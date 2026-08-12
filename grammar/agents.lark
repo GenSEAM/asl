@@ -1,0 +1,152 @@
+// AgentS-Core v0.1 — Lark grammar (Earley).
+// Normative source: AGENT_SPEC_CORE.md
+//
+// Earley is chosen to match llguidance, which the constrained-decoding arm
+// (EXPERIMENT.md arm C) uses, so a grammar accepted here is convertible without
+// re-deriving parse behavior under a different algorithm.
+//
+// Scope: this grammar enforces STRUCTURE (delimiters, declaration shapes, token
+// classes). It deliberately does NOT enforce types, arity, exhaustiveness, or
+// scope — those are not context-free. See RESEARCH_REPORT.md §5: a CFG reaches
+// only the syntactic slice of the error surface, and the type layer is where the
+// leverage is. Over-tightening here would reject valid programs while buying
+// none of that.
+
+start: toplevel*
+
+toplevel: defschema
+        | defun
+
+// ---------- declarations ----------
+
+defschema: "(" DEFSCHEMA TYPE_NAME field+ ")"
+
+field: "(" FIELD_KW IDENT type STRING field_opt* ")"
+
+field_opt: DEFAULT_KW literal
+         | JSON_KW STRING
+
+defun: "(" DEFUN IDENT params ARROW type expr+ ")"
+
+params: "[" param* "]"
+param: "(" IDENT type ")"
+
+// ---------- types ----------
+
+type: TYPE_NAME
+    | "(" TYPE_NAME type+ ")"
+
+// ---------- expressions ----------
+
+expr: literal
+    | IDENT
+    | OPERATOR
+    | let_form
+    | if_form
+    | cond_form
+    | match_form
+    | try_form
+    | fn_form
+    | ctor
+    | field_access
+    | call
+
+let_form: "(" LET "[" binding* "]" expr+ ")"
+binding: "(" IDENT expr ")"
+
+if_form: "(" IF expr expr expr ")"
+
+cond_form: "(" COND cond_clause+ else_clause ")"
+cond_clause: "(" expr expr+ ")"
+else_clause: "(" ELSE_KW expr+ ")"
+
+match_form: "(" MATCH expr match_arm+ ")"
+match_arm: "(" pattern expr+ ")"
+
+pattern: "(" OK pattern ")"
+       | "(" ERR pattern ")"
+       | "(" SOME pattern ")"
+       | "(" NONE ")"
+       | "(" LIST ")"
+       | "(" CONS pattern pattern ")"
+       | "(" PAIR pattern pattern ")"
+       | literal
+       | IDENT
+       | WILDCARD
+
+try_form: "(" TRY expr ")"
+
+fn_form: "(" FN params ARROW type expr+ ")"
+
+// A PascalCase head is record construction: (Point :x 3 :y 4)
+ctor: "(" TYPE_NAME ctor_arg* ")"
+ctor_arg: KEYWORD expr
+
+// (.-field record)
+field_access: "(" FIELD_REF expr ")"
+
+// Any other application, including all builtins from AGENT_SPEC_CORE.md §6.
+call: "(" expr expr* ")"
+
+// ---------- literals ----------
+
+literal: INT
+       | FLOAT
+       | STRING
+       | BOOL
+       | UNIT
+
+// ---------- terminals ----------
+// Keyword terminals are declared before IDENT so Earley prefers them; they are
+// still valid IDENT shapes, which is intentional — Core has no reserved words at
+// the lexical level, only positionally significant heads.
+
+DEFSCHEMA: "defschema"
+DEFUN: "defun"
+LET: "let"
+IF: "if"
+COND: "cond"
+MATCH: "match"
+TRY: "try"
+FN: "fn"
+OK: "ok"
+ERR: "err"
+SOME: "some"
+NONE: "none"
+LIST: "list"
+CONS: "cons"
+PAIR: "pair"
+
+FIELD_KW: ":field"
+DEFAULT_KW: ":default"
+JSON_KW: ":json"
+ELSE_KW: ":else"
+
+ARROW: "->"
+WILDCARD: "_"
+
+// §6.1/§6.2 operators are ordinary identifiers in call position. Declared as
+// explicit alternatives rather than a regex so that "->" (longer literal) always
+// out-prioritises "-" and never lexes as an operator inside a defun signature.
+OPERATOR: "!=" | "<=" | ">=" | "+" | "*" | "/" | "=" | "<" | ">" | "-"
+
+// (.-field x) — the Clojure-precedent field accessor. FFI's (.method x) is not
+// in Core; reserving this shape now keeps its later addition additive.
+FIELD_REF: /\.-[a-z][a-z0-9-]*/
+
+BOOL: "true" | "false"
+UNIT: "()"
+
+TYPE_NAME: /[A-Z][A-Za-z0-9]*/
+IDENT: /[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+KEYWORD: /:[a-z][a-z0-9]*(-[a-z0-9]+)*/
+
+INT: /-?[0-9]+/
+FLOAT: /-?[0-9]+\.[0-9]+/
+STRING: /"([^"\\]|\\.)*"/
+
+COMMENT: /;[^\n]*/
+
+%import common.WS
+%ignore WS
+%ignore COMMENT

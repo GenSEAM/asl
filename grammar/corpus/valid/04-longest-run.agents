@@ -1,0 +1,17 @@
+; The worked example from AGENT_SPEC_CORE.md section 7.
+
+(defun run-length [(chars (List String)) (cur String) (n Int64) (best (Pair String Int64))]
+        -> (Pair String Int64)
+  (match chars
+    ((list)
+     (if (> n (.-second best)) (pair cur n) best))
+    ((cons h t)
+     (if (= h cur)
+       (run-length t cur (+ n 1) best)
+       (let [(best2 (if (> n (.-second best)) (pair cur n) best))]
+         (run-length t h 1 best2))))))
+
+(defun longest-run [(s String)] -> (Option (Pair String Int64))
+  (match (string-chars s)
+    ((list)     (none))
+    ((cons h t) (some (run-length t h 1 (pair h 1))))))

@@ -1,0 +1,19 @@
+; Records, construction, field access, arithmetic.
+
+(defschema Point
+  (:field x Int64 "Horizontal coordinate")
+  (:field y Int64 "Vertical coordinate"))
+
+(defschema Config
+  (:field name    String "Display name")
+  (:field retries Int64  "Attempt count" :default 3))
+
+(defun origin [] -> Point
+  (Point :x 0 :y 0))
+
+(defun manhattan [(p Point) (q Point)] -> Int64
+  (+ (abs (- (.-x p) (.-x q)))
+     (abs (- (.-y p) (.-y q)))))
+
+(defun scale [(p Point) (k Int64)] -> Point
+  (Point :x (* (.-x p) k) :y (* (.-y p) k)))
