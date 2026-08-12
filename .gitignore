@@ -2,3 +2,5 @@
 results/*.json
 node_modules/
 target/
+grammar/tree-sitter-agents/src/
+package-lock.json

@@ -1,0 +1,7 @@
+{
+  "name": "tree-sitter-agents",
+  "version": "0.1.0",
+  "description": "tree-sitter grammar for AgentS-Core",
+  "private": true,
+  "tree-sitter": [{ "scope": "source.agents", "file-types": ["agents"] }]
+}
