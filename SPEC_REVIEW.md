@@ -32,6 +32,19 @@ rather than structural — the fixes in §9 are mostly *writing down* decisions,
 But as it stands the document cannot deliver the determinism its §1 claims, and the §6 checklist
 asks the model to compensate for that by trying harder.
 
+**Every Tier 1 and Tier 2 fix has a shipped precedent** (§11). Clojure solved C3 with a
+one-character prefix; Gleam and Rust settled B1's ergonomics; serde and pydantic agree on A2;
+MCP standardizes G1's tool schema. Two findings there are load-bearing enough to change plans
+rather than just wording:
+
+* **§6.1 is solving the paren problem in the wrong layer.** Grammar-constrained decoding
+  *guarantees* balanced delimiters at the token level. Shipping a grammar replaces a prompt rule
+  with a hard guarantee, and gives the spec the normative syntax definition it currently lacks.
+* **BAML — the closest shipped system to AgentS — does not transpile.** It compiles to bytecode
+  and binds four languages to one shared Rust runtime, which is what keeps their behavior
+  identical. AgentS's N-native-backends design is strictly harder, and it is exactly where A1,
+  A2, A3, G8, and B6 converge. Worth choosing deliberately rather than by default.
+
 ### 1.1 Falsification: four minimal programs
 
 The method: attempt each program using **only** forms `AGENT_SPEC.md` defines, and record the
@@ -461,18 +474,22 @@ Ordered by reliability gained per unit of effort.
 
 ### Tier 1 — cheap, and each removes a whole failure class
 
-1. **Split field access from FFI (C3).** Keep `(.field record)` for records; give FFI its own
-   form, e.g. `(ffi:call obj "methodName" args…)`. One grammar line; removes the worst
-   ambiguity in the document and makes both forms greppable.
+1. **Split field access from FFI (C3).** Adopt Clojure's `.-` prefix: `(.-field record)` for
+   schema access, `(.method obj args…)` for FFI. One grammar line, fifteen years of production
+   evidence, and it fixes the silent field-loses-to-method shadowing Clojure documents
+   explicitly — see §11.1.
 2. **Add a `Result`/`Option` eliminator (B1, B3).** Minimum viable: `match` with `ok`/`err`/
-   `some`/`none` patterns, plus a `try`/`?` propagation form so the common path does not nest.
-   Without this the language cannot do I/O; with it, most of §4 becomes usable.
+   `some`/`none` patterns, **plus** a propagation form (Gleam's `use`, Rust's `?`) so the common
+   path does not nest — §11.2. Without this the language cannot do I/O; with it, most of §4
+   becomes usable. Shipping `match` alone recreates the deep nesting that causes L1.
 3. **Add a record constructor (B2).** e.g. `(SearchRequest :query "x" :max-results 5)` with
    defaults applied. One form; unblocks every function that returns a schema.
 4. **Pin naming and wire format normatively (A1, A2, A3, C5).** A table: AgentS identifier →
    TS/Python/Go/Rust identifier, plus the JSON key rule with a per-field `:json` override, plus
    fixed-width numeric types (`Int32`/`Int64`/`Float64`) with `Int` as a documented alias.
-   Pure writing; kills four ambiguities and makes output byte-reproducible.
+   Copy the shape serde and pydantic both converged on — container-level default plus per-field
+   override (§11.5) — and reserve a compiler-internal identifier prefix now, as Haxe does
+   (§11.8). Pure writing; kills four ambiguities and makes output byte-reproducible.
 5. **Add a closed-vocabulary appendix (§7, L5).** Every builtin, with its type signature, in one
    table — including `let`, `if`, `fn`, `str`, `ok`, `err`, `match`, and the primitive types.
    This is the **single highest-value change for LLM reliability**: it converts the document from
@@ -484,7 +501,10 @@ Ordered by reliability gained per unit of effort.
 
 7. **Specify `defagent` properly (G1, C1).** `deftool` + `:tools` + `:max-iterations` +
    `:on-error`; declare `agent:call-llm -> (Result T LlmError)`; bind `input` explicitly in the
-   signature the way `defun` does; define `agent:respond` as a tail return.
+   signature the way `defun` does; define `agent:respond` as a tail return. Compile `deftool` to
+   **JSON Schema** and both major provider APIs plus MCP servers come for free (§11.7); make
+   `:max-iterations` required-with-a-default, since an uncapped agent loop is a safety defect
+   rather than a missing tuning knob.
 8. **Specify reactivity (G2, G3, A4, B5-for-UI).** Syntax for `computed`/`effect` with teardown;
    a keyed `ui:for`; a normative attribute-mapping table for React and Vue; a rule that the
    attribute map is mandatory (possibly empty) to resolve A4; a statement on component
@@ -501,8 +521,9 @@ Ordered by reliability gained per unit of effort.
 
 12. **Mutability and ownership model (B6).** Gate the Rust backend behind this; consider marking
     Rust and C as experimental in §1 until it exists.
-13. **Async coloring strategy (G8).** Decide: all-async, inferred, or explicit `defun-async`.
-    Name the Rust executor and channel type.
+13. **Async coloring strategy (G8).** Decide between the three known answers — colorblind
+    inference (Zig), algebraic effects (Koka), or explicit `defun-async` — per §11.6. Name the
+    Rust executor and channel type.
 14. **Modules and imports (B4).**
 15. **Diagnostic contract (L2).** A machine-readable error format the compiler returns for the
     LLM repair loop — arguably the most important *toolchain* feature for a spec whose purpose is
@@ -512,11 +533,19 @@ Ordered by reliability gained per unit of effort.
 
 "Verify delimiter counts before emitting output" instructs the model to do the one thing it
 demonstrably cannot self-execute — closing-paren errors at nesting depth >4 are the dominant
-failure mode for LLM-generated Lisp, and asking for vigilance does not reduce them. Move the
-mitigation into the toolchain: a repair-tolerant parser that auto-closes at EOF and reports the
-inferred structure, plus a formatter that keeps nesting shallow. Then reduce §6.1 to a formatting
-rule. Related: fixes 2 and 11 above (a `try` operator and `cond`) reduce nesting depth directly,
-which attacks the root cause rather than the symptom.
+failure mode for LLM-generated Lisp, and asking for vigilance does not reduce them.
+
+The mechanism that actually delivers balanced delimiters is **grammar-constrained decoding**: a
+context-free grammar compiled to a pushdown automaton tracks nesting depth and restricts the
+next-token distribution to tokens that keep the output valid, so balance is guaranteed by
+construction rather than checked afterward (§11.4). **Ship a GBNF-style grammar for AgentS** —
+it makes §6.1 unnecessary on any grammar-capable runtime *and* doubles as the normative syntax
+definition the document currently lacks (§7). Where grammar constraints are unavailable, use a
+repair-tolerant parser on BAML's Schema-Aligned Parsing model, not a sterner prompt.
+
+Either way this is a toolchain change, not a prompt change. Then reduce §6.1 to a formatting rule.
+Fixes 2 and 11 above (a propagation operator and `cond`) attack the root cause from the other
+side by reducing nesting depth directly.
 
 ### On §3.3's hardcoded model
 
@@ -548,3 +577,174 @@ model from configuration in the example, or use an obvious placeholder.
 | A4–A9 | UI attrs, `set!`, `let`, `if`, `if-target`, `->` | Ambiguity |
 | G4/G5/G7/G9 | `*:exec`, language basics, defaults, eval order | Gap |
 | L1–L7 | LLM-reliability findings | Process |
+
+---
+
+## 11. Prior art
+
+Every Tier 1 and Tier 2 recommendation in §9 has a shipped precedent. None of these problems is
+novel, and three of them have a settled answer that AgentS can adopt more or less verbatim.
+
+### 11.1 C3 — Clojure already solved this, for the same reason
+
+Clojure hit the identical collision: `(.foo obj)` could mean a field read or a zero-argument
+method call, and the two are textually indistinguishable. Its resolution is a one-character
+prefix, and the rule is normative:
+
+> "If the second operand is a symbol starting with `-`, the member-symbol will resolve only as
+> field access (never as a 0-arity method)"
+
+So `(.-x obj)` is unambiguously a field; `(.x obj)` is a method call. Crucially, Clojure also
+documents the failure mode AgentS currently has — with the plain `.` form and no arguments,
+**method resolution is attempted first**, so a field silently loses to a same-named zero-arg
+method. `.-` exists precisely because that silent shadowing was unacceptable. The accessor was
+also motivated by aligning Clojure and ClojureScript field lookup, i.e. by *multi-target
+consistency* — the same pressure AgentS is under.
+
+**Adopt directly:** `(.-field record)` for schema access, `(.method obj args…)` for FFI. This is
+a smaller change than the `ffi:call` form proposed in §9.1, preserves the spec's existing
+aesthetics, and comes with fifteen years of evidence that it works.
+
+### 11.2 B1 — `use` / `try` / `?` are the settled ergonomics
+
+Gleam is the closest analogue (small ML-family language, `Result`-typed I/O, compiles to
+**two** targets — Erlang and JavaScript — so it faces AgentS's multi-backend constraint):
+
+* `result.try` chains fallible calls, short-circuiting on the first `Error` — "railway-oriented"
+  style.
+* The `use` expression exists specifically because chained `try` callbacks nest badly; `use`
+  flattens them into sequential-looking code.
+* Gleam's own community has an open design discussion on adding a `?` operator, which is worth
+  reading before AgentS picks a syntax — the tradeoffs are laid out there rather than
+  needing rediscovery.
+
+Rust's `?` is the other reference point. Either way the pairing is the same: **a `match`
+eliminator for the general case plus a propagation form for the common case.** Shipping only
+`match` reproduces the nesting problem that §6.1 (L1) is already struggling with — deep nesting
+is the direct cause of unbalanced-paren failures in LLM output, so B1 and L1 are the same bug
+seen from two ends.
+
+### 11.3 G1 + architecture — BAML is the closest shipped system
+
+[BAML](https://github.com/BoundaryML/baml) is a DSL for exactly AgentS's `defschema` + `defagent`
+scope: typed LLM function interfaces compiled to idiomatic clients in **Python, TypeScript, Ruby,
+and Go**, with a Rust compiler. Two things AgentS should take from it, and one warning.
+
+**Take: the pipeline.** BAML's compiler runs seven phases — Lexer → Parser → HIR → TIR (typed IR)
+→ VIR (validated IR) → MIR → bytecode. A concrete reference architecture for the separation
+AgentS needs between parsing, type checking, validation, and target lowering.
+
+**Take: Schema-Aligned Parsing.** SAP transforms raw LLM text into typed data, tolerating broken
+JSON, markdown wrappers, and chain-of-thought preamble, and coercing types — which means it works
+against models with no native function-calling API. This is the robust answer to §3.3's
+`:response-schema`, and it generalizes: the same tolerance AgentS needs when *parsing
+LLM-generated AgentS* (see 11.4).
+
+**Warning: BAML does not transpile.** All four clients bind via FFI to a single shared Rust
+runtime, which is what guarantees consistent behavior across languages. AgentS proposes something
+strictly harder — **N independent native backends that must be semantically equivalent** — and
+that is precisely where A1 (mangling), A2 (wire casing), A3 (numeric widths), G8 (async), and B6
+(ownership) all bite at once. Worth deciding deliberately rather than by default: a shared runtime
+with thin generated bindings sidesteps most of §4's per-target table, at the cost of the
+"native output" promise in §1.
+
+Note also that BAML — a Rust-implemented, well-resourced project — ships **no Rust client**.
+That is corroboration for B6: Rust codegen from a higher-level language is the expensive target,
+not the free one.
+
+### 11.4 L1 — constrained decoding makes balanced parens a guarantee, not an aspiration
+
+§6.1 asks the model to "verify delimiter counts before emitting output." The mechanism that
+actually delivers this operates at the token level: constrained decoding restricts the next-token
+distribution to tokens that keep the output valid against a grammar. Because the constraint is
+enforced *during* generation rather than checked after, output is guaranteed valid — no parse
+errors, no retries, no fallback parser.
+
+For nesting specifically, a context-free grammar compiled to a **pushdown automaton** tracks depth
+and enforces balance throughout generation. GBNF (llama.cpp's grammar format) is recursive and can
+express exactly this.
+
+**Implication for the project:** AgentS should ship a grammar, not a paragraph of advice. A GBNF
+(or equivalent) grammar for AgentS gives balanced delimiters by construction on any
+grammar-constrained runtime, and doubles as the normative syntax definition the spec currently
+lacks (§7's closure problem). Where constrained decoding is unavailable — hosted APIs without
+grammar support — BAML's SAP is the fallback pattern: a repair-tolerant parser, not a stricter
+prompt. Either path is a toolchain change; neither is a prompt change.
+
+### 11.5 A2 — wire casing has a conventional answer
+
+Both mainstream ecosystems AgentS targets converged on the same design: a container-level default
+plus a per-field override.
+
+* **serde**: `#[serde(rename_all = "camelCase")]` on the struct, `#[serde(rename = "...")]` per
+  field.
+* **pydantic**: `alias_generator` on the model (with `to_camel`, `to_lower_camel`, `to_pascal`
+  helpers), explicit `alias` per field, plus a flag to allow population by field name.
+
+Adopt the shape wholesale: a `:json-case` option on `defschema` defaulting to one documented
+convention, and a `:json "..."` override on `:field`. Note the known sharp edge — pydantic has a
+reported inconsistency in how `to_camel` treats already-camelCased input — so specify the
+transform on the *AgentS* kebab-case identifier only, and define it total.
+
+### 11.6 G8 — function coloring is a known fork with three known answers
+
+Bob Nystrom's "What Color is Your Function?" (2015) is the canonical statement of the problem
+AgentS inherits in its TS and Python backends. The three live answers:
+
+1. **Colorblind (Zig).** Infer async-ness; allow `async`/`await` on non-async functions, so
+   libraries are agnostic to blocking vs. async I/O. Zig's newer I/O work relocates the color from
+   blocking/non-blocking to io/non-io rather than eliminating it — the discourse is worth reading
+   before claiming AgentS can avoid coloring entirely.
+2. **Algebraic effects (Koka).** Effects in the type signature, handlers supplying semantics, the
+   effect propagating outward until handled. The most principled fit for a language that also
+   wants to track fallibility (`Result`) and target purity — but it is a research-grade
+   commitment, and lowering effect handlers to Go and Rust is hard.
+3. **Explicit coloring.** `defun-async`, propagate manually. Cheapest, ugliest, and honest.
+
+The spec currently makes no choice, which means the backends will each make a different one.
+
+### 11.7 G1 — tool schemas and the iteration cap are standardized
+
+MCP's tool model is the reference: a tool is a schema (so the model knows how to call it), an
+implementation, and a result format; discovery via `tools/list`, invocation via `tools/call`. The
+schema is defined in TypeScript and published as JSON Schema for compatibility, and both major
+model families accept JSON Schema tool definitions. Notably, `required` vs. optional materially
+changes model behavior — a fact a `deftool` form should expose deliberately rather than
+inherit accidentally from `:default` (G7).
+
+On the agent loop itself, a hard `MAX_ITERATIONS` cap is standard practice (commonly ~10) and is
+treated as a safety rail, not a tuning knob: without it a confused agent loops indefinitely.
+§9.7's `:max-iterations` should therefore be **required with a default**, not optional.
+
+Practical consequence: if `deftool` compiles to JSON Schema, AgentS gets MCP servers and both
+major provider APIs for free, and §3.3's `:response-schema` stops being bespoke.
+
+### 11.8 A1 — reserve a namespace before you need it
+
+Haxe (nine-plus targets, the closest analogue to AgentS's ambition) reserves the identifier prefix
+`_hx_` for compiler-internal use, and its docs warn that generated variable names may not
+correspond to source names — which is exactly why target-specific code injection (AgentS's
+`if-target`, G4) is hazardous without a stated mangling contract. Reserve a prefix in the spec now;
+retrofitting one after user code exists is a breaking change.
+
+### Sources
+
+- [Clojure — Java Interop reference](https://clojure.org/reference/java_interop)
+- [Clojure — Special Forms](https://clojure.org/reference/special_forms)
+- [Gleam — Result module (language tour)](https://tour.gleam.run/standard-library/result-module/)
+- [Gleam — Introducing use expressions](https://gleam.run/news/v0.25-introducing-use-expressions/)
+- [Gleam — discussion: new `?` error-handling operator](https://github.com/gleam-lang/gleam/discussions/3908)
+- [BAML — architecture overview (DeepWiki)](https://deepwiki.com/BoundaryML/baml)
+- [BAML — getting started (DeepWiki)](https://deepwiki.com/BoundaryML/baml/1.1-getting-started)
+- [Constrained decoding: forcing LLM output to a grammar](https://zeroentropy.dev/concepts/constrained-decoding/)
+- [A Guide to Structured Outputs Using Constrained Decoding](https://www.aidancooper.co.uk/constrained-decoding/)
+- [Flexible and Efficient Grammar-Constrained Decoding (arXiv 2502.05111)](https://arxiv.org/pdf/2502.05111)
+- [Serde — field rename attributes](https://serde.rs/attr-rename.html)
+- [Pydantic — alias concepts](https://pydantic.dev/docs/validation/latest/concepts/alias/)
+- [pydantic#8361 — `to_camel` case-change edge case](https://github.com/pydantic/pydantic/issues/8361)
+- [What is Zig's "Colorblind" Async/Await?](https://kristoff.it/blog/zig-colorblind-async-await/)
+- [Zig's new I/O: function coloring is inevitable?](https://blog.ivnj.org/post/function-coloring-is-inevitable)
+- [Model Context Protocol — schema reference](https://modelcontextprotocol.io/specification/2025-11-25/schema)
+- [MCP — tools concept](https://modelcontextprotocol.info/docs/concepts/tools/)
+- [Haxe — accessing target-specific syntax](https://haxe.org/manual/target-syntax.html)
+- [HaxeFoundation/haxe#4462 — reserved identifier prefix](https://github.com/HaxeFoundation/haxe/issues/4462)
