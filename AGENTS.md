@@ -35,7 +35,8 @@ and a grammar that rejected them would be over-tight.
 .venv/bin/python grammar/closure_audit.py
 .venv/bin/python prelude/generate.py --check
 .venv/bin/python backend/check_corpus.py
-.venv/bin/python -m pytest backend/t -q
+.venv/bin/python backend/differential.py
+.venv/bin/python -m pytest backend/t bench/algo -q
 ```
 
 The closure gate extracts call heads with the project's own tree-sitter grammar and fails if any
@@ -49,6 +50,14 @@ read as placeholders and fail far from their cause.
 `check_corpus.py` transpiles every corpus program. Parsing proves a program is well-formed;
 transpiling proves the backend covers the forms the grammar admits. Those two drift apart
 silently otherwise.
+
+`check_corpus.py` invokes `rustc` on the Rust output rather than trusting the transpiler's exit
+code. It did not, once, and every fixture passed while the backend emitted a wildcard for list
+destructuring that `rustc` rejects.
+
+`differential.py` runs one AgentS source through every backend and fails if they disagree.
+Portability is a claim, not a property: Python and JavaScript already differ on `2**53+1` and on
+rounding a half, so equivalence exists only where it is enforced.
 
 `backend/t` runs AgentS source through the transpiler and executes the result, asserting semantics
 taken from the specification — not from observing what the transpiler happened to emit.

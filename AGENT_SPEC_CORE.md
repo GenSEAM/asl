@@ -35,7 +35,10 @@ and that the unit of one pass is a **working module** (PCP `r-43ea`, `r-8f23`, `
   strings, defeating type safety exactly where it pays; without the second, ordinary programs are
   inexpressible.
 
-**No FFI.** Core contains no `(.method obj)` form, so the v0 collision
+**No FFI *yet*.** This is a staging decision, not a permanent boundary: a total foreign-call
+surface is the language's central rationale (PCP `d-4b8c`), and it will land here. Core omits it
+only until the checker exists, because an untotal boundary is worse than none. Core contains no
+`(.method obj)` form, so the v0 collision
 ([`SPEC_REVIEW.md`](SPEC_REVIEW.md) C3) cannot arise. The `.-` accessor is specified so that
 reintroducing FFI later is additive rather than breaking.
 

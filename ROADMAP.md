@@ -37,9 +37,12 @@ Everything below was checked by a command whose output was read, not inferred.
 | Tooling (AST, structural search) | **working** — queries return real captures |
 | Conformance gate | **green** — 11 fixtures × 2 grammars, 0 failures |
 | Closure gate | **green** — no example calls an undefined name |
+| Python backend | **working** — corpus transpiles, tests execute |
+| Rust backend | **working** — corpus transpiles and `rustc` accepts it |
+| Differential gate | **green** — Python and Rust agree on every case |
+| JavaScript backend | lowering rules exist in the prelude, no transpiler |
 | Semantic checker | **does not exist** |
-| Interpreter | **does not exist** |
-| Native backends | **do not exist** |
+| Reference interpreter | **not built, deliberately** — see below |
 | Measurement harness | **not started — blocked**, see §5 |
 
 ### Documents, in reading order for a newcomer

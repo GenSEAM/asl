@@ -192,3 +192,20 @@ gate. A positive pilot licenses spending on a real run; it does not validate the
 
 **Host language decided:** the compiler is hosted in Rust (PCP `d-2030`). This does not affect the
 measurement targets, which remain Python and JavaScript per amendment 2026-08-20-b.
+
+### 2026-08-21-a — H5 restated to the backends that exist (made BEFORE any results)
+
+No arm has run. Amendment 2026-08-20-b restated H5 over Python and JavaScript, on the reasoning
+that the benchmark and its baselines live there. Two backends now exist and neither pairing matches
+that text: **Python and Rust** are implemented, JavaScript has lowering rules in the prelude but no
+transpiler, and Go has neither.
+
+**H5 as it now stands:** Core transpiles cleanly to Python and Rust — every corpus program lowers,
+`rustc` accepts the Rust, and the two backends agree on every case of every benchmark task.
+
+That last clause is the substantive part and it is already enforced by a differential gate rather
+than asserted. Cross-runtime agreement is not a default: measured on this machine, Python and
+JavaScript disagree on `2**53+1` and on rounding a half. Equivalence exists only where a gate
+enforces it.
+
+JavaScript re-enters H5 when its transpiler exists, not before.

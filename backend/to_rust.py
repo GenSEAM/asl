@@ -47,6 +47,8 @@ class ToRust:
         self.parser = Lark((ROOT / "grammar" / "agents.lark").read_text(),
                            start="start", parser="earley", ambiguity="resolve")
         self.enums: dict[str, tuple[str, list[str]]] = {}   # case -> (enum, field types)
+        self.slice_match = False
+        self.cons_tail = None
         self.tmp = 0
 
     def fresh(self):
@@ -265,7 +267,12 @@ class ToRust:
         mk = self.kids(n)
         subj = self.expr(mk[0], stmts, ind)
         t = self.fresh()
-        stmts.append(f"{pad}let {t} = match {subj} {{")
+        # Rust destructures a list only through a slice pattern, so a match
+        # containing list arms must scrutinise a slice rather than the Vec.
+        arms = [a for a in mk[1:] if isinstance(a, Tree) and a.data == "match_arm"]
+        self.slice_match = any(self._is_list_pat(self.kids(a)[0]) for a in arms)
+        scrut = f"{subj}.as_slice()" if self.slice_match else subj
+        stmts.append(f"{pad}let {t} = match {scrut} {{")
         for arm in mk[1:]:
             if not (isinstance(arm, Tree) and arm.data == "match_arm"):
                 continue
@@ -275,13 +282,26 @@ class ToRust:
             v = None
             for b in ak[1:]:
                 v = self.expr(b, inner, ind + 2)
-            if inner:
-                body = "\n".join(inner + [f"{pad}        {v}"])
+            pre = []
+            if getattr(self, "cons_tail", None) and "@ .." in pat:
+                pre = [f"{pad}        let {self.cons_tail} = {self.cons_tail}.to_vec();"]
+                self.cons_tail = None
+            if inner or pre:
+                body = "\n".join(pre + inner + [f"{pad}        {v}"])
                 stmts.append(f"{pad}    {pat} => {{\n{body}\n{pad}    }},")
             else:
                 stmts.append(f"{pad}    {pat} => {v},")
+        if self.slice_match:
+            stmts.append(f"{pad}    _ => unreachable!(),")
         stmts.append(f"{pad}}};")
         return t
+
+    def _is_list_pat(self, pat) -> bool:
+        if isinstance(pat, Tree) and pat.data == "pattern" and len(pat.children) == 1 \
+                and isinstance(pat.children[0], Tree):
+            pat = pat.children[0]
+        toks = pat.children if isinstance(pat, Tree) else []
+        return bool(toks) and isinstance(toks[0], Token) and str(toks[0]) in ("list", "cons")
 
     def pattern(self, pat) -> str:
         if isinstance(pat, Tree) and pat.data == "pattern" and len(pat.children) == 1 \
@@ -301,9 +321,13 @@ class ToRust:
         if head == "none":
             return "None"
         if head == "list":
-            return "v if v.is_empty()"
+            return "[]"
         if head == "cons":
-            return "_"           # list destructuring needs a slice pattern; see gaps
+            h, rest = sub(toks[1]), sub(toks[2])
+            # The tail is bound as a slice; the body expects an owned list, so it
+            # is materialised at the top of the arm (see match()).
+            self.cons_tail = rest
+            return f"[{h}, {rest} @ ..]"
         if head == "pair":
             return f"({sub(toks[1])}, {sub(toks[2])})"
         if head in self.enums:

@@ -4,9 +4,13 @@ This file groups d/c/r/l entries for the lang/backends module.
 
 ### [l-880d] Native backends are gated behind the checker and the ownership question
 - **Date**: 2026-08-20
-- **Status**: Deferred
+- **Status**: Partly resolved
 - **Cluster**: lang/backends
-- **Description**: Native code generation for the priority targets is postponed. Two prerequisites
+- **Update 2026-08-21**: a systems-target backend now exists and its output is accepted by the
+  target compiler, built on the conservative ownership strategy below rather than on a resolved
+  model. What remains open is the cost of that strategy, which is now measurable rather than
+  hypothetical: values are cloned at every use site.
+- **Description**: Native code generation for the priority targets was postponed. Two prerequisites
   are unmet: there is no semantic checker to guarantee the input is well-formed, and no decision
   has been recorded on how values are owned and shared, without which the systems-language backend
   has to guess at every signature.
