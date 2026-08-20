@@ -145,6 +145,27 @@ def handbook() -> str:
     return "\n".join(lines)
 
 
+def validate_templates() -> list[str]:
+    """Every lowering template must format cleanly at its declared arity.
+
+    Literal braces are the trap: a Python empty-dict lowering of `{}` is read as
+    a format placeholder and fails at transpile time, far from its cause. Braces
+    intended literally must be doubled in prelude.json.
+    """
+    bad = []
+    for b in PRELUDE["builtins"]:
+        lhs = b["type"].split("->")[0].strip()
+        n = 0 if not lhs else len(lhs.split())
+        for tgt in ("py", "js"):
+            tpl = b[tgt]
+            try:
+                if "{*}" not in tpl:
+                    tpl.format(*[f"a{i}" for i in range(max(n, 4))])
+            except Exception as exc:
+                bad.append(f"{b['name']} [{tgt}] {tpl!r}: {exc}")
+    return bad
+
+
 def write(path: Path, content: str, check: bool) -> bool:
     """Returns True when stale."""
     old = path.read_text() if path.exists() else None
@@ -162,6 +183,13 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
+
+    broken = validate_templates()
+    if broken:
+        print("BROKEN LOWERING TEMPLATES:")
+        for b in broken:
+            print("  " + b)
+        return 1
 
     stale = write(HANDBOOK, handbook(), args.check)
 

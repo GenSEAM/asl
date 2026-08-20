@@ -88,7 +88,7 @@
     {"name":"list-min","sec":"List","type":"(List T) -> (Option T)","doc":"Least element, or none when empty.","py":"_as.least({0})","js":"_as.least({0})"},
     {"name":"list-max","sec":"List","type":"(List T) -> (Option T)","doc":"Greatest element, or none when empty.","py":"_as.greatest({0})","js":"_as.greatest({0})"},
 
-    {"name":"map-empty","sec":"Map","type":"-> (Map K V)","doc":"The empty map.","py":"{}","js":"new Map()"},
+    {"name":"map-empty","sec":"Map","type":"-> (Map K V)","doc":"The empty map.","py":"{{}}","js":"new Map()"},
     {"name":"map-get","sec":"Map","type":"(Map K V) K -> (Option V)","doc":"Value for a key, or none.","py":"_as.m_get({0}, {1})","js":"_as.mGet({0}, {1})"},
     {"name":"map-set","sec":"Map","type":"(Map K V) K V -> (Map K V)","doc":"Map with the key bound to the value.","py":"_as.m_set({0}, {1}, {2})","js":"_as.mSet({0}, {1}, {2})"},
     {"name":"map-remove","sec":"Map","type":"(Map K V) K -> (Map K V)","doc":"Map without the key.","py":"_as.m_del({0}, {1})","js":"_as.mDel({0}, {1})"},

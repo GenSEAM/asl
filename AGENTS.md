@@ -34,13 +34,24 @@ and a grammar that rejected them would be over-tight.
 ```bash
 .venv/bin/python grammar/closure_audit.py
 .venv/bin/python prelude/generate.py --check
+.venv/bin/python backend/check_corpus.py
+.venv/bin/python -m pytest backend/t -q
 ```
 
 The closure gate extracts call heads with the project's own tree-sitter grammar and fails if any
 names something neither in the vocabulary nor bound locally. The specification's claim to be closed
 is only worth what this gate enforces; it was false once already.
 
-The generator check fails when a generated artifact is stale.
+The generator check fails when a generated artifact is stale, and when a lowering template will
+not format at its declared arity — literal braces must be doubled in `prelude.json`, or they are
+read as placeholders and fail far from their cause.
+
+`check_corpus.py` transpiles every corpus program. Parsing proves a program is well-formed;
+transpiling proves the backend covers the forms the grammar admits. Those two drift apart
+silently otherwise.
+
+`backend/t` runs AgentS source through the transpiler and executes the result, asserting semantics
+taken from the specification — not from observing what the transpiler happened to emit.
 
 ### The vocabulary has one source
 

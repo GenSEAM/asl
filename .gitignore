@@ -8,3 +8,6 @@ package-lock.json
 .pcp/INVENTORY.md
 .pcp/INVENTORY.json
 .pcp/INDEX.md
+backend/t/smoke.py
+__pycache__/
+.pytest_cache/
