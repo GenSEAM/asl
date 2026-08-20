@@ -103,7 +103,7 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 | Type | Notes |
 |---|---|
 | `Bool` | `true` / `false`. No truthiness — `if` accepts `Bool` only. |
-| `Int32`, `Int64` | Two's complement, wrapping is an error not a behavior; see §7.1 |
+| `Int32`, `Int64` | Two's complement, wrapping is an error not a behavior; see §6.1 |
 | `Float64` | IEEE-754 binary64 |
 | `String` | Sequence of Unicode scalar values. **All indices are in characters, never bytes.** |
 | `Unit` | Exactly one value, written `()` |
@@ -114,7 +114,7 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 | `(Map K V)` | Immutable keyed collection; `K` must support equality |
 
 `Int` is a documented alias for `Int64`. **There is no implicit numeric conversion** — mixing
-`Int64` and `Float64` in one arithmetic form is a type error. Use §7.4's explicit conversions.
+`Int64` and `Float64` in one arithmetic form is a type error. Use §6.4's explicit conversions.
 
 Fixing the widths resolves `SPEC_REVIEW.md` A3, which otherwise makes the same program overflow
 differently on each of the four targets.
@@ -238,7 +238,12 @@ capitalization (§8).
 (fn [(x Int64)] -> Int64 (* x 2))
 ```
 
-Anonymous function. Closes over the enclosing scope by value. Same shape as `defun` without a name.
+`(fn [<params>] -> <Type> <body-expr>+)`. Anonymous function, closing over the enclosing scope by
+value.
+
+It is **not** simply `defun` without a name: a lambda takes neither type parameters nor `:doc`.
+Type parameters are bound by the named declaration that encloses it, and a lambda has no exported
+surface to document. Both grammars enforce this, and a fixture pins it.
 
 ### 4.4 `defenum` — closed unions
 

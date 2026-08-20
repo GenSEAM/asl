@@ -1,0 +1,5 @@
+; A is used as a type but bound in no { } binder (AGENT_SPEC_CORE 9, rule 10).
+; Well-formed to any grammar: nothing context-free distinguishes a bound type
+; variable from an undeclared concrete type name.
+(defun identity [(x A)] -> A
+  x)

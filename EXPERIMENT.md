@@ -110,6 +110,9 @@ Prediction on record: **this will fail without user-defined sum types** (`SPEC_R
 token kinds are a sum. Recording the prediction now so that discovering it counts as confirmation
 rather than hindsight.
 
+**Superseded — see amendment 2026-08-20-a.** The language gained closed unions before the probe was
+run, so this prediction can no longer be confirmed or refuted by it.
+
 ## 8. Transpiler gate (H5)
 
 * compile rate ≥ 95% for both `rustc` and `go build` on generated output
@@ -120,4 +123,16 @@ rather than hindsight.
 
 ## 9. Amendments
 
-*(none yet)*
+### 2026-08-20-a — H4 prediction superseded (made BEFORE any results)
+
+`AgentS-Core` v0.2 added user-declarable closed unions, which §7 had predicted the lexer probe
+would fail without. The prediction was made against v0.1 and is now untestable: the probe can no
+longer fail for the predicted reason.
+
+No result had been observed when this amendment was made — the probe has never been run, and no
+measurement arm has executed. The change originates from a language-scope decision, not from
+seeing an outcome.
+
+**Replacement prediction for H4:** the probe now succeeds in producing a lexer, and the binding
+constraint moves to what remains absent from Core — I/O and FFI — meaning a self-hosting compiler
+stays blocked on reading its own source file rather than on expressing its token type.
