@@ -1,5 +1,5 @@
 /**
- * AgentS-Core v0.1 — tree-sitter grammar.
+ * AgentS-Core v0.2 — tree-sitter grammar.
  * Normative source: AGENT_SPEC_CORE.md
  *
  * This is the tooling grammar (axis 2): it yields a typed AST, error recovery,
@@ -26,12 +26,44 @@ module.exports = grammar({
   rules: {
     source_file: $ => repeat($._toplevel),
 
-    _toplevel: $ => choice($.defschema, $.defun),
+    _toplevel: $ => choice($.module_decl, $.defschema, $.defun, $.defenum),
+
+    // ---------- module header (v0.2) ----------
+
+    module_decl: $ => seq(
+      '(', 'module', field('path', $.mod_path), repeat($.module_opt), ')'
+    ),
+    module_opt: $ => choice(
+      seq(':doc', field('doc', $.string)),
+      seq(':export', '[', repeat(field('export', $.ident)), ']'),
+      seq(':import', '[', repeat($.import_spec), ']'),
+    ),
+    import_spec: $ => seq(
+      '(', field('path', $.mod_path), ':as', field('alias', $.ident), ')'
+    ),
+
+    // Type variables are bound explicitly, so a name is a type variable because
+    // it was declared one, never because of how it is spelled.
+    type_params: $ => seq('{', repeat(field('param', $.type_name)), '}'),
 
     // ---------- declarations ----------
 
     defschema: $ => seq(
-      '(', 'defschema', field('name', $.type_name), repeat1($.field), ')'
+      '(', 'defschema',
+      optional(field('type_params', $.type_params)),
+      field('name', $.type_name), repeat1($.field), ')'
+    ),
+
+    defenum: $ => seq(
+      '(', 'defenum',
+      optional(field('type_params', $.type_params)),
+      field('name', $.type_name), repeat1($.enum_case), ')'
+    ),
+    enum_case: $ => seq(
+      '(', ':case',
+      field('name', $.ident),
+      '[', repeat($.param), ']',
+      field('doc', $.string), ')'
     ),
 
     field: $ => seq(
@@ -49,10 +81,12 @@ module.exports = grammar({
 
     defun: $ => seq(
       '(', 'defun',
+      optional(field('type_params', $.type_params)),
       field('name', $.ident),
       field('params', $.params),
       '->',
       field('return_type', $._type),
+      optional(seq(':doc', field('doc', $.string))),
       repeat1(field('body', $._expr)), ')'
     ),
 
@@ -71,6 +105,7 @@ module.exports = grammar({
     _expr: $ => choice(
       $._literal,
       $.ident,
+      $.qualified,
       $.operator,
       $.let_form,
       $.if_form,
@@ -153,6 +188,7 @@ module.exports = grammar({
       $.list_pattern,
       $.cons_pattern,
       $.pair_pattern,
+      $.enum_pattern,
       $._literal,
       $.ident,
       $.wildcard,
@@ -165,6 +201,10 @@ module.exports = grammar({
     list_pattern: $ => seq('(', 'list', ')'),
     cons_pattern: $ => seq('(', 'cons', $._pattern, $._pattern, ')'),
     pair_pattern: $ => seq('(', 'pair', $._pattern, $._pattern, ')'),
+    // A defenum case used as a pattern; its arity is a semantic check.
+    enum_pattern: $ => seq(
+      '(', field('case', $.ident), repeat($._pattern), ')'
+    ),
 
     // ---------- terminals ----------
 
@@ -180,6 +220,10 @@ module.exports = grammar({
     operator: $ => choice('!=', '<=', '>=', '+', '*', '/', '=', '<', '>', '-'),
 
     type_name: $ => /[A-Z][A-Za-z0-9]*/,
+    // alias/member. Bare "/" stays the division operator: it is separator-
+    // delimited, a qualified name never is.
+    qualified: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/,
+    mod_path: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*(\/[a-z][a-z0-9]*(-[a-z0-9]+)*)*/,
     ident: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/,
     keyword: $ => /:[a-z][a-z0-9]*(-[a-z0-9]+)*/,
     field_ref: $ => /\.-[a-z][a-z0-9]*(-[a-z0-9]+)*/,

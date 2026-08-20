@@ -18,3 +18,20 @@ This file groups d/c/r/l entries for the lang/modules module.
 - **Why Non-Obvious**: Cutting modules reads as harmless scope reduction because every benchmark
   task fits in one file. The cost only appears at the metric that actually matters — how much
   usable work survives a single pass — where it caps reuse at zero.
+
+### [d-f99b] Module surface is private by default and machine-readable
+- **Date**: 2026-08-20
+- **Status**: Active
+- **Cluster**: lang/modules
+- **Description**: Every source file is a module whether or not it declares a header; the header
+  only names the module and opens part of it. Visibility is private by default, so the exported
+  list is a deliberate, stable contract rather than an accident of what happened to be top-level.
+- **Rationale**: The unit of one agent pass is a working module, so the property to optimise is
+  whether a later pass can build on an earlier one without reading its body. An explicit export
+  list is exactly that surface, and being declarative it can be extracted mechanically rather than
+  inferred. Public-by-default was rejected: it makes every internal helper part of the contract,
+  which is the opposite of reusable.
+- **Why Non-Obvious**: Private-by-default reads as friction when writing the first module, because
+  every reuse costs an explicit export. The benefit only appears at the second module, and the
+  cost of the alternative only appears once something internal has been depended upon and can no
+  longer be changed.

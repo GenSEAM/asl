@@ -1,4 +1,4 @@
-# AGENT_SPEC_CORE.md — AgentS-Core v0.1
+# AGENT_SPEC_CORE.md — AgentS-Core v0.2
 
 **Status:** normative for the concept-validation experiment (`EXPERIMENT.md`).
 Supersedes [`AGENT_SPEC.md`](AGENT_SPEC.md) (frozen as v0) for everything it covers.
@@ -10,27 +10,40 @@ cannot be judged on forms the specification never gave it.
 
 ## 0. Scope
 
-**In:** `defschema`, `defun`, `fn`, `let`, `if`, `cond`, `match`, `try`, records, `Result`,
-`Option`, `Pair`, lists, strings, arithmetic, comparison, `Bool` / `Int32` / `Int64` / `Float64` /
-`String` / `Unit`.
+**In:** modules, `defschema`, `defenum`, `defun`, `fn`, type parameters, `let`, `if`, `cond`,
+`match`, `try`, records, `Result`, `Option`, `Pair`, `List`, `Map`, strings, arithmetic,
+comparison, `Bool` / `Int32` / `Int64` / `Float64` / `String` / `Unit`.
 
-**Deliberately out of Core v0.1:** `defagent`, `defui`, `meta:async`, `if-target`, FFI, modules,
-JSON serialization, user-defined sum types.
+**Deliberately out of Core:** `defagent`, `defui`, `meta:async`, `if-target`, FFI, JSON
+serialization, I/O.
 
-Two exclusions are load-bearing and deliberate:
+### Why v0.2 exists
 
-* **No user-defined sum types.** HumanEval-class programs do not need them; a compiler does. Their
-  absence is what makes the Stage 5 lexer probe informative rather than decorative. Prediction on
-  record: the probe will fail without them (`EXPERIMENT.md` §7).
-* **No FFI.** Core therefore contains no `(.method obj)` form at all, so the v0 collision
-  ([`SPEC_REVIEW.md`](SPEC_REVIEW.md) C3) cannot arise. The `.-` field accessor is specified now
-  anyway, so that reintroducing FFI later is additive rather than breaking.
+v0.1 was scoped to what a HumanEval-class benchmark exercises, and that scope was wrong for the
+product. A suite of small self-contained functions cannot reveal the absence of a module system or
+of user-declarable polymorphism, because no task in it spans two files or needs a shared
+abstraction. Scoping to the benchmark therefore optimised the measurement and not the language.
+
+Three additions follow directly from the stated goal that an agent should produce reusable work,
+and that the unit of one pass is a **working module** (PCP `r-43ea`, `r-8f23`, `r-b539`):
+
+* **Modules by default** — every file is a module with an explicit exported surface, so a later
+  pass can compose an earlier one having read only that surface.
+* **Type parameters** — without them only the prelude is polymorphic and every user abstraction
+  must be duplicated per concrete type, which caps reuse at zero.
+* **Closed unions and a keyed collection** — without the first, domain states get encoded as
+  strings, defeating type safety exactly where it pays; without the second, ordinary programs are
+  inexpressible.
+
+**No FFI.** Core contains no `(.method obj)` form, so the v0 collision
+([`SPEC_REVIEW.md`](SPEC_REVIEW.md) C3) cannot arise. The `.-` accessor is specified so that
+reintroducing FFI later is additive rather than breaking.
 
 ### Deviation from the approved plan
 
-The plan listed `for` among Core's iteration forms. It is **omitted**: Core has immutable bindings
-and no mutation, so `for` would have no useful semantics that `fold` does not already provide.
-Iteration is `map` / `filter` / `fold` / `range` plus recursion.
+The plan listed `for` among Core's iteration forms. It is **omitted**: bindings are immutable and
+there is no mutation, so `for` would add nothing `fold` does not already provide. Iteration is
+`map` / `filter` / `fold` / `range` plus recursion.
 
 ---
 
@@ -62,6 +75,9 @@ is commodity (`RESEARCH_REPORT.md` §2.2). Claims about parser convenience or to
 ```
 comment    ::= ";" <any char except newline>* 
 ident      ::= [a-z] [a-z0-9-]* [?!]?          ; kebab-case
+qualified  ::= ident "/" ident                 ; alias-qualified, e.g. s/upper
+mod-path   ::= ident ( "/" ident )*            ; module path, e.g. core/strings
+type-var   ::= [A-Z] [A-Za-z0-9]*              ; only inside a { } binder
 type-name  ::= [A-Z] [A-Za-z0-9]*              ; PascalCase
 keyword    ::= ":" ident
 int-lit    ::= "-"? [0-9]+
@@ -73,6 +89,10 @@ unit-lit   ::= "()"
 ```
 
 Identifiers are case-sensitive. Whitespace and comments are insignificant except as separators.
+
+`/` is both the division operator and the qualified-name separator. They never collide: division
+is a standalone token surrounded by separators, while a qualified name has no internal whitespace.
+Clojure resolves it the same way, and for the same reason.
 `agents-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
 rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8). The prefix is deliberately spelled in
 a form the identifier rule above can actually produce — a reserved word the lexer cannot emit
@@ -91,6 +111,7 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 | `(Option T)` | `(some v)` \| `(none)` |
 | `(Result T E)` | `(ok v)` \| `(err e)` |
 | `(Pair A B)` | Built-in record, fields `first` / `second` |
+| `(Map K V)` | Immutable keyed collection; `K` must support equality |
 
 `Int` is a documented alias for `Int64`. **There is no implicit numeric conversion** — mixing
 `Int64` and `Float64` in one arithmetic form is a type error. Use §7.4's explicit conversions.
@@ -99,6 +120,34 @@ Fixing the widths resolves `SPEC_REVIEW.md` A3, which otherwise makes the same p
 differently on each of the four targets.
 
 ## 4. Declarations
+
+### 4.0 `module` — modularity by default
+
+Every source file is a module. The header is its contract, and it is deliberately readable without
+the body: a later pass composes a module by reading only this.
+
+```lisp
+(module text/casing
+  :doc "Case-conversion helpers for report rendering."
+  :export [shout initials]
+  :import [(core/strings :as s)
+           (core/lists   :as l)])
+```
+
+* `:doc` — mandatory. One sentence on what the module is for.
+* `:export` — the public surface. **Everything not listed is private to the module.**
+* `:import` — each entry binds a module path to a short alias; members are then reached as
+  `alias/name`.
+
+A file with no `module` header is still a module: its path relative to the source root becomes its
+name, its `:doc` is absent, and **nothing is exported**. Modularity is the default; the header
+only names and opens it.
+
+Private-by-default is the deliberate choice. An explicit export list is a stable surface to
+program against, and it is the one part of a module another pass must read — which is exactly the
+property being optimised when the unit of work is a whole module.
+
+Import cycles are an error. Aliases are module-local and may be chosen freely.
 
 ### 4.1 `defschema`
 
@@ -112,8 +161,17 @@ differently on each of the four targets.
   (:field retries Int64  "Attempt count" :default 3))
 ```
 
+`(defschema [{<type-vars>}] <TypeName> <field>+)`, with
 `(:field <ident> <Type> <doc-string> [:default <literal>] [:json <string>])`.
 The doc-string is mandatory — it is cheap, and it is what an LLM reads.
+
+Records may be parameterised. Type variables are bound in a leading `{ }`, so a name is a type
+variable because it was declared one, never because of how it is spelled:
+
+```lisp
+(defschema {T} Box
+  (:field value T "The wrapped value"))
+```
 
 **Construction** (resolves `SPEC_REVIEW.md` B2, which left records unconstructable):
 
@@ -148,16 +206,31 @@ overrides it. Shape copied from serde and pydantic, which converged independentl
     (ok (/ a b))))
 ```
 
-`(defun <ident> [<params>] -> <Type> <body-expr>+)`. The parameter list is a **vector**, and `->`
-is a literal token in the form, not an expression (resolves A9). The body is one or more
-expressions evaluated in order; the value is the last one.
+`(defun [{<type-vars>}] <ident> [<params>] -> <Type> [:doc <string>] <body-expr>+)`. The parameter
+list is a **vector**, and `->` is a literal token in the form, not an expression (resolves A9). The
+body is one or more expressions evaluated in order; the value is the last one.
+
+`:doc` is **mandatory for every exported function** and optional otherwise. v0.1 required a
+doc-string on record fields but gave functions nowhere to put one, which is backwards: an agent
+composing a module reads its functions, not its field layouts.
+
+Functions may be parameterised over types, bound in a leading `{ }`:
+
+```lisp
+(defun {A B} swap [(p (Pair A B))] -> (Pair B A)
+  :doc "Exchange the two components of a pair."
+  (pair (.-second p) (.-first p)))
+```
+
+Without this, only the prelude is polymorphic and every shared abstraction has to be rewritten per
+concrete type (PCP `r-8f23`).
 
 Parameters are vectors throughout the language — v0 used a list for `defun` and a vector for
 `defui`, which was inconsistent (C4). Core standardizes on the vector.
 
-Top-level `defun` and `defschema` are public; everything bound inside a body is local. Core has no
-modules, so this is the only visibility distinction, and it is what drives Go's capitalization
-(§9).
+Visibility comes from the module's `:export` list (§4.0), not from position. A top-level
+definition that is not exported is private to its module, and that is what drives Go's
+capitalization (§8).
 
 ### 4.3 `fn`
 
@@ -166,6 +239,39 @@ modules, so this is the only visibility distinction, and it is what drives Go's 
 ```
 
 Anonymous function. Closes over the enclosing scope by value. Same shape as `defun` without a name.
+
+### 4.4 `defenum` — closed unions
+
+```lisp
+(defenum Shape
+  (:case circle    [(radius Float64)]                  "A circle")
+  (:case rectangle [(width Float64) (height Float64)]  "An axis-aligned rectangle")
+  (:case point     []                                  "A degenerate zero-area shape"))
+```
+
+`(defenum [{<type-vars>}] <TypeName> <case>+)` with
+`(:case <ident> [<fields>] <doc-string>)`. Case names are kebab-case identifiers and are used as
+both constructors and patterns, exactly like the built-in `ok` / `some`:
+
+```lisp
+(circle 2.0)
+(match sh
+  ((circle r)      (* 3.14159 (* r r)))
+  ((rectangle w h) (* w h))
+  ((point)         0.0))
+```
+
+Enums may be parameterised, which is what makes recursive container types expressible:
+
+```lisp
+(defenum {T} Tree
+  (:case leaf []                            "An empty subtree")
+  (:case node [(value T) (left (Tree T)) (right (Tree T))] "An interior node"))
+```
+
+Matching an enum must be exhaustive, as for every other `match`. Without closed unions a domain
+state is encoded as a string or an integer, which discards type safety at precisely the points
+where it would have paid, and the compiler's own AST is inexpressible (PCP `r-b539`).
 
 ## 5. Expressions
 
@@ -228,6 +334,7 @@ Patterns, and nothing else:
 | `(cons <p> <p>)` | a non-empty list, binding head and tail |
 | `(pair <p> <p>)` | a `Pair` |
 | literal | equal `Int32`/`Int64`/`Bool`/`String` value |
+| `(<case> <p>*)` | a `defenum` case, binding its fields (§4.4) |
 | `<ident>` | anything, binding it |
 | `_` | anything, binding nothing |
 
@@ -377,6 +484,28 @@ the transpiler nothing to guess.
 
 ---
 
+### 6.7 Map
+
+Immutable: every operation returns a new map. Lookup is total, returning `(Option V)` rather than
+trapping, consistent with `list-get`.
+
+| Form | Type |
+|---|---|
+| `(map-empty)` | `-> (Map K V)` |
+| `(map-get m k)` | `(Map K V) K -> (Option V)` |
+| `(map-set m k v)` | `(Map K V) K V -> (Map K V)` |
+| `(map-remove m k)` | `(Map K V) K -> (Map K V)` |
+| `(map-has? m k)` | `(Map K V) K -> Bool` |
+| `(map-size m)` | `(Map K V) -> Int64` |
+| `(map-keys m)` | `(Map K V) -> (List K)` |
+| `(map-values m)` | `(Map K V) -> (List V)` |
+| `(map-pairs m)` | `(Map K V) -> (List (Pair K V))` |
+| `(map-from-pairs ps)` | `(List (Pair K V)) -> (Map K V)` — later entries win |
+
+Iteration order of `map-keys` / `map-values` / `map-pairs` is **sorted by key**, not insertion
+order. Unspecified ordering would make the four backends disagree on identical input, which the
+differential harness would then report as a transpiler defect.
+
 ## 7. Worked example
 
 Complete, uses only forms defined above, and is the shape few-shot prompts should use.
@@ -432,10 +561,20 @@ no collision policy at all.
 
 A Core program is well-formed iff:
 
-1. Delimiters balance, and every form is a list, vector, or atom.
-2. Every identifier is defined in §6, bound by `defun`/`fn`/`let`, or is a `defschema` name.
+1. Delimiters balance, and every form is a list, vector, map, or atom.
+2. Every identifier is defined in §6, bound by `defun`/`fn`/`let`, declared by
+   `defschema`/`defenum`, or imported under an alias declared in the module header.
 3. Every `defun` declares parameter types and a return type.
 4. Every `if` and `cond` is total; every `match` is exhaustive.
 5. Every `try` sits in a `defun` returning a compatible `(Result _ E)`.
 6. No numeric operation mixes types; all conversions are explicit.
 7. No identifier begins with `agents-`.
+8. The module header carries a `:doc`, and every exported `defun` carries a `:doc`.
+9. Every qualified name `alias/member` uses an alias bound in `:import`, and the member is
+   exported by that module.
+10. Every type variable used in a signature is bound in that declaration's `{ }`.
+11. There are no import cycles.
+
+Rules 2, 5, 7-11 are **semantic**, not context-free: no grammar can enforce them, and the
+conformance gate deliberately keeps such fixtures in `grammar/corpus/semantic/` so the untested
+surface stays visible rather than appearing covered.

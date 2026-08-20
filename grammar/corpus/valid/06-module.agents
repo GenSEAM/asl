@@ -1,0 +1,42 @@
+; v0.2: module header, type parameters, closed unions, keyed collection.
+
+(module text/casing
+  :doc "Case-conversion and tallying helpers for report rendering."
+  :export [shout area tally]
+  :import [(core/strings :as s)])
+
+(defschema {T} Box
+  (:field value T "The wrapped value"))
+
+(defenum Shape
+  (:case circle    [(radius Float64)]                 "A circle")
+  (:case rectangle [(width Float64) (height Float64)] "An axis-aligned rectangle")
+  (:case point     []                                 "A degenerate zero-area shape"))
+
+(defenum {T} Tree
+  (:case leaf []                                             "An empty subtree")
+  (:case node [(value T) (left (Tree T)) (right (Tree T))]   "An interior node"))
+
+(defun {A B} swap [(p (Pair A B))] -> (Pair B A)
+  :doc "Exchange the two components of a pair."
+  (pair (.-second p) (.-first p)))
+
+(defun area [(sh Shape)] -> Float64
+  :doc "Area of a shape, zero for degenerate cases."
+  (match sh
+    ((circle r)      (* 3.14159 (* r r)))
+    ((rectangle w h) (* w h))
+    ((point)         0.0)))
+
+(defun shout [(x String)] -> String
+  :doc "Uppercase and exclaim, via the imported string module."
+  (s/concat (s/upper x) "!"))
+
+(defun tally [(ws (List String))] -> (Map String Int64)
+  :doc "Count occurrences of each word."
+  (fold (fn [(m (Map String Int64)) (w String)] -> (Map String Int64)
+          (match (map-get m w)
+            ((some n) (map-set m w (+ n 1)))
+            ((none)   (map-set m w 1))))
+        (map-empty)
+        ws))

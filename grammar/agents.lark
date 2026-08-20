@@ -14,19 +14,38 @@
 
 start: toplevel*
 
-toplevel: defschema
+toplevel: module_decl
+        | defschema
         | defun
+        | defenum
+
+// ---------- module header (v0.2) ----------
+
+module_decl: "(" MODULE mod_path module_opt* ")"
+module_opt: DOC_KW STRING
+          | EXPORT_KW "[" IDENT* "]"
+          | IMPORT_KW "[" import_spec* "]"
+import_spec: "(" mod_path AS_KW IDENT ")"
+mod_path: MOD_PATH | IDENT
+
+// Type parameters are bound explicitly, so a name is a type variable because it
+// was declared one, never because of its spelling.
+type_params: "{" TYPE_NAME* "}"
 
 // ---------- declarations ----------
 
-defschema: "(" DEFSCHEMA TYPE_NAME field+ ")"
+defschema: "(" DEFSCHEMA type_params? TYPE_NAME field+ ")"
 
 field: "(" FIELD_KW IDENT type STRING field_opt* ")"
 
 field_opt: DEFAULT_KW literal
          | JSON_KW STRING
 
-defun: "(" DEFUN IDENT params ARROW type expr+ ")"
+defun: "(" DEFUN type_params? IDENT params ARROW type doc_opt? expr+ ")"
+doc_opt: DOC_KW STRING
+
+defenum: "(" DEFENUM type_params? TYPE_NAME enum_case+ ")"
+enum_case: "(" CASE_KW IDENT "[" param* "]" STRING ")"
 
 params: "[" param* "]"
 param: "(" IDENT type ")"
@@ -40,6 +59,7 @@ type: TYPE_NAME
 
 expr: literal
     | IDENT
+    | QUALIFIED
     | OPERATOR
     | let_form
     | if_form
@@ -63,7 +83,8 @@ else_clause: "(" ELSE_KW expr+ ")"
 match_form: "(" MATCH expr match_arm+ ")"
 match_arm: "(" pattern expr+ ")"
 
-pattern: "(" OK pattern ")"
+pattern: "(" IDENT pattern* ")"     -> enum_pattern
+       | "(" OK pattern ")"
        | "(" ERR pattern ")"
        | "(" SOME pattern ")"
        | "(" NONE ")"
@@ -117,6 +138,14 @@ LIST: "list"
 CONS: "cons"
 PAIR: "pair"
 
+MODULE: "module"
+DEFENUM: "defenum"
+DOC_KW: ":doc"
+EXPORT_KW: ":export"
+IMPORT_KW: ":import"
+AS_KW: ":as"
+CASE_KW: ":case"
+
 FIELD_KW: ":field"
 DEFAULT_KW: ":default"
 JSON_KW: ":json"
@@ -140,6 +169,12 @@ UNIT: "()"
 TYPE_NAME: /[A-Z][A-Za-z0-9]*/
 IDENT: /[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
 KEYWORD: /:[a-z][a-z0-9]*(-[a-z0-9]+)*/
+
+// alias/member and a/b/c module paths share a shape; position disambiguates.
+// Bare "/" stays the division operator: it is separator-delimited, a qualified
+// name never is.
+QUALIFIED: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+MOD_PATH: /[a-z][a-z0-9]*(-[a-z0-9]+)*(\/[a-z][a-z0-9]*(-[a-z0-9]+)*)+/
 
 INT: /-?[0-9]+/
 FLOAT: /-?[0-9]+\.[0-9]+/
