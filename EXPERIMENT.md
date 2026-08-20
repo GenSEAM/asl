@@ -169,3 +169,26 @@ PCP `r-io`. Until it is resolved, this benchmark is unrunnable regardless of gat
 
 **H5 is restated:** Core transpiles cleanly to Python and JavaScript — compile/import rate and
 differential agreement against the reference interpreter, on those two targets.
+
+### 2026-08-20-c — pilot scope and spend cap (made BEFORE any results)
+
+No arm has run. This amendment narrows the first run to fit an explicit budget.
+
+**Scope: 2-3 borderline tasks, not the suite.** Chosen for being at the edge of what Core can
+express, since a task the language handles comfortably tells us nothing we do not already know.
+Task ids are fixed in `bench/tasks/PILOT.txt` before the first call.
+
+**Spend cap: $0.20 per run, enforced in the harness, not by intention.** The harness must track
+cumulative spend and abort mid-run when the cap is reached rather than reporting an overrun
+afterwards. Measured payload: the specification is ~6,000 tokens and is resent on every call, so
+it dominates cost; at cheap-tier pricing 60 calls is roughly $0.08 and 120 roughly $0.16. Prompt
+caching, if the gateway offers it, cuts that by around two thirds.
+
+**This pilot cannot satisfy the primary gate, and must not be reported as if it had.** A pass@1
+estimate over 2-3 tasks carries no useful confidence interval; the 15 pp threshold in §6 is
+unevaluable at this sample size. What the pilot *can* do is detect catastrophic failure — a model
+that cannot produce parseable or type-correct AgentS at all — which is a cheap and legitimate kill
+gate. A positive pilot licenses spending on a real run; it does not validate the concept.
+
+**Host language decided:** the compiler is hosted in Rust (PCP `d-2030`). This does not affect the
+measurement targets, which remain Python and JavaScript per amendment 2026-08-20-b.

@@ -173,8 +173,26 @@ The harness can be written and unit-tested without any of this. It cannot be run
 
 ---
 
-## 7. Working agreements
+## 7. Roles in measurement
 
+Qualitative critique of transpiled output is in scope for this assistant. Scoring is not
+(PCP `c-9af5`).
+
+* **Mechanical, no judgement:** tests pass or fail, the target compiles or does not, reference
+  implementation and backends agree or do not. This is the gate.
+* **Judged, reported alongside, never scored:** idiomaticity of the generated Python/JavaScript,
+  readability, and transpiler artifacts such as redundant copies or awkward encodings of language
+  constructs the target lacks.
+
+The separation is structural rather than a matter of care: a judge who designed the language
+resolves every ambiguous case toward the design they already chose, and those errors correlate
+instead of cancelling.
+
+## 8. Working agreements
+
+* **The first run is a pilot, not a measurement.** 2-3 borderline tasks under a $0.20 cap enforced
+  in the harness. It can detect catastrophic failure; it cannot evaluate the 15 pp threshold, and
+  must not be reported as if it could.
 * **Pre-registration is binding.** `EXPERIMENT.md` §9 requires amendments to be dated and to state
   whether they were made before or after seeing results. Editing a threshold after seeing a result
   invalidates it — say so rather than quietly changing it.
