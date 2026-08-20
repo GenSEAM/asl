@@ -136,3 +136,36 @@ seeing an outcome.
 **Replacement prediction for H4:** the probe now succeeds in producing a lexer, and the binding
 constraint moves to what remains absent from Core — I/O and FFI — meaning a self-hosting compiler
 stays blocked on reading its own source file rather than on expressing its token type.
+
+### 2026-08-20-b — benchmark and measurement targets changed (made BEFORE any results)
+
+No arm has run and no result has been observed. The change follows from the project goal, not from
+an outcome.
+
+**Benchmark: HumanEval → terminal-bench.** HumanEval is a suite of small self-contained functions
+and therefore cannot exercise the property v0.2 was built for: modules, reuse, and how much
+*working* code survives one pass. Measuring on it would have scored the language on the one axis
+its redesign was not about. terminal-bench tasks are whole working programs, which is the unit
+this project defines as a pass.
+
+**SWE-bench was considered and rejected for now.** Its tasks are edits inside existing Python
+repositories, so a solution must import, subclass and interoperate with arbitrary host code. Core
+has no FFI by deliberate design, so such a patch is currently inexpressible — the measurement
+would report a scope boundary as a language failure. Revisit only if FFI enters Core.
+
+**Measurement targets: Python and JavaScript.** These are where the benchmark and its human
+baselines live. Rust and Go remain the compiler's own self-hosting targets and are unchanged as a
+product goal; they are simply not what the generation experiment compares against.
+
+**Consequences for the pre-registered gate.** The comparator is no longer MultiPL-E's Go/Rust
+translations but real Python/JavaScript solutions to the same terminal-bench tasks. The 15 pp
+threshold is retained in form but now applies against those baselines. §3, §4, §5, §6 and §8 are
+superseded by this amendment wherever they name HumanEval, MultiPL-E, or Go/Rust as comparators.
+
+**A new blocking dependency this creates:** terminal-bench tasks read input and write output.
+Core has **no I/O at all** — it is on the deliberate exclusion list. The language must gain an I/O
+surface before any arm can run, and that is a scope decision, not a harness detail. Recorded as
+PCP `r-io`. Until it is resolved, this benchmark is unrunnable regardless of gateway access.
+
+**H5 is restated:** Core transpiles cleanly to Python and JavaScript — compile/import rate and
+differential agreement against the reference interpreter, on those two targets.

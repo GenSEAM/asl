@@ -46,7 +46,8 @@ Everything below was checked by a command whose output was read, not inferred.
 
 1. `AGENT_SPEC_CORE.md` — the language. **Normative.** Start here.
 2. `ROADMAP.md` — this file.
-3. `EXPERIMENT.md` — pre-registered measurement protocol and pass/fail thresholds.
+3. `EXPERIMENT.md` — pre-registered measurement protocol and pass/fail thresholds. **Read §9
+   first**: two amendments supersede parts of the body.
 4. `RESEARCH_REPORT.md` — evidence on whether the concept is viable at all. Read §3 and §5.
 5. `SPEC_REVIEW.md` — critique of the original v0 draft; explains why v0.2 looks as it does.
 6. `AGENT_SPEC.md` — the original v0 draft, **frozen, superseded, kept only for provenance**.
@@ -114,20 +115,29 @@ reports it as pending; each new check should add fixtures there.
 1. **Reference interpreter** — enough to execute the corpus and validate benchmark translations.
    Rust, per the priority target; tree-sitter's Rust bindings are first-class and the code survives
    into the compiler frontend.
-2. **Benchmark translations** — hand-written, never model-generated (`EXPERIMENT.md` §3), each
-   verified solvable by the interpreter before any measurement arm runs.
-3. **Measurement** — see §5. Blocked.
-4. **Native backends** — Rust and Go. Gated behind the checker *and* an unrecorded ownership
-   decision (PCP `l-880d`).
-5. **Self-hosting probe** — write the AgentS lexer in AgentS. Prediction on record: it needs
+2. **I/O surface** — now on the critical path, PCP `r-56bf`. The benchmark is whole programs that read
+   and write, and Core has no I/O at all. Decide at the same time whether effects are tracked in
+   the type system; leaving that implicit is cheap now and is what forces function colouring later.
+3. **Python and JavaScript backends** — the measurement targets. Rust and Go remain the compiler's
+   own self-hosting targets and are unchanged as a product goal.
+4. **Benchmark harness** — terminal-bench, comparing generated AgentS transpiled to Python/JS
+   against real Python/JS solutions to the same tasks.
+5. **Measurement** — see §5. Blocked.
+6. **Native backends** — Rust and Go, for self-hosting. Gated behind the checker *and* an
+   unrecorded ownership decision (PCP `l-880d`).
+7. **Self-hosting probe** — write the AgentS lexer in AgentS. Prediction on record: it needs
    closed unions, which v0.2 now has, so the probe is newly worth running.
 
 ---
 
 ## 5. Blocked — needs the owner
 
-Measurement cannot start. The protocol and thresholds are fixed; the access details are not
-(PCP `l-298e`). Required:
+Measurement cannot start, now for two independent reasons.
+
+**Language:** the benchmark is whole programs that read and write, and Core has no I/O
+(PCP `r-56bf`). This blocks every arm regardless of access.
+
+**Access** (PCP `l-298e`) — required:
 
 1. **LLM Gateway endpoint** — is it OpenAI-compatible (`/v1/chat/completions`)?
 2. **Exact model identifier**, as the API accepts it. A model was named verbally as
@@ -135,7 +145,11 @@ Measurement cannot start. The protocol and thresholds are fixed; the access deta
    guessed at.
 3. **Environment variable name** holding the credential. Credentials go in the environment only —
    never the repository, never a committed artifact.
-4. **Factory Droid** — the headless invocation, and how a specification is supplied to it.
+4. **Harness** — terminal-bench was chosen as the driving agent/benchmark over Factory Droid and
+   over SWE-bench. SWE-bench was rejected because its tasks are edits inside existing Python
+   repositories and require interoperating with arbitrary host code, which Core cannot express
+   without FFI; measuring there would report a deliberate scope boundary as a language failure.
+   Needed: the headless invocation and how a specification is supplied to it.
 
 The harness can be written and unit-tested without any of this. It cannot be run.
 
