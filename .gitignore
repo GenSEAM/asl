@@ -11,3 +11,5 @@ package-lock.json
 backend/t/smoke.py
 __pycache__/
 .pytest_cache/
+bench/harness/config.json
+results/*.json
