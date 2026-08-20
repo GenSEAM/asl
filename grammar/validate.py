@@ -71,6 +71,13 @@ def main() -> int:
 
     cases = [(p, True) for p in sorted((ROOT / "corpus" / "valid").glob("*.agents"))]
     cases += [(p, False) for p in sorted((ROOT / "corpus" / "invalid").glob("*.agents"))]
+    # corpus/semantic holds programs that are well-formed to any context-free
+    # grammar but violate a rule only a checker can enforce (reserved prefixes,
+    # exhaustiveness, arity, types). They MUST parse; rejecting them here would
+    # mean the grammar is over-tight. They are listed so the untested surface
+    # stays visible instead of looking covered.
+    semantic = sorted((ROOT / "corpus" / "semantic").glob("*.agents"))
+    cases += [(p, True) for p in semantic]
 
     print(f"{'fixture':<30} {'lark':<8} {'tree-sitter':<12} verdict")
     print("-" * 66)
@@ -97,6 +104,9 @@ def main() -> int:
         for p in problems:
             print(f"{'':<30} -> {p}")
 
+    if semantic:
+        print(f"\nsemantic-only fixtures (parse by design, need a checker): "
+              f"{', '.join(p.name for p in semantic)}")
     print(f"\n{len(failures)} failure(s)")
     return len(failures)
 

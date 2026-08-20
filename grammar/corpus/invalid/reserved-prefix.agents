@@ -1,3 +1,0 @@
-; agents__ is a reserved compiler-internal prefix (AGENT_SPEC_CORE 2).
-(defun agents__internal [] -> Int64
-  1)

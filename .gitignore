@@ -4,3 +4,7 @@ node_modules/
 target/
 grammar/tree-sitter-agents/src/
 package-lock.json
+.pcp/MAP.json
+.pcp/INVENTORY.md
+.pcp/INVENTORY.json
+.pcp/INDEX.md

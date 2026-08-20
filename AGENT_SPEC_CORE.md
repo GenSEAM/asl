@@ -73,8 +73,10 @@ unit-lit   ::= "()"
 ```
 
 Identifiers are case-sensitive. Whitespace and comments are insignificant except as separators.
-`agents__` is a **reserved identifier prefix** for compiler-internal names; user code using it is
-rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8).
+`agents-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
+rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8). The prefix is deliberately spelled in
+a form the identifier rule above can actually produce — a reserved word the lexer cannot emit
+reserves nothing, and its conformance fixture would pass for an unrelated reason.
 
 ## 3. Types
 
@@ -207,8 +209,8 @@ for the same reason `if` is.
   ((some n) (* n 2))
   ((none)   0))
 
-(match (parse-config text)
-  ((ok cfg)  (.-retries cfg))
+(match (option-to-result (list-head xs) "empty list")
+  ((ok n)    n)
   ((err msg) (string-length msg)))
 
 (match xs
@@ -235,10 +237,14 @@ type.
 ### 5.5 `try` — Result propagation
 
 ```lisp
-(defun read-port [(text String)] -> (Result Int64 String)
-  (let [(raw (try (find-field text "port")))
-        (n   (try (parse-int raw)))]
-    (ok n)))
+(defun parse-port [(text String)] -> (Result Int64 String)
+  (let [(raw (try (option-to-result (list-get (string-split text ":") 1)
+                                    "missing port")))
+        (n   (try (option-to-result (string-to-int64 (string-trim raw))
+                                    "port is not a number")))]
+    (if (> n 65535)
+      (err "port out of range")
+      (ok n))))
 ```
 
 `(try e)` where `e : (Result T E)` evaluates to `T`, or returns `(err …)` from the enclosing
@@ -432,4 +438,4 @@ A Core program is well-formed iff:
 4. Every `if` and `cond` is total; every `match` is exhaustive.
 5. Every `try` sits in a `defun` returning a compatible `(Result _ E)`.
 6. No numeric operation mixes types; all conversions are explicit.
-7. No identifier begins with `agents__`.
+7. No identifier begins with `agents-`.
