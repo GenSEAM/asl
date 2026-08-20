@@ -377,140 +377,136 @@ short-circuit; nothing else does. The compiler may not reorder or elide any call
 
 ## 6. Closed vocabulary
 
-Every builtin, with its type. Nothing outside this table and §4–5 exists in Core.
+Every builtin, with its type. Nothing outside this table and §4-5 exists in Core.
+
+**Generated from `prelude/prelude.json`** — edit there, not here.
 
 ### 6.1 Arithmetic
 
-`N` is `Int32`, `Int64`, or `Float64`; both operands and the result share one `N`.
-
-| Form | Type |
-|---|---|
-| `(+ a b)` `(- a b)` `(* a b)` | `N N -> N` |
-| `(/ a b)` | `N N -> N` — integer division truncates toward zero; **traps on zero divisor** |
-| `(mod a b)` | `N N -> N` — sign follows the dividend; traps on zero |
-| `(checked-div a b)` `(checked-mod a b)` | `N N -> (Option N)` — `(none)` on zero divisor |
-| `(neg a)` `(abs a)` | `N -> N` |
-| `(min a b)` `(max a b)` | `N N -> N` |
-
-Overflow of `Int32`/`Int64` traps; it is never wrapping. This is one behavior across all four
-targets by construction, which Go and TypeScript do not give for free.
+| Form | Type | Meaning |
+|---|---|---|
+| `(+ a b)` | `N N -> N` | Sum. |
+| `(- a b)` | `N N -> N` | Difference. |
+| `(* a b)` | `N N -> N` | Product. |
+| `(/ a b)` | `N N -> N` | Division; integer division truncates toward zero. Traps on a zero divisor. |
+| `(mod a b)` | `N N -> N` | Remainder; the sign follows the dividend. Traps on a zero divisor. |
+| `(checked-div a b)` | `N N -> (Option N)` | Division, or none on a zero divisor. |
+| `(checked-mod a b)` | `N N -> (Option N)` | Remainder, or none on a zero divisor. |
+| `(neg a)` | `N -> N` | Arithmetic negation. |
+| `(abs a)` | `N -> N` | Absolute value. |
+| `(min a b)` | `N N -> N` | Lesser of two values. |
+| `(max a b)` | `N N -> N` | Greater of two values. |
 
 ### 6.2 Comparison and logic
 
-| Form | Type |
-|---|---|
-| `(= a b)` `(!= a b)` | `T T -> Bool` — structural equality |
-| `(< a b)` `(<= a b)` `(> a b)` `(>= a b)` | `T T -> Bool` for `N` and `String` |
-| `(and a b)` `(or a b)` | `Bool Bool -> Bool`, short-circuiting |
-| `(not a)` | `Bool -> Bool` |
+| Form | Type | Meaning |
+|---|---|---|
+| `(= a b)` | `T T -> Bool` | Structural equality. |
+| `(!= a b)` | `T T -> Bool` | Structural inequality. |
+| `(< a b)` | `T T -> Bool` | Ordered comparison, for numbers and strings. |
+| `(<= a b)` | `T T -> Bool` | Ordered comparison, for numbers and strings. |
+| `(> a b)` | `T T -> Bool` | Ordered comparison, for numbers and strings. |
+| `(>= a b)` | `T T -> Bool` | Ordered comparison, for numbers and strings. |
+| `(and a b)` | `Bool Bool -> Bool` | Conjunction; short-circuits. |
+| `(or a b)` | `Bool Bool -> Bool` | Disjunction; short-circuits. |
+| `(not a)` | `Bool -> Bool` | Negation. |
 
 ### 6.3 String
 
-Indices are character offsets. Out-of-range slicing yields `(none)`, never a trap.
-
-| Form | Type |
-|---|---|
-| `(string-length s)` | `String -> Int64` |
-| `(string-empty? s)` | `String -> Bool` |
-| `(str a b …)` | `String… -> String` — variadic, `String` only |
-| `(string-slice s start end)` | `String Int64 Int64 -> (Option String)` — half-open |
-| `(string-index-of s sub)` | `String String -> (Option Int64)` |
-| `(string-contains? s sub)` | `String String -> Bool` |
-| `(string-starts-with? s p)` `(string-ends-with? s p)` | `String String -> Bool` |
-| `(string-split s sep)` | `String String -> (List String)` |
-| `(string-join parts sep)` | `(List String) String -> String` |
-| `(string-upper s)` `(string-lower s)` `(string-trim s)` `(string-reverse s)` | `String -> String` |
-| `(string-replace s from to)` | `String String String -> String` |
-| `(string-chars s)` | `String -> (List String)` — one-character strings |
-| `(string-from-int64 n)` `(string-from-float64 x)` | `Int64 -> String`, `Float64 -> String` |
-| `(string-to-int64 s)` | `String -> (Option Int64)` |
-| `(string-to-float64 s)` | `String -> (Option Float64)` |
-
-Conversion builtins are named `-to-`, not `->`. Scheme's `->` convention collides directly with
-the return-type token in `defun`, making `(string->int64 s)` ambiguous to any lexer. Found while
-writing the grammar; recorded here because the ambiguity is invisible until you try to parse it.
-
-`str` takes `String` only. Converting first is deliberate: it keeps the type rules total and gives
-the transpiler nothing to guess.
+| Form | Type | Meaning |
+|---|---|---|
+| `(string-length a)` | `String -> Int64` | Length in characters. |
+| `(string-empty? a)` | `String -> Bool` | True when the string has no characters. |
+| `(str a b …)` | `String... -> String` | Concatenate strings. Takes strings only; convert first. |
+| `(string-slice a b c)` | `String Int64 Int64 -> (Option String)` | Half-open character slice, or none when out of range. |
+| `(string-index-of a b)` | `String String -> (Option Int64)` | Character index of the first occurrence. |
+| `(string-contains? a b)` | `String String -> Bool` | True when the substring occurs. |
+| `(string-starts-with? a b)` | `String String -> Bool` | True when the string begins with the prefix. |
+| `(string-ends-with? a b)` | `String String -> Bool` | True when the string ends with the suffix. |
+| `(string-split a b)` | `String String -> (List String)` | Split on a separator. |
+| `(string-join a b c)` | `(List String) String -> String` | Join with a separator. |
+| `(string-upper a)` | `String -> String` | Upper case. |
+| `(string-lower a)` | `String -> String` | Lower case. |
+| `(string-trim a)` | `String -> String` | Remove leading and trailing whitespace. |
+| `(string-reverse a)` | `String -> String` | Reverse the character sequence. |
+| `(string-replace a b c)` | `String String String -> String` | Replace every occurrence. |
+| `(string-chars a)` | `String -> (List String)` | Characters as one-character strings. |
+| `(string-from-int64 a)` | `Int64 -> String` | Decimal rendering of an integer. |
+| `(string-from-float64 a)` | `Float64 -> String` | Decimal rendering of a float. |
+| `(string-to-int64 a)` | `String -> (Option Int64)` | Parse an integer, or none. |
+| `(string-to-float64 a)` | `String -> (Option Float64)` | Parse a float, or none. |
 
 ### 6.4 Numeric conversion
 
-| Form | Type |
-|---|---|
-| `(int32-to-int64 x)` | `Int32 -> Int64` |
-| `(int64-to-int32 x)` | `Int64 -> (Option Int32)` |
-| `(int64-to-float64 x)` | `Int64 -> Float64` |
-| `(float64-to-int64 x)` | `Float64 -> (Option Int64)` — truncates; `(none)` if NaN/∞/out of range |
+| Form | Type | Meaning |
+|---|---|---|
+| `(int32-to-int64 a)` | `Int32 -> Int64` | Widen. |
+| `(int64-to-int32 a)` | `Int64 -> (Option Int32)` | Narrow, or none when out of range. |
+| `(int64-to-float64 a)` | `Int64 -> Float64` | Convert to floating point. |
+| `(float64-to-int64 a)` | `Float64 -> (Option Int64)` | Truncate toward zero, or none for NaN, infinity or out of range. |
 
 ### 6.5 List
 
-| Form | Type |
-|---|---|
-| `(list a b …)` | `T… -> (List T)` |
-| `(list-empty? xs)` | `(List T) -> Bool` |
-| `(list-length xs)` | `(List T) -> Int64` |
-| `(list-get xs i)` | `(List T) Int64 -> (Option T)` |
-| `(list-head xs)` | `(List T) -> (Option T)` |
-| `(list-tail xs)` | `(List T) -> (Option (List T))` |
-| `(list-cons x xs)` | `T (List T) -> (List T)` |
-| `(list-append xs ys)` | `(List T) (List T) -> (List T)` |
-| `(list-reverse xs)` | `(List T) -> (List T)` |
-| `(list-slice xs start end)` | `(List T) Int64 Int64 -> (Option (List T))` |
-| `(list-contains? xs x)` | `(List T) T -> Bool` |
-| `(list-index-of xs x)` | `(List T) T -> (Option Int64)` |
-| `(list-sort xs)` | `(List T) -> (List T)`, ordered `T`, stable ascending |
-| `(list-sort-by f xs)` | `(fn [T] -> K) (List T) -> (List T)`, ordered `K`, stable |
-| `(map f xs)` | `(fn [A] -> B) (List A) -> (List B)` |
-| `(filter p xs)` | `(fn [T] -> Bool) (List T) -> (List T)` |
-| `(fold f init xs)` | `(fn [B A] -> B) B (List A) -> B` — left fold |
-| `(range start end)` | `Int64 Int64 -> (List Int64)` — half-open, empty if `start >= end` |
-| `(zip xs ys)` | `(List A) (List B) -> (List (Pair A B))` — truncates to the shorter |
-| `(list-sum xs)` | `(List N) -> N` |
-| `(list-min xs)` `(list-max xs)` | `(List T) -> (Option T)`, ordered `T` |
+| Form | Type | Meaning |
+|---|---|---|
+| `(list a b …)` | `T... -> (List T)` | Construct a list. |
+| `(list-empty? a b)` | `(List T) -> Bool` | True when the list has no elements. |
+| `(list-length a b)` | `(List T) -> Int64` | Element count. |
+| `(list-get a b c)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
+| `(list-head a b)` | `(List T) -> (Option T)` | First element, or none. |
+| `(list-tail a b)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
+| `(list-cons a b c)` | `T (List T) -> (List T)` | Prepend an element. |
+| `(list-append a b c d)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
+| `(list-reverse a b)` | `(List T) -> (List T)` | Reverse order. |
+| `(list-slice a b c d)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
+| `(list-contains? a b c)` | `(List T) T -> Bool` | True when the element occurs. |
+| `(list-index-of a b c)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
+| `(list-sort a b)` | `(List T) -> (List T)` | Stable ascending sort. |
+| `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key. |
+| `(map a b)` | `(fn [A] -> B) (List A) -> (List B)` | Apply a function to every element. |
+| `(filter a b)` | `(fn [T] -> Bool) (List T) -> (List T)` | Keep elements satisfying a predicate. |
+| `(fold a b c)` | `(fn [B A] -> B) B (List A) -> B` | Left fold with an initial accumulator. |
+| `(range a b)` | `Int64 Int64 -> (List Int64)` | Half-open integer range; empty when start is not below end. |
+| `(zip a b c d)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
+| `(list-sum a b)` | `(List N) -> N` | Sum of elements. |
+| `(list-min a b)` | `(List T) -> (Option T)` | Least element, or none when empty. |
+| `(list-max a b)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
 
-### 6.6 Option, Result, Pair
+### 6.6 Map
 
-| Form | Type |
-|---|---|
-| `(some v)` / `(none)` | `T -> (Option T)` / `(Option T)` |
-| `(ok v)` / `(err e)` | `T -> (Result T E)` / `E -> (Result T E)` |
-| `(is-some? o)` `(is-none? o)` | `(Option T) -> Bool` |
-| `(is-ok? r)` `(is-err? r)` | `(Result T E) -> Bool` |
-| `(option-or o default)` | `(Option T) T -> T` |
-| `(result-or r default)` | `(Result T E) T -> T` |
-| `(option-map f o)` | `(fn [A] -> B) (Option A) -> (Option B)` |
-| `(result-map f r)` | `(fn [A] -> B) (Result A E) -> (Result B E)` |
-| `(result-map-err f r)` | `(fn [E] -> F) (Result T E) -> (Result T F)` |
-| `(option-to-result o e)` | `(Option T) E -> (Result T E)` |
-| `(result-to-option r)` | `(Result T E) -> (Option T)` |
-| `(pair a b)` | `A B -> (Pair A B)` |
+| Form | Type | Meaning |
+|---|---|---|
+| `(map-empty)` | `-> (Map K V)` | The empty map. |
+| `(map-get a b c d)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
+| `(map-set a b c d)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
+| `(map-remove a b c d)` | `(Map K V) K -> (Map K V)` | Map without the key. |
+| `(map-has? a b c d)` | `(Map K V) K -> Bool` | True when the key is present. |
+| `(map-size a b c)` | `(Map K V) -> Int64` | Number of entries. |
+| `(map-keys a b c)` | `(Map K V) -> (List K)` | Keys, sorted. |
+| `(map-values a b c)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
+| `(map-pairs a b c)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
+| `(map-from-pairs a b c d)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
 
-`Pair` fields are read with `(.-first p)` and `(.-second p)` like any record.
+### 6.7 Option, Result, Pair
 
----
-
-### 6.7 Map
-
-Immutable: every operation returns a new map. Lookup is total, returning `(Option V)` rather than
-trapping, consistent with `list-get`.
-
-| Form | Type |
-|---|---|
-| `(map-empty)` | `-> (Map K V)` |
-| `(map-get m k)` | `(Map K V) K -> (Option V)` |
-| `(map-set m k v)` | `(Map K V) K V -> (Map K V)` |
-| `(map-remove m k)` | `(Map K V) K -> (Map K V)` |
-| `(map-has? m k)` | `(Map K V) K -> Bool` |
-| `(map-size m)` | `(Map K V) -> Int64` |
-| `(map-keys m)` | `(Map K V) -> (List K)` |
-| `(map-values m)` | `(Map K V) -> (List V)` |
-| `(map-pairs m)` | `(Map K V) -> (List (Pair K V))` |
-| `(map-from-pairs ps)` | `(List (Pair K V)) -> (Map K V)` — later entries win |
-
-Iteration order of `map-keys` / `map-values` / `map-pairs` is **sorted by key**, not insertion
-order. Unspecified ordering would make the four backends disagree on identical input, which the
-differential harness would then report as a transpiler defect.
-
+| Form | Type | Meaning |
+|---|---|---|
+| `(some a)` | `T -> (Option T)` | A present value. |
+| `(none)` | `-> (Option T)` | An absent value. |
+| `(ok a)` | `T -> (Result T E)` | A successful result. |
+| `(err a)` | `E -> (Result T E)` | A failed result. |
+| `(is-some? a b)` | `(Option T) -> Bool` | True when a value is present. |
+| `(is-none? a b)` | `(Option T) -> Bool` | True when no value is present. |
+| `(is-ok? a b c)` | `(Result T E) -> Bool` | True when the result succeeded. |
+| `(is-err? a b c)` | `(Result T E) -> Bool` | True when the result failed. |
+| `(option-or a b c)` | `(Option T) T -> T` | The value, or a fallback when absent. |
+| `(result-or a b c d)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
+| `(option-map a b)` | `(fn [A] -> B) (Option A) -> (Option B)` | Transform a present value. |
+| `(result-map a b)` | `(fn [A] -> B) (Result A E) -> (Result B E)` | Transform a successful value. |
+| `(result-map-err a b)` | `(fn [E] -> F) (Result T E) -> (Result T F)` | Transform a failure value. |
+| `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
+| `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
+| `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
 ## 7. Worked example
 
 Complete, uses only forms defined above, and is the shape few-shot prompts should use.

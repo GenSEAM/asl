@@ -29,16 +29,21 @@ QUERY = """
 (defun name: (ident) @definition)
 """
 
-# Heads that are grammar productions, not calls: they never reach a `call` node.
-SPECIAL_FORMS = {"defschema", "defun", "fn", "let", "if", "cond", "match", "try",
-                 "ok", "err", "some", "none", "list", "cons", "pair"}
+def special_forms() -> set[str]:
+    """Grammar productions, not calls; they never reach a `call` node."""
+    sf = json.loads((ROOT.parent / "prelude" / "prelude.json").read_text())["special_forms"]
+    return {n for group in sf.values() for n in group}
 
 
 def defined_builtins() -> set[str]:
-    """Builtins are those named in a section 6 table cell, e.g. | `(list-get xs i)` | ..."""
-    spec = SPEC.read_text()
-    body = spec.split("## 6. Closed vocabulary")[1].split("## 7.")[0]
-    return set(re.findall(r"`\((?:#)?([a-z][a-z0-9\-]*[?!]?)[ )]", body))
+    """Read the vocabulary from its single source of truth.
+
+    This previously regexed the specification's markdown tables, which made the
+    gate depend on prose formatting: a reworded table silently changed what
+    counted as defined.
+    """
+    prelude = json.loads((ROOT.parent / "prelude" / "prelude.json").read_text())
+    return {b["name"] for b in prelude["builtins"]}
 
 
 def run_query(paths: list[Path]) -> tuple[set[str], set[str]]:
@@ -71,7 +76,7 @@ def main() -> int:
 
     calls, local = run_query(sources)
     builtins = defined_builtins()
-    known = builtins | local | SPECIAL_FORMS
+    known = builtins | local | special_forms()
     undefined = sorted(calls - known)
 
     print(f"builtins defined in section 6 : {len(builtins)}")

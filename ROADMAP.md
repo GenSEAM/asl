@@ -44,7 +44,11 @@ Everything below was checked by a command whose output was read, not inferred.
 
 ### Documents, in reading order for a newcomer
 
-1. `AGENT_SPEC_CORE.md` — the language. **Normative.** Start here.
+0. `prelude/prelude.json` — the vocabulary, authoritative. The specification tables and the
+   handbook are generated from it; nothing else may restate it.
+1. `AGENT_SPEC_CORE.md` — the language. **Normative** for the forms. Start here.
+1b. `prelude/HANDBOOK.md` — generated agent-facing reference, ~2,600 tokens. This is the artifact
+   that goes into a prompt.
 2. `ROADMAP.md` — this file.
 3. `EXPERIMENT.md` — pre-registered measurement protocol and pass/fail thresholds. **Read §9
    first**: two amendments supersede parts of the body.

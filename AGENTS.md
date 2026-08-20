@@ -33,11 +33,27 @@ and a grammar that rejected them would be over-tight.
 
 ```bash
 .venv/bin/python grammar/closure_audit.py
+.venv/bin/python prelude/generate.py --check
 ```
 
-Extracts call heads with the project's own tree-sitter grammar and fails if any names something
-neither defined in the specification's vocabulary nor bound locally. The specification's claim to
-be closed is only worth what this gate enforces; it was false once already.
+The closure gate extracts call heads with the project's own tree-sitter grammar and fails if any
+names something neither in the vocabulary nor bound locally. The specification's claim to be closed
+is only worth what this gate enforces; it was false once already.
+
+The generator check fails when a generated artifact is stale.
+
+### The vocabulary has one source
+
+`prelude/prelude.json` is authoritative. The specification's §6 tables and `prelude/HANDBOOK.md`
+are **generated** — editing them by hand is wasted work that the `--check` gate will reject.
+
+```bash
+.venv/bin/python prelude/generate.py
+```
+
+`HANDBOOK.md` is what goes into an agent's prompt, not the full specification: it is the same
+vocabulary at roughly 2,600 tokens against 6,500, and the prompt is resent on every call, so this
+dominates the cost of a run.
 
 ### Regenerating the parser
 
