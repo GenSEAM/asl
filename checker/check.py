@@ -288,6 +288,25 @@ class Checker:
     def entries(self) -> None:
         for extra in self.m.entries[1:]:
             self.add(extra, 15, "a second defentry; a program has at most one entry point")
+        # §4.5 fixes the entry point's parameters, and every backend lowers it to
+        # a startup shim that passes the host's argument vector. A defentry with
+        # any other signature parses, checked clean, and then produced a program
+        # that could not be run: the Python backend called it with one argument
+        # too many at start-up, and the typed backends did not compile at all.
+        for node in self.m.entries:
+            # The declaration's own `params` child, not `find(node, "param")`:
+            # that walks the body too, so an entry point containing a `fn` would
+            # be reported for the lambda's parameters.
+            own = own_params(node)
+            shape = ", ".join(f"({tok(kids(p)[0])} {' '.join(str(t) for t in type_names(kids(p)[1]))})"
+                              for p in own) or "no parameters"
+            if len(own) != 1:
+                self.add(node, 15, f"the entry point takes {shape}; §4.5 gives it exactly "
+                                   f"one parameter, `(argv (List String))`")
+                continue
+            if [str(t) for t in type_names(kids(own[0])[1])] != ["List", "String"]:
+                self.add(node, 15, f"the entry point's parameter is {shape}; §4.5 gives it "
+                                   f"`(argv (List String))`")
 
     # rule 13
     def extern_targets(self) -> None:
@@ -354,17 +373,24 @@ class Checker:
     def exported_by(self, module_path: str):
         """(defined names, exported names) of another module, or None."""
         cache = Checker._surfaces
-        if module_path in cache:
-            return cache[module_path]
-        table = modules.index(modules.default_roots(Path(self.path)))
+        roots = modules.default_roots(Path(self.path))
+        # Keyed by the roots as well as the path: a module path resolves relative
+        # to the importing file's own directory, so two files in different
+        # directories importing the same module path mean two different modules.
+        # Keying on the path alone made the first one answer for the second and
+        # reported its members as undefined.
+        key = (tuple(str(r) for r in roots), module_path)
+        if key in cache:
+            return cache[key]
+        table = modules.index(roots)
         file = table.get(module_path)
         if file is None:
-            cache[module_path] = None
+            cache[key] = None
             return None
         tops = [t.children[0] for t in parser().parse(file.read_text()).children]
         _, exports, _ = modules._header(tops)
-        cache[module_path] = (set(modules.top_level_names(tops)), exports)
-        return cache[module_path]
+        cache[key] = (set(modules.top_level_names(tops)), exports)
+        return cache[key]
 
     # rule 2
     def names(self) -> None:
@@ -663,6 +689,14 @@ def signature_types(node) -> list:
     return out
 
 
+def own_params(node) -> list:
+    """The `param` nodes of this declaration itself, excluding any nested `fn`."""
+    for p in node.children:
+        if isinstance(p, Tree) and p.data == "params":
+            return [q for q in p.children if isinstance(q, Tree) and q.data == "param"]
+    return []
+
+
 def typed_params(node) -> list:
     out = []
     for p in find(node, "param"):
@@ -761,6 +795,17 @@ def target_capabilities(models: dict, target: str) -> list[Diag]:
     return out
 
 
+def status(count: int) -> int:
+    """The diagnostic count as a process exit code.
+
+    A shell truncates an exit status to 8 bits, so returning the count raw made
+    exactly 256 diagnostics exit 0 and a gate read that as success. Clamped, so
+    the count is still the code wherever it fits and a failure never reads as a
+    pass.
+    """
+    return min(count, 255) if count else 0
+
+
 def check_file(p: Lark, path: Path):
     try:
         tree = p.parse(path.read_text())
@@ -770,7 +815,14 @@ def check_file(p: Lark, path: Path):
     tops = [t.children[0] for t in tree.children]
     m = model(tops)
     c = Checker(path, tops, m)
-    ds = c.run()
+    try:
+        ds = c.run()
+    except modules.ModuleError as exc:
+        # Resolving an import reads the module index, and a malformed module graph
+        # — two files declaring one path — is a finding about the input, not a
+        # defect in the checker. Reported as a diagnostic; it used to escape as a
+        # stack trace from whichever rule happened to touch the index first.
+        return m, [Diag(str(path), 1, 1, 0, str(exc))], (0, 0)
     return m, ds, (getattr(c, "typed", 0), getattr(c, "untyped", 0))
 
 
@@ -824,26 +876,31 @@ def main() -> int:
         diags += target_capabilities(models, args.target)
     diags.sort(key=lambda d: (d.file, d.line, d.col, d.rule))
 
-    if args.coverage:
+    # `--min-coverage` is a floor, not a rendering option, so it is enforced
+    # whether or not the table was asked for. Gated inside `--coverage`, a gate
+    # that passed only the floor silently checked nothing.
+    if args.coverage or args.min_coverage is not None:
         tt = ut = 0
-        print(f"{'file':<44}{'typed':>8}{'untyped':>9}  coverage")
+        if args.coverage:
+            print(f"{'file':<44}{'typed':>8}{'untyped':>9}  coverage")
         for f, (t, u) in cover:
             tt += t
             ut += u
-            pct = f"{100 * t // max(t + u, 1)}%"
-            print(f"{str(f):<44}{t:>8}{u:>9}  {pct:>8}")
-        print(f"\n{'TOTAL':<44}{tt:>8}{ut:>9}  "
-              f"{100 * tt // max(tt + ut, 1):>7}%")
+            if args.coverage:
+                pct = f"{100 * t // max(t + u, 1)}%"
+                print(f"{str(f):<44}{t:>8}{u:>9}  {pct:>8}")
         pct = 100 * tt // max(tt + ut, 1)
-        print("\nUntyped expressions are silent, not clean. This is the size of "
-              "what\na clean report does not cover.")
+        if args.coverage:
+            print(f"\n{'TOTAL':<44}{tt:>8}{ut:>9}  {pct:>7}%")
+            print("\nUntyped expressions are silent, not clean. This is the size of "
+                  "what\na clean report does not cover.")
         if args.min_coverage is not None and pct < args.min_coverage:
             print(f"\nFAIL: type coverage {pct}% is below the required "
                   f"{args.min_coverage}%. A form the type layer cannot type is a\n"
                   f"form it silently accepts — close the gap or lower the floor "
                   f"deliberately.")
-            return max(len(diags), 1)
-        return len(diags)
+            return status(max(len(diags), 1))
+        return status(len(diags))
 
     if args.json:
         print(json.dumps([d.as_dict() for d in diags], indent=1))
@@ -851,7 +908,7 @@ def main() -> int:
         for d in diags:
             print(d.text())
         print(f"\n{len(diags)} diagnostic(s) across {len(files)} file(s)")
-    return len(diags)
+    return status(len(diags))
 
 
 if __name__ == "__main__":

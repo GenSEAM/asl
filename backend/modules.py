@@ -190,6 +190,50 @@ def check_collisions(modules: list) -> None:
                 raise ModuleError(
                     f"`{owner}` and `{from_flat[flat]}` both mangle to `{flat}`")
             from_flat[flat] = owner
+    check_unprefixed(modules)
+
+
+def check_unprefixed(modules: list) -> None:
+    """Record types and enum cases are emitted without the module prefix.
+
+    A `TYPE_NAME` cannot be qualified and an enum case is matched by bare name,
+    so neither has a cross-module spelling and every backend emits them
+    unprefixed. Two modules each declaring `Point` therefore emit one definition
+    twice into one output: the typed backends reject the redefinition, and the
+    Python backend silently kept the last one, so the other module's constructor
+    call failed at run time with an argument it had never heard of. Detected here
+    because §8 requires an error, not a silent rename.
+    """
+    owners: dict[str, str] = {}
+    for m in modules:
+        for kind, name in flat_emitted_names(m.tops):
+            where = m.path or m.file.name
+            if name in owners and owners[name] != where:
+                raise ModuleError(
+                    f"modules `{owners[name]}` and `{where}` both declare {kind} "
+                    f"`{name}`, which is emitted unqualified and would collide")
+            owners[name] = where
+
+
+def flat_emitted_names(tops) -> list:
+    """(kind, name) for every declaration a backend emits without a prefix."""
+    out = []
+    for n in tops:
+        if not isinstance(n, Tree):
+            continue
+        if n.data in ("defschema", "defenum", "defopaque"):
+            for c in n.children:
+                if isinstance(c, Token) and c.type == "TYPE_NAME":
+                    out.append(("type", str(c)))
+                    break
+        if n.data == "defenum":
+            for c in n.children:
+                if isinstance(c, Tree) and c.data == "enum_case":
+                    for t in c.children:
+                        if isinstance(t, Token) and t.type == "IDENT":
+                            out.append(("enum case", str(t)))
+                            break
+    return out
 
 
 def top_level_names(tops) -> list:

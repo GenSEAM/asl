@@ -165,7 +165,10 @@ def eprintln(s): return _write(sys.stderr, s + "\n")
 
 
 def file_read(path):
-    return attempt(lambda: open(path, encoding="utf-8").read())
+    def go():
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    return attempt(go)
 
 
 def file_write(path, s):

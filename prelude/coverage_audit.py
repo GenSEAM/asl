@@ -50,12 +50,12 @@ def sources() -> list[Path]:
 
 
 def exercised(paths: list[Path]) -> set[str]:
-    with tempfile.NamedTemporaryFile("w", suffix=".scm", delete=False) as fh:
-        fh.write(QUERY)
-        qfile = fh.name
-    proc = subprocess.run(
-        [str(TS_BIN), "query", qfile, *[str(p.resolve()) for p in paths]],
-        cwd=TS_DIR, capture_output=True, text=True)
+    with tempfile.TemporaryDirectory() as d:
+        qfile = Path(d) / "coverage.scm"
+        qfile.write_text(QUERY)
+        proc = subprocess.run(
+            [str(TS_BIN), "query", str(qfile), *[str(p.resolve()) for p in paths]],
+            cwd=TS_DIR, capture_output=True, text=True)
     names: set[str] = set()
     for line in proc.stdout.splitlines():
         m = re.search(r"capture: \d+ - (\w+), .*text: `(.*)`", line)

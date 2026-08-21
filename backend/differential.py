@@ -75,6 +75,11 @@ def run_rust(src: Path, task: dict) -> list:
         if c.returncode:
             raise RuntimeError("rustc: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
         r = subprocess.run([str(Path(d) / "prog")], capture_output=True, text=True)
+        # A trap prints nothing on stdout, so without this the gate died inside
+        # json.loads with a decode error naming neither the backend nor the
+        # panic. Overflow is exactly the case this reaches.
+        if r.returncode:
+            raise RuntimeError("rust: " + (r.stderr.strip().splitlines() or ["?"])[-1][:140])
         return json.loads(r.stdout.strip())
 
 
@@ -109,6 +114,8 @@ def run_swift(src: Path, task: dict) -> list:
         if c.returncode:
             raise RuntimeError("swiftc: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
         r = subprocess.run([str(Path(d) / "prog")], capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError("swift: " + (r.stderr.strip().splitlines() or ["?"])[-1][:140])
         return json.loads(r.stdout.strip())
 
 
@@ -177,9 +184,24 @@ def main() -> int:
     for task_file, src_file in SUITE:
         task = json.loads((ROOT / task_file).read_text())
         src = ROOT / src_file
-        got = {name: run(src, task) for name, run in BACKENDS.items()}
+        got, broken = {}, {}
+        for name, run in BACKENDS.items():
+            try:
+                got[name] = run(src, task)
+            except Exception as exc:      # noqa: BLE001 — name the backend, not the frame
+                broken[name] = f"{type(exc).__name__}: {exc}"
 
-        print(f"== {task['id']}  ({', '.join(got)})")
+        print(f"== {task['id']}  ({', '.join(BACKENDS)})")
+        # A backend that could not answer is a disagreement with all of them, and
+        # saying which one and why beats the traceback this used to raise from
+        # inside whichever runner failed first.
+        for name, why in broken.items():
+            print(f"  BROKEN    {name}: {why}")
+            bad += len(task["cases"])
+        if broken:
+            cases += len(task["cases"])
+            print()
+            continue
         for k, (inp, want) in enumerate(task["cases"]):
             row = {n: v[k] for n, v in got.items()}
             agree = all(v == want for v in row.values())

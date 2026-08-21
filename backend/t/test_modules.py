@@ -79,6 +79,7 @@ def test_a_file_declaring_a_different_module_than_it_is_imported_as(tmp_path):
     ("to_python", ["core_strings_show", "core_numbers_show"]),
     ("to_rust", ["core_strings_show", "core_numbers_show"]),
     ("to_swift", ["coreStringsShow", "coreNumbersShow"]),
+    ("to_typescript", ["coreStringsShow", "coreNumbersShow"]),
 ])
 def test_the_same_alias_in_two_modules_does_not_collide(backend, expect):
     # `app/labels` binds `s` to core/strings; `text/format` binds `s` to
@@ -124,3 +125,40 @@ def test_the_transpiled_multi_module_program_runs():
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
         assert r.stdout.strip() == "HI!"     # via core/strings, across the boundary
+
+
+def test_a_record_two_modules_declare_is_refused_not_silently_merged(tmp_path):
+    # Record types and enum cases have no qualified spelling, so every backend
+    # emits them unprefixed. Two `Point`s produced one definition twice: the
+    # typed backends rejected the redefinition and the Python backend kept the
+    # last one, so the other module's constructor failed at run time.
+    import modules
+    (tmp_path / "dep.as").write_text(
+        '(module dep/geom\n  :doc "d"\n  :export [origin])\n'
+        '(defschema Point\n  (:field x Int64 "x")\n  (:field y Int64 "y"))\n'
+        '(defun origin [] -> Point\n  :doc "d"\n  (Point :x 0 :y 0))\n')
+    f = tmp_path / "m.as"
+    f.write_text(
+        '(module app/m\n  :doc "d"\n  :export [go]\n  :import [(dep/geom :as g)])\n'
+        '(defschema Point\n  (:field lat Float64 "lat")\n  (:field lon Float64 "lon"))\n'
+        '(defun go [] -> Point\n  :doc "d"\n  (Point :lat 1.0 :lon 2.0))\n')
+    with pytest.raises(modules.ModuleError) as exc:
+        modules.load(f)
+    assert "Point" in str(exc.value)
+
+
+def test_an_enum_case_two_modules_declare_is_refused(tmp_path):
+    import modules
+    (tmp_path / "dep.as").write_text(
+        '(module dep/shape\n  :doc "d"\n  :export [name-of])\n'
+        '(defenum Shape\n  (:case circle [(r Int64)] "a circle"))\n'
+        '(defun name-of [(s Shape)] -> String\n  :doc "d"\n'
+        '  (match s\n    ((circle r) "circle")))\n')
+    f = tmp_path / "m.as"
+    f.write_text(
+        '(module app/m\n  :doc "d"\n  :export [go]\n  :import [(dep/shape :as s)])\n'
+        '(defenum Marker\n  (:case circle [(a String) (b String)] "another circle"))\n'
+        '(defun go [] -> Marker\n  :doc "d"\n  (circle "a" "b"))\n')
+    with pytest.raises(modules.ModuleError) as exc:
+        modules.load(f)
+    assert "circle" in str(exc.value)

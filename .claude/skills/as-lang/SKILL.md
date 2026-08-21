@@ -53,7 +53,7 @@ catches a different class of error.
 .venv/bin/python prelude/generate.py --check  # generated artifacts are current
 .venv/bin/python backend/check_corpus.py      # transpiles AND the target accepts it
 .venv/bin/python backend/differential.py      # the backends agree
-.venv/bin/python -m pytest backend/t bench/algo tools/bindgen/t checker/t -q
+.venv/bin/python -m pytest backend/t bench/algo tools/bindgen/t checker/t tools/fmt/t compiler/t -q
 ```
 
 `checker/check.py` decides twelve of the fifteen §9 rules. The three it does not

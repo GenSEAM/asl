@@ -61,7 +61,7 @@ cannot lex. A wrong example in the one document an agent reads is worse than no 
 .venv/bin/python backend/check_corpus.py
 .venv/bin/python backend/differential.py
 .venv/bin/python bench/harness/run.py --dry-run
-.venv/bin/python -m pytest backend/t bench/algo tools/bindgen/t checker/t -q
+.venv/bin/python -m pytest backend/t bench/algo tools/bindgen/t checker/t tools/fmt/t compiler/t -q
 ```
 
 The dry run exercises the harness without an endpoint or a key, and it is the only gate that

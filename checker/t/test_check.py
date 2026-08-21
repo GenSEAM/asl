@@ -351,3 +351,100 @@ def test_the_type_layer_fails_open_rather_than_guessing(tmp_path):
                                 '(defextern x/make [] -> Thing\n  :doc "d"\n  :target :py)\n'
                                 '(defun f [] -> (Result Thing String)\n  :doc "d"\n'
                                 '  (x/make))\n') == []
+
+
+def test_one_generic_record_does_not_fix_another_declaration_s_type(tmp_path):
+    # The type layer spells every declaration's `{T}` as the same variable, so a
+    # substitution carried between declarations made the second reader of a
+    # generic record inherit the first one's instantiation.
+    assert check_src(tmp_path, HEAD + '''
+(defschema {T} Box
+  (:field value T "the boxed value"))
+
+(defun unbox-int [(b (Box Int64))] -> Int64
+  :doc "d"
+  (.-value b))
+
+(defun unbox-str [(b (Box String))] -> String
+  :doc "d"
+  (.-value b))
+''') == []
+
+
+def test_a_record_name_two_modules_declare_is_declined_not_guessed(tmp_path):
+    # `TYPE_NAME` cannot be qualified, so nothing in the source distinguishes the
+    # two `Point`s. Resolving against the module being checked reported the
+    # imported record's real field as missing.
+    (tmp_path / "dep.as").write_text(
+        '(module dep/geom\n  :doc "d"\n  :export [origin])\n'
+        '(defschema Point\n  (:field x Int64 "x")\n  (:field y Int64 "y"))\n'
+        '(defun origin [] -> Point\n  :doc "d"\n  (Point :x 0 :y 0))\n')
+    f = tmp_path / "m.as"
+    f.write_text(
+        '(module app/m\n  :doc "d"\n  :export [go]\n  :import [(dep/geom :as g)])\n'
+        '(defschema Point\n  (:field lat Float64 "lat")\n  (:field lon Float64 "lon"))\n'
+        '(defun go [] -> Int64\n  :doc "d"\n  (.-x (g/origin)))\n')
+    assert run(f) == []
+
+
+def test_two_directories_importing_one_module_path_do_not_share_a_surface(tmp_path):
+    # A module path resolves relative to the importing file's own directory, so
+    # the two `shared/thing`s below are different modules. A cache keyed on the
+    # path alone let the first answer for the second.
+    for d, member in (("a", "helper"), ("b", "other")):
+        sub = tmp_path / d
+        sub.mkdir()
+        (sub / "dep.as").write_text(
+            f'(module shared/thing\n  :doc "d"\n  :export [{member}])\n'
+            f'(defun {member} [] -> Int64\n  :doc "d"\n  1)\n')
+        (sub / "main.as").write_text(
+            f'(module app/{d}\n  :doc "d"\n  :export [go]\n'
+            f'  :import [(shared/thing :as t)])\n'
+            f'(defun go [] -> Int64\n  :doc "d"\n  (t/{member}))\n')
+    assert run(tmp_path / "a" / "main.as", tmp_path / "b" / "main.as") == []
+
+
+def test_an_entry_point_that_takes_no_argv_is_refused(tmp_path):
+    # §4.5 fixes the signature and every backend lowers it to a shim that passes
+    # the host's argument vector, so any other shape produced a program that
+    # could not start.
+    diags = check_src(tmp_path, HEAD + '''
+(defentry [] -> (Result Unit String)
+  :doc "d"
+  (ok unit))
+''')
+    assert 15 in rules(diags), diags
+
+
+def test_an_entry_point_taking_the_wrong_type_is_refused(tmp_path):
+    diags = check_src(tmp_path, HEAD + '''
+(defentry [(argv String)] -> (Result Unit String)
+  :doc "d"
+  (ok unit))
+''')
+    assert 15 in rules(diags), diags
+
+
+def test_a_malformed_module_graph_is_a_diagnostic_not_a_traceback(tmp_path):
+    # Two files declaring one module path made `modules.index` raise from inside
+    # whichever rule touched it first, and the raise escaped the checker.
+    for name in ("a.as", "b.as"):
+        (tmp_path / name).write_text('(module dup/mod\n  :doc "d"\n  :export [])\n')
+    f = tmp_path / "m.as"
+    f.write_text('(module app/m\n  :doc "d"\n  :export []\n'
+                 '  :import [(dup/mod :as d)])\n'
+                 '(defun go [] -> Int64\n  :doc "d"\n  1)\n')
+    diags = run(f)
+    assert diags and "dup/mod" in diags[0]["message"]
+
+
+def test_a_lambda_inside_the_entry_point_is_not_its_parameter(tmp_path):
+    # The entry-point signature is read off the declaration's own `params`; a
+    # walk of the whole node counts a nested `fn`'s parameters too.
+    assert check_src(tmp_path, HEAD + '''
+(defentry [(argv (List String))] -> (Result Unit String)
+  :doc "d"
+  :effects [console]
+  (let [(f (fn [(x Int64)] -> Int64 (+ x 1)))]
+    (println (string-from-int64 (f 1)))))
+''') == []

@@ -299,7 +299,8 @@ class Surface:
     """What one module offers: function signatures, records, enums, opaques."""
     funs: dict = field(default_factory=dict)        # name -> FnTy
     schemas: dict = field(default_factory=dict)     # name -> {field: Ty}
-    enum_of: dict = field(default_factory=dict)     # case -> (enum, [Ty])
+    schema_tvs: dict = field(default_factory=dict)  # name -> [type variable name]
+    enum_of: dict = field(default_factory=dict)     # case -> (enum, [Ty], [tv])
     opaques: set = field(default_factory=set)
 
 
@@ -333,6 +334,11 @@ def surface_of(tops) -> Surface:
                     fk = kids(f)
                     fields[tok(fk[0])] = from_tree(fk[1], tv)
             s.schemas[tok(k[0])] = fields
+            # Recorded in the same order `lookup` instantiates an enum's, so a
+            # field's type variable can be mapped to the argument the value was
+            # constructed with instead of leaking into the module-wide
+            # substitution.
+            s.schema_tvs[tok(k[0])] = sorted(tv)
         elif n.data == "defenum":
             tv = typevars_of(n)
             k = [x for x in kids(n) if not (isinstance(x, Tree) and x.data == "type_params")]
@@ -406,6 +412,12 @@ class Walk:
     # ---------- declarations ----------
 
     def declaration(self, n) -> None:
+        # A declaration's own `{T}` binder is a fresh variable, so the
+        # substitution must not survive from the previous one: `from_tree` spells
+        # every declaration's `T` as the same `Var("T")`, and carrying a binding
+        # over made the second generic function in a module inherit the first
+        # one's instantiation and report a mismatch on correct code.
+        self.subst = {}
         tv = typevars_of(n)
         params, ret = signature_parts(n, tv)
         env = {}
@@ -562,13 +574,18 @@ class Walk:
         fld = tok(e.children[0])[2:]
         target = resolve(self.synth(e.children[1], env), self.subst)
         name = target.name if isinstance(target, Con) else None
+        if name is not None and self.ambiguous_record(name):
+            return UNKNOWN
         if name in self.s.schemas:
             fields = self.s.schemas[name]
             if fld not in fields:
                 self.report(e, f"`{name}` has no field `{fld}`")
                 return UNKNOWN
-            return fields[fld]
+            return self.instantiate_field(name, fields[fld], target)
         if name == "Pair" and getattr(target, "args", ()):
+            if fld not in ("first", "second"):
+                self.report(e, f"`Pair` has no field `{fld}`")
+                return UNKNOWN
             return target.args[0] if fld == "first" else target.args[1]
         if name == "ProcessResult" or (name is None and fld in
                                        {f[0] for f in RECORDS["ProcessResult"]}):
@@ -577,8 +594,39 @@ class Walk:
                     return parse_ty(fty)
         return UNKNOWN
 
+    def ambiguous_record(self, name: str) -> bool:
+        """Whether more than one module in this program declares this record.
+
+        A `TYPE_NAME` cannot be qualified, so two modules may each declare a
+        `Point` and nothing in the source distinguishes them. Resolving the name
+        against whichever module is being checked reported a real field as
+        missing, so an ambiguous name is declined instead — this layer fails open
+        by design, and a wrong answer is worse than none.
+        """
+        seen = 1 if name in self.s.schemas else 0
+        for other in self.imported.values():
+            if name in other.schemas:
+                seen += 1
+        return seen > 1
+
+    def instantiate_field(self, name: str, ty: Ty, target: Ty) -> Ty:
+        """A record field's type at the instantiation the value was built with."""
+        tvs = self.s.schema_tvs.get(name) or []
+        args = target.args if isinstance(target, Con) else ()
+        if tvs and len(args) == len(tvs):
+            return resolve_named(ty, dict(zip(tvs, args)))
+        # Unapplied, so the binder is still open. Freshened rather than returned
+        # raw: a bare `Var("T")` unifies into the shared substitution and binds
+        # every other use of that schema's variable along with it.
+        return fresh(ty, self.tag()) if tvs else ty
+
     def t_ctor(self, e, env) -> Ty:
         name = tok(e.children[0])
+        if self.ambiguous_record(name):
+            for a in e.children[1:]:
+                if isinstance(a, Tree) and a.data == "ctor_arg":
+                    self.synth(a.children[1], env)
+            return Con(name)
         fields = self.s.schemas.get(name)
         given = {}
         for a in e.children[1:]:

@@ -25,7 +25,8 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "tools" / "fmt"))
 sys.path.insert(0, str(ROOT / "checker"))
 
-BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "sw": "to_swift.py"}
+BACKENDS = {"py": "to_python.py", "ts": "to_typescript.py",
+            "rs": "to_rust.py", "sw": "to_swift.py"}
 TREE_SITTER = ROOT / "node_modules" / ".bin" / "tree-sitter"
 GRAMMAR_DIR = ROOT / "grammar" / "tree-sitter-as-lang"
 # Read from the vocabulary rather than from the checker, so `--target` can be validated
@@ -67,7 +68,10 @@ def report(diags: list, as_json: bool, subject: str) -> int:
         for d in diags:
             print(d.text())
         print(f"\n{len(diags)} {subject}")
-    return len(diags)
+    # A shell truncates an exit status to 8 bits, so returning the count raw made
+    # exactly 256 problems exit 0. Clamped: the count is still the code wherever
+    # it fits, and a failure never reads as a pass.
+    return min(len(diags), 255) if diags else 0
 
 
 # ---------- subcommands ----------

@@ -115,7 +115,7 @@ def test_the_lexer_cannot_yet_lex_itself(lexer):
 
 
 def test_it_transpiles_to_every_backend():
-    for backend in ("to_python.py", "to_rust.py", "to_swift.py"):
+    for backend in ("to_python.py", "to_typescript.py", "to_rust.py", "to_swift.py"):
         r = subprocess.run([sys.executable, str(ROOT / "backend" / backend), str(SRC)],
                            capture_output=True, text=True)
         assert r.returncode == 0, f"{backend}: {r.stderr[-400:]}"
