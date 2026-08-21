@@ -56,3 +56,24 @@ This file groups d/c/r/l entries for the lang/checker module.
   which is a strictly weaker claim than "both accept the same language" and reads identically in a
   green gate. The one backend that would have caught it — Python — was also the one with no
   compiler gate, so its visibly wrong output was reported as `ok`.
+
+
+### [d-a3f7] The type layer is bidirectional and fails open
+- **Date**: 2026-08-21
+- **Status**: Active — closes the type half of `l-78ae`
+- **Cluster**: lang/checker
+- **Description**: §9 rules 3 and 6 are now decided by `checker/typecheck.py`, which brings the
+  checker to fourteen of fifteen rules; the fifteenth is delimiter balance, which the grammars own.
+- **Why bidirectional rather than Hindley–Milner**: the language annotates every binding site —
+  parameters and returns on `defun` and `fn`, schema fields, enum cases — so the only unannotated
+  position in the whole language is a `let` binding. That removes generalisation entirely and
+  leaves first-order unification, used in one place: instantiating a `{A B}` binder at a call site.
+  "Needs a type system" had been recorded as the reason these rules were undecidable; the property
+  that makes them cheap was already in the language.
+- **Fails open, deliberately**: a construct the layer cannot type yields an unknown that unifies
+  with anything, rather than an error. A checker that fires on the programs the handbook teaches is
+  worse than no checker, so every gap is silent. The cost is that silence is **not** proof of
+  well-typedness, and `--rules` says so rather than leaving a clean report to imply it.
+- **Why Non-Obvious**: the honest-looking move is to report everything uncertain and let the author
+  suppress the noise. For an artifact whose whole purpose is to be generated against, a false
+  positive is worse than a miss: it teaches the generator to avoid a construct that was correct.

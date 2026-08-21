@@ -61,7 +61,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | Grammar shape gate | **green** — both grammars find the same qualified names, not just the same verdict |
 | Overflow parity | **green** — all three backends trap; Rust checked under `-O`, where it used to wrap |
 | Cross-module linking | **working** — whole-program, `backend/modules.py`; rule 9 now checks the export surface |
-| Semantic checker | **12 of 15 §9 rules** — `checker/check.py`; rules 3 and 6 need inference |
+| Semantic checker | **14 of 15 §9 rules** — `checker/check.py`; only delimiter balance is left to the grammars |
 | Reference interpreter | **not built, deliberately** — see below |
 | Measurement harness | **not started — blocked**, see §5 |
 
@@ -113,16 +113,14 @@ Source: `RESEARCH_REPORT.md` §3.
 
 ## 4. Immediate next step
 
-**Finish the type layer of the checker.** `checker/check.py` now decides twelve of §9's fifteen
-rules and sits in the gate sequence; `--rules` prints the split. What is left is the part that
-needs a type system and cannot be faked structurally:
+**Self-hosting, probe first** — the lexer and parser in `.as`, gated differentially against the
+Lark grammar. Cross-module linking, the prerequisite, is done; §9 is enforced to fourteen of
+fifteen rules. What remains before the probe is the bootstrap rule (plan Phase 5b): the pinned
+compiler must build the current compiler source, or a language change can lock the compiler out of
+building itself.
 
-* **rule 3/6 — types.** Inference at call sites, and the judgement that no numeric operation mixes
-  `Int64` with `Float64`. This is the half the located evidence says matters most
-  (`RESEARCH_REPORT.md` §5), and it is the reason a clean check still does not mean well-typed.
-
-Everything else §9 lists is enforced. Written in Python deliberately, as the oracle the eventual
-Rust frontend must agree with (PCP `d-c4a1`).
+Widening the type layer — it fails open, so every construct it declines is a gap — is the other
+open thread, and it can proceed in parallel.
 
 Why this and not backends: the conformance gate proves only that two parsers agree on *shape*.
 Nothing currently rejects a program that imports a cycle, calls a function with the wrong arity,
@@ -207,9 +205,10 @@ The harness can be written and unit-tested without any of this. It cannot be run
 * **Vocabulary coverage 23%.** Only 22 of 92 declared builtins appear in any example.
   The closure gate proves no example uses an *undefined* name; it says nothing about defined names
   no example uses, and that direction is what degrades generation quality. PCP `l-3434`.
-* **No type checking.** See §4. Twelve of §9's fifteen rules are enforced; the two that need
-  inference are not, so a `.as` file that parses and checks is **not** known to type-check. The
-  target compilers are still the strongest signal there.
+* **The type layer fails open.** Fourteen of §9's fifteen rules are enforced, types included, but
+  `typecheck.py` stays silent on any construct it cannot type rather than risk a false positive on
+  valid code. A clean report is therefore not proof of well-typedness, and the target compilers
+  remain a stronger signal. `--rules` prints the caveat.
 * **The foreign boundary is lowered only for the Python target.** Rust and Swift refuse a foreign
   module by name, which is correct and asserted, but it means the total-boundary claim is
   demonstrated in one ecosystem so far.

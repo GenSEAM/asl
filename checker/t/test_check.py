@@ -208,7 +208,146 @@ def test_exit_code_is_the_diagnostic_count():
     assert r.returncode == len(run(SEMANTIC / "reserved-prefix.as")) > 0
 
 
-def test_rules_command_lists_what_is_not_checked():
+def test_rules_command_states_what_it_does_not_decide():
+    # The honest half matters more than the list: the type layer fails open, and
+    # a clean report must not be read as proof of well-typedness.
     r = subprocess.run([sys.executable, str(CHECK), "--rules"], capture_output=True, text=True)
     assert r.returncode == 0
-    assert "NOT CHECKED" in r.stdout and "type inference" in r.stdout
+    assert "NOT CHECKED" in r.stdout
+    assert "FAIL OPEN" in r.stdout
+    assert "not proof" in r.stdout
+    for rule in (3, 6):
+        assert f" {rule}. " in r.stdout.split("NOT CHECKED")[0]   # now decided
+
+
+# ---------- the type layer (rules 3 and 6) ----------
+
+def test_mixing_numeric_types_is_rule_6(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun total [(count Int64) (rate Float64)] -> Float64
+  :doc "d"
+  (+ count rate))
+''')
+    assert 6 in rules(d)
+    msg = next(x["message"] for x in d if x["rule"] == 6)
+    # The message has to name the mix, not just the symptom at one operand.
+    assert "Int64" in msg and "Float64" in msg
+
+
+def test_an_explicit_conversion_is_accepted(tmp_path):
+    assert check_src(tmp_path, HEAD + '''
+(defun total [(count Int64) (rate Float64)] -> Float64
+  :doc "d"
+  (+ (int64-to-float64 count) rate))
+''') == []
+
+
+def test_a_non_numeric_operand_is_not_called_a_numeric_mix(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun f [(s String)] -> Int64
+  :doc "d"
+  (+ s 1))
+''')
+    assert d and 6 not in rules(d)      # a String is not a number being mixed
+
+
+def test_wrong_argument_type(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun size [(n Int64)] -> Int64
+  :doc "d"
+  (string-length n))
+''')
+    assert 3 in rules(d) and "String" in d[0]["message"]
+
+
+def test_wrong_arity(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun parts [(s String)] -> (List String)
+  :doc "d"
+  (string-split s))
+''')
+    assert 3 in rules(d) and "argument" in d[0]["message"]
+
+
+def test_return_type_must_match_the_body(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun label [(n Int64)] -> String
+  :doc "d"
+  n)
+''')
+    assert 3 in rules(d)
+
+
+def test_if_branches_must_agree(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun f [(b Bool)] -> Int64
+  :doc "d"
+  (if b 1 "two"))
+''')
+    assert 3 in rules(d) and "disagree" in " ".join(x["message"] for x in d)
+
+
+def test_an_if_condition_must_be_bool(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defun f [(n Int64)] -> Int64
+  :doc "d"
+  (if n 1 2))
+''')
+    assert 3 in rules(d)
+
+
+def test_unknown_record_field(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defschema Point
+  (:field x Int64 "d"))
+(defun f [(p Point)] -> Int64
+  :doc "d"
+  (.-y p))
+''')
+    assert 3 in rules(d) and "`y`" in d[0]["message"]
+
+
+def test_constructing_a_record_with_the_wrong_field_type(tmp_path):
+    d = check_src(tmp_path, HEAD + '''
+(defschema Point
+  (:field x Int64 "d"))
+(defun f [] -> Point
+  :doc "d"
+  (Point :x "origin"))
+''')
+    assert 3 in rules(d)
+
+
+def test_generics_unify_per_call_site(tmp_path):
+    # Two calls to one generic function must not share its type variable.
+    assert check_src(tmp_path, HEAD + '''
+(defun {A B} swap [(p (Pair A B))] -> (Pair B A)
+  :doc "d"
+  (pair (.-second p) (.-first p)))
+
+(defun use-both [] -> String
+  :doc "d"
+  (let [(a (swap (pair 1 "x")))
+        (b (swap (pair true 2.0)))]
+    (.-first a)))
+''') == []
+
+
+def test_try_unwraps_the_result(tmp_path):
+    assert check_src(tmp_path, HEAD + '''
+(defun f [(s String)] -> (Result Int64 String)
+  :doc "d"
+  (let [(n (try (option-to-result (string-to-int64 s) "bad")))]
+    (ok (+ n 1))))
+''') == []
+
+
+def test_the_type_layer_fails_open_rather_than_guessing(tmp_path):
+    # An opaque host value has no structure this layer models; it must stay
+    # silent rather than invent a mismatch.
+    assert check_src(tmp_path, '(module t/m\n  :doc "d"\n  :export []\n'
+                                '  :extern [(py "x" :as x)])\n'
+                                '(defopaque Thing\n  :doc "d")\n'
+                                '(defextern x/make [] -> Thing\n  :doc "d"\n  :target :py)\n'
+                                '(defun f [] -> (Result Thing String)\n  :doc "d"\n'
+                                '  (x/make))\n') == []

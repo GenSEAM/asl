@@ -6,11 +6,12 @@ evidence puts the great majority of failures in LLM-generated code at the type
 level rather than the syntactic one (PCP `l-78ae`, `RESEARCH_REPORT.md` §5), so
 this is where the leverage is, not in the parsers.
 
-**Scope, stated so a clean report is not over-read.** Rules 3 and 6 need a real
-type system — inference at call sites, and a numeric-kind judgement for every
-operand — and that does not exist yet. Everything a checker can decide without
-inferring types is decided here; §9's two type rules are reported as unchecked
-rather than silently counted as passing. `--rules` prints the split.
+**Scope, stated so a clean report is not over-read.** Fourteen of §9's fifteen
+rules are decided here; the fifteenth is delimiter balance, which the grammars
+own. Rules 3 and 6 — the type rules — are checked by `typecheck.py` and **fail
+open**: a construct it cannot type is silent rather than reported, because a
+checker that fires on the programs the handbook teaches is worse than no checker.
+Silence is not proof of well-typedness. `--rules` prints the whole split.
 
 Diagnostics use one shape across every subcommand the toolchain will grow:
 `{file, line, col, rule, message}`. `--json` emits it verbatim so an agent reads
@@ -31,6 +32,7 @@ from lark.exceptions import LarkError
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 import modules  # noqa: E402  — the loader lives with the backends
+import typecheck  # noqa: E402
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
 
 BUILTINS = {b["name"]: b for b in PRELUDE["builtins"]}
@@ -56,11 +58,11 @@ CHECKED = {
     13: ":target on every defextern",
     14: "no defopaque value is inspected",
     15: "at most one defentry per program",
+    3: "declared parameter and return types are consistent with the bodies",
+    6: "no numeric operation mixes types",
 }
 UNCHECKED = {
     1: "delimiter balance — the grammars decide it; a parse failure is reported instead",
-    3: "parameter and return types present — the grammars decide it",
-    6: "no numeric operation mixes types — needs type inference, which does not exist",
 }
 
 
@@ -253,7 +255,7 @@ class Checker:
     def run(self) -> list[Diag]:
         for name in ("reserved_prefix", "docs", "entries", "extern_targets",
                      "typevars", "aliases", "names", "try_sites", "foreign_results",
-                     "exhaustive", "effects", "opaque_use"):
+                     "exhaustive", "effects", "opaque_use", "typecheck"):
             getattr(self, name)()
         self.out.sort(key=lambda d: (d.line, d.col, d.rule))
         return self.out
@@ -435,6 +437,25 @@ class Checker:
             for t in find(node, "try_form"):
                 self.add(t, 5, f"`try` inside `{name}`, which does not return a Result, "
                                f"so there is nowhere for the failure to go")
+
+    # rules 3 and 6
+    def typecheck(self) -> None:
+        """The type layer. Anything it cannot type is silent, never an error."""
+        surface = typecheck.surface_of(self.tops)
+        imported = {}
+        for alias, path in self.m.imports.items():
+            table = modules.index(modules.default_roots(Path(self.path)))
+            f = table.get(path)
+            if f is None:
+                continue
+            tops = [t.children[0] for t in parser().parse(f.read_text()).children]
+            imported[alias] = typecheck.surface_of(tops)
+        w = typecheck.Walk(surface, imported, self.m.path or "m")
+        for n in self.tops:
+            if isinstance(n, Tree) and n.data in ("defun", "defentry"):
+                w.declaration(n)
+        for f in w.out:
+            self.add(f.node, f.rule, f.message)
 
     # rule 5, over §11
     def foreign_results(self) -> None:
@@ -765,6 +786,12 @@ def main() -> int:
         print("NOT CHECKED:")
         for k in sorted(UNCHECKED):
             print(f"  {k:>2}. {UNCHECKED[k]}")
+        print()
+        print("Rules 3 and 6 FAIL OPEN. The type layer reports only what it can type;")
+        print("a construct it cannot type is silent rather than an error, because a")
+        print("checker that fires on valid code is worse than none. Silence is")
+        print("therefore not proof that a module is well-typed — the target compilers")
+        print("remain the stronger signal.")
         return 0
 
     files = []

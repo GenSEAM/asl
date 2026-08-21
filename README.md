@@ -68,19 +68,19 @@ Verified by a command whose output was read, not asserted.
 | Closure gate | no example calls an undefined name |
 | Coverage gate | 103 of 103 builtins appear in an example |
 | Differential gate | 28 cases × 3 backends, no disagreement |
-| Semantic checker | 12 of §9's 15 rules — `checker/check.py`; the two type rules need inference |
+| Semantic checker | 14 of §9's 15 rules — types included; fails open, so silence is not proof |
 | Measurement | not run; blocked on gateway access |
 
 ### What is not true yet
 
-**There is no type checking.** `checker/check.py` decides twelve of §9's fifteen
-well-formedness rules — name resolution, exhaustiveness, effects, the foreign
-boundary, import cycles — and runs in the gate sequence. The two it does not
-decide are the type rules, which need inference at call sites, and `--rules`
-prints that split rather than letting a clean report imply more than it means.
-Located evidence puts roughly 94% of the error surface in LLM-generated code at
-the type level, so the remaining third of the checklist is most of the remaining
-value.
+**The type layer fails open.** `checker/check.py` decides fourteen of §9's
+fifteen well-formedness rules — name resolution, types, exhaustiveness, effects,
+the foreign boundary, import cycles — and runs in the gate sequence. The
+fifteenth is delimiter balance, which the grammars own. But a construct the type
+layer cannot type is reported as nothing rather than as an error, because a
+checker that fires on valid code is worse than none. **Silence is not proof that
+a module is well-typed**; `--rules` says so, and the target compilers remain a
+stronger signal.
 
 **The core premise is unmeasured.** No located source evaluates whether LLMs
 generate S-expressions more or less reliably than mainstream languages, and the
