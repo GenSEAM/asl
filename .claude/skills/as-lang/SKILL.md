@@ -47,7 +47,7 @@ catches a different class of error.
 
 ```bash
 .venv/bin/python grammar/validate.py          # both grammars, same verdict AND same shape
-.venv/bin/python checker/check.py <file>      # the §9 rules no grammar can express
+.venv/bin/python checker/check.py <file>      # 14 of the 15 §9 rules
 .venv/bin/python grammar/closure_audit.py     # no call to an undefined name
 .venv/bin/python prelude/coverage_audit.py    # every builtin has an example
 .venv/bin/python prelude/generate.py --check  # generated artifacts are current

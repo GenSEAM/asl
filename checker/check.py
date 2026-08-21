@@ -11,7 +11,11 @@ rules are decided here; the fifteenth is delimiter balance, which the grammars
 own. Rules 3 and 6 — the type rules — are checked by `typecheck.py` and **fail
 open**: a construct it cannot type is silent rather than reported, because a
 checker that fires on the programs the handbook teaches is worse than no checker.
-Silence is not proof of well-typedness. `--rules` prints the whole split.
+
+Failing open makes the difference between "checked and clean" and "declined to
+look" invisible, so `--coverage` measures it and the gate holds it at 100%: every
+expression in the corpus is typed today, and a new form the layer cannot handle
+breaks that rather than passing quietly.
 
 Diagnostics use one shape across every subcommand the toolchain will grow:
 `{file, line, col, rule, message}`. `--json` emits it verbatim so an agent reads
@@ -456,6 +460,7 @@ class Checker:
                 w.declaration(n)
         for f in w.out:
             self.add(f.node, f.rule, f.message)
+        self.typed, self.untyped = w.typed, w.untyped
 
     # rule 5, over §11
     def foreign_results(self) -> None:
@@ -761,10 +766,12 @@ def check_file(p: Lark, path: Path):
         tree = p.parse(path.read_text())
     except LarkError as exc:
         first = str(exc).splitlines()[0]
-        return None, [Diag(str(path), 0, 0, 1, f"does not parse: {first}")]
+        return None, [Diag(str(path), 0, 0, 1, f"does not parse: {first}")], (0, 0)
     tops = [t.children[0] for t in tree.children]
     m = model(tops)
-    return m, Checker(path, tops, m).run()
+    c = Checker(path, tops, m)
+    ds = c.run()
+    return m, ds, (getattr(c, "typed", 0), getattr(c, "untyped", 0))
 
 
 def main() -> int:
@@ -772,6 +779,10 @@ def main() -> int:
     ap.add_argument("paths", nargs="*", type=Path)
     ap.add_argument("--json", action="store_true", help="emit diagnostics as JSON")
     ap.add_argument("--rules", action="store_true", help="print what is and is not checked")
+    ap.add_argument("--coverage", action="store_true",
+                    help="report how much of each file the type layer actually typed")
+    ap.add_argument("--min-coverage", type=int, default=None, metavar="PCT",
+                    help="fail when type coverage is below PCT (for the gate)")
     ap.add_argument("--target", choices=sorted(TARGETS),
                     help="also refuse modules whose effects this target cannot provide")
     args = ap.parse_args()
@@ -801,16 +812,38 @@ def main() -> int:
         print("no .as files given", file=sys.stderr)
         return 1
 
-    p, diags, models = parser(), [], {}
+    p, diags, models, cover = parser(), [], {}, []
     for f in files:
-        m, ds = check_file(p, f)
+        m, ds, cov = check_file(p, f)
         diags += ds
+        cover.append((f, cov))
         if m is not None:
             models[str(f)] = m
     diags += import_cycles(models)
     if args.target:
         diags += target_capabilities(models, args.target)
     diags.sort(key=lambda d: (d.file, d.line, d.col, d.rule))
+
+    if args.coverage:
+        tt = ut = 0
+        print(f"{'file':<44}{'typed':>8}{'untyped':>9}  coverage")
+        for f, (t, u) in cover:
+            tt += t
+            ut += u
+            pct = f"{100 * t // max(t + u, 1)}%"
+            print(f"{str(f):<44}{t:>8}{u:>9}  {pct:>8}")
+        print(f"\n{'TOTAL':<44}{tt:>8}{ut:>9}  "
+              f"{100 * tt // max(tt + ut, 1):>7}%")
+        pct = 100 * tt // max(tt + ut, 1)
+        print("\nUntyped expressions are silent, not clean. This is the size of "
+              "what\na clean report does not cover.")
+        if args.min_coverage is not None and pct < args.min_coverage:
+            print(f"\nFAIL: type coverage {pct}% is below the required "
+                  f"{args.min_coverage}%. A form the type layer cannot type is a\n"
+                  f"form it silently accepts — close the gap or lower the floor "
+                  f"deliberately.")
+            return max(len(diags), 1)
+        return len(diags)
 
     if args.json:
         print(json.dumps([d.as_dict() for d in diags], indent=1))

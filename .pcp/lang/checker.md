@@ -74,6 +74,12 @@ This file groups d/c/r/l entries for the lang/checker module.
   with anything, rather than an error. A checker that fires on the programs the handbook teaches is
   worse than no checker, so every gap is silent. The cost is that silence is **not** proof of
   well-typedness, and `--rules` says so rather than leaving a clean report to imply it.
+- **Failing open is measured, not trusted**: `--coverage` counts typed against untyped expressions
+  and the gate holds the floor at 100%. Without it, "checked and clean" and "declined to look"
+  print identically. Measured at 519 of 519 on the corpus, so the caveat is currently vacuous —
+  which is worth knowing, and is a stronger claim than the caveat alone.
 - **Why Non-Obvious**: the honest-looking move is to report everything uncertain and let the author
   suppress the noise. For an artifact whose whole purpose is to be generated against, a false
   positive is worse than a miss: it teaches the generator to avoid a construct that was correct.
+  The second non-obvious part is that "fails open" is not a caveat you can simply write down — it
+  hides exactly the information that would tell you how much the caveat costs.

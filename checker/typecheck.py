@@ -390,6 +390,11 @@ class Walk:
         self.subst: dict = {}
         self.n = 0
         self.out: list = []
+        # How much of the module this layer actually typed. It fails open, so
+        # without this the difference between "checked and clean" and "declined
+        # to look" is invisible — which is the whole risk of failing open.
+        self.typed = 0
+        self.untyped = 0
 
     def tag(self) -> str:
         self.n += 1
@@ -469,7 +474,12 @@ class Walk:
             return UNKNOWN
 
         handler = getattr(self, "t_" + e.data, None)
-        return handler(e, env) if handler else UNKNOWN
+        result = handler(e, env) if handler else UNKNOWN
+        if isinstance(resolve(result, self.subst), Unknown):
+            self.untyped += 1
+        else:
+            self.typed += 1
+        return result
 
     # ---------- forms ----------
 

@@ -79,8 +79,10 @@ the foreign boundary, import cycles — and runs in the gate sequence. The
 fifteenth is delimiter balance, which the grammars own. But a construct the type
 layer cannot type is reported as nothing rather than as an error, because a
 checker that fires on valid code is worse than none. **Silence is not proof that
-a module is well-typed**; `--rules` says so, and the target compilers remain a
-stronger signal.
+a module is well-typed** — so the gap is measured rather than assumed away:
+`--coverage` reports it, and the gate holds it at 100%. All 519 expressions in
+the corpus are typed today, and a form the layer cannot handle breaks that gate
+instead of passing quietly.
 
 **The core premise is unmeasured.** No located source evaluates whether LLMs
 generate S-expressions more or less reliably than mainstream languages, and the

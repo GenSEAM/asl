@@ -53,7 +53,8 @@ nothing used to check it, which is how it came to show `pl/read_csv` — a name 
 cannot lex. A wrong example in the one document an agent reads is worse than no example.
 
 ```bash
-.venv/bin/python checker/check.py grammar/corpus/valid examples
+.venv/bin/python checker/check.py grammar/corpus/valid examples lib backend/t
+.venv/bin/python checker/check.py --coverage --min-coverage 100 grammar/corpus/valid examples lib
 .venv/bin/python grammar/closure_audit.py
 .venv/bin/python prelude/coverage_audit.py
 .venv/bin/python prelude/generate.py --check
@@ -70,11 +71,16 @@ The closure gate extracts call heads with the project's own tree-sitter grammar 
 names something neither in the vocabulary nor bound locally. The specification's claim to be closed
 is only worth what this gate enforces; it was false once already.
 
-`checker/check.py` enforces the rules of §9 that no grammar can express — name
-resolution, exhaustiveness, effects, the foreign boundary, import cycles. Run `--rules` for the
-split between what it decides and what it does not: §9's two type rules (3 and 6) need inference,
-which does not exist, and they are reported as unchecked rather than counted as passing. `--json`
-emits one diagnostic shape for every tool the CLI grows.
+`checker/check.py` enforces the rules of §9 that no grammar can express — name resolution, types,
+exhaustiveness, effects, the foreign boundary, import cycles. Fourteen of the fifteen; the
+fifteenth is delimiter balance, which the grammars own. `--rules` prints the split, `--json` emits
+one diagnostic shape for every tool the CLI grows.
+
+The type layer **fails open**: a construct it cannot type is silent rather than reported, because a
+checker that fires on the programs the handbook teaches is worse than none. That makes "checked and
+clean" indistinguishable from "declined to look", so `--coverage` measures it and the gate holds
+the floor at 100%. Every expression in the corpus is typed today; a new form the layer cannot
+handle breaks that gate instead of passing quietly.
 
 Valid corpus and examples must come back with **zero** diagnostics; the nine fixtures in
 `grammar/corpus/semantic/` must each be caught by their own rule, which `checker/t` asserts by
