@@ -32,7 +32,8 @@ SKIP: dict[str, set] = {}
 # A module carrying a foreign declaration belongs to one ecosystem, and a
 # transpiler for another target must refuse it BY NAME. Asserted rather than
 # skipped: a refusal that silently stopped happening would look like coverage.
-REFUSE = {"rust": {"08-ffi.as"}, "swift": {"08-ffi.as"}}
+REFUSE = {"rust": {"08-ffi.as"}, "swift": {"08-ffi.as"},
+          "typescript": {"08-ffi.as"}}
 
 
 def transpile(backend: str, f: Path) -> tuple[bool, str, str]:
@@ -63,6 +64,20 @@ def compile_rust(src: str, d: Path) -> subprocess.CompletedProcess:
                            "--crate-type=lib", "lib.rs"], cwd=d, capture_output=True, text=True)
 
 
+def compile_typescript(src: str, d: Path) -> subprocess.CompletedProcess:
+    (d / "rt.ts").write_text((ROOT / "backend" / "ts" / "rt.ts").read_text())
+    (d / "lib.ts").write_text(src)
+    # --noEmit for the same reason swiftc gets -typecheck: the question is
+    # whether the type checker accepts the code. --typeRoots is absolute because
+    # the temp directory cannot walk up to node_modules.
+    return subprocess.run([str(ROOT / "node_modules" / ".bin" / "tsc"),
+                           "--noEmit", "--strict", "--target", "ES2022",
+                           "--module", "commonjs", "--types", "node",
+                           "--typeRoots", str(ROOT / "node_modules" / "@types"),
+                           "rt.ts", "lib.ts"],
+                          cwd=d, capture_output=True, text=True)
+
+
 def compile_swift(src: str, d: Path) -> subprocess.CompletedProcess:
     (d / "rt.swift").write_text((ROOT / "backend" / "swift" / "rt.swift").read_text())
     (d / "lib.swift").write_text(src)
@@ -74,6 +89,7 @@ def compile_swift(src: str, d: Path) -> subprocess.CompletedProcess:
 
 
 BACKENDS = [("python", "to_python.py", compile_python, "compile"),
+            ("typescript", "to_typescript.py", compile_typescript, "tsc"),
             ("rust", "to_rust.py", compile_rust, "rustc"),
             ("swift", "to_swift.py", compile_swift, "swiftc")]
 
@@ -81,8 +97,8 @@ BACKENDS = [("python", "to_python.py", compile_python, "compile"),
 def main() -> int:
     fails = []
     cols = [n for b in BACKENDS for n in (b[0], b[3]) if n]
-    print(f"{'fixture':<26}" + "".join(f"{c:<10}" for c in cols))
-    print("-" * (26 + 10 * len(cols)))
+    print(f"{'fixture':<26}" + "".join(f"{c:<11}" for c in cols))
+    print("-" * (26 + 11 * len(cols)))
     for f in CORPUS:
         label = str(f.relative_to(ROOT / "examples")) if "examples" in f.parts else f.name
         row = []
@@ -110,9 +126,13 @@ def main() -> int:
                 c = compiler(src, Path(d))
             row.append("ok" if c.returncode == 0 else "FAIL")
             if c.returncode:
+                # tsc writes diagnostics to stdout, not stderr, so a reason read
+                # only from stderr would print blank for the one backend most
+                # likely to reject something.
+                detail = (c.stderr.strip() or c.stdout.strip())
                 fails.append(f"{label}: {cname} rejected the output: "
-                             + (c.stderr.strip().splitlines() or ["?"])[0][:70])
-        print(f"{label:<26}" + "".join(f"{x:<10}" for x in row))
+                             + (detail.splitlines() or ["?"])[0][:70])
+        print(f"{label:<26}" + "".join(f"{x:<11}" for x in row))
     print()
     for x in fails:
         print("  " + x)

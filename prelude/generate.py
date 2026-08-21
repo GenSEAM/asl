@@ -297,7 +297,7 @@ def validate_prelude() -> list[str]:
             if eff not in declared_effects:
                 bad.append(f"{b['name']}: undeclared effect {eff!r}")
         n = len(params(b["type"]))
-        for tgt in ("py", "js", "rs", "sw"):
+        for tgt in ("py", "ts", "rs", "sw"):
             tpl = b.get(tgt)
             if tpl is None:
                 bad.append(f"{b['name']}: no {tgt} lowering")

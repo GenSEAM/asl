@@ -91,7 +91,7 @@ work the `--check` gate will reject.
 .venv/bin/python prelude/generate.py
 ```
 
-A new builtin needs a lowering for all four targets (`py`, `js`, `rs`, `sw`) and
+A new builtin needs a lowering for all four targets (`py`, `ts`, `rs`, `sw`) and
 an example, or the coverage gate fails. Literal braces in a template must be
 doubled or they are read as format placeholders and fail far from their cause.
 

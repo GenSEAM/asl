@@ -762,7 +762,7 @@ run:
 
 | Target | Provides |
 |---|---|
-| `py`, `js`, `rs`, `sw` | `console`, `stdin`, `fs`, `env`, `proc` |
+| `py`, `ts`, `rs`, `sw` | `console`, `stdin`, `fs`, `env`, `proc` |
 | `wasm` (browser) | `console` |
 
 WebAssembly is reached through the Rust backend and `wasm32-unknown-unknown`; there is no separate

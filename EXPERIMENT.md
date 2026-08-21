@@ -304,3 +304,50 @@ Nine fixtures in `grammar/corpus/semantic/` encode rules nothing enforces, four 
 v0.3 (effect declaration, foreign results used as bare values, `defopaque` inspection, and more than
 one `defentry`). A program that parses and transpiles is not known to be well-typed, and no arm of
 this protocol should be reported as if it were.
+
+### 2026-08-21-d — the JavaScript target becomes TypeScript (made BEFORE any results)
+
+No arm has run and no result has been observed. This amendment replaces a declared target with a
+real one, and the reason is a property of gates rather than of an outcome.
+
+**JavaScript was never gateable and that is why it is gone.** A backend is only as trustworthy as
+the oracle that accepts or rejects its output. `rustc` and `swiftc` are those oracles for their
+backends; JavaScript has none, and the cost of not having one is already recorded in this project:
+the Python column of `backend/check_corpus.py` reported `ok` on output no compiler ever saw, while
+the transpiler emitted `s(/, concat, ...)` for every qualified name. `tsc --noEmit --strict` puts
+TypeScript in the same column as `rustc` and `swiftc`. JavaScript is not lost — it is what `tsc`
+emits.
+
+**The `js` lowerings are deleted, not ported.** All 103 of them named a runtime that was never
+written, so they had no accept/reject history behind them and no claim to be a starting point. The
+prelude now carries `py`, `ts`, `rs` and `sw`, and `prelude/generate.py` validates that tuple.
+
+**Measurement target: TypeScript compiled to JavaScript.** Amendment `2026-08-20-b` fixed the
+measurement targets as Python and JavaScript, because that is where the benchmark and its human
+baselines live. That claim is unchanged at the artifact: the thing a JavaScript baseline is
+compared against is still JavaScript running on Node. What changes is the language the backend
+emits on the way there, and therefore what a green gate means — an accepted program is now one a
+type checker accepted, not one that merely parsed.
+
+**H5 as it now stands:** Core transpiles cleanly to Python, Rust, Swift and TypeScript — every
+corpus program lowers, `rustc`, `swiftc` and `tsc --noEmit --strict` accept their output, and the
+four backends agree on every case of every benchmark task. This supersedes the closing line of
+amendment `2026-08-21-a` ("JavaScript re-enters H5 when its transpiler exists, not before") and the
+matching clause in `2026-08-21-b`: JavaScript does not re-enter, TypeScript enters in its place.
+Kotlin still enters when its transpiler exists, and not before.
+
+**One divergence this closes, stated because it was named twice.** Amendments `2026-08-20-b` and
+`2026-08-21-a` both cite Python and JavaScript disagreeing on `2**53+1` as the evidence that
+cross-runtime agreement is not a default. `Int32` and `Int64` lower to `bigint` here, not to
+`number`, so that particular disagreement no longer exists to be measured — and the Int64 bound is
+enforced in the runtime, as it is in the Python one, so the trapping-arithmetic finding closed
+under `2026-08-21-b` holds for the fourth backend too.
+
+**Divergences it does not close, and one it exposes.** Ordering a tagged value is the honest gap,
+and adding a fourth backend made it a three-way split rather than creating it: Rust derives `Ord`
+for a user enum and inherits `None < Some` from the standard library, Swift synthesizes no
+`Comparable` for an enum carrying a payload or for any `Option`, and TypeScript has no type to
+refuse from at all, so its runtime throws rather than order two values by their tag strings.
+`string-trim` is a second: JavaScript's Unicode whitespace set matches Python's and Rust's, not
+Swift's ASCII one. Neither is exercised by a benchmark case, which is the same shape of latency the
+overflow finding had — a green gate must not be read as having tested them.

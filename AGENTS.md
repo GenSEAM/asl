@@ -113,11 +113,15 @@ A module carrying a `defextern` names one ecosystem, so a backend for another ta
 it. `REFUSE` in that file asserts the refusal rather than skipping the fixture: a refusal that
 silently stopped happening would read as coverage.
 
-`differential.py` runs one AgentScript source through every backend — Python, Rust and Swift — and
-fails if they disagree. Portability is a claim, not a property: Python and JavaScript already
-differ on `2**53+1` and on rounding a half, so equivalence exists only where it is enforced. What
-it does not reach is arithmetic overflow, where the three backends genuinely differ and no case
-exercises it (`EXPERIMENT.md` amendment `2026-08-21-b`).
+`differential.py` runs one AgentScript source through every backend — Python, TypeScript, Rust and
+Swift — and fails if they disagree. Portability is a claim, not a property, so equivalence exists
+only where it is enforced.
+
+The example this project used to cite for that — Python and JavaScript differing on `2**53+1` — no
+longer applies to our own output: `Int64` lowers to `bigint`, not `number`, so the disagreement was
+designed out rather than measured. Rounding a half still differs, and ordering a tagged value is a
+genuine three-way split (`EXPERIMENT.md` amendment `2026-08-21-d`). Arithmetic overflow was a
+divergence and is now closed and tested under `-O` (`backend/t/test_overflow.py`).
 
 `backend/t` runs AgentScript source through the transpiler and executes the result, asserting semantics
 taken from the specification — not from observing what the transpiler happened to emit.
@@ -136,7 +140,7 @@ times longer. Measured at **4,531 tokens** on 2026-08-21, up from about 2,600 be
 I/O and the foreign boundary — the prompt is resent on every call, so this number dominates the
 cost of a run. Keep it under 5,000, and measure rather than estimate when it changes.
 
-Adding a builtin means a lowering for all four targets (`py`, `js`, `rs`, `sw`) *and* an example,
+Adding a builtin means a lowering for all four targets (`py`, `ts`, `rs`, `sw`) *and* an example,
 or the coverage gate fails. Adding a keyword terminal to either grammar also means adding it to
 `FORM_KW` in all three backends, or `kids()` leaves it in the child list and the declaration
 mis-parses.

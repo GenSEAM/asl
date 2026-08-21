@@ -2,9 +2,14 @@
 """Differential gate: one AgentScript source, every backend, identical results.
 
 Portability across targets is a claim, not a property. Runtimes disagree by
-default — measured on this machine, Python and JavaScript already differ on
-2**53+1 and on rounding a .5 — so equivalence only exists where it is enforced.
-This is the enforcement.
+default, so equivalence exists only where it is enforced. This is the
+enforcement.
+
+The example this file used to give — Python and JavaScript differing on
+2**53+1 — is no longer one, and the reason is worth keeping: `Int64` lowers to
+`bigint` in the TypeScript backend rather than to `number`, so the disagreement
+was designed out instead of being measured. Rounding a half still differs, and
+so does ordering a tagged value (`EXPERIMENT.md` amendment 2026-08-21-d).
 
 What it does not enforce: the benchmark's cases never overflow, and the three
 backends do not agree there. Swift traps, Rust traps in debug, Python has
@@ -107,7 +112,51 @@ def run_swift(src: Path, task: dict) -> list:
         return json.loads(r.stdout.strip())
 
 
-BACKENDS = {"python": run_python, "rust": run_rust, "swift": run_swift}
+def run_typescript(src: Path, task: dict) -> list:
+    from to_typescript import ToTypeScript, mangle
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        (p / "rt.ts").write_text((ROOT / "backend" / "ts" / "rt.ts").read_text())
+        body = ToTypeScript().transpile_program(
+            __import__("modules").load(src, p=ToTypeScript().parser))
+        inputs = ", ".join(json.dumps(i) for i, _ in task["cases"])
+        fn = mangle(task["entry"])
+        if task.get("result") == "string":
+            render = f"  out.push(JSON.stringify({fn}(i)))\n"
+        else:
+            # Keys are emitted in sorted order, which is the order the language
+            # specifies for map iteration.
+            # RT.mKeys/mGet, not the JS Map API: ASMap wraps a Map keyed by a
+            # canonical rendering, and mKeys is what sorts, which is the order
+            # the language specifies for map iteration.
+            render = (f"  const g = {fn}(i)\n"
+                      "  const kv: string[] = []\n"
+                      "  for (const k of RT.mKeys(g)) {\n"
+                      "    const v = RT.mGet(g, k)\n"
+                      "    kv.push(JSON.stringify(k) + \":\" + (v as any).value.toString())\n"
+                      "  }\n"
+                      "  out.push(\"{\" + kv.join(\",\") + \"}\")\n")
+        body += ("\nconst ins: string[] = [" + inputs + "]\n"
+                 "const out: string[] = []\n"
+                 "for (const i of ins) {\n" + render + "}\n"
+                 "console.log(\"[\" + out.join(\",\") + \"]\")\n")
+        (p / "main.ts").write_text(body)
+        c = subprocess.run([str(ROOT / "node_modules" / ".bin" / "tsc"),
+                            "--strict", "--target", "ES2022", "--module", "commonjs",
+                            "--types", "node",
+                            "--typeRoots", str(ROOT / "node_modules" / "@types"),
+                            "rt.ts", "main.ts"], cwd=d, capture_output=True, text=True)
+        if c.returncode:
+            raise RuntimeError("tsc: " + ((c.stdout or c.stderr).strip().splitlines()
+                                          or ["?"])[0][:140])
+        r = subprocess.run(["node", "main.js"], cwd=d, capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError("node: " + (r.stderr.strip().splitlines() or ["?"])[0][:140])
+        return json.loads(r.stdout.strip())
+
+
+BACKENDS = {"python": run_python, "typescript": run_typescript,
+            "rust": run_rust, "swift": run_swift}
 
 
 # Each entry is (task path, source path), both relative to the repository root.
