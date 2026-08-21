@@ -64,7 +64,7 @@ pub fn index_of<T: PartialEq>(xs: &[T], x: &T) -> Option<i64> {
     xs.iter().position(|y| y == x).map(|i| i as i64)
 }
 pub fn sort<T: Ord>(mut xs: Vec<T>) -> Vec<T> { xs.sort(); xs }
-pub fn sort_by<T, K: Ord, F: Fn(&T) -> K>(mut xs: Vec<T>, f: F) -> Vec<T> {
+pub fn sort_by<T, K: Ord, F: Fn(&T) -> K>(f: F, mut xs: Vec<T>) -> Vec<T> {
     xs.sort_by_key(|x| f(x));
     xs
 }

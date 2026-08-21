@@ -156,7 +156,7 @@ def validate_templates() -> list[str]:
     for b in PRELUDE["builtins"]:
         lhs = b["type"].split("->")[0].strip()
         n = 0 if not lhs else len(lhs.split())
-        for tgt in ("py", "js", "rs"):
+        for tgt in ("py", "js", "rs", "sw"):
             tpl = b.get(tgt)
             if tpl is None:
                 bad.append(f"{b['name']}: no {tgt} lowering")

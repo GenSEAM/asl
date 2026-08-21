@@ -3,15 +3,18 @@
 Written to be read cold. A session starting from zero should be able to resume from this file
 alone, plus `AGENTS.md` for commands and `.pcp/INDEX.md` for recorded intent.
 
-**Last updated:** 2026-08-20 · **Head commit at writing:** `2b80615`
+**Last updated:** 2026-08-21 · **Head commit at writing:** `8679362`
 
 ---
 
 ## 1. What this project is
 
 AgentS is an S-expression language designed so that LLM agents can generate large, reusable units
-of working code in a single pass, transpiled to native Rust and Go (the priority targets), with
-TypeScript and Python secondary.
+of working code in a single pass, transpiled to native Rust, Kotlin and Swift (the priority
+targets), with TypeScript and Python secondary. Go was a priority target until 2026-08-21 and is
+now best-effort: wanted eventually, gated and planned for by nothing. `EXPERIMENT.md` amendment
+`2026-08-21-b` and PCP `d-bf87` carry the reasoning; mobile access is the motive and is deferred
+(PCP `l-720b`).
 
 Four goals, in the owner's order of priority:
 
@@ -39,7 +42,9 @@ Everything below was checked by a command whose output was read, not inferred.
 | Closure gate | **green** — no example calls an undefined name |
 | Python backend | **working** — corpus transpiles, tests execute |
 | Rust backend | **working** — corpus transpiles and `rustc` accepts it |
-| Differential gate | **green** — Python and Rust agree on every case |
+| Swift backend | **working** — corpus transpiles and `swiftc` accepts it |
+| Differential gate | **green** — Python, Rust and Swift agree on every case |
+| Kotlin backend | priority target, no transpiler — toolchain not installed |
 | JavaScript backend | lowering rules exist in the prelude, no transpiler |
 | Semantic checker | **does not exist** |
 | Reference interpreter | **not built, deliberately** — see below |
@@ -125,13 +130,14 @@ reports it as pending; each new check should add fixtures there.
 2. **I/O surface** — now on the critical path, PCP `r-56bf`. The benchmark is whole programs that read
    and write, and Core has no I/O at all. Decide at the same time whether effects are tracked in
    the type system; leaving that implicit is cheap now and is what forces function colouring later.
-3. **Python and JavaScript backends** — the measurement targets. Rust and Go remain the compiler's
-   own self-hosting targets and are unchanged as a product goal.
+3. **Python and JavaScript backends** — the measurement targets. Rust, Kotlin and Swift are the
+   native targets and are unchanged as a product goal.
 4. **Benchmark harness** — terminal-bench, comparing generated AgentS transpiled to Python/JS
    against real Python/JS solutions to the same tasks.
 5. **Measurement** — see §5. Blocked.
-6. **Native backends** — Rust and Go, for self-hosting. Gated behind the checker *and* an
-   unrecorded ownership decision (PCP `l-880d`).
+6. **Native backends** — Rust and Swift exist; Kotlin is next and needs a toolchain installed
+   first. Only Rust raises the ownership question (PCP `l-880d`); the other two are
+   reference-counted or garbage-collected, which is part of why they are the cheaper targets.
 7. **Self-hosting probe** — write the AgentS lexer in AgentS. Prediction on record: it needs
    closed unions, which v0.2 now has, so the probe is newly worth running.
 
@@ -164,12 +170,14 @@ The harness can be written and unit-tested without any of this. It cannot be run
 
 ## 6. Known gaps — do not mistake green gates for a validated language
 
-* **Vocabulary coverage ~26%.** Only about a quarter of declared builtins appear in any example.
+* **Vocabulary coverage 23%.** Only 22 of 92 declared builtins appear in any example.
   The closure gate proves no example uses an *undefined* name; it says nothing about defined names
   no example uses, and that direction is what degrades generation quality. PCP `l-3434`.
 * **No semantic checking at all.** See §4.
-* **Ownership model unrecorded.** Required before the Rust backend; without it every signature is
-  a guess between moving, borrowing and cloning. PCP `l-880d`.
+* **Ownership model unrecorded.** The Rust backend was built anyway, on the conservative
+  strategy of cloning at every use site, so the open question is now the cost of that rather than
+  whether it compiles. It is a Rust-only question: the Swift backend never had to answer it.
+  PCP `l-880d`.
 * **Concurrency deliberately absent.** No async, so function colouring has not had to be decided.
   It will have to be before any concurrent construct is added.
 * **The core premise remains unmeasured.** No located source evaluates whether LLMs generate
@@ -204,8 +212,9 @@ instead of cancelling.
   whether they were made before or after seeing results. Editing a threshold after seeing a result
   invalidates it — say so rather than quietly changing it.
 * **The primary gate is fixed:** generated code must land within **15 percentage points** of the
-  Go and Rust baselines on identical tasks and models. If missed, stop and report; do not iterate
-  prompts until it passes.
+  baselines named in the current `EXPERIMENT.md` amendment — real Python/JavaScript solutions to
+  the same terminal-bench tasks, per `2026-08-20-b`, not the Go and Rust baselines the body of that
+  document still names. If missed, stop and report; do not iterate prompts until it passes.
 * **Benchmark translations are written by hand.** A model-generated translation contaminates the
   thing being measured.
 * **Both grammars change together.** They are separate artifacts that can drift silently; a drift

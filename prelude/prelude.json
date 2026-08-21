@@ -66,7 +66,8 @@
    "doc": "Sum.",
    "py": "({0} + {1})",
    "js": "({0} + {1})",
-   "rs": "({0} + {1})"
+   "rs": "({0} + {1})",
+   "sw": "({0} + {1})"
   },
   {
    "name": "-",
@@ -75,7 +76,8 @@
    "doc": "Difference.",
    "py": "({0} - {1})",
    "js": "({0} - {1})",
-   "rs": "({0} - {1})"
+   "rs": "({0} - {1})",
+   "sw": "({0} - {1})"
   },
   {
    "name": "*",
@@ -84,7 +86,8 @@
    "doc": "Product.",
    "py": "({0} * {1})",
    "js": "({0} * {1})",
-   "rs": "({0} * {1})"
+   "rs": "({0} * {1})",
+   "sw": "({0} * {1})"
   },
   {
    "name": "/",
@@ -93,7 +96,8 @@
    "doc": "Division; integer division truncates toward zero. Traps on a zero divisor.",
    "py": "_as.div({0}, {1})",
    "js": "_as.div({0}, {1})",
-   "rs": "rt::div({0}, {1})"
+   "rs": "rt::div({0}, {1})",
+   "sw": "RT.div({0}, {1})"
   },
   {
    "name": "mod",
@@ -102,7 +106,8 @@
    "doc": "Remainder; the sign follows the dividend. Traps on a zero divisor.",
    "py": "_as.mod({0}, {1})",
    "js": "_as.mod({0}, {1})",
-   "rs": "rt::rem({0}, {1})"
+   "rs": "rt::rem({0}, {1})",
+   "sw": "RT.rem({0}, {1})"
   },
   {
    "name": "checked-div",
@@ -111,7 +116,8 @@
    "doc": "Division, or none on a zero divisor.",
    "py": "_as.checked_div({0}, {1})",
    "js": "_as.checkedDiv({0}, {1})",
-   "rs": "rt::checked_div({0}, {1})"
+   "rs": "rt::checked_div({0}, {1})",
+   "sw": "RT.checkedDiv({0}, {1})"
   },
   {
    "name": "checked-mod",
@@ -120,7 +126,8 @@
    "doc": "Remainder, or none on a zero divisor.",
    "py": "_as.checked_mod({0}, {1})",
    "js": "_as.checkedMod({0}, {1})",
-   "rs": "rt::checked_rem({0}, {1})"
+   "rs": "rt::checked_rem({0}, {1})",
+   "sw": "RT.checkedRem({0}, {1})"
   },
   {
    "name": "neg",
@@ -129,7 +136,8 @@
    "doc": "Arithmetic negation.",
    "py": "(-{0})",
    "js": "(-{0})",
-   "rs": "(-{0})"
+   "rs": "(-{0})",
+   "sw": "(-{0})"
   },
   {
    "name": "abs",
@@ -138,7 +146,8 @@
    "doc": "Absolute value.",
    "py": "abs({0})",
    "js": "Math.abs({0})",
-   "rs": "({0}).abs()"
+   "rs": "({0}).abs()",
+   "sw": "abs({0})"
   },
   {
    "name": "min",
@@ -147,7 +156,8 @@
    "doc": "Lesser of two values.",
    "py": "min({0}, {1})",
    "js": "Math.min({0}, {1})",
-   "rs": "std::cmp::min({0}, {1})"
+   "rs": "std::cmp::min({0}, {1})",
+   "sw": "min({0}, {1})"
   },
   {
    "name": "max",
@@ -156,7 +166,8 @@
    "doc": "Greater of two values.",
    "py": "max({0}, {1})",
    "js": "Math.max({0}, {1})",
-   "rs": "std::cmp::max({0}, {1})"
+   "rs": "std::cmp::max({0}, {1})",
+   "sw": "max({0}, {1})"
   },
   {
    "name": "=",
@@ -165,7 +176,8 @@
    "doc": "Structural equality.",
    "py": "_as.eq({0}, {1})",
    "js": "_as.eq({0}, {1})",
-   "rs": "({0} == {1})"
+   "rs": "({0} == {1})",
+   "sw": "({0} == {1})"
   },
   {
    "name": "!=",
@@ -174,7 +186,8 @@
    "doc": "Structural inequality.",
    "py": "(not _as.eq({0}, {1}))",
    "js": "(!_as.eq({0}, {1}))",
-   "rs": "({0} != {1})"
+   "rs": "({0} != {1})",
+   "sw": "({0} != {1})"
   },
   {
    "name": "<",
@@ -183,7 +196,8 @@
    "doc": "Ordered comparison, for numbers and strings.",
    "py": "({0} < {1})",
    "js": "({0} < {1})",
-   "rs": "({0} < {1})"
+   "rs": "({0} < {1})",
+   "sw": "({0} < {1})"
   },
   {
    "name": "<=",
@@ -192,7 +206,8 @@
    "doc": "Ordered comparison, for numbers and strings.",
    "py": "({0} <= {1})",
    "js": "({0} <= {1})",
-   "rs": "({0} <= {1})"
+   "rs": "({0} <= {1})",
+   "sw": "({0} <= {1})"
   },
   {
    "name": ">",
@@ -201,7 +216,8 @@
    "doc": "Ordered comparison, for numbers and strings.",
    "py": "({0} > {1})",
    "js": "({0} > {1})",
-   "rs": "({0} > {1})"
+   "rs": "({0} > {1})",
+   "sw": "({0} > {1})"
   },
   {
    "name": ">=",
@@ -210,7 +226,8 @@
    "doc": "Ordered comparison, for numbers and strings.",
    "py": "({0} >= {1})",
    "js": "({0} >= {1})",
-   "rs": "({0} >= {1})"
+   "rs": "({0} >= {1})",
+   "sw": "({0} >= {1})"
   },
   {
    "name": "and",
@@ -219,7 +236,8 @@
    "doc": "Conjunction; short-circuits.",
    "py": "({0} and {1})",
    "js": "({0} && {1})",
-   "rs": "({0} && {1})"
+   "rs": "({0} && {1})",
+   "sw": "({0} && {1})"
   },
   {
    "name": "or",
@@ -228,7 +246,8 @@
    "doc": "Disjunction; short-circuits.",
    "py": "({0} or {1})",
    "js": "({0} || {1})",
-   "rs": "({0} || {1})"
+   "rs": "({0} || {1})",
+   "sw": "({0} || {1})"
   },
   {
    "name": "not",
@@ -237,7 +256,8 @@
    "doc": "Negation.",
    "py": "(not {0})",
    "js": "(!{0})",
-   "rs": "(!{0})"
+   "rs": "(!{0})",
+   "sw": "(!{0})"
   },
   {
    "name": "string-length",
@@ -246,7 +266,8 @@
    "doc": "Length in characters.",
    "py": "len({0})",
    "js": "[...{0}].length",
-   "rs": "rt::str_len(&{0})"
+   "rs": "rt::str_len(&{0})",
+   "sw": "RT.strLen({0})"
   },
   {
    "name": "string-empty?",
@@ -255,7 +276,8 @@
    "doc": "True when the string has no characters.",
    "py": "(len({0}) == 0)",
    "js": "({0}.length === 0)",
-   "rs": "{0}.is_empty()"
+   "rs": "{0}.is_empty()",
+   "sw": "{0}.isEmpty"
   },
   {
    "name": "str",
@@ -264,7 +286,8 @@
    "doc": "Concatenate strings. Takes strings only; convert first.",
    "py": "\"\".join([{*}])",
    "js": "[{*}].join('')",
-   "rs": "rt::concat(&[{*}])"
+   "rs": "rt::concat(&[{*}])",
+   "sw": "RT.concat([{*}])"
   },
   {
    "name": "string-slice",
@@ -273,7 +296,8 @@
    "doc": "Half-open character slice, or none when out of range.",
    "py": "_as.str_slice({0}, {1}, {2})",
    "js": "_as.strSlice({0}, {1}, {2})",
-   "rs": "rt::str_slice(&{0}, {1}, {2})"
+   "rs": "rt::str_slice(&{0}, {1}, {2})",
+   "sw": "RT.strSlice({0}, {1}, {2})"
   },
   {
    "name": "string-index-of",
@@ -282,7 +306,8 @@
    "doc": "Character index of the first occurrence.",
    "py": "_as.str_index_of({0}, {1})",
    "js": "_as.strIndexOf({0}, {1})",
-   "rs": "rt::str_index_of(&{0}, &{1})"
+   "rs": "rt::str_index_of(&{0}, &{1})",
+   "sw": "RT.strIndexOf({0}, {1})"
   },
   {
    "name": "string-contains?",
@@ -291,7 +316,8 @@
    "doc": "True when the substring occurs.",
    "py": "({1} in {0})",
    "js": "{0}.includes({1})",
-   "rs": "{0}.contains(&{1})"
+   "rs": "{0}.contains(&{1})",
+   "sw": "RT.contains({0}, {1})"
   },
   {
    "name": "string-starts-with?",
@@ -300,7 +326,8 @@
    "doc": "True when the string begins with the prefix.",
    "py": "{0}.startswith({1})",
    "js": "{0}.startsWith({1})",
-   "rs": "{0}.starts_with(&{1})"
+   "rs": "{0}.starts_with(&{1})",
+   "sw": "{0}.hasPrefix({1})"
   },
   {
    "name": "string-ends-with?",
@@ -309,7 +336,8 @@
    "doc": "True when the string ends with the suffix.",
    "py": "{0}.endswith({1})",
    "js": "{0}.endsWith({1})",
-   "rs": "{0}.ends_with(&{1})"
+   "rs": "{0}.ends_with(&{1})",
+   "sw": "{0}.hasSuffix({1})"
   },
   {
    "name": "string-split",
@@ -318,7 +346,8 @@
    "doc": "Split on a separator.",
    "py": "{0}.split({1})",
    "js": "{0}.split({1})",
-   "rs": "rt::split(&{0}, &{1})"
+   "rs": "rt::split(&{0}, &{1})",
+   "sw": "RT.split({0}, {1})"
   },
   {
    "name": "string-join",
@@ -327,7 +356,8 @@
    "doc": "Join with a separator.",
    "py": "{1}.join({0})",
    "js": "{0}.join({1})",
-   "rs": "{0}.join(&{1})"
+   "rs": "{0}.join(&{1})",
+   "sw": "{0}.joined(separator: {1})"
   },
   {
    "name": "string-upper",
@@ -336,7 +366,8 @@
    "doc": "Upper case.",
    "py": "{0}.upper()",
    "js": "{0}.toUpperCase()",
-   "rs": "{0}.to_uppercase()"
+   "rs": "{0}.to_uppercase()",
+   "sw": "{0}.uppercased()"
   },
   {
    "name": "string-lower",
@@ -345,7 +376,8 @@
    "doc": "Lower case.",
    "py": "{0}.lower()",
    "js": "{0}.toLowerCase()",
-   "rs": "{0}.to_lowercase()"
+   "rs": "{0}.to_lowercase()",
+   "sw": "{0}.lowercased()"
   },
   {
    "name": "string-trim",
@@ -354,7 +386,8 @@
    "doc": "Remove leading and trailing whitespace.",
    "py": "{0}.strip()",
    "js": "{0}.trim()",
-   "rs": "{0}.trim().to_string()"
+   "rs": "{0}.trim().to_string()",
+   "sw": "RT.trim({0})"
   },
   {
    "name": "string-reverse",
@@ -363,7 +396,8 @@
    "doc": "Reverse the character sequence.",
    "py": "{0}[::-1]",
    "js": "[...{0}].reverse().join('')",
-   "rs": "rt::str_rev(&{0})"
+   "rs": "rt::str_rev(&{0})",
+   "sw": "RT.strRev({0})"
   },
   {
    "name": "string-replace",
@@ -372,7 +406,8 @@
    "doc": "Replace every occurrence.",
    "py": "{0}.replace({1}, {2})",
    "js": "{0}.replaceAll({1}, {2})",
-   "rs": "{0}.replace(&{1}, &{2})"
+   "rs": "{0}.replace(&{1}, &{2})",
+   "sw": "RT.replace({0}, {1}, {2})"
   },
   {
    "name": "string-chars",
@@ -381,7 +416,8 @@
    "doc": "Characters as one-character strings.",
    "py": "list({0})",
    "js": "[...{0}]",
-   "rs": "rt::chars(&{0})"
+   "rs": "rt::chars(&{0})",
+   "sw": "RT.chars({0})"
   },
   {
    "name": "string-from-int64",
@@ -390,7 +426,8 @@
    "doc": "Decimal rendering of an integer.",
    "py": "str({0})",
    "js": "String({0})",
-   "rs": "{0}.to_string()"
+   "rs": "{0}.to_string()",
+   "sw": "String({0})"
   },
   {
    "name": "string-from-float64",
@@ -399,7 +436,8 @@
    "doc": "Decimal rendering of a float.",
    "py": "repr({0})",
    "js": "String({0})",
-   "rs": "rt::fmt_f64({0})"
+   "rs": "rt::fmt_f64({0})",
+   "sw": "RT.fmtF64({0})"
   },
   {
    "name": "string-to-int64",
@@ -408,7 +446,8 @@
    "doc": "Parse an integer, or none.",
    "py": "_as.to_int({0})",
    "js": "_as.toInt({0})",
-   "rs": "rt::to_i64(&{0})"
+   "rs": "rt::to_i64(&{0})",
+   "sw": "RT.toI64({0})"
   },
   {
    "name": "string-to-float64",
@@ -417,7 +456,8 @@
    "doc": "Parse a float, or none.",
    "py": "_as.to_float({0})",
    "js": "_as.toFloat({0})",
-   "rs": "rt::to_f64(&{0})"
+   "rs": "rt::to_f64(&{0})",
+   "sw": "RT.toF64({0})"
   },
   {
    "name": "int32-to-int64",
@@ -426,7 +466,8 @@
    "doc": "Widen.",
    "py": "{0}",
    "js": "{0}",
-   "rs": "({0} as i64)"
+   "rs": "({0} as i64)",
+   "sw": "Int64({0})"
   },
   {
    "name": "int64-to-int32",
@@ -435,7 +476,8 @@
    "doc": "Narrow, or none when out of range.",
    "py": "_as.to_i32({0})",
    "js": "_as.toI32({0})",
-   "rs": "rt::to_i32({0})"
+   "rs": "rt::to_i32({0})",
+   "sw": "RT.toI32({0})"
   },
   {
    "name": "int64-to-float64",
@@ -444,7 +486,8 @@
    "doc": "Convert to floating point.",
    "py": "float({0})",
    "js": "{0}",
-   "rs": "({0} as f64)"
+   "rs": "({0} as f64)",
+   "sw": "Double({0})"
   },
   {
    "name": "float64-to-int64",
@@ -453,7 +496,8 @@
    "doc": "Truncate toward zero, or none for NaN, infinity or out of range.",
    "py": "_as.f_to_i({0})",
    "js": "_as.fToI({0})",
-   "rs": "rt::f_to_i({0})"
+   "rs": "rt::f_to_i({0})",
+   "sw": "RT.fToI({0})"
   },
   {
    "name": "list",
@@ -462,7 +506,8 @@
    "doc": "Construct a list.",
    "py": "[{*}]",
    "js": "[{*}]",
-   "rs": "vec![{*}]"
+   "rs": "vec![{*}]",
+   "sw": "[{*}]"
   },
   {
    "name": "list-empty?",
@@ -471,7 +516,8 @@
    "doc": "True when the list has no elements.",
    "py": "(len({0}) == 0)",
    "js": "({0}.length === 0)",
-   "rs": "{0}.is_empty()"
+   "rs": "{0}.is_empty()",
+   "sw": "{0}.isEmpty"
   },
   {
    "name": "list-length",
@@ -480,7 +526,8 @@
    "doc": "Element count.",
    "py": "len({0})",
    "js": "{0}.length",
-   "rs": "({0}.len() as i64)"
+   "rs": "({0}.len() as i64)",
+   "sw": "Int64({0}.count)"
   },
   {
    "name": "list-get",
@@ -489,7 +536,8 @@
    "doc": "Element at an index, or none.",
    "py": "_as.at({0}, {1})",
    "js": "_as.at({0}, {1})",
-   "rs": "rt::at(&{0}, {1})"
+   "rs": "rt::at(&{0}, {1})",
+   "sw": "RT.at({0}, {1})"
   },
   {
    "name": "list-head",
@@ -498,7 +546,8 @@
    "doc": "First element, or none.",
    "py": "_as.at({0}, 0)",
    "js": "_as.at({0}, 0)",
-   "rs": "rt::at(&{0}, 0)"
+   "rs": "rt::at(&{0}, 0)",
+   "sw": "RT.at({0}, 0)"
   },
   {
    "name": "list-tail",
@@ -507,7 +556,8 @@
    "doc": "All but the first element, or none when empty.",
    "py": "_as.tail({0})",
    "js": "_as.tail({0})",
-   "rs": "rt::tail(&{0})"
+   "rs": "rt::tail(&{0})",
+   "sw": "RT.tail({0})"
   },
   {
    "name": "list-cons",
@@ -516,7 +566,8 @@
    "doc": "Prepend an element.",
    "py": "([{0}] + {1})",
    "js": "[{0}, ...{1}]",
-   "rs": "rt::cons({0}, {1})"
+   "rs": "rt::cons({0}, {1})",
+   "sw": "([{0}] + {1})"
   },
   {
    "name": "list-append",
@@ -525,7 +576,8 @@
    "doc": "Concatenate two lists.",
    "py": "({0} + {1})",
    "js": "[...{0}, ...{1}]",
-   "rs": "rt::append({0}, {1})"
+   "rs": "rt::append({0}, {1})",
+   "sw": "({0} + {1})"
   },
   {
    "name": "list-reverse",
@@ -534,7 +586,8 @@
    "doc": "Reverse order.",
    "py": "{0}[::-1]",
    "js": "[...{0}].reverse()",
-   "rs": "rt::rev({0})"
+   "rs": "rt::rev({0})",
+   "sw": "Array({0}.reversed())"
   },
   {
    "name": "list-slice",
@@ -543,7 +596,8 @@
    "doc": "Half-open slice, or none when out of range.",
    "py": "_as.list_slice({0}, {1}, {2})",
    "js": "_as.listSlice({0}, {1}, {2})",
-   "rs": "rt::list_slice(&{0}, {1}, {2})"
+   "rs": "rt::list_slice(&{0}, {1}, {2})",
+   "sw": "RT.listSlice({0}, {1}, {2})"
   },
   {
    "name": "list-contains?",
@@ -552,7 +606,8 @@
    "doc": "True when the element occurs.",
    "py": "_as.contains({0}, {1})",
    "js": "_as.contains({0}, {1})",
-   "rs": "{0}.contains(&{1})"
+   "rs": "{0}.contains(&{1})",
+   "sw": "{0}.contains({1})"
   },
   {
    "name": "list-index-of",
@@ -561,7 +616,8 @@
    "doc": "Index of the first occurrence.",
    "py": "_as.index_of({0}, {1})",
    "js": "_as.indexOf({0}, {1})",
-   "rs": "rt::index_of(&{0}, &{1})"
+   "rs": "rt::index_of(&{0}, &{1})",
+   "sw": "RT.indexOf({0}, {1})"
   },
   {
    "name": "list-sort",
@@ -570,7 +626,8 @@
    "doc": "Stable ascending sort.",
    "py": "sorted({0})",
    "js": "_as.sort({0})",
-   "rs": "rt::sort({0})"
+   "rs": "rt::sort({0})",
+   "sw": "{0}.sorted()"
   },
   {
    "name": "list-sort-by",
@@ -579,7 +636,8 @@
    "doc": "Stable ascending sort by a derived key.",
    "py": "sorted({1}, key={0})",
    "js": "_as.sortBy({0}, {1})",
-   "rs": "rt::sort_by({0}, {1})"
+   "rs": "rt::sort_by({0}, {1})",
+   "sw": "RT.sortBy({0}, {1})"
   },
   {
    "name": "map",
@@ -588,7 +646,8 @@
    "doc": "Apply a function to every element.",
    "py": "[{0}(_x) for _x in {1}]",
    "js": "{1}.map({0})",
-   "rs": "{1}.into_iter().map({0}).collect::<Vec<_>>()"
+   "rs": "{1}.into_iter().map({0}).collect::<Vec<_>>()",
+   "sw": "{1}.map({0})"
   },
   {
    "name": "filter",
@@ -597,7 +656,8 @@
    "doc": "Keep elements satisfying a predicate.",
    "py": "[_x for _x in {1} if {0}(_x)]",
    "js": "{1}.filter({0})",
-   "rs": "{1}.into_iter().filter(|x| ({0})(x.clone())).collect::<Vec<_>>()"
+   "rs": "{1}.into_iter().filter(|x| ({0})(x.clone())).collect::<Vec<_>>()",
+   "sw": "{1}.filter({0})"
   },
   {
    "name": "fold",
@@ -606,7 +666,8 @@
    "doc": "Left fold with an initial accumulator.",
    "py": "_as.fold({0}, {1}, {2})",
    "js": "{2}.reduce({0}, {1})",
-   "rs": "{2}.into_iter().fold({1}, {0})"
+   "rs": "{2}.into_iter().fold({1}, {0})",
+   "sw": "{2}.reduce({1}, {0})"
   },
   {
    "name": "range",
@@ -615,7 +676,8 @@
    "doc": "Half-open integer range; empty when start is not below end.",
    "py": "list(range({0}, {1}))",
    "js": "_as.range({0}, {1})",
-   "rs": "rt::range({0}, {1})"
+   "rs": "rt::range({0}, {1})",
+   "sw": "RT.range({0}, {1})"
   },
   {
    "name": "zip",
@@ -624,7 +686,8 @@
    "doc": "Pair up elements, truncating to the shorter list.",
    "py": "_as.zip({0}, {1})",
    "js": "_as.zip({0}, {1})",
-   "rs": "rt::zip({0}, {1})"
+   "rs": "rt::zip({0}, {1})",
+   "sw": "RT.zip({0}, {1})"
   },
   {
    "name": "list-sum",
@@ -633,7 +696,8 @@
    "doc": "Sum of elements.",
    "py": "sum({0})",
    "js": "_as.sum({0})",
-   "rs": "rt::sum({0})"
+   "rs": "rt::sum({0})",
+   "sw": "RT.sum({0})"
   },
   {
    "name": "list-min",
@@ -642,7 +706,8 @@
    "doc": "Least element, or none when empty.",
    "py": "_as.least({0})",
    "js": "_as.least({0})",
-   "rs": "rt::least(&{0})"
+   "rs": "rt::least(&{0})",
+   "sw": "{0}.min()"
   },
   {
    "name": "list-max",
@@ -651,7 +716,8 @@
    "doc": "Greatest element, or none when empty.",
    "py": "_as.greatest({0})",
    "js": "_as.greatest({0})",
-   "rs": "rt::greatest(&{0})"
+   "rs": "rt::greatest(&{0})",
+   "sw": "{0}.max()"
   },
   {
    "name": "map-empty",
@@ -660,7 +726,8 @@
    "doc": "The empty map.",
    "py": "{{}}",
    "js": "new Map()",
-   "rs": "std::collections::BTreeMap::new()"
+   "rs": "std::collections::BTreeMap::new()",
+   "sw": "[:]"
   },
   {
    "name": "map-get",
@@ -669,7 +736,8 @@
    "doc": "Value for a key, or none.",
    "py": "_as.m_get({0}, {1})",
    "js": "_as.mGet({0}, {1})",
-   "rs": "rt::m_get(&{0}, &{1})"
+   "rs": "rt::m_get(&{0}, &{1})",
+   "sw": "RT.mGet({0}, {1})"
   },
   {
    "name": "map-set",
@@ -678,7 +746,8 @@
    "doc": "Map with the key bound to the value.",
    "py": "_as.m_set({0}, {1}, {2})",
    "js": "_as.mSet({0}, {1}, {2})",
-   "rs": "rt::m_set({0}, {1}, {2})"
+   "rs": "rt::m_set({0}, {1}, {2})",
+   "sw": "RT.mSet({0}, {1}, {2})"
   },
   {
    "name": "map-remove",
@@ -687,7 +756,8 @@
    "doc": "Map without the key.",
    "py": "_as.m_del({0}, {1})",
    "js": "_as.mDel({0}, {1})",
-   "rs": "rt::m_del({0}, &{1})"
+   "rs": "rt::m_del({0}, &{1})",
+   "sw": "RT.mDel({0}, {1})"
   },
   {
    "name": "map-has?",
@@ -696,7 +766,8 @@
    "doc": "True when the key is present.",
    "py": "({1} in {0})",
    "js": "{0}.has({1})",
-   "rs": "{0}.contains_key(&{1})"
+   "rs": "{0}.contains_key(&{1})",
+   "sw": "({0}[{1}] != nil)"
   },
   {
    "name": "map-size",
@@ -705,7 +776,8 @@
    "doc": "Number of entries.",
    "py": "len({0})",
    "js": "{0}.size",
-   "rs": "({0}.len() as i64)"
+   "rs": "({0}.len() as i64)",
+   "sw": "Int64({0}.count)"
   },
   {
    "name": "map-keys",
@@ -714,7 +786,8 @@
    "doc": "Keys, sorted.",
    "py": "sorted({0}.keys())",
    "js": "_as.mKeys({0})",
-   "rs": "{0}.keys().cloned().collect::<Vec<_>>()"
+   "rs": "{0}.keys().cloned().collect::<Vec<_>>()",
+   "sw": "RT.mKeys({0})"
   },
   {
    "name": "map-values",
@@ -723,7 +796,8 @@
    "doc": "Values, ordered by sorted key.",
    "py": "[{0}[_k] for _k in sorted({0})]",
    "js": "_as.mValues({0})",
-   "rs": "{0}.values().cloned().collect::<Vec<_>>()"
+   "rs": "{0}.values().cloned().collect::<Vec<_>>()",
+   "sw": "RT.mValues({0})"
   },
   {
    "name": "map-pairs",
@@ -732,7 +806,8 @@
    "doc": "Entries as pairs, ordered by sorted key.",
    "py": "_as.m_pairs({0})",
    "js": "_as.mPairs({0})",
-   "rs": "rt::m_pairs(&{0})"
+   "rs": "rt::m_pairs(&{0})",
+   "sw": "RT.mPairs({0})"
   },
   {
    "name": "map-from-pairs",
@@ -741,7 +816,8 @@
    "doc": "Build from pairs; later entries win.",
    "py": "_as.m_from({0})",
    "js": "_as.mFrom({0})",
-   "rs": "rt::m_from({0})"
+   "rs": "rt::m_from({0})",
+   "sw": "RT.mFrom({0})"
   },
   {
    "name": "some",
@@ -750,7 +826,8 @@
    "doc": "A present value.",
    "py": "_as.some({0})",
    "js": "_as.some({0})",
-   "rs": "Some({0})"
+   "rs": "Some({0})",
+   "sw": "Optional({0})"
   },
   {
    "name": "none",
@@ -759,7 +836,8 @@
    "doc": "An absent value.",
    "py": "_as.NONE",
    "js": "_as.NONE",
-   "rs": "None"
+   "rs": "None",
+   "sw": "nil"
   },
   {
    "name": "ok",
@@ -768,7 +846,8 @@
    "doc": "A successful result.",
    "py": "_as.ok({0})",
    "js": "_as.ok({0})",
-   "rs": "Ok({0})"
+   "rs": "Ok({0})",
+   "sw": "ASResult.ok({0})"
   },
   {
    "name": "err",
@@ -777,7 +856,8 @@
    "doc": "A failed result.",
    "py": "_as.err({0})",
    "js": "_as.err({0})",
-   "rs": "Err({0})"
+   "rs": "Err({0})",
+   "sw": "ASResult.err({0})"
   },
   {
    "name": "is-some?",
@@ -786,7 +866,8 @@
    "doc": "True when a value is present.",
    "py": "_as.is_some({0})",
    "js": "_as.isSome({0})",
-   "rs": "{0}.is_some()"
+   "rs": "{0}.is_some()",
+   "sw": "({0} != nil)"
   },
   {
    "name": "is-none?",
@@ -795,7 +876,8 @@
    "doc": "True when no value is present.",
    "py": "(not _as.is_some({0}))",
    "js": "(!_as.isSome({0}))",
-   "rs": "{0}.is_none()"
+   "rs": "{0}.is_none()",
+   "sw": "({0} == nil)"
   },
   {
    "name": "is-ok?",
@@ -804,7 +886,8 @@
    "doc": "True when the result succeeded.",
    "py": "_as.is_ok({0})",
    "js": "_as.isOk({0})",
-   "rs": "{0}.is_ok()"
+   "rs": "{0}.is_ok()",
+   "sw": "RT.isOk({0})"
   },
   {
    "name": "is-err?",
@@ -813,7 +896,8 @@
    "doc": "True when the result failed.",
    "py": "(not _as.is_ok({0}))",
    "js": "(!_as.isOk({0}))",
-   "rs": "{0}.is_err()"
+   "rs": "{0}.is_err()",
+   "sw": "(!RT.isOk({0}))"
   },
   {
    "name": "option-or",
@@ -822,7 +906,8 @@
    "doc": "The value, or a fallback when absent.",
    "py": "_as.opt_or({0}, {1})",
    "js": "_as.optOr({0}, {1})",
-   "rs": "{0}.unwrap_or({1})"
+   "rs": "{0}.unwrap_or({1})",
+   "sw": "({0} ?? {1})"
   },
   {
    "name": "result-or",
@@ -831,7 +916,8 @@
    "doc": "The value, or a fallback on failure.",
    "py": "_as.res_or({0}, {1})",
    "js": "_as.resOr({0}, {1})",
-   "rs": "{0}.unwrap_or({1})"
+   "rs": "{0}.unwrap_or({1})",
+   "sw": "RT.resOr({0}, {1})"
   },
   {
    "name": "option-map",
@@ -840,7 +926,8 @@
    "doc": "Transform a present value.",
    "py": "_as.opt_map({0}, {1})",
    "js": "_as.optMap({0}, {1})",
-   "rs": "{1}.map({0})"
+   "rs": "{1}.map({0})",
+   "sw": "{1}.map({0})"
   },
   {
    "name": "result-map",
@@ -849,7 +936,8 @@
    "doc": "Transform a successful value.",
    "py": "_as.res_map({0}, {1})",
    "js": "_as.resMap({0}, {1})",
-   "rs": "{1}.map({0})"
+   "rs": "{1}.map({0})",
+   "sw": "RT.resMap({0}, {1})"
   },
   {
    "name": "result-map-err",
@@ -858,7 +946,8 @@
    "doc": "Transform a failure value.",
    "py": "_as.res_map_err({0}, {1})",
    "js": "_as.resMapErr({0}, {1})",
-   "rs": "{1}.map_err({0})"
+   "rs": "{1}.map_err({0})",
+   "sw": "RT.resMapErr({0}, {1})"
   },
   {
    "name": "option-to-result",
@@ -867,7 +956,8 @@
    "doc": "Absent becomes the given failure.",
    "py": "_as.opt_to_res({0}, {1})",
    "js": "_as.optToRes({0}, {1})",
-   "rs": "{0}.ok_or({1})"
+   "rs": "{0}.ok_or({1})",
+   "sw": "RT.optToRes({0}, {1})"
   },
   {
    "name": "result-to-option",
@@ -876,7 +966,8 @@
    "doc": "Failure becomes absence.",
    "py": "_as.res_to_opt({0})",
    "js": "_as.resToOpt({0})",
-   "rs": "{0}.ok()"
+   "rs": "{0}.ok()",
+   "sw": "RT.resToOpt({0})"
   },
   {
    "name": "pair",
@@ -885,7 +976,8 @@
    "doc": "Construct a pair.",
    "py": "_as.pair({0}, {1})",
    "js": "_as.pair({0}, {1})",
-   "rs": "({0}, {1})"
+   "rs": "({0}, {1})",
+   "sw": "ASPair({0}, {1})"
   }
  ]
 }

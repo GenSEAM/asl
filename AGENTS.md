@@ -20,6 +20,10 @@ Rust is installed but the `~/.cargo/bin` shims are broken — they point at a `r
 longer exists. Invoke through `rustup run stable <cmd>`, or fix the shim with
 `ln -sf /opt/homebrew/bin/rustup ~/.cargo/bin/rustup`.
 
+Swift comes from the Xcode command line tools; `swiftc` is on `PATH` and needs no wrapper. Kotlin
+is a priority target with no toolchain here yet — `brew install kotlin` before writing that
+backend, and until then do not add a Kotlin column that reports `skipped` on every row.
+
 ### Gates — both must pass before any commit
 
 ```bash
@@ -51,13 +55,17 @@ read as placeholders and fail far from their cause.
 transpiling proves the backend covers the forms the grammar admits. Those two drift apart
 silently otherwise.
 
-`check_corpus.py` invokes `rustc` on the Rust output rather than trusting the transpiler's exit
-code. It did not, once, and every fixture passed while the backend emitted a wildcard for list
-destructuring that `rustc` rejects.
+`check_corpus.py` invokes `rustc` and `swiftc` on their backends' output rather than trusting the
+transpiler's exit code. It did not, once, and every fixture passed while the backend emitted a
+wildcard for list destructuring that `rustc` rejects. A fixture a backend cannot lower is skipped
+whole, in both its columns — a transpile reported `ok` whose output no compiler ever saw is the
+same failure wearing a different hat.
 
-`differential.py` runs one AgentS source through every backend and fails if they disagree.
-Portability is a claim, not a property: Python and JavaScript already differ on `2**53+1` and on
-rounding a half, so equivalence exists only where it is enforced.
+`differential.py` runs one AgentS source through every backend — Python, Rust and Swift — and
+fails if they disagree. Portability is a claim, not a property: Python and JavaScript already
+differ on `2**53+1` and on rounding a half, so equivalence exists only where it is enforced. What
+it does not reach is arithmetic overflow, where the three backends genuinely differ and no case
+exercises it (`EXPERIMENT.md` amendment `2026-08-21-b`).
 
 `backend/t` runs AgentS source through the transpiler and executes the result, asserting semantics
 taken from the specification — not from observing what the transpiler happened to emit.

@@ -6,6 +6,10 @@ default — measured on this machine, Python and JavaScript already differ on
 2**53+1 and on rounding a .5 — so equivalence only exists where it is enforced.
 This is the enforcement.
 
+What it does not enforce: the benchmark's cases never overflow, and the three
+backends do not agree there. Swift traps, Rust traps in debug, Python has
+arbitrary-precision integers. See EXPERIMENT.md amendment 2026-08-21-b.
+
 Exit code is the number of disagreements.
 """
 import json
@@ -55,30 +59,59 @@ def run_rust(src: Path, task: dict) -> list:
         if c.returncode:
             raise RuntimeError("rustc: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
         r = subprocess.run([str(Path(d) / "prog")], capture_output=True, text=True)
-        raw = r.stdout.strip()
-        # Rust prints {"a":1,...}; normalise to the same shape Python returns.
-        return json.loads(raw.replace("{", "{").replace("}", "}")) if raw.startswith("[{") else raw
+        return json.loads(r.stdout.strip())
+
+
+def run_swift(src: Path, task: dict) -> list:
+    from to_swift import ToSwift, mangle
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "rt.swift").write_text((ROOT / "backend" / "swift" / "rt.swift").read_text())
+        body = ToSwift().transpile(src.read_text())
+        inputs = ", ".join(json.dumps(i) for i, _ in task["cases"])
+        fn = mangle(task["entry"])
+        # Keys are emitted in sorted order, which is the order the language
+        # specifies for map iteration and the order BTreeMap gives Rust for free.
+        body += (
+            "\nlet ins: [String] = [" + inputs + "]\n"
+            "var out: [String] = []\n"
+            "for i in ins {\n"
+            f"    let g = {fn}(i)\n"
+            "    var kv: [String] = []\n"
+            "    for k in g.keys.sorted() { kv.append(\"\\\"\\(k)\\\":\\(g[k]!)\") }\n"
+            "    out.append(\"{\" + kv.joined(separator: \",\") + \"}\")\n"
+            "}\n"
+            "print(\"[\" + out.joined(separator: \",\") + \"]\")\n")
+        (Path(d) / "main.swift").write_text(body)
+        c = subprocess.run(["swiftc", "-O", "rt.swift", "main.swift", "-o", "prog"],
+                           cwd=d, capture_output=True, text=True)
+        if c.returncode:
+            raise RuntimeError("swiftc: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
+        r = subprocess.run([str(Path(d) / "prog")], capture_output=True, text=True)
+        return json.loads(r.stdout.strip())
+
+
+BACKENDS = {"python": run_python, "rust": run_rust, "swift": run_swift}
 
 
 def main() -> int:
     sys.path.insert(0, str(ROOT / "backend"))
     task = json.loads((ROOT / "bench" / "tasks" / "histogram.json").read_text())
     src = ROOT / "bench" / "algo" / "variants" / "tight.agents"
-    expected = [w for _, w in task["cases"]]
 
-    py = run_python(src, task)
-    rs = run_rust(src, task)
+    got = {name: run(src, task) for name, run in BACKENDS.items()}
 
     bad = 0
-    print(f"{'input':<12} {'expected':<22} {'python':<22} {'rust':<22}")
-    print("-" * 82)
-    for k, ((inp, want), p) in enumerate(zip(task["cases"], py)):
-        r = rs[k] if isinstance(rs, list) else "?"
-        agree = (p == want) and (r == want)
+    head = f"{'input':<12} {'expected':<22}" + "".join(f"{n:<22}" for n in got)
+    print(head)
+    print("-" * len(head))
+    for k, (inp, want) in enumerate(task["cases"]):
+        row = {n: v[k] for n, v in got.items()}
+        agree = all(v == want for v in row.values())
         bad += 0 if agree else 1
-        print(f"{inp!r:<12} {json.dumps(want):<22} {json.dumps(p):<22} {json.dumps(r):<22}"
+        print(f"{inp!r:<12} {json.dumps(want):<22}"
+              + "".join(f"{json.dumps(row[n]):<22}" for n in got)
               + ("" if agree else "  <-- DISAGREE"))
-    print(f"\n{bad} disagreement(s) across {len(py)} cases x 2 backends")
+    print(f"\n{bad} disagreement(s) across {len(task['cases'])} cases x {len(got)} backends")
     return bad
 
 

@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 CORPUS = sorted((ROOT / "grammar" / "corpus" / "valid").glob("*.agents"))
 # Qualified names and module headers are parsed but not yet lowered; see ROADMAP.
-SKIP_RUST = {"06-module.agents"}
+SKIP = {"rust": {"06-module.agents"}, "swift": {"06-module.agents"}}
 
 
 def transpile(backend: str, f: Path) -> tuple[bool, str, str]:
@@ -23,31 +23,58 @@ def transpile(backend: str, f: Path) -> tuple[bool, str, str]:
     return r.returncode == 0, r.stdout, (r.stderr.strip().splitlines() or [""])[-1][:70]
 
 
+def compile_rust(src: str, d: Path) -> subprocess.CompletedProcess:
+    (d / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
+    (d / "lib.rs").write_text(src)
+    return subprocess.run(["rustup", "run", "stable", "rustc", "--edition", "2021",
+                           "--crate-type=lib", "lib.rs"], cwd=d, capture_output=True, text=True)
+
+
+def compile_swift(src: str, d: Path) -> subprocess.CompletedProcess:
+    (d / "rt.swift").write_text((ROOT / "backend" / "swift" / "rt.swift").read_text())
+    (d / "lib.swift").write_text(src)
+    # -typecheck, not -c: the corpus has no entry point and the question a gate
+    # asks here is whether the target compiler accepts the code, not whether it
+    # links.
+    return subprocess.run(["swiftc", "-typecheck", "rt.swift", "lib.swift"],
+                          cwd=d, capture_output=True, text=True)
+
+
+BACKENDS = [("python", "to_python.py", None, None),
+            ("rust", "to_rust.py", compile_rust, "rustc"),
+            ("swift", "to_swift.py", compile_swift, "swiftc")]
+
+
 def main() -> int:
     fails = []
-    print(f"{'fixture':<26} {'python':<12} {'rust':<12} {'rustc':<10}")
-    print("-" * 62)
+    cols = [n for b in BACKENDS for n in (b[0], b[3]) if n]
+    print(f"{'fixture':<26}" + "".join(f"{c:<10}" for c in cols))
+    print("-" * (26 + 10 * len(cols)))
     for f in CORPUS:
-        py_ok, _, py_err = transpile("to_python.py", f)
-        rs_ok, rs_src, rs_err = transpile("to_rust.py", f)
-        rustc = "-"
-        if rs_ok and f.name not in SKIP_RUST:
+        row = []
+        for name, script, compiler, cname in BACKENDS:
+            # A skipped fixture is skipped whole. Reporting a transpile as `ok`
+            # while its output is never compiled is the failure mode this gate
+            # exists to prevent.
+            if f.name in SKIP.get(name, ()):
+                row += ["skipped"] + (["skipped"] if cname else [])
+                continue
+            ok, src, err = transpile(script, f)
+            row.append("ok" if ok else "FAIL")
+            if not ok:
+                fails.append(f"{f.name}: {name} backend: {err}")
+            if not cname:
+                continue
+            if not ok:
+                row.append("-")
+                continue
             with tempfile.TemporaryDirectory(dir="/tmp") as d:
-                (Path(d) / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
-                (Path(d) / "lib.rs").write_text(rs_src)
-                c = subprocess.run(["rustup", "run", "stable", "rustc", "--edition", "2021",
-                                    "--crate-type=lib", "lib.rs"], cwd=d,
-                                   capture_output=True, text=True)
-                rustc = "ok" if c.returncode == 0 else "FAIL"
-                if c.returncode:
-                    fails.append(f"{f.name}: rustc rejected the output")
-        elif f.name in SKIP_RUST:
-            rustc = "skipped"
-        if not py_ok:
-            fails.append(f"{f.name}: python backend: {py_err}")
-        if not rs_ok:
-            fails.append(f"{f.name}: rust backend: {rs_err}")
-        print(f"{f.name:<26} {'ok' if py_ok else 'FAIL':<12} {'ok' if rs_ok else 'FAIL':<12} {rustc:<10}")
+                c = compiler(src, Path(d))
+            row.append("ok" if c.returncode == 0 else "FAIL")
+            if c.returncode:
+                fails.append(f"{f.name}: {cname} rejected the output: "
+                             + (c.stderr.strip().splitlines() or ["?"])[0][:70])
+        print(f"{f.name:<26}" + "".join(f"{x:<10}" for x in row))
     print()
     for x in fails:
         print("  " + x)

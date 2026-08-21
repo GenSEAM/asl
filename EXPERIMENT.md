@@ -209,3 +209,42 @@ JavaScript disagree on `2**53+1` and on rounding a half. Equivalence exists only
 enforces it.
 
 JavaScript re-enters H5 when its transpiler exists, not before.
+
+### 2026-08-21-b — priority targets changed from Go to Kotlin and Swift (made BEFORE any results)
+
+No arm has run and no result has been observed. The change follows from a product decision about
+which platforms the language is for, not from an outcome.
+
+**Go is demoted from priority target to best-effort.** It remains a language the project would
+like to support eventually, along with any other; it is no longer gated, measured, or planned for.
+
+**Kotlin and Swift replace it as the priority native targets.** The reasoning is the one already
+recorded for the compiler host in PCP `d-2030`, applied to targets rather than to the host: this
+language's defining constructs are closed unions, exhaustive matching and option/result types.
+Kotlin and Swift have all three natively, with exhaustiveness checked by their own compilers, so
+those constructs survive translation intact. Go has none of them — a closed union lowers to an
+interface plus a runtime type switch with no exhaustiveness check, which discards the safety
+property at exactly the layer meant to preserve it. Mobile (Android and iOS) is the product
+direction behind the choice; platform FFI and UI remain out of scope and are recorded separately.
+
+**Superseded text.** Amendment `2026-08-20-b` superseded Go as a *comparator*. Go survives in this
+document as a *transpiler target*, which is a separate claim, in four places now superseded:
+the §2 **H2** row (`15 pp below Go and Rust baselines`), the §2 **H5** row (`transpiles cleanly to
+Rust and Go`), the §3 **known caveat** on spot-checking the MultiPL-E Go baseline, and all of §8
+(`go build` compile rate, `go vet` count, Go in the differential triple).
+
+**H5 as it now stands:** Core transpiles cleanly to Python, Rust and Swift — every corpus program
+lowers, `rustc` and `swiftc` accept their output, and the three backends agree on every case of
+every benchmark task. Kotlin enters H5 when its transpiler exists; JavaScript when its transpiler
+exists. Neither before.
+
+**A limit on what that agreement proves.** The differential gate compares backends on the
+benchmark's cases, and those cases do not overflow. Swift traps on integer overflow, Rust traps in
+debug, and Python has arbitrary-precision integers and cannot trap at all — so the three backends
+do not in fact implement the specification's trapping arithmetic identically. The disagreement is
+latent rather than absent, and a green gate must not be read as having tested it.
+
+**Sequencing, stated rather than quietly reordered.** PCP `l-78ae` puts the semantic checker ahead
+of backends. A third backend lands before that checker exists, widening the surface that consumes
+unchecked input. That is a deliberate cost of moving the target set now, not a revision of the
+priority.

@@ -120,7 +120,7 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 `Int64` and `Float64` in one arithmetic form is a type error. Use §6.4's explicit conversions.
 
 Fixing the widths resolves `SPEC_REVIEW.md` A3, which otherwise makes the same program overflow
-differently on each of the four targets.
+differently on every target it is lowered to.
 
 ## 4. Declarations
 
@@ -232,8 +232,9 @@ Parameters are vectors throughout the language — v0 used a list for `defun` an
 `defui`, which was inconsistent (C4). Core standardizes on the vector.
 
 Visibility comes from the module's `:export` list (§4.0), not from position. A top-level
-definition that is not exported is private to its module, and that is what drives Go's
-capitalization (§8).
+definition that is not exported is private to its module, and the backends express that with the
+target's own visibility modifier — `pub` in Rust, `public`/`internal` in Kotlin and Swift. It is a
+modifier, never a spelling: §8's mangling is independent of whether a name is exported.
 
 ### 4.3 `fn`
 
@@ -545,12 +546,16 @@ returned expression, in every branch.
 Deterministic, because output that is not byte-reproducible cannot be differentially tested
 (resolves A1).
 
-| AgentS | TypeScript | Python | Go (top-level) | Go (local) | Rust |
+| AgentS | TypeScript | Python | Kotlin | Swift | Rust |
 |---|---|---|---|---|---|
-| `parse-html-url` | `parseHtmlUrl` | `parse_html_url` | `ParseHtmlUrl` | `parseHtmlUrl` | `parse_html_url` |
+| `parse-html-url` | `parseHtmlUrl` | `parse_html_url` | `parseHtmlUrl` | `parseHtmlUrl` | `parse_html_url` |
 | `Point` | `Point` | `Point` | `Point` | `Point` | `Point` |
-| `empty?` | `isEmpty` | `is_empty` | `IsEmpty` | `isEmpty` | `is_empty` |
-| `set!` | `setMut` | `set_mut` | `SetMut` | `setMut` | `set_mut` |
+| `empty?` | `isEmpty` | `is_empty` | `isEmpty` | `isEmpty` | `is_empty` |
+| `set!` | `setMut` | `set_mut` | `setMut` | `setMut` | `set_mut` |
+
+The Go columns were removed on 2026-08-21, when Go stopped being a priority target
+(`EXPERIMENT.md` amendment `2026-08-21-b`). Go's two-case rule — capitalization carrying
+visibility — is the one convention here that a target's *export list* would have had to drive.
 
 Rules: strip a trailing `?` and prefix `is-`; strip a trailing `!` and suffix `-mut`; then split on
 `-` and recase. Acronyms are not special-cased — `html` becomes `Html`, always.
