@@ -20,7 +20,9 @@ from pathlib import Path
 
 from lark import Lark, Tree, Token
 
+import modules
 from boundary import NotLowered, TargetMismatch, check_target
+from modules import ModuleError
 
 ROOT = Path(__file__).parent.parent
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
@@ -83,6 +85,11 @@ class ToSwift:
         self.schemas: dict[str, list[str]] = {}            # schema -> field order
         self.err_ty: str | None = None                     # E of the enclosing defun
         self.tmp = 0
+        # Naming context; replaced per module by enter(). A single-module
+        # program leaves the prefix empty, which is the common case.
+        self.prefix = ""
+        self.aliases: dict[str, str] = {}
+        self.local_tops: set[str] = set()
 
     def fresh(self) -> str:
         self.tmp += 1
@@ -155,23 +162,55 @@ class ToSwift:
     # ---------- entry ----------
 
     def transpile(self, src: str) -> str:
-        tree = self.parser.parse(src)
-        tops = [t.children[0] for t in tree.children]
-        check_target(tops, self.TARGET, lowers_foreign=False)
+        return self.transpile_program(modules.single(src, self.parser))
+
+    def transpile_file(self, path) -> str:
+        return self.transpile_program(modules.load(Path(path), p=self.parser))
+
+    def transpile_program(self, prog) -> str:
+        """One output file for the whole program, dependencies first."""
         out: list[str] = []
-        for n in tops:
-            if n.data == "defenum":
-                out += self.defenum(n)
-        for n in tops:
-            if n.data == "defschema":
-                out += self.defschema(n)
-        for n in tops:
-            if n.data == "defun":
-                out += self.defun(n)
-        for n in tops:
-            if n.data == "defentry":
-                out += self.defentry(n)
+        for mod in prog.modules:
+            check_target(mod.tops, self.TARGET, lowers_foreign=False)
+        for mod in prog.modules:
+            self.enter(mod)
+            tops = mod.tops
+            for n in tops:
+                if n.data == "defenum":
+                    out += self.defenum(n)
+            for n in tops:
+                if n.data == "defschema":
+                    out += self.defschema(n)
+            for n in tops:
+                if n.data == "defun":
+                    out += self.defun(n)
+            for n in tops:
+                if n.data == "defentry":
+                    out += self.defentry(n)
         return "\n".join(out) + "\n"
+
+    def enter(self, mod) -> None:
+        """Emit in the naming context of one module.
+
+        Only an imported module's top-level names are prefixed. The entry
+        module's are the program's own surface, and prefixing them would rename
+        every function the tests and the differential harness call by name.
+        """
+        self.prefix = mod.prefix()
+        self.aliases = mod.imports
+        self.local_tops = set(modules.top_level_names(mod.tops))
+
+    def gname(self, name: str) -> str:
+        """A name as written in this module -> the whole program's name for it."""
+        if "/" in name:
+            alias, member = name.split("/", 1)
+            target = self.aliases.get(alias)
+            if target is None:
+                raise NotImplementedError(f"unbound alias in `{name}`")
+            return mangle(f"{target}/{member}")
+        if name in self.local_tops:
+            return mangle(self.prefix + name)
+        return mangle(name)
 
     # The foreign-boundary rule lives in backend/boundary.py. This backend does
     # not lower foreign declarations, so a module holding them is refused —
@@ -254,7 +293,7 @@ class ToSwift:
     def defun(self, n) -> list[str]:
         k = [x for x in self.kids(n)
              if not (isinstance(x, Tree) and x.data in ("type_params", "decl_opt"))]
-        name = mangle(self.tok(k[0]))
+        name = mangle(self.prefix + self.tok(k[0]))
         gen = self.type_params(n)
         ps = [p for p in k[1].children if isinstance(p, Tree) and p.data == "param"]
         args = ", ".join(f"_ {mangle(self.tok(self.kids(p)[0]))}: {self.stype(self.kids(p)[1])}"
@@ -407,9 +446,7 @@ class ToSwift:
             en, arity = self.enums[name]
             return f"{en}.{mangle(name)}" + (f"({', '.join(args)})" if arity else "")
         if name:
-            if isinstance(head, Token) and head.type == "QUALIFIED":
-                raise NotImplementedError("qualified names are not lowered to Swift")
-            return f"{mangle(name)}({', '.join(args)})"
+            return f"{self.gname(name)}({', '.join(args)})"
         return f"({self.expr(head, ind)})({', '.join(args)})"
 
     # ---------- match ----------
@@ -537,23 +574,19 @@ class ToSwift:
             return conds + [f"{access} == {self.atom(tk)}"], binds
         return conds, binds + [f"let {mangle(str(tk))} = {access}"]
 
-    @staticmethod
-    def atom(tok) -> str:
+    def atom(self, tok) -> str:
         s = str(tok)
         if tok.type == "UNIT":
             return "()"
-        if tok.type == "QUALIFIED":
-            raise NotImplementedError("qualified names are not lowered to Swift")
         if tok.type in ("BOOL", "INT", "FLOAT", "STRING"):
             return s
-        return mangle(s)
+        return self.gname(s)
 
 
 if __name__ == "__main__":
-    src = Path(sys.argv[1]).read_text()
     try:
-        print(ToSwift().transpile(src))
-    except (TargetMismatch, NotLowered) as exc:
+        print(ToSwift().transpile_file(Path(sys.argv[1])))
+    except (TargetMismatch, NotLowered, ModuleError) as exc:
         # A refusal is a result, not a crash: this is the path a module for
         # another ecosystem takes, and a stack trace would read as a defect.
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

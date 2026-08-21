@@ -660,18 +660,33 @@ visibility — is the one convention here that a target's *export list* would ha
 Rules: strip a trailing `?` and prefix `is-`; strip a trailing `!` and suffix `-mut`; then split on
 `-` and recase. Acronyms are not special-cased — `html` becomes `Html`, always.
 
-**A qualified name flattens.** `alias/member` mangles as though the `/` were a `-`, so `s/concat`
-becomes `s_concat` in Python and Rust and `sConcat` in Kotlin and Swift. The alias is a
-module-local label, not a runtime object, so there is nothing to attribute-access on the target
-side; leaving the separator in place produced output no target could parse.
+**A qualified name flattens, through the module path and not the alias.** `alias/member` is first
+resolved to `module-path/member`, and *that* mangles as though each `/` were a `-`. So `s/concat`,
+where `s` is bound to `core/strings`, becomes `core_strings_concat` in Python and Rust and
+`coreStringsConcat` in Kotlin and Swift.
 
-| AgentScript | TypeScript | Python | Kotlin | Swift | Rust |
-|---|---|---|---|---|---|
-| `s/concat` | `sConcat` | `s_concat` | `sConcat` | `sConcat` | `s_concat` |
-| `pl/read-csv` | `plReadCsv` | `pl_read_csv` | `plReadCsv` | `plReadCsv` | `pl_read_csv` |
+Resolving before mangling is load-bearing. An alias is module-local, so two modules may each bind
+`s` to a different module; mangling the alias itself gave both of their members the same target
+name, silently. The module path is unique by construction.
+
+| AgentScript | resolves to | Python / Rust | Kotlin / Swift |
+|---|---|---|---|
+| `s/concat` (s = `core/strings`) | `core/strings/concat` | `core_strings_concat` | `coreStringsConcat` |
+| `pl/read-csv` (foreign) | — | `pl_read_csv` | `plReadCsv` |
+
+A **foreign** alias is not resolved this way: it names a host package, not a module, so §11's
+`:target` and `:symbol` govern it and the alias is kept.
+
+Top-level names in the **entry** module are not prefixed at all — they are the program's own
+surface. Only imported modules are qualified.
 
 This is also why §11's `:symbol` exists: the flattened name is what reaches the host, and mangling
 cannot reproduce every host spelling.
+
+**Imported types cannot yet be named.** The type grammar admits `TypeName` and `(TypeName type+)`
+and has no qualified form, so a schema or enum declared in another module cannot be written in a
+signature. Cross-module composition is therefore over *functions* today. Two modules declaring the
+same type name is caught as a mangling collision rather than silently resolved.
 
 If a mangled name collides with a target keyword, append `_`. **If two distinct AgentScript identifiers
 mangle to the same target identifier, the compiler errors** — it does not silently rename. v0 had

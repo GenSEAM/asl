@@ -16,7 +16,9 @@ from pathlib import Path
 
 from lark import Lark, Tree, Token
 
+import modules
 from boundary import NotLowered, TargetMismatch, check_target
+from modules import ModuleError
 
 ROOT = Path(__file__).parent.parent
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
@@ -73,6 +75,11 @@ class ToRust:
         self.slice_match = False
         self.cons_tail = None
         self.tmp = 0
+        # Naming context; replaced per module by enter(). A single-module
+        # program leaves the prefix empty, which is the common case.
+        self.prefix = ""
+        self.aliases: dict[str, str] = {}
+        self.local_tops: set[str] = set()
 
     def fresh(self):
         self.tmp += 1
@@ -101,29 +108,72 @@ class ToRust:
             "Result": f"Result<{args[0]}, {args[1]}>" if len(args) > 1 else "Result<(),()>",
             "Pair": f"({args[0]}, {args[1]})" if len(args) > 1 else "((),())",
             "Map": f"std::collections::BTreeMap<{args[0]}, {args[1]}>" if len(args) > 1 else "()",
-        }.get(head, PRIM.get(head, head))
+        }.get(head) or self.user_type(head, args)
+
+    @staticmethod
+    def user_type(head: str, args: list) -> str:
+        """A user type applied to arguments, e.g. `(Tree T)` -> `Tree<T>`.
+
+        The arguments used to be discarded, which produced a bare `Tree` that
+        rustc rejects for a generic declaration. Invisible while the one generic
+        fixture in the corpus was skipped.
+        """
+        base = PRIM.get(head, head)
+        return f"{base}<{', '.join(args)}>" if args else base
 
     # ---------- entry ----------
 
     def transpile(self, src: str) -> str:
-        tree = self.parser.parse(src)
+        return self.transpile_program(modules.single(src, self.parser))
+
+    def transpile_file(self, path) -> str:
+        return self.transpile_program(modules.load(Path(path), p=self.parser))
+
+    def transpile_program(self, prog) -> str:
+        """One output file for the whole program, dependencies first."""
         out = ["#![allow(dead_code, unused_variables, unused_mut, unused_parens)]",
                "mod rt;", ""]   # inner attributes must precede any item
-        tops = [t.children[0] for t in tree.children]
-        check_target(tops, self.TARGET, lowers_foreign=False)
-        for n in tops:
-            if n.data == "defenum":
-                out += self.defenum(n)
-        for n in tops:
-            if n.data == "defschema":
-                out += self.defschema(n)
-        for n in tops:
-            if n.data == "defun":
-                out += self.defun(n)
-        for n in tops:
-            if n.data == "defentry":
-                out += self.defentry(n)
+        for mod in prog.modules:
+            check_target(mod.tops, self.TARGET, lowers_foreign=False)
+        for mod in prog.modules:
+            self.enter(mod)
+            tops = mod.tops
+            for n in tops:
+                if n.data == "defenum":
+                    out += self.defenum(n)
+            for n in tops:
+                if n.data == "defschema":
+                    out += self.defschema(n)
+            for n in tops:
+                if n.data == "defun":
+                    out += self.defun(n)
+            for n in tops:
+                if n.data == "defentry":
+                    out += self.defentry(n)
         return "\n".join(out) + "\n"
+
+    def enter(self, mod) -> None:
+        """Emit in the naming context of one module.
+
+        Only an imported module's top-level names are prefixed. The entry
+        module's are the program's own surface, and prefixing them would rename
+        every function the tests and the differential harness call by name.
+        """
+        self.prefix = mod.prefix()
+        self.aliases = mod.imports
+        self.local_tops = set(modules.top_level_names(mod.tops))
+
+    def gname(self, name: str) -> str:
+        """A name as written in this module -> the whole program's name for it."""
+        if "/" in name:
+            alias, member = name.split("/", 1)
+            target = self.aliases.get(alias)
+            if target is None:
+                return mangle(name)          # a foreign alias; boundary.py owns it
+            return mangle(f"{target}/{member}")
+        if name in self.local_tops:
+            return mangle(self.prefix + name)
+        return mangle(name)
 
     # The foreign-boundary rule lives in backend/boundary.py. This backend does
     # not lower foreign declarations, so a module holding them is refused —
@@ -148,6 +198,41 @@ class ToRust:
                 + ["fn main() {",
                    "    if let Err(e) = as_entry(rt::args()) { rt::fail(e) }",
                    "}", ""])
+
+    def box_if_recursive(self, owner: str, t) -> str:
+        """`Box` a payload that names its own enum.
+
+        A recursive variant is infinitely sized in Rust. Swift expresses the same
+        thing with `indirect`; here the indirection has to be written.
+        """
+        rendered = self.rtype(t)
+        names = {str(x) for x in t.scan_values(
+            lambda v: getattr(v, "type", None) == "TYPE_NAME")} if isinstance(t, Tree) else {str(t)}
+        # Fully qualified: `06-module.as` declares a schema called `Box`, which
+        # shadows the std type and made the indirection silently not one.
+        return f"::std::boxed::Box<{rendered}>" if owner in names else rendered
+
+    @staticmethod
+    def type_params(n, bound: str = "") -> str:
+        """`{A B}` as Rust generics.
+
+        These were dropped entirely, which compiled only while no generic
+        declaration reached this backend — `06-module.as` is the one that does,
+        and it was skipped from the day it was written.
+
+        `bound` is `Clone` for functions: the conservative ownership strategy
+        clones at every use site (PCP `l-880d`), so a type parameter a function
+        body touches has to be cloneable. Data declarations need no bound —
+        `derive` generates the conditional impls itself.
+        """
+        tp = [x for x in n.children if isinstance(x, Tree) and x.data == "type_params"]
+        if not tp:
+            return ""
+        names = [str(t) for t in tp[0].children if isinstance(t, Token)]
+        if not names:
+            return ""
+        suffix = f": {bound}" if bound else ""
+        return "<" + ", ".join(f"{x}{suffix}" for x in names) + ">"
 
     def is_ordable(self, t) -> bool:
         """Whether a type tree can derive Eq/Ord, following user declarations."""
@@ -181,7 +266,7 @@ class ToRust:
         fields = [f for f in n.children if isinstance(f, Tree) and f.data == "field"]
         types = [self.kids(f)[1] for f in fields]
         self.ordable[name] = all(self.is_ordable(t) for t in types)
-        lines = [self.derives(types), f"pub struct {name} {{"]
+        lines = [self.derives(types), f"pub struct {name}{self.type_params(n)} {{"]
         for f in fields:
             fk = self.kids(f)
             lines.append(f"    pub {mangle(self.tok(fk[0]))}: {self.rtype(fk[1])},")
@@ -198,7 +283,7 @@ class ToRust:
             case = self.tok(ck[0])
             ps = [p for p in c.children if isinstance(p, Tree) and p.data == "param"]
             nodes = [self.kids(p)[1] for p in ps]
-            tys = [self.rtype(t) for t in nodes]
+            tys = [self.box_if_recursive(name, t) for t in nodes]
             payloads += nodes
             self.enums[case] = (name, tys)
             decls.append(f"    {pascal(case)}" + (f"({', '.join(tys)})," if tys else ","))
@@ -206,12 +291,13 @@ class ToRust:
         # exist before is_ordable walks it; assume orderable and correct below.
         self.ordable[name] = True
         self.ordable[name] = all(self.is_ordable(t) for t in payloads)
-        return [self.derives(payloads), f"pub enum {name} {{"] + decls + ["}", ""]
+        return ([self.derives(payloads), f"pub enum {name}{self.type_params(n)} {{"]
+                + decls + ["}", ""])
 
     def defun(self, n) -> list[str]:
         k = [x for x in self.kids(n)
              if not (isinstance(x, Tree) and x.data in ("type_params", "decl_opt"))]
-        name = mangle(self.tok(k[0]))
+        name = mangle(self.prefix + self.tok(k[0]))
         ps = [p for p in k[1].children if isinstance(p, Tree) and p.data == "param"]
         args = ", ".join(f"{mangle(self.tok(self.kids(p)[0]))}: {self.rtype(self.kids(p)[1])}"
                          for p in ps)
@@ -220,7 +306,8 @@ class ToRust:
         body, stmts, last = k[ti + 1:], [], None
         for b in body:
             last = self.expr(b, stmts, 1)
-        return [f"pub fn {name}({args}) -> {ret} {{"] + stmts + [f"    {last}", "}", ""]
+        return ([f"pub fn {name}{self.type_params(n, 'Clone')}({args}) -> {ret} {{"]
+                + stmts + [f"    {last}", "}", ""])
 
     # ---------- expressions ----------
 
@@ -344,7 +431,7 @@ class ToRust:
             en, _ = self.enums[name]
             return f"{en}::{pascal(name)}" + (f"({', '.join(args)})" if args else "")
         if name:
-            return f"{mangle(name)}({', '.join(args)})"
+            return f"{self.gname(name)}({', '.join(args)})"
         return f"({self.expr(head, stmts, ind)})({', '.join(args)})"
 
     def match(self, n, stmts, ind) -> str:
@@ -428,8 +515,7 @@ class ToRust:
             return mangle(str(tk))
         return "_"
 
-    @staticmethod
-    def atom(tok) -> str:
+    def atom(self, tok) -> str:
         s = str(tok)
         if tok.type == "BOOL":
             return "true" if s == "true" else "false"
@@ -439,14 +525,13 @@ class ToRust:
             return s
         if tok.type == "UNIT":
             return "()"
-        return mangle(s)
+        return self.gname(s)
 
 
 if __name__ == "__main__":
-    src = Path(sys.argv[1]).read_text()
     try:
-        print(ToRust().transpile(src))
-    except (TargetMismatch, NotLowered) as exc:
+        print(ToRust().transpile_file(Path(sys.argv[1])))
+    except (TargetMismatch, NotLowered, ModuleError) as exc:
         # A refusal is a result, not a crash: this is the path a module for
         # another ecosystem takes, and a stack trace would read as a defect.
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

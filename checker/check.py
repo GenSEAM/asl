@@ -29,6 +29,8 @@ from lark import Lark, Token, Tree
 from lark.exceptions import LarkError
 
 ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT / "backend"))
+import modules  # noqa: E402  — the loader lives with the backends
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
 
 BUILTINS = {b["name"]: b for b in PRELUDE["builtins"]}
@@ -47,7 +49,7 @@ CHECKED = {
     5: "try only inside a Result-returning defun or defentry",
     7: "no identifier begins with the reserved prefix",
     8: "module :doc, and :doc on every exported defun",
-    9: "a qualified name's alias is bound in :import or :extern",
+    9: "a qualified name's alias is bound, and names a member the other module exports",
     10: "every type variable is bound in its declaration's { }",
     11: "no import cycles",
     12: "the specific effects reached, declared transitively (console/stdin/fs/env/proc)",
@@ -238,6 +240,8 @@ def body_of(node) -> list:
 # ---------- rules ----------
 
 class Checker:
+    _surfaces: dict = {}
+
     def __init__(self, path: Path, tops, m: Module):
         self.path, self.tops, self.m = str(path), tops, m
         self.out: list[Diag] = []
@@ -312,13 +316,49 @@ class Checker:
 
     # rule 9 (the half that does not need the other module on disk)
     def aliases(self) -> None:
+        """Both halves of rule 9.
+
+        The second — that the member is exported by the module the alias names —
+        needed a loader that could find the other module on disk, which did not
+        exist until cross-module linking landed. It is the half that catches a
+        call into a private helper.
+        """
         known = set(self.m.imports) | set(self.m.externs)
         for n in walk_tops(self.tops):
-            if isinstance(n, Token) and n.type == "QUALIFIED":
-                alias = str(n).split("/")[0]
-                if alias not in known:
-                    self.add(n, 9, f"`{n}` uses alias `{alias}`, which no :import "
-                                   f"or :extern binds")
+            if not (isinstance(n, Token) and n.type == "QUALIFIED"):
+                continue
+            alias, member = str(n).split("/", 1)
+            if alias not in known:
+                self.add(n, 9, f"`{n}` uses alias `{alias}`, which no :import "
+                               f"or :extern binds")
+                continue
+            if alias in self.m.externs:
+                continue                  # a foreign member; §11's :target owns it
+            surface = self.exported_by(self.m.imports[alias])
+            if surface is None:
+                continue                  # unresolvable here; the loader reports it
+            defined, exported = surface
+            if member not in defined:
+                self.add(n, 9, f"`{n}` names `{member}`, which module "
+                               f"`{self.m.imports[alias]}` does not define")
+            elif member not in exported:
+                self.add(n, 9, f"`{n}` names `{member}`, which module "
+                               f"`{self.m.imports[alias]}` defines but does not export")
+
+    def exported_by(self, module_path: str):
+        """(defined names, exported names) of another module, or None."""
+        cache = Checker._surfaces
+        if module_path in cache:
+            return cache[module_path]
+        table = modules.index(modules.default_roots(Path(self.path)))
+        file = table.get(module_path)
+        if file is None:
+            cache[module_path] = None
+            return None
+        tops = [t.children[0] for t in parser().parse(file.read_text()).children]
+        _, exports, _ = modules._header(tops)
+        cache[module_path] = (set(modules.top_level_names(tops)), exports)
+        return cache[module_path]
 
     # rule 2
     def names(self) -> None:

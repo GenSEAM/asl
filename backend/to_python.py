@@ -16,7 +16,9 @@ from pathlib import Path
 
 from lark import Lark, Tree, Token
 
+import modules
 from boundary import NotLowered, TargetMismatch, check_target, extern_symbol
+from modules import ModuleError
 
 ROOT = Path(__file__).parent.parent
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
@@ -58,6 +60,11 @@ class Transpiler:
                            start="start", parser="earley", ambiguity="resolve")
         self.enum_cases: dict[str, list[str]] = {}   # case name -> field names
         self.tmp = 0
+        # Naming context; replaced per module by enter(). A single-module
+        # program leaves the prefix empty, which is the common case.
+        self.prefix = ""
+        self.aliases: dict[str, str] = {}
+        self.local_tops: set[str] = set()
 
     # ---------- helpers ----------
 
@@ -77,28 +84,64 @@ class Transpiler:
     # ---------- entry ----------
 
     def transpile(self, src: str) -> str:
-        tree = self.parser.parse(src)
-        tops = [t.children[0] for t in tree.children]
-        check_target(tops, self.TARGET, lowers_foreign=True)
+        return self.transpile_program(modules.single(src, self.parser))
+
+    def transpile_file(self, path) -> str:
+        return self.transpile_program(modules.load(Path(path), p=self.parser))
+
+    def transpile_program(self, prog) -> str:
+        """One output file for the whole program, dependencies first.
+
+        Separate compilation would need a module system per target in each of
+        four backends; a program here is a handful of modules built at once.
+        """
         out = ["import runtime as _as", ""]
-        out += self.host_imports(tops)
-        # enums first: their cases are constructors used by later definitions
-        for node in tops:
-            if node.data == "defenum":
-                out += self.defenum(node)
-        for node in tops:
-            if node.data == "defopaque":
-                out += self.defopaque(node)
-        for node in tops:
-            if node.data == "defschema":
-                out += self.defschema(node)
-            elif node.data == "defextern":
-                out += self.defextern(node)
-            elif node.data == "defun":
-                out += self.defun(node)
-            elif node.data == "defentry":
-                out += self.defentry(node)
+        for mod in prog.modules:
+            check_target(mod.tops, self.TARGET, lowers_foreign=True)
+            out += self.host_imports(mod.tops)
+        for mod in prog.modules:
+            self.enter(mod)
+            tops = mod.tops
+            # enums first: their cases are constructors used by later definitions
+            for node in tops:
+                if node.data == "defenum":
+                    out += self.defenum(node)
+            for node in tops:
+                if node.data == "defopaque":
+                    out += self.defopaque(node)
+            for node in tops:
+                if node.data == "defschema":
+                    out += self.defschema(node)
+                elif node.data == "defextern":
+                    out += self.defextern(node)
+                elif node.data == "defun":
+                    out += self.defun(node)
+                elif node.data == "defentry":
+                    out += self.defentry(node)
         return "\n".join(out) + "\n"
+
+    def enter(self, mod) -> None:
+        """Emit in the naming context of one module.
+
+        Only an imported module's top-level names are prefixed. The entry
+        module's are the program's own surface, and prefixing them would rename
+        every function the tests and the differential harness call by name.
+        """
+        self.prefix = mod.prefix()
+        self.aliases = mod.imports
+        self.local_tops = set(modules.top_level_names(mod.tops))
+
+    def gname(self, name: str) -> str:
+        """A name as written in this module -> the whole program's name for it."""
+        if "/" in name:
+            alias, member = name.split("/", 1)
+            target = self.aliases.get(alias)
+            if target is None:
+                return mangle(name)          # a foreign alias; boundary.py owns it
+            return mangle(f"{target}/{member}")
+        if name in self.local_tops:
+            return mangle(self.prefix + name)
+        return mangle(name)
 
     # ---------- declarations ----------
 
@@ -151,7 +194,7 @@ class Transpiler:
         params = [mangle(self.tok(p.children[0])) for p in kids[1].children
                   if isinstance(p, Tree) and p.data == "param"]
         call = f"_host_{mangle(alias)}.{symbol}({', '.join(params)})"
-        return [f"def {mangle(qual)}({', '.join(params)}):",
+        return [f"def {self.gname(qual)}({', '.join(params)}):",
                 f"    return _as.attempt(lambda: {call})", ""]
 
     def defentry(self, node) -> list[str]:
@@ -213,7 +256,7 @@ class Transpiler:
                 last = self.expr(b, stmts, indent=1)
             else:
                 self.expr(b, stmts, indent=1)
-        head = f"def {mangle(name)}({', '.join(params)}):"
+        head = f"def {mangle(self.prefix + name)}({', '.join(params)}):"
         return [head] + stmts + [f"    return {last}", ""]
 
     # ---------- expressions ----------
@@ -350,7 +393,7 @@ class Transpiler:
         if hname in self.enum_cases:
             return f"{mangle(hname)}({', '.join(args)})"
         if hname:
-            return f"{mangle(hname)}({', '.join(args)})"
+            return f"{self.gname(hname)}({', '.join(args)})"
         return f"{self.expr(head, stmts, indent)}({', '.join(args)})"
 
     def match(self, node, stmts, indent) -> str:
@@ -424,8 +467,7 @@ class Transpiler:
             return "True", [f"{mangle(str(tk))} = {subj}"]
         return "True", []
 
-    @staticmethod
-    def atom(tok) -> str:
+    def atom(self, tok) -> str:
         s = str(tok)
         if tok.type == "BOOL":
             return "True" if s == "true" else "False"
@@ -433,14 +475,13 @@ class Transpiler:
             return s
         if tok.type == "UNIT":
             return "None"
-        return mangle(s)
+        return self.gname(s)
 
 
 if __name__ == "__main__":
-    src = Path(sys.argv[1]).read_text()
     try:
-        print(Transpiler().transpile(src))
-    except (TargetMismatch, NotLowered) as exc:
+        print(Transpiler().transpile_file(Path(sys.argv[1])))
+    except (TargetMismatch, NotLowered, ModuleError) as exc:
         # A refusal is a result, not a crash: this is the path a module for
         # another ecosystem takes, and a stack trace would read as a defect.
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

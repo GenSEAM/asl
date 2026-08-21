@@ -60,6 +60,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | Handbook example gate | **green** — every fenced block parses under both grammars |
 | Grammar shape gate | **green** — both grammars find the same qualified names, not just the same verdict |
 | Overflow parity | **green** — all three backends trap; Rust checked under `-O`, where it used to wrap |
+| Cross-module linking | **working** — whole-program, `backend/modules.py`; rule 9 now checks the export surface |
 | Semantic checker | **12 of 15 §9 rules** — `checker/check.py`; rules 3 and 6 need inference |
 | Reference interpreter | **not built, deliberately** — see below |
 | Measurement harness | **not started — blocked**, see §5 |
@@ -212,9 +213,10 @@ The harness can be written and unit-tested without any of this. It cannot be run
 * **The foreign boundary is lowered only for the Python target.** Rust and Swift refuse a foreign
   module by name, which is correct and asserted, but it means the total-boundary claim is
   demonstrated in one ecosystem so far.
-* **Cross-module resolution does not exist.** `alias/member` flattens to a single mangled name, so
-  a module importing another does not link; `06-module.as` is skipped by every backend for that
-  reason.
+* ~~**Cross-module resolution does not exist.**~~ **Closed.** `backend/modules.py` resolves imports
+  transitively and the backends emit whole programs; `06-module.as` is compiled by all three for
+  the first time. What remains is that **imported types cannot be named** — the type grammar has no
+  qualified form — so composition across modules is over functions only.
 * **Ownership model unrecorded.** The Rust backend was built anyway, on the conservative
   strategy of cloning at every use site, so the open question is now the cost of that rather than
   whether it compiles. It is a Rust-only question: the Swift backend never had to answer it.

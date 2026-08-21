@@ -63,7 +63,8 @@ Verified by a command whose output was read, not asserted.
 | Kotlin backend | priority target, no transpiler |
 | WebAssembly (browser) | via the Rust backend; a module needing `fs`/`env`/`proc` is refused before the build |
 | JavaScript backend | lowering rules in the prelude, no transpiler |
-| Conformance gate | 22 fixtures × 2 grammars |
+| Cross-module linking | whole-program; modules indexed by their declared header |
+| Conformance gate | 23 fixtures × 2 grammars |
 | Closure gate | no example calls an undefined name |
 | Coverage gate | 103 of 103 builtins appear in an example |
 | Differential gate | 28 cases × 3 backends, no disagreement |

@@ -23,13 +23,11 @@ ROOT = Path(__file__).parent.parent
 CORPUS = (sorted((ROOT / "grammar" / "corpus" / "valid").glob("*.as"))
           + sorted((ROOT / "examples").rglob("*.as")))
 
-# Cross-module resolution does not exist: `s/concat` flattens to a name that no
-# file in the fixture defines, so the target compiler is right to reject it.
-# Skipped whole — reporting a transpile as `ok` whose output is never compiled is
-# the failure mode this gate exists to prevent.
-SKIP = {"python": {"06-module.as"},
-        "rust": {"06-module.as"},
-        "swift": {"06-module.as"}}
+# Nothing is skipped. `06-module.as` was skipped by every backend from the day it
+# was written, because cross-module resolution did not exist and `s/concat`
+# flattened to a name no file defined. It now links against `lib/core/strings.as`
+# and is compiled like everything else.
+SKIP: dict[str, set] = {}
 
 # A module carrying a foreign declaration belongs to one ecosystem, and a
 # transpiler for another target must refuse it BY NAME. Asserted rather than
