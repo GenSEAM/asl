@@ -20,7 +20,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
-TS_DIR = ROOT / "tree-sitter-agents"
+TS_DIR = ROOT / "tree-sitter-as-lang"
 TS_BIN = ROOT.parent / "node_modules" / ".bin" / "tree-sitter"
 SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 
@@ -63,14 +63,14 @@ def run_query(paths: list[Path]) -> tuple[set[str], set[str]]:
 
 
 def main() -> int:
-    sources = sorted((ROOT / "corpus" / "valid").glob("*.agents"))
+    sources = sorted((ROOT / "corpus" / "valid").glob("*.as"))
 
     # Spec examples become real files so the real parser sees them.
     tmp = Path(tempfile.mkdtemp())
     for i, block in enumerate(re.findall(r"```lisp\n(.*?)```", SPEC.read_text(), re.S)):
         if "(defun" not in block and "(defschema" not in block:
             continue  # fragment, not a compilable unit
-        p = tmp / f"spec_{i:02d}.agents"
+        p = tmp / f"spec_{i:02d}.as"
         p.write_text(block)
         sources.append(p)
 

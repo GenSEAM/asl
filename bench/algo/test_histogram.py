@@ -1,6 +1,6 @@
 """One test suite, both implementations. Cases are HumanEval/111's.
 
-The AgentS result is a Python dict because Map lowers to dict, so the two are
+The AgentScript result is a Python dict because Map lowers to dict, so the two are
 directly comparable without adaptation.
 """
 import sys, pathlib

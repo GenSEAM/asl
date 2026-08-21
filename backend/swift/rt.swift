@@ -1,4 +1,4 @@
-// AgentS runtime for the Swift backend.
+// AgentScript runtime for the Swift backend.
 //
 // Strings are measured and sliced in Unicode scalars, not in Characters: Swift
 // counts grapheme clusters where Rust's `chars()` and Python's `len()` count
@@ -10,7 +10,7 @@
 // code stays free of any dependency the target platform has to supply.
 
 /// `Result` is hand-rolled because the stdlib's constrains its failure type to
-/// `Error`, and AgentS writes `(Result Int64 String)`. Conforming `String` to
+/// `Error`, and AgentScript writes `(Result Int64 String)`. Conforming `String` to
 /// `Error` retroactively would change an imported type for every module that
 /// links this runtime.
 public enum ASResult<T, E> {
@@ -38,7 +38,7 @@ extension ASPair: Comparable where A: Comparable, B: Comparable {
     }
 }
 
-/// Carries an AgentS `err` value out of a `try`. Typed throws let the enclosing
+/// Carries an AgentScript `err` value out of a `try`. Typed throws let the enclosing
 /// function catch exactly this and nothing else, so `try` propagates without the
 /// caller-visible colouring that a `throws` signature would impose.
 public struct ASThrown<E>: Error {
@@ -49,20 +49,55 @@ public struct ASThrown<E>: Error {
 public enum RT {
     // MARK: arithmetic
 
+    // §3: for Int32/Int64 "wrapping is an error not a behavior". Swift's `+`
+    // already traps, so these exist for parity with the other two runtimes
+    // rather than to change behaviour — the lowering is one shape across every
+    // backend, which is what keeps the differential gate comparing like with
+    // like.
+    public static func add<T: FixedWidthInteger>(_ a: T, _ b: T) -> T { a + b }
+    public static func sub<T: FixedWidthInteger>(_ a: T, _ b: T) -> T { a - b }
+    public static func mul<T: FixedWidthInteger>(_ a: T, _ b: T) -> T { a * b }
+    public static func neg<T: FixedWidthInteger & SignedInteger>(_ a: T) -> T { -a }
+    public static func absv<T: FixedWidthInteger & SignedInteger>(_ a: T) -> T {
+        precondition(a != T.min, "integer overflow")
+        return a < 0 ? -a : a
+    }
+    public static func add(_ a: Double, _ b: Double) -> Double { a + b }
+    public static func sub(_ a: Double, _ b: Double) -> Double { a - b }
+    public static func mul(_ a: Double, _ b: Double) -> Double { a * b }
+    public static func neg(_ a: Double) -> Double { -a }
+    public static func absv(_ a: Double) -> Double { a < 0 ? -a : a }
+
     public static func div<T: BinaryInteger>(_ a: T, _ b: T) -> T {
         precondition(b != 0, "division by zero")
         return a / b
     }
-    public static func div(_ a: Double, _ b: Double) -> Double { a / b }
+    // The specification says "traps on a zero divisor" without qualifying it to
+    // integers. Returning an IEEE-754 infinity here would make this backend
+    // disagree with the others on the language's most basic operator.
+    public static func div(_ a: Double, _ b: Double) -> Double {
+        precondition(b != 0, "division by zero")
+        return a / b
+    }
 
     public static func rem<T: BinaryInteger>(_ a: T, _ b: T) -> T {
         precondition(b != 0, "modulo by zero")
         return a % b
     }
-    public static func rem(_ a: Double, _ b: Double) -> Double { a.truncatingRemainder(dividingBy: b) }
+    public static func rem(_ a: Double, _ b: Double) -> Double {
+        precondition(b != 0, "modulo by zero")
+        return a.truncatingRemainder(dividingBy: b)
+    }
 
     public static func checkedDiv<T: BinaryInteger>(_ a: T, _ b: T) -> T? { b == 0 ? nil : a / b }
     public static func checkedRem<T: BinaryInteger>(_ a: T, _ b: T) -> T? { b == 0 ? nil : a % b }
+    // `/` and `mod` are one form each over both integers and floats (§6.1), so
+    // the checked variants need the float case too. Without it a program that
+    // divides Float64 fails to compile on this backend alone.
+    public static func checkedDiv(_ a: Double, _ b: Double) -> Double? { b == 0 ? nil : a / b }
+    public static func checkedRem(_ a: Double, _ b: Double) -> Double? {
+        b == 0 ? nil : a.truncatingRemainder(dividingBy: b)
+    }
 
     // MARK: strings
 
@@ -264,3 +299,115 @@ public enum RT {
         }
     }
 }
+
+// ---------- I/O ----------
+// Foundation is imported here and only here. The pure core above stays free of
+// it — that claim still holds for any program that does no I/O — but files,
+// environment and subprocesses have no stdlib equivalent, so an effectful
+// program pays the import. Stating the exception is cheaper than a runtime that
+// silently reimplements FileManager.
+import Foundation
+
+/// Built-in record, so `.-exit-code` needs no special case in the transpiler.
+public struct ProcessResult: Equatable {
+    public let exitCode: Int64
+    public let stdout: String
+    public let stderr: String
+    public init(exitCode: Int64, stdout: String, stderr: String) {
+        self.exitCode = exitCode; self.stdout = stdout; self.stderr = stderr
+    }
+}
+
+extension RT {
+    /// Run a host operation, converting any thrown error into an `err` value.
+    static func attempt<T>(_ body: () throws -> T) -> ASResult<T, String> {
+        do { return .ok(try body()) } catch { return .err("\(error)") }
+    }
+
+    public static func readLine() -> ASResult<String?, String> {
+        .ok(Swift.readLine(strippingNewline: true))
+    }
+
+    public static func readAll() -> ASResult<String, String> {
+        attempt {
+            let data = FileHandle.standardInput.readDataToEndOfFile()
+            guard let s = String(data: data, encoding: .utf8) else {
+                throw RTError.notUTF8
+            }
+            return s
+        }
+    }
+
+    public static func print_(_ s: String) -> ASResult<Void, String> {
+        Swift.print(s, terminator: "")
+        return .ok(())
+    }
+
+    public static func println(_ s: String) -> ASResult<Void, String> {
+        Swift.print(s)
+        return .ok(())
+    }
+
+    public static func eprintln(_ s: String) -> ASResult<Void, String> {
+        FileHandle.standardError.write(Data((s + "\n").utf8))
+        return .ok(())
+    }
+
+    public static func fileRead(_ path: String) -> ASResult<String, String> {
+        attempt { try String(contentsOfFile: path, encoding: .utf8) }
+    }
+
+    public static func fileWrite(_ path: String, _ s: String) -> ASResult<Void, String> {
+        attempt { try s.write(toFile: path, atomically: true, encoding: .utf8) }
+    }
+
+    public static func fileExists(_ path: String) -> Bool {
+        FileManager.default.fileExists(atPath: path)
+    }
+
+    public static func envGet(_ name: String) -> String? {
+        ProcessInfo.processInfo.environment[name]
+    }
+
+    public static func args() -> [String] {
+        Array(ProcessInfo.processInfo.arguments.dropFirst())
+    }
+
+    /// `argv` is a list, never a shell string, so nothing is re-parsed by a
+    /// shell and there is no quoting to get wrong.
+    public static func processRun(_ cmd: String, _ argv: [String], _ stdin: String)
+        -> ASResult<ProcessResult, String>
+    {
+        attempt {
+            let p = Process()
+            // No shell, so the command is resolved against PATH explicitly
+            // rather than by an interpreter that would also re-split argv.
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            p.arguments = [cmd] + argv
+            let inPipe = Pipe(), outPipe = Pipe(), errPipe = Pipe()
+            p.standardInput = inPipe
+            p.standardOutput = outPipe
+            p.standardError = errPipe
+            try p.run()
+            inPipe.fileHandleForWriting.write(Data(stdin.utf8))
+            try inPipe.fileHandleForWriting.close()
+            let out = outPipe.fileHandleForReading.readDataToEndOfFile()
+            let err = errPipe.fileHandleForReading.readDataToEndOfFile()
+            p.waitUntilExit()
+            return ProcessResult(
+                exitCode: Int64(p.terminationStatus),
+                stdout: String(data: out, encoding: .utf8) ?? "",
+                stderr: String(data: err, encoding: .utf8) ?? "")
+        }
+    }
+
+    /// Report an entry point's `err` and exit non-zero. Entry-point failure
+    /// lives in the runtime so generated code stays free of Foundation, which
+    /// is what the note at the top of this file claims for the pure core.
+    public static func fail(_ message: String) -> Never {
+        FileHandle.standardError.write(Data((message + "\n").utf8))
+        exit(1)
+    }
+}
+
+enum RTError: Error { case notUTF8 }

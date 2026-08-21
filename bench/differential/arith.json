@@ -1,0 +1,41 @@
+{
+  "id": "arith",
+  "signature": "(defun probe [(text String)] -> String)",
+  "prompt": "Not a generation task. This is a differential fixture: it pins the numeric behaviours where the three backends have diverged, so a runtime that stops agreeing fails a gate instead of being discovered later.",
+  "entry": "probe",
+  "result": "string",
+  "cases": [
+    [
+      "7 2",
+      "3|1|3.5|1"
+    ],
+    [
+      "-7 2",
+      "-3|-1|-3.5|-1"
+    ],
+    [
+      "7 -2",
+      "-3|1|-3.5|1"
+    ],
+    [
+      "-7 -2",
+      "3|-1|3.5|-1"
+    ],
+    [
+      "1 0",
+      "0|0|0.0|0"
+    ],
+    [
+      "9 4",
+      "2|1|2.25|2"
+    ],
+    [
+      "-9 4",
+      "-2|-1|-2.25|-2"
+    ],
+    [
+      "100 3",
+      "33|1|33.333333333333336|25"
+    ]
+  ]
+}

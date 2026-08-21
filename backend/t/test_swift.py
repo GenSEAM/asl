@@ -1,4 +1,4 @@
-"""End-to-end: AgentS source -> Swift -> compiled -> executed, semantics asserted.
+"""End-to-end: AgentScript source -> Swift -> compiled -> executed, semantics asserted.
 
 Expected values are written from AGENT_SPEC_CORE.md, not from observing what the
 transpiler produced, and they are the same values `test_smoke.py` asserts against
@@ -50,7 +50,7 @@ def results():
     if shutil.which("swiftc") is None:
         pytest.skip("swiftc not installed")
     from to_swift import ToSwift
-    src = (Path(__file__).parent / "smoke.agents").read_text()
+    src = (Path(__file__).parent / "smoke.as").read_text()
     with tempfile.TemporaryDirectory() as d:
         p = Path(d)
         (p / "rt.swift").write_text((ROOT / "backend" / "swift" / "rt.swift").read_text())

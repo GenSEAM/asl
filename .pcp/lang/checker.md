@@ -4,7 +4,10 @@ This file groups d/c/r/l entries for the lang/checker module.
 
 ### [l-78ae] Semantic checker is the next load-bearing component, not the backends
 - **Date**: 2026-08-20
-- **Status**: Deferred
+- **Status**: **Partly resolved 2026-08-21** — `checker/check.py` decides twelve of §9's fifteen
+  rules and is in the gate sequence. What remains is the part that needs a type system: rules 3
+  and 6, inference at call sites and the numeric-kind judgement. Those are reported as *unchecked*
+  by `--rules` rather than counted as passing, so a clean report is not read as a type check.
 - **Cluster**: lang/checker
 - **Description**: Most of the conformance checklist cannot be enforced by any grammar: name
   resolution across module boundaries, import cycles, type-variable binding, match exhaustiveness,
@@ -17,3 +20,39 @@ This file groups d/c/r/l entries for the lang/checker module.
 - **Why Non-Obvious**: The conformance gate is green, which reads as "the language is validated".
   It validates only that two parsers agree on shape. Nothing yet rejects a program that imports a
   cycle, calls a function with the wrong arity, or fails to handle a union case.
+
+
+### [d-c4a1] The checker is written in Python first, and is the oracle for the Rust one
+- **Date**: 2026-08-21
+- **Status**: Active
+- **Cluster**: lang/checker
+- **Description**: `d-2030` puts the compiler in Rust, and a semantic checker is compiler frontend
+  code. It was nevertheless written in Python, alongside the existing gates.
+- **Rationale**: A checker that enforces twelve rules today is worth more than a better-hosted one
+  in several weeks, because nothing enforced any of them and that was the largest gap in the
+  project. The Python one is not throwaway: when the Rust frontend is written it must agree with
+  this one on the whole corpus, which is the same technique that de-risks porting the transpilers —
+  the existing implementation becomes the differential oracle for its replacement.
+- **Costs accepted**: two implementations of the same rules will exist for a while, and they can
+  drift. The mitigation is that the drift is mechanically detectable, which is not true of a rule
+  that exists in only one place and is wrong.
+- **Why Non-Obvious**: hosting decisions read as binding for every component they touch, so
+  "the compiler is in Rust" reads as "therefore the checker is". The decision was about the
+  compiler that ships, not about the first thing that enforces a rule.
+
+### [c-2f7e] Two grammars can accept the same file and read it differently
+- **Date**: 2026-08-21
+- **Status**: **Resolved 2026-08-21** by a shape comparison in `grammar/validate.py`
+- **Cluster**: lang/checker
+- **Description**: `(s/concat a b)` parsed as a four-argument call to `s` under Lark and as a call
+  to the qualified name `s/concat` under tree-sitter. Both grammars accepted the file. The gate
+  compared accept/reject and therefore could not see it; the defect surfaced only when the new
+  semantic checker reported `s` and `concat` as undefined names.
+- **Mechanism**: under the dynamic lexer both tokenizations are valid, and in call-head position
+  Earley resolved the ambiguity the wrong way. In argument position it resolved correctly, so every
+  fixture that only passed qualified names as arguments looked fine. Fixed with a terminal priority
+  on `QUALIFIED`.
+- **Why Non-Obvious**: "both grammars agree" was being enforced as "both return the same verdict",
+  which is a strictly weaker claim than "both accept the same language" and reads identically in a
+  green gate. The one backend that would have caught it — Python — was also the one with no
+  compiler gate, so its visibly wrong output was reported as `ok`.

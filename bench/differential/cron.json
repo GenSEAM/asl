@@ -1,0 +1,22 @@
+{
+  "id": "cron",
+  "signature": "(defun describe-or-error [(expression String)] -> String)",
+  "prompt": "Not a generation task. Test vectors for the ported cron describer, lifted from the standard five-field crontab grammar rather than from this implementation's output.",
+  "entry": "describe-or-error",
+  "result": "string",
+  "cases": [
+    ["* * * * *",     "every minute; every hour; every day; every month; every weekday"],
+    ["0 0 * * *",     "minute 0; hour 0; every day; every month; every weekday"],
+    ["*/15 * * * *",  "every 15 minutes; every hour; every day; every month; every weekday"],
+    ["0 9-17 * * 1",  "minute 0; hour 9 through 17; every day; every month; weekday 1"],
+    ["0,30 * * * *",  "minute 0, 30; every hour; every day; every month; every weekday"],
+    ["0 0 1 1 *",     "minute 0; hour 0; day 1; month 1; every weekday"],
+    ["  0 0 1 1 *  ", "minute 0; hour 0; day 1; month 1; every weekday"],
+    ["60 * * * *",    "error: minute: value 60 is outside 0-59"],
+    ["* * * *",       "error: expected 5 fields, got 4"],
+    ["0 0 0 1 *",     "error: day: value 0 is outside 1-31"],
+    ["5-1 * * * *",   "error: minute: range runs backwards: 5-1"],
+    ["*/0 * * * *",   "error: minute: step must be positive"],
+    ["x * * * *",     "error: minute: not a number: x"]
+  ]
+}

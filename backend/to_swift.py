@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""AgentS-Core -> Swift.
+"""AgentScript Core -> Swift.
 
 Lowering rules come from prelude/prelude.json, as for every backend. This file
 owns only the special forms and the type mapping.
 
-Every AgentS form is an expression, and Swift's are statements, so the forms that
+Every AgentScript form is an expression, and Swift's are statements, so the forms that
 cannot be written as one expression — `match`, and anything containing a binding
 or a `try` — are lowered to an immediately-applied closure. Swift 5.7 infers the
 result type of a multi-statement closure, which is what makes this work without a
@@ -20,11 +20,15 @@ from pathlib import Path
 
 from lark import Lark, Tree, Token
 
+from boundary import NotLowered, TargetMismatch, check_target
+
 ROOT = Path(__file__).parent.parent
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
 LOWER = {b["name"]: b["sw"] for b in PRELUDE["builtins"]}
 
-FORM_KW = {"DEFUN", "DEFSCHEMA", "DEFENUM", "MODULE", "IF", "COND", "MATCH", "TRY",
+FORM_KW = {"DEFENTRY", "DEFEXTERN", "DEFOPAQUE", "EXTERN_KW", "EFFECTS_KW",
+           "TARGET_KW", "SYMBOL_KW",
+           "DEFUN", "DEFSCHEMA", "DEFENUM", "MODULE", "IF", "COND", "MATCH", "TRY",
            "LET", "FN", "ARROW", "ELSE_KW", "CASE_KW", "FIELD_KW", "DOC_KW",
            "EXPORT_KW", "IMPORT_KW", "AS_KW", "DEFAULT_KW", "JSON_KW",
            "OK", "ERR", "SOME", "NONE", "LIST", "CONS", "PAIR"}
@@ -35,7 +39,7 @@ PRIM = {"Bool": "Bool", "Int32": "Int32", "Int64": "Int64", "Int": "Int64",
 HASHABLE_PRIM = {"Bool", "Int32", "Int64", "Int", "Float64", "String"}
 COMPARABLE_PRIM = {"Int32", "Int64", "Int", "Float64", "String"}
 
-# Swift's reserved words that a mangled AgentS name can collide with. Spec §8
+# Swift's reserved words that a mangled AgentScript name can collide with. Spec §8
 # appends `_` rather than backticking, so the emitted name is still a plain
 # identifier in every position.
 SWIFT_KW = {"as", "associatedtype", "break", "case", "catch", "class", "continue",
@@ -49,6 +53,10 @@ SWIFT_KW = {"as", "associatedtype", "break", "case", "catch", "class", "continue
 
 def mangle(n: str) -> str:
     """kebab-case -> camelCase, per AGENT_SPEC_CORE.md §8."""
+    if "/" in n:
+        # `alias/member` flattens to one name; see to_python.mangle.
+        head, *rest = [mangle(part) for part in n.split("/")]
+        return head + "".join(r[:1].upper() + r[1:] for r in rest)
     if n.endswith("?"):
         n = "is-" + n[:-1]
     if n.endswith("!"):
@@ -66,9 +74,12 @@ def has_try(n) -> bool:
 
 class ToSwift:
     def __init__(self):
-        self.parser = Lark((ROOT / "grammar" / "agents.lark").read_text(),
+        self.parser = Lark((ROOT / "grammar" / "as-lang.lark").read_text(),
                            start="start", parser="earley", ambiguity="resolve")
         self.enums: dict[str, tuple[str, int]] = {}        # case -> (enum, arity)
+        # Whether an enum carries associated values, which decides what Swift can
+        # synthesize for it (see _traits).
+        self.enum_payloads: dict[str, bool] = {}
         self.schemas: dict[str, list[str]] = {}            # schema -> field order
         self.err_ty: str | None = None                     # E of the enclosing defun
         self.tmp = 0
@@ -102,17 +113,25 @@ class ToSwift:
             "Map": f"[{args[0]}: {args[1]}]" if len(args) > 1 else "[Void: Void]",
         }.get(head, PRIM.get(head, head))
 
-    def _traits(self, n, prim: set[str], containers: bool) -> bool:
-        """Whether a conformance can be synthesized for this type."""
+    def _traits(self, n, prim: set[str], containers: bool, payload_enums: bool = True) -> bool:
+        """Whether a conformance can be synthesized for this type.
+
+        `payload_enums` is False for Comparable: Swift synthesizes Equatable and
+        Hashable for an enum that carries associated values, but Comparable only
+        for one that carries none. Treating the two alike emitted a record whose
+        `<` compared two enum payloads that have no `<`.
+        """
         if isinstance(n, Tree) and n.data == "type":
             n = n.children[0] if len(n.children) == 1 else n
         if isinstance(n, Token):
             name = str(n)
-            return name in prim or name in self.schemas or name in {e for e, _ in self.enums.values()}
+            if name in {e for e, _ in self.enums.values()}:
+                return payload_enums or not self.enum_payloads.get(name, False)
+            return name in prim or name in self.schemas
         head = self.tok(n.children[0])
         if not containers or head == "Result":
             return False
-        return all(self._traits(a, prim, containers) for a in n.children[1:])
+        return all(self._traits(a, prim, containers, payload_enums) for a in n.children[1:])
 
     def conformances(self, types: list) -> str:
         """`Result` has no Hashable conformance and Void has neither, so a type
@@ -120,7 +139,8 @@ class ToSwift:
         out = []
         if all(self._traits(t, HASHABLE_PRIM, True) for t in types):
             out = ["Equatable", "Hashable"]
-        if types and all(self._traits(t, COMPARABLE_PRIM, False) for t in types):
+        if types and all(self._traits(t, COMPARABLE_PRIM, False, payload_enums=False)
+                         for t in types):
             out.append("Comparable")
         return (": " + ", ".join(out)) if out else ""
 
@@ -137,6 +157,7 @@ class ToSwift:
     def transpile(self, src: str) -> str:
         tree = self.parser.parse(src)
         tops = [t.children[0] for t in tree.children]
+        check_target(tops, self.TARGET, lowers_foreign=False)
         out: list[str] = []
         for n in tops:
             if n.data == "defenum":
@@ -147,7 +168,42 @@ class ToSwift:
         for n in tops:
             if n.data == "defun":
                 out += self.defun(n)
+        for n in tops:
+            if n.data == "defentry":
+                out += self.defentry(n)
         return "\n".join(out) + "\n"
+
+    # The foreign-boundary rule lives in backend/boundary.py. This backend does
+    # not lower foreign declarations, so a module holding them is refused —
+    # as a target mismatch when it names another ecosystem, and as an
+    # unimplemented backend when it names this one. The two are not the same
+    # failure and must not report as one.
+    TARGET = "sw"
+
+    def defentry(self, n) -> list[str]:
+        """The entry point is named with the reserved `as-` prefix, which is what
+        that prefix is reserved for: a compiler-internal name no user code owns."""
+        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data == "decl_opt")]
+        ps = [p for p in k[0].children if isinstance(p, Tree) and p.data == "param"]
+        args = ", ".join(f"_ {mangle(self.tok(self.kids(p)[0]))}: {self.stype(self.kids(p)[1])}"
+                         for p in ps)
+        ti = next(i for i, x in enumerate(k) if isinstance(x, Tree) and x.data == "type")
+        ret_node = k[ti]
+        self.err_ty = self._result_err(ret_node)
+        lines = self.block(k[ti + 1:], 2 if has_try(n) else 1)
+        if has_try(n):
+            lines = ["    do {"] + lines + ["    } catch {",
+                                            "        return .err(error.value)",
+                                            "    }"]
+        self.err_ty = None
+        return ([f"public func asEntry({args}) -> {self.stype(ret_node)} {{"]
+                + lines + ["}", ""]
+                + ["@main",
+                   "struct ASMain {",
+                   "    static func main() {",
+                   "        if case .err(let e) = asEntry(RT.args()) { RT.fail(e) }",
+                   "    }",
+                   "}", ""])
 
     def defschema(self, n) -> list[str]:
         k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data == "type_params")]
@@ -165,12 +221,13 @@ class ToSwift:
         body = "; ".join(f"self.{f} = {f}" for f in names)
         lines += [f"    public init({args}) {{ {body} }}"]
         if "Comparable" in conf:
-            cmps = " ".join(
-                f"if l.{f} != r.{f} {{ return l.{f} < r.{f} }}" for f in names[:-1])
-            lines += [f"    public static func < (l: Self, r: Self) -> Bool {{",
-                      f"        {cmps}".rstrip(),
-                      f"        return l.{names[-1]} < r.{names[-1]}",
-                      "    }"]
+            # One statement per line. Joining them with spaces produced valid
+            # Swift only while a record had two fields; at three the parser
+            # rejects consecutive statements on one line.
+            lines.append("    public static func < (l: Self, r: Self) -> Bool {")
+            lines += [f"        if l.{f} != r.{f} {{ return l.{f} < r.{f} }}"
+                      for f in names[:-1]]
+            lines += [f"        return l.{names[-1]} < r.{names[-1]}", "    }"]
         return [x for x in lines if x != ""] + ["}", ""]
 
     def defenum(self, n) -> list[str]:
@@ -189,13 +246,14 @@ class ToSwift:
             decls.append(f"    case {mangle(case)}" + (f"({rendered})" if tys else ""))
         # `indirect` is what makes a recursive union expressible; Swift rejects it
         # on an enum that carries nothing, so it is applied only where it is legal.
+        self.enum_payloads[name] = bool(payloads)
         kw = "indirect enum" if payloads else "enum"
         conf = self.conformances(payloads) if (payloads and not gen) else ""
         return [f"public {kw} {name}{gen}{conf} {{"] + decls + ["}", ""]
 
     def defun(self, n) -> list[str]:
         k = [x for x in self.kids(n)
-             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt"))]
+             if not (isinstance(x, Tree) and x.data in ("type_params", "decl_opt"))]
         name = mangle(self.tok(k[0]))
         gen = self.type_params(n)
         ps = [p for p in k[1].children if isinstance(p, Tree) and p.data == "param"]
@@ -225,7 +283,7 @@ class ToSwift:
 
     def block(self, exprs, ind: int) -> list[str]:
         """Lower a body to statements. A trailing `let` is flattened rather than
-        wrapped in a closure — every AgentS body is one, and the nesting would
+        wrapped in a closure — every AgentScript body is one, and the nesting would
         otherwise dominate the output."""
         pad = "    " * ind
         lines: list[str] = []
@@ -492,4 +550,11 @@ class ToSwift:
 
 
 if __name__ == "__main__":
-    print(ToSwift().transpile(Path(sys.argv[1]).read_text()))
+    src = Path(sys.argv[1]).read_text()
+    try:
+        print(ToSwift().transpile(src))
+    except (TargetMismatch, NotLowered) as exc:
+        # A refusal is a result, not a crash: this is the path a module for
+        # another ecosystem takes, and a stack trace would read as a defect.
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(2)

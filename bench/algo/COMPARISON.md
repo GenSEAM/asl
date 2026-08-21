@@ -6,7 +6,7 @@ Return each most-frequent letter of a space-separated string, with its count. Ti
 
 ---
 
-## 1. AgentS source — hand-written
+## 1. AgentScript source — hand-written
 
 ```lisp
 (defun tally [(m (Map String Int64)) (w String)] -> (Map String Int64)
@@ -72,11 +72,11 @@ def histogram(text):
 
 | Artifact | Bytes | ~Tokens | Code lines |
 |---|---:|---:|---:|
-| AgentS source | 894 | 223 | 19 |
+| AgentScript source | 894 | 223 | 19 |
 | Generated Python | 643 | 160 | 19 |
 | Idiomatic Python | 341 | 85 | 9 |
 
-**AgentS costs 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.**
+**AgentScript costs 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.**
 
 That number matters more than it looks. The project's stated goal is more work per agent pass, and
 tokens spent on syntax are tokens not spent on problem-solving. On this evidence the language is
@@ -114,8 +114,8 @@ mystery.
 
 ## What this run establishes, and what it does not
 
-**Establishes:** the pipeline is real end to end — an algorithm can be written in AgentS, lowered
+**Establishes:** the pipeline is real end to end — an algorithm can be written in AgentScript, lowered
 to Python, and pass the original benchmark's assertions unmodified.
 
-**Does not establish:** anything about whether an *agent* can write AgentS. This file was written
+**Does not establish:** anything about whether an *agent* can write AgentScript. This file was written
 by hand. The premise under test in `EXPERIMENT.md` is untouched by it.

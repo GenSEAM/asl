@@ -1,4 +1,4 @@
-"""Python with the type safety AgentS provides. The fair comparison."""
+"""Python with the type safety AgentScript provides. The fair comparison."""
 from typing import Dict, List
 
 

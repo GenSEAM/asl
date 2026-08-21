@@ -1,4 +1,4 @@
-# AGENT_SPEC_CORE.md — AgentS-Core v0.2
+# AGENT_SPEC_CORE.md — AgentScript Core v0.3
 
 **Status:** normative for the concept-validation experiment (`EXPERIMENT.md`).
 Supersedes [`AGENT_SPEC.md`](AGENT_SPEC.md) (frozen as v0) for everything it covers.
@@ -10,12 +10,13 @@ cannot be judged on forms the specification never gave it.
 
 ## 0. Scope
 
-**In:** modules, `defschema`, `defenum`, `defun`, `fn`, type parameters, `let`, `if`, `cond`,
-`match`, `try`, records, `Result`, `Option`, `Pair`, `List`, `Map`, strings, arithmetic,
-comparison, `Bool` / `Int32` / `Int64` / `Float64` / `String` / `Unit`.
+**In:** modules, `defschema`, `defenum`, `defun`, `defentry`, `fn`, type parameters, `let`, `if`,
+`cond`, `match`, `try`, records, `Result`, `Option`, `Pair`, `List`, `Map`, strings, arithmetic,
+comparison, `Bool` / `Int32` / `Int64` / `Float64` / `String` / `Unit`, an I/O surface (§10), and a
+foreign-function boundary — `defextern`, `defopaque`, `:extern` (§11).
 
-**Deliberately out of Core:** `defagent`, `defui`, `meta:async`, `if-target`, FFI, JSON
-serialization, I/O.
+**Deliberately out of Core:** `defagent`, `defui`, `meta:async`, `if-target`, JSON serialization,
+concurrency.
 
 ### Why v0.2 exists
 
@@ -35,12 +36,31 @@ and that the unit of one pass is a **working module** (PCP `r-43ea`, `r-8f23`, `
   strings, defeating type safety exactly where it pays; without the second, ordinary programs are
   inexpressible.
 
-**No FFI *yet*.** This is a staging decision, not a permanent boundary: a total foreign-call
-surface is the language's central rationale (PCP `d-4b8c`), and it will land here. Core omits it
-only until the checker exists, because an untotal boundary is worse than none. Core contains no
-`(.method obj)` form, so the v0 collision
-([`SPEC_REVIEW.md`](SPEC_REVIEW.md) C3) cannot arise. The `.-` accessor is specified so that
-reintroducing FFI later is additive rather than breaking.
+### Why v0.3 exists
+
+v0.2 excluded both I/O and foreign calls. Each exclusion has since become untenable, for a
+different reason.
+
+* **I/O** — the benchmark is whole programs that read and write (PCP `r-56bf`), so the exclusion
+  stopped being a scope boundary and became a blocker: no measurement arm can run without it.
+* **Foreign calls** — a total boundary over an untyped ecosystem is the language's *central
+  rationale* (PCP `d-4b8c`). A specification that listed it under "deliberately out" contradicted
+  the reason the language exists.
+
+The v0 collision that made FFI dangerous ([`SPEC_REVIEW.md`](SPEC_REVIEW.md) C3) does not arise:
+Core has no `(.method obj)` form, `.-` is the only accessor, and a foreign function is reached
+through an ordinary qualified name resolved by an explicit `defextern`. Nothing is dispatched on
+spelling.
+
+**The boundary is total by construction, and that is the whole claim.** A `defextern` declares the
+type of the *success* value; every call site sees `(Result T String)`. There is no form that
+yields a bare host value and no escape hatch. This is strictly more than the host's own checker
+can express — host type stubs declare argument and return types and carry no exception information
+whatsoever, so a statically checked host program still cannot see that a call may fail.
+
+**What it costs.** A module carrying any `defextern` is no longer portable: it names one ecosystem
+and a transpiler for another target refuses it. Portability survives for the pure core, and the
+effectful edges belong to one host. That cost is accepted, not worked around.
 
 ### Deviation from the approved plan
 
@@ -96,7 +116,7 @@ Identifiers are case-sensitive. Whitespace and comments are insignificant except
 `/` is both the division operator and the qualified-name separator. They never collide: division
 is a standalone token surrounded by separators, while a qualified name has no internal whitespace.
 Clojure resolves it the same way, and for the same reason.
-`agents-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
+`as-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
 rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8). The prefix is deliberately spelled in
 a form the identifier rule above can actually produce — a reserved word the lexer cannot emit
 reserves nothing, and its conformance fixture would pass for an unrelated reason.
@@ -114,6 +134,7 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 | `(Option T)` | `(some v)` \| `(none)` |
 | `(Result T E)` | `(ok v)` \| `(err e)` |
 | `(Pair A B)` | Built-in record, fields `first` / `second` |
+| `ProcessResult` | Built-in record, fields `exit-code` / `stdout` / `stderr`; see §10 |
 | `(Map K V)` | Immutable keyed collection; `K` must support equality |
 
 `Int` is a documented alias for `Int64`. **There is no implicit numeric conversion** — mixing
@@ -282,6 +303,69 @@ Matching an enum must be exhaustive, as for every other `match`. Without closed 
 state is encoded as a string or an integer, which discards type safety at precisely the points
 where it would have paid, and the compiler's own AST is inexpressible (PCP `r-b539`).
 
+### 4.5 `defentry` — the single entry point
+
+```lisp
+(defentry [(argv (List String))] -> (Result Unit String)
+  :doc "Summarise the file named by the first argument."
+  :effects [io]
+  (let [(path (option-or (list-head argv) ""))]
+    (println (str "reading " path))))
+```
+
+`(defentry [<params>] -> <Type> [:doc <string>] [:effects [<effect>*]] <expr>+)`.
+
+It carries **no name**. An entry point identified by spelling — a function that becomes the program
+because it happens to be called `main` — would be the one construct in this language dispatched on
+how a name is written, which §4.1 and the type-parameter rule exist to avoid. There is at most one
+per program.
+
+Backends lower it to `as-entry` plus the target's own startup convention. That is what the reserved
+`as-` prefix (§2) is for, and it is the first use of it.
+
+### 4.6 `:effects` — declared, checked, not inferred
+
+Any `defun` or `defentry` that reaches the outside names what it reaches:
+
+```lisp
+(defun save [(path String) (body String)] -> (Result Unit String)
+  :doc "Write a report."
+  :effects [fs]
+  (file-write path body))
+```
+
+The vocabulary is closed, and it is finer than one name on purpose:
+
+| Effect | Covers |
+|---|---|
+| `console` | `print`, `println`, `eprintln` |
+| `stdin` | `read-line`, `read-all` |
+| `fs` | `file-read`, `file-write`, `file-exists?` |
+| `env` | `env-get`, `args` |
+| `proc` | `process-run` |
+
+**Effects are transitive.** A function that only calls an effectful function is
+effectful too, and declares the same names; a rule that stopped at direct calls would be
+satisfied by one wrapper.
+
+**A target that cannot provide an effect refuses the module.** A browser has `console` and
+nothing else — no filesystem, no environment, no subprocesses — and this is what makes that
+decidable before a build rather than at run time. It is the same shape as §11's `:target`
+refusal for foreign declarations, applied to capabilities instead of ecosystems.
+
+One name would have been simpler and is what v0.3 shipped first. It was split once WebAssembly
+became a target, because `io` claimed a filesystem on a host that has none, and splitting it later
+would have been a breaking change to every signature already written.
+
+Purity is the default and stays verifiable: a declaration that omits `:effects` may not call an
+effectful builtin, directly or transitively.
+
+The alternative was to leave effects implicit. That is cheaper today and is precisely the choice
+that forces function colouring later, when a concurrent construct arrives and every signature has
+to be re-typed. An annotation is a mild colouring paid at one line per effectful function, and it
+makes adding `:effects [async]` additive rather than breaking. Recorded as a decision under
+`lang/io`; the trade is deliberate, not incidental.
+
 ## 5. Expressions
 
 ### 5.1 `let` — sequential, immutable
@@ -428,7 +512,7 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | `(string-starts-with? a b)` | `String String -> Bool` | True when the string begins with the prefix. |
 | `(string-ends-with? a b)` | `String String -> Bool` | True when the string ends with the suffix. |
 | `(string-split a b)` | `String String -> (List String)` | Split on a separator. |
-| `(string-join a b c)` | `(List String) String -> String` | Join with a separator. |
+| `(string-join a b)` | `(List String) String -> String` | Join with a separator. |
 | `(string-upper a)` | `String -> String` | Upper case. |
 | `(string-lower a)` | `String -> String` | Lower case. |
 | `(string-trim a)` | `String -> String` | Remove leading and trailing whitespace. |
@@ -454,42 +538,42 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | Form | Type | Meaning |
 |---|---|---|
 | `(list a b …)` | `T... -> (List T)` | Construct a list. |
-| `(list-empty? a b)` | `(List T) -> Bool` | True when the list has no elements. |
-| `(list-length a b)` | `(List T) -> Int64` | Element count. |
-| `(list-get a b c)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
-| `(list-head a b)` | `(List T) -> (Option T)` | First element, or none. |
-| `(list-tail a b)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
-| `(list-cons a b c)` | `T (List T) -> (List T)` | Prepend an element. |
-| `(list-append a b c d)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
-| `(list-reverse a b)` | `(List T) -> (List T)` | Reverse order. |
-| `(list-slice a b c d)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
-| `(list-contains? a b c)` | `(List T) T -> Bool` | True when the element occurs. |
-| `(list-index-of a b c)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
-| `(list-sort a b)` | `(List T) -> (List T)` | Stable ascending sort. |
+| `(list-empty? a)` | `(List T) -> Bool` | True when the list has no elements. |
+| `(list-length a)` | `(List T) -> Int64` | Element count. |
+| `(list-get a b)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
+| `(list-head a)` | `(List T) -> (Option T)` | First element, or none. |
+| `(list-tail a)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
+| `(list-cons a b)` | `T (List T) -> (List T)` | Prepend an element. |
+| `(list-append a b)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
+| `(list-reverse a)` | `(List T) -> (List T)` | Reverse order. |
+| `(list-slice a b c)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
+| `(list-contains? a b)` | `(List T) T -> Bool` | True when the element occurs. |
+| `(list-index-of a b)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
+| `(list-sort a)` | `(List T) -> (List T)` | Stable ascending sort. |
 | `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key. |
 | `(map a b)` | `(fn [A] -> B) (List A) -> (List B)` | Apply a function to every element. |
 | `(filter a b)` | `(fn [T] -> Bool) (List T) -> (List T)` | Keep elements satisfying a predicate. |
 | `(fold a b c)` | `(fn [B A] -> B) B (List A) -> B` | Left fold with an initial accumulator. |
 | `(range a b)` | `Int64 Int64 -> (List Int64)` | Half-open integer range; empty when start is not below end. |
-| `(zip a b c d)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
-| `(list-sum a b)` | `(List N) -> N` | Sum of elements. |
-| `(list-min a b)` | `(List T) -> (Option T)` | Least element, or none when empty. |
-| `(list-max a b)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
+| `(zip a b)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
+| `(list-sum a)` | `(List N) -> N` | Sum of elements. |
+| `(list-min a)` | `(List T) -> (Option T)` | Least element, or none when empty. |
+| `(list-max a)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
 
 ### 6.6 Map
 
 | Form | Type | Meaning |
 |---|---|---|
 | `(map-empty)` | `-> (Map K V)` | The empty map. |
-| `(map-get a b c d)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
-| `(map-set a b c d)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
-| `(map-remove a b c d)` | `(Map K V) K -> (Map K V)` | Map without the key. |
-| `(map-has? a b c d)` | `(Map K V) K -> Bool` | True when the key is present. |
-| `(map-size a b c)` | `(Map K V) -> Int64` | Number of entries. |
-| `(map-keys a b c)` | `(Map K V) -> (List K)` | Keys, sorted. |
-| `(map-values a b c)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
-| `(map-pairs a b c)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
-| `(map-from-pairs a b c d)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
+| `(map-get a b)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
+| `(map-set a b c)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
+| `(map-remove a b)` | `(Map K V) K -> (Map K V)` | Map without the key. |
+| `(map-has? a b)` | `(Map K V) K -> Bool` | True when the key is present. |
+| `(map-size a)` | `(Map K V) -> Int64` | Number of entries. |
+| `(map-keys a)` | `(Map K V) -> (List K)` | Keys, sorted. |
+| `(map-values a)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
+| `(map-pairs a)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
+| `(map-from-pairs a)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
 
 ### 6.7 Option, Result, Pair
 
@@ -499,18 +583,34 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | `(none)` | `-> (Option T)` | An absent value. |
 | `(ok a)` | `T -> (Result T E)` | A successful result. |
 | `(err a)` | `E -> (Result T E)` | A failed result. |
-| `(is-some? a b)` | `(Option T) -> Bool` | True when a value is present. |
-| `(is-none? a b)` | `(Option T) -> Bool` | True when no value is present. |
-| `(is-ok? a b c)` | `(Result T E) -> Bool` | True when the result succeeded. |
-| `(is-err? a b c)` | `(Result T E) -> Bool` | True when the result failed. |
-| `(option-or a b c)` | `(Option T) T -> T` | The value, or a fallback when absent. |
-| `(result-or a b c d)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
+| `(is-some? a)` | `(Option T) -> Bool` | True when a value is present. |
+| `(is-none? a)` | `(Option T) -> Bool` | True when no value is present. |
+| `(is-ok? a)` | `(Result T E) -> Bool` | True when the result succeeded. |
+| `(is-err? a)` | `(Result T E) -> Bool` | True when the result failed. |
+| `(option-or a b)` | `(Option T) T -> T` | The value, or a fallback when absent. |
+| `(result-or a b)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
 | `(option-map a b)` | `(fn [A] -> B) (Option A) -> (Option B)` | Transform a present value. |
 | `(result-map a b)` | `(fn [A] -> B) (Result A E) -> (Result B E)` | Transform a successful value. |
 | `(result-map-err a b)` | `(fn [E] -> F) (Result T E) -> (Result T F)` | Transform a failure value. |
-| `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
-| `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
+| `(option-to-result a b)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
+| `(result-to-option a)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
 | `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
+
+### 6.8 I/O
+
+| Form | Type | Meaning |
+|---|---|---|
+| `(read-line)` | `-> (Result (Option String) String)` | Read one line from standard input without its newline, or none at end of input. |
+| `(read-all)` | `-> (Result String String)` | Read all of standard input. |
+| `(print a)` | `String -> (Result Unit String)` | Write to standard output with no trailing newline. |
+| `(println a)` | `String -> (Result Unit String)` | Write to standard output followed by a newline. |
+| `(eprintln a)` | `String -> (Result Unit String)` | Write to standard error followed by a newline. |
+| `(file-read a)` | `String -> (Result String String)` | Read a whole file as UTF-8 text. |
+| `(file-write a b)` | `String String -> (Result Unit String)` | Write UTF-8 text to a file, replacing any existing contents. |
+| `(file-exists? a)` | `String -> Bool` | True when the path exists. |
+| `(env-get a)` | `String -> (Option String)` | Value of an environment variable, or none when unset. |
+| `(args)` | `-> (List String)` | Command-line arguments, excluding the program name. |
+| `(process-run a b c)` | `String (List String) String -> (Result ProcessResult String)` | Run a program with an argument list and standard input, capturing its output. The argument list is never a shell string, so there is no quoting to get wrong. |
 ## 7. Worked example
 
 Complete, uses only forms defined above, and is the shape few-shot prompts should use.
@@ -546,7 +646,7 @@ returned expression, in every branch.
 Deterministic, because output that is not byte-reproducible cannot be differentially tested
 (resolves A1).
 
-| AgentS | TypeScript | Python | Kotlin | Swift | Rust |
+| AgentScript | TypeScript | Python | Kotlin | Swift | Rust |
 |---|---|---|---|---|---|
 | `parse-html-url` | `parseHtmlUrl` | `parse_html_url` | `parseHtmlUrl` | `parseHtmlUrl` | `parse_html_url` |
 | `Point` | `Point` | `Point` | `Point` | `Point` | `Point` |
@@ -560,7 +660,20 @@ visibility — is the one convention here that a target's *export list* would ha
 Rules: strip a trailing `?` and prefix `is-`; strip a trailing `!` and suffix `-mut`; then split on
 `-` and recase. Acronyms are not special-cased — `html` becomes `Html`, always.
 
-If a mangled name collides with a target keyword, append `_`. **If two distinct AgentS identifiers
+**A qualified name flattens.** `alias/member` mangles as though the `/` were a `-`, so `s/concat`
+becomes `s_concat` in Python and Rust and `sConcat` in Kotlin and Swift. The alias is a
+module-local label, not a runtime object, so there is nothing to attribute-access on the target
+side; leaving the separator in place produced output no target could parse.
+
+| AgentScript | TypeScript | Python | Kotlin | Swift | Rust |
+|---|---|---|---|---|---|
+| `s/concat` | `sConcat` | `s_concat` | `sConcat` | `sConcat` | `s_concat` |
+| `pl/read-csv` | `plReadCsv` | `pl_read_csv` | `plReadCsv` | `plReadCsv` | `pl_read_csv` |
+
+This is also why §11's `:symbol` exists: the flattened name is what reaches the host, and mangling
+cannot reproduce every host spelling.
+
+If a mangled name collides with a target keyword, append `_`. **If two distinct AgentScript identifiers
 mangle to the same target identifier, the compiler errors** — it does not silently rename. v0 had
 no collision policy at all.
 
@@ -577,13 +690,121 @@ A Core program is well-formed iff:
 4. Every `if` and `cond` is total; every `match` is exhaustive.
 5. Every `try` sits in a `defun` returning a compatible `(Result _ E)`.
 6. No numeric operation mixes types; all conversions are explicit.
-7. No identifier begins with `agents-`.
+7. No identifier begins with `as-`.
 8. The module header carries a `:doc`, and every exported `defun` carries a `:doc`.
 9. Every qualified name `alias/member` uses an alias bound in `:import`, and the member is
    exported by that module.
 10. Every type variable used in a signature is bound in that declaration's `{ }`.
 11. There are no import cycles.
+12. Every `defun` or `defentry` that calls an effectful builtin (§10) declares `:effects [io]`,
+    and so does every one that calls such a function transitively.
+13. Every `defextern` carries a `:target`, and every module containing one is transpiled only to
+    that target.
+14. No `defopaque` value is inspected: it is passed to a `defextern` or bound, never destructured
+    and never compared.
+15. There is at most one `defentry` per program.
 
-Rules 2, 5, 7-11 are **semantic**, not context-free: no grammar can enforce them, and the
+Rules 2, 5, 7-15 are **semantic**, not context-free: no grammar can enforce them, and the
 conformance gate deliberately keeps such fixtures in `grammar/corpus/semantic/` so the untested
 surface stays visible rather than appearing covered.
+
+Rule 13's target half is the one semantic rule a *backend* enforces today rather than a checker:
+each transpiler refuses a foreign declaration aimed elsewhere, and `backend/check_corpus.py`
+asserts the refusal rather than skipping the fixture.
+
+---
+
+## 10. I/O
+
+Every operation that touches the outside returns a `Result`. There is no trapping I/O and no
+exception: a missing file, a closed stream and a program that will not start are all values.
+
+The failure type is `String` — the host's own message. A structured `IoError` union was considered
+and rejected for now: its cases would have to be identical across Python, Rust and Swift for the
+differential gate to pass, and they are not. A host message is honest about what is actually
+known at the boundary. The cost is that a caller can report a failure but cannot dispatch on its
+kind; when that becomes load-bearing, a union is added and `String` becomes one of its cases.
+
+The vocabulary is in §6 under **I/O**. Three properties are worth stating outside the table:
+
+* **`process-run` takes an argv list, never a shell string.** `(process-run "git" (list "rev-parse"
+  "HEAD") "")`. Nothing is re-parsed by a shell, so there is no quoting to get wrong and no
+  injection surface to warn about — the shape removes it rather than documenting it.
+* **`ProcessResult` is a built-in record**, read with `.-exit-code`, `.-stdout`, `.-stderr`, on the
+  same footing as `Pair` (§3).
+* **`read-line` returns `(Result (Option String) String)`.** End of input is `(none)`, which is not
+  a failure; a failure is the outer `err`. Collapsing the two would make end-of-input
+  indistinguishable from a broken pipe.
+
+`file-exists?` and `env-get` are the two exceptions to the `Result` rule, and deliberately: neither
+can fail, only answer. `file-exists?` returns `Bool` and `env-get` returns `(Option String)`. Both
+are still effects (§4.6) — they read the outside world, and a target without one cannot run them.
+
+### 10.1 Targets and capabilities
+
+Not every target provides every effect, so the effect a function declares decides where it can
+run:
+
+| Target | Provides |
+|---|---|
+| `py`, `js`, `rs`, `sw` | `console`, `stdin`, `fs`, `env`, `proc` |
+| `wasm` (browser) | `console` |
+
+WebAssembly is reached through the Rust backend and `wasm32-unknown-unknown`; there is no separate
+wasm code generator, and a pure module needs no new work to run in a browser. What does need
+saying is the negative case: `rustc` links `std::fs` for that target without complaint, so a module
+that reads files **compiles, ships, and fails at run time**. The capability check is what turns
+that into a refusal naming the declaration.
+
+## 11. Foreign functions
+
+The reason the language exists (PCP `d-4b8c`). Three forms.
+
+**`:extern` in the module header** names the host packages, and is the only place a host package
+name appears — so a module's foreign dependencies are extractable without reading its body:
+
+```lisp
+(module data/frames
+  :doc "Typed total boundary over the host dataframe library."
+  :export [row-count]
+  :extern [(py "polars" :as pl)])
+```
+
+**`defopaque`** names a host type this language passes but cannot inspect:
+
+```lisp
+(defopaque DataFrame
+  :doc "A host dataframe: passed across the boundary, never inspected here.")
+```
+
+Without it, binding generation would stall on the first host type with no mapping. With it,
+generation stays total: an unmodelled type becomes opaque rather than a failure.
+
+**`defextern`** declares one host function:
+
+```lisp
+(defextern pl/read-csv [(path String)] -> DataFrame
+  :doc "Read a CSV file into a dataframe."
+  :target :py
+  :symbol "read_csv")
+```
+
+`(defextern <alias>/<member> [<params>] -> <Type> [:doc <string>] :target <keyword> [:symbol
+<string>])`.
+
+* **The declared type is the SUCCESS type.** The call site sees `(Result T String)`. This is the
+  rule the whole design rests on: there is no form that yields a bare host value, so a caller
+  cannot use a foreign result without accounting for failure.
+* **The name is kebab-case**, like every other identifier, and reaches the host through §8
+  mangling. `:symbol` overrides that for the names mangling cannot reproduce — §8 does not
+  special-case acronyms, so it cannot round-trip every host spelling, and pretending otherwise
+  would make the escape hatch a silent wrong answer instead of an explicit one.
+* **A host optional type maps onto `(Option T)`**, so absence is handled rather than discovered.
+* **`:target` is mandatory.** A module containing any `defextern` belongs to that ecosystem; every
+  other backend refuses it and names the offending declaration. This is not portable, and saying so
+  in the type of the module is better than discovering it at run time.
+
+**Bindings are generated, not written.** Runtime introspection of a host yields nothing useful, but
+the separately shipped stub corpus covers the standard library broadly and a prototype produced
+correct declarations from it, including optional types. Generation must parse stubs properly rather
+than by pattern matching — a regex prototype produced visible defects. See `tools/bindgen/`.

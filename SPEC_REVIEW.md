@@ -1,4 +1,4 @@
-# SPEC_REVIEW.md — Critique of `AGENT_SPEC.md` (AgentS DSL)
+# SPEC_REVIEW.md — Critique of `AGENT_SPEC.md` (AgentScript DSL)
 
 Reviewed document: [`AGENT_SPEC.md`](AGENT_SPEC.md), as supplied.
 Targets in scope: TypeScript/Node (React, Vue), Python, Go, Rust. C99 out of scope except
@@ -11,7 +11,7 @@ which was not available, are tagged `[may-be-in-RFC-001]`.
 ## 1. Verdict
 
 `AGENT_SPEC.md` is a **style guide presented as a language specification**. Its stated purpose
-(§1) is to make an LLM emit deterministic, transpilable AgentS. That requires the document to be
+(§1) is to make an LLM emit deterministic, transpilable AgentScript. That requires the document to be
 *closed*: an LLM can only be reliable about forms the document actually defines. It is not closed.
 
 Twenty-four identifiers appear in the spec's own examples without ever being defined by it —
@@ -40,9 +40,9 @@ rather than just wording:
 * **§6.1 is solving the paren problem in the wrong layer.** Grammar-constrained decoding
   *guarantees* balanced delimiters at the token level. Shipping a grammar replaces a prompt rule
   with a hard guarantee, and gives the spec the normative syntax definition it currently lacks.
-* **BAML — the closest shipped system to AgentS — does not transpile.** It compiles to bytecode
+* **BAML — the closest shipped system to AgentScript — does not transpile.** It compiles to bytecode
   and binds four languages to one shared Rust runtime, which is what keeps their behavior
-  identical. AgentS's N-native-backends design is strictly harder, and it is exactly where A1,
+  identical. AgentScript's N-native-backends design is strictly harder, and it is exactly where A1,
   A2, A3, G8, and B6 converge. Worth choosing deliberately rather than by default.
 
 ### 1.1 Falsification: four minimal programs
@@ -157,7 +157,7 @@ and no restriction on where it may appear. One rule forbids what the other grant
 **C3 — field access and FFI share a syntax.** *(worst single defect)*
 §3.2 reads a schema field as `(.query req)`. §5.1 defines `(.method-name obj args)` as a native
 FFI method call. Identical surface syntax, two completely different semantics, disambiguated
-only by whether the receiver is an AgentS record or a foreign object — which is undecidable
+only by whether the receiver is an AgentScript record or a foreign object — which is undecidable
 when the receiver's type is itself foreign or inferred. Consequences:
 
 * The generator cannot tell you which one it meant, so neither can a reader.
@@ -227,7 +227,7 @@ Two defensible readings ⇒ two different valid outputs ⇒ the determinism clai
 **A1 — Identifier mangling is unspecified.** `fetch-user-data` must become `fetchUserData`
 (TS), `fetch_user_data` (Python), and `FetchUserData` or `fetchUserData` in Go depending on
 export intent — which the spec has no way to express. No algorithm, no export rule, no
-collision policy: `fetch-user`, `fetch_user`, and `fetchUser` are three distinct AgentS
+collision policy: `fetch-user`, `fetch_user`, and `fetchUser` are three distinct AgentScript
 identifiers that can mangle to one target identifier. Also unhandled: leading digits,
 target keyword collisions (`type`, `func`, `match`, `class`), and acronym casing
 (`parse-html-url`).
@@ -318,7 +318,7 @@ missing:
 **G4 — `*:exec` takes an unstructured source string.** `(py:exec "import os; …")` accepts raw
 foreign source with no type, no result binding, no declared effects, and no interpolation rules.
 The spec's own Rust arm already needs `\"` escaping inside the DSL string, and any interpolation
-of AgentS values into that string is an injection hazard at the codegen boundary with no escaping
+of AgentScript values into that string is an injection hazard at the codegen boundary with no escaping
 contract. There is also no way to *return* a value from an `if-target` arm into surrounding code,
 which makes the construct nearly useless for anything but side effects.
 
@@ -484,7 +484,7 @@ Ordered by reliability gained per unit of effort.
    becomes usable. Shipping `match` alone recreates the deep nesting that causes L1.
 3. **Add a record constructor (B2).** e.g. `(SearchRequest :query "x" :max-results 5)` with
    defaults applied. One form; unblocks every function that returns a schema.
-4. **Pin naming and wire format normatively (A1, A2, A3, C5).** A table: AgentS identifier →
+4. **Pin naming and wire format normatively (A1, A2, A3, C5).** A table: AgentScript identifier →
    TS/Python/Go/Rust identifier, plus the JSON key rule with a per-field `:json` override, plus
    fixed-width numeric types (`Int32`/`Int64`/`Float64`) with `Int` as a documented alias.
    Copy the shape serde and pydantic both converged on — container-level default plus per-field
@@ -538,7 +538,7 @@ failure mode for LLM-generated Lisp, and asking for vigilance does not reduce th
 The mechanism that actually delivers balanced delimiters is **grammar-constrained decoding**: a
 context-free grammar compiled to a pushdown automaton tracks nesting depth and restricts the
 next-token distribution to tokens that keep the output valid, so balance is guaranteed by
-construction rather than checked afterward (§11.4). **Ship a GBNF-style grammar for AgentS** —
+construction rather than checked afterward (§11.4). **Ship a GBNF-style grammar for AgentScript** —
 it makes §6.1 unnecessary on any grammar-capable runtime *and* doubles as the normative syntax
 definition the document currently lacks (§7). Where grammar constraints are unavailable, use a
 repair-tolerant parser on BAML's Schema-Aligned Parsing model, not a sterner prompt.
@@ -583,7 +583,7 @@ model from configuration in the example, or use an obvious placeholder.
 ## 11. Prior art
 
 Every Tier 1 and Tier 2 recommendation in §9 has a shipped precedent. None of these problems is
-novel, and three of them have a settled answer that AgentS can adopt more or less verbatim.
+novel, and three of them have a settled answer that AgentScript can adopt more or less verbatim.
 
 ### 11.1 C3 — Clojure already solved this, for the same reason
 
@@ -595,11 +595,11 @@ prefix, and the rule is normative:
 > field access (never as a 0-arity method)"
 
 So `(.-x obj)` is unambiguously a field; `(.x obj)` is a method call. Crucially, Clojure also
-documents the failure mode AgentS currently has — with the plain `.` form and no arguments,
+documents the failure mode AgentScript currently has — with the plain `.` form and no arguments,
 **method resolution is attempted first**, so a field silently loses to a same-named zero-arg
 method. `.-` exists precisely because that silent shadowing was unacceptable. The accessor was
 also motivated by aligning Clojure and ClojureScript field lookup, i.e. by *multi-target
-consistency* — the same pressure AgentS is under.
+consistency* — the same pressure AgentScript is under.
 
 **Adopt directly:** `(.-field record)` for schema access, `(.method obj args…)` for FFI. This is
 a smaller change than the `ffi:call` form proposed in §9.1, preserves the spec's existing
@@ -608,14 +608,14 @@ aesthetics, and comes with fifteen years of evidence that it works.
 ### 11.2 B1 — `use` / `try` / `?` are the settled ergonomics
 
 Gleam is the closest analogue (small ML-family language, `Result`-typed I/O, compiles to
-**two** targets — Erlang and JavaScript — so it faces AgentS's multi-backend constraint):
+**two** targets — Erlang and JavaScript — so it faces AgentScript's multi-backend constraint):
 
 * `result.try` chains fallible calls, short-circuiting on the first `Error` — "railway-oriented"
   style.
 * The `use` expression exists specifically because chained `try` callbacks nest badly; `use`
   flattens them into sequential-looking code.
 * Gleam's own community has an open design discussion on adding a `?` operator, which is worth
-  reading before AgentS picks a syntax — the tradeoffs are laid out there rather than
+  reading before AgentScript picks a syntax — the tradeoffs are laid out there rather than
   needing rediscovery.
 
 Rust's `?` is the other reference point. Either way the pairing is the same: **a `match`
@@ -626,22 +626,22 @@ seen from two ends.
 
 ### 11.3 G1 + architecture — BAML is the closest shipped system
 
-[BAML](https://github.com/BoundaryML/baml) is a DSL for exactly AgentS's `defschema` + `defagent`
+[BAML](https://github.com/BoundaryML/baml) is a DSL for exactly AgentScript's `defschema` + `defagent`
 scope: typed LLM function interfaces compiled to idiomatic clients in **Python, TypeScript, Ruby,
-and Go**, with a Rust compiler. Two things AgentS should take from it, and one warning.
+and Go**, with a Rust compiler. Two things AgentScript should take from it, and one warning.
 
 **Take: the pipeline.** BAML's compiler runs seven phases — Lexer → Parser → HIR → TIR (typed IR)
 → VIR (validated IR) → MIR → bytecode. A concrete reference architecture for the separation
-AgentS needs between parsing, type checking, validation, and target lowering.
+AgentScript needs between parsing, type checking, validation, and target lowering.
 
 **Take: Schema-Aligned Parsing.** SAP transforms raw LLM text into typed data, tolerating broken
 JSON, markdown wrappers, and chain-of-thought preamble, and coercing types — which means it works
 against models with no native function-calling API. This is the robust answer to §3.3's
-`:response-schema`, and it generalizes: the same tolerance AgentS needs when *parsing
-LLM-generated AgentS* (see 11.4).
+`:response-schema`, and it generalizes: the same tolerance AgentScript needs when *parsing
+LLM-generated AgentScript* (see 11.4).
 
 **Warning: BAML does not transpile.** All four clients bind via FFI to a single shared Rust
-runtime, which is what guarantees consistent behavior across languages. AgentS proposes something
+runtime, which is what guarantees consistent behavior across languages. AgentScript proposes something
 strictly harder — **N independent native backends that must be semantically equivalent** — and
 that is precisely where A1 (mangling), A2 (wire casing), A3 (numeric widths), G8 (async), and B6
 (ownership) all bite at once. Worth deciding deliberately rather than by default: a shared runtime
@@ -664,8 +664,8 @@ For nesting specifically, a context-free grammar compiled to a **pushdown automa
 and enforces balance throughout generation. GBNF (llama.cpp's grammar format) is recursive and can
 express exactly this.
 
-**Implication for the project:** AgentS should ship a grammar, not a paragraph of advice. A GBNF
-(or equivalent) grammar for AgentS gives balanced delimiters by construction on any
+**Implication for the project:** AgentScript should ship a grammar, not a paragraph of advice. A GBNF
+(or equivalent) grammar for AgentScript gives balanced delimiters by construction on any
 grammar-constrained runtime, and doubles as the normative syntax definition the spec currently
 lacks (§7's closure problem). Where constrained decoding is unavailable — hosted APIs without
 grammar support — BAML's SAP is the fallback pattern: a repair-tolerant parser, not a stricter
@@ -673,7 +673,7 @@ prompt. Either path is a toolchain change; neither is a prompt change.
 
 ### 11.5 A2 — wire casing has a conventional answer
 
-Both mainstream ecosystems AgentS targets converged on the same design: a container-level default
+Both mainstream ecosystems AgentScript targets converged on the same design: a container-level default
 plus a per-field override.
 
 * **serde**: `#[serde(rename_all = "camelCase")]` on the struct, `#[serde(rename = "...")]` per
@@ -684,17 +684,17 @@ plus a per-field override.
 Adopt the shape wholesale: a `:json-case` option on `defschema` defaulting to one documented
 convention, and a `:json "..."` override on `:field`. Note the known sharp edge — pydantic has a
 reported inconsistency in how `to_camel` treats already-camelCased input — so specify the
-transform on the *AgentS* kebab-case identifier only, and define it total.
+transform on the *AgentScript* kebab-case identifier only, and define it total.
 
 ### 11.6 G8 — function coloring is a known fork with three known answers
 
 Bob Nystrom's "What Color is Your Function?" (2015) is the canonical statement of the problem
-AgentS inherits in its TS and Python backends. The three live answers:
+AgentScript inherits in its TS and Python backends. The three live answers:
 
 1. **Colorblind (Zig).** Infer async-ness; allow `async`/`await` on non-async functions, so
    libraries are agnostic to blocking vs. async I/O. Zig's newer I/O work relocates the color from
    blocking/non-blocking to io/non-io rather than eliminating it — the discourse is worth reading
-   before claiming AgentS can avoid coloring entirely.
+   before claiming AgentScript can avoid coloring entirely.
 2. **Algebraic effects (Koka).** Effects in the type signature, handlers supplying semantics, the
    effect propagating outward until handled. The most principled fit for a language that also
    wants to track fallibility (`Result`) and target purity — but it is a research-grade
@@ -716,14 +716,14 @@ On the agent loop itself, a hard `MAX_ITERATIONS` cap is standard practice (comm
 treated as a safety rail, not a tuning knob: without it a confused agent loops indefinitely.
 §9.7's `:max-iterations` should therefore be **required with a default**, not optional.
 
-Practical consequence: if `deftool` compiles to JSON Schema, AgentS gets MCP servers and both
+Practical consequence: if `deftool` compiles to JSON Schema, AgentScript gets MCP servers and both
 major provider APIs for free, and §3.3's `:response-schema` stops being bespoke.
 
 ### 11.8 A1 — reserve a namespace before you need it
 
-Haxe (nine-plus targets, the closest analogue to AgentS's ambition) reserves the identifier prefix
+Haxe (nine-plus targets, the closest analogue to AgentScript's ambition) reserves the identifier prefix
 `_hx_` for compiler-internal use, and its docs warn that generated variable names may not
-correspond to source names — which is exactly why target-specific code injection (AgentS's
+correspond to source names — which is exactly why target-specific code injection (AgentScript's
 `if-target`, G4) is hazardous without a stated mangling contract. Reserve a prefix in the spec now;
 retrofitting one after user code exists is a breaking change.
 

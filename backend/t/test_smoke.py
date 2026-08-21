@@ -1,4 +1,4 @@
-"""End-to-end: AgentS source -> Python -> executed, semantics asserted.
+"""End-to-end: AgentScript source -> Python -> executed, semantics asserted.
 
 Expected values are written from AGENT_SPEC_CORE.md, not from observing what the
 transpiler produced. A test that records current behaviour proves the pipeline

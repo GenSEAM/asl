@@ -1,10 +1,10 @@
 /**
- * AgentS-Core v0.2 — tree-sitter grammar.
+ * AgentScript Core v0.3 — tree-sitter grammar.
  * Normative source: AGENT_SPEC_CORE.md
  *
  * This is the tooling grammar (axis 2): it yields a typed AST, error recovery,
  * editor highlighting, and structural search via tree-sitter queries, which
- * ast-grep also consumes. The Lark grammar in ../agents.lark covers the
+ * ast-grep also consumes. The Lark grammar in ../as-lang.lark covers the
  * constrained-decoding path; grammar/validate.py checks both accept and reject
  * the same corpus.
  *
@@ -17,7 +17,7 @@
  */
 
 module.exports = grammar({
-  name: 'agents',
+  name: 'as_lang',
 
   word: $ => $.ident,
 
@@ -26,9 +26,12 @@ module.exports = grammar({
   rules: {
     source_file: $ => repeat($._toplevel),
 
-    _toplevel: $ => choice($.module_decl, $.defschema, $.defun, $.defenum),
+    _toplevel: $ => choice(
+      $.module_decl, $.defschema, $.defun, $.defenum,
+      $.defentry, $.defextern, $.defopaque,
+    ),
 
-    // ---------- module header (v0.2) ----------
+    // ---------- module header (v0.2, :extern added in v0.3) ----------
 
     module_decl: $ => seq(
       '(', 'module', field('path', $.mod_path), repeat($.module_opt), ')'
@@ -37,9 +40,16 @@ module.exports = grammar({
       seq(':doc', field('doc', $.string)),
       seq(':export', '[', repeat(field('export', $.ident)), ']'),
       seq(':import', '[', repeat($.import_spec), ']'),
+      seq(':extern', '[', repeat($.extern_spec), ']'),
     ),
     import_spec: $ => seq(
       '(', field('path', $.mod_path), ':as', field('alias', $.ident), ')'
+    ),
+    // The host package name appears here and nowhere else, so a module's
+    // foreign dependencies are extractable without reading its body.
+    extern_spec: $ => seq(
+      '(', field('host', $.ident), field('package', $.string),
+      ':as', field('alias', $.ident), ')'
     ),
 
     // Type variables are bound explicitly, so a name is a type variable because
@@ -86,8 +96,51 @@ module.exports = grammar({
       field('params', $.params),
       '->',
       field('return_type', $._type),
-      optional(seq(':doc', field('doc', $.string))),
+      repeat($.decl_opt),
       repeat1(field('body', $._expr)), ')'
+    ),
+
+    decl_opt: $ => choice(
+      seq(':doc', field('doc', $.string)),
+      seq(':effects', '[', repeat(field('effect', $.ident)), ']'),
+    ),
+
+    // Exactly one per program. Unnamed, because an entry point declared by
+    // spelling would make `main` magic in a language where nothing else is.
+    defentry: $ => seq(
+      '(', 'defentry',
+      field('params', $.params),
+      '->',
+      field('return_type', $._type),
+      repeat($.decl_opt),
+      repeat1(field('body', $._expr)), ')'
+    ),
+
+    // A host type the language passes but cannot inspect. Without it, binding
+    // generation would stall on the first type the host does not share.
+    defopaque: $ => seq(
+      '(', 'defopaque',
+      field('name', $.type_name),
+      ':doc', field('doc', $.string), ')'
+    ),
+
+    // The declared type is the SUCCESS type: every call site sees
+    // (Result T String). The name is kebab-case like every other identifier and
+    // reaches the host through §8 mangling; :symbol overrides that for the names
+    // mangling cannot reproduce.
+    defextern: $ => seq(
+      '(', 'defextern',
+      field('name', $.qualified),
+      field('params', $.params),
+      '->',
+      field('return_type', $._type),
+      repeat($.extern_opt), ')'
+    ),
+
+    extern_opt: $ => choice(
+      seq(':doc', field('doc', $.string)),
+      seq(':target', field('target', $.keyword)),
+      seq(':symbol', field('symbol', $.string)),
     ),
 
     params: $ => seq('[', repeat($.param), ']'),

@@ -27,3 +27,21 @@ This file groups d/c/r/l entries for the lang/ffi module.
   writing applications, which it cannot, because applications are mostly ecosystem. The defensible
   framing inverts it: keep the ecosystem, replace only the part where the incumbent is provably
   weakest — the untyped, exception-carrying boundary that its own type checker cannot see.
+
+### [d-7a55] A foreign function is named in the language's own case, with an explicit escape
+- **Date**: 2026-08-21
+- **Status**: Active
+- **Cluster**: lang/ffi
+- **Description**: `defextern` names its function in kebab-case like every other identifier and
+  reaches the host through the §8 mangling that already exists; `:symbol "..."` overrides that for
+  the spellings mangling cannot reproduce. The alternative — writing the host spelling directly —
+  was rejected because `pl/read_csv` is not a name the identifier rule can lex.
+- **Rationale**: Reusing §8 means the boundary introduces no second naming convention, and it means
+  `read-csv` reaching `read_csv` costs nothing. But §8 deliberately does not special-case acronyms,
+  so it cannot round-trip every host name; `:symbol` makes that failure explicit at the one
+  declaration where it happens instead of silently resolving to a name the host does not have. The
+  generator emits it exactly when the round trip fails, never always and never never.
+- **Why Non-Obvious**: allowing the host spelling verbatim looks like the simpler design and
+  removes a concept. It also breaks the lexical rule for every snake_case ecosystem, which is most
+  of them — and the specification's own handbook shipped an unparseable example for exactly this
+  reason before a gate caught it.

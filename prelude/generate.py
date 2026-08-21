@@ -22,17 +22,55 @@ SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 HANDBOOK = ROOT / "HANDBOOK.md"
 
 SEC_ORDER = ["Arithmetic", "Comparison and logic", "String", "Numeric conversion",
-             "List", "Map", "Option, Result, Pair"]
+             "List", "Map", "Option, Result, Pair", "I/O"]
+
+
+def params(type_str: str) -> list[str]:
+    """The declared parameter types, split at nesting depth zero.
+
+    Both splits have to respect depth or higher-order and constructed types are
+    miscounted: a naive `split("->")` cuts inside `(fn [A] -> B)`, and a naive
+    `split()` reads `(Map K V)` as three parameters. That miscount is not
+    cosmetic — it is what the handbook shows an agent as the call shape.
+    """
+    depth, arrow = 0, -1
+    for i, ch in enumerate(type_str):
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "-" and depth == 0 and type_str[i:i + 2] == "->":
+            arrow = i
+    lhs = (type_str if arrow < 0 else type_str[:arrow]).strip()
+    if not lhs:
+        return []
+    out, cur, depth = [], "", 0
+    for ch in lhs:
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        if ch == " " and depth == 0:
+            if cur.strip():
+                out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if cur.strip():
+        out.append(cur.strip())
+    return out
+
+
+ARG_NAMES = ["a", "b", "c", "d", "e"]
 
 
 def signature(b: dict) -> str:
     """`(name a b)` rendered from the declared type, so arity cannot drift."""
-    lhs = b["type"].split("->")[0].strip()
-    n = 0 if not lhs else len(lhs.split())
-    names = ["a", "b", "c", "d"][:n]
     if "..." in b["type"]:
         return f"({b['name']} a b …)"
-    return f"({b['name']}{''.join(' ' + x for x in names)})"
+    n = len(params(b["type"]))
+    assert n <= len(ARG_NAMES), f"{b['name']}: arity {n} exceeds argument names"
+    return f"({b['name']}{''.join(' ' + x for x in ARG_NAMES[:n])})"
 
 
 def spec_tables() -> str:
@@ -53,7 +91,7 @@ def handbook() -> str:
     p = PRELUDE
     sf = p["special_forms"]
     lines = [
-        "# AgentS-Core — agent handbook",
+        "# AgentScript Core — agent handbook",
         "",
         "**Generated from `prelude/prelude.json`. Do not edit.**",
         "",
@@ -89,13 +127,19 @@ def handbook() -> str:
         "5. Lookups that can fail return `(Option T)`. They never throw.",
         "6. Read a record field with `(.-field r)`. Build one with `(Point :x 1 :y 2)`.",
         "7. A name is a type variable only if it appears in that declaration's `{ }`.",
+        "8. Anything that touches the outside returns a `Result`, and its caller declares "
+        "the effects it reaches — transitively, so a wrapper declares them too.",
+        "9. Every foreign call is fallible. A `defextern` returning `T` is called as "
+        "`(Result T String)` — there is no form that yields a bare host value.",
         "",
         "## Handling failure",
         "",
         "```lisp",
-        "(match (string-to-int64 s)      ; take apart an Option or Result",
-        "  ((some n) n)",
-        "  ((none)   0))",
+        "(defun or-zero [(s String)] -> Int64",
+        '  :doc "match takes an Option or a Result apart."',
+        "  (match (string-to-int64 s)",
+        "    ((some n) n)",
+        "    ((none)   0)))",
         "",
         "(defun f [(s String)] -> (Result Int64 String)",
         '  :doc "try unwraps ok, or returns the err from f immediately."',
@@ -104,6 +148,77 @@ def handbook() -> str:
         "```",
         "",
         "`try` is legal only inside a `defun` returning a `Result`. Prefer it over nested `match`.",
+        "",
+        "## Using another module",
+        "",
+        "Only `:export`ed names are reachable, and only through the alias.",
+        "",
+        "```lisp",
+        "(module report/render",
+        '  :doc "Render a tally line."',
+        "  :export [line]",
+        "  :import [(text/casing :as c)])",
+        "",
+        "(defun line [(w String)] -> String",
+        '  :doc "Shout one word."',
+        "  (c/shout w))                  ; alias/name, never the module path",
+        "```",
+        "",
+        "## Talking to the outside",
+        "",
+        "`defentry` is the program's single entry point. Reading, writing and running "
+        "programs are all fallible, so `try` does the unwrapping.",
+        "",
+        "```lisp",
+        "(defun first-line [(path String)] -> (Result String String)",
+        '  :doc "First line of a file."',
+        "  :effects [fs]",
+        '  (let [(text (try (file-read path)))]',
+        '    (match (list-head (string-split text "\\n"))',
+        "      ((some l) (ok l))",
+        '      ((none)   (err "empty file")))))',
+        "",
+        "(defentry [(argv (List String))] -> (Result Unit String)",
+        '  :doc "Print the commit, then the first line of the file named by argv."',
+        "  :effects [console fs proc]",
+        '  (let [(head (try (process-run "git" (list "rev-parse" "HEAD") "")))',
+        '        (line (try (first-line (option-or (list-head argv) ""))))]',
+        "    (try (print (.-stdout head)))   ; argv is a list — never a shell string",
+        "    (println line)))",
+        "```",
+        "",
+        "## Using a host library",
+        "",
+        "`:extern` names the host package, `defextern` declares one of its functions, "
+        "and `defopaque` names a host type this language only passes along. **Every "
+        "foreign call returns a `Result`** — the declared type is the success type.",
+        "",
+        "```lisp",
+        "(module data/frames",
+        '  :doc "Typed total boundary over the host dataframe library."',
+        "  :export [row-count]",
+        '  :extern [(py "polars" :as pl)])',
+        "",
+        "(defopaque DataFrame",
+        '  :doc "A host value this language passes but cannot inspect.")',
+        "",
+        "(defextern pl/read-csv [(path String)] -> DataFrame",
+        '  :doc "Read a CSV into a dataframe."',
+        "  :target :py",
+        '  :symbol "read_csv")        ; the host spelling, which kebab-case cannot reach',
+        "",
+        "(defextern pl/height [(df DataFrame)] -> Int64",
+        '  :doc "Row count of a dataframe."',
+        "  :target :py)",
+        "",
+        "(defun row-count [(path String)] -> (Result Int64 String)",
+        '  :doc "Rows in a CSV, or the host failure as a value."',
+        "  (let [(df (try (pl/read-csv path)))]",
+        "    (ok (try (pl/height df)))))",
+        "```",
+        "",
+        "A module with any `defextern` belongs to that one ecosystem: it is not portable, "
+        "and a transpiler for another target refuses it by name.",
         "",
         "## Never write this",
         "",
@@ -116,6 +231,16 @@ def handbook() -> str:
         "| `(defun f (x Int64) ...)` | `(defun f [(x Int64)] ...)` — parameters are a vector |",
         "| `(string->int64 s)` | `(string-to-int64 s)` — `->` is the return arrow only |",
         "| `(nth xs 0)` | `(list-get xs 0)` — only names on this page exist |",
+        "| `(string-length (file-read p))` | `(string-length (try (file-read p)))` — "
+        "every outside call is a `Result` |",
+        '| `(process-run "git rev-parse HEAD" ...)` | '
+        '`(process-run "git" (list "rev-parse" "HEAD") "")` — argv is a list |',
+        "| a `defun` calling `println` with no `:effects` | `:effects [console]` — "
+        "name the effect you reach |",
+        "| `:effects [io]` | `io` is not an effect; it is `console`, `stdin`, `fs`, "
+        "`env` or `proc` |",
+        "| `(defextern f [(x Int64)] -> Int64 :doc \"…\")` | add `:target` — a foreign "
+        "declaration names its ecosystem |",
         "",
         "## Forms",
         "",
@@ -124,12 +249,20 @@ def handbook() -> str:
         f"- Constructors: {', '.join('`' + x + '`' for x in sf['constructors'])}",
         f"- Patterns: {', '.join('`' + x + '`' for x in sf['patterns'])}, "
         "a literal, a name (binds), or `_`",
+        f"- Effects: {', '.join('`' + x + '`' for x in p['effects'])} — the only names "
+        "`:effects` accepts. Declare what you reach and nothing more: a target "
+        "that cannot provide an effect refuses the module before it is built "
+        "(a browser has `console` only).",
         "",
         "## Types",
         "",
         f"- Primitive: {', '.join('`' + x + '`' for x in p['types']['primitive'])}",
         f"- Constructed: {', '.join('`(' + x + ' …)`' for x in p['types']['constructed'])}",
         f"- `Int` means `Int64`.",
+        "- Built-in records, read with `.-field`: "
+        + "; ".join(f"`{n}` (" + ", ".join(f"`.-{f[0]}`" for f in fs) + ")"
+                    for n, fs in p["types"]["records"].items())
+        + ".",
         "",
         "## Vocabulary",
         "",
@@ -145,17 +278,25 @@ def handbook() -> str:
     return "\n".join(lines)
 
 
-def validate_templates() -> list[str]:
-    """Every lowering template must format cleanly at its declared arity.
+def validate_prelude() -> list[str]:
+    """Everything about prelude.json that must hold before anything is generated.
 
-    Literal braces are the trap: a Python empty-dict lowering of `{}` is read as
-    a format placeholder and fails at transpile time, far from its cause. Braces
-    intended literally must be doubled in prelude.json.
+    Two classes of defect, both of which surface far from their cause otherwise.
+    A lowering template must format cleanly at its declared arity — literal
+    braces are the trap, since a Python empty-dict lowering of `{}` is read as a
+    placeholder and fails at transpile time. And an effect name must be one the
+    top-level `effects` list declares, or it reaches the checker as a rule about
+    an effect that does not exist.
     """
     bad = []
+    declared_effects = set(PRELUDE["effects"])
     for b in PRELUDE["builtins"]:
-        lhs = b["type"].split("->")[0].strip()
-        n = 0 if not lhs else len(lhs.split())
+        # An effect name no declaration list mentions is a typo that would reach
+        # the checker as a rule about an effect that does not exist.
+        for eff in b.get("effects", ()):
+            if eff not in declared_effects:
+                bad.append(f"{b['name']}: undeclared effect {eff!r}")
+        n = len(params(b["type"]))
         for tgt in ("py", "js", "rs", "sw"):
             tpl = b.get(tgt)
             if tpl is None:
@@ -163,10 +304,18 @@ def validate_templates() -> list[str]:
                 continue
             try:
                 if "{*}" not in tpl:
-                    tpl.format(*[f"a{i}" for i in range(max(n, 4))])
+                    tpl.format(*[f"a{i}" for i in range(n)])
             except Exception as exc:
                 bad.append(f"{b['name']} [{tgt}] {tpl!r}: {exc}")
     return bad
+
+
+# The handbook is resent on every model call, so its size is the running cost of
+# a whole measurement run. Gated in bytes rather than tokens because bytes need
+# no tokenizer and cannot drift with one: 14,995 B measured at 4,531 tokens on
+# 2026-08-21, so the ceiling below is about 5,300 tokens. Raise it deliberately,
+# with a re-measurement, or not at all.
+HANDBOOK_MAX_BYTES = 17_500
 
 
 def write(path: Path, content: str, check: bool) -> bool:
@@ -187,14 +336,20 @@ def main() -> int:
     ap.add_argument("--check", action="store_true")
     args = ap.parse_args()
 
-    broken = validate_templates()
+    broken = validate_prelude()
     if broken:
-        print("BROKEN LOWERING TEMPLATES:")
+        print("PRELUDE DEFECTS:")
         for b in broken:
             print("  " + b)
         return 1
 
-    stale = write(HANDBOOK, handbook(), args.check)
+    hb = handbook()
+    if len(hb.encode()) > HANDBOOK_MAX_BYTES:
+        print(f"HANDBOOK TOO LARGE: {len(hb.encode())}B exceeds "
+              f"{HANDBOOK_MAX_BYTES}B. It is resent on every call; either cut it "
+              f"or raise the ceiling with a fresh token measurement.")
+        return 1
+    stale = write(HANDBOOK, hb, args.check)
 
     spec = SPEC.read_text()
     head, _, rest = spec.partition("## 6. Closed vocabulary")

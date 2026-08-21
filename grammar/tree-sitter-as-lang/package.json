@@ -1,0 +1,7 @@
+{
+  "name": "tree-sitter-as-lang",
+  "version": "0.1.0",
+  "description": "tree-sitter grammar for AgentScript (as-lang)",
+  "private": true,
+  "tree-sitter": [{ "scope": "source.as", "file-types": ["as"] }]
+}

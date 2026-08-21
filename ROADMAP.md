@@ -1,17 +1,23 @@
-# ROADMAP.md — AgentS project state and handoff
+# ROADMAP.md — as-lang (AgentScript) project state and handoff
 
 Written to be read cold. A session starting from zero should be able to resume from this file
 alone, plus `AGENTS.md` for commands and `.pcp/INDEX.md` for recorded intent.
 
-**Last updated:** 2026-08-21 · **Head commit at writing:** `8679362`
+**Last updated:** 2026-08-21 · **Head commit at writing:** `970568c`
 
 ---
 
 ## 1. What this project is
 
-AgentS is an S-expression language designed so that LLM agents can generate large, reusable units
-of working code in a single pass, transpiled to native Rust, Kotlin and Swift (the priority
-targets), with TypeScript and Python secondary. Go was a priority target until 2026-08-21 and is
+AgentScript — every searchable identifier is `as-lang`, and source files are `.as` — is an
+S-expression language designed so that LLM agents can generate large, reusable units of working
+code in a single pass, transpiled to native Rust, Kotlin and Swift (the priority targets), with
+TypeScript and Python secondary.
+
+Since v0.3 the language also has a reason to exist that is not about syntax: a **total foreign
+boundary**. A host library is declared with types and every foreign call yields `(Result T
+String)`, which is strictly more than the host's own checker can express, because host type stubs
+carry no exception information at all (PCP `d-4b8c`). Go was a priority target until 2026-08-21 and is
 now best-effort: wanted eventually, gated and planned for by nothing. `EXPERIMENT.md` amendment
 `2026-08-21-b` and PCP `d-bf87` carry the reasoning; mobile access is the motive and is deferred
 (PCP `l-720b`).
@@ -35,7 +41,7 @@ Everything below was checked by a command whose output was read, not inferred.
 
 | Area | State |
 |---|---|
-| Language specification | **v0.2 complete** — `AGENT_SPEC_CORE.md` |
+| Language specification | **v0.3 complete** — `AGENT_SPEC_CORE.md`; adds I/O (§10) and FFI (§11) |
 | Grammars | **two, agreeing** — Lark (Earley) and tree-sitter |
 | Tooling (AST, structural search) | **working** — queries return real captures |
 | Conformance gate | **green** — 11 fixtures × 2 grammars, 0 failures |
@@ -45,8 +51,16 @@ Everything below was checked by a command whose output was read, not inferred.
 | Swift backend | **working** — corpus transpiles and `swiftc` accepts it |
 | Differential gate | **green** — Python, Rust and Swift agree on every case |
 | Kotlin backend | priority target, no transpiler — toolchain not installed |
+| WebAssembly | **works via the Rust backend** — pure modules only; effectful ones refused by capability |
 | JavaScript backend | lowering rules exist in the prelude, no transpiler |
-| Semantic checker | **does not exist** |
+| I/O surface | **working** — 11 builtins, all total; executed by `backend/t/test_io.py` |
+| Foreign boundary | **specified and lowered** — `defextern`/`defopaque`/`:extern`, Python target |
+| Binding generator | **working** — `tools/bindgen/from_pyi.py`, 8 tests |
+| Coverage gate | **green** — 103/103 builtins appear in an example |
+| Handbook example gate | **green** — every fenced block parses under both grammars |
+| Grammar shape gate | **green** — both grammars find the same qualified names, not just the same verdict |
+| Overflow parity | **green** — all three backends trap; Rust checked under `-O`, where it used to wrap |
+| Semantic checker | **12 of 15 §9 rules** — `checker/check.py`; rules 3 and 6 need inference |
 | Reference interpreter | **not built, deliberately** — see below |
 | Measurement harness | **not started — blocked**, see §5 |
 
@@ -55,8 +69,11 @@ Everything below was checked by a command whose output was read, not inferred.
 0. `prelude/prelude.json` — the vocabulary, authoritative. The specification tables and the
    handbook are generated from it; nothing else may restate it.
 1. `AGENT_SPEC_CORE.md` — the language. **Normative** for the forms. Start here.
-1b. `prelude/HANDBOOK.md` — generated agent-facing reference, ~2,600 tokens. This is the artifact
-   that goes into a prompt.
+1b. `prelude/HANDBOOK.md` — generated agent-facing reference, 4,531 measured tokens. This is the
+   artifact that goes into a prompt, and every example in it is now parsed by a gate.
+1c. `.claude/skills/as-lang/SKILL.md` — the short working loop: what to read, what to run, what
+   the four rules are. Read before editing `.as`; it is not a substitute for the handbook.
+1d. `README.md` — the front door, including an explicit list of what is not true yet.
 2. `ROADMAP.md` — this file.
 3. `EXPERIMENT.md` — pre-registered measurement protocol and pass/fail thresholds. **Read §9
    first**: two amendments supersede parts of the body.
@@ -95,8 +112,16 @@ Source: `RESEARCH_REPORT.md` §3.
 
 ## 4. Immediate next step
 
-**Build the semantic checker.** It is the next load-bearing component, ahead of interpreter and
-backends. Recorded as PCP `l-78ae`.
+**Finish the type layer of the checker.** `checker/check.py` now decides twelve of §9's fifteen
+rules and sits in the gate sequence; `--rules` prints the split. What is left is the part that
+needs a type system and cannot be faked structurally:
+
+* **rule 3/6 — types.** Inference at call sites, and the judgement that no numeric operation mixes
+  `Int64` with `Float64`. This is the half the located evidence says matters most
+  (`RESEARCH_REPORT.md` §5), and it is the reason a clean check still does not mean well-typed.
+
+Everything else §9 lists is enforced. Written in Python deliberately, as the oracle the eventual
+Rust frontend must agree with (PCP `d-c4a1`).
 
 Why this and not backends: the conformance gate proves only that two parsers agree on *shape*.
 Nothing currently rejects a program that imports a cycle, calls a function with the wrong arity,
@@ -115,8 +140,14 @@ grammar can express:
 - type-variable binding and scope
 - `match` exhaustiveness, and arity of enum-case patterns
 - `try` only inside a `defun` returning a compatible `Result`
-- reserved `agents-` prefix
+- reserved `as-` prefix
 - mandatory `:doc` on the module header and on every exported `defun`
+- **`:effects [io]` declared wherever an effectful builtin is reached, transitively** (§9 rule 12)
+- **a foreign result used as a value rather than a `Result`** (§9 rule 5 over §11)
+- **`:target` present on every `defextern`** (§9 rule 13) — the *transpile* half of this rule is
+  already enforced by the backends and asserted by `check_corpus.py`
+- **no `defopaque` value inspected** (§9 rule 14)
+- **at most one `defentry`** (§9 rule 15)
 
 Fixtures for semantic-only rules live in `grammar/corpus/semantic/`. They **must parse** — a
 grammar that rejects them is over-tight. Today that directory holds one fixture and the gate
@@ -127,18 +158,20 @@ reports it as pending; each new check should add fixtures there.
 1. **Reference interpreter** — enough to execute the corpus and validate benchmark translations.
    Rust, per the priority target; tree-sitter's Rust bindings are first-class and the code survives
    into the compiler frontend.
-2. **I/O surface** — now on the critical path, PCP `r-56bf`. The benchmark is whole programs that read
-   and write, and Core has no I/O at all. Decide at the same time whether effects are tracked in
-   the type system; leaving that implicit is cheap now and is what forces function colouring later.
+2. ~~**I/O surface**~~ — **done** in v0.3 (§10), and the effect question was decided rather than
+   deferred: effects are **declared and checked**, not inferred and not carried in the return type
+   (§4.6). The failure type is the host's `String` message; a structured union was rejected for now
+   because its cases could not be made identical across three hosts, which the differential gate
+   would have caught as a disagreement.
 3. **Python and JavaScript backends** — the measurement targets. Rust, Kotlin and Swift are the
    native targets and are unchanged as a product goal.
-4. **Benchmark harness** — terminal-bench, comparing generated AgentS transpiled to Python/JS
+4. **Benchmark harness** — terminal-bench, comparing generated AgentScript transpiled to Python/JS
    against real Python/JS solutions to the same tasks.
 5. **Measurement** — see §5. Blocked.
 6. **Native backends** — Rust and Swift exist; Kotlin is next and needs a toolchain installed
    first. Only Rust raises the ownership question (PCP `l-880d`); the other two are
    reference-counted or garbage-collected, which is part of why they are the cheaper targets.
-7. **Self-hosting probe** — write the AgentS lexer in AgentS. Prediction on record: it needs
+7. **Self-hosting probe** — write the AgentScript lexer in AgentScript. Prediction on record: it needs
    closed unions, which v0.2 now has, so the probe is newly worth running.
 
 ---
@@ -173,7 +206,15 @@ The harness can be written and unit-tested without any of this. It cannot be run
 * **Vocabulary coverage 23%.** Only 22 of 92 declared builtins appear in any example.
   The closure gate proves no example uses an *undefined* name; it says nothing about defined names
   no example uses, and that direction is what degrades generation quality. PCP `l-3434`.
-* **No semantic checking at all.** See §4.
+* **No type checking.** See §4. Twelve of §9's fifteen rules are enforced; the two that need
+  inference are not, so a `.as` file that parses and checks is **not** known to type-check. The
+  target compilers are still the strongest signal there.
+* **The foreign boundary is lowered only for the Python target.** Rust and Swift refuse a foreign
+  module by name, which is correct and asserted, but it means the total-boundary claim is
+  demonstrated in one ecosystem so far.
+* **Cross-module resolution does not exist.** `alias/member` flattens to a single mangled name, so
+  a module importing another does not link; `06-module.as` is skipped by every backend for that
+  reason.
 * **Ownership model unrecorded.** The Rust backend was built anyway, on the conservative
   strategy of cloning at every use site, so the open question is now the cost of that rather than
   whether it compiles. It is a Rust-only question: the Swift backend never had to answer it.

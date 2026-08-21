@@ -1,16 +1,15 @@
 {
- "$comment": "SINGLE SOURCE OF TRUTH for the AgentS-Core vocabulary. The specification tables, both grammars, the agent handbook, the closure gate and the backends are all GENERATED from this file. Never edit those by hand; edit here and run prelude/generate.py.",
- "version": "0.2",
- "runtime": {
-  "py": "_as",
-  "js": "_as"
- },
+ "$comment": "SINGLE SOURCE OF TRUTH for the AgentScript Core vocabulary. The specification tables, both grammars, the agent handbook, the closure gate and the backends are all GENERATED from this file. Never edit those by hand; edit here and run prelude/generate.py.",
+ "version": "0.3",
  "special_forms": {
   "declarations": [
    "module",
    "defschema",
    "defenum",
-   "defun"
+   "defun",
+   "defentry",
+   "defextern",
+   "defopaque"
   ],
   "expressions": [
    "fn",
@@ -56,6 +55,37 @@
   ],
   "aliases": {
    "Int": "Int64"
+  },
+  "records": {
+   "Pair": [
+    [
+     "first",
+     "A",
+     "The first component"
+    ],
+    [
+     "second",
+     "B",
+     "The second component"
+    ]
+   ],
+   "ProcessResult": [
+    [
+     "exit-code",
+     "Int64",
+     "Process exit status"
+    ],
+    [
+     "stdout",
+     "String",
+     "Captured standard output"
+    ],
+    [
+     "stderr",
+     "String",
+     "Captured standard error"
+    ]
+   ]
   }
  },
  "builtins": [
@@ -64,30 +94,30 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Sum.",
-   "py": "({0} + {1})",
-   "js": "({0} + {1})",
-   "rs": "({0} + {1})",
-   "sw": "({0} + {1})"
+   "py": "_as.add({0}, {1})",
+   "js": "_as.add({0}, {1})",
+   "rs": "rt::add({0}, {1})",
+   "sw": "RT.add({0}, {1})"
   },
   {
    "name": "-",
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Difference.",
-   "py": "({0} - {1})",
-   "js": "({0} - {1})",
-   "rs": "({0} - {1})",
-   "sw": "({0} - {1})"
+   "py": "_as.sub({0}, {1})",
+   "js": "_as.sub({0}, {1})",
+   "rs": "rt::sub({0}, {1})",
+   "sw": "RT.sub({0}, {1})"
   },
   {
    "name": "*",
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Product.",
-   "py": "({0} * {1})",
-   "js": "({0} * {1})",
-   "rs": "({0} * {1})",
-   "sw": "({0} * {1})"
+   "py": "_as.mul({0}, {1})",
+   "js": "_as.mul({0}, {1})",
+   "rs": "rt::mul({0}, {1})",
+   "sw": "RT.mul({0}, {1})"
   },
   {
    "name": "/",
@@ -134,20 +164,20 @@
    "sec": "Arithmetic",
    "type": "N -> N",
    "doc": "Arithmetic negation.",
-   "py": "(-{0})",
-   "js": "(-{0})",
-   "rs": "(-{0})",
-   "sw": "(-{0})"
+   "py": "_as.neg({0})",
+   "js": "_as.neg({0})",
+   "rs": "rt::neg({0})",
+   "sw": "RT.neg({0})"
   },
   {
    "name": "abs",
    "sec": "Arithmetic",
    "type": "N -> N",
    "doc": "Absolute value.",
-   "py": "abs({0})",
-   "js": "Math.abs({0})",
-   "rs": "({0}).abs()",
-   "sw": "abs({0})"
+   "py": "_as.absv({0})",
+   "js": "_as.absv({0})",
+   "rs": "rt::absv({0})",
+   "sw": "RT.absv({0})"
   },
   {
    "name": "min",
@@ -978,6 +1008,204 @@
    "js": "_as.pair({0}, {1})",
    "rs": "({0}, {1})",
    "sw": "ASPair({0}, {1})"
+  },
+  {
+   "name": "read-line",
+   "sec": "I/O",
+   "type": "-> (Result (Option String) String)",
+   "doc": "Read one line from standard input without its newline, or none at end of input.",
+   "py": "_as.read_line()",
+   "js": "_as.readLine()",
+   "rs": "rt::read_line()",
+   "sw": "RT.readLine()",
+   "effects": [
+    "stdin"
+   ]
+  },
+  {
+   "name": "read-all",
+   "sec": "I/O",
+   "type": "-> (Result String String)",
+   "doc": "Read all of standard input.",
+   "py": "_as.read_all()",
+   "js": "_as.readAll()",
+   "rs": "rt::read_all()",
+   "sw": "RT.readAll()",
+   "effects": [
+    "stdin"
+   ]
+  },
+  {
+   "name": "print",
+   "sec": "I/O",
+   "type": "String -> (Result Unit String)",
+   "doc": "Write to standard output with no trailing newline.",
+   "py": "_as.print_({0})",
+   "js": "_as.print_({0})",
+   "rs": "rt::print_({0})",
+   "sw": "RT.print_({0})",
+   "effects": [
+    "console"
+   ]
+  },
+  {
+   "name": "println",
+   "sec": "I/O",
+   "type": "String -> (Result Unit String)",
+   "doc": "Write to standard output followed by a newline.",
+   "py": "_as.println({0})",
+   "js": "_as.println({0})",
+   "rs": "rt::println({0})",
+   "sw": "RT.println({0})",
+   "effects": [
+    "console"
+   ]
+  },
+  {
+   "name": "eprintln",
+   "sec": "I/O",
+   "type": "String -> (Result Unit String)",
+   "doc": "Write to standard error followed by a newline.",
+   "py": "_as.eprintln({0})",
+   "js": "_as.eprintln({0})",
+   "rs": "rt::eprintln({0})",
+   "sw": "RT.eprintln({0})",
+   "effects": [
+    "console"
+   ]
+  },
+  {
+   "name": "file-read",
+   "sec": "I/O",
+   "type": "String -> (Result String String)",
+   "doc": "Read a whole file as UTF-8 text.",
+   "py": "_as.file_read({0})",
+   "js": "_as.fileRead({0})",
+   "rs": "rt::file_read({0})",
+   "sw": "RT.fileRead({0})",
+   "effects": [
+    "fs"
+   ]
+  },
+  {
+   "name": "file-write",
+   "sec": "I/O",
+   "type": "String String -> (Result Unit String)",
+   "doc": "Write UTF-8 text to a file, replacing any existing contents.",
+   "py": "_as.file_write({0}, {1})",
+   "js": "_as.fileWrite({0}, {1})",
+   "rs": "rt::file_write({0}, {1})",
+   "sw": "RT.fileWrite({0}, {1})",
+   "effects": [
+    "fs"
+   ]
+  },
+  {
+   "name": "file-exists?",
+   "sec": "I/O",
+   "type": "String -> Bool",
+   "doc": "True when the path exists.",
+   "py": "_as.file_exists({0})",
+   "js": "_as.fileExists({0})",
+   "rs": "rt::file_exists({0})",
+   "sw": "RT.fileExists({0})",
+   "effects": [
+    "fs"
+   ]
+  },
+  {
+   "name": "env-get",
+   "sec": "I/O",
+   "type": "String -> (Option String)",
+   "doc": "Value of an environment variable, or none when unset.",
+   "py": "_as.env_get({0})",
+   "js": "_as.envGet({0})",
+   "rs": "rt::env_get({0})",
+   "sw": "RT.envGet({0})",
+   "effects": [
+    "env"
+   ]
+  },
+  {
+   "name": "args",
+   "sec": "I/O",
+   "type": "-> (List String)",
+   "doc": "Command-line arguments, excluding the program name.",
+   "py": "_as.args()",
+   "js": "_as.args()",
+   "rs": "rt::args()",
+   "sw": "RT.args()",
+   "effects": [
+    "env"
+   ]
+  },
+  {
+   "name": "process-run",
+   "sec": "I/O",
+   "type": "String (List String) String -> (Result ProcessResult String)",
+   "doc": "Run a program with an argument list and standard input, capturing its output. The argument list is never a shell string, so there is no quoting to get wrong.",
+   "py": "_as.process_run({0}, {1}, {2})",
+   "js": "_as.processRun({0}, {1}, {2})",
+   "rs": "rt::process_run({0}, {1}, {2})",
+   "sw": "RT.processRun({0}, {1}, {2})",
+   "effects": [
+    "proc"
+   ]
   }
- ]
+ ],
+ "effects": [
+  "console",
+  "stdin",
+  "fs",
+  "env",
+  "proc"
+ ],
+ "targets": {
+  "py": {
+   "effects": [
+    "console",
+    "stdin",
+    "fs",
+    "env",
+    "proc"
+   ],
+   "note": "CPython host"
+  },
+  "js": {
+   "effects": [
+    "console",
+    "stdin",
+    "fs",
+    "env",
+    "proc"
+   ],
+   "note": "Node host"
+  },
+  "rs": {
+   "effects": [
+    "console",
+    "stdin",
+    "fs",
+    "env",
+    "proc"
+   ],
+   "note": "native host"
+  },
+  "sw": {
+   "effects": [
+    "console",
+    "stdin",
+    "fs",
+    "env",
+    "proc"
+   ],
+   "note": "native host"
+  },
+  "wasm": {
+   "effects": [
+    "console"
+   ],
+   "note": "browser via the Rust backend and wasm32-unknown-unknown; no filesystem, no environment, no subprocesses"
+  }
+ }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AgentS-Core -> Python transpiler.
+"""AgentScript Core -> Python transpiler.
 
 Lowering rules for builtins are NOT written here: they come from
 prelude/prelude.json, the single source of truth. This file owns only the
@@ -9,11 +9,14 @@ Scope: the subset needed for a first end-to-end run — module, defschema,
 defenum, defun, fn, let, if, cond, match, try, calls, field access, literals.
 """
 import json
+import keyword
 import re
 import sys
 from pathlib import Path
 
 from lark import Lark, Tree, Token
+
+from boundary import NotLowered, TargetMismatch, check_target, extern_symbol
 
 ROOT = Path(__file__).parent.parent
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
@@ -23,7 +26,9 @@ LOWER = {b["name"]: b["py"] for b in PRELUDE["builtins"]}
 # Form heads are named terminals, so Lark keeps them as children. Filtering them
 # centrally beats per-handler index arithmetic, which breaks the moment an
 # optional child is added to a rule.
-FORM_KW = {"DEFUN", "DEFSCHEMA", "DEFENUM", "MODULE", "IF", "COND", "MATCH",
+FORM_KW = {"DEFENTRY", "DEFEXTERN", "DEFOPAQUE", "EXTERN_KW", "EFFECTS_KW",
+           "TARGET_KW", "SYMBOL_KW",
+           "DEFUN", "DEFSCHEMA", "DEFENUM", "MODULE", "IF", "COND", "MATCH",
            "TRY", "LET", "FN", "ARROW", "ELSE_KW", "CASE_KW", "FIELD_KW",
            "DOC_KW", "EXPORT_KW", "IMPORT_KW", "AS_KW", "DEFAULT_KW", "JSON_KW",
            "OK", "ERR", "SOME", "NONE", "LIST", "CONS", "PAIR"}
@@ -31,17 +36,25 @@ FORM_KW = {"DEFUN", "DEFSCHEMA", "DEFENUM", "MODULE", "IF", "COND", "MATCH",
 
 def mangle(name: str) -> str:
     """kebab-case -> snake_case, per AGENT_SPEC_CORE.md section 8."""
+    if "/" in name:
+        # `alias/member` flattens to one name: the alias is a module-local label,
+        # not a runtime object, so there is nothing to attribute-access. This
+        # previously fell through and left the `/` in the output.
+        return "_".join(mangle(part) for part in name.split("/"))
     if name.endswith("?"):
         name = "is-" + name[:-1]
     if name.endswith("!"):
         name = name[:-1] + "-mut"
     out = name.replace("-", "_")
-    return out + "_" if out in ("None", "True", "False", "class", "def", "lambda") else out
+    # §8 requires a trailing underscore on any collision with a target keyword.
+    # A hand-written list had six entries and missed `from`, which a parameter
+    # named `from` hit immediately; the stdlib knows the whole set.
+    return out + "_" if keyword.iskeyword(out) or keyword.issoftkeyword(out) else out
 
 
 class Transpiler:
     def __init__(self):
-        self.parser = Lark((ROOT / "grammar" / "agents.lark").read_text(),
+        self.parser = Lark((ROOT / "grammar" / "as-lang.lark").read_text(),
                            start="start", parser="earley", ambiguity="resolve")
         self.enum_cases: dict[str, list[str]] = {}   # case name -> field names
         self.tmp = 0
@@ -65,21 +78,98 @@ class Transpiler:
 
     def transpile(self, src: str) -> str:
         tree = self.parser.parse(src)
+        tops = [t.children[0] for t in tree.children]
+        check_target(tops, self.TARGET, lowers_foreign=True)
         out = ["import runtime as _as", ""]
+        out += self.host_imports(tops)
         # enums first: their cases are constructors used by later definitions
-        for top in tree.children:
-            node = top.children[0]
+        for node in tops:
             if node.data == "defenum":
                 out += self.defenum(node)
-        for top in tree.children:
-            node = top.children[0]
+        for node in tops:
+            if node.data == "defopaque":
+                out += self.defopaque(node)
+        for node in tops:
             if node.data == "defschema":
                 out += self.defschema(node)
+            elif node.data == "defextern":
+                out += self.defextern(node)
             elif node.data == "defun":
                 out += self.defun(node)
+            elif node.data == "defentry":
+                out += self.defentry(node)
         return "\n".join(out) + "\n"
 
     # ---------- declarations ----------
+
+    # ---------- foreign boundary ----------
+    # The rule itself lives in backend/boundary.py: three copies of "which
+    # modules may this backend emit" is three chances to disagree.
+
+    TARGET = "py"
+
+    def host_imports(self, tops) -> list[str]:
+        """`:extern` is the only place a host package is named, so a module's
+        foreign dependencies are derivable without reading any body."""
+        out = []
+        for n in tops:
+            if n.data != "module_decl":
+                continue
+            for o in n.children:
+                if not (isinstance(o, Tree) and o.data == "module_opt"):
+                    continue
+                if str(o.children[0]) != ":extern":
+                    continue
+                for spec in o.children:
+                    if isinstance(spec, Tree) and spec.data == "extern_spec":
+                        sk = self.kids(spec)      # kids() drops the `:as` keyword
+                        host, pkg, alias = (self.tok(sk[0]),
+                                            self.tok(sk[1]).strip('"'),
+                                            self.tok(sk[2]))
+                        if host == self.TARGET:
+                            out.append(f"import {pkg} as _host_{mangle(alias)}")
+        if not out:
+            return []
+        # Stated once for the module rather than on every wrapper: the note is
+        # about the boundary, and repeating it per function said nothing the
+        # `attempt` call below does not already say.
+        return (["# Foreign boundary: each wrapper's declared type is the SUCCESS type,",
+                 "# so a host exception becomes an err value here and never escapes."]
+                + out + [""])
+
+    def defopaque(self, node) -> list[str]:
+        name = self.tok(self.kids(node)[0])
+        # `object` is a stand-in, not a shape: the language never inspects the
+        # value, so any binding that survives an isinstance would do.
+        return [f"{name} = object  # opaque host type", ""]
+
+    def defextern(self, node) -> list[str]:
+        kids = self.kids(node)
+        qual = self.tok(kids[0])
+        alias, member = qual.split("/")
+        symbol = extern_symbol(node) or mangle(member)
+        params = [mangle(self.tok(p.children[0])) for p in kids[1].children
+                  if isinstance(p, Tree) and p.data == "param"]
+        call = f"_host_{mangle(alias)}.{symbol}({', '.join(params)})"
+        return [f"def {mangle(qual)}({', '.join(params)}):",
+                f"    return _as.attempt(lambda: {call})", ""]
+
+    def defentry(self, node) -> list[str]:
+        """The entry point is named with the reserved `as-` prefix, which is what
+        that prefix is reserved for: a compiler-internal name no user code owns."""
+        kids = [k for k in self.kids(node)
+                if not (isinstance(k, Tree) and k.data == "decl_opt")]
+        params = [mangle(self.tok(p.children[0])) for p in kids[0].children
+                  if isinstance(p, Tree) and p.data == "param"]
+        ti = next(i for i, k in enumerate(kids) if isinstance(k, Tree) and k.data == "type")
+        stmts, last = [], None
+        for b in kids[ti + 1:]:
+            last = self.expr(b, stmts, indent=1)
+        return ([f"def as_entry({', '.join(params)}):"] + stmts + [f"    return {last}", ""]
+                + ['if __name__ == "__main__":',
+                   "    _r = as_entry(_as.args())",
+                   '    if _r[0] == "err":',
+                   "        _as.fail(_r[1])", ""])
 
     def defschema(self, node) -> list[str]:
         kids = [k for k in self.kids(node) if not (isinstance(k, Tree) and k.data == "type_params")]
@@ -109,7 +199,7 @@ class Transpiler:
 
     def defun(self, node) -> list[str]:
         kids = [k for k in self.kids(node)
-                if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt"))]
+                if not (isinstance(k, Tree) and k.data in ("type_params", "decl_opt"))]
         name = self.tok(kids[0])
         params = [mangle(self.tok(p.children[0])) for p in kids[1].children
                   if isinstance(p, Tree) and p.data == "param"]
@@ -215,7 +305,7 @@ class Transpiler:
                 v = self.expr(b, sub, indent + 1)
             if not sub:
                 return f"(lambda {', '.join(params)}: {v})"
-            # Python lambdas are expression-only, but an AgentS lambda body may
+            # Python lambdas are expression-only, but an AgentScript lambda body may
             # need statements (a match compiles to if/elif). Emit a nested def
             # and pass its name; semantically identical, and closures behave the
             # same way.
@@ -348,4 +438,10 @@ class Transpiler:
 
 if __name__ == "__main__":
     src = Path(sys.argv[1]).read_text()
-    print(Transpiler().transpile(src))
+    try:
+        print(Transpiler().transpile(src))
+    except (TargetMismatch, NotLowered) as exc:
+        # A refusal is a result, not a crash: this is the path a module for
+        # another ecosystem takes, and a stack trace would read as a defect.
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(2)

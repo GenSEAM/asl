@@ -2,7 +2,7 @@
 results/*.json
 node_modules/
 target/
-grammar/tree-sitter-agents/src/
+grammar/tree-sitter-as-lang/src/
 package-lock.json
 .pcp/MAP.json
 .pcp/INVENTORY.md
@@ -12,4 +12,3 @@ backend/t/smoke.py
 __pycache__/
 .pytest_cache/
 bench/harness/config.json
-results/*.json

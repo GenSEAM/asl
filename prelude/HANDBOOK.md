@@ -1,8 +1,8 @@
-# AgentS-Core — agent handbook
+# AgentScript Core — agent handbook
 
 **Generated from `prelude/prelude.json`. Do not edit.**
 
-Language version 0.2. This is the complete vocabulary: if a name is not on this page, it does not exist. Write nothing else.
+Language version 0.3. This is the complete vocabulary: if a name is not on this page, it does not exist. Write nothing else.
 
 ## Shape
 
@@ -33,13 +33,17 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 5. Lookups that can fail return `(Option T)`. They never throw.
 6. Read a record field with `(.-field r)`. Build one with `(Point :x 1 :y 2)`.
 7. A name is a type variable only if it appears in that declaration's `{ }`.
+8. Anything that touches the outside returns a `Result`, and its caller declares the effects it reaches — transitively, so a wrapper declares them too.
+9. Every foreign call is fallible. A `defextern` returning `T` is called as `(Result T String)` — there is no form that yields a bare host value.
 
 ## Handling failure
 
 ```lisp
-(match (string-to-int64 s)      ; take apart an Option or Result
-  ((some n) n)
-  ((none)   0))
+(defun or-zero [(s String)] -> Int64
+  :doc "match takes an Option or a Result apart."
+  (match (string-to-int64 s)
+    ((some n) n)
+    ((none)   0)))
 
 (defun f [(s String)] -> (Result Int64 String)
   :doc "try unwraps ok, or returns the err from f immediately."
@@ -48,6 +52,73 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 ```
 
 `try` is legal only inside a `defun` returning a `Result`. Prefer it over nested `match`.
+
+## Using another module
+
+Only `:export`ed names are reachable, and only through the alias.
+
+```lisp
+(module report/render
+  :doc "Render a tally line."
+  :export [line]
+  :import [(text/casing :as c)])
+
+(defun line [(w String)] -> String
+  :doc "Shout one word."
+  (c/shout w))                  ; alias/name, never the module path
+```
+
+## Talking to the outside
+
+`defentry` is the program's single entry point. Reading, writing and running programs are all fallible, so `try` does the unwrapping.
+
+```lisp
+(defun first-line [(path String)] -> (Result String String)
+  :doc "First line of a file."
+  :effects [fs]
+  (let [(text (try (file-read path)))]
+    (match (list-head (string-split text "\n"))
+      ((some l) (ok l))
+      ((none)   (err "empty file")))))
+
+(defentry [(argv (List String))] -> (Result Unit String)
+  :doc "Print the commit, then the first line of the file named by argv."
+  :effects [console fs proc]
+  (let [(head (try (process-run "git" (list "rev-parse" "HEAD") "")))
+        (line (try (first-line (option-or (list-head argv) ""))))]
+    (try (print (.-stdout head)))   ; argv is a list — never a shell string
+    (println line)))
+```
+
+## Using a host library
+
+`:extern` names the host package, `defextern` declares one of its functions, and `defopaque` names a host type this language only passes along. **Every foreign call returns a `Result`** — the declared type is the success type.
+
+```lisp
+(module data/frames
+  :doc "Typed total boundary over the host dataframe library."
+  :export [row-count]
+  :extern [(py "polars" :as pl)])
+
+(defopaque DataFrame
+  :doc "A host value this language passes but cannot inspect.")
+
+(defextern pl/read-csv [(path String)] -> DataFrame
+  :doc "Read a CSV into a dataframe."
+  :target :py
+  :symbol "read_csv")        ; the host spelling, which kebab-case cannot reach
+
+(defextern pl/height [(df DataFrame)] -> Int64
+  :doc "Row count of a dataframe."
+  :target :py)
+
+(defun row-count [(path String)] -> (Result Int64 String)
+  :doc "Rows in a CSV, or the host failure as a value."
+  (let [(df (try (pl/read-csv path)))]
+    (ok (try (pl/height df)))))
+```
+
+A module with any `defextern` belongs to that one ecosystem: it is not portable, and a transpiler for another target refuses it by name.
 
 ## Never write this
 
@@ -60,23 +131,30 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 | `(defun f (x Int64) ...)` | `(defun f [(x Int64)] ...)` — parameters are a vector |
 | `(string->int64 s)` | `(string-to-int64 s)` — `->` is the return arrow only |
 | `(nth xs 0)` | `(list-get xs 0)` — only names on this page exist |
+| `(string-length (file-read p))` | `(string-length (try (file-read p)))` — every outside call is a `Result` |
+| `(process-run "git rev-parse HEAD" ...)` | `(process-run "git" (list "rev-parse" "HEAD") "")` — argv is a list |
+| a `defun` calling `println` with no `:effects` | `:effects [console]` — name the effect you reach |
+| `:effects [io]` | `io` is not an effect; it is `console`, `stdin`, `fs`, `env` or `proc` |
+| `(defextern f [(x Int64)] -> Int64 :doc "…")` | add `:target` — a foreign declaration names its ecosystem |
 
 ## Forms
 
-- Declarations: `module`, `defschema`, `defenum`, `defun`
+- Declarations: `module`, `defschema`, `defenum`, `defun`, `defentry`, `defextern`, `defopaque`
 - Expressions: `fn`, `let`, `if`, `cond`, `match`, `try`
 - Constructors: `ok`, `err`, `some`, `none`, `list`, `pair`
 - Patterns: `ok`, `err`, `some`, `none`, `list`, `cons`, `pair`, a literal, a name (binds), or `_`
+- Effects: `console`, `stdin`, `fs`, `env`, `proc` — the only names `:effects` accepts. Declare what you reach and nothing more: a target that cannot provide an effect refuses the module before it is built (a browser has `console` only).
 
 ## Types
 
 - Primitive: `Bool`, `Int32`, `Int64`, `Float64`, `String`, `Unit`
 - Constructed: `(List …)`, `(Option …)`, `(Result …)`, `(Pair …)`, `(Map …)`
 - `Int` means `Int64`.
+- Built-in records, read with `.-field`: `Pair` (`.-first`, `.-second`); `ProcessResult` (`.-exit-code`, `.-stdout`, `.-stderr`).
 
 ## Vocabulary
 
-All 92 names. Nothing else exists.
+All 103 names. Nothing else exists.
 
 ### Arithmetic
 
@@ -121,7 +199,7 @@ All 92 names. Nothing else exists.
 | `(string-starts-with? a b)` | `String String -> Bool` | True when the string begins with the prefix. |
 | `(string-ends-with? a b)` | `String String -> Bool` | True when the string ends with the suffix. |
 | `(string-split a b)` | `String String -> (List String)` | Split on a separator. |
-| `(string-join a b c)` | `(List String) String -> String` | Join with a separator. |
+| `(string-join a b)` | `(List String) String -> String` | Join with a separator. |
 | `(string-upper a)` | `String -> String` | Upper case. |
 | `(string-lower a)` | `String -> String` | Lower case. |
 | `(string-trim a)` | `String -> String` | Remove leading and trailing whitespace. |
@@ -147,42 +225,42 @@ All 92 names. Nothing else exists.
 | Form | Type | Meaning |
 |---|---|---|
 | `(list a b …)` | `T... -> (List T)` | Construct a list. |
-| `(list-empty? a b)` | `(List T) -> Bool` | True when the list has no elements. |
-| `(list-length a b)` | `(List T) -> Int64` | Element count. |
-| `(list-get a b c)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
-| `(list-head a b)` | `(List T) -> (Option T)` | First element, or none. |
-| `(list-tail a b)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
-| `(list-cons a b c)` | `T (List T) -> (List T)` | Prepend an element. |
-| `(list-append a b c d)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
-| `(list-reverse a b)` | `(List T) -> (List T)` | Reverse order. |
-| `(list-slice a b c d)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
-| `(list-contains? a b c)` | `(List T) T -> Bool` | True when the element occurs. |
-| `(list-index-of a b c)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
-| `(list-sort a b)` | `(List T) -> (List T)` | Stable ascending sort. |
+| `(list-empty? a)` | `(List T) -> Bool` | True when the list has no elements. |
+| `(list-length a)` | `(List T) -> Int64` | Element count. |
+| `(list-get a b)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
+| `(list-head a)` | `(List T) -> (Option T)` | First element, or none. |
+| `(list-tail a)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
+| `(list-cons a b)` | `T (List T) -> (List T)` | Prepend an element. |
+| `(list-append a b)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
+| `(list-reverse a)` | `(List T) -> (List T)` | Reverse order. |
+| `(list-slice a b c)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
+| `(list-contains? a b)` | `(List T) T -> Bool` | True when the element occurs. |
+| `(list-index-of a b)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
+| `(list-sort a)` | `(List T) -> (List T)` | Stable ascending sort. |
 | `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key. |
 | `(map a b)` | `(fn [A] -> B) (List A) -> (List B)` | Apply a function to every element. |
 | `(filter a b)` | `(fn [T] -> Bool) (List T) -> (List T)` | Keep elements satisfying a predicate. |
 | `(fold a b c)` | `(fn [B A] -> B) B (List A) -> B` | Left fold with an initial accumulator. |
 | `(range a b)` | `Int64 Int64 -> (List Int64)` | Half-open integer range; empty when start is not below end. |
-| `(zip a b c d)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
-| `(list-sum a b)` | `(List N) -> N` | Sum of elements. |
-| `(list-min a b)` | `(List T) -> (Option T)` | Least element, or none when empty. |
-| `(list-max a b)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
+| `(zip a b)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
+| `(list-sum a)` | `(List N) -> N` | Sum of elements. |
+| `(list-min a)` | `(List T) -> (Option T)` | Least element, or none when empty. |
+| `(list-max a)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
 
 ### Map
 
 | Form | Type | Meaning |
 |---|---|---|
 | `(map-empty)` | `-> (Map K V)` | The empty map. |
-| `(map-get a b c d)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
-| `(map-set a b c d)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
-| `(map-remove a b c d)` | `(Map K V) K -> (Map K V)` | Map without the key. |
-| `(map-has? a b c d)` | `(Map K V) K -> Bool` | True when the key is present. |
-| `(map-size a b c)` | `(Map K V) -> Int64` | Number of entries. |
-| `(map-keys a b c)` | `(Map K V) -> (List K)` | Keys, sorted. |
-| `(map-values a b c)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
-| `(map-pairs a b c)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
-| `(map-from-pairs a b c d)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
+| `(map-get a b)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
+| `(map-set a b c)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
+| `(map-remove a b)` | `(Map K V) K -> (Map K V)` | Map without the key. |
+| `(map-has? a b)` | `(Map K V) K -> Bool` | True when the key is present. |
+| `(map-size a)` | `(Map K V) -> Int64` | Number of entries. |
+| `(map-keys a)` | `(Map K V) -> (List K)` | Keys, sorted. |
+| `(map-values a)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
+| `(map-pairs a)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
+| `(map-from-pairs a)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
 
 ### Option, Result, Pair
 
@@ -192,15 +270,31 @@ All 92 names. Nothing else exists.
 | `(none)` | `-> (Option T)` | An absent value. |
 | `(ok a)` | `T -> (Result T E)` | A successful result. |
 | `(err a)` | `E -> (Result T E)` | A failed result. |
-| `(is-some? a b)` | `(Option T) -> Bool` | True when a value is present. |
-| `(is-none? a b)` | `(Option T) -> Bool` | True when no value is present. |
-| `(is-ok? a b c)` | `(Result T E) -> Bool` | True when the result succeeded. |
-| `(is-err? a b c)` | `(Result T E) -> Bool` | True when the result failed. |
-| `(option-or a b c)` | `(Option T) T -> T` | The value, or a fallback when absent. |
-| `(result-or a b c d)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
+| `(is-some? a)` | `(Option T) -> Bool` | True when a value is present. |
+| `(is-none? a)` | `(Option T) -> Bool` | True when no value is present. |
+| `(is-ok? a)` | `(Result T E) -> Bool` | True when the result succeeded. |
+| `(is-err? a)` | `(Result T E) -> Bool` | True when the result failed. |
+| `(option-or a b)` | `(Option T) T -> T` | The value, or a fallback when absent. |
+| `(result-or a b)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
 | `(option-map a b)` | `(fn [A] -> B) (Option A) -> (Option B)` | Transform a present value. |
 | `(result-map a b)` | `(fn [A] -> B) (Result A E) -> (Result B E)` | Transform a successful value. |
 | `(result-map-err a b)` | `(fn [E] -> F) (Result T E) -> (Result T F)` | Transform a failure value. |
-| `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
-| `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
+| `(option-to-result a b)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
+| `(result-to-option a)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
 | `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
+
+### I/O
+
+| Form | Type | Meaning |
+|---|---|---|
+| `(read-line)` | `-> (Result (Option String) String)` | Read one line from standard input without its newline, or none at end of input. |
+| `(read-all)` | `-> (Result String String)` | Read all of standard input. |
+| `(print a)` | `String -> (Result Unit String)` | Write to standard output with no trailing newline. |
+| `(println a)` | `String -> (Result Unit String)` | Write to standard output followed by a newline. |
+| `(eprintln a)` | `String -> (Result Unit String)` | Write to standard error followed by a newline. |
+| `(file-read a)` | `String -> (Result String String)` | Read a whole file as UTF-8 text. |
+| `(file-write a b)` | `String String -> (Result Unit String)` | Write UTF-8 text to a file, replacing any existing contents. |
+| `(file-exists? a)` | `String -> Bool` | True when the path exists. |
+| `(env-get a)` | `String -> (Option String)` | Value of an environment variable, or none when unset. |
+| `(args)` | `-> (List String)` | Command-line arguments, excluding the program name. |
+| `(process-run a b c)` | `String (List String) String -> (Result ProcessResult String)` | Run a program with an argument list and standard input, capturing its output. The argument list is never a shell string, so there is no quoting to get wrong. |

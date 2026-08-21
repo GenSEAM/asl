@@ -1,4 +1,4 @@
-// AgentS-Core v0.1 — Lark grammar (Earley).
+// AgentScript Core v0.3 — Lark grammar (Earley).
 // Normative source: AGENT_SPEC_CORE.md
 //
 // Earley is chosen to match llguidance, which the constrained-decoding arm
@@ -18,14 +18,21 @@ toplevel: module_decl
         | defschema
         | defun
         | defenum
+        | defentry
+        | defextern
+        | defopaque
 
-// ---------- module header (v0.2) ----------
+// ---------- module header (v0.2, :extern added in v0.3) ----------
 
 module_decl: "(" MODULE mod_path module_opt* ")"
 module_opt: DOC_KW STRING
           | EXPORT_KW "[" IDENT* "]"
           | IMPORT_KW "[" import_spec* "]"
+          | EXTERN_KW "[" extern_spec* "]"
 import_spec: "(" mod_path AS_KW IDENT ")"
+// The host package name appears here and nowhere else, so a module's foreign
+// dependencies are extractable without reading its body.
+extern_spec: "(" IDENT STRING AS_KW IDENT ")"
 mod_path: MOD_PATH | IDENT
 
 // Type parameters are bound explicitly, so a name is a type variable because it
@@ -41,8 +48,25 @@ field: "(" FIELD_KW IDENT type STRING field_opt* ")"
 field_opt: DEFAULT_KW literal
          | JSON_KW STRING
 
-defun: "(" DEFUN type_params? IDENT params ARROW type doc_opt? expr+ ")"
-doc_opt: DOC_KW STRING
+defun: "(" DEFUN type_params? IDENT params ARROW type decl_opt* expr+ ")"
+decl_opt: DOC_KW STRING
+        | EFFECTS_KW "[" IDENT* "]"
+
+// Exactly one per program. Unnamed, because an entry point declared by spelling
+// would make `main` magic in a language where nothing else is.
+defentry: "(" DEFENTRY params ARROW type decl_opt* expr+ ")"
+
+// A host type the language passes but cannot inspect. Without it, binding
+// generation would stall on the first type the host does not share.
+defopaque: "(" DEFOPAQUE TYPE_NAME DOC_KW STRING ")"
+
+// The declared type is the SUCCESS type: every call site sees (Result T String).
+// The name is kebab-case like every other identifier and reaches the host through
+// §8 mangling; :symbol overrides that for the names mangling cannot reproduce.
+defextern: "(" DEFEXTERN QUALIFIED params ARROW type extern_opt* ")"
+extern_opt: DOC_KW STRING
+          | TARGET_KW KEYWORD
+          | SYMBOL_KW STRING
 
 defenum: "(" DEFENUM type_params? TYPE_NAME enum_case+ ")"
 enum_case: "(" CASE_KW IDENT "[" param* "]" STRING ")"
@@ -140,11 +164,19 @@ PAIR: "pair"
 
 MODULE: "module"
 DEFENUM: "defenum"
+DEFENTRY: "defentry"
+DEFEXTERN: "defextern"
+DEFOPAQUE: "defopaque"
 DOC_KW: ":doc"
 EXPORT_KW: ":export"
 IMPORT_KW: ":import"
 AS_KW: ":as"
 CASE_KW: ":case"
+
+EXTERN_KW: ":extern"
+EFFECTS_KW: ":effects"
+TARGET_KW: ":target"
+SYMBOL_KW: ":symbol"
 
 FIELD_KW: ":field"
 DEFAULT_KW: ":default"
@@ -173,7 +205,15 @@ KEYWORD: /:[a-z][a-z0-9]*(-[a-z0-9]+)*/
 // alias/member and a/b/c module paths share a shape; position disambiguates.
 // Bare "/" stays the division operator: it is separator-delimited, a qualified
 // name never is.
-QUALIFIED: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+//
+// The priority is load-bearing, not cosmetic. Under the dynamic lexer both
+// `s/concat` and `s`,`/`,`concat` are valid tokenizations, and in CALL-HEAD
+// position Earley resolved the ambiguity the wrong way: `(s/concat a b)` parsed
+// as a four-argument call to `s`. The same name in argument position parsed
+// correctly, so the defect was invisible in every fixture that only passed
+// qualified names as arguments — and the tooling grammar always got it right,
+// which meant the two grammars silently enforced different languages.
+QUALIFIED.2: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
 MOD_PATH: /[a-z][a-z0-9]*(-[a-z0-9]+)*(\/[a-z][a-z0-9]*(-[a-z0-9]+)*)+/
 
 INT: /-?[0-9]+/

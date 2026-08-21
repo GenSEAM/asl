@@ -1,8 +1,8 @@
-"""Minimal AgentS runtime for the Python backend.
+"""Minimal AgentScript runtime for the Python backend.
 
 Option and Result are tagged tuples rather than classes: they print readably in
 test failures, compare structurally for free, and cost no import. The tag is the
-same string the language uses, so a failing test shows AgentS vocabulary rather
+same string the language uses, so a failing test shows AgentScript vocabulary rather
 than backend internals.
 """
 
@@ -117,3 +117,117 @@ def m_set(m, k, v): return {**m, k: v}
 def m_del(m, k): return {i: j for i, j in m.items() if i != k}
 def m_pairs(m): return [pair(k, m[k]) for k in sorted(m)]
 def m_from(ps): return {p[1]: p[2] for p in ps}
+
+
+# ---------- I/O ----------
+# Every effectful operation returns a Result. A host exception that escaped to
+# the caller would be exactly the invisible failure the boundary exists to
+# remove, so the boundary is where exceptions stop being exceptions.
+import os
+import subprocess
+import sys
+
+
+def attempt(thunk):
+    """Run a host thunk, converting any exception into an `err` value.
+
+    The message carries the exception type because a bare `str(exc)` is empty for
+    several of the most common host failures — OSError among them.
+    """
+    try:
+        return ok(thunk())
+    except Exception as exc:  # noqa: BLE001 - totality is the whole point
+        return err(f"{type(exc).__name__}: {exc}")
+
+
+def read_line():
+    def go():
+        line = sys.stdin.readline()
+        return NONE if line == "" else some(line.rstrip("\n"))
+    return attempt(go)
+
+
+def read_all(): return attempt(sys.stdin.read)
+
+
+def _write(stream, s):
+    """Unit is `None`, and `stream.write` returns a count — returning it would
+    make an empty write yield 0 where the other backends yield Unit."""
+    def go():
+        stream.write(s)
+        return None
+    return attempt(go)
+
+
+def print_(s): return _write(sys.stdout, s)
+def println(s): return _write(sys.stdout, s + "\n")
+def eprintln(s): return _write(sys.stderr, s + "\n")
+
+
+def file_read(path):
+    return attempt(lambda: open(path, encoding="utf-8").read())
+
+
+def file_write(path, s):
+    def go():
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(s)
+    return attempt(go)
+
+
+def file_exists(path): return os.path.exists(path)
+
+
+def env_get(name):
+    v = os.environ.get(name)
+    return NONE if v is None else some(v)
+
+
+def args(): return sys.argv[1:]
+
+
+def process_run(cmd, argv, stdin):
+    """Run a program. `argv` is a list, never a shell string, so nothing is
+    re-parsed by a shell and there is no quoting to get wrong."""
+    def go():
+        p = subprocess.run([cmd, *argv], input=stdin,
+                           capture_output=True, text=True)
+        # Records lower to dicts keyed by the language's own field names, so
+        # `.-exit-code` needs no special case in the transpiler.
+        return {"exit-code": p.returncode, "stdout": p.stdout, "stderr": p.stderr}
+    return attempt(go)
+
+
+def fail(message):
+    """Report an entry point's `err` and exit non-zero.
+
+    Entry-point failure lives in the runtime so generated code never has to
+    import anything itself.
+    """
+    eprintln(message)
+    sys.exit(1)
+
+
+# ---------- trapping arithmetic ----------
+# §3: for Int32/Int64 "wrapping is an error not a behavior". Python integers are
+# arbitrary-precision and cannot overflow, so without an explicit bound this
+# backend silently computed a value the typed backends trap on — a divergence
+# the differential gate could not see, because no benchmark case overflows.
+#
+# The width enforced is Int64. This runtime is untyped and cannot tell an Int32
+# from an Int64 at the point of the operation, so Int32 overflow is caught by the
+# typed backends only. Stated rather than hidden.
+_I64_MIN, _I64_MAX = -(2 ** 63), 2 ** 63 - 1
+
+
+def _checked(n):
+    if isinstance(n, int) and not (_I64_MIN <= n <= _I64_MAX):
+        raise Trap("integer overflow")
+    return n
+
+
+def add(a, b): return _checked(a + b)
+def sub(a, b): return _checked(a - b)
+def mul(a, b): return _checked(a * b)
+def neg(a): return _checked(-a)
+def absv(a): return _checked(abs(a))

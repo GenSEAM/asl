@@ -62,3 +62,22 @@ This file groups d/c/r/l entries for the lang/backends module.
 - **Why Non-Obvious**: Once both mobile targets exist, "generate an app" reads as the obvious next
   step, and the absence of I/O, FFI and UI reads as an oversight rather than as three unmade
   decisions.
+
+### [c-6d3f] A backend without a compiler gate is not gated
+- **Date**: 2026-08-21
+- **Status**: Active
+- **Cluster**: lang/backends
+- **Description**: The corpus gate invoked `rustc` and `swiftc` but had nothing to invoke for
+  Python, so the Python column reported the transpiler's exit code and nothing more. It had been
+  emitting `s(/, concat, ...)` — not valid Python — for every qualified name, and every fixture
+  read `ok`. `compile()` is the standard library's accept/reject oracle and is now called like the
+  other two.
+- **Consequences found the same day**: with the gate in place, four further defects surfaced
+  immediately that no existing fixture reached — a keyword-collision list with six entries where
+  the target has about thirty-five, a runtime higher-order signature that no emitted closure could
+  satisfy, unconditional derives on a record holding a user enum, and a synthesized comparison that
+  emitted several statements on one line and so was valid only up to two fields.
+- **Why Non-Obvious**: the file's own header already warned that a gate not invoking the target
+  measures the transpiler's exit code and nothing more. The warning was acted on for the two
+  backends with an obvious external compiler and not for the one whose compiler is a function call,
+  because there was no missing binary to notice.

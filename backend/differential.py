@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential gate: one AgentS source, every backend, identical results.
+"""Differential gate: one AgentScript source, every backend, identical results.
 
 Portability across targets is a claim, not a property. Runtimes disagree by
 default — measured on this machine, Python and JavaScript already differ on
@@ -9,6 +9,10 @@ This is the enforcement.
 What it does not enforce: the benchmark's cases never overflow, and the three
 backends do not agree there. Swift traps, Rust traps in debug, Python has
 arbitrary-precision integers. See EXPERIMENT.md amendment 2026-08-21-b.
+
+A task declares its `result` shape, because the driver that collects an answer
+has to render it: a Map is printed key-sorted, a String verbatim. Adding a shape
+is how a new class of divergence becomes gateable.
 
 Exit code is the number of disagreements.
 """
@@ -31,6 +35,8 @@ def run_python(src: Path, task: dict) -> list:
             f"import sys, json\nsys.path[:0]=[{str(ROOT/'backend')!r},{d!r}]\nimport cand\n"
             f"fn=getattr(cand,{task['entry'].replace('-','_')!r})\n"
             f"print(json.dumps([fn(i) for i,_ in json.loads({json.dumps(json.dumps(task['cases']))})]))\n")
+        # Python needs no per-shape rendering: json.dumps already agrees with the
+        # expected literal for both a dict and a str.
         r = subprocess.run([sys.executable, str(drv)], capture_output=True, text=True)
         if r.returncode:
             raise RuntimeError(r.stderr.strip().splitlines()[-1][:120])
@@ -44,14 +50,19 @@ def run_rust(src: Path, task: dict) -> list:
         body = ToRust().transpile(src.read_text())
         inputs = ", ".join(f'{json.dumps(i)}.to_string()' for i, _ in task["cases"])
         fn = task["entry"].replace("-", "_")
+        if task.get("result") == "string":
+            render = f"    for i in ins {{ out.push(format!(\"{{:?}}\", {fn}(i))); }}\n"
+        else:
+            render = (
+                f"    for i in ins {{ let g = {fn}(i);\n"
+                "        let mut kv: Vec<String> = Vec::new();\n"
+                "        for (k, v) in g.iter() { kv.push(format!(\"{:?}:{}\", k, v)); }\n"
+                "        out.push(format!(\"{{{}}}\", kv.join(\",\"))); }\n")
         body += (
             "\nfn main() {\n"
             f"    let ins: Vec<String> = vec![{inputs}];\n"
             "    let mut out: Vec<String> = Vec::new();\n"
-            f"    for i in ins {{ let g = {fn}(i);\n"
-            "        let mut kv: Vec<String> = Vec::new();\n"
-            "        for (k, v) in g.iter() { kv.push(format!(\"{:?}:{}\", k, v)); }\n"
-            "        out.push(format!(\"{{{}}}\", kv.join(\",\"))); }\n"
+            + render +
             "    println!(\"[{}]\", out.join(\",\"));\n}\n")
         (Path(d) / "main.rs").write_text(body)
         c = subprocess.run(["rustup", "run", "stable", "rustc", "--edition", "2021",
@@ -71,15 +82,21 @@ def run_swift(src: Path, task: dict) -> list:
         fn = mangle(task["entry"])
         # Keys are emitted in sorted order, which is the order the language
         # specifies for map iteration and the order BTreeMap gives Rust for free.
+        if task.get("result") == "string":
+            render = ("for i in ins {\n"
+                      f"    out.append(\"\\\"\\({fn}(i))\\\"\")\n"
+                      "}\n")
+        else:
+            render = ("for i in ins {\n"
+                      f"    let g = {fn}(i)\n"
+                      "    var kv: [String] = []\n"
+                      "    for k in g.keys.sorted() { kv.append(\"\\\"\\(k)\\\":\\(g[k]!)\") }\n"
+                      "    out.append(\"{\" + kv.joined(separator: \",\") + \"}\")\n"
+                      "}\n")
         body += (
             "\nlet ins: [String] = [" + inputs + "]\n"
             "var out: [String] = []\n"
-            "for i in ins {\n"
-            f"    let g = {fn}(i)\n"
-            "    var kv: [String] = []\n"
-            "    for k in g.keys.sorted() { kv.append(\"\\\"\\(k)\\\":\\(g[k]!)\") }\n"
-            "    out.append(\"{\" + kv.joined(separator: \",\") + \"}\")\n"
-            "}\n"
+            + render +
             "print(\"[\" + out.joined(separator: \",\") + \"]\")\n")
         (Path(d) / "main.swift").write_text(body)
         c = subprocess.run(["swiftc", "-O", "rt.swift", "main.swift", "-o", "prog"],
@@ -93,25 +110,45 @@ def run_swift(src: Path, task: dict) -> list:
 BACKENDS = {"python": run_python, "rust": run_rust, "swift": run_swift}
 
 
+# Each entry is (task path, source path), both relative to the repository root.
+#
+# `bench/tasks/` holds generation tasks — `bench/harness/run.py` globs that
+# directory and asks a model to solve everything in it. `bench/differential/`
+# holds fixtures that only ever run here: they pin behaviour and have known
+# answers, so putting them under `tasks/` would have the harness spend pilot
+# budget generating solutions to problems it was handed the answers to.
+SUITE = [("bench/tasks/histogram.json", "bench/algo/variants/tight.as"),
+         ("bench/differential/arith.json", "bench/algo/variants/arith.as"),
+         ("bench/differential/cron.json", "examples/port/cron/cron.as")]
+
+
 def main() -> int:
     sys.path.insert(0, str(ROOT / "backend"))
-    task = json.loads((ROOT / "bench" / "tasks" / "histogram.json").read_text())
-    src = ROOT / "bench" / "algo" / "variants" / "tight.agents"
+    bad, cases = 0, 0
+    for task_file, src_file in SUITE:
+        task = json.loads((ROOT / task_file).read_text())
+        src = ROOT / src_file
+        got = {name: run(src, task) for name, run in BACKENDS.items()}
 
-    got = {name: run(src, task) for name, run in BACKENDS.items()}
-
-    bad = 0
-    head = f"{'input':<12} {'expected':<22}" + "".join(f"{n:<22}" for n in got)
-    print(head)
-    print("-" * len(head))
-    for k, (inp, want) in enumerate(task["cases"]):
-        row = {n: v[k] for n, v in got.items()}
-        agree = all(v == want for v in row.values())
-        bad += 0 if agree else 1
-        print(f"{inp!r:<12} {json.dumps(want):<22}"
-              + "".join(f"{json.dumps(row[n]):<22}" for n in got)
-              + ("" if agree else "  <-- DISAGREE"))
-    print(f"\n{bad} disagreement(s) across {len(task['cases'])} cases x {len(got)} backends")
+        print(f"== {task['id']}  ({', '.join(got)})")
+        for k, (inp, want) in enumerate(task["cases"]):
+            row = {n: v[k] for n, v in got.items()}
+            agree = all(v == want for v in row.values())
+            bad += 0 if agree else 1
+            cases += 1
+            # Agreement is the common case and its detail is noise; a
+            # disagreement prints every backend's answer in full, because that
+            # is the only time the values matter.
+            if agree:
+                print(f"  ok        {inp!r}")
+            else:
+                print(f"  DISAGREE  {inp!r}")
+                print(f"      expected  {json.dumps(want)}")
+                for n in got:
+                    mark = " " if row[n] == want else "*"
+                    print(f"    {mark} {n:<8} {json.dumps(row[n])}")
+        print()
+    print(f"{bad} disagreement(s) across {cases} cases x {len(BACKENDS)} backends")
     return bad
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measurement harness: model -> AgentS -> Python -> tests -> score.
+"""Measurement harness: model -> AgentScript -> Python -> tests -> score.
 
 The spend cap is enforced here rather than intended: the run aborts when the cap
 is reached, instead of reporting an overrun afterwards (EXPERIMENT.md 2026-08-20-c).
@@ -59,7 +59,7 @@ class Budget:
 
 def system_prompt() -> str:
     return (
-        "You write AgentS-Core, a small typed Lisp. The complete language reference follows. "
+        "You write AgentScript Core, a small typed Lisp. The complete language reference follows. "
         "Use ONLY names defined in it — nothing else exists.\n\n"
         f"{HANDBOOK}\n\n"
         "Reply with ONE ```lisp fenced block containing a complete module and nothing else. "
@@ -141,13 +141,16 @@ def evaluate(code: str, task: dict, s: Sample) -> Sample:
     return s
 
 
-CANNED = (ROOT / "bench" / "algo" / "variants" / "tight.agents")
+CANNED = (ROOT / "bench" / "algo" / "variants" / "tight.as")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=str(Path(__file__).parent / "config.json"))
     ap.add_argument("--dry-run", action="store_true")
+    # Only generation tasks. `bench/differential/` holds fixtures with known
+    # answers that exist for backend/differential.py; generating against those
+    # would spend the cap on problems already solved.
     ap.add_argument("--tasks", default=str(ROOT / "bench" / "tasks"))
     args = ap.parse_args()
 
@@ -203,7 +206,11 @@ def main() -> int:
     print(f"spent ${budget.spent:.4f} of ${budget.cap:.2f}"
           + ("  [ABORTED ON CAP]" if aborted else ""))
 
+    # `results/` is git-ignored, so it does not exist in a fresh checkout and the
+    # first run used to die after doing all the work — and, unlike a dry run,
+    # after spending money.
     out = ROOT / "results" / ("dry-run.json" if args.dry_run else "run.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(
         {"model": cfg["model"], "spent_usd": round(budget.spent, 6), "aborted": aborted,
          "samples": [asdict(s) for s in samples]}, indent=1))
