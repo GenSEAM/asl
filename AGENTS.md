@@ -170,6 +170,29 @@ cp backend/swift/rt.swift . && swiftc -o prog rt.swift prog.swift
 **Never name the generated Swift file `main.swift`.** Swift treats that filename as top-level code
 and then rejects the `@main` the backend emits for `defentry`.
 
+### One entry point
+
+`as-lang` collapses the scripts above into subcommands over the same
+implementations — nothing is reimplemented, and `--json` everywhere emits the
+`{file, line, col, rule, message}` shape `checker/check.py` defines.
+
+```bash
+.venv/bin/python as-lang check [paths] [--target T] [--coverage] [--json]
+.venv/bin/python as-lang build <file> --target py|ts|rs|sw
+.venv/bin/python as-lang fmt [paths] [--check]
+```
+
+Run it through the virtualenv, as with every other tool here: the shebang picks
+the system interpreter, which has no `lark`.
+
+`fmt` re-prints from the parse tree, so output is canonical and parens balance by
+construction; comments are recovered separately because Lark discards them.
+**The corpus is deliberately not reformatted.** Eleven of twenty-two hand-written
+files differ from the formatter's output, mostly in alignment and in whether an
+expression is joined onto one line — and a hand-wrapped arithmetic expression
+carries a readability choice the formatter does not have an opinion worth
+overriding it with. Run `fmt` on new code, not over the corpus.
+
 ### Structural search
 
 ```bash

@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""One entry point over the AgentScript toolchain.
+
+The working loop was four scripts with four calling conventions, and an agent that
+had to remember which of them takes a directory, which takes a file, and which one
+answers in JSON. Everything here delegates: `check` is `checker/check.py`, `build`
+is `backend/to_*.py`, `ast` is the project's own tree-sitter grammar. Only `fmt` is
+new, and it lives in `tools/fmt/fmt.py`.
+
+Two things are uniform across every subcommand, because they are the part a caller
+writes code against:
+
+  * `--json` emits the toolchain's diagnostic shape, `{file, line, col, rule,
+    message}`, the one `checker/check.py` defines.
+  * the exit code is the number of problems — 0 when there are none.
+"""
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT / "tools" / "fmt"))
+sys.path.insert(0, str(ROOT / "checker"))
+
+BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "sw": "to_swift.py"}
+TREE_SITTER = ROOT / "node_modules" / ".bin" / "tree-sitter"
+GRAMMAR_DIR = ROOT / "grammar" / "tree-sitter-as-lang"
+# Read from the vocabulary rather than from the checker, so `--target` can be validated
+# by argparse before anything imports lark.
+TARGETS = sorted(json.loads((ROOT / "prelude" / "prelude.json").read_text())["targets"])
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+class BadInput(Exception):
+    """A usage error: no sources, or a path that is not there."""
+
+
+def sources(paths: list[Path]) -> list[Path]:
+    out: list[Path] = []
+    for p in paths:
+        if not p.exists():
+            raise BadInput(f"{p}: no such file or directory")
+        out += sorted(p.rglob("*.as")) if p.is_dir() else [p]
+    if not out:
+        raise BadInput("no .as files given")
+    return out
+
+
+def diag(file, rule: int, message: str):
+    """One diagnostic in the toolchain's shape, for a failure that is not a §9 rule.
+
+    The dataclass lives in the formatter rather than the checker so that importing it
+    does not pull in the checker's prelude load; both spell the same five fields.
+    """
+    import fmt
+
+    return fmt.Diag(str(file), 1, 1, rule, message)
+
+
+def report(diags: list, as_json: bool, subject: str) -> int:
+    if as_json:
+        print(json.dumps([d.as_dict() for d in diags], indent=1))
+    else:
+        for d in diags:
+            print(d.text())
+        print(f"\n{len(diags)} {subject}")
+    return len(diags)
+
+
+# ---------- subcommands ----------
+
+def cmd_check(args) -> int:
+    if args.rules:
+        return subprocess.run([sys.executable, str(ROOT / "checker" / "check.py"),
+                               "--rules"]).returncode
+    import check
+
+    files = sources(args.paths)
+    parser, diags, models = check.parser(), [], {}
+    typed = untyped = 0
+    for f in files:
+        # check_file also reports how much the type layer managed to type; the
+        # third value is how `--coverage` tells "clean" from "declined to look".
+        m, ds, (t, u) = check.check_file(parser, f)
+        diags += ds
+        typed += t
+        untyped += u
+        if m is not None:
+            models[str(f)] = m
+    diags += check.import_cycles(models)
+    if args.target:
+        diags += check.target_capabilities(models, args.target)
+    diags.sort(key=lambda d: (d.file, d.line, d.col, d.rule))
+    if args.coverage and not args.json:
+        total = typed + untyped
+        print(f"type coverage: {typed}/{total} expressions "
+              f"({100 * typed // max(total, 1)}%)\n")
+    return report(diags, args.json, f"diagnostic(s) across {len(files)} file(s)")
+
+
+def cmd_build(args) -> int:
+    if not args.file.is_file():
+        return report([diag(args.file, 0, "no such file")], args.json, "diagnostic(s)")
+    script = ROOT / "backend" / BACKENDS[args.target]
+    run = subprocess.run([sys.executable, str(script), str(args.file)],
+                         capture_output=True, text=True)
+    if run.returncode == 0:
+        sys.stdout.write(run.stdout)
+        return 0
+    # The backends refuse a module written for another ecosystem by name, and that
+    # refusal is a result rather than a crash. It is reported as one diagnostic, under
+    # rule 13 when the refusal is about :target and under no rule otherwise.
+    message = last_line(run.stderr) or "build failed"
+    rule = 13 if message.startswith("TargetMismatch") else 0
+    return report([diag(args.file, rule, message)], args.json, "diagnostic(s)")
+
+
+def last_line(stderr: str) -> str:
+    """The final line of a delegate's stderr, stripped of terminal colouring.
+
+    A backend colours its own tracebacks, and those escapes would otherwise be
+    embedded in a `message` field that a caller parses.
+    """
+    text = ANSI.sub("", stderr).strip()
+    return text.splitlines()[-1] if text else ""
+
+
+def cmd_fmt(args) -> int:
+    import fmt
+
+    files = sources(args.paths)
+    diags, changed = [], []
+    for f in files:
+        did, ds = fmt.format_file(f, write=not args.check)
+        diags += ds
+        if did and not ds:
+            changed.append(f)
+    if args.check:
+        return report(diags, args.json, f"file(s) to reformat, of {len(files)}")
+    # A rewrite is not a problem, so it does not belong in the diagnostic stream a
+    # caller parses; it goes to stderr, where it is still visible under --json.
+    for f in changed:
+        print(f"formatted {f}", file=sys.stderr)
+    return report(diags, args.json, f"file(s) refused, {len(changed)} rewritten")
+
+
+def cmd_ast(args) -> int:
+    query = Path(args.query) if args.query else GRAMMAR_DIR / "queries" / "searches.scm"
+    if not TREE_SITTER.exists():
+        return report([diag(args.file, 0, "tree-sitter is not installed; "
+                                          "run `npm install`")],
+                      args.json, "diagnostic(s)")
+    run = subprocess.run([str(TREE_SITTER), "query", str(query.resolve()),
+                          str(Path(args.file).resolve())],
+                         cwd=GRAMMAR_DIR, capture_output=True, text=True)
+    sys.stdout.write(run.stdout)
+    if run.returncode == 0:
+        return 0
+    return report([diag(args.file, 0, last_line(run.stderr) or "query failed")],
+                  args.json, "diagnostic(s)")
+
+
+# ---------- driver ----------
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="as-lang", description=__doc__.splitlines()[0])
+    ap.add_argument("--json", action="store_true",
+                    help="emit diagnostics as {file, line, col, rule, message}")
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("check", help="the §9 rules a grammar cannot express")
+    p.add_argument("paths", nargs="*", type=Path)
+    p.add_argument("--target", choices=TARGETS,
+                   help="also refuse effects this target cannot provide")
+    p.add_argument("--rules", action="store_true",
+                   help="print what is and is not checked")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.add_argument("--coverage", action="store_true",
+                   help="also report how much of the input the type layer typed")
+    p.set_defaults(fn=cmd_check)
+
+    p = sub.add_parser("build", help="transpile one module to a target")
+    p.add_argument("file", type=Path)
+    p.add_argument("--target", required=True, choices=sorted(BACKENDS))
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_build)
+
+    p = sub.add_parser("fmt", help="print canonically, in place")
+    p.add_argument("paths", nargs="*", type=Path)
+    p.add_argument("--check", action="store_true",
+                   help="report what would change instead of changing it")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_fmt)
+
+    p = sub.add_parser("ast", help="run a tree-sitter query over a module")
+    p.add_argument("file", type=Path)
+    p.add_argument("-q", "--query", help="a .scm query file (default: searches.scm)")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_ast)
+
+    args = ap.parse_args()
+    try:
+        return args.fn(args)
+    except BadInput as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
