@@ -39,6 +39,13 @@ SCALARS = {
 CONTAINERS = {"list": "List", "set": "List", "sequence": "List", "iterable": "List",
               "dict": "Map", "mapping": "Map", "tuple": "Pair"}
 
+# Names the language already owns. An opaque may never take one: `list` with no
+# parameter used to become `(defopaque List)`, shadowing the built-in `List` with
+# a host type — accepted by every gate, and meaning something else entirely.
+BUILTIN_TYPE_NAMES = set(CONTAINERS.values()) | {
+    "Option", "Result", "Pair", "Map", "List", "Bool", "Int32", "Int64",
+    "Float64", "String", "Unit", "ProcessResult"}
+
 
 class Unmapped(Exception):
     """A host type with no language counterpart. The caller turns it opaque."""
@@ -102,10 +109,17 @@ def render(node, opaques: dict[str, str]) -> str:
         if mapped is None:
             raise Unmapped(f"no language type for {name}")
         return mapped
+    # An unparameterised container is not an opaque type — it is a container
+    # whose element type the stub did not say. Guessing an opaque here produced
+    # `(defopaque List)`, which shadows the built-in.
+    if name.lower() in CONTAINERS:
+        raise Unmapped(f"`{name}` with no element type")
     # A host class with no mapping becomes opaque rather than a failure.
     pascal = "".join(p[:1].upper() + p[1:] for p in name.replace(".", "_").split("_") if p)
     if not pascal or not pascal[0].isalpha():
         raise Unmapped(f"unspellable host type: {name!r}")
+    if pascal in BUILTIN_TYPE_NAMES:
+        raise Unmapped(f"host type `{name}` would shadow the built-in `{pascal}`")
     opaques.setdefault(pascal, name)
     return pascal
 

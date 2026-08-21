@@ -46,3 +46,5 @@
 ; Not generated, and why:
 ;   scan_all - variadic or keyword-only parameters
 ;   to_arrow - no language type for bytes
+;   rows_untyped - `list` with no element type
+;   as_map - `dict` with no element type

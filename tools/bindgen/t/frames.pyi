@@ -34,3 +34,9 @@ def readCSV(path: str) -> DataFrame:
 
 def write_csv(df: DataFrame, path: str) -> None:
     """Write a dataframe out; returns nothing."""
+
+def rows_untyped(xs: list) -> int:
+    """A container with no element type — not an opaque, and not a List."""
+
+def as_map(df: DataFrame) -> dict:
+    """Same, for a mapping."""

@@ -63,3 +63,32 @@ def test_every_declaration_names_a_target():
     externs = body.count("(defextern ")
     assert externs > 0
     assert body.count(":target :py") == externs
+
+
+def test_a_container_without_an_element_type_is_not_turned_into_an_opaque():
+    # `xs: list` once produced `(defopaque List)` — a host type named `List`,
+    # shadowing the language's own. Every gate accepted it, because `defopaque`
+    # may name anything and nothing checked the name against the built-ins.
+    out = generate()
+    assert "defopaque List" not in out
+    assert "defopaque Map" not in out
+    assert "rows_untyped" in out.split("; Not generated, and why:")[1]
+
+
+def test_no_opaque_shadows_a_built_in_type_name():
+    import re
+    names = set(re.findall(r"\(defopaque (\w+)", generate()))
+    builtin = {"List", "Option", "Result", "Pair", "Map", "Bool", "Int32",
+               "Int64", "Float64", "String", "Unit", "ProcessResult"}
+    assert not (names & builtin), f"opaque shadows a built-in: {names & builtin}"
+
+
+def test_the_generated_module_passes_the_semantic_checker(tmp_path):
+    # The strongest check available: generated bindings must be a well-formed
+    # module, not merely well-shaped text.
+    import subprocess
+    f = tmp_path / "gen.as"
+    f.write_text(generate())
+    r = subprocess.run([sys.executable, str(ROOT / "checker" / "check.py"), str(f)],
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout
