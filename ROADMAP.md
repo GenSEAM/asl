@@ -60,6 +60,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | Handbook example gate | **green** — every fenced block parses under both grammars |
 | Grammar shape gate | **green** — both grammars find the same qualified names, not just the same verdict |
 | Overflow parity | **green** — all three backends trap; Rust checked under `-O`, where it used to wrap |
+| Self-hosting | **probed and blocked** — `compiler/lex.as` works but cannot lex itself; no loop form |
 | Cross-module linking | **working** — whole-program, `backend/modules.py`; rule 9 now checks the export surface |
 | Semantic checker | **14 of 15 §9 rules** — `checker/check.py`; only delimiter balance is left to the grammars |
 | Reference interpreter | **not built, deliberately** — see below |
@@ -170,8 +171,17 @@ reports it as pending; each new check should add fixtures there.
 6. **Native backends** — Rust and Swift exist; Kotlin is next and needs a toolchain installed
    first. Only Rust raises the ownership question (PCP `l-880d`); the other two are
    reference-counted or garbage-collected, which is part of why they are the cheaper targets.
-7. **Self-hosting probe** — write the AgentScript lexer in AgentScript. Prediction on record: it needs
-   closed unions, which v0.2 now has, so the probe is newly worth running.
+7. ~~**Self-hosting probe**~~ — **run, and it failed usefully** (PCP `c-1d90`). `compiler/lex.as`
+   is a real lexer for the language, in the language: it classifies every token class, round-trips
+   real source and transpiles to all three backends. **It cannot lex itself.** The prediction on
+   record was that closed unions would decide it; they were the part that worked. What blocks
+   self-hosting is **iteration**: there is no loop, no backend eliminates tail calls, and a lexer
+   recurses once per token, so the Python backend runs out of stack at ~900 tokens against the
+   ~1,400 atoms of the lexer's own source.
+
+   **Before self-hosting can proceed, the language needs a bounded-iteration form** — a `loop`
+   or `while` that lowers to a target loop rather than to recursion. A function type (finding 2)
+   is the next most costly gap.
 
 ---
 

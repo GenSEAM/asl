@@ -73,6 +73,14 @@ Verified by a command whose output was read, not asserted.
 
 ### What is not true yet
 
+**The language cannot yet host its own compiler.** `compiler/lex.as` is a lexer
+for AgentScript written in AgentScript — it classifies every token class,
+round-trips real source and transpiles to all three backends — and it cannot lex
+itself. There is no loop form, no backend eliminates tail calls, and a lexer
+recurses once per token, so the Python backend runs out of stack at about 900
+tokens. Closed unions, exhaustive matching and `Result` threading were expected
+to be the hard part and were not; iteration was, and nobody had it on the list.
+
 **The type layer fails open.** `checker/check.py` decides fourteen of §9's
 fifteen well-formedness rules — name resolution, types, exhaustiveness, effects,
 the foreign boundary, import cycles — and runs in the gate sequence. The

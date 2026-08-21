@@ -450,14 +450,18 @@ class ToRust:
                 continue
             ak = self.kids(arm)
             pat = self.pattern(ak[0])
+            # Captured before the body is lowered, not after: a nested `match` on
+            # the tail sets `cons_tail` again while the body is being expanded,
+            # so reading it afterwards gave the inner pattern's name and the
+            # outer tail was never materialised — leaving `t.as_slice()` on a
+            # value that is already a slice.
+            tail = self.cons_tail if "@ .." in pat else None
+            self.cons_tail = None
             inner: list[str] = []
             v = None
             for b in ak[1:]:
                 v = self.expr(b, inner, ind + 2)
-            pre = []
-            if getattr(self, "cons_tail", None) and "@ .." in pat:
-                pre = [f"{pad}        let {self.cons_tail} = {self.cons_tail}.to_vec();"]
-                self.cons_tail = None
+            pre = [f"{pad}        let {tail} = {tail}.to_vec();"] if tail else []
             if inner or pre:
                 body = "\n".join(pre + inner + [f"{pad}        {v}"])
                 stmts.append(f"{pad}    {pat} => {{\n{body}\n{pad}    }},")
