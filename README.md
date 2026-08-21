@@ -59,15 +59,15 @@ Verified by a command whose output was read, not asserted.
 |---|---|
 | Specification | v0.3 — `AGENT_SPEC_CORE.md`, normative |
 | Grammars | two, agreeing — Lark (Earley) and tree-sitter |
-| Python / Rust / Swift backends | working; output accepted by `compile()`, `rustc`, `swiftc` |
+| Python / TypeScript / Rust / Swift backends | working; output accepted by `compile()`, `tsc`, `rustc`, `swiftc` |
 | Kotlin backend | priority target, no transpiler |
 | WebAssembly (browser) | via the Rust backend; a module needing `fs`/`env`/`proc` is refused before the build |
-| JavaScript backend | lowering rules in the prelude, no transpiler |
+| TypeScript backend | working; `tsc --noEmit --strict` gates it, and JavaScript comes out of `tsc` |
 | Cross-module linking | whole-program; modules indexed by their declared header |
 | Conformance gate | 23 fixtures × 2 grammars |
 | Closure gate | no example calls an undefined name |
 | Coverage gate | 103 of 103 builtins appear in an example |
-| Differential gate | 28 cases × 3 backends, no disagreement |
+| Differential gate | 28 cases × 4 backends, no disagreement — **pure functions only** |
 | Semantic checker | 14 of §9's 15 rules — types included; fails open, so silence is not proof |
 | Measurement | not run; blocked on gateway access |
 

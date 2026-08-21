@@ -52,7 +52,8 @@ Everything below was checked by a command whose output was read, not inferred.
 | Differential gate | **green** — Python, Rust and Swift agree on every case |
 | Kotlin backend | priority target, no transpiler — toolchain not installed |
 | WebAssembly | **works via the Rust backend** — pure modules only; effectful ones refused by capability |
-| JavaScript backend | lowering rules exist in the prelude, no transpiler |
+| TypeScript backend | **working** — corpus transpiles and `tsc --noEmit --strict` accepts it |
+| JavaScript | produced downstream by `tsc`; there is no JS backend and no `js` lowerings |
 | I/O surface | **working** — 11 builtins, all total; executed by `backend/t/test_io.py` |
 | Foreign boundary | **specified and lowered** — `defextern`/`defopaque`/`:extern`, Python target |
 | Binding generator | **working** — `tools/bindgen/from_pyi.py`, 8 tests |
@@ -163,8 +164,10 @@ reports it as pending; each new check should add fixtures there.
    (§4.6). The failure type is the host's `String` message; a structured union was rejected for now
    because its cases could not be made identical across three hosts, which the differential gate
    would have caught as a disagreement.
-3. **Python and JavaScript backends** — the measurement targets. Rust, Kotlin and Swift are the
-   native targets and are unchanged as a product goal.
+3. ~~**Python and JavaScript backends**~~ — **done**, as Python and TypeScript; JavaScript comes
+   out of `tsc` (`EXPERIMENT.md` amendment `2026-08-21-d`). Rust, Kotlin and Swift are the native
+   targets and are unchanged as a product goal; **Kotlin still has no transpiler and no toolchain
+   installed here.**
 4. **Benchmark harness** — terminal-bench, comparing generated AgentScript transpiled to Python/JS
    against real Python/JS solutions to the same tasks.
 5. **Measurement** — see §5. Blocked.
