@@ -20,7 +20,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT.parent / "prelude"))
+sys.path.insert(0, str(ROOT.parent / "backend"))
 
+import exec_coverage  # noqa: E402
 from vocab import builtins as defined_builtins, special_forms  # noqa: E402
 TS_DIR = ROOT / "tree-sitter-agents"
 TS_BIN = ROOT.parent / "node_modules" / ".bin" / "tree-sitter"
@@ -37,19 +39,36 @@ QUERY = """
 """
 
 def run_query(paths: list[Path]) -> tuple[set[str], set[str], set[str]]:
-    with tempfile.NamedTemporaryFile("w", suffix=".scm", delete=False) as fh:
-        fh.write(QUERY)
-        qfile = fh.name
-    proc = subprocess.run(
-        [str(TS_BIN), "query", qfile, *[str(p.resolve()) for p in paths]],
-        cwd=TS_DIR, capture_output=True, text=True,
-    )
+    """The call heads, definitions and qualified heads tree-sitter finds.
+
+    The runner's exit status is checked because the failure mode is silent in the
+    dangerous direction: a missing binary, an unbuilt grammar or a query the
+    grammar no longer admits all yield no output, and no output means no
+    undefined head, which this gate prints as closure.
+    """
+    if not paths:
+        raise RuntimeError("closure over no sources is not closure")
+    with tempfile.TemporaryDirectory() as d:
+        qfile = Path(d) / "closure.scm"
+        qfile.write_text(QUERY)
+        proc = subprocess.run(
+            [str(TS_BIN), "query", str(qfile), *[str(p.resolve()) for p in paths]],
+            cwd=TS_DIR, capture_output=True, text=True,
+        )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"tree-sitter query failed (exit {proc.returncode}): "
+            + (proc.stderr.strip().splitlines() or ["no stderr"])[-1][:160])
     calls, defs, qualified = set(), set(), set()
     bucket = {"callee": calls, "definition": defs, "qualified": qualified}
     for line in proc.stdout.splitlines():
         m = re.search(r"capture: \d+ - (callee|definition|qualified), .*text: `([^`]*)`", line)
         if m:
             bucket[m.group(1)].add(m.group(2))
+    if not calls or not defs:
+        raise RuntimeError(
+            f"{len(paths)} source(s) yielded {len(calls)} call head(s) and {len(defs)} "
+            "definition(s); the query matched nothing, so closure is unmeasured")
     return calls, defs, qualified
 
 
@@ -76,16 +95,22 @@ def main() -> int:
     print(f"builtins defined in section 6 : {len(builtins)}")
     print(f"definitions found in sources  : {len(local)}")
     print(f"distinct call heads           : {len(calls)}")
-    print(f"exercised builtins            : {len(calls & builtins)}/{len(builtins)}"
-          f"  ({100*len(calls & builtins)//max(len(builtins),1)}%)")
+    # Not "how many builtins are mentioned": that number was wrong in both
+    # directions, and a call head in a branch no case takes still counts toward
+    # it. The figure comes from the tracer, which counts evaluation.
+    coverage, stats = exec_coverage.check()
+    print(f"executed builtins             : {len(stats['executed'])}/{stats['declared']}"
+          f"  ({stats['pct']}%)")
     print()
+    for c in coverage:
+        print("  " + c)
     if undefined:
         print("UNDEFINED CALL HEADS:")
         for u in undefined:
             print(f"   {u}")
-    else:
-        print("OK: spec and corpus are closed")
-    return len(undefined)
+    elif not coverage and not stats["unreached"]:
+        print("OK: spec and corpus are closed, and every builtin is executed")
+    return len(undefined) + len(coverage)
 
 
 if __name__ == "__main__":

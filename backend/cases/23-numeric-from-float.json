@@ -1,0 +1,21 @@
+{
+  "id": "numeric-from-float",
+  "src": "grammar/corpus/valid/23-numeric.agents",
+  "entry": "from-float",
+  "cases": [
+    [["9223372036854775808"], "none|none",
+     "2^63 as a double and as text. A cast that saturates answers 9223372036854775807 and a host without widths answers 9223372036854775808; both are a number the argument is not"],
+    [["-9223372036854775808"], "some -9223372036854775808|some -9223372036854775808",
+     "the other boundary, which is inside Int64 — the range test is not symmetric and must not reject this"],
+    [["1e30"], "none|none",
+     "far outside, where saturation is least visible: the answer is a legal-looking Int64"],
+    [["nan"], "none|none",
+     "NaN converts to no integer, and is not an integer literal either"],
+    [["1_0"], "some 0|none",
+     "a digit group separator: one host's numeric parsers accept it and the other's reject it, so neither parse may accept it. The 0 is option-or's fallback, not a parse"],
+    [["-3.9"], "some -3|none",
+     "truncation toward zero on the float leg, and a float that is not an integer on the text leg"],
+    [["12"], "some 12|some 12",
+     "the ordinary case, so the guards cannot be a blanket rejection"]
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "string-transforms",
+  "src": "grammar/corpus/valid/28-string-transforms.agents",
+  "entry": "transform",
+  "cases": [
+    [["aXbXc"], "axbxc|AXBXC|cXbXa|a-b-c|aXbXc|n=5|none|0.0",
+     "a from/to swap in string-replace leaves the input unchanged, and replacing only the first occurrence gives a-bXc"],
+    [["Hello World"], "hello world|HELLO WORLD|dlroW olleH|Hello World|Hello+World|n=11|none|0.0",
+     "string-lower as the identity, string-lower and string-upper swapped, string-reverse as the identity, and string-join's separator"],
+    [["abc"], "abc|ABC|cba|abc|abc|n=3|none|0.0",
+     "reverse over a short non-palindrome"],
+    [["42"], "42|42|24|42|42|n=2|some 42|42.0",
+     "string-to-int64's success side, and a whole float rendering as 42.0 on both hosts rather than as 42"],
+    [["2.5"], "2.5|2.5|5.2|2.5|2.5|n=3|none|2.5",
+     "string-to-int64 must not accept a float, and string-to-float64 must"],
+    [["0.1"], "0.1|0.1|1.0|0.1|0.1|n=3|none|0.1",
+     "shortest round-trip rendering: 0.1 is not 0.1000000000000000055"],
+    [["x"], "x|X|x|x|x|n=1|none|0.0",
+     "both parsers' failure side, reached through option-or's fallback"],
+    [[""], "|||||n=0|none|0.0",
+     "the empty line: splitting it yields one empty field, which rejoins to nothing"]
+  ]
+}

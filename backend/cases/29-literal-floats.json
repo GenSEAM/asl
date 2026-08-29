@@ -1,0 +1,13 @@
+{
+  "id": "literal-floats",
+  "src": "grammar/corpus/valid/29-literals.agents",
+  "entry": "floats",
+  "cases": [
+    [[2.5], "1.0|-0.0|-2.5|-1.5",
+     "a negative float literal as an operand, and -0.0 written directly: it compares equal to 0.0, so only the rendering can show the sign survived the parse"],
+    [[0.0], "-1.5|-0.0|-0.0|-1.5",
+     "zero times a negative literal is negative zero under IEEE-754, which is the one arithmetic result whose sign no comparison can observe"],
+    [[-1.5], "-3.0|-0.0|1.5|-1.5",
+     "a negative argument with a negative literal: the product is positive, and the sum is neither operand"]
+  ]
+}

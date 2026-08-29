@@ -29,6 +29,19 @@ NUMERIC = {"Int32", "Int64", "Float64"}
 INTEGRAL = {"Int32", "Int64"}
 KIND_SET = {"any": None, "num": NUMERIC, "int": INTEGRAL}
 TAGS = {"some": 1, "none": 0, "ok": 1, "err": 1, "list": 0, "cons": 2, "pair": 2}
+# The primitives no backend can put in a total order: f64 has none, and IoError
+# is an opaque host value. A declaration that reaches either inherits the lack,
+# which is why `unordered` walks a user type's members and not only its
+# arguments. This mirrors `to_rust.NO_TOTAL_ORDER`, which decides the same
+# question for the derive; the two must agree or a probe compiles here and not
+# there.
+UNORDERED = {"Float64", "IoError"}
+# §3's fixed widths, as the range a literal has to sit in. A literal outside its
+# type is not an overflow at run time — nothing has been computed yet — so it is
+# rejected here rather than trapped, and it has to be rejected here because one
+# host has no width to notice with: Python answered 2147483648 at Int32 while
+# rustc refused the same literal.
+INT_RANGE = {"Int32": (-2**31, 2**31 - 1), "Int64": (-2**63, 2**63 - 1)}
 # A prelude union's cases are nullary constructors; nothing downstream should
 # care whether a union came from the prelude or from a user `defenum`.
 PRELUDE_CASES = {case: name for name, cases in unions().items() for case in cases}
@@ -127,6 +140,22 @@ def unify(a, b) -> None:
     raise Mismatch(a, b, numeric=False)
 
 
+def map_keys(t):
+    """Every key type of every Map anywhere inside `t`, pruned. A Map reached
+    through another type's arguments counts: `(List (Map K V))` is still a Map
+    the backend has to build."""
+    t = prune(t)
+    if isinstance(t, Fun):
+        for p in (*t.params, t.ret):
+            yield from map_keys(p)
+        return
+    if isinstance(t, Con):
+        if t.name == "Map" and len(t.args) == 2:
+            yield t.args[0]
+        for a in t.args:
+            yield from map_keys(a)
+
+
 def from_json(spec: dict, fresh: dict):
     """A parsed prelude signature -> a type, instantiating its variables."""
     if "var" in spec:
@@ -152,6 +181,19 @@ class Types:
         self.ret_type = None                  # enclosing defun's declared return
         self.in_lambda = False
         self.lambdas: list = []
+        # Builtin call sites with the metavariables their arguments unified
+        # with. Read after the walk, not during it: instantiation is what the
+        # unifier arrives at, and a site is only resolved once its neighbours are.
+        self.instantiations: list[tuple[str, int, int, list]] = []
+        # Every type this walk attaches to a source node, kept unpruned: a
+        # metavariable that becomes a Map key three unifications later is the
+        # whole reason the map-key rule cannot live on the written annotation.
+        self.map_sites: list[tuple[object, object, str | None, str]] = []
+        # Every integer literal with the metavariable its width will be decided
+        # by. Same reason as map_sites: the width is fixed by unification with a
+        # neighbour, so the range cannot be checked where the literal is read.
+        self.int_sites: list[tuple[Token, object]] = []
+        self.scope = "?"                      # the declaration the walk is inside
 
     # ---------- declared types ----------
 
@@ -236,8 +278,10 @@ class Types:
     # ---------- expressions ----------
 
     def check_module(self) -> None:
+        self.declaration_types()
         self.field_defaults()
         for fun in self.mod.funs.values():
+            self.scope = f"function {fun.name}"
             env = {name: self.declared(t, fun.typevars) for name, t in fun.params}
             self.ret_type = self.declared(fun.ret, fun.typevars)
             body = [k for k in kids(fun.node) if isinstance(k, Tree) and k.data == "expr"]
@@ -245,6 +289,104 @@ class Types:
                 self.infer(e, env)
             self.expect(body[-1], env, self.ret_type, f"return of {fun.name}")
         self.undetermined_lambdas()
+        self.map_key_rules()
+        self.literal_ranges()
+
+    def declaration_types(self) -> None:
+        """Every type the module writes down. A declaration whose body is never
+        walked — a schema field, an enum case parameter — reaches the type-level
+        rules only from here."""
+        for fun in self.mod.funs.values():
+            self.scope = f"function {fun.name}"
+            for _, t in fun.params:
+                self.note(self.declared(t, fun.typevars), t, self.scope)
+            self.note(self.declared(fun.ret, fun.typevars), fun.ret, self.scope)
+        for schema in self.mod.schemas.values():
+            for fname, (t, _) in schema.fields.items():
+                self.scope = f"field {schema.name}.{fname}"
+                self.note(self.declared(t, schema.typevars), t, self.scope)
+        for enum in self.mod.enums.values():
+            for case, params in enum.cases.items():
+                self.scope = f"case {case}"
+                for _, t in params:
+                    self.note(self.declared(t, enum.typevars), t, self.scope)
+
+    def note(self, ty, node, where: str | None = None) -> None:
+        self.map_sites.append((ty, node, where, self.scope))
+
+    def unordered(self, ty, seen: set | None = None) -> str | None:
+        """The name inside `ty` that no backend can order, or None. A user
+        declaration is opaque only until its members are read: a record holding a
+        Float64 can derive no total order either, and neither can one holding
+        that record."""
+        ty = prune(ty)
+        if not isinstance(ty, Con):
+            return None                       # a Var is not determined; a Fun is not a key
+        if ty.name in UNORDERED:
+            return ty.name
+        seen = set() if seen is None else seen
+        for arg in ty.args:
+            if (bad := self.unordered(arg, seen)) is not None:
+                return bad
+        key = (ty.mod, ty.name)
+        if ty.mod is None or key in seen:
+            return None                       # built-in, or already being walked
+        seen.add(key)
+        owner = self.module_of(ty)
+        if owner is None:
+            return None
+        if (schema := owner.schemas.get(ty.name)) is not None:
+            members, bound = [t for t, _ in schema.fields.values()], schema.typevars
+        elif (enum := owner.enums.get(ty.name)) is not None:
+            members = [t for params in enum.cases.values() for _, t in params]
+            bound = enum.typevars
+        else:
+            return None
+        for member in members:
+            if (bad := self.unordered(self.declared(member, bound, None, owner),
+                                      seen)) is not None:
+                return bad
+        return None
+
+    def map_key_rules(self) -> None:
+        """§6 specifies map-keys/values/pairs in sorted key order, so a key type
+        needs an order and not merely equality. The rule runs here, after the
+        walk, because a key is fixed by inference as often as by the programmer:
+        `(map-from-pairs ps)` writes no Map anywhere in its source text, and
+        every lowering of one reached rustc and failed at a bound in rt.
+
+        One declaration reaching one unorderable type gets one diagnostic, at the
+        first position that reaches it. A nested `(Map (Map Float64 V) W)` is two
+        Map keys and one defect; so is a key written in a signature and used
+        again at every call in the body."""
+        seen: set[tuple[str, str]] = set()
+        for ty, node, where, scope in self.map_sites:
+            for key in map_keys(ty):
+                bad = self.unordered(key)
+                if bad is None or (scope, bad) in seen:
+                    continue
+                seen.add((scope, bad))
+                shown, site = show(key), f" in {where}" if where else ""
+                blame = (f"{shown} as a Map key{site} has no total order"
+                         if shown == bad else
+                         f"the Map key {shown}{site} reaches {bad}, which has no total order")
+                self.report("map-key-order",
+                            f"{blame}; map-keys is specified to return keys sorted", node)
+
+    def literal_ranges(self) -> None:
+        """§3: an unsuffixed integer literal takes the width its context requires
+        and Int64 where nothing constrains it. A literal the width cannot hold is
+        rejected — the alternative is a program that means one number on a host
+        with fixed widths and another on a host without them."""
+        for token, width in self.int_sites:
+            ty = prune(width)
+            name = ty.name if isinstance(ty, Con) else "Int64"
+            bounds = INT_RANGE.get(name)
+            if bounds is None or bounds[0] <= int(str(token)) <= bounds[1]:
+                continue
+            self.report("literal-range",
+                        f"the literal {token} does not fit {name} "
+                        f"({bounds[0]}..{bounds[1]})", token)
 
     def field_defaults(self) -> None:
         """§4.1's default stands in for a value the constructor omits, so it has
@@ -252,6 +394,7 @@ class Types:
         no construction site can be blamed for."""
         for schema in self.mod.schemas.values():
             for fname, literal in schema.defaults.items():
+                self.scope = f"field {schema.name}.{fname}"
                 want = self.declared(schema.fields[fname][0], schema.typevars)
                 self.expect(literal, {}, want, f"default for {schema.name}.{fname}")
 
@@ -267,6 +410,9 @@ class Types:
                             "write them", node)
 
     def expect(self, node, env, want, where: str):
+        # Noted before the descent so the position's diagnostic is the one that
+        # can name where it came from; `infer` notes the same node namelessly.
+        self.note(want, node, where)
         got = self.infer(node, env)
         if got is None:
             return
@@ -276,6 +422,14 @@ class Types:
             self.report("rule-6" if exc.numeric else "type", f"{where}: {exc}", node)
 
     def infer(self, node, env):
+        """Every expression's type passes through here, which is what lets a
+        type-level rule reach a Map the source never spells out."""
+        ty = self._infer(node, env)
+        if ty is not None:
+            self.note(ty, node)
+        return ty
+
+    def _infer(self, node, env):
         if isinstance(node, Token):
             return self.atom(node, env)
         if node.data == "expr":
@@ -286,7 +440,9 @@ class Types:
     def atom(self, token: Token, env):
         text = str(token)
         if token.type == "INT":
-            return Var("int")
+            width = Var("int")
+            self.int_sites.append((token, width))
+            return width
         if token.type == "FLOAT":
             return Con("Float64")
         if token.type == "STRING":
@@ -311,6 +467,15 @@ class Types:
         parts = [k for k in node.children if isinstance(k, Tree) and k.data == "expr"]
         head, args = parts[0], parts[1:]
         inner = head.children[0]
+        if isinstance(inner, Tree) and inner.data == "literal":
+            # `(-1 2)` is a call whose callee is a number. Reachable because a
+            # sign binds to its digits, so the head of that form is the literal
+            # -1 and not subtraction; both backends only find out at compile time.
+            self.report("not-callable",
+                        f"{tok(inner)} is a literal, not a function", inner)
+            for a in args:
+                self.infer(a, env)
+            return None
         variadic = False
         if isinstance(inner, Token) and str(inner) not in env:
             found = (self.lookup(str(inner)) if inner.type != "QUALIFIED"
@@ -338,6 +503,10 @@ class Types:
             return callee.ret                 # arity is reported by the resolve pass
         for want, arg in zip(params, args):
             self.expect(arg, env, want, f"argument to {self.head_name(inner)}")
+        if isinstance(inner, Token) and str(inner) in self.builtins \
+                and str(inner) not in env:
+            self.instantiations.append(
+                (str(inner), inner.line or 0, inner.column or 0, params))
         return callee.ret
 
     @staticmethod

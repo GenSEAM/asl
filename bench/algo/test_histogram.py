@@ -35,3 +35,19 @@ def test_histogram(impl, text, expected):
 def test_both_agree_everywhere():
     for text, _ in CASES:
         assert histogram_agents.histogram(text) == histogram_python.histogram(text)
+
+
+def test_the_checked_in_lowering_matches_its_source():
+    """`histogram_agents.py` is committed and every case above imports it, so an
+    emitter change reached the measurement in ROADMAP's size table without
+    anything comparing the file to the source it came from — and one had already
+    drifted by an arithmetic lowering. Regenerate with:
+
+        .venv/bin/python backend/to_python.py bench/algo/histogram.agents \
+            > bench/algo/histogram_agents.py
+    """
+    sys.path.insert(0, str(HERE.parent.parent / "grammar"))
+    from to_python import Transpiler
+    src = HERE / "histogram.agents"
+    assert Transpiler().transpile(src.read_text(), path=src) == \
+        (HERE / "histogram_agents.py").read_text()

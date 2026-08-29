@@ -120,7 +120,7 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 | `(Option T)` | `(some v)` \| `(none)` |
 | `(Result T E)` | `(ok v)` \| `(err e)` |
 | `(Pair A B)` | Built-in record, fields `first` / `second` |
-| `(Map K V)` | Immutable keyed collection; `K` must support equality |
+| `(Map K V)` | Immutable keyed collection; `K` must support ordering and equality. `Float64` is not a legal key type: its equality is IEEE-754, so a `NaN` key could never be looked up again |
 | `IoError` | Closed union of I/O failures: `(not-found)`, `(permission-denied)`, `(already-exists)`, `(invalid-path)`, `(interrupted)`, `(other)`. Fixed so every target reaches the same case for the same condition |
 
 `Int` is a documented alias for `Int64`. **There is no implicit numeric conversion** — mixing
@@ -131,8 +131,59 @@ nothing constrains it; a literal with a decimal point is always `Float64`. Witho
 would have to be written with a width to be usable at all, which is the ceremony §5 exists to
 avoid — and leaving it unstated made `(+ x 1)` mean different things to different implementations.
 
+A literal whose value does not fit the type its context requires is a **static error**, not an
+overflow: nothing has been computed yet. This has to be said, because one host has no width to
+notice with — `2147483648` at `Int32` answered itself on Python while `rustc` refused the same
+literal.
+
+A leading `-` is part of the literal when it touches the digits and the subtraction operator when it
+does not: `-1` is one token, `- 1` is two, and `(- 1 2)` is arithmetic while `(-1 2)` applies the
+number `-1` to `2` and is rejected. Both readings are legal parses of the same characters, so the
+choice is normative rather than an implementation detail: the grammar is the constrained-decoding
+surface, and an ambiguity there is a decoder that can emit either. There is no exponent form — a
+number is an optional sign, digits, and optionally a point and more digits — so `1.5e3` is the
+float `1.5` followed by the name `e3`, and `.5` and `1.` are not numbers at all.
+
 Fixing the widths resolves `SPEC_REVIEW.md` A3, which otherwise makes the same program overflow
 differently on each of the four targets.
+
+### 3.1 Integer overflow
+
+An integer operation whose exact result is not representable in the operand type **traps**. `Int32`
+and `Int64` never wrap and never widen, so `(+ a b)`, `(- a b)`, `(* a b)`, `(neg a)`, `(abs a)`,
+`(/ a b)` and `(list-sum xs)` all trap at their boundaries, and `(neg a)` and `(abs a)` do so at
+`MIN` because two's complement is not symmetric. `(mod a b)` does not trap there: `MIN mod -1` is
+`0`, which the type holds, and the rule is about the result rather than about the operands.
+
+`(checked-div a b)` answers `(none)` in exactly the cases `/` traps on — a zero divisor and
+`MIN / -1` — because being total is the reason it exists; `(checked-mod a b)` answers `(none)` only
+for a zero divisor. A conversion that cannot represent its argument answers `(none)` rather than the
+nearest value it can: `(float64-to-int64 1e30)` and `(string-to-int64 "9223372036854775808")` are
+both `(none)`, not `9223372036854775807`.
+
+A host without fixed integer widths has to impose them, and a host whose `-O` build wraps has to
+check explicitly: the semantics are the language's, not the profile's.
+
+### 3.2 Ordering and NaN
+
+Comparison is IEEE-754. `<`, `<=`, `>` and `>=` are all false when either operand is `NaN`, and
+`(= nan nan)` is false — including inside a container, so a list holding a `NaN` is not equal to
+itself.
+
+Ordering is not comparison. `list-sort`, `list-sort-by`, `list-min`, `list-max`, `min` and `max` use
+one **sort order**, which is total because a sort with an unordered element has no defined output
+and this language's output is defined on every target:
+
+- a value holding a `NaN` sorts after every value that does not;
+- values holding a `NaN` tie with one another, and every sort is stable, so they keep their input
+  order;
+- everything else is ordered as `<` orders it.
+
+So `(list-sort (list 3.0 nan 0.5))` is `(0.5 3.0 nan)`, `(min nan 1.0)` and `(min 1.0 nan)` are both
+`1.0`, and `(max …)` is `nan` from either side. Selection agrees with the sort — `(list-min xs)` is
+the head of `(list-sort xs)` — rather than being a second rule that answers by operand position.
+Leaving it to `<` alone is what made one host answer `(1.0 nan 2.0 3.0)` and the other
+`(1.0 3.0 nan 2.0)` for the same input.
 
 ## 4. Declarations
 
@@ -476,17 +527,17 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 
 | Form | Type | Meaning |
 |---|---|---|
-| `(+ a b)` | `N N -> N` | Sum. |
-| `(- a b)` | `N N -> N` | Difference. |
-| `(* a b)` | `N N -> N` | Product. |
-| `(/ a b)` | `N N -> N` | Division; integer division truncates toward zero. Traps on a zero divisor. |
+| `(+ a b)` | `N N -> N` | Sum. Traps on integer overflow. |
+| `(- a b)` | `N N -> N` | Difference. Traps on integer overflow. |
+| `(* a b)` | `N N -> N` | Product. Traps on integer overflow. |
+| `(/ a b)` | `N N -> N` | Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type. |
 | `(mod a b)` | `N N -> N` | Remainder; the sign follows the dividend. Traps on a zero divisor. |
-| `(checked-div a b)` | `N N -> (Option N)` | Division, or none on a zero divisor. |
-| `(checked-mod a b)` | `N N -> (Option N)` | Remainder, or none on a zero divisor. |
-| `(neg a)` | `N -> N` | Arithmetic negation. |
-| `(abs a)` | `N -> N` | Absolute value. |
-| `(min a b)` | `N N -> N` | Lesser of two values. |
-| `(max a b)` | `N N -> N` | Greater of two values. |
+| `(checked-div a b)` | `N N -> (Option N)` | Division, or none on a zero divisor or a quotient outside the type. |
+| `(checked-mod a b)` | `N N -> (Option N)` | Remainder, or none on a zero divisor; the remainder is always in range. |
+| `(neg a)` | `N -> N` | Arithmetic negation. Traps on integer overflow. |
+| `(abs a)` | `N -> N` | Absolute value. Traps on integer overflow. |
+| `(min a b)` | `N N -> N` | Lesser of two values in the sort order, so NaN is the greater. |
+| `(max a b)` | `N N -> N` | Greater of two values in the sort order, so NaN is the greater. |
 
 ### 6.2 Comparison and logic
 
@@ -515,7 +566,7 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | `(string-starts-with? a b)` | `String String -> Bool` | True when the string begins with the prefix. |
 | `(string-ends-with? a b)` | `String String -> Bool` | True when the string ends with the suffix. |
 | `(string-split a b)` | `String String -> (List String)` | Split on a separator. |
-| `(string-join a b c)` | `(List String) String -> String` | Join with a separator. |
+| `(string-join a b)` | `(List String) String -> String` | Join with a separator. |
 | `(string-upper a)` | `String -> String` | Upper case. |
 | `(string-lower a)` | `String -> String` | Lower case. |
 | `(string-trim a)` | `String -> String` | Remove leading and trailing whitespace. |
@@ -524,7 +575,7 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | `(string-chars a)` | `String -> (List String)` | Characters as one-character strings. |
 | `(string-from-int64 a)` | `Int64 -> String` | Decimal rendering of an integer. |
 | `(string-from-float64 a)` | `Float64 -> String` | Decimal rendering of a float. |
-| `(string-to-int64 a)` | `String -> (Option Int64)` | Parse an integer, or none. |
+| `(string-to-int64 a)` | `String -> (Option Int64)` | Parse an integer, or none when it is malformed or outside Int64. |
 | `(string-to-float64 a)` | `String -> (Option Float64)` | Parse a float, or none. |
 
 ### 6.4 Numeric conversion
@@ -541,42 +592,42 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | Form | Type | Meaning |
 |---|---|---|
 | `(list a b …)` | `T... -> (List T)` | Construct a list. |
-| `(list-empty? a b)` | `(List T) -> Bool` | True when the list has no elements. |
-| `(list-length a b)` | `(List T) -> Int64` | Element count. |
-| `(list-get a b c)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
-| `(list-head a b)` | `(List T) -> (Option T)` | First element, or none. |
-| `(list-tail a b)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
-| `(list-cons a b c)` | `T (List T) -> (List T)` | Prepend an element. |
-| `(list-append a b c d)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
-| `(list-reverse a b)` | `(List T) -> (List T)` | Reverse order. |
-| `(list-slice a b c d)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
-| `(list-contains? a b c)` | `(List T) T -> Bool` | True when the element occurs. |
-| `(list-index-of a b c)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
-| `(list-sort a b)` | `(List T) -> (List T)` | Stable ascending sort. |
-| `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key. |
+| `(list-empty? a)` | `(List T) -> Bool` | True when the list has no elements. |
+| `(list-length a)` | `(List T) -> Int64` | Element count. |
+| `(list-get a b)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
+| `(list-head a)` | `(List T) -> (Option T)` | First element, or none. |
+| `(list-tail a)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
+| `(list-cons a b)` | `T (List T) -> (List T)` | Prepend an element. |
+| `(list-append a b)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
+| `(list-reverse a)` | `(List T) -> (List T)` | Reverse order. |
+| `(list-slice a b c)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
+| `(list-contains? a b)` | `(List T) T -> Bool` | True when the element occurs. |
+| `(list-index-of a b)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
+| `(list-sort a)` | `(List T) -> (List T)` | Stable ascending sort; a value holding a NaN sorts last. |
+| `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key; a key holding a NaN sorts last. |
 | `(map a b)` | `(fn [A] -> B) (List A) -> (List B)` | Apply a function to every element. |
 | `(filter a b)` | `(fn [T] -> Bool) (List T) -> (List T)` | Keep elements satisfying a predicate. |
 | `(fold a b c)` | `(fn [B A] -> B) B (List A) -> B` | Left fold with an initial accumulator. |
 | `(range a b)` | `Int64 Int64 -> (List Int64)` | Half-open integer range; empty when start is not below end. |
-| `(zip a b c d)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
-| `(list-sum a b)` | `(List N) -> N` | Sum of elements. |
-| `(list-min a b)` | `(List T) -> (Option T)` | Least element, or none when empty. |
-| `(list-max a b)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
+| `(zip a b)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
+| `(list-sum a)` | `(List N) -> N` | Sum of elements, 0 when empty. Traps on integer overflow. |
+| `(list-min a)` | `(List T) -> (Option T)` | Least element in the sort order, or none when empty. |
+| `(list-max a)` | `(List T) -> (Option T)` | Greatest element in the sort order, or none when empty. |
 
 ### 6.6 Map
 
 | Form | Type | Meaning |
 |---|---|---|
 | `(map-empty)` | `-> (Map K V)` | The empty map. |
-| `(map-get a b c d)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
-| `(map-set a b c d)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
-| `(map-remove a b c d)` | `(Map K V) K -> (Map K V)` | Map without the key. |
-| `(map-has? a b c d)` | `(Map K V) K -> Bool` | True when the key is present. |
-| `(map-size a b c)` | `(Map K V) -> Int64` | Number of entries. |
-| `(map-keys a b c)` | `(Map K V) -> (List K)` | Keys, sorted. |
-| `(map-values a b c)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
-| `(map-pairs a b c)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
-| `(map-from-pairs a b c d)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
+| `(map-get a b)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
+| `(map-set a b c)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
+| `(map-remove a b)` | `(Map K V) K -> (Map K V)` | Map without the key. |
+| `(map-has? a b)` | `(Map K V) K -> Bool` | True when the key is present. |
+| `(map-size a)` | `(Map K V) -> Int64` | Number of entries. |
+| `(map-keys a)` | `(Map K V) -> (List K)` | Keys, sorted. |
+| `(map-values a)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
+| `(map-pairs a)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
+| `(map-from-pairs a)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
 
 ### 6.7 Option, Result, Pair
 
@@ -586,17 +637,17 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | `(none)` | `-> (Option T)` | An absent value. |
 | `(ok a)` | `T -> (Result T E)` | A successful result. |
 | `(err a)` | `E -> (Result T E)` | A failed result. |
-| `(is-some? a b)` | `(Option T) -> Bool` | True when a value is present. |
-| `(is-none? a b)` | `(Option T) -> Bool` | True when no value is present. |
-| `(is-ok? a b c)` | `(Result T E) -> Bool` | True when the result succeeded. |
-| `(is-err? a b c)` | `(Result T E) -> Bool` | True when the result failed. |
-| `(option-or a b c)` | `(Option T) T -> T` | The value, or a fallback when absent. |
-| `(result-or a b c d)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
+| `(is-some? a)` | `(Option T) -> Bool` | True when a value is present. |
+| `(is-none? a)` | `(Option T) -> Bool` | True when no value is present. |
+| `(is-ok? a)` | `(Result T E) -> Bool` | True when the result succeeded. |
+| `(is-err? a)` | `(Result T E) -> Bool` | True when the result failed. |
+| `(option-or a b)` | `(Option T) T -> T` | The value, or a fallback when absent. |
+| `(result-or a b)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
 | `(option-map a b)` | `(fn [A] -> B) (Option A) -> (Option B)` | Transform a present value. |
 | `(result-map a b)` | `(fn [A] -> B) (Result A E) -> (Result B E)` | Transform a successful value. |
 | `(result-map-err a b)` | `(fn [E] -> F) (Result T E) -> (Result T F)` | Transform a failure value. |
-| `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
-| `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
+| `(option-to-result a b)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
+| `(result-to-option a)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
 | `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
 
 ### 6.8 I/O

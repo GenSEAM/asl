@@ -1,0 +1,11 @@
+; A float is digits, a point, digits — both sides required. `.5` and `1.` are
+; rejected rather than read as 0.5 and 1.0, because the alternative is a lexer
+; where `.` is sometimes part of a number and sometimes the start of `.-field`,
+; and the constrained-decoding arm cannot afford that ambiguity.
+(defun half [] -> Float64
+  :doc "A float with nothing before the point."
+  .5)
+
+(defun one [] -> Float64
+  :doc "A float with nothing after it."
+  1.)

@@ -1,0 +1,11 @@
+{
+  "id": "list-pairs",
+  "src": "grammar/corpus/valid/24-list-reshaping.agents",
+  "entry": "pairs",
+  "cases": [
+    [[2], [["pair", 0, "a"], ["pair", 1, "b"]],
+     "zip truncates to the shorter list, here the left one, and the pair components keep their order"],
+    [[5], [["pair", 0, "a"], ["pair", 1, "b"], ["pair", 2, "c"]],
+     "truncation from the other side"]
+  ]
+}

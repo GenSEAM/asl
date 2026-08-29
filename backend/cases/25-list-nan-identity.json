@@ -1,0 +1,13 @@
+{
+  "id": "list-nan-identity",
+  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "entry": "nan-identity",
+  "cases": [
+    [["nan,1"], "F|none|F|F",
+     "the list's own first element is a NaN, so it is in no list, at no index, and equal to neither itself nor the list holding it. Testing identity before equality answers T|some 0|T|F"],
+    [["1,2"], "T|some 0|T|T",
+     "the same three questions where the element is a number, so the rule is about NaN and not about the comparison"],
+    [["1,nan"], "T|some 0|F|T",
+     "a NaN elsewhere in the list: the element is found, and the list is still unequal to itself"]
+  ]
+}

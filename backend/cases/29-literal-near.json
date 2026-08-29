@@ -1,0 +1,13 @@
+{
+  "id": "literal-near",
+  "src": "grammar/corpus/valid/29-literals.agents",
+  "entry": "near",
+  "cases": [
+    [[-1], "minus-one|-1|-1,-2",
+     "a negative literal as a match pattern: it has to be one token there too, or the arm binds a name instead of testing a value"],
+    [[0], "other|-1|-1,-2",
+     "the same arm not taken, which is what separates a literal pattern from a binder that matches everything"],
+    [[-9223372036854775808], "other|-1|-1,-2",
+     "the boundary value as an argument, so the arm's literal is compared against a value at the edge of the type"]
+  ]
+}

@@ -78,6 +78,7 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 - Primitive: `Bool`, `Int32`, `Int64`, `Float64`, `String`, `Unit`
 - Constructed: `(List …)`, `(Option …)`, `(Result …)`, `(Pair …)`, `(Map …)`
 - `Int` means `Int64`.
+- A `Map` key must be orderable: `Float64` is not a legal key type.
 
 ## Vocabulary
 
@@ -87,17 +88,17 @@ All 107 names. Nothing else exists.
 
 | Form | Type | Meaning |
 |---|---|---|
-| `(+ a b)` | `N N -> N` | Sum. |
-| `(- a b)` | `N N -> N` | Difference. |
-| `(* a b)` | `N N -> N` | Product. |
-| `(/ a b)` | `N N -> N` | Division; integer division truncates toward zero. Traps on a zero divisor. |
+| `(+ a b)` | `N N -> N` | Sum. Traps on integer overflow. |
+| `(- a b)` | `N N -> N` | Difference. Traps on integer overflow. |
+| `(* a b)` | `N N -> N` | Product. Traps on integer overflow. |
+| `(/ a b)` | `N N -> N` | Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type. |
 | `(mod a b)` | `N N -> N` | Remainder; the sign follows the dividend. Traps on a zero divisor. |
-| `(checked-div a b)` | `N N -> (Option N)` | Division, or none on a zero divisor. |
-| `(checked-mod a b)` | `N N -> (Option N)` | Remainder, or none on a zero divisor. |
-| `(neg a)` | `N -> N` | Arithmetic negation. |
-| `(abs a)` | `N -> N` | Absolute value. |
-| `(min a b)` | `N N -> N` | Lesser of two values. |
-| `(max a b)` | `N N -> N` | Greater of two values. |
+| `(checked-div a b)` | `N N -> (Option N)` | Division, or none on a zero divisor or a quotient outside the type. |
+| `(checked-mod a b)` | `N N -> (Option N)` | Remainder, or none on a zero divisor; the remainder is always in range. |
+| `(neg a)` | `N -> N` | Arithmetic negation. Traps on integer overflow. |
+| `(abs a)` | `N -> N` | Absolute value. Traps on integer overflow. |
+| `(min a b)` | `N N -> N` | Lesser of two values in the sort order, so NaN is the greater. |
+| `(max a b)` | `N N -> N` | Greater of two values in the sort order, so NaN is the greater. |
 
 ### Comparison and logic
 
@@ -126,7 +127,7 @@ All 107 names. Nothing else exists.
 | `(string-starts-with? a b)` | `String String -> Bool` | True when the string begins with the prefix. |
 | `(string-ends-with? a b)` | `String String -> Bool` | True when the string ends with the suffix. |
 | `(string-split a b)` | `String String -> (List String)` | Split on a separator. |
-| `(string-join a b c)` | `(List String) String -> String` | Join with a separator. |
+| `(string-join a b)` | `(List String) String -> String` | Join with a separator. |
 | `(string-upper a)` | `String -> String` | Upper case. |
 | `(string-lower a)` | `String -> String` | Lower case. |
 | `(string-trim a)` | `String -> String` | Remove leading and trailing whitespace. |
@@ -135,7 +136,7 @@ All 107 names. Nothing else exists.
 | `(string-chars a)` | `String -> (List String)` | Characters as one-character strings. |
 | `(string-from-int64 a)` | `Int64 -> String` | Decimal rendering of an integer. |
 | `(string-from-float64 a)` | `Float64 -> String` | Decimal rendering of a float. |
-| `(string-to-int64 a)` | `String -> (Option Int64)` | Parse an integer, or none. |
+| `(string-to-int64 a)` | `String -> (Option Int64)` | Parse an integer, or none when it is malformed or outside Int64. |
 | `(string-to-float64 a)` | `String -> (Option Float64)` | Parse a float, or none. |
 
 ### Numeric conversion
@@ -152,42 +153,42 @@ All 107 names. Nothing else exists.
 | Form | Type | Meaning |
 |---|---|---|
 | `(list a b …)` | `T... -> (List T)` | Construct a list. |
-| `(list-empty? a b)` | `(List T) -> Bool` | True when the list has no elements. |
-| `(list-length a b)` | `(List T) -> Int64` | Element count. |
-| `(list-get a b c)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
-| `(list-head a b)` | `(List T) -> (Option T)` | First element, or none. |
-| `(list-tail a b)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
-| `(list-cons a b c)` | `T (List T) -> (List T)` | Prepend an element. |
-| `(list-append a b c d)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
-| `(list-reverse a b)` | `(List T) -> (List T)` | Reverse order. |
-| `(list-slice a b c d)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
-| `(list-contains? a b c)` | `(List T) T -> Bool` | True when the element occurs. |
-| `(list-index-of a b c)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
-| `(list-sort a b)` | `(List T) -> (List T)` | Stable ascending sort. |
-| `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key. |
+| `(list-empty? a)` | `(List T) -> Bool` | True when the list has no elements. |
+| `(list-length a)` | `(List T) -> Int64` | Element count. |
+| `(list-get a b)` | `(List T) Int64 -> (Option T)` | Element at an index, or none. |
+| `(list-head a)` | `(List T) -> (Option T)` | First element, or none. |
+| `(list-tail a)` | `(List T) -> (Option (List T))` | All but the first element, or none when empty. |
+| `(list-cons a b)` | `T (List T) -> (List T)` | Prepend an element. |
+| `(list-append a b)` | `(List T) (List T) -> (List T)` | Concatenate two lists. |
+| `(list-reverse a)` | `(List T) -> (List T)` | Reverse order. |
+| `(list-slice a b c)` | `(List T) Int64 Int64 -> (Option (List T))` | Half-open slice, or none when out of range. |
+| `(list-contains? a b)` | `(List T) T -> Bool` | True when the element occurs. |
+| `(list-index-of a b)` | `(List T) T -> (Option Int64)` | Index of the first occurrence. |
+| `(list-sort a)` | `(List T) -> (List T)` | Stable ascending sort; a value holding a NaN sorts last. |
+| `(list-sort-by a b)` | `(fn [T] -> K) (List T) -> (List T)` | Stable ascending sort by a derived key; a key holding a NaN sorts last. |
 | `(map a b)` | `(fn [A] -> B) (List A) -> (List B)` | Apply a function to every element. |
 | `(filter a b)` | `(fn [T] -> Bool) (List T) -> (List T)` | Keep elements satisfying a predicate. |
 | `(fold a b c)` | `(fn [B A] -> B) B (List A) -> B` | Left fold with an initial accumulator. |
 | `(range a b)` | `Int64 Int64 -> (List Int64)` | Half-open integer range; empty when start is not below end. |
-| `(zip a b c d)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
-| `(list-sum a b)` | `(List N) -> N` | Sum of elements. |
-| `(list-min a b)` | `(List T) -> (Option T)` | Least element, or none when empty. |
-| `(list-max a b)` | `(List T) -> (Option T)` | Greatest element, or none when empty. |
+| `(zip a b)` | `(List A) (List B) -> (List (Pair A B))` | Pair up elements, truncating to the shorter list. |
+| `(list-sum a)` | `(List N) -> N` | Sum of elements, 0 when empty. Traps on integer overflow. |
+| `(list-min a)` | `(List T) -> (Option T)` | Least element in the sort order, or none when empty. |
+| `(list-max a)` | `(List T) -> (Option T)` | Greatest element in the sort order, or none when empty. |
 
 ### Map
 
 | Form | Type | Meaning |
 |---|---|---|
 | `(map-empty)` | `-> (Map K V)` | The empty map. |
-| `(map-get a b c d)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
-| `(map-set a b c d)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
-| `(map-remove a b c d)` | `(Map K V) K -> (Map K V)` | Map without the key. |
-| `(map-has? a b c d)` | `(Map K V) K -> Bool` | True when the key is present. |
-| `(map-size a b c)` | `(Map K V) -> Int64` | Number of entries. |
-| `(map-keys a b c)` | `(Map K V) -> (List K)` | Keys, sorted. |
-| `(map-values a b c)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
-| `(map-pairs a b c)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
-| `(map-from-pairs a b c d)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
+| `(map-get a b)` | `(Map K V) K -> (Option V)` | Value for a key, or none. |
+| `(map-set a b c)` | `(Map K V) K V -> (Map K V)` | Map with the key bound to the value. |
+| `(map-remove a b)` | `(Map K V) K -> (Map K V)` | Map without the key. |
+| `(map-has? a b)` | `(Map K V) K -> Bool` | True when the key is present. |
+| `(map-size a)` | `(Map K V) -> Int64` | Number of entries. |
+| `(map-keys a)` | `(Map K V) -> (List K)` | Keys, sorted. |
+| `(map-values a)` | `(Map K V) -> (List V)` | Values, ordered by sorted key. |
+| `(map-pairs a)` | `(Map K V) -> (List (Pair K V))` | Entries as pairs, ordered by sorted key. |
+| `(map-from-pairs a)` | `(List (Pair K V)) -> (Map K V)` | Build from pairs; later entries win. |
 
 ### Option, Result, Pair
 
@@ -197,17 +198,17 @@ All 107 names. Nothing else exists.
 | `(none)` | `-> (Option T)` | An absent value. |
 | `(ok a)` | `T -> (Result T E)` | A successful result. |
 | `(err a)` | `E -> (Result T E)` | A failed result. |
-| `(is-some? a b)` | `(Option T) -> Bool` | True when a value is present. |
-| `(is-none? a b)` | `(Option T) -> Bool` | True when no value is present. |
-| `(is-ok? a b c)` | `(Result T E) -> Bool` | True when the result succeeded. |
-| `(is-err? a b c)` | `(Result T E) -> Bool` | True when the result failed. |
-| `(option-or a b c)` | `(Option T) T -> T` | The value, or a fallback when absent. |
-| `(result-or a b c d)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
+| `(is-some? a)` | `(Option T) -> Bool` | True when a value is present. |
+| `(is-none? a)` | `(Option T) -> Bool` | True when no value is present. |
+| `(is-ok? a)` | `(Result T E) -> Bool` | True when the result succeeded. |
+| `(is-err? a)` | `(Result T E) -> Bool` | True when the result failed. |
+| `(option-or a b)` | `(Option T) T -> T` | The value, or a fallback when absent. |
+| `(result-or a b)` | `(Result T E) T -> T` | The value, or a fallback on failure. |
 | `(option-map a b)` | `(fn [A] -> B) (Option A) -> (Option B)` | Transform a present value. |
 | `(result-map a b)` | `(fn [A] -> B) (Result A E) -> (Result B E)` | Transform a successful value. |
 | `(result-map-err a b)` | `(fn [E] -> F) (Result T E) -> (Result T F)` | Transform a failure value. |
-| `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
-| `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
+| `(option-to-result a b)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
+| `(result-to-option a)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
 | `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
 
 ### I/O

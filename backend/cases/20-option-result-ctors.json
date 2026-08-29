@@ -1,0 +1,13 @@
+{
+  "id": "option-result-ctors",
+  "src": "grammar/corpus/valid/20-option-result-ctors.agents",
+  "entry": "classify",
+  "cases": [
+    [["3", "x"], ["pair", "some/ok:3|TFTF", "none/err:x|FTFT"],
+     "a pair that ignores argument order; every predicate takes both polarities here"],
+    [["x", "3"], ["pair", "none/err:x|FTFT", "some/ok:3|TFTF"],
+     "the mirror of case 1: a pair that swaps its arguments passes case 1 alone"],
+    [["", "0"], ["pair", "none/err:|FTFT", "some/ok:0|TFTF"],
+     "an empty token, and a parsed 0 that a truthiness test would call unparsed"]
+  ]
+}

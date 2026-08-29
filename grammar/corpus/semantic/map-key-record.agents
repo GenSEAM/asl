@@ -1,0 +1,10 @@
+; expect-only: map-key-order
+; A record is orderable only if every field is. Point holds a Float64, so the
+; Rust lowering derives no Ord for it and BTreeMap<Point, _> does not compile.
+
+(defschema Point
+  (:field x Float64 "Horizontal coordinate")
+  (:field y Float64 "Vertical coordinate"))
+
+(defun lookup [(m (Map Point Int64)) (k Point)] -> (Option Int64)
+  (map-get m k))

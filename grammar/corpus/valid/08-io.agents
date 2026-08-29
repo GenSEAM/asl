@@ -3,7 +3,8 @@
 ; the signature and not the body.
 
 (module io-demo
-  :doc "Copies a file, reporting a missing source rather than trapping."
+  :doc "Copies a file and echoes it back, reporting a missing source rather than
+        trapping."
   :export [main])
 
 (defun ! describe [(path String)] -> String
@@ -19,12 +20,17 @@
   (map (fn ! [p] (describe p)) paths))
 
 (defun ! main [(args (List String))] -> (Result Unit IoError)
-  :doc "Copy the source to the destination, or describe it when given one path.
-        A failed write is the program's own result, so the exit status carries it
-        without a trap and without a separate error channel."
+  :doc "Copy the source to the destination and read it back to stdout, or
+        describe it when given one path. Reading the destination back is what
+        makes a successful write observable: a deleted write leaves no file, so
+        the read reports `not-found` instead of echoing the content. A failed
+        write is the program's own result, so the exit status carries it without
+        a trap and without a separate error channel."
   (match args
     ((cons src rest)
       (match rest
-        ((cons dst more) (file-write dst (describe src)))
+        ((cons dst more)
+          (try (file-write dst (describe src)))
+          (println (try (file-read dst))))
         ((list)          (println (describe src)))))
     ((list) (eprintln "usage: io-demo SRC [DST]"))))

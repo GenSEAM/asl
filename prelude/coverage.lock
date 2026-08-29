@@ -1,0 +1,519 @@
+{
+  "floor_pct": 95,
+  "executed": 107,
+  "tier_a": {
+    "probes": 400,
+    "narrowed": [
+      "map-empty [K=Float64,V=Bool]",
+      "map-empty [K=Float64,V=Float64]",
+      "map-empty [K=Float64,V=Int64]",
+      "map-empty [K=Float64,V=String]",
+      "map-from-pairs [K=Float64,V=Bool]",
+      "map-from-pairs [K=Float64,V=Float64]",
+      "map-from-pairs [K=Float64,V=Int64]",
+      "map-from-pairs [K=Float64,V=String]",
+      "map-get [K=Float64,V=Bool]",
+      "map-get [K=Float64,V=Float64]",
+      "map-get [K=Float64,V=Int64]",
+      "map-get [K=Float64,V=String]",
+      "map-has? [K=Float64,V=Bool]",
+      "map-has? [K=Float64,V=Float64]",
+      "map-has? [K=Float64,V=Int64]",
+      "map-has? [K=Float64,V=String]",
+      "map-keys [K=Float64,V=Bool]",
+      "map-keys [K=Float64,V=Float64]",
+      "map-keys [K=Float64,V=Int64]",
+      "map-keys [K=Float64,V=String]",
+      "map-pairs [K=Float64,V=Bool]",
+      "map-pairs [K=Float64,V=Float64]",
+      "map-pairs [K=Float64,V=Int64]",
+      "map-pairs [K=Float64,V=String]",
+      "map-remove [K=Float64,V=Bool]",
+      "map-remove [K=Float64,V=Float64]",
+      "map-remove [K=Float64,V=Int64]",
+      "map-remove [K=Float64,V=String]",
+      "map-set [K=Float64,V=Bool]",
+      "map-set [K=Float64,V=Float64]",
+      "map-set [K=Float64,V=Int64]",
+      "map-set [K=Float64,V=String]",
+      "map-size [K=Float64,V=Bool]",
+      "map-size [K=Float64,V=Float64]",
+      "map-size [K=Float64,V=Int64]",
+      "map-size [K=Float64,V=String]",
+      "map-values [K=Float64,V=Bool]",
+      "map-values [K=Float64,V=Float64]",
+      "map-values [K=Float64,V=Int64]",
+      "map-values [K=Float64,V=String]"
+    ],
+    "domains": {
+      "N": [
+        "Int32",
+        "Int64",
+        "Float64"
+      ],
+      "*": [
+        "Int64",
+        "Float64",
+        "String",
+        "Bool"
+      ]
+    },
+    "excluded": {
+      "effect": [
+        "read-line",
+        "read-all",
+        "print",
+        "println",
+        "eprintln",
+        "file-read",
+        "file-write",
+        "file-append",
+        "file-exists?"
+      ],
+      "variadic": [
+        "str",
+        "list"
+      ],
+      "higher-order": [
+        "list-sort-by",
+        "map",
+        "filter",
+        "fold",
+        "option-map",
+        "result-map",
+        "result-map-err"
+      ],
+      "monomorphic": [
+        "and",
+        "or",
+        "not",
+        "string-length",
+        "string-empty?",
+        "string-slice",
+        "string-index-of",
+        "string-contains?",
+        "string-starts-with?",
+        "string-ends-with?",
+        "string-split",
+        "string-join",
+        "string-upper",
+        "string-lower",
+        "string-trim",
+        "string-reverse",
+        "string-replace",
+        "string-chars",
+        "string-from-int64",
+        "string-from-float64",
+        "string-to-int64",
+        "string-to-float64",
+        "int32-to-int64",
+        "int64-to-int32",
+        "int64-to-float64",
+        "float64-to-int64",
+        "range",
+        "not-found",
+        "permission-denied",
+        "already-exists",
+        "invalid-path",
+        "interrupted",
+        "other"
+      ]
+    }
+  },
+  "instantiations": {
+    "!=": [
+      "Int64"
+    ],
+    "*": [
+      "Float64",
+      "Int64"
+    ],
+    "+": [
+      "Float64",
+      "Int32",
+      "Int64"
+    ],
+    "-": [
+      "Float64",
+      "Int64"
+    ],
+    "/": [
+      "Float64",
+      "Int64"
+    ],
+    "<": [
+      "Int64"
+    ],
+    "<=": [
+      "Int64"
+    ],
+    "=": [
+      "(List Float64)",
+      "Float64",
+      "Int64",
+      "IoError",
+      "String"
+    ],
+    ">": [
+      "Int64"
+    ],
+    ">=": [
+      "Int64"
+    ],
+    "abs": [
+      "Float64",
+      "Int64"
+    ],
+    "already-exists": [],
+    "and": [
+      "Bool"
+    ],
+    "checked-div": [
+      "Float64",
+      "Int64"
+    ],
+    "checked-mod": [
+      "Float64",
+      "Int64"
+    ],
+    "eprintln": [
+      "String"
+    ],
+    "err": [
+      "IoError",
+      "String"
+    ],
+    "file-append": [
+      "String"
+    ],
+    "file-exists?": [
+      "String"
+    ],
+    "file-read": [
+      "String"
+    ],
+    "file-write": [
+      "String"
+    ],
+    "filter": [
+      "(List (Pair String Int64))",
+      "(List Int64)",
+      "(List String)",
+      "(fn [(Pair String Int64)] -> Bool)",
+      "(fn [Int64] -> Bool)",
+      "(fn [String] -> Bool)"
+    ],
+    "float64-to-int64": [
+      "Float64"
+    ],
+    "fold": [
+      "(List Int64)",
+      "(List String)",
+      "(Map String Int64)",
+      "(fn [(Map String Int64) String] -> (Map String Int64))",
+      "(fn [Int64 Int64] -> Int64)",
+      "(fn [Int64 String] -> Int64)",
+      "Int64"
+    ],
+    "int32-to-int64": [
+      "Int32"
+    ],
+    "int64-to-float64": [
+      "Int64"
+    ],
+    "int64-to-int32": [
+      "Int64"
+    ],
+    "interrupted": [],
+    "invalid-path": [],
+    "is-err?": [
+      "(Result Int64 String)"
+    ],
+    "is-none?": [
+      "(Option Int64)"
+    ],
+    "is-ok?": [
+      "(Result Int64 String)"
+    ],
+    "is-some?": [
+      "(Option Int64)"
+    ],
+    "list": [
+      "Int64",
+      "String"
+    ],
+    "list-append": [
+      "(List Int64)"
+    ],
+    "list-cons": [
+      "(List Int64)",
+      "Int64"
+    ],
+    "list-contains?": [
+      "(List Float64)",
+      "(List Int64)",
+      "Float64",
+      "Int64"
+    ],
+    "list-empty?": [
+      "(List Float64)"
+    ],
+    "list-get": [
+      "(List Int64)",
+      "Int64"
+    ],
+    "list-head": [
+      "(List Float64)",
+      "(List Int64)"
+    ],
+    "list-index-of": [
+      "(List Float64)",
+      "(List Int64)",
+      "Float64",
+      "Int64"
+    ],
+    "list-length": [
+      "(List Float64)",
+      "(List Int64)",
+      "(List String)"
+    ],
+    "list-max": [
+      "(List Float64)",
+      "(List Int64)"
+    ],
+    "list-min": [
+      "(List Float64)"
+    ],
+    "list-reverse": [
+      "(List Int64)"
+    ],
+    "list-slice": [
+      "(List Int64)",
+      "Int64"
+    ],
+    "list-sort": [
+      "(List Float64)"
+    ],
+    "list-sort-by": [
+      "(List Int64)",
+      "(List String)",
+      "(fn [Int64] -> Int64)",
+      "(fn [String] -> Float64)",
+      "(fn [String] -> Int64)"
+    ],
+    "list-sum": [
+      "(List Float64)",
+      "(List Int64)"
+    ],
+    "list-tail": [
+      "(List Int64)"
+    ],
+    "map": [
+      "(List Float64)",
+      "(List Int64)",
+      "(List String)",
+      "(fn [Float64] -> String)",
+      "(fn [Int64] -> Int64)",
+      "(fn [Int64] -> String)",
+      "(fn [String] -> Float64)",
+      "(fn [String] -> Int64)",
+      "(fn [String] -> String)"
+    ],
+    "map-empty": [],
+    "map-from-pairs": [
+      "(List (Pair String Int64))"
+    ],
+    "map-get": [
+      "(Map String Int64)",
+      "String"
+    ],
+    "map-has?": [
+      "(Map String Int64)",
+      "String"
+    ],
+    "map-keys": [
+      "(Map String Int64)"
+    ],
+    "map-pairs": [
+      "(Map String Int64)"
+    ],
+    "map-remove": [
+      "(Map String Int64)",
+      "String"
+    ],
+    "map-set": [
+      "(Map String Int64)",
+      "Int64",
+      "String"
+    ],
+    "map-size": [
+      "(Map String Int64)"
+    ],
+    "map-values": [
+      "(Map String Int64)"
+    ],
+    "max": [
+      "Float64",
+      "Int64"
+    ],
+    "min": [
+      "Float64",
+      "Int64"
+    ],
+    "mod": [
+      "Float64",
+      "Int64"
+    ],
+    "neg": [
+      "Float64",
+      "Int64"
+    ],
+    "none": [],
+    "not": [
+      "Bool"
+    ],
+    "not-found": [],
+    "ok": [
+      "Int64"
+    ],
+    "option-map": [
+      "(Option Int32)",
+      "(Option Int64)",
+      "(fn [Int32] -> Int64)",
+      "(fn [Int64] -> Int64)"
+    ],
+    "option-or": [
+      "(Option Float64)",
+      "(Option Int64)",
+      "Float64",
+      "Int64"
+    ],
+    "option-to-result": [
+      "(Option Int64)",
+      "String"
+    ],
+    "or": [
+      "Bool"
+    ],
+    "other": [],
+    "pair": [
+      "Int64",
+      "String"
+    ],
+    "permission-denied": [],
+    "print": [
+      "String"
+    ],
+    "println": [
+      "String"
+    ],
+    "range": [
+      "Int64"
+    ],
+    "read-all": [],
+    "read-line": [],
+    "result-map": [
+      "(Result Int64 String)",
+      "(fn [Int64] -> Int64)",
+      "(fn [Int64] -> String)"
+    ],
+    "result-map-err": [
+      "(Result Int64 String)",
+      "(fn [String] -> String)"
+    ],
+    "result-or": [
+      "(Result String String)",
+      "String"
+    ],
+    "result-to-option": [
+      "(Result Int64 String)"
+    ],
+    "some": [
+      "(Pair String Int64)",
+      "Int64",
+      "Node"
+    ],
+    "str": [
+      "String"
+    ],
+    "string-chars": [
+      "String"
+    ],
+    "string-contains?": [
+      "String"
+    ],
+    "string-empty?": [
+      "String"
+    ],
+    "string-ends-with?": [
+      "String"
+    ],
+    "string-from-float64": [
+      "Float64"
+    ],
+    "string-from-int64": [
+      "Int64"
+    ],
+    "string-index-of": [
+      "String"
+    ],
+    "string-join": [
+      "(List String)",
+      "String"
+    ],
+    "string-length": [
+      "String"
+    ],
+    "string-lower": [
+      "String"
+    ],
+    "string-replace": [
+      "String"
+    ],
+    "string-reverse": [
+      "String"
+    ],
+    "string-slice": [
+      "Int64",
+      "String"
+    ],
+    "string-split": [
+      "String"
+    ],
+    "string-starts-with?": [
+      "String"
+    ],
+    "string-to-float64": [
+      "String"
+    ],
+    "string-to-int64": [
+      "String"
+    ],
+    "string-trim": [
+      "String"
+    ],
+    "string-upper": [
+      "String"
+    ],
+    "zip": [
+      "(List Int64)",
+      "(List String)"
+    ]
+  },
+  "unproven": {
+    "list-sort": "no executed instantiation in the suite",
+    "list-min": "no executed instantiation in the suite",
+    "list-max": "no executed instantiation in the suite",
+    "map-has?": "no executed instantiation in the suite",
+    "map-remove": "no executed instantiation in the suite",
+    "map-keys": "no executed instantiation in the suite",
+    "map-pairs": "no executed instantiation in the suite",
+    "map-from-pairs": "no executed instantiation in the suite",
+    "already-exists": "the constructor is executed; the host EEXIST mapping is reached by no portable case",
+    "invalid-path": "the constructor is executed; the host ENOTDIR mapping is reached by no portable case",
+    "interrupted": "the constructor is executed; the host EINTR mapping is not reachable deterministically",
+    "other": "the constructor is executed; the fallback host mapping is not reachable deterministically"
+  },
+  "unexecuted": {},
+  "note": "instantiations covers root-unit call sites only; an imported module's body contributes builtin names but no instantiations. Int32 has no Python representation, so the Python side never executes Int32 arithmetic: tier_a compiles it, and the 400/400 figure does not mean it ran."
+}

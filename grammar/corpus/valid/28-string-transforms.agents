@@ -1,0 +1,29 @@
+; Transforming a string, with every operation reported beside the one it could be
+; confused with: lower beside upper, replace over an input that contains the
+; needle more than once, reverse over a non-palindrome, and both parsers over
+; inputs that only one of them accepts.
+;
+; run: transform("aXbXc") == "axbxc|AXBXC|cXbXa|a-b-c|aXbXc|n=5|none|0.0"
+
+(module string/transform
+  :doc "Report every string transformation over one line."
+  :export [transform])
+
+(defun show-int [(o (Option Int64))] -> String
+  :doc "An optional integer, so a parsed zero is not read as a failure."
+  (match o
+    ((some n) (str "some " (string-from-int64 n)))
+    ((none)   "none")))
+
+(defun transform [(line String)] -> String
+  :doc "lower, upper, reversed, X replaced, words rejoined, length, and the line
+        read as an integer and as a float."
+  (string-join (list (string-lower line)
+                     (string-upper line)
+                     (string-reverse line)
+                     (string-replace line "X" "-")
+                     (string-join (string-split line " ") "+")
+                     (str "n=" (string-from-int64 (string-length line)))
+                     (show-int (string-to-int64 line))
+                     (string-from-float64 (option-or (string-to-float64 line) 0.0)))
+               "|"))

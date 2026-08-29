@@ -85,34 +85,34 @@
    "name": "+",
    "sec": "Arithmetic",
    "type": "N N -> N",
-   "doc": "Sum.",
-   "py": "({0} + {1})",
-   "js": "({0} + {1})",
-   "rs": "({0} + {1})"
+   "doc": "Sum. Traps on integer overflow.",
+   "py": "_as.add({0}, {1})",
+   "js": "_as.add({0}, {1})",
+   "rs": "rt::add({0}, {1})"
   },
   {
    "name": "-",
    "sec": "Arithmetic",
    "type": "N N -> N",
-   "doc": "Difference.",
-   "py": "({0} - {1})",
-   "js": "({0} - {1})",
-   "rs": "({0} - {1})"
+   "doc": "Difference. Traps on integer overflow.",
+   "py": "_as.sub({0}, {1})",
+   "js": "_as.sub({0}, {1})",
+   "rs": "rt::sub({0}, {1})"
   },
   {
    "name": "*",
    "sec": "Arithmetic",
    "type": "N N -> N",
-   "doc": "Product.",
-   "py": "({0} * {1})",
-   "js": "({0} * {1})",
-   "rs": "({0} * {1})"
+   "doc": "Product. Traps on integer overflow.",
+   "py": "_as.mul({0}, {1})",
+   "js": "_as.mul({0}, {1})",
+   "rs": "rt::mul({0}, {1})"
   },
   {
    "name": "/",
    "sec": "Arithmetic",
    "type": "N N -> N",
-   "doc": "Division; integer division truncates toward zero. Traps on a zero divisor.",
+   "doc": "Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type.",
    "py": "_as.div({0}, {1})",
    "js": "_as.div({0}, {1})",
    "rs": "rt::div({0}, {1})"
@@ -130,7 +130,7 @@
    "name": "checked-div",
    "sec": "Arithmetic",
    "type": "N N -> (Option N)",
-   "doc": "Division, or none on a zero divisor.",
+   "doc": "Division, or none on a zero divisor or a quotient outside the type.",
    "py": "_as.checked_div({0}, {1})",
    "js": "_as.checkedDiv({0}, {1})",
    "rs": "rt::checked_div({0}, {1})"
@@ -139,7 +139,7 @@
    "name": "checked-mod",
    "sec": "Arithmetic",
    "type": "N N -> (Option N)",
-   "doc": "Remainder, or none on a zero divisor.",
+   "doc": "Remainder, or none on a zero divisor; the remainder is always in range.",
    "py": "_as.checked_mod({0}, {1})",
    "js": "_as.checkedMod({0}, {1})",
    "rs": "rt::checked_rem({0}, {1})"
@@ -148,37 +148,37 @@
    "name": "neg",
    "sec": "Arithmetic",
    "type": "N -> N",
-   "doc": "Arithmetic negation.",
-   "py": "(-{0})",
-   "js": "(-{0})",
-   "rs": "(-{0})"
+   "doc": "Arithmetic negation. Traps on integer overflow.",
+   "py": "_as.neg({0})",
+   "js": "_as.neg({0})",
+   "rs": "rt::neg({0})"
   },
   {
    "name": "abs",
    "sec": "Arithmetic",
    "type": "N -> N",
-   "doc": "Absolute value.",
-   "py": "abs({0})",
-   "js": "Math.abs({0})",
-   "rs": "({0}).abs()"
+   "doc": "Absolute value. Traps on integer overflow.",
+   "py": "_as.absolute({0})",
+   "js": "_as.absolute({0})",
+   "rs": "rt::abs({0})"
   },
   {
    "name": "min",
    "sec": "Arithmetic",
    "type": "N N -> N",
-   "doc": "Lesser of two values.",
-   "py": "min({0}, {1})",
-   "js": "Math.min({0}, {1})",
-   "rs": "std::cmp::min({0}, {1})"
+   "doc": "Lesser of two values in the sort order, so NaN is the greater.",
+   "py": "_as.min_({0}, {1})",
+   "js": "_as.min({0}, {1})",
+   "rs": "rt::min({0}, {1})"
   },
   {
    "name": "max",
    "sec": "Arithmetic",
    "type": "N N -> N",
-   "doc": "Greater of two values.",
-   "py": "max({0}, {1})",
-   "js": "Math.max({0}, {1})",
-   "rs": "std::cmp::max({0}, {1})"
+   "doc": "Greater of two values in the sort order, so NaN is the greater.",
+   "py": "_as.max_({0}, {1})",
+   "js": "_as.max({0}, {1})",
+   "rs": "rt::max({0}, {1})"
   },
   {
    "name": "=",
@@ -412,22 +412,22 @@
    "doc": "Decimal rendering of an integer.",
    "py": "str({0})",
    "js": "String({0})",
-   "rs": "{0}.to_string()"
+   "rs": "rt::fmt_i64({0})"
   },
   {
    "name": "string-from-float64",
    "sec": "String",
    "type": "Float64 -> String",
    "doc": "Decimal rendering of a float.",
-   "py": "repr({0})",
-   "js": "String({0})",
+   "py": "repr(float({0}))",
+   "js": "_as.fmtF64({0})",
    "rs": "rt::fmt_f64({0})"
   },
   {
    "name": "string-to-int64",
    "sec": "String",
    "type": "String -> (Option Int64)",
-   "doc": "Parse an integer, or none.",
+   "doc": "Parse an integer, or none when it is malformed or outside Int64.",
    "py": "_as.to_int({0})",
    "js": "_as.toInt({0})",
    "rs": "rt::to_i64(&{0})"
@@ -466,7 +466,7 @@
    "doc": "Convert to floating point.",
    "py": "float({0})",
    "js": "{0}",
-   "rs": "({0} as f64)"
+   "rs": "rt::i_to_f({0})"
   },
   {
    "name": "float64-to-int64",
@@ -589,8 +589,8 @@
    "name": "list-sort",
    "sec": "List",
    "type": "(List T) -> (List T)",
-   "doc": "Stable ascending sort.",
-   "py": "sorted({0})",
+   "doc": "Stable ascending sort; a value holding a NaN sorts last.",
+   "py": "sorted({0}, key=_as.order_key)",
    "js": "_as.sort({0})",
    "rs": "rt::sort({0})"
   },
@@ -598,8 +598,8 @@
    "name": "list-sort-by",
    "sec": "List",
    "type": "(fn [T] -> K) (List T) -> (List T)",
-   "doc": "Stable ascending sort by a derived key.",
-   "py": "sorted({1}, key={0})",
+   "doc": "Stable ascending sort by a derived key; a key holding a NaN sorts last.",
+   "py": "sorted({1}, key=_as.order_by({0}))",
    "js": "_as.sortBy({0}, {1})",
    "rs": "rt::sort_by({1}, {0})"
   },
@@ -644,7 +644,7 @@
    "sec": "List",
    "type": "(List A) (List B) -> (List (Pair A B))",
    "doc": "Pair up elements, truncating to the shorter list.",
-   "py": "_as.zip({0}, {1})",
+   "py": "_as.zip_({0}, {1})",
    "js": "_as.zip({0}, {1})",
    "rs": "rt::zip({0}, {1})"
   },
@@ -652,8 +652,8 @@
    "name": "list-sum",
    "sec": "List",
    "type": "(List N) -> N",
-   "doc": "Sum of elements.",
-   "py": "sum({0})",
+   "doc": "Sum of elements, 0 when empty. Traps on integer overflow.",
+   "py": "_as.sum_({0})",
    "js": "_as.sum({0})",
    "rs": "rt::sum({0})"
   },
@@ -661,7 +661,7 @@
    "name": "list-min",
    "sec": "List",
    "type": "(List T) -> (Option T)",
-   "doc": "Least element, or none when empty.",
+   "doc": "Least element in the sort order, or none when empty.",
    "py": "_as.least({0})",
    "js": "_as.least({0})",
    "rs": "rt::least(&{0})"
@@ -670,7 +670,7 @@
    "name": "list-max",
    "sec": "List",
    "type": "(List T) -> (Option T)",
-   "doc": "Greatest element, or none when empty.",
+   "doc": "Greatest element in the sort order, or none when empty.",
    "py": "_as.greatest({0})",
    "js": "_as.greatest({0})",
    "rs": "rt::greatest(&{0})"

@@ -1,0 +1,56 @@
+; A log appender, and the whole IoError surface it can reach. The six cases are
+; ordinary nullary constructors, so `--labels` executes every one of them and
+; pins its spelling; the host mapping from errno to case is what only a real
+; failing call reaches, and two of them (a missing parent, an unreadable file)
+; are driven by backend/differential.py.
+
+(module io/log
+  :doc "Append a line of input to a file and show the result."
+  :export [main])
+
+(defun label [(e IoError)] -> String
+  :doc "The case name of an I/O failure, as the specification spells it."
+  (cond ((= e (not-found))         "not-found")
+        ((= e (permission-denied)) "permission-denied")
+        ((= e (already-exists))    "already-exists")
+        ((= e (invalid-path))      "invalid-path")
+        ((= e (interrupted))       "interrupted")
+        (:else                     "other")))
+
+(defun labels [] -> String
+  :doc "Every case, in declaration order, comma separated."
+  (string-join (list (label (not-found))
+                     (label (permission-denied))
+                     (label (already-exists))
+                     (label (invalid-path))
+                     (label (interrupted))
+                     (label (other)))
+               ","))
+
+(defun ! run [(path String)] -> (Result Unit IoError)
+  :doc "Append one line of standard input to the log, then show the whole log.
+        A path that did not exist is reported rather than dumped, so the
+        appending and the reporting are distinguishable from their output."
+  (let [(existed (try (file-exists? path)))
+        (line (try (read-line)))
+        (chunk (match line
+                 ((some s) (str s "\n"))
+                 ((none)   "")))]
+    (match (file-append path chunk)
+      ((err e) (println (label e)) (err e))
+      ((ok _)
+       (if existed
+           (match (file-read path)
+             ((err e) (println (label e)) (err e))
+             ((ok text) (print text)))
+           (println "absent"))))))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  :doc "`--labels` names every I/O failure case, `--slurp` echoes all of stdin,
+        and any other argument is a log path."
+  (match args
+    ((cons a rest)
+     (cond ((= a "--labels") (println (labels)))
+           ((= a "--slurp")  (print (try (read-all))))
+           (:else            (run a))))
+    ((list) (eprintln "usage: log PATH"))))

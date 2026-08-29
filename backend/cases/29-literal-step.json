@@ -1,0 +1,10 @@
+{
+  "id": "literal-step",
+  "src": "grammar/corpus/valid/29-literals.agents",
+  "entry": "step",
+  "cases": [
+    [[0], -1, "a negative literal at Int32, where the narrow width and not the sign is what the lowering has to carry"],
+    [[-2147483647], -2147483648, "one step short of Int32's least value: the result is representable, so it is a value and not a trap"],
+    [[2147483647], 2147483646, "the greatest Int32, stepped down by the same literal"]
+  ]
+}

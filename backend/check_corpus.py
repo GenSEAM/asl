@@ -12,8 +12,8 @@ exits 0 on that output — it is a division expression — so a fixture may also
 declare, in a `; run:` header, one expression over its own emitted names that has
 to evaluate true. Compiling proves the shape; only running proves the meaning.
 
-The exit code is not the verdict here: a `skipped` column still exits 0, and that
-is how the module fixture's broken lowering stayed invisible.
+There is no skip list, and there is not going to be one: a `skipped` column still
+exits 0, and that is how the module fixture's broken lowering stayed invisible.
 """
 import subprocess
 import sys
@@ -21,7 +21,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-CORPUS = sorted((ROOT / "grammar" / "corpus" / "valid").glob("*.agents"))
+# Every source any gate counts is compile-gated: the differential harness and
+# the coverage tracer both execute the bench sources, and a source that runs
+# without compiling here is one whose backend coverage nothing checks.
+CORPUS = (sorted((ROOT / "grammar" / "corpus" / "valid").glob("*.agents"))
+          + sorted((ROOT / "bench").rglob("*.agents")))
 MODULES = ROOT / "grammar" / "corpus" / "modules"
 
 
@@ -56,6 +60,9 @@ def execute(py_src: str, expr: str) -> tuple[bool, str]:
 
 def main() -> int:
     fails = []
+    if not CORPUS:
+        print("no corpus sources were found; the gate would pass by having nothing to do")
+        return 1
     print(f"{'fixture':<26} {'python':<12} {'compile':<10} {'run':<10} "
           f"{'rust':<12} {'rustc':<10}")
     print("-" * 84)
@@ -76,7 +83,10 @@ def main() -> int:
         ran = "-"
         expr = declared_run(f)
         if expr is not None:
-            if not py_ok:
+            if "==" not in expr:
+                ran = "FAIL"
+                fails.append(f"{f.name}: `; run:` header has no `==` assertion: `{expr}`")
+            elif not py_ok:
                 ran = "FAIL"
             else:
                 ok, why = execute(py_src, expr)

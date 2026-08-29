@@ -1,0 +1,25 @@
+; Every comparison and both connectives, reported as eight independent columns.
+; A strict operator written where a non-strict one belongs differs only at the
+; boundary, so the cases put `x` exactly on `lo` and exactly on `hi`; and both
+; connectives take all the operand combinations that separate them.
+;
+; run: band(3, 3, 7) == "TTFTFFTF"
+
+(module range/band
+  :doc "Report where a value sits relative to a closed range."
+  :export [band])
+
+(defun mark [(b Bool)] -> String
+  :doc "One character per column, so a report is fixed width."
+  (if b "T" "F"))
+
+(defun band [(lo Int64) (x Int64) (hi Int64)] -> String
+  :doc "<=lo, >=hi, <lo, >hi, !=lo, inside-above-lo, at-lo-or-past-hi, outside."
+  (str (mark (<= lo x))
+       (mark (>= hi x))
+       (mark (< lo x))
+       (mark (> hi x))
+       (mark (!= x lo))
+       (mark (and (!= x lo) (>= hi x)))
+       (mark (or (= x lo) (> x hi)))
+       (mark (not (and (<= lo x) (>= hi x))))))

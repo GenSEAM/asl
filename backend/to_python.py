@@ -494,5 +494,8 @@ if __name__ == "__main__":
                          "A file's own directory is always searched.")
     args = ap.parse_args()
     source = Path(args.file)
-    print(Transpiler().transpile(source.read_text(), path=source,
-                                 roots=[Path(r) for r in args.root]))
+    # Written, not printed: the checked-in lowerings are compared against
+    # `transpile` itself, and print's newline made the file differ from the
+    # thing the drift gate calls.
+    sys.stdout.write(Transpiler().transpile(source.read_text(), path=source,
+                                            roots=[Path(r) for r in args.root]))

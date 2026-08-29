@@ -1,0 +1,32 @@
+; Both polarities of every Option and Result predicate, inside a single case: one
+; half of the pair parses and one does not, so a predicate stuck at `true` fails
+; on the other half. The pair is returned positionally, which is what makes an
+; argument swap in `pair` visible at all — both components are String.
+;
+; run: classify("3", "x") == ("pair", "some/ok:3|TFTF", "none/err:x|FTFT")
+
+(module parse/classify
+  :doc "Report how a token parses, from both the Option and the Result side."
+  :export [classify])
+
+(defun flag [(b Bool)] -> String
+  :doc "One character per predicate, so a report is fixed width."
+  (if b "T" "F"))
+
+(defun render [(tok String)] -> String
+  :doc "tag/side:value|is-some?is-none?is-ok?is-err?"
+  (let [(o (string-to-int64 tok))
+        (r (match o
+             ((some n) (ok n))
+             ((none)   (err tok))))
+        (value (match r
+                 ((ok n)  (string-from-int64 n))
+                 ((err e) e)))]
+    (str (if (is-some? o) "some" "none") "/"
+         (if (is-ok? r) "ok" "err") ":" value "|"
+         (flag (is-some? o)) (flag (is-none? o))
+         (flag (is-ok? r)) (flag (is-err? r)))))
+
+(defun classify [(a String) (b String)] -> (Pair String String)
+  :doc "Both tokens rendered, in argument order."
+  (pair (render a) (render b)))

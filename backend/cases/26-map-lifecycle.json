@@ -1,0 +1,15 @@
+{
+  "id": "map-lifecycle",
+  "src": "grammar/corpus/valid/26-map-lifecycle.agents",
+  "entry": "lifecycle",
+  "cases": [
+    [["a b a c", "a"], "3|T|2|b,c",
+     "removing a key that is present: the size drops, which a no-op map-remove cannot reproduce"],
+    [["a b a c", "z"], "3|F|3|a,b,c",
+     "removing an absent key is a no-op, and this is map-has?'s false side, without which a constant-true predicate passes"],
+    [["", "a"], "0|F|0|",
+     "the empty map: map-keys of it joins to the empty string"],
+    [["c b a", "b"], "3|T|2|a,c",
+     "map-keys is sorted, not insertion-ordered, and the input is given in descending order"]
+  ]
+}

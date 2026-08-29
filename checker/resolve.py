@@ -614,6 +614,30 @@ class Checker:
         return sorted(self.diags, key=lambda d: (d.line, d.col, d.code))
 
 
+def call_instantiations(path: Path, roots: list[Path]) -> list[dict]:
+    """Every builtin call site in `path`, with the concrete types its arguments
+    were inferred at.
+
+    This is serialization of inference that already runs (`types_.declared` with
+    `fresh` given is exactly instantiation), not a second inference. It exists so
+    the rule that an `N`-typed builtin must execute at Int64 *and* Float64 is
+    enforced against the checker rather than against a hand-written list.
+
+    Only this file's own call sites: the checker collects an imported module's
+    header and never walks its body, so no instantiation for it exists to report.
+    """
+    from types_ import Types, prune, show
+
+    path = Path(path)
+    mod = collect(path)
+    checker = Checker(mod, Loader([path.parent, *roots]))
+    types = Types(mod, checker.report, checker.loader)
+    types.check_module()
+    return [{"path": str(path), "line": line, "col": col, "builtin": name,
+             "args": [show(prune(p)) for p in params]}
+            for name, line, col, params in types.instantiations]
+
+
 def check_file(path: Path, roots: list[Path]) -> list[Diagnostic]:
     """A file gets diagnostics, never a traceback: the measurement harness feeds
     this generated code, where malformed input is an expected outcome to

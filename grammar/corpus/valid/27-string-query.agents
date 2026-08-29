@@ -1,0 +1,36 @@
+; Querying a string. Both arguments are String, so a haystack/needle swap
+; type-checks and compiles: the cases assert the index, not merely that one was
+; found. The needle sits at the start in one case and at the end in another,
+; which is what separates string-starts-with? from string-ends-with?, and the
+; last case is non-ASCII, where a byte offset and a character offset differ.
+;
+; run: query("banana", "na") == "6|some 2|T|F|T|F|6"
+
+(module string/query
+  :doc "Report where and whether a needle occurs in a haystack."
+  :export [query cut])
+
+(defun mark [(b Bool)] -> String
+  :doc "One character per predicate, so a report is fixed width."
+  (if b "T" "F"))
+
+(defun show-int [(o (Option Int64))] -> String
+  :doc "An optional index, tagged so index zero is not read as absence."
+  (match o
+    ((some n) (str "some " (string-from-int64 n)))
+    ((none)   "none")))
+
+(defun query [(hay String) (needle String)] -> String
+  :doc "length, index, contains?, starts-with?, ends-with?, empty?, char count."
+  (string-join (list (string-from-int64 (string-length hay))
+                     (show-int (string-index-of hay needle))
+                     (mark (string-contains? hay needle))
+                     (mark (string-starts-with? hay needle))
+                     (mark (string-ends-with? hay needle))
+                     (mark (string-empty? hay))
+                     (string-from-int64 (list-length (string-chars hay))))
+               "|"))
+
+(defun cut [(hay String) (a Int64) (b Int64)] -> (Option String)
+  :doc "The half-open slice [a, b) in characters, or none when out of range."
+  (string-slice hay a b))

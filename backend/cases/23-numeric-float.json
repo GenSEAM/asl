@@ -1,0 +1,47 @@
+{
+  "id": "numeric-float64",
+  "src": "grammar/corpus/valid/23-numeric.agents",
+  "entry": "fnum",
+  "cases": [
+    [
+      [
+        7,
+        2
+      ],
+      "9.0|3.5|1.0|14.0|5.0|7.0|-7.0|2.0|7.0|some 3.5|some 1.0",
+      "the Float64 instantiation / mod min max checked-div checked-mod never had; 3.5 also separates float division from truncating division"
+    ],
+    [
+      [
+        -7,
+        2
+      ],
+      "-5.0|-3.5|-1.0|-14.0|-9.0|7.0|7.0|-7.0|2.0|some -3.5|some -1.0",
+      "a remainder whose sign follows the dividend, which floored modulo would give as +1.0"
+    ],
+    [
+      [
+        5,
+        0
+      ],
+      "none|none",
+      "a zero divisor at Float64: checked, not an infinity"
+    ],
+    [
+      [
+        7,
+        3
+      ],
+      "10.0|2.3333333333333335|1.0|21.0|4.0|7.0|-7.0|3.0|7.0|some 2.3333333333333335|some 1.0",
+      "the shortest round-trip rendering of a non-terminating quotient must agree on both hosts"
+    ],
+    [
+      [
+        9007199254740993,
+        2
+      ],
+      "9007199254740994.0|4503599627370496.0|0.0|1.8014398509481984e+16|9007199254740990.0|9007199254740992.0|-9007199254740992.0|2.0|9007199254740992.0|some 4503599627370496.0|some 0.0",
+      "2^53+1 rounds to an even double, and the product crosses into exponent notation, where the two hosts spell the exponent differently unless made to agree"
+    ]
+  ]
+}

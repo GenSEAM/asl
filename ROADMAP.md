@@ -43,16 +43,17 @@ Everything below was checked by a command whose output was read, not inferred.
 | Language specification | **v0.2 complete** — `AGENT_SPEC_CORE.md` |
 | Grammars | **two, agreeing** — Lark (Earley) and tree-sitter |
 | Tooling (AST, structural search) | **working** — queries return real captures |
-| Conformance gate | **green** — 63 fixtures × 2 grammars (58 must parse, 5 must be rejected), 0 failures, plus 7 token-identity probes compared across both parsers |
-| Closure gate | **green** — no example calls an undefined name |
-| Python backend | **working** — 18 corpus fixtures transpile, `py_compile` accepts every one, 10 also run a declared expression |
-| Rust backend | **working for `Int64`** — all 18 fixtures transpile and `rustc` accepts them, but seven arithmetic builtins declared over the numeric type variable `N` are lowered `i64`-only and do not compile at the other two numeric types; see §6. Phase 2 owns the repair |
+| Conformance gate | **green** — 74 fixtures × 2 grammars (69 must parse, 5 must be rejected), 0 failures, plus 7 token-identity probes compared across both parsers |
+| Closure gate | **green** — no example calls an undefined name, and it now reports the *executed* coverage figure rather than a scanned one: **107/107 builtins evaluated** on the Python lowering (the Rust lowering is compile-gated by `monomorphism.py` and executed under `differential.py`), against a floor and a ratchet in `prelude/coverage.lock` |
+| Python backend | **working** — 28 corpus fixtures and 2 bench sources transpile, `py_compile` accepts every one, 27 also run a declared expression |
+| Rust backend | **working over the declared numeric domain** — every corpus and bench source transpiles and `rustc` accepts it, and `backend/monomorphism.py` compiles all 400 admissible (builtin × instantiation) probes, so the numeric family is generic over `Int32`/`Int64`/`Float64` and the ordering helpers over any `PartialOrd` element. Still owed by Phase 1: `defenum`/`defschema` elements and keys, which need the `Ord`/`Eq` derives |
 | JavaScript backend | lowering rules exist in the prelude, no transpiler |
-| Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, and type resolution across a module boundary |
-| Semantic gate | **green** — 24 fixtures clean (18 programs, 6 modules), 34 semantic fixtures each rejected under the rule they declare, 17 of them asserted to report that code *and nothing else* |
+| Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and the named checks §9 has no item for (`type-arity`, `map-key-order`) |
+| Semantic gate | **green** — 34 fixtures clean (28 programs, 6 modules), 40 semantic fixtures each rejected under the rule they declare, 23 of them asserted to report that code *and nothing else*. `; expect-only:` compares a *set* of codes, so it cannot pin a count; `checker/t/test_map_keys.py` does that for the six `map-key-order` fixtures, which is what a duplicate report breaks |
 | I/O surface | **working** — read/write, files, `IoError`, tracked effects, `main` |
-| Differential gate | **green** — 7 function cases and 7 whole-program cases, Python and Rust; 2 of the program cases also assert a declared expected output rather than only cross-backend agreement |
-| Unit tests | **79 pass** — `backend/t`, `bench/algo`, `checker/t` |
+| Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible (builtin × instantiation) probes through the checker, `rustc` and `py_compile`; the 40 narrowed by `map-key-order`, the domains and the exclusion set are recorded in `prelude/coverage.lock`. What "admissible" buys is narrower than "the checker accepts ⇒ it compiles": the probes are single-builtin, fully annotated one-liners, so the gate proves that claim *for them* and not for programs generally — see the `Map`-key bullet for a program the checker accepts and `rustc` rejects |
+| Differential gate | **green** — 85 function cases across 18 tasks and 14 whole-program cases, Python and Rust; every case asserts a checked-in expected value as well as cross-backend agreement, and a program case declares its files, its stdin, its stdout and its exit status |
+| Unit tests | **96 pass** — `backend/t`, `bench/algo`, `checker/t` |
 | Reference interpreter | **not built, deliberately** — see below |
 | Measurement harness | **built, never run** — `--dry-run` exercises the whole path with canned responses; a real run is blocked, see §5 |
 
@@ -184,7 +185,10 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    unrecorded ownership decision (PCP `l-880d`).
 6b. **WebAssembly target** — the cheap half is already reachable: the Rust backend's output is
    accepted for `wasm32-unknown-unknown` unchanged, and every rustc-gated corpus fixture produces
-   a valid module (magic `0061736d`), so a target arrives with no new code generation. What is not
+   a valid module (magic `0061736d`), so a target arrives with no new code generation. That route
+   runs through `backend/rust/rt.rs` and therefore inherited its numeric gap; Phase 2's repairs and
+   the Tier-A sweep close it for this target too, and any new numeric helper it needs is compiled
+   at every admissible instantiation by the same gate. What is not
    free is everything that makes it *glue*: an interface contract generated from the module header,
    and a decision on how a foreign call's failure crosses that boundary — the same question
    `d-4b8c` answers for host bindings, asked again for a different boundary. Direct Wasm code
@@ -222,19 +226,20 @@ The harness can be written and unit-tested without any of this. It cannot be run
 
 ## 6. Known gaps — do not mistake green gates for a validated language
 
-* **Vocabulary coverage is reported as 35%, and the number that means anything is 19%.**
-  `grammar/closure_audit.py` reports 38 of 107 builtins "exercised". It counts a builtin as
-  exercised when it appears as a call head in a scanned file — the valid corpus and the
-  specification's own code blocks — so *exercised* means mentioned, never run. Wrapping each
-  builtin's Python lowering in a recorder and running every program the gates actually execute puts
-  the executed set at 33 of 107; of the 38 the gate counts, only **21 are ever executed** (19%).
-  Seventeen of the counted builtins have never run, `/` and `mod` among them — which is exactly how
-  they sit inside the "exercised" set while being broken for two of the three numeric types on the
-  Rust backend. Twelve more execute in files the gate does not scan (the module fixtures and the
-  benchmark variants), so the scan root is wrong in both directions; 57 builtins are neither
-  mentioned nor executed. Even "executed" is weaker than it sounds: it means the lowering worked at
-  the one type someone happened to use, not that it works. A coverage floor has to be defined over
-  (builtin × type) and over lines that ran, or it measures the wrong thing. PCP `l-3434`.
+* **Vocabulary coverage is 107/107 executed, and the metric changed to make that mean
+  something.** The old figure counted a call head found by a static scan over the corpus and the
+  specification's markdown: it read 38 of 107 while the executed set was 33, and only 21 builtins
+  were in both — wrong in both directions, and blind to a call in a branch no case takes.
+  `backend/exec_coverage.py` now wraps every Python lowering template in a recorder and runs every
+  program the gates execute, so a builtin counts only when its emitted expression is *evaluated*.
+  The floor (95%), the ratchet, the per-builtin executed instantiations and the Tier-A probe set
+  live in `prelude/coverage.lock`, and every `N`-typed builtin is required to execute at `Int64`
+  **and** at `Float64` — the rule that would have caught `/` and `mod`. What is still not proven:
+  execution is recorded on the Python side only (the Rust side is compile-gated by
+  `monomorphism.py` and compared by `differential.py`), the host errno mappings for
+  `already-exists`, `invalid-path`, `interrupted` and `other` are unreachable from a deterministic
+  case, and the eight builtins listed under `unproven` have no `defenum`-typed instantiation until
+  Phase 1's derives land. PCP `l-3434`.
 * **Types cross the module boundary; three holes were left open.** `:export` admits type names, an
   importer writes `alias/TypeName` and `alias/case-name`, identity is nominal and keyed by the
   defining module, and rule 13 forbids an exported signature from naming a private type. PCP
@@ -247,17 +252,98 @@ The harness can be written and unit-tested without any of this. It cannot be run
 * **The checklist and the checker's diagnostic set no longer correspond one-to-one.** A check with
   no §9 entry is coded by name rather than given the next free rule number, so that a fixture's
   declared rule is assertable against the specification and not merely against the code that
-  produced it. Type-application arity is the first such check: it is enforced, and §9 has no item
-  for it. Closing the gap means adding a checklist item, which is a specification change. PCP
-  `d-bad1`.
-* **The Rust backend is numerically `Int64`-only.** `/`, `mod`, `checked-div`, `checked-mod` and
-  `list-sum` lower to runtime helpers whose parameters are `i64`, and `min`/`max` lower to the
-  standard total-ordering functions. All seven declare `N N -> N` or `(List N) -> N`, and `N` is
-  `Int32`, `Int64` or `Float64` in both the specification and the checker. Compiling a probe that
-  calls them at `Float64` and at `Int32` gives three `rustc` errors: the ordering trait is not
-  implemented for the floating type, and the integer widths are not the declared parameter type. The
-  corpus never reaches any of these at a type other than `Int64`, so every gate is green. **Phase 2
-  owns the repair.**
+  produced it. Type-application arity was the first such check; `map-key-order` is the second. Both
+  are enforced, and §9 has an item for neither. Closing the gap means adding checklist items, which
+  is a specification change. PCP `d-bad1`.
+* **A `Map` key must be orderable, and the rule is enforced where the key is *determined*, not
+  where it is written.** `(Map Float64 V)` type-checked and could lower to no backend: `BTreeMap`
+  needs `Ord`, `f64` has no total order, and §6 specifies `map-keys` as sorted. `map-key-order`
+  first shipped as a scan over declared type trees, which reads no key that inference supplies —
+  `(defun b [(ps (List (Pair Float64 Int64)))] -> Int64 (map-size (map-from-pairs ps)))` checked
+  clean and then failed at `rustc` with `error[E0277]: the trait bound f64: Ord is not satisfied`.
+  The check now runs in the type layer (`checker/types_.py:map_key_rules`) over every type the walk
+  attaches to a source node, so it sees the inferred key, a key fixed by instantiating a generic
+  function's type variable at a call site, and a key reached through a user declaration: a record or
+  union holding a `Float64` — transitively — derives no `Ord` either, and neither does `IoError`.
+  One declaration reaching one unorderable type reports once; the old pass reported a nested
+  `(Map (Map Float64 V) W)` twice at the same token.
+  **The residual hole, stated rather than described away:** a key that is a *rigid type variable*.
+  `(defun {K} build [(ps (List (Pair K Int64)))] -> Int64 (map-size (map-from-pairs ps)))` checks
+  clean (`checker/check.py` exit 0) and `rustc` rejects it with `the trait bound K: Ord is not
+  satisfied` at the definition, before any instantiation — the backend emits the generic with no
+  bound, and the language has no way to write one. Closing it means either emitting `Ord` bounds in
+  `backend/to_rust.py` (which moves the error to the caller, where the checker still admits it) or
+  narrowing §3 so a `Map` key may not be a type variable. The second is normative text and is owed.
+  Forty instantiations across the ten `Map` builtins are narrowed away by `map-key-order` rather
+  than repaired, which is what lets Tier A's floor be 100% rather than 100% minus a skip list;
+  `.venv/bin/python backend/monomorphism.py` re-derives `candidates: 440 / narrowed: 40 / probes:
+  400`. Measured blast radius: `check_file` over all 82 `.agents` files in the tree reports
+  `map-key-order` on the six `grammar/corpus/semantic/map-*.agents` fixtures and nothing else.
+  `prelude/HANDBOOK.md:81` carries the headline — "A `Map` key must be orderable: `Float64` is not a
+  legal key type" — so the narrowing reaches the artifact a model actually reads, but it does not
+  yet say that a record or union reaching a `Float64`, or `IoError`, is refused for the same reason.
+  The handbook is generated by `prelude/generate.py`; that widening is owed.
+* **"Admissible" means "the checker accepts it", and that is a weaker floor than it reads as.** The
+  checker's type system models the specification's types; it does not model the trait obligations a
+  lowering carries. Where a backend needs a property of a type argument that §3 never wrote down,
+  the checker has no reason to ask for it, and the gate that would catch the difference only
+  *compiles* — `py_compile` is a parser, so a Python-side obligation is invisible to it entirely.
+  Measured today, on top of the `Map`-key type-variable hole above: `(defun store [(k (List Int64))]
+  -> Int64 (map-size (map-set (map-empty) k 1)))` checks clean, `rustc` accepts it (`Vec<i64>` is
+  `Ord`), and the Python lowering — a `dict` keyed by a `list` — raises `TypeError: unhashable type:
+  'list'` when the function is called. A `Map` key must therefore be *hashable in Python* as well as
+  ordered in Rust, and nothing states or checks the first. The narrowing decision is normative and
+  is owed; so is the question of whether Tier B should execute a probe rather than compile it.
+* **Every operation at `Int32` ignores the width, because the Python lowering table is keyed on the
+  builtin name alone.** `backend/to_python.py`'s `LOWER` maps `+` to one template regardless of the
+  operand type, so `Int32` arithmetic is emitted as unbounded Python integer arithmetic while Rust
+  emits `i32` and traps. §3.1 says an operation whose exact result is not representable in the
+  operand type traps, and `Int32` "never wraps and never widens" — the Rust side obeys it and the
+  Python side cannot see the question. Measured with `differential.run_python` and
+  `differential.run_rust` over a scratch file, all three arithmetic forms diverge at the boundary:
+  `(defun bump [(n Int32)] -> Int32 (+ n 1))` at `2147483647` answers `[2147483648]` on Python and
+  `panicked at rt.rs:46:1: overflow in addition` on Rust; `(* n n)` at `100000` answers
+  `[10000000000]` against `overflow in multiplication`; `(neg n)` at `-2147483648` answers
+  `[2147483648]` against `overflow in negation`. The checker accepts all three (`checker/check.py`
+  exit 0) and is right to — the program is well-typed and the divergence is in the lowering. Note
+  what is *not* broken: an `Int32` **literal** outside the width is now rejected statically
+  (`literal-range`, `checker/types_.py:literal_ranges`), which is the half that needed no type
+  information at the backend. Closing the rest means `to_python.py` learning the operand type at
+  each call site — the checker already computes it and records instantiations for
+  `exec_coverage.py`, so the type is available; threading it into the emitter is a phase, not a
+  cleanup. The differential gate cannot catch this today because it compares values and a Rust trap
+  is not a value; `grammar/corpus/valid/23-numeric.agents` asserts the Int64 traps by construction
+  and has no Int32 leg. PCP `l-4d92`.
+* **`list-sort` over a user union, a `Result` or a record orders by different things on each
+  backend, and over a record or a `Map` only one backend can order at all.** Python lowers a union
+  case to a tuple whose head is the case *name*, so sorting compares tag strings; Rust lowers it to
+  an `enum` whose derived order is *declaration order*. The two agree only when the two orders
+  coincide. Measured: `(list-sort (list (err "E") (ok n)))` answers `['errE', 'ok1']` on Python and
+  `['ok1', 'errE']` on Rust; with `(defenum Tag (:case zed [] "Z") (:case alpha [] "A"))`,
+  `(list-sort (list (alpha) (zed)))` answers `['alpha', 'zed']` on Python and `['zed', 'alpha']` on
+  Rust. A record is worse than disagreement: it lowers to a `dict`, and
+  `(list-sort (list (P :x n) (P :x 0)))` answers `[0, 3]` on Rust and raises
+  `TypeError: '<' not supported between instances of 'dict' and 'dict'` on Python; two `Map` values
+  raise the same `TypeError` while Rust sorts `BTreeMap` by its derived order. The mirror case is
+  `IoError`, which §3 says has no order: a record holding one sorts fine on Python and `rustc`
+  refuses it with `error[E0277]: can't compare Failure with Failure`. The checker accepts every one
+  of these (`checker/check.py` exit 0) because `UNORDERED` is consulted for `Map` keys only. Fixing
+  it needs a decision — one sort order for user types, presumably declaration order, written into
+  §3.2 — and then a Python record representation that *has* an order, which is the same
+  type-awareness phase as the `Int32` gap above. Until then `backend/to_rust.py` derives `PartialOrd`
+  separately from `Eq, Ord` so the Rust half is at least correct at `Float64`
+  (`backend/t/test_float_ordering.py`), and no differential case sorts a user type. PCP `l-5c47`,
+  `d-6c04`.
+* **A `:field`'s `:default` is type-checked and then lowered by neither backend.** §4.1 says the
+  default stands in for a value the constructor omits; `checker/types_.py:field_defaults` checks it
+  against the field type, and that is the whole of its life. `(defschema C (:field at Int64 "P"
+  :default -1))` with `(.-at (C))` passes `checker/check.py` with exit 0, emits `def C(at)` called
+  as `C()` — `TypeError: C() missing 1 required positional argument: 'at'` — and emits `C {  }`,
+  which `rustc` rejects with `error[E0063]: missing field at in initializer of C`. No fixture had
+  ever omitted a defaulted field: `grammar/corpus/valid/01-basics.agents` declares `:default 3` and
+  always supplies the field, so both gates stayed green over a feature neither backend has. Closing
+  it is a design item on the Rust side, where a struct literal cannot omit a field and the choice is
+  between a generated constructor function and `Default` plus functional update. PCP `l-9e13`.
 * **The entry point's signature is unconstrained by the language.** Both host runtimes require it
   to take the argument vector and return a result failing with `IoError` — Rust structurally at
   compile time, Python by an explicit runtime check — and nothing in the specification or the

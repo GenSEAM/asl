@@ -1,0 +1,65 @@
+; A sign belongs to the digits it precedes. `-1` used to be read as the
+; subtraction operator applied to `1` — a legal parse of the same characters,
+; and the one the Earley resolver chose — so `(+ x -1)` lowered to
+; `_as.add(x, _)` and `rt::add(x.clone(), _.clone())`: the wildcard token,
+; leaking out of pattern position, on both backends at once. No fixture had ever
+; written a negative number, so every gate was green over it.
+;
+; Every literal form that can carry a sign is here, because a sign is not the
+; only thing a literal can get wrong: both integer widths at both boundaries
+; (Int64::MIN has no positive counterpart, so it exists only as a signed
+; literal), a negative float, negative zero, a negative literal as a match
+; pattern, as a field default, and inside an elided lambda.
+;
+; run: signs(4) == "3|5|-8|5|-9223372036854775808|4|9223372036854775807|-9223372036854775808|2147483647|-2147483648" and floats(2.5) == "1.0|-0.0|-2.5|-1.5" and near(-1) == "minus-one|-1|-1,-2" and near(0) == "other|-1|-1,-2" and step(0) == -1
+
+(module math/literals
+  :doc "Literal forms that carry a sign, at every numeric type."
+  :export [signs floats near step])
+
+(defschema Cursor
+  (:field at Int64 "Position, before anything has moved it." :default -1))
+
+(defun signs [(x Int64)] -> String
+  :doc "Negative literals as operands, then the four width boundaries as
+        literals. A boundary is where a sign stops being cosmetic: Int64::MIN is
+        one past the largest positive literal, so it can only be written signed."
+  (string-join (list (string-from-int64 (+ x -1))
+                     (string-from-int64 (- x -1))
+                     (string-from-int64 (* x -2))
+                     (string-from-int64 (neg -5))
+                     (string-from-int64 (min x -9223372036854775808))
+                     (string-from-int64 (max x -9223372036854775808))
+                     (string-from-int64 9223372036854775807)
+                     (string-from-int64 -9223372036854775808)
+                     (string-from-int64 (int32-to-int64 2147483647))
+                     (string-from-int64 (int32-to-int64 -2147483648)))
+               "|"))
+
+(defun floats [(x Float64)] -> String
+  :doc "The same at Float64, including negative zero — which equals zero and
+        renders differently, so only the rendering can tell the sign survived."
+  (string-join (list (string-from-float64 (+ x -1.5))
+                     (string-from-float64 -0.0)
+                     (string-from-float64 (* x -1.0))
+                     (string-from-float64 (/ -3.0 2.0)))
+               "|"))
+
+(defun near [(x Int64)] -> String
+  :doc "A negative literal as a match pattern, as a constructor argument, and in
+        a lambda body whose parameter type is elided. The field's own :default
+        is type-checked from the declaration; omitting the field at construction
+        is a separate gap, recorded in ROADMAP.md section 6."
+  (string-join (list (match x
+                       (-1 "minus-one")
+                       (_  "other"))
+                     (string-from-int64 (.-at (Cursor :at -1)))
+                     (string-join (map (fn [n] (string-from-int64 (* n -1)))
+                                       (list 1 2))
+                                  ","))
+               "|"))
+
+(defun step [(n Int32)] -> Int32
+  :doc "A negative literal at the narrow width, where it is the width and not
+        the sign that the lowering has to get right."
+  (+ n -1))

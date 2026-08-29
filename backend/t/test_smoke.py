@@ -44,8 +44,15 @@ def test_match_over_result():
 
 
 def test_the_checked_in_lowering_matches_its_source():
-    """`smoke.py` is committed and every other test here imports it, so nothing
-    would notice the emitter drifting away from the source it was generated from."""
+    """Every other test here imports `smoke.py`, so nothing would notice the
+    emitter drifting away from the source it was generated from. Regenerate with:
+
+        .venv/bin/python backend/to_python.py backend/t/smoke.agents \
+            > backend/t/smoke.py
+
+    The file is listed in `.gitignore`, so a clean checkout has to run that line
+    before this module can even be imported — a decision, not an accident, and
+    not the same one `bench/algo/histogram_agents.py` records."""
     import sys
     sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
     sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent / "grammar"))

@@ -26,8 +26,8 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 ## Phase status
 | Phase | Plan | Plan review | Implementation | Impl review | Gates | Commit |
 |---|---|---|---|---|---|---|
-| 1 — module-boundary types | v2 reconciled | 2 lenses, 4 blockers, all folded | in progress | — | — | — |
-| 2 — vocabulary coverage | v1 REJECTED, v2 in progress | 4 blockers | — | — | — | — |
+| 1 — module-boundary types | v2 reconciled | 2 lenses, 4 blockers, all folded | done | 2 lenses + /code-review, 2 fix passes | 7/7 green, 79 tests | `a635ab4` |
+| 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `d69c331` |
 | 3 — Wasm target v1 | feasibility done | — | — | — | — | — |
 | 4 — JS/TS backend | — | — | — | — | — | — |
 | 5 — Go backend | — | — | — | — | — | — |
@@ -125,3 +125,97 @@ fires it, and checks clean after perturbation. Spec §2.7 already assigns `rule-
 Owed beyond the two blockers: `ROADMAP.md` is stale in four places (§2's table, `:61`, `:141-144`,
 `:208-211` still describes `r-ea8c` as open while PCP marks it Resolved) — replacement text drafted
 in the conformance report's appendix; imported-call arity is unchecked with no fixture recording it.
+
+## Phase 1 closed — `a635ab4`
+
+Owner chose one commit per phase on `main`, applied to every remaining phase without asking again.
+This first commit necessarily absorbs the pre-existing uncommitted work as well; that is the
+consequence of declining a baseline commit and is recorded rather than hidden.
+
+From here the phase diff is `git diff HEAD`, not an rsync snapshot.
+
+Final state: seven gates green, 79 tests (47 at the phase's start), `rustc` on `06-module` 13 → 0.
+
+Two fix passes landed after review, and each found a defect of the same *class* as the one it was
+sent to fix — which is the argument for asking an agent to enumerate the class rather than patch the
+instance:
+* sent to fix the `cond` traversal hole, the checker pass also found `:default` literals were never
+  typed against their field;
+* sent to fix `sequence()` in `cond` clauses, the backend pass enumerated all six multi-expression
+  body positions and confirmed each routes through it.
+
+`differential.py` now accepts a declared expected stdout per program case. This is the structural
+lesson of the phase: two backends agreeing on a wrong answer was being counted as agreement, and it
+was demonstrated live, not argued.
+
+**Honest coverage, measured with a tracer rather than a scan: 21/107 executed** against the 35%
+`closure_audit.py` reports as mentioned; 33/107 executed overall, 57/107 neither mentioned nor run.
+That number is Phase 2's actual starting line.
+
+## Phase 2 — implementation reviewed
+
+Gates verified by the orchestrator: all eight green, 96 tests, coverage **33/107 → 107/107**
+executed, 400 monomorphism probes, differential 85 function + 14 program cases.
+
+**The coverage number is real, and it was tested as a number rather than believed.** The coverage
+reviewer ran a full 107-builtin mutation test — perturb each Python lowering, delete each effect,
+then assert every `; run:` header, differential expectation and program stdout/exit. **101 of 107
+mutants died.** The six survivors are named and are the honest limit of the current oracles: the
+four `IoError` constructors (compared only against themselves), `map-empty` (its lowering is a
+literal `{}`, nothing to mutate), and `file-write`, whose only executed site is a failing path whose
+oracle — stdout `""`, exit 1 — cannot be told apart from a crash. Rust-side reachability is 105/107.
+
+**No gate got easier.** Every changed gate checks strictly more; `validate.py` and `checker/gate.py`
+are byte-unchanged. `closure_audit`'s deleted `exercised builtins` line was pure print — its exit
+code never referenced it.
+
+The oracle reviewer built a spec-derived oracle importing nothing from `backend/` and ran it over
+**all 78 function cases plus the 7 new program cases**, not the fifteen it was asked for: zero
+disagreements. Where the plan and the implementation disagreed on an expected value, the
+implementation was right all three times — the plan's fixture-22 table was wrong in four rows of
+five, and its fixture-27 note misstated what Python's `str.find` returns.
+
+### Three blockers, all portability, none reachable by any executed case
+
+1. **`list-sort` at `Float64` with NaN.** Rust's `partial_cmp(..).unwrap_or(Equal)` freezes NaN in
+   place; Python's `sorted` does not. Reproduced end to end through the real transpilers:
+   `3.0,nan,0.5,1.0,2.0` against `0.5,3.0,nan,1.0,2.0`. The specification demands byte-reproducible
+   output.
+2. **`MIN / -1`** for `/`, `mod`, `checked-div`, `checked-mod`. Rust panics; Python returns
+   `9223372036854775808`, which is outside `Int64`. The language declares fixed widths and trapping
+   overflow, so Python is the wrong one here — the fix is to trap, not to widen.
+3. **`map-key-order` only narrows *written* annotations.** A `Float64` map key reaching through
+   inference — `(List (Pair Float64 Int64))` into `map-from-pairs` — checks clean and then fails at
+   `rustc` with `E0277`. So `ROADMAP.md`'s claim that `Float64` is no longer an admissible key is
+   false as written, and Tier A's "admissible = what the checker accepts" is a weaker floor than
+   advertised.
+
+Ownership: all three are Phase 2's. Blocker 3 also requires the `ROADMAP.md` wording to be retracted
+rather than merely footnoted.
+
+## Phase 2 closed — fix wave landed and verified
+
+The three portability blockers and the coverage-integrity findings from both implementation reviews
+are fixed. Verified by the orchestrator directly, not taken from any fixer's report (the fixers had
+no shell and could not run gates): all seven gates green, **161 tests**, coverage **107/107**
+executed, 400 monomorphism probes, differential **120 function + 15 program cases**, 0 disagreements.
+
+Fix wave, by area:
+
+* **Runtime portability** (landed before this session, verified now): the NaN total order
+  (`nan_last`/`order_key`), the `MIN / -1` trap-or-none contract, the `f_to_i` range guard, and
+  `map-key-order` raised to the inference path in `checker/types_.py`. Pinned by the `backend/cases/`
+  boundary cases.
+* **Coverage-gate integrity** (this session): `unexecuted` reasons must name a PCP id, `--write`
+  refuses a lower executed count without `--allow-regression`, the "every builtin is executed" line
+  is gated on `not unreached`, `unproven` entries expire on a user-defined-type instantiation, and
+  the `N`-domain rule is exact per `N`-position. `tier_a.narrowed` is now the label list.
+* **`file-write` success path** (this session): `08-io.agents` writes and reads back in one
+  invocation, so a deleted write is told apart from a crash; the differential gate gained a 15th
+  program case.
+
+Decisions recorded in PCP: `d-6e1f` (NaN total order), `d-8b3c` (numeric edge contract), plus
+updates to `d-2c8f`, `d-7c21` and `d-a70b`; `c-3ef8` marked superseded. The
+`d-7a15`/`d-2ba6`/`d-6c04`/`c-3d71`/`c-e820`/`l-4d92`/`l-9e13`/`l-5c47` entries minted in
+`DRAFT_LOG.md` during the pre-crash "cleanup" wave remain un-folded into their per-area files; they
+are recorded in the draft log and the code already reflects them.

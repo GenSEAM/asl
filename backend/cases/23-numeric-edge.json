@@ -1,0 +1,17 @@
+{
+  "id": "numeric-int64-edge",
+  "src": "grammar/corpus/valid/23-numeric.agents",
+  "entry": "edge",
+  "cases": [
+    [[-1], "none|some 0",
+     "Int64's least value over -1. The quotient is 2^63, one past the type, so checked-div is none rather than a wider integer; the remainder is 0, which is in range, so checked-mod answers it rather than trapping with the quotient"],
+    [[1], "some -9223372036854775808|some 0",
+     "the same dividend over 1: the boundary value itself is a perfectly good quotient, so the rule is about the result and not about the operand"],
+    [[0], "none|none",
+     "the zero divisor, still the other reason both are none"],
+    [[2], "some -4611686018427387904|some 0",
+     "an exact halving of the boundary, which no overflow rule may reject"],
+    [[3], "some -3074457345618258602|some -2",
+     "truncation toward zero at the boundary, with a remainder whose sign follows the dividend: flooring would give -3074457345618258603 and +1"]
+  ]
+}

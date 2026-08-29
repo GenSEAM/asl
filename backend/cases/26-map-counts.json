@@ -1,0 +1,11 @@
+{
+  "id": "map-counts",
+  "src": "grammar/corpus/valid/26-map-lifecycle.agents",
+  "entry": "counts",
+  "cases": [
+    [["a b a c"], {"a": 2, "b": 1, "c": 1},
+     "the map itself as a return value, which is the shape the harness's encoder has to spell"],
+    [[""], {}, "an empty map encodes as an empty object, not as null"],
+    [["b a"], {"a": 1, "b": 1}, "key order in the encoding does not follow insertion order"]
+  ]
+}

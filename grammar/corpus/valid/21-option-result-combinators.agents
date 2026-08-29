@@ -1,0 +1,25 @@
+; The Option and Result combinators in a chain, with the failure carried all the
+; way to the output. A pipeline that routes its failure through result-to-option
+; discards the error, which is how three different `result-map-err` bodies once
+; produced byte-identical output; here the mapped error is printed.
+;
+; run: resolve("21", 0) == "ok:43|43|43"
+
+(module parse/resolve
+  :doc "Parse a number, transform it, and report every failure route."
+  :export [resolve])
+
+(defun resolve [(raw String) (fallback Int64)] -> String
+  :doc "Double the parsed value, add one, and report the outcome three ways:
+        matched, recovered with a String fallback, and recovered with an Int64."
+  (let [(doubled (option-map (fn [n] (* n 2)) (string-to-int64 raw)))
+        (added (result-map (fn [n] (+ n 1))
+                           (option-to-result doubled (str "bad:" raw))))
+        (r (result-map-err (fn [e] (str "E<" e ">")) added))]
+    (string-join
+      (list (match r
+              ((ok v)  (str "ok:" (string-from-int64 v)))
+              ((err e) (str "err:" e)))
+            (result-or (result-map (fn [v] (string-from-int64 v)) r) "FB")
+            (string-from-int64 (option-or (result-to-option r) fallback)))
+      "|")))

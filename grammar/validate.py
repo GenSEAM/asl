@@ -76,6 +76,26 @@ PROBES = [
      "QUALIFIED", "qualified", 1),
     ("division", '(defun f [(a Int64) (b Int64)] -> Int64 (/ a b))',
      "OPERATOR", "operator", 1),
+    # A sign and the digits after it are one token, and the two grammars once
+    # disagreed about exactly that while every fixture still parsed under both:
+    # tree-sitter took the longest match and read `-1`, Lark's Earley lexer split
+    # it into the subtraction operator and `1`, and `(+ x -1)` lowered to a
+    # wildcard. Verdicts cannot see that; spans can.
+    ("negative int operand", '(defun f [(x Int64)] -> Int64 (+ x -1))',
+     "INT", "int", 1),
+    ("negative float operand", '(defun f [(x Float64)] -> Float64 (+ x -1.5))',
+     "FLOAT", "float", 1),
+    ("boundary int literal", '(defun f [] -> Int64 -9223372036854775808)',
+     "INT", "int", 1),
+    # The other half of the same decision: separated from its digits, `-` is
+    # still subtraction. Without this the fix could be "a minus is never an
+    # operator", which would delete the arithmetic instead.
+    ("spaced subtraction", '(defun f [(x Int64)] -> Int64 (- x 1))',
+     "OPERATOR", "operator", 1),
+    ("spaced subtraction operand", '(defun f [(x Int64)] -> Int64 (- x 1))',
+     "INT", "int", 1),
+    ("negative literal pattern", '(defun f [(x Int64)] -> Int64 (match x (-1 0) (_ 1)))',
+     "INT", "int", 3),
 ]
 
 

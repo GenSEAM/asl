@@ -1,0 +1,17 @@
+{
+  "id": "list-aggregation",
+  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "entry": "agg",
+  "cases": [
+    [["3,1,3,2"], "F|4|9.0|1.0|3.0|[1.0,2.0,3.0,3.0]",
+     "unsorted input with a duplicate, so list-sort as the identity fails; three distinct values, so list-min and list-max swapped fails; and this is the Float64 instantiation of all three"],
+    [["0.1,0.2"], "F|2|0.30000000000000004|0.1|0.2|[0.1,0.2]",
+     "float addition is not decimal addition: both hosts must fold the same double"],
+    [[""], "F|1|0.0|0.0|0.0|[0.0]",
+     "(string-split \"\" \",\") yields a one-element list holding the empty string, not the empty list"],
+    [["-2,-9,4"], "F|3|-7.0|-9.0|4.0|[-9.0,-2.0,4.0]",
+     "negative values: a sort keyed on magnitude gives [-2.0,4.0,-9.0]"],
+    [["5"], "F|1|5.0|5.0|5.0|[5.0]",
+     "a single element, where list-min equals list-max, which is why it cannot be the only case"]
+  ]
+}

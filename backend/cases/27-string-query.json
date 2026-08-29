@@ -1,0 +1,21 @@
+{
+  "id": "string-query",
+  "src": "grammar/corpus/valid/27-string-query.agents",
+  "entry": "query",
+  "cases": [
+    [["banana", "na"], "6|some 2|T|F|T|F|6",
+     "a haystack/needle swap type-checks, and (string-index-of \"na\" \"banana\") is none; the case asserts the index 2, not merely that one exists"],
+    [["log:hello", "log:"], "9|some 0|T|T|F|F|9",
+     "the needle is at the start only, which is where starts-with? and ends-with? swapped becomes visible"],
+    [["hello.log", ".log"], "9|some 5|T|F|T|F|9",
+     "the mirror: the needle is at the end only"],
+    [["abc", "abc"], "3|some 0|T|T|T|F|3",
+     "the equality boundary: a string is its own prefix and its own suffix"],
+    [["abc", "z"], "3|none|F|F|F|F|3",
+     "the absent side of all three predicates"],
+    [["", "a"], "0|none|F|F|F|T|0",
+     "string-empty?'s true side, and every predicate over an empty haystack"],
+    [["héllo", "l"], "5|some 2|T|F|F|F|5",
+     "character indices, not byte indices: byte offsets give a length of 6 and an index of 3"]
+  ]
+}

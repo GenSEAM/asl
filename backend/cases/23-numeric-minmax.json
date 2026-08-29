@@ -1,0 +1,21 @@
+{
+  "id": "numeric-minmax",
+  "src": "grammar/corpus/valid/23-numeric.agents",
+  "entry": "minmax",
+  "cases": [
+    [["nan", "1.0"], "1.0|nan|none",
+     "NaN in the first operand position. The sort order puts NaN last, so it is the max and never the min however it is spelled; a comparator that reads `b < a` on the doubles keeps the NaN here instead"],
+    [["1.0", "nan"], "1.0|nan|some 1",
+     "the other operand order, whose answer is now identical: an order that depends on which side the NaN arrived from is not an order"],
+    [["nan", "nan"], "nan|nan|none",
+     "two NaNs tie, so both selections return one and neither can invent a number"],
+    [["3.9", "1.5"], "1.5|3.9|some 3",
+     "min and max swapped; float64-to-int64 truncating toward zero"],
+    [["-3.9", "1.5"], "-3.9|1.5|some -3",
+     "truncation, not floor: floor gives -4"],
+    [["2.0", "2.0"], "2.0|2.0|some 2",
+     "the tie: min and max must both return the value"],
+    [["x", "1.0"], "0.0|1.0|some 0",
+     "option-or's fallback arm, and a 0.0 that is not a parse"]
+  ]
+}

@@ -172,7 +172,10 @@ WILDCARD: "_"
 // §6.1/§6.2 operators are ordinary identifiers in call position. Declared as
 // explicit alternatives rather than a regex so that "->" (longer literal) always
 // out-prioritises "-" and never lexes as an operator inside a defun signature.
-OPERATOR: "!=" | "<=" | ">=" | "+" | "*" | "/" | "=" | "<" | ">" | "-"
+// The lookahead on "-" is what makes a sign bind to the digits after it: without
+// it the Earley lexer could read `-1` as subtraction applied to `1`, which is a
+// legal parse, and the resolver chose it — so `(+ x -1)` lost its literal.
+OPERATOR: "!=" | "<=" | ">=" | "+" | "*" | "/" | "=" | "<" | ">" | /-(?![0-9])/
 
 // (.-field x) — the Clojure-precedent field accessor. FFI's (.method x) is not
 // in Core; reserving this shape now keeps its later addition additive.

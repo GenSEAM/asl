@@ -1,0 +1,13 @@
+{
+  "id": "list-reshaping",
+  "src": "grammar/corpus/valid/24-list-reshaping.agents",
+  "entry": "reshape",
+  "cases": [
+    [[4], "[9,0,1,2,3]|[0,1,2,3,100,200,300]|[3,2,1,0]|some [1,2,3]|some 0|some 1",
+     "a list-append operand swap moves the 100,200,300 block; the input is ascending and distinct so list-reverse is not the identity; list-get reads index 1, neither 0 nor length-1"],
+    [[1], "[9,0]|[0,100,200,300]|[0]|some []|some 0|none",
+     "list-tail of a one-element list is some [], not none; index 1 is out of range"],
+    [[0], "[9]|[100,200,300]|[]|none|none|none",
+     "the empty-list arm of list-tail and list-head, and (range 0 0) being empty"]
+  ]
+}

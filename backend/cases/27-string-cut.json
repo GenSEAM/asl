@@ -1,0 +1,12 @@
+{
+  "id": "string-cut",
+  "src": "grammar/corpus/valid/27-string-query.agents",
+  "entry": "cut",
+  "cases": [
+    [["banana", 1, 3], ["some", "an"], "half-open [a, b): an inclusive slice gives \"ana\""],
+    [["banana", 0, 6], ["some", "banana"], "b == length is in range"],
+    [["banana", 0, 7], ["none"], "b > length: an off-by-one in the upper bound test"],
+    [["banana", 3, 1], ["none"], "b < a"],
+    [["héllo", 1, 3], ["some", "él"], "character slicing, not byte slicing, which would split a code point"]
+  ]
+}

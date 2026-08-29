@@ -39,10 +39,16 @@ PRIM = {"Bool": "bool", "Int32": "i32", "Int64": "i64", "Int": "i64",
         "Float64": "f64", "String": "String", "Unit": "()",
         "IoError": "rt::IoError"}
 
-# f64 implements neither Eq nor Ord and rt::IoError does not implement Ord, so a
-# declaration reachable from either cannot derive them: the derive fails at the
-# declaration, not at a use site.
+# f64 implements neither Eq nor Ord and rt::IoError implements none of the four
+# order traits, so a declaration reachable from either cannot derive them: the
+# derive fails at the declaration, not at a use site.
 NO_TOTAL_ORDER = {"Float64", "IoError"}
+# f64 *is* PartialOrd, so the two questions are not the same one and bundling
+# them cost a Float64-bearing record every comparison it was entitled to:
+# `list-sort` over it failed rustc's PartialOrd bound while the language
+# specifies its order (section 3.2, NaN last). rt::sort takes PartialOrd, not
+# Ord, precisely so that order is expressible.
+NO_PARTIAL_ORDER = {"IoError"}
 
 
 def mangle(n: str) -> str:
@@ -95,6 +101,7 @@ class ToRust:
         self.field_box: dict[str, set[str]] = {}   # schema path -> boxed fields
         self.boxed_fields: set[str] = set()
         self.orderable: set[str] = set()
+        self.comparable: set[str] = set()
         self.tmp = 0
 
     def fresh(self):
@@ -200,14 +207,16 @@ class ToRust:
         return "<" + ", ".join(p + suffix for p in params) + ">"
 
     def derives(self, name: str) -> str:
-        extra = ", Eq, PartialOrd, Ord" if name in self.orderable else ""
+        extra = ", PartialOrd" if name in self.comparable else ""
+        extra += ", Eq, Ord" if name in self.orderable else ""
         return f"#[derive(Debug, Clone, PartialEq{extra})]"
 
     def plan_derives(self, units) -> None:
-        """Which declarations may derive Eq and Ord, computed over every linked
-        module before anything is emitted: a case parameter may name a type the
-        emitter has not reached yet — in this module or another — and the answer
-        must not depend on the order it reaches them."""
+        """Which declarations may derive a partial order, and which a total one,
+        computed over every linked module before anything is emitted: a case
+        parameter may name a type the emitter has not reached yet — in this
+        module or another — and the answer must not depend on the order it
+        reaches them."""
         mentions: dict[str, set[str]] = {}
         for mod_path, tree, prefix, _ in units:
             for top in tree.children:
@@ -223,13 +232,18 @@ class ToRust:
                         target = self.unit_aliases[mod_path].get(alias, "")
                         seen.add(self.unit_types.get(target, {}).get(member, member))
                 mentions[prefix + self.decl_name(n)] = seen
-        tainted = {n for n, seen in mentions.items() if seen & NO_TOTAL_ORDER}
-        while True:
-            grown = {n for n, seen in mentions.items() if n not in tainted and seen & tainted}
-            if not grown:
-                break
-            tainted |= grown
-        self.orderable = set(mentions) - tainted
+        def reachable(seeds: set[str]) -> set[str]:
+            tainted = {n for n, seen in mentions.items() if seen & seeds}
+            while True:
+                grown = {n for n, seen in mentions.items()
+                         if n not in tainted and seen & tainted}
+                if not grown:
+                    break
+                tainted |= grown
+            return tainted
+
+        self.orderable = set(mentions) - reachable(NO_TOTAL_ORDER)
+        self.comparable = set(mentions) - reachable(NO_PARTIAL_ORDER)
 
     # ---------- entry ----------
 
@@ -560,6 +574,10 @@ class ToRust:
         pad = "    " * ind
         mk = self.kids(n)
         subj = self.expr(mk[0], stmts, ind)
+        # Same conservative ownership as `call`: destructuring a bare binding
+        # moves out of it, and the arms of one match are not the only reader.
+        if re.fullmatch(r"[a-z_][a-z0-9_]*", subj):
+            subj += ".clone()"
         t = self.fresh()
         # Rust destructures a list only through a slice pattern, so a match
         # containing list arms must scrutinise a slice rather than the Vec.
@@ -695,7 +713,11 @@ class ToRust:
         if tok.type == "STRING":
             return f"{s}.to_string()"
         if tok.type in ("INT", "FLOAT"):
-            return s
+            # Rust's `-1` is a unary operation, not a primary, and a method
+            # binds tighter than the sign: any template that suffixes onto its
+            # argument reads -(1.to_string()) without these. The header already
+            # allows unused_parens.
+            return f"({s})" if s.startswith("-") else s
         if tok.type == "UNIT":
             return "()"
         if tok.type in ("QUALIFIED", "QUALIFIED_TYPE"):
@@ -711,5 +733,8 @@ if __name__ == "__main__":
                          "A file's own directory is always searched.")
     args = ap.parse_args()
     source = Path(args.file)
-    print(ToRust().transpile(source.read_text(), path=source,
-                             roots=[Path(r) for r in args.root]))
+    # Written, not printed: the checked-in lowerings are compared against
+    # `transpile` itself, and print's newline made the file differ from the
+    # thing the drift gate calls.
+    sys.stdout.write(ToRust().transpile(source.read_text(), path=source,
+                                        roots=[Path(r) for r in args.root]))

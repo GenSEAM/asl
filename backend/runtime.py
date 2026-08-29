@@ -31,24 +31,111 @@ class Trap(Exception):
     programmer errors the language declines to model as values."""
 
 
+# The language fixes its integer widths; Python does not have any, so the width
+# is enforced here or nowhere. Every integer in a transpiled program is an Int64
+# — Int32 is indistinguishable from it at runtime, which is recorded against
+# `backend/to_python.py` rather than papered over.
+INT64_MIN = -2 ** 63
+INT64_MAX = 2 ** 63 - 1
+
+
+def _int(n):
+    """An integer result, or a trap when it left the type."""
+    if not INT64_MIN <= n <= INT64_MAX:
+        raise Trap("integer overflow")
+    return n
+
+
+def _both_int(a, b): return isinstance(a, int) and isinstance(b, int)
+
+
+def add(a, b): return _int(a + b) if _both_int(a, b) else a + b
+def sub(a, b): return _int(a - b) if _both_int(a, b) else a - b
+def mul(a, b): return _int(a * b) if _both_int(a, b) else a * b
+def neg(a): return _int(-a) if isinstance(a, int) else -a
+def absolute(a): return _int(abs(a)) if isinstance(a, int) else abs(a)
+
+
+def _trunc_div(a, b):
+    q = abs(a) // abs(b)
+    return q if (a >= 0) == (b >= 0) else -q
+
+
 def div(a, b):
     if b == 0:
         raise Trap("division by zero")
-    if isinstance(a, int) and isinstance(b, int):
-        q = abs(a) // abs(b)
-        return q if (a >= 0) == (b >= 0) else -q
+    if _both_int(a, b):
+        return _int(_trunc_div(a, b))
     return a / b
 
 
 def mod(a, b):
     if b == 0:
         raise Trap("modulo by zero")
-    return a - div(a, b) * b
+    if _both_int(a, b):
+        # Computed from the unchecked quotient: INT64_MIN mod -1 is 0, which is
+        # representable even though the quotient is not.
+        return a - _trunc_div(a, b) * b
+    # Float division is exact, so `a - div(a, b) * b` degenerates to zero; the
+    # declared meaning is a remainder whose sign follows the dividend, i.e. fmod.
+    import math
+    return math.fmod(a, b)
 
 
-def checked_div(a, b): return NONE if b == 0 else some(div(a, b))
+def checked_div(a, b):
+    if b == 0:
+        return NONE
+    if _both_int(a, b):
+        q = _trunc_div(a, b)
+        return some(q) if INT64_MIN <= q <= INT64_MAX else NONE
+    return some(a / b)
+
+
 def checked_mod(a, b): return NONE if b == 0 else some(mod(a, b))
-def eq(a, b): return a == b
+
+
+def eq(a, b):
+    """Structural equality, spelled out because `==` is not it: a container
+    compares its elements by identity first, so a list holding a NaN equals
+    itself here and not on a target that compares the doubles."""
+    if isinstance(a, float) or isinstance(b, float):
+        return a == b
+    if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+        return len(a) == len(b) and all(eq(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(eq(a[k], b[k]) for k in a)
+    return a == b
+
+
+def _holds_nan(v):
+    if isinstance(v, float):
+        return v != v
+    if isinstance(v, (list, tuple)):
+        return any(_holds_nan(x) for x in v)
+    if isinstance(v, dict):
+        return any(_holds_nan(x) for x in v.values())
+    return False
+
+
+def order_key(v):
+    """The language's sort order as a key. Everything holding a NaN collapses to
+    one key, so those elements sort last and tie with each other — a stable sort
+    then leaves them in input order, which is what the Rust comparator does."""
+    return (1, ()) if _holds_nan(v) else (0, v)
+
+
+def order_by(f):
+    """`list-sort-by`'s key, ordered the same way as `list-sort`'s elements."""
+    return lambda x: order_key(f(x))
+
+
+def _before(a, b): return order_key(a) < order_key(b)
+
+
+# Selection follows the sort order, so `min` is the head of `list-sort` rather
+# than a separate rule: keep the first unless the second sorts strictly before.
+def min_(a, b): return b if _before(b, a) else a
+def max_(a, b): return b if _before(a, b) else a
 
 
 def at(xs, i):
@@ -56,10 +143,46 @@ def at(xs, i):
 
 
 def tail(xs): return some(list(xs[1:])) if xs else NONE
-def contains(xs, x): return x in xs
-def index_of(xs, x): return some(xs.index(x)) if x in xs else NONE
-def least(xs): return some(min(xs)) if xs else NONE
-def greatest(xs): return some(max(xs)) if xs else NONE
+
+
+# `in` and `.index` test identity before equality, which finds a NaN already in
+# the list; the language's equality never does.
+def contains(xs, x): return any(eq(y, x) for y in xs)
+
+
+def index_of(xs, x):
+    for i, y in enumerate(xs):
+        if eq(y, x):
+            return some(i)
+    return NONE
+
+
+def _reduce(xs, pick):
+    it = iter(xs)
+    try:
+        acc = next(it)
+    except StopIteration:
+        return NONE
+    for x in it:
+        acc = pick(acc, x)
+    return some(acc)
+
+
+def least(xs): return _reduce(xs, min_)
+def greatest(xs): return _reduce(xs, max_)
+
+
+def sum_(xs):
+    """`list-sum`, folded through the trapping addition rather than `sum`, whose
+    integers are unbounded. The empty list answers 0 because the element type is
+    what an empty list does not carry — at `(List Float64)` the language says
+    0.0, and only `string-from-float64` is in a position to know that."""
+    total = 0
+    for x in xs:
+        total = add(total, x)
+    return total
+
+
 def zip_(a, b): return [pair(x, y) for x, y in zip(a, b)]
 
 
@@ -87,16 +210,30 @@ def str_index_of(s, sub):
     return some(i) if i >= 0 else NONE
 
 
+def _parsable(text):
+    """Python's numeric parsers accept more than the language declares: digit
+    group underscores and non-ASCII decimal digits are both values on this host
+    and parse errors on the other."""
+    return text.isascii() and "_" not in text
+
+
 def to_int(s):
+    text = s.strip()
+    if not _parsable(text):
+        return NONE
     try:
-        return some(int(s.strip()))
+        n = int(text)
     except ValueError:
         return NONE
+    return some(n) if INT64_MIN <= n <= INT64_MAX else NONE
 
 
 def to_float(s):
+    text = s.strip()
+    if not _parsable(text):
+        return NONE
     try:
-        return some(float(s.strip()))
+        return some(float(text))
     except ValueError:
         return NONE
 
@@ -105,8 +242,11 @@ def to_i32(n): return some(n) if -2**31 <= n < 2**31 else NONE
 
 
 def f_to_i(x):
-    import math
-    if math.isnan(x) or math.isinf(x):
+    # The range decides before the conversion: a target whose cast saturates
+    # would otherwise answer INT64_MAX for 1e30 and call that a conversion. NaN
+    # and both infinities fall out of the same two comparisons.
+    x = float(x)
+    if not INT64_MIN <= x < 2 ** 63:
         return NONE
     return some(int(x))
 

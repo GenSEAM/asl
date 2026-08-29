@@ -1,0 +1,92 @@
+; Aggregation over (List Float64), which is the instantiation list-sum, list-sort,
+; list-min and list-max never had: their Rust lowerings were i64-only or bounded
+; by Ord. The input is unsorted and carries a duplicate, so an identity sort is
+; visible, and the integer entry sorts by a projection, which is the builtin that
+; shipped with its arguments reversed.
+;
+; A NaN is where an ascending sort stops being obvious: it is unordered against
+; every number, so a comparator built out of `<` leaves it wherever the host's
+; algorithm happened to put it, and the two hosts put it in different places.
+;
+; run: agg("3,1,3,2") == "F|4|9.0|1.0|3.0|[1.0,2.0,3.0,3.0]"
+
+(module list/aggregate
+  :doc "Summarise a comma-separated list of numbers."
+  :export [agg agg-empty lookup rank nan-identity])
+
+(defun show-floats [(xs (List Float64))] -> String
+  :doc "A list of floats, bracketed and comma separated."
+  (str "[" (string-join (map (fn [v] (string-from-float64 v)) xs) ",") "]"))
+
+(defun show-ints [(xs (List Int64))] -> String
+  :doc "A list of integers, bracketed and comma separated."
+  (str "[" (string-join (map (fn [v] (string-from-int64 v)) xs) ",") "]"))
+
+(defun show-float [(o (Option Float64))] -> String
+  :doc "An optional float, so `none` is distinguishable from zero."
+  (match o
+    ((some x) (string-from-float64 x))
+    ((none)   "none")))
+
+(defun show-int [(o (Option Int64))] -> String
+  :doc "An optional integer, tagged so an index of zero is not read as absence."
+  (match o
+    ((some n) (str "some " (string-from-int64 n)))
+    ((none)   "none")))
+
+(defun report [(xs (List Float64))] -> String
+  :doc "empty?, length, sum, least, greatest and the sorted list."
+  (string-join (list (if (list-empty? xs) "T" "F")
+                     (string-from-int64 (list-length xs))
+                     (string-from-float64 (list-sum xs))
+                     (show-float (list-min xs))
+                     (show-float (list-max xs))
+                     (show-floats (list-sort xs)))
+               "|"))
+
+(defun no-floats [] -> (List Float64)
+  :doc "The empty list at Float64, which splitting a string cannot produce:
+        (string-split \"\" \",\") is a one-element list holding the empty string."
+  (list))
+
+(defun agg [(csv String)] -> String
+  :doc "Summarise the parsed fields, treating an unparsable field as zero."
+  (report (map (fn [t] (option-or (string-to-float64 t) 0.0))
+               (string-split csv ","))))
+
+(defun agg-empty [] -> String
+  :doc "The same summary of nothing: the true side of list-empty? and the
+        identity of the empty sum."
+  (report (no-floats)))
+
+(defun lookup [(csv String) (needle Int64)] -> String
+  :doc "Membership, first index, length, sum, and the list sorted descending by
+        a projection."
+  (let [(xs (map (fn [t] (option-or (string-to-int64 t) 0)) (string-split csv ",")))]
+    (string-join (list (if (list-contains? xs needle) "T" "F")
+                       (show-int (list-index-of xs needle))
+                       (string-from-int64 (list-length xs))
+                       (string-from-int64 (list-sum xs))
+                       (show-ints (list-sort-by (fn [x] (neg x)) xs)))
+                 "|")))
+
+(defun rank [(csv String)] -> String
+  :doc "The fields ordered by their parsed value. Two fields whose key is NaN
+        tie with each other, so the stable sort leaves them in input order —
+        which is the half of the rule a single NaN cannot show."
+  (string-join (list-sort-by (fn [t] (option-or (string-to-float64 t) 0.0))
+                             (string-split csv ","))
+               "|"))
+
+(defun nan-identity [(csv String)] -> String
+  :doc "Membership, position and equality against the list's own first element.
+        A NaN is equal to nothing, including the one already in the list, and a
+        host that tests identity before equality answers otherwise."
+  (let [(xs (map (fn [t] (option-or (string-to-float64 t) 0.0))
+                 (string-split csv ",")))
+        (h (option-or (list-head xs) 0.0))]
+    (string-join (list (if (list-contains? xs h) "T" "F")
+                       (show-int (list-index-of xs h))
+                       (if (= xs xs) "T" "F")
+                       (if (= h h) "T" "F"))
+                 "|")))

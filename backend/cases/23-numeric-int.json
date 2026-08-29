@@ -1,0 +1,47 @@
+{
+  "id": "numeric-int64",
+  "src": "grammar/corpus/valid/23-numeric.agents",
+  "entry": "num",
+  "cases": [
+    [
+      [
+        7,
+        2
+      ],
+      "9|3|1|14|5|7|-7|2|7|some 3|some 1",
+      "/ and mod swapped (3 != 1); min and max swapped (2 != 7); a - operand swap (5 != -5); neg confused with abs (-7 != 7)"
+    ],
+    [
+      [
+        -7,
+        2
+      ],
+      "-5|-3|-1|-14|-9|7|7|-7|2|some -3|some -1",
+      "truncation toward zero, not floor: floor division gives -4 and a remainder of +1"
+    ],
+    [
+      [
+        5,
+        0
+      ],
+      "none|none",
+      "the zero-divisor arm of both checked operations, and that the entry does not trap"
+    ],
+    [
+      [
+        7,
+        3
+      ],
+      "10|2|1|21|4|7|-7|3|7|some 2|some 1",
+      "checked-div and checked-mod swapped: quotient 2 differs from remainder 1"
+    ],
+    [
+      [
+        9007199254740993,
+        2
+      ],
+      "9007199254740995|4503599627370496|1|18014398509481986|9007199254740991|9007199254740993|-9007199254740993|2|9007199254740993|some 4503599627370496|some 1",
+      "Int64 keeps 2^53+1 exactly, which the Float64 leg does not"
+    ]
+  ]
+}

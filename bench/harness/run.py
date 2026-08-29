@@ -146,8 +146,8 @@ def evaluate(code: str, task: dict, s: Sample) -> Sample:
             f"cases = json.loads({json.dumps(json.dumps(task['cases']))})\n"
             f"fn = getattr(cand, {task['entry'].replace('-', '_')!r})\n"
             "bad = []\n"
-            "for inp, want in cases:\n"
-            "    got = fn(inp)\n"
+            "for inp, want, *_ in cases:\n"
+            "    got = fn(*inp)\n"
             "    if got != want: bad.append((inp, got, want))\n"
             "print(json.dumps({'bad': bad[:3], 'n': len(bad)}))\n"
         )

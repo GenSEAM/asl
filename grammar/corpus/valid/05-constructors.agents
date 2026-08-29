@@ -1,6 +1,8 @@
 ; Constructor builtins used as ordinary expressions (spec 6.5, 6.6), not as
 ; match patterns. These heads are ambiguous by design: (list) is the empty-list
 ; pattern in an arm and the empty-list constructor in an expression.
+;
+; run: [small_primes(), no_names(), wrap(-1), maybe_double(("some", 4)), labelled("k", 1), tagged([1, 2], ["a"]), heads([])] == [[2, 3, 5, 7, 11], [], ("err", "negative"), ("some", 8), ("pair", "k", 1), [("pair", 1, "a")], []]
 
 (defun small-primes [] -> (List Int64)
   (list 2 3 5 7 11))

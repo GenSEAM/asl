@@ -36,6 +36,7 @@ and a grammar that rejected them would be over-tight.
 .venv/bin/python prelude/generate.py --check
 .venv/bin/python checker/gate.py
 .venv/bin/python backend/check_corpus.py
+.venv/bin/python backend/monomorphism.py
 .venv/bin/python backend/differential.py
 .venv/bin/python -m pytest backend/t bench/algo checker/t -q
 ```
@@ -43,6 +44,21 @@ and a grammar that rejected them would be over-tight.
 The closure gate extracts call heads with the project's own tree-sitter grammar and fails if any
 names something neither in the vocabulary nor bound locally. The specification's claim to be closed
 is only worth what this gate enforces; it was false once already.
+
+It also reports **executed** vocabulary coverage, computed by `backend/exec_coverage.py` rather than
+by a scan: every Python lowering template is wrapped in a recorder and every program the gates run is
+run, so a builtin counts only when its emitted expression is evaluated. A call head in a branch no
+case takes counts for nothing — the previous, scanned figure could be moved by eleven with nothing
+executed. The floor, the ratchet, the per-builtin executed instantiations and the Tier-A probe set
+are data in `prelude/coverage.lock`; run `backend/exec_coverage.py --write` to record a new figure
+deliberately, in the commit that earns it.
+
+`monomorphism.py` is the other half. It generates every admissible (builtin × concrete
+instantiation) from `prelude.json`, checks them in one pass and compiles them with one `rustc` and
+one `py_compile`. "Exercised" never meant "the lowering works" — it meant "the lowering works at the
+one type someone happened to use": `/` and `mod` were inside the exercised set while their runtime
+helpers took `i64` alone. Effectful, variadic and higher-order builtins are excluded, each recorded
+with its reason in the lock, because an exclusion nothing writes down is a skip list.
 
 The generator check fails when a generated artifact is stale, and when a lowering template will
 not format at its declared arity — literal braces must be doubled in `prelude.json`, or they are

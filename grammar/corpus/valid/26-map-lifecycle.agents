@@ -1,0 +1,32 @@
+; A map built, queried and shrunk, with its size printed before and after the
+; removal: a map-remove that does nothing is indistinguishable from a correct one
+; unless both sizes are shown, and one case removes a key that is absent. The key
+; order is the specification's, not the insertion order, and the two backends
+; reach it by different routes — sorted() on one, BTreeMap on the other.
+;
+; run: lifecycle("a b a c", "a") == "3|T|2|b,c"
+
+(module map/lifecycle
+  :doc "Count words, then remove one and report what is left."
+  :export [lifecycle counts])
+
+(defun tally [(m (Map String Int64)) (w String)] -> (Map String Int64)
+  :doc "Increment the count for one word."
+  (match (map-get m w)
+    ((some n) (map-set m w (+ n 1)))
+    ((none)   (map-set m w 1))))
+
+(defun counts [(words String)] -> (Map String Int64)
+  :doc "Word counts, ignoring the empty fields a split of blank text produces."
+  (fold tally (map-empty)
+        (filter (fn [w] (not (string-empty? w))) (string-split words " "))))
+
+(defun lifecycle [(words String) (drop String)] -> String
+  :doc "Size, membership, size after removal, and the remaining keys in order."
+  (let [(m (counts words))
+        (m2 (map-remove m drop))]
+    (string-join (list (string-from-int64 (map-size m))
+                       (if (map-has? m drop) "T" "F")
+                       (string-from-int64 (map-size m2))
+                       (string-join (map-keys m2) ","))
+                 "|")))

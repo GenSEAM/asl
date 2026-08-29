@@ -1,0 +1,141 @@
+; Every numeric builtin at Int64 and at Float64, in the same shape, because
+; "exercised" has meant "exercised at one type": `/` and `mod` were counted as
+; covered while their Rust lowerings took i64 alone. The float leg is the half
+; that did not compile. Truncation toward zero, the zero divisor, the Int32
+; boundary and 2^53+1 each get their own case.
+;
+; The Int64 boundary is the second half: the type is fixed, so an operation whose
+; result leaves it traps rather than widening — which one host does by not having
+; a width at all. The trapping entries are asserted here because a trap is not a
+; value and the differential harness compares values.
+;
+; run: num(7, 2) == "9|3|1|14|5|7|-7|2|7|some 3|some 1" and wrap_mod() == 0 and all(__import__('unittest').TestCase().assertRaises(_as.Trap, f) is None for f in [trap_div, trap_neg, trap_abs, trap_add, trap_sub, trap_mul, trap_sum])
+
+(module math/report
+  :doc "Report the numeric vocabulary over one pair of values."
+  :export [num fnum narrow minmax edge from-float wrap-mod
+           trap-div trap-neg trap-abs trap-add trap-sub trap-mul trap-sum])
+
+(defun oi [(o (Option Int64))] -> String
+  :doc "An optional integer, rendered so `none` is distinguishable from zero."
+  (match o
+    ((some n) (str "some " (string-from-int64 n)))
+    ((none)   "none")))
+
+(defun of [(o (Option Float64))] -> String
+  :doc "An optional float, rendered the same way."
+  (match o
+    ((some x) (str "some " (string-from-float64 x)))
+    ((none)   "none")))
+
+(defun num [(a Int64) (b Int64)] -> String
+  :doc "The Int64 leg. A zero divisor reports only the checked operations,
+        which is the whole point of their existing."
+  (if (= b 0)
+      (string-join (list (oi (checked-div a b)) (oi (checked-mod a b))) "|")
+      (string-join (list (string-from-int64 (+ a b))
+                         (string-from-int64 (/ a b))
+                         (string-from-int64 (mod a b))
+                         (string-from-int64 (* a b))
+                         (string-from-int64 (- a b))
+                         (string-from-int64 (abs a))
+                         (string-from-int64 (neg a))
+                         (string-from-int64 (min a b))
+                         (string-from-int64 (max a b))
+                         (oi (checked-div a b))
+                         (oi (checked-mod a b)))
+                   "|")))
+
+(defun fnum [(a Int64) (b Int64)] -> String
+  :doc "The Float64 leg of the same report, over the converted arguments."
+  (let [(x (int64-to-float64 a))
+        (y (int64-to-float64 b))]
+    (if (= b 0)
+        (string-join (list (of (checked-div x y)) (of (checked-mod x y))) "|")
+        (string-join (list (string-from-float64 (+ x y))
+                           (string-from-float64 (/ x y))
+                           (string-from-float64 (mod x y))
+                           (string-from-float64 (* x y))
+                           (string-from-float64 (- x y))
+                           (string-from-float64 (abs x))
+                           (string-from-float64 (neg x))
+                           (string-from-float64 (min x y))
+                           (string-from-float64 (max x y))
+                           (of (checked-div x y))
+                           (of (checked-mod x y)))
+                     "|"))))
+
+(defun narrow [(a Int64)] -> String
+  :doc "The conversions, each at a boundary: Int32's range is not symmetric and
+        Float64 stops being exact at 2^53."
+  (let [(wide (option-map (fn [n] (int32-to-int64 n)) (int64-to-int32 a)))
+        (f (int64-to-float64 a))]
+    (string-join (list (oi wide)
+                       (string-from-float64 f)
+                       (oi (float64-to-int64 f)))
+                 "|")))
+
+(defun minmax [(a String) (b String)] -> String
+  :doc "min and max at Float64 in both operand positions, which is where the
+        NaN rule lives: selection follows the sort order, so NaN is the greater
+        value and the answer does not depend on which operand carries it."
+  (let [(x (option-or (string-to-float64 a) 0.0))
+        (y (option-or (string-to-float64 b) 0.0))]
+    (string-join (list (string-from-float64 (min x y))
+                       (string-from-float64 (max x y))
+                       (oi (float64-to-int64 x)))
+                 "|")))
+
+(defun int64-min [] -> Int64
+  :doc "Int64's least value, reached by arithmetic rather than written down.
+        The decimal spelling compiles too — 29-literals.agents writes it — so
+        this form is here for what it exercises: neg and - one step from the
+        boundary, which is the last place either can answer without trapping."
+  (- (neg 9223372036854775807) 1))
+
+(defun edge [(b Int64)] -> String
+  :doc "The checked operations against Int64's least value, where the quotient
+        leaves the type and the remainder does not."
+  (string-join (list (oi (checked-div (int64-min) b))
+                     (oi (checked-mod (int64-min) b)))
+               "|"))
+
+(defun from-float [(t String)] -> String
+  :doc "Both parses of one text: float64-to-int64 over the parsed double, and
+        string-to-int64 over the text. Neither may answer a number outside
+        Int64, and neither may accept what the other rejects."
+  (let [(x (option-or (string-to-float64 t) 0.0))]
+    (string-join (list (oi (float64-to-int64 x)) (oi (string-to-int64 t))) "|")))
+
+(defun wrap-mod [] -> Int64
+  :doc "The remainder at the boundary the quotient traps on. It is 0, which is
+        representable, so this is the one operation of the pair that answers."
+  (mod (int64-min) (neg 1)))
+
+(defun trap-div [] -> Int64
+  :doc "The quotient at that boundary is 2^63, which Int64 does not hold."
+  (/ (int64-min) (neg 1)))
+
+(defun trap-neg [] -> Int64
+  :doc "Two's complement is not symmetric, so negating the least value traps."
+  (neg (int64-min)))
+
+(defun trap-abs [] -> Int64
+  :doc "Absolute value is that same negation for a negative argument."
+  (abs (int64-min)))
+
+(defun trap-add [] -> Int64
+  :doc "Addition past the greatest value traps rather than widening."
+  (+ 9223372036854775807 1))
+
+(defun trap-sub [] -> Int64
+  :doc "Subtraction past the least value, which is the other end of the type."
+  (- (int64-min) 1))
+
+(defun trap-mul [] -> Int64
+  :doc "Multiplication overflows without ever reaching a boundary value."
+  (* 9223372036854775807 2))
+
+(defun trap-sum [] -> Int64
+  :doc "list-sum accumulates through the same addition, so it traps too."
+  (list-sum (list 9223372036854775807 1)))

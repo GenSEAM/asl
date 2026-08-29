@@ -1,0 +1,13 @@
+{
+  "id": "list-window",
+  "src": "grammar/corpus/valid/24-list-reshaping.agents",
+  "entry": "window",
+  "cases": [
+    [[4, 1, 3], ["some", [1, 2]],
+     "half-open [a, b): an inclusive slice gives [1,2,3] and an a/b swap gives none"],
+    [[4, 0, 4], ["some", [0, 1, 2, 3]], "b == n is in range"],
+    [[4, 0, 5], ["none"], "b > n is out: an off-by-one in the upper bound test"],
+    [[4, 3, 1], ["none"], "b < a is out"],
+    [[4, 2, 2], ["some", []], "the empty slice is some [], not none"]
+  ]
+}

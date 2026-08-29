@@ -4,7 +4,7 @@ def tally(m, w):
     _t1 = _as.m_get(m, w)
     if _t1[0] == "some":
         n = _t1[1]
-        _t2 = _as.m_set(m, w, (n + 1))
+        _t2 = _as.m_set(m, w, _as.add(n, 1))
     elif _t1[0] == "none":
         _t2 = _as.m_set(m, w, 1)
     return _t2
@@ -19,5 +19,4 @@ def histogram(text):
         top = _t3[1]
         _t4 = _as.m_from([_x for _x in _as.m_pairs(counts) if (lambda p: _as.eq(p[2], top))(_x)])
     return _t4
-
 

@@ -1,0 +1,17 @@
+{
+  "id": "numeric-conversions",
+  "src": "grammar/corpus/valid/23-numeric.agents",
+  "entry": "narrow",
+  "cases": [
+    [[2147483647], "some 2147483647|2147483647.0|some 2147483647",
+     "the positive Int32 boundary, which is in range"],
+    [[2147483648], "none|2147483648.0|some 2147483648",
+     "boundary + 1: an off-by-one in the range test"],
+    [[-2147483648], "some -2147483648|-2147483648.0|some -2147483648",
+     "the negative boundary, which is not symmetric with the positive one"],
+    [[-2147483649], "none|-2147483649.0|some -2147483649",
+     "negative boundary - 1"],
+    [[9007199254740993], "none|9007199254740992.0|some 9007199254740992",
+     "int64-to-float64 at 2^53+1: the value the differential harness's own docstring names as a cross-runtime divergence"]
+  ]
+}

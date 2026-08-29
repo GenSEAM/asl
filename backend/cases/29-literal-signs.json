@@ -1,0 +1,13 @@
+{
+  "id": "literal-signs",
+  "src": "grammar/corpus/valid/29-literals.agents",
+  "entry": "signs",
+  "cases": [
+    [[4], "3|5|-8|5|-9223372036854775808|4|9223372036854775807|-9223372036854775808|2147483647|-2147483648",
+     "a negative literal as the right operand of every arithmetic form, then the four width boundaries written as literals; -9223372036854775808 has no positive counterpart, so it exists only signed"],
+    [[0], "-1|1|0|5|-9223372036854775808|0|9223372036854775807|-9223372036854775808|2147483647|-2147483648",
+     "zero, where adding and subtracting the same negative literal are the only columns that can still differ"],
+    [[-3], "-4|-2|6|5|-9223372036854775808|-3|9223372036854775807|-9223372036854775808|2147483647|-2147483648",
+     "a negative operand as well as a negative literal: the product of two negatives is where a sign dropped in lowering would show as the wrong magnitude and not merely the wrong sign"]
+  ]
+}

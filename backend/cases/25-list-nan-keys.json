@@ -1,0 +1,13 @@
+{
+  "id": "list-sort-by-nan-keys",
+  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "entry": "rank",
+  "cases": [
+    [["3,-nan,1,nan,2"], "1|2|3|-nan|nan",
+     "keys that are NaN tie with one another, so the stable sort keeps -nan before nan — their input order — after every field with a number for a key"],
+    [["nan,3,1"], "1|3|nan",
+     "a single NaN key, which must land last and not first"],
+    [["2,1"], "1|2",
+     "no NaN at all, so the rule cannot be a permutation applied unconditionally"]
+  ]
+}

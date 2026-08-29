@@ -70,6 +70,10 @@ This file groups d/c/r/l entries for the lang/checker module.
 ### [d-bad1] A check the conformance checklist does not list is coded by name, never by the next free rule number
 - **Date**: 2026-08-29
 - **Status**: Active
+- **Update 2026-08-29 (Phase 2)**: `map-key-order` (d-2c8f) is the second such check. The plan it
+  came from carried a parked instruction to code it `rule-14`; this entry overrode that, §9's items
+  1-13 were read in full, and none covers the domain of a `Map` key (item 6 governs mixing numeric
+  *operands*). The asymmetry recorded below therefore grows by one rather than being closed.
 - **Cluster**: lang/checker
 - **Description**: Diagnostic codes are rule numbers exactly where the specification's conformance
   checklist has a corresponding item, and descriptive names everywhere else. A check with no
@@ -89,3 +93,54 @@ This file groups d/c/r/l entries for the lang/checker module.
 - **Why Non-Obvious**: taking the next number reads as the tidier option and costs nothing visible
   on the day. What it costs is the property that a fixture's declared rule is checkable against a
   document rather than against the code that produced it.
+
+### [d-2c8f] A Map key must be orderable, so Float64 is not a legal key type
+- **Date**: 2026-08-29
+- **Status**: Active
+- **Update 2026-08-30 (Phase 2 fix wave)**: raised from the syntactic pass to the type layer.
+  `map-key-order` now reports against the *inferred* type at every `Map`-producing call site
+  (`map-empty`, `map-from-pairs`, `map-set`), not only against a written `(Map K V)` annotation, so
+  a `Float64` key reached through inference — `(map-from-pairs (list (pair 1.5 "a")))` — is rejected
+  where it previously checked clean and failed at `rustc` with `E0277`. The implementation review
+  demonstrated the gap live; `grammar/corpus/semantic/map-key-inferred.agents` and
+  `checker/t/test_map_keys.py` pin it.
+- **Cluster**: lang/checker
+- **Description**: The checker rejects any declared type in which `Float64` occurs anywhere inside a
+  `Map`'s first argument, recursively — `(Map Float64 V)`, `(Map (Pair Float64 T) V)`,
+  `(Map (List Float64) V)` — under the code `map-key-order`. The specification's type table said `K`
+  must support equality while §6 specified `map-keys`, `map-values` and `map-pairs` as ordered by
+  sorted key; sorting needs an order, not equality. Both the table and `HANDBOOK.md` now say so.
+- **Rationale**: the declaration was wider than any backend can implement. `rt.rs` uses `BTreeMap`,
+  which needs `Ord`, and `f64` has no total order, so all forty `K = Float64` instantiations across
+  the ten `Map` builtins type-checked and twenty-four of them failed at `rustc`. Repairing this
+  would mean replacing the Map representation for every program to support a key type the
+  specification never intended. Narrowing before the Tier-A sweep is what lets that gate's floor be
+  100% rather than 100% minus a skip list.
+- **Costs accepted**: this is a language narrowing — a program that type-checked yesterday does not
+  today. Measured blast radius on the corpus, the modules and the bench sources: zero. It reaches
+  the handbook at a cost of about sixty characters, because a narrowing the model-facing artifact
+  does not carry makes the language narrower without making the *taught* language narrower.
+- **Deliberately not covered**: `defschema` derives `Ord` unconditionally, so a record with a
+  `Float64` field is an equally illegal key and an equally illegal `list-sort` element. That is the
+  `defenum`/`defschema` derive defect Phase 1 owns; extending this check through user types belongs
+  with that fix.
+- **Why Non-Obvious**: the contradiction is between two sections of one document, each defensible
+  alone, and the checker enforced neither — so the only symptom was a `rustc` error about a trait
+  bound in the runtime, which reads as a backend bug rather than a specification one.
+
+### [d-4a19] Per-call-site instantiations are serialized out of the checker, not written by hand
+- **Date**: 2026-08-29
+- **Status**: Active
+- **Cluster**: lang/checker
+- **Description**: `checker/resolve.call_instantiations(path, roots)` returns every builtin call site
+  in a file with the concrete types its arguments were inferred at. It is serialization of inference
+  that already runs — `types_.declared` with `fresh` given is exactly instantiation — and the
+  coverage tracer intersects it with the sites that actually ran, keyed by (source, line, column).
+- **Rationale**: the rule "an `N`-typed builtin must execute at `Int64` and at `Float64`" is the
+  whole Tier-B guard against the defect class this phase exists to close, and in the plan it was a
+  hand-written field in a lock file. A hand-written field is a claim about coverage that nothing
+  checks; the intersection makes it a measurement. The intersection, rather than the checked sites
+  alone, is what matters: a builtin may be *called* at `Float64` on a line no case reaches.
+- **Costs accepted**: only the root unit's sites are reported. The checker collects an imported
+  module's header and never walks its body, so no instantiation exists for it to report, and the
+  tracer records sites in the root unit only to match.

@@ -1,0 +1,17 @@
+{
+  "id": "boolean-algebra",
+  "src": "grammar/corpus/valid/22-boolean-algebra.agents",
+  "entry": "band",
+  "cases": [
+    [[3, 3, 7], "TTFTFFTF",
+     "x == lo: the only place <= and < differ, and the only place column 7's operands are (true, false)"],
+    [[3, 7, 7], "TTTFTTFF",
+     "x == hi: the only place >= and > differ"],
+    [[3, 2, 7], "FTFTTTFT",
+     "below the range: column 1 false, and the negation in column 8 true"],
+    [[3, 8, 7], "TFTFTFTT",
+     "above the range: column 2 false, and column 7's second operand true"],
+    [[3, 5, 7], "TTTTTTFF",
+     "interior: column 7's operands are both false, which is where or and and agree"]
+  ]
+}

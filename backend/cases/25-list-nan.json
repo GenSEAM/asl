@@ -1,0 +1,15 @@
+{
+  "id": "list-aggregation-nan",
+  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "entry": "agg",
+  "cases": [
+    [["3,nan,0.5,1,2"], "F|5|nan|0.5|nan|[0.5,1.0,2.0,3.0,nan]",
+     "the sort order with a NaN in it: the numbers ascend and the NaN follows all of them, so list-min is 0.5 and list-max is the NaN. A comparator that answers Equal whenever it cannot compare leaves the NaN where it started"],
+    [["3,1,nan,2"], "F|4|nan|1.0|nan|[1.0,2.0,3.0,nan]",
+     "the arrangement the two hosts sorted differently from each other: [1.0,nan,2.0,3.0] on one and [1.0,3.0,nan,2.0] on the other"],
+    [["nan"], "F|1|nan|nan|nan|[nan]",
+     "one element, where least and greatest are the same NaN and no comparison happens at all"],
+    [["nan,nan,1"], "F|3|nan|1.0|nan|[1.0,nan,nan]",
+     "two NaNs, which tie with each other and sort after the number rather than around it"]
+  ]
+}

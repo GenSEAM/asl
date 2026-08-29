@@ -1,0 +1,13 @@
+{
+  "id": "option-result-combinators",
+  "src": "grammar/corpus/valid/21-option-result-combinators.agents",
+  "entry": "resolve",
+  "cases": [
+    [["21", 0], "ok:43|43|43",
+     "option-map before result-map: double-then-increment is 43, the other order is 44"],
+    [["x", 5], "err:E<bad:x>|FB|5",
+     "result-map-err replaced by the identity or by result-map both give err:bad:x; and the fallback arms of result-or and result-to-option"],
+    [["", 9], "err:E<bad:>|FB|9",
+     "an empty token still reaches the error path, and (str \"bad:\" \"\") is not \"bad\""]
+  ]
+}

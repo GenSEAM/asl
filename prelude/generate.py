@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from vocab import parse_signature
+
 ROOT = Path(__file__).parent
 PRELUDE = json.loads((ROOT / "prelude.json").read_text())
 SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
@@ -27,8 +29,7 @@ SEC_ORDER = ["Arithmetic", "Comparison and logic", "String", "Numeric conversion
 
 def signature(b: dict) -> str:
     """`(name a b)` rendered from the declared type, so arity cannot drift."""
-    lhs = b["type"].split("->")[0].strip()
-    n = 0 if not lhs else len(lhs.split())
+    n = len(parse_signature(b["type"])[0])
     names = ["a", "b", "c", "d"][:n]
     if "..." in b["type"]:
         return f"({b['name']} a b …)"
@@ -135,6 +136,7 @@ def handbook() -> str:
         f"- Primitive: {', '.join('`' + x + '`' for x in p['types']['primitive'])}",
         f"- Constructed: {', '.join('`(' + x + ' …)`' for x in p['types']['constructed'])}",
         f"- `Int` means `Int64`.",
+        f"- A `Map` key must be orderable: `Float64` is not a legal key type.",
         "",
         "## Vocabulary",
         "",
@@ -159,8 +161,7 @@ def validate_templates() -> list[str]:
     """
     bad = []
     for b in PRELUDE["builtins"]:
-        lhs = b["type"].split("->")[0].strip()
-        n = 0 if not lhs else len(lhs.split())
+        n = len(parse_signature(b["type"])[0])
         for tgt in ("py", "js", "rs"):
             tpl = b.get(tgt)
             if tpl is None:
