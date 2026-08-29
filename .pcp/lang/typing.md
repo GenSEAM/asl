@@ -24,3 +24,19 @@ This file groups d/c/r/l entries for the lang/typing module.
 - **Why Non-Obvious**: "typed" and "annotated" read as the same property, so the cost of writing
   types gets attributed to having them. They are separable, and almost all of the cost is in the
   writing.
+
+### [d-043b] A numeric literal takes its type from context, with one documented default
+- **Date**: 2026-08-29
+- **Status**: Active
+- **Cluster**: lang/typing
+- **Description**: An unsuffixed integer literal is whichever integer type its position requires,
+  and the documented default width where nothing constrains it. A literal with a decimal point is
+  always the float type. Written into the specification, not only into the checker.
+- **Rationale**: The specification fixed the numeric widths and forbade implicit conversion but
+  never said what type a literal has, so the most ordinary expression in the language — adding one
+  to a variable — had no defined meaning and each implementation was free to pick. The alternative,
+  requiring a width on every literal, reintroduces exactly the ceremony inference exists to remove,
+  and on the most common form in any program.
+- **Why Non-Obvious**: fixing the widths reads as having settled numeric typing completely. It
+  settles it for *values that have a declared type*; a literal has none, which is why the gap
+  survived a specification review that was looking for width ambiguity.

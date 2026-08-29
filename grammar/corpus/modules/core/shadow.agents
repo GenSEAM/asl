@@ -1,0 +1,30 @@
+; Search-path companion: a module whose binders collide with its own top-level
+; names. Every top-level name is emitted under the module's prefix and every
+; binder is emitted bare, so a lowering that resolves an identifier through the
+; unit's name table rather than through lexical scope reaches the definition
+; instead of the binding — on both targets at once.
+
+(module core/shadow
+  :doc "Binders that shadow this module's own top-level names."
+  :export [x g triple tripled scaled])
+
+(defun x [] -> Int64
+  :doc "A nullary function whose name a parameter shadows below."
+  1)
+
+(defun g [(x Int64)] -> Int64
+  :doc "The parameter wins over the top-level `x` of the same name."
+  x)
+
+(defun triple [(y Int64)] -> Int64
+  :doc "A function whose name a `let` binder shadows below."
+  (* y 3))
+
+(defun tripled [(n Int64)] -> Int64
+  :doc "`triple` where nothing shadows it, so both readings are observable."
+  (triple n))
+
+(defun scaled [(xs (List Int64))] -> (List Int64)
+  :doc "The `let` binder wins, so every element gains 100 rather than tripling."
+  (let [(triple (fn [(y Int64)] -> Int64 (+ y 100)))]
+    (map triple xs)))

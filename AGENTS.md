@@ -34,9 +34,10 @@ and a grammar that rejected them would be over-tight.
 ```bash
 .venv/bin/python grammar/closure_audit.py
 .venv/bin/python prelude/generate.py --check
+.venv/bin/python checker/gate.py
 .venv/bin/python backend/check_corpus.py
 .venv/bin/python backend/differential.py
-.venv/bin/python -m pytest backend/t bench/algo -q
+.venv/bin/python -m pytest backend/t bench/algo checker/t -q
 ```
 
 The closure gate extracts call heads with the project's own tree-sitter grammar and fails if any
@@ -51,16 +52,31 @@ read as placeholders and fail far from their cause.
 transpiling proves the backend covers the forms the grammar admits. Those two drift apart
 silently otherwise.
 
-`check_corpus.py` invokes `rustc` on the Rust output rather than trusting the transpiler's exit
-code. It did not, once, and every fixture passed while the backend emitted a wildcard for list
-destructuring that `rustc` rejects.
+`checker/gate.py` runs the semantic checker over both corpora: `corpus/valid` must check clean and
+every `corpus/semantic` fixture must be rejected **under the rule its `; expect:` header names**.
+Asserting the code matters more than asserting rejection — the reserved-prefix fixture once passed
+because an unrelated lexical rule rejected it, which removed the pressure to write the real check.
+
+`check_corpus.py` invokes `rustc` on the Rust output, and `py_compile` on the Python output, rather
+than trusting the transpiler's exit code. It did not, once, and every fixture passed while the Rust
+backend emitted a wildcard for list destructuring that `rustc` rejects — and the Python side had
+the same hole until the module fixture was caught lowering a qualified name to `s/concat(...)`.
 
 `differential.py` runs one AgentS source through every backend and fails if they disagree.
 Portability is a claim, not a property: Python and JavaScript already differ on `2**53+1` and on
 rounding a half, so equivalence exists only where it is enforced.
 
+It has two modes. The function mode calls an entry and compares returns; the **program mode** runs a
+whole program and compares stdout *and* exit status, including a failing path. That second mode is
+what checks the I/O surface: each runtime derives its `IoError` case independently — from `errno` on
+one target, `ErrorKind` on the other — so nothing but running both proves they agree. It is also the
+only gate that has ever caught a defect in how one form nests inside another (PCP `c-15f3`).
+
 `backend/t` runs AgentS source through the transpiler and executes the result, asserting semantics
 taken from the specification — not from observing what the transpiler happened to emit.
+
+`checker/t` covers the type layer's internals. A unifier that accepts everything leaves every gate
+green, so the pieces whose failure is silent are tested directly rather than through a verdict.
 
 ### The vocabulary has one source
 

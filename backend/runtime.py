@@ -117,3 +117,102 @@ def m_set(m, k, v): return {**m, k: v}
 def m_del(m, k): return {i: j for i, j in m.items() if i != k}
 def m_pairs(m): return [pair(k, m[k]) for k in sorted(m)]
 def m_from(ps): return {p[1]: p[2] for p in ps}
+
+
+# ---------- I/O ----------
+# The error case is chosen from errno, not from the exception class, because the
+# Rust runtime has to reach the same case for the same condition and errno is the
+# one vocabulary both hosts share. The differential gate compares them.
+
+import os as _os
+import sys as _sys
+
+_ERRNO = {2: "not-found", 13: "permission-denied", 17: "already-exists",
+          20: "invalid-path", 21: "invalid-path", 4: "interrupted"}
+
+# rt::IoError's cases. `main`'s failure type is fixed on both targets, and this
+# host has to reject what the Rust one rejects at compile time.
+_IO_ERRORS = ("not-found", "permission-denied", "already-exists",
+              "invalid-path", "interrupted", "other")
+
+
+def _io_err(exc):
+    return err((_ERRNO.get(getattr(exc, "errno", None), "other"),))
+
+
+def read_line():
+    try:
+        line = _sys.stdin.readline()
+    except OSError as exc:
+        return _io_err(exc)
+    return ok(NONE if line == "" else some(line.rstrip("\n")))
+
+
+def read_all():
+    try:
+        return ok(_sys.stdin.read())
+    except OSError as exc:
+        return _io_err(exc)
+
+
+def _write(stream, text):
+    try:
+        stream.write(text)
+        stream.flush()
+    except OSError as exc:
+        return _io_err(exc)
+    return ok(None)
+
+
+def print_out(s): return _write(_sys.stdout, s)
+def println(s): return _write(_sys.stdout, s + "\n")
+def eprintln(s): return _write(_sys.stderr, s + "\n")
+
+
+def file_read(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return ok(fh.read())
+    except OSError as exc:
+        return _io_err(exc)
+
+
+def _file_put(path, text, mode):
+    try:
+        with open(path, mode, encoding="utf-8") as fh:
+            fh.write(text)
+    except OSError as exc:
+        return _io_err(exc)
+    return ok(None)
+
+
+def file_write(path, text): return _file_put(path, text, "w")
+def file_append(path, text): return _file_put(path, text, "a")
+
+
+def file_exists(path):
+    try:
+        return ok(_os.path.exists(path))
+    except OSError as exc:
+        return _io_err(exc)
+
+
+def main_exit(result):
+    """Host entry glue: a program's Result becomes its exit status. `err` prints
+    the case name, which is the only part of a failure the language defines.
+
+    The shape is checked, not assumed: rt::main_exit takes a Result<(), IoError>
+    and rejects anything else at compile time, so accepting any value here would
+    make the two backends disagree about which programs are valid — a `main`
+    returning (Result Unit String) printed the first character of its error.
+    """
+    if not (isinstance(result, tuple) and len(result) == 2
+            and result[0] in ("ok", "err")):
+        raise TypeError(f"main must return a Result, got {result!r}")
+    if result[0] == "ok":
+        return 0
+    case = result[1]
+    if not (isinstance(case, tuple) and len(case) == 1 and case[0] in _IO_ERRORS):
+        raise TypeError(f"main must fail with an IoError, got {case!r}")
+    _sys.stderr.write(case[0] + "\n")
+    return 1

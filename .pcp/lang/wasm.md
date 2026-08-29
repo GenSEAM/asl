@@ -1,0 +1,54 @@
+# Lang / Wasm
+
+This file groups d/c/r/l entries for the lang/wasm module.
+
+### [d-f484] WebAssembly is the target the language is aimed at, and the glue it is for
+- **Date**: 2026-08-29
+- **Status**: Active
+- **Cluster**: lang/wasm
+- **Description**: One source, two exits, both kept: a portable bytecode module where portability is
+  the point, or emission into a specific native language where a specialised implementation — a
+  numeric kernel, a hand-tuned routine — pays for itself. The focus is the first. Its role is a
+  typed glue layer between ecosystems
+  that meet as compiled modules rather than as source: units written in different languages are
+  composed through declared interface contracts, and the language supplies the checked, total layer
+  over those contracts. Producing modules for that target is a first-class product goal, not a
+  by-product of one backend.
+- **Rationale**: The module surface is already private-by-default with an explicit export contract
+  and a mandatory doc (d-f99b), which is the same shape an interface contract takes at a module
+  boundary. Binding an ecosystem at that boundary therefore reuses a decision already made rather
+  than adding a second, parallel notion of a module's public face. The safety argument is that a
+  module is confined by the host embedding it and cannot reach anything it was not handed — a
+  property of the execution substrate, and separate from the type-level guarantees the language
+  itself provides.
+- **Route, measured**: the first target costs no new code generation. The existing systems-language
+  backend's output is already accepted for the portable target unchanged; every corpus fixture it
+  covers produces a valid module. Direct code generation for the target is a distinct and far more
+  expensive commitment — memory layout and a reclamation strategy for the recursive unions the
+  language is built on — and is not started by this decision.
+- **Costs accepted**: the ecosystem reached this way is not the ecosystem reached through host
+  bindings (d-4b8c). Host binding buys an existing library corpus; module composition buys typed
+  contracts to a set of modules that is comparatively small, and pulling a dynamic host language
+  in through it means shipping that language's whole runtime. Both boundaries are now in scope,
+  they answer different questions, and neither is a substitute for the other. Portability continues
+  to hold for the pure core only — a module bound to one ecosystem's libraries stays with it.
+- **Why Non-Obvious**: the target looks like a portability feature to be added at the end, once
+  there is something to port. It is instead an interop model, and interop is a language-surface
+  question: what a module declares, what crosses the boundary, and what a failure across it looks
+  like. Deciding it late means deciding it twice.
+
+### [c-c759] The rendering and system-UI half of the portability story does not exist yet
+- **Date**: 2026-08-29
+- **Status**: Active
+- **Cluster**: lang/wasm
+- **Description**: Composing compiled modules is standardised for computation. Reaching a GPU, a
+  window, or a system UI through the same mechanism is not: the interface for it is a proposal,
+  no host outside the browser implements one, and inside the browser a module reaches the graphics
+  API only through the surrounding script host, not through the portable interface. Engines that
+  might embed such a module expose no plugin contract for one.
+- **Impact**: any plan that treats graphics or UI as another contract to be imported is planning
+  against a capability that must first be built by hand, per host, and is therefore neither
+  portable nor free. It belongs in the effectful edge that d-4b8c already declares non-portable.
+- **Why Non-Obvious**: the computation side works so smoothly that the graphics side is assumed to
+  work the same way, and the proposals are public and readable enough to be mistaken for shipped
+  standards.

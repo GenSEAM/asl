@@ -35,7 +35,7 @@ module.exports = grammar({
     ),
     module_opt: $ => choice(
       seq(':doc', field('doc', $.string)),
-      seq(':export', '[', repeat(field('export', $.ident)), ']'),
+      seq(':export', '[', repeat(field('export', choice($.ident, $.type_name))), ']'),
       seq(':import', '[', repeat($.import_spec), ']'),
     ),
     import_spec: $ => seq(
@@ -79,8 +79,11 @@ module.exports = grammar({
       seq(':json', field('json_name', $.string)),
     ),
 
+    // `!` marks a declaration that touches the world; mandatory on the
+    // signature because the signature is the module surface.
     defun: $ => seq(
       '(', 'defun',
+      optional(field('effect', '!')),
       optional(field('type_params', $.type_params)),
       field('name', $.ident),
       field('params', $.params),
@@ -97,8 +100,8 @@ module.exports = grammar({
 
     // ---------- types ----------
 
-    _type: $ => choice($.type_name, $.type_app),
-    type_app: $ => seq('(', $.type_name, repeat1($._type), ')'),
+    _type: $ => choice($.type_name, $.qualified_type, $.type_app),
+    type_app: $ => seq('(', choice($.type_name, $.qualified_type), repeat1($._type), ')'),
 
     // ---------- expressions ----------
 
@@ -148,12 +151,20 @@ module.exports = grammar({
 
     try_form: $ => seq('(', 'try', field('body', $._expr), ')'),
 
+    // Lambda annotations are optional where the callee's signature fixes them;
+    // `params` stays strict because a named declaration is the module surface.
     fn_form: $ => seq(
       '(', 'fn',
-      field('params', $.params),
-      '->',
-      field('return_type', $._type),
+      optional(field('effect', '!')),
+      field('params', $.fn_params),
+      optional(seq('->', field('return_type', $._type))),
       repeat1(field('body', $._expr)), ')'
+    ),
+
+    fn_params: $ => seq('[', repeat($.fn_param), ']'),
+    fn_param: $ => choice(
+      field('name', $.ident),
+      seq('(', field('name', $.ident), field('type', $._type), ')')
     ),
 
     // §6.5/§6.6 builtins whose heads double as pattern heads.
@@ -167,7 +178,8 @@ module.exports = grammar({
     ),
 
     // A PascalCase head is record construction (§4.1).
-    ctor: $ => seq('(', field('type', $.type_name), repeat($.ctor_arg), ')'),
+    ctor: $ => seq('(', field('type', choice($.type_name, $.qualified_type)),
+                   repeat($.ctor_arg), ')'),
     ctor_arg: $ => seq(field('key', $.keyword), field('value', $._expr)),
 
     field_access: $ => seq(
@@ -203,7 +215,7 @@ module.exports = grammar({
     pair_pattern: $ => seq('(', 'pair', $._pattern, $._pattern, ')'),
     // A defenum case used as a pattern; its arity is a semantic check.
     enum_pattern: $ => seq(
-      '(', field('case', $.ident), repeat($._pattern), ')'
+      '(', field('case', choice($.ident, $.qualified)), repeat($._pattern), ')'
     ),
 
     // ---------- terminals ----------
@@ -223,6 +235,9 @@ module.exports = grammar({
     // alias/member. Bare "/" stays the division operator: it is separator-
     // delimited, a qualified name never is.
     qualified: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/,
+    // The uppercase tail keeps an imported type disjoint from qualified,
+    // mod_path and type_name, so it is one token wherever it can appear.
+    qualified_type: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[A-Z][A-Za-z0-9]*/,
     mod_path: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*(\/[a-z][a-z0-9]*(-[a-z0-9]+)*)*/,
     ident: $ => /[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/,
     keyword: $ => /:[a-z][a-z0-9]*(-[a-z0-9]+)*/,

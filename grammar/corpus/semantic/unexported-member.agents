@@ -1,0 +1,12 @@
+; expect: rule-9
+; `trim` exists in core/strings but is not on its :export list. The import is
+; well-formed and the qualified name is well-shaped; only the imported module's
+; contract says the member is private.
+(module text/clean
+  :doc "Module reaching for a member its import does not export."
+  :export [clean]
+  :import [(core/strings :as s)])
+
+(defun clean [(x String)] -> String
+  :doc "Trim through an alias that may not offer it."
+  (s/trim x))

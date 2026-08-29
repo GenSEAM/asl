@@ -1,0 +1,13 @@
+; expect-only: arity
+; `s/circle` is exported and well-shaped, so rule 9 is satisfied; only the
+; declaration in core/shapes says the case takes one argument. Arity does not
+; stop being checkable at a module boundary — the import table carries the
+; callee's parameters.
+(module text/too-many
+  :doc "Calls an imported constructor with the wrong number of arguments."
+  :export [big]
+  :import [(core/shapes :as s)])
+
+(defun big [] -> s/Shape
+  :doc "A circle given a radius it does not have."
+  (s/circle 1.0 2.0))

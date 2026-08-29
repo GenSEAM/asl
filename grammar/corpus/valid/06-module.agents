@@ -1,8 +1,9 @@
+; run: shout("hi") == "HI!"
 ; v0.2: module header, type parameters, closed unions, keyed collection.
 
 (module text/casing
   :doc "Case-conversion and tallying helpers for report rendering."
-  :export [shout area tally]
+  :export [shout area tally Shape]
   :import [(core/strings :as s)])
 
 (defschema {T} Box

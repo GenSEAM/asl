@@ -1,0 +1,13 @@
+; run: show() == "rectangle 1.0"
+; Transitivity: this module calls through an intermediary that speaks in a third
+; module's type, and never imports that third module. Naming the type would
+; require the import — corpus/valid/09 is the fixture that does.
+
+(module text/consume
+  :doc "Consuming a module that speaks in another module's types."
+  :export [show]
+  :import [(text/report :as r)])
+
+(defun show [] -> String
+  :doc "Describe the unit square without naming its type."
+  (r/describe (r/unit-square)))

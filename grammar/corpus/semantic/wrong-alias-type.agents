@@ -1,0 +1,13 @@
+; expect-only: rule-9
+; Two imports, and Shape is reached through the alias that does not define it.
+; "the module has no such type" and "it has one but keeps it private" share a
+; code path, and this covers the first of them.
+(module text/mixup
+  :doc "Reaches a type through the wrong alias."
+  :export [tag]
+  :import [(core/shapes  :as s)
+           (core/strings :as t)])
+
+(defun tag [(x t/Shape)] -> String
+  :doc "Name a shape reached through the string module's alias."
+  "shape")

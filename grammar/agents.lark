@@ -23,7 +23,7 @@ toplevel: module_decl
 
 module_decl: "(" MODULE mod_path module_opt* ")"
 module_opt: DOC_KW STRING
-          | EXPORT_KW "[" IDENT* "]"
+          | EXPORT_KW "[" (IDENT|TYPE_NAME)* "]"
           | IMPORT_KW "[" import_spec* "]"
 import_spec: "(" mod_path AS_KW IDENT ")"
 mod_path: MOD_PATH | IDENT
@@ -41,7 +41,10 @@ field: "(" FIELD_KW IDENT type STRING field_opt* ")"
 field_opt: DEFAULT_KW literal
          | JSON_KW STRING
 
-defun: "(" DEFUN type_params? IDENT params ARROW type doc_opt? expr+ ")"
+// The `!` marks a declaration that touches the world. It is inferred inside a
+// body but mandatory here, because the signature is the module surface and a
+// caller must see an effect without reading the body (PCP d-f99b).
+defun: "(" DEFUN BANG? type_params? IDENT params ARROW type doc_opt? expr+ ")"
 doc_opt: DOC_KW STRING
 
 defenum: "(" DEFENUM type_params? TYPE_NAME enum_case+ ")"
@@ -53,7 +56,8 @@ param: "(" IDENT type ")"
 // ---------- types ----------
 
 type: TYPE_NAME
-    | "(" TYPE_NAME type+ ")"
+    | QUALIFIED_TYPE
+    | "(" (TYPE_NAME|QUALIFIED_TYPE) type+ ")"
 
 // ---------- expressions ----------
 
@@ -83,7 +87,7 @@ else_clause: "(" ELSE_KW expr+ ")"
 match_form: "(" MATCH expr match_arm+ ")"
 match_arm: "(" pattern expr+ ")"
 
-pattern: "(" IDENT pattern* ")"     -> enum_pattern
+pattern: "(" (IDENT|QUALIFIED) pattern* ")"     -> enum_pattern
        | "(" OK pattern ")"
        | "(" ERR pattern ")"
        | "(" SOME pattern ")"
@@ -97,10 +101,18 @@ pattern: "(" IDENT pattern* ")"     -> enum_pattern
 
 try_form: "(" TRY expr ")"
 
-fn_form: "(" FN params ARROW type expr+ ")"
+// A lambda's parameter and return types are optional: where it is passed to a
+// callee whose signature fixes them, an annotation cannot differ from what the
+// position implies, and writing it costs the budget the language exists to spend
+// on problem-solving (PCP r-a624). Named declarations keep theirs — they are the
+// module surface, read without the body — so `params` stays strict.
+fn_form: "(" FN BANG? fn_params (ARROW type)? expr+ ")"
+fn_params: "[" fn_param* "]"
+fn_param: IDENT
+        | "(" IDENT type ")"
 
 // A PascalCase head is record construction: (Point :x 3 :y 4)
-ctor: "(" TYPE_NAME ctor_arg* ")"
+ctor: "(" (TYPE_NAME|QUALIFIED_TYPE) ctor_arg* ")"
 ctor_arg: KEYWORD expr
 
 // (.-field record)
@@ -152,6 +164,9 @@ JSON_KW: ":json"
 ELSE_KW: ":else"
 
 ARROW: "->"
+// Standalone: no identifier starts with it and the only operator containing it
+// is the longer "!=", so the literal cannot be re-lexed into one.
+BANG: "!"
 WILDCARD: "_"
 
 // §6.1/§6.2 operators are ordinary identifiers in call position. Declared as
@@ -172,8 +187,13 @@ KEYWORD: /:[a-z][a-z0-9]*(-[a-z0-9]+)*/
 
 // alias/member and a/b/c module paths share a shape; position disambiguates.
 // Bare "/" stays the division operator: it is separator-delimited, a qualified
-// name never is.
-QUALIFIED: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+// name never is. The priority is load-bearing: without it the dynamic lexer
+// splits a qualified name in head position into `alias / member`, which is a
+// legal division call, so (s/concat x) silently became a call to `s`.
+QUALIFIED.2: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+// The uppercase tail makes this lexically disjoint from QUALIFIED, MOD_PATH
+// and TYPE_NAME, so an imported type is one token wherever it can appear.
+QUALIFIED_TYPE.2: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[A-Z][A-Za-z0-9]*/
 MOD_PATH: /[a-z][a-z0-9]*(-[a-z0-9]+)*(\/[a-z][a-z0-9]*(-[a-z0-9]+)*)+/
 
 INT: /-?[0-9]+/

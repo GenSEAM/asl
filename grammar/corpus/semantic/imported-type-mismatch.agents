@@ -1,0 +1,15 @@
+; expect-only: type
+; A locally declared Shape where the imported one is required. Identity is
+; nominal and keyed by defining module, so the two must not unify — this is the
+; only fixture covering that direction.
+(module text/clash
+  :doc "Passes a local value where an imported type is required."
+  :export [Shape relay]
+  :import [(core/shapes :as s)])
+
+(defenum Shape
+  (:case blob [] "The only case of the local union"))
+
+(defun relay [(x Shape)] -> Float64
+  :doc "Hand a local shape to a function typed by the imported one."
+  (s/area x))

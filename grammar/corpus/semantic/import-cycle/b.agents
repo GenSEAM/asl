@@ -1,0 +1,10 @@
+; expect: rule-11
+; The other half; see a.agents.
+(module b
+  :doc "Imports a, which imports b."
+  :export [from-b]
+  :import [(a :as a)])
+
+(defun from-b [] -> Int64
+  :doc "Exists so the module has a surface."
+  2)

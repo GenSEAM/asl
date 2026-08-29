@@ -1,0 +1,65 @@
+; A multi-expression body in every position the grammar admits one: a function
+; body, a `let` body, a `cond` clause, an `:else` clause, a `match` arm and a
+; lambda body. Each non-final expression is a `println`, so a backend that
+; evaluates one without emitting it prints a line short — which two backends can
+; do in agreement. The expected output is written down in backend/differential.py.
+;
+; run: tally([1, 2, 3]) == 6
+
+(module seq-demo
+  :doc "Every multi-expression body position, each with an observable effect."
+  :export [main tally])
+
+(defun tally [(xs (List Int64))] -> Int64
+  :doc "A pure fold, so the fixture asserts a value as well as an output."
+  (fold (fn [(acc Int64) (n Int64)] (+ acc n)) 0 xs))
+
+(defun ! in-function [] -> (Result Int64 IoError)
+  :doc "Function body: an effect, then the value."
+  (try (println "function-1"))
+  (ok 1))
+
+(defun ! in-let [] -> (Result Int64 IoError)
+  :doc "`let` body: the binding, then an effect, then the value."
+  (let [(n 2)]
+    (try (println "let-1"))
+    (ok n)))
+
+(defun ! in-cond [(flag Bool)] -> (Result Int64 IoError)
+  :doc "A `cond` clause and its `:else` each carry two expressions."
+  (cond
+    (flag  (try (println "cond-1")) (ok 3))
+    (:else (try (println "else-1")) (ok 4))))
+
+(defun ! in-cond-bare [(flag Bool)] -> Int64
+  :doc "The same two clauses with a bare effect: no `try` to force a statement
+        out of it, so an unsequenced clause drops it on every target at once."
+  (cond
+    (flag  (println "cond-bare") 6)
+    (:else (println "else-bare") 7)))
+
+(defun ! in-match [(r (Result Int64 String))] -> (Result Int64 IoError)
+  :doc "A `match` arm body: an effect before the arm's value."
+  (match r
+    ((ok n)  (try (println "match-ok-1"))  (ok n))
+    ((err e) (try (println "match-err-1")) (ok 0))))
+
+(defun ! in-lambda [(xs (List Int64))] -> (List Int64)
+  :doc "A lambda body, where the leading effect is bare: `try` needs a Result
+        around it and a lambda cannot propagate out of its caller."
+  (map (fn ! [(x Int64)] (println "lambda-1") (* x 10)) xs))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  :doc "Drive every position, then print what they produced."
+  (let [(a (try (in-function)))
+        (b (try (in-let)))
+        (c (try (in-cond true)))
+        (d (try (in-cond false)))
+        (e (try (in-match (ok 5))))
+        (f (try (in-match (err "no"))))
+        (g (in-lambda (list 1 2)))
+        (h (in-cond-bare true))
+        (i (in-cond-bare false))]
+    (try (println (string-from-int64 (+ a (+ b (+ c (+ d (+ e f))))))))
+    (try (println (string-from-int64 (+ h i))))
+    (println (string-from-int64 (tally g)))))

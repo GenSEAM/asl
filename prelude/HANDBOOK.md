@@ -9,8 +9,9 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 ```lisp
 (module my/mod                  ; every file is a module
   :doc "One sentence."          ; required
-  :export [f]                   ; NOTHING is public unless listed
-  :import [(other/mod :as o)])  ; members reached as o/name
+  :export [f Point]             ; NOTHING is public unless listed; a
+                                ;   PascalCase entry exports a type
+  :import [(other/mod :as o)])  ; o/name for a value, o/Type for a type
 
 (defschema Point                ; a record
   (:field x Int64 "Doc."))      ; doc required on every field
@@ -18,6 +19,10 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 (defenum Shape                  ; a closed union
   (:case circle [(r Float64)] "Doc.")
   (:case point  []            "Doc."))
+
+(defun area [(s o/Shape)] -> Float64  ; an imported type in a signature;
+  :doc "Doc."                         ;   its cases are (o/circle r)
+  0.0)
 
 (defun {A} id [(x A)] -> A      ; {A} binds a type variable
   :doc "Required when exported."
@@ -65,8 +70,8 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 
 - Declarations: `module`, `defschema`, `defenum`, `defun`
 - Expressions: `fn`, `let`, `if`, `cond`, `match`, `try`
-- Constructors: `ok`, `err`, `some`, `none`, `list`, `pair`
-- Patterns: `ok`, `err`, `some`, `none`, `list`, `cons`, `pair`, a literal, a name (binds), or `_`
+- Constructors: `ok`, `err`, `some`, `none`, `list`, `pair`, `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`
+- Patterns: `ok`, `err`, `some`, `none`, `list`, `cons`, `pair`, `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`, a literal, a name (binds), or `_`
 
 ## Types
 
@@ -76,7 +81,7 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 
 ## Vocabulary
 
-All 92 names. Nothing else exists.
+All 107 names. Nothing else exists.
 
 ### Arithmetic
 
@@ -204,3 +209,23 @@ All 92 names. Nothing else exists.
 | `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
 | `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
 | `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
+
+### I/O
+
+| Form | Type | Meaning |
+|---|---|---|
+| `(not-found)` | `-> IoError` | The not found failure. |
+| `(permission-denied)` | `-> IoError` | The permission denied failure. |
+| `(already-exists)` | `-> IoError` | The already exists failure. |
+| `(invalid-path)` | `-> IoError` | The invalid path failure. |
+| `(interrupted)` | `-> IoError` | The interrupted failure. |
+| `(other)` | `-> IoError` | The other failure. |
+| `(read-line)` | `-> (Result (Option String) IoError)` | Read one line from standard input; none at end of input. |
+| `(read-all)` | `-> (Result String IoError)` | Read all of standard input. |
+| `(print a)` | `String -> (Result Unit IoError)` | Write to standard output with no trailing newline. |
+| `(println a)` | `String -> (Result Unit IoError)` | Write a line to standard output. |
+| `(eprintln a)` | `String -> (Result Unit IoError)` | Write a line to standard error. |
+| `(file-read a)` | `String -> (Result String IoError)` | Read a whole file as text. |
+| `(file-write a b)` | `String String -> (Result Unit IoError)` | Write text to a file, replacing it. |
+| `(file-append a b)` | `String String -> (Result Unit IoError)` | Append text to a file, creating it if absent. |
+| `(file-exists? a)` | `String -> (Result Bool IoError)` | Whether a path exists. |

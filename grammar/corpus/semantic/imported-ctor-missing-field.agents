@@ -1,0 +1,12 @@
+; expect-only: ctor
+; `value` has no :default, and construction rules do not change across a module
+; boundary. Validating keys against the local schema table instead reports
+; nothing at all here.
+(module text/empty-cell
+  :doc "Constructs an imported record without its required field."
+  :export [make]
+  :import [(core/trees :as t)])
+
+(defun make [] -> (t/Cell Int64)
+  :doc "Construct an imported record, omitting a required field."
+  (t/Cell))

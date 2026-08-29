@@ -1,0 +1,17 @@
+; Search-path companion: the module whose type the importing fixtures name.
+; Its export list carries a type beside a function, which is what the whole
+; boundary rests on.
+
+(module core/shapes
+  :doc "Plane figures and their measurements."
+  :export [Shape area])
+
+(defenum Shape
+  (:case circle    [(radius Float64)]                 "A circle")
+  (:case rectangle [(width Float64) (height Float64)] "An axis-aligned rectangle"))
+
+(defun area [(sh Shape)] -> Float64
+  :doc "Area of a shape."
+  (match sh
+    ((circle r)      (* 3.14159 (* r r)))
+    ((rectangle w h) (* w h))))

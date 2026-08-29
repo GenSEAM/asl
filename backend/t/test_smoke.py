@@ -41,3 +41,15 @@ def test_try_propagates_failure():
 def test_match_over_result():
     assert s.describe(_as.ok(7)) == "7"
     assert s.describe(_as.err("boom")) == "boom"
+
+
+def test_the_checked_in_lowering_matches_its_source():
+    """`smoke.py` is committed and every other test here imports it, so nothing
+    would notice the emitter drifting away from the source it was generated from."""
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+    sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent / "grammar"))
+    from to_python import Transpiler
+    src = pathlib.Path(__file__).parent / "smoke.agents"
+    assert Transpiler().transpile(src.read_text(), path=src) == \
+        (pathlib.Path(__file__).parent / "smoke.py").read_text()

@@ -1,0 +1,18 @@
+; Nested list destructuring. A cons inside a cons is more heads on one slice
+; pattern, not a pattern inside a pattern: Rust binds the rest of a slice once,
+; and `x @ ..` accepts only a binding on its left.
+;
+; run: pairwise([1, 2, 3, 4, 5]) == [3, 7, 5]
+
+(defun pairwise [(xs (List Int64))] -> (List Int64)
+  :doc "Sum adjacent elements two at a time, carrying a lone tail through."
+  (match xs
+    ((cons a (cons b rest)) (list-cons (+ a b) (pairwise rest)))
+    ((cons a (list))        (list a))
+    ((list)                 (list))))
+
+(defun leading [(xs (List Int64))] -> Int64
+  :doc "A wildcard tail binds nothing, so the slice pattern carries no `@`."
+  (match xs
+    ((cons a _) a)
+    ((list)     0)))

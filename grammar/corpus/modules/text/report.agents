@@ -1,0 +1,17 @@
+; Search-path companion: it speaks in another module's type, so rule 13 has to
+; be checked against the module that DEFINES a type, not the one naming it.
+
+(module text/report
+  :doc "Rendering for shapes declared in another module."
+  :export [describe unit-square]
+  :import [(core/shapes :as s)])
+
+(defun describe [(sh s/Shape)] -> String
+  :doc "One line per shape."
+  (match sh
+    ((s/circle r)      (str "circle " (string-from-float64 r)))
+    ((s/rectangle w h) (str "rectangle " (string-from-float64 (* w h))))))
+
+(defun unit-square [] -> s/Shape
+  :doc "The 1x1 rectangle."
+  (s/rectangle 1.0 1.0))

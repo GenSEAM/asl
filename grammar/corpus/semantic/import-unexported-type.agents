@@ -1,0 +1,12 @@
+; expect-only: rule-9
+; `Hidden` is declared by core/private and is absent from its export list. The
+; import is well-formed and the qualified type is well-shaped; only the other
+; module's contract says the type is private.
+(module text/peek
+  :doc "Names a type its import keeps private."
+  :export [tag]
+  :import [(core/private :as p)])
+
+(defun tag [(h p/Hidden)] -> String
+  :doc "Label a value of a type the import does not publish."
+  "hidden")

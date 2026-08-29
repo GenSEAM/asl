@@ -22,7 +22,7 @@ SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 HANDBOOK = ROOT / "HANDBOOK.md"
 
 SEC_ORDER = ["Arithmetic", "Comparison and logic", "String", "Numeric conversion",
-             "List", "Map", "Option, Result, Pair"]
+             "List", "Map", "Option, Result, Pair", "I/O"]
 
 
 def signature(b: dict) -> str:
@@ -65,8 +65,9 @@ def handbook() -> str:
         "```lisp",
         "(module my/mod                  ; every file is a module",
         '  :doc "One sentence."          ; required',
-        "  :export [f]                   ; NOTHING is public unless listed",
-        "  :import [(other/mod :as o)])  ; members reached as o/name",
+        "  :export [f Point]             ; NOTHING is public unless listed; a",
+        "                                ;   PascalCase entry exports a type",
+        "  :import [(other/mod :as o)])  ; o/name for a value, o/Type for a type",
         "",
         "(defschema Point                ; a record",
         '  (:field x Int64 "Doc."))      ; doc required on every field',
@@ -74,6 +75,10 @@ def handbook() -> str:
         "(defenum Shape                  ; a closed union",
         '  (:case circle [(r Float64)] "Doc.")',
         '  (:case point  []            "Doc."))',
+        "",
+        "(defun area [(s o/Shape)] -> Float64  ; an imported type in a signature;",
+        '  :doc "Doc."                         ;   its cases are (o/circle r)',
+        "  0.0)",
         "",
         "(defun {A} id [(x A)] -> A      ; {A} binds a type variable",
         '  :doc "Required when exported."',

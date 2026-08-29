@@ -26,7 +26,13 @@
    "some",
    "none",
    "list",
-   "pair"
+   "pair",
+   "not-found",
+   "permission-denied",
+   "already-exists",
+   "invalid-path",
+   "interrupted",
+   "other"
   ],
   "patterns": [
    "ok",
@@ -35,7 +41,13 @@
    "none",
    "list",
    "cons",
-   "pair"
+   "pair",
+   "not-found",
+   "permission-denied",
+   "already-exists",
+   "invalid-path",
+   "interrupted",
+   "other"
   ]
  },
  "types": {
@@ -56,6 +68,16 @@
   ],
   "aliases": {
    "Int": "Int64"
+  },
+  "unions": {
+   "IoError": [
+    "not-found",
+    "permission-denied",
+    "already-exists",
+    "invalid-path",
+    "interrupted",
+    "other"
+   ]
   }
  },
  "builtins": [
@@ -579,7 +601,7 @@
    "doc": "Stable ascending sort by a derived key.",
    "py": "sorted({1}, key={0})",
    "js": "_as.sortBy({0}, {1})",
-   "rs": "rt::sort_by({0}, {1})"
+   "rs": "rt::sort_by({1}, {0})"
   },
   {
    "name": "map",
@@ -597,7 +619,7 @@
    "doc": "Keep elements satisfying a predicate.",
    "py": "[_x for _x in {1} if {0}(_x)]",
    "js": "{1}.filter({0})",
-   "rs": "{1}.into_iter().filter(|x| ({0})(x.clone())).collect::<Vec<_>>()"
+   "rs": "rt::filter({1}, {0})"
   },
   {
    "name": "fold",
@@ -886,6 +908,150 @@
    "py": "_as.pair({0}, {1})",
    "js": "_as.pair({0}, {1})",
    "rs": "({0}, {1})"
+  },
+  {
+   "name": "not-found",
+   "sec": "I/O",
+   "type": "-> IoError",
+   "doc": "The not found failure.",
+   "py": "(\"not-found\",)",
+   "js": "[\"not-found\"]",
+   "rs": "rt::IoError::NotFound"
+  },
+  {
+   "name": "permission-denied",
+   "sec": "I/O",
+   "type": "-> IoError",
+   "doc": "The permission denied failure.",
+   "py": "(\"permission-denied\",)",
+   "js": "[\"permission-denied\"]",
+   "rs": "rt::IoError::PermissionDenied"
+  },
+  {
+   "name": "already-exists",
+   "sec": "I/O",
+   "type": "-> IoError",
+   "doc": "The already exists failure.",
+   "py": "(\"already-exists\",)",
+   "js": "[\"already-exists\"]",
+   "rs": "rt::IoError::AlreadyExists"
+  },
+  {
+   "name": "invalid-path",
+   "sec": "I/O",
+   "type": "-> IoError",
+   "doc": "The invalid path failure.",
+   "py": "(\"invalid-path\",)",
+   "js": "[\"invalid-path\"]",
+   "rs": "rt::IoError::InvalidPath"
+  },
+  {
+   "name": "interrupted",
+   "sec": "I/O",
+   "type": "-> IoError",
+   "doc": "The interrupted failure.",
+   "py": "(\"interrupted\",)",
+   "js": "[\"interrupted\"]",
+   "rs": "rt::IoError::Interrupted"
+  },
+  {
+   "name": "other",
+   "sec": "I/O",
+   "type": "-> IoError",
+   "doc": "The other failure.",
+   "py": "(\"other\",)",
+   "js": "[\"other\"]",
+   "rs": "rt::IoError::Other"
+  },
+  {
+   "name": "read-line",
+   "sec": "I/O",
+   "type": "-> (Result (Option String) IoError)",
+   "doc": "Read one line from standard input; none at end of input.",
+   "py": "_as.read_line()",
+   "js": "_as.readLine()",
+   "rs": "rt::read_line()",
+   "effect": true
+  },
+  {
+   "name": "read-all",
+   "sec": "I/O",
+   "type": "-> (Result String IoError)",
+   "doc": "Read all of standard input.",
+   "py": "_as.read_all()",
+   "js": "_as.readAll()",
+   "rs": "rt::read_all()",
+   "effect": true
+  },
+  {
+   "name": "print",
+   "sec": "I/O",
+   "type": "String -> (Result Unit IoError)",
+   "doc": "Write to standard output with no trailing newline.",
+   "py": "_as.print_out({0})",
+   "js": "_as.printOut({0})",
+   "rs": "rt::print_out(&{0})",
+   "effect": true
+  },
+  {
+   "name": "println",
+   "sec": "I/O",
+   "type": "String -> (Result Unit IoError)",
+   "doc": "Write a line to standard output.",
+   "py": "_as.println({0})",
+   "js": "_as.println({0})",
+   "rs": "rt::println(&{0})",
+   "effect": true
+  },
+  {
+   "name": "eprintln",
+   "sec": "I/O",
+   "type": "String -> (Result Unit IoError)",
+   "doc": "Write a line to standard error.",
+   "py": "_as.eprintln({0})",
+   "js": "_as.eprintln({0})",
+   "rs": "rt::eprintln(&{0})",
+   "effect": true
+  },
+  {
+   "name": "file-read",
+   "sec": "I/O",
+   "type": "String -> (Result String IoError)",
+   "doc": "Read a whole file as text.",
+   "py": "_as.file_read({0})",
+   "js": "_as.fileRead({0})",
+   "rs": "rt::file_read(&{0})",
+   "effect": true
+  },
+  {
+   "name": "file-write",
+   "sec": "I/O",
+   "type": "String String -> (Result Unit IoError)",
+   "doc": "Write text to a file, replacing it.",
+   "py": "_as.file_write({0}, {1})",
+   "js": "_as.fileWrite({0}, {1})",
+   "rs": "rt::file_write(&{0}, &{1})",
+   "effect": true
+  },
+  {
+   "name": "file-append",
+   "sec": "I/O",
+   "type": "String String -> (Result Unit IoError)",
+   "doc": "Append text to a file, creating it if absent.",
+   "py": "_as.file_append({0}, {1})",
+   "js": "_as.fileAppend({0}, {1})",
+   "rs": "rt::file_append(&{0}, &{1})",
+   "effect": true
+  },
+  {
+   "name": "file-exists?",
+   "sec": "I/O",
+   "type": "String -> (Result Bool IoError)",
+   "doc": "Whether a path exists.",
+   "py": "_as.file_exists({0})",
+   "js": "_as.fileExists({0})",
+   "rs": "rt::file_exists(&{0})",
+   "effect": true
   }
  ]
 }

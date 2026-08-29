@@ -4,7 +4,13 @@ This file groups d/c/r/l entries for the lang/inference module.
 
 ### [r-a624] Lambda parameter and return types must be inferred, not written
 - **Date**: 2026-08-21
-- **Status**: Active
+- **Status**: Resolved
+- **Update 2026-08-29**: implemented. Both grammars admit a bare parameter and an absent return
+  type, and the type layer binds them by unifying the lambda into the argument position that
+  determines them. The requirement's own condition — *wherever the expected type is determined by
+  the context* — is enforced rather than trusted: a lambda whose types are still unresolved after
+  checking is rejected, because typing it by whatever its body happened to allow is not inference.
+  The predicted saving remains unmeasured; measuring it needs a hand-written elided translation.
 - **Cluster**: lang/inference
 - **Description**: A lambda passed to a higher-order builtin currently repeats types the callee's
   signature already fixes completely. Nothing is learned by writing them and nothing is checked

@@ -64,9 +64,18 @@ pub fn index_of<T: PartialEq>(xs: &[T], x: &T) -> Option<i64> {
     xs.iter().position(|y| y == x).map(|i| i as i64)
 }
 pub fn sort<T: Ord>(mut xs: Vec<T>) -> Vec<T> { xs.sort(); xs }
-pub fn sort_by<T, K: Ord, F: Fn(&T) -> K>(mut xs: Vec<T>, f: F) -> Vec<T> {
-    xs.sort_by_key(|x| f(x));
+// The language's higher-order arguments take their element by value, so the
+// helpers do too: a closure written against `&T` here could never be the same
+// closure the source declares.
+pub fn sort_by<T: Clone, K: Ord, F: Fn(T) -> K>(mut xs: Vec<T>, f: F) -> Vec<T> {
+    xs.sort_by_key(|x| f(x.clone()));
     xs
+}
+// Passing the predicate to a generic function, rather than invoking a closure
+// literal inline, is what lets rustc infer an elided parameter type: the bound
+// supplies the expected signature the same way the checker's does.
+pub fn filter<T: Clone, F: Fn(T) -> bool>(xs: Vec<T>, f: F) -> Vec<T> {
+    xs.into_iter().filter(|x| f(x.clone())).collect()
 }
 pub fn range(a: i64, b: i64) -> Vec<i64> { if a >= b { vec![] } else { (a..b).collect() } }
 pub fn zip<A, B>(a: Vec<A>, b: Vec<B>) -> Vec<(A, B)> { a.into_iter().zip(b).collect() }
@@ -84,3 +93,99 @@ pub fn m_pairs<K: Ord + Clone, V: Clone>(m: &BTreeMap<K, V>) -> Vec<(K, V)> {
     m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
 }
 pub fn m_from<K: Ord, V>(ps: Vec<(K, V)>) -> BTreeMap<K, V> { ps.into_iter().collect() }
+
+// ---------- I/O ----------
+// The case is chosen from errno where one exists, and from ErrorKind otherwise,
+// because the Python runtime reaches its case from errno and the two have to
+// agree for the same condition. The differential gate compares them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IoError {
+    NotFound,
+    PermissionDenied,
+    AlreadyExists,
+    InvalidPath,
+    Interrupted,
+    Other,
+}
+
+impl IoError {
+    pub fn case(&self) -> &'static str {
+        match self {
+            IoError::NotFound => "not-found",
+            IoError::PermissionDenied => "permission-denied",
+            IoError::AlreadyExists => "already-exists",
+            IoError::InvalidPath => "invalid-path",
+            IoError::Interrupted => "interrupted",
+            IoError::Other => "other",
+        }
+    }
+}
+
+fn io_err(e: std::io::Error) -> IoError {
+    match e.raw_os_error() {
+        Some(2) => IoError::NotFound,
+        Some(13) => IoError::PermissionDenied,
+        Some(17) => IoError::AlreadyExists,
+        Some(20) | Some(21) => IoError::InvalidPath,
+        Some(4) => IoError::Interrupted,
+        _ => match e.kind() {
+            std::io::ErrorKind::NotFound => IoError::NotFound,
+            std::io::ErrorKind::PermissionDenied => IoError::PermissionDenied,
+            std::io::ErrorKind::AlreadyExists => IoError::AlreadyExists,
+            std::io::ErrorKind::Interrupted => IoError::Interrupted,
+            _ => IoError::Other,
+        },
+    }
+}
+
+pub fn read_line() -> Result<Option<String>, IoError> {
+    let mut s = String::new();
+    match std::io::BufRead::read_line(&mut std::io::stdin().lock(), &mut s) {
+        Ok(0) => Ok(None),
+        Ok(_) => Ok(Some(s.trim_end_matches('\n').to_string())),
+        Err(e) => Err(io_err(e)),
+    }
+}
+
+pub fn read_all() -> Result<String, IoError> {
+    let mut s = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)
+        .map(|_| s)
+        .map_err(io_err)
+}
+
+fn write_to<W: std::io::Write>(mut w: W, text: &str) -> Result<(), IoError> {
+    w.write_all(text.as_bytes()).map_err(io_err)?;
+    w.flush().map_err(io_err)
+}
+
+pub fn print_out(s: &str) -> Result<(), IoError> { write_to(std::io::stdout(), s) }
+pub fn println(s: &str) -> Result<(), IoError> { write_to(std::io::stdout(), &format!("{}\n", s)) }
+pub fn eprintln(s: &str) -> Result<(), IoError> { write_to(std::io::stderr(), &format!("{}\n", s)) }
+
+pub fn file_read(path: &str) -> Result<String, IoError> {
+    std::fs::read_to_string(path).map_err(io_err)
+}
+
+pub fn file_write(path: &str, text: &str) -> Result<(), IoError> {
+    std::fs::write(path, text).map_err(io_err)
+}
+
+pub fn file_append(path: &str, text: &str) -> Result<(), IoError> {
+    let mut f = std::fs::OpenOptions::new()
+        .create(true).append(true).open(path).map_err(io_err)?;
+    write_to(&mut f, text)
+}
+
+pub fn file_exists(path: &str) -> Result<bool, IoError> {
+    Ok(std::path::Path::new(path).exists())
+}
+
+/// Host entry glue: a program's Result becomes its exit status. `err` prints the
+/// case name, which is the only part of a failure the language defines.
+pub fn main_exit(r: Result<(), IoError>) -> i32 {
+    match r {
+        Ok(()) => 0,
+        Err(e) => { let _ = eprintln(e.case()); 1 }
+    }
+}

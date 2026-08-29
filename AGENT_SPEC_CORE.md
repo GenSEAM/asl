@@ -15,7 +15,12 @@ cannot be judged on forms the specification never gave it.
 comparison, `Bool` / `Int32` / `Int64` / `Float64` / `String` / `Unit`.
 
 **Deliberately out of Core:** `defagent`, `defui`, `meta:async`, `if-target`, FFI, JSON
-serialization, I/O.
+serialization.
+
+**I/O is in**, with its effects tracked: a declaration that touches the world carries `!` in its
+signature (§4.2), failures are values of the closed union `IoError` (§3), and a program's entry
+point is `main` (§4.0). The exclusion was defensible while the benchmark was pure functions; it is
+not, now that the unit of measurement is a whole working program.
 
 ### Why v0.2 exists
 
@@ -79,6 +84,7 @@ is commodity (`RESEARCH_REPORT.md` §2.2). Claims about parser convenience or to
 comment    ::= ";" <any char except newline>* 
 ident      ::= [a-z] [a-z0-9-]* [?!]?          ; kebab-case
 qualified  ::= ident "/" ident                 ; alias-qualified, e.g. s/upper
+qual-type  ::= ident "/" type-name             ; alias-qualified type, e.g. s/Shape
 mod-path   ::= ident ( "/" ident )*            ; module path, e.g. core/strings
 type-var   ::= [A-Z] [A-Za-z0-9]*              ; only inside a { } binder
 type-name  ::= [A-Z] [A-Za-z0-9]*              ; PascalCase
@@ -115,9 +121,15 @@ reserves nothing, and its conformance fixture would pass for an unrelated reason
 | `(Result T E)` | `(ok v)` \| `(err e)` |
 | `(Pair A B)` | Built-in record, fields `first` / `second` |
 | `(Map K V)` | Immutable keyed collection; `K` must support equality |
+| `IoError` | Closed union of I/O failures: `(not-found)`, `(permission-denied)`, `(already-exists)`, `(invalid-path)`, `(interrupted)`, `(other)`. Fixed so every target reaches the same case for the same condition |
 
 `Int` is a documented alias for `Int64`. **There is no implicit numeric conversion** — mixing
 `Int64` and `Float64` in one arithmetic form is a type error. Use §6.4's explicit conversions.
+
+An unsuffixed integer literal takes whichever integer type its context requires, and `Int64` where
+nothing constrains it; a literal with a decimal point is always `Float64`. Without this a literal
+would have to be written with a width to be usable at all, which is the ceremony §5 exists to
+avoid — and leaving it unstated made `(+ x 1)` mean different things to different implementations.
 
 Fixing the widths resolves `SPEC_REVIEW.md` A3, which otherwise makes the same program overflow
 differently on each of the four targets.
@@ -138,9 +150,37 @@ the body: a later pass composes a module by reading only this.
 ```
 
 * `:doc` — mandatory. One sentence on what the module is for.
-* `:export` — the public surface. **Everything not listed is private to the module.**
+* `:export` — the public surface. **Everything not listed is private to the module.** An entry
+  is a function name or a type name, and its case decides which: `:export [describe Shape]`
+  publishes one of each. This is the only place in the language where spelling decides a kind,
+  and it is a deliberate exception — a second `:export-types` vector would be a second
+  contract, free to disagree with the first about what is public.
 * `:import` — each entry binds a module path to a short alias; members are then reached as
-  `alias/name`.
+  `alias/name`, and an exported type as `alias/TypeName`.
+
+**An exported type is transparent.** Exporting a `defenum` publishes its cases, written
+`alias/case-name` both as constructors and as patterns; exporting a `defschema` publishes its
+fields, for construction and for `.-field` access. Exhaustiveness forces this: §9 rule 4
+requires every `match` to cover its union, so an importer that cannot see every case cannot
+write a legal one. There is no opaque form in v0.2, because an opaque type is an abstract
+handle and what may be done with one depends on an ownership model this version deliberately
+leaves unrecorded (PCP `l-880d`); the syntax is left additive so opacity can arrive later
+without invalidating a program written now.
+
+**A bare case name is not exportable.** Cases travel with their type, so `:export [circle]`
+names nothing the module declares and violates rule 2. A second route to publishing a
+constructor would be a second contract, and it would publish a constructor for a type no
+importer can name.
+
+**There is no re-export.** An entry must name a type or function this module declares, so
+listing an imported type violates rule 2. A consumer of B need not import A to call a B
+function whose signature mentions an A type — identity is by defining module, not by who is
+looking — but it must import A the moment it needs to write that type itself.
+
+**The contract is this header together with the declarations of the types it exports.** Under
+transparent export the vector seeds the public surface rather than being the whole of it, so a
+mechanical extractor reads both; both are in the same file, which is what keeps the surface
+readable without the bodies.
 
 A file with no `module` header is still a module: its path relative to the source root becomes its
 name, its `:doc` is absent, and **nothing is exported**. Modularity is the default; the header
@@ -151,6 +191,17 @@ program against, and it is the one part of a module another pass must read — w
 property being optimised when the unit of work is a whole module.
 
 Import cycles are an error. Aliases are module-local and may be chosen freely.
+
+**A module that declares `main` is a program.** The entry point is
+
+```lisp
+(defun ! main [(args (List String))] -> (Result Unit IoError))
+```
+
+and its `Result` is the process's exit status: `ok` exits zero, `err` exits non-zero with the case
+name on standard error. Arguments arrive as a parameter rather than through a hidden global, so the
+program's input is visible in its contract and testable without substituting an environment. A
+module without `main` is a library and gets no entry point.
 
 ### 4.1 `defschema`
 
@@ -209,9 +260,15 @@ overrides it. Shape copied from serde and pydantic, which converged independentl
     (ok (/ a b))))
 ```
 
-`(defun [{<type-vars>}] <ident> [<params>] -> <Type> [:doc <string>] <body-expr>+)`. The parameter
-list is a **vector**, and `->` is a literal token in the form, not an expression (resolves A9). The
-body is one or more expressions evaluated in order; the value is the last one.
+`(defun [!] [{<type-vars>}] <ident> [<params>] -> <Type> [:doc <string>] <body-expr>+)`. The
+parameter list is a **vector**, and `->` is a literal token in the form, not an expression
+(resolves A9). The body is one or more expressions evaluated in order; the value is the last one.
+
+The optional `!` marks a function that **touches the world** — anything in §6's I/O group, or
+anything that calls something marked. It is written on the signature and not inferred away,
+because the signature is what a caller reads (§4.0); a marker on a function that turns out to
+perform no effect is legal, since tightening a contract later must not break its callers. Calling a
+marked function from an unmarked one is an error (§5.7).
 
 `:doc` is **mandatory for every exported function** and optional otherwise. v0.1 required a
 doc-string on record fields but gave functions nowhere to put one, which is backwards: an agent
@@ -233,16 +290,29 @@ Parameters are vectors throughout the language — v0 used a list for `defun` an
 
 Visibility comes from the module's `:export` list (§4.0), not from position. A top-level
 definition that is not exported is private to its module, and that is what drives Go's
-capitalization (§8).
+capitalization (§8). A `defschema` or `defenum` is exported by naming it on that same list,
+and its fields or cases travel with it.
 
 ### 4.3 `fn`
 
 ```lisp
-(fn [(x Int64)] -> Int64 (* x 2))
+(fn [(x Int64)] -> Int64 (* x 2))    ; annotated
+(map (fn [x] (* x 2)) xs)            ; annotations elided: `map` fixes them
 ```
 
-`(fn [<params>] -> <Type> <body-expr>+)`. Anonymous function, closing over the enclosing scope by
-value.
+`(fn [!] [<param>*] [-> <Type>] <body-expr>+)`, where each `<param>` is `<ident>` or
+`(<ident> <Type>)`. Anonymous function, closing over the enclosing scope by value. A lambda carries
+its own effect marker: `(map (fn ! [p] (file-read p)) paths)` is how one `map` serves both kinds
+without a second, effectful copy of it.
+
+**Annotations are optional where the position determines them.** A lambda passed to a callee whose
+signature fixes its parameter and return types cannot carry an annotation that differs from what
+the position implies, so writing one carries no information. Where nothing determines them — a
+lambda bound by `let` and never applied, say — they are **required**, and a checker rejects the
+elision rather than typing the lambda by accident of what its body happens to allow.
+
+Named declarations are the opposite case and keep their mandatory annotations: `defun`, `defschema`
+and `defenum` are the module surface, read without the body (§4.0).
 
 It is **not** simply `defun` without a name: a lambda takes neither type parameters nor `:doc`.
 Type parameters are bound by the named declaration that encloses it, and a lambda has no exported
@@ -259,7 +329,8 @@ surface to document. Both grammars enforce this, and a fixture pins it.
 
 `(defenum [{<type-vars>}] <TypeName> <case>+)` with
 `(:case <ident> [<fields>] <doc-string>)`. Case names are kebab-case identifiers and are used as
-both constructors and patterns, exactly like the built-in `ok` / `some`:
+both constructors and patterns within their own module, exactly like the built-in `ok` /
+`some`; an importer writes them `alias/case-name` in both positions (§4.0):
 
 ```lisp
 (circle 2.0)
@@ -364,7 +435,8 @@ type.
 
 `(try e)` where `e : (Result T E)` evaluates to `T`, or returns `(err …)` from the enclosing
 `defun` immediately. Legal only inside a `defun` whose return type is `(Result _ E)` with a
-matching `E`.
+matching `E`, and **not inside an `fn`** — a lambda is not the function `try` returns from, so the
+form there has no meaning to give it.
 
 Together `match` and `try` resolve `SPEC_REVIEW.md` B1 — v0 could construct `ok`/`err` and had no
 way to consume them, making every I/O-shaped program unwritable. Precedent: Gleam's
@@ -375,6 +447,22 @@ nests deeply, and nesting depth is the dominant LLM syntax-failure mode.
 
 Strict, left to right, depth first. Arguments are fully evaluated before the call. `and` / `or`
 short-circuit; nothing else does. The compiler may not reorder or elide any call (resolves G9).
+
+### 5.7 Effects
+
+A form is **effectful** when it calls an I/O builtin (§6), calls a function marked `!`, or hands a
+lambda marked `!` to something. An effectful form is legal only inside a `defun` or `fn` that
+carries the marker; otherwise it is an error (§9 rule 12).
+
+Effects need no ordering rule of their own: §5.6 already fixes evaluation as strict, left to right,
+with no reordering or elision, and `let` is already the sequencing form. What the marker buys is
+not ordering but *visibility* — a caller sees that a function touches the world without reading its
+body, and the language keeps the option of adding concurrency later without colouring every
+function retroactively.
+
+The rule over-approximates in one place, deliberately: a marked lambda that is passed somewhere and
+never applied still makes the call that received it effectful. Deciding otherwise would mean
+carrying effects inside the type of a function, which is the machinery this design is avoiding.
 
 ---
 
@@ -510,6 +598,26 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 | `(option-to-result a b c)` | `(Option T) E -> (Result T E)` | Absent becomes the given failure. |
 | `(result-to-option a b c)` | `(Result T E) -> (Option T)` | Failure becomes absence. |
 | `(pair a b)` | `A B -> (Pair A B)` | Construct a pair. |
+
+### 6.8 I/O
+
+| Form | Type | Meaning |
+|---|---|---|
+| `(not-found)` | `-> IoError` | The not found failure. |
+| `(permission-denied)` | `-> IoError` | The permission denied failure. |
+| `(already-exists)` | `-> IoError` | The already exists failure. |
+| `(invalid-path)` | `-> IoError` | The invalid path failure. |
+| `(interrupted)` | `-> IoError` | The interrupted failure. |
+| `(other)` | `-> IoError` | The other failure. |
+| `(read-line)` | `-> (Result (Option String) IoError)` | Read one line from standard input; none at end of input. |
+| `(read-all)` | `-> (Result String IoError)` | Read all of standard input. |
+| `(print a)` | `String -> (Result Unit IoError)` | Write to standard output with no trailing newline. |
+| `(println a)` | `String -> (Result Unit IoError)` | Write a line to standard output. |
+| `(eprintln a)` | `String -> (Result Unit IoError)` | Write a line to standard error. |
+| `(file-read a)` | `String -> (Result String IoError)` | Read a whole file as text. |
+| `(file-write a b)` | `String String -> (Result Unit IoError)` | Write text to a file, replacing it. |
+| `(file-append a b)` | `String String -> (Result Unit IoError)` | Append text to a file, creating it if absent. |
+| `(file-exists? a)` | `String -> (Result Bool IoError)` | Whether a path exists. |
 ## 7. Worked example
 
 Complete, uses only forms defined above, and is the shape few-shot prompts should use.
@@ -551,13 +659,23 @@ Deterministic, because output that is not byte-reproducible cannot be differenti
 | `Point` | `Point` | `Point` | `Point` | `Point` | `Point` |
 | `empty?` | `isEmpty` | `is_empty` | `IsEmpty` | `isEmpty` | `is_empty` |
 | `set!` | `setMut` | `set_mut` | `SetMut` | `setMut` | `set_mut` |
+| `s/parse-html-url` | — | `core_strings__parse_html_url` | — | — | `core_strings::parse_html_url` |
+| `s/Point` | — | `core_strings__Point` | — | — | `core_strings::Point` |
 
 Rules: strip a trailing `?` and prefix `is-`; strip a trailing `!` and suffix `-mut`; then split on
 `-` and recase. Acronyms are not special-cased — `html` becomes `Html`, always.
 
+A qualified name mangles as its member would unqualified, prefixed by its **defining module
+path** — never by the alias, which is module-local and would give one definition two names.
+The path itself mangles segment by segment and the segments are joined by the target's own
+namespace separator, shown above for the two targets that have a backend; `—` marks a target
+whose separator is fixed when that backend lands.
+
 If a mangled name collides with a target keyword, append `_`. **If two distinct AgentS identifiers
 mangle to the same target identifier, the compiler errors** — it does not silently rename. v0 had
-no collision policy at all.
+no collision policy at all. The same applies to module paths: `core/shapes` and a module named
+`core-shapes` mangle alike under either scheme above, and the collision is an error rather than
+a silent merge.
 
 ---
 
@@ -574,11 +692,23 @@ A Core program is well-formed iff:
 6. No numeric operation mixes types; all conversions are explicit.
 7. No identifier begins with `agents-`.
 8. The module header carries a `:doc`, and every exported `defun` carries a `:doc`.
-9. Every qualified name `alias/member` uses an alias bound in `:import`, and the member is
-   exported by that module.
+9. Every qualified name `alias/member` uses an alias bound in `:import`, and the member — a
+   function, a type name, or a case of an exported union — is exported by that module.
 10. Every type variable used in a signature is bound in that declaration's `{ }`.
 11. There are no import cycles.
+12. Every effectful form sits inside a `defun` or `fn` marked `!`.
+13. Every type named in the signature of an exported `defun`, in every field type of an
+    exported `defschema`, and in every case-parameter type of an exported `defenum`, is a §3
+    built-in, a type variable bound in that declaration's `{ }`, or a type exported by the
+    module that defines it. A signature naming a private type is not a contract: no importer
+    can write the type of what it receives.
 
-Rules 2, 5, 7-11 are **semantic**, not context-free: no grammar can enforce them, and the
+Rules 2, 5, 6, 7-13 are **semantic**, not context-free, and so is the `match` half of rule 4 —
+`if` and `cond` totality is the only part of it a grammar reaches. No grammar can enforce them, and the
 conformance gate deliberately keeps such fixtures in `grammar/corpus/semantic/` so the untested
 surface stays visible rather than appearing covered.
+
+The list is necessary, not sufficient: §4.1's construction rules (every field without a `:default`
+supplied, no unknown or duplicate keys) and type correctness generally are enforced alongside it.
+Each fixture in `grammar/corpus/semantic/` names the rule it violates, and the gate asserts that
+rule specifically — a fixture rejected for the wrong reason is a failure there.

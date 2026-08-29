@@ -1,6 +1,6 @@
 (module smoke
   :doc "End-to-end check of the Python backend."
-  :export [area classify sum-list safe-div parse-double describe])
+  :export [Shape area classify sum-list safe-div parse-double describe])
 
 (defenum Shape
   (:case circle    [(radius Float64)]                 "A circle")

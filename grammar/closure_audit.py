@@ -12,7 +12,6 @@ as a parameter or a let binding.
 
 Exit code is the number of undefined heads.
 """
-import json
 import re
 import subprocess
 import sys
@@ -20,33 +19,24 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT.parent / "prelude"))
+
+from vocab import builtins as defined_builtins, special_forms  # noqa: E402
 TS_DIR = ROOT / "tree-sitter-agents"
 TS_BIN = ROOT.parent / "node_modules" / ".bin" / "tree-sitter"
 SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 
+# Every head shape the `call` rule admits, not only identifiers: `callee` is
+# any expression, so operator heads (+, <=) and qualified heads (s/upper) were
+# invisible to this gate and the closure it reported excluded them.
 QUERY = """
 (call callee: (ident) @callee)
+(call callee: (operator) @callee)
+(call callee: (qualified) @qualified)
 (defun name: (ident) @definition)
 """
 
-def special_forms() -> set[str]:
-    """Grammar productions, not calls; they never reach a `call` node."""
-    sf = json.loads((ROOT.parent / "prelude" / "prelude.json").read_text())["special_forms"]
-    return {n for group in sf.values() for n in group}
-
-
-def defined_builtins() -> set[str]:
-    """Read the vocabulary from its single source of truth.
-
-    This previously regexed the specification's markdown tables, which made the
-    gate depend on prose formatting: a reworded table silently changed what
-    counted as defined.
-    """
-    prelude = json.loads((ROOT.parent / "prelude" / "prelude.json").read_text())
-    return {b["name"] for b in prelude["builtins"]}
-
-
-def run_query(paths: list[Path]) -> tuple[set[str], set[str]]:
+def run_query(paths: list[Path]) -> tuple[set[str], set[str], set[str]]:
     with tempfile.NamedTemporaryFile("w", suffix=".scm", delete=False) as fh:
         fh.write(QUERY)
         qfile = fh.name
@@ -54,12 +44,13 @@ def run_query(paths: list[Path]) -> tuple[set[str], set[str]]:
         [str(TS_BIN), "query", qfile, *[str(p.resolve()) for p in paths]],
         cwd=TS_DIR, capture_output=True, text=True,
     )
-    calls, defs = set(), set()
+    calls, defs, qualified = set(), set(), set()
+    bucket = {"callee": calls, "definition": defs, "qualified": qualified}
     for line in proc.stdout.splitlines():
-        m = re.search(r"capture: \d+ - (callee|definition), .*text: `([^`]*)`", line)
+        m = re.search(r"capture: \d+ - (callee|definition|qualified), .*text: `([^`]*)`", line)
         if m:
-            (calls if m.group(1) == "callee" else defs).add(m.group(2))
-    return calls, defs
+            bucket[m.group(1)].add(m.group(2))
+    return calls, defs, qualified
 
 
 def main() -> int:
@@ -74,11 +65,14 @@ def main() -> int:
         p.write_text(block)
         sources.append(p)
 
-    calls, local = run_query(sources)
+    calls, local, qualified = run_query(sources)
     builtins = defined_builtins()
     known = builtins | local | special_forms()
     undefined = sorted(calls - known)
 
+    # A qualified head resolves in another module, which this gate cannot see;
+    # the checker's rule 9 owns that. Counted so the number is not silently zero.
+    print(f"qualified heads (checker owns)  : {len(qualified)}")
     print(f"builtins defined in section 6 : {len(builtins)}")
     print(f"definitions found in sources  : {len(local)}")
     print(f"distinct call heads           : {len(calls)}")

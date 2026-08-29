@@ -1,0 +1,10 @@
+; expect: rule-5
+; The enclosing defun does return a Result, but try sits inside a lambda, where
+; the specification does not say what it returns from.
+(defun parse-it [(s String)] -> (Result Int64 String)
+  :doc "A fallible helper to try."
+  (ok 1))
+
+(defun sum-all [(xs (List String))] -> (Result (List Int64) String)
+  :doc "Maps a fallible parse over a list."
+  (ok (map (fn [(x String)] -> Int64 (try (parse-it x))) xs)))

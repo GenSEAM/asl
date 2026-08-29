@@ -1,0 +1,10 @@
+; expect-only: rule-2
+; `Missing` is on the export list and is declared nowhere in this module. Same
+; code as an exported-but-undefined function: the entry names nothing.
+(module text/missing
+  :doc "Exports a type it does not declare."
+  :export [Missing shout])
+
+(defun shout [(x String)] -> String
+  :doc "Uppercase and exclaim."
+  (str (string-upper x) "!"))

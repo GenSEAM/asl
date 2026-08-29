@@ -24,10 +24,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
+sys.path.insert(0, str(ROOT / "grammar"))
+sys.path.insert(0, str(ROOT / "checker"))
 
 HANDBOOK = (ROOT / "prelude" / "HANDBOOK.md").read_text()
 
-STAGES = ["extract", "parse", "transpile", "execute", "correct"]
+# `check` sits between parsing and lowering because a semantically rejected
+# program and a program that does not parse say different things about the
+# language, and collapsing them would discard the signal the stage list exists
+# for (EXPERIMENT.md amendment 2026-08-29-a).
+STAGES = ["extract", "parse", "check", "transpile", "execute", "correct"]
 
 
 @dataclass
@@ -102,16 +108,33 @@ def extract(reply: str) -> str | None:
 
 
 def evaluate(code: str, task: dict, s: Sample) -> Sample:
+    from parse import parse_text
+    from resolve import check_file
     from to_python import Transpiler
 
     s.stage_reached = "parse"
     try:
-        py = Transpiler().transpile(code)
-    except Exception as exc:                      # parse and lowering share a call
+        parse_text(code)
+    except Exception as exc:
         s.detail = f"{type(exc).__name__}: {exc}"[:160]
         return s
 
+    s.stage_reached = "check"
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "candidate.agents"
+        src.write_text(code)
+        diags = check_file(src, [])
+    if diags:
+        s.detail = f"{diags[0].code}: {diags[0].message}"[:160]
+        return s
+
     s.stage_reached = "transpile"
+    try:
+        py = Transpiler().transpile(code)
+    except Exception as exc:
+        s.detail = f"lowering: {type(exc).__name__}: {exc}"[:160]
+        return s
+
     with tempfile.TemporaryDirectory() as d:
         mod = Path(d) / "cand.py"
         mod.write_text(py)
@@ -152,7 +175,7 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.dry_run:
-        cfg = {"samples_per_task": 2, "spend_cap_usd": 0.20,
+        cfg = {"samples_per_task": 3, "spend_cap_usd": 0.20,
                "price_per_1m_input": 0.15, "price_per_1m_output": 0.60,
                "model": "dry-run", "endpoint": "-", "api_key_env": "-",
                "temperature": 0.2, "max_tokens": 1200}
@@ -174,10 +197,15 @@ def main() -> int:
                 break
             s = Sample(task=task["id"], index=i)
             if args.dry_run:
-                # Sample 0 is a known-good module; sample 1 is malformed, so the
-                # failure path is exercised too rather than assumed to work.
-                reply = (f"```lisp\n{CANNED.read_text()}\n```" if i == 0
-                         else "```lisp\n(defun broken [ -> Int64 1)\n```")
+                # Sample 0 is a known-good module; sample 1 is malformed and
+                # sample 2 parses but is ill-typed, so each failure stage is
+                # exercised rather than assumed to work.
+                canned = {
+                    0: f"```lisp\n{CANNED.read_text()}\n```",
+                    1: "```lisp\n(defun broken [ -> Int64 1)\n```",
+                    2: '```lisp\n(defun mistyped [] -> String\n  (string-length "x"))\n```',
+                }
+                reply = canned[i % 3]
                 nin, nout = len(system_prompt()) // 4, 200
             else:
                 reply, nin, nout = call_model(cfg, task["prompt"])

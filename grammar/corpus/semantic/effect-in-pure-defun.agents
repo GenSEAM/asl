@@ -1,0 +1,5 @@
+; expect: rule-12
+; The call is well-typed and well-scoped; only the missing marker makes it an
+; error. Nothing context-free can see that `file-read` touches the world.
+(defun read-config [(path String)] -> (Result String IoError)
+  (file-read path))

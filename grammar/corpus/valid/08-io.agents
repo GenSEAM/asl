@@ -1,0 +1,30 @@
+; I/O and the effect marker. `!` on a declaration says it touches the world; it
+; is inferred inside a body but written on the signature, because a caller reads
+; the signature and not the body.
+
+(module io-demo
+  :doc "Copies a file, reporting a missing source rather than trapping."
+  :export [main])
+
+(defun ! describe [(path String)] -> String
+  :doc "Read a file, naming the failure instead of propagating it."
+  (match (file-read path)
+    ((ok text)         text)
+    ((err (not-found)) "missing")
+    ((err e)           "unreadable")))
+
+(defun ! copy-all [(paths (List String))] -> (List String)
+  :doc "The lambda carries its own marker; that is what lets one `map` serve
+        both effectful and pure functions."
+  (map (fn ! [p] (describe p)) paths))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  :doc "Copy the source to the destination, or describe it when given one path.
+        A failed write is the program's own result, so the exit status carries it
+        without a trap and without a separate error channel."
+  (match args
+    ((cons src rest)
+      (match rest
+        ((cons dst more) (file-write dst (describe src)))
+        ((list)          (println (describe src)))))
+    ((list) (eprintln "usage: io-demo SRC [DST]"))))

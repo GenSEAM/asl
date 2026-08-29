@@ -1,0 +1,19 @@
+; Search-path companion: a parameterised recursive union and a parameterised
+; record, both exported, so an importer can instantiate them across the boundary.
+
+(module core/trees
+  :doc "A parameterised binary tree and a one-field cell for its payload."
+  :export [Tree Cell tree-size])
+
+(defenum {T} Tree
+  (:case leaf []                                           "An empty subtree")
+  (:case node [(value T) (left (Tree T)) (right (Tree T))] "An interior node"))
+
+(defschema {T} Cell
+  (:field value T "The wrapped value"))
+
+(defun {T} tree-size [(t (Tree T))] -> Int64
+  :doc "Count the interior nodes of a tree."
+  (match t
+    ((leaf)       0)
+    ((node v l r) (+ 1 (+ (tree-size l) (tree-size r))))))

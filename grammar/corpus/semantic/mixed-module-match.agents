@@ -1,0 +1,17 @@
+; expect-only: rule-4
+; The arms mix a local case and an imported one. Keyed on the bare enum name the
+; two collapse to "Shape", the arms-mix test cannot fire, and the file checks
+; clean while matching one union's value against another's constructor.
+(module text/mixed
+  :doc "Matches arms drawn from two different unions."
+  :export [Shape label]
+  :import [(core/shapes :as s)])
+
+(defenum Shape
+  (:case circle [(radius Float64)] "A local circle"))
+
+(defun label [(sh Shape)] -> String
+  :doc "Name the case."
+  (match sh
+    ((circle r)        "local")
+    ((s/rectangle w h) "imported")))

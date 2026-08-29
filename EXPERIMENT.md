@@ -209,3 +209,18 @@ JavaScript disagree on `2**53+1` and on rounding a half. Equivalence exists only
 enforces it.
 
 JavaScript re-enters H5 when its transpiler exists, not before.
+
+### 2026-08-29-a — a `check` stage added to the classification (made BEFORE any results)
+
+No arm has run and no result has been observed. The change follows from a component landing, not
+from an outcome.
+
+A semantic checker now exists, so `STAGES` becomes `extract, parse, **check**, transpile, execute,
+correct`. Previously a program that parsed but was semantically wrong could only die at
+`transpile`, or not at all — the harness lowered unchecked source, and parse and lowering shared
+one call, so the two were indistinguishable in the record.
+
+This adds resolution to the instrument; it does not move the pre-registered gate. The 15 pp
+threshold against the Python and JavaScript baselines is unchanged, and no threshold is defined
+over the new stage. The dry-run path gained a third canned sample — one that parses and fails the
+checker — so the new stage is exercised rather than assumed reachable.

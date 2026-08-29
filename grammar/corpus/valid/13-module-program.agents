@@ -1,0 +1,23 @@
+; A whole program across a module boundary: an imported union matched, an
+; imported function called, and one module reached through two aliases. The two
+; targets represent that union completely differently — a tagged tuple on one, a
+; namespaced variant on the other — and each derives its representation
+; independently, so only running both proves they agree.
+
+(module text/show
+  :doc "Prints a description and a measurement of an imported shape."
+  :export [describe]
+  :import [(core/shapes :as s)
+           (core/shapes :as g)])
+
+(defun describe [(sh s/Shape)] -> String
+  :doc "Name the case an imported shape belongs to."
+  (match sh
+    ((g/circle r)      "circle")
+    ((g/rectangle w h) "rectangle")))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  :doc "Describe and measure a shape built through the other alias."
+  (let [(sh (g/rectangle 2.0 3.0))]
+    (try (println (describe sh)))
+    (println (string-from-float64 (s/area sh)))))

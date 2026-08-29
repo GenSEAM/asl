@@ -1,0 +1,23 @@
+; Lambda annotations elided: each of these positions is an argument to a builtin
+; whose signature fixes the parameter and return types completely, so writing
+; them again could not differ from what the position already says.
+
+(defun evens [(xs (List Int64))] -> (List Int64)
+  (filter (fn [x] (= (mod x 2) 0)) xs))
+
+(defun doubled [(xs (List Int64))] -> (List Int64)
+  (map (fn [x] (* x 2)) xs))
+
+(defun total [(xs (List Int64))] -> Int64
+  (fold (fn [acc x] (+ acc x)) 0 xs))
+
+(defun longest [(ws (List String))] -> Int64
+  :doc "Mixes an elided lambda with an annotated one; both remain legal."
+  (fold (fn [(best Int64) (w String)] -> Int64 (max best (string-length w)))
+        0
+        ws))
+
+(defun by-length [(ws (List String))] -> (List String)
+  :doc "Sorting by a projection exercises the other higher-order builtin, whose
+        Rust lowering nothing had ever compiled."
+  (list-sort-by (fn [w] (string-length w)) ws))
