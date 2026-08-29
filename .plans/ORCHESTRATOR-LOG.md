@@ -27,7 +27,7 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | Phase | Plan | Plan review | Implementation | Impl review | Gates | Commit |
 |---|---|---|---|---|---|---|
 | 1 — module-boundary types | v2 reconciled | 2 lenses, 4 blockers, all folded | done | 2 lenses + /code-review, 2 fix passes | 7/7 green, 79 tests | `a635ab4` |
-| 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `d69c331` |
+| 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `b6b43ff` |
 | 3 — Wasm target v1 | feasibility done | — | — | — | — | — |
 | 4 — JS/TS backend | — | — | — | — | — | — |
 | 5 — Go backend | — | — | — | — | — | — |

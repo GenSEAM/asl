@@ -30,7 +30,7 @@ the defining module, and rule 13 forbids an exported signature from naming a pri
 rule is what makes a module header usable as an interface contract, which is what the Wasm thesis
 rests on.
 
-### Phase 2 — Vocabulary coverage  (gap `l-3434`)  — **DONE**, commit `d69c331`
+### Phase 2 — Vocabulary coverage  (gap `l-3434`)  — **DONE**, commit `b6b43ff`
 Executed coverage 33/107 → 107/107, proven by a tracer rather than a scan and mutation-tested at
 101/107. Ten lowerings repaired. Three portability blockers found in review and fixed, and the
 coverage gate hardened against the fake-it attacks the reviewers demonstrated.
