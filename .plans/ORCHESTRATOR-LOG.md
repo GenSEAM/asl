@@ -31,7 +31,7 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | `4a7677b` |
 | 4 — WebAssembly target v1 | feasibility measured | — (direct) | done | — (direct) | 7/7 green, 161 tests | — |
 | 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 7/7 green, 161 tests, differential 120+15 (4 arms) | `5995351` |
-| 6 — agent-facing surface | v2 reconciled | 3 lenses (1 reject → folded) | — | — | — | — |
+| 6 — agent-facing surface | v2 reconciled | 3 lenses (1 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 16 gates green, 161+351 tests, 140/79 ambiguity | `51f5f03` |
 | 6 — agent-facing tooling | — | — | — | — | — | — |
 | 7 — TypeScript backend | — | — | — | — | — | — |
 | 8 — Go backend | — | — | — | — | — | — |
