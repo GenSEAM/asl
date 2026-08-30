@@ -32,8 +32,7 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 4 — WebAssembly target v1 | feasibility measured | — (direct) | done | — (direct) | 7/7 green, 161 tests | — |
 | 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 7/7 green, 161 tests, differential 120+15 (4 arms) | `5995351` |
 | 6 — agent-facing surface | v2 reconciled | 3 lenses (1 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 16 gates green, 161+351 tests, 140/79 ambiguity | `51f5f03` |
-| 6 — agent-facing tooling | — | — | — | — | — | — |
-| 7 — TypeScript backend | — | — | — | — | — | — |
+| 7 — TypeScript backend | v2 reconciled | 3 lenses (1 reject → folded) | — | — | — | — |
 | 8 — Go backend | — | — | — | — | — | — |
 | 9 — harness whole-program mode | — | — | — | — | — | — |
 
@@ -316,3 +315,11 @@ Impl review wave (3 lenses): correctness `approve` (0B/1M/3m), conformance `appr
 Fix wave (one fixer, `agentscript` + `tools/`): `cmd_check` now calls `checker.resolve.check_file` in-process (the subprocess+regex had a real colon-parsing bug); the duplicated `Diag` dataclass collapsed into `checker.resolve.Diagnostic` (`code: str`), fixing the `--json` `"rule"` str-vs-int contract bug; six duplicate `import fmt` + `sys.path` mutations removed (`tools/__init__.py` added); dead code in `span_coverage.py` and `tsutil.py` deleted. The L2 "`.title()` pascal" simplification was correctly rejected by the fixer (`.title()` lowercases `DataFrame`→`Dataframe`, breaking the bindgen expectation).
 
 Deferred (recorded, not forgotten): **H1 — replace the ctypes tree-sitter shim (`tools/tsutil.py`) with a Rust `[[bin]]` in `crates/agentscript-ts`** (the crate already exposes `language()`; this is a robustness refactor of a working, tested surface, not a defect); **correctness M1 — grammar.js still carries the prelude `pattern` nodes while lark now resolves them to `enum_pattern`** (recorded decision: the accepted language is unchanged, so grammar.js stays; changing it would be the worse drift); both stashes retained (stash@{1} is Phase 7).
+
+## Phase 7 — plan reviewed and reconciled (2026-08-30)
+
+Scout: TS backend only in `stash@{1}^3` — `backend/to_typescript.py` (22 KB transpiler) + `backend/ts/rt.ts` (22 KB runtime) + prelude `"ts"` templates + `typescript`/`@types/node` devDeps. Live tree has no `to_typescript.py`, no `ts/`, no `boundary.py`, and `prelude.json` carries only `py/js/rs` keys. Fork transpiler is real but stale: no `main` entry driver (uses dead `defentry`), `string` error type (live is the six-case `IoError` union), no module linking, no function-mode serialization.
+
+Planner produced 7 items + 5 decisions (middle complexity). Decisions: (D1) module linking scoped IN (function task 23 + the seven module fixtures); (D2) error model = `IoError` union agreement; (D3) keep `js` keys and add `ts` alongside (100 shared + 7 live-only, 3 orphans dropped); (D4) classic `typescript@5.x` + `@types/node` (not the fork's unverified `7.x` tsgo); (D5) differential both modes with NO skip mechanism (a TS build failure is a raised error, never a silent disagreement).
+
+Plan review wave: design (architect) `approve-with-amendments` (1B/3M/2m), exec `approve-with-amendments` (2B/5n), coverage `reject` (3B/2M/2m). Reconciler folded 21 findings → 17 rows (11 accept, 4 accept-modified, 2 reject). Key amendments: D4's frozen tsc flags gain `--typeRoots <repo>/node_modules/@types --types node` (else every W3–W7 gate dies on TS2307/TS2580 from `/tmp` build dirs); W1's gate is a three-way conjunction including the widened `validate_templates()` empty broken-`ts` list; W6/W7 anti-stub rules (transpile-fail and empty-emission are gate failures; differential must exit 0 and print a five-arm summary); D2's Node errno table adds `ENOTDIR`/`EISDIR`→`invalid-path` and keeps `EINVAL`→`other` (both duals `runtime.py:269-273`/`rt.rs:266-268` map `EINVAL`→`other`); the fork pattern matcher must seed prelude unions (live `to_python.py:57-60` does) so `(err (not-found))` keeps its tag test.
