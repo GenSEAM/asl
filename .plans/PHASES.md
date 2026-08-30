@@ -44,7 +44,7 @@ name survives where it names the language.
 *Acceptance:* `rg` finds no `AgentS`/`.agents`/`agents.lark`/`agents-`/`asex` naming the language;
 all seven gates + pytest green.
 
-### Phase 4 — WebAssembly target v1  (roadmap 6b, `d-f484`, `c-c759`)
+### Phase 4 — WebAssembly target v1  (roadmap 6b, `d-f484`, `c-c759`)  — **DONE**
 The commercial target. Route already measured in `.plans/phase-4/FEASIBILITY.md`: AgentScript →
 Rust → `wasm32-wasip1` → `node:wasi`, with stdout and exit status both observable, so the Wasm arm
 attaches to the existing differential gate. The glue that is not free: an interface contract

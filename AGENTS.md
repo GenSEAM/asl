@@ -85,8 +85,10 @@ rounding a half, so equivalence exists only where it is enforced.
 It has two modes. The function mode calls an entry and compares returns; the **program mode** runs a
 whole program and compares stdout *and* exit status, including a failing path. That second mode is
 what checks the I/O surface: each runtime derives its `IoError` case independently — from `errno` on
-one target, `ErrorKind` on the other — so nothing but running both proves they agree. It is also the
-only gate that has ever caught a defect in how one form nests inside another (PCP `c-15f3`).
+Python, `ErrorKind` on the Rust targets (native and the `wasm32-wasip1` arm under `node:wasi`) — so
+nothing but running them proves they agree; the Wasm arm caught a raw-errno mapping that is Unix on
+one target and WASI on the other (PCP `c-7b9e`). It is also the only gate that has ever caught a
+defect in how one form nests inside another (PCP `c-15f3`).
 
 `backend/t` runs AgentScript source through the transpiler and executes the result, asserting semantics
 taken from the specification — not from observing what the transpiler happened to emit.

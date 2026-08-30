@@ -62,3 +62,16 @@ tracer env vars move to AgentScript in one atomic change; `AGENT_SPEC.md`/`SPEC_
 
 Caveats minted: none. Deferred: none. The rename is mechanically complete and gated (161 tests,
 107/107 executed, 0 differential disagreements).
+
+## 2026-08-30 — Phase 4 (WebAssembly target v1)
+
+Decisions minted: `d-3c5f` — the Wasm arm is the Rust backend compiled to `wasm32-wasip1` under
+`node:wasi`, attached as a third program-mode arm of the differential gate (stdout/stderr/exit
+compared against Python, native Rust and the declared values).
+
+Caveats minted: `c-7b9e` — a host-errno mapping is not portable. The Wasm arm exposed that `rt.rs`
+read `raw_os_error()` as Unix errno while WASI numbers the same condition differently (2 is `ACCES`,
+not `ENOENT`), so the mode-000 file mapped to `not-found` on Wasm and `permission-denied` natively.
+`io_err` now maps from `ErrorKind`.
+
+Deferred: nothing new. Function-mode Wasm interop (`i64` as `BigInt`) is not attached (d-3c5f).

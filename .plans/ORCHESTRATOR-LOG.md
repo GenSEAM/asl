@@ -28,8 +28,8 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 |---|---|---|---|---|---|---|
 | 1 — module-boundary types | v2 reconciled | 2 lenses, 4 blockers, all folded | done | 2 lenses + /code-review, 2 fix passes | 7/7 green, 79 tests | `a635ab4` |
 | 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `b6b43ff` |
-| 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | — |
-| 4 — WebAssembly target v1 | feasibility done (`.plans/phase-4/FEASIBILITY.md`) | — | — | — | — | — |
+| 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | `4a7677b` |
+| 4 — WebAssembly target v1 | feasibility measured | — (direct) | done | — (direct) | 7/7 green, 161 tests | — |
 | 5 — reference interpreter | — | — | — | — | — | — |
 | 6 — agent-facing tooling | — | — | — | — | — | — |
 | 7 — TypeScript backend | — | — | — | — | — | — |
@@ -245,3 +245,22 @@ and `tree-sitter-agents` false-positive on the new names without word boundaries
 scans are recorded in `d-9c1f`. `.plans/phase-3/FEASIBILITY.md` (a Wasm probe) was relocated to
 `.plans/phase-4/FEASIBILITY.md`, the phase it describes; the plan's `node pcp/scripts/pcp.js`
 actualize command is a phantom (no `pcp.js` exists; PCP is markdown + `INDEX.md` counts).
+
+## Phase 4 closed — WebAssembly target v1
+
+The Wasm arm attaches to the existing differential gate rather than adding a new one: the same
+`ToRust` program is compiled to `wasm32-wasip1` and run under node's `WASI` preview1
+(`backend/rust/wasi.mjs`), and `programs()` now compares stdout, stderr and exit status across
+python, rust and wasm. Verified by the orchestrator directly: all seven gates green, **161 tests**,
+differential **120 function + 15 program cases**, 0 disagreements.
+
+The arm earned its place on the first run: the `noperm.txt` case (mode 000) disagreed — wasm said
+`not-found` where both native arms said `permission-denied`. Root cause: `rt.rs::io_err` matched
+`raw_os_error()` against Unix errno numbers, but on `wasm32-wasip1` that value is a WASI errno
+(2 = `ACCES`, not `ENOENT`). Fixed by mapping from `ErrorKind`, which every target normalizes,
+folding `NotADirectory | IsADirectory` into `invalid-path` to keep the errno 20/21 case the Python
+side reaches by number. Recorded as `d-3c5f` (arm) and `c-7b9e` (portability caveat).
+
+Not done (recorded in `d-3c5f`): function-mode Wasm interop (`i64` as `BigInt`) and the interface
+contract / foreign-failure decision the phase description names; program mode is the acceptance
+surface, and artifact size is the Rust std baseline.

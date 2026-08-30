@@ -225,9 +225,11 @@ pub fn m_pairs<K: Ord + Clone, V: Clone>(m: &BTreeMap<K, V>) -> Vec<(K, V)> {
 pub fn m_from<K: Ord, V>(ps: Vec<(K, V)>) -> BTreeMap<K, V> { ps.into_iter().collect() }
 
 // ---------- I/O ----------
-// The case is chosen from errno where one exists, and from ErrorKind otherwise,
-// because the Python runtime reaches its case from errno and the two have to
-// agree for the same condition. The differential gate compares them.
+// The case is chosen from ErrorKind, not from raw_os_error(): the latter is the
+// host's errno — Unix errno natively, WASI errno under wasm32-wasip1 — and the
+// two number the same condition differently (WASI's 2 is ACCES, not ENOENT).
+// ErrorKind is the vocabulary every target normalizes to, and the Python runtime
+// reaches the same cases from the errno numbers the two share.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IoError {
     NotFound,
@@ -252,19 +254,15 @@ impl IoError {
 }
 
 fn io_err(e: std::io::Error) -> IoError {
-    match e.raw_os_error() {
-        Some(2) => IoError::NotFound,
-        Some(13) => IoError::PermissionDenied,
-        Some(17) => IoError::AlreadyExists,
-        Some(20) | Some(21) => IoError::InvalidPath,
-        Some(4) => IoError::Interrupted,
-        _ => match e.kind() {
-            std::io::ErrorKind::NotFound => IoError::NotFound,
-            std::io::ErrorKind::PermissionDenied => IoError::PermissionDenied,
-            std::io::ErrorKind::AlreadyExists => IoError::AlreadyExists,
-            std::io::ErrorKind::Interrupted => IoError::Interrupted,
-            _ => IoError::Other,
-        },
+    use std::io::ErrorKind::*;
+    match e.kind() {
+        NotFound => IoError::NotFound,
+        PermissionDenied => IoError::PermissionDenied,
+        AlreadyExists => IoError::AlreadyExists,
+        // One case on the Python side (errno 20/21), two ErrorKinds here.
+        NotADirectory | IsADirectory => IoError::InvalidPath,
+        Interrupted => IoError::Interrupted,
+        _ => IoError::Other,
     }
 }
 

@@ -298,8 +298,27 @@ def build_rust(src: Path, d: Path) -> list[str]:
     return [str(d / "prog")]
 
 
+def build_rust_wasm(src: Path, d: Path) -> list[str]:
+    """The same Rust program compiled to wasm32-wasip1, run under node:wasi.
+
+    Program mode compares stdout, stderr and exit status, which Route B (see
+    .plans/phase-4/FEASIBILITY.md) proved observable through WASI: proc_exit's
+    code reaches the JS caller and std I/O reaches the process's own descriptors.
+    """
+    from to_rust import ToRust
+    (d / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
+    (d / "main.rs").write_text(ToRust().transpile(src.read_text(), path=src, roots=ROOTS))
+    c = subprocess.run(["rustup", "run", "stable", "rustc", "--target",
+                        "wasm32-wasip1", "-O", "--edition", "2021", "main.rs",
+                        "-o", "main.wasm"], cwd=d, capture_output=True, text=True)
+    if c.returncode:
+        raise RuntimeError("rustc wasm: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
+    return ["node", "--no-warnings", str(ROOT / "backend" / "rust" / "wasi.mjs"),
+            str(d / "main.wasm")]
+
+
 def programs(src: Path, cases: list[dict]) -> int:
-    """Run a whole program on both targets and compare stdout, stderr and exit
+    """Run a whole program on every target and compare stdout, stderr and exit
     status against each other and against the case's declared values.
 
     Each backend gets its own working directory, seeded from the case: a case
@@ -314,8 +333,8 @@ def programs(src: Path, cases: list[dict]) -> int:
     re-opening that hole by omission.
     """
     bad = 0
-    print(f"\n{'argv':<22} {'python':<24} {'stderr':<20} {'rust':<24} exit")
-    print("-" * 104)
+    print(f"\n{'argv':<20} {'python':<20} {'rust':<20} {'wasm':<20} {'stderr':<18} exit")
+    print("-" * 112)
     for case in cases:
         argv = case.get("argv", [])
         files = case.get("files", {})
@@ -325,7 +344,8 @@ def programs(src: Path, cases: list[dict]) -> int:
         want = (case["stdout"], case["stderr"], case["exit"])
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            runners = {"python": build_python(src, d), "rust": build_rust(src, d)}
+            runners = {"python": build_python(src, d), "rust": build_rust(src, d),
+                       "wasm": build_rust_wasm(src, d)}
             seen = {}
             for name, cmd in runners.items():
                 run = d / f"run-{name}"
@@ -338,14 +358,15 @@ def programs(src: Path, cases: list[dict]) -> int:
                 r = subprocess.run(cmd + argv, cwd=run, input=stdin,
                                    capture_output=True, text=True)
                 seen[name] = (r.stdout, r.stderr, r.returncode)
-            agree = seen["python"] == seen["rust"]
+            agree = seen["python"] == seen["rust"] == seen["wasm"]
             declared_ok = seen["python"] == want
             bad += 0 if (agree and declared_ok) else 1
             note = ("" if agree else "  <-- DISAGREE") + \
                    ("" if declared_ok else "  <-- NOT THE DECLARED OUTPUT/STATUS")
-            print(f"{' '.join(argv):<22} {seen['python'][0]!r:<24} "
-                  f"{seen['python'][1]!r:<20} {seen['rust'][0]!r:<24} "
-                  f"{seen['python'][2]}/{seen['rust'][2]}" + note)
+            print(f"{' '.join(argv):<20} {seen['python'][0]!r:<20} "
+                  f"{seen['rust'][0]!r:<20} {seen['wasm'][0]!r:<20} "
+                  f"{seen['python'][1]!r:<18} "
+                  f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}" + note)
     return bad
 
 
@@ -432,7 +453,7 @@ def main() -> int:
         bad += programs(src, group)
         program_total += len(group)
     print(f"\n{bad} disagreement(s) across {cases} function cases "
-          f"+ {program_total} program cases x 2 backends")
+          f"+ {program_total} program cases (python/rust/wasm)")
     return bad
 
 

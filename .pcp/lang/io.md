@@ -51,3 +51,19 @@ This file groups d/c/r/l entries for the lang/io module.
   pragmatic language trades away. What is actually being bought is the *option* on concurrency:
   ordering was never the problem — evaluation order is already specified — and the cost of the
   decision is paid entirely in the future, by whoever adds the first concurrent construct.
+
+### [c-7b9e] A host-errno mapping is not portable; ErrorKind is the vocabulary every target shares
+- **Date**: 2026-08-30
+- **Status**: Active
+- **Cluster**: lang/io
+- **Description**: `rt.rs` chose the IoError case from `raw_os_error()`, which is the host's errno:
+  Unix errno on the native target, WASI errno under `wasm32-wasip1` — and the two number the same
+  condition differently (WASI's 2 is `ACCES`, not `ENOENT`). The Wasm arm reported `not-found` for a
+  mode-000 file that both native arms report as `permission-denied`. The fix maps from `ErrorKind`,
+  which every target normalizes to, with `NotADirectory | IsADirectory` folded into `invalid-path`
+  to preserve the errno 20/21 case the Python side reaches by number.
+- **Why Non-Obvious**: the native backends agreed on the mapping, and the gate was green, because
+  both were reading the same Unix errno. The defect was only reachable by running the same code on a
+  target whose errno is a different vocabulary — which is the exact failure the differential gate
+  exists to find, and the exact reason the Wasm arm was attached rather than left as a separate,
+  weaker check.

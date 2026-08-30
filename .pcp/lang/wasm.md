@@ -52,3 +52,25 @@ This file groups d/c/r/l entries for the lang/wasm module.
 - **Why Non-Obvious**: the computation side works so smoothly that the graphics side is assumed to
   work the same way, and the proposals are public and readable enough to be mistaken for shipped
   standards.
+
+### [d-3c5f] The Wasm arm is the Rust backend compiled to wasm32-wasip1, run under node:wasi
+- **Date**: 2026-08-30
+- **Status**: Active
+- **Cluster**: lang/wasm
+- **Description**: The first Wasm target reuses the Rust backend's output unchanged: the same
+  `ToRust` program is compiled to `wasm32-wasip1` and run under node's `WASI` preview1, attached as
+  a third arm of `differential.py`'s program mode — stdout, stderr and exit status compared against
+  the Python and native-Rust arms and against the declared values. The guest's root maps to the
+  per-run directory the gate seeds, so relative file I/O lands on the same files the other arms see.
+- **Rationale**: the route was measured (`.plans/phase-4/FEASIBILITY.md`) and needs no new tooling:
+  `wasm32-wasip1` is one rustup target and `node:wasi` is in the already-present node. Direct code
+  generation for the target — the memory-layout and reclamation commitment d-f484 declined to start
+  — is still not started; this arm is Rust std on WASI, which is why it reaches stdout, files and
+  exit status.
+- **Costs accepted**: function-mode Wasm (calling an entry with typed args across the JS boundary,
+  `i64` as `BigInt`) is not attached; program mode is the surface the acceptance criterion names.
+  Artifact size is the Rust std baseline (~1.8 MB), not optimised.
+- **Why Non-Obvious**: the arm looked like a new backend but is the existing backend plus one
+  `--target`. What it bought instead of new code was an oracle: running the same Rust program on
+  WASI exposed that `rt.rs`'s IoError mapping read `raw_os_error()` as Unix errno, which WASI
+  numbers differently (c-7b9e) — a portability defect every previous gate was green through.
