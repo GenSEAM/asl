@@ -23,10 +23,12 @@ authoritative figure once W1/W7/W8 record them):**
 - Earley ambiguity, Lark 1.3.1, `parser="earley", ambiguity="explicit"`, counting `_ambig`
   nodes over `grammar/corpus/valid/*.agentscript` (29) + `grammar/corpus/semantic/*.agentscript`
   (42) + `grammar/corpus/modules/**/*.agentscript` (6; note the subdirectories — the glob must
-  be recursive): **219 over 77 parseable fixtures**, deterministic across repeat runs. Largest
+  be recursive): **219 over 79 parseable fixtures**, deterministic across repeat runs. Largest
   per-file contributors: `14-sequenced-bodies` at 25, `02-match` at 10. Re-measure: build the
   grammar as `Lark(GRAMMAR, start="start", parser="earley", ambiguity="explicit")` and count
-  trees with `data == "_ambig"`.
+  trees with `data == "_ambig"`. **The lock (`grammar/ambiguity.lock`) is authoritative** —
+  the auditor's recursive glob measures 79 fixtures (not the 77 this prose once estimated), and
+  post-W2 it locks 140 over 79.
 - `prelude/HANDBOOK.md`: **12,749 characters** (`len(read_text())`; the file is 12,779
   *bytes* by `wc -c` — the budget unit is characters, per D3's mechanism).
 - `crates/agentscript-interp/src/ast.rs`: `Expr` has 17 variants; **4 of them (`Float`, `Str`,
@@ -292,12 +294,13 @@ too weak (W4's idempotence-only check) it is tightened, never relaxed.
 
 ### W6 — Re-integrate bindgen
 - **What:** materialise `tools/bindgen/from_pyi.py` and `tools/bindgen/t/` from `b614ec8` per
-  §2 (the expected file is renamed to `frames.expected.agentscript`); validate that the
-  emitted declarations parse under the current grammar via `grammar/parse.py` and that the
-  fixture's foreign names resolve against the current `prelude/prelude.json` (the fork
-  predates the prelude-lock work; adjust the expected fixture if the current §6 vocabulary
-  renamed anything — the diff drives the fixture, not vice versa); register `bindgen` in the
-  distributor.
+  §2 (the expected file is renamed to `frames.expected.agentscript`); register `bindgen` in the
+  distributor. **Amended (orchestrator, post-implementation):** parse-validation of the emitted
+  declarations is **exempted** — Core deliberately has no FFI (ROADMAP §3), so there is no
+  grammar to parse the FFI forms against. Validation is text-level (the checked-in
+  `frames.expected.agentscript` fixture + the 8 bindgen tests). The fork predates the
+  prelude-lock work; the expected fixture is adjusted only if the current §6 vocabulary renamed
+  something — the diff drives the fixture, not vice versa.
 - **Why:** PHASES.md Phase 6 names the bindgen re-integration explicitly.
 - **Gate (fails now):** `.venv/bin/python -m pytest tools/bindgen/t -q`
   ```

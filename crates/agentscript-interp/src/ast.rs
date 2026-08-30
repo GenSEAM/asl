@@ -68,23 +68,46 @@ pub enum Expr {
     Str(String),
     Bool(bool),
     Unit,
-    Ident(String),
+    Ident { name: String, span: Span },
     /// A qualified name: alias/member (lowercase member, prelude case, or a
     /// ucamel constructor reached through an alias as `alias/TypeName`).
-    Qualified(String, String),
-    Let(Vec<(String, Expr)>, Vec<Expr>),
-    If(Box<Expr>, Box<Expr>, Box<Expr>),
-    Cond(Vec<CondClause>),
-    Match(Box<Expr>, Vec<(Pattern, Vec<Expr>)>),
-    Try(Box<Expr>),
-    Fn(FnLit),
+    Qualified { alias: String, member: String, span: Span },
+    Let { bindings: Vec<(String, Expr)>, body: Vec<Expr>, span: Span },
+    If { cond: Box<Expr>, cons: Box<Expr>, alt: Box<Expr>, span: Span },
+    Cond { clauses: Vec<CondClause>, span: Span },
+    Match { subj: Box<Expr>, arms: Vec<(Pattern, Vec<Expr>)>, span: Span },
+    Try { body: Box<Expr>, span: Span },
+    Fn { lit: FnLit, span: Span },
     /// A constructor builtin as a plain expression: ok/err/some/none/pair/list.
-    Ctor(String, Vec<Expr>),
+    Ctor { head: String, args: Vec<Expr>, span: Span },
     /// A record construction: `(TypeName :field v ...)` (ucamel head).
-    Record(String, Vec<(String, Expr)>),
-    FieldAccess { field: String, target: Box<Expr> },
+    Record { name: String, fields: Vec<(String, Expr)>, span: Span },
+    FieldAccess { field: String, target: Box<Expr>, span: Span },
     /// A call with an arbitrary callee expression (ident, qualified, or nested).
-    Call(Box<Expr>, Vec<Expr>),
+    Call { callee: Box<Expr>, args: Vec<Expr>, span: Span },
+}
+
+impl Expr {
+    /// The source location of a failable variant. `Float`/`Str`/`Bool`/`Unit`
+    /// cannot reach a runtime `Err`, so they carry none (D4).
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            Expr::Int(lit) => Some(lit.span),
+            Expr::Ident { span, .. } => Some(*span),
+            Expr::Qualified { span, .. } => Some(*span),
+            Expr::Let { span, .. } => Some(*span),
+            Expr::If { span, .. } => Some(*span),
+            Expr::Cond { span, .. } => Some(*span),
+            Expr::Match { span, .. } => Some(*span),
+            Expr::Try { span, .. } => Some(*span),
+            Expr::Fn { span, .. } => Some(*span),
+            Expr::Ctor { span, .. } => Some(*span),
+            Expr::Record { span, .. } => Some(*span),
+            Expr::FieldAccess { span, .. } => Some(*span),
+            Expr::Call { span, .. } => Some(*span),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

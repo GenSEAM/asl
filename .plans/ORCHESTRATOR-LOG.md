@@ -302,3 +302,17 @@ Plan review wave: design (architect) `approve-with-amendments` (0B/4M/4m), exec 
 Measurement note: the design reviewer's ambiguity figures (196/79) did NOT reproduce under the plan's mechanism; the reproducible count is **219 over 77 fixtures** (deterministic). The lock is authoritative — the implementer writes it from a fresh measurement in W1.
 
 Orchestrator decisions: (1) drop the stashed shim's `--target`/`--rules`/`import_cycles`/`target_capabilities` (gone APIs, no current equivalent); (2) keep both stashes — `stash@{1}` is Phase 7's TS backend.
+
+## Phase 6 — implementation landed (W6 decision)
+
+W1–W5, W7, W8 landed, all gates green. W6 (bindgen) landed at **text level**: recovered, renamed, registered in the `agentscript` CLI, 8 text-level tests pass — but its emitted FFI declarations cannot parse-validate against Core because Core deliberately has no FFI (ROADMAP §3). **Orchestrator decision: accept text-level bindgen validation and record the FFI parse-validation exemption** — bindgen's output targets a future FFI surface. This is a recorded gate-scope change, not a weakened check (there is no FFI grammar to check against).
+
+Measurement notes: ambiguity held at **219 → 140** after W2 (exact-match lock written from a fresh measurement). The fixture count differed between measurements (77 vs 79) — the lock is authoritative, prose to be reconciled.
+
+## Phase 6 — implementation reviewed and fixed (2026-08-30)
+
+Impl review wave (3 lenses): correctness `approve` (0B/1M/3m), conformance `approve-with-amendments` (0B/1M/2m), simplify `approve-with-amendments` (0B/2 medium + 8 low). All 16 acceptance commands green: ambiguity `140/79`, budget `12749`, span `13/13`, formatter idempotent on corpus, `agentscript check valid` exit 0, differential `0 disagreements (4 arms)`, pytest `161 + 351` (backend + tools), cargo `10`.
+
+Fix wave (one fixer, `agentscript` + `tools/`): `cmd_check` now calls `checker.resolve.check_file` in-process (the subprocess+regex had a real colon-parsing bug); the duplicated `Diag` dataclass collapsed into `checker.resolve.Diagnostic` (`code: str`), fixing the `--json` `"rule"` str-vs-int contract bug; six duplicate `import fmt` + `sys.path` mutations removed (`tools/__init__.py` added); dead code in `span_coverage.py` and `tsutil.py` deleted. The L2 "`.title()` pascal" simplification was correctly rejected by the fixer (`.title()` lowercases `DataFrame`→`Dataframe`, breaking the bindgen expectation).
+
+Deferred (recorded, not forgotten): **H1 — replace the ctypes tree-sitter shim (`tools/tsutil.py`) with a Rust `[[bin]]` in `crates/agentscript-ts`** (the crate already exposes `language()`; this is a robustness refactor of a working, tested surface, not a defect); **correctness M1 — grammar.js still carries the prelude `pattern` nodes while lark now resolves them to `enum_pattern`** (recorded decision: the accepted language is unchanged, so grammar.js stays; changing it would be the worse drift); both stashes retained (stash@{1} is Phase 7).

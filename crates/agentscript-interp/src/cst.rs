@@ -116,12 +116,12 @@ impl<'src> Builder<'src> {
             }
             "bool" => Expr::Bool(self.text(node) == "true"),
             "unit" => Expr::Unit,
-            "operator" => Expr::Ident(self.text(node)),
-            "ident" => Expr::Ident(self.text(node)),
+            "operator" => Expr::Ident { name: self.text(node), span: self.span(node) },
+            "ident" => Expr::Ident { name: self.text(node), span: self.span(node) },
             "qualified" => {
                 let t = self.text(node);
                 let (a, m) = t.split_once('/').expect("qualified always has /");
-                Expr::Qualified(a.to_string(), m.to_string())
+                Expr::Qualified { alias: a.to_string(), member: m.to_string(), span: self.span(node) }
             }
             "let_form" => {
                 let mut bindings = vec![];
@@ -133,14 +133,14 @@ impl<'src> Builder<'src> {
                     }
                 }
                 let body: Vec<Expr> = self.body_exprs(node);
-                Expr::Let(bindings, body)
+                Expr::Let { bindings, body, span: self.span(node) }
             }
             "if_form" => {
                 let f = self.field(node, "condition").unwrap();
                 let c = self.field(node, "consequence").unwrap();
                 let a = self.field(node, "alternative").unwrap();
-                Expr::If(Box::new(self.parse_expr(f)), Box::new(self.parse_expr(c)),
-                         Box::new(self.parse_expr(a)))
+                Expr::If { cond: Box::new(self.parse_expr(f)), cons: Box::new(self.parse_expr(c)),
+                           alt: Box::new(self.parse_expr(a)), span: self.span(node) }
             }
             "cond_form" => {
                 let mut clauses = vec![];
@@ -157,7 +157,7 @@ impl<'src> Builder<'src> {
                         clauses.push(CondClause { condition: None, body });
                     }
                 }
-                Expr::Cond(clauses)
+                Expr::Cond { clauses, span: self.span(node) }
             }
             "match_form" => {
                 let subj = self.field(node, "subject").unwrap();
@@ -169,17 +169,18 @@ impl<'src> Builder<'src> {
                         arms.push((self.parse_pattern(pat), body));
                     }
                 }
-                Expr::Match(Box::new(self.parse_expr(subj)), arms)
+                Expr::Match { subj: Box::new(self.parse_expr(subj)), arms, span: self.span(node) }
             }
             "try_form" => {
                 let b = self.field(node, "body").unwrap();
-                Expr::Try(Box::new(self.parse_expr(b)))
+                Expr::Try { body: Box::new(self.parse_expr(b)), span: self.span(node) }
             }
             "fn_form" => {
                 let params = self.field(node, "params").unwrap();
                 let ret = self.field(node, "return_type").map(|n| self.parse_type(n));
                 let body: Vec<Expr> = self.body_exprs(node);
-                Expr::Fn(FnLit { params: self.parse_fn_params(params), body })
+                Expr::Fn { lit: FnLit { params: self.parse_fn_params(params), body },
+                           span: self.span(node) }
             }
             "constructor_call" => {
                 // Head is an anonymous keyword (ok/err/some/none/pair/list);
@@ -195,7 +196,9 @@ impl<'src> Builder<'src> {
                 let args: Vec<Expr> = kids[1..].iter()
                     .map(|a| self.parse_expr(*a))
                     .collect();
-                Expr::Ctor(head, args)
+                Expr::Ctor {
+                    head, args, span: self.span(node),
+                }
             }
             "ctor" => {
                 let type_node = self.field(node, "type").unwrap();
@@ -208,7 +211,7 @@ impl<'src> Builder<'src> {
                         fields.push((strip_key(&self.text(key)), self.parse_expr(v)));
                     }
                 }
-                Expr::Record(qual_type_name(&type_text), fields)
+                Expr::Record { name: qual_type_name(&type_text), fields, span: self.span(node) }
             }
             "field_access" => {
                 let f = self.field(node, "field").unwrap();
@@ -216,6 +219,7 @@ impl<'src> Builder<'src> {
                 Expr::FieldAccess {
                     field: self.text(f).trim_start_matches(".-").to_string(),
                     target: Box::new(self.parse_expr(t)),
+                    span: self.span(node),
                 }
             }
             "call" => {
@@ -223,7 +227,8 @@ impl<'src> Builder<'src> {
                 let args: Vec<Expr> = self.fields(node, "argument").into_iter()
                     .map(|a| self.parse_expr(a))
                     .collect();
-                Expr::Call(Box::new(self.parse_expr(callee)), args)
+                Expr::Call { callee: Box::new(self.parse_expr(callee)), args,
+                              span: self.span(node) }
             }
             other => panic!("unrecognized expression node: {} at line {}", other, self.span(node).line),
         }

@@ -11,7 +11,7 @@
 //! function's declared signature (or a sibling Int32 operand) fixes them Int32
 //! (spec §2.5 and ROADMAP l-4d92).
 
-use crate::ast::{Expr, FnLit, NumericWidth, Pattern, Program};
+use crate::ast::{Expr, NumericWidth, Pattern, Program, Span};
 use crate::builtins;
 use crate::io;
 use crate::num;
@@ -19,25 +19,49 @@ use crate::value::{eq, Callable, Lambda, MapKey, Value};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+/// A located source span (1-based line and column), for `path:line:col:` output.
+#[derive(Debug)]
+pub struct Located {
+    pub path: String,
+    pub span: Span,
+}
+
 /// A trapping/internal error: diagnostic on stderr, exit 2.
 #[derive(Debug)]
-pub enum Err {
-    Trap(String),
-    Internal(String),
+pub struct Err {
+    pub trap: bool,
+    pub message: String,
+    pub located: Option<Located>,
+}
+
+impl Err {
+    pub fn trap(s: String) -> Err {
+        Err { trap: true, message: s, located: None }
+    }
+    pub fn internal(s: String) -> Err {
+        Err { trap: false, message: s, located: None }
+    }
+    pub fn message(&self) -> &str {
+        &self.message
+    }
 }
 
 impl std::fmt::Display for Err {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Err::Trap(s) => write!(f, "trap: {}", s),
-            Err::Internal(s) => write!(f, "internal error: {}", s),
+        match &self.located {
+            Some(l) => write!(
+                f,
+                "{}:{}:{}: {}",
+                l.path, l.span.line, l.span.col, self.message
+            ),
+            None => write!(f, "{}", self.message),
         }
     }
 }
 
 impl From<String> for Err {
     fn from(s: String) -> Err {
-        Err::Trap(s)
+        Err::trap(s)
     }
 }
 
@@ -207,7 +231,25 @@ impl<'a> Interp<'a> {
         Ok(last)
     }
 
+    /// The source path of the current unit, for located diagnostics.
+    fn path(&self) -> String {
+        self.program.units.get(self.cur).map(|(p, _)| p.clone()).unwrap_or_default()
+    }
+
     fn eval(&mut self, e: &Expr) -> Result<Step, Err> {
+        self.eval_inner(e).map_err(|mut err| {
+            // Attach this expression's span to an otherwise unlocated error, so a
+            // runtime failure reports `path:line:col: message`.
+            if err.located.is_none() {
+                if let Some(sp) = e.span() {
+                    err.located = Some(Located { path: self.path(), span: sp });
+                }
+            }
+            err
+        })
+    }
+
+    fn eval_inner(&mut self, e: &Expr) -> Result<Step, Err> {
         use Expr::*;
         match e {
             Int(lit) => {
@@ -219,9 +261,9 @@ impl<'a> Interp<'a> {
             Str(s) => Ok(Step::OK(Value::Str(s.clone()))),
             Bool(b) => Ok(Step::OK(Value::Bool(*b))),
             Unit => Ok(Step::OK(Value::Unit)),
-            Ident(name) => self.eval_ident(name),
-            Qualified(alias, member) => self.eval_qualified(alias, member),
-            Let(bindings, body) => {
+            Ident { name, .. } => self.eval_ident(name),
+            Qualified { alias, member, .. } => self.eval_qualified(alias, member),
+            Let { bindings, body, .. } => {
                 // let*: a binding's initialiser sees the earlier bindings, so
                 // the frame grows one binder at a time (15-shadowed-binders).
                 self.env.push(BTreeMap::new());
@@ -233,15 +275,15 @@ impl<'a> Interp<'a> {
                 self.env.pop();
                 r
             }
-            If(c, t, f) => {
-                let cond = self.eval(&**c)?.into_ok()?;
-                if self.as_bool(&cond, "if condition")? {
-                    self.eval(&**t)
+            If { cond, cons, alt, .. } => {
+                let c = self.eval(cond)?.into_ok()?;
+                if self.as_bool(&c, "if condition")? {
+                    self.eval(cons)
                 } else {
-                    self.eval(&**f)
+                    self.eval(alt)
                 }
             }
-            Cond(clauses) => {
+            Cond { clauses, .. } => {
                 for cl in clauses {
                     match &cl.condition {
                         Some(c) => {
@@ -249,15 +291,15 @@ impl<'a> Interp<'a> {
                             match v {
                                 Value::Bool(true) => return self.eval_seq(&cl.body),
                                 Value::Bool(false) => {}
-                                _ => return Err(Err::Internal("cond needs Bool".into())),
+                                _ => return Err(Err::internal("cond needs Bool".into())),
                             }
                         }
                         None => return self.eval_seq(&cl.body),
                     }
                 }
-                Err(Err::Internal("cond had no :else branch".to_string()))
+                Err(Err::internal("cond had no :else branch".to_string()))
             }
-            Match(subj, arms) => {
+            Match { subj, arms, .. } => {
                 let sv = self.eval(subj)?.into_ok()?;
                 for (pat, body) in arms {
                     let mut binds = BTreeMap::new();
@@ -268,20 +310,20 @@ impl<'a> Interp<'a> {
                         return r;
                     }
                 }
-                Err(Err::Internal("match was not exhaustive".to_string()))
+                Err(Err::internal("match was not exhaustive".to_string()))
             }
-            Try(inner) => {
-                let s = self.eval(inner)?;
+            Try { body, .. } => {
+                let s = self.eval(body)?;
                 match s {
                     Step::Ret(v) => Ok(Step::Ret(v)),
                     Step::OK(v) => match &v {
                         Value::Tagged(t, args) if t == "ok" => Ok(Step::OK(args[0].clone())),
                         Value::Tagged(t, _) if t == "err" => Ok(Step::Ret(v)),
-                        other => Err(Err::Internal(format!("try needs Result, got {:?}", other))),
+                        other => Err(Err::internal(format!("try needs Result, got {:?}", other))),
                     },
                 }
             }
-            Fn(lit) => {
+            Fn { lit, .. } => {
                 let lam = Lambda {
                     params: lit.params.clone(),
                     body: lit.body.clone(),
@@ -289,28 +331,30 @@ impl<'a> Interp<'a> {
                 };
                 Ok(Step::OK(Value::Closure(Callable::Lambda(lam))))
             }
-            Ctor(head, args) => {
+            Ctor { head, args, .. } => {
                 let mut vals = vec![];
                 for a in args {
                     vals.push(self.eval(a)?.into_ok()?);
                 }
                 Ok(Step::OK(construct(head, vals)))
             }
-            Record(_, fields) => {
+            Record { fields, .. } => {
                 let mut rec = vec![];
                 for (fname, val) in fields {
                     rec.push((fname.clone(), self.eval(val)?.into_ok()?));
                 }
                 Ok(Step::OK(Value::Record(rec)))
             }
-            FieldAccess { field, target } => {
+            FieldAccess { field, target, .. } => {
                 let tv = self.eval(target)?.into_ok()?;
                 self.field(&tv, field)
             }
-            Call(callee, args) => {
+            Call { callee, args, .. } => {
                 let (name, is_qualified) = match &**callee {
-                    Ident(n) => (Some(n.clone()), false),
-                    Qualified(a, m) => (Some(format!("{}/{}", a, m)), true),
+                    Ident { name, .. } => (Some(name.clone()), false),
+                    Qualified { alias, member, .. } => {
+                        (Some(format!("{}/{}", alias, member)), true)
+                    }
                     _ => (None, false),
                 };
                 if name.as_deref() == Some("and") {
@@ -380,7 +424,7 @@ impl<'a> Interp<'a> {
         if io::IO_ERROR_CASES.contains(&name) {
             return Ok(Value::Tagged(name.to_string(), vec![]));
         }
-        Err(Err::Internal(format!("unbound name {}", name)))
+        Err(Err::internal(format!("unbound name {}", name)))
     }
 
     fn eval_ident(&mut self, name: &str) -> Result<Step, Err> {
@@ -403,7 +447,7 @@ impl<'a> Interp<'a> {
             .get(self.cur)
             .and_then(|a| a.get(alias))
             .and_then(|m| self.mod_index.get(m).copied())
-            .ok_or_else(|| Err::Internal(format!("unbound alias {}", alias)))
+            .ok_or_else(|| Err::internal(format!("unbound alias {}", alias)))
     }
 
     fn lookup_lex(&self, name: &str) -> Option<Value> {
@@ -432,14 +476,14 @@ impl<'a> Interp<'a> {
         if self.case_index[ti].contains(name) {
             return Ok(Value::Closure(Callable::Case(name.to_string())));
         }
-        Err(Err::Internal(format!("unbound member {}", name)))
+        Err(Err::internal(format!("unbound member {}", name)))
     }
 
     // ---------------------------------------------------------------- calls
 
     fn resolve_call(&mut self, callee: &Expr) -> Result<Callable, Err> {
         match callee {
-            Expr::Ident(name) => {
+            Expr::Ident { name, .. } => {
                 // Prelude IoError cases are constructors in call position
                 // ((not-found)); ident_value yields the bare tag value, which
                 // would misread as a non-function here.
@@ -451,7 +495,7 @@ impl<'a> Interp<'a> {
                 }
                 self.ident_value(name).and_then(|v| self.value_to_callable(v))
             }
-            Expr::Qualified(alias, member) => self
+            Expr::Qualified { alias, member, .. } => self
                 .qualified_value(alias, member)
                 .and_then(|v| self.value_to_callable(v)),
             _ => {
@@ -464,7 +508,7 @@ impl<'a> Interp<'a> {
     fn value_to_callable(&self, v: Value) -> Result<Callable, Err> {
         match v {
             Value::Closure(c) => Ok(c),
-            _ => Err(Err::Internal("called a non-function value".to_string())),
+            _ => Err(Err::internal("called a non-function value".to_string())),
         }
     }
 
@@ -499,7 +543,7 @@ impl<'a> Interp<'a> {
             Callable::Case(tag) => Ok(Step::OK(Value::Tagged(tag, args))),
             Callable::Lambda(lam) => {
                 if lam.params.len() != args.len() {
-                    return Err(Err::Internal("lambda arity".to_string()));
+                    return Err(Err::internal("lambda arity".to_string()));
                 }
                 let saved = std::mem::replace(&mut self.env, lam.captured);
                 let mut frame = BTreeMap::new();
@@ -522,10 +566,10 @@ impl<'a> Interp<'a> {
         let idx = *self
             .defun_index[ti]
             .get(name)
-            .ok_or_else(|| Err::Internal(format!("no defun {}", name)))?;
+            .ok_or_else(|| Err::internal(format!("no defun {}", name)))?;
         let def = &self.units[ti].defuns[idx];
         if def.params.len() != args.len() {
-            return Err(Err::Internal(format!(
+            return Err(Err::internal(format!(
                 "{}: expected {} arg(s), got {}",
                 name,
                 def.params.len(),
@@ -569,7 +613,7 @@ impl<'a> Interp<'a> {
                         Ok(Value::int(r, *w))
                     }
                     Float(x) => Ok(Value::Float(if name == "neg" { -*x } else { x.abs() })),
-                    _ => Err(Err::Internal("numeric op on non-number".into())),
+                    _ => Err(Err::internal("numeric op on non-number".into())),
                 }
             }
             "min" | "max" => {
@@ -726,7 +770,7 @@ impl<'a> Interp<'a> {
                 .collect())),
             "map-from-pairs" => {
                 let ps = self.as_list(&args[0])?;
-                Ok(Map(builtins::m_from(ps).map_err(Err::Internal)?))
+                Ok(Map(builtins::m_from(ps).map_err(Err::internal)?))
             }
             // --- option / result ---
             "is-some?" => Ok(Bool(matches!(&args[0], Tagged(t, _) if t == "some"))),
@@ -763,7 +807,7 @@ impl<'a> Interp<'a> {
             "file-write" => io::file_write(self.as_str(&args[0])?, self.as_str(&args[1])?),
             "file-append" => io::file_append(self.as_str(&args[0])?, self.as_str(&args[1])?),
             "file-exists?" => io::file_exists(self.as_str(&args[0])?),
-            other => Err(Err::Internal(format!("unknown builtin {}", other))),
+            other => Err(Err::internal(format!("unknown builtin {}", other))),
         }
     }
 
@@ -784,7 +828,7 @@ impl<'a> Interp<'a> {
                 };
                 if name == "/" || name == "mod" {
                     if *y == 0 {
-                        return Err(Err::Trap(format!("{} by zero", if name == "/" { "division" } else { "modulo" })));
+                        return Err(Err::trap(format!("{} by zero", if name == "/" { "division" } else { "modulo" })));
                     }
                     if name == "/" {
                         return Ok(Value::int(num::idiv(*x, *y, w)?, w));
@@ -807,7 +851,7 @@ impl<'a> Interp<'a> {
                     "+" => num::iadd(*x, *y, w)?,
                     "-" => num::isub(*x, *y, w)?,
                     "*" => num::imul(*x, *y, w)?,
-                    _ => return Err(Err::Internal("bad int op".into())),
+                    _ => return Err(Err::internal("bad int op".into())),
                 };
                 Ok(Value::int(r, w))
             }
@@ -835,7 +879,7 @@ impl<'a> Interp<'a> {
                     "+" => x + y,
                     "-" => x - y,
                     "*" => x * y,
-                    _ => return Err(Err::Internal("bad float op".into())),
+                    _ => return Err(Err::internal("bad float op".into())),
                 };
                 Ok(Float(r))
             }
@@ -859,7 +903,7 @@ impl<'a> Interp<'a> {
                     acc = num::iadd(acc, *v, width_or(*w, NumericWidth::I64))?;
                     width = width_or(*w, width);
                 }
-                _ => return Err(Err::Internal("list-sum over non-number".into())),
+                _ => return Err(Err::internal("list-sum over non-number".into())),
             }
         }
         Ok(Value::int(acc, width))
@@ -911,7 +955,7 @@ impl<'a> Interp<'a> {
                 }
             }
             Value::Tagged(t, _) if t == "none" => Ok(Value::Tagged("none".into(), vec![])),
-            _ => Err(Err::Internal("apply_higher on non-option/result".into())),
+            _ => Err(Err::internal("apply_higher on non-option/result".into())),
         }
     }
 
@@ -958,14 +1002,14 @@ impl<'a> Interp<'a> {
                 keyed.sort_by(|a, b| self.compare(&a.1, &b.1));
                 Ok(Value::List(keyed.into_iter().map(|(x, _)| x).collect()))
             }
-            _ => Err(Err::Internal("bad list higher".into())),
+            _ => Err(Err::internal("bad list higher".into())),
         }
     }
 
     fn apply_closure_n(&mut self, func: &Value, args: Vec<Value>) -> Result<Value, Err> {
         match func {
             Value::Closure(c) => self.apply(c.clone(), args)?.into_ok(),
-            _ => Err(Err::Internal("higher-order got a non-function".into())),
+            _ => Err(Err::internal("higher-order got a non-function".into())),
         }
     }
 
@@ -1011,43 +1055,43 @@ impl<'a> Interp<'a> {
     pub fn as_bool(&self, v: &Value, what: &str) -> Result<bool, Err> {
         match v {
             Value::Bool(b) => Ok(*b),
-            _ => Err(Err::Internal(format!("{}: expected Bool", what))),
+            _ => Err(Err::internal(format!("{}: expected Bool", what))),
         }
     }
     pub fn as_str<'v>(&self, v: &'v Value) -> Result<&'v str, Err> {
         match v {
             Value::Str(s) => Ok(s),
-            _ => Err(Err::Internal("expected String".into())),
+            _ => Err(Err::internal("expected String".into())),
         }
     }
     pub fn as_i64(&self, v: &Value) -> Result<i64, Err> {
         match v {
             Value::Int { v, .. } => Ok(*v),
-            _ => Err(Err::Internal("expected Int".into())),
+            _ => Err(Err::internal("expected Int".into())),
         }
     }
     pub fn as_f64(&self, v: &Value) -> Result<f64, Err> {
         match v {
             Value::Float(x) => Ok(*x),
             Value::Int { v, .. } => Ok(*v as f64),
-            _ => Err(Err::Internal("expected Float".into())),
+            _ => Err(Err::internal("expected Float".into())),
         }
     }
     pub fn as_list<'v>(&self, v: &'v Value) -> Result<&'v Vec<Value>, Err> {
         match v {
             Value::List(xs) => Ok(xs),
-            _ => Err(Err::Internal("expected List".into())),
+            _ => Err(Err::internal("expected List".into())),
         }
     }
     pub fn as_map<'v>(&self, v: &'v Value) -> Result<&'v BTreeMap<MapKey, Value>, Err> {
         match v {
             Value::Map(m) => Ok(m),
-            _ => Err(Err::Internal("expected Map".into())),
+            _ => Err(Err::internal("expected Map".into())),
         }
     }
     pub fn key(&self, v: &Value) -> Result<MapKey, Err> {
         MapKey::from_value(v)
-            .ok_or_else(|| Err::Internal("map key is not orderable".into()))
+            .ok_or_else(|| Err::internal("map key is not orderable".into()))
     }
 
     fn field(&mut self, v: &Value, f: &str) -> Result<Step, Err> {
@@ -1058,7 +1102,7 @@ impl<'a> Interp<'a> {
                         return Ok(Step::OK(val.clone()));
                     }
                 }
-                Err(Err::Internal(format!("no field {} in record", f)))
+                Err(Err::internal(format!("no field {} in record", f)))
             }
             Value::Tagged(t, a) if t == "pair" && a.len() == 2 => {
                 if f == "first" {
@@ -1066,10 +1110,10 @@ impl<'a> Interp<'a> {
                 } else if f == "second" {
                     Ok(Step::OK(a[1].clone()))
                 } else {
-                    Err(Err::Internal(format!("bad pair field {}", f)))
+                    Err(Err::internal(format!("bad pair field {}", f)))
                 }
             }
-            _ => Err(Err::Internal(format!("field access on non-record: {}", f))),
+            _ => Err(Err::internal(format!("field access on non-record: {}", f))),
         }
     }
 

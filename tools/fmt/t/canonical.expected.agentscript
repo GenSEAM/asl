@@ -1,0 +1,30 @@
+(module canonical/demo
+  :doc "A canonical formatter fixture."
+  :export [pick describe]
+  :import [(core/strings :as s)])
+
+(defschema Point
+  (:field x Int64 "across" :default 0)
+  (:field y Int64 "down"))
+
+(defenum {T} Shape
+  (:case dot []            "nothing")
+  (:case box [(w T) (h T)] "a box"))
+
+(defun pick [(n Int64) (p Point)] -> (Result Int64 String)
+  :doc "Pick a value, conveying failure as a Result."
+  (let [(m (Point :x 1 :y 2))
+        (k (.-x p))]
+    (cond
+      ((= n 0) (ok 0))
+      ((< n 0)
+       (ok (if (> k 0)
+             1
+             2)))
+      (:else
+       (match (describe p)
+         ((some v) (ok (s/upper (+ v 1))))
+         ((none)   (err "nothing")))))))
+
+(defun describe [(p Point)] -> (Option Int64)
+  (try (ok (+ (.-x p) (.-y p)))))

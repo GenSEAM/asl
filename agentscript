@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""One entry point over the AgentScript toolchain.
+
+The working loop was four scripts with four calling conventions, and an agent that
+had to remember which of them takes a directory, which takes a file, and which one
+answers in JSON. Everything here delegates: `check` is `checker/resolve.check_file`, `build`
+is `backend/to_*.py`, `ambiguity` is `grammar/ambiguity_audit.py`, `tokens` is
+`prelude/budget.py`, `fmt` is `tools/fmt/fmt.py`, and `ast`/`search`/`edit` are the
+tree-sitter surface in `tools/tsutil.py`.
+
+Two things are uniform across every subcommand, because they are the part a caller
+writes code against:
+
+  * `--json` emits the toolchain's diagnostic shape, `{file, line, col, code,
+    message}`, the one `checker/resolve.py` defines (the checker's `code` field is
+    the former `rule`, now a string).
+  * the exit code is the number of problems — 0 when there are none.
+"""
+import argparse
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).parent
+
+# `checker/resolve.py` imports its siblings (`collect`, `types_`) flat, so its
+# directory has to be on the path; `checker/check.py` and the gates do the same.
+sys.path.insert(0, str(ROOT / "checker"))
+
+from resolve import Diagnostic, check_file  # noqa: E402
+from tools import tsutil  # noqa: E402
+from tools.fmt import fmt  # noqa: E402
+
+BACKENDS = {"py": "to_python.py", "rs": "to_rust.py"}
+TREE_SITTER = ROOT / "node_modules" / ".bin" / "tree-sitter"
+GRAMMAR_DIR = ROOT / "grammar" / "tree-sitter-agentscript"
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+class BadInput(Exception):
+    """A usage error: no sources, or a path that is not there."""
+
+
+def sources(paths: list[Path]) -> list[Path]:
+    out: list[Path] = []
+    for p in paths:
+        if not p.exists():
+            raise BadInput(f"{p}: no such file or directory")
+        out += sorted(p.rglob("*.agentscript")) if p.is_dir() else [p]
+    if not out:
+        raise BadInput("no .agentscript files given")
+    return out
+
+
+def diag(file, code: str, message: str) -> Diagnostic:
+    """One diagnostic in the toolchain's shape, for a failure with no position.
+
+    `code` is the checker's `code` field (a string such as "build" or "internal");
+    the distributor's former numeric `rule` argument is gone with the rename to
+    `code: str`.
+    """
+    return Diagnostic(code, message, 1, 1, str(file))
+
+
+def diag_as_dict(d: Diagnostic) -> dict:
+    return {"file": d.path, "line": d.line, "col": d.col,
+            "code": d.code, "message": d.message}
+
+
+def report(diags: list[Diagnostic], as_json: bool, subject: str) -> int:
+    if as_json:
+        print(json.dumps([diag_as_dict(d) for d in diags], indent=1))
+    else:
+        for d in diags:
+            print(d)
+        print(f"\n{len(diags)} {subject}")
+    return len(diags)
+
+
+# ---------- subcommands ----------
+
+def cmd_check(args) -> int:
+    """Run the semantic checker in-process (`checker/resolve.check_file`)."""
+    files = sources(args.paths)
+    # The corpus's search-path modules live under grammar/corpus/modules; the
+    # checker gate resolves against them, so the distributor must too.
+    roots = [ROOT / "grammar" / "corpus" / "modules"]
+    diags: list[Diagnostic] = []
+    for f in files:
+        diags += check_file(f, roots)
+    diags.sort(key=lambda d: (d.path, d.line, d.col, d.code))
+    return report(diags, args.json, f"diagnostic(s) across {len(files)} file(s)")
+
+
+def cmd_build(args) -> int:
+    if not args.file.is_file():
+        return report([diag(args.file, "build", "no such file")], args.json, "diagnostic(s)")
+    script = ROOT / "backend" / BACKENDS[args.target]
+    run = subprocess.run([sys.executable, str(script), str(args.file)],
+                         capture_output=True, text=True)
+    if run.returncode == 0:
+        sys.stdout.write(run.stdout)
+        return 0
+    # The backends refuse a module written for another ecosystem by name, and that
+    # refusal is a result rather than a crash. It is reported as one diagnostic.
+    message = last_line(run.stderr) or "build failed"
+    code = "target-mismatch" if message.startswith("TargetMismatch") else "build"
+    return report([diag(args.file, code, message)], args.json, "diagnostic(s)")
+
+
+def last_line(stderr: str) -> str:
+    """The final line of a delegate's stderr, stripped of terminal colouring."""
+    text = ANSI.sub("", stderr).strip()
+    return text.splitlines()[-1] if text else ""
+
+
+def cmd_fmt(args) -> int:
+    files = sources(args.paths)
+    diags, changed = [], []
+    for f in files:
+        did, ds = fmt.format_file(f, write=not args.check)
+        diags += ds
+        if did and not ds:
+            changed.append(f)
+    if args.check:
+        return report(diags, args.json, f"file(s) to reformat, of {len(files)}")
+    for f in changed:
+        print(f"formatted {f}", file=sys.stderr)
+    return report(diags, args.json, f"file(s) refused, {len(changed)} rewritten")
+
+
+def cmd_ambiguity(args) -> int:
+    """Runs the Earley ambiguity audit; `--check` ratchets against the lock."""
+    run = ["--write"] if args.write else (["--check"] if args.check else [])
+    return subprocess.run(
+        [sys.executable, str(ROOT / "grammar" / "ambiguity_audit.py"), *run],
+        cwd=ROOT).returncode
+
+
+def cmd_tokens(args) -> int:
+    """The token-budget ratchet over `prelude/HANDBOOK.md`."""
+    run = ["--write"] if args.write else (["--check"] if args.check else [])
+    return subprocess.run(
+        [sys.executable, str(ROOT / "prelude" / "budget.py"), *run],
+        cwd=ROOT).returncode
+
+
+def cmd_ast(args) -> int:
+    try:
+        print(json.dumps(tsutil.ast_json(args.file), indent=1))
+        return 0
+    except Exception as exc:
+        return report([diag(args.file, "internal", str(exc))], args.json, "diagnostic(s)")
+
+
+def cmd_search(args) -> int:
+    query = Path(args.query).read_text()
+    try:
+        print(json.dumps(tsutil.search_json(args.file, query), indent=1))
+        return 0
+    except Exception as exc:
+        return report([diag(args.file, "internal", str(exc))], args.json, "diagnostic(s)")
+
+
+def cmd_edit(args) -> int:
+    try:
+        receipt = tsutil.edit(args.file, args.op, args.range or args.at, args.text or "")
+        print(json.dumps(receipt))
+        return 0
+    except Exception as exc:
+        payload = {"file": str(args.file), "op": args.op, "error": str(exc)}
+        print(json.dumps(payload))
+        return 1
+
+
+def cmd_bindgen(args) -> int:
+    """Foreign declarations from a Python type stub (`tools/bindgen/from_pyi.py`)."""
+    run = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "bindgen" / "from_pyi.py"),
+         str(args.stub), "--module", args.module, "--package", args.package,
+         "--alias", args.alias, "--target", args.target],
+        capture_output=True, text=True)
+    sys.stdout.write(run.stdout)
+    if run.returncode == 0:
+        return 0
+    sys.stderr.write(run.stderr)
+    return 1
+
+
+# ---------- driver ----------
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="agentscript", description=__doc__.splitlines()[0])
+    ap.add_argument("--json", action="store_true",
+                    help="emit diagnostics as {file, line, col, code, message}")
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("check", help="the §9 rules a grammar cannot express")
+    p.add_argument("paths", nargs="*", type=Path)
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_check)
+
+    p = sub.add_parser("build", help="transpile one module to a target")
+    p.add_argument("file", type=Path)
+    p.add_argument("--target", required=True, choices=sorted(BACKENDS))
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_build)
+
+    p = sub.add_parser("fmt", help="print canonically, in place")
+    p.add_argument("paths", nargs="*", type=Path)
+    p.add_argument("--check", action="store_true",
+                   help="report what would change instead of changing it")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_fmt)
+
+    p = sub.add_parser("ambiguity", help="Earley ambiguity count over the corpus")
+    p.add_argument("--check", action="store_true")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_ambiguity)
+
+    p = sub.add_parser("tokens", help="token-budget ratchet over HANDBOOK.md")
+    p.add_argument("--check", action="store_true")
+    p.add_argument("--write", action="store_true")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_tokens)
+
+    p = sub.add_parser("ast", help="dump the tree-sitter JSON AST of a module")
+    p.add_argument("file", type=Path)
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_ast)
+
+    p = sub.add_parser("search", help="run a tree-sitter query over a module")
+    p.add_argument("file", type=Path)
+    p.add_argument("-q", "--query", required=True, help="a .scm query file")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_search)
+
+    p = sub.add_parser("edit", help="a structured byte-range edit")
+    p.add_argument("op", choices=["replace", "delete", "insert"])
+    p.add_argument("file", type=Path)
+    p.add_argument("--range", help="<l>:<c>-<l>:<c> for replace/delete")
+    p.add_argument("--at", help="<l>:<c> for insert")
+    p.add_argument("--text", help="replacement / inserted text")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_edit)
+
+    p = sub.add_parser("bindgen",
+                       help="foreign declarations from a Python type stub")
+    p.add_argument("stub", type=Path)
+    p.add_argument("--module", required=True)
+    p.add_argument("--package", required=True)
+    p.add_argument("--alias", required=True)
+    p.add_argument("--target", default="py")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_bindgen)
+
+    args = ap.parse_args()
+    try:
+        return args.fn(args)
+    except BadInput as exc:
+        print(exc, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
