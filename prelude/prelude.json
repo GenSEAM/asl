@@ -1,9 +1,9 @@
 {
- "$comment": "SINGLE SOURCE OF TRUTH for the AgentS-Core vocabulary. The specification tables, both grammars, the agent handbook, the closure gate and the backends are all GENERATED from this file. Never edit those by hand; edit here and run prelude/generate.py.",
+ "$comment": "SINGLE SOURCE OF TRUTH for the AgentScript vocabulary. The specification tables, both grammars, the agent handbook, the closure gate and the backends are all GENERATED from this file. Never edit those by hand; edit here and run prelude/generate.py.",
  "version": "0.2",
  "runtime": {
-  "py": "_as",
-  "js": "_as"
+  "py": "_agentscript",
+  "js": "_agentscript"
  },
  "special_forms": {
   "declarations": [
@@ -86,8 +86,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Sum. Traps on integer overflow.",
-   "py": "_as.add({0}, {1})",
-   "js": "_as.add({0}, {1})",
+   "py": "_agentscript.add({0}, {1})",
+   "js": "_agentscript.add({0}, {1})",
    "rs": "rt::add({0}, {1})"
   },
   {
@@ -95,8 +95,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Difference. Traps on integer overflow.",
-   "py": "_as.sub({0}, {1})",
-   "js": "_as.sub({0}, {1})",
+   "py": "_agentscript.sub({0}, {1})",
+   "js": "_agentscript.sub({0}, {1})",
    "rs": "rt::sub({0}, {1})"
   },
   {
@@ -104,8 +104,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Product. Traps on integer overflow.",
-   "py": "_as.mul({0}, {1})",
-   "js": "_as.mul({0}, {1})",
+   "py": "_agentscript.mul({0}, {1})",
+   "js": "_agentscript.mul({0}, {1})",
    "rs": "rt::mul({0}, {1})"
   },
   {
@@ -113,8 +113,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type.",
-   "py": "_as.div({0}, {1})",
-   "js": "_as.div({0}, {1})",
+   "py": "_agentscript.div({0}, {1})",
+   "js": "_agentscript.div({0}, {1})",
    "rs": "rt::div({0}, {1})"
   },
   {
@@ -122,8 +122,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Remainder; the sign follows the dividend. Traps on a zero divisor.",
-   "py": "_as.mod({0}, {1})",
-   "js": "_as.mod({0}, {1})",
+   "py": "_agentscript.mod({0}, {1})",
+   "js": "_agentscript.mod({0}, {1})",
    "rs": "rt::rem({0}, {1})"
   },
   {
@@ -131,8 +131,8 @@
    "sec": "Arithmetic",
    "type": "N N -> (Option N)",
    "doc": "Division, or none on a zero divisor or a quotient outside the type.",
-   "py": "_as.checked_div({0}, {1})",
-   "js": "_as.checkedDiv({0}, {1})",
+   "py": "_agentscript.checked_div({0}, {1})",
+   "js": "_agentscript.checkedDiv({0}, {1})",
    "rs": "rt::checked_div({0}, {1})"
   },
   {
@@ -140,8 +140,8 @@
    "sec": "Arithmetic",
    "type": "N N -> (Option N)",
    "doc": "Remainder, or none on a zero divisor; the remainder is always in range.",
-   "py": "_as.checked_mod({0}, {1})",
-   "js": "_as.checkedMod({0}, {1})",
+   "py": "_agentscript.checked_mod({0}, {1})",
+   "js": "_agentscript.checkedMod({0}, {1})",
    "rs": "rt::checked_rem({0}, {1})"
   },
   {
@@ -149,8 +149,8 @@
    "sec": "Arithmetic",
    "type": "N -> N",
    "doc": "Arithmetic negation. Traps on integer overflow.",
-   "py": "_as.neg({0})",
-   "js": "_as.neg({0})",
+   "py": "_agentscript.neg({0})",
+   "js": "_agentscript.neg({0})",
    "rs": "rt::neg({0})"
   },
   {
@@ -158,8 +158,8 @@
    "sec": "Arithmetic",
    "type": "N -> N",
    "doc": "Absolute value. Traps on integer overflow.",
-   "py": "_as.absolute({0})",
-   "js": "_as.absolute({0})",
+   "py": "_agentscript.absolute({0})",
+   "js": "_agentscript.absolute({0})",
    "rs": "rt::abs({0})"
   },
   {
@@ -167,8 +167,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Lesser of two values in the sort order, so NaN is the greater.",
-   "py": "_as.min_({0}, {1})",
-   "js": "_as.min({0}, {1})",
+   "py": "_agentscript.min_({0}, {1})",
+   "js": "_agentscript.min({0}, {1})",
    "rs": "rt::min({0}, {1})"
   },
   {
@@ -176,8 +176,8 @@
    "sec": "Arithmetic",
    "type": "N N -> N",
    "doc": "Greater of two values in the sort order, so NaN is the greater.",
-   "py": "_as.max_({0}, {1})",
-   "js": "_as.max({0}, {1})",
+   "py": "_agentscript.max_({0}, {1})",
+   "js": "_agentscript.max({0}, {1})",
    "rs": "rt::max({0}, {1})"
   },
   {
@@ -185,8 +185,8 @@
    "sec": "Comparison and logic",
    "type": "T T -> Bool",
    "doc": "Structural equality.",
-   "py": "_as.eq({0}, {1})",
-   "js": "_as.eq({0}, {1})",
+   "py": "_agentscript.eq({0}, {1})",
+   "js": "_agentscript.eq({0}, {1})",
    "rs": "({0} == {1})"
   },
   {
@@ -194,8 +194,8 @@
    "sec": "Comparison and logic",
    "type": "T T -> Bool",
    "doc": "Structural inequality.",
-   "py": "(not _as.eq({0}, {1}))",
-   "js": "(!_as.eq({0}, {1}))",
+   "py": "(not _agentscript.eq({0}, {1}))",
+   "js": "(!_agentscript.eq({0}, {1}))",
    "rs": "({0} != {1})"
   },
   {
@@ -293,8 +293,8 @@
    "sec": "String",
    "type": "String Int64 Int64 -> (Option String)",
    "doc": "Half-open character slice, or none when out of range.",
-   "py": "_as.str_slice({0}, {1}, {2})",
-   "js": "_as.strSlice({0}, {1}, {2})",
+   "py": "_agentscript.str_slice({0}, {1}, {2})",
+   "js": "_agentscript.strSlice({0}, {1}, {2})",
    "rs": "rt::str_slice(&{0}, {1}, {2})"
   },
   {
@@ -302,8 +302,8 @@
    "sec": "String",
    "type": "String String -> (Option Int64)",
    "doc": "Character index of the first occurrence.",
-   "py": "_as.str_index_of({0}, {1})",
-   "js": "_as.strIndexOf({0}, {1})",
+   "py": "_agentscript.str_index_of({0}, {1})",
+   "js": "_agentscript.strIndexOf({0}, {1})",
    "rs": "rt::str_index_of(&{0}, &{1})"
   },
   {
@@ -420,7 +420,7 @@
    "type": "Float64 -> String",
    "doc": "Decimal rendering of a float.",
    "py": "repr(float({0}))",
-   "js": "_as.fmtF64({0})",
+   "js": "_agentscript.fmtF64({0})",
    "rs": "rt::fmt_f64({0})"
   },
   {
@@ -428,8 +428,8 @@
    "sec": "String",
    "type": "String -> (Option Int64)",
    "doc": "Parse an integer, or none when it is malformed or outside Int64.",
-   "py": "_as.to_int({0})",
-   "js": "_as.toInt({0})",
+   "py": "_agentscript.to_int({0})",
+   "js": "_agentscript.toInt({0})",
    "rs": "rt::to_i64(&{0})"
   },
   {
@@ -437,8 +437,8 @@
    "sec": "String",
    "type": "String -> (Option Float64)",
    "doc": "Parse a float, or none.",
-   "py": "_as.to_float({0})",
-   "js": "_as.toFloat({0})",
+   "py": "_agentscript.to_float({0})",
+   "js": "_agentscript.toFloat({0})",
    "rs": "rt::to_f64(&{0})"
   },
   {
@@ -455,8 +455,8 @@
    "sec": "Numeric conversion",
    "type": "Int64 -> (Option Int32)",
    "doc": "Narrow, or none when out of range.",
-   "py": "_as.to_i32({0})",
-   "js": "_as.toI32({0})",
+   "py": "_agentscript.to_i32({0})",
+   "js": "_agentscript.toI32({0})",
    "rs": "rt::to_i32({0})"
   },
   {
@@ -473,8 +473,8 @@
    "sec": "Numeric conversion",
    "type": "Float64 -> (Option Int64)",
    "doc": "Truncate toward zero, or none for NaN, infinity or out of range.",
-   "py": "_as.f_to_i({0})",
-   "js": "_as.fToI({0})",
+   "py": "_agentscript.f_to_i({0})",
+   "js": "_agentscript.fToI({0})",
    "rs": "rt::f_to_i({0})"
   },
   {
@@ -509,8 +509,8 @@
    "sec": "List",
    "type": "(List T) Int64 -> (Option T)",
    "doc": "Element at an index, or none.",
-   "py": "_as.at({0}, {1})",
-   "js": "_as.at({0}, {1})",
+   "py": "_agentscript.at({0}, {1})",
+   "js": "_agentscript.at({0}, {1})",
    "rs": "rt::at(&{0}, {1})"
   },
   {
@@ -518,8 +518,8 @@
    "sec": "List",
    "type": "(List T) -> (Option T)",
    "doc": "First element, or none.",
-   "py": "_as.at({0}, 0)",
-   "js": "_as.at({0}, 0)",
+   "py": "_agentscript.at({0}, 0)",
+   "js": "_agentscript.at({0}, 0)",
    "rs": "rt::at(&{0}, 0)"
   },
   {
@@ -527,8 +527,8 @@
    "sec": "List",
    "type": "(List T) -> (Option (List T))",
    "doc": "All but the first element, or none when empty.",
-   "py": "_as.tail({0})",
-   "js": "_as.tail({0})",
+   "py": "_agentscript.tail({0})",
+   "js": "_agentscript.tail({0})",
    "rs": "rt::tail(&{0})"
   },
   {
@@ -563,8 +563,8 @@
    "sec": "List",
    "type": "(List T) Int64 Int64 -> (Option (List T))",
    "doc": "Half-open slice, or none when out of range.",
-   "py": "_as.list_slice({0}, {1}, {2})",
-   "js": "_as.listSlice({0}, {1}, {2})",
+   "py": "_agentscript.list_slice({0}, {1}, {2})",
+   "js": "_agentscript.listSlice({0}, {1}, {2})",
    "rs": "rt::list_slice(&{0}, {1}, {2})"
   },
   {
@@ -572,8 +572,8 @@
    "sec": "List",
    "type": "(List T) T -> Bool",
    "doc": "True when the element occurs.",
-   "py": "_as.contains({0}, {1})",
-   "js": "_as.contains({0}, {1})",
+   "py": "_agentscript.contains({0}, {1})",
+   "js": "_agentscript.contains({0}, {1})",
    "rs": "{0}.contains(&{1})"
   },
   {
@@ -581,8 +581,8 @@
    "sec": "List",
    "type": "(List T) T -> (Option Int64)",
    "doc": "Index of the first occurrence.",
-   "py": "_as.index_of({0}, {1})",
-   "js": "_as.indexOf({0}, {1})",
+   "py": "_agentscript.index_of({0}, {1})",
+   "js": "_agentscript.indexOf({0}, {1})",
    "rs": "rt::index_of(&{0}, &{1})"
   },
   {
@@ -590,8 +590,8 @@
    "sec": "List",
    "type": "(List T) -> (List T)",
    "doc": "Stable ascending sort; a value holding a NaN sorts last.",
-   "py": "sorted({0}, key=_as.order_key)",
-   "js": "_as.sort({0})",
+   "py": "sorted({0}, key=_agentscript.order_key)",
+   "js": "_agentscript.sort({0})",
    "rs": "rt::sort({0})"
   },
   {
@@ -599,8 +599,8 @@
    "sec": "List",
    "type": "(fn [T] -> K) (List T) -> (List T)",
    "doc": "Stable ascending sort by a derived key; a key holding a NaN sorts last.",
-   "py": "sorted({1}, key=_as.order_by({0}))",
-   "js": "_as.sortBy({0}, {1})",
+   "py": "sorted({1}, key=_agentscript.order_by({0}))",
+   "js": "_agentscript.sortBy({0}, {1})",
    "rs": "rt::sort_by({1}, {0})"
   },
   {
@@ -626,7 +626,7 @@
    "sec": "List",
    "type": "(fn [B A] -> B) B (List A) -> B",
    "doc": "Left fold with an initial accumulator.",
-   "py": "_as.fold({0}, {1}, {2})",
+   "py": "_agentscript.fold({0}, {1}, {2})",
    "js": "{2}.reduce({0}, {1})",
    "rs": "{2}.into_iter().fold({1}, {0})"
   },
@@ -636,7 +636,7 @@
    "type": "Int64 Int64 -> (List Int64)",
    "doc": "Half-open integer range; empty when start is not below end.",
    "py": "list(range({0}, {1}))",
-   "js": "_as.range({0}, {1})",
+   "js": "_agentscript.range({0}, {1})",
    "rs": "rt::range({0}, {1})"
   },
   {
@@ -644,8 +644,8 @@
    "sec": "List",
    "type": "(List A) (List B) -> (List (Pair A B))",
    "doc": "Pair up elements, truncating to the shorter list.",
-   "py": "_as.zip_({0}, {1})",
-   "js": "_as.zip({0}, {1})",
+   "py": "_agentscript.zip_({0}, {1})",
+   "js": "_agentscript.zip({0}, {1})",
    "rs": "rt::zip({0}, {1})"
   },
   {
@@ -653,8 +653,8 @@
    "sec": "List",
    "type": "(List N) -> N",
    "doc": "Sum of elements, 0 when empty. Traps on integer overflow.",
-   "py": "_as.sum_({0})",
-   "js": "_as.sum({0})",
+   "py": "_agentscript.sum_({0})",
+   "js": "_agentscript.sum({0})",
    "rs": "rt::sum({0})"
   },
   {
@@ -662,8 +662,8 @@
    "sec": "List",
    "type": "(List T) -> (Option T)",
    "doc": "Least element in the sort order, or none when empty.",
-   "py": "_as.least({0})",
-   "js": "_as.least({0})",
+   "py": "_agentscript.least({0})",
+   "js": "_agentscript.least({0})",
    "rs": "rt::least(&{0})"
   },
   {
@@ -671,8 +671,8 @@
    "sec": "List",
    "type": "(List T) -> (Option T)",
    "doc": "Greatest element in the sort order, or none when empty.",
-   "py": "_as.greatest({0})",
-   "js": "_as.greatest({0})",
+   "py": "_agentscript.greatest({0})",
+   "js": "_agentscript.greatest({0})",
    "rs": "rt::greatest(&{0})"
   },
   {
@@ -689,8 +689,8 @@
    "sec": "Map",
    "type": "(Map K V) K -> (Option V)",
    "doc": "Value for a key, or none.",
-   "py": "_as.m_get({0}, {1})",
-   "js": "_as.mGet({0}, {1})",
+   "py": "_agentscript.m_get({0}, {1})",
+   "js": "_agentscript.mGet({0}, {1})",
    "rs": "rt::m_get(&{0}, &{1})"
   },
   {
@@ -698,8 +698,8 @@
    "sec": "Map",
    "type": "(Map K V) K V -> (Map K V)",
    "doc": "Map with the key bound to the value.",
-   "py": "_as.m_set({0}, {1}, {2})",
-   "js": "_as.mSet({0}, {1}, {2})",
+   "py": "_agentscript.m_set({0}, {1}, {2})",
+   "js": "_agentscript.mSet({0}, {1}, {2})",
    "rs": "rt::m_set({0}, {1}, {2})"
   },
   {
@@ -707,8 +707,8 @@
    "sec": "Map",
    "type": "(Map K V) K -> (Map K V)",
    "doc": "Map without the key.",
-   "py": "_as.m_del({0}, {1})",
-   "js": "_as.mDel({0}, {1})",
+   "py": "_agentscript.m_del({0}, {1})",
+   "js": "_agentscript.mDel({0}, {1})",
    "rs": "rt::m_del({0}, &{1})"
   },
   {
@@ -735,7 +735,7 @@
    "type": "(Map K V) -> (List K)",
    "doc": "Keys, sorted.",
    "py": "sorted({0}.keys())",
-   "js": "_as.mKeys({0})",
+   "js": "_agentscript.mKeys({0})",
    "rs": "{0}.keys().cloned().collect::<Vec<_>>()"
   },
   {
@@ -744,7 +744,7 @@
    "type": "(Map K V) -> (List V)",
    "doc": "Values, ordered by sorted key.",
    "py": "[{0}[_k] for _k in sorted({0})]",
-   "js": "_as.mValues({0})",
+   "js": "_agentscript.mValues({0})",
    "rs": "{0}.values().cloned().collect::<Vec<_>>()"
   },
   {
@@ -752,8 +752,8 @@
    "sec": "Map",
    "type": "(Map K V) -> (List (Pair K V))",
    "doc": "Entries as pairs, ordered by sorted key.",
-   "py": "_as.m_pairs({0})",
-   "js": "_as.mPairs({0})",
+   "py": "_agentscript.m_pairs({0})",
+   "js": "_agentscript.mPairs({0})",
    "rs": "rt::m_pairs(&{0})"
   },
   {
@@ -761,8 +761,8 @@
    "sec": "Map",
    "type": "(List (Pair K V)) -> (Map K V)",
    "doc": "Build from pairs; later entries win.",
-   "py": "_as.m_from({0})",
-   "js": "_as.mFrom({0})",
+   "py": "_agentscript.m_from({0})",
+   "js": "_agentscript.mFrom({0})",
    "rs": "rt::m_from({0})"
   },
   {
@@ -770,8 +770,8 @@
    "sec": "Option, Result, Pair",
    "type": "T -> (Option T)",
    "doc": "A present value.",
-   "py": "_as.some({0})",
-   "js": "_as.some({0})",
+   "py": "_agentscript.some({0})",
+   "js": "_agentscript.some({0})",
    "rs": "Some({0})"
   },
   {
@@ -779,8 +779,8 @@
    "sec": "Option, Result, Pair",
    "type": "-> (Option T)",
    "doc": "An absent value.",
-   "py": "_as.NONE",
-   "js": "_as.NONE",
+   "py": "_agentscript.NONE",
+   "js": "_agentscript.NONE",
    "rs": "None"
   },
   {
@@ -788,8 +788,8 @@
    "sec": "Option, Result, Pair",
    "type": "T -> (Result T E)",
    "doc": "A successful result.",
-   "py": "_as.ok({0})",
-   "js": "_as.ok({0})",
+   "py": "_agentscript.ok({0})",
+   "js": "_agentscript.ok({0})",
    "rs": "Ok({0})"
   },
   {
@@ -797,8 +797,8 @@
    "sec": "Option, Result, Pair",
    "type": "E -> (Result T E)",
    "doc": "A failed result.",
-   "py": "_as.err({0})",
-   "js": "_as.err({0})",
+   "py": "_agentscript.err({0})",
+   "js": "_agentscript.err({0})",
    "rs": "Err({0})"
   },
   {
@@ -806,8 +806,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Option T) -> Bool",
    "doc": "True when a value is present.",
-   "py": "_as.is_some({0})",
-   "js": "_as.isSome({0})",
+   "py": "_agentscript.is_some({0})",
+   "js": "_agentscript.isSome({0})",
    "rs": "{0}.is_some()"
   },
   {
@@ -815,8 +815,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Option T) -> Bool",
    "doc": "True when no value is present.",
-   "py": "(not _as.is_some({0}))",
-   "js": "(!_as.isSome({0}))",
+   "py": "(not _agentscript.is_some({0}))",
+   "js": "(!_agentscript.isSome({0}))",
    "rs": "{0}.is_none()"
   },
   {
@@ -824,8 +824,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Result T E) -> Bool",
    "doc": "True when the result succeeded.",
-   "py": "_as.is_ok({0})",
-   "js": "_as.isOk({0})",
+   "py": "_agentscript.is_ok({0})",
+   "js": "_agentscript.isOk({0})",
    "rs": "{0}.is_ok()"
   },
   {
@@ -833,8 +833,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Result T E) -> Bool",
    "doc": "True when the result failed.",
-   "py": "(not _as.is_ok({0}))",
-   "js": "(!_as.isOk({0}))",
+   "py": "(not _agentscript.is_ok({0}))",
+   "js": "(!_agentscript.isOk({0}))",
    "rs": "{0}.is_err()"
   },
   {
@@ -842,8 +842,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Option T) T -> T",
    "doc": "The value, or a fallback when absent.",
-   "py": "_as.opt_or({0}, {1})",
-   "js": "_as.optOr({0}, {1})",
+   "py": "_agentscript.opt_or({0}, {1})",
+   "js": "_agentscript.optOr({0}, {1})",
    "rs": "{0}.unwrap_or({1})"
   },
   {
@@ -851,8 +851,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Result T E) T -> T",
    "doc": "The value, or a fallback on failure.",
-   "py": "_as.res_or({0}, {1})",
-   "js": "_as.resOr({0}, {1})",
+   "py": "_agentscript.res_or({0}, {1})",
+   "js": "_agentscript.resOr({0}, {1})",
    "rs": "{0}.unwrap_or({1})"
   },
   {
@@ -860,8 +860,8 @@
    "sec": "Option, Result, Pair",
    "type": "(fn [A] -> B) (Option A) -> (Option B)",
    "doc": "Transform a present value.",
-   "py": "_as.opt_map({0}, {1})",
-   "js": "_as.optMap({0}, {1})",
+   "py": "_agentscript.opt_map({0}, {1})",
+   "js": "_agentscript.optMap({0}, {1})",
    "rs": "{1}.map({0})"
   },
   {
@@ -869,8 +869,8 @@
    "sec": "Option, Result, Pair",
    "type": "(fn [A] -> B) (Result A E) -> (Result B E)",
    "doc": "Transform a successful value.",
-   "py": "_as.res_map({0}, {1})",
-   "js": "_as.resMap({0}, {1})",
+   "py": "_agentscript.res_map({0}, {1})",
+   "js": "_agentscript.resMap({0}, {1})",
    "rs": "{1}.map({0})"
   },
   {
@@ -878,8 +878,8 @@
    "sec": "Option, Result, Pair",
    "type": "(fn [E] -> F) (Result T E) -> (Result T F)",
    "doc": "Transform a failure value.",
-   "py": "_as.res_map_err({0}, {1})",
-   "js": "_as.resMapErr({0}, {1})",
+   "py": "_agentscript.res_map_err({0}, {1})",
+   "js": "_agentscript.resMapErr({0}, {1})",
    "rs": "{1}.map_err({0})"
   },
   {
@@ -887,8 +887,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Option T) E -> (Result T E)",
    "doc": "Absent becomes the given failure.",
-   "py": "_as.opt_to_res({0}, {1})",
-   "js": "_as.optToRes({0}, {1})",
+   "py": "_agentscript.opt_to_res({0}, {1})",
+   "js": "_agentscript.optToRes({0}, {1})",
    "rs": "{0}.ok_or({1})"
   },
   {
@@ -896,8 +896,8 @@
    "sec": "Option, Result, Pair",
    "type": "(Result T E) -> (Option T)",
    "doc": "Failure becomes absence.",
-   "py": "_as.res_to_opt({0})",
-   "js": "_as.resToOpt({0})",
+   "py": "_agentscript.res_to_opt({0})",
+   "js": "_agentscript.resToOpt({0})",
    "rs": "{0}.ok()"
   },
   {
@@ -905,8 +905,8 @@
    "sec": "Option, Result, Pair",
    "type": "A B -> (Pair A B)",
    "doc": "Construct a pair.",
-   "py": "_as.pair({0}, {1})",
-   "js": "_as.pair({0}, {1})",
+   "py": "_agentscript.pair({0}, {1})",
+   "js": "_agentscript.pair({0}, {1})",
    "rs": "({0}, {1})"
   },
   {
@@ -968,8 +968,8 @@
    "sec": "I/O",
    "type": "-> (Result (Option String) IoError)",
    "doc": "Read one line from standard input; none at end of input.",
-   "py": "_as.read_line()",
-   "js": "_as.readLine()",
+   "py": "_agentscript.read_line()",
+   "js": "_agentscript.readLine()",
    "rs": "rt::read_line()",
    "effect": true
   },
@@ -978,8 +978,8 @@
    "sec": "I/O",
    "type": "-> (Result String IoError)",
    "doc": "Read all of standard input.",
-   "py": "_as.read_all()",
-   "js": "_as.readAll()",
+   "py": "_agentscript.read_all()",
+   "js": "_agentscript.readAll()",
    "rs": "rt::read_all()",
    "effect": true
   },
@@ -988,8 +988,8 @@
    "sec": "I/O",
    "type": "String -> (Result Unit IoError)",
    "doc": "Write to standard output with no trailing newline.",
-   "py": "_as.print_out({0})",
-   "js": "_as.printOut({0})",
+   "py": "_agentscript.print_out({0})",
+   "js": "_agentscript.printOut({0})",
    "rs": "rt::print_out(&{0})",
    "effect": true
   },
@@ -998,8 +998,8 @@
    "sec": "I/O",
    "type": "String -> (Result Unit IoError)",
    "doc": "Write a line to standard output.",
-   "py": "_as.println({0})",
-   "js": "_as.println({0})",
+   "py": "_agentscript.println({0})",
+   "js": "_agentscript.println({0})",
    "rs": "rt::println(&{0})",
    "effect": true
   },
@@ -1008,8 +1008,8 @@
    "sec": "I/O",
    "type": "String -> (Result Unit IoError)",
    "doc": "Write a line to standard error.",
-   "py": "_as.eprintln({0})",
-   "js": "_as.eprintln({0})",
+   "py": "_agentscript.eprintln({0})",
+   "js": "_agentscript.eprintln({0})",
    "rs": "rt::eprintln(&{0})",
    "effect": true
   },
@@ -1018,8 +1018,8 @@
    "sec": "I/O",
    "type": "String -> (Result String IoError)",
    "doc": "Read a whole file as text.",
-   "py": "_as.file_read({0})",
-   "js": "_as.fileRead({0})",
+   "py": "_agentscript.file_read({0})",
+   "js": "_agentscript.fileRead({0})",
    "rs": "rt::file_read(&{0})",
    "effect": true
   },
@@ -1028,8 +1028,8 @@
    "sec": "I/O",
    "type": "String String -> (Result Unit IoError)",
    "doc": "Write text to a file, replacing it.",
-   "py": "_as.file_write({0}, {1})",
-   "js": "_as.fileWrite({0}, {1})",
+   "py": "_agentscript.file_write({0}, {1})",
+   "js": "_agentscript.fileWrite({0}, {1})",
    "rs": "rt::file_write(&{0}, &{1})",
    "effect": true
   },
@@ -1038,8 +1038,8 @@
    "sec": "I/O",
    "type": "String String -> (Result Unit IoError)",
    "doc": "Append text to a file, creating it if absent.",
-   "py": "_as.file_append({0}, {1})",
-   "js": "_as.fileAppend({0}, {1})",
+   "py": "_agentscript.file_append({0}, {1})",
+   "js": "_agentscript.fileAppend({0}, {1})",
    "rs": "rt::file_append(&{0}, &{1})",
    "effect": true
   },
@@ -1048,8 +1048,8 @@
    "sec": "I/O",
    "type": "String -> (Result Bool IoError)",
    "doc": "Whether a path exists.",
-   "py": "_as.file_exists({0})",
-   "js": "_as.fileExists({0})",
+   "py": "_agentscript.file_exists({0})",
+   "js": "_agentscript.fileExists({0})",
    "rs": "rt::file_exists(&{0})",
    "effect": true
   }

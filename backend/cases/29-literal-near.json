@@ -1,6 +1,6 @@
 {
   "id": "literal-near",
-  "src": "grammar/corpus/valid/29-literals.agents",
+  "src": "grammar/corpus/valid/29-literals.agentscript",
   "entry": "near",
   "cases": [
     [[-1], "minus-one|-1|-1,-2",

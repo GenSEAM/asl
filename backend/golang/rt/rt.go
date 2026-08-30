@@ -1,4 +1,4 @@
-// Package rt is the AgentS runtime for the Go backend.
+// Package rt is the AgentScript runtime for the Go backend.
 //
 // Go has neither sum types nor an ordered map, so both are built here. Map
 // iteration is sorted by key because the language specifies it: an unspecified

@@ -1,6 +1,6 @@
 {
   "id": "numeric-minmax",
-  "src": "grammar/corpus/valid/23-numeric.agents",
+  "src": "grammar/corpus/valid/23-numeric.agentscript",
   "entry": "minmax",
   "cases": [
     [["nan", "1.0"], "1.0|nan|none",

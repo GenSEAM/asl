@@ -31,7 +31,7 @@ from parse import kids, position, tok  # noqa: E402
 from vocab import (builtins, effectful, parse_signature, signatures,  # noqa: E402
                    special_forms, type_aliases, type_names, unions)
 
-RESERVED = "agents-"
+RESERVED = "agentscript-"
 
 # Arity of the built-in union tags, which are constructors and patterns both.
 TAGS = {"some": 1, "none": 0, "ok": 1, "err": 1, "list": 0, "cons": 2, "pair": 2}

@@ -102,7 +102,7 @@ This file groups d/c/r/l entries for the lang/checker module.
   (`map-empty`, `map-from-pairs`, `map-set`), not only against a written `(Map K V)` annotation, so
   a `Float64` key reached through inference — `(map-from-pairs (list (pair 1.5 "a")))` — is rejected
   where it previously checked clean and failed at `rustc` with `E0277`. The implementation review
-  demonstrated the gap live; `grammar/corpus/semantic/map-key-inferred.agents` and
+  demonstrated the gap live; `grammar/corpus/semantic/map-key-inferred.agentscript` and
   `checker/t/test_map_keys.py` pin it.
 - **Cluster**: lang/checker
 - **Description**: The checker rejects any declared type in which `Float64` occurs anywhere inside a

@@ -1,4 +1,4 @@
-# ROADMAP.md — AgentS project state and handoff
+# ROADMAP.md — AgentScript project state and handoff
 
 Written to be read cold. A session starting from zero should be able to resume from this file
 alone, plus `AGENTS.md` for commands and `.pcp/INDEX.md` for recorded intent.
@@ -11,7 +11,7 @@ passes that followed it.
 
 ## 1. What this project is
 
-AgentS is an S-expression language designed so that LLM agents can generate large, reusable units
+AgentScript is an S-expression language designed so that LLM agents can generate large, reusable units
 of working code in a single pass, transpiled to native Rust and Go (the priority targets), with
 TypeScript and Python secondary.
 
@@ -178,7 +178,7 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    implicit, so the concurrency question stays open instead of being foreclosed.
 3. **Python and JavaScript backends** — the measurement targets. Rust and Go remain the compiler's
    own self-hosting targets and are unchanged as a product goal.
-4. **Benchmark harness** — terminal-bench, comparing generated AgentS transpiled to Python/JS
+4. **Benchmark harness** — terminal-bench, comparing generated AgentScript transpiled to Python/JS
    against real Python/JS solutions to the same tasks.
 5. **Measurement** — see §5. Blocked.
 6. **Native backends** — Rust and Go, for self-hosting. Gated behind the checker *and* an
@@ -194,7 +194,7 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    `d-4b8c` answers for host bindings, asked again for a different boundary. Direct Wasm code
    generation, bypassing Rust, is a separate and much larger commitment: it owns memory layout and
    reclamation for recursive unions.
-7. **Self-hosting probe** — write the AgentS lexer in AgentS. Prediction on record: it needs
+7. **Self-hosting probe** — write the AgentScript lexer in AgentScript. Prediction on record: it needs
    closed unions, which v0.2 now has, so the probe is newly worth running.
 
 ---
@@ -277,8 +277,8 @@ The harness can be written and unit-tested without any of this. It cannot be run
   Forty instantiations across the ten `Map` builtins are narrowed away by `map-key-order` rather
   than repaired, which is what lets Tier A's floor be 100% rather than 100% minus a skip list;
   `.venv/bin/python backend/monomorphism.py` re-derives `candidates: 440 / narrowed: 40 / probes:
-  400`. Measured blast radius: `check_file` over all 82 `.agents` files in the tree reports
-  `map-key-order` on the six `grammar/corpus/semantic/map-*.agents` fixtures and nothing else.
+  400`. Measured blast radius: `check_file` over all 82 `.agentscript` files in the tree reports
+  `map-key-order` on the six `grammar/corpus/semantic/map-*.agentscript` fixtures and nothing else.
   `prelude/HANDBOOK.md:81` carries the headline — "A `Map` key must be orderable: `Float64` is not a
   legal key type" — so the narrowing reaches the artifact a model actually reads, but it does not
   yet say that a record or union reaching a `Float64`, or `IoError`, is refused for the same reason.
@@ -312,7 +312,7 @@ The harness can be written and unit-tested without any of this. It cannot be run
   each call site — the checker already computes it and records instantiations for
   `exec_coverage.py`, so the type is available; threading it into the emitter is a phase, not a
   cleanup. The differential gate cannot catch this today because it compares values and a Rust trap
-  is not a value; `grammar/corpus/valid/23-numeric.agents` asserts the Int64 traps by construction
+  is not a value; `grammar/corpus/valid/23-numeric.agentscript` asserts the Int64 traps by construction
   and has no Int32 leg. PCP `l-4d92`.
 * **`list-sort` over a user union, a `Result` or a record orders by different things on each
   backend, and over a record or a `Map` only one backend can order at all.** Python lowers a union
@@ -340,7 +340,7 @@ The harness can be written and unit-tested without any of this. It cannot be run
   :default -1))` with `(.-at (C))` passes `checker/check.py` with exit 0, emits `def C(at)` called
   as `C()` — `TypeError: C() missing 1 required positional argument: 'at'` — and emits `C {  }`,
   which `rustc` rejects with `error[E0063]: missing field at in initializer of C`. No fixture had
-  ever omitted a defaulted field: `grammar/corpus/valid/01-basics.agents` declares `:default 3` and
+  ever omitted a defaulted field: `grammar/corpus/valid/01-basics.agentscript` declares `:default 3` and
   always supplies the field, so both gates stayed green over a feature neither backend has. Closing
   it is a design item on the Rust side, where a struct literal cannot omit a field and the choice is
   between a generated constructor function and `Default` plus functional update. PCP `l-9e13`.

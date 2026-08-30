@@ -58,8 +58,8 @@ CONSUMER = """(module geo/report
 def build(tmp: Path):
     """Both modules on disk, the consumer transpiled with the tree as its root."""
     (tmp / "geo").mkdir()
-    (tmp / "geo" / "shapes.agents").write_text(SHAPES)
-    source = tmp / "geo" / "report.agents"
+    (tmp / "geo" / "shapes.agentscript").write_text(SHAPES)
+    source = tmp / "geo" / "report.agentscript"
     source.write_text(CONSUMER)
     (tmp / "runtime.py").write_text((ROOT / "backend" / "runtime.py").read_text())
     out = tmp / "cand.py"
@@ -99,7 +99,7 @@ def test_two_aliases_for_one_module_reach_one_definition():
 def test_the_corpus_module_fixture_calls_across_the_boundary():
     """`shout` is an imported *function* call — the exact form the backend gate's
     skip list was hiding, and the one an imported-union case does not cover."""
-    source = CORPUS / "valid" / "06-module.agents"
+    source = CORPUS / "valid" / "06-module.agentscript"
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
         (tmp / "runtime.py").write_text((ROOT / "backend" / "runtime.py").read_text())

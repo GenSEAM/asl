@@ -58,7 +58,7 @@ UNION = """\
 
 
 def _rust(tmp_path, text: str, entry: str, args: list):
-    path = tmp_path / "probe.agents"
+    path = tmp_path / "probe.agentscript"
     path.write_text(text)
     return d.run_rust(path, {"id": entry, "entry": entry, "cases": [[args, None]]})[0]
 
@@ -95,7 +95,7 @@ def test_an_ioerror_bearing_record_still_derives_no_order(tmp_path):
     src = ('(defschema Failure (:field cause IoError "Why it failed."))\n'
            '(defun ordered [(n Int64)] -> Int64 :doc "Unused." n)\n')
     from to_rust import ToRust
-    path = tmp_path / "probe.agents"
+    path = tmp_path / "probe.agentscript"
     path.write_text(src)
     out = ToRust().transpile(src, path=path)
     assert "#[derive(Debug, Clone, PartialEq)]\npub struct Failure" in out

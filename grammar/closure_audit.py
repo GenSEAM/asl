@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT.parent / "backend"))
 
 import exec_coverage  # noqa: E402
 from vocab import builtins as defined_builtins, special_forms  # noqa: E402
-TS_DIR = ROOT / "tree-sitter-agents"
+TS_DIR = ROOT / "tree-sitter-agentscript"
 TS_BIN = ROOT.parent / "node_modules" / ".bin" / "tree-sitter"
 SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 
@@ -73,14 +73,14 @@ def run_query(paths: list[Path]) -> tuple[set[str], set[str], set[str]]:
 
 
 def main() -> int:
-    sources = sorted((ROOT / "corpus" / "valid").glob("*.agents"))
+    sources = sorted((ROOT / "corpus" / "valid").glob("*.agentscript"))
 
     # Spec examples become real files so the real parser sees them.
     tmp = Path(tempfile.mkdtemp())
     for i, block in enumerate(re.findall(r"```lisp\n(.*?)```", SPEC.read_text(), re.S)):
         if "(defun" not in block and "(defschema" not in block:
             continue  # fragment, not a compilable unit
-        p = tmp / f"spec_{i:02d}.agents"
+        p = tmp / f"spec_{i:02d}.agentscript"
         p.write_text(block)
         sources.append(p)
 

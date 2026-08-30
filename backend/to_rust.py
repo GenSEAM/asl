@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AgentS-Core -> Rust.
+"""AgentScript -> Rust.
 
 Lowering rules come from prelude/prelude.json, as for every backend. This file
 owns only the special forms and the type mapping.

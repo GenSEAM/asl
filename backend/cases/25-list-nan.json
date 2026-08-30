@@ -1,6 +1,6 @@
 {
   "id": "list-aggregation-nan",
-  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "src": "grammar/corpus/valid/25-list-aggregation.agentscript",
   "entry": "agg",
   "cases": [
     [["3,nan,0.5,1,2"], "F|5|nan|0.5|nan|[0.5,1.0,2.0,3.0,nan]",

@@ -219,7 +219,7 @@ def admissible_set() -> tuple[list[dict], list[dict]]:
     probes = candidates()
     src = probe_source(probes)
     with tempfile.TemporaryDirectory(dir="/tmp") as d:
-        path = Path(d) / "probes.agents"
+        path = Path(d) / "probes.agentscript"
         path.write_text(src)
         diags = check_file(path, [])
     by_line = probe_index_by_line(src)

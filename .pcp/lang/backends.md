@@ -161,7 +161,7 @@ This file groups d/c/r/l entries for the lang/backends module.
 - **Description**: `rt::min(a, b)` returns `a` unless `b < a`, and `rt::max` returns `a` unless
   `b > a`. So a NaN in the first operand propagates and a NaN in the second does not, and a tie
   returns the first argument — measured identical to Python's `min`/`max` in both operand positions,
-  and pinned by `23-numeric.agents`'s `minmax` entry. `list-min`/`list-max` use the same reduce
+  and pinned by `23-numeric.agentscript`'s `minmax` entry. `list-min`/`list-max` use the same reduce
   rather than `iter().min()`, whose tie and NaN behaviour differ. `prelude.json`'s `js` templates
   are `Math.min`/`Math.max`, which propagate NaN from either position and are therefore wrong under
   this rule; they are **not** changed, because there is no JS runtime and no gate could check the
@@ -237,7 +237,7 @@ This file groups d/c/r/l entries for the lang/backends module.
   (2) `string-from-float64` at NaN and in exponent notation: Rust's `{:?}` gives `NaN`, `1e16` and
   `1e-5` where Python's `repr` gives `nan`, `1e+16` and `1e-05`. (3) `list-sum` of an empty
   `(List Float64)`: Python's `sum([])` is the integer `0`, so the declared `Float64` rendered as
-  `"0"`. (4) `zip`'s Python template named `_as.zip`, which does not exist — the runtime calls it
+  `"0"`. (4) `zip`'s Python template named `_agentscript.zip`, which does not exist — the runtime calls it
   `zip_` to avoid shadowing the builtin, so every Python program calling `zip` raised `NameError`.
 - **Why Non-Obvious**: each is in a builtin the coverage figure was happy to call covered, and three
   of the four are in the *rendering* of a value rather than in its computation, which is the part a

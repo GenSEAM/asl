@@ -1,8 +1,8 @@
-"""Minimal AgentS runtime for the Python backend.
+"""Minimal AgentScript runtime for the Python backend.
 
 Option and Result are tagged tuples rather than classes: they print readably in
 test failures, compare structurally for free, and cost no import. The tag is the
-same string the language uses, so a failing test shows AgentS vocabulary rather
+same string the language uses, so a failing test shows AgentScript vocabulary rather
 than backend internals.
 """
 

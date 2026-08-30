@@ -18,7 +18,7 @@ CORPUS = ROOT / "grammar" / "corpus" / "semantic"
 
 
 def codes(tmp_path, src: str) -> list[str]:
-    f = tmp_path / "case.agents"
+    f = tmp_path / "case.agentscript"
     f.write_text(src)
     return [d.code for d in check_file(f, [])]
 
@@ -116,5 +116,5 @@ def test_float_elsewhere_in_the_map_is_admissible(tmp_path):
 
 
 def test_every_map_key_fixture_reports_exactly_one_diagnostic():
-    for path in sorted(CORPUS.glob("map-*.agents")):
+    for path in sorted(CORPUS.glob("map-*.agentscript")):
         assert [d.code for d in check_file(path, [])] == ["map-key-order"], path.name

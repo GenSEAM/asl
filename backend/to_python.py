@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AgentS-Core -> Python transpiler.
+"""AgentScript -> Python transpiler.
 
 Lowering rules for builtins are NOT written here: they come from
 prelude/prelude.json, the single source of truth. This file owns only the
@@ -101,7 +101,7 @@ class Transpiler:
         neither keeps working and resolves no imports, which is what the
         measurement harness needs: it transpiles generated text that has no file."""
         tree = self.parser.parse(src)
-        out = ["import runtime as _as", ""]
+        out = ["import runtime as _agentscript", ""]
         for mod_path, unit, prefix in self.link(tree, path, roots):
             self.enter(unit, prefix)
             out += self.unit(unit)
@@ -180,7 +180,7 @@ class Transpiler:
             body = [k for k in self.kids(node) if not (isinstance(k, Tree) and k.data == "type_params")]
             if str(body[0]) == "main":
                 return ["", 'if __name__ == "__main__":', "    import sys as _sys",
-                        "    _sys.exit(_as.main_exit(main(_sys.argv[1:])))"]
+                        "    _sys.exit(_agentscript.main_exit(main(_sys.argv[1:])))"]
         return []
 
     # ---------- declarations ----------
@@ -332,7 +332,7 @@ class Transpiler:
             self.pop()
             if not sub:
                 return f"(lambda {', '.join(params)}: {v})"
-            # Python lambdas are expression-only, but an AgentS lambda body may
+            # Python lambdas are expression-only, but an AgentScript lambda body may
             # need statements (a match compiles to if/elif). Emit a nested def
             # and pass its name; semantically identical, and closures behave the
             # same way.

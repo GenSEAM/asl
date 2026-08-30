@@ -1,7 +1,7 @@
 ; A sign belongs to the digits it precedes. `-1` used to be read as the
 ; subtraction operator applied to `1` — a legal parse of the same characters,
 ; and the one the Earley resolver chose — so `(+ x -1)` lowered to
-; `_as.add(x, _)` and `rt::add(x.clone(), _.clone())`: the wildcard token,
+; `_agentscript.add(x, _)` and `rt::add(x.clone(), _.clone())`: the wildcard token,
 ; leaking out of pattern position, on both backends at once. No fixture had ever
 ; written a negative number, so every gate was green over it.
 ;

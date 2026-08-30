@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measurement harness: model -> AgentS -> Python -> tests -> score.
+"""Measurement harness: model -> AgentScript -> Python -> tests -> score.
 
 The spend cap is enforced here rather than intended: the run aborts when the cap
 is reached, instead of reporting an overrun afterwards (EXPERIMENT.md 2026-08-20-c).
@@ -65,7 +65,7 @@ class Budget:
 
 def system_prompt() -> str:
     return (
-        "You write AgentS-Core, a small typed Lisp. The complete language reference follows. "
+        "You write AgentScript, a small typed Lisp. The complete language reference follows. "
         "Use ONLY names defined in it — nothing else exists.\n\n"
         f"{HANDBOOK}\n\n"
         "Reply with ONE ```lisp fenced block containing a complete module and nothing else. "
@@ -121,7 +121,7 @@ def evaluate(code: str, task: dict, s: Sample) -> Sample:
 
     s.stage_reached = "check"
     with tempfile.TemporaryDirectory() as d:
-        src = Path(d) / "candidate.agents"
+        src = Path(d) / "candidate.agentscript"
         src.write_text(code)
         diags = check_file(src, [])
     if diags:
@@ -164,7 +164,7 @@ def evaluate(code: str, task: dict, s: Sample) -> Sample:
     return s
 
 
-CANNED = (ROOT / "bench" / "algo" / "variants" / "tight.agents")
+CANNED = (ROOT / "bench" / "algo" / "variants" / "tight.agentscript")
 
 
 def main() -> int:

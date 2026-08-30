@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Semantic checker CLI: agents source in, diagnostics out.
+"""Semantic checker CLI: AgentScript source in, diagnostics out.
 
 Exit code is the diagnostic count, matching the other gates so CI can gate on it.
 """

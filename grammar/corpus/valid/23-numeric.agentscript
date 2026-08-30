@@ -9,7 +9,7 @@
 ; a width at all. The trapping entries are asserted here because a trap is not a
 ; value and the differential harness compares values.
 ;
-; run: num(7, 2) == "9|3|1|14|5|7|-7|2|7|some 3|some 1" and wrap_mod() == 0 and all(__import__('unittest').TestCase().assertRaises(_as.Trap, f) is None for f in [trap_div, trap_neg, trap_abs, trap_add, trap_sub, trap_mul, trap_sum])
+; run: num(7, 2) == "9|3|1|14|5|7|-7|2|7|some 3|some 1" and wrap_mod() == 0 and all(__import__('unittest').TestCase().assertRaises(_agentscript.Trap, f) is None for f in [trap_div, trap_neg, trap_abs, trap_add, trap_sub, trap_mul, trap_sum])
 
 (module math/report
   :doc "Report the numeric vocabulary over one pair of values."
@@ -88,7 +88,7 @@
 
 (defun int64-min [] -> Int64
   :doc "Int64's least value, reached by arithmetic rather than written down.
-        The decimal spelling compiles too — 29-literals.agents writes it — so
+        The decimal spelling compiles too — 29-literals.agentscript writes it — so
         this form is here for what it exercises: neg and - one step from the
         boundary, which is the last place either can answer without trapping."
   (- (neg 9223372036854775807) 1))

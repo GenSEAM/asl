@@ -1,6 +1,6 @@
 {
   "id": "list-window",
-  "src": "grammar/corpus/valid/24-list-reshaping.agents",
+  "src": "grammar/corpus/valid/24-list-reshaping.agentscript",
   "entry": "window",
   "cases": [
     [[4, 1, 3], ["some", [1, 2]],

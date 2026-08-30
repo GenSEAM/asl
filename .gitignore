@@ -2,7 +2,7 @@
 results/*.json
 node_modules/
 target/
-grammar/tree-sitter-agents/src/
+grammar/tree-sitter-agentscript/src/
 package-lock.json
 .pcp/MAP.json
 .pcp/INVENTORY.md

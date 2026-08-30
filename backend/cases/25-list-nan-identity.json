@@ -1,6 +1,6 @@
 {
   "id": "list-nan-identity",
-  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "src": "grammar/corpus/valid/25-list-aggregation.agentscript",
   "entry": "nan-identity",
   "cases": [
     [["nan,1"], "F|none|F|F",

@@ -1,10 +1,10 @@
 /**
- * AgentS-Core v0.2 — tree-sitter grammar.
+ * AgentScript v0.2 — tree-sitter grammar.
  * Normative source: AGENT_SPEC_CORE.md
  *
  * This is the tooling grammar (axis 2): it yields a typed AST, error recovery,
  * editor highlighting, and structural search via tree-sitter queries, which
- * ast-grep also consumes. The Lark grammar in ../agents.lark covers the
+ * ast-grep also consumes. The Lark grammar in ../agentscript.lark covers the
  * constrained-decoding path; grammar/validate.py checks both accept and reject
  * the same corpus.
  *
@@ -17,7 +17,7 @@
  */
 
 module.exports = grammar({
-  name: 'agents',
+  name: 'agentscript',
 
   word: $ => $.ident,
 

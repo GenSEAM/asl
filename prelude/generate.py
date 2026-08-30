@@ -54,7 +54,7 @@ def handbook() -> str:
     p = PRELUDE
     sf = p["special_forms"]
     lines = [
-        "# AgentS-Core — agent handbook",
+        "# AgentScript — agent handbook",
         "",
         "**Generated from `prelude/prelude.json`. Do not edit.**",
         "",

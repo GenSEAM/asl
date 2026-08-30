@@ -1,6 +1,6 @@
 {
   "id": "option-result-combinators",
-  "src": "grammar/corpus/valid/21-option-result-combinators.agents",
+  "src": "grammar/corpus/valid/21-option-result-combinators.agentscript",
   "entry": "resolve",
   "cases": [
     [["21", 0], "ok:43|43|43",

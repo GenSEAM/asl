@@ -1,4 +1,4 @@
-# AGENT_SPEC_CORE.md — AgentS-Core v0.2
+# AGENT_SPEC_CORE.md — AgentScript v0.2
 
 **Status:** normative for the concept-validation experiment (`EXPERIMENT.md`).
 Supersedes [`AGENT_SPEC.md`](AGENT_SPEC.md) (frozen as v0) for everything it covers.
@@ -102,7 +102,7 @@ Identifiers are case-sensitive. Whitespace and comments are insignificant except
 `/` is both the division operator and the qualified-name separator. They never collide: division
 is a standalone token surrounded by separators, while a qualified name has no internal whitespace.
 Clojure resolves it the same way, and for the same reason.
-`agents-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
+`agentscript-` is a **reserved identifier prefix** for compiler-internal names; user code using it is
 rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8). The prefix is deliberately spelled in
 a form the identifier rule above can actually produce — a reserved word the lexer cannot emit
 reserves nothing, and its conformance fixture would pass for an unrelated reason.
@@ -704,7 +704,7 @@ returned expression, in every branch.
 Deterministic, because output that is not byte-reproducible cannot be differentially tested
 (resolves A1).
 
-| AgentS | TypeScript | Python | Go (top-level) | Go (local) | Rust |
+| AgentScript | TypeScript | Python | Go (top-level) | Go (local) | Rust |
 |---|---|---|---|---|---|
 | `parse-html-url` | `parseHtmlUrl` | `parse_html_url` | `ParseHtmlUrl` | `parseHtmlUrl` | `parse_html_url` |
 | `Point` | `Point` | `Point` | `Point` | `Point` | `Point` |
@@ -722,7 +722,7 @@ The path itself mangles segment by segment and the segments are joined by the ta
 namespace separator, shown above for the two targets that have a backend; `—` marks a target
 whose separator is fixed when that backend lands.
 
-If a mangled name collides with a target keyword, append `_`. **If two distinct AgentS identifiers
+If a mangled name collides with a target keyword, append `_`. **If two distinct AgentScript identifiers
 mangle to the same target identifier, the compiler errors** — it does not silently rename. v0 had
 no collision policy at all. The same applies to module paths: `core/shapes` and a module named
 `core-shapes` mangle alike under either scheme above, and the collision is an error rather than
@@ -741,7 +741,7 @@ A Core program is well-formed iff:
 4. Every `if` and `cond` is total; every `match` is exhaustive.
 5. Every `try` sits in a `defun` returning a compatible `(Result _ E)`.
 6. No numeric operation mixes types; all conversions are explicit.
-7. No identifier begins with `agents-`.
+7. No identifier begins with `agentscript-`.
 8. The module header carries a `:doc`, and every exported `defun` carries a `:doc`.
 9. Every qualified name `alias/member` uses an alias bound in `:import`, and the member — a
    function, a type name, or a case of an exported union — is exported by that module.

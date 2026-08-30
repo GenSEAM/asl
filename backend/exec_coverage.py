@@ -55,7 +55,7 @@ VALID = ROOT / "grammar" / "corpus" / "valid"
 # Overridable so a test can point the gate at a forged lock without editing the
 # checked-in one; the recorder is a one-way monkeypatch, so every consumer that
 # traces has to be its own process anyway.
-LOCK = Path(os.environ.get("AGENTS_COVERAGE_LOCK", ROOT / "prelude" / "coverage.lock"))
+LOCK = Path(os.environ.get("AGENTSCRIPT_COVERAGE_LOCK", ROOT / "prelude" / "coverage.lock"))
 
 # A parked `unexecuted` fixture must cite the PCP decision that parked it (the
 # `c-15f3` in `PCP c-15f3`), so an absence cannot be parked behind a bare
@@ -81,7 +81,7 @@ def is_user_defined_type(shown: str) -> bool:
 RECORDER = '''\
 import os
 
-_PATH = os.environ["AGENTS_EXEC_COVERAGE"]
+_PATH = os.environ["AGENTSCRIPT_EXEC_COVERAGE"]
 _seen = set()
 
 
@@ -100,7 +100,7 @@ def hit(name):
 
 def site(line, col, name):
     _write("site\\t%s\\t%d\\t%d\\t%s"
-           % (os.environ["AGENTS_EXEC_SOURCE"], line, col, name))
+           % (os.environ["AGENTSCRIPT_EXEC_SOURCE"], line, col, name))
     return None
 '''
 
@@ -212,7 +212,7 @@ def programs() -> list[tuple[str, Path, object]]:
     condition 4 names it rather than letting the absence be silent.
     """
     out: list[tuple[str, Path, object]] = []
-    for path in sorted(VALID.glob("*.agents")):
+    for path in sorted(VALID.glob("*.agentscript")):
         expr = check_corpus.declared_run(path)
         if expr is not None:
             out.append((f"run:{path.name}", path, expr))
@@ -237,11 +237,11 @@ def trace() -> tuple[set[str], set[Path], dict[tuple[str, int, int], str]]:
         record.write_text("")
         (Path(d) / "_rec.py").write_text(RECORDER)
         path_before = os.environ.get("PYTHONPATH")
-        with _environment(AGENTS_EXEC_COVERAGE=str(record), AGENTS_EXEC_SOURCE="",
+        with _environment(AGENTSCRIPT_EXEC_COVERAGE=str(record), AGENTSCRIPT_EXEC_SOURCE="",
                           PYTHONPATH=os.pathsep.join(
                               [d] + ([path_before] if path_before else []))):
             for label, src, payload in programs():
-                os.environ["AGENTS_EXEC_SOURCE"] = str(src)
+                os.environ["AGENTSCRIPT_EXEC_SOURCE"] = str(src)
                 if isinstance(payload, str):
                     ok, why = check_corpus.execute(_transpile(src), payload)
                     if not ok:
@@ -380,7 +380,7 @@ def check() -> tuple[list[str], dict]:
                         "lock is stale, so record the new count deliberately")
 
     parked = lock.get("unexecuted", {})
-    for path in sorted(VALID.glob("*.agents")):
+    for path in sorted(VALID.glob("*.agentscript")):
         if str(path.relative_to(ROOT)) in s["covered"]:
             continue
         reason = parked.get(path.name)

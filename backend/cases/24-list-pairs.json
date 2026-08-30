@@ -1,6 +1,6 @@
 {
   "id": "list-pairs",
-  "src": "grammar/corpus/valid/24-list-reshaping.agents",
+  "src": "grammar/corpus/valid/24-list-reshaping.agentscript",
   "entry": "pairs",
   "cases": [
     [[2], [["pair", 0, "a"], ["pair", 1, "b"]],

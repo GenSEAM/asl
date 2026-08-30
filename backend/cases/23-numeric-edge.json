@@ -1,6 +1,6 @@
 {
   "id": "numeric-int64-edge",
-  "src": "grammar/corpus/valid/23-numeric.agents",
+  "src": "grammar/corpus/valid/23-numeric.agentscript",
   "entry": "edge",
   "cases": [
     [[-1], "none|some 0",

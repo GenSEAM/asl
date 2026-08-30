@@ -18,7 +18,7 @@ from vocab import effectful, unions  # noqa: E402
 
 
 def check(tmp_path, src: str) -> list[str]:
-    f = tmp_path / "case.agents"
+    f = tmp_path / "case.agentscript"
     f.write_text(src)
     return [d.code for d in check_file(f, [])]
 

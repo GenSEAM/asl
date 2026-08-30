@@ -1,6 +1,6 @@
 {
   "id": "boolean-algebra",
-  "src": "grammar/corpus/valid/22-boolean-algebra.agents",
+  "src": "grammar/corpus/valid/22-boolean-algebra.agentscript",
   "entry": "band",
   "cases": [
     [[3, 3, 7], "TTFTFFTF",

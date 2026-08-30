@@ -1,6 +1,6 @@
 {
   "id": "literal-signs",
-  "src": "grammar/corpus/valid/29-literals.agents",
+  "src": "grammar/corpus/valid/29-literals.agentscript",
   "entry": "signs",
   "cases": [
     [[4], "3|5|-8|5|-9223372036854775808|4|9223372036854775807|-9223372036854775808|2147483647|-2147483648",

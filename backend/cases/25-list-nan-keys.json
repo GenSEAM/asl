@@ -1,6 +1,6 @@
 {
   "id": "list-sort-by-nan-keys",
-  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "src": "grammar/corpus/valid/25-list-aggregation.agentscript",
   "entry": "rank",
   "cases": [
     [["3,-nan,1,nan,2"], "1|2|3|-nan|nan",

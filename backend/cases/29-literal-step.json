@@ -1,6 +1,6 @@
 {
   "id": "literal-step",
-  "src": "grammar/corpus/valid/29-literals.agents",
+  "src": "grammar/corpus/valid/29-literals.agentscript",
   "entry": "step",
   "cases": [
     [[0], -1, "a negative literal at Int32, where the narrow width and not the sign is what the lowering has to carry"],

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One module resolver for every tool that follows an AgentS import.
+"""One module resolver for every tool that follows an AgentScript import.
 
 The checker and both backends need the same two answers — which file a module
 path names, and in what order a program's imports have to be processed — and
@@ -16,7 +16,7 @@ from parse import parse_file, tok
 def find(mod_path: str, roots) -> Path | None:
     """The file a module path names, over an ordered list of source roots."""
     for root in roots:
-        candidate = Path(root) / (mod_path + ".agents")
+        candidate = Path(root) / (mod_path + ".agentscript")
         if candidate.exists():
             return candidate
     return None

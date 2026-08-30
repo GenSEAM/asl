@@ -24,8 +24,8 @@ ROOT = Path(__file__).parent.parent
 # Every source any gate counts is compile-gated: the differential harness and
 # the coverage tracer both execute the bench sources, and a source that runs
 # without compiling here is one whose backend coverage nothing checks.
-CORPUS = (sorted((ROOT / "grammar" / "corpus" / "valid").glob("*.agents"))
-          + sorted((ROOT / "bench").rglob("*.agents")))
+CORPUS = (sorted((ROOT / "grammar" / "corpus" / "valid").glob("*.agentscript"))
+          + sorted((ROOT / "bench").rglob("*.agentscript")))
 MODULES = ROOT / "grammar" / "corpus" / "modules"
 
 

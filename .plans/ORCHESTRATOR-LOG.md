@@ -28,11 +28,13 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 |---|---|---|---|---|---|---|
 | 1 — module-boundary types | v2 reconciled | 2 lenses, 4 blockers, all folded | done | 2 lenses + /code-review, 2 fix passes | 7/7 green, 79 tests | `a635ab4` |
 | 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `b6b43ff` |
-| 3 — Wasm target v1 | feasibility done | — | — | — | — | — |
-| 4 — JS/TS backend | — | — | — | — | — | — |
-| 5 — Go backend | — | — | — | — | — | — |
-| 6 — reference interpreter | — | — | — | — | — | — |
-| 7 — harness whole-program mode | — | — | — | — | — | — |
+| 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | — |
+| 4 — WebAssembly target v1 | feasibility done (`.plans/phase-4/FEASIBILITY.md`) | — | — | — | — | — |
+| 5 — reference interpreter | — | — | — | — | — | — |
+| 6 — agent-facing tooling | — | — | — | — | — | — |
+| 7 — TypeScript backend | — | — | — | — | — | — |
+| 8 — Go backend | — | — | — | — | — | — |
+| 9 — harness whole-program mode | — | — | — | — | — | — |
 
 ## 2026-08-29 — orchestrator-verified defect, independent of any agent report
 
@@ -219,3 +221,27 @@ updates to `d-2c8f`, `d-7c21` and `d-a70b`; `c-3ef8` marked superseded. The
 `d-7a15`/`d-2ba6`/`d-6c04`/`c-3d71`/`c-e820`/`l-4d92`/`l-9e13`/`l-5c47` entries minted in
 `DRAFT_LOG.md` during the pre-crash "cleanup" wave remain un-folded into their per-area files; they
 are recorded in the draft log and the code already reflects them.
+
+## Phase 3 closed — rename AgentS → AgentScript
+
+Mechanical rename executed directly on `main` (owner directive, no working branch): 88 fixtures
+`.agents` → `.agentscript`; grammars/tree-sitter `tree-sitter-agents` → `tree-sitter-agentscript`
+(name `agents` → `agentscript`, scope `source.agentscript`, file-types `agentscript`); reserved
+prefix `agents-` → `agentscript-`; runtime alias `_as` → `_agentscript`; tracer env vars
+`AGENTS_EXEC_COVERAGE`/`AGENTS_EXEC_SOURCE`/`AGENTS_COVERAGE_LOCK` → `AGENTSCRIPT_*`; Go module
+`agents` → `agentscript`; npm root name `asex` → `agentscript`.
+
+Verified by the orchestrator directly, not from any subagent report: all seven gates green,
+**161 tests**, coverage **107/107**, differential **120 function + 15 program cases**, 0
+disagreements. Acceptance scans clean under word-bounded patterns (`\bAgentS\b`,
+`tree-sitter-agents\b`). Canaries held: `prelude/coverage.lock` byte-identical, `backend/cases/*.json`
+changed only in `"src"`, differential expected stdout/stderr/exit unchanged. Frozen exceptions
+intact: `AGENT_SPEC.md`/`SPEC_REVIEW.md` untouched, `.plans/**` history preserved, repo dir `asex`
+and `ASEX_GATEWAY_KEY` (in `bench/harness/config.example.json`) unchanged.
+
+Both plan-review subagents returned empty reports, so the orchestrator performed the review slices
+inline (baseline counts 98/79/88/161 reproduced verbatim). The plan's acceptance greps for `AgentS`
+and `tree-sitter-agents` false-positive on the new names without word boundaries; the corrected
+scans are recorded in `d-9c1f`. `.plans/phase-3/FEASIBILITY.md` (a Wasm probe) was relocated to
+`.plans/phase-4/FEASIBILITY.md`, the phase it describes; the plan's `node pcp/scripts/pcp.js`
+actualize command is a phantom (no `pcp.js` exists; PCP is markdown + `INDEX.md` counts).

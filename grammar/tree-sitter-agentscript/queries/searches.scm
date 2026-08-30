@@ -1,5 +1,5 @@
 ; Structural search examples (axis 2). Run with:
-;   tree-sitter query queries/searches.scm <file.agents>
+;   tree-sitter query queries/searches.scm <file.agentscript>
 ;
 ; These are the queries a compiler, linter, or refactoring tool would use, and
 ; they are why the tooling grammar carries field names: without them a query can

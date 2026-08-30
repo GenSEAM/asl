@@ -1,6 +1,6 @@
 {
   "id": "string-cut",
-  "src": "grammar/corpus/valid/27-string-query.agents",
+  "src": "grammar/corpus/valid/27-string-query.agentscript",
   "entry": "cut",
   "cases": [
     [["banana", 1, 3], ["some", "an"], "half-open [a, b): an inclusive slice gives \"ana\""],

@@ -1,4 +1,4 @@
-//! AgentS runtime for the Rust backend.
+//! AgentScript runtime for the Rust backend.
 //!
 //! Map lowers to BTreeMap, not HashMap: the language specifies sorted iteration
 //! for map-keys/values/pairs, and an unspecified order would make the backends

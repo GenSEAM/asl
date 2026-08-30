@@ -6,7 +6,7 @@ Return each most-frequent letter of a space-separated string, with its count. Ti
 
 ---
 
-## 1. AgentS source — hand-written
+## 1. AgentScript source — hand-written
 
 ```lisp
 (defun tally [(m (Map String Int64)) (w String)] -> (Map String Int64)
@@ -32,23 +32,23 @@ Return each most-frequent letter of a space-separated string, with its count. Ti
 
 ```python
 def tally(m, w):
-    _t1 = _as.m_get(m, w)
+    _t1 = _agentscript.m_get(m, w)
     if _t1[0] == "some":
         n = _t1[1]
-        _t2 = _as.m_set(m, w, (n + 1))
+        _t2 = _agentscript.m_set(m, w, (n + 1))
     elif _t1[0] == "none":
-        _t2 = _as.m_set(m, w, 1)
+        _t2 = _agentscript.m_set(m, w, 1)
     return _t2
 
 def histogram(text):
     words = [_x for _x in text.strip().split(" ") if (lambda w: (not (len(w) == 0)))(_x)]
-    counts = _as.fold(tally, {}, words)
-    _t3 = _as.greatest([counts[_k] for _k in sorted(counts)])
+    counts = _agentscript.fold(tally, {}, words)
+    _t3 = _agentscript.greatest([counts[_k] for _k in sorted(counts)])
     if _t3[0] == "none":
         _t4 = {}
     elif _t3[0] == "some":
         top = _t3[1]
-        _t4 = _as.m_from([_x for _x in _as.m_pairs(counts) if (lambda p: _as.eq(p[2], top))(_x)])
+        _t4 = _agentscript.m_from([_x for _x in _agentscript.m_pairs(counts) if (lambda p: _agentscript.eq(p[2], top))(_x)])
     return _t4
 ```
 
@@ -72,11 +72,11 @@ def histogram(text):
 
 | Artifact | Bytes | ~Tokens | Code lines |
 |---|---:|---:|---:|
-| AgentS source | 894 | 223 | 19 |
+| AgentScript source | 894 | 223 | 19 |
 | Generated Python | 643 | 160 | 19 |
 | Idiomatic Python | 341 | 85 | 9 |
 
-**AgentS costs 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.**
+**AgentScript costs 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.**
 
 That number matters more than it looks. The project's stated goal is more work per agent pass, and
 tokens spent on syntax are tokens not spent on problem-solving. On this evidence the language is
@@ -114,8 +114,8 @@ mystery.
 
 ## What this run establishes, and what it does not
 
-**Establishes:** the pipeline is real end to end — an algorithm can be written in AgentS, lowered
+**Establishes:** the pipeline is real end to end — an algorithm can be written in AgentScript, lowered
 to Python, and pass the original benchmark's assertions unmodified.
 
-**Does not establish:** anything about whether an *agent* can write AgentS. This file was written
+**Does not establish:** anything about whether an *agent* can write AgentScript. This file was written
 by hand. The premise under test in `EXPERIMENT.md` is untouched by it.

@@ -47,7 +47,7 @@ QUIET_PROGRAM = """\
 
 @pytest.fixture
 def source(tmp_path):
-    def write(text: str, name: str = "probe.agents") -> Path:
+    def write(text: str, name: str = "probe.agentscript") -> Path:
         path = tmp_path / name
         path.write_text(text)
         return path
@@ -58,7 +58,7 @@ def source(tmp_path):
 
 
 def _diag(line: int) -> Diagnostic:
-    return Diagnostic("internal", "the checker raised", line, 0, "probes.agents")
+    return Diagnostic("internal", "the checker raised", line, 0, "probes.agentscript")
 
 
 @pytest.mark.parametrize("line", [0, 10 ** 6])
@@ -169,7 +169,7 @@ def test_results_and_cases_must_correspond_in_length(source, monkeypatch, result
 
 
 def test_a_program_case_must_declare_its_stderr():
-    src = ROOT / "grammar" / "corpus" / "valid" / "08-io.agents"
+    src = ROOT / "grammar" / "corpus" / "valid" / "08-io.agentscript"
     with pytest.raises(RuntimeError, match="declares no stderr"):
         d.programs(src, [{"argv": [], "stdout": "", "exit": 0}])
 
@@ -178,7 +178,7 @@ def test_the_failing_write_is_told_apart_from_a_crash():
     """`file-write`'s only executed site fails, and stdout "" with exit 1 is
     also what a crash looks like. The IoError case name on stderr is the whole
     difference, so declaring the wrong one has to fail."""
-    src = ROOT / "grammar" / "corpus" / "valid" / "08-io.agents"
+    src = ROOT / "grammar" / "corpus" / "valid" / "08-io.agentscript"
     case = {"argv": ["sample.txt", "nodir/out.txt"],
             "files": {"sample.txt": ("hello from a file\n", 0o644)},
             "stdout": "", "exit": 1}
@@ -203,11 +203,11 @@ import to_python
 
 before = {"lower": dict(to_python.LOWER),
           "pythonpath": os.environ.get("PYTHONPATH"),
-          "coverage": os.environ.get("AGENTS_EXEC_COVERAGE")}
+          "coverage": os.environ.get("AGENTSCRIPT_EXEC_COVERAGE")}
 ec.check()
 after = {"lower": dict(to_python.LOWER),
          "pythonpath": os.environ.get("PYTHONPATH"),
-         "coverage": os.environ.get("AGENTS_EXEC_COVERAGE")}
+         "coverage": os.environ.get("AGENTSCRIPT_EXEC_COVERAGE")}
 emitted = to_python.Transpiler().transpile(%r)
 print(json.dumps({"same_lower": before["lower"] == after["lower"],
                   "same_path": before["pythonpath"] == after["pythonpath"],
@@ -253,7 +253,7 @@ def test_the_recorder_refuses_to_nest():
 def test_a_traced_program_that_does_not_do_what_the_case_says_is_a_failure():
     """Coverage recorded from a run that crashed halfway is coverage of nothing;
     the runner's exit status was discarded entirely."""
-    src = ROOT / "grammar" / "corpus" / "valid" / "13-module-program.agents"
+    src = ROOT / "grammar" / "corpus" / "valid" / "13-module-program.agentscript"
     with pytest.raises(RuntimeError, match="traced run gave"):
         ec._run_program(src, {"argv": [], "stdout": "not what it prints", "exit": 0})
 
@@ -271,7 +271,7 @@ def test_an_executed_site_the_checker_has_no_record_for_is_not_dropped(monkeypat
     record indistinguishable from a site that ran at no interesting type, and
     the instantiation figures are the sole enforcement of the N-at-both-widths
     rule."""
-    src = ROOT / "grammar" / "corpus" / "valid" / "01-basics.agents"
+    src = ROOT / "grammar" / "corpus" / "valid" / "01-basics.agentscript"
     monkeypatch.setattr(ec, "trace",
                         lambda: (set(), {src}, {(str(src), 10 ** 6, 1): "list-sum"}))
     with pytest.raises(RuntimeError, match="no instantiation for"):
@@ -281,7 +281,7 @@ def test_an_executed_site_the_checker_has_no_record_for_is_not_dropped(monkeypat
 def test_a_variadic_site_without_a_record_is_admitted(monkeypatch):
     """`(list)` has no fixed argument positions to instantiate, so the three
     executed sites the checker reports nothing for are all legitimate."""
-    src = ROOT / "grammar" / "corpus" / "valid" / "01-basics.agents"
+    src = ROOT / "grammar" / "corpus" / "valid" / "01-basics.agentscript"
     monkeypatch.setattr(ec, "trace",
                         lambda: (set(), {src}, {(str(src), 10 ** 6, 1): "list"}))
     assert ec.instantiations() == {}
@@ -304,7 +304,7 @@ def test_a_case_whose_seeded_file_is_gone_does_not_abort_the_gate(source, monkey
     """The chmod was dead work — each runner's directory is inside the tempdir —
     and a program that removed or renamed its input raised FileNotFoundError
     mid-run, taking every later case with it."""
-    src = source(QUIET_PROGRAM, "quiet.agents")
+    src = source(QUIET_PROGRAM, "quiet.agentscript")
     real = subprocess.run
 
     def run(cmd, *a, **kw):
@@ -333,7 +333,7 @@ def test_a_failing_tree_sitter_is_not_read_as_closure(tmp_path, monkeypatch):
     fake.chmod(0o755)
     monkeypatch.setattr(ca, "TS_BIN", fake)
     with pytest.raises(RuntimeError, match="tree-sitter query failed"):
-        ca.run_query([ROOT / "grammar" / "corpus" / "valid" / "08-io.agents"])
+        ca.run_query([ROOT / "grammar" / "corpus" / "valid" / "08-io.agentscript"])
 
 
 def test_a_query_that_matches_nothing_is_not_read_as_closure(tmp_path, monkeypatch):
@@ -343,7 +343,7 @@ def test_a_query_that_matches_nothing_is_not_read_as_closure(tmp_path, monkeypat
     fake.chmod(0o755)
     monkeypatch.setattr(ca, "TS_BIN", fake)
     with pytest.raises(RuntimeError, match="closure is unmeasured"):
-        ca.run_query([ROOT / "grammar" / "corpus" / "valid" / "08-io.agents"])
+        ca.run_query([ROOT / "grammar" / "corpus" / "valid" / "08-io.agentscript"])
 
 
 def test_closure_over_no_sources_is_refused():

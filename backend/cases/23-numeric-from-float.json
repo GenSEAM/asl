@@ -1,6 +1,6 @@
 {
   "id": "numeric-from-float",
-  "src": "grammar/corpus/valid/23-numeric.agents",
+  "src": "grammar/corpus/valid/23-numeric.agentscript",
   "entry": "from-float",
   "cases": [
     [["9223372036854775808"], "none|none",

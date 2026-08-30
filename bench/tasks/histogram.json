@@ -1,7 +1,7 @@
 {
   "id": "histogram",
   "source": "HumanEval/111",
-  "src": "bench/algo/variants/tight.agents",
+  "src": "bench/algo/variants/tight.agentscript",
   "signature": "(defun histogram [(text String)] -> (Map String Int64))",
   "prompt": "Write a module exporting `histogram`. Given a string of space-separated lowercase letters, return a Map from letter to its count, containing only the letters that occur most often. If several letters tie for most frequent, include all of them. An empty or blank string yields an empty map.",
   "entry": "histogram",

@@ -36,7 +36,7 @@ import exec_coverage as ec
 
 source, call = sys.argv[1], sys.argv[2]
 d = Path(tempfile.mkdtemp())
-src = d / "probe.agents"
+src = d / "probe.agentscript"
 src.write_text(source)
 hits = d / "hits.txt"
 hits.write_text("")
@@ -45,8 +45,8 @@ hits.write_text("")
 with ec.recorder_installed():
     (d / "cand.py").write_text(ec._transpile(src))
 (d / "drv.py").write_text("import cand\\ncand." + call + "\\n")
-env = dict(os.environ, AGENTS_EXEC_COVERAGE=str(hits),
-           AGENTS_EXEC_SOURCE=str(src), PYTHONPATH=str(d))
+env = dict(os.environ, AGENTSCRIPT_EXEC_COVERAGE=str(hits),
+           AGENTSCRIPT_EXEC_SOURCE=str(src), PYTHONPATH=str(d))
 r = subprocess.run([sys.executable, str(d / "drv.py")], cwd=d, env=env,
                    capture_output=True, text=True)
 assert r.returncode == 0, r.stderr
@@ -86,7 +86,7 @@ def _gate(lock: Path | None = None) -> subprocess.CompletedProcess:
     env = None
     if lock is not None:
         import os
-        env = dict(os.environ, AGENTS_COVERAGE_LOCK=str(lock))
+        env = dict(os.environ, AGENTSCRIPT_COVERAGE_LOCK=str(lock))
     return subprocess.run([sys.executable, str(BACKEND / "exec_coverage.py")],
                           capture_output=True, text=True, env=env)
 
@@ -138,7 +138,7 @@ def _check_forged(tmp_path, monkeypatch, *, lock_patch=None, instantiations=None
     executed = sorted(ec.declared_builtins())
     if covered is None:
         covered = {str(p.relative_to(ec.ROOT))
-                   for p in (ec.ROOT / "grammar" / "corpus" / "valid").glob("*.agents")}
+                   for p in (ec.ROOT / "grammar" / "corpus" / "valid").glob("*.agentscript")}
     monkeypatch.setattr(ec, "stats", lambda: {
         "executed": executed,
         "unreached": [],
@@ -154,9 +154,9 @@ def _check_forged(tmp_path, monkeypatch, *, lock_patch=None, instantiations=None
 
 
 def test_an_unexecuted_reason_without_a_pcp_id_fails(tmp_path, monkeypatch):
-    victim = "01-basics.agents"
+    victim = "01-basics.agentscript"
     covered = {str(p.relative_to(ec.ROOT))
-               for p in (ec.ROOT / "grammar" / "corpus" / "valid").glob("*.agents")}
+               for p in (ec.ROOT / "grammar" / "corpus" / "valid").glob("*.agentscript")}
     covered.remove(f"grammar/corpus/valid/{victim}")
     failures, _ = _check_forged(
         tmp_path, monkeypatch,
@@ -166,9 +166,9 @@ def test_an_unexecuted_reason_without_a_pcp_id_fails(tmp_path, monkeypatch):
 
 
 def test_an_unexecuted_reason_with_a_pcp_id_is_admitted(tmp_path, monkeypatch):
-    victim = "01-basics.agents"
+    victim = "01-basics.agentscript"
     covered = {str(p.relative_to(ec.ROOT))
-               for p in (ec.ROOT / "grammar" / "corpus" / "valid").glob("*.agents")}
+               for p in (ec.ROOT / "grammar" / "corpus" / "valid").glob("*.agentscript")}
     covered.remove(f"grammar/corpus/valid/{victim}")
     failures, _ = _check_forged(
         tmp_path, monkeypatch,

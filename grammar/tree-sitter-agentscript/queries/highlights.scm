@@ -1,4 +1,4 @@
-; AgentS-Core syntax highlighting.
+; AgentScript syntax highlighting.
 
 ["defschema" "defun" "let" "if" "cond" "match" "try" "fn"] @keyword
 [":field" ":default" ":json" ":else"] @keyword

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Conformance gate for the AgentS-Core grammars.
+"""Conformance gate for the AgentScript grammars.
 
 Checks BOTH grammars against the same corpus:
-  - agents.lark              (Earley; the constrained-decoding path)
-  - tree-sitter-agents/      (the tooling path: AST, queries, editor support)
+  - agentscript.lark              (Earley; the constrained-decoding path)
+  - tree-sitter-agentscript/      (the tooling path: AST, queries, editor support)
 
 Every file in corpus/valid must parse under both; every file in corpus/invalid
 must be rejected by both. Accepting an invalid fixture is as much a failure as
@@ -27,7 +27,7 @@ from lark.exceptions import LarkError
 from parse import parse_file, parse_text
 
 ROOT = Path(__file__).parent
-TS_DIR = ROOT / "tree-sitter-agents"
+TS_DIR = ROOT / "tree-sitter-agentscript"
 TS_BIN = ROOT.parent / "node_modules" / ".bin" / "tree-sitter"
 
 
@@ -108,7 +108,7 @@ def lark_spans(src: str, terminal: str) -> list[tuple[int, int, int]]:
 
 def ts_spans(src: str, node: str) -> list[tuple[int, int, int]]:
     with tempfile.TemporaryDirectory() as d:
-        probe = Path(d) / "probe.agents"
+        probe = Path(d) / "probe.agentscript"
         probe.write_text(src + "\n")
         proc = subprocess.run([str(TS_BIN), "parse", str(probe)],
                               cwd=TS_DIR, capture_output=True, text=True)
@@ -147,8 +147,8 @@ def main() -> int:
 
     failures: list[str] = []
 
-    cases = [(p, True) for p in sorted((ROOT / "corpus" / "valid").glob("*.agents"))]
-    cases += [(p, False) for p in sorted((ROOT / "corpus" / "invalid").glob("*.agents"))]
+    cases = [(p, True) for p in sorted((ROOT / "corpus" / "valid").glob("*.agentscript"))]
+    cases += [(p, False) for p in sorted((ROOT / "corpus" / "invalid").glob("*.agentscript"))]
     # corpus/semantic holds programs that are well-formed to any context-free
     # grammar but violate a rule only a checker can enforce (reserved prefixes,
     # exhaustiveness, arity, types). They MUST parse; rejecting them here would
@@ -157,12 +157,12 @@ def main() -> int:
     # rglob, not glob: a rule that needs two files to violate it (an import
     # cycle) lives in a subdirectory, and a flat glob would let it skip this gate
     # while looking covered.
-    semantic = sorted((ROOT / "corpus" / "semantic").rglob("*.agents"))
+    semantic = sorted((ROOT / "corpus" / "semantic").rglob("*.agentscript"))
     cases += [(p, True) for p in semantic]
     # corpus/modules holds the search-path companions the module fixtures import.
     # Most of the forms this grammar gained for them live nowhere else, and no
     # gate parsed these files at all.
-    cases += [(p, True) for p in sorted((ROOT / "corpus" / "modules").rglob("*.agents"))]
+    cases += [(p, True) for p in sorted((ROOT / "corpus" / "modules").rglob("*.agentscript"))]
 
     print(f"{'fixture':<30} {'lark':<8} {'tree-sitter':<12} verdict")
     print("-" * 66)

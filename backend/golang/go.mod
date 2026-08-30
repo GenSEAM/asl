@@ -1,3 +1,3 @@
-module agents
+module agentscript
 
 go 1.21

@@ -53,3 +53,12 @@ exact `N`-domain rule, `narrowed` as a label list, and the `Int32`-never-execute
 `coverage.lock`'s `note`).
 
 Deferred: nothing new.
+
+## 2026-08-30 — Phase 3 (rename AgentS → AgentScript)
+
+Decisions minted: `d-9c1f` — the language, file extension, reserved prefix, runtime alias and
+tracer env vars move to AgentScript in one atomic change; `AGENT_SPEC.md`/`SPEC_REVIEW.md`,
+`.plans/**`, the `asex` repo dir and `ASEX_GATEWAY_KEY` are frozen external/historical contracts.
+
+Caveats minted: none. Deferred: none. The rename is mechanically complete and gated (161 tests,
+107/107 executed, 0 differential disagreements).

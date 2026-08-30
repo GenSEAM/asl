@@ -1,0 +1,7 @@
+{
+  "name": "tree-sitter-agentscript",
+  "version": "0.1.0",
+  "description": "tree-sitter grammar for AgentScript",
+  "private": true,
+  "tree-sitter": [{ "scope": "source.agentscript", "file-types": ["agentscript"] }]
+}

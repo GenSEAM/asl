@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential gate: one AgentS source, every backend, identical results.
+"""Differential gate: one AgentScript source, every backend, identical results.
 
 Portability across targets is a claim, not a property. Runtimes disagree by
 default — measured on this machine, Python and JavaScript already differ on
@@ -356,7 +356,7 @@ def program_cases() -> list[tuple[Path, list[dict]]]:
     return [
         # The failing path is checked, not only the happy one: it is the error
         # mapping, not the read itself, that the two runtimes derive independently.
-        (valid / "08-io.agents", [
+        (valid / "08-io.agentscript", [
             {"argv": ["sample.txt"], "files": {"sample.txt": ("hello from a file\n", 0o644)},
              "stdout": "hello from a file\n\n", "stderr": "", "exit": 0},
             {"argv": ["missing.txt"], "stdout": "missing\n", "stderr": "", "exit": 0},
@@ -380,13 +380,13 @@ def program_cases() -> list[tuple[Path, list[dict]]]:
         # reaches one module through two aliases, which is the cheap
         # discriminator for a lowering keyed on the alias rather than on the
         # defining module path.
-        (valid / "13-module-program.agents", [
+        (valid / "13-module-program.agentscript", [
             {"argv": [], "stdout": "rectangle\n6.0\n", "stderr": "", "exit": 0},
         ]),
         # Bodies with more than one expression, in every position that admits
         # one. The defect this covers was a leading effect dropped by both
         # backends at once, which is why the output is written down here.
-        (valid / "14-sequenced-bodies.agents", [
+        (valid / "14-sequenced-bodies.agentscript", [
             {"argv": [], "exit": 0, "stderr": "",
              "stdout": "function-1\nlet-1\ncond-1\nelse-1\nmatch-ok-1\n"
                        "match-err-1\nlambda-1\nlambda-1\ncond-bare\nelse-bare\n"
@@ -395,10 +395,10 @@ def program_cases() -> list[tuple[Path, list[dict]]]:
         # A binder inside an imported module, shadowing a top-level name of that
         # module. Reaching the definition instead of the binding also agrees
         # across the two, and the higher-order case compiles cleanly on both.
-        (valid / "15-shadowed-binders.agents", [
+        (valid / "15-shadowed-binders.agentscript", [
             {"argv": [], "stdout": "7 6 101 102\n", "stderr": "", "exit": 0},
         ]),
-        (valid / "19-io-errors.agents", [
+        (valid / "19-io-errors.agentscript", [
             {"argv": ["log.txt"], "files": {"log.txt": ("A\n", 0o644)}, "stdin": "B",
              "stdout": "A\nB\n", "stderr": "", "exit": 0},
             {"argv": ["absent.txt"], "stdout": "absent\n", "stderr": "", "exit": 0},

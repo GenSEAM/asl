@@ -1,4 +1,4 @@
-"""End-to-end: AgentS source -> Python -> executed, semantics asserted.
+"""End-to-end: AgentScript source -> Python -> executed, semantics asserted.
 
 Expected values are written from AGENT_SPEC_CORE.md, not from observing what the
 transpiler produced. A test that records current behaviour proves the pipeline
@@ -8,7 +8,7 @@ import sys, pathlib
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import smoke as s
-import runtime as _as
+import runtime as _agentscript
 
 
 def test_enum_dispatch():
@@ -39,24 +39,24 @@ def test_try_propagates_failure():
 
 
 def test_match_over_result():
-    assert s.describe(_as.ok(7)) == "7"
-    assert s.describe(_as.err("boom")) == "boom"
+    assert s.describe(_agentscript.ok(7)) == "7"
+    assert s.describe(_agentscript.err("boom")) == "boom"
 
 
 def test_the_checked_in_lowering_matches_its_source():
     """Every other test here imports `smoke.py`, so nothing would notice the
     emitter drifting away from the source it was generated from. Regenerate with:
 
-        .venv/bin/python backend/to_python.py backend/t/smoke.agents \
+        .venv/bin/python backend/to_python.py backend/t/smoke.agentscript \
             > backend/t/smoke.py
 
     The file is listed in `.gitignore`, so a clean checkout has to run that line
     before this module can even be imported — a decision, not an accident, and
-    not the same one `bench/algo/histogram_agents.py` records."""
+    not the same one `bench/algo/histogram_agentscript.py` records."""
     import sys
     sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
     sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent / "grammar"))
     from to_python import Transpiler
-    src = pathlib.Path(__file__).parent / "smoke.agents"
+    src = pathlib.Path(__file__).parent / "smoke.agentscript"
     assert Transpiler().transpile(src.read_text(), path=src) == \
         (pathlib.Path(__file__).parent / "smoke.py").read_text()

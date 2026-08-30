@@ -1,6 +1,6 @@
 {
   "id": "numeric-int64",
-  "src": "grammar/corpus/valid/23-numeric.agents",
+  "src": "grammar/corpus/valid/23-numeric.agentscript",
   "entry": "num",
   "cases": [
     [

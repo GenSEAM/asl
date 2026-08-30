@@ -34,7 +34,7 @@ SHAPES = [
 
 @pytest.fixture(scope="module")
 def source(tmp_path_factory) -> Path:
-    path = tmp_path_factory.mktemp("shapes") / "shapes.agents"
+    path = tmp_path_factory.mktemp("shapes") / "shapes.agentscript"
     path.write_text(SOURCE)
     return path
 
@@ -73,7 +73,7 @@ def test_an_input_type_the_harness_cannot_spell_fails_loudly(spec):
 
 def test_successful_file_write_case_pins_content_and_declares_stderr():
     cases = next(cases for src, cases in d.program_cases()
-                 if src.name == "08-io.agents")
+                 if src.name == "08-io.agentscript")
     case = next((c for c in cases if c.get("argv") == ["sample.txt", "out.txt"]),
                 None)
     assert case is not None

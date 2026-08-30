@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One parser for every tool that reads AgentS source.
+"""One parser for every tool that reads AgentScript source.
 
 Three copies of this construction had drifted apart on their arguments, and a
 checker that disagreed with a backend about what a program is would report
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from lark import Lark, Token, Tree
 
-GRAMMAR = Path(__file__).parent / "agents.lark"
+GRAMMAR = Path(__file__).parent / "agentscript.lark"
 
 # Form heads are named terminals, so Lark keeps them as children. Filtering them
 # centrally beats per-handler index arithmetic, which breaks the moment an

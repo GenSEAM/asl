@@ -1,4 +1,4 @@
-# Phase 3 — Wasm route, measured not assumed
+# Phase 4 — Wasm route, measured not assumed
 
 Probed by the orchestrator on 2026-08-29 before planning. Every line below was executed and its
 output read.

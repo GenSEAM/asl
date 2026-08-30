@@ -55,3 +55,27 @@ This file groups d/c/r/l entries for the lang/lexical module.
   consumer will handle nodes that never arrive, and will read the absence of those nodes in a trace
   as evidence their own code is wrong. A dead production is not neutral: it is a false statement in
   the artifact whose whole purpose is to be normative about shape.
+
+### [d-9c1f] The language is renamed AgentScript, and the identifier surface moves with it atomically
+- **Date**: 2026-08-30
+- **Status**: Active
+- **Cluster**: lang/lexical
+- **Description**: The name, extension, reserved prefix, runtime alias and tracer env vars move
+  together — `AgentS` → `AgentScript`, `.agents` → `.agentscript`, `agents-` → `agentscript-`,
+  `_as` → `_agentscript`, `AGENTS_EXEC_COVERAGE`/`AGENTS_EXEC_SOURCE`/`AGENTS_COVERAGE_LOCK` →
+  `AGENTSCRIPT_*` — with the tree-sitter grammar name/scope/file-types and the Go module name
+  moving too. Frozen by owner: `AGENT_SPEC.md` + `SPEC_REVIEW.md` (v0 provenance), `.plans/**`
+  (phase history), the repo directory `asex` and `ASEX_GATEWAY_KEY` (external filesystem/credential
+  contracts). The fork's `.as` extension is not adopted: it collides with ActionScript and belongs
+  to the abandoned `as-lang` identity.
+- **Rationale**: the old name was a working title and the owner named the product. One atomic
+  change, not a series, because the extension, reserved prefix, runtime alias and env vars are one
+  surface — a partial rename fails loudly (a `; run:` header names the alias the emitter no longer
+  imports) or silently (a stale `*.agents` glob reads zero fixtures and a gate with no empty-set
+  guard passes).
+- **Why Non-Obvious**: the acceptance greps for the old name are themselves easy to get wrong —
+  `rg 'AgentS'` and `rg 'tree-sitter-agents'` both match the *new* names `AgentScript` /
+  `tree-sitter-agentscript`, so a naive "no old strings" check reports a wall of false positives on
+  a clean tree. The gates that actually prove the rename are the word-bounded scans (`\bAgentS\b`,
+  `tree-sitter-agents\b`) plus the byte-identity canaries: `prelude/coverage.lock` untouched,
+  `backend/cases/*.json` changed only in `"src"`, differential expectations unchanged.

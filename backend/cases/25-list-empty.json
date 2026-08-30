@@ -1,6 +1,6 @@
 {
   "id": "list-aggregation-empty",
-  "src": "grammar/corpus/valid/25-list-aggregation.agents",
+  "src": "grammar/corpus/valid/25-list-aggregation.agentscript",
   "entry": "agg-empty",
   "cases": [
     [[], "T|0|0.0|none|none|[]",

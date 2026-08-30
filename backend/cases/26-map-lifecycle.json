@@ -1,6 +1,6 @@
 {
   "id": "map-lifecycle",
-  "src": "grammar/corpus/valid/26-map-lifecycle.agents",
+  "src": "grammar/corpus/valid/26-map-lifecycle.agentscript",
   "entry": "lifecycle",
   "cases": [
     [["a b a c", "a"], "3|T|2|b,c",

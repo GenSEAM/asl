@@ -48,7 +48,7 @@ def main() -> int:
 
     # Search-path modules are checked too: one that does not check clean would
     # make every rule 9 verdict resting on it worthless.
-    clean = sorted((CORPUS / "valid").glob("*.agents")) + sorted((CORPUS / "modules").rglob("*.agents"))
+    clean = sorted((CORPUS / "valid").glob("*.agentscript")) + sorted((CORPUS / "modules").rglob("*.agentscript"))
     for path in clean:
         diags = check_file(path, ROOTS)
         label = str(path.relative_to(CORPUS))
@@ -58,7 +58,7 @@ def main() -> int:
         print(f"{label:<38} {'clean':<10} {','.join(d.code for d in diags) or '-':<28} "
               f"{'ok' if ok else 'FAIL'}")
 
-    for path in sorted((CORPUS / "semantic").rglob("*.agents")):
+    for path in sorted((CORPUS / "semantic").rglob("*.agentscript")):
         label = str(path.relative_to(CORPUS))
         want, exact = expected(path)
         diags = check_file(path, ROOTS)

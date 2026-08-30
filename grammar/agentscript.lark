@@ -1,4 +1,4 @@
-// AgentS-Core v0.1 — Lark grammar (Earley).
+// AgentScript v0.1 — Lark grammar (Earley).
 // Normative source: AGENT_SPEC_CORE.md
 //
 // Earley is chosen to match llguidance, which the constrained-decoding arm

@@ -1,6 +1,6 @@
 {
   "id": "string-query",
-  "src": "grammar/corpus/valid/27-string-query.agents",
+  "src": "grammar/corpus/valid/27-string-query.agentscript",
   "entry": "query",
   "cases": [
     [["banana", "na"], "6|some 2|T|F|T|F|6",

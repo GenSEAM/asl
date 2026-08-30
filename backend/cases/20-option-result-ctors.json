@@ -1,6 +1,6 @@
 {
   "id": "option-result-ctors",
-  "src": "grammar/corpus/valid/20-option-result-ctors.agents",
+  "src": "grammar/corpus/valid/20-option-result-ctors.agentscript",
   "entry": "classify",
   "cases": [
     [["3", "x"], ["pair", "some/ok:3|TFTF", "none/err:x|FTFT"],
