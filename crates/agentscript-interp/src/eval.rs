@@ -184,6 +184,15 @@ impl<'a> Interp<'a> {
         Ok(exit_glue(&v))
     }
 
+    /// The function-mode entry protocol: evaluate the named defun with concrete
+    /// argument values and return its value, for the differential harness.
+    pub fn call_entry(&mut self, ti: usize, name: &str, args: Vec<Value>) -> Result<Value, Err> {
+        let r = self.call_defun(ti, name, args)?;
+        Ok(match r {
+            Step::OK(v) | Step::Ret(v) => v,
+        })
+    }
+
     // ----------------------------------------------------------- evaluation
 
     fn eval_seq(&mut self, body: &[Expr]) -> Result<Step, Err> {

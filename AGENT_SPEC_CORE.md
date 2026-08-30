@@ -177,6 +177,9 @@ and this language's output is defined on every target:
 - a value holding a `NaN` sorts after every value that does not;
 - values holding a `NaN` tie with one another, and every sort is stable, so they keep their input
   order;
+- a value of a user enum or union type orders by **declaration order** — the order its cases are
+  written in the `defenum` — never by case name, so `(list-sort (list (zed) (alpha)))` with `zed`
+  declared before `alpha` yields `(zed alpha)`;
 - everything else is ordered as `<` orders it.
 
 So `(list-sort (list 3.0 nan 0.5))` is `(0.5 3.0 nan)`, `(min nan 1.0)` and `(min 1.0 nan)` are both

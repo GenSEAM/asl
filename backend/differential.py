@@ -237,6 +237,29 @@ def run_rust(src: Path, task: dict) -> list:
         return json.loads(check_run(r, f"rust {task['entry']}"))
 
 
+def run_interp(src: Path, task: dict) -> list:
+    """The reference interpreter's function-mode arm.
+
+    The binary evaluates the entry `defun` directly from the tree-sitter AST and
+    serializes each return in the same canonical JSON the python/rust harnesses
+    produce. Each case's argument JSON is passed as its own `--arg`, so one
+    process prints the whole result array.
+    """
+    binp = ROOT / "target" / "debug" / "agentscript-interp"
+    if not binp.exists():
+        subprocess.run(["rustup", "run", "stable", "cargo", "build",
+                        "--manifest-path", str(ROOT / "Cargo.toml")],
+                       check=True, cwd=ROOT, capture_output=True, text=True)
+    cmd = [str(binp)]
+    for r in ROOTS:
+        cmd += ["--root", str(r)]
+    cmd += ["--call", task["entry"], str(src)]
+    for args, *_ in task["cases"]:
+        cmd += ["--arg", json.dumps(args)]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    return json.loads(check_run(r, f"interp {task['entry']}"))
+
+
 def function_tasks() -> list[dict]:
     """Every declared function-mode task, with `src` resolved against the repo.
 
@@ -257,17 +280,19 @@ def functions(task: dict) -> int:
     src = task["src"]
     py = run_python(src, task)
     rs = run_rust(src, task)
-    if not (len(py) == len(rs) == len(task["cases"])):
+    ip = run_interp(src, task)
+    if not (len(py) == len(rs) == len(ip) == len(task["cases"])):
         raise RuntimeError(
-            f"{task['id']}: {len(task['cases'])} case(s) produced {len(py)} python and "
-            f"{len(rs)} rust result(s); a truncated comparison is not a comparison")
+            f"{task['id']}: {len(task['cases'])} case(s) produced {len(py)} python, "
+            f"{len(rs)} rust and {len(ip)} interp result(s); a truncated comparison "
+            f"is not a comparison")
     bad = 0
     print(f"\n{task['id']} — {task['entry']}")
-    print(f"{'input':<12} {'expected':<22} {'python':<22} {'rust':<22}")
-    print("-" * 82)
-    for k, (case, p, r) in enumerate(zip(task["cases"], py, rs)):
+    print(f"{'input':<12} {'expected':<22} {'python':<22} {'rust':<22} {'interp':<22}")
+    print("-" * 106)
+    for k, (case, p, r, i) in enumerate(zip(task["cases"], py, rs, ip)):
         args, want = case[0], case[1]
-        agree = (p == want) and (r == want)
+        agree = (p == want) and (r == want) and (i == want)
         bad += 0 if agree else 1
         shown = ", ".join(repr(a) for a in args)
         # Sorted keys because a Map has no declared iteration order: BTreeMap and
@@ -275,7 +300,8 @@ def functions(task: dict) -> int:
         # insertion-ordered rendering of an equal value reads as a disagreement.
         show = {"sort_keys": True}
         print(f"{shown:<12} {json.dumps(want, **show):<22} {json.dumps(p, **show):<22} "
-              f"{json.dumps(r, **show):<22}" + ("" if agree else "  <-- DISAGREE"))
+              f"{json.dumps(r, **show):<22} {json.dumps(i, **show):<22}"
+              + ("" if agree else "  <-- DISAGREE"))
     return bad
 
 
