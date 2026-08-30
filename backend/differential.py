@@ -38,6 +38,7 @@ sys.path.insert(0, str(ROOT / "checker"))
 
 from collect import collect  # noqa: E402
 from vocab import parse_signature, type_aliases  # noqa: E402
+from _ts import compile_ts  # noqa: E402
 
 # Imports are linked into one artifact, so every transpile here needs the search
 # root the corpus module fixtures live under.
@@ -138,6 +139,25 @@ def py_literal(spec: dict, value) -> str:
     if name == "List":
         inner = spec["args"][0]
         return "[" + ", ".join(py_literal(inner, v) for v in value) + "]"
+    if name in ("String", "Bool"):
+        return repr(value)
+    raise RuntimeError(f"{name} is not an admissible differential input type")
+
+
+def ts_literal(spec: dict, value) -> str:
+    """The same value as TypeScript source. An Int literal carries the `n`
+    suffix: every integer in this backend is a bigint, and `1` and `1n` are
+    different values that never compare equal."""
+    name = con(spec)
+    if name == "Float64":
+        if isinstance(value, str):
+            return {"nan": "NaN", "inf": "Infinity", "-inf": "-Infinity"}[value]
+        return repr(float(value))
+    if name in ("Int32", "Int64"):
+        return f"{int(value)}n"
+    if name == "List":
+        inner = spec["args"][0]
+        return "[" + ", ".join(ts_literal(inner, v) for v in value) + "]"
     if name in ("String", "Bool"):
         return repr(value)
     raise RuntimeError(f"{name} is not an admissible differential input type")
@@ -281,26 +301,27 @@ def functions(task: dict) -> int:
     py = run_python(src, task)
     rs = run_rust(src, task)
     ip = run_interp(src, task)
-    if not (len(py) == len(rs) == len(ip) == len(task["cases"])):
+    ts = run_typescript(src, task)
+    if not (len(py) == len(rs) == len(ip) == len(ts) == len(task["cases"])):
         raise RuntimeError(
             f"{task['id']}: {len(task['cases'])} case(s) produced {len(py)} python, "
-            f"{len(rs)} rust and {len(ip)} interp result(s); a truncated comparison "
-            f"is not a comparison")
+            f"{len(rs)} rust, {len(ip)} interp and {len(ts)} ts result(s); a truncated "
+            f"comparison is not a comparison")
     bad = 0
     print(f"\n{task['id']} — {task['entry']}")
-    print(f"{'input':<12} {'expected':<22} {'python':<22} {'rust':<22} {'interp':<22}")
-    print("-" * 106)
-    for k, (case, p, r, i) in enumerate(zip(task["cases"], py, rs, ip)):
+    print(f"{'input':<12} {'expected':<18} {'python':<18} {'rust':<18} {'interp':<18} {'ts':<18}")
+    print("-" * 104)
+    for k, (case, p, r, i, t) in enumerate(zip(task["cases"], py, rs, ip, ts)):
         args, want = case[0], case[1]
-        agree = (p == want) and (r == want) and (i == want)
+        agree = (p == want) and (r == want) and (i == want) and (t == want)
         bad += 0 if agree else 1
         shown = ", ".join(repr(a) for a in args)
-        # Sorted keys because a Map has no declared iteration order: BTreeMap and
-        # a Python dict reach the same object by different routes, and an
-        # insertion-ordered rendering of an equal value reads as a disagreement.
+        # Sorted keys: a Map has no declared iteration order, so equal maps
+        # reach the same object by different routes on different hosts.
         show = {"sort_keys": True}
-        print(f"{shown:<12} {json.dumps(want, **show):<22} {json.dumps(p, **show):<22} "
-              f"{json.dumps(r, **show):<22} {json.dumps(i, **show):<22}"
+        print(f"{shown:<12} {json.dumps(want, **show):<18} {json.dumps(p, **show):<18} "
+              f"{json.dumps(r, **show):<18} {json.dumps(i, **show):<18} "
+              f"{json.dumps(t, **show):<18}"
               + ("" if agree else "  <-- DISAGREE"))
     return bad
 
@@ -363,6 +384,91 @@ def build_interpreter(src: Path, d: Path) -> list[str]:
     return cmd
 
 
+def build_typescript(src: Path, d: Path) -> list[str]:
+    """Transpile to TS, copy the runtime, compile with `tsc`, return the runnable
+    node command. The arm raises on a transpile or `tsc` failure **and on an
+    empty emitted source** — a transpiler that swallows a form and writes nothing
+    cannot enter the arm, so there is never a stub or forwarded column to agree
+    trivially."""
+    from to_typescript import ToTypeScript
+    main_ts = ToTypeScript().transpile(src.read_text(), path=src, roots=ROOTS)
+    if not main_ts.strip():
+        raise RuntimeError(f"ts transpile of {src.name} emitted no source")
+    (d / "rt.ts").write_text((ROOT / "backend" / "ts" / "rt.ts").read_text())
+    (d / "main.ts").write_text(main_ts)
+    c = compile_ts([d / "main.ts", d / "rt.ts"], out_dir=d / "dist")
+    if c.returncode:
+        raise RuntimeError("tsc: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
+    return ["node", str(d / "dist" / "main.js")]
+
+
+# Function-mode returns are primitives and pairs here, so serialization is
+# small — but a Float64 must keep its decimal point (1.0 is 1.0, not 1), a
+# non-finite float must keep its name in quotes, and a pair must render as
+# ["pair",a,b], exactly as the Rust `J` harness and Python's NORMALISE render
+# them; otherwise the TS arm disagrees on the one shape the differential exists
+# to pin.
+_SER = """
+function keySer(k: any): string {
+    if (typeof k === "string") return JSON.stringify(k);
+    if (typeof k === "bigint") return JSON.stringify(k.toString());
+    if (typeof k === "number") return JSON.stringify(RT.fmtF64(k));
+    if (typeof k === "boolean") return JSON.stringify(k ? "true" : "false");
+    return JSON.stringify(ser(k));
+}
+function ser(v: any): string {
+    if (v === undefined || v === null) return "null";
+    if (typeof v === "string") return JSON.stringify(v);
+    if (typeof v === "boolean") return v ? "true" : "false";
+    if (typeof v === "bigint") return v.toString();
+    if (typeof v === "number") return RT.fmtF64(v);
+    if (Array.isArray(v)) return "[" + v.map(ser).join(",") + "]";
+    if (v instanceof RT.ASPair) return '["pair",' + ser(v.first) + "," + ser(v.second) + "]";
+    if (typeof v === "object" && "entries" in v) {
+        const es: any[] = [...v.entries.values()].sort((a: any, b: any) => RT.cmp(a[0], b[0]));
+        return "{" + es.map((e: any) => keySer(e[0]) + ":" + ser(e[1])).join(",") + "}";
+    }
+    if (typeof v === "object" && "tag" in v) {
+        if (v.tag === "some") return '["some",' + ser(v.value) + "]";
+        if (v.tag === "none") return '["none"]';
+        if (v.tag === "ok") return '["ok",' + ser(v.value) + "]";
+        if (v.tag === "err") return '["err",' + ser(v.value) + "]";
+        const args: string[] = [];
+        let i = 0;
+        while (("_" + i) in v) { args.push(ser(v["_" + i])); i++; }
+        return args.length === 0 ? '["' + v.tag + '"]' : '["' + v.tag + '",' + args.join(",") + "]";
+    }
+    return JSON.stringify(v);
+}
+"""
+
+
+def run_typescript(src: Path, task: dict) -> list:
+    from to_typescript import ToTypeScript, mangle
+    specs = entry_types(src, task["entry"])
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        main_ts = ToTypeScript().transpile(src.read_text(), path=src, roots=ROOTS)
+        if not main_ts.strip():
+            raise RuntimeError(f"ts transpile of {src.name} emitted no source")
+        (d / "rt.ts").write_text((ROOT / "backend" / "ts" / "rt.ts").read_text())
+        (d / "main.ts").write_text(main_ts)
+        fn = mangle(task["entry"])
+        calls = ", ".join(
+            f"cand.{fn}(" + ", ".join(ts_literal(s, a) for s, a in bind(specs, args, task)) + ")"
+            for args, *_ in task["cases"])
+        (d / "drv.ts").write_text(
+            'import * as RT from "./rt";\nimport * as cand from "./main";\n'
+            + _SER
+            + f"\nconst results = [{calls}];\n"
+              'console.log("[" + results.map(ser).join(",") + "]");\n')
+        c = compile_ts([d / "main.ts", d / "rt.ts", d / "drv.ts"], out_dir=d / "dist")
+        if c.returncode:
+            raise RuntimeError("tsc: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
+        r = subprocess.run(["node", str(d / "dist" / "drv.js")], capture_output=True, text=True)
+        return json.loads(check_run(r, f"ts {task['entry']}"))
+
+
 def programs(src: Path, cases: list[dict]) -> int:
     """Run a whole program on every target and compare stdout, stderr and exit
     status against each other and against the case's declared values.
@@ -379,8 +485,8 @@ def programs(src: Path, cases: list[dict]) -> int:
     re-opening that hole by omission.
     """
     bad = 0
-    print(f"\n{'argv':<20} {'python':<20} {'rust':<20} {'wasm':<20} {'interp':<20} {'stderr':<18} exit")
-    print("-" * 130)
+    print(f"\n{'argv':<18} {'python':<18} {'rust':<18} {'wasm':<18} {'interp':<18} {'ts':<18} {'stderr':<14} exit")
+    print("-" * 134)
     for case in cases:
         argv = case.get("argv", [])
         files = case.get("files", {})
@@ -391,7 +497,8 @@ def programs(src: Path, cases: list[dict]) -> int:
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             runners = {"python": build_python(src, d), "rust": build_rust(src, d),
-                       "wasm": build_rust_wasm(src, d), "interp": build_interpreter(src, d)}
+                       "wasm": build_rust_wasm(src, d), "interp": build_interpreter(src, d),
+                       "ts": build_typescript(src, d)}
             seen = {}
             for name, cmd in runners.items():
                 run = d / f"run-{name}"
@@ -404,15 +511,18 @@ def programs(src: Path, cases: list[dict]) -> int:
                 r = subprocess.run(cmd + argv, cwd=run, input=stdin,
                                    capture_output=True, text=True)
                 seen[name] = (r.stdout, r.stderr, r.returncode)
-            agree = seen["python"] == seen["rust"] == seen["wasm"] == seen["interp"]
+            agree = (seen["python"] == seen["rust"] == seen["wasm"]
+                     == seen["interp"] == seen["ts"])
             declared_ok = seen["python"] == want
             bad += 0 if (agree and declared_ok) else 1
             note = ("" if agree else "  <-- DISAGREE") + \
                    ("" if declared_ok else "  <-- NOT THE DECLARED OUTPUT/STATUS")
-            print(f"{' '.join(argv):<20} {seen['python'][0]!r:<20} "
-                  f"{seen['rust'][0]!r:<20} {seen['wasm'][0]!r:<20} "
-                  f"{seen['interp'][0]!r:<20} {seen['python'][1]!r:<18} "
-                  f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}/{seen['interp'][2]}" + note)
+            print(f"{' '.join(argv):<18} {seen['python'][0]!r:<18} "
+                  f"{seen['rust'][0]!r:<18} {seen['wasm'][0]!r:<18} "
+                  f"{seen['interp'][0]!r:<18} {seen['ts'][0]!r:<18} "
+                  f"{seen['python'][1]!r:<14} "
+                  f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}/"
+                  f"{seen['interp'][2]}/{seen['ts'][2]}" + note)
     return bad
 
 
@@ -499,7 +609,7 @@ def main() -> int:
         bad += programs(src, group)
         program_total += len(group)
     print(f"\n{bad} disagreement(s) across {cases} function cases "
-          f"+ {program_total} program cases (python/rust/wasm/interp)")
+          f"+ {program_total} program cases (python/rust/wasm/interp/ts)")
     return bad
 
 

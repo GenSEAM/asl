@@ -20,6 +20,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from _ts import compile_ts
+
 ROOT = Path(__file__).parent.parent
 # Every source any gate counts is compile-gated: the differential harness and
 # the coverage tracer both execute the bench sources, and a source that runs
@@ -64,11 +66,12 @@ def main() -> int:
         print("no corpus sources were found; the gate would pass by having nothing to do")
         return 1
     print(f"{'fixture':<26} {'python':<12} {'compile':<10} {'run':<10} "
-          f"{'rust':<12} {'rustc':<10}")
-    print("-" * 84)
+          f"{'rust':<12} {'rustc':<10} {'ts':<12} {'tsc':<10}")
+    print("-" * 108)
     for f in CORPUS:
         py_ok, py_src, py_err = transpile("to_python.py", f)
         rs_ok, rs_src, rs_err = transpile("to_rust.py", f)
+        ts_ok, ts_src, ts_err = transpile("to_typescript.py", f)
         pyc = "-"
         if py_ok:
             with tempfile.TemporaryDirectory(dir="/tmp") as d:
@@ -104,12 +107,28 @@ def main() -> int:
                 rustc = "ok" if c.returncode == 0 else "FAIL"
                 if c.returncode:
                     fails.append(f"{f.name}: rustc rejected the output")
+        tsc_ = "-"
+        if ts_ok:
+            if not ts_src.strip():
+                tsc_ = "FAIL"
+                fails.append(f"{f.name}: ts backend emitted no source")
+            else:
+                with tempfile.TemporaryDirectory(dir="/tmp") as d:
+                    (Path(d) / "rt.ts").write_text((ROOT / "backend" / "ts" / "rt.ts").read_text())
+                    (Path(d) / "main.ts").write_text(ts_src)
+                    c = compile_ts([Path(d) / "main.ts", Path(d) / "rt.ts"], no_emit=True)
+                    tsc_ = "ok" if c.returncode == 0 else "FAIL"
+                    if c.returncode:
+                        fails.append(f"{f.name}: tsc rejected the output")
         if not py_ok:
             fails.append(f"{f.name}: python backend: {py_err}")
         if not rs_ok:
             fails.append(f"{f.name}: rust backend: {rs_err}")
+        if not ts_ok:
+            fails.append(f"{f.name}: ts backend: {ts_err}")
         print(f"{f.name:<26} {'ok' if py_ok else 'FAIL':<12} {pyc:<10} {ran:<10} "
-              f"{'ok' if rs_ok else 'FAIL':<12} {rustc:<10}")
+              f"{'ok' if rs_ok else 'FAIL':<12} {rustc:<10} "
+              f"{'ok' if ts_ok else 'FAIL':<12} {tsc_:<10}")
     print()
     for x in fails:
         print("  " + x)
