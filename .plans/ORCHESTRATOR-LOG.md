@@ -31,6 +31,7 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | `4a7677b` |
 | 4 — WebAssembly target v1 | feasibility measured | — (direct) | done | — (direct) | 7/7 green, 161 tests | — |
 | 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 7/7 green, 161 tests, differential 120+15 (4 arms) | `5995351` |
+| 6 — agent-facing surface | v2 reconciled | 3 lenses (1 reject → folded) | — | — | — | — |
 | 6 — agent-facing tooling | — | — | — | — | — | — |
 | 7 — TypeScript backend | — | — | — | — | — | — |
 | 8 — Go backend | — | — | — | — | — | — |
@@ -287,3 +288,17 @@ Fix wave (one fixer, `crates/agentscript-interp/` + the int32-trap probe): every
 Plan-text gate rot corrected (orchestrator, recorded not hidden): the binary path `crates/target/debug/agentscript-interp` → `target/debug/agentscript-interp` (workspace-root target), `p5-i2` expected `"ab"` → `"a1b"` (`(+ -1 2)` == 1), `p5-i2d` rewritten to trap directly instead of via the absent `string-from-int32`, and the I5 probe loop now asserts the int32-trap exit code 2.
 
 Deferred to later (recorded, not forgotten): cross-enum `tag_order` collision (correctness M1, the §3.2 user-type-sort spec change — same gap as `l-5c47`), function-mode interp agreement (Phase-5 follow-up / Phase-9), and the two tree-walker performance hazards above.
+
+## Phase 5 deferred — closed (`5c0e7a9`)
+
+`tag_order` proved already correct for all reachable programs (lists are homogeneous, so cross-enum sort cannot occur; within one enum declaration order is preserved) — no code change needed. §3.2 now states the user-type sort rule (declaration order), written into `AGENT_SPEC_CORE.md`. Function mode now carries the interpreter as a third arm (`--call` entry protocol, `value.rs::to_json` mirroring `harness.rs`); differential reports `0 disagreement(s) across 120 function cases + 15 program cases (python/rust/wasm/interp)`. The l-5c47 backend convergence (Python user-union sort) and l-4d92 (Python Int32 width) remain the "type-awareness" known gap — flagged, not closed here.
+
+## Phase 6 — plan reviewed and reconciled (2026-08-30)
+
+Scout: formatter in `stash@{0}^3` (`as-lang`, `tools/fmt/`), bindgen in fork history `b614ec8`; no distributor, ambiguity gate, token counter, or structured-edit code exist in the tree. Planner produced 8 items + 6 decisions (middle complexity, architect as design critic).
+
+Plan review wave: design (architect) `approve-with-amendments` (0B/4M/4m), exec `approve-with-amendments` (2B/5n), coverage `reject` (3B/3M). Reconciler folded 18 findings → 18 rows (13 accept, 3 accept-modified, 2 reject). Key amendments: exact-match ratchet on all three new locks (D7); W2 dead-`pattern` range corrected to `agentscript.lark:91-97` (219→140 over 77 fixtures); W5 rescoped as a checker-API rewrite; W4 gate = idempotence + recovered fmt tests + canonical fixture; W8 gains a `differential.py` gate.
+
+Measurement note: the design reviewer's ambiguity figures (196/79) did NOT reproduce under the plan's mechanism; the reproducible count is **219 over 77 fixtures** (deterministic). The lock is authoritative — the implementer writes it from a fresh measurement in W1.
+
+Orchestrator decisions: (1) drop the stashed shim's `--target`/`--rules`/`import_cycles`/`target_capabilities` (gone APIs, no current equivalent); (2) keep both stashes — `stash@{1}` is Phase 7's TS backend.
