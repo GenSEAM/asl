@@ -1,0 +1,12 @@
+[package]
+name = "agentscript-interp"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "agentscript-interp"
+path = "src/main.rs"
+
+[dependencies]
+agentscript-ts = { path = "../agentscript-ts" }
+tree-sitter = "0.24"

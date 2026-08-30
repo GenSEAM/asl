@@ -1,0 +1,6 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-join (map (fn [n] (string-from-int64 n)) (evens (list 1 2 3 4))) ","))
+  (println (string-join (map (fn [n] (string-from-int64 n)) (doubled (list 1 2))) ","))
+  (println (string-from-int64 (total (list 1 2 3))))
+  (println (string-from-int64 (longest (list "a" "bbb"))))
+  (println (string-join (by-length (list "bbb" "a" "cc")) ",")))

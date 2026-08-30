@@ -1,0 +1,16 @@
+; A sort must be stable with NaN-last ties: NaN-holding keys sort after every
+; finite key, and equal NaN keys tie with one another so a stable sort leaves
+; them in input order. Here elements are (label, key) pairs sorted by key; the
+; label makes the two-NaN input order observable, which a bare list of identical
+; NaNs could not. Keys come from parsing, which is the only route to a NaN.
+
+(defun key [(s String)] -> Float64 (option-or (string-to-float64 s) 0.0))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (let [(xs (list (pair "c" (key "3"))
+                  (pair "a" (key "1"))
+                  (pair "e" (key "-nan"))
+                  (pair "b" (key "2"))
+                  (pair "d" (key "nan"))))
+        (k (list-sort-by (fn [(p (Pair String Float64))] (.-second p)) xs))]
+    (println (string-join (map (fn [(p (Pair String Float64))] (.-first p)) k) ","))))

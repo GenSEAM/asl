@@ -1,0 +1,3 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (transform "aXbXc"))
+  (println (transform "123")))

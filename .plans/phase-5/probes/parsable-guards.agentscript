@@ -1,0 +1,13 @@
+; string-to-int64/float64 must reject non-ASCII decimal digits and digit-group
+; underscores (_parsable). Rust's bare parse() would accept both, so these are
+; pinned by hand. The Arabic-Indic digits are ١٢٣.
+
+(defun show [(o (Option Int64))] -> String
+  (match o
+    ((some n) "some")
+    ((none)   "none")))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (show (string-to-int64 "١٢٣")))
+  (println (show (string-to-int64 "1_000")))
+  (println (match (string-to-float64 "١٢٣") ((some x) "some") ((none) "none"))))

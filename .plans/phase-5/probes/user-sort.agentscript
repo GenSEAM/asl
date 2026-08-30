@@ -1,0 +1,18 @@
+; User enum/union values sort by declaration order, not by case name (l-5c47).
+; The compiled arms disagree with each other here today, so this is probe-pinned:
+; no derived oracle, no differential case.
+;
+; `zed` is declared first, so it sorts before `alpha` even though "alpha" < "zed"
+; as strings.
+
+(defenum Tag
+  (:case zed   [] "Last alphabetically, first in declaration")
+  (:case alpha [] "First alphabetically, last in declaration"))
+
+(defun name [(t Tag)] -> String
+  (match t
+    ((zed)   "zed")
+    ((alpha) "alpha")))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-join (map (fn [t] (name t)) (list-sort (list (alpha) (zed)))) ",")))

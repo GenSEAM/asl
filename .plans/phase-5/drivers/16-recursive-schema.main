@@ -1,0 +1,3 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-from-int64 (depth (chain))))
+  (println (string-from-int64 (total (chain)))))

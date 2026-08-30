@@ -52,7 +52,7 @@ generated from the module header, and a decision on how a foreign call's failure
 boundary. Rendering and system UI are out (`c-c759`).
 *Acceptance:* a corpus program runs on the Wasm target; its stdout/exit match the other arms.
 
-### Phase 5 — Reference interpreter  (roadmap 1, promoted)
+### Phase 5 — Reference interpreter  (roadmap 1, promoted)  — **DONE**
 Rust, over the tree-sitter AST, and the dynamic-execution runtime. This phase also serves the
 development loop the owner named: write a test, run it in the interpreter immediately, no
 transpilation to a host language. The code survives into the compiler frontend.

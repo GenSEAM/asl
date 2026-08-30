@@ -1,0 +1,7 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (let [(r (match (longest-run "aabbbc")
+             ((some p) p)
+             ((none) (pair "" 0))))]
+    (println (.-first r))
+    (println (string-from-int64 (.-second r))))
+  (println (match (longest-run "") ((some p) "some") ((none) "none"))))

@@ -1,0 +1,6 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (agg "3,1,3,2"))
+  (println (agg-empty))
+  (println (lookup "3,1,3,2" 3))
+  (println (rank "b,a"))
+  (println (nan-identity "1,2")))

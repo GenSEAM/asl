@@ -1,0 +1,3 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (shout "hi"))
+  (println (string-from-float64 (area (circle 2.0)))))

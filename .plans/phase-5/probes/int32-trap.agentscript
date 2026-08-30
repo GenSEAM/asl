@@ -1,0 +1,8 @@
+; Int32 arithmetic traps at the 32-bit boundary (l-4d92). The Python lowering
+; ignores Int32 width, so this is a hand-written probe, not a derived oracle.
+; The trap is a process-level exit 2 with a diagnostic — it cannot be a value.
+
+(defun bump [(n Int32)] -> Int32 (+ n 1))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (bump 2147483647))

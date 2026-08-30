@@ -1,0 +1,4 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (local-name (blob)))
+  (println (relay (s/circle 1.0)))
+  (println (relay (sh/rectangle 1.0 2.0))))

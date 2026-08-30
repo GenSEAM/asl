@@ -1,0 +1,4 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (reshape 4))
+  (println (match (list-tail (range 0 0)) ((some xs) "tail") ((none) "none")))
+  (println (match (window 4 1 3) ((some xs) (str "[" (string-join (map (fn [v] (string-from-int64 v)) xs) ",") "]")) ((none) "none"))))

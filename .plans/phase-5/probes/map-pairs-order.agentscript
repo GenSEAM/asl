@@ -1,0 +1,10 @@
+; map-pairs must yield entries ordered by sorted key, in codepoint order — the
+; same order as map-keys/map-values. No corpus fixture or case file asserts it,
+; so it is pinned here by hand (uppercase sorts before lowercase, codepoint-wise).
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (let [(m (map-set (map-set (map-set (map-empty) "b" 2) "Z" 0) "a" 1))]
+    (println (string-join
+      (map (fn [(p (Pair String Int64))] (str (.-first p) "=" (string-from-int64 (.-second p))))
+           (map-pairs m))
+      ","))))

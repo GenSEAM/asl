@@ -1,0 +1,8 @@
+; read-line returns (some line) without the trailing newline, and (none) at EOF.
+; No declared program case feeds empty stdin, so EOF is pinned here by hand.
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (let [(line (try (read-line)))]
+    (match line
+      ((some s) (println "some"))
+      ((none)   (println "none")))))

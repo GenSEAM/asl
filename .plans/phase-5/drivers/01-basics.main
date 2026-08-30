@@ -1,0 +1,5 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-from-int64 (manhattan (origin) (scale (Point :x 1 :y 2) 3))))
+  (let [(c (Config :name "a" :retries 3))]
+    (println (.-name c))
+    (println (string-from-int64 (.-retries c)))))

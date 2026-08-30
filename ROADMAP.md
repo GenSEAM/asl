@@ -54,7 +54,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible (builtin × instantiation) probes through the checker, `rustc` and `py_compile`; the 40 narrowed by `map-key-order`, the domains and the exclusion set are recorded in `prelude/coverage.lock`. What "admissible" buys is narrower than "the checker accepts ⇒ it compiles": the probes are single-builtin, fully annotated one-liners, so the gate proves that claim *for them* and not for programs generally — see the `Map`-key bullet for a program the checker accepts and `rustc` rejects |
 | Differential gate | **green** — 85 function cases across 18 tasks and 14 whole-program cases, Python and Rust; every case asserts a checked-in expected value as well as cross-backend agreement, and a program case declares its files, its stdin, its stdout and its exit status |
 | Unit tests | **96 pass** — `backend/t`, `bench/algo`, `checker/t` |
-| Reference interpreter | **not built, deliberately** — see below |
+| Reference interpreter | **built** (Phase 5) — Rust tree-walking interpreter over the tree-sitter AST (`crates/agentscript-interp/`), fourth arm on the differential gate; `corpus/valid` agrees with python/rust/wasm on stdout/stderr/exit. Function-mode agreement deferred |
 | Measurement harness | **built, never run** — `--dry-run` exercises the whole path with canned responses; a real run is blocked, see §5 |
 
 ### Documents, in reading order for a newcomer
@@ -171,9 +171,9 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
 
 ### After the checker
 
-1. **Reference interpreter** — enough to execute the corpus and validate benchmark translations.
-   Rust, per the priority target; tree-sitter's Rust bindings are first-class and the code survives
-   into the compiler frontend.
+1. ~~**Reference interpreter**~~ — **done** (Phase 5). The corpus executes under a Rust tree-walking
+   interpreter over the tree-sitter AST and agrees with python/rust/wasm on stdout/stderr/exit via
+   `differential.py`; the code survives into the compiler frontend.
 2. ~~**I/O surface**~~ — done, PCP `r-56bf`. Effects are tracked by a marker rather than left
    implicit, so the concurrency question stays open instead of being foreclosed.
 3. **Python and JavaScript backends** — the measurement targets. Rust and Go remain the compiler's

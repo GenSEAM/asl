@@ -1,0 +1,6 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-from-int64 (sum-list (list 1 2 3 4))))
+  (println (string-from-int64 (first-or (list) 9)))
+  (println (match (safe-div 7 2) ((ok n) (str "ok:" (string-from-int64 n))) ((err e) e)))
+  (println (describe (safe-div 7 0)))
+  (println (classify -5)))

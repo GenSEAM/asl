@@ -1,0 +1,16 @@
+; `try` unwinds to the nearest enclosing defun invocation, through lambda
+; application (spec §5.5). A lambda is NOT a return target: if the unwind
+; stopped at the lambda frame, the caller would continue to println and print
+; "reached" — and the Python lowering drops the error after the lambda returns it
+; to an effect position, so this must be hand-written, not derived.
+
+(defun ! probe [] -> (Result String IoError)
+  (let [(f (fn [] -> (Result String IoError) (try (err (not-found)))))]
+    (f)
+    (ok "reached")))
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (match (probe)
+    ((ok s)            (println (str "ok:" s)))
+    ((err (not-found)) (println "err:not-found"))
+    ((err e)           (println "err-other"))))

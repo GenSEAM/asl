@@ -1,0 +1,3 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (band 3 3 7))
+  (println (band 3 2 7)))

@@ -1,0 +1,2 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-from-shadow)))

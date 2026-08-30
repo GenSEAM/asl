@@ -1,0 +1,4 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (query "banana" "na"))
+  (println (query "banana" "b"))
+  (println (match (cut "banana" 1 3) ((some s) s) ((none) "none"))))

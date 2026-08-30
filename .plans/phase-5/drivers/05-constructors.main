@@ -1,0 +1,5 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-join (map (fn [n] (string-from-int64 n)) (small-primes)) ","))
+  (println (match (wrap -1) ((ok n) "ok") ((err e) e)))
+  (println (string-from-int64 (match (maybe-double (some 4)) ((some n) n) ((none) 0))))
+  (println (match (labelled "k" 1) ((pair k v) (str k (string-from-int64 v))))))

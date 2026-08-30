@@ -1,0 +1,8 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (shout "  hi "))
+  (println (initials "ada lovelace"))
+  (println (match (parse-pair " 21 ")
+             ((ok n) (str "ok" (string-from-int64 n)))
+             ((err e) e)))
+  (println (string-join (map (fn [n] (string-from-int64 n)) (evens-below 6)) ","))
+  (println (string-from-int64 (total (list 1 2 3)))))

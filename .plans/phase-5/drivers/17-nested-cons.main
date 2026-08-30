@@ -1,0 +1,3 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (string-join (map (fn [n] (string-from-int64 n)) (pairwise (list 1 2 3 4 5))) ","))
+  (println (string-from-int64 (leading (list 1 2 3)))))

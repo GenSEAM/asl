@@ -89,7 +89,7 @@ ls .plans/phase-5/probes/*.expected | wc -l   # ≥ 8, one per required probe
 **I1 — Workspace + parser crate + CLI skeleton.** Root workspace, `crates/agentscript-ts` (build.rs per §2.2), `crates/agentscript-interp` binary that parses `SOURCE` with tree-sitter and reports: no ERROR/MISSING nodes → continues; any ERROR/MISSING node or load failure → stderr `SOURCE:line: syntax error`, exit 2. The tree-sitter crate pin is verified against ABI 14 here (§5 risk 1), including a cargo test that parses a source end-to-end — the scaffold exercises the parser at runtime, not merely at link time. Gate (fails now: no workspace):
 ```
 rustup run stable cargo build --manifest-path Cargo.toml
-B=crates/target/debug/agentscript-interp
+B=target/debug/agentscript-interp
 printf '(defun f [] -> Int64 1)\n' > /tmp/p5-ok.agentscript
 out="$($B /tmp/p5-ok.agentscript)"; test $? -eq 0 && test -z "$out"
 printf '(defun f [] -> Int64 1\n' > /tmp/p5-bad.agentscript && $B /tmp/p5-bad.agentscript; test $? -eq 2
@@ -98,18 +98,18 @@ rustup run stable cargo test --manifest-path Cargo.toml -q
 
 **I2 — Value model, literals, arithmetic, core forms.** `Value` enum (Bool; Int32/Int64 width-tagged ints; Float64; String; Unit; List; Pair; Map = BTreeMap keyed with the language order; Option/Result tagged; enum values tagged by bare case name; records = ordered field map). Width-tagged trapping arithmetic at **both** widths (§2.5), literal parsing incl. sign-as-literal and the Int32-literal check against the called function's declared signature, string unescaping, `let`/`if`/`cond`/`defun`/call/recursion/`fn` closures with shadowing, `try` unwinding to the enclosing defun through lambda application. Gate (each line fails until implemented; heredoc sources are single-module, no imports):
 ```
-B=crates/target/debug/agentscript-interp
+B=target/debug/agentscript-interp
 printf '(defun ! main [(args (List String))] -> (Result Unit IoError) (println (str "a" (string-from-int64 (+ -1 2)) "b")))\n' > /tmp/p5-i2.agentscript
-test "$($B /tmp/p5-i2.agentscript)" = "ab"
+test "$($B /tmp/p5-i2.agentscript)" = "a1b"
 printf '(defun ! main [(args (List String))] -> (Result Unit IoError) (println (string-from-float64 (/ -3.0 2.0))) (println (str "x\\ny")))\n' > /tmp/p5-i2b.agentscript
 test "$($B /tmp/p5-i2b.agentscript)" = "$(printf -- '-1.5\nx\ny')"
 printf '(defun ! main [(args (List String))] -> (Result Unit IoError) (println (string-from-int64 (+ 9223372036854775807 1))))\n' > /tmp/p5-i2c.agentscript
 $B /tmp/p5-i2c.agentscript 2>/tmp/err.$$; test $? -eq 2 && test -s /tmp/err.$$
 cat > /tmp/p5-i2d.agentscript <<'EOF'
+(defun bump [(n Int32)] -> Int32 (+ n 1))
 (defun ! main [(args (List String))] -> (Result Unit IoError)
-  (println (string-from-int32 (bump 2147483647))))
+  (bump 2147483647))
 EOF
-printf '(defun bump [(n Int32)] -> Int32 (+ n 1))\n' >> /tmp/p5-i2d.agentscript
 $B /tmp/p5-i2d.agentscript 2>/tmp/err2.$$; test $? -eq 2 && test -s /tmp/err2.$$
 $B .plans/phase-5/probes/try-in-lambda.agentscript; test $? -eq 0
 diff -u .plans/phase-5/probes/try-in-lambda.expected <($B .plans/phase-5/probes/try-in-lambda.agentscript) || exit 1
@@ -119,7 +119,7 @@ The `p5-i2b` line is correct as written: `printf` emits one backslash followed b
 
 **I3 — Forms over the corpus (no match, no modules, no I/O).** Fixtures 01, 03, 04, 05, 07 run **driver-wrapped** (none declares `main`; the bare fixture would exit 0 with empty stdout and the comparison would be vacuous) against the derived oracle. Gate:
 ```
-B=crates/target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
+B=target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
 for f in 01-basics 03-strings 04-longest-run 05-constructors 07-lambda-elision; do
   $O --emit $f > /tmp/wrap.$$.agentscript
   $B /tmp/wrap.$$.agentscript > /tmp/out.$$ || exit 1
@@ -129,7 +129,7 @@ done
 
 **I4 — Pattern matching.** All pattern forms (§2.3): bare ident = binder vs parenthesised = case (`18-pattern-binders` — the only fixture pinning the distinction, so it is driven by name, not by prose); negative literal pattern; qualified enum heads resolve to the defining module's bare tag; cons spines; wildcard. Gate: `02-match` driver output equals the oracle's, plus:
 ```
-B=crates/target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
+B=target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
 for f in 02-match 18-pattern-binders; do
   $O --emit $f > /tmp/wrap.$$.agentscript
   $B /tmp/wrap.$$.agentscript > /tmp/out.$$ || exit 1
@@ -141,22 +141,23 @@ test "$($B /tmp/p5-i4.agentscript)" = "hit"
 
 **I5 — Builtin vocabulary.** All 107 builtins from `prelude/prelude.json` with the semantics of §2.5 (sorted map iteration, NaN-last stable sort, `fmt_f64`, `_parsable` parsing guards, `f_to_i` range-before-truncation, char-indexed string ops, `list-sum` through trapping add). Cargo unit tests for the traps and formatting (`fmt_f64(1e16)`, `fmt_f64(-0.0)`, `MIN/-1`, `MIN mod -1 == 0`, NaN order, **sort stability with two NaN values** whose tie order must be input order per `backend/cases/25-list-nan-keys.json`, **multi-entry map key iteration in codepoint order** — the test that would catch a `HashMap` standing in for the BTreeMap, **`map-pairs` key/value ordering** — no corpus fixture or case file asserts it — **`_parsable` hostile input** `"١٢٣"` and `"1_000"` rejected). Gate — the driver-wrapped vocabulary fixtures agree with the derived oracle, and the hand-written probes hold:
 ```
-B=crates/target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
+B=target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
 for f in 16-recursive-schema 17-nested-cons 20-option-result-ctors 21-option-result-combinators 22-boolean-algebra 23-numeric 24-list-reshaping 25-list-aggregation 26-map-lifecycle 27-string-query 28-string-transforms 29-literals; do
   $O --emit $f > /tmp/wrap.$$.agentscript
   $B /tmp/wrap.$$.agentscript > /tmp/out.$$ || exit 1
   diff -u <($O $f) /tmp/out.$$ || exit 1
 done
-for p in int32-trap user-sort nan-stability parsable-guards map-pairs-order; do
+for p in user-sort nan-stability parsable-guards map-pairs-order; do
   diff -u .plans/phase-5/probes/$p.expected <($B .plans/phase-5/probes/$p.agentscript) || exit 1
 done
+$B .plans/phase-5/probes/int32-trap.agentscript >/tmp/o.$$ 2>/tmp/e.$$; test $? -eq 2 && test -s /tmp/e.$$ && test ! -s /tmp/o.$$
 rustup run stable cargo test --manifest-path Cargo.toml -q
 ```
 The `user-sort` probe compares only against its hand-written `.expected` file: the compiled arms disagree on user-type sort order today (`l-5c47`), so there is no derived oracle and no differential case — the interpreter implements the ROADMAP-presumptive rule (declaration order, §2.5) and the spec change is the orchestrator's.
 
 **I6 — Module system.** Port `modules.py` resolution into `src/modules.rs` (§2.5): search path = file's parent + `--root`s; dependencies-first evaluation order; alias tables per unit; global table keyed by defining module path; qualified name/type resolution; bare enum tags across boundaries. Gate — all six fixtures driver-wrapped (`06` does not declare `main`; `15` does but goes through the same mechanism with `--root` for its `core/shadow` import):
 ```
-B=crates/target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
+B=target/debug/agentscript-interp; O=".venv/bin/python .plans/phase-5/oracle.py"
 for f in 06-module 09-imported-types 10-imported-generic-types 11-name-coexistence 12-transitive-use 15-shadowed-binders; do
   $O --emit --root grammar/corpus/modules $f > /tmp/wrap.$$.agentscript
   $B --root grammar/corpus/modules /tmp/wrap.$$.agentscript > /tmp/out.$$ || exit 1

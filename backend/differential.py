@@ -317,6 +317,26 @@ def build_rust_wasm(src: Path, d: Path) -> list[str]:
             str(d / "main.wasm")]
 
 
+def build_interpreter(src: Path, d: Path) -> list[str]:
+    """The reference interpreter, evaluated directly from the tree-sitter AST.
+
+    Same shape as the other arms: SOURCE first (the corpus file), then the
+    search root the module fixtures live under. argv append after --root/SOURCE,
+    matching the other arms' `cmd + argv` form. The binary is built by the
+    workspace before the gate runs (I1; replay.py shares build_interpreter).
+    """
+    binp = ROOT / "target" / "debug" / "agentscript-interp"
+    if not binp.exists():
+        subprocess.run(["rustup", "run", "stable", "cargo", "build",
+                        "--manifest-path", str(ROOT / "Cargo.toml")],
+                       check=True, cwd=ROOT, capture_output=True, text=True)
+    cmd = [str(binp)]
+    for r in ROOTS:
+        cmd += ["--root", str(r)]
+    cmd += [str(src)]
+    return cmd
+
+
 def programs(src: Path, cases: list[dict]) -> int:
     """Run a whole program on every target and compare stdout, stderr and exit
     status against each other and against the case's declared values.
@@ -333,8 +353,8 @@ def programs(src: Path, cases: list[dict]) -> int:
     re-opening that hole by omission.
     """
     bad = 0
-    print(f"\n{'argv':<20} {'python':<20} {'rust':<20} {'wasm':<20} {'stderr':<18} exit")
-    print("-" * 112)
+    print(f"\n{'argv':<20} {'python':<20} {'rust':<20} {'wasm':<20} {'interp':<20} {'stderr':<18} exit")
+    print("-" * 130)
     for case in cases:
         argv = case.get("argv", [])
         files = case.get("files", {})
@@ -345,7 +365,7 @@ def programs(src: Path, cases: list[dict]) -> int:
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             runners = {"python": build_python(src, d), "rust": build_rust(src, d),
-                       "wasm": build_rust_wasm(src, d)}
+                       "wasm": build_rust_wasm(src, d), "interp": build_interpreter(src, d)}
             seen = {}
             for name, cmd in runners.items():
                 run = d / f"run-{name}"
@@ -358,15 +378,15 @@ def programs(src: Path, cases: list[dict]) -> int:
                 r = subprocess.run(cmd + argv, cwd=run, input=stdin,
                                    capture_output=True, text=True)
                 seen[name] = (r.stdout, r.stderr, r.returncode)
-            agree = seen["python"] == seen["rust"] == seen["wasm"]
+            agree = seen["python"] == seen["rust"] == seen["wasm"] == seen["interp"]
             declared_ok = seen["python"] == want
             bad += 0 if (agree and declared_ok) else 1
             note = ("" if agree else "  <-- DISAGREE") + \
                    ("" if declared_ok else "  <-- NOT THE DECLARED OUTPUT/STATUS")
             print(f"{' '.join(argv):<20} {seen['python'][0]!r:<20} "
                   f"{seen['rust'][0]!r:<20} {seen['wasm'][0]!r:<20} "
-                  f"{seen['python'][1]!r:<18} "
-                  f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}" + note)
+                  f"{seen['interp'][0]!r:<20} {seen['python'][1]!r:<18} "
+                  f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}/{seen['interp'][2]}" + note)
     return bad
 
 
@@ -453,7 +473,7 @@ def main() -> int:
         bad += programs(src, group)
         program_total += len(group)
     print(f"\n{bad} disagreement(s) across {cases} function cases "
-          f"+ {program_total} program cases (python/rust/wasm)")
+          f"+ {program_total} program cases (python/rust/wasm/interp)")
     return bad
 
 

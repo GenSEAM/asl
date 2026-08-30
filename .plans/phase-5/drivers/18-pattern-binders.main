@@ -1,0 +1,4 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (outcome (ok "hi")))
+  (println (outcome (err (not-found))))
+  (println (outcome (err (other)))))

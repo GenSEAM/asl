@@ -30,7 +30,7 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `b6b43ff` |
 | 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | `4a7677b` |
 | 4 — WebAssembly target v1 | feasibility measured | — (direct) | done | — (direct) | 7/7 green, 161 tests | — |
-| 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | — | — | — | — |
+| 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 7/7 green, 161 tests, differential 120+15 (4 arms) | — |
 | 6 — agent-facing tooling | — | — | — | — | — | — |
 | 7 — TypeScript backend | — | — | — | — | — | — |
 | 8 — Go backend | — | — | — | — | — | — |
@@ -275,3 +275,15 @@ Decisions made here, recorded explicitly (do not rediscover):
 - **User-type sort order = declaration order** for the interpreter, per ROADMAP's presumptive §3.2 rule (`l-5c47`/`d-6c04`). Probe-pinned only; the compiled arms disagree today, so no differential case sorts a user type. Writing `AGENT_SPEC_CORE.md` §3.2 is owed and is a spec change outside Phase 5's file set — flagged, not done here.
 - **Function mode is out of scope for Phase 5.** PHASES.md acceptance amended to say "program mode" explicitly. Entry-return agreement is a Phase-5 follow-up or Phase-9 item.
 - **I0 halts-and-reports on any baseline count mismatch** — the recorded numbers are never edited to match a regressed tree (the circuit breaker for the oracle-authoring step).
+
+## Phase 5 — implementation reviewed and fixed (2026-08-30)
+
+Implementation review wave (3 lenses): correctness `approve` (0 blockers, 0 majors, 3 minors); conformance `approve-with-amendments` (0 blockers, 1 major, 2 minors); simplify `approve-with-amendments` (3 high, 7 medium, 10 low). All seven gates + cargo + differential green with the fourth arm: `0 disagreement(s) across 120 function cases + 15 program cases (python/rust/wasm/interp)`.
+
+**A reviewer's cited "verified" fact was wrong, and I caught it by checking.** The conformance lens rated the `int32-trap` probe a major blocker on the premise that `int32-to-int64` is absent from the vocabulary ("both confirmed absent"). It is present (`prelude/prelude.json:445`), as are `string-from-int64` (`:409`) and `int64-to-int32` (`:454`); only `string-from-int32` is genuinely absent. Running the probe shows it traps correctly on Int32 overflow (`trap: int32 overflow`, exit 2) — the trap fires before the outer call resolves, so the probe was never masked by an unbound call. What WAS real: the I5 probe gate only diffs stdout and never asserted the exit code, and the plan's `p5-i2d` heredoc calls the genuinely-absent `string-from-int32`. Both fixed.
+
+Fix wave (one fixer, `crates/agentscript-interp/` + the int32-trap probe): every simplify finding applied except the two performance hazards the review itself deferred (candidate clones in `list_extreme`/`min`/`max`, O(n²) `cons_pattern` spine). Dead `fmt.rs` deleted; root file no longer parsed twice; prelude IoError cases lifted to one `const`; the five linear defun/case scans replaced with link-time indexes; whole-`Defun` clones eliminated; resolve helpers factored. `int32-trap` probe rewritten to a direct `(bump 2147483647)` and a new `int32_boundary_traps` cargo test pins `l-4d92` durably. All four gate commands green.
+
+Plan-text gate rot corrected (orchestrator, recorded not hidden): the binary path `crates/target/debug/agentscript-interp` → `target/debug/agentscript-interp` (workspace-root target), `p5-i2` expected `"ab"` → `"a1b"` (`(+ -1 2)` == 1), `p5-i2d` rewritten to trap directly instead of via the absent `string-from-int32`, and the I5 probe loop now asserts the int32-trap exit code 2.
+
+Deferred to later (recorded, not forgotten): cross-enum `tag_order` collision (correctness M1, the §3.2 user-type-sort spec change — same gap as `l-5c47`), function-mode interp agreement (Phase-5 follow-up / Phase-9), and the two tree-walker performance hazards above.

@@ -1,0 +1,4 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (let [(p (classify "3" "x"))]
+    (println (.-first p))
+    (println (.-second p))))

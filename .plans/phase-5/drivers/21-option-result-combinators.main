@@ -1,0 +1,3 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (resolve "21" 0))
+  (println (resolve "x" 0)))

@@ -1,0 +1,6 @@
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (signs 4))
+  (println (floats 2.5))
+  (println (near -1))
+  (println (near 0))
+  (println (string-from-int64 (int32-to-int64 (step 0)))))

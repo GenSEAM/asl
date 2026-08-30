@@ -1,0 +1,10 @@
+; All six string escapes the lexer must unescape: \" \\ \n \t \r \0.
+; No corpus fixture contains an escape, so each is pinned here by hand.
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  (println (str "A" "\"" "B"))
+  (println (str "A" "\\" "B"))
+  (println (str "A" "\n" "B"))
+  (println (str "A" "\t" "B"))
+  (println (str "A" "\r" "B"))
+  (println (str "A" "\0" "B")))
