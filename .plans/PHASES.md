@@ -56,8 +56,7 @@ boundary. Rendering and system UI are out (`c-c759`).
 Rust, over the tree-sitter AST, and the dynamic-execution runtime. This phase also serves the
 development loop the owner named: write a test, run it in the interpreter immediately, no
 transpilation to a host language. The code survives into the compiler frontend.
-*Acceptance:* `corpus/valid` programs execute under the interpreter and agree with the compiled arms
-via `differential.py`.
+*Acceptance:* every `corpus/valid` program executes under the interpreter in `differential.py`'s **program mode** and agrees with the compiled arms on stdout/stderr/exit. Function-mode agreement is deferred (a Phase-5 follow-up or Phase 9).
 
 ### Phase 6 — The agent-facing surface, measured (tooling)
 Goal 4 has no gate; this phase gives it numbers that can regress. The three existing axes —

@@ -30,7 +30,7 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 2 — vocabulary coverage | v3 amending | v1 rejected, v2 approve-with-amendments | done | 2 lenses, 3 blockers + 5 majors fixed | 7/7 green, 161 tests | `b6b43ff` |
 | 3 — rename AgentS → AgentScript | v1 architect | 2 lenses (returned empty; self-reviewed) | done | 2 lenses (returned empty; self-reviewed) | 7/7 green, 161 tests | `4a7677b` |
 | 4 — WebAssembly target v1 | feasibility measured | — (direct) | done | — (direct) | 7/7 green, 161 tests | — |
-| 5 — reference interpreter | — | — | — | — | — | — |
+| 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | — | — | — | — |
 | 6 — agent-facing tooling | — | — | — | — | — | — |
 | 7 — TypeScript backend | — | — | — | — | — | — |
 | 8 — Go backend | — | — | — | — | — | — |
@@ -264,3 +264,14 @@ side reaches by number. Recorded as `d-3c5f` (arm) and `c-7b9e` (portability cav
 Not done (recorded in `d-3c5f`): function-mode Wasm interop (`i64` as `BigInt`) and the interface
 contract / foreign-failure decision the phase description names; program mode is the acceptance
 surface, and artifact size is the Rust std baseline.
+
+## Phase 5 — plan reviewed and reconciled (2026-08-30)
+
+Plan review wave: design lens `approve-with-amendments` (0 blockers, 2 majors, 5 minors); exec lens `reject` (5 blockers); coverage lens `reject` (2 blockers). Both rejects rested on foldable findings, not on the approach. Reconciler produced `PLAN.md` v2 + `RECONCILIATION.md` (42 rows: 24 accept, 13 accept-modified, 1 reject, plus sub-claims rejected inside modified rows).
+
+Central fix, found independently by all three lenses: every non-`main` fixture was being run bare as `exit 0, stdout ""`, so the diffs were vacuous. v2 drives all 29 fixtures through a checked-in wrapper (`oracle.py --emit` + `drivers/*.main`) so the fixture's entry points actually evaluate. The derived oracle (Python lowering) is now supplemented by hand-written probes (`probes/*.agentscript` + `.expected`) pinning the behaviours the Python lowering is blind to: Int32 trap (`l-4d92`), user-type sort (`l-5c47`), the six string escapes, `try`-in-lambda, `read-line` EOF, two-NaN stability, parse guards, `map-pairs` order.
+
+Decisions made here, recorded explicitly (do not rediscover):
+- **User-type sort order = declaration order** for the interpreter, per ROADMAP's presumptive §3.2 rule (`l-5c47`/`d-6c04`). Probe-pinned only; the compiled arms disagree today, so no differential case sorts a user type. Writing `AGENT_SPEC_CORE.md` §3.2 is owed and is a spec change outside Phase 5's file set — flagged, not done here.
+- **Function mode is out of scope for Phase 5.** PHASES.md acceptance amended to say "program mode" explicitly. Entry-return agreement is a Phase-5 follow-up or Phase-9 item.
+- **I0 halts-and-reports on any baseline count mismatch** — the recorded numbers are never edited to match a regressed tree (the circuit breaker for the oracle-authoring step).
