@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Database, GitFork, ShieldCheck, ExternalLink, Terminal, Layers } from 'lucide-react';
+import { Sparkles, Database, GitFork, ShieldCheck, ExternalLink, Terminal, Layers, Globe } from 'lucide-react';
 
 interface ShowcaseProject {
   id: string;
@@ -15,6 +15,38 @@ interface ShowcaseProject {
 
 export const ShowcaseGallery: React.FC = () => {
   const PROJECTS: ShowcaseProject[] = [
+    {
+      id: 'asl-search',
+      name: 'asl-search (SearXNG & Proxy Pool)',
+      badge: 'Agent Metasearch',
+      tagline: 'Decentralized SearXNG aggregator with zero-drop proxy rotation',
+      description: 'Gives autonomous AI agents multi-engine search capabilities (Google, Bing, arXiv, GitHub) with automatic proxy pool health checks, URL deduplication, and token-compressed RAG summaries.',
+      tokens: '310 tokens',
+      latency: '<40ms aggregation',
+      icon: <Globe className="w-5 h-5 text-craft-cyan" />,
+      codeSnippet: `(module search/engine
+  :export [Proxy ProxyStatus SearchResult select-proxy deduplicate-results]
+  :import [(core/strings :as s)])
+
+(defenum ProxyStatus
+  (:case active   []              "Healthy proxy")
+  (:case degraded [(fails Int64)] "Degraded with fail count")
+  (:case dead     []              "Dead proxy"))
+
+(defschema Proxy
+  (:field endpoint String "Host:Port")
+  (:field latency Float64 "Ping ms")
+  (:field status ProxyStatus "Health"))
+
+(defun select-proxy [(pool (List Proxy))] -> (Option Proxy)
+  (match pool
+    ((list) (none))
+    ((cons head tail)
+      (match (.-status head)
+        ((active) (some head))
+        ((degraded f) (if (< f 3) (some head) (select-proxy tail)))
+        ((dead) (select-proxy tail))))))`
+    },
     {
       id: 'asl-mem',
       name: 'asl-mem (Vector Semantic Memory)',

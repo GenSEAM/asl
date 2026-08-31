@@ -221,6 +221,17 @@ def cmd_search(args) -> int:
         return report([diag(args.file, "internal", str(exc))], args.json, "diagnostic(s)")
 
 
+def cmd_websearch(args) -> int:
+    """Metasearch aggregator via SearXNG with proxy pool support."""
+    from tools.search import query_searxng, format_results_markdown
+    items = query_searxng(args.query, instance_url=getattr(args, "instance", None), proxy=getattr(args, "proxy", None))
+    if getattr(args, "json", False):
+        print(json.dumps([item.__dict__ for item in items], indent=2))
+    else:
+        print(format_results_markdown(args.query, items))
+    return 0
+
+
 def cmd_edit(args) -> int:
     try:
         receipt = tsutil.edit(args.file, args.op, args.range or args.at, args.text or "")
@@ -428,6 +439,14 @@ def main() -> int:
     p.add_argument("-q", "--query", required=True, help="a .scm query file")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_search)
+
+    p = sub.add_parser("websearch", aliases=["searxng", "find"],
+                       help="metasearch aggregator via SearXNG with proxy pool support")
+    p.add_argument("query", help="search query text")
+    p.add_argument("--instance", help="custom SearXNG instance URL")
+    p.add_argument("--proxy", help="proxy URL (http://... or socks5://...)")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_websearch)
 
     p = sub.add_parser("edit", help="a structured byte-range edit")
     p.add_argument("op", choices=["replace", "delete", "insert"])
