@@ -4,26 +4,26 @@ import json
 from pathlib import Path
 
 DEFAULT_SKILL = """---
-name: agentscript
-description: AgentScript developer instructions, syntax cheat sheet, and toolchain rules.
+name: asl
+description: ASL (AgentScript Language) developer instructions, syntax cheat sheet, and toolchain rules.
 ---
 
-# AgentScript Project Guide
+# ASL (AgentScript Language) Project Guide
 
-This project is built with **AgentScript** (deterministic S-expressions for WebAssembly & host targets).
+This project is built with **ASL (AgentScript Language)** — the deterministic S-expression language for WebAssembly & host target ecosystems.
 
-## Agent Rules
+## Core Rules for AI Agents
 1. Every file is a module starting with `(module name/path :doc "..." :export [...] :import [...])`.
-2. All identifiers and module names use kebab-case (no underscores).
-3. All numeric types are fixed-width (`Int32`, `Int64`, `Float64`).
-4. `match` is exhaustive; `if` requires both then and else; `cond` requires `:else`.
-5. Functions with host I/O must carry the `!` effect marker: `(defun ! main [(args (List String))] -> (Result Unit IoError) ...)`.
+2. All identifiers, function names, and module names use kebab-case (`user-id`, `parse-int`).
+3. Fixed-width numeric types: `Int32`, `Int64`, `Float64`.
+4. `match` is exhaustive; `if` requires both then/else; `cond` requires `:else`.
+5. Host side-effects require the `!` marker: `(defun ! main [(args (List String))] -> (Result Unit IoError) ...)`.
 
 ## Key Commands
-- Check semantics: `agentscript check src/main.agentscript`
-- Build WebAssembly: `agentscript build src/main.agentscript --target wasm -o dist/main.wasm`
-- Build TypeScript: `agentscript build src/main.agentscript --target ts`
-- Format code: `agentscript fmt src/`
+- Check semantics: `asl check src/main.agentscript`
+- Build multi-target: `asl build`
+- Hot-reload watch: `asl watch`
+- Quick reference: `asl ref`
 """
 
 
@@ -42,7 +42,12 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
         "description": f"{project_name} built with ASL (AgentScript Language)",
         "template": template,
         "entry": "src/main.agentscript",
-        "targets": ["wasm", "ts", "rs", "go", "py"]
+        "watch": ["src/", "asl.json"],
+        "targets": {
+            "wasm": {"output": "dist/main.wasm"},
+            "ts": {"output": "dist/main.ts"},
+            "py": {"output": "dist/main.py"}
+        }
     }
     manifest_path = target_dir / "asl.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
@@ -127,21 +132,27 @@ This project is written in **AgentScript** (an S-expression language designed fo
     claude_md = """# Claude Code Instructions
 
 Read `AGENTS.md` first for all project conventions, type rules, build targets, and verification commands.
-AgentScript language rules and cheat sheet are available in `.skills/agentscript/SKILL.md`.
+ASL (AgentScript Language) rules and cheat sheet are available in `.skills/asl/SKILL.md` or via `asl ref`.
 
-Always run `agentscript check` and `agentscript build` before finalizing any changes.
+Always run `asl check` and `asl build` before finalizing any changes.
 """
     claude_path = target_dir / "CLAUDE.md"
     claude_path.write_text(claude_md)
     created_files.append(str(claude_path))
 
-    # 6. .skills/agentscript/SKILL.md (if enabled)
+    # 6. .skills/asl/SKILL.md (if enabled)
     if embed_skill:
-        skill_dir = target_dir / ".skills" / "agentscript"
+        skill_dir = target_dir / ".skills" / "asl"
         skill_dir.mkdir(parents=True, exist_ok=True)
         skill_path = skill_dir / "SKILL.md"
         skill_path.write_text(DEFAULT_SKILL)
         created_files.append(str(skill_path))
+
+        # Backward compatibility alias
+        legacy_dir = target_dir / ".skills" / "agentscript"
+        legacy_dir.mkdir(parents=True, exist_ok=True)
+        (legacy_dir / "SKILL.md").write_text(DEFAULT_SKILL)
+        created_files.append(str(legacy_dir / "SKILL.md"))
 
     return {
         "status": "success",
