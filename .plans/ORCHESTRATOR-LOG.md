@@ -378,3 +378,14 @@ Plan review wave: design (architect) `approve-with-amendments` (2B/3M/4m), exec 
   - `backend/t/test_wasm_runner.py`: Pytest suite running valid corpus wasm programs.
 - **Review Wave**: Correctness `approve` (0B/0M/0m), Conformance `approve` (0B/0M/0m), Simplify `approve` (0B/0M/1m).
 - **Verification**: All gates clean (validate.py, closure_audit.py 100%, checker/gate.py, check_corpus.py, monomorphism.py 400 probes, differential.py 135 runs across 6 targets, 167 backend tests pass).
+
+## Phase 11 — AgentScript MCP Server & Developer Agent Tooling (2026-08-31)
+
+- **Tier**: Tier 1.5 (Middle complexity — stdlib-only JSON-RPC MCP server + 5 tools + context signature compressor + test suite + domain skill).
+- **Deliverables**:
+  - `tools/mcp/server.py`: Stdlib-only JSON-RPC 2.0 stdio MCP server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`, `asex_ast_query`.
+  - `tools/mcp/compressor.py`: AST module signature extractor preserving type contracts and docstrings while stubbing function bodies to reduce prompt tokens by 70–85%.
+  - `tools/t/test_mcp.py`: Pytest suite covering initialization, tool listing, checking, evaluation, formatting, and compression.
+  - `skills/agentscript/SKILL.md`: Developer guide and MCP reference for agents.
+- **Review Wave**: Correctness `approve`, Conformance `approve`, Simplify `approve`.
+- **Verification**: All gates clean (validate.py, closure_audit.py 100%, checker/gate.py, check_corpus.py, monomorphism.py 400 probes, differential.py 135 runs across 6 targets, 172 tests in `backend/t` + `tools/t` pass).

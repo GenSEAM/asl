@@ -86,7 +86,7 @@ specifies a terminal-bench shape.
 Browser- and Node-compatible WASI / WebAssembly runner and compiler integration. Adds `agentscript build --target wasm` to CLI, builds `backend/ts/wasm_runner.ts` (browser memory buffers, WASI preview1 polyfill/shim, export invoker, structured execution result), and tests execution in both Node and simulated browser context.
 *Acceptance:* `agentscript build <file> --target wasm` produces valid wasm; `backend/ts/wasm_runner.ts` executes corpus programs capturing stdout/stderr/exit in-memory; unit tests pass.
 
-### Phase 11 — AgentScript MCP Server & Developer Agent Tooling
+### Phase 11 — AgentScript MCP Server & Developer Agent Tooling — **DONE**
 A Model Context Protocol (MCP) server (`tools/mcp/`) and agent context utilities. Implements stdio JSON-RPC MCP server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_ast`, `asex_compress_module` (token compressor extracting interface-only signatures). Includes automated test suite for all MCP tools and local skill documentation.
 *Acceptance:* `tools/mcp/` server starts over stdio, passes MCP protocol schema tests, all tools return structured results matching specification; `pytest tools/t/test_mcp.py` green.
 
