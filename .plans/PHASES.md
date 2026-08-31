@@ -90,9 +90,12 @@ Browser- and Node-compatible WASI / WebAssembly runner and compiler integration.
 A Model Context Protocol (MCP) server (`tools/mcp/`) and agent context utilities. Implements stdio JSON-RPC MCP server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_ast`, `asex_compress_module` (token compressor extracting interface-only signatures). Includes automated test suite for all MCP tools and local skill documentation.
 *Acceptance:* `tools/mcp/` server starts over stdio, passes MCP protocol schema tests, all tools return structured results matching specification; `pytest tools/t/test_mcp.py` green.
 
+### Phase 12 — Showcase Web App & Craft Interactive System — **DONE**
+Landing page, live WASI REPL in browser, GPU/Canvas 60fps AST visualizer, in-browser neural vector cosine classifier, multi-target matrix switcher (AS, Wasm, TS, Rust, Go, Python), and token economics calculator.
+*Acceptance:* `npm run build:web` produces static production bundle in `web/dist/`; all interactive components functional; all project gates green.
+
 ## Out of scope — deferred to subsequent pass
 
-* **Phase 12 — Showcase Web App & Craft UI** — Landing page, live REPL in browser, visual AST/type inspector, React + Tailwind + Wasm integration.
 * **Measurement runs** (`l-298e`) — gateway endpoint, model identifier, credential env var.
 * **Concurrency / async** — deliberately absent; function colouring undecided.
 

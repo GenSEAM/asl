@@ -389,3 +389,16 @@ Plan review wave: design (architect) `approve-with-amendments` (2B/3M/4m), exec 
   - `skills/agentscript/SKILL.md`: Developer guide and MCP reference for agents.
 - **Review Wave**: Correctness `approve`, Conformance `approve`, Simplify `approve`.
 - **Verification**: All gates clean (validate.py, closure_audit.py 100%, checker/gate.py, check_corpus.py, monomorphism.py 400 probes, differential.py 135 runs across 6 targets, 172 tests in `backend/t` + `tools/t` pass).
+
+## Phase 12 — Showcase Web App & Craft Interactive System (2026-08-31)
+
+- **Tier**: Tier 1.5 (Craft UI design system, Vite 6 + React 19 + Tailwind, live WASI in-browser sandbox, 60fps Canvas AST particle explorer, in-browser neural vector classifier, multi-target transpilation matrix, token calculator).
+- **Deliverables**:
+  - `web/`: Production-ready static web app built with Vite + React 19 + Tailwind.
+  - `web/src/components/Playground.tsx`: Live WebAssembly S-expression execution sandbox with WASI stdout console and execution timer.
+  - `web/src/components/GraphVisualizer.tsx`: 60fps HTML5 Canvas particle & force-directed S-expression AST tree explorer.
+  - `web/src/components/VectorClassifier.tsx`: In-browser neural vector cosine classifier executing without server roundtrips.
+  - `web/src/components/TargetMatrix.tsx`: Multi-language transpilation switcher (`.agentscript`, `.wasm`, `.ts`, `.rs`, `.go`, `.py`).
+  - `web/src/components/TokenCalculator.tsx`: Interactive ROI & 78% context savings estimator for AI agent workflows.
+  - `package.json`: Top-level npm bindings (`npm run dev:web`, `npm run build:web`, `npm run preview:web`).
+- **Verification**: `npm run build:web` succeeds in 2.08s producing `web/dist/`, all 7 repo gates green, 533 unit tests pass.
