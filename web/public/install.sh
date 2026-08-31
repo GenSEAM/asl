@@ -3,7 +3,7 @@
 # Usage: curl -fsSL https://aslang.dev/install.sh | bash
 set -e
 
-REPO="https://github.com/aslang-org/asl"
+REPO="https://github.com/genseam/asl"
 INSTALL_DIR="${ASL_INSTALL_DIR:-$HOME/.asl}"
 BIN_DIR="$INSTALL_DIR/bin"
 

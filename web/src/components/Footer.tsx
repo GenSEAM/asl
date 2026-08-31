@@ -29,7 +29,7 @@ export const Footer: React.FC = () => {
         {/* Community & Links */}
         <div className="flex items-center gap-5 text-xs">
           <a
-            href="https://github.com/aslang-org/asl"
+            href="https://github.com/genseam/asl"
             target="_blank"
             rel="noreferrer"
             className="text-craft-300 hover:text-craft-accent transition-colors"
@@ -37,7 +37,7 @@ export const Footer: React.FC = () => {
             GitHub
           </a>
           <a
-            href="https://discord.gg/aslang"
+            href="https://discord.gg/genseam"
             target="_blank"
             rel="noreferrer"
             className="text-craft-300 hover:text-craft-accent transition-colors"
@@ -45,7 +45,7 @@ export const Footer: React.FC = () => {
             Discord
           </a>
           <a
-            href="https://x.com/aslang_dev"
+            href="https://x.com/genseam"
             target="_blank"
             rel="noreferrer"
             className="text-craft-300 hover:text-craft-accent transition-colors"
