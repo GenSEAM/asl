@@ -98,6 +98,22 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 
 def cmd_build(args) -> int:
+    if getattr(args, "watch", False):
+        from tools.project import watch_project
+        watch_project(getattr(args, "file", None) if getattr(args, "file", None) and getattr(args, "file").is_dir() else Path.cwd())
+        return 0
+
+    if not getattr(args, "file", None) or (args.file and args.file.is_dir()):
+        from tools.project import build_project
+        code, results = build_project(getattr(args, "file", None) or Path.cwd())
+        if getattr(args, "json", False):
+            print(json.dumps(results, indent=2))
+        else:
+            for r in results:
+                status = "✓" if r["ok"] else "✗"
+                print(f"{status} [{r['target']}] -> {r['output']} ({r['duration_ms']:.1f}ms)")
+        return code
+
     if not args.file.is_file():
         return report([diag(args.file, "build", "no such file")], args.json, "diagnostic(s)")
     if args.target == "wasm":
@@ -142,6 +158,13 @@ def cmd_build(args) -> int:
     message = last_line(run.stderr) or "build failed"
     code = "target-mismatch" if message.startswith("TargetMismatch") else "build"
     return report([diag(args.file, code, message)], args.json, "diagnostic(s)")
+
+
+def cmd_watch(args) -> int:
+    """Hot-reload file watcher and incremental multi-target compiler."""
+    from tools.project import watch_project
+    watch_project(getattr(args, "directory", None) or Path.cwd())
+    return 0
 
 
 def last_line(stderr: str) -> str:
@@ -335,12 +358,18 @@ def main() -> int:
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_check)
 
-    p = sub.add_parser("build", help="transpile one module to a target")
-    p.add_argument("file", type=Path)
-    p.add_argument("--target", required=True, choices=sorted(BACKENDS))
+    p = sub.add_parser("build", help="transpile project or single module to target(s)")
+    p.add_argument("file", nargs="?", type=Path, help="source file to build (or builds all in asl.json)")
+    p.add_argument("--target", choices=sorted(BACKENDS), help="target backend (optional if defined in asl.json)")
     p.add_argument("-o", "--output", type=Path, help="write output artifact to file path")
+    p.add_argument("--watch", "-w", action="store_true", help="watch for file changes and recompile")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_build)
+
+    p = sub.add_parser("watch", help="hot-reload file watcher and incremental multi-target compiler")
+    p.add_argument("directory", nargs="?", type=Path, help="project directory to watch")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_watch)
 
     p = sub.add_parser("fmt", help="print canonically, in place")
     p.add_argument("paths", nargs="*", type=Path)
