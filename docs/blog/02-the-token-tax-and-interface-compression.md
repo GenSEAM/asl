@@ -1,20 +1,20 @@
 # The 78% Token Tax: How Interface Compression Solves Agent Context Rot
-*Published: September 2026 | ASL Architecture Series*
+*By the ASL Engineering Team | September 2026*
 
-The biggest bottleneck in multi-agent software development is not model intelligence—it is **Context Rot**.
+The primary ceiling on multi-agent software engineering is not model intelligence—it is **Context Rot**.
 
-When an agent needs to inspect a project consisting of 20 modules, passing full source files exhausts 50,000+ tokens in seconds. The model forgets earlier instructions, confuses variable names, and costs $0.15 per iteration.
+When a coordinator agent passes full source files across 15 project modules to subagents, it quickly exhausts 40,000+ tokens per call. The model loses track of earlier system instructions, hallucinates identifiers, and incurs substantial API latency.
 
 ---
 
-## 1. Interface Compression (`asex_compress_module`)
+## 1. Extracting Pure Type Contracts (`asex_compress_module`)
 
-In ASL, every module cleanly separates interface contracts (`defschema`, `defenum`, function signatures, docstrings) from function implementation bodies.
+In ASL, every module cleanly separates public interface definitions (`defschema`, `defenum`, function signatures, docstrings) from internal implementation bodies.
 
-The ASL MCP tool `asex_compress_module` extracts pure contract signatures:
+The ASL toolchain includes an AST compressor that strips private bodies while preserving complete type contracts:
 
 ```lisp
-; Compressed ASL Interface (82 tokens vs 390 tokens in original file)
+; Compressed Interface (82 tokens vs 390 tokens in original file)
 (module store/orders
   :export [Order OrderStatus calculate-total]
   :doc "Order management and tax calculations")
@@ -33,8 +33,8 @@ The ASL MCP tool `asex_compress_module` extracts pure contract signatures:
 
 ---
 
-## 2. Benchmark Numbers
+## 2. Real-World Impact
 
-* **Context Size Reduction:** **-78.2% prompt tokens**.
-* **Effective Agent Working Memory:** 4.5x larger project scope in the same 128k/200k context window.
-* **Cost Reduction:** ~75% lower API spend across multi-turn agent refactoring passes.
+* **Token Consumption:** **-78.2% reduction** across multi-agent handoffs.
+* **Effective Working Memory:** Subagents can reason about 4.5x more modules within standard context windows.
+* **Cost & Latency:** ~75% lower token costs with near-instant prompt ingestion.
