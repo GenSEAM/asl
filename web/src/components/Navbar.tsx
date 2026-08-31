@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Terminal, Cpu, Layers, Sparkles, FolderPlus } from 'lucide-react';
+import { Terminal, Cpu, Layers, Sparkles, FolderPlus, Bot } from 'lucide-react';
 import { ScaffoldModal } from './ScaffoldModal';
 
 export const Navbar: React.FC = () => {
@@ -23,6 +23,10 @@ export const Navbar: React.FC = () => {
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-mono text-craft-300">
+            <a href="#harness" className="hover:text-craft-accent transition-colors flex items-center gap-1.5">
+              <Bot className="w-4 h-4 text-craft-accent" />
+              <span>Agent Sandbox</span>
+            </a>
             <a href="#showcases" className="hover:text-craft-accent transition-colors flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-craft-accent" />
               <span>Showcases</span>
