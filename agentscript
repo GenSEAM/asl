@@ -223,6 +223,23 @@ def cmd_bindgen(args) -> int:
     return 1
 
 
+def cmd_init(args) -> int:
+    """Scaffold a new AgentScript project with AGENTS.md, CLAUDE.md, and starter code."""
+    from tools.scaffold import scaffold_project
+    res = scaffold_project(args.directory, template=args.template, embed_skill=not args.no_skill)
+    if args.json:
+        print(json.dumps(res, indent=2))
+    else:
+        print(f"✓ Initialized AgentScript project '{res['project']}' in {res['directory']}")
+        for f in res["created_files"]:
+            print(f"  + {f}")
+        print("\nNext steps:")
+        print(f"  cd {args.directory}")
+        print("  agentscript check src/main.agentscript")
+        print("  agentscript build src/main.agentscript --target wasm")
+    return 0
+
+
 # ---------- driver ----------
 
 def main() -> int:
@@ -230,6 +247,13 @@ def main() -> int:
     ap.add_argument("--json", action="store_true",
                     help="emit diagnostics as {file, line, col, code, message}")
     sub = ap.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("init", help="scaffold a new AgentScript project with AGENTS.md and CLAUDE.md")
+    p.add_argument("directory", type=Path, help="directory to initialize")
+    p.add_argument("--template", choices=["cli", "wasm", "web", "lib"], default="cli", help="project template")
+    p.add_argument("--no-skill", action="store_true", help="do not embed local .skills directory")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_init)
 
     p = sub.add_parser("check", help="the §9 rules a grammar cannot express")
     p.add_argument("paths", nargs="*", type=Path)
