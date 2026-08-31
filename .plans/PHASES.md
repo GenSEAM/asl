@@ -82,7 +82,17 @@ point, re-integrated and gated by `tsc`. Third arm on the differential gate.
 specifies a terminal-bench shape.
 *Acceptance:* multi-target runner supports Python, TypeScript, Rust, Go, and Interpreter with isolated workspaces, 6-stage lifecycle tracking, whole-program tasks, offline `--dry-run`, and automated test suite (`bench/harness/test_run.py`).
 
-## Not in scope — owner decisions, recorded as blocked
+### Phase 10 — WebAssembly Browser Sandbox & Web Runner — **DONE**
+Browser- and Node-compatible WASI / WebAssembly runner and compiler integration. Adds `agentscript build --target wasm` to CLI, builds `backend/ts/wasm_runner.ts` (browser memory buffers, WASI preview1 polyfill/shim, export invoker, structured execution result), and tests execution in both Node and simulated browser context.
+*Acceptance:* `agentscript build <file> --target wasm` produces valid wasm; `backend/ts/wasm_runner.ts` executes corpus programs capturing stdout/stderr/exit in-memory; unit tests pass.
 
+### Phase 11 — AgentScript MCP Server & Developer Agent Tooling
+A Model Context Protocol (MCP) server (`tools/mcp/`) and agent context utilities. Implements stdio JSON-RPC MCP server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_ast`, `asex_compress_module` (token compressor extracting interface-only signatures). Includes automated test suite for all MCP tools and local skill documentation.
+*Acceptance:* `tools/mcp/` server starts over stdio, passes MCP protocol schema tests, all tools return structured results matching specification; `pytest tools/t/test_mcp.py` green.
+
+## Out of scope — deferred to subsequent pass
+
+* **Phase 12 — Showcase Web App & Craft UI** — Landing page, live REPL in browser, visual AST/type inspector, React + Tailwind + Wasm integration.
 * **Measurement runs** (`l-298e`) — gateway endpoint, model identifier, credential env var.
 * **Concurrency / async** — deliberately absent; function colouring undecided.
+

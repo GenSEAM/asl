@@ -1,14 +1,12 @@
 {
   "name": "agentscript",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
-  "main": "index.js",
+  "main": "backend/ts/wasm_runner.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:wasm": "node backend/ts/test_wasm_runner.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "devDependencies": {
     "@types/node": "^26.4.0",
     "tree-sitter-cli": "^0.26.12",

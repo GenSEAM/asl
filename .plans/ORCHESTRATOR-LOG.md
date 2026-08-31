@@ -367,3 +367,14 @@ Scout: `backend/golang/rt/rt.go` is a partial pure-core runtime (Option/Result/P
 Planner produced 7 items + 7 decisions (middle complexity). Decisions: (D1) single-package (rt.go + main.go both `package main` in temp dir, no go.mod, `go build`/`go vet` on explicit files); (D2) `defenum` → tagged struct `{Tag string; Args []any}` + per-case ctors, `defschema` → plain struct with `*Name` self-refs; (D3) generic `Number` constraint + checked ops, `Div` gains the MinInt64/-1 trap, `FmtF64` port of `rt.ts`; (D4) `try` = panic/recover with a `Thrown` value, re-panicking non-Thrown (traps) and checker-blocked try-in-fn; (D5) `syscall.Errno` via `errors.As`, table = `runtime.py:269-273`; (D6) 107 fresh `go` templates; (D7) TS precedent — Go does NOT join `monomorphism.py`.
 
 Plan review wave: design (architect) `approve-with-amendments` (2B/3M/4m), exec `approve-with-amendments` (2B/10n), coverage `reject` (4B/3M/2m). Reconciler folded 30 findings → 26 rows (0 reject). Key amendments: anti-stub literal gate (per-arm case-run counters, `go == python` and nonzero, plus six-arm summary); W2 rebuilt (rt.go compile fix item 1, NaN-aware `Eq`/nan-last `Cmp` layer item 8 retargeting `Contains`/`IndexOf`/`Sort`/`Least`/`Greatest`, probe pins all six trap messages + all five errno mappings + full `FmtF64` set); W3/W4 hardened (`main` in the mangle set — five fixtures declare it, D2 emission rules stated, try-in-fn reject, structural grep on `06-module`'s three `Shape` match assertions).
+
+## Phase 10 — WebAssembly Browser Sandbox & Web Runner (2026-08-31)
+
+- **Tier**: Tier 1.5 (Middle complexity — pure TypeScript in-memory WASI preview1 host engine + CLI compilation + multi-platform test harness).
+- **Deliverables**:
+  - `backend/ts/wasm_runner.ts` + `backend/ts/wasm_runner.js`: zero-native-dependency WASI snapshot_preview1 runner with dynamic memory buffer detachment safety (`memory.grow()`), 8-byte ciovec unpacking, streaming callbacks, and `createWasmInstance` export invoker.
+  - `backend/ts/test_wasm_runner.ts`: comprehensive Node/browser-compatible test suite.
+  - `agentscript`: CLI integration for `build --target wasm [-o <out.wasm>]`.
+  - `backend/t/test_wasm_runner.py`: Pytest suite running valid corpus wasm programs.
+- **Review Wave**: Correctness `approve` (0B/0M/0m), Conformance `approve` (0B/0M/0m), Simplify `approve` (0B/0M/1m).
+- **Verification**: All gates clean (validate.py, closure_audit.py 100%, checker/gate.py, check_corpus.py, monomorphism.py 400 probes, differential.py 135 runs across 6 targets, 167 backend tests pass).

@@ -33,7 +33,7 @@ from resolve import Diagnostic, check_file  # noqa: E402
 from tools import tsutil  # noqa: E402
 from tools.fmt import fmt  # noqa: E402
 
-BACKENDS = {"py": "to_python.py", "rs": "to_rust.py"}
+BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "ts": "to_typescript.py", "go": "to_go.py", "wasm": "wasm"}
 TREE_SITTER = ROOT / "node_modules" / ".bin" / "tree-sitter"
 GRAMMAR_DIR = ROOT / "grammar" / "tree-sitter-agentscript"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -94,14 +94,48 @@ def cmd_check(args) -> int:
     return report(diags, args.json, f"diagnostic(s) across {len(files)} file(s)")
 
 
+sys.path.insert(0, str(ROOT / "backend"))
+
+
 def cmd_build(args) -> int:
     if not args.file.is_file():
         return report([diag(args.file, "build", "no such file")], args.json, "diagnostic(s)")
+    if args.target == "wasm":
+        import tempfile
+        from to_rust import ToRust
+        roots = [ROOT / "grammar" / "corpus" / "modules"]
+        try:
+            rs_src = ToRust().transpile(args.file.read_text(), path=args.file, roots=roots)
+            with tempfile.TemporaryDirectory(dir="/tmp") as d:
+                (Path(d) / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
+                (Path(d) / "main.rs").write_text(rs_src)
+                out_wasm = Path(d) / "out.wasm"
+                is_prog = "pub fn main_(" in rs_src or "fn main()" in rs_src
+                target_flag = ["--target", "wasm32-wasip1"] if is_prog else ["--target", "wasm32-unknown-unknown", "--crate-type=cdylib"]
+                c = subprocess.run(["rustup", "run", "stable", "rustc", *target_flag,
+                                    "-O", "--edition", "2021", "main.rs", "-o", str(out_wasm)],
+                                   cwd=d, capture_output=True, text=True)
+                if c.returncode != 0:
+                    message = last_line(c.stderr) or "rustc wasm build failed"
+                    return report([diag(args.file, "build", message)], args.json, "diagnostic(s)")
+                wasm_bytes = out_wasm.read_bytes()
+                if getattr(args, "output", None):
+                    args.output.write_bytes(wasm_bytes)
+                else:
+                    sys.stdout.buffer.write(wasm_bytes)
+                return 0
+        except Exception as exc:
+            return report([diag(args.file, "build", str(exc))], args.json, "diagnostic(s)")
+
     script = ROOT / "backend" / BACKENDS[args.target]
-    run = subprocess.run([sys.executable, str(script), str(args.file)],
+    run = subprocess.run([sys.executable, str(script), str(args.file),
+                         "--root", str(ROOT / "grammar" / "corpus" / "modules")],
                          capture_output=True, text=True)
     if run.returncode == 0:
-        sys.stdout.write(run.stdout)
+        if getattr(args, "output", None):
+            args.output.write_text(run.stdout)
+        else:
+            sys.stdout.write(run.stdout)
         return 0
     # The backends refuse a module written for another ecosystem by name, and that
     # refusal is a result rather than a crash. It is reported as one diagnostic.
@@ -205,6 +239,7 @@ def main() -> int:
     p = sub.add_parser("build", help="transpile one module to a target")
     p.add_argument("file", type=Path)
     p.add_argument("--target", required=True, choices=sorted(BACKENDS))
+    p.add_argument("-o", "--output", type=Path, help="write output artifact to file path")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_build)
 
