@@ -6,6 +6,7 @@ import { GraphVisualizer } from './components/GraphVisualizer';
 import { VectorClassifier } from './components/VectorClassifier';
 import { TargetMatrix } from './components/TargetMatrix';
 import { TokenCalculator } from './components/TokenCalculator';
+import { ParadigmBridge } from './components/ParadigmBridge';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
 
@@ -18,6 +19,7 @@ export const App: React.FC = () => {
         <Playground />
         <GraphVisualizer />
         <VectorClassifier />
+        <ParadigmBridge />
         <TargetMatrix />
         <TokenCalculator />
         <Ecosystem />
