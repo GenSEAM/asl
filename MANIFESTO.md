@@ -38,9 +38,11 @@ Modern programming languages were designed for human eyeballs, text editors, and
 - The AgentScript interface compressor (`asex_compress_module`) strips internal function bodies into stubbed signatures while preserving typed contracts, schemas, and docstrings.
 - **Measured Reality:** A 650-token module compresses to 142 tokens (**-78.1% context savings** across multi-agent loops).
 
-### Pillar 3: WebAssembly as the Primary Production Target
-- WebAssembly (`wasm32-wasip1`) is the core execution target.
-- 64KB memory page granularity, zero-overhead bounds checking, instant in-browser and edge execution via pure in-memory WASI preview1 host shims.
+### Pillar 3: WebAssembly as the Universal Production Sandbox & Agent Scratchpad
+- **Zero-Latency In-Memory Execution:** WebAssembly (`wasm32-wasip1`) and the reference interpreter execute in **<1ms** with isolated 64KB memory pages.
+- **The Agent Scratchpad Paradigm:** Autonomous agents no longer need to write risky, uncontrolled bash/Python scripts or wait 300ms for Docker containers. An agent can draft an AgentScript module to run exploratory computations, mathematical simulations, or batch AST refactorings safely in memory.
+- **Virtual File System Operations:** Agents can perform complex data transformations and batch code rewrites within an in-memory VFS, validating the output via semantic checkers before synchronizing changes back to the real codebase.
+- **Total Freedom with Zero Host Risk:** Provides the agent complete computational power (recursion, fixed-width arithmetic, fast vector queries) while guaranteeing host isolation.
 
 ### Pillar 4: Multi-Target Ecosystem Glue
 - AgentScript acts as the universal glue between Object-Oriented, Functional, and Procedural worlds:
