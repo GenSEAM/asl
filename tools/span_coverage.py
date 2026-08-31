@@ -5,7 +5,7 @@ The regressible number is variants-with-span / failable variants, computed from
 `ast.rs`. Four `Expr` variants (`Float`, `Str`, `Bool`, `Unit`) can never reach a
 runtime `Err` site, so they carry no span and are excluded; the failable denominator
 is 13. Coverage of the *value* of a span (that its error path prints a real,
-non-zero location) is enforced by the functional test `tools/t/test_interp_diag.py`,
+non-zero location) is enforced by the functional test `tools/tests/test_interp_diag.py`,
 not by this fraction.
 
 The lock is exact-match (D7): `--check` fails on ANY difference — up or down — and

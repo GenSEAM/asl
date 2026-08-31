@@ -33,5 +33,5 @@ The local MCP server is available at `tools/mcp/server.py`.
 .venv/bin/python backend/check_corpus.py
 .venv/bin/python backend/monomorphism.py
 .venv/bin/python backend/differential.py
-.venv/bin/pytest backend/t tools/t -q
+.venv/bin/pytest backend/tests checker/tests tools/tests -q
 ```

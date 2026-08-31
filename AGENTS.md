@@ -38,7 +38,7 @@ and a grammar that rejected them would be over-tight.
 .venv/bin/python backend/check_corpus.py
 .venv/bin/python backend/monomorphism.py
 .venv/bin/python backend/differential.py
-.venv/bin/python -m pytest backend/t bench/algo checker/t -q
+.venv/bin/python -m pytest backend/tests bench/algo checker/tests tools/tests -q
 ```
 
 The closure gate extracts call heads with the project's own tree-sitter grammar and fails if any
@@ -90,10 +90,10 @@ nothing but running them proves they agree; the Wasm arm caught a raw-errno mapp
 one target and WASI on the other (PCP `c-7b9e`). It is also the only gate that has ever caught a
 defect in how one form nests inside another (PCP `c-15f3`).
 
-`backend/t` runs AgentScript source through the transpiler and executes the result, asserting semantics
+`backend/tests` runs AgentScript source through the transpiler and executes the result, asserting semantics
 taken from the specification — not from observing what the transpiler happened to emit.
 
-`checker/t` covers the type layer's internals. A unifier that accepts everything leaves every gate
+`checker/tests` covers the type layer's internals. A unifier that accepts everything leaves every gate
 green, so the pieces whose failure is silent are tested directly rather than through a verdict.
 
 ### The vocabulary has one source
