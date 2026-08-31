@@ -323,15 +323,43 @@ def cmd_skill(args) -> int:
     return 0
 
 
+def cmd_version(args) -> int:
+    """Show current ASL version and check for updates."""
+    from tools.upgrade import get_current_version, check_latest_version
+    cur = get_current_version()
+    print(f"asl (AgentScript Language) v{cur}")
+    print("Main Target: wasm32-wasip1 | Bridges: ts, rs, go, py | URL: https://aslang.dev")
+    latest = check_latest_version(timeout=1.0)
+    if latest and latest.get("version") and latest["version"] != cur:
+        print(f"\n💡 A new release is available: v{latest['version']} (current: v{cur})")
+        print("   Run 'asl upgrade' to update to the latest release.")
+    return 0
+
+
+def cmd_upgrade(args) -> int:
+    """Upgrade ASL toolchain to the latest release."""
+    from tools.upgrade import run_upgrade
+    return run_upgrade(verbose=True)
+
+
 # ---------- driver ----------
 
 def main() -> int:
     ap = argparse.ArgumentParser(prog="agentscript", description=__doc__.splitlines()[0])
+    ap.add_argument("--version", "-v", action="store_true", help="show version information")
     ap.add_argument("--json", action="store_true",
                     help="emit diagnostics as {file, line, col, code, message}")
     ap.add_argument("--grammar", "--ref", action="store_true",
                     help="print language grammar rules and LLM cheat sheet")
     sub = ap.add_subparsers(dest="command", required=False)
+
+    p = sub.add_parser("version", help="show version and check for updates")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_version)
+
+    p = sub.add_parser("upgrade", aliases=["update"], help="upgrade ASL to the latest release")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_upgrade)
 
     p = sub.add_parser("grammar", aliases=["ref", "cheat", "llms"],
                        help="print language grammar rules and LLM reference sheet")
@@ -421,6 +449,8 @@ def main() -> int:
     p.set_defaults(fn=cmd_bindgen)
 
     args = ap.parse_args()
+    if getattr(args, "version", False):
+        return cmd_version(args)
     if getattr(args, "grammar", False) or getattr(args, "ref", False):
         return cmd_grammar(args)
     if not hasattr(args, "fn"):

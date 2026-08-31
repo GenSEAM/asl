@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, ShieldCheck, Zap, ArrowRight, Code2 } from 'lucide-react';
+import { Cpu, ShieldCheck, Zap, ArrowRight, Code2, Terminal } from 'lucide-react';
 
 export const Hero: React.FC = () => {
   return (
@@ -20,7 +20,40 @@ export const Hero: React.FC = () => {
             <strong>ASL (AgentScript Language)</strong> is the first programming language built from the ground up for the Agentic Era. Single-pass S-expressions, 0 syntax repair loops, 78% lower prompt token overhead, and instant zero-cost WebAssembly sandboxing.
           </p>
 
-          <div className="mt-8 flex flex-wrap gap-4 items-center font-mono">
+          {/* Fast-Track 1-Line Installer */}
+          <div className="mt-8 p-3.5 rounded-xl border border-craft-700 bg-craft-900/90 shadow-xl max-w-2xl font-mono text-xs">
+            <div className="flex items-center justify-between text-[11px] text-craft-400 mb-2 border-b border-craft-800 pb-2">
+              <span className="flex items-center gap-1.5 font-bold text-craft-200">
+                <Terminal className="w-3.5 h-3.5 text-craft-accent" />
+                <span>Install ASL in 5 Seconds</span>
+              </span>
+              <span className="text-craft-500">macOS / Linux / Windows</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 bg-craft-950 p-2.5 rounded-lg border border-craft-800">
+              <code className="text-craft-accent select-all overflow-x-auto whitespace-nowrap">
+                curl -fsSL https://aslang.dev/install.sh | bash
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText('curl -fsSL https://aslang.dev/install.sh | bash');
+                  alert('Copied to clipboard: curl -fsSL https://aslang.dev/install.sh | bash');
+                }}
+                className="px-2.5 py-1 rounded bg-craft-800 hover:bg-craft-700 text-craft-200 text-[11px] transition-colors shrink-0"
+              >
+                Copy
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-craft-400 font-mono pt-1">
+              <span>Also via:</span>
+              <span className="text-craft-300">brew install aslang</span>
+              <span>•</span>
+              <span className="text-craft-300">npx aslang init</span>
+              <span>•</span>
+              <span className="text-craft-300">pip install aslang</span>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-4 items-center font-mono">
             <a
               href="#playground"
               className="px-5 py-3 rounded bg-craft-accent text-craft-950 font-semibold text-sm hover:bg-craft-accent/90 transition-all flex items-center gap-2 shadow-lg shadow-craft-accent/10"

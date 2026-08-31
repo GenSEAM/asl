@@ -1,0 +1,8 @@
+{
+  "name": "asl",
+  "version": "1.0.0",
+  "tag": "v1.0.0",
+  "release_date": "2026-09-01",
+  "url": "https://aslang.dev",
+  "changelog": "Official release of ASL (AgentScript Language) with native WebAssembly sandbox, MCP server, and multi-framework bridges."
+}
