@@ -259,6 +259,47 @@ def cmd_init(args) -> int:
     return 0
 
 
+def cmd_skill(args) -> int:
+    """Manage and install the ASL skill for AI agent harnesses (Claude, Cursor, Antigravity)."""
+    skill_src = ROOT / "skills" / "asl" / "SKILL.md"
+    if not skill_src.exists():
+        skill_src = ROOT / "skills" / "agentscript" / "SKILL.md"
+
+    if getattr(args, "install", None):
+        target = args.install
+        if target == "global":
+            dest_dir = Path.home() / ".gemini" / "config" / "skills" / "asl"
+        elif target == "local":
+            dest_dir = Path.cwd() / ".skills" / "asl"
+        else:
+            dest_dir = Path(target)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_file = dest_dir / "SKILL.md"
+        dest_file.write_text(skill_src.read_text())
+        print(f"✓ Installed ASL skill to {dest_file}")
+        return 0
+
+    # Print setup recommendations and config snippets
+    print("# ASL AI Agent Setup & Skill Integration\n")
+    print("## 1. Install Skill into Agent Harness")
+    print("  • Global install:  asl skill --install global  (~/.gemini/config/skills/asl)")
+    print("  • Local install:   asl skill --install local   (./.skills/asl)\n")
+    print("## 2. Cursor / Claude Desktop / Windsurf Config (`mcpServers`)")
+    server_path = str((ROOT / "tools" / "mcp" / "server.py").resolve())
+    mcp_config = {
+        "mcpServers": {
+            "asl": {
+                "command": "python3",
+                "args": [server_path]
+            }
+        }
+    }
+    print(json.dumps(mcp_config, indent=2))
+    print("\n## 3. Direct System Prompt Injection")
+    print("  • Run: `asl ref` or include `llms.txt` (~500 tokens).")
+    return 0
+
+
 # ---------- driver ----------
 
 def main() -> int:
@@ -275,6 +316,12 @@ def main() -> int:
     p.add_argument("--full", action="store_true", help="emit full standard library handbook")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_grammar)
+
+    p = sub.add_parser("skill", aliases=["setup", "config"],
+                       help="manage and install the ASL skill for AI agent harnesses")
+    p.add_argument("--install", choices=["global", "local"], help="install skill directory")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_skill)
 
     p = sub.add_parser("init", help="scaffold a new AgentScript project with AGENTS.md and CLAUDE.md")
     p.add_argument("directory", type=Path, help="directory to initialize")
