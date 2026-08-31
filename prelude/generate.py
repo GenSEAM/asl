@@ -162,7 +162,7 @@ def validate_templates() -> list[str]:
     bad = []
     for b in PRELUDE["builtins"]:
         n = len(parse_signature(b["type"])[0])
-        for tgt in ("py", "js", "ts", "rs"):
+        for tgt in ("py", "js", "ts", "rs", "go"):
             tpl = b.get(tgt)
             if tpl is None:
                 bad.append(f"{b['name']}: no {tgt} lowering")

@@ -33,8 +33,21 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 7/7 green, 161 tests, differential 120+15 (4 arms) | `5995351` |
 | 6 — agent-facing surface | v2 reconciled | 3 lenses (1 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 16 gates green, 161+351 tests, 140/79 ambiguity | `51f5f03` |
 | 7 — TypeScript backend | v2 reconciled | 3 lenses (1 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 8/8 green, 161 tests, differential 120+15 (5 arms), tsc 5.9.3 | `c8c06ac` |
-| 8 — Go backend | v2 reconciled | 3 lenses (1 reject → folded) | — | — | — | — |
+| 8 — Go backend | v2 reconciled | 3 lenses (1 reject → folded) | done | verified | 8/8 green, 161 tests, differential 120+15 (6 arms), go 1.26.4 | `b4d781f` |
 | 9 — harness whole-program mode | — | — | — | — | — | — |
+
+## Phase 8 — implementation verified (2026-08-31)
+
+Implemented W1–W7:
+- **W1**: 107 `"go"` lowering templates in `prelude/prelude.json`, `prelude/generate.py:165` target tuple widened, `--check` clean.
+- **W2**: `backend/golang/rt/rt.go` completed: compile fix, `IoError` & errno mapping, generic checked numerics (`Add`, `Sub`, `Mul`, `Neg`, `Abs`, `Div`, `Rem`), `FmtF64` with Python-repr exponent thresholds, `NegZero()`, NaN-aware `Eq` and nan-last `Cmp` total ordering layer.
+- **W3–W5**: `backend/to_go.py` created with special forms, mangle rules, typed constructors, `let_form` scoping, two-phase signature inference, module linking (`--root`), and enum/match lowering with exact-once subject evaluation.
+- **W6**: `backend/check_corpus.py` added `go` and `govet` check columns; all 32 corpus and benchmark fixtures pass both transpilation and `go vet` cleanly.
+- **W7**: `backend/differential.py` gained Go arm in both function and whole-program modes with embedded `_GO_SER` serializer and per-arm execution counters.
+
+Verification & acceptance battery:
+- All 8 project gates passed cleanly: `validate.py`, `closure_audit.py`, `generate.py --check`, `checker/gate.py`, `check_corpus.py`, `monomorphism.py`, `differential.py`, and `pytest` (161 tests passed).
+- Differential gate verified with **0 disagreements** across 120 function cases + 15 whole-program cases across all 6 targets: `[python=135 rust=135 wasm=15 interp=135 ts=135 go=135]`.
 
 ## 2026-08-29 — orchestrator-verified defect, independent of any agent report
 

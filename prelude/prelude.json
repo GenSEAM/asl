@@ -89,7 +89,8 @@
       "py": "_agentscript.add({0}, {1})",
       "js": "_agentscript.add({0}, {1})",
       "rs": "rt::add({0}, {1})",
-      "ts": "RT.add({0}, {1})"
+      "ts": "RT.add({0}, {1})",
+      "go": "Add({0}, {1})"
     },
     {
       "name": "-",
@@ -99,7 +100,8 @@
       "py": "_agentscript.sub({0}, {1})",
       "js": "_agentscript.sub({0}, {1})",
       "rs": "rt::sub({0}, {1})",
-      "ts": "RT.sub({0}, {1})"
+      "ts": "RT.sub({0}, {1})",
+      "go": "Sub({0}, {1})"
     },
     {
       "name": "*",
@@ -109,7 +111,8 @@
       "py": "_agentscript.mul({0}, {1})",
       "js": "_agentscript.mul({0}, {1})",
       "rs": "rt::mul({0}, {1})",
-      "ts": "RT.mul({0}, {1})"
+      "ts": "RT.mul({0}, {1})",
+      "go": "Mul({0}, {1})"
     },
     {
       "name": "/",
@@ -119,7 +122,8 @@
       "py": "_agentscript.div({0}, {1})",
       "js": "_agentscript.div({0}, {1})",
       "rs": "rt::div({0}, {1})",
-      "ts": "RT.div({0}, {1})"
+      "ts": "RT.div({0}, {1})",
+      "go": "Div({0}, {1})"
     },
     {
       "name": "mod",
@@ -129,7 +133,8 @@
       "py": "_agentscript.mod({0}, {1})",
       "js": "_agentscript.mod({0}, {1})",
       "rs": "rt::rem({0}, {1})",
-      "ts": "RT.rem({0}, {1})"
+      "ts": "RT.rem({0}, {1})",
+      "go": "Rem({0}, {1})"
     },
     {
       "name": "checked-div",
@@ -139,7 +144,8 @@
       "py": "_agentscript.checked_div({0}, {1})",
       "js": "_agentscript.checkedDiv({0}, {1})",
       "rs": "rt::checked_div({0}, {1})",
-      "ts": "RT.checkedDiv({0}, {1})"
+      "ts": "RT.checkedDiv({0}, {1})",
+      "go": "CheckedDiv({0}, {1})"
     },
     {
       "name": "checked-mod",
@@ -149,7 +155,8 @@
       "py": "_agentscript.checked_mod({0}, {1})",
       "js": "_agentscript.checkedMod({0}, {1})",
       "rs": "rt::checked_rem({0}, {1})",
-      "ts": "RT.checkedRem({0}, {1})"
+      "ts": "RT.checkedRem({0}, {1})",
+      "go": "CheckedRem({0}, {1})"
     },
     {
       "name": "neg",
@@ -159,7 +166,8 @@
       "py": "_agentscript.neg({0})",
       "js": "_agentscript.neg({0})",
       "rs": "rt::neg({0})",
-      "ts": "RT.neg({0})"
+      "ts": "RT.neg({0})",
+      "go": "Neg({0})"
     },
     {
       "name": "abs",
@@ -169,7 +177,8 @@
       "py": "_agentscript.absolute({0})",
       "js": "_agentscript.absolute({0})",
       "rs": "rt::abs({0})",
-      "ts": "RT.absv({0})"
+      "ts": "RT.absv({0})",
+      "go": "Abs({0})"
     },
     {
       "name": "min",
@@ -179,7 +188,8 @@
       "py": "_agentscript.min_({0}, {1})",
       "js": "_agentscript.min({0}, {1})",
       "rs": "rt::min({0}, {1})",
-      "ts": "RT.min({0}, {1})"
+      "ts": "RT.min({0}, {1})",
+      "go": "Min({0}, {1})"
     },
     {
       "name": "max",
@@ -189,7 +199,8 @@
       "py": "_agentscript.max_({0}, {1})",
       "js": "_agentscript.max({0}, {1})",
       "rs": "rt::max({0}, {1})",
-      "ts": "RT.max({0}, {1})"
+      "ts": "RT.max({0}, {1})",
+      "go": "Max({0}, {1})"
     },
     {
       "name": "=",
@@ -199,7 +210,8 @@
       "py": "_agentscript.eq({0}, {1})",
       "js": "_agentscript.eq({0}, {1})",
       "rs": "({0} == {1})",
-      "ts": "RT.eq({0}, {1})"
+      "ts": "RT.eq({0}, {1})",
+      "go": "Eq({0}, {1})"
     },
     {
       "name": "!=",
@@ -209,7 +221,8 @@
       "py": "(not _agentscript.eq({0}, {1}))",
       "js": "(!_agentscript.eq({0}, {1}))",
       "rs": "({0} != {1})",
-      "ts": "(!RT.eq({0}, {1}))"
+      "ts": "(!RT.eq({0}, {1}))",
+      "go": "(!Eq({0}, {1}))"
     },
     {
       "name": "<",
@@ -219,7 +232,8 @@
       "py": "({0} < {1})",
       "js": "({0} < {1})",
       "rs": "({0} < {1})",
-      "ts": "(RT.cmp({0}, {1}) < 0)"
+      "ts": "(RT.cmp({0}, {1}) < 0)",
+      "go": "({0} < {1})"
     },
     {
       "name": "<=",
@@ -229,7 +243,8 @@
       "py": "({0} <= {1})",
       "js": "({0} <= {1})",
       "rs": "({0} <= {1})",
-      "ts": "(RT.cmp({0}, {1}) <= 0)"
+      "ts": "(RT.cmp({0}, {1}) <= 0)",
+      "go": "({0} <= {1})"
     },
     {
       "name": ">",
@@ -239,7 +254,8 @@
       "py": "({0} > {1})",
       "js": "({0} > {1})",
       "rs": "({0} > {1})",
-      "ts": "(RT.cmp({0}, {1}) > 0)"
+      "ts": "(RT.cmp({0}, {1}) > 0)",
+      "go": "({0} > {1})"
     },
     {
       "name": ">=",
@@ -249,7 +265,8 @@
       "py": "({0} >= {1})",
       "js": "({0} >= {1})",
       "rs": "({0} >= {1})",
-      "ts": "(RT.cmp({0}, {1}) >= 0)"
+      "ts": "(RT.cmp({0}, {1}) >= 0)",
+      "go": "({0} >= {1})"
     },
     {
       "name": "and",
@@ -259,7 +276,8 @@
       "py": "({0} and {1})",
       "js": "({0} && {1})",
       "rs": "({0} && {1})",
-      "ts": "({0} && {1})"
+      "ts": "({0} && {1})",
+      "go": "({0} && {1})"
     },
     {
       "name": "or",
@@ -269,7 +287,8 @@
       "py": "({0} or {1})",
       "js": "({0} || {1})",
       "rs": "({0} || {1})",
-      "ts": "({0} || {1})"
+      "ts": "({0} || {1})",
+      "go": "({0} || {1})"
     },
     {
       "name": "not",
@@ -279,7 +298,8 @@
       "py": "(not {0})",
       "js": "(!{0})",
       "rs": "(!{0})",
-      "ts": "(!{0})"
+      "ts": "(!{0})",
+      "go": "(!{0})"
     },
     {
       "name": "string-length",
@@ -289,7 +309,8 @@
       "py": "len({0})",
       "js": "[...{0}].length",
       "rs": "rt::str_len(&{0})",
-      "ts": "RT.strLen({0})"
+      "ts": "RT.strLen({0})",
+      "go": "StrLen({0})"
     },
     {
       "name": "string-empty?",
@@ -299,7 +320,8 @@
       "py": "(len({0}) == 0)",
       "js": "({0}.length === 0)",
       "rs": "{0}.is_empty()",
-      "ts": "({0}.length === 0)"
+      "ts": "({0}.length === 0)",
+      "go": "({0} == \"\")"
     },
     {
       "name": "str",
@@ -309,7 +331,8 @@
       "py": "\"\".join([{*}])",
       "js": "[{*}].join('')",
       "rs": "rt::concat(&[{*}])",
-      "ts": "RT.concat([{*}])"
+      "ts": "RT.concat([{*}])",
+      "go": "Concat({*})"
     },
     {
       "name": "string-slice",
@@ -319,7 +342,8 @@
       "py": "_agentscript.str_slice({0}, {1}, {2})",
       "js": "_agentscript.strSlice({0}, {1}, {2})",
       "rs": "rt::str_slice(&{0}, {1}, {2})",
-      "ts": "RT.strSlice({0}, {1}, {2})"
+      "ts": "RT.strSlice({0}, {1}, {2})",
+      "go": "StrSlice({0}, {1}, {2})"
     },
     {
       "name": "string-index-of",
@@ -329,7 +353,8 @@
       "py": "_agentscript.str_index_of({0}, {1})",
       "js": "_agentscript.strIndexOf({0}, {1})",
       "rs": "rt::str_index_of(&{0}, &{1})",
-      "ts": "RT.strIndexOf({0}, {1})"
+      "ts": "RT.strIndexOf({0}, {1})",
+      "go": "StrIndexOf({0}, {1})"
     },
     {
       "name": "string-contains?",
@@ -339,7 +364,8 @@
       "py": "({1} in {0})",
       "js": "{0}.includes({1})",
       "rs": "{0}.contains(&{1})",
-      "ts": "{0}.includes({1})"
+      "ts": "{0}.includes({1})",
+      "go": "StrContains({0}, {1})"
     },
     {
       "name": "string-starts-with?",
@@ -349,7 +375,8 @@
       "py": "{0}.startswith({1})",
       "js": "{0}.startsWith({1})",
       "rs": "{0}.starts_with(&{1})",
-      "ts": "{0}.startsWith({1})"
+      "ts": "{0}.startsWith({1})",
+      "go": "StrStartsWith({0}, {1})"
     },
     {
       "name": "string-ends-with?",
@@ -359,7 +386,8 @@
       "py": "{0}.endswith({1})",
       "js": "{0}.endsWith({1})",
       "rs": "{0}.ends_with(&{1})",
-      "ts": "{0}.endsWith({1})"
+      "ts": "{0}.endsWith({1})",
+      "go": "StrEndsWith({0}, {1})"
     },
     {
       "name": "string-split",
@@ -369,7 +397,8 @@
       "py": "{0}.split({1})",
       "js": "{0}.split({1})",
       "rs": "rt::split(&{0}, &{1})",
-      "ts": "RT.split({0}, {1})"
+      "ts": "RT.split({0}, {1})",
+      "go": "Split({0}, {1})"
     },
     {
       "name": "string-join",
@@ -379,7 +408,8 @@
       "py": "{1}.join({0})",
       "js": "{0}.join({1})",
       "rs": "{0}.join(&{1})",
-      "ts": "{0}.join({1})"
+      "ts": "{0}.join({1})",
+      "go": "StrJoin({0}, {1})"
     },
     {
       "name": "string-upper",
@@ -389,7 +419,8 @@
       "py": "{0}.upper()",
       "js": "{0}.toUpperCase()",
       "rs": "{0}.to_uppercase()",
-      "ts": "{0}.toUpperCase()"
+      "ts": "{0}.toUpperCase()",
+      "go": "StrUpper({0})"
     },
     {
       "name": "string-lower",
@@ -399,7 +430,8 @@
       "py": "{0}.lower()",
       "js": "{0}.toLowerCase()",
       "rs": "{0}.to_lowercase()",
-      "ts": "{0}.toLowerCase()"
+      "ts": "{0}.toLowerCase()",
+      "go": "StrLower({0})"
     },
     {
       "name": "string-trim",
@@ -409,7 +441,8 @@
       "py": "{0}.strip()",
       "js": "{0}.trim()",
       "rs": "{0}.trim().to_string()",
-      "ts": "{0}.trim()"
+      "ts": "{0}.trim()",
+      "go": "StrTrim({0})"
     },
     {
       "name": "string-reverse",
@@ -419,7 +452,8 @@
       "py": "{0}[::-1]",
       "js": "[...{0}].reverse().join('')",
       "rs": "rt::str_rev(&{0})",
-      "ts": "RT.strRev({0})"
+      "ts": "RT.strRev({0})",
+      "go": "StrRev({0})"
     },
     {
       "name": "string-replace",
@@ -429,7 +463,8 @@
       "py": "{0}.replace({1}, {2})",
       "js": "{0}.replaceAll({1}, {2})",
       "rs": "{0}.replace(&{1}, &{2})",
-      "ts": "RT.replace({0}, {1}, {2})"
+      "ts": "RT.replace({0}, {1}, {2})",
+      "go": "StrReplace({0}, {1}, {2})"
     },
     {
       "name": "string-chars",
@@ -439,7 +474,8 @@
       "py": "list({0})",
       "js": "[...{0}]",
       "rs": "rt::chars(&{0})",
-      "ts": "RT.chars({0})"
+      "ts": "RT.chars({0})",
+      "go": "Chars({0})"
     },
     {
       "name": "string-from-int64",
@@ -449,7 +485,8 @@
       "py": "str({0})",
       "js": "String({0})",
       "rs": "rt::fmt_i64({0})",
-      "ts": "String({0})"
+      "ts": "String({0})",
+      "go": "FmtI64({0})"
     },
     {
       "name": "string-from-float64",
@@ -459,7 +496,8 @@
       "py": "repr(float({0}))",
       "js": "_agentscript.fmtF64({0})",
       "rs": "rt::fmt_f64({0})",
-      "ts": "RT.fmtF64({0})"
+      "ts": "RT.fmtF64({0})",
+      "go": "FmtF64({0})"
     },
     {
       "name": "string-to-int64",
@@ -469,7 +507,8 @@
       "py": "_agentscript.to_int({0})",
       "js": "_agentscript.toInt({0})",
       "rs": "rt::to_i64(&{0})",
-      "ts": "RT.toI64({0})"
+      "ts": "RT.toI64({0})",
+      "go": "ToI64({0})"
     },
     {
       "name": "string-to-float64",
@@ -479,7 +518,8 @@
       "py": "_agentscript.to_float({0})",
       "js": "_agentscript.toFloat({0})",
       "rs": "rt::to_f64(&{0})",
-      "ts": "RT.toF64({0})"
+      "ts": "RT.toF64({0})",
+      "go": "ToF64({0})"
     },
     {
       "name": "int32-to-int64",
@@ -489,7 +529,8 @@
       "py": "{0}",
       "js": "{0}",
       "rs": "({0} as i64)",
-      "ts": "{0}"
+      "ts": "{0}",
+      "go": "int64({0})"
     },
     {
       "name": "int64-to-int32",
@@ -499,7 +540,8 @@
       "py": "_agentscript.to_i32({0})",
       "js": "_agentscript.toI32({0})",
       "rs": "rt::to_i32({0})",
-      "ts": "RT.toI32({0})"
+      "ts": "RT.toI32({0})",
+      "go": "ToI32({0})"
     },
     {
       "name": "int64-to-float64",
@@ -509,7 +551,8 @@
       "py": "float({0})",
       "js": "{0}",
       "rs": "rt::i_to_f({0})",
-      "ts": "Number({0})"
+      "ts": "Number({0})",
+      "go": "float64({0})"
     },
     {
       "name": "float64-to-int64",
@@ -519,7 +562,8 @@
       "py": "_agentscript.f_to_i({0})",
       "js": "_agentscript.fToI({0})",
       "rs": "rt::f_to_i({0})",
-      "ts": "RT.fToI({0})"
+      "ts": "RT.fToI({0})",
+      "go": "FToI({0})"
     },
     {
       "name": "list",
@@ -529,7 +573,8 @@
       "py": "[{*}]",
       "js": "[{*}]",
       "rs": "vec![{*}]",
-      "ts": "[{*}]"
+      "ts": "[{*}]",
+      "go": "ListOf({*})"
     },
     {
       "name": "list-empty?",
@@ -539,7 +584,8 @@
       "py": "(len({0}) == 0)",
       "js": "({0}.length === 0)",
       "rs": "{0}.is_empty()",
-      "ts": "({0}.length === 0)"
+      "ts": "({0}.length === 0)",
+      "go": "(len({0}) == 0)"
     },
     {
       "name": "list-length",
@@ -549,7 +595,8 @@
       "py": "len({0})",
       "js": "{0}.length",
       "rs": "({0}.len() as i64)",
-      "ts": "BigInt({0}.length)"
+      "ts": "BigInt({0}.length)",
+      "go": "(int64(len({0})))"
     },
     {
       "name": "list-get",
@@ -559,7 +606,8 @@
       "py": "_agentscript.at({0}, {1})",
       "js": "_agentscript.at({0}, {1})",
       "rs": "rt::at(&{0}, {1})",
-      "ts": "RT.at({0}, {1})"
+      "ts": "RT.at({0}, {1})",
+      "go": "At({0}, {1})"
     },
     {
       "name": "list-head",
@@ -569,7 +617,8 @@
       "py": "_agentscript.at({0}, 0)",
       "js": "_agentscript.at({0}, 0)",
       "rs": "rt::at(&{0}, 0)",
-      "ts": "RT.at({0}, 0n)"
+      "ts": "RT.at({0}, 0n)",
+      "go": "At({0}, int64(0))"
     },
     {
       "name": "list-tail",
@@ -579,7 +628,8 @@
       "py": "_agentscript.tail({0})",
       "js": "_agentscript.tail({0})",
       "rs": "rt::tail(&{0})",
-      "ts": "RT.tail({0})"
+      "ts": "RT.tail({0})",
+      "go": "Tail({0})"
     },
     {
       "name": "list-cons",
@@ -589,7 +639,8 @@
       "py": "([{0}] + {1})",
       "js": "[{0}, ...{1}]",
       "rs": "rt::cons({0}, {1})",
-      "ts": "[{0}, ...{1}]"
+      "ts": "[{0}, ...{1}]",
+      "go": "Cons({0}, {1})"
     },
     {
       "name": "list-append",
@@ -599,7 +650,8 @@
       "py": "({0} + {1})",
       "js": "[...{0}, ...{1}]",
       "rs": "rt::append({0}, {1})",
-      "ts": "[...{0}, ...{1}]"
+      "ts": "[...{0}, ...{1}]",
+      "go": "Append({0}, {1})"
     },
     {
       "name": "list-reverse",
@@ -609,7 +661,8 @@
       "py": "{0}[::-1]",
       "js": "[...{0}].reverse()",
       "rs": "rt::rev({0})",
-      "ts": "[...{0}].reverse()"
+      "ts": "[...{0}].reverse()",
+      "go": "Rev({0})"
     },
     {
       "name": "list-slice",
@@ -619,7 +672,8 @@
       "py": "_agentscript.list_slice({0}, {1}, {2})",
       "js": "_agentscript.listSlice({0}, {1}, {2})",
       "rs": "rt::list_slice(&{0}, {1}, {2})",
-      "ts": "RT.listSlice({0}, {1}, {2})"
+      "ts": "RT.listSlice({0}, {1}, {2})",
+      "go": "ListSlice({0}, {1}, {2})"
     },
     {
       "name": "list-contains?",
@@ -629,7 +683,8 @@
       "py": "_agentscript.contains({0}, {1})",
       "js": "_agentscript.contains({0}, {1})",
       "rs": "{0}.contains(&{1})",
-      "ts": "RT.contains({0}, {1})"
+      "ts": "RT.contains({0}, {1})",
+      "go": "Contains({0}, {1})"
     },
     {
       "name": "list-index-of",
@@ -639,7 +694,8 @@
       "py": "_agentscript.index_of({0}, {1})",
       "js": "_agentscript.indexOf({0}, {1})",
       "rs": "rt::index_of(&{0}, &{1})",
-      "ts": "RT.indexOf({0}, {1})"
+      "ts": "RT.indexOf({0}, {1})",
+      "go": "IndexOf({0}, {1})"
     },
     {
       "name": "list-sort",
@@ -649,7 +705,8 @@
       "py": "sorted({0}, key=_agentscript.order_key)",
       "js": "_agentscript.sort({0})",
       "rs": "rt::sort({0})",
-      "ts": "RT.sort({0})"
+      "ts": "RT.sort({0})",
+      "go": "Sort({0})"
     },
     {
       "name": "list-sort-by",
@@ -659,7 +716,8 @@
       "py": "sorted({1}, key=_agentscript.order_by({0}))",
       "js": "_agentscript.sortBy({0}, {1})",
       "rs": "rt::sort_by({1}, {0})",
-      "ts": "RT.sortBy({0}, {1})"
+      "ts": "RT.sortBy({0}, {1})",
+      "go": "SortBy({0}, {1})"
     },
     {
       "name": "map",
@@ -669,7 +727,8 @@
       "py": "[{0}(_x) for _x in {1}]",
       "js": "{1}.map({0})",
       "rs": "{1}.into_iter().map({0}).collect::<Vec<_>>()",
-      "ts": "{1}.map({0})"
+      "ts": "{1}.map({0})",
+      "go": "Map({0}, {1})"
     },
     {
       "name": "filter",
@@ -679,7 +738,8 @@
       "py": "[_x for _x in {1} if {0}(_x)]",
       "js": "{1}.filter({0})",
       "rs": "rt::filter({1}, {0})",
-      "ts": "{1}.filter({0})"
+      "ts": "{1}.filter({0})",
+      "go": "Filter({0}, {1})"
     },
     {
       "name": "fold",
@@ -689,7 +749,8 @@
       "py": "_agentscript.fold({0}, {1}, {2})",
       "js": "{2}.reduce({0}, {1})",
       "rs": "{2}.into_iter().fold({1}, {0})",
-      "ts": "RT.fold({0}, {1}, {2})"
+      "ts": "RT.fold({0}, {1}, {2})",
+      "go": "Fold({0}, {1}, {2})"
     },
     {
       "name": "range",
@@ -699,7 +760,8 @@
       "py": "list(range({0}, {1}))",
       "js": "_agentscript.range({0}, {1})",
       "rs": "rt::range({0}, {1})",
-      "ts": "RT.range({0}, {1})"
+      "ts": "RT.range({0}, {1})",
+      "go": "Range({0}, {1})"
     },
     {
       "name": "zip",
@@ -709,7 +771,8 @@
       "py": "_agentscript.zip_({0}, {1})",
       "js": "_agentscript.zip({0}, {1})",
       "rs": "rt::zip({0}, {1})",
-      "ts": "RT.zip({0}, {1})"
+      "ts": "RT.zip({0}, {1})",
+      "go": "Zip({0}, {1})"
     },
     {
       "name": "list-sum",
@@ -719,7 +782,8 @@
       "py": "_agentscript.sum_({0})",
       "js": "_agentscript.sum({0})",
       "rs": "rt::sum({0})",
-      "ts": "RT.sum({0})"
+      "ts": "RT.sum({0})",
+      "go": "Sum({0})"
     },
     {
       "name": "list-min",
@@ -729,7 +793,8 @@
       "py": "_agentscript.least({0})",
       "js": "_agentscript.least({0})",
       "rs": "rt::least(&{0})",
-      "ts": "RT.least({0})"
+      "ts": "RT.least({0})",
+      "go": "Least({0})"
     },
     {
       "name": "list-max",
@@ -739,7 +804,8 @@
       "py": "_agentscript.greatest({0})",
       "js": "_agentscript.greatest({0})",
       "rs": "rt::greatest(&{0})",
-      "ts": "RT.greatest({0})"
+      "ts": "RT.greatest({0})",
+      "go": "Greatest({0})"
     },
     {
       "name": "map-empty",
@@ -749,7 +815,8 @@
       "py": "{{}}",
       "js": "new Map()",
       "rs": "std::collections::BTreeMap::new()",
-      "ts": "RT.MAP_EMPTY"
+      "ts": "RT.MAP_EMPTY",
+      "go": "MAP_EMPTY"
     },
     {
       "name": "map-get",
@@ -759,7 +826,8 @@
       "py": "_agentscript.m_get({0}, {1})",
       "js": "_agentscript.mGet({0}, {1})",
       "rs": "rt::m_get(&{0}, &{1})",
-      "ts": "RT.mGet({0}, {1})"
+      "ts": "RT.mGet({0}, {1})",
+      "go": "MGet({0}, {1})"
     },
     {
       "name": "map-set",
@@ -769,7 +837,8 @@
       "py": "_agentscript.m_set({0}, {1}, {2})",
       "js": "_agentscript.mSet({0}, {1}, {2})",
       "rs": "rt::m_set({0}, {1}, {2})",
-      "ts": "RT.mSet({0}, {1}, {2})"
+      "ts": "RT.mSet({0}, {1}, {2})",
+      "go": "MSet({0}, {1}, {2})"
     },
     {
       "name": "map-remove",
@@ -779,7 +848,8 @@
       "py": "_agentscript.m_del({0}, {1})",
       "js": "_agentscript.mDel({0}, {1})",
       "rs": "rt::m_del({0}, &{1})",
-      "ts": "RT.mDel({0}, {1})"
+      "ts": "RT.mDel({0}, {1})",
+      "go": "MDel({0}, {1})"
     },
     {
       "name": "map-has?",
@@ -789,7 +859,8 @@
       "py": "({1} in {0})",
       "js": "{0}.has({1})",
       "rs": "{0}.contains_key(&{1})",
-      "ts": "RT.mHas({0}, {1})"
+      "ts": "RT.mHas({0}, {1})",
+      "go": "MHas({0}, {1})"
     },
     {
       "name": "map-size",
@@ -799,7 +870,8 @@
       "py": "len({0})",
       "js": "{0}.size",
       "rs": "({0}.len() as i64)",
-      "ts": "RT.mSize({0})"
+      "ts": "RT.mSize({0})",
+      "go": "(int64(len({0})))"
     },
     {
       "name": "map-keys",
@@ -809,7 +881,8 @@
       "py": "sorted({0}.keys())",
       "js": "_agentscript.mKeys({0})",
       "rs": "{0}.keys().cloned().collect::<Vec<_>>()",
-      "ts": "RT.mKeys({0})"
+      "ts": "RT.mKeys({0})",
+      "go": "MKeys({0})"
     },
     {
       "name": "map-values",
@@ -819,7 +892,8 @@
       "py": "[{0}[_k] for _k in sorted({0})]",
       "js": "_agentscript.mValues({0})",
       "rs": "{0}.values().cloned().collect::<Vec<_>>()",
-      "ts": "RT.mValues({0})"
+      "ts": "RT.mValues({0})",
+      "go": "MValues({0})"
     },
     {
       "name": "map-pairs",
@@ -829,7 +903,8 @@
       "py": "_agentscript.m_pairs({0})",
       "js": "_agentscript.mPairs({0})",
       "rs": "rt::m_pairs(&{0})",
-      "ts": "RT.mPairs({0})"
+      "ts": "RT.mPairs({0})",
+      "go": "MPairs({0})"
     },
     {
       "name": "map-from-pairs",
@@ -839,7 +914,8 @@
       "py": "_agentscript.m_from({0})",
       "js": "_agentscript.mFrom({0})",
       "rs": "rt::m_from({0})",
-      "ts": "RT.mFrom({0})"
+      "ts": "RT.mFrom({0})",
+      "go": "MFrom({0})"
     },
     {
       "name": "some",
@@ -849,7 +925,8 @@
       "py": "_agentscript.some({0})",
       "js": "_agentscript.some({0})",
       "rs": "Some({0})",
-      "ts": "RT.some({0})"
+      "ts": "RT.some({0})",
+      "go": "Some({0})"
     },
     {
       "name": "none",
@@ -859,7 +936,8 @@
       "py": "_agentscript.NONE",
       "js": "_agentscript.NONE",
       "rs": "None",
-      "ts": "RT.NONE"
+      "ts": "RT.NONE",
+      "go": "None[T]()"
     },
     {
       "name": "ok",
@@ -869,7 +947,8 @@
       "py": "_agentscript.ok({0})",
       "js": "_agentscript.ok({0})",
       "rs": "Ok({0})",
-      "ts": "RT.ok({0})"
+      "ts": "RT.ok({0})",
+      "go": "Ok({0})"
     },
     {
       "name": "err",
@@ -879,7 +958,8 @@
       "py": "_agentscript.err({0})",
       "js": "_agentscript.err({0})",
       "rs": "Err({0})",
-      "ts": "RT.err({0})"
+      "ts": "RT.err({0})",
+      "go": "Err({0})"
     },
     {
       "name": "is-some?",
@@ -889,7 +969,8 @@
       "py": "_agentscript.is_some({0})",
       "js": "_agentscript.isSome({0})",
       "rs": "{0}.is_some()",
-      "ts": "({0}.tag === \"some\")"
+      "ts": "({0}.tag === \"some\")",
+      "go": "({0}.Present)"
     },
     {
       "name": "is-none?",
@@ -899,7 +980,8 @@
       "py": "(not _agentscript.is_some({0}))",
       "js": "(!_agentscript.isSome({0}))",
       "rs": "{0}.is_none()",
-      "ts": "({0}.tag === \"none\")"
+      "ts": "({0}.tag === \"none\")",
+      "go": "(!{0}.Present)"
     },
     {
       "name": "is-ok?",
@@ -909,7 +991,8 @@
       "py": "_agentscript.is_ok({0})",
       "js": "_agentscript.isOk({0})",
       "rs": "{0}.is_ok()",
-      "ts": "({0}.tag === \"ok\")"
+      "ts": "({0}.tag === \"ok\")",
+      "go": "({0}.IsOk)"
     },
     {
       "name": "is-err?",
@@ -919,7 +1002,8 @@
       "py": "(not _agentscript.is_ok({0}))",
       "js": "(!_agentscript.isOk({0}))",
       "rs": "{0}.is_err()",
-      "ts": "({0}.tag === \"err\")"
+      "ts": "({0}.tag === \"err\")",
+      "go": "(!{0}.IsOk)"
     },
     {
       "name": "option-or",
@@ -929,7 +1013,8 @@
       "py": "_agentscript.opt_or({0}, {1})",
       "js": "_agentscript.optOr({0}, {1})",
       "rs": "{0}.unwrap_or({1})",
-      "ts": "RT.optOr({0}, {1})"
+      "ts": "RT.optOr({0}, {1})",
+      "go": "OptOr({0}, {1})"
     },
     {
       "name": "result-or",
@@ -939,7 +1024,8 @@
       "py": "_agentscript.res_or({0}, {1})",
       "js": "_agentscript.resOr({0}, {1})",
       "rs": "{0}.unwrap_or({1})",
-      "ts": "RT.resOr({0}, {1})"
+      "ts": "RT.resOr({0}, {1})",
+      "go": "ResOr({0}, {1})"
     },
     {
       "name": "option-map",
@@ -949,7 +1035,8 @@
       "py": "_agentscript.opt_map({0}, {1})",
       "js": "_agentscript.optMap({0}, {1})",
       "rs": "{1}.map({0})",
-      "ts": "RT.optMap({0}, {1})"
+      "ts": "RT.optMap({0}, {1})",
+      "go": "OptMap({0}, {1})"
     },
     {
       "name": "result-map",
@@ -959,7 +1046,8 @@
       "py": "_agentscript.res_map({0}, {1})",
       "js": "_agentscript.resMap({0}, {1})",
       "rs": "{1}.map({0})",
-      "ts": "RT.resMap({0}, {1})"
+      "ts": "RT.resMap({0}, {1})",
+      "go": "ResMap({0}, {1})"
     },
     {
       "name": "result-map-err",
@@ -969,7 +1057,8 @@
       "py": "_agentscript.res_map_err({0}, {1})",
       "js": "_agentscript.resMapErr({0}, {1})",
       "rs": "{1}.map_err({0})",
-      "ts": "RT.resMapErr({0}, {1})"
+      "ts": "RT.resMapErr({0}, {1})",
+      "go": "ResMapErr({0}, {1})"
     },
     {
       "name": "option-to-result",
@@ -979,7 +1068,8 @@
       "py": "_agentscript.opt_to_res({0}, {1})",
       "js": "_agentscript.optToRes({0}, {1})",
       "rs": "{0}.ok_or({1})",
-      "ts": "RT.optToRes({0}, {1})"
+      "ts": "RT.optToRes({0}, {1})",
+      "go": "OptToRes({0}, {1})"
     },
     {
       "name": "result-to-option",
@@ -989,7 +1079,8 @@
       "py": "_agentscript.res_to_opt({0})",
       "js": "_agentscript.resToOpt({0})",
       "rs": "{0}.ok()",
-      "ts": "RT.resToOpt({0})"
+      "ts": "RT.resToOpt({0})",
+      "go": "ResToOpt({0})"
     },
     {
       "name": "pair",
@@ -999,7 +1090,8 @@
       "py": "_agentscript.pair({0}, {1})",
       "js": "_agentscript.pair({0}, {1})",
       "rs": "({0}, {1})",
-      "ts": "new RT.ASPair({0}, {1})"
+      "ts": "new RT.ASPair({0}, {1})",
+      "go": "MkPair({0}, {1})"
     },
     {
       "name": "not-found",
@@ -1009,7 +1101,8 @@
       "py": "(\"not-found\",)",
       "js": "[\"not-found\"]",
       "rs": "rt::IoError::NotFound",
-      "ts": "RT.notFound()"
+      "ts": "RT.notFound()",
+      "go": "NotFound()"
     },
     {
       "name": "permission-denied",
@@ -1019,7 +1112,8 @@
       "py": "(\"permission-denied\",)",
       "js": "[\"permission-denied\"]",
       "rs": "rt::IoError::PermissionDenied",
-      "ts": "RT.permissionDenied()"
+      "ts": "RT.permissionDenied()",
+      "go": "PermissionDenied()"
     },
     {
       "name": "already-exists",
@@ -1029,7 +1123,8 @@
       "py": "(\"already-exists\",)",
       "js": "[\"already-exists\"]",
       "rs": "rt::IoError::AlreadyExists",
-      "ts": "RT.alreadyExists()"
+      "ts": "RT.alreadyExists()",
+      "go": "AlreadyExists()"
     },
     {
       "name": "invalid-path",
@@ -1039,7 +1134,8 @@
       "py": "(\"invalid-path\",)",
       "js": "[\"invalid-path\"]",
       "rs": "rt::IoError::InvalidPath",
-      "ts": "RT.invalidPath()"
+      "ts": "RT.invalidPath()",
+      "go": "InvalidPath()"
     },
     {
       "name": "interrupted",
@@ -1049,7 +1145,8 @@
       "py": "(\"interrupted\",)",
       "js": "[\"interrupted\"]",
       "rs": "rt::IoError::Interrupted",
-      "ts": "RT.interrupted()"
+      "ts": "RT.interrupted()",
+      "go": "Interrupted()"
     },
     {
       "name": "other",
@@ -1059,7 +1156,8 @@
       "py": "(\"other\",)",
       "js": "[\"other\"]",
       "rs": "rt::IoError::Other",
-      "ts": "RT.other()"
+      "ts": "RT.other()",
+      "go": "Other()"
     },
     {
       "name": "read-line",
@@ -1070,7 +1168,8 @@
       "js": "_agentscript.readLine()",
       "rs": "rt::read_line()",
       "effect": true,
-      "ts": "RT.readLine()"
+      "ts": "RT.readLine()",
+      "go": "ReadLine()"
     },
     {
       "name": "read-all",
@@ -1081,7 +1180,8 @@
       "js": "_agentscript.readAll()",
       "rs": "rt::read_all()",
       "effect": true,
-      "ts": "RT.readAll()"
+      "ts": "RT.readAll()",
+      "go": "ReadAll()"
     },
     {
       "name": "print",
@@ -1092,7 +1192,8 @@
       "js": "_agentscript.printOut({0})",
       "rs": "rt::print_out(&{0})",
       "effect": true,
-      "ts": "RT.print_({0})"
+      "ts": "RT.print_({0})",
+      "go": "PrintOut({0})"
     },
     {
       "name": "println",
@@ -1103,7 +1204,8 @@
       "js": "_agentscript.println({0})",
       "rs": "rt::println(&{0})",
       "effect": true,
-      "ts": "RT.println({0})"
+      "ts": "RT.println({0})",
+      "go": "Println({0})"
     },
     {
       "name": "eprintln",
@@ -1114,7 +1216,8 @@
       "js": "_agentscript.eprintln({0})",
       "rs": "rt::eprintln(&{0})",
       "effect": true,
-      "ts": "RT.eprintln({0})"
+      "ts": "RT.eprintln({0})",
+      "go": "Eprintln({0})"
     },
     {
       "name": "file-read",
@@ -1125,7 +1228,8 @@
       "js": "_agentscript.fileRead({0})",
       "rs": "rt::file_read(&{0})",
       "effect": true,
-      "ts": "RT.fileRead({0})"
+      "ts": "RT.fileRead({0})",
+      "go": "FileRead({0})"
     },
     {
       "name": "file-write",
@@ -1136,7 +1240,8 @@
       "js": "_agentscript.fileWrite({0}, {1})",
       "rs": "rt::file_write(&{0}, &{1})",
       "effect": true,
-      "ts": "RT.fileWrite({0}, {1})"
+      "ts": "RT.fileWrite({0}, {1})",
+      "go": "FileWrite({0}, {1})"
     },
     {
       "name": "file-append",
@@ -1147,7 +1252,8 @@
       "js": "_agentscript.fileAppend({0}, {1})",
       "rs": "rt::file_append(&{0}, &{1})",
       "effect": true,
-      "ts": "RT.fileAppend({0}, {1})"
+      "ts": "RT.fileAppend({0}, {1})",
+      "go": "FileAppend({0}, {1})"
     },
     {
       "name": "file-exists?",
@@ -1158,7 +1264,8 @@
       "js": "_agentscript.fileExists({0})",
       "rs": "rt::file_exists(&{0})",
       "effect": true,
-      "ts": "RT.ok(RT.fileExists({0}))"
+      "ts": "RT.ok(RT.fileExists({0}))",
+      "go": "FileExistsRes({0})"
     }
   ]
 }

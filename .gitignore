@@ -16,3 +16,4 @@ bench/harness/config.json
 results/*.json
 .claude/settings.local.json
 .claude/worktrees/
+.tokensave/
