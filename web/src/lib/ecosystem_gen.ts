@@ -2,15 +2,10 @@ import * as RT from "./rt";
 
 export type TargetStatus =
   | { readonly tag: "active" }
-  | { readonly tag: "inprogress" }
   | { readonly tag: "planned" };
 
 export function active(): TargetStatus {
     return { tag: "active" };
-}
-
-export function inprogress(): TargetStatus {
-    return { tag: "inprogress" };
 }
 
 export function planned(): TargetStatus {
@@ -48,7 +43,7 @@ export class TargetLanguage {
 }
 
 export function getTargetsCount(): bigint {
-    return 7n;
+    return 8n;
 }
 
 export function calculateTokenSavings(modules: bigint, dailyCalls: bigint): bigint {
@@ -62,13 +57,13 @@ export function formatBridgeName(p: Paradigm): string {
     return (() => {
         const t1 = p;
         if (t1.tag === "oop") {
-            return "OOP Bridge (Schemas to Classes)";
+            return "OOP Bridge (Schemas to Classes & Structs)";
         }
         if (t1.tag === "functional") {
-            return "Functional Bridge (Pure S-Expressions)";
+            return "Functional Bridge (Pure S-Expressions & ADTs)";
         }
         if (t1.tag === "procedural") {
-            return "Procedural Bridge (Effects Tracking)";
+            return "Procedural Bridge (Strict Effect Tracking)";
         }
         return RT.nonExhaustive();
     })();

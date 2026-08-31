@@ -4,7 +4,6 @@
 
 (defenum TargetStatus
   (:case active     [] "Fully verified with differential gate")
-  (:case inprogress [] "Specification drafted, backend underway")
   (:case planned    [] "On future language roadmap"))
 
 (defschema TargetLanguage
@@ -19,8 +18,8 @@
   (:case procedural [] "Step-by-step imperative sequences and explicit effect markers"))
 
 (defun get-targets-count [] -> Int64
-  :doc "Returns total count of current and in-progress targets"
-  7)
+  :doc "Returns total count of active and planned targets"
+  8)
 
 (defun calculate-token-savings [(modules Int64) (daily-calls Int64)] -> Int64
   :doc "Calculates monthly token reduction in millions of tokens"
@@ -32,6 +31,6 @@
 (defun format-bridge-name [(p Paradigm)] -> String
   :doc "Returns descriptive bridge title"
   (match p
-    ((oop) "OOP Bridge (Schemas to Classes)")
-    ((functional) "Functional Bridge (Pure S-Expressions)")
-    ((procedural) "Procedural Bridge (Effects Tracking)")))
+    ((oop) "OOP Bridge (Schemas to Classes & Structs)")
+    ((functional) "Functional Bridge (Pure S-Expressions & ADTs)")
+    ((procedural) "Procedural Bridge (Strict Effect Tracking)")))
