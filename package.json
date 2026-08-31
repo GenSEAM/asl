@@ -8,10 +8,10 @@
   "scripts": {
     "build:wasm-runner": "tsc -p backend/ts/tsconfig.json",
     "test:wasm-runner": "tsc -p backend/ts/tsconfig.json && node backend/ts/test_wasm_runner.js",
-    "dev:web": "npm --prefix web run dev",
-    "build:web": "npm --prefix web run build",
-    "preview:web": "npm --prefix web run preview",
-    "test": "npm run test:wasm-runner"
+    "dev:web": "pnpm --prefix web run dev",
+    "build:web": "pnpm --prefix web run build",
+    "preview:web": "pnpm --prefix web run preview",
+    "test": "pnpm run test:wasm-runner"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",

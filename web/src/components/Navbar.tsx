@@ -23,6 +23,10 @@ export const Navbar: React.FC = () => {
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-mono text-craft-300">
+            <a href="#showcases" className="hover:text-craft-accent transition-colors flex items-center gap-1.5">
+              <Sparkles className="w-4 h-4 text-craft-accent" />
+              <span>Showcases</span>
+            </a>
             <a href="#playground" className="hover:text-craft-accent transition-colors flex items-center gap-1.5">
               <Terminal className="w-4 h-4 text-craft-accent" />
               <span>Playground</span>

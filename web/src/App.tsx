@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
+import { ShowcaseGallery } from './components/ShowcaseGallery';
 import { Playground } from './components/Playground';
 import { GraphVisualizer } from './components/GraphVisualizer';
 import { VectorClassifier } from './components/VectorClassifier';
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
       <Navbar />
       <main className="flex-1">
         <Hero />
+        <ShowcaseGallery />
         <Playground />
         <GraphVisualizer />
         <VectorClassifier />
