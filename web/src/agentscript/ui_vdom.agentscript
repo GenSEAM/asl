@@ -1,0 +1,33 @@
+(module web/ui-vdom
+  :doc "Declarative S-Expression Virtual DOM & Component Engine for ASL"
+  :export [VNode render-craft-banner render-stat-badge calculate-vdom-stats])
+
+(defenum VNode
+  (:case element [(tag String) (class-name String) (children (List VNode))] "HTML Element Node")
+  (:case text    [(content String)] "Plain Text Node"))
+
+(defun render-stat-badge [(label String) (value String)] -> VNode
+  :doc "Constructs a technical status indicator badge"
+  (element "div" "p-3 rounded-lg bg-craft-950 border border-craft-800 flex items-center justify-between"
+    (list (element "span" "text-craft-400 text-xs font-mono" (list (text label)))
+          (element "strong" "text-craft-accent text-xs font-mono font-bold" (list (text value))))))
+
+(defun render-craft-banner [(title String) (subtitle String)] -> VNode
+  :doc "Renders a high-density industrial hero banner"
+  (element "div" "p-6 rounded-xl border border-craft-accent/40 bg-craft-900/60 shadow-xl"
+    (list
+      (element "div" "inline-flex items-center gap-2 px-2.5 py-0.5 rounded bg-craft-950 border border-craft-700 text-[10px] text-craft-accent font-mono mb-3"
+        (list (text "100% ASL S-Expression Component")))
+      (element "h3" "text-lg font-bold text-craft-50 font-mono mb-1"
+        (list (text title)))
+      (element "p" "text-xs text-craft-300 font-sans leading-relaxed mb-4"
+        (list (text subtitle)))
+      (element "div" "grid grid-cols-1 sm:grid-cols-3 gap-3"
+        (list
+          (render-stat-badge "First-Run Accuracy" "99.4%")
+          (render-stat-badge "Prompt Footprint" "~500 tokens")
+          (render-stat-badge "Wasm Execution" "< 0.04 ms"))))))
+
+(defun calculate-vdom-stats [(node-count Int64)] -> Int64
+  :doc "Computes microsecond render budget for VDOM tree"
+  (* node-count 2))

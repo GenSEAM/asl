@@ -7,6 +7,7 @@ import { VectorClassifier } from './components/VectorClassifier';
 import { TargetMatrix } from './components/TargetMatrix';
 import { TokenCalculator } from './components/TokenCalculator';
 import { ParadigmBridge } from './components/ParadigmBridge';
+import { AslVdomRenderer } from './components/AslVdomRenderer';
 import { Docs } from './components/Docs';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
@@ -20,6 +21,7 @@ export const App: React.FC = () => {
         <Playground />
         <GraphVisualizer />
         <VectorClassifier />
+        <AslVdomRenderer />
         <ParadigmBridge />
         <TargetMatrix />
         <TokenCalculator />
