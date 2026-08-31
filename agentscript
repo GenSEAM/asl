@@ -232,6 +232,18 @@ def cmd_websearch(args) -> int:
     return 0
 
 
+def cmd_get(args) -> int:
+    """Download and record a remote package from GitHub/Git (Go-style)."""
+    from tools.pkg import add_package
+    return add_package(args.package, local=not getattr(args, "global_pkg", False))
+
+
+def cmd_install(args) -> int:
+    """Restore all packages declared in asl.json."""
+    from tools.pkg import install_all_packages
+    return install_all_packages()
+
+
 def cmd_edit(args) -> int:
     try:
         receipt = tsutil.edit(args.file, args.op, args.range or args.at, args.text or "")
@@ -371,6 +383,16 @@ def main() -> int:
     p = sub.add_parser("upgrade", aliases=["update"], help="upgrade ASL to the latest release")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_upgrade)
+
+    p = sub.add_parser("get", aliases=["add"], help="download and record a remote package (Go-style)")
+    p.add_argument("package", help="package URL or identifier, e.g. github.com/genseam/search@v1.0.0")
+    p.add_argument("--global", dest="global_pkg", action="store_true", help="install into global cache")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_get)
+
+    p = sub.add_parser("install", aliases=["pkg"], help="restore all packages declared in asl.json")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_install)
 
     p = sub.add_parser("grammar", aliases=["ref", "cheat", "llms"],
                        help="print language grammar rules and LLM reference sheet")
