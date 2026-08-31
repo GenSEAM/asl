@@ -223,6 +223,25 @@ def cmd_bindgen(args) -> int:
     return 1
 
 
+def cmd_grammar(args) -> int:
+    """Print language grammar rules or LLM reference sheet to stdout."""
+    if getattr(args, "lark", False):
+        lark_file = ROOT / "grammar" / "agentscript.lark"
+        sys.stdout.write(lark_file.read_text())
+        return 0
+    if getattr(args, "full", False):
+        handbook_file = ROOT / "prelude" / "HANDBOOK.md"
+        sys.stdout.write(handbook_file.read_text())
+        return 0
+    # Default: ultra-compact ~500-token LLM cheat sheet (llms.txt)
+    llms_file = ROOT / "llms.txt"
+    if llms_file.exists():
+        sys.stdout.write(llms_file.read_text())
+    else:
+        sys.stdout.write((ROOT / "skills" / "asl" / "SKILL.md").read_text())
+    return 0
+
+
 def cmd_init(args) -> int:
     """Scaffold a new AgentScript project with AGENTS.md, CLAUDE.md, and starter code."""
     from tools.scaffold import scaffold_project
@@ -246,7 +265,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="agentscript", description=__doc__.splitlines()[0])
     ap.add_argument("--json", action="store_true",
                     help="emit diagnostics as {file, line, col, code, message}")
-    sub = ap.add_subparsers(dest="command", required=True)
+    ap.add_argument("--grammar", "--ref", action="store_true",
+                    help="print language grammar rules and LLM cheat sheet")
+    sub = ap.add_subparsers(dest="command", required=False)
+
+    p = sub.add_parser("grammar", aliases=["ref", "cheat", "llms"],
+                       help="print language grammar rules and LLM reference sheet")
+    p.add_argument("--lark", action="store_true", help="emit raw EBNF Lark grammar")
+    p.add_argument("--full", action="store_true", help="emit full standard library handbook")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_grammar)
 
     p = sub.add_parser("init", help="scaffold a new AgentScript project with AGENTS.md and CLAUDE.md")
     p.add_argument("directory", type=Path, help="directory to initialize")
@@ -317,6 +345,11 @@ def main() -> int:
     p.set_defaults(fn=cmd_bindgen)
 
     args = ap.parse_args()
+    if getattr(args, "grammar", False) or getattr(args, "ref", False):
+        return cmd_grammar(args)
+    if not hasattr(args, "fn"):
+        ap.print_help()
+        return 0
     try:
         return args.fn(args)
     except BadInput as exc:
