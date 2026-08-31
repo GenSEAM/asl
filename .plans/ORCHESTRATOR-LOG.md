@@ -33,8 +33,21 @@ Pre-phase snapshot of the tree kept in the session scratchpad for diffing.
 | 5 — reference interpreter | v2 reconciled | 3 lenses (2 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 7/7 green, 161 tests, differential 120+15 (4 arms) | `5995351` |
 | 6 — agent-facing surface | v2 reconciled | 3 lenses (1 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 16 gates green, 161+351 tests, 140/79 ambiguity | `51f5f03` |
 | 7 — TypeScript backend | v2 reconciled | 3 lenses (1 reject → folded) | done | 3 lenses, 0 blockers + fix wave | 8/8 green, 161 tests, differential 120+15 (5 arms), tsc 5.9.3 | `c8c06ac` |
-| 8 — Go backend | v2 reconciled | 3 lenses (1 reject → folded) | done | verified | 8/8 green, 161 tests, differential 120+15 (6 arms), go 1.26.4 | `b4d781f` |
-| 9 — harness whole-program mode | — | — | — | — | — | — |
+| 9 — harness whole-program mode | v2 reconciled | 3 lenses (3 reject → folded) | done | 3 lenses, 0 blockers + simplify fix | 8/8 green, 524 tests, differential 120+15 (6 arms) | `5ee81da` |
+
+## Phase 9 — implementation verified (2026-08-31)
+
+Implemented W1–W6:
+- **W1**: `bench/tasks/io_demo.json` whole-program task fixture declaring CLI inputs (`argv`, `stdin`, `files`) and outputs (`stdout`, `stderr`, `exit`).
+- **W2**: Multi-target execution runner engine in `bench/harness/run.py` supporting all 5 targets (`python`, `typescript`, `rust`, `go`, `interp`) reusing builders from `differential.py`, with per-case temporary working directory isolation, file permission setup/cleanup, timeout enforcement, and stdout/stderr/exit verification.
+- **W3**: Dual-mode execution support in `evaluate()` with strict 6-stage lifecycle barriers (`extract` -> `parse` -> `check` -> `transpile` -> `execute` -> `correct`).
+- **W4**: Upgraded `--dry-run` suite with 6-stage synthetic whole-program task and target-aware canned responses exercising every stage offline without network or API keys, and added `--target` and `--roots` CLI options.
+- **W5**: `bench/harness/test_run.py` automated test suite (12 tests) covering budget calculations, spend cap abortion, code extraction, multi-target execution, and failure classification under `pytest`.
+- **W6**: Verification across all 5 targets and full 8-gate acceptance clean check.
+
+Verification:
+- All 8 repository gates green: `validate.py`, `closure_audit.py`, `generate.py --check`, `checker/gate.py`, `check_corpus.py`, `monomorphism.py`, `differential.py`, and `pytest` (524 tests passed).
+- Differential gate verified with 0 disagreements across 120 function cases + 15 whole-program cases across all 6 targets `[python=135 rust=135 wasm=15 interp=135 ts=135 go=135]`.
 
 ## Phase 8 — implementation verified (2026-08-31)
 

@@ -330,6 +330,8 @@ def function_tasks() -> list[dict]:
     out = []
     for path in sorted(CASES.glob("*.json")) + sorted(TASKS.glob("*.json")):
         task = json.loads(path.read_text())
+        if task.get("cases") and isinstance(task["cases"][0], dict):
+            continue
         task["path"] = path
         task["src"] = ROOT / task["src"]
         out.append(task)
@@ -367,18 +369,25 @@ def functions(task: dict) -> int:
     return bad
 
 
-def build_python(src: Path, d: Path) -> list[str]:
+def build_python(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
+    import py_compile
+    if roots is None:
+        roots = ROOTS
     from to_python import Transpiler
     (d / "runtime.py").write_text((ROOT / "backend" / "runtime.py").read_text())
-    (d / "cand.py").write_text(
-        Transpiler().transpile(src.read_text(), path=src, roots=ROOTS))
-    return [sys.executable, str(d / "cand.py")]
+    cand = d / "cand.py"
+    cand.write_text(
+        Transpiler().transpile(src.read_text(), path=src, roots=roots))
+    py_compile.compile(str(cand), doraise=True)
+    return [sys.executable, str(cand)]
 
 
-def build_rust(src: Path, d: Path) -> list[str]:
+def build_rust(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
+    if roots is None:
+        roots = ROOTS
     from to_rust import ToRust
     (d / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
-    (d / "main.rs").write_text(ToRust().transpile(src.read_text(), path=src, roots=ROOTS))
+    (d / "main.rs").write_text(ToRust().transpile(src.read_text(), path=src, roots=roots))
     c = subprocess.run(["rustup", "run", "stable", "rustc", "--edition", "2021",
                         "main.rs", "-o", "rust_prog"], cwd=d, capture_output=True, text=True)
     if c.returncode:
@@ -386,16 +395,18 @@ def build_rust(src: Path, d: Path) -> list[str]:
     return [str(d / "rust_prog")]
 
 
-def build_rust_wasm(src: Path, d: Path) -> list[str]:
+def build_rust_wasm(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
     """The same Rust program compiled to wasm32-wasip1, run under node:wasi.
 
     Program mode compares stdout, stderr and exit status, which Route B (see
     .plans/phase-4/FEASIBILITY.md) proved observable through WASI: proc_exit's
     code reaches the JS caller and std I/O reaches the process's own descriptors.
     """
+    if roots is None:
+        roots = ROOTS
     from to_rust import ToRust
     (d / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
-    (d / "main.rs").write_text(ToRust().transpile(src.read_text(), path=src, roots=ROOTS))
+    (d / "main.rs").write_text(ToRust().transpile(src.read_text(), path=src, roots=roots))
     c = subprocess.run(["rustup", "run", "stable", "rustc", "--target",
                         "wasm32-wasip1", "-O", "--edition", "2021", "main.rs",
                         "-o", "main.wasm"], cwd=d, capture_output=True, text=True)
@@ -405,7 +416,7 @@ def build_rust_wasm(src: Path, d: Path) -> list[str]:
             str(d / "main.wasm")]
 
 
-def build_interpreter(src: Path, d: Path) -> list[str]:
+def build_interpreter(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
     """The reference interpreter, evaluated directly from the tree-sitter AST.
 
     Same shape as the other arms: SOURCE first (the corpus file), then the
@@ -413,26 +424,30 @@ def build_interpreter(src: Path, d: Path) -> list[str]:
     matching the other arms' `cmd + argv` form. The binary is built by the
     workspace before the gate runs (I1; replay.py shares build_interpreter).
     """
+    if roots is None:
+        roots = ROOTS
     binp = ROOT / "target" / "debug" / "agentscript-interp"
     if not binp.exists():
         subprocess.run(["rustup", "run", "stable", "cargo", "build",
                         "--manifest-path", str(ROOT / "Cargo.toml")],
                        check=True, cwd=ROOT, capture_output=True, text=True)
     cmd = [str(binp)]
-    for r in ROOTS:
+    for r in roots:
         cmd += ["--root", str(r)]
     cmd += [str(src)]
     return cmd
 
 
-def build_typescript(src: Path, d: Path) -> list[str]:
+def build_typescript(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
     """Transpile to TS, copy the runtime, compile with `tsc`, return the runnable
     node command. The arm raises on a transpile or `tsc` failure **and on an
     empty emitted source** — a transpiler that swallows a form and writes nothing
     cannot enter the arm, so there is never a stub or forwarded column to agree
     trivially."""
+    if roots is None:
+        roots = ROOTS
     from to_typescript import ToTypeScript
-    main_ts = ToTypeScript().transpile(src.read_text(), path=src, roots=ROOTS)
+    main_ts = ToTypeScript().transpile(src.read_text(), path=src, roots=roots)
     if not main_ts.strip():
         raise RuntimeError(f"ts transpile of {src.name} emitted no source")
     (d / "rt.ts").write_text((ROOT / "backend" / "ts" / "rt.ts").read_text())
@@ -443,9 +458,11 @@ def build_typescript(src: Path, d: Path) -> list[str]:
     return ["node", str(d / "dist" / "main.js")]
 
 
-def build_go(src: Path, d: Path) -> list[str]:
+def build_go(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
+    if roots is None:
+        roots = ROOTS
     from to_go import ToGo
-    main_go = ToGo().transpile(src.read_text(), path=src, roots=ROOTS)
+    main_go = ToGo().transpile(src.read_text(), path=src, roots=roots)
     if not main_go.strip():
         raise RuntimeError(f"go transpile of {src.name} emitted no source")
     rt_go = (ROOT / "backend" / "golang" / "rt" / "rt.go").read_text().replace("package rt\n", "package main\n", 1)

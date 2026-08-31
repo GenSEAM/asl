@@ -1,0 +1,65 @@
+{
+  "id": "io_demo",
+  "source": "grammar/corpus/valid/08-io.agentscript",
+  "src": "grammar/corpus/valid/08-io.agentscript",
+  "signature": "(defun ! main [(args (List String))] -> (Result Unit IoError))",
+  "prompt": "Write a module `io-demo` exporting `main`. It copies a source file to a destination file and echoes the content to stdout, or describes the source file when given one path. When given no arguments, print usage instructions to stderr. If writing fails, return the IoError.",
+  "cases": [
+    {
+      "argv": [
+        "sample.txt"
+      ],
+      "stdin": "",
+      "files": {
+        "sample.txt": "hello from a file\n"
+      },
+      "stdout": "hello from a file\n\n",
+      "stderr": "",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "missing.txt"
+      ],
+      "stdin": "",
+      "files": {},
+      "stdout": "missing\n",
+      "stderr": "",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "sample.txt",
+        "out.txt"
+      ],
+      "stdin": "",
+      "files": {
+        "sample.txt": "hello from a file\n"
+      },
+      "stdout": "hello from a file\n\n",
+      "stderr": "",
+      "exit": 0
+    },
+    {
+      "argv": [
+        "sample.txt",
+        "nodir/out.txt"
+      ],
+      "stdin": "",
+      "files": {
+        "sample.txt": "hello from a file\n"
+      },
+      "stdout": "",
+      "stderr": "not-found\n",
+      "exit": 1
+    },
+    {
+      "argv": [],
+      "stdin": "",
+      "files": {},
+      "stdout": "",
+      "stderr": "usage: io-demo SRC [DST]\n",
+      "exit": 0
+    }
+  ]
+}
