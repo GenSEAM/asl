@@ -58,7 +58,7 @@ development loop the owner named: write a test, run it in the interpreter immedi
 transpilation to a host language. The code survives into the compiler frontend.
 *Acceptance:* every `corpus/valid` program executes under the interpreter in `differential.py`'s **program mode** and agrees with the compiled arms on stdout/stderr/exit. Function-mode agreement is deferred (a Phase-5 follow-up or Phase 9).
 
-### Phase 6 — The agent-facing surface, measured (tooling)
+### Phase 6 — The agent-facing surface, measured (tooling) — **DONE**, commit `51f5f03`
 Goal 4 has no gate; this phase gives it numbers that can regress. The three existing axes —
 ambiguity, observability, token budget — plus the editing surface the owner named: structured edit
 operations (point and range), AST access and structural search, wired into the distributor, so an
@@ -67,18 +67,20 @@ and bindgen (`tools/bindgen/`) are re-integrated and adapted to the new name her
 *Acceptance:* ambiguity is surfaced and driven to zero or recorded; edit/AST/search covered by
 tests; the formatter is idempotent on the corpus.
 
-### Phase 7 — TypeScript backend  (roadmap 3)
+### Phase 7 — TypeScript backend  (roadmap 3) — **DONE**, commit `c8c06ac`
 The browser-side glue for the Wasm story and a measurement target. The stashed
 `backend/to_typescript.py` + `backend/ts/rt.ts` + the `prelude.json` `ts` templates are the starting
 point, re-integrated and gated by `tsc`. Third arm on the differential gate.
 *Acceptance:* a third arm on `differential.py` runs and agrees; `tsc` accepts the emitted output.
 
-### Phase 8 — Go backend  (roadmap 6)
+### Phase 8 — Go backend  (roadmap 6) — **DONE**, commit `b4d781f`
 `backend/golang/rt/rt.go` exists; no transpiler. A GC'd native target and a fourth differential arm.
+*Acceptance:* `to_go.py` built; all 32 fixtures pass Go transpilation and `go vet`; differential gate passes with Go arm.
 
-### Phase 9 — Harness whole-program mode  (roadmap 4)
+### Phase 9 — Harness whole-program mode  (roadmap 4) — **DONE**, commit `70195fe`
 `bench/harness/run.py` drives a pure entry function; `EXPERIMENT.md` amendment 2026-08-20-b
 specifies a terminal-bench shape.
+*Acceptance:* multi-target runner supports Python, TypeScript, Rust, Go, and Interpreter with isolated workspaces, 6-stage lifecycle tracking, whole-program tasks, offline `--dry-run`, and automated test suite (`bench/harness/test_run.py`).
 
 ## Not in scope — owner decisions, recorded as blocked
 

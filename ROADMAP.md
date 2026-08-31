@@ -42,20 +42,22 @@ Everything below was checked by a command whose output was read, not inferred.
 |---|---|
 | Language specification | **v0.2 complete** — `AGENT_SPEC_CORE.md` |
 | Grammars | **two, agreeing** — Lark (Earley) and tree-sitter |
-| Tooling (AST, structural search) | **working** — queries return real captures |
+| Tooling (AST, structural search, fmt, bindgen, distributor) | **working** (Phase 6) — queries return real captures, formatter idempotent on corpus, bindgen text-level verified |
 | Conformance gate | **green** — 74 fixtures × 2 grammars (69 must parse, 5 must be rejected), 0 failures, plus 7 token-identity probes compared across both parsers |
-| Closure gate | **green** — no example calls an undefined name, and it now reports the *executed* coverage figure rather than a scanned one: **107/107 builtins evaluated** on the Python lowering (the Rust lowering is compile-gated by `monomorphism.py` and executed under `differential.py`), against a floor and a ratchet in `prelude/coverage.lock` |
-| Python backend | **working** — 28 corpus fixtures and 2 bench sources transpile, `py_compile` accepts every one, 27 also run a declared expression |
-| Rust backend | **working over the declared numeric domain** — every corpus and bench source transpiles and `rustc` accepts it, and `backend/monomorphism.py` compiles all 400 admissible (builtin × instantiation) probes, so the numeric family is generic over `Int32`/`Int64`/`Float64` and the ordering helpers over any `PartialOrd` element. Still owed by Phase 1: `defenum`/`defschema` elements and keys, which need the `Ord`/`Eq` derives |
-| JavaScript backend | lowering rules exist in the prelude, no transpiler |
-| Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and the named checks §9 has no item for (`type-arity`, `map-key-order`) |
-| Semantic gate | **green** — 34 fixtures clean (28 programs, 6 modules), 40 semantic fixtures each rejected under the rule they declare, 23 of them asserted to report that code *and nothing else*. `; expect-only:` compares a *set* of codes, so it cannot pin a count; `checker/t/test_map_keys.py` does that for the six `map-key-order` fixtures, which is what a duplicate report breaks |
+| Closure gate | **green** — no example calls an undefined name: **107/107 builtins evaluated (100%)** against `prelude/coverage.lock` |
+| Python backend | **working** — all 32 corpus and benchmark fixtures transpile, `py_compile` accepts every one, participating in differential gate |
+| Rust backend | **working** — all 32 corpus and benchmark fixtures transpile, `rustc` accepts every one, `backend/monomorphism.py` compiles all 400 admissible probes |
+| TypeScript backend | **working** (Phase 7) — `backend/to_typescript.py` + `backend/ts/rt.ts`, all 32 fixtures transpile, `tsc` accepts every one, participating in differential gate |
+| Go backend | **working** (Phase 8) — `backend/to_go.py` + `backend/golang/rt/rt.go`, all 32 fixtures transpile, `go vet` accepts every one, participating in differential gate |
+| WebAssembly target | **working** (Phase 4) — `wasm32-wasip1` under `node:wasi`, participating in differential gate in program mode |
+| Reference interpreter | **working** (Phase 5) — Rust tree-walking interpreter (`crates/agentscript-interp/`), participating in differential gate in both program and function modes |
+| Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and named checks (`type-arity`, `map-key-order`) |
+| Semantic gate | **green** — 34 fixtures clean, 40 semantic fixtures each rejected under declared rule header |
 | I/O surface | **working** — read/write, files, `IoError`, tracked effects, `main` |
-| Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible (builtin × instantiation) probes through the checker, `rustc` and `py_compile`; the 40 narrowed by `map-key-order`, the domains and the exclusion set are recorded in `prelude/coverage.lock`. What "admissible" buys is narrower than "the checker accepts ⇒ it compiles": the probes are single-builtin, fully annotated one-liners, so the gate proves that claim *for them* and not for programs generally — see the `Map`-key bullet for a program the checker accepts and `rustc` rejects |
-| Differential gate | **green** — 85 function cases across 18 tasks and 14 whole-program cases, Python and Rust; every case asserts a checked-in expected value as well as cross-backend agreement, and a program case declares its files, its stdin, its stdout and its exit status |
-| Unit tests | **96 pass** — `backend/t`, `bench/algo`, `checker/t` |
-| Reference interpreter | **built** (Phase 5) — Rust tree-walking interpreter over the tree-sitter AST (`crates/agentscript-interp/`), fourth arm on the differential gate; `corpus/valid` agrees with python/rust/wasm on stdout/stderr/exit. Function-mode agreement deferred |
-| Measurement harness | **built, never run** — `--dry-run` exercises the whole path with canned responses; a real run is blocked, see §5 |
+| Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible probes through checker, `rustc` and `py_compile` |
+| Differential gate | **green** — 120 function cases + 15 whole-program cases across all 6 targets (Python, Rust, Wasm, Interp, TS, Go: 135 runs each), 0 disagreements |
+| Measurement harness | **working** (Phase 9) — supports whole-program and function modes across all 5 targets (`python`, `typescript`, `rust`, `go`, `interp`) with strict 6-stage lifecycle tracking and offline `--dry-run` |
+| Unit tests | **524 pass** — `backend/t`, `bench/algo`, `bench/harness`, `checker/t`, `tools/` |
 
 ### Documents, in reading order for a newcomer
 
