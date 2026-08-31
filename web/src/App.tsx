@@ -10,6 +10,7 @@ import { ParadigmBridge } from './components/ParadigmBridge';
 import { FrameworkBridges } from './components/FrameworkBridges';
 import { AslVdomRenderer } from './components/AslVdomRenderer';
 import { BestPractices } from './components/BestPractices';
+import { Blog } from './components/Blog';
 import { Docs } from './components/Docs';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
@@ -29,6 +30,7 @@ export const App: React.FC = () => {
         <TargetMatrix />
         <TokenCalculator />
         <BestPractices />
+        <Blog />
         <Docs />
         <Ecosystem />
       </main>
