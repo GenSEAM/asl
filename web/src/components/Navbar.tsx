@@ -15,10 +15,10 @@ export const Navbar: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-mono font-bold text-craft-50 tracking-tight text-lg">AgentScript</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-craft-800 text-craft-accent border border-craft-700">v1.0-WASM</span>
+                <span className="font-mono font-bold text-craft-50 tracking-tight text-lg">ASL</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-craft-800 text-craft-accent border border-craft-700">AgentScript</span>
               </div>
-              <p className="text-[11px] text-craft-400 font-mono hidden sm:block">Deterministic S-Expressions for AI Agents</p>
+              <p className="text-[11px] text-craft-400 font-mono hidden sm:block">The Language for AI Agents & Vibe-Coding</p>
             </div>
           </div>
 

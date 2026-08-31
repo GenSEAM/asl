@@ -16,8 +16,8 @@ def test_scaffold_project():
         assert res["status"] == "success"
         assert res["project"] == "demo-agent-service"
 
-        # Verify asex.json
-        manifest = json.loads((target / "asex.json").read_text())
+        # Verify asl.json
+        manifest = json.loads((target / "asl.json").read_text())
         assert manifest["name"] == "demo-agent-service"
         assert "wasm" in manifest["targets"]
 

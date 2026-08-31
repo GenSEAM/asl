@@ -35,16 +35,16 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
 
     created_files: list[str] = []
 
-    # 1. asex.json
+    # 1. asl.json
     manifest = {
         "name": project_name,
         "version": "0.1.0",
-        "description": f"{project_name} built with AgentScript",
+        "description": f"{project_name} built with ASL (AgentScript Language)",
         "template": template,
         "entry": "src/main.agentscript",
         "targets": ["wasm", "ts", "rs", "go", "py"]
     }
-    manifest_path = target_dir / "asex.json"
+    manifest_path = target_dir / "asl.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     created_files.append(str(manifest_path))
 

@@ -1,11 +1,11 @@
 ---
-name: aslang
-description: AsLang / AgentScript language reference, S-expression syntax rules, MCP tools, and zero-shot LLM cheat sheet.
+name: asl
+description: ASL (AgentScript Language) developer reference, S-expression syntax rules, MCP tools, and vibe-coding cheat sheet.
 ---
 
-# AsLang / AgentScript Cheat Sheet (~500 tokens)
+# ASL (AgentScript Language) Cheat Sheet (~500 tokens)
 
-Deterministic S-expression language for autonomous AI agents. Compiles to WebAssembly (Main), TypeScript, Rust, Go, Python.
+The #1 language for autonomous AI agents, vibe-coding, and universal WebAssembly execution. Compiles deterministically to WebAssembly (Main), TypeScript, Rust, Go, and Python.
 
 ## 1. Syntax & Forms
 - **Module:** `(module path/name :doc "..." :export [Sym ...] :import [(path/mod :as alias)])`
@@ -35,11 +35,11 @@ Deterministic S-expression language for autonomous AI agents. Compiles to WebAss
 - `asex_compress_module(source=...)`: AST compressor (-78% prompt tokens) -> `{ compressed }`
 - `asex_format(source=...)`: Canonical S-expression layout formatter -> `{ formatted }`
 
-## 5. Build CLI
+## 5. ASL CLI
 ```bash
-agentscript init <dir> --template wasm
-agentscript check <file>
-agentscript build <file> --target wasm -o dist/main.wasm
-agentscript build <file> --target ts|rs|go|py
-agentscript fmt <dir>
+asl init <dir> --template wasm
+asl check <file>
+asl build <file> --target wasm -o dist/main.wasm
+asl build <file> --target ts|rs|go|py
+asl fmt <dir>
 ```

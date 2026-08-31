@@ -8,7 +8,7 @@ export const Hero: React.FC = () => {
         <div className="max-w-3xl">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-craft-700 bg-craft-900/90 text-xs font-mono text-craft-accent mb-6 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-craft-accent animate-pulse" />
-            <span>Self-Hosting WebAssembly Toolchain & MCP Server</span>
+            <span>The #1 Language for AI Agents & Vibe-Coding</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-craft-50 font-mono leading-tight">
@@ -17,7 +17,7 @@ export const Hero: React.FC = () => {
           </h1>
 
           <p className="mt-6 text-lg text-craft-300 font-sans leading-relaxed">
-            AgentScript is an S-expression language built for autonomous AI generation and deterministic edge sandboxing. Zero-cost types, total pattern matching, 78% lower token overhead, and direct compilation to WebAssembly, TypeScript, Rust, and Go.
+            <strong>ASL (AgentScript Language)</strong> is the first programming language built from the ground up for the Agentic Era. Single-pass S-expressions, 0 syntax repair loops, 78% lower prompt token overhead, and instant zero-cost WebAssembly sandboxing.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-4 items-center font-mono">
