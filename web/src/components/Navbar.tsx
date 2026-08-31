@@ -38,8 +38,8 @@ export const Navbar: React.FC = () => {
             <a href="#targets" className="hover:text-craft-accent transition-colors">
               <span>Targets</span>
             </a>
-            <a href="#benchmarks" className="hover:text-craft-accent transition-colors">
-              <span>Benchmarks</span>
+            <a href="#recipes" className="hover:text-craft-accent transition-colors">
+              <span>Recipes</span>
             </a>
             <a href="#docs" className="hover:text-craft-accent transition-colors flex items-center gap-1">
               <span className="text-craft-accent">§</span>

@@ -8,6 +8,7 @@ import { TargetMatrix } from './components/TargetMatrix';
 import { TokenCalculator } from './components/TokenCalculator';
 import { ParadigmBridge } from './components/ParadigmBridge';
 import { AslVdomRenderer } from './components/AslVdomRenderer';
+import { BestPractices } from './components/BestPractices';
 import { Docs } from './components/Docs';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
@@ -25,6 +26,7 @@ export const App: React.FC = () => {
         <ParadigmBridge />
         <TargetMatrix />
         <TokenCalculator />
+        <BestPractices />
         <Docs />
         <Ecosystem />
       </main>
