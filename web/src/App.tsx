@@ -7,6 +7,7 @@ import { VectorClassifier } from './components/VectorClassifier';
 import { TargetMatrix } from './components/TargetMatrix';
 import { TokenCalculator } from './components/TokenCalculator';
 import { ParadigmBridge } from './components/ParadigmBridge';
+import { FrameworkBridges } from './components/FrameworkBridges';
 import { AslVdomRenderer } from './components/AslVdomRenderer';
 import { BestPractices } from './components/BestPractices';
 import { Docs } from './components/Docs';
@@ -22,6 +23,7 @@ export const App: React.FC = () => {
         <Playground />
         <GraphVisualizer />
         <VectorClassifier />
+        <FrameworkBridges />
         <AslVdomRenderer />
         <ParadigmBridge />
         <TargetMatrix />

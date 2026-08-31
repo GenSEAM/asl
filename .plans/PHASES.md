@@ -90,9 +90,13 @@ Browser- and Node-compatible WASI / WebAssembly runner and compiler integration.
 A Model Context Protocol (MCP) server (`tools/mcp/`) and agent context utilities. Implements stdio JSON-RPC MCP server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_ast`, `asex_compress_module` (token compressor extracting interface-only signatures). Includes automated test suite for all MCP tools and local skill documentation.
 *Acceptance:* `tools/mcp/` server starts over stdio, passes MCP protocol schema tests, all tools return structured results matching specification; `pytest tools/t/test_mcp.py` green.
 
-### Phase 12 — Showcase Web App & Craft Interactive System — **DONE**
-Landing page, live WASI REPL in browser, GPU/Canvas 60fps AST visualizer, in-browser neural vector cosine classifier, multi-target matrix switcher (AS, Wasm, TS, Rust, Go, Python), and token economics calculator.
-*Acceptance:* `npm run build:web` produces static production bundle in `web/dist/`; all interactive components functional; all project gates green.
+### Phase 13 — ASL Best Practices & Integration Recipes — **DONE**, commit `1c56335`
+Battle-tested integration recipes (in-browser Wasm sandbox, multi-agent MCP loop, cross-compilation CI/CD, agent VFS scratchpad, and native FFI) with interactive UI showcase.
+*Acceptance:* `docs/BEST_PRACTICES.md` written, `web/src/components/BestPractices.tsx` mounted, `npm run build:web` passes.
+
+### Phase 14 — Universal Framework Bridges (React, Vue, Angular, Svelte) & High-Perf Wasm Engine — **ACTIVE**
+Unifies frontend architectures by enabling ASL as the zero-drift portable core logic layer for React Hooks, Vue 3 Composables, Angular Injectable Services, and Svelte Runes/Stores, with zero-boilerplate Wasm acceleration (<0.04ms) for math, physics, canvas, crypto, and data crunching.
+*Acceptance:* `docs/FRAMEWORKS.md` created, `web/src/components/FrameworkBridges.tsx` with live framework code matrix and telemetry mounted, `npm run build:web` and all gates green.
 
 ## Out of scope — deferred to subsequent pass
 

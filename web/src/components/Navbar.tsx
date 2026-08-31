@@ -35,8 +35,8 @@ export const Navbar: React.FC = () => {
               <Cpu className="w-4 h-4 text-craft-accent" />
               <span>Wasm Vector AI</span>
             </a>
-            <a href="#targets" className="hover:text-craft-accent transition-colors">
-              <span>Targets</span>
+            <a href="#frameworks" className="hover:text-craft-accent transition-colors">
+              <span>Frameworks</span>
             </a>
             <a href="#recipes" className="hover:text-craft-accent transition-colors">
               <span>Recipes</span>
