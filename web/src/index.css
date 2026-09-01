@@ -3,51 +3,50 @@
 @tailwind utilities;
 
 /*
-  One token layer, two themes. Components never branch on `dark:` — they name a role
-  (ground / surface / ink / signal) and the theme rebinds the channels underneath.
-  Channels are raw RGB triplets so Tailwind's `<alpha-value>` still works.
-
-  Cool graphite monochrome with glowing purple signal accents.
+  Design System: High-end architectural graphite monochrome with sophisticated designer fuchsia accents.
+  Zero generic AI purple gradients. Clean, confident, editorial Swiss aesthetic.
 */
 @layer base {
   :root {
-    --ground: 246 245 250;
-    --sunken: 236 234 243;
+    --ground: 248 248 250;
+    --sunken: 240 240 244;
     --surface: 255 255 255;
-    --inset: 247 246 252;
+    --inset: 243 243 247;
 
-    --line: 224 221 233;
-    --line-strong: 138 133 150;
+    --line: 228 228 234;
+    --line-strong: 142 142 152;
 
-    --ink: 20 19 26;
-    --ink-2: 85 82 96;
-    --ink-3: 104 100 114;
+    --ink: 18 18 22;
+    --ink-2: 82 82 94;
+    --ink-3: 110 110 122;
 
-    --signal: 140 38 180;
-    --signal-soft: 175 90 210;
+    /* Architectural Designer Fuchsia */
+    --signal: 214 31 105;
+    --signal-soft: 236 72 138;
 
-    --shadow-hue: 280 22% 16%;
-    --shadow-strength: 0.08;
+    --shadow-hue: 330 15% 12%;
+    --shadow-strength: 0.06;
   }
 
   .dark {
-    --ground: 10 9 14;
-    --sunken: 6 5 9;
-    --surface: 22 20 29;
-    --inset: 16 15 22;
+    --ground: 12 12 14;
+    --sunken: 7 7 9;
+    --surface: 20 20 24;
+    --inset: 15 15 18;
 
-    --line: 42 39 52;
-    --line-strong: 96 90 112;
+    --line: 38 38 46;
+    --line-strong: 92 92 108;
 
-    --ink: 238 236 244;
-    --ink-2: 170 166 182;
-    --ink-3: 138 134 150;
+    --ink: 242 242 246;
+    --ink-2: 168 168 180;
+    --ink-3: 132 132 146;
 
-    --signal: 198 96 240;
-    --signal-soft: 156 76 190;
+    /* Luminous Designer Fuchsia */
+    --signal: 240 56 132;
+    --signal-soft: 214 31 105;
 
     --shadow-hue: 0 0% 0%;
-    --shadow-strength: 0.65;
+    --shadow-strength: 0.6;
   }
 
   html {
@@ -77,16 +76,15 @@
   }
 
   ::selection {
-    background: rgb(var(--signal) / 0.2);
+    background: rgb(var(--signal) / 0.18);
     color: rgb(var(--ink));
   }
 
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: rgb(var(--ground)); }
   ::-webkit-scrollbar-thumb {
-    background: rgb(var(--line-strong) / 0.4);
+    background: rgb(var(--line-strong) / 0.35);
     border-radius: 999px;
-    border: 3px solid rgb(var(--ground));
   }
   ::-webkit-scrollbar-thumb:hover { background: rgb(var(--signal)); }
 }
@@ -95,20 +93,20 @@
   .paren { color: rgb(var(--signal)); }
   .rule-fade {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.5), transparent);
+    background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.4), transparent);
   }
 
   .bg-dot-grid {
-    background-image: radial-gradient(rgb(var(--line-strong) / 0.18) 1px, transparent 1px);
+    background-image: radial-gradient(rgb(var(--line-strong) / 0.15) 1px, transparent 1px);
     background-size: 24px 24px;
   }
 
   .glow-orb {
     position: absolute;
     border-radius: 9999px;
-    filter: blur(100px);
+    filter: blur(120px);
     pointer-events: none;
-    opacity: 0.25;
+    opacity: 0.18;
     background: radial-gradient(circle, rgb(var(--signal)), transparent 70%);
   }
 }

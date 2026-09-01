@@ -5,7 +5,6 @@ import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
 import { Ecosystem } from './components/Ecosystem';
-import { VoiceAssistant } from './components/VoiceAssistant';
 import { Footer } from './components/Footer';
 
 export const App: React.FC = () => (
@@ -17,7 +16,6 @@ export const App: React.FC = () => (
         <TheAgentWay />
         <AgentWireProtocol />
         <Ecosystem />
-        <VoiceAssistant />
       </main>
       <Footer />
     </div>

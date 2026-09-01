@@ -1,16 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, Copy, Cpu, ShieldCheck, Zap, Layers, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Copy, Zap, ShieldCheck, Layers, Cpu, Sparkles } from 'lucide-react';
 import { Emblem } from './ui/Logo';
 
 const INSTALL = 'curl -fsSL https://aslang.dev/install.sh | bash';
-const TARGETS = [
-  { name: 'WebAssembly', tag: 'WASI Preview1', hot: true },
-  { name: 'Native Rust', tag: 'rustc clean' },
-  { name: 'TypeScript', tag: 'Node & Browser' },
-  { name: 'Go', tag: 'go vet clean' },
-  { name: 'Python', tag: 'py_compile clean' },
-  { name: 'Interpreter', tag: 'Reference Tree-Walk' },
-];
+const TARGETS = ['WebAssembly', 'Rust', 'TypeScript', 'Go', 'Python'];
 
 export const Hero: React.FC = () => {
   const [copied, setCopied] = useState(false);
@@ -36,41 +29,41 @@ export const Hero: React.FC = () => {
   };
 
   return (
-    <section id="top" className="relative bg-ground pt-36 pb-24 sm:pt-44 sm:pb-32 overflow-hidden bg-dot-grid">
-      {/* Ambient Atmospheric Lighting Glows */}
-      <div className="glow-orb -top-32 -left-32 w-96 h-96" aria-hidden="true" />
-      <div className="glow-orb top-1/2 -right-32 w-[32rem] h-[32rem]" aria-hidden="true" />
+    <section id="top" className="relative bg-ground pt-36 pb-20 sm:pt-44 sm:pb-28 overflow-hidden bg-dot-grid">
+      {/* Subtle Atmospheric Lighting */}
+      <div className="glow-orb -top-40 -left-40 w-96 h-96" aria-hidden="true" />
+      <div className="glow-orb top-1/2 -right-40 w-[30rem] h-[30rem]" aria-hidden="true" />
 
       <div className="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-12 items-center">
           <div className="lg:col-span-6">
-            <span className="inline-flex items-center gap-2.5 px-3 py-1 rounded-full border border-line bg-surface/80 backdrop-blur-md font-mono text-micro font-medium uppercase text-ink-3 shadow-e1">
+            <span className="inline-flex items-center gap-2.5 px-3.5 py-1 rounded-full border border-line bg-surface/80 backdrop-blur-md font-mono text-micro font-medium uppercase text-ink-3 shadow-e1">
               <span className="w-2 h-2 rounded-full bg-signal animate-pulse" aria-hidden />
-              The Deterministic Agentic Language
+              The Language for Autonomous Agents
             </span>
 
-            <h1 className="mt-8 text-display font-bold text-ink text-balance tracking-tight">
-              Code an agent can<br className="hidden sm:block" /> write correctly the
+            <h1 className="mt-7 text-display font-bold text-ink text-balance tracking-tight">
+              Code that agents write right the
               <span className="text-signal"> first time.</span>
             </h1>
 
-            <p className="mt-8 text-lead text-ink-2 max-w-prose leading-relaxed">
-              AgentScript (ASL) is a high-performance S-expression language engineered exclusively for autonomous AI swarms. Single-pass LL(1) grammar, zero indentation hazards, and instant WebAssembly compilation — eliminating hallucinated brackets and multi-turn repair loops.
+            <p className="mt-6 text-lead text-ink-2 max-w-prose leading-relaxed">
+              Every existing language was designed for human typists. AgentScript is engineered from first principles for model generation: balanced, deterministic, compact, and eliminating syntax errors and repair loops by design.
             </p>
 
-            <div className="mt-10 flex flex-wrap items-center gap-3">
+            <div className="mt-9 flex flex-wrap items-center gap-3.5">
               <a
                 href="#agent-way"
                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-ink text-ground font-medium text-body hover:opacity-90 transition-all shadow-e2"
               >
-                Explore the Architecture
+                Why AgentScript
                 <ArrowRight className="w-4 h-4" aria-hidden />
               </a>
               <a
                 href="#toolchain"
                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-line-strong text-ink font-medium text-body hover:bg-surface transition-colors"
               >
-                Multi-Target Engine
+                The Toolchain
               </a>
             </div>
 
@@ -90,87 +83,76 @@ export const Hero: React.FC = () => {
             </div>
           </div>
 
-          {/* ASL Nano Visual Architecture Engine */}
-          <div className="lg:col-span-6 lg:-mr-8 xl:-mr-12">
+          {/* Architectural Telemetry Cockpit */}
+          <div className="lg:col-span-6 lg:-mr-4 xl:-mr-8">
             <div className="relative rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3 overflow-hidden p-6 sm:p-8">
-              {/* Card Accent Ambient Gradient */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-signal/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute top-0 right-0 w-64 h-64 bg-signal/5 rounded-full blur-3xl pointer-events-none" />
 
               <div className="flex items-center justify-between pb-6 border-b border-line">
-                <div className="flex items-center gap-3">
-                  <Emblem className="w-10 h-10 text-ink" />
+                <div className="flex items-center gap-3.5">
+                  <Emblem className="w-9 h-9 text-ink" />
                   <div>
-                    <h2 className="font-sans font-bold text-ink text-base">ASL Nano Core</h2>
-                    <p className="font-mono text-micro uppercase text-ink-3">Single-Pass LL(1) Engine</p>
+                    <h2 className="font-sans font-bold text-ink text-base">AgentScript Core</h2>
+                    <p className="font-mono text-micro uppercase text-ink-3">Generation Engine</p>
                   </div>
                 </div>
                 <span className="px-3 py-1 rounded-full bg-signal/10 text-signal font-mono text-micro font-semibold uppercase">
-                  v0.1.0 Ready
+                  Active
                 </span>
               </div>
 
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-2xl border border-line bg-ground/80 backdrop-blur-sm hover:border-line-strong transition-colors">
+                <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
                     <Zap className="w-4 h-4 text-signal" />
-                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Zero Syntax Drift</p>
+                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Grammar Safety</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">100% 1-Pass</p>
-                  <p className="mt-1 text-meta text-ink-2">Strict balanced parentheses. No invisible indentation ambiguity.</p>
+                  <p className="mt-2 text-h3 font-bold text-ink">Deterministic</p>
+                  <p className="mt-1 text-meta text-ink-2">Strict balanced structure. Zero indentation bugs or ambiguous syntax trees.</p>
                 </div>
 
-                <div className="p-4 rounded-2xl border border-line bg-ground/80 backdrop-blur-sm hover:border-line-strong transition-colors">
-                  <div className="flex items-center gap-2 text-ink">
-                    <ShieldCheck className="w-4 h-4 text-signal" />
-                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Differential Lockstep</p>
-                  </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">0 Mismatch</p>
-                  <p className="mt-1 text-meta text-ink-2">Identical execution across Rust, Wasm, Go, Python, TS & Interp.</p>
-                </div>
-
-                <div className="p-4 rounded-2xl border border-line bg-ground/80 backdrop-blur-sm hover:border-line-strong transition-colors">
+                <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
                     <Layers className="w-4 h-4 text-signal" />
-                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Token Economy</p>
+                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Context Efficiency</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">-78.4% Tokens</p>
-                  <p className="mt-1 text-meta text-ink-2">Interface compressor extracts pure typed signatures for prompts.</p>
+                  <p className="mt-2 text-h3 font-bold text-ink">Ultra-Compact</p>
+                  <p className="mt-1 text-meta text-ink-2">Drastically lower token overhead compared to verbose code or nested JSON.</p>
                 </div>
 
-                <div className="p-4 rounded-2xl border border-line bg-ground/80 backdrop-blur-sm hover:border-line-strong transition-colors">
+                <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 text-ink">
+                    <ShieldCheck className="w-4 h-4 text-signal" />
+                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Execution</p>
+                  </div>
+                  <p className="mt-2 text-h3 font-bold text-ink">Verified</p>
+                  <p className="mt-1 text-meta text-ink-2">Programs produce consistent semantics regardless of the deployment target.</p>
+                </div>
+
+                <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
                     <Cpu className="w-4 h-4 text-signal" />
-                    <p className="font-mono text-micro uppercase font-medium text-ink-3">In-Browser Wasm</p>
+                    <p className="font-mono text-micro uppercase font-medium text-ink-3">Toolchain</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">&lt;0.04 ms</p>
-                  <p className="mt-1 text-meta text-ink-2">Zero-server in-memory WASI sandbox with instant export execution.</p>
+                  <p className="mt-2 text-h3 font-bold text-ink">Universal</p>
+                  <p className="mt-1 text-meta text-ink-2">Compiles seamlessly to native binaries, web runtimes, and agent tools.</p>
                 </div>
               </div>
 
               <div className="mt-6 pt-5 border-t border-line flex items-center justify-between">
                 <div className="flex items-center gap-2 font-mono text-micro uppercase text-ink-3">
                   <Sparkles className="w-3.5 h-3.5 text-signal" />
-                  <span>Verified Standard Library</span>
+                  <span>Target Platforms</span>
                 </div>
-                <span className="font-mono text-micro text-signal font-bold">107/107 Builtins (100%)</span>
+                <div className="flex items-center gap-2">
+                  {TARGETS.map((t) => (
+                    <span key={t} className="font-mono text-micro text-ink-2 px-2 py-0.5 rounded-md bg-inset border border-line">
+                      {t}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-
-        {/* 6 Target Runtimes Grid */}
-        <div className="mt-24 sm:mt-32">
-          <div className="rule-fade" aria-hidden />
-          <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {TARGETS.map((t) => (
-              <div
-                key={t.name}
-                className="p-4 rounded-2xl border border-line bg-surface/60 backdrop-blur-md text-center hover:border-line-strong transition-all"
-              >
-                <p className="font-sans font-semibold text-body text-ink">{t.name}</p>
-                <p className="mt-1 font-mono text-micro uppercase text-ink-3">{t.tag}</p>
-              </div>
-            ))}
           </div>
         </div>
       </div>
