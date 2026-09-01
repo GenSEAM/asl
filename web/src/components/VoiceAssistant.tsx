@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Section, SectionHeader } from './ui/primitives';
-import { Mic, Radio, Zap, ShieldAlert, Cpu } from 'lucide-react';
+import { Mic, Zap, Cpu } from 'lucide-react';
 
 export const VoiceAssistant: React.FC = () => {
   const [isRecording, setIsRecording] = useState(false);

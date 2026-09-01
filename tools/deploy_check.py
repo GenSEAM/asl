@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 Deployment Pre-Flight Validator for Cloudflare Pages / Static Hosting.
-Verifies production bundle integrity, assets, and wrangler configuration.
+Verifies TypeScript compilation, production build, bundle integrity, and wrangler configuration.
 """
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,7 +15,39 @@ def check_deployment() -> bool:
     errors = []
     print("--- Running Deployment Pre-Flight Checks ---")
 
-    # 1. Check wrangler.toml
+    # 1. Run TypeScript typecheck on web
+    print("--> Typechecking web app (tsc -p web/tsconfig.json)...")
+    env = os.environ.copy()
+    env["PATH"] = f"/usr/local/bin:{env.get('PATH', '')}"
+    node_bin = "/usr/local/bin/node" if Path("/usr/local/bin/node").exists() else "node"
+    tsc_script = ROOT / "web" / "node_modules" / "typescript" / "bin" / "tsc"
+    vite_script = ROOT / "web" / "node_modules" / "vite" / "bin" / "vite"
+
+    if tsc_script.exists():
+        r = subprocess.run(
+            [node_bin, str(tsc_script), "-p", str(ROOT / "web" / "tsconfig.json")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            env=env
+        )
+        if r.returncode != 0:
+            errors.append(f"TypeScript compilation failed in web/:\n{r.stdout}\n{r.stderr}")
+
+    # 2. Build web app bundle
+    if not errors and vite_script.exists():
+        print("--> Building web production bundle (vite build web)...")
+        r = subprocess.run(
+            [node_bin, str(vite_script), "build", "web"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            env=env
+        )
+        if r.returncode != 0:
+            errors.append(f"Vite production build failed:\n{r.stdout}\n{r.stderr}")
+
+    # 3. Check wrangler.toml
     wrangler_file = ROOT / "wrangler.toml"
     if not wrangler_file.exists():
         errors.append("Missing wrangler.toml configuration file.")
@@ -22,10 +56,10 @@ def check_deployment() -> bool:
         if "pages_build_output_dir" not in content:
             errors.append("wrangler.toml must declare pages_build_output_dir.")
 
-    # 2. Check web/dist build output
+    # 4. Check web/dist build output
     dist_dir = ROOT / "web" / "dist"
     if not dist_dir.exists():
-        errors.append("web/dist directory does not exist. Run 'npm run build:web' first.")
+        errors.append("web/dist directory does not exist after build.")
     else:
         index_html = dist_dir / "index.html"
         if not index_html.exists():
@@ -39,7 +73,7 @@ def check_deployment() -> bool:
         if not assets_dir.exists() or not list(assets_dir.glob("*.js")):
             errors.append("Missing compiled javascript chunks in web/dist/assets/.")
 
-    # 3. Check release notes
+    # 5. Check release notes
     release_notes = ROOT / "docs" / "RELEASE_NOTES_v0.1.0.md"
     if not release_notes.exists():
         errors.append("Missing docs/RELEASE_NOTES_v0.1.0.md documentation.")
@@ -50,7 +84,7 @@ def check_deployment() -> bool:
             print(f"  - {err}")
         return False
 
-    print("OK: Deployment pre-flight checks passed (Cloudflare Pages ready).")
+    print("OK: Deployment pre-flight & TypeScript checks passed (Cloudflare Pages ready).")
     return True
 
 
