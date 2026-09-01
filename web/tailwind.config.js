@@ -1,9 +1,16 @@
-/** @type {import('tailwindcss').Config} */
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const channel = (name) => `rgb(var(--${name}) / <alpha-value>)`;
 
+/** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  content: [
+    path.join(__dirname, 'index.html'),
+    path.join(__dirname, 'src/**/*.{js,ts,jsx,tsx}'),
+  ],
   theme: {
     extend: {
       fontFamily: {
@@ -23,7 +30,6 @@ export default {
         signal: channel('signal'),
         'signal-soft': channel('signal-soft'),
       },
-      // A ladder, not a pile: each step is a distinct role, so nothing lands between two of them.
       fontSize: {
         micro: ['0.6875rem', { lineHeight: '1.4', letterSpacing: '0.08em' }],
         meta: ['0.75rem', { lineHeight: '1.45', letterSpacing: '0.02em' }],
@@ -35,8 +41,7 @@ export default {
         h2: ['clamp(2rem, 3.6vw, 2.5rem)', { lineHeight: '1.06', letterSpacing: '-0.035em' }],
         display: ['clamp(3rem, 6.2vw, 5rem)', { lineHeight: '0.94', letterSpacing: '-0.05em' }],
       },
-      borderRadius: { '2xl': '1rem' },
-      // Elevation obeys blur = 2 × offset, so every layer reads at the same light source.
+      borderRadius: { '2xl': '1rem', '3xl': '1.5rem' },
       boxShadow: {
         e1: '0 2px 4px hsl(var(--shadow-hue) / var(--shadow-strength))',
         e2: '0 6px 12px hsl(var(--shadow-hue) / var(--shadow-strength))',
@@ -47,4 +52,4 @@ export default {
     },
   },
   plugins: [],
-}
+};

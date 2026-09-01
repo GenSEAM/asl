@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: asl-gates
+        name: ASL Pre-Commit Gates
+        entry: tools/hooks/pre-commit
+        language: script
+        always_run: true
+        pass_filenames: false
