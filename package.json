@@ -13,6 +13,9 @@
     "preview:web": "pnpm --prefix web run preview",
     "test": "pnpm run test:wasm-runner"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "devDependencies": {
     "@types/node": "^26.4.0",
     "tree-sitter-cli": "^0.26.12",
