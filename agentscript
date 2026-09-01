@@ -294,6 +294,12 @@ def cmd_eddie(args) -> int:
     return execute_eddie_plan(prompt, json_mode=getattr(args, "json", False))
 
 
+def cmd_voice(args) -> int:
+    """Real-Time Voice Assistant stream and audio bridge."""
+    from tools.voice import start_voice_session
+    return start_voice_session(simulate=getattr(args, "simulate", False), json_mode=getattr(args, "json", False))
+
+
 def cmd_get(args) -> int:
     """Download and record a remote package from GitHub/Git (Go-style)."""
     from tools.pkg import add_package
@@ -545,6 +551,12 @@ def main() -> int:
     p.add_argument("prompt", nargs="?", default="", help="user task or instruction prompt")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_eddie)
+
+    p = sub.add_parser("voice", aliases=["audio", "speech"],
+                       help="real-time voice assistant stream and audio bridge")
+    p.add_argument("--simulate", action="store_true", help="simulate audio stream")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_voice)
 
     p = sub.add_parser("heal", aliases=["repair", "fix"],
                        help="autonomous self-healing and zero-blocker repair engine")

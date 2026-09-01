@@ -17,6 +17,7 @@ PACKAGES = [
     ("asl-browser-plugin", "browser-plugin", "Cross-browser extension (Manifest V3) with in-memory WASI runner & DOM compressor"),
     ("asl-agent-bus", "agent-bus", "High-performance Inter-Agent Swarm Bus with MCP, SSE, and Socket streaming for warm subagents"),
     ("asl-eddie", "eddie", "EDDIE: Adaptive Swarm Orchestrator, Intent Classifier & Speculative Task Pool for AgentScript"),
+    ("asl-voice", "voice", "Real-time Voice Stream Assistant, 16kHz PCM Audio Bridge & Sub-Millisecond Voice Router for AgentScript"),
 ]
 
 

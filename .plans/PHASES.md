@@ -98,17 +98,26 @@ Battle-tested integration recipes (in-browser Wasm sandbox, multi-agent MCP loop
 Unifies frontend architectures by enabling ASL as the zero-drift portable core logic layer for React Hooks, Vue 3 Composables, Angular Injectable Services, and Svelte Runes/Stores, with zero-boilerplate Wasm acceleration (<0.04ms) for math, physics, canvas, crypto, and data crunching.
 *Acceptance:* `docs/FRAMEWORKS.md` created, `web/src/components/FrameworkBridges.tsx` with live framework code matrix and telemetry mounted, `npm run build:web` and all gates green.
 
-### Phase 15 — Cross-Browser Agent Plugin & WebExtension (@genseam/asl-browser-plugin) — **ACTIVE**
+### Phase 15 — Cross-Browser Agent Plugin & WebExtension (@genseam/asl-browser-plugin) — **DONE**, commit `f2bc27b`
 Manifest V3 cross-browser extension (Chrome, Firefox, Safari, Edge) empowering autonomous web agents: in-memory WASI preview1 ASL runner in background worker, intelligent DOM tree extractor and S-expression compressor (-78% tokens), popup & side panel REPL, and SearXNG metasearch integration.
 *Acceptance:* `packages/asl-browser-plugin/` created with `manifest.json`, background worker, content script, and side panel; builds cleanly, unit tests pass.
 
-### Phase 16 — Comprehensive Monorepo Gap & Consistency Audit — **PLANNED**
-Full consistency audit across all monorepo packages (`@genseam/asl-search`, `asl-mem`, `asl-fsm`, `asl-vdom`, `asl-harness`, `asl-browser-plugin`), documentation, CLI subcommands, and CI/CD pipelines.
-*Acceptance:* All 7 repository gates green, all pytest suites green, `pnpm run build:web` green, 0 broken links.
+### Phase 16 — Inter-Agent Swarm Bus & 3-Layer EDDIE Orchestrator (@genseam/asl-agent-bus, @genseam/eddie) — **DONE**, commit `0b6945b`
+Inter-agent communication bus daemon with SSE streams and Unix sockets for warm subagents, combined with EDDIE 3-layer architecture: Layer 1 Fast Triage (<0.012ms), Layer 2 Consultative Ambiguity Resolver with Follow-ups, Layer 3 Task Pool DAG with Speculative Branches and Circuit Breaker.
+*Acceptance:* `packages/asl-agent-bus` and `packages/asl-eddie` built, `$ asl bus` and `$ asl eddie` verified, `AgentSwarmVisualizer.tsx` and `EddieOrchestrator.tsx` mounted, all gates green.
+
+### Phase 17 — Voice Stream Assistant & Real-Time Audio Bridge — **ACTIVE**
+Direct Web Audio API / 16kHz PCM audio stream bridge connecting voice inputs directly into EDDIE Layer 2 Consultative Router. Generates instant tool synthesis, audio wave telemetry, and zero-latency in-memory tool execution.
+*Acceptance:* Voice stream handler created, interactive audio waveform recorder mounted in `web/`, unit tests and gates pass.
+
+### Phase 18 — Production Deployment & Autonomous Benchmark Suite — **PLANNED**
+Production deployment of `web/dist` to `aslang.dev` domain, GitHub Release tagging v0.1.0, and automated SWE-Bench style autonomous agent benchmark suite.
+*Acceptance:* DNS and static CDN deployed, release notes published, benchmark runner green.
 
 ## Out of scope — deferred to subsequent pass
 
 * **Measurement runs** (`l-298e`) — gateway endpoint, model identifier, credential env var.
 * **Concurrency / async** — deliberately absent; function colouring undecided.
+
 
 
