@@ -2,20 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
-}
+@layer base {
+  :root {
+    --bg-main: #f8fafc;
+    --text-main: #0f172a;
+    --border-main: #e2e8f0;
+  }
 
-body {
-  margin: 0;
-  background-color: #0a0a0c;
-  color: #eef1f6;
-  font-family: 'Inter', sans-serif;
-  overflow-x: hidden;
-}
+  .dark {
+    --bg-main: #060a12;
+    --text-main: #f1f5f9;
+    --border-main: #1e293b;
+  }
 
-code, pre, .font-mono {
-  font-family: 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  body {
+    margin: 0;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+  }
 }
 
 /* Custom scrollbars */
@@ -24,23 +35,43 @@ code, pre, .font-mono {
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #111215;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2f343f;
+  background: #334155;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #464c5b;
+  background: #475569;
 }
 
-.glow-subtle {
-  box-shadow: 0 0 25px -5px rgba(45, 212, 191, 0.12);
+/* Ambient background patterns */
+.grid-mesh {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
 }
 
-.grid-pattern {
-  background-size: 32px 32px;
+.dark .grid-mesh {
+  background-size: 40px 40px;
   background-image: 
     linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+.spotlight {
+  background: radial-gradient(600px circle at var(--x, 50%) var(--y, 50%), rgba(6, 182, 212, 0.08), transparent 80%);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dark .glass-panel {
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(30, 41, 59, 0.8);
 }

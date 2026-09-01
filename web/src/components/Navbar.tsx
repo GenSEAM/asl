@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Bot, Package, Sparkles, Zap, Globe, Menu, X, ExternalLink } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 export const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -14,46 +15,50 @@ export const Navbar: React.FC = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-craft-800/80 bg-craft-950/90 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-craft-200/80 dark:border-craft-800/80 bg-white/80 dark:bg-craft-950/85 backdrop-blur-xl transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Logo */}
+        {/* Logo & Brand */}
         <a href="#" className="flex items-center gap-3 group">
-          <div className="h-9 w-9 rounded-md border border-craft-accent/50 bg-craft-900/80 flex items-center justify-center text-craft-accent font-mono font-bold text-lg shadow-sm group-hover:border-craft-accent transition-colors">
+          <div className="h-9 w-9 rounded-lg border border-craft-300 dark:border-craft-accent/50 bg-craft-100 dark:bg-craft-900 flex items-center justify-center text-craft-accent font-mono font-bold text-lg shadow-sm group-hover:border-craft-accent group-hover:scale-105 transition-all">
             λ
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono font-bold text-craft-50 tracking-tight text-lg">ASL</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-craft-800 text-craft-accent border border-craft-700">v1.0 Nano</span>
+              <span className="font-mono font-bold text-craft-900 dark:text-craft-50 tracking-tight text-lg">ASL</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-craft-100 dark:bg-craft-800 text-craft-accent border border-craft-200 dark:border-craft-700">
+                v1.0 Nano
+              </span>
             </div>
-            <p className="text-[10px] text-craft-400 font-mono hidden sm:block">AgentScript Language</p>
+            <p className="text-[10px] text-craft-500 dark:text-craft-400 font-mono hidden sm:block">AgentScript Language</p>
           </div>
         </a>
 
         {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center gap-1 xl:gap-2 text-xs font-mono text-craft-300">
+        <nav className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-craft-600 dark:text-craft-300">
           {navItems.map((item) => {
             const Icon = item.icon;
             return (
               <a
                 key={item.href}
                 href={item.href}
-                className="px-3 py-1.5 rounded hover:text-craft-accent hover:bg-craft-900/60 transition-colors flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-lg hover:text-craft-accent hover:bg-craft-100 dark:hover:bg-craft-900/80 transition-all flex items-center gap-1.5"
               >
-                <Icon className="w-3.5 h-3.5 text-craft-accent/80" />
+                <Icon className="w-3.5 h-3.5 text-craft-accent" />
                 <span>{item.label}</span>
               </a>
             );
           })}
         </nav>
 
-        {/* Action Buttons */}
+        {/* Action Buttons & Theme Toggle */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
+
           <a
             href="https://github.com/GenSEAM/asl"
             target="_blank"
             rel="noreferrer"
-            className="p-2 text-craft-400 hover:text-craft-100 hover:bg-craft-900 rounded border border-transparent hover:border-craft-800 transition-colors"
+            className="p-2 text-craft-500 dark:text-craft-400 hover:text-craft-900 dark:hover:text-craft-100 hover:bg-craft-100 dark:hover:bg-craft-900 rounded-lg border border-craft-200 dark:border-craft-800 transition-colors"
             title="GitHub Repository"
           >
             <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
@@ -63,7 +68,7 @@ export const Navbar: React.FC = () => {
 
           <a
             href="#skills"
-            className="px-3.5 py-1.5 text-xs font-mono font-semibold rounded bg-craft-accent text-craft-950 hover:bg-craft-accent/90 transition-colors shadow-sm flex items-center gap-1.5"
+            className="px-3.5 py-1.5 text-xs font-mono font-semibold rounded-lg bg-craft-accent text-craft-950 hover:bg-craft-accent/90 transition-all shadow-glow-sm flex items-center gap-1.5"
           >
             <Package className="w-3.5 h-3.5" />
             <span>Install Skills</span>
@@ -72,7 +77,7 @@ export const Navbar: React.FC = () => {
           {/* Mobile Hamburger Toggle */}
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="lg:hidden p-2 text-craft-400 hover:text-craft-100 hover:bg-craft-900 rounded border border-craft-800 transition-colors"
+            className="lg:hidden p-2 text-craft-500 dark:text-craft-400 hover:text-craft-900 dark:hover:text-craft-100 hover:bg-craft-100 dark:hover:bg-craft-900 rounded-lg border border-craft-200 dark:border-craft-800 transition-colors"
             aria-label="Toggle navigation menu"
           >
             {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -82,7 +87,7 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Dropdown Drawer */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden border-b border-craft-800 bg-craft-950/95 backdrop-blur-xl px-4 py-4 space-y-2">
+        <div className="lg:hidden border-b border-craft-200 dark:border-craft-800 bg-white/95 dark:bg-craft-950/95 backdrop-blur-2xl px-4 py-4 space-y-2">
           <div className="grid grid-cols-2 gap-2 text-xs font-mono">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -91,7 +96,7 @@ export const Navbar: React.FC = () => {
                   key={item.href}
                   href={item.href}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2.5 rounded bg-craft-900/60 border border-craft-800/80 hover:border-craft-accent/50 text-craft-200 flex items-center gap-2 transition-colors"
+                  className="p-3 rounded-lg bg-craft-100/60 dark:bg-craft-900/60 border border-craft-200 dark:border-craft-800/80 hover:border-craft-accent/50 text-craft-800 dark:text-craft-200 flex items-center gap-2 transition-all"
                 >
                   <Icon className="w-4 h-4 text-craft-accent" />
                   <span>{item.label}</span>
