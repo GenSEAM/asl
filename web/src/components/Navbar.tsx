@@ -9,6 +9,7 @@ export const Navbar: React.FC = () => {
     { label: 'The Agent Way', href: '#agent-way' },
     { label: 'A2A Wire', href: '#a2a-protocol' },
     { label: 'Observability', href: '#observability' },
+    { label: 'Insights', href: '#insights' },
     { label: 'Skills Hub', href: '#skills' },
   ];
 

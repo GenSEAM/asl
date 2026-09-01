@@ -10,6 +10,7 @@ import { DesignSystemExplorer } from './components/DesignSystemExplorer';
 import { EcosystemGlue } from './components/EcosystemGlue';
 import { EddieOrchestrator } from './components/EddieOrchestrator';
 import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
+import { EngineeringBlog } from './components/EngineeringBlog';
 import { SkillsMarketplace } from './components/SkillsMarketplace';
 import { TokenCalculator } from './components/TokenCalculator';
 import { Ecosystem } from './components/Ecosystem';
@@ -30,6 +31,7 @@ export const App: React.FC = () => {
           <EcosystemGlue />
           <EddieOrchestrator />
           <AgentSwarmVisualizer />
+          <EngineeringBlog />
           <SkillsMarketplace />
           <TokenCalculator />
           <Ecosystem />
