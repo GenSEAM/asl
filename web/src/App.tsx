@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
+import { AgentObservabilityStudio } from './components/AgentObservabilityStudio';
 import { VisualCognition } from './components/VisualCognition';
 import { DesignSystemExplorer } from './components/DesignSystemExplorer';
 import { EcosystemGlue } from './components/EcosystemGlue';
@@ -23,6 +24,7 @@ export const App: React.FC = () => {
           <Hero />
           <TheAgentWay />
           <AgentWireProtocol />
+          <AgentObservabilityStudio />
           <VisualCognition />
           <DesignSystemExplorer />
           <EcosystemGlue />

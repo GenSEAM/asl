@@ -8,7 +8,7 @@ export const Navbar: React.FC = () => {
   const navItems = [
     { label: 'The Agent Way', href: '#agent-way' },
     { label: 'A2A Wire', href: '#a2a-protocol' },
-    { label: 'Agent Harness', href: '#eddie' },
+    { label: 'Observability', href: '#observability' },
     { label: 'Skills Hub', href: '#skills' },
   ];
 
@@ -44,7 +44,7 @@ export const Navbar: React.FC = () => {
 
           <a
             href="#skills"
-            className="px-4 py-1.5 text-xs font-mono font-bold rounded-full bg-craft-accent text-craft-950 hover:bg-craft-accent/90 transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)] flex items-center gap-1.5"
+            className="px-4 py-1.5 text-xs font-mono font-bold rounded-full bg-craft-accent text-craft-950 hover:bg-craft-accent/90 transition-all shadow-sm flex items-center gap-1.5"
           >
             <span>Install</span>
           </a>
