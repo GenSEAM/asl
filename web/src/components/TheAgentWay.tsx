@@ -10,13 +10,14 @@ interface HistoricalEpoch {
   badge: string;
   badgeColor: string;
   flaws?: string[];
-  tabColor: string;
+  perks?: string[];
+  isCurrent?: boolean;
 }
 
 export const TheAgentWay: React.FC = () => {
-  const [activeHoverId, setActiveHoverId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string>('agp');
 
-  const history: HistoricalEpoch[] = [
+  const epochs: HistoricalEpoch[] = [
     {
       id: 'oop',
       era: '1990s',
@@ -25,7 +26,7 @@ export const TheAgentWay: React.FC = () => {
       desc: 'Humans writing manual classes, inheritance hierarchies, and verbose boilerplate line-by-line.',
       badge: 'Manual Era',
       badgeColor: 'text-craft-500 border-craft-300 dark:border-craft-800 bg-craft-100 dark:bg-craft-900',
-      tabColor: 'border-craft-300 dark:border-white/[0.1] bg-craft-100/90 dark:bg-[#0a0d14]',
+      flaws: ['Rigid inheritance hierarchies', 'State mutation hazards', 'Human typing friction'],
     },
     {
       id: 'fp',
@@ -35,7 +36,7 @@ export const TheAgentWay: React.FC = () => {
       desc: 'Immutability, pure functions, and monads to manage concurrent state safely.',
       badge: 'Declarative Era',
       badgeColor: 'text-blue-500 border-blue-500/30 bg-blue-500/10',
-      tabColor: 'border-blue-500/30 bg-blue-500/5 dark:bg-[#080c18]',
+      flaws: ['Complex type acrobatics', 'Performance overhead in naive runtimes'],
     },
     {
       id: 'prompt',
@@ -45,23 +46,25 @@ export const TheAgentWay: React.FC = () => {
       desc: 'Feeding natural language prompts into LLMs and getting hallucinated indentation, broken brackets, and 4–8 repair loops.',
       badge: 'High Friction',
       badgeColor: 'text-rose-500 border-rose-500/30 bg-rose-500/10',
-      flaws: ['Indentation crashes', 'Type drift in loops', 'Context window bloat'],
-      tabColor: 'border-rose-500/30 bg-rose-500/5 dark:bg-[#140a0e]',
+      flaws: ['Indentation syntax crashes', 'Silent semantic drift in loops', 'Context window explosion'],
+    },
+    {
+      id: 'agp',
+      era: '2026+',
+      name: 'Agentic Programming (AgP) — The Agent Way',
+      summary: 'The True Paradigm of Machine Agency',
+      desc: 'Deterministic single-pass S-expression contracts, A2A wire streams, and verified swarm consensus. Crafted for AI agents from first principles.',
+      badge: 'Current Paradigm',
+      badgeColor: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10',
+      isCurrent: true,
+      perks: [
+        'Single-pass deterministic contracts (0 parsing crashes)',
+        '–78% prompt token context reduction',
+        'A2A Wire Protocol with sub-millisecond execution',
+        'Minimizes hallucination drift with mathematical proof'
+      ],
     },
   ];
-
-  const currentEra = {
-    era: '2026+',
-    name: 'Agentic Programming (AgP) — The Agent Way',
-    summary: 'The True Paradigm of Machine Agency',
-    desc: 'Deterministic single-pass S-expression contracts, A2A wire streams, and verified swarm consensus. Crafted for AI agents from first principles.',
-    perks: [
-      'Single-pass deterministic contracts (0 parsing crashes)',
-      '–78% prompt token context reduction',
-      'A2A Wire Protocol with sub-millisecond execution',
-      'Minimizes hallucination drift with mathematical proof'
-    ],
-  };
 
   return (
     <section id="agent-way" className="relative py-28 border-b border-craft-200/60 dark:border-white/[0.06] bg-white dark:bg-[#05070a] transition-colors">
@@ -79,40 +82,45 @@ export const TheAgentWay: React.FC = () => {
           </h2>
 
           <p className="mt-4 text-base sm:text-lg text-craft-600 dark:text-craft-300 font-sans leading-relaxed tracking-[-0.01em]">
-            Hover over any archived epoch in the deck to reveal its historical constraints. The culmination at the foreground is <strong>Agentic Programming (AgP)</strong>.
+            Hover or click any epoch tab in the deck to reveal its historical constraints. The cards above and below smoothly shift to keep all navigation visible.
           </p>
         </div>
 
-        {/* Physical Overlapping Archive Stack */}
-        <div className="relative pt-6 pb-4 text-left">
-          
-          {history.map((epoch, idx) => {
-            const isHovered = activeHoverId === epoch.id;
-            const zIndex = isHovered ? 40 : (idx + 1) * 10;
-            const negativeMargin = idx === 0 ? '' : '-mt-10 sm:-mt-12';
+        {/* Dynamic Physical Archive Deck */}
+        <div 
+          className="flex flex-col gap-3 text-left"
+          onMouseLeave={() => setActiveId('agp')}
+        >
+          {epochs.map((epoch) => {
+            const isExpanded = activeId === epoch.id;
 
             return (
               <div
                 key={epoch.id}
-                onMouseEnter={() => setActiveHoverId(epoch.id)}
-                onMouseLeave={() => setActiveHoverId(null)}
-                style={{ zIndex }}
-                className={`relative rounded-3xl border ${epoch.tabColor} transition-all duration-500 ease-out shadow-2xl backdrop-blur-2xl ${negativeMargin} ${
-                  isHovered
-                    ? '-translate-y-6 sm:-translate-y-8 shadow-[0_15px_30px_rgba(0,0,0,0.5)] border-craft-400 dark:border-white/[0.25]'
-                    : 'hover:-translate-y-2 opacity-90 hover:opacity-100'
+                onMouseEnter={() => setActiveId(epoch.id)}
+                onClick={() => setActiveId(epoch.id)}
+                className={`rounded-3xl border transition-all duration-300 backdrop-blur-2xl cursor-pointer ${
+                  isExpanded
+                    ? epoch.isCurrent
+                      ? 'border-cyan-500/60 bg-gradient-to-b from-white dark:from-[#0d121c] via-craft-50 dark:via-[#090c14] to-white dark:to-[#07090e] shadow-[0_20px_50px_rgba(0,0,0,0.4)]'
+                      : 'border-craft-400 dark:border-white/[0.25] bg-craft-50/90 dark:bg-[#0c101a] shadow-xl'
+                    : 'border-craft-200 dark:border-white/[0.08] bg-craft-100/60 dark:bg-[#07090e]/80 hover:border-craft-300 dark:hover:border-white/[0.15] opacity-85 hover:opacity-100'
                 }`}
               >
-                {/* Archive Folder Header Lip */}
-                <div 
-                  onClick={() => setActiveHoverId(activeHoverId === epoch.id ? null : epoch.id)}
-                  className="px-6 py-4 flex items-center justify-between gap-4 cursor-pointer"
-                >
+                {/* Archive Folder Header Tab */}
+                <div className="px-6 py-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
+                    {epoch.isCurrent && (
+                      <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shrink-0" />
+                    )}
                     <span className="font-mono text-xs font-bold text-craft-400 dark:text-craft-500 w-24 shrink-0">
                       {epoch.era}
                     </span>
-                    <span className="font-sans font-bold text-sm sm:text-base text-craft-800 dark:text-craft-200">
+                    <span className={`font-sans font-bold text-sm sm:text-base ${
+                      isExpanded && epoch.isCurrent
+                        ? 'text-cyan-600 dark:text-cyan-300'
+                        : 'text-craft-800 dark:text-craft-200'
+                    }`}>
                       {epoch.name}
                     </span>
                   </div>
@@ -121,7 +129,7 @@ export const TheAgentWay: React.FC = () => {
                     <span className={`hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border ${epoch.badgeColor}`}>
                       {epoch.badge}
                     </span>
-                    {isHovered ? (
+                    {isExpanded ? (
                       <ChevronUp className="w-4 h-4 text-cyan-400" />
                     ) : (
                       <ChevronDown className="w-4 h-4 text-craft-400" />
@@ -131,11 +139,11 @@ export const TheAgentWay: React.FC = () => {
 
                 {/* Sliding Archive Drawer Content */}
                 <div
-                  className={`overflow-hidden transition-all duration-500 ease-out ${
-                    isHovered ? 'max-h-60 px-6 pb-6 pt-1 opacity-100' : 'max-h-0 px-6 pb-0 pt-0 opacity-0'
+                  className={`overflow-hidden transition-all duration-300 ease-out ${
+                    isExpanded ? 'max-h-96 px-6 pb-6 pt-1 opacity-100' : 'max-h-0 px-6 pb-0 pt-0 opacity-0'
                   }`}
                 >
-                  <div className="pt-3 border-t border-craft-200 dark:border-white/[0.06] text-xs space-y-3 font-sans">
+                  <div className="pt-3 border-t border-craft-200 dark:border-white/[0.06] text-xs sm:text-sm space-y-3 font-sans">
                     <div className="font-mono text-cyan-400 font-semibold text-xs">
                       // {epoch.summary}
                     </div>
@@ -153,53 +161,23 @@ export const TheAgentWay: React.FC = () => {
                         ))}
                       </div>
                     )}
+
+                    {epoch.perks && (
+                      <div className="pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                        {epoch.perks.map((perk) => (
+                          <div key={perk} className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 shrink-0" />
+                            <span>{perk}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
+
               </div>
             );
           })}
-
-          {/* Front Archive Masterpiece: 2026+ The Agent Way (Overlapping on Top & Permanently Expanded) */}
-          <div
-            style={{ zIndex: 50 }}
-            className="relative -mt-10 sm:-mt-12 p-8 sm:p-10 rounded-[2.5rem] border border-cyan-500/40 bg-gradient-to-b from-white dark:from-[#0d121c] via-craft-50 dark:via-[#090c14] to-white dark:to-[#07090e] backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.6)] transition-all"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                <span className="font-mono text-sm font-bold text-cyan-400 tracking-wider">
-                  {currentEra.era} // CURRENT EPOCH
-                </span>
-              </div>
-              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
-                The Agent Way
-              </span>
-            </div>
-
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-craft-900 dark:text-white font-sans tracking-tight mb-1">
-              {currentEra.name}
-            </h3>
-
-            <p className="text-xs sm:text-sm font-mono text-cyan-400 font-semibold mb-4">
-              // {currentEra.summary}
-            </p>
-
-            <p className="text-sm sm:text-base text-craft-600 dark:text-craft-300 font-sans leading-relaxed mb-6 max-w-2xl">
-              {currentEra.desc}
-            </p>
-
-            {/* Perks Grid */}
-            <div className="pt-5 border-t border-craft-200 dark:border-white/[0.08] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm font-sans font-medium text-craft-800 dark:text-craft-100">
-              {currentEra.perks.map((perk) => (
-                <div key={perk} className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>{perk}</span>
-                </div>
-              ))}
-            </div>
-
-          </div>
-
         </div>
 
       </div>
