@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl-harness",
+  "version": "0.1.0",
+  "description": "Pluggable, multi-modal Autonomous Agent Harness supporting Code, Browser, Computer-Use, and Chat adapters",
+  "entry": "src/harness.agentscript",
+  "targets": {
+    "wasm": {"output": "dist/harness.wasm"},
+    "ts": {"output": "dist/harness.ts"},
+    "py": {"output": "dist/harness.py"}
+  }
+}
