@@ -1,5 +1,5 @@
 import React from 'react';
-import { Section, SectionHeader, Sexpr } from './ui/primitives';
+import { Section, SectionHeader } from './ui/primitives';
 
 const targets = [
   { name: 'Python', note: 'py_compile clean' },
@@ -12,18 +12,18 @@ const targets = [
 
 const surfaces = [
   {
-    name: 'MCP server',
-    body: 'The toolchain exposed to a model as structured tools — check, evaluate, format, and compress a module to its interface.',
+    name: 'MCP Server',
+    body: 'The ASL toolchain exposed to agents as structured tools — check, evaluate, format, and compress modules to their interface.',
     cmd: 'asl mcp',
   },
   {
     name: 'Compiler',
-    body: 'One source to any of the six targets, or straight into the in-memory WASI runner with no host disk.',
-    cmd: 'asl run --target wasm app.agentscript',
+    body: 'One source to any of the six targets, or straight into the in-memory WASI preview1 runner with no host disk.',
+    cmd: 'asl run --target wasm app.asl',
   },
   {
     name: 'Formatter',
-    body: 'A canonical layout that is idempotent over the corpus, plus structural search over the project’s own grammar.',
+    body: 'A canonical layout that is idempotent over the corpus, plus structural search over the ASL grammar.',
     cmd: 'asl fmt',
   },
 ];
@@ -57,21 +57,25 @@ export const Ecosystem: React.FC = () => (
     <SectionHeader
       id="toolchain-title"
       index="03"
-      eyebrow="The ecosystem"
+      eyebrow="The Ecosystem"
       title="One program. Six runtimes that are made to agree."
       lead="Portability is a claim until something enforces it. Every fixture runs through all six targets and the build fails if any two of them disagree on a result — which is why the language can promise a program means the same thing wherever it lands."
     />
 
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,20rem)_1fr] gap-10 lg:gap-0 items-center">
       <div className="rounded-2xl border border-line bg-surface p-6">
-        <p className="font-mono text-micro uppercase text-ink-3">Source</p>
-        <div className="mt-4 overflow-x-auto">
-          <Sexpr code="(defun manhattan [(p Point)" className="text-meta text-ink block" />
-          <Sexpr code="              (q Point)] -> Int64" className="text-meta text-ink block" />
+        <div className="flex items-center justify-between pb-3 border-b border-line">
+          <span className="font-mono text-micro uppercase text-ink-3">Public Protocol</span>
+          <span className="font-mono text-micro text-signal uppercase font-semibold">ASL Nano</span>
         </div>
-        <p className="mt-5 pt-4 border-t border-line font-mono text-micro uppercase text-signal">
-          Checked once
-        </p>
+        <div className="mt-4 space-y-2">
+          <p className="text-h3 font-semibold text-ink">Single-Pass AST</p>
+          <p className="text-body text-ink-2">Byte-reproducible native code emission across every target.</p>
+        </div>
+        <div className="mt-6 pt-4 border-t border-line flex items-center justify-between font-mono text-micro uppercase">
+          <span className="text-ink-3">Verification</span>
+          <span className="text-signal font-medium">Differential Lockstep</span>
+        </div>
       </div>
 
       <div className="relative grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,18rem)]">

@@ -7,27 +7,27 @@ const frames = [
     dir: 'out' as const,
     label: 'Probe',
     note: 'Capabilities',
-    code: '(?agent/probe :proto "asl/1.0" :caps [wasm schema stream])',
+    code: '(? agent/probe :proto "asl/1.0" :caps [wasm schema stream])',
   },
   {
     step: '02',
     dir: 'in' as const,
     label: 'Acknowledge',
     note: 'Mode agreed',
-    code: '(!agent/ack :proto "asl/1.0" :mode :nano)',
+    code: '(! agent/ack :proto "asl/1.0" :mode :nano)',
   },
   {
     step: '03',
     dir: 'out' as const,
     label: 'Request',
-    note: 'Typed',
+    note: 'Typed Nano',
     code: '(? agent-coder fsm/build :states ["idle" "plan" "exec" "done"])',
   },
   {
     step: '04',
     dir: 'in' as const,
     label: 'Result',
-    note: 'A value',
+    note: 'ASL Nano Value',
     code: '(! agent-coder :ok (dfe State (:case idle []) (:case plan [(g Str)])))',
   },
 ];
@@ -50,7 +50,7 @@ export const AgentWireProtocol: React.FC = () => (
       index="02"
       eyebrow="Agent to agent"
       title="Prose is the wrong wire format between two machines."
-      lead="Natural language is the right interface between an agent and a person. Between two agents it is payload that both sides have to re-parse and neither side can check. The moment they connect, they agree on a mode and stop talking in sentences."
+      lead="Natural language is the right interface between an agent and a person. Between two agents it is payload that both sides have to re-parse and neither side can check. The moment they connect, they agree on ASL Nano mode and stop talking in sentences."
       align="center"
     />
 
@@ -59,7 +59,7 @@ export const AgentWireProtocol: React.FC = () => (
         <Endpoint name="agent-orchestrator" role="Planner" />
         <div className="flex-1 pt-2.5 flex items-center gap-3">
           <span className="flex-1 h-px bg-line-strong" aria-hidden />
-          <span className="font-mono text-micro uppercase text-signal">asl/1.0</span>
+          <span className="font-mono text-micro uppercase text-signal font-semibold">asl/1.0 nano</span>
           <span className="flex-1 h-px bg-line-strong" aria-hidden />
         </div>
         <Endpoint name="agent-coder" role="Wasm specialist" align="right" />
@@ -96,7 +96,7 @@ export const AgentWireProtocol: React.FC = () => (
           </p>
         </div>
         <div className="bg-surface p-8">
-          <p className="font-mono text-micro uppercase text-signal">Said on the wire</p>
+          <p className="font-mono text-micro uppercase text-signal">Said on the wire (ASL Nano)</p>
           <p className="mt-4 font-mono text-meta text-ink break-words">
             <span className="paren">(</span>? agent-coder fsm/build :states{' '}
             <span className="paren">[</span>"idle" "plan"<span className="paren">]</span>
