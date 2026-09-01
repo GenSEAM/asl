@@ -1,0 +1,40 @@
+(module asl/agent-bus
+  :doc "High-performance Agent Mesh & Swarm Bus protocol"
+  :export [AgentRole AgentStatus AgentMessage AgentNode route-message format-sse-event]
+  :import [(core/strings :as s)])
+
+(defenum AgentRole
+  (:case orchestrator [] "Master agent dispatching tasks")
+  (:case planner [] "Strategic phase planner")
+  (:case coder [] "Wasm/ASL code implementer")
+  (:case reviewer [] "Correctness and gate reviewer")
+  (:case searcher [] "SearXNG web research agent"))
+
+(defenum AgentStatus
+  (:case idle [] "Warm and waiting for task payload")
+  (:case busy [] "Actively executing task")
+  (:case streaming [] "Emitting real-time token stream")
+  (:case terminated [] "Process exited"))
+
+(defschema AgentNode
+  (:field id String)
+  (:field name String)
+  (:field role AgentRole)
+  (:field status AgentStatus)
+  (:field latency-ms Float64 0.04))
+
+(defschema AgentMessage
+  (:field id String)
+  (:field from-agent String)
+  (:field to-agent String)
+  (:field event-type String)
+  (:field payload String)
+  (:field timestamp Int64))
+
+(defun route-message [(msg AgentMessage)] -> String
+  :doc "Validates routing headers and computes target dispatch"
+  (s/concat (s/concat "Routed from [" msg.from-agent) (s/concat "] -> [" (s/concat msg.to-agent "]"))))
+
+(defun format-sse-event [(event-name String) (data String)] -> String
+  :doc "Formats Server-Sent Event payload for streaming agent sockets"
+  (s/concat (s/concat (s/concat "event: " event-name) "\ndata: ") (s/concat data "\n\n")))

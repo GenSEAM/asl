@@ -3,6 +3,8 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { ShowcaseGallery } from './components/ShowcaseGallery';
 import { AgentHarness } from './components/AgentHarness';
+import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
+import { CommunityHub } from './components/CommunityHub';
 import { Playground } from './components/Playground';
 import { GraphVisualizer } from './components/GraphVisualizer';
 import { VectorClassifier } from './components/VectorClassifier';
@@ -13,7 +15,6 @@ import { ParadigmBridge } from './components/ParadigmBridge';
 import { FrameworkBridges } from './components/FrameworkBridges';
 import { AslVdomRenderer } from './components/AslVdomRenderer';
 import { BestPractices } from './components/BestPractices';
-import { CommunityHub } from './components/CommunityHub';
 import { Blog } from './components/Blog';
 import { Docs } from './components/Docs';
 import { Ecosystem } from './components/Ecosystem';
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
         <Hero />
         <ShowcaseGallery />
         <AgentHarness />
+        <AgentSwarmVisualizer />
         <CommunityHub />
         <Playground />
         <GraphVisualizer />

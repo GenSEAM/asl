@@ -1,0 +1,14 @@
+{
+  "name": "@genseam/asl-agent-bus",
+  "version": "0.1.0",
+  "description": "High-performance Inter-Agent Swarm Bus with MCP, SSE, and Unix Socket streaming for warm subagents",
+  "entry": "src/bus.agentscript",
+  "targets": {
+    "ts": {
+      "output": "dist/bus.ts"
+    },
+    "wasm": {
+      "output": "dist/bus.wasm"
+    }
+  }
+}

@@ -15,6 +15,7 @@ PACKAGES = [
     ("asl-vdom", "vdom", "Declarative S-Expression Virtual DOM renderer bridging React 19, Vue 3, and Svelte 5"),
     ("asl-harness", "harness", "Universal multi-modal agent harness with Code, Browser, Computer-Use, and Chat adapters"),
     ("asl-browser-plugin", "browser-plugin", "Cross-browser extension (Manifest V3) with in-memory WASI runner & DOM compressor"),
+    ("asl-agent-bus", "agent-bus", "High-performance Inter-Agent Swarm Bus with MCP, SSE, and Socket streaming for warm subagents"),
 ]
 
 

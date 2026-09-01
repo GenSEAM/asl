@@ -277,6 +277,16 @@ def cmd_plugin(args) -> int:
     return search_plugins(query, json_mode=getattr(args, "json", False))
 
 
+def cmd_bus(args) -> int:
+    """Inter-Agent Swarm Bus daemon and message router."""
+    from tools.agent_bus import serve_bus, list_peers, send_message_cli
+    if getattr(args, "serve", False):
+        return serve_bus(port=getattr(args, "port", 8765))
+    if getattr(args, "send_to", None) and getattr(args, "message", None):
+        return send_message_cli(args.send_to, args.message, json_mode=getattr(args, "json", False))
+    return list_peers(json_mode=getattr(args, "json", False))
+
+
 def cmd_get(args) -> int:
     """Download and record a remote package from GitHub/Git (Go-style)."""
     from tools.pkg import add_package
@@ -513,6 +523,15 @@ def main() -> int:
     p.add_argument("--create", "-c", help="scaffold new community plugin package")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_plugin)
+
+    p = sub.add_parser("bus", aliases=["mesh", "swarm"],
+                       help="inter-agent communication bus daemon and message dispatcher")
+    p.add_argument("--serve", action="store_true", help="start local SSE & socket bus server")
+    p.add_argument("--port", type=int, default=8765, help="bus daemon port (default: 8765)")
+    p.add_argument("--send", dest="send_to", help="target agent ID to dispatch task")
+    p.add_argument("--msg", dest="message", help="task message payload")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_bus)
 
     p = sub.add_parser("heal", aliases=["repair", "fix"],
                        help="autonomous self-healing and zero-blocker repair engine")
