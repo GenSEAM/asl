@@ -67,7 +67,23 @@
       "Map"
     ],
     "aliases": {
-      "Int": "Int64"
+      "Int": "Int64",
+      "I64": "Int64",
+      "I32": "Int32",
+      "F64": "Float64",
+      "F32": "Float64",
+      "Num": "Float64",
+      "Str": "String",
+      "Bool": "Bool",
+      "Unit": "Unit",
+      "i64": "Int64",
+      "i32": "Int32",
+      "f64": "Float64",
+      "f32": "Float64",
+      "num": "Float64",
+      "str": "String",
+      "bool": "Bool",
+      "unit": "Unit"
     },
     "unions": {
       "IoError": [
