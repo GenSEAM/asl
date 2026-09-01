@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "ASL Agent Browser Plugin",
+  "version": "0.1.0",
+  "description": "Cross-browser runtime for Autonomous AI Agents: In-Memory WASI sandbox, DOM extraction, and SearXNG metasearch",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "ASL Agent Studio"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -94,12 +94,21 @@ A Model Context Protocol (MCP) server (`tools/mcp/`) and agent context utilities
 Battle-tested integration recipes (in-browser Wasm sandbox, multi-agent MCP loop, cross-compilation CI/CD, agent VFS scratchpad, and native FFI) with interactive UI showcase.
 *Acceptance:* `docs/BEST_PRACTICES.md` written, `web/src/components/BestPractices.tsx` mounted, `npm run build:web` passes.
 
-### Phase 14 — Universal Framework Bridges (React, Vue, Angular, Svelte) & High-Perf Wasm Engine — **ACTIVE**
+### Phase 14 — Universal Framework Bridges (React, Vue, Angular, Svelte) & High-Perf Wasm Engine — **DONE**
 Unifies frontend architectures by enabling ASL as the zero-drift portable core logic layer for React Hooks, Vue 3 Composables, Angular Injectable Services, and Svelte Runes/Stores, with zero-boilerplate Wasm acceleration (<0.04ms) for math, physics, canvas, crypto, and data crunching.
 *Acceptance:* `docs/FRAMEWORKS.md` created, `web/src/components/FrameworkBridges.tsx` with live framework code matrix and telemetry mounted, `npm run build:web` and all gates green.
+
+### Phase 15 — Cross-Browser Agent Plugin & WebExtension (@genseam/asl-browser-plugin) — **ACTIVE**
+Manifest V3 cross-browser extension (Chrome, Firefox, Safari, Edge) empowering autonomous web agents: in-memory WASI preview1 ASL runner in background worker, intelligent DOM tree extractor and S-expression compressor (-78% tokens), popup & side panel REPL, and SearXNG metasearch integration.
+*Acceptance:* `packages/asl-browser-plugin/` created with `manifest.json`, background worker, content script, and side panel; builds cleanly, unit tests pass.
+
+### Phase 16 — Comprehensive Monorepo Gap & Consistency Audit — **PLANNED**
+Full consistency audit across all monorepo packages (`@genseam/asl-search`, `asl-mem`, `asl-fsm`, `asl-vdom`, `asl-harness`, `asl-browser-plugin`), documentation, CLI subcommands, and CI/CD pipelines.
+*Acceptance:* All 7 repository gates green, all pytest suites green, `pnpm run build:web` green, 0 broken links.
 
 ## Out of scope — deferred to subsequent pass
 
 * **Measurement runs** (`l-298e`) — gateway endpoint, model identifier, credential env var.
 * **Concurrency / async** — deliberately absent; function colouring undecided.
+
 

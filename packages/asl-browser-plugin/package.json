@@ -1,0 +1,13 @@
+{
+  "name": "@genseam/asl-browser-plugin",
+  "version": "0.1.0",
+  "description": "Cross-browser Manifest V3 extension providing in-memory ASL WASI runner, DOM tree extraction, and agent harness",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
