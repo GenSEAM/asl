@@ -13,6 +13,7 @@ import { ParadigmBridge } from './components/ParadigmBridge';
 import { FrameworkBridges } from './components/FrameworkBridges';
 import { AslVdomRenderer } from './components/AslVdomRenderer';
 import { BestPractices } from './components/BestPractices';
+import { CommunityHub } from './components/CommunityHub';
 import { Blog } from './components/Blog';
 import { Docs } from './components/Docs';
 import { Ecosystem } from './components/Ecosystem';
@@ -26,6 +27,7 @@ export const App: React.FC = () => {
         <Hero />
         <ShowcaseGallery />
         <AgentHarness />
+        <CommunityHub />
         <Playground />
         <GraphVisualizer />
         <VectorClassifier />

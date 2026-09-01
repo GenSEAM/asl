@@ -265,6 +265,18 @@ def cmd_test(args) -> int:
     return run_tests_cli(paths=getattr(args, "paths", None), json_mode=getattr(args, "json", False), fail_fast=getattr(args, "fail_fast", False))
 
 
+def cmd_plugin(args) -> int:
+    """Community-extensible Agent Plugin Manager."""
+    from tools.plugins import search_plugins, create_plugin_scaffold
+    if getattr(args, "create", None):
+        return create_plugin_scaffold(args.create)
+    if getattr(args, "add", None):
+        from tools.pkg import add_package
+        return add_package(args.add)
+    query = getattr(args, "search", None) or getattr(args, "query", "") or ""
+    return search_plugins(query, json_mode=getattr(args, "json", False))
+
+
 def cmd_get(args) -> int:
     """Download and record a remote package from GitHub/Git (Go-style)."""
     from tools.pkg import add_package
@@ -492,6 +504,15 @@ def main() -> int:
     p.add_argument("-x", "--fail-fast", action="store_true", help="stop on first test failure")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_test)
+
+    p = sub.add_parser("plugin", aliases=["plugins", "ext"],
+                       help="community-extensible agent plugin manager")
+    p.add_argument("query", nargs="?", default="", help="search query text")
+    p.add_argument("--search", "-s", nargs="?", const="", help="search community registry")
+    p.add_argument("--add", "-a", help="install plugin from GitHub URL")
+    p.add_argument("--create", "-c", help="scaffold new community plugin package")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_plugin)
 
     p = sub.add_parser("heal", aliases=["repair", "fix"],
                        help="autonomous self-healing and zero-blocker repair engine")
