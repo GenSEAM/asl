@@ -1,11 +1,17 @@
 (module asl/eddie
-  :doc "EDDIE: Engine for Dynamic Decomposition, Intent-routing & Execution"
-  :export [TaskTier TaskIntent OrchestrationPlan classify-intent plan-execution evaluate-circuit-breaker]
+  :doc "EDDIE: 3-Layer Superposition Swarm Orchestrator, Consultative Router & Task Pool"
+  :export [TaskTier TaskIntent TriageVerdict TaskItem TaskPool OrchestrationPlan VoiceCommand
+           fast-triage consult-and-refine plan-execution evaluate-circuit-breaker]
   :import [(core/strings :as s)])
 
+(defenum TriageVerdict
+  (:case instant [] "Layer 1: Instant single-shot execution (<0.04ms)")
+  (:case consult [] "Layer 2: Consultative clarification, follow-ups, and ambiguity resolution")
+  (:case swarm [] "Layer 3: Multi-agent task pool decomposition and mesh delegation"))
+
 (defenum TaskTier
-  (:case tier-0 [] "Fast-Track: Deterministic S-expression evaluation (<0.04ms)")
-  (:case tier-1 [] "Standard: Single specialist agent execution")
+  (:case tier-0 [] "Fast-Track: Deterministic S-expression evaluation in 64KB Wasm")
+  (:case tier-1 [] "Specialist: Single agent direct dispatch")
   (:case tier-2 [] "Superposition: Multi-agent speculative deliberation and verification"))
 
 (defenum TaskIntent
@@ -13,40 +19,64 @@
   (:case web-search [] "SearXNG real-time research and RAG extraction")
   (:case browser-nav [] "Live DOM interaction, form fill, or scraping")
   (:case sys-command [] "Shell command execution, build, or deployment")
+  (:case voice-dialog [] "Voice / audio natural language conversation")
   (:case chat-rag [] "Knowledge retrieval and vector memory query"))
+
+(defschema TaskItem
+  (:field id String)
+  (:field title String)
+  (:field assigned-agent String)
+  (:field status String "pending")
+  (:field duration-ms Float64 0.04))
+
+(defschema TaskPool
+  (:field leader-task-id String)
+  (:field prompt String)
+  (:field subtasks (List TaskItem))
+  (:field follow-ups (List String))
+  (:field total-completed Int64 0))
+
+(defschema VoiceCommand
+  (:field transcript String)
+  (:field is-voice Bool true)
+  (:field audio-duration-sec Float64 2.5))
 
 (defschema OrchestrationPlan
   (:field task-id String)
   (:field intent TaskIntent)
   (:field tier TaskTier)
+  (:field triage TriageVerdict)
   (:field assigned-agents (List String))
-  (:field speculative-branches Int64)
+  (:field follow-up-needed Bool false)
+  (:field speculative-branches Int64 2)
   (:field circuit-breaker-limit Int64 2))
 
-(defun classify-intent [(prompt String)] -> TaskIntent
-  :doc "Classifies incoming prompt intent via semantic keyword heuristics"
-  (if (s/starts-with prompt "build")
-      (:code-gen)
-      (if (s/starts-with prompt "search")
-          (:web-search)
-          (if (s/starts-with prompt "click")
-              (:browser-nav)
-              (:chat-rag)))))
+(defun fast-triage [(prompt String)] -> TriageVerdict
+  :doc "Layer 1: Ultra-fast heuristic triage (<0.04ms)"
+  (if (s/starts-with prompt "help")
+      (:consult)
+      (if (s/starts-with prompt "build")
+          (:swarm)
+          (if (s/starts-with prompt "search")
+              (:instant)
+              (:swarm)))))
+
+(defun consult-and-refine [(prompt String) (ambiguous Bool)] -> OrchestrationPlan
+  :doc "Layer 2: Consultative ambiguity resolution and follow-up generation"
+  (if ambiguous
+      ["eddie-consult" (:chat-rag) (:tier-0) (:consult) ["agent-consultant"] true 1 1]
+      ["eddie-task" (:code-gen) (:tier-2) (:swarm) ["agent-planner" "agent-coder" "agent-reviewer"] false 2 2]))
 
 (defun plan-execution [(task-id String) (prompt String)] -> OrchestrationPlan
-  :doc "Builds adaptive orchestration plan with speculative agent routing"
-  (let [(intent (classify-intent prompt))]
-    (match intent
-      ((:code-gen)
-       [task-id intent (:tier-2) ["agent-planner" "agent-coder" "agent-reviewer"] 2 2])
-      ((:web-search)
-       [task-id intent (:tier-1) ["agent-searcher"] 1 2])
-      ((:browser-nav)
-       [task-id intent (:tier-1) ["agent-browser"] 1 2])
-      ((:sys-command)
-       [task-id intent (:tier-0) ["agent-terminal"] 1 1])
-      ((:chat-rag)
-       [task-id intent (:tier-0) ["agent-mem"] 1 1]))))
+  :doc "Layer 3: Decomposes prompt into full multi-agent task pool"
+  (let [(triage (fast-triage prompt))]
+    (match triage
+      ((:instant)
+       [task-id (:web-search) (:tier-0) triage ["agent-searcher"] false 1 1])
+      ((:consult)
+       [task-id (:voice-dialog) (:tier-1) triage ["agent-consultant"] true 1 2])
+      ((:swarm)
+       [task-id (:code-gen) (:tier-2) triage ["agent-planner" "agent-coder" "agent-reviewer"] false 2 2]))))
 
 (defun evaluate-circuit-breaker [(failures Int64) (threshold Int64)] -> Bool
   :doc "Evaluates if circuit breaker must trip to trigger automatic tree rollback"

@@ -15,8 +15,9 @@ def test_cli_eddie_classify_search():
     )
     assert proc.returncode == 0
     data = json.loads(proc.stdout)
-    assert data["intent"] == "web-search"
-    assert data["tier"] == "tier-1"
+    assert data["layer2_intent"] == "web-search"
+    assert data["layer1_triage"] == "instant"
+    assert data["layer3_tier"] == "tier-1"
 
 
 def test_cli_eddie_classify_code():
@@ -28,6 +29,6 @@ def test_cli_eddie_classify_code():
     )
     assert proc.returncode == 0
     data = json.loads(proc.stdout)
-    assert data["intent"] == "code-gen"
-    assert data["tier"] == "tier-2"
+    assert data["layer2_intent"] == "code-gen"
+    assert data["layer3_tier"] == "tier-2"
     assert data["speculative_branches"] == 2
