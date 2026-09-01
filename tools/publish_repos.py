@@ -16,6 +16,7 @@ PACKAGES = [
     ("asl-harness", "harness", "Universal multi-modal agent harness with Code, Browser, Computer-Use, and Chat adapters"),
     ("asl-browser-plugin", "browser-plugin", "Cross-browser extension (Manifest V3) with in-memory WASI runner & DOM compressor"),
     ("asl-agent-bus", "agent-bus", "High-performance Inter-Agent Swarm Bus with MCP, SSE, and Socket streaming for warm subagents"),
+    ("asl-eddie", "eddie", "EDDIE: Adaptive Swarm Orchestrator, Intent Classifier & Speculative Task Pool for AgentScript"),
 ]
 
 

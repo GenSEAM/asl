@@ -3,6 +3,7 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { ShowcaseGallery } from './components/ShowcaseGallery';
 import { AgentHarness } from './components/AgentHarness';
+import { EddieOrchestrator } from './components/EddieOrchestrator';
 import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
 import { CommunityHub } from './components/CommunityHub';
 import { Playground } from './components/Playground';
@@ -28,6 +29,7 @@ export const App: React.FC = () => {
         <Hero />
         <ShowcaseGallery />
         <AgentHarness />
+        <EddieOrchestrator />
         <AgentSwarmVisualizer />
         <CommunityHub />
         <Playground />

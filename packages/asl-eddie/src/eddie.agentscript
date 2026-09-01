@@ -1,0 +1,53 @@
+(module asl/eddie
+  :doc "EDDIE: Engine for Dynamic Decomposition, Intent-routing & Execution"
+  :export [TaskTier TaskIntent OrchestrationPlan classify-intent plan-execution evaluate-circuit-breaker]
+  :import [(core/strings :as s)])
+
+(defenum TaskTier
+  (:case tier-0 [] "Fast-Track: Deterministic S-expression evaluation (<0.04ms)")
+  (:case tier-1 [] "Standard: Single specialist agent execution")
+  (:case tier-2 [] "Superposition: Multi-agent speculative deliberation and verification"))
+
+(defenum TaskIntent
+  (:case code-gen [] "Code synthesis, refactoring, or bug repair")
+  (:case web-search [] "SearXNG real-time research and RAG extraction")
+  (:case browser-nav [] "Live DOM interaction, form fill, or scraping")
+  (:case sys-command [] "Shell command execution, build, or deployment")
+  (:case chat-rag [] "Knowledge retrieval and vector memory query"))
+
+(defschema OrchestrationPlan
+  (:field task-id String)
+  (:field intent TaskIntent)
+  (:field tier TaskTier)
+  (:field assigned-agents (List String))
+  (:field speculative-branches Int64)
+  (:field circuit-breaker-limit Int64 2))
+
+(defun classify-intent [(prompt String)] -> TaskIntent
+  :doc "Classifies incoming prompt intent via semantic keyword heuristics"
+  (if (s/starts-with prompt "build")
+      (:code-gen)
+      (if (s/starts-with prompt "search")
+          (:web-search)
+          (if (s/starts-with prompt "click")
+              (:browser-nav)
+              (:chat-rag)))))
+
+(defun plan-execution [(task-id String) (prompt String)] -> OrchestrationPlan
+  :doc "Builds adaptive orchestration plan with speculative agent routing"
+  (let [(intent (classify-intent prompt))]
+    (match intent
+      ((:code-gen)
+       [task-id intent (:tier-2) ["agent-planner" "agent-coder" "agent-reviewer"] 2 2])
+      ((:web-search)
+       [task-id intent (:tier-1) ["agent-searcher"] 1 2])
+      ((:browser-nav)
+       [task-id intent (:tier-1) ["agent-browser"] 1 2])
+      ((:sys-command)
+       [task-id intent (:tier-0) ["agent-terminal"] 1 1])
+      ((:chat-rag)
+       [task-id intent (:tier-0) ["agent-mem"] 1 1]))))
+
+(defun evaluate-circuit-breaker [(failures Int64) (threshold Int64)] -> Bool
+  :doc "Evaluates if circuit breaker must trip to trigger automatic tree rollback"
+  (>= failures threshold))

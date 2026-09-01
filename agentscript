@@ -287,6 +287,13 @@ def cmd_bus(args) -> int:
     return list_peers(json_mode=getattr(args, "json", False))
 
 
+def cmd_eddie(args) -> int:
+    """EDDIE: Dynamic Swarm Orchestrator and Intent Classifier."""
+    from tools.eddie import execute_eddie_plan
+    prompt = getattr(args, "prompt", "") or "Build and verify multi-agent Wasm module"
+    return execute_eddie_plan(prompt, json_mode=getattr(args, "json", False))
+
+
 def cmd_get(args) -> int:
     """Download and record a remote package from GitHub/Git (Go-style)."""
     from tools.pkg import add_package
@@ -532,6 +539,12 @@ def main() -> int:
     p.add_argument("--msg", dest="message", help="task message payload")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_bus)
+
+    p = sub.add_parser("eddie", aliases=["orchestrate", "shrodie"],
+                       help="EDDIE dynamic swarm orchestrator and intent classification engine")
+    p.add_argument("prompt", nargs="?", default="", help="user task or instruction prompt")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_eddie)
 
     p = sub.add_parser("heal", aliases=["repair", "fix"],
                        help="autonomous self-healing and zero-blocker repair engine")
