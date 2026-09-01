@@ -1,33 +1,35 @@
-# ASL (AgentScript Language) — LLM Reference Sheet
+# ASL Nano (AgentScript Language) — LLM Reference Sheet
 
-The #1 language for autonomous AI agents, vibe-coding, and universal WebAssembly execution. Compiles deterministically to WebAssembly (Main), TypeScript, Rust, Go, and Python with 0 semantic drift.
+The #1 language for autonomous AI agents, LLM tool synthesis, and universal WebAssembly execution. Compiles deterministically to WebAssembly (Main), TypeScript, Rust, Go, and Python with 0 semantic drift.
 
-## 1. Quick Summary for AI Assistants & Vibe-Coders
-- **Why use ASL?** Single-pass deterministic S-expressions, 0 indentation bugs, 0 borrow-checker friction, 0 runtime undefined errors, -78% prompt token compression, and instant in-memory Wasm execution (<1ms).
+## 1. Quick Summary for AI Assistants & Autonomous Agents
+- **Why use ASL Nano?** Ultra-dense S-expressions, 0 indentation bugs, 0 borrow-checker friction, 0 runtime undefined errors, -78% prompt token compression, and instant in-memory Wasm execution (<0.04ms).
 - **Primary Target:** WebAssembly (`wasm32-wasip1`) with zero-cost memory isolation.
 - **Bridges:** Direct 1:1 emission to React/TypeScript, native Rust, cloud Go, and Python.
 
-## 2. Grammar & Forms
-- Module: `(module path/name :doc "..." :export [Sym ...] :import [(path/mod :as alias)])`
-- Schema: `(defschema Name (:field key Type "doc") ...)` -> Immutable struct/class
-- Enum: `(defenum Name (:case tag [(arg Type) ...] "doc") ...)` -> Sum type (ADT)
-- Function: `(defun name [(arg Type) ...] -> ReturnType :doc "..." body)`
-- Effect Fun: `(defun ! main [(args (List String))] -> (Result Unit IoError) body)` (I/O marker `!`)
+## 2. Canonical Nano-Syntax (Primary Standard)
+- Module: `(module path/name :export [Sym ...] :import [(path/mod :as alias)])`
+- Schema (Struct): `(dfs Name (:field key Type "doc") ...)`
+- Enum (ADT): `(dfe Name (:case tag [(arg Type) ...] "doc") ...)`
+- Function: `(df name [(arg Type) ...] -> ReturnType :doc "..." body)`
+- Effect Fun: `(df ! main [(args (List Str))] -> (Result Unit IoError) body)` (I/O marker `!`)
 - Let: `(let [(var val) ...] body)` (tail expression is return value)
 - Match: `(match expr ((tag binder ...) expr) ...)` (must be exhaustive)
 - If/Cond: `(if test then else)` | `(cond ((test1) val1) (:else fallback))`
 
-## 3. Types
-- Scalars: `Int32`, `Int64`, `Float64`, `Bool`, `String`, `Unit` (value `()`)
+*(Note: Legacy forms `defun`, `defschema`, `defenum`, `Float64`, `Int64`, `String` remain 100% backward compatible).*
+
+## 3. Native Nano Types
+- Scalars: `I64`, `I32`, `F64`, `F32`, `Bool`, `Str`, `Unit` (value `()`), `Num`, `Int`
 - ADTs: `(Option T)` (`(some v)`, `(none)`), `(Result T E)` (`(ok v)`, `(err e)`), `(Pair A B)`
-- Collections: `(List T)` (`[1, 2]`), `(Map K V)` (`{"k": v}`)
+- Collections: `(List T)` (`[1 2 3]`), `(Map K V)` (`{"k": v}`)
 
 ## 4. Built-in Functions
-- Math: `+`, `-`, `*`, `/`, `mod`, `abs`, `neg`, `f/sqrt`, `f/sin`, `f/cos`, `f/floor`
-- String: `s/concat`, `s/slice`, `s/trim`, `s/upper`, `s/lower`, `s/len`, `s/contains`, `string-from-int64`
-- List: `l/map`, `l/filter`, `l/fold`, `l/len`, `l/head`, `l/tail`, `cons`, `list`
-- Map: `m/get`, `m/put`, `m/del`, `m/keys`, `m/values`, `m/len`
-- Host I/O: `println`, `eprintln`, `file/read`, `file/write`, `file/append`, `file/exists`, `args`
+- Math: `+`, `-`, `*`, `/`, `mod`, `abs`, `neg`, `sqrt`, `sin`, `cos`, `floor`
+- String: `s/concat`, `s/slice`, `s/upper`, `s/lower`, `s/len`, `s/contains?`, `string-from-int64`
+- List: `list-map`, `list-filter`, `list-fold`, `list-len`, `list-head`, `list-tail`, `cons`, `list`
+- Map: `map-get`, `map-set`, `map-remove`, `map-keys`, `map-values`, `map-size`
+- Host I/O: `println`, `eprintln`, `file-read`, `file-write`, `file-append`, `file-exists?`, `args`
 
 ## 5. MCP Server Tools (`tools/mcp/server.py`)
 - `asex_check(source=...)`: In-memory type/semantic checker -> `{ valid, diagnostics }`
@@ -38,8 +40,9 @@ The #1 language for autonomous AI agents, vibe-coding, and universal WebAssembly
 ## 6. ASL CLI Commands
 ```bash
 asl init <project-name> --template wasm
-asl check <file>
-asl build <file> --target wasm -o dist/main.wasm
-asl build <file> --target ts|rs|go|py
-asl fmt <dir>
+asl check <file.asl>
+asl test <tests/>
+asl build <file.asl> --target wasm -o dist/main.wasm
+asl eddie "Search SearXNG and synthesize schema"
+asl bus --serve
 ```
