@@ -84,14 +84,41 @@ def report(diags: list[Diagnostic], as_json: bool, subject: str) -> int:
 def cmd_check(args) -> int:
     """Run the semantic checker in-process (`checker/resolve.check_file`)."""
     files = sources(args.paths)
-    # The corpus's search-path modules live under grammar/corpus/modules; the
-    # checker gate resolves against them, so the distributor must too.
     roots = [ROOT / "grammar" / "corpus" / "modules"]
+
+    if getattr(args, "fix", False):
+        from tools.heal import heal_file
+        for f in files:
+            heal_file(f, apply_fix=True)
+
+    if getattr(args, "machine", False):
+        from tools.heal import machine_diagnostics_report
+        reports = [machine_diagnostics_report(f) for f in files]
+        print(json.dumps(reports[0] if len(reports) == 1 else reports, indent=2))
+        return 0 if all(r["valid"] for r in reports) else 1
+
     diags: list[Diagnostic] = []
     for f in files:
         diags += check_file(f, roots)
     diags.sort(key=lambda d: (d.path, d.line, d.col, d.code))
-    return report(diags, args.json, f"diagnostic(s) across {len(files)} file(s)")
+    return report(diags, getattr(args, "json", False), f"diagnostic(s) across {len(files)} file(s)")
+
+
+def cmd_heal(args) -> int:
+    """Diagnose and auto-repair rule violations in ASL files."""
+    from tools.heal import heal_file, machine_diagnostics_report
+    files = sources(args.paths)
+    all_patches = []
+    for f in files:
+        if getattr(args, "json", False) or getattr(args, "machine", False):
+            print(json.dumps(machine_diagnostics_report(f), indent=2))
+        else:
+            patches = heal_file(f, apply_fix=not getattr(args, "dry_run", False))
+            for p in patches:
+                status = "✓ Repaired" if p.applied else "→ Suggested"
+                print(f"{status} [{p.rule}] in {p.file}: {p.description}")
+            all_patches.extend(patches)
+    return 0
 
 
 sys.path.insert(0, str(ROOT / "backend"))
@@ -449,8 +476,18 @@ def main() -> int:
 
     p = sub.add_parser("check", help="the §9 rules a grammar cannot express")
     p.add_argument("paths", nargs="*", type=Path)
+    p.add_argument("--fix", action="store_true", help="auto-repair fixable rule violations")
+    p.add_argument("--machine", action="store_true", help="emit machine-native actionable diagnostic JSON")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_check)
+
+    p = sub.add_parser("heal", aliases=["repair", "fix"],
+                       help="autonomous self-healing and zero-blocker repair engine")
+    p.add_argument("paths", nargs="*", type=Path)
+    p.add_argument("--dry-run", action="store_true", help="preview patches without writing to disk")
+    p.add_argument("--machine", action="store_true", help="emit machine diagnostic JSON")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_heal)
 
     p = sub.add_parser("build", help="transpile project or single module to target(s)")
     p.add_argument("file", nargs="?", type=Path, help="source file to build (or builds all in asl.json)")
