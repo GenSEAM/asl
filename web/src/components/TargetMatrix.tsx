@@ -69,7 +69,7 @@ export const TargetMatrix: React.FC = () => {
                 onClick={() => setTarget('as')}
                 className={`px-3 py-1 text-xs rounded transition-all ${target === 'as' ? 'bg-craft-accent text-craft-950 font-bold' : 'text-craft-400 hover:text-craft-100'}`}
               >
-                .agentscript
+                .asl (Nano)
               </button>
               <button
                 onClick={() => setTarget('wasm')}
