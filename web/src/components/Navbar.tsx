@@ -8,7 +8,7 @@ export const Navbar: React.FC = () => {
   const navItems = [
     { label: 'The Agent Way', href: '#agent-way' },
     { label: 'A2A Wire', href: '#a2a-protocol' },
-    { label: 'EDDIE Swarm', href: '#eddie' },
+    { label: 'Agent Harness', href: '#eddie' },
     { label: 'Skills Hub', href: '#skills' },
   ];
 

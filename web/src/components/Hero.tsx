@@ -41,7 +41,7 @@ export const Hero: React.FC = () => {
 
             {/* Visionary Narrative */}
             <p className="text-base sm:text-lg text-craft-600 dark:text-craft-300 font-sans font-light leading-relaxed max-w-xl">
-              <strong>ASL</strong> is the precision language substrate uniting human intent with self-organizing societies of autonomous agents. Single-pass mathematical contracts, zero syntax repair loops, and instant sub-millisecond execution.
+              <strong>ASL</strong> is the precision language substrate uniting human intent with self-organizing societies of autonomous agents. Single-pass mathematical contracts, deterministic type invariants, and instant sub-millisecond execution.
             </p>
 
             {/* Inline Frosted Glass Installer */}
@@ -89,10 +89,9 @@ export const Hero: React.FC = () => {
 
           </div>
 
-          {/* Right Column: Seamless 3D Quantum Processor Core Floating in Space (No enclosing box) */}
+          {/* Right Column: Seamless 3D Quantum Processor Core Floating in Space */}
           <div className="lg:col-span-5 relative flex items-center justify-center">
             
-            {/* The 3D Quantum Core floating naturally in the ambient scene */}
             <div className="relative w-full max-w-md lg:max-w-none group">
               
               {/* Diffuse radial aura behind the core */}
@@ -108,10 +107,10 @@ export const Hero: React.FC = () => {
               <div className="absolute -top-4 -left-4 sm:top-6 sm:-left-6 z-20 p-3.5 rounded-2xl bg-white/90 dark:bg-[#06080d]/90 backdrop-blur-2xl border border-craft-200 dark:border-white/[0.12] shadow-2xl text-left font-mono">
                 <div className="flex items-center gap-2 text-[10px] text-craft-accent font-bold tracking-wider">
                   <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                  <span>SINGLE-PASS SUBSTRATE</span>
+                  <span>SINGLE-PASS CONTRACT</span>
                 </div>
                 <div className="text-xs font-bold text-craft-900 dark:text-white mt-1">
-                  Zero Hallucination Loops
+                  Minimizes Hallucination Drift
                 </div>
                 <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">–78% Token Overhead</div>
               </div>

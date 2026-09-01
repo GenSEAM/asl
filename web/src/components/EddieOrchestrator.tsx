@@ -115,15 +115,15 @@ export const EddieOrchestrator: React.FC = () => {
         {/* Header Section with 3D Holographic Core */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-12">
           <div className="lg:col-span-8 space-y-4 text-left">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-mono">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 dark:bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 text-xs font-mono">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>3-Layer Superposition Architecture</span>
+              <span>COMING SOON // AGENT HARNESS</span>
             </div>
             <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-craft-900 dark:text-craft-50 font-sans">
-              EDDIE: 3-Layer Swarm Orchestrator
+              Agent Harness: The Meta-Agent Engine
             </h2>
             <p className="text-craft-600 dark:text-craft-300 max-w-2xl text-sm sm:text-base leading-relaxed">
-              Layer 1 Fast Triage + Layer 2 Consultative Router + Layer 3 Task Pool Mesh. Powering Voice Assistants, Ultra-Browser agents, and Autonomous Swarms.
+              The unified Agent Harness designed to orchestrate, supervise, and coordinate all autonomous agents. Layer 1 Fast Triage + Layer 2 Consultative Router + Layer 3 Task Pool Mesh.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
