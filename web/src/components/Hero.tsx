@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, ShieldCheck, Zap, ArrowRight, Code2, Terminal } from 'lucide-react';
+import { Cpu, ShieldCheck, Zap, ArrowRight, Terminal } from 'lucide-react';
 
 export const Hero: React.FC = () => {
   return (
@@ -55,18 +55,18 @@ export const Hero: React.FC = () => {
 
           <div className="mt-6 flex flex-wrap gap-4 items-center font-mono">
             <a
-              href="#playground"
+              href="#eddie"
               className="px-5 py-3 rounded bg-craft-accent text-craft-950 font-semibold text-sm hover:bg-craft-accent/90 transition-all flex items-center gap-2 shadow-lg shadow-craft-accent/10"
             >
-              <span>Try Live in Browser</span>
+              <span>Explore EDDIE Swarm</span>
               <ArrowRight className="w-4 h-4" />
             </a>
             <a
-              href="#targets"
+              href="#skills"
               className="px-5 py-3 rounded bg-craft-900 border border-craft-700 text-craft-100 text-sm hover:border-craft-500 transition-colors flex items-center gap-2"
             >
-              <Code2 className="w-4 h-4 text-craft-accent" />
-              <span>Multi-Target Matrix</span>
+              <Terminal className="w-4 h-4 text-craft-accent" />
+              <span>Skills Hub & MCP</span>
             </a>
           </div>
 
