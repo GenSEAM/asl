@@ -1,37 +1,74 @@
-# DESIGN.md — ASL Ecosystem Design System & Cognitive Engineering Specification
+# DESIGN.md — the ASL design system
 
-## 1. Brand Platform & Core Narrative
-**ASL (AgentScript Language)** is the universal language of human-agent symbiosis and collective intelligence.
-- **The Core**: A single-pass, deterministic, zero-overhead language that serves as the infrastructure glue connecting human intent with autonomous agent societies.
-- **The Extremes**: Radical agent autonomy + pure mathematical determinism = exponential amplification of human productivity and life quality.
-- **Positioning**: Beyond raw compilers and benchmarks — ASL is the social fabric and cognitive substrate for the post-software agent era.
+The site has one job: make the language legible. Everything below exists to keep four sections
+from drifting into four private conventions.
 
----
+## 1. The idea
 
-## 2. Visual Style: Kinetic Hyper-Tech & Editorial Elegance
-- **Archetype**: Multi-layered Bento Grid 2.0 with Golden Spiral visual flow, frosted glass refraction, and kinetic micro-interactions.
-- **Color Philosophy**:
-  - *Dark (Cyber Stealth)*: Deep obsidian `#06080d` with 3% chromatic violet undertone.
-  - *Light (Precision Lab)*: Crisp frosted ivory `#f8fafc` with subtle cool-slate mesh.
-  - *Accents*: Hyper-Cyan `#00f5d4`, Aurora Violet `#a855f7`, Solar Gold `#fbbf24`.
+Warm graphite monochrome. Hue is not decoration here — the only chromatic element on the page is
+the bronze `signal`, and it is spent on three things and nothing else:
 
----
+1. the parentheses in every code sample,
+2. the one live state in a set (the current era, the active protocol),
+3. the `$` in a shell line.
 
-## 3. Mathematical & Optical Metrics
-- **Optical Tracking**:
-  - Display Titles (72px+): `-0.04em` to `-0.05em` for monolithic typographic cohesion.
-  - Subtitles (20–24px): `-0.015em`.
-  - Body Text (16–18px): `0em` with `leading: 1.65` and `max-w-prose` (45–70 chars).
-- **Spatial Padding Rules**:
-  - Buttons / Badges: $P_x = 2 \times P_y$ (e.g. `py-3 px-6`).
-  - Section Spacing: `py-28` to `py-32` with asymmetrical floating overlays.
-- **Depth & Elevation**:
-  - Shadow blur: $B = 2 \times D$ (e.g. `offset-y: 12px` -> `blur: 24px`).
-  - Layer Contrast ($\Delta L$): ~12% step between ground base and elevated glass panels.
+Neon on black, cyan gradients and clipped-gradient headlines are the visual signature of a
+generated page. They are out, permanently.
 
----
+The mark is `( • )` — two parentheses around one evaluated core, the smallest well-formed
+S-expression. It is also why the accent lands on parens.
 
-## 4. Emotional Architecture (Don Norman's 3-Layer Model)
-1. **Visceral (0–50ms)**: Breathtaking golden-spiral 3D agent society visual, monolithic gradient headline, instant optical balance.
-2. **Behavioral (Frictionless Interaction)**: Tactile kinetic hover cards, real-time reactive pulse, 1-click install with instant feedback.
-3. **Reflective (Storytelling & Vision)**: Awakening the perception that programming is no longer solitary manual typing, but orchestrating a harmonious society of intelligent agents.
+## 2. Tokens
+
+`web/src/index.css` holds the whole palette as raw RGB triplets on `:root` and `.dark`;
+`tailwind.config.js` maps each to a Tailwind colour with `<alpha-value>` support. **Components
+name a role and never write `dark:`.** Adding a `dark:` variant to a component is the bug.
+
+| Role | Use |
+|---|---|
+| `ground` / `sunken` | Page canvas. Alternate them to band sections apart. |
+| `surface` | A panel sitting above the canvas. |
+| `inset` | A well recessed into a surface — code blocks, nested fields. |
+| `line` / `line-strong` | Hairline; `line-strong` for anything bounding a control. |
+| `ink` / `ink-2` / `ink-3` | Primary, secondary, meta. Never pure black or pure white. |
+| `signal` | The bronze. See §1 for the three places it is allowed. |
+
+`npm run check:tokens` (from `web/`) must report **0 failing
+pairings**: every ink-on-ground combination at 4.5:1, `line-strong` at 3:1, and each layer
+separated by ΔL\* ≥ 2.
+
+## 3. Scales
+
+Every value below is a token. An arbitrary Tailwind value (`text-[2rem]`, `rounded-[2rem]`) means
+the scale was missing a step — add the step instead.
+
+- **Type**: `micro` · `meta` · `code` · `body` · `brand` · `lead` · `h3` · `h2` · `display`.
+  `h2` and `display` are `clamp()`, so there is no responsive override ladder.
+- **Radius**: `2xl` (16px) for panels, `full` for pills and buttons. That is the entire scale.
+- **Elevation**: `e1`–`e4`, each with blur = 2 × offset, so every layer reads at one light source.
+- **Padding on a capsule**: `Px = 2 × Py` (`px-7 py-3.5`, `px-3 py-1.5`).
+- **Section rhythm**: `py-28 sm:py-36`, set by `<Section>`. Sections do not set their own.
+
+## 4. Components
+
+`web/src/components/ui/` is the exposed surface. Sections are assembled from it and nothing else.
+
+- `Section` — vertical rhythm, container width, `ground` or `sunken` band.
+- `SectionHeader` — numbered eyebrow, title, lead. `align` is the only rhythm control a section
+  gets; alternating left/centre is what stops stacked sections reading as one template.
+- `Eyebrow` — the numbered index rule.
+- `Sexpr` — renders source with the parentheses carrying `signal`.
+- `Logo` / `Wordmark`.
+
+A primitive with no callers gets deleted, not kept for later.
+
+## 5. Rules that are not negotiable
+
+- **Everything visible at once.** No tabs, no accordions, no filters gating content the reader
+  came for. If a section only makes sense after a click, the section is wrong.
+- **Every number on the page must be traceable to a gate in `ROADMAP.md`.** Benchmark figures
+  with no measurement behind them are not a design choice, they are a false claim.
+- **One focus treatment** (`:focus-visible` in `index.css`) for the whole product.
+- **`prefers-reduced-motion` is honoured globally.** Nothing animates perpetually.
+- **No decorative bitmaps.** A photographic wash reads as grey haze on a light ground; atmosphere
+  is drawn with a gradient, and the hero visual is a specimen of real corpus source.

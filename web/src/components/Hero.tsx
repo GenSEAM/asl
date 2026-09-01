@@ -1,156 +1,144 @@
-import React, { useState } from 'react';
-import { ArrowRight, Terminal, Check, ShieldCheck, Code2, Zap, Cpu } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowRight, Check, Copy } from 'lucide-react';
+import { Sexpr } from './ui/primitives';
+
+const INSTALL = 'curl -fsSL https://aslang.dev/install.sh | bash';
+
+// Taken verbatim from the conformance corpus, so the specimen is the language, not a mock-up.
+const SPECIMEN = [
+  '(defschema Point',
+  '  (:field x Int64)',
+  '  (:field y Int64))',
+  '',
+  '(defun manhattan [(p Point) (q Point)] -> Int64',
+  '  (+ (abs (- (.-x p) (.-x q)))',
+  '     (abs (- (.-y p) (.-y q)))))',
+  '',
+  '(defun scale [(p Point) (k Int64)] -> Point',
+  '  (Point :x (* (.-x p) k)',
+  '         :y (* (.-y p) k)))',
+];
+
+const TARGETS = ['Python', 'Rust', 'WebAssembly', 'TypeScript', 'Go', 'Interpreter'];
 
 export const Hero: React.FC = () => {
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText('curl -fsSL https://aslang.dev/install.sh | bash');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  // The Clipboard API is absent on insecure origins and rejects when permission is denied;
+  // the command itself stays select-all so the fallback is to select it by hand.
+  const copy = async () => {
+    let ok = true;
+    try {
+      await navigator.clipboard.writeText(INSTALL);
+    } catch {
+      ok = false;
+    }
+    setCopied(ok);
+    setFailed(!ok);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      setCopied(false);
+      setFailed(false);
+    }, 2000);
   };
 
   return (
-    <section className="relative min-h-[90vh] flex items-center justify-center pt-24 pb-20 border-b border-craft-200/80 dark:border-white/[0.08] bg-white dark:bg-[#05070a] overflow-hidden transition-colors">
-      {/* Full-Bleed Ambient Nebula Canvas */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        <img
-          src="/assets/images/ambient_bg.jpg"
-          alt="Ambient Atmospheric Horizon"
-          className="w-full h-full object-cover opacity-45 dark:opacity-35 scale-105"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-white/30 dark:from-[#05070a]/30 via-transparent to-white dark:to-[#05070a]" />
-      </div>
+    <section id="top" className="relative bg-ground pt-40 pb-24 sm:pt-48 sm:pb-32">
+      <div className="max-w-6xl mx-auto px-6 lg:px-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 lg:gap-12 items-center">
+          <div className="lg:col-span-6">
+            <span className="inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3">
+              <span className="w-1.5 h-1.5 rounded-full bg-signal" aria-hidden />
+              A language written for the generator
+            </span>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
-        
-        {/* Asymmetrical 2-Column Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-          
-          {/* Left Column: Language Proposition & Inline Installer */}
-          <div className="lg:col-span-7 space-y-6 text-left">
-            
-            {/* Clean Architectural Badge */}
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-craft-300 dark:border-white/[0.12] bg-craft-100 dark:bg-white/[0.03] backdrop-blur-xl text-xs font-mono text-craft-900 dark:text-white">
-              <span className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span className="font-semibold tracking-wider uppercase text-[11px]">THE NATIVE LANGUAGE FOR AI AGENTS</span>
-            </div>
-
-            {/* Monumental Headline: The Language */}
-            <h1 className="text-4xl sm:text-6xl lg:text-[4.6rem] font-extrabold tracking-[-0.045em] font-sans leading-[1.02] text-craft-900 dark:text-white">
-              The Programming Language for{' '}
-              <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
-                Autonomous Agents.
-              </span>
+            <h1 className="mt-8 text-display font-semibold text-ink text-balance">
+              Code an agent can<br className="hidden sm:block" /> write correctly the
+              <span className="text-signal"> first time.</span>
             </h1>
 
-            {/* Clear Language Value Narrative */}
-            <p className="text-base sm:text-lg text-craft-600 dark:text-craft-300 font-sans font-normal leading-relaxed max-w-xl">
-              <strong>ASL (AgentScript)</strong> is a single-pass deterministic S-expression language designed from first principles for LLMs to generate, typecheck, and execute code with <strong>zero syntax repair loops</strong> and native WebAssembly isolation.
+            <p className="mt-8 text-lead text-ink-2 max-w-prose">
+              AgentScript is an S-expression language with a single-pass LL(1) grammar. There is no
+              significant whitespace to hallucinate and no bracket a parser has to guess at — so a
+              model emits a program once instead of repairing one four times.
             </p>
 
-            {/* 4 Core Language Feature Badges */}
-            <div className="grid grid-cols-2 gap-3 max-w-lg font-mono text-xs text-left">
-              <div className="p-3.5 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50 dark:bg-white/[0.02] flex items-center gap-2.5 text-craft-800 dark:text-craft-200">
-                <Code2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Single-Pass LL(1) S-Expr</span>
-              </div>
-              <div className="p-3.5 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50 dark:bg-white/[0.02] flex items-center gap-2.5 text-craft-800 dark:text-craft-200">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>107 Closed Safe Builtins</span>
-              </div>
-              <div className="p-3.5 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50 dark:bg-white/[0.02] flex items-center gap-2.5 text-craft-800 dark:text-craft-200">
-                <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>–78% Prompt Token Load</span>
-              </div>
-              <div className="p-3.5 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50 dark:bg-white/[0.02] flex items-center gap-2.5 text-craft-800 dark:text-craft-200">
-                <Cpu className="w-4 h-4 text-purple-400 shrink-0" />
-                <span>WASI Sandbox &lt;0.04ms</span>
-              </div>
-            </div>
-
-            {/* Inline Precision Installer */}
-            <div className="pt-2 max-w-lg">
-              <div className="p-2 rounded-2xl border border-craft-300 dark:border-white/[0.12] bg-craft-100/90 dark:bg-white/[0.03] backdrop-blur-xl shadow-lg flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 px-2 text-xs font-mono text-craft-600 dark:text-craft-400 truncate">
-                  <Terminal className="w-4 h-4 text-cyan-400 shrink-0" />
-                  <code className="text-craft-900 dark:text-cyan-300 font-bold select-all overflow-x-auto whitespace-nowrap">
-                    curl -fsSL https://aslang.dev/install.sh | bash
-                  </code>
-                </div>
-                <button
-                  onClick={handleCopy}
-                  className="px-4 py-2 rounded-xl bg-craft-900 dark:bg-white text-white dark:text-black font-mono text-xs font-bold hover:opacity-90 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Copied</span>
-                    </>
-                  ) : (
-                    <span>Copy</span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Clean Action Buttons */}
-            <div className="flex flex-wrap gap-4 items-center pt-2 font-mono">
+            <div className="mt-10 flex flex-wrap items-center gap-3">
               <a
                 href="#agent-way"
-                className="px-7 py-3.5 rounded-full bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs tracking-wider uppercase transition-all flex items-center gap-2"
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-ink text-ground font-medium text-body hover:opacity-90 transition-opacity"
               >
-                <span>Language Specification</span>
-                <ArrowRight className="w-4 h-4" />
+                Read the idea
+                <ArrowRight className="w-4 h-4" aria-hidden />
               </a>
               <a
-                href="#a2a-protocol"
-                className="px-7 py-3.5 rounded-full bg-craft-100 dark:bg-white/[0.04] border border-craft-300 dark:border-white/[0.12] text-craft-900 dark:text-white text-xs tracking-wider uppercase hover:border-white/[0.25] transition-all flex items-center gap-2"
+                href="#toolchain"
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-line-strong text-ink font-medium text-body hover:bg-surface transition-colors"
               >
-                <span>A2A Wire Protocol</span>
+                The toolchain
               </a>
             </div>
 
-          </div>
-
-          {/* Right Column: Precision 3D Quantum Processor Core */}
-          <div className="lg:col-span-5 relative flex items-center justify-center">
-            <div className="relative w-full max-w-md lg:max-w-none group">
-              <img
-                src="/assets/images/quantum_core_scene.jpg"
-                alt="Autonomous Agentic Quantum Processor Core"
-                className="relative z-10 w-full h-auto rounded-3xl object-cover shadow-2xl transition-transform duration-700 ease-out"
-              />
-
-              {/* Orbiting Telemetry HUD Badge 1 */}
-              <div className="absolute -top-4 -left-4 sm:top-6 sm:-left-6 z-20 p-3.5 rounded-2xl bg-white/95 dark:bg-[#0b0e14]/95 backdrop-blur-2xl border border-craft-200 dark:border-white/[0.12] shadow-xl text-left font-mono">
-                <div className="flex items-center gap-2 text-[10px] text-cyan-400 font-bold tracking-wider">
-                  <Code2 className="w-3.5 h-3.5" />
-                  <span>DETERMINISTIC LANGUAGE</span>
-                </div>
-                <div className="text-xs font-bold text-craft-900 dark:text-white mt-1">
-                  Zero Indentation Hallucinations
-                </div>
-                <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">LL(1) S-Expression Grammar</div>
-              </div>
-
-              {/* Orbiting Telemetry HUD Badge 2 */}
-              <div className="absolute -bottom-4 -right-4 sm:bottom-6 sm:-right-6 z-20 p-3.5 rounded-2xl bg-white/95 dark:bg-[#0b0e14]/95 backdrop-blur-2xl border border-craft-200 dark:border-white/[0.12] shadow-xl text-right font-mono">
-                <div className="flex items-center justify-end gap-2 text-[10px] text-emerald-400 font-bold tracking-wider">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>NATIVE PROOF</span>
-                </div>
-                <div className="text-xs font-bold text-craft-900 dark:text-white mt-1">
-                  WASI &lt;0.04ms Isolation
-                </div>
-                <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">100% Spec Verified Gates</div>
-              </div>
+            <div id="install" className="mt-8 flex items-center gap-3 max-w-lg">
+              <code className="flex-1 min-w-0 font-mono text-meta text-ink-2 truncate select-all">
+                <span className="text-ink-3">$ </span>
+                {INSTALL}
+              </code>
+              <button
+                type="button"
+                onClick={copy}
+                className="shrink-0 inline-flex items-center gap-1.5 font-mono text-meta text-ink-3 hover:text-ink transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" aria-hidden /> : <Copy className="w-3.5 h-3.5" aria-hidden />}
+                {copied ? 'Copied' : failed ? 'Select it' : 'Copy'}
+              </button>
+              <span aria-live="polite" className="sr-only">
+                {copied ? 'Install command copied to clipboard' : ''}
+                {failed ? 'Clipboard unavailable. Select the command to copy it.' : ''}
+              </span>
             </div>
-
           </div>
 
+          {/* The specimen is the hero image. A program set well says more than a render of a sphere. */}
+          <figure className="lg:col-span-6 lg:-mr-8 xl:-mr-16">
+            <div className="rounded-2xl border border-line bg-surface shadow-e3 overflow-hidden">
+              <div className="flex items-center justify-between px-6 py-3.5 border-b border-line">
+                <span className="font-mono text-micro uppercase text-ink-3">point.agentscript</span>
+                <span className="font-mono text-micro uppercase text-ink-3">Balanced · 1 pass</span>
+              </div>
+              <pre className="px-6 py-7 overflow-x-auto text-code">
+                {SPECIMEN.map((line, i) => (
+                  <span key={i} className="grid grid-cols-[2rem_1fr]">
+                    <span className="font-mono text-ink-3 select-none tabular-nums text-micro pt-[0.3em]">
+                      {i + 1}
+                    </span>
+                    <Sexpr code={line} className="text-ink" />
+                  </span>
+                ))}
+              </pre>
+            </div>
+            <figcaption className="sr-only">
+              A record definition and a function from the ASL conformance corpus.
+            </figcaption>
+          </figure>
         </div>
 
+        {/* One source, six targets — stated as a measure rather than a claim. */}
+        <div className="mt-24 sm:mt-32">
+          <div className="rule-fade" aria-hidden />
+          <div className="mt-8 flex flex-wrap items-baseline gap-x-10 gap-y-4">
+            <span className="font-mono text-micro uppercase text-ink-3">One source compiles to</span>
+            {TARGETS.map((t) => (
+              <span key={t} className="font-mono text-meta text-ink-2">
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );

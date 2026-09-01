@@ -1,49 +1,49 @@
 /** @type {import('tailwindcss').Config} */
+const channel = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   darkMode: 'class',
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       fontFamily: {
-        mono: ['Fira Code', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        mono: ['Fira Code', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       colors: {
-        craft: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          850: '#131c2e',
-          900: '#0f172a',
-          950: '#060a12',
-          accent: '#06b6d4', // vivid cyan
-          teal: '#14b8a6',
-          amber: '#f59e0b',
-          emerald: '#10b981',
-          rose: '#f43f5e',
-          purple: '#a855f7',
-          cyan: '#06b6d4',
-        }
+        ground: channel('ground'),
+        sunken: channel('sunken'),
+        surface: channel('surface'),
+        inset: channel('inset'),
+        line: channel('line'),
+        'line-strong': channel('line-strong'),
+        ink: channel('ink'),
+        'ink-2': channel('ink-2'),
+        'ink-3': channel('ink-3'),
+        signal: channel('signal'),
+        'signal-soft': channel('signal-soft'),
       },
-      backgroundImage: {
-        'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'hero-glow': 'radial-gradient(circle at 50% 0%, rgba(6, 182, 212, 0.15), transparent 70%)',
-        'mesh-dark': 'radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.08) 0px, transparent 50%), radial-gradient(at 0% 100%, rgba(168, 85, 247, 0.06) 0px, transparent 50%)',
+      // A ladder, not a pile: each step is a distinct role, so nothing lands between two of them.
+      fontSize: {
+        micro: ['0.6875rem', { lineHeight: '1.4', letterSpacing: '0.08em' }],
+        meta: ['0.75rem', { lineHeight: '1.45', letterSpacing: '0.02em' }],
+        code: ['0.8125rem', { lineHeight: '1.85', letterSpacing: '0' }],
+        body: ['0.9375rem', { lineHeight: '1.65', letterSpacing: '0' }],
+        brand: ['1.0625rem', { lineHeight: '1.2', letterSpacing: '-0.03em' }],
+        lead: ['1.125rem', { lineHeight: '1.6', letterSpacing: '-0.01em' }],
+        h3: ['1.375rem', { lineHeight: '1.25', letterSpacing: '-0.02em' }],
+        h2: ['clamp(2rem, 3.6vw, 2.5rem)', { lineHeight: '1.06', letterSpacing: '-0.035em' }],
+        display: ['clamp(3rem, 6.2vw, 5rem)', { lineHeight: '0.94', letterSpacing: '-0.05em' }],
       },
+      borderRadius: { '2xl': '1rem' },
+      // Elevation obeys blur = 2 × offset, so every layer reads at the same light source.
       boxShadow: {
-        'glow-sm': '0 0 15px -3px rgba(6, 182, 212, 0.2)',
-        'glow-md': '0 0 25px -5px rgba(6, 182, 212, 0.3)',
-        'glow-lg': '0 0 40px -10px rgba(6, 182, 212, 0.35)',
-      }
+        e1: '0 2px 4px hsl(var(--shadow-hue) / var(--shadow-strength))',
+        e2: '0 6px 12px hsl(var(--shadow-hue) / var(--shadow-strength))',
+        e3: '0 12px 24px hsl(var(--shadow-hue) / var(--shadow-strength))',
+        e4: '0 20px 40px hsl(var(--shadow-hue) / var(--shadow-strength))',
+      },
+      maxWidth: { prose: '68ch' },
     },
   },
   plugins: [],

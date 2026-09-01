@@ -1,80 +1,79 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { Wordmark } from './ui/Logo';
+
+const navItems = [
+  { label: 'The Agent Way', href: '#agent-way' },
+  { label: 'Wire Protocol', href: '#a2a-protocol' },
+  { label: 'Toolchain', href: '#toolchain' },
+];
 
 export const Navbar: React.FC = () => {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
-  const navItems = [
-    { label: 'The Agent Way', href: '#agent-way' },
-    { label: 'A2A Wire', href: '#a2a-protocol' },
-    { label: 'Observability', href: '#observability' },
-    { label: 'Insights', href: '#insights' },
-    { label: 'Skills Hub', href: '#skills' },
-  ];
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setIsOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
-      <header className="pointer-events-auto max-w-4xl w-full rounded-full border border-craft-200/80 dark:border-white/[0.12] bg-white/80 dark:bg-[#06080d]/80 backdrop-blur-2xl px-4 sm:px-6 h-14 flex items-center justify-between shadow-2xl transition-all">
-        {/* Brand Logo Capsule */}
-        <a href="#" className="flex items-center gap-2.5 group">
-          <div className="h-8 w-8 rounded-full border border-craft-300 dark:border-craft-accent/50 bg-craft-100 dark:bg-craft-900 flex items-center justify-center text-craft-accent font-mono font-bold text-base shadow-sm group-hover:scale-105 transition-all">
-            λ
-          </div>
-          <span className="font-mono font-extrabold text-craft-900 dark:text-white tracking-tight text-base">
-            ASL
-          </span>
+      <header className="pointer-events-auto max-w-4xl w-full rounded-full border border-line bg-surface/85 backdrop-blur-2xl px-4 sm:px-5 h-14 flex items-center justify-between shadow-e2">
+        <a href="#top" className="rounded-full">
+          <Wordmark />
         </a>
 
-        {/* Compact Center Navigation */}
-        <nav className="hidden md:flex items-center gap-1 text-xs font-mono text-craft-600 dark:text-craft-300">
+        <nav aria-label="Sections" className="hidden md:flex items-center gap-1">
           {navItems.map((item) => (
             <a
               key={item.href}
               href={item.href}
-              className="px-3.5 py-1.5 rounded-full hover:text-craft-accent hover:bg-craft-100 dark:hover:bg-white/[0.06] transition-all"
+              className="px-3.5 py-1.5 rounded-full font-mono text-meta text-ink-2 hover:text-ink hover:bg-inset transition-colors"
             >
               {item.label}
             </a>
           ))}
         </nav>
 
-        {/* Action Capsule */}
         <div className="flex items-center gap-2">
           <ThemeToggle />
-
           <a
-            href="#skills"
-            className="px-4 py-1.5 text-xs font-mono font-bold rounded-full bg-craft-accent text-craft-950 hover:bg-craft-accent/90 transition-all shadow-sm flex items-center gap-1.5"
+            href="#install"
+            className="px-4 py-2 rounded-full bg-ink text-ground font-mono text-meta font-medium hover:opacity-90 transition-opacity"
           >
-            <span>Install</span>
+            Install
           </a>
-
-          {/* Mobile Menu Button */}
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-1.5 text-craft-500 dark:text-craft-400 hover:text-craft-900 dark:hover:text-white"
+            onClick={() => setIsOpen(!isOpen)}
+            className="md:hidden p-1.5 rounded-full text-ink-2 hover:text-ink"
+            aria-expanded={isOpen}
+            aria-controls="mobile-nav"
             aria-label="Toggle navigation menu"
           >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </header>
 
-      {/* Mobile Dropdown Drawer */}
-      {isMobileMenuOpen && (
-        <div className="pointer-events-auto absolute top-16 left-4 right-4 rounded-3xl border border-craft-200 dark:border-white/[0.12] bg-white/95 dark:bg-[#06080d]/95 backdrop-blur-2xl p-4 shadow-2xl md:hidden space-y-2 font-mono text-xs text-left">
+      {isOpen && (
+        <nav
+          id="mobile-nav"
+          aria-label="Sections"
+          className="pointer-events-auto absolute top-[4.5rem] left-4 right-4 rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl p-2 shadow-e3 md:hidden"
+        >
           {navItems.map((item) => (
             <a
               key={item.href}
               href={item.href}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="block p-3 rounded-2xl bg-craft-100/50 dark:bg-white/[0.03] text-craft-800 dark:text-craft-200 hover:text-craft-accent"
+              onClick={() => setIsOpen(false)}
+              className="block px-4 py-3 rounded-2xl font-mono text-meta text-ink-2 hover:text-ink hover:bg-inset transition-colors"
             >
               {item.label}
             </a>
           ))}
-        </div>
+        </nav>
       )}
     </div>
   );

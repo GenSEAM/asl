@@ -2,76 +2,114 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  One token layer, two themes. Components never branch on `dark:` — they name a role
+  (ground / surface / ink / signal) and the theme rebinds the channels underneath.
+  Channels are raw RGB triplets so Tailwind's `<alpha-value>` still works.
+
+  The system is warm graphite monochrome. Hue is not decoration here: the only chromatic
+  element on the page is the bronze `signal`, and it is spent on parentheses, on the one
+  live state, and on nothing else.
+*/
 @layer base {
   :root {
-    --bg-main: #f8fafc;
-    --text-main: #0f172a;
-    --border-main: #e2e8f0;
+    --ground: 245 244 242;
+    --sunken: 235 233 229;
+    --surface: 255 255 255;
+    --inset: 246 245 242;
+
+    --line: 224 221 216;
+    --line-strong: 141 137 129;
+
+    --ink: 23 23 26;
+    --ink-2: 88 87 84;
+    --ink-3: 103 101 96;
+
+    --signal: 143 92 28;
+    --signal-soft: 176 130 68;
+
+    --shadow-hue: 30 15% 15%;
+    --shadow-strength: 0.08;
   }
 
   .dark {
-    --bg-main: #060a12;
-    --text-main: #f1f5f9;
-    --border-main: #1e293b;
+    --ground: 12 12 13;
+    --sunken: 5 5 6;
+    --surface: 26 27 31;
+    --inset: 18 19 22;
+
+    --line: 44 45 50;
+    --line-strong: 92 94 101;
+
+    --ink: 237 235 231;
+    --ink-2: 168 165 159;
+    --ink-3: 139 136 129;
+
+    --signal: 217 154 78;
+    --signal-soft: 166 116 58;
+
+    --shadow-hue: 0 0% 0%;
+    --shadow-strength: 0.55;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* Sections are anchor targets under a fixed header; without this they land beneath it. */
+    scroll-padding-top: 6rem;
   }
 
   body {
     margin: 0;
-    background-color: var(--bg-main);
-    color: var(--text-main);
+    background-color: rgb(var(--ground));
+    color: rgb(var(--ink));
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
-    transition: background-color 0.25s ease, color 0.25s ease;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
   code, pre, .font-mono {
     font-family: 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+    font-variant-ligatures: none;
+  }
+
+  /* One focus treatment for the whole product, so no component invents its own. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--ink));
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: rgb(var(--ink) / 0.12);
+    color: rgb(var(--ink));
+  }
+
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: rgb(var(--sunken)); }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--line-strong));
+    border-radius: 999px;
+    border: 4px solid rgb(var(--sunken));
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--ink-3)); }
+}
+
+@layer components {
+  /* The brand idea, applied literally: in every sample the parentheses carry the accent. */
+  .paren { color: rgb(var(--signal)); }
+  /* A hairline that fades at both ends, so a full-bleed rule never reads as a hard band. */
+  .rule-fade {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(var(--line-strong)), transparent);
   }
 }
 
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #475569;
-}
-
-/* Ambient background patterns */
-.grid-mesh {
-  background-size: 40px 40px;
-  background-image: 
-    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
-}
-
-.dark .grid-mesh {
-  background-size: 40px 40px;
-  background-image: 
-    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-}
-
-.spotlight {
-  background: radial-gradient(600px circle at var(--x, 50%) var(--y, 50%), rgba(6, 182, 212, 0.08), transparent 80%);
-}
-
-.glass-panel {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-}
-
-.dark .glass-panel {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(30, 41, 59, 0.8);
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

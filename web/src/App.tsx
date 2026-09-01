@@ -4,30 +4,26 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
-import { AgentObservabilityStudio } from './components/AgentObservabilityStudio';
-import { EngineeringBlog } from './components/EngineeringBlog';
-import { SkillsMarketplace } from './components/SkillsMarketplace';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
 
-export const App: React.FC = () => {
-  return (
-    <ThemeProvider>
-      <div className="min-h-screen bg-white dark:bg-[#05070a] text-craft-900 dark:text-craft-100 flex flex-col selection:bg-craft-accent/30 selection:text-craft-900 dark:selection:text-white transition-colors">
-        <Navbar />
-        <main className="flex-1 space-y-0">
-          <Hero />
-          <TheAgentWay />
-          <AgentWireProtocol />
-          <AgentObservabilityStudio />
-          <EngineeringBlog />
-          <SkillsMarketplace />
-          <Ecosystem />
-        </main>
-        <Footer />
-      </div>
-    </ThemeProvider>
-  );
-};
+/*
+  The public surface is deliberately the language and the wire protocol only. Observability,
+  the essay hub and the skills registry are built but withheld until each stands on its own.
+*/
+export const App: React.FC = () => (
+  <ThemeProvider>
+    <div className="min-h-screen bg-ground text-ink flex flex-col">
+      <Navbar />
+      <main className="flex-1">
+        <Hero />
+        <TheAgentWay />
+        <AgentWireProtocol />
+        <Ecosystem />
+      </main>
+      <Footer />
+    </div>
+  </ThemeProvider>
+);
 
 export default App;

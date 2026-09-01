@@ -1,66 +1,38 @@
-# Skill: Visual Cognition & Agentic Design System (VC-DS)
-> Formal specification for reproducible, high-end editorial and Apple-grade interfaces engineered for both human perception and autonomous AI agent comprehension.
-
-## 1. Core Axiom: Dual-Plane Architecture
-Every interface must be designed on two distinct planes:
-1. **The Human Visual Plane (Sensory & Visceral)**:
-   - Evaluated by human eye in `<50ms` (Don Norman's Visceral Layer).
-   - Characterized by monolithic editorial typography, negative optical tracking, physical materiality (frosted obsidian glass, titanium edges, optical caustics), and tactile micro-physics.
-2. **The Agent Semantic Plane (Machine Substrate)**:
-   - Consumed by LLMs, browser agents, and search bots in `1 single pass`.
-   - Characterized by `llms.txt`, `llms-full.txt`, JSON-LD schemas (`schema.org/SoftwareApplication`), and structured S-expression wire frames (`asl/1.0`).
-
+---
+name: visual-cognition-design
+description: The ASL design system — warm graphite monochrome, one bronze signal, token-only components, everything visible without interaction. Use when building or reviewing any ASL surface.
 ---
 
-## 2. Mathematical Design Rules & Optical Physics
-- **Negative Optical Tracking (Typographic Cohesion)**:
-  - Display titles ($72\text{px}+$): `tracking-[-0.045em]` to `tracking-[-0.055em]`, `leading-[0.96]`.
-  - Section headers ($36\text{px}-48\text{px}$): `tracking-[-0.035em]`.
-  - Monospaced code & metadata ($11\text{px}-14\text{px}$): `tracking-[0.02em]`.
-- **Spatial Padding Law**:
-  - Capsules & Buttons: $P_x = 2 \times P_y$ (e.g. `px-7 py-3.5`).
-  - Section Rhythm: `py-28` to `py-36` with generous negative space.
-- **Glass & Elevation Physics**:
-  - Base ground: Deep obsidian `#030508` to `#06080d`.
-  - Elevated glass: `bg-white/[0.02]` to `bg-white/[0.04]` with `backdrop-blur-2xl` and `border-white/[0.08]`.
-  - Specular edge: 1px inner border with top-oriented ambient light reflection.
+# Visual cognition design
 
----
+`DESIGN.md` at the repository root is normative. This file is the working checklist.
 
-## 3. Standard Component Archetypes
+## Before writing a component
 
-### Archetype A: `FloatingCapsuleHeader` (Dynamic Island)
-- **Role**: Minimalist, floating centered navigation capsule that occupies <5% of screen height.
-- **Structure**:
-  ```tsx
-  <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
-    <header className="pointer-events-auto max-w-4xl w-full rounded-full border border-white/[0.12] bg-[#06080d]/80 backdrop-blur-2xl px-6 h-14 flex items-center justify-between shadow-2xl">
-      {/* Brand + Capsule Links + Action Pill */}
-    </header>
-  </div>
-  ```
+1. Read the roles in `web/src/index.css`. Use `ground`, `sunken`, `surface`, `inset`, `line`,
+   `line-strong`, `ink`, `ink-2`, `ink-3`, `signal`.
+2. Reach for `web/src/components/ui/primitives.tsx` first. A section that needs something the
+   primitives do not have either adds a primitive or does not need it.
 
-### Archetype B: `AsymmetricHeroCanvas`
-- **Role**: Hero presentation uniting text on the left with a borderless 3D artifact on the right.
-- **Rules**:
-  - No enclosing box or rectangular card borders around the 3D artifact.
-  - Floating frosted glass HUD chips orbit the artifact naturally in 3D space.
-  - Terminal installer is embedded inline with text flow as a frosted pill.
+## Checklist
 
-### Archetype C: `EvolutionaryTimeline`
-- **Role**: Chronological narrative contrasting previous fragile paradigms with the modern agentic era.
-- **Structure**: Vertical border line with pulsing glowing active node for 2026+ AgP.
+- [ ] No `dark:` variant anywhere. The theme rebinds tokens; components do not branch.
+- [ ] No arbitrary values — `text-[…]`, `rounded-[…]`, `p-[…]`. If a step is missing, add it to
+      `tailwind.config.js`.
+- [ ] Radius is `2xl` or `full`. Nothing else.
+- [ ] `signal` appears only on parentheses, on the one live state in a set, and on `$`.
+- [ ] No gradient-filled text, no neon, no glassmorphism, no photographic background wash.
+- [ ] Section headers alternate `align` so consecutive sections do not share a silhouette.
+- [ ] Every claim on screen traces to a gate in `ROADMAP.md`.
+- [ ] Content is readable without clicking. No tab strip, no accordion, no filter.
+- [ ] Interactive elements are real `<button>` / `<a>`; state changes carry `aria-expanded` or
+      `aria-current`; lists are lists.
+- [ ] Contrast check reports 0 failing pairings.
+- [ ] `npx tsc --noEmit && npm run build` from `web/` is clean.
 
-### Archetype D: `ShockAndAweStream`
-- **Role**: Live A2A wire protocol stream demonstrating instant discovery probe, query, response, and real-time telemetry meters without interactive tabs.
+## Anti-patterns, named
 
----
-
-## 4. Reproducibility Checklist for Autonomous Agents
-When an agent builds or refactors a page using this skill, verify:
-- [ ] No generic purple gradients or template bootstrap cards.
-- [ ] Display titles use negative optical tracking (`tracking-[-0.045em]`).
-- [ ] Navigation is housed in a floating frosted capsule.
-- [ ] 3D hero assets float seamlessly without enclosing card boxes.
-- [ ] Dual-plane metadata (`llms.txt`, JSON-LD schema) is verified.
-- [ ] All gates and typechecks pass (`npm run build:web`).
+Cyan-on-black with a violet second accent. A clipped-gradient headline. A stock render of a
+glowing sphere. Five sections with the same centred badge-title-paragraph block. A card whose
+fill differs from its ground by less than one perceptual step, so only the border reads. A number
+on the page that nothing in the repository measures.

@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ASL — The Universal Language for the Agent Society</title>
-    <meta name="description" content="ASL (AgentScript Language) is the precision language substrate and ecosystem glue for Agentic Programming (AgP), uniting human intent with autonomous agent swarms." />
+    <title>ASL — A programming language written for the generator</title>
+    <meta name="description" content="AgentScript is an S-expression language with a single-pass LL(1) grammar, built so a model emits a correct program the first time — and so one source compiles to six runtimes that are made to agree." />
     
     <!-- Machine-Readable Agent Context -->
     <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Machine Readable Specification" />
@@ -12,10 +12,19 @@
     <meta name="agent-protocol" content="asl/1.0" />
     <meta name="agent-wire-format" content="s-expression-nano" />
     
-    <!-- Typography -->
+    <!--
+      The mark is the smallest well-formed S-expression: two parens around one evaluated core.
+      A favicon cannot read the page theme, so the parens take a mid-tone that clears 3:1 against
+      both a light and a dark browser chrome.
+    -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M11.6 4.4a15.5 15.5 0 0 0 0 23.2' fill='none' stroke='%23787672' stroke-width='2.4' stroke-linecap='round'/%3E%3Cpath d='M20.4 4.4a15.5 15.5 0 0 1 0 23.2' fill='none' stroke='%23787672' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23d99a4e'/%3E%3C/svg%3E" />
+
+    <!-- Typography: preconnected so the display line does not reflow on load. Every weight the
+         components use is fetched here; nothing falls back to a synthesised bold. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
     <!-- Schema.org JSON-LD for AI Agents and Search Crawlers -->
     <script type="application/ld+json">
@@ -30,7 +39,7 @@
         "price": "0",
         "priceCurrency": "USD"
       },
-      "description": "Deterministic single-pass S-expression language and A2A wire protocol engineered for Agentic Programming (AgP) and WebAssembly execution.",
+      "description": "Single-pass S-expression language and agent-to-agent wire protocol, compiling to Python, Rust, WebAssembly, TypeScript, Go and a reference interpreter.",
       "url": "https://aslang.dev",
       "softwareVersion": "1.0.0",
       "license": "https://opensource.org/licenses/MIT",
@@ -40,10 +49,19 @@
       }
     }
     </script>
-    <script type="module" crossorigin src="/assets/index-DEMEXhw1.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Ck4Mhwjo.css">
+    <script type="module" crossorigin src="/assets/index-CXO078mN.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-CNmXzOhj.css">
   </head>
-  <body class="bg-white dark:bg-[#030508] text-craft-900 dark:text-white font-sans antialiased selection:bg-craft-accent/30 selection:text-white">
+  <body class="font-sans antialiased">
+    <script>
+      // Runs before first paint: the app resolves the same value later, this only stops the flash.
+      try {
+        var t = localStorage.getItem('asl-theme') || 'dark';
+        if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(t);
+      } catch (e) {}
+    </script>
     <div id="root"></div>
   </body>
 </html>
