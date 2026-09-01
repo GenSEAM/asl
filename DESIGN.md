@@ -5,15 +5,17 @@ from drifting into four private conventions.
 
 ## 1. The idea
 
-Warm graphite monochrome. Hue is not decoration here — the only chromatic element on the page is
-the bronze `signal`, and it is spent on three things and nothing else:
+Cool graphite monochrome. Hue is not decoration here — the only chromatic element on the page is
+the purple `signal`, and it is spent on three things and nothing else:
 
 1. the parentheses in every code sample,
 2. the one live state in a set (the current era, the active protocol),
 3. the `$` in a shell line.
 
-Neon on black, cyan gradients and clipped-gradient headlines are the visual signature of a
-generated page. They are out, permanently.
+The neutrals carry a few percent of the same hue, which is what stops a saturated accent from
+reading as a sticker applied to a grey page. What is out permanently is the *combination* that
+marks a generated page: violet-to-cyan gradients, clipped-gradient headlines and neon glow. A
+single flat accent is not that.
 
 The mark is `( • )` — two parentheses around one evaluated core, the smallest well-formed
 S-expression. It is also why the accent lands on parens.
@@ -31,7 +33,7 @@ name a role and never write `dark:`.** Adding a `dark:` variant to a component i
 | `inset` | A well recessed into a surface — code blocks, nested fields. |
 | `line` / `line-strong` | Hairline; `line-strong` for anything bounding a control. |
 | `ink` / `ink-2` / `ink-3` | Primary, secondary, meta. Never pure black or pure white. |
-| `signal` | The bronze. See §1 for the three places it is allowed. |
+| `signal` | The purple. See §1 for the three places it is allowed. |
 
 `npm run check:tokens` (from `web/`) must report **0 failing
 pairings**: every ink-on-ground combination at 4.5:1, `line-strong` at 3:1, and each layer

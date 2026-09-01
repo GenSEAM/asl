@@ -1,6 +1,6 @@
 ---
 name: visual-cognition-design
-description: The ASL design system — warm graphite monochrome, one bronze signal, token-only components, everything visible without interaction. Use when building or reviewing any ASL surface.
+description: The ASL design system — cool graphite monochrome, one purple signal, token-only components, everything visible without interaction. Use when building or reviewing any ASL surface.
 ---
 
 # Visual cognition design
@@ -21,7 +21,8 @@ description: The ASL design system — warm graphite monochrome, one bronze sign
       `tailwind.config.js`.
 - [ ] Radius is `2xl` or `full`. Nothing else.
 - [ ] `signal` appears only on parentheses, on the one live state in a set, and on `$`.
-- [ ] No gradient-filled text, no neon, no glassmorphism, no photographic background wash.
+- [ ] The accent is flat. No gradient-filled text, no second accent hue, no glow, no
+      glassmorphism, no photographic background wash.
 - [ ] Section headers alternate `align` so consecutive sections do not share a silhouette.
 - [ ] Every claim on screen traces to a gate in `ROADMAP.md`.
 - [ ] Content is readable without clicking. No tab strip, no accordion, no filter.
@@ -32,7 +33,7 @@ description: The ASL design system — warm graphite monochrome, one bronze sign
 
 ## Anti-patterns, named
 
-Cyan-on-black with a violet second accent. A clipped-gradient headline. A stock render of a
+Two accent hues in one system. A clipped-gradient headline. A stock render of a
 glowing sphere. Five sections with the same centred badge-title-paragraph block. A card whose
 fill differs from its ground by less than one perceptual step, so only the border reads. A number
 on the page that nothing in the repository measures.
