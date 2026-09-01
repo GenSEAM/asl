@@ -127,8 +127,8 @@ literal: INT
 // still valid IDENT shapes, which is intentional — Core has no reserved words at
 // the lexical level, only positionally significant heads.
 
-DEFSCHEMA: "defschema"
-DEFUN: "defun"
+DEFSCHEMA: "defschema" | "schema" | "dfs"
+DEFUN: "defun" | "def" | "df"
 LET: "let"
 IF: "if"
 COND: "cond"
@@ -144,7 +144,7 @@ CONS: "cons"
 PAIR: "pair"
 
 MODULE: "module"
-DEFENUM: "defenum"
+DEFENUM: "defenum" | "enum" | "dfe"
 DOC_KW: ":doc"
 EXPORT_KW: ":export"
 IMPORT_KW: ":import"

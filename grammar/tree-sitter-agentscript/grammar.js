@@ -49,13 +49,13 @@ module.exports = grammar({
     // ---------- declarations ----------
 
     defschema: $ => seq(
-      '(', 'defschema',
+      '(', choice('defschema', 'schema', 'dfs'),
       optional(field('type_params', $.type_params)),
       field('name', $.type_name), repeat1($.field), ')'
     ),
 
     defenum: $ => seq(
-      '(', 'defenum',
+      '(', choice('defenum', 'enum', 'dfe'),
       optional(field('type_params', $.type_params)),
       field('name', $.type_name), repeat1($.enum_case), ')'
     ),
@@ -82,7 +82,7 @@ module.exports = grammar({
     // `!` marks a declaration that touches the world; mandatory on the
     // signature because the signature is the module surface.
     defun: $ => seq(
-      '(', 'defun',
+      '(', choice('defun', 'def', 'df'),
       optional(field('effect', '!')),
       optional(field('type_params', $.type_params)),
       field('name', $.ident),

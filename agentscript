@@ -398,6 +398,24 @@ def cmd_skill(args) -> int:
     """Universal Agent Skills Hub and marketplace manager."""
     from tools.skills_manager import list_skills, install_skill
 
+    if getattr(args, "_command", "") == "setup" or getattr(args, "setup", False):
+        print("# ASL AI Agent Setup & Skill Integration\n")
+        print("## 1. Install Skill into Agent Harness")
+        print("  • Global install:  asl skill --install global  (~/.gemini/config/skills/asl)")
+        print("  • Local install:   asl skill --install local   (./.skills/asl)\n")
+        print("## 2. Cursor / Claude Desktop / Windsurf Config (`mcpServers`)")
+        server_path = str((ROOT / "tools" / "mcp" / "server.py").resolve())
+        mcp_config = {
+            "mcpServers": {
+                "asl": {
+                    "command": "python3",
+                    "args": [server_path]
+                }
+            }
+        }
+        print(json.dumps(mcp_config, indent=2))
+        return 0
+
     target = getattr(args, "install", None) or getattr(args, "install_id", None)
     if target:
         if target == "global":
@@ -411,18 +429,6 @@ def cmd_skill(args) -> int:
 
     query = getattr(args, "query", "") or ""
     return list_skills(category=query, json_mode=getattr(args, "json", False))
-    server_path = str((ROOT / "tools" / "mcp" / "server.py").resolve())
-    mcp_config = {
-        "mcpServers": {
-            "asl": {
-                "command": "python3",
-                "args": [server_path]
-            }
-        }
-    }
-    print(json.dumps(mcp_config, indent=2))
-    print("\n## 3. Direct System Prompt Injection")
-    print("  • Run: `asl ref` or include `llms.txt` (~500 tokens).")
     return 0
 
 
@@ -552,6 +558,11 @@ def main() -> int:
     p.add_argument("--install", "-i", dest="install_id", help="install skill ID into agent harness")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_skill)
+
+    p = sub.add_parser("setup", aliases=["config"],
+                       help="print agent harness and MCP configuration snippet")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_skill, setup=True)
 
     p = sub.add_parser("heal", aliases=["repair", "fix"],
                        help="autonomous self-healing and zero-blocker repair engine")

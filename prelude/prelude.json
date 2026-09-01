@@ -76,14 +76,7 @@
       "Str": "String",
       "Bool": "Bool",
       "Unit": "Unit",
-      "i64": "Int64",
-      "i32": "Int32",
-      "f64": "Float64",
-      "f32": "Float64",
-      "num": "Float64",
-      "str": "String",
-      "bool": "Bool",
-      "unit": "Unit"
+      "Float": "Float64"
     },
     "unions": {
       "IoError": [
