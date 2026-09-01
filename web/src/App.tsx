@@ -2,6 +2,7 @@ import React from 'react';
 import { ThemeProvider } from './lib/theme';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
+import { TheAgentWay } from './components/TheAgentWay';
 import { EcosystemGlue } from './components/EcosystemGlue';
 import { EddieOrchestrator } from './components/EddieOrchestrator';
 import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
@@ -18,6 +19,7 @@ export const App: React.FC = () => {
         <Navbar />
         <main className="flex-1 space-y-0">
           <Hero />
+          <TheAgentWay />
           <EcosystemGlue />
           <EddieOrchestrator />
           <AgentSwarmVisualizer />

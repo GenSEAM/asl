@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { Bot, Package, Sparkles, Zap, Globe, Menu, X, ExternalLink } from 'lucide-react';
+import { Bot, Package, Sparkles, Zap, Globe, Menu, X, Compass } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 export const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
+    { label: 'The Agent Way', href: '#agent-way', icon: Compass },
     { label: 'EDDIE Swarm', href: '#eddie', icon: Bot },
     { label: 'Skills Hub', href: '#skills', icon: Package },
     { label: 'Swarm Bus', href: '#bus', icon: Sparkles },
     { label: 'Community', href: '#community', icon: Globe },
     { label: 'Benchmarks', href: '#benchmarks', icon: Zap },
-    { label: 'Ecosystem', href: '#ecosystem', icon: ExternalLink },
   ];
 
   return (
@@ -19,17 +19,17 @@ export const Navbar: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo & Brand */}
         <a href="#" className="flex items-center gap-3 group">
-          <div className="h-9 w-9 rounded-lg border border-craft-300 dark:border-craft-accent/50 bg-craft-100 dark:bg-craft-900 flex items-center justify-center text-craft-accent font-mono font-bold text-lg shadow-sm group-hover:border-craft-accent group-hover:scale-105 transition-all">
+          <div className="h-9 w-9 rounded-xl border border-craft-300 dark:border-craft-accent/50 bg-craft-100 dark:bg-craft-900 flex items-center justify-center text-craft-accent font-mono font-bold text-lg shadow-sm group-hover:border-craft-accent group-hover:scale-105 transition-all">
             λ
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono font-bold text-craft-900 dark:text-craft-50 tracking-tight text-lg">ASL</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-craft-100 dark:bg-craft-800 text-craft-accent border border-craft-200 dark:border-craft-700">
-                v1.0 Nano
+                The Agent Way
               </span>
             </div>
-            <p className="text-[10px] text-craft-500 dark:text-craft-400 font-mono hidden sm:block">AgentScript Language</p>
+            <p className="text-[10px] text-craft-500 dark:text-craft-400 font-mono hidden sm:block">Agentic-Oriented Programming</p>
           </div>
         </a>
 
