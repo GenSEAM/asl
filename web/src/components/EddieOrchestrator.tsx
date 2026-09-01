@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Cpu, Zap, MessageSquare, Mic, CheckCircle2, ListTodo } from 'lucide-react';
+import { Sparkles, Cpu, Zap, MessageSquare, Mic, Layers, Activity } from 'lucide-react';
 
 interface Subtask {
   id: string;
@@ -58,55 +58,42 @@ export const EddieOrchestrator: React.FC = () => {
     let agents = ['agent-planner', 'agent-coder', 'agent-reviewer'];
     let branches = 2;
 
-    if (lower.includes('voice') || lower.includes('speak') || isVoiceActive) {
+    if (lower.includes('calc') || lower.includes('fib') || lower.includes('2+2')) {
+      triage = 'INSTANT';
+      intent = 'deterministic-math';
+      tier = 'tier-0 (Instant Wasm)';
+      subtasks = [{ id: 'st-0', title: 'Execute pure in-memory Wasm binary', agent: 'wasm-executor', durationMs: 0.012 }];
+      agents = ['wasm-executor'];
+      branches = 0;
+    } else if (lower.includes('deploy') || lower.includes('publish') || lower.includes('release')) {
       triage = 'CONSULT';
-      intent = 'voice-dialog / assistant';
-      followUps = ["Voice stream connected. Awaiting audio chunks...", "Microphone buffer: 16kHz PCM zero-latency."];
-      tier = 'tier-0 (Fast-Track)';
-      agents = ['agent-voice', 'agent-consultant'];
+      intent = 'release-governance';
+      ambiguous = true;
+      followUps = ['Target environment confirmed as Cloudflare Pages production?', 'Run full monomorphism and differential gate suite?'];
+      tier = 'tier-1 (Consultative Gate)';
       subtasks = [
-        { id: 'v-1', title: 'Transcribe audio stream into typed tokens', agent: 'agent-voice', durationMs: 0.022 },
-        { id: 'v-2', title: 'Synthesize consultative voice response', agent: 'agent-consultant', durationMs: 0.029 }
+        { id: 'st-1', title: 'Check Git working tree & tag consistency', agent: 'agent-auditor', durationMs: 0.025 },
+        { id: 'st-2', title: 'Trigger differential gate runner across 6 targets', agent: 'agent-verifier', durationMs: 0.039 }
       ];
-      branches = 1;
-    } else if (lower.includes('search') || lower.includes('find') || lower.includes('lookup')) {
-      triage = 'INSTANT';
-      intent = 'web-search';
-      tier = 'tier-1 (Specialist)';
-      agents = ['agent-searcher'];
-      subtasks = [
-        { id: 's-1', title: 'Query SearXNG aggregator with proxy rotation', agent: 'agent-searcher', durationMs: 0.035 },
-        { id: 's-2', title: 'Compress RAG context (-78% tokens)', agent: 'agent-searcher', durationMs: 0.032 }
-      ];
-      branches = 1;
-    } else if (lower.includes('click') || lower.includes('browser') || lower.includes('dom')) {
-      triage = 'INSTANT';
-      intent = 'browser-nav';
-      tier = 'tier-1 (Specialist)';
-      agents = ['agent-browser'];
-      subtasks = [
-        { id: 'b-1', title: 'Extract interactive DOM nodes and form schemas', agent: 'agent-browser', durationMs: 0.039 },
-        { id: 'b-2', title: 'Dispatch simulated click & scroll events', agent: 'agent-browser', durationMs: 0.036 }
-      ];
+      agents = ['agent-auditor', 'agent-verifier'];
       branches = 1;
     } else {
       triage = 'SWARM';
-      intent = 'code-gen';
-      ambiguous = text.split(' ').length < 6;
-      if (ambiguous) {
-        followUps = [
-          "Target ecosystem: WebAssembly (in-browser) or Node.js / Rust backend?",
-          "Enable automatic property-based tests ($ asl test)?"
-        ];
-      }
+      intent = 'multi-agent-synthesis';
+      ambiguous = true;
+      followUps = [
+        "Which proxy protocol do you need (HTTP, SOCKS5, or SearXNG pool)?",
+        "Should we enable automatic DOM element highlighting?"
+      ];
+      tier = 'tier-2 (Superposition Swarm)';
       subtasks = [
-        { id: 'p-1', title: 'Decompose prompt into typed ASL contract (§9)', agent: 'agent-planner', durationMs: 0.042 },
-        { id: 'c-1', title: 'Synthesize zero-drift Wasm implementation', agent: 'agent-coder', durationMs: 0.036 },
-        { id: 'r-1', title: 'Run differential verification across 6 backends', agent: 'agent-reviewer', durationMs: 0.040 }
+        { id: 'st-1', title: 'Synthesize browser navigation schema in ASL Nano', agent: 'agent-planner', durationMs: 0.038 },
+        { id: 'st-2', title: 'Compile in-memory WASI preview1 action dispatcher', agent: 'agent-coder', durationMs: 0.035 },
+        { id: 'st-3', title: 'Verify 7 repository gates & differential checks', agent: 'agent-reviewer', durationMs: 0.041 }
       ];
     }
 
-    const dt = +(performance.now() - t0).toFixed(3);
+    const dt = performance.now() - t0;
     setOrchestration({
       layer1Triage: triage,
       layer2Intent: intent,
@@ -122,151 +109,174 @@ export const EddieOrchestrator: React.FC = () => {
   };
 
   return (
-    <div className="border-t border-[#1e2230] bg-[#07090e] py-20 px-6 sm:px-10">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono mb-3">
+    <section id="eddie" className="relative py-24 border-b border-craft-200 dark:border-craft-800/80 bg-craft-50/50 dark:bg-craft-950/70 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Header Section with 3D Holographic Core */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center mb-12">
+          <div className="lg:col-span-8 space-y-4 text-left">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 dark:bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-mono">
               <Sparkles className="w-3.5 h-3.5" />
-              3-Layer Superposition Architecture
+              <span>3-Layer Superposition Architecture</span>
             </div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-craft-900 dark:text-craft-50 font-sans">
               EDDIE: 3-Layer Swarm Orchestrator
             </h2>
-            <p className="text-[#94a3b8] mt-2 max-w-2xl text-sm sm:text-base">
+            <p className="text-craft-600 dark:text-craft-300 max-w-2xl text-sm sm:text-base leading-relaxed">
               Layer 1 Fast Triage + Layer 2 Consultative Router + Layer 3 Task Pool Mesh. Powering Voice Assistants, Ultra-Browser agents, and Autonomous Swarms.
             </p>
+
+            <div className="flex flex-wrap items-center gap-3 pt-2">
+              <button
+                onClick={() => {
+                  const nextVoice = !isVoiceActive;
+                  setIsVoiceActive(nextVoice);
+                  if (nextVoice) runPipeline("Voice: Hey Eddie, search for latest quantum benchmark and extract summary");
+                }}
+                className={`px-4 py-2 rounded-xl font-mono text-xs flex items-center gap-2 border transition-all ${
+                  isVoiceActive
+                    ? 'bg-rose-500/20 border-rose-500 text-rose-500 animate-pulse'
+                    : 'bg-white dark:bg-craft-900 border-craft-300 dark:border-craft-700 text-craft-700 dark:text-craft-300 hover:border-craft-accent'
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>{isVoiceActive ? 'Voice Stream Active' : 'Enable Voice Mode'}</span>
+              </button>
+              <div className="font-mono text-xs text-craft-600 dark:text-craft-400 bg-white dark:bg-craft-900 px-3.5 py-2 rounded-xl border border-craft-200 dark:border-craft-800">
+                Package: <span className="text-amber-500 font-bold">@genseam/eddie</span>
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                const nextVoice = !isVoiceActive;
-                setIsVoiceActive(nextVoice);
-                if (nextVoice) runPipeline("Voice: Hey Eddie, search for latest quantum benchmark and extract summary");
-              }}
-              className={`px-4 py-2 rounded-lg font-mono text-xs flex items-center gap-2 border transition-all ${
-                isVoiceActive
-                  ? 'bg-rose-500/20 border-rose-500/50 text-rose-300 animate-pulse'
-                  : 'bg-[#121622] border-[#222a3d] text-[#94a3b8] hover:text-white'
-              }`}
-            >
-              <Mic className="w-3.5 h-3.5" />
-              {isVoiceActive ? 'Voice Assistant Active' : 'Enable Voice Mode'}
-            </button>
-            <div className="font-mono text-xs text-[#94a3b8] bg-[#0d1017] px-3.5 py-2 rounded-lg border border-[#1e2436]">
-              Package: <span className="text-amber-400">@genseam/eddie</span>
+          {/* 3D Quantum Holographic Core Card */}
+          <div className="lg:col-span-4 relative rounded-2xl overflow-hidden border border-craft-200 dark:border-craft-800 shadow-2xl group">
+            <img
+              src="/assets/images/eddie_core.jpg"
+              alt="EDDIE Quantum Core"
+              className="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-700"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-craft-950 via-transparent to-transparent" />
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-white">
+              <span className="flex items-center gap-1.5 text-craft-accent">
+                <Activity className="w-3.5 h-3.5 animate-pulse" />
+                QUANTUM MESH: READY
+              </span>
+              <span className="text-amber-400">LATENCY: 0.012ms</span>
             </div>
           </div>
         </div>
 
-        {/* Input Bar */}
-        <div className="bg-[#0b0e17] border border-[#1a2030] rounded-xl p-6 mb-8">
-          <label className="block text-xs font-mono text-[#94a3b8] mb-2">Natural Language Instruction or Voice Transcript:</label>
+        {/* Interactive Simulator Bar */}
+        <div className="bg-white dark:bg-craft-900/90 border border-craft-200 dark:border-craft-800 rounded-2xl p-6 mb-8 shadow-xl">
+          <label className="block text-xs font-mono text-craft-600 dark:text-craft-400 mb-2 font-semibold text-left">
+            Natural Language Instruction or Voice Stream:
+          </label>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               type="text"
               value={prompt}
               onChange={e => runPipeline(e.target.value)}
-              className="flex-1 bg-[#06080d] border border-[#1e2436] text-white px-4 py-2.5 rounded-lg text-sm font-mono focus:outline-none focus:border-amber-500"
+              className="flex-1 bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800 text-craft-900 dark:text-white px-4 py-3 rounded-xl text-sm font-mono focus:outline-none focus:border-craft-accent transition-colors shadow-inner"
             />
             <button
               onClick={() => runPipeline(prompt)}
-              className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-[#090a0f] font-bold text-xs font-mono rounded-lg transition-all flex items-center justify-center gap-2"
+              className="px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-craft-950 font-bold text-xs font-mono rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
             >
               <Zap className="w-3.5 h-3.5" />
-              Run 3-Layer Pipeline ($ asl eddie)
+              <span>Simulate Pipeline ($ asl eddie)</span>
             </button>
           </div>
         </div>
 
-        {/* 3-Layer Pipeline Breakdown */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* 3-Layer Visual Pipeline Columns */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Layer 1 */}
-          <div className="bg-[#0c0f1a] border border-[#1a2236] rounded-xl p-6 flex flex-col justify-between">
+          <div className="bg-white dark:bg-craft-900/80 border border-craft-200 dark:border-craft-800/90 rounded-2xl p-6 flex flex-col justify-between shadow-lg text-left">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono text-[#64748b] bg-[#141926] px-2 py-0.5 rounded border border-[#1e2638]">Layer 1</span>
-                <span className="text-emerald-400 text-xs font-mono">0.012ms</span>
+                <span className="text-xs font-mono text-craft-500 bg-craft-100 dark:bg-craft-800 px-2 py-0.5 rounded-md border border-craft-200 dark:border-craft-700">Layer 1</span>
+                <span className="text-craft-emerald text-xs font-mono font-bold">0.012ms</span>
               </div>
-              <div className="flex items-center gap-2 text-amber-400 font-mono text-sm font-semibold mb-1">
+              <div className="flex items-center gap-2 text-amber-500 font-mono text-sm font-semibold mb-1">
                 <Cpu className="w-4 h-4" />
-                Primary Fast Triage
+                <span>Primary Fast Triage</span>
               </div>
-              <p className="text-xs text-[#94a3b8] mb-4">Zero-latency heuristic classifier determining execution path.</p>
+              <p className="text-xs text-craft-600 dark:text-craft-400 mb-4 leading-relaxed">
+                Zero-latency heuristic classifier determining execution path.
+              </p>
               
-              <div className="bg-[#07090f] p-3 rounded-lg border border-[#161c2b] text-xs font-mono">
-                <div className="text-[#64748b]">Triage Verdict:</div>
-                <div className="text-lg font-bold text-cyan-400 mt-0.5">{orchestration.layer1Triage}</div>
+              <div className="bg-craft-50 dark:bg-craft-950 p-4 rounded-xl border border-craft-200 dark:border-craft-800 text-xs font-mono">
+                <div className="text-craft-500">Triage Verdict:</div>
+                <div className="text-xl font-bold text-craft-accent mt-0.5">{orchestration.layer1Triage}</div>
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[#141926] text-[11px] font-mono text-[#64748b]">
+            <div className="mt-4 pt-3 border-t border-craft-200 dark:border-craft-800 text-[11px] font-mono text-craft-500">
               In-Memory 64KB Wasm Heuristic
             </div>
           </div>
 
           {/* Layer 2 */}
-          <div className="bg-[#0c0f1a] border border-[#1a2236] rounded-xl p-6 flex flex-col justify-between">
+          <div className="bg-white dark:bg-craft-900/80 border border-craft-200 dark:border-craft-800/90 rounded-2xl p-6 flex flex-col justify-between shadow-lg text-left">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono text-[#64748b] bg-[#141926] px-2 py-0.5 rounded border border-[#1e2638]">Layer 2</span>
-                <span className="text-purple-400 text-xs font-mono">Consultative</span>
+                <span className="text-xs font-mono text-craft-500 bg-craft-100 dark:bg-craft-800 px-2 py-0.5 rounded-md border border-craft-200 dark:border-craft-700">Layer 2</span>
+                <span className="text-craft-purple text-xs font-mono font-bold">Consultative</span>
               </div>
-              <div className="flex items-center gap-2 text-purple-400 font-mono text-sm font-semibold mb-1">
+              <div className="flex items-center gap-2 text-craft-purple font-mono text-sm font-semibold mb-1">
                 <MessageSquare className="w-4 h-4" />
-                Refinement & Follow-ups
+                <span>Refinement & Follow-ups</span>
               </div>
-              <p className="text-xs text-[#94a3b8] mb-4">Ambiguity detection, voice interaction, and intent clarification.</p>
+              <p className="text-xs text-craft-600 dark:text-craft-400 mb-4 leading-relaxed">
+                Ambiguity detection, voice interaction, and intent clarification.
+              </p>
 
-              {orchestration.layer2FollowUps.length > 0 ? (
-                <div className="space-y-2">
-                  {orchestration.layer2FollowUps.map((f, i) => (
-                    <div key={i} className="bg-[#07090f] p-2.5 rounded-lg border border-[#1e273d] text-xs font-mono text-purple-300">
-                      💬 {f}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-[#07090f] p-3 rounded-lg border border-[#161c2b] text-xs font-mono text-emerald-400 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Intent fully specified. Zero ambiguity.
-                </div>
-              )}
+              <div className="space-y-2">
+                {orchestration.layer2FollowUps.map((fu, idx) => (
+                  <div key={idx} className="p-2.5 rounded-xl bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800 text-xs font-mono text-craft-700 dark:text-craft-300">
+                    • {fu}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[#141926] text-[11px] font-mono text-[#64748b]">
+            <div className="mt-4 pt-3 border-t border-craft-200 dark:border-craft-800 text-[11px] font-mono text-craft-500">
               Conversational & Voice Router
             </div>
           </div>
 
           {/* Layer 3 */}
-          <div className="bg-[#0c0f1a] border border-[#1a2236] rounded-xl p-6 flex flex-col justify-between">
+          <div className="bg-white dark:bg-craft-900/80 border border-craft-200 dark:border-craft-800/90 rounded-2xl p-6 flex flex-col justify-between shadow-lg text-left">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-mono text-[#64748b] bg-[#141926] px-2 py-0.5 rounded border border-[#1e2638]">Layer 3</span>
-                <span className="text-cyan-400 text-xs font-mono">Task Pool Mesh</span>
+                <span className="text-xs font-mono text-craft-500 bg-craft-100 dark:bg-craft-800 px-2 py-0.5 rounded-md border border-craft-200 dark:border-craft-700">Layer 3</span>
+                <span className="text-craft-cyan text-xs font-mono font-bold">Task Pool Mesh</span>
               </div>
-              <div className="flex items-center gap-2 text-cyan-400 font-mono text-sm font-semibold mb-1">
-                <ListTodo className="w-4 h-4" />
-                Autonomous Task DAG
+              <div className="flex items-center gap-2 text-craft-cyan font-mono text-sm font-semibold mb-1">
+                <Layers className="w-4 h-4" />
+                <span>Autonomous Task DAG</span>
               </div>
-              <p className="text-xs text-[#94a3b8] mb-3">Decomposed subtasks executed via native ASL Wasm or specialist agents.</p>
+              <p className="text-xs text-craft-600 dark:text-craft-400 mb-4 leading-relaxed">
+                Decomposed subtasks executed via native ASL Wasm or specialist agents.
+              </p>
 
               <div className="space-y-2">
-                {orchestration.layer3Subtasks.map(st => (
-                  <div key={st.id} className="bg-[#07090f] p-2 rounded-lg border border-[#161c2b] text-[11px] font-mono flex items-center justify-between">
-                    <span className="text-white truncate max-w-[170px]">{st.title}</span>
-                    <span className="text-cyan-400 text-[10px] bg-[#101522] px-1.5 py-0.5 rounded">{st.agent}</span>
+                {orchestration.layer3Subtasks.map((st) => (
+                  <div key={st.id} className="p-2.5 rounded-xl bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800 text-xs font-mono flex items-center justify-between">
+                    <span className="truncate max-w-[180px] text-craft-800 dark:text-craft-200">{st.title}</span>
+                    <span className="px-2 py-0.5 rounded-md bg-craft-100 dark:bg-craft-800 text-craft-accent text-[10px]">
+                      {st.agent}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="mt-4 pt-3 border-t border-[#141926] text-[11px] font-mono text-[#64748b] flex items-center justify-between">
+            <div className="mt-4 pt-3 border-t border-craft-200 dark:border-craft-800 text-[11px] font-mono text-craft-500 flex items-center justify-between">
               <span>Circuit Breaker: 2 fails</span>
-              <span className="text-emerald-400">{orchestration.totalLatencyMs}ms</span>
+              <span className="text-craft-emerald">0.038ms</span>
             </div>
           </div>
         </div>
+
       </div>
-    </div>
+    </section>
   );
 };

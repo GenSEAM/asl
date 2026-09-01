@@ -22,11 +22,11 @@ interface MessagePacket {
 
 export const AgentSwarmVisualizer: React.FC = () => {
   const [agents, setAgents] = useState<AgentNode[]>([
-    { id: 'agent-orchestrator', name: 'Orchestrator', role: 'Master Dispatcher', status: 'idle', latencyMs: 0.038, icon: <Bot className="w-5 h-5 text-cyan-400" /> },
-    { id: 'agent-planner', name: 'Strategic Planner', role: 'Decomposition & Specs', status: 'idle', latencyMs: 0.042, icon: <Cpu className="w-5 h-5 text-purple-400" /> },
-    { id: 'agent-coder', name: 'ASL Coder', role: 'In-Memory Wasm Synthesis', status: 'idle', latencyMs: 0.035, icon: <Flame className="w-5 h-5 text-amber-400" /> },
-    { id: 'agent-reviewer', name: 'Gate Auditor', role: 'Zero-Drift Verifier', status: 'idle', latencyMs: 0.039, icon: <ShieldCheck className="w-5 h-5 text-green-400" /> },
-    { id: 'agent-searcher', name: 'SearXNG Scout', role: 'Proxy Pool Web RAG', status: 'idle', latencyMs: 0.045, icon: <Search className="w-5 h-5 text-blue-400" /> }
+    { id: 'agent-orchestrator', name: 'Orchestrator', role: 'Master Dispatcher', status: 'idle', latencyMs: 0.038, icon: <Bot className="w-5 h-5 text-craft-cyan" /> },
+    { id: 'agent-planner', name: 'Strategic Planner', role: 'Decomposition & Specs', status: 'idle', latencyMs: 0.042, icon: <Cpu className="w-5 h-5 text-craft-purple" /> },
+    { id: 'agent-coder', name: 'ASL Coder', role: 'In-Memory Wasm Synthesis', status: 'idle', latencyMs: 0.035, icon: <Flame className="w-5 h-5 text-amber-500" /> },
+    { id: 'agent-reviewer', name: 'Gate Auditor', role: 'Zero-Drift Verifier', status: 'idle', latencyMs: 0.039, icon: <ShieldCheck className="w-5 h-5 text-craft-emerald" /> },
+    { id: 'agent-searcher', name: 'SearXNG Scout', role: 'Proxy Pool Web RAG', status: 'idle', latencyMs: 0.045, icon: <Search className="w-5 h-5 text-blue-500" /> }
   ]);
 
   const [packets, setPackets] = useState<MessagePacket[]>([
@@ -58,129 +58,158 @@ export const AgentSwarmVisualizer: React.FC = () => {
   };
 
   return (
-    <div className="border-t border-[#1e2230] bg-[#080a10] py-20 px-6 sm:px-10">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+    <section id="bus" className="relative py-24 border-b border-craft-200 dark:border-craft-800/80 bg-white dark:bg-craft-950 transition-colors">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* Section Header */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6 text-left">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono mb-3">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-400 text-xs font-mono mb-3">
               <Network className="w-3.5 h-3.5" />
-              Inter-Agent Mesh & SSE Swarm Bus
+              <span>Inter-Agent Mesh & SSE Swarm Bus</span>
             </div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+            <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-craft-900 dark:text-craft-50 font-sans">
               Warm Subagents & In-Memory Socket Bus
             </h2>
-            <p className="text-[#94a3b8] mt-2 max-w-2xl text-sm sm:text-base">
+            <p className="text-craft-600 dark:text-craft-300 mt-2 max-w-2xl text-sm sm:text-base leading-relaxed">
               Subagents stay hot in memory with zero container spin-up. Broadcast typed S-expression ASTs over local SSE & Unix domain sockets with <strong>&lt;0.04ms latency</strong>.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 font-mono text-xs text-[#94a3b8] bg-[#0f131d] px-4 py-2 rounded-lg border border-[#1e2436]">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            Daemon Active: <span className="text-white">http://localhost:8765/events</span>
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-craft-100 dark:bg-craft-900 border border-craft-200 dark:border-craft-800 text-xs font-mono text-craft-600 dark:text-craft-400">
+            <span className="w-2 h-2 rounded-full bg-craft-emerald animate-ping" />
+            <span>Daemon Active: <strong>http://localhost:8765/events</strong></span>
           </div>
         </div>
 
-        {/* Top Swarm Nodes Matrix */}
+        {/* Live Warm Subagent Nodes Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          {agents.map(agent => (
-            <div
-              key={agent.id}
-              onClick={() => setSelectedAgent(agent.id)}
-              className={`bg-[#0b0e17] border rounded-xl p-4 cursor-pointer transition-all ${
-                selectedAgent === agent.id ? 'border-purple-500 shadow-lg shadow-purple-500/10 bg-[#121624]' : 'border-[#1a2030] hover:border-[#2a334d]'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="w-8 h-8 rounded-lg bg-[#161c2b] flex items-center justify-center">
-                  {agent.icon}
+          {agents.map((agent) => {
+            const isStreaming = agent.status === 'streaming';
+            return (
+              <div
+                key={agent.id}
+                className={`p-5 rounded-2xl border transition-all text-left ${
+                  isStreaming
+                    ? 'border-craft-accent bg-craft-100 dark:bg-craft-900 shadow-glow-sm ring-1 ring-craft-accent/50 scale-[1.02]'
+                    : 'border-craft-200 dark:border-craft-800/80 bg-white dark:bg-craft-900/50 hover:border-craft-300 dark:hover:border-craft-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="p-2.5 rounded-xl bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800">
+                    {agent.icon}
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase ${
+                      isStreaming
+                        ? 'bg-craft-accent text-craft-950 animate-pulse font-bold'
+                        : 'bg-craft-100 dark:bg-craft-800 text-craft-emerald'
+                    }`}
+                  >
+                    {agent.status}
+                  </span>
                 </div>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
-                  agent.status === 'streaming'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
-                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                }`}>
-                  {agent.status}
-                </span>
+
+                <div className="font-mono font-bold text-sm text-craft-900 dark:text-craft-100">{agent.name}</div>
+                <div className="text-[11px] text-craft-500 dark:text-craft-400 font-sans mt-0.5">{agent.role}</div>
+
+                <div className="mt-4 pt-3 border-t border-craft-200 dark:border-craft-800/80 flex items-center justify-between text-[10px] font-mono text-craft-500">
+                  <span>IPC Latency</span>
+                  <span className="text-craft-accent font-bold">{agent.latencyMs}ms</span>
+                </div>
               </div>
-              <h4 className="text-white font-semibold text-sm">{agent.name}</h4>
-              <p className="text-[#64748b] text-xs mt-0.5">{agent.role}</p>
-              <div className="mt-3 pt-3 border-t border-[#161c2b] flex items-center justify-between text-[11px] font-mono text-[#94a3b8]">
-                <span>IPC Latency</span>
-                <span className="text-purple-400">{agent.latencyMs}ms</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Live Dispatcher & Event Log */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Dispatcher Box */}
-          <div className="bg-[#0b0e17] border border-[#1a2030] rounded-xl p-6 flex flex-col justify-between">
+        {/* Live SSE Event Stream & Interactive Task Dispatcher */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left: Dispatcher Console */}
+          <div className="lg:col-span-5 bg-white dark:bg-craft-900/80 border border-craft-200 dark:border-craft-800 rounded-2xl p-6 shadow-xl text-left flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Radio className="w-4 h-4 text-purple-400" />
-                <h3 className="text-white font-semibold text-sm">SSE Mesh Task Dispatcher</h3>
+              <div className="flex items-center gap-2 text-craft-accent font-mono text-xs font-bold uppercase mb-4">
+                <Radio className="w-4 h-4 text-craft-accent animate-pulse" />
+                <span>SSE Mesh Task Dispatcher</span>
               </div>
 
-              <label className="block text-xs font-mono text-[#94a3b8] mb-1.5">Target Warm Agent:</label>
-              <select
-                value={selectedAgent}
-                onChange={e => setSelectedAgent(e.target.value)}
-                className="w-full bg-[#121624] border border-[#222a40] text-white rounded-lg px-3 py-2 text-xs font-mono mb-4 focus:outline-none focus:border-purple-500"
-              >
-                {agents.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.id})</option>
-                ))}
-              </select>
+              <div className="space-y-4 font-mono text-xs">
+                <div>
+                  <label className="block text-craft-500 mb-1 font-semibold">Target Warm Agent:</label>
+                  <select
+                    value={selectedAgent}
+                    onChange={(e) => setSelectedAgent(e.target.value)}
+                    className="w-full bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800 rounded-xl px-3.5 py-2.5 text-craft-900 dark:text-craft-100 focus:outline-none focus:border-craft-accent"
+                  >
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <label className="block text-xs font-mono text-[#94a3b8] mb-1.5">Typed S-Expression Payload:</label>
-              <textarea
-                value={inputMsg}
-                onChange={e => setInputMsg(e.target.value)}
-                rows={4}
-                className="w-full bg-[#07090f] border border-[#1a2030] text-[#a7f3d0] rounded-lg p-3 text-xs font-mono focus:outline-none focus:border-purple-500"
-              />
+                <div>
+                  <label className="block text-craft-500 mb-1 font-semibold">Typed S-Expression Payload:</label>
+                  <textarea
+                    rows={3}
+                    value={inputMsg}
+                    onChange={(e) => setInputMsg(e.target.value)}
+                    className="w-full bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800 rounded-xl p-3 text-craft-900 dark:text-craft-100 font-mono text-xs focus:outline-none focus:border-craft-accent shadow-inner"
+                  />
+                </div>
+              </div>
             </div>
 
             <button
               onClick={dispatchTask}
-              className="mt-4 w-full py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold rounded-lg text-xs font-mono flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 transition-all"
+              className="mt-6 w-full py-3 rounded-xl bg-craft-accent hover:bg-craft-accent/90 text-craft-950 font-mono font-bold text-xs shadow-glow-sm hover:shadow-glow-md transition-all flex items-center justify-center gap-2"
             >
               <Send className="w-3.5 h-3.5" />
-              Dispatch Packet ($ asl bus send)
+              <span>Dispatch Packet ($ asl bus send)</span>
             </button>
           </div>
 
-          {/* Real-Time Packet Stream */}
-          <div className="lg:col-span-2 bg-[#07090f] border border-[#1a2030] rounded-xl p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4 border-b border-[#141926] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
-                <h3 className="text-white font-semibold text-sm font-mono">Live SSE Event Stream (/events)</h3>
+          {/* Right: Real-time Event Stream Viewer */}
+          <div className="lg:col-span-7 bg-craft-50 dark:bg-craft-950 border border-craft-200 dark:border-craft-800 rounded-2xl p-5 shadow-xl text-left font-mono flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-craft-200 dark:border-craft-800/80 pb-3 mb-4">
+                <div className="flex items-center gap-2 text-xs font-bold text-craft-900 dark:text-craft-100">
+                  <span className="w-2 h-2 rounded-full bg-craft-emerald animate-ping" />
+                  <span>Live SSE Event Stream (/events)</span>
+                </div>
+                <span className="text-[10px] text-craft-500">Wire Protocol: ASL S-Expressions</span>
               </div>
-              <span className="text-xs font-mono text-[#64748b]">Wire Protocol: ASL S-Expressions</span>
+
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {packets.map((pkt) => (
+                  <div
+                    key={pkt.id}
+                    className="p-3 rounded-xl bg-white dark:bg-craft-900/90 border border-craft-200 dark:border-craft-800/80 text-xs flex items-center justify-between shadow-sm hover:border-craft-accent/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="text-craft-accent font-bold">{pkt.from}</span>
+                      <ArrowRight className="w-3 h-3 text-craft-400 shrink-0" />
+                      <span className="text-purple-600 dark:text-purple-400 font-bold">{pkt.to}</span>
+                      <span className="text-craft-700 dark:text-craft-300 font-mono text-[11px] truncate ml-2">
+                        {pkt.payload}
+                      </span>
+                    </div>
+                    <div className="text-right text-[10px] text-craft-500 shrink-0 ml-3">
+                      <span className="text-craft-emerald font-bold">{pkt.latencyMs}ms</span> • {pkt.time}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[220px]">
-              {packets.map(pkt => (
-                <div key={pkt.id} className="bg-[#0c0f18] border border-[#161c2b] rounded-lg p-3 font-mono text-xs flex items-center justify-between gap-4 hover:border-purple-500/30 transition-colors">
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-purple-400 font-semibold">{pkt.from}</span>
-                    <ArrowRight className="w-3 h-3 text-[#64748b]" />
-                    <span className="text-cyan-400 font-semibold">{pkt.to}</span>
-                  </div>
-                  <div className="text-[#a7f3d0] truncate flex-1 font-mono text-[11px] bg-[#07080d] px-2 py-1 rounded border border-[#161c28]">
-                    {pkt.payload}
-                  </div>
-                  <div className="text-[10px] text-[#64748b] shrink-0">
-                    {pkt.latencyMs}ms • {pkt.time}
-                  </div>
-                </div>
-              ))}
+            <div className="mt-4 pt-3 border-t border-craft-200 dark:border-craft-800/80 flex items-center justify-between text-[11px] text-craft-500">
+              <span>Unix Domain Sockets & Zero-Copy VFS</span>
+              <span className="text-craft-cyan font-bold">100% Deterministic</span>
             </div>
           </div>
         </div>
+
       </div>
-    </div>
+    </section>
   );
 };
