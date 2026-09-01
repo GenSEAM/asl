@@ -69,15 +69,28 @@ export const SkillsMarketplace: React.FC = () => {
       isCore: true
     },
     {
-      id: 'asl-browser',
-      name: 'Headless DOM & WASI Agent',
+      id: 'asl-browser-ext',
+      name: 'Companion Extension & Visual Lens',
       pkg: '@genseam/browser-plugin',
       category: 'Browser & DOM',
-      description: 'Intelligent DOM tree compression (-78% tokens), simulated click/fill actions, and in-memory WebAssembly action execution.',
+      description: 'Browser extension companion for visual context extraction, in-situ DOM actions, and direct daemon socket bridge.',
       author: 'GenSEAM Core',
-      tokenCost: 1600,
-      platforms: ['Claude Code', 'Antigravity', 'OpenDevin'],
-      repo: 'https://github.com/GenSEAM/browser-plugin'
+      tokenCost: 1500,
+      platforms: ['Chrome Extension', 'Edge', 'Brave', 'Firefox'],
+      repo: 'https://github.com/GenSEAM/browser-plugin',
+      isCore: true
+    },
+    {
+      id: 'asl-in-browser-dev',
+      name: 'In-Browser Dev & Hot-Reload IDE',
+      pkg: '@genseam/in-browser-dev',
+      category: 'Browser & DOM',
+      description: 'Zero-server in-browser WebAssembly hot-reloading runtime, Web Worker threads, OPFS, and isomorphic-git integration.',
+      author: 'GenSEAM Core',
+      tokenCost: 1650,
+      platforms: ['Web Sandbox', 'PWA', 'Chrome Extension'],
+      repo: 'https://github.com/GenSEAM/in-browser-dev',
+      isCore: true
     },
     {
       id: 'asl-search',
