@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bot, Package, Sparkles, Zap, Globe, Menu, X, Compass } from 'lucide-react';
+import { Bot, Package, Sparkles, Globe, Menu, X, Compass, Radio } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
 export const Navbar: React.FC = () => {
@@ -7,11 +7,11 @@ export const Navbar: React.FC = () => {
 
   const navItems = [
     { label: 'The Agent Way', href: '#agent-way', icon: Compass },
+    { label: 'A2A Wire Protocol', href: '#a2a-protocol', icon: Radio },
     { label: 'EDDIE Swarm', href: '#eddie', icon: Bot },
     { label: 'Skills Hub', href: '#skills', icon: Package },
     { label: 'Swarm Bus', href: '#bus', icon: Sparkles },
     { label: 'Community', href: '#community', icon: Globe },
-    { label: 'Benchmarks', href: '#benchmarks', icon: Zap },
   ];
 
   return (
@@ -29,7 +29,7 @@ export const Navbar: React.FC = () => {
                 The Agent Way
               </span>
             </div>
-            <p className="text-[10px] text-craft-500 dark:text-craft-400 font-mono hidden sm:block">Agentic-Oriented Programming</p>
+            <p className="text-[10px] text-craft-500 dark:text-craft-400 font-mono hidden sm:block">Agentic Programming (AgP)</p>
           </div>
         </a>
 

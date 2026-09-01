@@ -18,7 +18,7 @@ export const TheAgentWay: React.FC = () => {
           </h2>
 
           <p className="mt-4 text-base sm:text-lg text-craft-600 dark:text-craft-300 font-sans leading-relaxed">
-            First came <strong>Object-Oriented Programming</strong>. Then came <strong>Functional Programming</strong>. Today begins <strong>Agentic-Oriented Programming (AOP)</strong> — the true path for human-AI co-creation.
+            First came <strong>Object-Oriented Programming (OOP)</strong>. Then came <strong>Functional Programming (FP)</strong>. Today begins <strong>Agentic Programming (AgP)</strong> — the true path for human-AI co-creation.
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export const TheAgentWay: React.FC = () => {
                 <span>The Agent Way (2026+)</span>
               </div>
               <h3 className="text-2xl font-bold text-craft-900 dark:text-craft-100 mb-4 font-sans">
-                Agentic-Oriented Programming (AOP)
+                Agentic Programming (AgP)
               </h3>
 
               <ul className="space-y-3.5 text-sm text-craft-700 dark:text-craft-200 font-sans">

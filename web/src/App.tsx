@@ -3,6 +3,7 @@ import { ThemeProvider } from './lib/theme';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
+import { AgentWireProtocol } from './components/AgentWireProtocol';
 import { EcosystemGlue } from './components/EcosystemGlue';
 import { EddieOrchestrator } from './components/EddieOrchestrator';
 import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
@@ -20,6 +21,7 @@ export const App: React.FC = () => {
         <main className="flex-1 space-y-0">
           <Hero />
           <TheAgentWay />
+          <AgentWireProtocol />
           <EcosystemGlue />
           <EddieOrchestrator />
           <AgentSwarmVisualizer />
