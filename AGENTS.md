@@ -130,6 +130,26 @@ cd grammar/tree-sitter-agentscript
 
 Queries address node parts by field name, which is why the grammar carries `field()` annotations.
 
+### Multi-Repo Workspace Orchestration (`GenSEAM/*`)
+
+The GenSEAM ecosystem is distributed across focused modular repositories:
+- `GenSEAM/asl` (Core Language, AST, Checker, Transpiler targets, WASI runner, Web Showcase)
+- `GenSEAM/harness` (Autonomous Agent Orchestration Engine)
+- `GenSEAM/skills` (Universal AI Agent Coding Skills Hub)
+- `GenSEAM/agent-bus` (High-frequency in-memory Unix Socket & SSE Mesh Bus)
+- `GenSEAM/browser-plugin` (Browser Extension Companion & Visual DOM Context Extractor)
+- `GenSEAM/in-browser-dev` (Zero-server WebAssembly hot-reloading IDE & OPFS Git runtime)
+- `GenSEAM/search` (Multi-engine decentralized search & markdown RAG context compressor)
+- `GenSEAM/mem` (Git-native hierarchical memory matrix & Wasm vector recall)
+
+**Workspace Rules**:
+1. **Direct Main Branch Policy**: Work directly on `main` across all repositories.
+2. **Deterministic Build Pipeline**: Always verify `npm run build:web` with Node.js 22 LTS (`.nvmrc`).
+3. **Cloudflare Pages Deployment**:
+   - Build command: `cd web && npm install && npm run build`
+   - Deploy command: `npx wrangler pages deploy web/dist --project-name=asl`
+   - Config file: `wrangler.toml` with `pages_build_output_dir = "web/dist"`.
+
 ### Conventions
 
 - Language identifiers are kebab-case; types are PascalCase; `agentscript-` is a reserved prefix.
@@ -139,3 +159,4 @@ Queries address node parts by field name, which is why the grammar carries `fiel
   credentials, or a `.env`.
 - `EXPERIMENT.md` is pre-registered: amendments must be dated and must state whether they were
   made before or after seeing results.
+
