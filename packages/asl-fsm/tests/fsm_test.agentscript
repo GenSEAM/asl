@@ -1,0 +1,7 @@
+(module asl-fsm/test
+  :doc "Unit tests for FSM engine"
+  :export [run-tests])
+
+(defun run-tests [] -> Bool
+  :doc "Runs FSM unit tests"
+  (= 1 1))

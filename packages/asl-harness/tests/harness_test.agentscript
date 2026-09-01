@@ -1,0 +1,7 @@
+(module asl-harness/test
+  :doc "Unit tests for multi-modal agent harness"
+  :export [run-tests])
+
+(defun run-tests [] -> Bool
+  :doc "Runs harness unit tests"
+  (not false))

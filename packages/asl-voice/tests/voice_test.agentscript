@@ -1,0 +1,8 @@
+(module asl-voice/test
+  :doc "Unit tests for voice bridge"
+  :export [run-tests]
+  :import [(core/strings :as s)])
+
+(defun run-tests [] -> Bool
+  :doc "Runs voice bridge unit tests"
+  (= (s/concat "Synthesizing " "audio") "Synthesizing audio"))

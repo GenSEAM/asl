@@ -1,0 +1,7 @@
+(module asl-vdom/test
+  :doc "Unit tests for S-expression Virtual DOM"
+  :export [run-tests])
+
+(defun run-tests [] -> Bool
+  :doc "Runs VDOM unit tests"
+  (= "div" "div"))

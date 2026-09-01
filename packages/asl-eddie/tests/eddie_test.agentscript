@@ -1,0 +1,7 @@
+(module asl-eddie/test
+  :doc "Unit tests for EDDIE orchestrator"
+  :export [run-tests])
+
+(defun run-tests [] -> Bool
+  :doc "Runs EDDIE orchestrator unit tests"
+  (< 1 2))

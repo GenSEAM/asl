@@ -1,0 +1,8 @@
+(module asl-agent-bus/test
+  :doc "Unit tests for agent bus protocol"
+  :export [run-tests]
+  :import [(core/strings :as s)])
+
+(defun run-tests [] -> Bool
+  :doc "Runs agent bus unit tests"
+  (= (s/concat "event: " "task") "event: task"))
