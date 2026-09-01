@@ -1,2 +1,7 @@
+packages:
+  - 'web'
+  - 'packages/*'
+
 allowBuilds:
+  esbuild: true
   tree-sitter-cli: true

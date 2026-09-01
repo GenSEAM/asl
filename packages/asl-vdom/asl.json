@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl-vdom",
+  "version": "0.1.0",
+  "description": "Declarative S-Expression Virtual DOM renderer bridging React 19, Vue 3, and Svelte 5",
+  "entry": "src/vdom.agentscript",
+  "targets": {
+    "wasm": {"output": "dist/vdom.wasm"},
+    "ts": {"output": "dist/vdom.ts"},
+    "py": {"output": "dist/vdom.py"}
+  }
+}

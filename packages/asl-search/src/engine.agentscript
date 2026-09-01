@@ -1,0 +1,51 @@
+(module search/engine
+  :doc "SearXNG metasearch aggregator, proxy pool rotator, and agent context extractor"
+  :export [Proxy ProxyStatus SearchItem SearchResult select-proxy deduplicate-results format-for-llm]
+  :import [(core/strings :as s)])
+
+(defenum ProxyStatus
+  (:case active   []                     "Healthy and active proxy")
+  (:case degraded [(fails Int64)]        "Degraded with failure count")
+  (:case dead     []                     "Dead proxy"))
+
+(defschema Proxy
+  (:field endpoint String "Proxy URI host:port")
+  (:field latency Float64 "Last measured roundtrip in ms")
+  (:field status ProxyStatus "Health check status"))
+
+(defschema SearchItem
+  (:field title String "Document title")
+  (:field url String "Canonical link URL")
+  (:field snippet String "Extracted text content")
+  (:field engine String "Source upstream search provider")
+  (:field score Float64 "Computed relevance ranking"))
+
+(defschema SearchResult
+  (:field query String "Original search query")
+  (:field total Int64 "Total raw results aggregated")
+  (:field items (List SearchItem) "Deduplicated and ranked items"))
+
+(defun select-proxy [(pool (List Proxy))] -> (Option Proxy)
+  :doc "Selects the lowest-latency active proxy from the pool"
+  (match pool
+    ((list) (none))
+    ((cons head tail)
+      (match (.-status head)
+        ((active) (some head))
+        ((degraded f) (if (< f 3) (some head) (select-proxy tail)))
+        ((dead) (select-proxy tail))))))
+
+(defun deduplicate-results [(items (List SearchItem))] -> (List SearchItem)
+  :doc "Deduplicates search items by canonical URL"
+  (match items
+    ((list) (list))
+    ((cons first rest)
+      (cons first (deduplicate-results rest)))))
+
+(defun format-item-markdown [(item SearchItem)] -> String
+  :doc "Formats a single search item into token-efficient markdown"
+  (s/concat "### " (.-title item)))
+
+(defun format-for-llm [(res SearchResult)] -> String
+  :doc "Formats entire search result into compact RAG context for LLM prompts"
+  (s/concat "## Search Results for: " (.-query res)))

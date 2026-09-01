@@ -1,0 +1,50 @@
+(module asl-fsm/engine
+  :doc "Exhaustive finite state machine state transitions for agent execution"
+  :export [State Event transition is-terminal]
+  :import [(core/strings :as s)])
+
+(defenum State
+  (:case idle      []                 "Agent is idle waiting for prompt")
+  (:case planning  [(step Int64)]     "Generating DAG execution plan")
+  (:case executing [(tool String)]    "Calling WebAssembly tool")
+  (:case completed [(duration Float64)] "Task completed successfully")
+  (:case failed    [(reason String)]  "Error trapped with diagnostic"))
+
+(defenum Event
+  (:case start     [(goal String)]    "Trigger execution cycle")
+  (:case tool-done []                 "Tool invocation finished")
+  (:case finish    [(duration Float64)] "Finalize cycle")
+  (:case error     [(msg String)]     "Trap unrecoverable error"))
+
+(defun is-terminal [(st State)] -> Bool
+  :doc "Checks if state is a terminal final state"
+  (match st
+    ((completed d) true)
+    ((failed r)    true)
+    ((idle)        false)
+    ((planning s)  false)
+    ((executing t) false)))
+
+(defun transition [(st State) (ev Event)] -> State
+  :doc "Pure deterministic state machine step"
+  (match st
+    ((idle)
+      (match ev
+        ((start g) (planning 1))
+        ((tool-done) st)
+        ((finish d) st)
+        ((error msg) (failed msg))))
+    ((planning s)
+      (match ev
+        ((start g) st)
+        ((tool-done) (executing "eval"))
+        ((finish d) (completed d))
+        ((error msg) (failed msg))))
+    ((executing t)
+      (match ev
+        ((tool-done) (completed 0.04))
+        ((start g) st)
+        ((finish d) (completed d))
+        ((error msg) (failed msg))))
+    ((completed d) st)
+    ((failed r) st)))
