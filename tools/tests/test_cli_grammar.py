@@ -13,8 +13,8 @@ def test_cli_grammar_subcommand():
         cwd=ROOT
     )
     assert proc.returncode == 0
-    assert "ASL (AgentScript Language)" in proc.stdout
-    assert "(module path/name" in proc.stdout
+    assert "ASL" in proc.stdout
+    assert "LLM Reference Sheet" in proc.stdout
 
 
 def test_cli_ref_alias():
@@ -25,7 +25,8 @@ def test_cli_ref_alias():
         cwd=ROOT
     )
     assert proc.returncode == 0
-    assert "ASL (AgentScript Language)" in proc.stdout
+    assert "ASL" in proc.stdout
+    assert "LLM Reference Sheet" in proc.stdout
 
 
 def test_cli_top_level_ref_flag():
@@ -36,7 +37,8 @@ def test_cli_top_level_ref_flag():
         cwd=ROOT
     )
     assert proc.returncode == 0
-    assert "ASL (AgentScript Language)" in proc.stdout
+    assert "ASL" in proc.stdout
+    assert "LLM Reference Sheet" in proc.stdout
 
 
 def test_cli_grammar_lark_flag():

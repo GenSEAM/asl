@@ -13,8 +13,8 @@ def test_cli_skill_subcommand():
         cwd=ROOT
     )
     assert proc.returncode == 0
-    assert "ASL AI Agent Setup" in proc.stdout
-    assert "mcpServers" in proc.stdout
+    assert "Agent Skills Marketplace" in proc.stdout
+    assert "asl-core" in proc.stdout
 
 
 def test_cli_setup_alias():
@@ -26,3 +26,4 @@ def test_cli_setup_alias():
     )
     assert proc.returncode == 0
     assert "ASL AI Agent Setup" in proc.stdout
+    assert "mcpServers" in proc.stdout
