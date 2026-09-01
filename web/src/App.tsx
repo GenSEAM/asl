@@ -5,35 +5,23 @@ import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
 import { AgentObservabilityStudio } from './components/AgentObservabilityStudio';
-import { VisualCognition } from './components/VisualCognition';
-import { DesignSystemExplorer } from './components/DesignSystemExplorer';
-import { EcosystemGlue } from './components/EcosystemGlue';
-import { EddieOrchestrator } from './components/EddieOrchestrator';
-import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
 import { EngineeringBlog } from './components/EngineeringBlog';
 import { SkillsMarketplace } from './components/SkillsMarketplace';
-import { TokenCalculator } from './components/TokenCalculator';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
 
 export const App: React.FC = () => {
   return (
     <ThemeProvider>
-      <div className="min-h-screen bg-white dark:bg-[#030508] text-craft-900 dark:text-craft-100 flex flex-col selection:bg-craft-accent/30 selection:text-craft-900 dark:selection:text-white transition-colors">
+      <div className="min-h-screen bg-white dark:bg-[#05070a] text-craft-900 dark:text-craft-100 flex flex-col selection:bg-craft-accent/30 selection:text-craft-900 dark:selection:text-white transition-colors">
         <Navbar />
         <main className="flex-1 space-y-0">
           <Hero />
           <TheAgentWay />
           <AgentWireProtocol />
           <AgentObservabilityStudio />
-          <VisualCognition />
-          <DesignSystemExplorer />
-          <EcosystemGlue />
-          <EddieOrchestrator />
-          <AgentSwarmVisualizer />
           <EngineeringBlog />
           <SkillsMarketplace />
-          <TokenCalculator />
           <Ecosystem />
         </main>
         <Footer />

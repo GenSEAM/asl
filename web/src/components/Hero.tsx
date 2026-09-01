@@ -11,15 +11,15 @@ export const Hero: React.FC = () => {
   };
 
   return (
-    <section className="relative min-h-[88vh] flex items-center justify-center pt-24 pb-20 border-b border-craft-200/80 dark:border-white/[0.08] bg-white dark:bg-[#07090e] overflow-hidden transition-colors">
+    <section className="relative min-h-[90vh] flex items-center justify-center pt-24 pb-20 border-b border-craft-200/80 dark:border-white/[0.08] bg-white dark:bg-[#05070a] overflow-hidden transition-colors">
       {/* Full-Bleed Ambient Nebula Canvas */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
         <img
           src="/assets/images/ambient_bg.jpg"
           alt="Ambient Atmospheric Horizon"
-          className="w-full h-full object-cover opacity-30 dark:opacity-20"
+          className="w-full h-full object-cover opacity-45 dark:opacity-35 scale-105"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-white/60 dark:from-[#07090e]/60 via-transparent to-white dark:to-[#07090e]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/30 dark:from-[#05070a]/30 via-transparent to-white dark:to-[#05070a]" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">

@@ -48,9 +48,9 @@ export const AgentObservabilityStudio: React.FC = () => {
   const activeNodeData = nodes.find(n => n.id === selectedNode) || nodes[2];
 
   return (
-    <section id="observability" className="relative py-28 border-b border-craft-200/80 dark:border-white/[0.08] bg-white dark:bg-[#06080d] overflow-hidden transition-colors">
+    <section id="observability" className="relative py-28 border-b border-craft-200/80 dark:border-white/[0.08] bg-white dark:bg-[#05070a] overflow-hidden transition-colors">
       {/* Subtle Atmospheric Depth */}
-      <div className="absolute inset-0 z-0 pointer-events-none opacity-15 dark:opacity-10">
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-25 dark:opacity-20">
         <img src="/assets/images/ambient_bg.jpg" alt="" className="w-full h-full object-cover" />
       </div>
 
