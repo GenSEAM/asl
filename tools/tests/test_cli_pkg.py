@@ -33,3 +33,56 @@ def test_cli_pkg_install_empty():
         )
         assert proc.returncode == 0
         assert "No dependencies defined" in proc.stdout
+
+
+def test_cli_pkg_list_and_remove():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        asl_json = Path(tmpdir) / "asl.json"
+        asl_json.write_text(json.dumps({
+            "name": "test-pkg",
+            "dependencies": {
+                "github.com/genseam/search": "v1.0.0"
+            }
+        }))
+
+        # List
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "agentscript"), "list"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True
+        )
+        assert proc.returncode == 0
+        assert "github.com/genseam/search" in proc.stdout
+        assert "missing" in proc.stdout
+
+        # Remove
+        proc_rm = subprocess.run(
+            [sys.executable, str(ROOT / "agentscript"), "remove", "github.com/genseam/search"],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True
+        )
+        assert proc_rm.returncode == 0
+        updated = json.loads(asl_json.read_text())
+        assert "github.com/genseam/search" not in updated.get("dependencies", {})
+
+
+def test_cli_pkg_link():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        root = Path(tmpdir)
+        (root / "asl.json").write_text(json.dumps({"name": "test-pkg"}))
+        local_lib = root / "local-lib"
+        local_lib.mkdir()
+        (local_lib / "asl.json").write_text(json.dumps({"name": "local-lib"}))
+
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "agentscript"), "link", "github.com/genseam/search", str(local_lib)],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True
+        )
+        assert proc.returncode == 0
+        symlink = root / ".asl_modules" / "github.com" / "genseam" / "search"
+        assert symlink.is_symlink()
+        assert symlink.resolve() == local_lib.resolve()

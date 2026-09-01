@@ -1,6 +1,7 @@
-"""Decentralized, Go-style package manager and registry client for ASL."""
+"""Decentralized, Go-style package manager and dependency management engine for ASL."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -97,6 +98,91 @@ def add_package(pkg_identifier: str, local: bool = True) -> int:
     lock_data[pkg_path] = {"version": version, "path": str(target_dir)}
     lock_file.write_text(json.dumps(lock_data, indent=2) + "\n")
 
+    return 0
+
+
+def remove_package(pkg_path: str) -> int:
+    """Removes a package from asl.json, .asl_modules, and asl.lock."""
+    project_root, manifest = get_project_root()
+    pkg_clean, _ = normalize_pkg_url(pkg_path)
+
+    manifest_file = project_root / "asl.json"
+    deps = manifest.get("dependencies", {})
+    if pkg_clean in deps:
+        del deps[pkg_clean]
+        manifest["dependencies"] = deps
+        manifest_file.write_text(json.dumps(manifest, indent=2) + "\n")
+        print(f"✓ Removed {pkg_clean} from asl.json")
+
+    # Remove from .asl_modules
+    target_dir = project_root / ".asl_modules" / pkg_clean
+    if target_dir.exists():
+        if target_dir.is_symlink():
+            target_dir.unlink()
+        else:
+            shutil.rmtree(target_dir, ignore_errors=True)
+        print(f"✓ Deleted local module directory {target_dir}")
+
+    # Update lockfile
+    lock_file = project_root / "asl.lock"
+    if lock_file.exists():
+        try:
+            lock_data = json.loads(lock_file.read_text())
+            if pkg_clean in lock_data:
+                del lock_data[pkg_clean]
+                lock_file.write_text(json.dumps(lock_data, indent=2) + "\n")
+        except Exception:
+            pass
+    return 0
+
+
+def list_packages(json_mode: bool = False) -> int:
+    """Lists all direct dependencies and their installation status."""
+    project_root, manifest = get_project_root()
+    deps = manifest.get("dependencies", {})
+
+    out_list = []
+    for pkg, ver in deps.items():
+        installed = (project_root / ".asl_modules" / pkg).exists()
+        out_list.append({
+            "package": pkg,
+            "required_version": ver,
+            "installed": installed,
+            "path": str(project_root / ".asl_modules" / pkg)
+        })
+
+    if json_mode:
+        print(json.dumps(out_list, indent=2))
+    else:
+        print(f"📦 Dependencies for '{manifest.get('name', 'project')}' ({len(deps)} total):")
+        if not deps:
+            print("  (no dependencies declared in asl.json)")
+            return 0
+        for item in out_list:
+            status = "✓ installed" if item["installed"] else "✗ missing (run 'asl install')"
+            print(f"  • {item['package']} @ {item['required_version']} [{status}]")
+    return 0
+
+
+def link_package(pkg_identifier: str, local_path: str) -> int:
+    """Links a local path as an alias for a package (monorepo/local dev workflow)."""
+    project_root, manifest = get_project_root()
+    pkg_clean, _ = normalize_pkg_url(pkg_identifier)
+    target_link = project_root / ".asl_modules" / pkg_clean
+    src_path = Path(local_path).resolve()
+
+    if not src_path.exists():
+        print(f"✗ Source path does not exist: {src_path}")
+        return 1
+
+    target_link.parent.mkdir(parents=True, exist_ok=True)
+    if target_link.is_symlink():
+        target_link.unlink()
+    elif target_link.is_dir():
+        shutil.rmtree(target_link)
+
+    target_link.symlink_to(src_path)
+    print(f"✓ Linked {pkg_clean} -> {src_path}")
     return 0
 
 

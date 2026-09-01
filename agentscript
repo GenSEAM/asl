@@ -238,6 +238,24 @@ def cmd_get(args) -> int:
     return add_package(args.package, local=not getattr(args, "global_pkg", False))
 
 
+def cmd_remove(args) -> int:
+    """Remove a package dependency from asl.json and local modules."""
+    from tools.pkg import remove_package
+    return remove_package(args.package)
+
+
+def cmd_list_pkg(args) -> int:
+    """List dependencies declared in asl.json."""
+    from tools.pkg import list_packages
+    return list_packages(json_mode=getattr(args, "json", False))
+
+
+def cmd_link(args) -> int:
+    """Link a local directory as a package for monorepo development."""
+    from tools.pkg import link_package
+    return link_package(args.package, args.path)
+
+
 def cmd_install(args) -> int:
     """Restore all packages declared in asl.json."""
     from tools.pkg import install_all_packages
@@ -389,6 +407,21 @@ def main() -> int:
     p.add_argument("--global", dest="global_pkg", action="store_true", help="install into global cache")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_get)
+
+    p = sub.add_parser("remove", aliases=["rm"], help="remove a package dependency from asl.json")
+    p.add_argument("package", help="package identifier to remove")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_remove)
+
+    p = sub.add_parser("list", aliases=["deps"], help="list dependencies declared in asl.json")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_list_pkg)
+
+    p = sub.add_parser("link", help="link a local directory as a package for monorepo development")
+    p.add_argument("package", help="package identifier, e.g. github.com/genseam/search")
+    p.add_argument("path", help="local filesystem path to the module")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_link)
 
     p = sub.add_parser("install", aliases=["pkg"], help="restore all packages declared in asl.json")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
