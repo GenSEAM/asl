@@ -16,9 +16,10 @@ from parse import parse_file, tok
 def find(mod_path: str, roots) -> Path | None:
     """The file a module path names, over an ordered list of source roots."""
     for root in roots:
-        candidate = Path(root) / (mod_path + ".agentscript")
-        if candidate.exists():
-            return candidate
+        for ext in (".agentscript", ".asl"):
+            candidate = Path(root) / (mod_path + ext)
+            if candidate.exists():
+                return candidate
     return None
 
 

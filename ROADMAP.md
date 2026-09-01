@@ -57,7 +57,10 @@ Everything below was checked by a command whose output was read, not inferred.
 | Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible probes through checker, `rustc` and `py_compile` |
 | Differential gate | **green** — 120 function cases + 15 whole-program cases across all 6 targets (Python, Rust, Wasm, Interp, TS, Go: 135 runs each), 0 disagreements |
 | Measurement harness | **working** (Phase 9) — supports whole-program and function modes across all 5 targets (`python`, `typescript`, `rust`, `go`, `interp`) with strict 6-stage lifecycle tracking and offline `--dry-run` |
-| Unit tests | **524 pass** — `backend/t`, `bench/algo`, `bench/harness`, `checker/t`, `tools/` |
+| In-Memory WASI Runner | **working** (Phase 10) — pure TS zero-dependency in-memory WASI preview1 shim for browser and Node |
+| Developer Agent MCP Server | **working** (Phase 11) — stdlib-only JSON-RPC 2.0 MCP server with 78% interface compression |
+| Interactive Web Showcase | **working** (Phase 12) — Vite + React 19 + Tailwind technical showcase with live REPL & observability cockpit |
+| Unit tests | **570 pass** — `backend/tests`, `bench/algo`, `bench/harness`, `checker/tests`, `tools/tests` |
 
 ### Documents, in reading order for a newcomer
 

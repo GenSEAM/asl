@@ -104,11 +104,11 @@ export const VisualCognition: React.FC = () => {
                 <span className="text-[11px] text-emerald-400">100% Single-Pass Parsable</span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-craft-50 dark:bg-[#06080d] border border-purple-500/30 overflow-x-auto text-purple-300 space-y-2">
-                <div><span className="text-craft-400">;; Manifest Endpoint:</span> <span className="text-cyan-300">https://aslang.dev/llms.txt</span></div>
-                <div><span className="text-craft-400">;; Protocol Handshake:</span> <span className="text-amber-300">(?agent/probe :proto "asl/1.0" :caps [wasm schema stream])</span></div>
-                <div><span className="text-craft-400">;; JSON-LD Schema:</span> <span className="text-emerald-300">&#123;"@context": "https://schema.org", "@type": "SoftwareApplication"&#125;</span></div>
-                <div><span className="text-craft-400">;; Native Wire Frame:</span> <span className="text-purple-300">(! agent-coder :ok (dfe State (:case active [(t I64)])))</span></div>
+              <div className="p-5 rounded-2xl bg-[#06080d] border border-purple-500/30 overflow-x-auto text-purple-300 space-y-2 shadow-inner">
+                <div><span className="text-craft-500">;; Manifest Endpoint:</span> <span className="text-cyan-300 font-bold">https://aslang.dev/llms.txt</span></div>
+                <div><span className="text-craft-500">;; Protocol Handshake:</span> <span className="text-amber-300 font-bold">(?agent/probe :proto "asl/1.0" :caps [wasm schema stream])</span></div>
+                <div><span className="text-craft-500">;; JSON-LD Schema:</span> <span className="text-emerald-300 font-bold">&#123;"@context": "https://schema.org", "@type": "SoftwareApplication"&#125;</span></div>
+                <div><span className="text-craft-500">;; Native Wire Frame:</span> <span className="text-purple-300 font-bold">(! agent-coder :ok (dfe State (:case active [(t I64)])))</span></div>
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-4 text-[11px] text-craft-400 pt-2 border-t border-craft-200 dark:border-white/[0.06]">

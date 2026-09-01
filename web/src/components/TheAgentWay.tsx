@@ -104,7 +104,10 @@ export const TheAgentWay: React.FC = () => {
                 }`}
               >
                 {/* Archive Folder Header Lip */}
-                <div className="px-6 py-4 flex items-center justify-between gap-4 cursor-pointer">
+                <div 
+                  onClick={() => setActiveHoverId(activeHoverId === epoch.id ? null : epoch.id)}
+                  className="px-6 py-4 flex items-center justify-between gap-4 cursor-pointer"
+                >
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-xs font-bold text-craft-400 dark:text-craft-500 w-24 shrink-0">
                       {epoch.era}

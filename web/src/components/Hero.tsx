@@ -19,7 +19,7 @@ export const Hero: React.FC = () => {
           alt="Ambient Atmospheric Horizon"
           className="w-full h-full object-cover opacity-30 dark:opacity-20"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#07090e]/60 via-transparent to-[#07090e]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-white/60 dark:from-[#07090e]/60 via-transparent to-white dark:to-[#07090e]" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">

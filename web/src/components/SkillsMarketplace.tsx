@@ -158,7 +158,7 @@ export const SkillsMarketplace: React.FC = () => {
           
           {/* Capsule Filter Pills */}
           <div className="p-1.5 rounded-full border border-craft-200 dark:border-white/[0.1] bg-craft-100/80 dark:bg-white/[0.03] backdrop-blur-2xl flex flex-wrap gap-1 shadow-lg max-w-full overflow-x-auto">
-            {categories.slice(0, 5).map((cat) => (
+            {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}

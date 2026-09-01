@@ -451,6 +451,17 @@ def cmd_upgrade(args) -> int:
     return run_upgrade(verbose=True)
 
 
+def cmd_inspect(args) -> int:
+    """Launch full-spectrum observability inspector or TUI."""
+    import subprocess
+    cmd = [sys.executable, str(ROOT / "tools" / "obs_inspect.py")]
+    if getattr(args, "tui", False):
+        cmd.append("--tui")
+    if getattr(args, "audit", False):
+        cmd.append("--audit")
+    return subprocess.call(cmd)
+
+
 # ---------- driver ----------
 
 def main() -> int:
@@ -469,6 +480,11 @@ def main() -> int:
     p = sub.add_parser("upgrade", aliases=["update"], help="upgrade ASL to the latest release")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_upgrade)
+
+    p = sub.add_parser("inspect", aliases=["obs", "audit"], help="launch full-spectrum observability inspector or TUI")
+    p.add_argument("--tui", action="store_true", help="launch terminal-based topological TUI")
+    p.add_argument("--audit", action="store_true", help="run automated safety, bundle size, and health diagnostics")
+    p.set_defaults(fn=cmd_inspect)
 
     p = sub.add_parser("get", aliases=["add"], help="download and record a remote package (Go-style)")
     p.add_argument("package", help="package URL or identifier, e.g. github.com/genseam/search@v1.0.0")
