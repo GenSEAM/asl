@@ -3,12 +3,45 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AgentScript — The Deterministic S-Expression Language for AI Agents & WebAssembly</title>
+    <title>ASL — The Universal Language for the Agent Society</title>
+    <meta name="description" content="ASL (AgentScript Language) is the precision language substrate and ecosystem glue for Agentic Programming (AgP), uniting human intent with autonomous agent swarms." />
+    
+    <!-- Machine-Readable Agent Context -->
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Machine Readable Specification" />
+    <link rel="alternate" type="text/plain" href="/llms-full.txt" title="Complete Agent Specification" />
+    <meta name="agent-protocol" content="asl/1.0" />
+    <meta name="agent-wire-format" content="s-expression-nano" />
+    
+    <!-- Typography -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <!-- Schema.org JSON-LD for AI Agents and Search Crawlers -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ASL (AgentScript Language)",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "All",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "Deterministic single-pass S-expression language and A2A wire protocol engineered for Agentic Programming (AgP) and WebAssembly execution.",
+      "url": "https://aslang.dev",
+      "softwareVersion": "1.0.0",
+      "license": "https://opensource.org/licenses/MIT",
+      "author": {
+        "@type": "Organization",
+        "name": "GenSEAM Core"
+      }
+    }
+    </script>
   </head>
-  <body class="bg-craft-950 text-craft-100 font-sans antialiased selection:bg-craft-accent/30 selection:text-white">
+  <body class="bg-[#030508] text-white font-sans antialiased selection:bg-craft-accent/30 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

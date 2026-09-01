@@ -1,0 +1,20 @@
+# ASL (AgentScript Language) Complete Technical Handbook for Autonomous Agents
+
+## 1. Grammatical Invariants
+1. Single-pass LL(1) deterministic S-expressions.
+2. Identifiers: kebab-case (e.g., `parse-json`, `dot-product`).
+3. Types: PascalCase (`I64`, `F64`, `Bool`, `Str`, `List`, `Map`, `Option`, `Result`).
+4. Effect tracking: Effectful operations are strictly suffixed with `!` (e.g., `println!`, `fetch!`, `write-file!`).
+5. Zero indentation crashes: Pure balanced parenthesis S-expressions.
+
+## 2. A2A Wire Protocol Specification
+- Discovery Probe: `(?agent/probe :proto "asl/1.0" :caps [wasm schema stream])`
+- Acknowledgment: `(!agent/ack :proto "asl/1.0" :mode :nano)`
+- Query Frame: `(? <target-agent> <verb> [:key <typed-val> ...])`
+- Response Frame: `(! <source-agent> :ok <typed-payload>)` or `(! <source-agent> :err <code> :msg <str>)`
+
+## 3. Package Management
+- CLI: `asl`
+- Install Skill: `asl skill install @genseam/<pkg>`
+- Build Wasm: `asl build <file.asl> --target wasm`
+- Run Fast Sandbox: `asl run <file.asl>`
