@@ -2,7 +2,7 @@
   "name": "@genseam/asl-fsm",
   "version": "0.1.0",
   "description": "Algebraic Finite State Machine engine with mathematically verified exhaustive transitions",
-  "entry": "src/fsm.agentscript",
+  "entry": "src/fsm.asl",
   "targets": {
     "wasm": {"output": "dist/fsm.wasm"},
     "ts": {"output": "dist/fsm.ts"},

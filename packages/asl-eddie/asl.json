@@ -2,7 +2,7 @@
   "name": "@genseam/eddie",
   "version": "0.1.0",
   "description": "Adaptive Swarm Orchestrator, Intent Classifier & Speculative Task Pool for AgentScript",
-  "entry": "src/eddie.agentscript",
+  "entry": "src/eddie.asl",
   "targets": {
     "ts": {
       "output": "dist/eddie.ts"

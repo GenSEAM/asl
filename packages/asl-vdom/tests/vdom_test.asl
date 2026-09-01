@@ -1,7 +1,7 @@
 (module asl-vdom/test
-  :doc "Unit tests for S-expression Virtual DOM"
+  :doc "Unit tests for S-expression Virtual DOM in ASL Nano"
   :export [run-tests])
 
-(defun run-tests [] -> Bool
+(df run-tests [] -> Bool
   :doc "Runs VDOM unit tests"
   (= "div" "div"))

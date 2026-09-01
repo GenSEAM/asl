@@ -2,7 +2,7 @@
   "name": "@genseam/asl-search",
   "version": "0.1.0",
   "description": "Decentralized SearXNG metasearch aggregator with zero-drop proxy rotation for AI agents",
-  "entry": "src/engine.agentscript",
+  "entry": "src/engine.asl",
   "targets": {
     "wasm": {"output": "dist/search.wasm"},
     "ts": {"output": "dist/search.ts"},

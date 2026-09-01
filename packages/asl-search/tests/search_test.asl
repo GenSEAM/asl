@@ -1,8 +1,8 @@
 (module asl-search/test
-  :doc "Unit tests for SearXNG metasearch package"
+  :doc "Unit tests for SearXNG metasearch in ASL Nano"
   :export [run-tests]
   :import [(core/strings :as s)])
 
-(defun run-tests [] -> Bool
+(df run-tests [] -> Bool
   :doc "Runs search unit tests"
   (= (s/concat "http://" "example.com") "http://example.com"))

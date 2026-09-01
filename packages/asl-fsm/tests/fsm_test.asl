@@ -1,7 +1,7 @@
 (module asl-fsm/test
-  :doc "Unit tests for FSM engine"
+  :doc "Unit tests for FSM engine in ASL Nano"
   :export [run-tests])
 
-(defun run-tests [] -> Bool
+(df run-tests [] -> Bool
   :doc "Runs FSM unit tests"
   (= 1 1))

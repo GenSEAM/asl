@@ -1,7 +1,7 @@
 (module asl-mem/test
-  :doc "Unit tests for in-memory vector database"
+  :doc "Unit tests for in-memory vector database in ASL Nano"
   :export [run-tests])
 
-(defun run-tests [] -> Bool
+(df run-tests [] -> Bool
   :doc "Runs vector memory unit tests"
   (> 1.0 0.5))

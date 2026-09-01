@@ -2,7 +2,7 @@
   "name": "@genseam/asl-mem",
   "version": "0.1.0",
   "description": "Zero-server in-memory vector database and semantic cosine similarity search in 64KB Wasm",
-  "entry": "src/store.agentscript",
+  "entry": "src/store.asl",
   "targets": {
     "wasm": {"output": "dist/mem.wasm"},
     "ts": {"output": "dist/mem.ts"},
