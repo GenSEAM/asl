@@ -5,6 +5,7 @@ import { ShowcaseGallery } from './components/ShowcaseGallery';
 import { AgentHarness } from './components/AgentHarness';
 import { EddieOrchestrator } from './components/EddieOrchestrator';
 import { AgentSwarmVisualizer } from './components/AgentSwarmVisualizer';
+import { SkillsMarketplace } from './components/SkillsMarketplace';
 import { CommunityHub } from './components/CommunityHub';
 import { Playground } from './components/Playground';
 import { GraphVisualizer } from './components/GraphVisualizer';
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
         <AgentHarness />
         <EddieOrchestrator />
         <AgentSwarmVisualizer />
+        <SkillsMarketplace />
         <CommunityHub />
         <Playground />
         <GraphVisualizer />

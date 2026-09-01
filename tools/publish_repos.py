@@ -18,13 +18,14 @@ PACKAGES = [
     ("asl-agent-bus", "agent-bus", "High-performance Inter-Agent Swarm Bus with MCP, SSE, and Socket streaming for warm subagents"),
     ("asl-eddie", "eddie", "EDDIE: Adaptive Swarm Orchestrator, Intent Classifier & Speculative Task Pool for AgentScript"),
     ("asl-voice", "voice", "Real-time Voice Stream Assistant, 16kHz PCM Audio Bridge & Sub-Millisecond Voice Router for AgentScript"),
+    ("skills", "skills", "Universal Agent Skills Hub: Official AgentScript skills for Claude Code, Cursor, Antigravity, Windsurf & OpenDevin"),
 ]
 
 
-def publish_package(pkg_folder: str, repo_name: str, description: str):
-    source_dir = PACKAGES_DIR / pkg_folder
-    if not source_dir.exists():
-        print(f"✗ Skipping {pkg_folder}: directory not found")
+def publish_package(pkg_dir_name: str, repo_name: str, description: str):
+    pkg_dir = ROOT / "skills" if pkg_dir_name == "skills" else ROOT / "packages" / pkg_dir_name
+    if not pkg_dir.exists():
+        print(f"✗ Skipping {pkg_dir_name}: directory not found")
         return
 
     print(f"\n🚀 Publishing GenSEAM/{repo_name}...")
@@ -48,7 +49,7 @@ def publish_package(pkg_folder: str, repo_name: str, description: str):
     # Export to a temporary clean git repository and push
     with tempfile.TemporaryDirectory() as tmpdir:
         dest = Path(tmpdir) / repo_name
-        shutil.copytree(source_dir, dest)
+        shutil.copytree(pkg_dir, dest)
 
         # Ensure .gitignore
         (dest / ".gitignore").write_text("dist/\nnode_modules/\n.DS_Store\n*.log\n")
