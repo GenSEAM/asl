@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Terminal, Check, Sparkles, ShieldCheck, Compass } from 'lucide-react';
+import { ArrowRight, Terminal, Check, Sparkles, ShieldCheck, Code2, Zap, Cpu } from 'lucide-react';
 
 export const Hero: React.FC = () => {
   const [copied, setCopied] = useState(false);
@@ -11,7 +11,7 @@ export const Hero: React.FC = () => {
   };
 
   return (
-    <section className="relative min-h-[90vh] flex items-center justify-center pt-24 pb-20 border-b border-craft-200/60 dark:border-white/[0.06] bg-white dark:bg-[#04060a] overflow-hidden transition-colors">
+    <section className="relative min-h-[92vh] flex items-center justify-center pt-24 pb-20 border-b border-craft-200/60 dark:border-white/[0.06] bg-white dark:bg-[#04060a] overflow-hidden transition-colors">
       
       {/* Seamless Ambient Caustics & Volumetric Glow */}
       <div className="absolute top-1/4 right-1/4 w-[700px] h-[500px] bg-cyan-500/10 dark:bg-cyan-500/15 blur-[160px] rounded-full pointer-events-none z-0" />
@@ -19,30 +19,50 @@ export const Hero: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
         
-        {/* Asymmetrical 2-Column Grid: Text & Actions on Left, Seamless Floating Core on Right */}
+        {/* Asymmetrical 2-Column Grid: Language Core on Left, Quantum Processor Core on Right */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           
-          {/* Left Column: Monumental Typography, Inline Installer & Actions */}
+          {/* Left Column: Language Proposition & Inline Installer */}
           <div className="lg:col-span-7 space-y-6 text-left">
             
-            {/* Ambient Pill Tag */}
+            {/* Tag Badge */}
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-craft-300/80 dark:border-white/[0.12] bg-craft-100/80 dark:bg-white/[0.03] backdrop-blur-2xl text-xs font-mono text-craft-900 dark:text-white shadow-sm">
               <span className="w-2 h-2 rounded-full bg-craft-accent shadow-[0_0_8px_#06b6d4] animate-pulse" />
-              <span className="font-semibold tracking-wider uppercase text-[11px]">THE AGENT WAY // AGENTIC PROGRAMMING</span>
+              <span className="font-semibold tracking-wider uppercase text-[11px]">THE NATIVE LANGUAGE FOR AI AGENTS</span>
             </div>
 
-            {/* Monumental Editorial Headline */}
-            <h1 className="text-4xl sm:text-6xl lg:text-[4.8rem] font-extrabold tracking-[-0.045em] font-sans leading-[1.02] text-craft-900 dark:text-white">
-              The Architecture of{' '}
+            {/* Monumental Headline: The Language */}
+            <h1 className="text-4xl sm:text-6xl lg:text-[4.6rem] font-extrabold tracking-[-0.045em] font-sans leading-[1.02] text-craft-900 dark:text-white">
+              The Programming Language for{' '}
               <span className="bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 bg-clip-text text-transparent">
-                Autonomous Thought.
+                Autonomous Agents.
               </span>
             </h1>
 
-            {/* Visionary Narrative */}
+            {/* Clear Language Value Narrative */}
             <p className="text-base sm:text-lg text-craft-600 dark:text-craft-300 font-sans font-light leading-relaxed max-w-xl">
-              <strong>ASL</strong> is the precision language substrate uniting human intent with self-organizing societies of autonomous agents. Single-pass mathematical contracts, deterministic type invariants, and instant sub-millisecond execution.
+              <strong>ASL (AgentScript)</strong> is a single-pass deterministic S-expression language designed from first principles for LLMs to generate, typecheck, and execute code with <strong>zero syntax repair loops</strong> and native WebAssembly isolation.
             </p>
+
+            {/* 4 Core Language Feature Badges */}
+            <div className="grid grid-cols-2 gap-2.5 max-w-lg font-mono text-xs text-left">
+              <div className="p-3 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50/70 dark:bg-white/[0.02] flex items-center gap-2 text-craft-800 dark:text-craft-200">
+                <Code2 className="w-4 h-4 text-craft-accent shrink-0" />
+                <span>Single-Pass LL(1) S-Expr</span>
+              </div>
+              <div className="p-3 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50/70 dark:bg-white/[0.02] flex items-center gap-2 text-craft-800 dark:text-craft-200">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>107 Closed Safe Builtins</span>
+              </div>
+              <div className="p-3 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50/70 dark:bg-white/[0.02] flex items-center gap-2 text-craft-800 dark:text-craft-200">
+                <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>–78% Prompt Token Load</span>
+              </div>
+              <div className="p-3 rounded-xl border border-craft-200 dark:border-white/[0.08] bg-craft-50/70 dark:bg-white/[0.02] flex items-center gap-2 text-craft-800 dark:text-craft-200">
+                <Cpu className="w-4 h-4 text-purple-400 shrink-0" />
+                <span>WASI Sandbox &lt;0.04ms</span>
+              </div>
+            </div>
 
             {/* Inline Frosted Glass Installer */}
             <div className="pt-2 max-w-lg">
@@ -75,14 +95,14 @@ export const Hero: React.FC = () => {
                 href="#agent-way"
                 className="px-7 py-3.5 rounded-full bg-craft-accent text-craft-950 font-extrabold text-xs tracking-wider uppercase hover:bg-craft-accent/90 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 shadow-[0_0_25px_rgba(6,182,212,0.35)]"
               >
-                <span>Explore The Paradigm</span>
+                <span>Language Specification</span>
                 <ArrowRight className="w-4 h-4" />
               </a>
               <a
                 href="#a2a-protocol"
                 className="px-7 py-3.5 rounded-full bg-craft-100 dark:bg-white/[0.04] border border-craft-300 dark:border-white/[0.12] text-craft-900 dark:text-white text-xs tracking-wider uppercase hover:border-craft-accent hover:text-craft-accent transition-all flex items-center gap-2"
               >
-                <Compass className="w-4 h-4 text-craft-accent" />
+                <Sparkles className="w-4 h-4 text-craft-accent" />
                 <span>A2A Wire Protocol</span>
               </a>
             </div>
@@ -107,12 +127,12 @@ export const Hero: React.FC = () => {
               <div className="absolute -top-4 -left-4 sm:top-6 sm:-left-6 z-20 p-3.5 rounded-2xl bg-white/90 dark:bg-[#06080d]/90 backdrop-blur-2xl border border-craft-200 dark:border-white/[0.12] shadow-2xl text-left font-mono">
                 <div className="flex items-center gap-2 text-[10px] text-craft-accent font-bold tracking-wider">
                   <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-                  <span>SINGLE-PASS CONTRACT</span>
+                  <span>DETERMINISTIC LANGUAGE</span>
                 </div>
                 <div className="text-xs font-bold text-craft-900 dark:text-white mt-1">
-                  Minimizes Hallucination Drift
+                  Zero Indentation Hallucinations
                 </div>
-                <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">–78% Token Overhead</div>
+                <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">LL(1) S-Expression Grammar</div>
               </div>
 
               {/* Seamless Orbiting Telemetry HUD Badge 2 */}
@@ -122,9 +142,9 @@ export const Hero: React.FC = () => {
                   <span>NATIVE PROOF</span>
                 </div>
                 <div className="text-xs font-bold text-craft-900 dark:text-white mt-1">
-                  WASI &lt;0.04ms Latency
+                  WASI &lt;0.04ms Isolation
                 </div>
-                <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">100% Spec Verified</div>
+                <div className="text-[10px] text-craft-500 dark:text-craft-400 mt-0.5">100% Spec Verified Gates</div>
               </div>
             </div>
 
