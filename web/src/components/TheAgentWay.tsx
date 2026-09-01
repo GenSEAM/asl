@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Compass, CheckCircle2, XCircle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Compass, CheckCircle2, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface HistoricalEpoch {
   era: string;
@@ -147,21 +147,16 @@ export const TheAgentWay: React.FC = () => {
           </div>
 
           {/* Spotlight Hero Card: 2026+ The Agent Way (Always Expanded & Elevated at Foreground) */}
-          <div className="mt-4 p-8 sm:p-10 rounded-[2.5rem] border border-craft-accent/50 bg-gradient-to-b from-white dark:from-white/[0.05] via-craft-50 dark:via-[#06080d] to-white dark:to-[#04060a] backdrop-blur-2xl shadow-[0_0_50px_rgba(6,182,212,0.18)] relative overflow-hidden z-20 group">
+          <div className="mt-4 p-8 sm:p-10 rounded-[2rem] border border-cyan-500/40 bg-gradient-to-b from-white dark:from-white/[0.04] via-craft-50 dark:via-[#090c12] to-white dark:to-[#07090e] backdrop-blur-xl shadow-xl relative overflow-hidden z-20 group">
             
-            {/* Ambient Corner Glow */}
-            <div className="absolute top-0 right-0 p-6 opacity-15 group-hover:opacity-25 transition-opacity">
-              <Sparkles className="w-36 h-36 text-craft-accent" />
-            </div>
-
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-craft-accent shadow-[0_0_10px_#06b6d4] animate-pulse" />
-                <span className="font-mono text-sm font-extrabold text-craft-accent tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                <span className="font-mono text-sm font-bold text-cyan-400 tracking-wider">
                   {currentEra.era} // CURRENT EPOCH
                 </span>
               </div>
-              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border border-cyan-500/40 bg-cyan-500/10 text-craft-accent shadow-sm">
+              <span className="px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider border border-cyan-500/30 bg-cyan-500/10 text-cyan-400">
                 The Agent Way
               </span>
             </div>
@@ -170,7 +165,7 @@ export const TheAgentWay: React.FC = () => {
               {currentEra.name}
             </h3>
 
-            <p className="text-xs sm:text-sm font-mono text-craft-accent font-bold mb-4">
+            <p className="text-xs sm:text-sm font-mono text-cyan-400 font-semibold mb-4">
               // {currentEra.summary}
             </p>
 
@@ -179,7 +174,7 @@ export const TheAgentWay: React.FC = () => {
             </p>
 
             {/* Perks Grid */}
-            <div className="pt-5 border-t border-craft-accent/30 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm font-sans font-medium text-craft-800 dark:text-craft-100">
+            <div className="pt-5 border-t border-craft-200 dark:border-white/[0.08] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm font-sans font-medium text-craft-800 dark:text-craft-100">
               {currentEra.perks.map((perk) => (
                 <div key={perk} className="flex items-center gap-2.5 text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="w-4 h-4 shrink-0" />

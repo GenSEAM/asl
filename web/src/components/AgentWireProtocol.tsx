@@ -23,12 +23,12 @@ export const AgentWireProtocol: React.FC = () => {
         </div>
 
         {/* Live A2A Stream Showcase (Immediate High-Impact View) */}
-        <div className="rounded-[2.5rem] border border-craft-accent/40 bg-gradient-to-b from-craft-50 dark:from-white/[0.03] to-white dark:to-white/[0.01] p-6 sm:p-10 backdrop-blur-2xl shadow-[0_0_50px_rgba(6,182,212,0.1)] mb-12">
+        <div className="rounded-[2rem] border border-craft-200 dark:border-white/[0.08] bg-craft-50/50 dark:bg-[#07090e] p-6 sm:p-8 backdrop-blur-xl shadow-xl mb-12">
           
           {/* Active Handshake Nodes Header */}
-          <div className="flex items-center justify-between border-b border-craft-200 dark:border-white/[0.08] pb-6 mb-8">
+          <div className="flex items-center justify-between border-b border-craft-200 dark:border-white/[0.08] pb-5 mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 text-craft-cyan">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
                 <Bot className="w-5 h-5" />
               </div>
               <div className="text-left font-mono">
@@ -38,8 +38,8 @@ export const AgentWireProtocol: React.FC = () => {
             </div>
 
             {/* Glowing Active Status Pill */}
-            <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/40 text-xs font-mono text-cyan-500 dark:text-cyan-300 font-bold shadow-[0_0_15px_rgba(6,182,212,0.2)]">
-              <span className="w-2 h-2 rounded-full bg-craft-accent animate-ping" />
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-xs font-mono text-cyan-400 font-bold">
+              <span className="w-2 h-2 rounded-full bg-cyan-400" />
               <span>AgP NANO WIRE: ACTIVE</span>
             </div>
 
