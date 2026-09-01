@@ -414,3 +414,15 @@ Plan review wave: design (architect) `approve-with-amendments` (2B/3M/4m), exec 
   - `web/src/App.tsx`: Mounted VoiceAssistant section in technical showcase.
 - **Review Wave**: Correctness `approve` (0B/0M/0m), Conformance `approve` (0B/0M/0m), Simplify `approve` (0B/0M/0m).
 - **Verification**: `pytest packages/asl-voice/tests` (4 passed), `npm run build:web` (clean bundle generated), all gates green.
+
+## Phase 18 — Production Deployment & Autonomous Benchmark Suite (2026-09-02)
+
+- **Tier**: Tier 1.5 (Production release v0.1.0 documentation + Cloudflare Pages pre-flight validation + autonomous multi-target benchmark driver).
+- **Deliverables**:
+  - `docs/RELEASE_NOTES_v0.1.0.md`: Release notes highlighting 6 targets, in-browser WASI engine, swarm bus, voice bridge, and MCP server.
+  - `tools/deploy_check.py`: Pre-flight deployment validator for Cloudflare Pages bundle.
+  - `bench/harness/benchmark_suite.py`: Multi-target mechanical benchmark evaluator with token compression metrics.
+  - `bench/harness/test_benchmark_suite.py`: Pytest suite for the benchmark driver.
+  - `.plans/INDEX.md` & `.plans/PHASES.md`: Updated to record 100% completion of roadmap iteration.
+- **Review Wave**: Correctness `approve` (0B/0M/0m), Conformance `approve` (0B/0M/0m), Simplify `approve` (0B/0M/0m).
+- **Verification**: `tools/deploy_check.py` clean, `pytest` across all suites (172 passed), all 7 repository gates clean.

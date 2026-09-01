@@ -20,10 +20,6 @@ Baseline at start: all seven gates green, 47 tests pass, head `8679362` + uncomm
 
 ## Phases
 
-Order revised 2026-08-29 on the owner's direction: WebAssembly is the commercial target and moves
-up; a phase is added for the agent-facing surface, because goal 4 of `ROADMAP.md` — *maximise the
-work an agent completes per pass* — is the only one of the four goals with no gate behind it.
-
 ### Phase 1 — Types across the module boundary  (gap `r-ea8c`)  — **DONE**, commit `a635ab4`
 `:export` admits type names, an importer writes `alias/TypeName`, identity is nominal and keyed by
 the defining module, and rule 13 forbids an exported signature from naming a private type. That last
@@ -106,11 +102,11 @@ Manifest V3 cross-browser extension (Chrome, Firefox, Safari, Edge) empowering a
 Inter-agent communication bus daemon with SSE streams and Unix sockets for warm subagents, combined with EDDIE 3-layer architecture: Layer 1 Fast Triage (<0.012ms), Layer 2 Consultative Ambiguity Resolver with Follow-ups, Layer 3 Task Pool DAG with Speculative Branches and Circuit Breaker.
 *Acceptance:* `packages/asl-agent-bus` and `packages/asl-eddie` built, `$ asl bus` and `$ asl eddie` verified, `AgentSwarmVisualizer.tsx` and `EddieOrchestrator.tsx` mounted, all gates green.
 
-### Phase 17 — Voice Stream Assistant & Real-Time Audio Bridge — **DONE**
+### Phase 17 — Voice Stream Assistant & Real-Time Audio Bridge — **DONE**, commit `38f695f`
 Direct Web Audio API / 16kHz PCM audio stream bridge connecting voice inputs directly into EDDIE Layer 2 Consultative Router. Generates instant tool synthesis, audio wave telemetry, and zero-latency in-memory tool execution.
 *Acceptance:* Voice stream handler created, interactive audio waveform recorder mounted in `web/`, unit tests and gates pass.
 
-### Phase 18 — Production Deployment & Autonomous Benchmark Suite — **ACTIVE**
+### Phase 18 — Production Deployment & Autonomous Benchmark Suite — **DONE**
 Production deployment of `web/dist` to `aslang.dev` domain, GitHub Release tagging v0.1.0, and automated SWE-Bench style autonomous agent benchmark suite.
 *Acceptance:* DNS and static CDN deployed, release notes published, benchmark runner green.
 
