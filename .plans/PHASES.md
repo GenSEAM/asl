@@ -106,11 +106,11 @@ Manifest V3 cross-browser extension (Chrome, Firefox, Safari, Edge) empowering a
 Inter-agent communication bus daemon with SSE streams and Unix sockets for warm subagents, combined with EDDIE 3-layer architecture: Layer 1 Fast Triage (<0.012ms), Layer 2 Consultative Ambiguity Resolver with Follow-ups, Layer 3 Task Pool DAG with Speculative Branches and Circuit Breaker.
 *Acceptance:* `packages/asl-agent-bus` and `packages/asl-eddie` built, `$ asl bus` and `$ asl eddie` verified, `AgentSwarmVisualizer.tsx` and `EddieOrchestrator.tsx` mounted, all gates green.
 
-### Phase 17 — Voice Stream Assistant & Real-Time Audio Bridge — **ACTIVE**
+### Phase 17 — Voice Stream Assistant & Real-Time Audio Bridge — **DONE**
 Direct Web Audio API / 16kHz PCM audio stream bridge connecting voice inputs directly into EDDIE Layer 2 Consultative Router. Generates instant tool synthesis, audio wave telemetry, and zero-latency in-memory tool execution.
 *Acceptance:* Voice stream handler created, interactive audio waveform recorder mounted in `web/`, unit tests and gates pass.
 
-### Phase 18 — Production Deployment & Autonomous Benchmark Suite — **PLANNED**
+### Phase 18 — Production Deployment & Autonomous Benchmark Suite — **ACTIVE**
 Production deployment of `web/dist` to `aslang.dev` domain, GitHub Release tagging v0.1.0, and automated SWE-Bench style autonomous agent benchmark suite.
 *Acceptance:* DNS and static CDN deployed, release notes published, benchmark runner green.
 
@@ -118,6 +118,3 @@ Production deployment of `web/dist` to `aslang.dev` domain, GitHub Release taggi
 
 * **Measurement runs** (`l-298e`) — gateway endpoint, model identifier, credential env var.
 * **Concurrency / async** — deliberately absent; function colouring undecided.
-
-
-

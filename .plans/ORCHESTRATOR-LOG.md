@@ -402,3 +402,15 @@ Plan review wave: design (architect) `approve-with-amendments` (2B/3M/4m), exec 
   - `web/src/components/TokenCalculator.tsx`: Interactive ROI & 78% context savings estimator for AI agent workflows.
   - `package.json`: Top-level npm bindings (`npm run dev:web`, `npm run build:web`, `npm run preview:web`).
 - **Verification**: `npm run build:web` succeeds in 2.08s producing `web/dist/`, all 7 repo gates green, 533 unit tests pass.
+
+## Phase 17 — Voice Stream Assistant & Real-Time Audio Bridge (2026-09-02)
+
+- **Tier**: Tier 1.5 (Real-time Web Audio API 16kHz linear PCM audio bridge + sub-millisecond voice intent router + interactive Canvas waveform visualizer).
+- **Deliverables**:
+  - `packages/asl-voice/src/voice.asl`: Voice protocol schemas (`AudioFormat`, `AudioChunk`, `VoiceFrame`, `VoiceIntent`).
+  - `packages/asl-voice/bridges/ts/index.ts`: Zero-dependency Web Audio API 16kHz linear PCM streaming processor and speech-to-intent synthesizer (<0.025ms).
+  - `packages/asl-voice/tests/test_voice.py`: Pytest suite verifying chunk construction, frame processing, and intent routing latency.
+  - `web/src/components/VoiceAssistant.tsx`: Interactive 60fps Canvas audio waveform visualizer and live telemetry cockpit.
+  - `web/src/App.tsx`: Mounted VoiceAssistant section in technical showcase.
+- **Review Wave**: Correctness `approve` (0B/0M/0m), Conformance `approve` (0B/0M/0m), Simplify `approve` (0B/0M/0m).
+- **Verification**: `pytest packages/asl-voice/tests` (4 passed), `npm run build:web` (clean bundle generated), all gates green.
