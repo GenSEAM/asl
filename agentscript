@@ -48,9 +48,12 @@ def sources(paths: list[Path]) -> list[Path]:
     for p in paths:
         if not p.exists():
             raise BadInput(f"{p}: no such file or directory")
-        out += sorted(p.rglob("*.agentscript")) if p.is_dir() else [p]
+        if p.is_dir():
+            out += sorted([f for f in p.rglob("*") if f.suffix in [".asl", ".agentscript"]])
+        else:
+            out.append(p)
     if not out:
-        raise BadInput("no .agentscript files given")
+        raise BadInput("no .asl or .agentscript files given")
     return out
 
 

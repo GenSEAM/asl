@@ -22,16 +22,18 @@ class TestResult:
 
 
 def discover_test_files(paths: list[Path] | None = None) -> list[Path]:
-    """Finds all test files matching test_*.agentscript or *_test.agentscript or in tests/ directory."""
+    """Finds all test files matching test_*.asl, *_test.asl, or .agentscript in tests/ directory."""
     targets = paths or [Path.cwd()]
     files: list[Path] = []
     for p in targets:
         p = Path(p)
-        if p.is_file() and p.suffix == ".agentscript":
+        if p.is_file() and p.suffix in [".asl", ".agentscript"]:
             files.append(p)
         elif p.is_dir():
-            for sub in p.rglob("*.agentscript"):
-                if sub.name.endswith(".expected.agentscript"):
+            for sub in p.rglob("*"):
+                if sub.suffix not in [".asl", ".agentscript"]:
+                    continue
+                if sub.name.endswith(".expected.agentscript") or sub.name.endswith(".expected.asl"):
                     continue
                 if "fmt/tests" in str(sub) or "bindgen/tests" in str(sub):
                     continue
