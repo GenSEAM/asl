@@ -259,6 +259,12 @@ def cmd_websearch(args) -> int:
     return 0
 
 
+def cmd_test(args) -> int:
+    """Run native in-memory and WebAssembly test runner."""
+    from tools.test_runner import run_tests_cli
+    return run_tests_cli(paths=getattr(args, "paths", None), json_mode=getattr(args, "json", False), fail_fast=getattr(args, "fail_fast", False))
+
+
 def cmd_get(args) -> int:
     """Download and record a remote package from GitHub/Git (Go-style)."""
     from tools.pkg import add_package
@@ -480,6 +486,12 @@ def main() -> int:
     p.add_argument("--machine", action="store_true", help="emit machine-native actionable diagnostic JSON")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_check)
+
+    p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
+    p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
+    p.add_argument("-x", "--fail-fast", action="store_true", help="stop on first test failure")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_test)
 
     p = sub.add_parser("heal", aliases=["repair", "fix"],
                        help="autonomous self-healing and zero-blocker repair engine")
