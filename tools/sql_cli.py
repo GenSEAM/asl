@@ -107,6 +107,21 @@ class AslSqlRenderer:
             elif head in ("in", "in-op"):
                 items = [self.render_expr(x) for x in expr[2:]]
                 return f"{self.render_expr(expr[1])} IN ({', '.join(items)})"
+            elif head in ("json-get", "json-extract", "q/json-get"):
+                col = self.quote_ident(str(expr[1]))
+                path = str(expr[2])
+                if self.dialect == "postgres":
+                    return f"{col}->>'{path}'"
+                elif self.dialect == "sqlite":
+                    return f"json_extract({col}, '$.{path}')"
+                elif self.dialect == "mysql":
+                    return f"JSON_UNQUOTE(JSON_EXTRACT({col}, '$.{path}'))"
+                elif self.dialect == "clickhouse":
+                    return f"JSONExtractString({col}, '{path}')"
+                else:
+                    return f"{col}.{path}"
+            elif head in ("raw", "raw-sql", "q/raw"):
+                return str(expr[1])
             else:
                 return " ".join(self.render_expr(x) for x in expr)
         return str(expr)
@@ -155,7 +170,7 @@ class AslSqlRenderer:
                     offset_val = form[1]
 
         # Assemble SQL
-        proj = ", ".join(self.quote_ident(c) if c != "*" else "*" for c in cols)
+        proj = ", ".join(self.render_expr(c) if isinstance(c, list) else (c if c == "*" else self.quote_ident(str(c))) for c in cols)
         sql_parts = [f"SELECT {proj}", f"FROM {self.quote_ident(from_table)}"]
 
         for jt, jtbl, on_cond in joins:
@@ -210,6 +225,21 @@ def render_ddl_table(table_name: str, fields: List[Tuple[str, str, bool]], diale
 
     body = ",\n".join(col_defs)
     return f"CREATE TABLE {quote}{table_name}{quote} (\n{body}\n);"
+
+
+def render_upsert_query(table_name: str, columns: List[str], values: List[str], conflict_cols: List[str], update_cols: List[str], dialect: str = "postgres") -> str:
+    """Renders cross-dialect UPSERT query (Postgres/SQLite ON CONFLICT vs MySQL ON DUPLICATE KEY)."""
+    quote = '`' if dialect in ("mysql", "clickhouse") else '"'
+    cols_str = ", ".join(f"{quote}{c}{quote}" for c in columns)
+    vals_str = ", ".join(values)
+    base = f"INSERT INTO {quote}{table_name}{quote} ({cols_str}) VALUES ({vals_str})"
+    if dialect in ("postgres", "sqlite"):
+        conflicts = ", ".join(f"{quote}{c}{quote}" for c in conflict_cols)
+        updates = ", ".join(f"{quote}{c}{quote} = EXCLUDED.{quote}{c}{quote}" for c in update_cols)
+        return f"{base} ON CONFLICT ({conflicts}) DO UPDATE SET {updates};"
+    else:  # MySQL
+        updates = ", ".join(f"{quote}{c}{quote} = VALUES({quote}{c}{quote})" for c in update_cols)
+        return f"{base} ON DUPLICATE KEY UPDATE {updates};"
 
 
 def run_sql_cli(args) -> int:

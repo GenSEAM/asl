@@ -100,3 +100,47 @@ def test_cli_json_mode(capsys):
     assert data["dialect"] == "postgres"
     assert "$1" in data["sql"]
     assert data["params"] == [42]
+
+
+def test_json_extract_polyfills():
+    s = '(select ["id" (json-get "payload" "user_id")] (from "events"))'
+    tree = parse_sql_sexpr(s)
+
+    r_pg = AslSqlRenderer(dialect="postgres")
+    sql_pg, _ = r_pg.render_query_tree(tree)
+    assert '"payload"->>\'user_id\'' in sql_pg
+
+    r_sqlite = AslSqlRenderer(dialect="sqlite")
+    sql_sqlite, _ = r_sqlite.render_query_tree(tree)
+    assert "json_extract(\"payload\", '$.user_id')" in sql_sqlite
+
+    r_mysql = AslSqlRenderer(dialect="mysql")
+    sql_mysql, _ = r_mysql.render_query_tree(tree)
+    assert "JSON_UNQUOTE(JSON_EXTRACT(`payload`, '$.user_id'))" in sql_mysql
+
+    r_ch = AslSqlRenderer(dialect="clickhouse")
+    sql_ch, _ = r_ch.render_query_tree(tree)
+    assert "JSONExtractString(`payload`, 'user_id')" in sql_ch
+
+
+def test_raw_sql_escape_hatch():
+    s = '(select ["id" (raw "RANK() OVER (PARTITION BY dept)")] (from "staff"))'
+    tree = parse_sql_sexpr(s)
+    r = AslSqlRenderer(dialect="postgres")
+    sql, _ = r.render_query_tree(tree)
+    assert "RANK() OVER (PARTITION BY dept)" in sql
+
+
+def test_upsert_polyfills():
+    from tools.sql_cli import render_upsert_query
+    # Postgres
+    pg_sql = render_upsert_query("users", ["id", "name", "visits"], ["1", "'Alice'", "10"], ["id"], ["name", "visits"], dialect="postgres")
+    assert "ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"visits\" = EXCLUDED.\"visits\"" in pg_sql
+
+    # SQLite
+    sqlite_sql = render_upsert_query("users", ["id", "name", "visits"], ["1", "'Alice'", "10"], ["id"], ["name", "visits"], dialect="sqlite")
+    assert "ON CONFLICT (\"id\") DO UPDATE SET \"name\" = EXCLUDED.\"name\", \"visits\" = EXCLUDED.\"visits\"" in sqlite_sql
+
+    # MySQL
+    mysql_sql = render_upsert_query("users", ["id", "name", "visits"], ["1", "'Alice'", "10"], ["id"], ["name", "visits"], dialect="mysql")
+    assert "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `visits` = VALUES(`visits`)" in mysql_sql
