@@ -32,6 +32,8 @@ export class SkyLoomRouter extends EventEmitter {
   public readonly heartbeatGuard: HeartbeatGuard;
   public readonly dlq: DeadLetterQueue;
 
+  private mailboxTimer: NodeJS.Timeout | null = null;
+
   constructor(options?: { mailboxTtlMs?: number; heartbeatTimeoutMs?: number }) {
     super();
     this.mailbox = new SkyLoomMailbox(options?.mailboxTtlMs ?? 60000);
@@ -42,6 +44,14 @@ export class SkyLoomRouter extends EventEmitter {
     this.heartbeatGuard.startWatchdog((deadPeerId) => {
       this.unregisterPeer(deadPeerId, 'heartbeat_timeout');
     });
+
+    // Periodically clean expired mailbox items
+    this.mailboxTimer = setInterval(() => {
+      this.mailbox.cleanExpired();
+    }, 5000);
+    if (this.mailboxTimer && typeof this.mailboxTimer.unref === 'function') {
+      this.mailboxTimer.unref();
+    }
   }
 
   /**
@@ -270,6 +280,10 @@ export class SkyLoomRouter extends EventEmitter {
    */
   destroy(): void {
     this.heartbeatGuard.stopWatchdog();
+    if (this.mailboxTimer) {
+      clearInterval(this.mailboxTimer);
+      this.mailboxTimer = null;
+    }
   }
 
   /**

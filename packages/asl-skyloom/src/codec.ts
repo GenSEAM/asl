@@ -1,6 +1,7 @@
 /**
  * SkyLoom Triple-Dialect Codec & Wire Parser
- * Supports: ASL Native S-expression, Compact Positional, and Polyglot JSON/Markdown
+ * Supports: ASL Native S-expression, Compact Positional, and Polyglot JSON/Markdown.
+ * Hardened for robust escape handling, arbitrary payloads, and zero schema drift.
  */
 
 import { LoomFrame, LoomHeader, Dialect, FrameType, ErrorCode } from './types.js';
@@ -37,6 +38,22 @@ export function validateFrame(obj: any): LoomFrame {
   return obj as LoomFrame;
 }
 
+function escapeStr(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function unescapeStr(s: string): string {
+  return s.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+}
+
+function escapePipe(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+}
+
+function unescapePipe(s: string): string {
+  return s.replace(/\\\|/g, '|').replace(/\\\\/g, '\\');
+}
+
 /**
  * Encodes a LoomFrame into ASL Native S-Expression syntax
  */
@@ -58,44 +75,48 @@ export function decodeAslSExpr(raw: string): LoomFrame {
     throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Invalid ASL S-expression frame delimiter');
   }
 
-  const getAttr = (key: string): string | undefined => {
-    const regex = new RegExp(`:${key}\\s+"([^"]*)"`);
-    const match = trimmed.match(regex);
-    return match ? match[1] : undefined;
-  };
-
-  const getNumAttr = (key: string): number | undefined => {
-    const regex = new RegExp(`:${key}\\s+([0-9]+)`);
-    const match = trimmed.match(regex);
-    return match ? Number(match[1]) : undefined;
-  };
-
-  const version = getNumAttr('v') ?? 1;
-  const id = getAttr('id');
-  const from = getAttr('from');
-  const to = getAttr('to');
-  const type = getAttr('type') as FrameType | undefined;
-  const timestamp = getNumAttr('ts') ?? Date.now();
-  const replyTo = getAttr('reply-to');
-  const channel = getAttr('channel');
-
-  // Extract :body
-  const bodyIdx = trimmed.indexOf(':body ');
+  // Find :body marker separating header attributes from the body expression
+  const bodyMarker = ':body ';
+  const bodyIdx = trimmed.indexOf(bodyMarker);
   if (bodyIdx === -1) {
     throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Missing :body in ASL frame');
   }
 
-  const rawBody = trimmed.slice(bodyIdx + 6, trimmed.length - 1).trim();
-  let body: unknown = null;
-  try {
-    body = JSON.parse(rawBody);
-  } catch {
-    // If not raw JSON, use trimmed string
-    body = rawBody;
+  const headerPart = trimmed.slice(11, bodyIdx).trim();
+  const rawBodyPart = trimmed.slice(bodyIdx + bodyMarker.length, trimmed.length - 1).trim();
+
+  // Extract attributes from headerPart safely
+  const strAttrs: Record<string, string> = {};
+  const strRegex = /:([a-zA-Z0-9_-]+)\s+"((?:[^"\\\\]|\\.)*)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = strRegex.exec(headerPart)) !== null) {
+    strAttrs[match[1]] = unescapeStr(match[2]);
   }
+
+  const numAttrs: Record<string, number> = {};
+  const numRegex = /:([a-zA-Z0-9_-]+)\s+([0-9]+)/g;
+  while ((match = numRegex.exec(headerPart)) !== null) {
+    numAttrs[match[1]] = Number(match[2]);
+  }
+
+  const version = numAttrs['v'] ?? 1;
+  const id = strAttrs['id'];
+  const from = strAttrs['from'];
+  const to = strAttrs['to'];
+  const type = strAttrs['type'] as FrameType | undefined;
+  const timestamp = numAttrs['ts'] ?? Date.now();
+  const replyTo = strAttrs['reply-to'];
+  const channel = strAttrs['channel'];
 
   if (!id || !from || !to || !type) {
     throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Missing required fields in ASL frame');
+  }
+
+  let body: unknown = null;
+  try {
+    body = JSON.parse(rawBodyPart);
+  } catch {
+    body = rawBodyPart;
   }
 
   return validateFrame({
@@ -116,34 +137,57 @@ export function decodeAslSExpr(raw: string): LoomFrame {
 
 /**
  * Compact Positional Token Codec:
- * [SK1|id|from|to|type|channel|ts|replyTo|base64_or_json_payload]
+ * SK1|v|id|from|to|type|channel|ts|replyTo|payload
  */
 export function encodeCompact(frame: LoomFrame): string {
   const h = frame.header;
   const payloadStr = JSON.stringify(frame.body);
   const parts = [
     'SK1',
-    h.version,
-    h.id,
-    h.from,
-    h.to,
+    h.version.toString(),
+    escapePipe(h.id),
+    escapePipe(h.from),
+    escapePipe(h.to),
     frame.type,
-    frame.channel || '',
-    h.timestamp,
-    h.replyTo || '',
+    escapePipe(frame.channel || ''),
+    h.timestamp.toString(),
+    escapePipe(h.replyTo || ''),
     payloadStr,
   ];
   return parts.join('|');
 }
 
 export function decodeCompact(raw: string): LoomFrame {
-  const parts = raw.split('|');
+  // Regex to split on unescaped pipes
+  const parts: string[] = [];
+  let current = '';
+  let escaped = false;
+  let fieldCount = 0;
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (escaped) {
+      current += ch;
+      escaped = false;
+    } else if (ch === '\\') {
+      escaped = true;
+      current += ch;
+    } else if (ch === '|' && fieldCount < 9) {
+      parts.push(current);
+      current = '';
+      fieldCount++;
+    } else {
+      current += ch;
+    }
+  }
+  parts.push(current);
+
   if (parts.length < 10 || parts[0] !== 'SK1') {
     throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Invalid Compact SkyLoom frame format');
   }
 
-  const [, vStr, id, from, to, typeStr, channel, tsStr, replyTo, ...payloadParts] = parts;
-  const bodyRaw = payloadParts.join('|');
+  const [, vStr, id, from, to, typeStr, channel, tsStr, replyTo, bodyRaw] = parts;
+
   let body: unknown = null;
   try {
     body = JSON.parse(bodyRaw);
@@ -154,15 +198,15 @@ export function decodeCompact(raw: string): LoomFrame {
   return validateFrame({
     header: {
       version: Number(vStr) || 1,
-      id,
-      from,
-      to,
+      id: unescapePipe(id),
+      from: unescapePipe(from),
+      to: unescapePipe(to),
       dialect: 'compact/v1',
       timestamp: Number(tsStr) || Date.now(),
-      replyTo: replyTo || undefined,
+      replyTo: replyTo ? unescapePipe(replyTo) : undefined,
     },
     type: typeStr as FrameType,
-    channel: channel || undefined,
+    channel: channel ? unescapePipe(channel) : undefined,
     body,
   });
 }
@@ -297,8 +341,4 @@ export function decodeFrame(raw: string): LoomFrame {
     case 'polyglot/v1':
       return decodePolyglot(raw);
   }
-}
-
-function escapeStr(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }

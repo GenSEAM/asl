@@ -164,6 +164,9 @@ export class HeartbeatGuard extends EventEmitter {
         }
       }
     }, this.checkIntervalMs);
+    if (this.timer && typeof this.timer.unref === 'function') {
+      this.timer.unref();
+    }
   }
 
   stopWatchdog(): void {

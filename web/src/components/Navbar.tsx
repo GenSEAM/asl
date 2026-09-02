@@ -6,6 +6,7 @@ import { Wordmark } from './ui/Logo';
 const navItems = [
   { label: 'The Agent Way', href: '#agent-way' },
   { label: 'Wire Protocol', href: '#a2a-protocol' },
+  { label: 'SkyLoom Mesh', href: '#skyloom-mesh' },
   { label: 'Toolchain', href: '#toolchain' },
 ];
 

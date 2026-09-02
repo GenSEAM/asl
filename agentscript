@@ -279,12 +279,16 @@ def cmd_plugin(args) -> int:
     query = getattr(args, "search", None) or getattr(args, "query", "") or ""
 def cmd_loom(args) -> int:
     """SkyLoom: Resilient Inter-Agent Communication Protocol & Mesh."""
-    from tools.skyloom_cli import list_peers, send_message, mailbox_status, primer, demo
+    from tools.skyloom_cli import list_peers, send_message, mailbox_status, primer, demo, doctor, run_mcp_server
     json_mode = getattr(args, "json", False)
     if getattr(args, "demo", False) or getattr(args, "action", "") == "demo":
         return demo(json_mode=json_mode)
     action = getattr(args, "action", "peers")
-    if action == "send":
+    if action == "doctor":
+        return doctor(json_mode=json_mode)
+    elif action == "mcp":
+        return run_mcp_server()
+    elif action == "send":
         return send_message(
             to=getattr(args, "target", "agent-planner"),
             message=getattr(args, "message", "execute_task"),
@@ -567,8 +571,8 @@ def main() -> int:
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p = sub.add_parser("loom", aliases=["skyloom"],
                        help="SkyLoom inter-agent resilient protocol, asymmetric mesh, and mailbox")
-    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "demo"],
-                   help="loom action (peers, send, mailbox, primer, demo)")
+    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "doctor", "mcp", "demo"],
+                   help="loom action (peers, send, mailbox, primer, doctor, mcp, demo)")
     p.add_argument("--to", dest="target", default="agent-planner", help="target agent ID")
     p.add_argument("--msg", dest="message", default="hello", help="message payload")
     p.add_argument("--from", dest="from_peer", default="agent-orchestrator", help="sender agent ID")

@@ -106,8 +106,12 @@ console.log('✓ Bootstrap primer generated successfully');
 
 // 7. Verify Skill File on disk
 console.log('7. Verifying skills/skyloom/SKILL.md existence and format...');
-const skillPath = path.resolve(process.cwd(), 'skills/skyloom/SKILL.md');
-assert(fs.existsSync(skillPath), 'SKILL.md must exist in skills/skyloom');
+const possiblePaths = [
+  path.resolve(process.cwd(), 'skills/skyloom/SKILL.md'),
+  path.resolve(process.cwd(), '../../skills/skyloom/SKILL.md'),
+];
+const skillPath = possiblePaths.find(p => fs.existsSync(p));
+assert(skillPath && fs.existsSync(skillPath), 'SKILL.md must exist in skills/skyloom');
 const skillContent = fs.readFileSync(skillPath, 'utf-8');
 assert(skillContent.includes('name: skyloom'));
 assert(skillContent.includes('skyloom_connect'));

@@ -127,4 +127,5 @@ assert.strictEqual(coder1.receivedFrames.length, 1, 'Coder 1 must not receive ne
 assert.strictEqual(coder2.receivedFrames.length, 2, 'Coder 2 must receive second task');
 console.log('✓ Dynamic leave and topic subscription cleanup verified');
 
+router.destroy();
 console.log('--- ALL SKYLOOM MESH TOPOLOGY TESTS PASSED SUCCESSFULLY ---');
