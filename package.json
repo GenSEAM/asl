@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "description": "AgentScript toolchain and WASI runner",
+  "license": "MIT OR Apache-2.0",
   "main": "backend/ts/wasm_runner.js",
   "types": "backend/ts/wasm_runner.d.ts",
   "scripts": {

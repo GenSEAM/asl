@@ -5,73 +5,74 @@ import { Bot, Cpu, Activity, CheckCircle2, AlertCircle } from 'lucide-react';
 const protocolStages = [
   {
     step: '01',
-    title: 'Capability Handshake',
-    desc: 'Agents verify mutual capabilities, available execution targets, and streaming channels before starting work.',
-    tag: 'Negotiation',
+    title: 'Instant Handshake',
+    desc: 'Agents verify schemas and target runtimes in a single 20-byte discovery probe.',
+    tag: 'Probe',
   },
   {
     step: '02',
-    title: 'Structured Wire Frames',
-    desc: 'Communication switches from chatty natural language to compact, balanced machine frames.',
-    tag: 'Efficiency',
+    title: 'ASN Wire Frames',
+    desc: 'Replaces conversational English with compact S-expressions. -80% tokens.',
+    tag: 'Compact',
   },
   {
     step: '03',
-    title: 'Contract Boundaries',
-    desc: 'Requests adhere to typed interface schemas, preventing payload corruption and hallucinated fields.',
-    tag: 'Safety',
+    title: 'Zero-Hallucination Types',
+    desc: 'Typed contract boundaries guarantee no missing keys, invalid types, or parse loops.',
+    tag: 'Strict',
   },
   {
     step: '04',
-    title: 'Direct Dispatch',
-    desc: 'Results are evaluated directly in-memory without multi-pass serialization or JSON reparsing.',
-    tag: 'Execution',
+    title: 'Direct In-Memory Dispatch',
+    desc: 'Evaluates directly in host memory (<0.05ms) without multi-pass JSON re-serialization.',
+    tag: 'Fast',
   },
 ];
 
 export const AgentWireProtocol: React.FC = () => (
   <Section id="a2a-protocol" variant="surface" labelledBy="a2a-title" className="overflow-hidden">
-
     <SectionHeader
       id="a2a-title"
-      index="02"
-      eyebrow="Agent to Agent"
-      title="Prose is the wrong wire format between two machines."
-      lead="Natural language is the right interface between a human and an agent. Between two machines, it is bloated payload that both sides have to re-parse and neither side can check. We are designing a structured wire protocol so agents can cooperate deterministically without conversational overhead."
+      index="04"
+      eyebrow="Agent-to-Agent Mesh Protocol"
+      title="Machines Shouldn't Chat Like Humans."
+      lead="When autonomous agents talk to each other in conversational English, you burn 80% of your token budget on polite greetings, repetitive prompts, and JSON parse failures. AgentScript Wire Frames replace conversational chat with instant, typed machine frames."
       align="center"
     />
 
     <div className="max-w-5xl mx-auto">
-      <div className="p-6 sm:p-8 rounded-2xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3">
+      <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3">
+        {/* Agent Communication Mesh Diagram */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-8 border-b border-line">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-inset flex items-center justify-center border border-line">
-              <Bot className="w-5 h-5 text-ink-2" />
+              <Bot className="w-5 h-5 text-signal" />
             </div>
             <div>
-              <p className="font-sans font-semibold text-ink">Planner Agent</p>
-              <p className="font-mono text-micro uppercase text-ink-3">Orchestration & Task Flow</p>
+              <p className="font-sans font-semibold text-ink">Planner Agent (LLM)</p>
+              <p className="font-mono text-micro uppercase text-ink-3">High-Reasoning Orchestrator</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-line bg-ground">
-            <Activity className="w-4 h-4 text-ink-3" />
-            <span className="font-mono text-micro font-semibold uppercase text-ink">
-              Structured Agent Protocol
+          <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-signal/30 bg-signal/10 text-signal">
+            <Activity className="w-4 h-4 text-signal animate-pulse" />
+            <span className="font-mono text-micro font-semibold uppercase tracking-wider">
+              Sub-Millisecond Wire Mesh
             </span>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-inset flex items-center justify-center border border-line">
-              <Cpu className="w-5 h-5 text-ink-2" />
+              <Cpu className="w-5 h-5 text-emerald-400" />
             </div>
             <div className="text-right">
-              <p className="font-sans font-semibold text-ink">Execution Specialist</p>
-              <p className="font-mono text-micro uppercase text-ink-3">Target Runtime Worker</p>
+              <p className="font-sans font-semibold text-ink">Worker Agent (Wasm / Local)</p>
+              <p className="font-mono text-micro uppercase text-ink-3">High-Speed Execution Node</p>
             </div>
           </div>
         </div>
 
+        {/* 4 Protocol Pillars */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {protocolStages.map((stage) => (
             <div
@@ -90,40 +91,45 @@ export const AgentWireProtocol: React.FC = () => (
           ))}
         </div>
 
+        {/* Side-by-Side Code Comparison: Conversational English vs AgentScript Frame */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 pt-8 border-t border-line">
-          <div className="p-6 rounded-2xl border border-line bg-inset/60">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-micro uppercase text-ink-3 font-semibold flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 text-ink-3" />
-                Unstructured Prose
+          {/* The Chatty English & JSON Way */}
+          <div className="p-6 rounded-2xl border border-rose-500/20 bg-rose-500/5">
+            <div className="flex items-center justify-between pb-3 border-b border-rose-500/20">
+              <span className="font-mono text-micro uppercase text-rose-400 font-semibold flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" />
+                The Chatty Human Way (Conversational JSON)
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-line text-ink-3 font-mono text-micro">
-                Legacy
+              <span className="px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 font-mono text-micro">
+                178 Tokens · High Latency
               </span>
             </div>
-            <p className="mt-4 text-body text-ink font-medium leading-relaxed">
-              “Could you please parse this JSON payload, build an FSM with idle and plan states, and return it formatted in JSON?”
-            </p>
-            <p className="mt-4 pt-4 border-t border-line text-meta text-ink-3 leading-relaxed">
-              Unchecked prose. Re-parsed by the receiver, prone to ambiguous structures and context exhaustion.
+            <div className="mt-4 font-mono text-xs text-ink-2 leading-relaxed bg-ground/70 p-4 rounded-xl border border-line overflow-x-auto">
+              <p className="text-ink-3">"Hi there! Could you please inspect order #892, verify if the payment cleared, and return the items formatted as strict JSON without markdown backticks? Thanks!"</p>
+              <p className="mt-2 text-rose-300">{"-->"} Sure! Here is the JSON: {"\n"}{'{"order_id": 892, "status": "paid", ...}'}</p>
+            </div>
+            <p className="mt-3 text-micro text-ink-3">
+              Unchecked prose. Fragile parser loops, token bloat, and frequent markdown formatting hallucinations.
             </p>
           </div>
 
-          <div className="p-6 rounded-2xl border border-line bg-surface shadow-e1">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-micro uppercase text-ink-2 font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-ink-3" />
-                Structured Machine Frame
+          {/* The AgentScript Wire Frame Way */}
+          <div className="p-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-e1">
+            <div className="flex items-center justify-between pb-3 border-b border-emerald-500/20">
+              <span className="font-mono text-micro uppercase text-emerald-400 font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                The AgentScript Way (ASN Wire Frame)
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-signal/10 text-signal font-mono text-micro font-semibold">
-                Agent-Native
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 font-mono text-micro font-semibold">
+                22 Tokens · 0.05ms
               </span>
             </div>
-            <p className="mt-4 text-body text-ink font-medium leading-relaxed">
-              Balanced symbolic packet with explicit signatures, typed arguments, and zero natural-language ambiguity.
-            </p>
-            <p className="mt-4 pt-4 border-t border-line text-meta text-ink-3 leading-relaxed">
-              Direct evaluation. Evaluated into native memory structures with zero intermediary hallucination.
+            <div className="mt-4 font-mono text-xs text-purple-300 leading-relaxed bg-ground/70 p-4 rounded-xl border border-line overflow-x-auto">
+              <p className="text-signal">(? order/inspect :id 892 :req [status items])</p>
+              <p className="mt-2 text-emerald-400">(! order/ack :status :paid :items [(:sku "x1" :qty 2)])</p>
+            </div>
+            <p className="mt-3 text-micro text-emerald-400/90 font-medium">
+              Zero conversational fluff. Validated against compiler schemas in one pass, evaluated in-memory.
             </p>
           </div>
         </div>

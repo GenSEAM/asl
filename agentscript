@@ -533,6 +533,77 @@ def cmd_grammar(args) -> int:
     return 0
 
 
+def cmd_parse(args) -> int:
+    """Parse a file with the self-hosted parser and render its verbose forms."""
+    from tools.native_parser import NativeParserError, native_render
+
+    if not args.file.is_file():
+        raise BadInput(f"{args.file}: no such file or directory")
+    src = args.file.read_text()
+    if getattr(args, "benchmark", False):
+        return _benchmark_parse(args, src)
+    try:
+        sys.stdout.write(native_render(src) + "\n")
+        return 0
+    except NativeParserError as exc:
+        return report([diag(args.file, "parse", str(exc))],
+                      getattr(args, "json", False), "diagnostic(s)")
+
+
+def _benchmark_parse(args, src: str) -> int:
+    """Compare native vs Lark parse latency and peak memory on one file."""
+    import time
+    import tracemalloc
+
+    from lark import Lark
+
+    from tools.native_parser import NativeParserError, native_render
+
+    n = getattr(args, "iterations", 20)
+    try:
+        native_render(src)  # warms the cached driver singleton; untimed
+    except NativeParserError as exc:
+        return report([diag(args.file, "parse", str(exc))],
+                      getattr(args, "json", False), "diagnostic(s)")
+
+    parser = Lark.open(str(ROOT / "grammar" / "agentscript.lark"), parser="earley")
+    parser.parse(src)  # warms the Earley grammar; untimed
+
+    def measure(fn, k: int) -> dict:
+        times = []
+        tracemalloc.start()
+        for _ in range(k):
+            t0 = time.perf_counter()
+            fn()
+            times.append(time.perf_counter() - t0)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        ordered = sorted(times)
+        mid = len(ordered) // 2
+        median = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+        return {"median_ms": median * 1000,
+                "mean_ms": (sum(times) / len(times)) * 1000,
+                "peak_mib": peak / (1024 * 1024)}
+
+    native = measure(lambda: native_render(src), n)
+    lark = measure(lambda: parser.parse(src), n)
+
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "file": str(args.file),
+            "iterations": n,
+            "native": {"label": "parse + render-node", **native},
+            "lark": {"label": "parse only", **lark},
+        }, indent=2))
+    else:
+        print(f"# parse benchmark: {args.file} ({n} iterations, parse call only)")
+        print(f"native (parse + render-node)  median {native['median_ms']:.3f} ms  "
+              f"mean {native['mean_ms']:.3f} ms  peak {native['peak_mib']:.2f} MiB")
+        print(f"lark   (parse only)           median {lark['median_ms']:.3f} ms  "
+              f"mean {lark['mean_ms']:.3f} ms  peak {lark['peak_mib']:.2f} MiB")
+    return 0
+
+
 def cmd_init(args) -> int:
     """Scaffold a new AgentScript project with AGENTS.md, CLAUDE.md, and starter code."""
     from tools.scaffold import scaffold_project
@@ -673,6 +744,15 @@ def main() -> int:
     p.add_argument("--full", action="store_true", help="emit full standard library handbook")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_grammar)
+
+    p = sub.add_parser("parse", help="parse a file with the self-hosted (pure-ASL) parser and render its verbose forms")
+    p.add_argument("file", type=Path, help="ASL file to parse")
+    p.add_argument("--benchmark", "--bench", action="store_true", default=argparse.SUPPRESS,
+                   help="benchmark native parser vs Lark parse latency and memory on this file (parse call only)")
+    p.add_argument("--iterations", type=int, default=20,
+                   help="iterations per benchmark arm (default: 20)")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_parse)
 
     p = sub.add_parser("init", help="scaffold a new AgentScript project with AGENTS.md and CLAUDE.md")
     p.add_argument("directory", type=Path, help="directory to initialize")

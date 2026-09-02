@@ -14,9 +14,9 @@ export const HomeView: React.FC = () => (
     <Ecosystem />
     <KeyCapabilities />
     <TheAgentWay />
-    <InBrowserAgent />
     <AgentWireProtocol />
     <HarnessToolkit />
     <ModuleGraphVisualizer />
+    <InBrowserAgent />
   </main>
 );

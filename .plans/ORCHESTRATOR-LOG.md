@@ -41,3 +41,18 @@
   into a concurrent commit (`152d1a1 docs(plans): specify ultra-fast Wasm and client parsers for ASN in Phase 2`)
   alongside `.plans/universal-codec/PHASES.md`; the intended `git commit` returned "no changes added to commit".
   The work is intact on `origin/main`; message is mislabeled and the change is entangled. Left un-rewritten pending an owner decision.
+
+## Phase 3 + Phase 4 planning/review 2026-09-03
+- Both phases Tier 1 (Standard): planner `steps-planner`, reviewer `steps-plan-reviewer`.
+- Phase 3 plan: `.plans/phase-3/PLAN.md` (5 items). Review `REVIEW-backend.md` → approve-with-amendments.
+  Dispositions: A1 tighten item-1 assertion to `"(module"` (ACCEPTED); A2 add missing-file
+  BadInput stderr test to item 3 (ACCEPTED); A3 label benchmark arms (ACCEPTED).
+  Reviewer confirmed str→String foreign call needs NO wrapper (`backend/to_python.py:209-218`).
+- Phase 4 plan: `.plans/phase-4/PLAN.md` (5 items). Review `REVIEW-scope.md` → approve-with-amendments.
+  Dispositions: A4 cosmetic line-cite drift (NOTED, no work); A2/A3 clarify item-2 scope includes
+  `asl-parser/tests/*.asl` fixtures (ACCEPTED).
+- Decisions (runner): `asl parse <file>` takes a path; `--benchmark`/`--bench` compares
+  native parse+render vs Lark parse (perf_counter + tracemalloc, setup excluded). "Full 7-gate CI"
+  = installed `.git/hooks/pre-commit` 7 gates PLUS AGENTS.md wider gates (check_corpus,
+  monomorphism, differential, pytest). Roadmap "24 packages" is stale → 37 `.asl` files across 14
+  packages. Phase 4 binds to Phase 3's landed `tools.native_parser` API, so it runs after Phase 3.
