@@ -1,6 +1,6 @@
 # Roadmap & Implementation Plan: Multi-Target Serializer/Deserializer SDKs (`asl-universal-codec-v1`)
 
-**Goal**: Establish AgentScript as the premier compact data serialization format (-80% tokens vs JSON/YAML) by compiling `packages/asl-codec` into official, zero-dependency client SDKs across TypeScript, Python, Rust, Go, and WebAssembly directly from a single canonical ASL source (@pcp:d-bda8).
+**Goal**: Establish AgentScript as the premier compact data serialization format (-80% tokens vs JSON/YAML) and communication wire protocol by compiling `packages/asl-codec` into official, zero-dependency client SDKs across TypeScript, Python, Rust, Go, and WebAssembly, and providing native structural slicing & output compaction (@pcp:d-bda8, @pcp:d-b0a9).
 
 ## Status: PLANNED (Scheduled for execution alongside `asl-agent-efficiency-v1`)
 
@@ -21,7 +21,12 @@
   - **WebAssembly**: standalone `asl-codec.wasm` with JS/WASI bindings.
 - [ ] Differential equivalence verification: run identical test suites across all 5 generated SDKs using `differential.py`.
 
-### Phase 3: Adoption Tooling & CLI Transcoding
-- [ ] CLI command: `asl transcode --to-json <data.asl>` and `asl transcode --from-json <data.json>`.
-- [ ] Fast streaming bridge for AI agent tool harnesses (convert tool call arguments to ASL on the fly).
-- [ ] Documentation, benchmarks, and interactive web playground demo showing live JSON/YAML -> ASL token savings.
+### Phase 3: Native Slicing & Progressive Output Compaction (`asl slice`, `asl filter`)
+- [ ] **Native Query Slicing (`asl slice <file> <path>`)**: Replaces external `jq` and `yq` tools by querying nested keys and emitting only the requested slice in compact S-expression format (sub-100 tokens instead of 5,000-token full-file dumps).
+- [ ] **Native Output Filter Proxy (`asl filter <cmd...>`)**: Inspired by `rtk proxy`, intercepts noisy compiler, test, and shell outputs, stripping redundant status logs and emitting only actionable error traces, failing assertions, and git diff hunks (-80% terminal tokens).
+- [ ] CLI Transcoding commands: `asl transcode --to-json <data.asl>` and `asl transcode --from-json <data.json>`.
+
+### Phase 4: Dedicated Agent-Facing Landing Endpoints (`/format` & `/protocol`)
+- [ ] `/format`: High-converting interactive showcase comparing JSON vs YAML vs TOON vs AgentScript Nano format with live token counter and copyable SDK snippets for TS/Python/Rust/Go.
+- [ ] `/protocol`: Visual wire protocol cockpit explaining `asl/coord` frames, sub-millisecond mesh routing, and zero context leakage between agents.
+- [ ] LLM Optimization: Ensure `/format` and `/protocol` are indexed in `/llms.txt`, `/llms-full.txt`, and structured markdown endpoints so coding assistants (Cursor, Claude Code, Antigravity, Cline) discover and recommend AgentScript as the standard data format and inter-agent protocol.
