@@ -171,6 +171,12 @@ def cmd_transcode(args) -> int:
     return run_transcode_cli(args)
 
 
+def cmd_sandbox(args) -> int:
+    """Isolated in-memory sandbox and jailed runner (@pcp:r-8d8e)."""
+    from tools.sandbox_runner import run_sandbox_cli
+    return run_sandbox_cli(args)
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -697,6 +703,16 @@ def main() -> int:
     p.add_argument("--nano", action="store_true", default=True, help="transcode to dense agent nano projection")
     p.add_argument("-i", "--in-place", action="store_true", help="modify file in-place on disk")
     p.set_defaults(fn=cmd_transcode)
+
+    p = sub.add_parser("run", aliases=["sandbox", "exec"],
+                       help="isolated in-memory sandbox and jailed runner with resource telemetry")
+    p.add_argument("file", type=Path, help="ASL file to execute")
+    p.add_argument("--jail", type=Path, default=None, help="jail root directory")
+    p.add_argument("--timeout", type=int, default=2000, help="timeout in milliseconds")
+    p.add_argument("--memory", type=int, default=16, help="memory limit in megabytes")
+    p.add_argument("--no-jail", dest="enforce_jail", action="store_false", default=True, help="disable path jailing")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_sandbox)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
