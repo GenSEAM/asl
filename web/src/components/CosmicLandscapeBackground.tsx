@@ -1,36 +1,150 @@
 import React from 'react';
-import { ChameleonSchematic } from './ui/Logo';
 
 /**
  * CosmicLandscapeBackground
- * Comprehensive multi-screen technical blueprint canvas celebrating the evolution of computing to AI agents:
- * 1. Fixed schematic chameleon mascot perched on a graceful cyber-vine in the upper-left.
- * 2. Unobtrusive authentic AgentScript Nano code snippets embedded as blueprint technical annotations.
- * 3. Continuous blueprint canvas framing the page with:
- *    - The Cyber-Vine branch running under the chameleon across the canopy.
- *    - The Evolution of Computing Timeline:
- *      * Era 1: 1950s Hollerith 80-Column Punch Card (IBM-029) & Vacuum Tube Triode (12AX7)
- *      * Era 2: 1980s 3.5" Floppy Disk ("1.44 MB // ENTIRE ASL RUNTIME FITS HERE")
- *      * Era 3: 2000s Paperclip Maximizer Meme ("Status: Converted to AgentScript, saving tokens instead")
- *      * Era 4: 2026+ WebAssembly Reactor Core & Autonomous Swarm Relay (0.038ms latency, chilling on vine)
- *    - Orbital satellites, planetary scanner dome, gears, and constellations.
+ * Comprehensive multi-screen technical blueprint canvas celebrating the Industrial Cosmos & Cyber-Canopy:
+ * 1. Fixed schematic chameleon mascot perched directly on an integrated cyber-vine branch in the top-left.
+ * 2. Grand Industrial Cosmos at the top of the canvas:
+ *    - Prominent Satellite Probe 1 with multi-cell solar arrays, high-gain dish, and radio signal waves.
+ *    - Deep-Space Satellite 2 with angled solar wings and telemetry mesh links.
+ *    - Deep-space constellations with star crosshairs, drafting arcs, and Greek-letter coordinate nodes.
+ *    - Architectural Monstera canopy foliage and tropical palm fronds along the right margin.
+ * 3. Planetary Scanner Port & Saturnian Ringed Planet (OPS.RTA) in the mid-range.
+ * 4. Bio-Mechanical Gear Drive (ШЕСТЕРЕНЧАТЫЙ ПРИВОД, C=150кп) and root conduits in the lower section.
+ * 5. Authentic ASL Nano code annotations rendered cleanly on technical drafting leader lines (no boxy panels).
  */
 export const CosmicLandscapeBackground: React.FC = () => (
   <div className="pointer-events-none select-none" aria-hidden="true">
-    {/* 1. Fixed Viewport Elements: Ambient Glow & Fixed Chameleon Mascot */}
+    {/* 1. Fixed Viewport Elements: Ambient Lighting Glow & Perched Chameleon on Cyber-Vine */}
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
       {/* Atmospheric bioluminescent lighting auras */}
-      <div className="absolute top-12 left-8 w-[550px] h-[550px] bg-purple-600/15 dark:bg-purple-900/25 blur-[150px] rounded-full" />
-      <div className="absolute top-1/3 right-8 w-[650px] h-[650px] bg-indigo-600/12 dark:bg-indigo-950/20 blur-[160px] rounded-full" />
+      <div className="absolute top-8 left-6 w-[550px] h-[550px] bg-purple-600/15 dark:bg-purple-900/25 blur-[150px] rounded-full" />
+      <div className="absolute top-1/4 right-8 w-[650px] h-[650px] bg-indigo-600/12 dark:bg-indigo-950/20 blur-[160px] rounded-full" />
       <div className="absolute bottom-16 left-1/4 w-[700px] h-[550px] bg-purple-900/15 blur-[160px] rounded-full" />
 
-      {/* Fixed Schematic Chameleon Watermark in Upper-Left (perched under floating navbar) */}
-      <div className="fixed top-20 left-2 sm:left-6 lg:left-10 w-72 sm:w-84 lg:w-[440px] h-auto opacity-30 dark:opacity-35 transition-all z-10">
-        <ChameleonSchematic
-          className="w-full h-auto text-signal"
-          strokeWidth={2.0}
-          glow={true}
-        />
+      {/* 
+        Fixed Schematic Chameleon PERCHED DIRECTLY ON CYBER-VINE (Top-Left)
+        Integrated SVG ensures the branch always runs directly under the chameleon's paws and belly,
+        curling out from the screen edge and leading smoothly towards the right.
+      */}
+      <div className="fixed top-16 sm:top-20 left-2 sm:left-6 lg:left-10 w-72 sm:w-84 lg:w-[420px] h-auto opacity-35 dark:opacity-40 transition-all z-10">
+        <svg
+          viewBox="0 0 240 160"
+          className="w-full h-auto text-signal overflow-visible"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <linearGradient id="vineBranchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#c084fc" />
+              <stop offset="60%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#7e22ce" />
+            </linearGradient>
+            <linearGradient id="chameleonGradFixed" x1="20%" y1="0%" x2="80%" y2="100%">
+              <stop offset="0%" stopColor="rgb(var(--signal-soft))" />
+              <stop offset="70%" stopColor="rgb(var(--signal))" />
+              <stop offset="100%" stopColor="#9333ea" />
+            </linearGradient>
+            <filter id="fixedAmbientGlow" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="3" result="glow" />
+              <feComposite in="SourceGraphic" in2="glow" operator="over" />
+            </filter>
+          </defs>
+
+          <g filter="url(#fixedAmbientGlow)">
+            {/* 
+              THE CYBER-VINE BRANCH (Physical perch under the chameleon):
+              Starts from off-screen left at y=108, passes right under feet and tail,
+              then extends out to the right with sprouts and leaf nodes.
+            */}
+            <path
+              d="M -30,108 C 20,104 60,112 105,108 C 145,104 185,116 230,110 C 270,105 310,120 360,114"
+              stroke="url(#vineBranchGrad)"
+              strokeWidth="3.2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M -30,113 C 20,109 60,117 105,113 C 145,109 185,121 230,115"
+              stroke="url(#vineBranchGrad)"
+              strokeWidth="1.2"
+              strokeDasharray="3 3"
+              opacity="0.6"
+            />
+
+            {/* Small Sprouting Cyber-Leaves along the vine */}
+            <g transform="translate(140, 108) rotate(20)">
+              <path d="M 0,0 Q 15,-10 30,0 Q 15,10 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
+              <line x1="0" y1="0" x2="30" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
+            </g>
+            <g transform="translate(195, 112) rotate(-15)">
+              <path d="M 0,0 Q 14,-8 26,0 Q 14,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
+              <line x1="0" y1="0" x2="26" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
+            </g>
+            {/* Spiral Tendril on Branch */}
+            <path
+              d="M 230,110 Q 245,125 240,135 Q 235,142 225,140 Q 220,135 225,130"
+              stroke="url(#vineBranchGrad)"
+              strokeWidth="1.4"
+            />
+
+            {/* Technical Perch Annotation */}
+            <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.85">
+              <text x="5" y="128">КИБЕР-ЛИАНА // ПЕРХ-01</text>
+              <line x1="0" y1="120" x2="75" y2="120" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 2" />
+            </g>
+
+            {/* 
+              THE SCHEMATIC CHAMELEON (Scale 1:1 onto the perch):
+              Positioned so paws grasp the branch at y=108 and tail curls gracefully around it.
+            */}
+            <g transform="translate(5, 0)">
+              {/* Spine and Tail Curl */}
+              <path
+                d="M 68 20 
+                   C 62 13, 56 12, 53 14 
+                   C 49 16, 49 22, 53 25
+                   C 35 28, 16 46, 12 70 
+                   C 8 95, 18 116, 38 122 
+                   C 56 127, 72 116, 70 96 
+                   C 68 81, 52 76, 44 86 
+                   C 37 94, 44 104, 53 102 
+                   C 59 100, 59 93, 54 91"
+                stroke="url(#chameleonGradFixed)"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Snout & Head Arc */}
+              <path
+                d="M 68 20 
+                   C 85 24, 102 36, 98 52 
+                   C 94 62, 80 65, 68 64"
+                stroke="url(#chameleonGradFixed)"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Eye Circular Aperture */}
+              <circle cx="82" cy="40" r="9" stroke="url(#chameleonGradFixed)" strokeWidth="2.2" />
+              <circle cx="82" cy="40" r="3" fill="rgb(var(--signal-soft))" opacity="0.9" />
+
+              {/* Belly & Underside Line */}
+              <path
+                d="M 68 64 
+                   C 52 64, 40 68, 32 78 
+                   C 25 87, 26 96, 30 102"
+                stroke="url(#chameleonGradFixed)"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+
+              {/* Blueprint coordinate nodes */}
+              <circle cx="53" cy="14" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+              <circle cx="98" cy="52" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+              <circle cx="38" cy="122" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+            </g>
+          </g>
+        </svg>
       </div>
     </div>
 
@@ -61,240 +175,186 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <stop offset="0%" stopColor="#a855f7" stopOpacity="0.18" />
             <stop offset="100%" stopColor="#581c87" stopOpacity="0.05" />
           </linearGradient>
-
-          <linearGradient id="amberGlow" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#d97706" stopOpacity="0.4" />
-          </linearGradient>
         </defs>
 
         {/* Technical Blueprint Grid Base */}
         <rect width="100%" height="100%" fill="url(#blueprintGridPattern)" />
 
         {/* ========================================================================= */}
-        {/* THE LIVING CYBER-VINE BRANCH: Running under the Chameleon (y: 180 - 450)  */}
+        {/* SCREEN 1: THE GRAND INDUSTRIAL COSMOS & CYBER-CANOPY (y: 0 - 1000)        */}
         {/* ========================================================================= */}
-        <g stroke="url(#bioLineGrad)" strokeWidth="1.8" fill="none">
-          {/* Main Horizontal Branch under chameleon's perching feet */}
-          <path
-            d="M 0,220 C 100,215 220,245 360,225 C 480,205 580,240 700,210 C 780,190 850,220 940,205"
-            strokeWidth="3.2"
-          />
-          <path
-            d="M 0,226 C 100,221 220,251 360,231 C 480,211 580,246 700,216"
-            strokeDasharray="4 4"
-            opacity="0.6"
-          />
-          {/* Branch Tendril Curving Down Left */}
-          <path d="M 180,238 C 220,290 190,360 230,410 C 250,435 280,445 300,430" strokeWidth="1.8" />
-          {/* Little Sprouting Cyber-Leaves on Branch */}
-          <g transform="translate(120, 218) rotate(-25)">
-            <path d="M 0,0 Q 25,-18 50,0 Q 25,18 0,0" fill="url(#leafFacetGrad)" strokeWidth="1.2" />
-            <line x1="0" y1="0" x2="50" y2="0" strokeWidth="1" />
+
+        {/* 1. INDUSTRIAL SATELLITE PROBE 1 (Upper Left-Center, x: 380, y: 190, rotate -25) */}
+        <g transform="translate(380, 190) rotate(-25)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
+          {/* Central Satellite Chassis */}
+          <rect x="-20" y="-35" width="40" height="70" rx="4" fill="#3b0764" fillOpacity="0.25" />
+          <line x1="-20" y1="-15" x2="20" y2="-15" strokeDasharray="3 3" />
+          <line x1="-20" y1="15" x2="20" y2="15" strokeDasharray="3 3" />
+          <circle cx="0" cy="0" r="10" strokeDasharray="2 2" />
+
+          {/* Large Solar Array Wing Left (3 segmented cells) */}
+          <rect x="-95" y="-18" width="70" height="36" fill="#581c87" fillOpacity="0.3" />
+          <line x1="-72" y1="-18" x2="-72" y2="18" />
+          <line x1="-49" y1="-18" x2="-49" y2="18" />
+          <line x1="-95" y1="0" x2="-25" y2="0" strokeDasharray="2 2" />
+
+          {/* Large Solar Array Wing Right (3 segmented cells) */}
+          <rect x="25" y="-18" width="70" height="36" fill="#581c87" fillOpacity="0.3" />
+          <line x1="48" y1="-18" x2="48" y2="18" />
+          <line x1="71" y1="-18" x2="71" y2="18" />
+          <line x1="25" y1="0" x2="95" y2="0" strokeDasharray="2 2" />
+
+          {/* Parabolic Antenna Dish with Feed Horn */}
+          <path d="M 0,35 Q -18,58 0,68 Q 18,58 0,35" strokeWidth="1.8" />
+          <line x1="0" y1="68" x2="0" y2="82" strokeWidth="2" />
+          <circle cx="0" cy="82" r="3" fill="currentColor" />
+
+          {/* Radio Signal Wave Fronts */}
+          <path d="M -16,92 Q 0,105 16,92" strokeDasharray="3 3" opacity="0.8" />
+          <path d="M -26,104 Q 0,122 26,104" strokeDasharray="3 3" opacity="0.6" />
+          <path d="M -36,116 Q 0,138 36,116" strokeDasharray="3 3" opacity="0.4" />
+
+          {/* Technical Leader Callouts */}
+          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9" transform="rotate(25)">
+            <text x="85" y="-20">САТЕЛЛИТ-1 // Ku-BAND</text>
+            <line x1="15" y1="-23" x2="80" y2="-23" stroke="currentColor" strokeWidth="0.8" />
+            <text x="85" y="-8" fill="#4ade80">(! mesh/ping "sat-01" 40)</text>
           </g>
-          <g transform="translate(280, 230) rotate(15)">
-            <path d="M 0,0 Q 20,-15 40,0 Q 20,15 0,0" fill="url(#leafFacetGrad)" strokeWidth="1.2" />
-            <line x1="0" y1="0" x2="40" y2="0" strokeWidth="1" />
+        </g>
+
+        {/* 2. CENTRAL INDUSTRIAL SATELLITE RELAY (Upper Right-Center, x: 920, y: 320, rotate 35) */}
+        <g transform="translate(920, 320) rotate(35)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
+          <rect x="-25" y="-30" width="50" height="60" rx="4" fill="#3b0764" fillOpacity="0.25" />
+          <circle cx="0" cy="0" r="14" strokeWidth="1.8" />
+          <circle cx="0" cy="0" r="5" fill="currentColor" />
+
+          {/* Extended Solar Panels */}
+          <rect x="-110" y="-16" width="80" height="32" fill="#581c87" fillOpacity="0.3" />
+          <line x1="-84" y1="-16" x2="-84" y2="16" />
+          <line x1="-58" y1="-16" x2="-58" y2="16" />
+
+          <rect x="30" y="-16" width="80" height="32" fill="#581c87" fillOpacity="0.3" />
+          <line x1="56" y1="-16" x2="56" y2="16" />
+          <line x1="82" y1="-16" x2="82" y2="16" />
+
+          {/* High-Gain Dish */}
+          <path d="M 0,30 Q -20,52 0,62 Q 20,52 0,30" strokeWidth="1.8" />
+          <line x1="0" y1="62" x2="0" y2="76" strokeWidth="2" />
+          <circle cx="0" cy="76" r="3.5" fill="currentColor" />
+
+          {/* Concentric Telemetry Radio Arcs */}
+          <path d="M 14,84 Q 28,96 20,112" strokeDasharray="3 3" opacity="0.8" />
+          <path d="M 22,80 Q 40,94 32,120" strokeDasharray="3 3" opacity="0.6" />
+
+          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9" transform="rotate(-35)">
+            <text x="35" y="-45">ОРБИТАЛЬНЫЙ РЕЛЕЙ</text>
+            <line x1="0" y1="-48" x2="30" y2="-48" stroke="currentColor" strokeWidth="0.8" />
+            <text x="35" y="-32" fill="#c084fc">СВЯЗЬ: 0.038ms // MESH</text>
           </g>
-          <g transform="translate(420, 212) rotate(-10)">
-            <path d="M 0,0 Q 22,-14 45,0 Q 22,14 0,0" fill="url(#leafFacetGrad)" strokeWidth="1.2" />
-            <line x1="0" y1="0" x2="45" y2="0" strokeWidth="1" />
+        </g>
+
+        {/* 3. DEEP-SPACE CONSTELLATIONS ALPHA & BETA (Upper Skies) */}
+        <g stroke="currentColor" strokeWidth="1.2" opacity="0.75" transform="translate(180, 60)">
+          {/* Alpha Web */}
+          <line x1="220" y1="90" x2="340" y2="50" />
+          <line x1="340" y1="50" x2="390" y2="20" />
+          <line x1="340" y1="50" x2="300" y2="150" />
+          <line x1="300" y1="150" x2="380" y2="170" />
+          <line x1="380" y1="170" x2="430" y2="130" />
+          <line x1="300" y1="150" x2="340" y2="230" />
+
+          {/* Precision Star Crosshairs */}
+          <g fill="currentColor">
+            <path d="M 216,90 H 224 M 220,86 V 94" />
+            <path d="M 336,50 H 344 M 340,46 V 54" />
+            <path d="M 386,20 H 394 M 390,16 V 24" />
+            <path d="M 296,150 H 304 M 300,146 V 154" />
+            <path d="M 376,170 H 384 M 380,166 V 174" />
+            <path d="M 426,130 H 434 M 430,126 V 134" />
+            <path d="M 336,230 H 344 M 340,226 V 234" />
           </g>
-          
-          {/* NANO-CODE SNIPPET 1: Chameleon Perch Telemetry Vector */}
-          <g transform="translate(50, 250)" strokeWidth="1">
-            <rect x="0" y="0" width="225" height="34" rx="4" fill="#3b0764" fillOpacity="0.25" strokeDasharray="3 3" />
-            <text x="8" y="15" fontFamily="monospace" fontSize="7.5" fill="#a855f7">
-              ;; Telemetry Vector: balanced
-            </text>
-            <text x="8" y="27" fontFamily="monospace" fontSize="8" fill="#4ade80">
-              (! cam:perch :target "vine-01" :mode :balanced)
-            </text>
+
+          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.8">
+            <text x="348" y="56">α-ASL</text>
+            <text x="398" y="26">β-COORD</text>
+            <text x="290" y="162">γ-WASM</text>
+            <text x="388" y="178">δ-SWARM</text>
+          </g>
+        </g>
+
+        {/* 4. UPPER-RIGHT CYBER-MONSTERA CANOPY (Natural, uncrowded architectural foliage) */}
+        <g transform="translate(1080, 0)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
+          {/* Graceful Canopy Arch */}
+          <path d="M 360,0 C 280,60 220,150 240,260 C 260,370 340,430 360,540" fill="none" />
+          <path d="M 375,0 C 295,65 235,155 255,265 C 275,375 355,435 375,545" strokeDasharray="4 4" opacity="0.5" fill="none" />
+
+          {/* Large Architectural Monstera Leaf with Precision Cutouts */}
+          <g transform="translate(180, 60) rotate(-15)">
+            <path
+              d="M 0,0 C 50,-70 130,-80 170,-30 C 200,20 190,90 150,140 C 110,180 30,170 -10,120 C -40,80 -30,30 0,0 Z"
+              fill="url(#leafFacetGrad)"
+            />
+            {/* Fenestrations / Cutouts */}
+            <ellipse cx="60" cy="-15" rx="15" ry="6" transform="rotate(-30 60 -15)" />
+            <ellipse cx="105" cy="20" rx="18" ry="7" transform="rotate(-15 105 20)" />
+            <ellipse cx="95" cy="75" rx="16" ry="6" transform="rotate(20 95 75)" />
+            <ellipse cx="45" cy="95" rx="14" ry="5" transform="rotate(45 45 95)" />
+            <line x1="0" y1="0" x2="150" y2="140" strokeWidth="2.2" />
+          </g>
+
+          {/* Tropical Palm Fronds Fan */}
+          <g transform="translate(80, 160) rotate(35)">
+            <path d="M 0,0 Q 60,-35 150,-15 Q 80,20 0,0" fill="url(#leafFacetGrad)" />
+            <path d="M 0,0 Q 75,-15 165,15 Q 90,40 0,0" fill="url(#leafFacetGrad)" />
+            <path d="M 0,0 Q 60,10 145,50 Q 70,55 0,0" fill="url(#leafFacetGrad)" />
+          </g>
+
+          {/* Chameleon Palm Mark */}
+          <g transform="translate(40, 320) rotate(-20)" strokeWidth="1.5">
+            <path d="M 0,0 C 15,-20 30,-15 25,10 C 20,30 5,35 0,0" fill="url(#leafFacetGrad)" />
+            <path d="M -15,-10 C -5,-30 10,-25 5,-5" fill="url(#leafFacetGrad)" />
+            <path d="M 20,-5 C 35,-25 50,-15 35,5" fill="url(#leafFacetGrad)" />
+            <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85">
+              <text x="35" y="10">БИО-КОМПОНЕНТ</text>
+              <line x1="0" y1="15" x2="30" y2="15" stroke="currentColor" strokeWidth="0.8" />
+            </g>
           </g>
         </g>
 
         {/* ========================================================================= */}
-        {/* EVOLUTION OF COMPUTING — ERA 1: 1950s PUNCH CARD & VACUUM TUBE            */}
+        {/* SCREEN 2: MID SCANNER DOME & PLANETARY VORTEX (y: 1000 - 2100)            */}
         {/* ========================================================================= */}
 
-        {/* 1. Hollerith 80-Column Punched Card (Upper Right Margin, x: 1140, y: 120) */}
-        <g transform="translate(1140, 120)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <polygon
-            points="18,0 260,0 260,130 0,130 0,18"
-            fill="#3b0764"
-            fillOpacity="0.3"
-          />
-          <line x1="0" y1="24" x2="260" y2="24" stroke="currentColor" strokeWidth="0.8" opacity="0.7" />
-          
-          <g fill="currentColor" opacity="0.9">
-            <rect x="25" y="36" width="3.5" height="7" />
-            <rect x="25" y="60" width="3.5" height="7" />
-            <rect x="45" y="48" width="3.5" height="7" />
-            <rect x="65" y="36" width="3.5" height="7" />
-            <rect x="65" y="72" width="3.5" height="7" />
-            <rect x="85" y="84" width="3.5" height="7" />
-            <rect x="105" y="48" width="3.5" height="7" />
-            <rect x="125" y="36" width="3.5" height="7" />
-            <rect x="125" y="96" width="3.5" height="7" />
-            <rect x="145" y="60" width="3.5" height="7" />
-            <rect x="165" y="72" width="3.5" height="7" />
-            <rect x="185" y="48" width="3.5" height="7" />
-            <rect x="205" y="36" width="3.5" height="7" />
-            <rect x="225" y="84" width="3.5" height="7" />
-            <rect x="240" y="60" width="3.5" height="7" />
-          </g>
-
-          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9">
-            <text x="25" y="16" fontWeight="bold" fill="#c084fc">IBM-029 // HOLLERITH CARD</text>
-            <text x="18" y="120" fill="#a855f7">1956: FORTRAN · 80 COLUMNS OF PAIN</text>
-          </g>
-        </g>
-
-        {/* 2. Vacuum Tube Triode 12AX7 (Upper Right Margin, x: 1220, y: 280) */}
-        <g transform="translate(1220, 280)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <path d="M 0,90 L 0,40 C 0,10 60,10 60,40 L 60,90 Z" fill="#4a044e" fillOpacity="0.25" />
-          
-          <line x1="15" y1="35" x2="45" y2="35" strokeWidth="2" />
-          <line x1="30" y1="15" x2="30" y2="35" />
-
-          <path d="M 18,50 L 22,54 L 26,50 L 30,54 L 34,50 L 38,54 L 42,50" strokeWidth="1.5" strokeDasharray="1 1" />
-          <line x1="18" y1="50" x2="10" y2="85" />
-
-          <path d="M 22,65 L 38,65" strokeWidth="2" stroke="url(#amberGlow)" />
-          <path d="M 26,75 L 30,68 L 34,75" strokeWidth="1.2" stroke="url(#amberGlow)" />
-          
-          <line x1="12" y1="90" x2="12" y2="102" strokeWidth="2" />
-          <line x1="24" y1="90" x2="24" y2="102" strokeWidth="2" />
-          <line x1="36" y1="90" x2="36" y2="102" strokeWidth="2" />
-          <line x1="48" y1="90" x2="48" y2="102" strokeWidth="2" />
-
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85">
-            <text x="70" y="45">TRIODE 12AX7</text>
-            <text x="70" y="60" fill="#fbbf24">HEATER: 6.3V</text>
-            <text x="70" y="75">FIRST BYTES EMITTED</text>
-          </g>
-        </g>
-
-        {/* NANO-CODE SNIPPET 2: Orbital Mesh Function (Right Margin, x: 1100, y: 440) */}
-        <g transform="translate(1100, 440)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <rect x="0" y="0" width="280" height="60" rx="6" fill="#3b0764" fillOpacity="0.3" strokeDasharray="4 3" />
-          <g fontFamily="monospace" fontSize="8" fill="currentColor">
-            <text x="12" y="18" fill="#c084fc">;; Mesh Satellite Handshake</text>
-            <text x="12" y="32" fill="#4ade80">(df orbit-sync [(sat String) (band Int64)] -&gt; Bool</text>
-            <text x="24" y="48" fill="#4ade80">  (! mesh/ping sat :hz band :timeout 40))</text>
-          </g>
-        </g>
-
-        {/* ========================================================================= */}
-        {/* EVOLUTION OF COMPUTING — ERA 2: 1980s FLOPPY DISK & SILICON               */}
-        {/* ========================================================================= */}
-
-        {/* 3. 3.5" Floppy Disk (Left Margin, x: 60, y: 720) */}
-        <g transform="translate(60, 720)" stroke="url(#bioLineGrad)" strokeWidth="1.3">
-          <polygon
-            points="0,0 125,0 135,10 135,140 0,140"
-            fill="#3b0764"
-            fillOpacity="0.3"
-          />
-          <rect x="25" y="0" width="65" height="50" rx="3" fill="#581c87" fillOpacity="0.4" />
-          <rect x="35" y="10" width="12" height="30" rx="1" fill="currentColor" fillOpacity="0.8" />
-          
-          <circle cx="67" cy="85" r="22" strokeDasharray="3 3" opacity="0.7" />
-          <circle cx="67" cy="85" r="8" fill="currentColor" opacity="0.6" />
-
-          <rect x="118" y="125" width="10" height="8" fill="currentColor" opacity="0.9" />
-
-          <rect x="15" y="102" width="105" height="28" rx="2" stroke="currentColor" strokeWidth="0.8" fill="#1e1b4b" fillOpacity="0.5" />
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.95">
-            <text x="20" y="114" fill="#4ade80">1.44 MB DISKETTE</text>
-            <text x="20" y="124" fill="#c084fc">ASL RUNTIME FITS HERE</text>
-          </g>
-        </g>
-
-        {/* NANO-CODE SNIPPET 3: In-Memory Vector Recall (Left Margin, x: 50, y: 900) */}
-        <g transform="translate(50, 900)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <rect x="0" y="0" width="270" height="58" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="3 3" />
-          <g fontFamily="monospace" fontSize="8" fill="currentColor">
-            <text x="10" y="18" fill="#c084fc">;; In-Memory Vector Recall (0.038ms)</text>
-            <text x="10" y="32" fill="#4ade80">(dfmem recall [(q String)] -&gt; (List Node)</text>
-            <text x="20" y="48" fill="#4ade80">  (! mem/search (embed q) :k 5 :max-ms 0.05))</text>
-          </g>
-        </g>
-
-        {/* ========================================================================= */}
-        {/* EVOLUTION OF COMPUTING — ERA 3: SYNTAX DARK AGES & CLIPPY MEME            */}
-        {/* ========================================================================= */}
-
-        {/* 4. The Paperclip Maximizer Meme (Right Margin, x: 1210, y: 840) */}
-        <g transform="translate(1210, 840)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
-          <path
-            d="M 20,70 L 20,25 C 20,10 45,10 45,25 L 45,80 C 45,100 10,100 10,80 L 10,35 C 10,22 32,22 32,35 L 32,70"
-            strokeWidth="2.2"
-            fill="none"
-          />
-          <circle cx="28" cy="50" r="35" strokeDasharray="4 3" opacity="0.5" />
-          <line x1="-15" y1="50" x2="70" y2="50" strokeDasharray="2 2" opacity="0.4" />
-          
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.9">
-            <text x="-70" y="20" fill="#c084fc">[ENTITY: CLIPPY / MAXIMIZER]</text>
-            <text x="-70" y="32" fill="#ef4444">STATUS: ABORTED</text>
-            <text x="-70" y="44" fill="#4ade80">REASON: DISCOVERED ASL</text>
-            <text x="-70" y="56" fill="#a855f7">SAVING TOKENS INSTEAD</text>
-          </g>
-        </g>
-
-        {/* NANO-CODE SNIPPET 4: Pure ASL Pipeline (Left Margin, x: 50, y: 1120) */}
-        <g transform="translate(50, 1120)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <rect x="0" y="0" width="270" height="70" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="5 3" />
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.9">
-            <text x="10" y="16" fill="#c084fc">;; Pure Verified Pipeline (0 Syntax Retries)</text>
-            <text x="10" y="32" fill="#4ade80">(! pipe [</text>
-            <text x="20" y="46" fill="#4ade80">  (read "src/core.asl") (check :pure) (emit :wasm)])</text>
-            <text x="10" y="60" fill="#a855f7">;; Result: 0 repair loops · -80% tokens</text>
-          </g>
-        </g>
-
-        {/* ========================================================================= */}
-        {/* ERA 4: 2026+ WEBASSEMBLY & AI AGENT SWARM RUNTIME                         */}
-        {/* ========================================================================= */}
-
-        {/* Large Planetary Station / Scanner Dome (Left Margin, x: 80, y: 1480) */}
-        <g transform="translate(80, 1480)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
+        {/* Planetary Scanner Station Dome (Left Margin, x: 80, y: 1380) */}
+        <g transform="translate(80, 1380)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
           <circle cx="0" cy="0" r="140" strokeDasharray="8 6" opacity="0.4" />
           <circle cx="0" cy="0" r="110" strokeDasharray="4 4" opacity="0.6" />
           <circle cx="0" cy="0" r="80" strokeWidth="2" />
 
+          {/* Hemisphere Dome */}
           <path d="M -70,-25 A 75 75 0 0 1 70,-25" strokeWidth="2.5" fill="#3b0764" fillOpacity="0.2" />
           <line x1="-70" y1="-25" x2="70" y2="-25" />
 
+          {/* Optical Scanner Head */}
           <path d="M -30,-25 L -16,-65 L 16,-65 L 30,-25 Z" strokeWidth="2" fill="#581c87" fillOpacity="0.3" />
           <line x1="0" y1="-65" x2="0" y2="-100" strokeWidth="2.5" />
           <circle cx="0" cy="-100" r="4" fill="currentColor" />
 
+          {/* Hydraulic Conduits */}
           <path d="M -50,15 L -100,65 L -120,130" strokeWidth="3" />
           <path d="M -30,25 L -75,90 L -85,150" strokeWidth="2" strokeDasharray="4 4" />
 
-          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.85">
+          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9">
             <text x="65" y="-50">ПЛАНЕТАРНЫЙ ПОРТ</text>
             <line x1="20" y1="-55" x2="60" y2="-55" stroke="currentColor" strokeWidth="0.8" />
             <text x="-35" y="15" transform="rotate(45 -35 15)">ПОРТ А</text>
-            <text x="55" y="110">WASM REACTOR // 0.038ms</text>
+            <text x="55" y="105" fill="#4ade80">WASM REACTOR // 0.038ms</text>
+            <text x="55" y="118" fill="#c084fc">(dfs WasmNode (:f id Str) (:f ms F64))</text>
           </g>
         </g>
 
-        {/* NANO-CODE SNIPPET 5: Typed Wasm Reactor Schema (Left Margin, x: 70, y: 1680) */}
-        <g transform="translate(70, 1680)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <rect x="0" y="0" width="240" height="74" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="4 3" />
-          <g fontFamily="monospace" fontSize="8" fill="currentColor">
-            <text x="10" y="16" fill="#c084fc">;; Schema: Zero-Leak Wasm Core</text>
-            <text x="10" y="32" fill="#4ade80">(dfs WasmNode</text>
-            <text x="20" y="46" fill="#4ade80">  (:f id String) (:f ms Float64)</text>
-            <text x="20" y="60" fill="#4ade80">  (:f cap (Option Keyword)))</text>
-          </g>
-        </g>
-
-        {/* Saturnian Ringed Planet (OPS.RTA) in Right Margin (x: 1240, y: 1520) */}
-        <g transform="translate(1240, 1520)" stroke="url(#bioLineGrad)" strokeWidth="1.3">
+        {/* Saturnian Ringed Planet (OPS.RTA) in Right Margin (x: 1240, y: 1440) */}
+        <g transform="translate(1240, 1440)" stroke="url(#bioLineGrad)" strokeWidth="1.3">
           <circle cx="0" cy="0" r="50" fill="#4a044e" fillOpacity="0.3" />
           <path d="M -40,-12 Q 0,-25 40,-12" strokeDasharray="2 3" opacity="0.6" />
           <path d="M -45,8 Q 0,-5 45,8" strokeDasharray="2 3" opacity="0.6" />
@@ -309,8 +369,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* Cable Bundles (Right Margin, x: 1140, y: 1750) */}
-        <g transform="translate(1140, 1750)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
+        {/* Cable Bundles and Sensor Terminals (Right Margin, x: 1140, y: 1680) */}
+        <g transform="translate(1140, 1680)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
           <path d="M 0,0 C 40,30 80,20 120,70" strokeWidth="2" />
           <path d="M 20,-10 C 60,10 90,40 140,50" />
           <path d="M 40,-20 C 70,-10 110,10 160,20" />
@@ -324,20 +384,20 @@ export const CosmicLandscapeBackground: React.FC = () => (
         </g>
 
         {/* ========================================================================= */}
-        {/* LOWER BLUEPRINT MATRIX & BIO-MECHANICAL GEARS (y: 2100 - 3200)            */}
+        {/* SCREEN 3: LOWER BLUEPRINT MATRIX & BIO-MECHANICAL GEARS (y: 2100 - 3200)  */}
         {/* ========================================================================= */}
 
-        {/* Token Fuel Gauge (Left Margin, x: 70, y: 2240) */}
+        {/* Token Fuel Gauge Callout (Left Margin, x: 70, y: 2240) */}
         <g transform="translate(70, 2240)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <rect x="0" y="0" width="220" height="95" rx="8" fill="#3b0764" fillOpacity="0.25" strokeDasharray="5 3" />
-          <line x1="0" y1="22" x2="220" y2="22" stroke="currentColor" strokeWidth="0.8" />
+          <circle cx="45" cy="45" r="40" strokeDasharray="4 3" opacity="0.6" />
+          <path d="M 45,45 L 68,24" stroke="#4ade80" strokeWidth="2.2" />
+          <circle cx="45" cy="45" r="4" fill="#4ade80" />
           
           <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9">
-            <text x="10" y="15" fontWeight="bold" fill="#c084fc">GAUGE: TOKEN CONSUMPTION</text>
-            <text x="10" y="40">JSON BLOAT : [E----|----F] (0%)</text>
-            <text x="10" y="55" fill="#4ade80">ASL SAVINGS: [████████--] (-80%)</text>
-            <line x1="10" y1="64" x2="210" y2="64" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 2" />
-            <text x="10" y="80" fill="#a855f7">COGNITIVE OVERHEAD: 0.00%</text>
+            <text x="100" y="32" fontWeight="bold" fill="#c084fc">GAUGE: TOKEN FUEL</text>
+            <text x="100" y="46" fill="#4ade80">ASL SAVINGS: -80% BLOAT</text>
+            <text x="100" y="60">COGNITIVE LOAD: 0.00%</text>
+            <line x1="85" y1="38" x2="96" y2="38" stroke="currentColor" strokeWidth="0.8" />
           </g>
         </g>
 
@@ -391,24 +451,15 @@ export const CosmicLandscapeBackground: React.FC = () => (
               />
             ))}
             <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.8">
-              <text x="-25" y="80">ШЕСТЕРЕНЧАТЫЙ БЛОК</text>
-            </g>
-          </g>
-
-          {/* NANO-CODE SNIPPET 6: Gear State Pattern Matching (Right Margin, x: -60, y: 440) */}
-          <g transform="translate(-60, 440)" stroke="url(#bioLineGrad)" strokeWidth="1">
-            <rect x="0" y="0" width="220" height="54" rx="4" fill="#3b0764" fillOpacity="0.25" strokeDasharray="3 3" />
-            <g fontFamily="monospace" fontSize="7.5" fill="currentColor">
-              <text x="8" y="14" fill="#c084fc">;; Exhaustive Pattern Match</text>
-              <text x="8" y="27" fill="#4ade80">(mt gear-state</text>
-              <text x="16" y="38" fill="#4ade80">  ((:running r) (! throttle r)))</text>
+              <text x="-35" y="80">ШЕСТЕРЕНЧАТЫЙ БЛОК</text>
+              <text x="-35" y="92" fill="#4ade80">(mt state ((:on) (! run)))</text>
             </g>
           </g>
 
           {/* Agent Vibe Secret S-Expression Frame */}
-          <g transform="translate(-80, 520)" stroke="url(#bioLineGrad)" strokeWidth="1">
-            <rect x="0" y="0" width="230" height="38" rx="6" fill="#3b0764" fillOpacity="0.3" strokeDasharray="3 3" />
-            <text x="10" y="24" fontFamily="monospace" fontSize="8" fill="#4ade80">
+          <g transform="translate(-100, 520)" stroke="url(#bioLineGrad)" strokeWidth="1">
+            <line x1="0" y1="12" x2="230" y2="12" strokeDasharray="3 3" opacity="0.5" />
+            <text x="10" y="26" fontFamily="monospace" fontSize="8" fill="#4ade80">
               (! agent/vibe :chill true :parens :balanced)
             </text>
           </g>
