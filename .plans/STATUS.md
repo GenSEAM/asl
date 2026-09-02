@@ -1,4 +1,4 @@
 # Current Status: asl-ecosystem-audit-v1
-- Current Phase: Phase 2 (Dual-Projection & Self-Hosting Parser Feasibility Audit)
-- Completed Phases: Phase 1 (Packages & API Contract Consistency Audit)
-- Active Work: Testing bidirectional transcoding on all packages, evaluating migration off Lark/tree-sitter to self-hosted ASL parser.
+- Current Phase: Phase 3 (Protocols, Mesh & Security Isolation Audit)
+- Completed Phases: Phase 1 (Packages & API Contract Audit), Phase 2 (Dual-Projection & Syntax Conformance Audit)
+- Active Work: Auditing SkyLoom frames, Agent-Bus integration, SQL polyfills, and jailed runner boundaries.
