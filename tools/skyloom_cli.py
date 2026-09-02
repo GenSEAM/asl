@@ -208,6 +208,10 @@ def demo(json_mode: bool = False) -> int:
     return 0
 
 
+def _quote_list(items: List[str]) -> str:
+    return " ".join(f'"{x}"' for x in items)
+
+
 def handoff(
     to: str,
     task: str,
@@ -225,8 +229,8 @@ def handoff(
     now = int(time.time() * 1000)
     msg_id = f"handoff-{int(time.time() % 10000):04d}"
 
-    owns_str = " ".join(f'"{o}"' for o in owns_list)
-    frozen_str = f' :frozen [{" ".join(f"{f}" for f in frozen_list)}]' if frozen_list else ""
+    owns_str = _quote_list(owns_list)
+    frozen_str = f' :frozen [{_quote_list(frozen_list)}]' if frozen_list else ""
     gate_str = f' :gate "{gate}"' if gate else ""
     budget_str = f' :budget {budget}' if budget else ""
 
@@ -287,7 +291,7 @@ def yield_task(
     msg_id = f"yield-{int(time.time() % 10000):04d}"
     artifacts_list = artifacts or []
 
-    art_str = f' :artifacts [{" ".join(f"{a}" for a in artifacts_list)}]' if artifacts_list else ""
+    art_str = f' :artifacts [{_quote_list(artifacts_list)}]' if artifacts_list else ""
     verdict_str = f' :verdict "{verdict}"' if verdict else ""
     err_str = f' :error "{error}"' if error else ""
 

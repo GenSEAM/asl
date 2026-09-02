@@ -81,6 +81,29 @@ export function encodeAslSExpr(frame: LoomFrame): string {
   return `(loom:frame :v ${h.version} :id "${escapeStr(h.id)}" :from "${escapeStr(h.from)}" :to "${escapeStr(h.to)}" :dialect "asl/v1" :ts ${h.timestamp}${replyPart} :type "${frame.type}"${chanPart} :body ${bodyJson})`;
 }
 
+function parseSExprAttrs(source: string) {
+  const strAttrs: Record<string, string> = {};
+  const strRegex = /:([a-zA-Z0-9_-]+)\s+"((?:[^"\\\\]|\\.)*)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = strRegex.exec(source)) !== null) {
+    strAttrs[match[1]] = unescapeStr(match[2]);
+  }
+
+  const numAttrs: Record<string, number> = {};
+  const numRegex = /:([a-zA-Z0-9_-]+)\s+([0-9]+)/g;
+  while ((match = numRegex.exec(source)) !== null) {
+    numAttrs[match[1]] = Number(match[2]);
+  }
+
+  const listAttrs: Record<string, string[]> = {};
+  const listRegex = /:([a-zA-Z0-9_-]+)\s+\[(.*?)\]/g;
+  while ((match = listRegex.exec(source)) !== null) {
+    listAttrs[match[1]] = [...match[2].matchAll(/"((?:[^"\\\\]|\\.)*)"/g)].map(m => unescapeStr(m[1]));
+  }
+
+  return { strAttrs, numAttrs, listAttrs };
+}
+
 /**
  * Decodes ASL Native S-Expression into LoomFrame (`asl/v1`)
  */
@@ -100,20 +123,7 @@ export function decodeAslSExpr(raw: string): LoomFrame {
   const headerPart = trimmed.slice(11, bodyIdx).trim();
   const rawBodyPart = trimmed.slice(bodyIdx + bodyMarker.length, trimmed.length - 1).trim();
 
-  // Extract attributes from headerPart safely
-  const strAttrs: Record<string, string> = {};
-  const strRegex = /:([a-zA-Z0-9_-]+)\s+"((?:[^"\\\\]|\\.)*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = strRegex.exec(headerPart)) !== null) {
-    strAttrs[match[1]] = unescapeStr(match[2]);
-  }
-
-  const numAttrs: Record<string, number> = {};
-  const numRegex = /:([a-zA-Z0-9_-]+)\s+([0-9]+)/g;
-  while ((match = numRegex.exec(headerPart)) !== null) {
-    numAttrs[match[1]] = Number(match[2]);
-  }
-
+  const { strAttrs, numAttrs } = parseSExprAttrs(headerPart);
   const version = numAttrs['v'] ?? 1;
   const id = strAttrs['id'];
   const from = strAttrs['from'];
@@ -199,29 +209,7 @@ export function decodeAslCoord(raw: string): LoomFrame {
     throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Invalid ASL Coordination frame delimiter');
   }
 
-  // Parse string attributes
-  const strAttrs: Record<string, string> = {};
-  const strRegex = /:([a-zA-Z0-9_-]+)\s+"((?:[^"\\\\]|\\.)*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = strRegex.exec(trimmed)) !== null) {
-    strAttrs[match[1]] = unescapeStr(match[2]);
-  }
-
-  // Parse number attributes
-  const numAttrs: Record<string, number> = {};
-  const numRegex = /:([a-zA-Z0-9_-]+)\s+([0-9]+)/g;
-  while ((match = numRegex.exec(trimmed)) !== null) {
-    numAttrs[match[1]] = Number(match[2]);
-  }
-
-  // Parse list attributes like :owns ["a" "b"]
-  const listAttrs: Record<string, string[]> = {};
-  const listRegex = /:([a-zA-Z0-9_-]+)\s+\[(.*?)\]/g;
-  while ((match = listRegex.exec(trimmed)) !== null) {
-    const key = match[1];
-    const items = [...match[2].matchAll(/"((?:[^"\\\\]|\\.)*)"/g)].map(m => unescapeStr(m[1]));
-    listAttrs[key] = items;
-  }
+  const { strAttrs, numAttrs, listAttrs } = parseSExprAttrs(trimmed);
 
   const version = numAttrs['v'] ?? 1;
   const id = strAttrs['id'];

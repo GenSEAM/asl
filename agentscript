@@ -305,18 +305,13 @@ def cmd_loom(args) -> int:
         return primer(target_peer=getattr(args, "target", "vanilla-llm"), sender=getattr(args, "from_peer", "orchestrator"), json_mode=json_mode)
     elif action == "handoff":
         from tools.skyloom_cli import handoff
-        owns = getattr(args, "owns", None)
-        if isinstance(owns, str):
-            owns = [o.strip() for o in owns.split(",") if o.strip()]
-        frozen = getattr(args, "frozen", None)
-        if isinstance(frozen, str):
-            frozen = [f.strip() for f in frozen.split(",") if f.strip()]
+        _csv = lambda v: [x.strip() for x in v.split(",") if x.strip()] if isinstance(v, str) else (v or [])
         return handoff(
             to=getattr(args, "target", "agent-coder"),
             task=getattr(args, "task", "execute_task"),
             cwd=getattr(args, "cwd", "."),
-            owns=owns,
-            frozen=frozen,
+            owns=_csv(getattr(args, "owns", None)),
+            frozen=_csv(getattr(args, "frozen", None)),
             gate=getattr(args, "gate", None),
             budget=getattr(args, "budget", 5000),
             from_peer=getattr(args, "from_peer", "agent-orchestrator"),
@@ -324,15 +319,13 @@ def cmd_loom(args) -> int:
         )
     elif action == "yield":
         from tools.skyloom_cli import yield_task
-        artifacts = getattr(args, "artifacts", None)
-        if isinstance(artifacts, str):
-            artifacts = [a.strip() for a in artifacts.split(",") if a.strip()]
+        _csv = lambda v: [x.strip() for x in v.split(",") if x.strip()] if isinstance(v, str) else (v or [])
         return yield_task(
             to=getattr(args, "target", "agent-orchestrator"),
             reply_to=getattr(args, "reply_to", "handoff-0001"),
             status=getattr(args, "status", "ok"),
             verdict=getattr(args, "verdict", None),
-            artifacts=artifacts,
+            artifacts=_csv(getattr(args, "artifacts", None)),
             error=getattr(args, "error", None),
             from_peer=getattr(args, "from_peer", "agent-coder"),
             json_mode=json_mode,
