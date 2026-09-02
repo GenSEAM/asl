@@ -160,3 +160,10 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
 - `EXPERIMENT.md` is pre-registered: amendments must be dated and must state whether they were
   made before or after seeing results.
 
+### Dual-Projection Protocol (@pcp:d-1eed, @pcp:c-adc8, @pcp:r-8d8e)
+
+- **Storage & Wire Default (@pcp:d-1eed)**: Repository `.asl` files on disk and inter-agent protocol frames standardize on the compact **Nano format** (`asl/coord`, dense S-expressions) to conserve LLM token budgets and eliminate token bloat.
+- **Human-Facing Projections**: In chat, user explanations, and educational examples, agents must present the **Verbose projection** for cognitive clarity.
+- **Non-Mutating Virtual Inspection (@pcp:r-8d8e)**: Do NOT use Git clean/smudge filters or automated on-save hooks that mutate files under user focus. Use virtual IDE schemes (`asl-verbose://`), `asl view <file>`, or explicit user-requested conversion (`asl transcode`).
+- **Control-Flow Linearization (@pcp:c-adc8)**: Keep S-expression control nesting $\le 4$ levels. Avoid deeply nested `match`/`if` trees by leveraging `try` early returns and local helper functions.
+

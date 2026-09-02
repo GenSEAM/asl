@@ -145,6 +145,14 @@ def cmd_sql(args) -> int:
     return run_sql_cli(args)
 
 
+def cmd_view(args) -> int:
+    """Virtual non-mutating projection viewer (@pcp:r-8d8e)."""
+    from tools.view import view_file_cli
+    verbose = not getattr(args, "nano", False)
+    dialect = getattr(args, "dialect", "postgres")
+    return view_file_cli(args.file, verbose=verbose, dialect=dialect)
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -644,6 +652,15 @@ def main() -> int:
     p.add_argument("--demo", action="store_true", help="run SQL studio demonstration")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_sql)
+
+    p = sub.add_parser("view", aliases=["show", "peek"],
+                       help="virtual non-mutating projection viewer for ASL and SQL ASTs")
+    p.add_argument("file", type=Path, help="file to inspect")
+    p.add_argument("--verbose", action="store_true", default=True, help="expand into human-readable verbose projection")
+    p.add_argument("--nano", action="store_true", help="compress into dense agent nano projection")
+    p.add_argument("--dialect", default="postgres", choices=["postgres", "sqlite", "mysql", "clickhouse"], help="target dialect if viewing SQL")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_view)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
