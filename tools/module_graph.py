@@ -107,15 +107,64 @@ def build_module_graph(dirs: List[Path]) -> Dict[str, Any]:
     }
 
 
-def print_graph_summary(graph_data: Dict[str, Any]):
-    """Prints terminal-friendly ASCII topology overview."""
+def filter_subgraph(graph_data: Dict[str, Any], focus_name: str) -> Dict[str, Any]:
+    """Prunes graph to only target module, its direct dependencies, and dependents."""
+    focus_lower = focus_name.lower()
+    target_keys = [k for k in graph_data["modules"] if focus_lower in k.lower()]
+    if not target_keys:
+        return graph_data
+
+    relevant_keys = set(target_keys)
+    # Collect direct dependencies of target
+    for tk in target_keys:
+        for imp in graph_data["modules"][tk]["imports"]:
+            imp_mod = imp["module"]
+            # Find matching module key
+            for k in graph_data["modules"]:
+                if k == imp_mod or imp_mod.endswith(k) or k.endswith(imp_mod):
+                    relevant_keys.add(k)
+
+    # Collect direct dependents (who imports target)
+    for k, info in graph_data["modules"].items():
+        for imp in info["imports"]:
+            if any(tk == imp["module"] or imp["module"].endswith(tk) for tk in target_keys):
+                relevant_keys.add(k)
+
+    filtered_modules = {k: v for k, v in graph_data["modules"].items() if k in relevant_keys}
+    filtered_edges = [
+        e for e in graph_data["edges"]
+        if e["from"] in relevant_keys and e["to"] in relevant_keys
+    ]
+
+    return {
+        "modules_count": len(filtered_modules),
+        "edges_count": len(filtered_edges),
+        "modules": filtered_modules,
+        "edges": filtered_edges,
+        "focus": focus_name,
+    }
+
+
+def print_graph_summary(graph_data: Dict[str, Any], compact_summary: bool = False):
+    """Prints terminal-friendly ASCII topology overview with optional subgraph focus."""
     print("==========================================================================")
     print("         AgentScript Full-Spectrum Visual Architecture Inspector          ")
     print("==========================================================================")
-    print(f"Total Modules Indexed : {graph_data['modules_count']}")
+    focus_label = f" (Focused on '{graph_data['focus']}')" if "focus" in graph_data else ""
+    print(f"Modules Displayed     : {graph_data['modules_count']}{focus_label}")
     print(f"Dependency Edges      : {graph_data['edges_count']}")
     print("--------------------------------------------------------------------------")
     
+    if compact_summary:
+        print(f"{'MODULE':<28} {'LINES':<8} {'SCORE':<8} {'TAGS'}")
+        print("-" * 74)
+        for mod_name, info in sorted(graph_data["modules"].items()):
+            tags_str = ", ".join(info["tags"])
+            print(f"{mod_name:<28} {info['lines']:<8} {info['quality_score']}/100   {tags_str}")
+        print("--------------------------------------------------------------------------")
+        print("Tip: Use 'asl graph --focus <name>' to inspect a localized module subgraph.")
+        return
+
     for mod_name, info in sorted(graph_data["modules"].items()):
         tags_str = ", ".join(info["tags"])
         print(f"\n📦 [{mod_name}] ({tags_str}) — Score: {info['quality_score']}/100")
@@ -133,7 +182,7 @@ def print_graph_summary(graph_data: Dict[str, Any]):
             print(f"   🔗 Imports  : {imp_str}")
 
     print("--------------------------------------------------------------------------")
-    print("✓ Full visual architecture topology verified without reading raw code.")
+    print("✓ Localized visual architecture topology verified without reading raw code.")
 
 
 def run_graph_cli(args) -> int:
@@ -144,10 +193,15 @@ def run_graph_cli(args) -> int:
         dirs = [Path(p) for p in args.paths]
 
     graph = build_module_graph(dirs)
+    focus = getattr(args, "focus", None)
+    if focus:
+        graph = filter_subgraph(graph, focus)
+
     if getattr(args, "json", False):
         print(json.dumps(graph, indent=2))
     else:
-        print_graph_summary(graph)
+        compact = getattr(args, "summary", False)
+        print_graph_summary(graph, compact_summary=compact)
     return 0
 
 
@@ -155,6 +209,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="ASL Architecture Graph Inspector")
     parser.add_argument("paths", nargs="*", default=None, help="directories to scan")
+    parser.add_argument("--focus", default=None, help="prune graph to target module and direct neighbors")
+    parser.add_argument("--summary", action="store_true", help="display compact one-line table summary")
     parser.add_argument("--json", action="store_true", help="emit JSON topology graph")
     args = parser.parse_args()
     sys.exit(run_graph_cli(args))

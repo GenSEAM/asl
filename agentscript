@@ -689,6 +689,8 @@ def main() -> int:
     p = sub.add_parser("graph", aliases=["topology", "arch"],
                        help="full-spectrum visual architecture topology and module graph inspector")
     p.add_argument("paths", nargs="*", type=Path, default=[Path("packages")], help="package directories to scan")
+    p.add_argument("--focus", default=None, help="prune graph to target module and direct neighbors")
+    p.add_argument("--summary", action="store_true", help="display compact one-line summary table")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_graph)
 

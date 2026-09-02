@@ -23,3 +23,14 @@ def test_build_packages_graph():
     assert "asl-sql/core" in graph["modules"]
     assert "asl-lint/core" in graph["modules"]
     assert "asl-skyloom/core" in graph["modules"]
+
+
+def test_subgraph_focus():
+    from tools.module_graph import filter_subgraph
+    packages_dir = ROOT / "packages"
+    graph = build_module_graph([packages_dir])
+    focused = filter_subgraph(graph, "asl-sql")
+    assert focused["modules_count"] == 2
+    assert "asl-sql/core" in focused["modules"]
+    assert "asl-sql/ddl" in focused["modules"]
+    assert "asl-skyloom/core" not in focused["modules"]
