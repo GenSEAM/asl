@@ -17,3 +17,4 @@ results/*.json
 .claude/settings.local.json
 .claude/worktrees/
 .tokensave/
+packages/asl-skyloom/dist/

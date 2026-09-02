@@ -1,0 +1,16 @@
+{
+  "name": "@genseam/asl-skyloom",
+  "version": "1.0.0",
+  "description": "SkyLoom: Resilient Inter-Agent Communication Protocol & Mesh for AgentScript",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json && node dist/tests/codec_test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.0",
+    "typescript": "^5.8.0"
+  }
+}

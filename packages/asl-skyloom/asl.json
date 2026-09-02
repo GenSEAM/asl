@@ -1,0 +1,14 @@
+{
+  "name": "@genseam/asl-skyloom",
+  "version": "1.0.0",
+  "description": "SkyLoom: Resilient Inter-Agent Communication Protocol & Mesh for AgentScript",
+  "entry": "src/core/skyloom.agentscript",
+  "targets": {
+    "ts": {
+      "output": "dist/core/skyloom.ts"
+    },
+    "wasm": {
+      "output": "dist/core/skyloom.wasm"
+    }
+  }
+}
