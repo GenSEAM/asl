@@ -131,6 +131,14 @@ def cmd_lint(args) -> int:
     return lint_paths(paths, json_mode=getattr(args, "json", False))
 
 
+def cmd_clone(args) -> int:
+    """Run AST structural clone and duplication detector."""
+    from tools.clone_detector import clone_check_cli
+    paths = getattr(args, "paths", []) or [Path(".")]
+    threshold = getattr(args, "threshold", 0.15)
+    return clone_check_cli(paths, threshold=threshold, json_mode=getattr(args, "json", False))
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -612,6 +620,13 @@ def main() -> int:
     p.add_argument("paths", nargs="*", type=Path, default=[Path(".")], help="file or directory paths to inspect")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_lint)
+
+    p = sub.add_parser("clone-check", aliases=["clones", "dup"],
+                       help="AST structural clone and copy-paste duplicate detector")
+    p.add_argument("paths", nargs="*", type=Path, default=[Path(".")], help="file or directory paths to inspect")
+    p.add_argument("--threshold", type=float, default=0.15, help="duplication ratio threshold (default: 0.15)")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_clone)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
