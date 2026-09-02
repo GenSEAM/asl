@@ -1,17 +1,17 @@
 (module asl-vdom/vdom
-  :doc "Declarative S-Expression Virtual DOM in ASL Nano"
+  :doc "Declarative S-Expression Virtual DOM in ASL"
   :export [VNode is-valid-node text])
 
-(dfe VNode
-  (:case text-node [(content Str)] "text node")
-  (:case element-node [(tag Str) (children (List VNode))] "element node"))
+(defenum VNode
+  (:case text-node [(content String)] "text node")
+  (:case element-node [(tag String) (children (List VNode))] "element node"))
 
-(df text [(content Str)] -> VNode
+(defun text [(content String)] -> VNode
   :doc "Creates text node"
-  (:text-node content))
+  (text-node content))
 
-(df is-valid-node [(node VNode)] -> Bool
+(defun is-valid-node [(node VNode)] -> Bool
   :doc "Validates VNode"
   (match node
     ((text-node content) (> (string-length content) 0))
-    ((element-node tag children) (> (string-length tag) 0))))
+    ((element-node tag _) (> (string-length tag) 0))))

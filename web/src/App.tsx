@@ -5,6 +5,7 @@ import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
 import { SkyLoomVisualizer } from './components/SkyLoomVisualizer';
+import { AslQualityDoctor } from './components/AslQualityDoctor';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
 
@@ -17,6 +18,7 @@ export const App: React.FC = () => (
         <TheAgentWay />
         <AgentWireProtocol />
         <SkyLoomVisualizer />
+        <AslQualityDoctor />
         <Ecosystem />
       </main>
       <Footer />

@@ -1,20 +1,20 @@
 (module asl-eddie/eddie
-  :doc "EDDIE: 3-Layer Superposition Swarm Orchestrator in ASL Nano"
+  :doc "EDDIE: 3-Layer Superposition Swarm Orchestrator in ASL"
   :export [TaskTier TaskIntent TriageVerdict TaskItem TaskPool OrchestrationPlan
            fast-triage consult-and-refine plan-execution evaluate-circuit-breaker]
   :import [(core/strings :as s)])
 
-(dfe TriageVerdict
+(defenum TriageVerdict
   (:case instant [] "Layer 1: Instant execution (<0.04ms)")
   (:case consult [] "Layer 2: Consultative clarification")
   (:case swarm [] "Layer 3: Task pool delegation"))
 
-(dfe TaskTier
+(defenum TaskTier
   (:case tier-0 [] "Fast-Track")
   (:case tier-1 [] "Specialist")
   (:case tier-2 [] "Superposition"))
 
-(dfe TaskIntent
+(defenum TaskIntent
   (:case code-gen [] "code generation")
   (:case web-search [] "web search")
   (:case browser-nav [] "browser nav")
@@ -22,46 +22,52 @@
   (:case voice-dialog [] "voice dialog")
   (:case chat-rag [] "chat rag"))
 
-(dfs TaskItem
-  (:field id Str "task id")
-  (:field title Str "title")
-  (:field assigned-agent Str "agent id")
-  (:field status Str "status")
-  (:field duration-ms F64 "duration in ms"))
+(defschema TaskItem
+  (:field id String "task id")
+  (:field title String "title")
+  (:field assigned-agent String "agent id")
+  (:field status String "status")
+  (:field duration-ms Float "duration in ms"))
 
-(dfs TaskPool
-  (:field leader-task-id Str "leader id")
-  (:field prompt Str "prompt")
+(defschema TaskPool
+  (:field leader-task-id String "leader id")
+  (:field prompt String "prompt")
   (:field subtasks (List TaskItem) "subtask dag")
-  (:field follow-ups (List Str) "follow-ups")
-  (:field total-completed I64 "completed count"))
+  (:field follow-ups (List String) "follow-ups")
+  (:field total-completed Int64 "completed count"))
 
-(dfs OrchestrationPlan
-  (:field task-id Str "task id")
+(defschema OrchestrationPlan
+  (:field task-id String "task id")
   (:field intent TaskIntent "intent")
   (:field tier TaskTier "tier")
   (:field triage TriageVerdict "triage")
-  (:field assigned-agents (List Str) "agents")
+  (:field assigned-agents (List String) "agents")
   (:field follow-up-needed Bool "follow-up flag")
-  (:field speculative-branches I64 "speculative branch count")
-  (:field circuit-breaker-limit I64 "max failure count"))
+  (:field speculative-branches Int64 "speculative branch count")
+  (:field circuit-breaker-limit Int64 "max failure count"))
 
-(df fast-triage [(prompt Str)] -> TriageVerdict
+(defun fast-triage [(prompt String)] -> TriageVerdict
   :doc "Layer 1: Ultra-fast triage"
-  (if (= (s/concat prompt "") "help")
-      (:consult)
-      (:swarm)))
+  (if (== prompt "help")
+    (consult)
+    (swarm)))
 
-(df consult-and-refine [(prompt Str) (ambiguous Bool)] -> OrchestrationPlan
+(defun consult-and-refine [(prompt String) (ambiguous Bool)] -> OrchestrationPlan
   :doc "Layer 2: Consultative refinement"
   (if ambiguous
-      ["eddie-consult" (:chat-rag) (:tier-0) (:consult) ["agent-consultant"] true 1 1]
-      ["eddie-task" (:code-gen) (:tier-2) (:swarm) ["agent-planner" "agent-coder" "agent-reviewer"] false 2 2]))
+    (OrchestrationPlan :task-id "eddie-consult" :intent (chat-rag) :tier (tier-0) :triage (consult)
+                       :assigned-agents (list "agent-consultant") :follow-up-needed true
+                       :speculative-branches 1 :circuit-breaker-limit 1)
+    (OrchestrationPlan :task-id "eddie-task" :intent (code-gen) :tier (tier-2) :triage (swarm)
+                       :assigned-agents (list "agent-planner" "agent-coder" "agent-reviewer") :follow-up-needed false
+                       :speculative-branches 2 :circuit-breaker-limit 2)))
 
-(df plan-execution [(task-id Str) (prompt Str)] -> OrchestrationPlan
+(defun plan-execution [(task-id String) (prompt String)] -> OrchestrationPlan
   :doc "Layer 3: Builds task plan"
-  [task-id (:code-gen) (:tier-2) (:swarm) ["agent-planner" "agent-coder" "agent-reviewer"] false 2 2])
+  (OrchestrationPlan :task-id task-id :intent (code-gen) :tier (tier-2) :triage (swarm)
+                     :assigned-agents (list "agent-planner" "agent-coder" "agent-reviewer") :follow-up-needed false
+                     :speculative-branches 2 :circuit-breaker-limit 2))
 
-(df evaluate-circuit-breaker [(failures I64) (threshold I64)] -> Bool
+(defun evaluate-circuit-breaker [(failures Int64) (threshold Int64)] -> Bool
   :doc "Evaluates circuit breaker"
   (>= failures threshold))
