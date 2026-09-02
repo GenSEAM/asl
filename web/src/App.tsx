@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
+import { SkyLoomVisualizer } from './components/SkyLoomVisualizer';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
 
@@ -15,6 +16,7 @@ export const App: React.FC = () => (
         <Hero />
         <TheAgentWay />
         <AgentWireProtocol />
+        <SkyLoomVisualizer />
         <Ecosystem />
       </main>
       <Footer />

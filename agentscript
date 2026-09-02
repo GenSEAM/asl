@@ -277,7 +277,27 @@ def cmd_plugin(args) -> int:
         from tools.pkg import add_package
         return add_package(args.add)
     query = getattr(args, "search", None) or getattr(args, "query", "") or ""
-    return search_plugins(query, json_mode=getattr(args, "json", False))
+def cmd_loom(args) -> int:
+    """SkyLoom: Resilient Inter-Agent Communication Protocol & Mesh."""
+    from tools.skyloom_cli import list_peers, send_message, mailbox_status, primer, demo
+    json_mode = getattr(args, "json", False)
+    if getattr(args, "demo", False) or getattr(args, "action", "") == "demo":
+        return demo(json_mode=json_mode)
+    action = getattr(args, "action", "peers")
+    if action == "send":
+        return send_message(
+            to=getattr(args, "target", "agent-planner"),
+            message=getattr(args, "message", "execute_task"),
+            from_peer=getattr(args, "from_peer", "agent-orchestrator"),
+            channel=getattr(args, "channel", None),
+            dialect=getattr(args, "dialect", "auto"),
+            json_mode=json_mode,
+        )
+    elif action == "mailbox":
+        return mailbox_status(peer_id=getattr(args, "target", "agent-lonely-sub"), json_mode=json_mode)
+    elif action == "primer":
+        return primer(target_peer=getattr(args, "target", "vanilla-llm"), sender=getattr(args, "from_peer", "orchestrator"), json_mode=json_mode)
+    return list_peers(json_mode=json_mode)
 
 
 def cmd_bus(args) -> int:
@@ -545,7 +565,18 @@ def main() -> int:
     p.add_argument("--add", "-a", help="install plugin from GitHub URL")
     p.add_argument("--create", "-c", help="scaffold new community plugin package")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
-    p.set_defaults(fn=cmd_plugin)
+    p = sub.add_parser("loom", aliases=["skyloom"],
+                       help="SkyLoom inter-agent resilient protocol, asymmetric mesh, and mailbox")
+    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "demo"],
+                   help="loom action (peers, send, mailbox, primer, demo)")
+    p.add_argument("--to", dest="target", default="agent-planner", help="target agent ID")
+    p.add_argument("--msg", dest="message", default="hello", help="message payload")
+    p.add_argument("--from", dest="from_peer", default="agent-orchestrator", help="sender agent ID")
+    p.add_argument("--dialect", default="auto", choices=["auto", "asl/v1", "compact/v1", "polyglot/v1"], help="wire dialect")
+    p.add_argument("--channel", default=None, help="topic channel")
+    p.add_argument("--demo", action="store_true", help="run end-to-end swarm simulation demo")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_loom)
 
     p = sub.add_parser("bus", aliases=["mesh", "swarm"],
                        help="inter-agent communication bus daemon and message dispatcher")
