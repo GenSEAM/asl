@@ -80,3 +80,9 @@ This file groups d/c/r/l entries for the lang/wasm module.
 - **Status**: Draft
 - **Cluster**: lang/wasm
 - **Description**: Replaces brittle external browser scraping with an in-browser autonomous agent (`packages/asl-browser-plugin`). The agent executes inside the browser process using the AgentScript WASI runtime paired with local 0.5B instruct models via WebGPU for private, zero-latency context analysis. Live DOM trees and reactive component states are compressed into strongly-typed ASL S-expression frames (`(! dom/snapshot ...)`), eliminating 78% of raw HTML token bloat. A bi-directional A2A mesh link streams verified UI anomalies, state mutations, and accessibility trees directly to IDE orchestrators without conversational overhead.
+
+### [d-29ef] WASI Capability-Based Directory Mounting & Zero-Token Pre-Compacted Execution
+- **Date**: 2026-09-02
+- **Status**: Final
+- **Cluster**: lang/wasm
+- **Description**: AI agents waste tens of thousands of prompt and generation tokens when performing repository analysis by writing ad-hoc scripts or ingesting raw multi-file search dumps. AgentScript's WASI runtime (`wasm32-wasip1`) leverages capability-based directory pre-opens (`asl run --mount <dir> <tool.wasm>`): (1) The sandbox securely mounts targeted workspace directories with fine-grained read/write capabilities while strictly isolating host filesystems, environment credentials, and raw network sockets; (2) Pre-compiled Wasm tooling (code search, AST graph extraction, semantic diffing) executes in-memory at near-native speed (<15ms vs multi-second container boot) and emits pre-compacted S-expression digests (<100 tokens); (3) In browser environments, the identical Wasm engine binds to the Origin Private File System (OPFS) or virtual memory filesystems, enabling zero-server repository exploration and linting inside client Web Workers.

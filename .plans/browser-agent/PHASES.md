@@ -8,6 +8,7 @@
 
 ### Phase 1: Browser Extension Core & In-Tab WASI Integration (`packages/asl-browser-plugin`)
 - [ ] Embed compiled AgentScript WASI runtime directly into Manifest V3 background service worker.
+- [ ] **OPFS Workspace Mounting**: Mount Origin Private File System (OPFS) and virtual memory trees directly into the in-browser WASI runtime for zero-server codebase navigation and file searches.
 - [ ] Connect `packages/asl-vdom` dual-perception engine:
   - AXTree extraction for semantic web apps.
   - D2Snap downsampling for complex web apps.
