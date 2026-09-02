@@ -2,47 +2,45 @@ import React from 'react';
 
 /**
  * CosmicLandscapeBackground
- * Comprehensive multi-screen technical blueprint canvas celebrating the Industrial Cosmos & Cyber-Canopy:
- * 1. Fixed schematic chameleon mascot perched directly on an integrated cyber-vine branch in the top-left.
- * 2. Grand Industrial Cosmos at the top:
- *    - Prominent Satellite Probe 1 with multi-cell solar arrays, dish, and radio signal waves.
- *    - Deep-Space Satellite 2 with angled solar wings and telemetry mesh links.
- *    - Deep-space constellations with star crosshairs, drafting arcs, and Greek-letter coordinate nodes.
- *    - Architectural Monstera canopy foliage and tropical palm fronds along the right margin.
- * 3. Planetary Scanner Port & Saturnian Ringed Planet (OPS.RTA) in the mid-range.
- * 4. Bio-Mechanical Gear Drive (ШЕСТЕРЕНЧАТЫЙ ПРИВОД) and root conduits in the lower section.
- * 5. Veiled, uncaptioned Easter eggs scattered naturally across the blueprint:
- *    - Perforated 80-column optical calibration mask (Hollerith punch card) tilted in upper orbit.
- *    - Inline glass-dome miniature vacuum triode amplifying the satellite downlink feed.
- *    - 3.5" avionics ROM cartridge tilted along the hydraulic conduit bus.
- *    - Structural wire retaining bracket shaped like a paperclip holding cable conduits together.
+ * Clean, uncluttered international aerospace & cybernetic blueprint:
+ * 1. Fixed schematic chameleon mascot perched on a cyber-vine that starts physically under its paws
+ *    and sweeps UPWARDS between the chameleon and satellite right to the top header/navbar.
+ * 2. Pure geometry & technical draft lines — NO intrusive text labels or loud museum signs.
+ * 3. 100% English & pure AgentScript Nano code annotations only.
+ * 4. Universal international hacker & space exploration Easter eggs woven invisibly into the schematics:
+ *    - Conway's Glider (the universal hacker emblem) drifting through the cosmic grid.
+ *    - Voyager Golden Record pulsar map schematic.
+ *    - Apollo 11 Lunar Module descent stage resting on an orbital station ring.
+ *    - Paperclip wire retainer clipping cable conduits.
+ *    - 3.5" avionics ROM cartridge along hydraulic lines.
+ *    - Miniature vacuum triode in the satellite RF downlink feed.
+ *    - 80-column perforated calibration mask in deep orbit.
  */
 export const CosmicLandscapeBackground: React.FC = () => (
   <div className="pointer-events-none select-none" aria-hidden="true">
-    {/* 1. Fixed Viewport Elements: Ambient Lighting Glow & Perched Chameleon on Cyber-Vine */}
+    {/* 1. Fixed Viewport: Ambient Glow & Perched Chameleon with Vine Sweeping to Header */}
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-      {/* Atmospheric bioluminescent lighting auras */}
-      <div className="absolute top-8 left-6 w-[550px] h-[550px] bg-purple-600/15 dark:bg-purple-900/25 blur-[150px] rounded-full" />
+      {/* Soft atmospheric lighting auras */}
+      <div className="absolute top-6 left-6 w-[550px] h-[550px] bg-purple-600/15 dark:bg-purple-900/25 blur-[150px] rounded-full" />
       <div className="absolute top-1/4 right-8 w-[650px] h-[650px] bg-indigo-600/12 dark:bg-indigo-950/20 blur-[160px] rounded-full" />
       <div className="absolute bottom-16 left-1/4 w-[700px] h-[550px] bg-purple-900/15 blur-[160px] rounded-full" />
 
       {/* 
-        Fixed Schematic Chameleon PERCHED DIRECTLY ON CYBER-VINE (Top-Left)
-        Integrated SVG ensures the branch always runs directly under the chameleon's paws and belly,
-        curling out from the screen edge and leading smoothly towards the right.
+        CHAMELEON & CYBER-VINE PERCH (Top-Left):
+        Starts under chameleon's paws at y=108, sweeps UPWARDS between chameleon & satellite right to the header!
       */}
-      <div className="fixed top-16 sm:top-20 left-2 sm:left-6 lg:left-10 w-72 sm:w-84 lg:w-[420px] h-auto opacity-35 dark:opacity-40 transition-all z-10">
+      <div className="fixed top-12 sm:top-14 left-2 sm:left-6 lg:left-10 w-72 sm:w-84 lg:w-[440px] h-auto opacity-35 dark:opacity-40 transition-all z-10">
         <svg
-          viewBox="0 0 240 160"
+          viewBox="0 0 260 160"
           className="w-full h-auto text-signal overflow-visible"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            <linearGradient id="vineBranchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#c084fc" />
-              <stop offset="60%" stopColor="#a855f7" />
-              <stop offset="100%" stopColor="#7e22ce" />
+            <linearGradient id="vineBranchGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#7e22ce" />
+              <stop offset="40%" stopColor="#a855f7" />
+              <stop offset="100%" stopColor="#c084fc" />
             </linearGradient>
             <linearGradient id="chameleonGradFixed" x1="20%" y1="0%" x2="80%" y2="100%">
               <stop offset="0%" stopColor="rgb(var(--signal-soft))" />
@@ -57,52 +55,51 @@ export const CosmicLandscapeBackground: React.FC = () => (
 
           <g filter="url(#fixedAmbientGlow)">
             {/* 
-              THE CYBER-VINE BRANCH (Physical perch under the chameleon):
-              Starts from off-screen left at y=108, passes right under feet and tail,
-              then extends out to the right with sprouts and leaf nodes.
+              THE CYBER-VINE:
+              Starts under paws/tail at (-30, 108), cradles the feet, then sweeps UPWARDS
+              between the chameleon and the satellite heading directly towards the header (y: -20)!
             */}
             <path
-              d="M -30,108 C 20,104 60,112 105,108 C 145,104 185,116 230,110 C 270,105 310,120 360,114"
+              d="M -30,108 C 20,104 60,112 105,108 C 135,104 160,88 180,62 C 205,28 220,-2 245,-30"
               stroke="url(#vineBranchGrad)"
               strokeWidth="3.2"
               strokeLinecap="round"
             />
             <path
-              d="M -30,113 C 20,109 60,117 105,113 C 145,109 185,121 230,115"
+              d="M -30,113 C 20,109 60,117 105,113 C 132,109 156,94 175,68 C 200,34 215,4 240,-24"
               stroke="url(#vineBranchGrad)"
               strokeWidth="1.2"
               strokeDasharray="3 3"
               opacity="0.6"
             />
 
-            {/* Small Sprouting Cyber-Leaves along the vine */}
-            <g transform="translate(140, 108) rotate(20)">
-              <path d="M 0,0 Q 15,-10 30,0 Q 15,10 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
-              <line x1="0" y1="0" x2="30" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
+            {/* Delicate sprouting cyber-leaves climbing up to header */}
+            <g transform="translate(145, 92) rotate(-35)">
+              <path d="M 0,0 Q 14,-9 28,0 Q 14,9 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
+              <line x1="0" y1="0" x2="28" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
             </g>
-            <g transform="translate(195, 112) rotate(-15)">
-              <path d="M 0,0 Q 14,-8 26,0 Q 14,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
-              <line x1="0" y1="0" x2="26" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
+            <g transform="translate(185, 52) rotate(-55)">
+              <path d="M 0,0 Q 12,-8 24,0 Q 12,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
+              <line x1="0" y1="0" x2="24" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
             </g>
-            {/* Spiral Tendril on Branch */}
+            <g transform="translate(225, 6) rotate(-70)">
+              <path d="M 0,0 Q 10,-7 20,0 Q 10,7 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
+              <line x1="0" y1="0" x2="20" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
+            </g>
+
+            {/* Spiral tendril curling near header */}
             <path
-              d="M 230,110 Q 245,125 240,135 Q 235,142 225,140 Q 220,135 225,130"
+              d="M 235,-15 Q 248,-28 245,-38 Q 240,-44 230,-40 Q 225,-35 230,-30"
               stroke="url(#vineBranchGrad)"
               strokeWidth="1.4"
             />
 
-            {/* Technical Perch Annotation */}
-            <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.85">
-              <text x="5" y="128">КИБЕР-ЛИАНА // ПЕРХ-01</text>
-              <line x1="0" y1="120" x2="75" y2="120" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 2" />
-            </g>
-
             {/* 
-              THE SCHEMATIC CHAMELEON (Scale 1:1 onto the perch):
-              Positioned so paws grasp the branch at y=108 and tail curls gracefully around it.
+              THE SCHEMATIC CHAMELEON:
+              Perched securely on the horizontal section of the branch.
             */}
             <g transform="translate(5, 0)">
-              {/* Spine and Tail Curl */}
+              {/* Spine and inward-spiraling tail */}
               <path
                 d="M 68 20 
                    C 62 13, 56 12, 53 14 
@@ -128,11 +125,11 @@ export const CosmicLandscapeBackground: React.FC = () => (
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {/* Eye Circular Aperture */}
+              {/* Eye circular aperture */}
               <circle cx="82" cy="40" r="9" stroke="url(#chameleonGradFixed)" strokeWidth="2.2" />
               <circle cx="82" cy="40" r="3" fill="rgb(var(--signal-soft))" opacity="0.9" />
 
-              {/* Belly & Underside Line */}
+              {/* Underside / Belly Line */}
               <path
                 d="M 68 64 
                    C 52 64, 40 68, 32 78 
@@ -142,7 +139,7 @@ export const CosmicLandscapeBackground: React.FC = () => (
                 strokeLinecap="round"
               />
 
-              {/* Blueprint coordinate nodes */}
+              {/* Coordinate reference nodes */}
               <circle cx="53" cy="14" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
               <circle cx="98" cy="52" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
               <circle cx="38" cy="122" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
@@ -152,7 +149,7 @@ export const CosmicLandscapeBackground: React.FC = () => (
       </div>
     </div>
 
-    {/* 2. Full-Document Scrolling Blueprint Landscape (Multi-Screen Continuous Canvas) */}
+    {/* 2. Full-Document Scrolling Blueprint Landscape (Continuous Canvas) */}
     <div className="absolute inset-0 w-full h-full pointer-events-none overflow-hidden z-0">
       <svg
         className="w-full h-full text-purple-400/35 dark:text-purple-300/30"
@@ -190,24 +187,23 @@ export const CosmicLandscapeBackground: React.FC = () => (
         <rect width="100%" height="100%" fill="url(#blueprintGridPattern)" />
 
         {/* ========================================================================= */}
-        {/* SCREEN 1: THE GRAND INDUSTRIAL COSMOS & CYBER-CANOPY (y: 0 - 1000)        */}
+        {/* SCREEN 1: INDUSTRIAL COSMOS & UNIVERSAL FLIGHT (y: 0 - 1000)               */}
         {/* ========================================================================= */}
 
-        {/* 1. INDUSTRIAL SATELLITE PROBE 1 (Upper Left-Center, x: 380, y: 190, rotate -25) */}
-        <g transform="translate(380, 190) rotate(-25)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
-          {/* Central Satellite Chassis */}
+        {/* 1. INDUSTRIAL SATELLITE PROBE 1 (x: 420, y: 190, rotate -25) */}
+        <g transform="translate(420, 190) rotate(-25)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
           <rect x="-20" y="-35" width="40" height="70" rx="4" fill="#3b0764" fillOpacity="0.25" />
           <line x1="-20" y1="-15" x2="20" y2="-15" strokeDasharray="3 3" />
           <line x1="-20" y1="15" x2="20" y2="15" strokeDasharray="3 3" />
           <circle cx="0" cy="0" r="10" strokeDasharray="2 2" />
 
-          {/* Large Solar Array Wing Left (3 segmented cells) */}
+          {/* Solar Array Wing Left */}
           <rect x="-95" y="-18" width="70" height="36" fill="#581c87" fillOpacity="0.3" />
           <line x1="-72" y1="-18" x2="-72" y2="18" />
           <line x1="-49" y1="-18" x2="-49" y2="18" />
           <line x1="-95" y1="0" x2="-25" y2="0" strokeDasharray="2 2" />
 
-          {/* Large Solar Array Wing Right (3 segmented cells) */}
+          {/* Solar Array Wing Right */}
           <rect x="25" y="-18" width="70" height="36" fill="#581c87" fillOpacity="0.3" />
           <line x1="48" y1="-18" x2="48" y2="18" />
           <line x1="71" y1="-18" x2="71" y2="18" />
@@ -218,51 +214,56 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <line x1="0" y1="68" x2="0" y2="82" strokeWidth="2" />
           <circle cx="0" cy="82" r="3" fill="currentColor" />
 
-          {/* Radio Signal Wave Fronts */}
+          {/* Wavefronts */}
           <path d="M -16,92 Q 0,105 16,92" strokeDasharray="3 3" opacity="0.8" />
           <path d="M -26,104 Q 0,122 26,104" strokeDasharray="3 3" opacity="0.6" />
           <path d="M -36,116 Q 0,138 36,116" strokeDasharray="3 3" opacity="0.4" />
 
-          {/* Technical Leader Callout */}
-          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9" transform="rotate(25)">
-            <text x="85" y="-20">САТЕЛЛИТ-1 // Ku-BAND</text>
-            <line x1="15" y1="-23" x2="80" y2="-23" stroke="currentColor" strokeWidth="0.8" />
-            <text x="85" y="-8" fill="#4ade80">(! mesh/ping "sat-01" 40)</text>
+          {/* Minimal ASL Code Annotation */}
+          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85" transform="rotate(25)">
+            <text x="85" y="-10" fill="#4ade80">(! ping "probe-01" 40)</text>
           </g>
         </g>
 
         {/* 
-          VEILED EASTER EGG 1: Glass Vacuum Triode (Inline RF Preamplifier)
-          Tilted -20° and wired directly into the satellite antenna downlink.
+          VEILED EASTER EGG: Miniature Vacuum Triode on Satellite Downlink
+          Tilted -20° inline RF amplifier
         */}
-        <g transform="translate(530, 310) rotate(-20)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          {/* Glass Dome Envelope */}
+        <g transform="translate(560, 310) rotate(-20)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
           <path d="M 0,55 L 0,25 C 0,8 36,8 36,25 L 36,55 Z" fill="#4a044e" fillOpacity="0.2" />
-          {/* Anode Plate */}
           <line x1="9" y1="20" x2="27" y2="20" strokeWidth="1.8" />
           <line x1="18" y1="8" x2="18" y2="20" />
-          {/* Zig-Zag Grid */}
           <path d="M 11,30 L 14,33 L 18,30 L 21,33 L 25,30" strokeWidth="1.2" strokeDasharray="1 1" />
-          {/* Glowing Heater Cathode */}
           <path d="M 13,40 L 23,40" stroke="url(#amberGlow)" strokeWidth="1.8" />
           <path d="M 16,46 L 18,42 L 20,46" stroke="url(#amberGlow)" strokeWidth="1.2" />
-          {/* Pin leads connecting to coaxial bus */}
           <line x1="8" y1="55" x2="8" y2="65" />
           <line x1="18" y1="55" x2="18" y2="68" />
           <line x1="28" y1="55" x2="28" y2="65" />
           <line x1="18" y1="68" x2="-40" y2="68" strokeDasharray="2 2" />
-          <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.75">
-            <text x="42" y="32">AMP: V-12 // 6.3V</text>
-          </g>
         </g>
 
-        {/* 2. CENTRAL INDUSTRIAL SATELLITE RELAY (Upper Right-Center, x: 920, y: 320, rotate 35) */}
-        <g transform="translate(920, 320) rotate(35)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
+        {/* 
+          VEILED EASTER EGG: Conway's Game of Life Glider (Universal Hacker Emblem)
+          5 cells drifting along the coordinate grid
+        */}
+        <g transform="translate(240, 320)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
+          <rect x="14" y="0" width="10" height="10" fill="#c084fc" fillOpacity="0.5" />
+          <rect x="28" y="14" width="10" height="10" fill="#c084fc" fillOpacity="0.5" />
+          <rect x="0" y="28" width="10" height="10" fill="#c084fc" fillOpacity="0.5" />
+          <rect x="14" y="28" width="10" height="10" fill="#c084fc" fillOpacity="0.5" />
+          <rect x="28" y="28" width="10" height="10" fill="#c084fc" fillOpacity="0.5" />
+          {/* Subtle trajectory vector */}
+          <line x1="38" y1="38" x2="68" y2="68" strokeDasharray="2 2" opacity="0.6" />
+          <path d="M 64,68 L 68,68 L 68,64" strokeWidth="1.4" />
+        </g>
+
+        {/* 2. CENTRAL ORBITAL RELAY (x: 940, y: 300, rotate 35) */}
+        <g transform="translate(940, 300) rotate(35)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
           <rect x="-25" y="-30" width="50" height="60" rx="4" fill="#3b0764" fillOpacity="0.25" />
           <circle cx="0" cy="0" r="14" strokeWidth="1.8" />
           <circle cx="0" cy="0" r="5" fill="currentColor" />
 
-          {/* Extended Solar Panels */}
+          {/* Solar Arrays */}
           <rect x="-110" y="-16" width="80" height="32" fill="#581c87" fillOpacity="0.3" />
           <line x1="-84" y1="-16" x2="-84" y2="16" />
           <line x1="-58" y1="-16" x2="-58" y2="16" />
@@ -271,35 +272,30 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <line x1="56" y1="-16" x2="56" y2="16" />
           <line x1="82" y1="-16" x2="82" y2="16" />
 
-          {/* High-Gain Dish */}
+          {/* Dish */}
           <path d="M 0,30 Q -20,52 0,62 Q 20,52 0,30" strokeWidth="1.8" />
           <line x1="0" y1="62" x2="0" y2="76" strokeWidth="2" />
           <circle cx="0" cy="76" r="3.5" fill="currentColor" />
 
-          {/* Concentric Telemetry Radio Arcs */}
           <path d="M 14,84 Q 28,96 20,112" strokeDasharray="3 3" opacity="0.8" />
           <path d="M 22,80 Q 40,94 32,120" strokeDasharray="3 3" opacity="0.6" />
 
-          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9" transform="rotate(-35)">
-            <text x="35" y="-45">ОРБИТАЛЬНЫЙ РЕЛЕЙ</text>
-            <line x1="0" y1="-48" x2="30" y2="-48" stroke="currentColor" strokeWidth="0.8" />
-            <text x="35" y="-32" fill="#c084fc">СВЯЗЬ: 0.038ms // MESH</text>
+          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85" transform="rotate(-35)">
+            <text x="35" y="-35" fill="#c084fc">0.038ms // MESH</text>
           </g>
         </g>
 
         {/* 
-          VEILED EASTER EGG 2: Perforated Calibration Mask (Hollerith 80-Column Card)
-          Tilted 22° in deep space, woven into orbit telemetry grid without loud caption.
+          VEILED EASTER EGG: Perforated 80-Column Mask (Hollerith Card)
+          Tilted 22° in deep space
         */}
-        <g transform="translate(680, 110) rotate(22)" stroke="url(#bioLineGrad)" strokeWidth="1.1">
-          {/* Outline with the unmistakable diagonal corner notch */}
+        <g transform="translate(710, 110) rotate(22)" stroke="url(#bioLineGrad)" strokeWidth="1.1">
           <polygon
             points="12,0 145,0 145,72 0,72 0,12"
             fill="#3b0764"
             fillOpacity="0.2"
           />
           <line x1="0" y1="14" x2="145" y2="14" strokeWidth="0.6" opacity="0.6" />
-          {/* Subtle punched rectangular apertures */}
           <g fill="currentColor" opacity="0.85">
             <rect x="16" y="22" width="2.5" height="5" />
             <rect x="16" y="38" width="2.5" height="5" />
@@ -314,15 +310,27 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <rect x="122" y="46" width="2.5" height="5" />
             <rect x="134" y="30" width="2.5" height="5" />
           </g>
-          {/* Cryptic engineering mark */}
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7">
-            <text x="14" y="10">MASK-80 // CAL-A</text>
-          </g>
         </g>
 
-        {/* 3. DEEP-SPACE CONSTELLATIONS ALPHA & BETA (Upper Skies) */}
-        <g stroke="currentColor" strokeWidth="1.2" opacity="0.75" transform="translate(180, 60)">
-          {/* Alpha Web */}
+        {/* 
+          VEILED EASTER EGG: Voyager Golden Record Schematic
+          Concentric circles with binary pulsar rays radiating from center
+        */}
+        <g transform="translate(640, 240)" stroke="url(#bioLineGrad)" strokeWidth="1.0" opacity="0.65">
+          <circle cx="0" cy="0" r="28" />
+          <circle cx="0" cy="0" r="14" strokeDasharray="2 2" />
+          <circle cx="0" cy="0" r="4" fill="currentColor" />
+          {/* Pulsar lines */}
+          <line x1="0" y1="0" x2="-24" y2="-12" />
+          <line x1="0" y1="0" x2="22" y2="-16" />
+          <line x1="0" y1="0" x2="-10" y2="24" />
+          <line x1="0" y1="0" x2="18" y2="20" />
+          <line x1="0" y1="0" x2="-26" y2="8" strokeDasharray="2 1" />
+          <line x1="0" y1="0" x2="26" y2="6" strokeDasharray="2 1" />
+        </g>
+
+        {/* 3. DEEP-SPACE CONSTELLATIONS */}
+        <g stroke="currentColor" strokeWidth="1.2" opacity="0.7" transform="translate(180, 60)">
           <line x1="220" y1="90" x2="340" y2="50" />
           <line x1="340" y1="50" x2="390" y2="20" />
           <line x1="340" y1="50" x2="300" y2="150" />
@@ -330,7 +338,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <line x1="380" y1="170" x2="430" y2="130" />
           <line x1="300" y1="150" x2="340" y2="230" />
 
-          {/* Precision Star Crosshairs */}
           <g fill="currentColor">
             <path d="M 216,90 H 224 M 220,86 V 94" />
             <path d="M 336,50 H 344 M 340,46 V 54" />
@@ -340,43 +347,10 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <path d="M 426,130 H 434 M 430,126 V 134" />
             <path d="M 336,230 H 344 M 340,226 V 234" />
           </g>
-
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.8">
-            <text x="348" y="56">α-ASL</text>
-            <text x="398" y="26">β-COORD</text>
-            <text x="290" y="162">γ-WASM</text>
-            <text x="388" y="178">δ-SWARM</text>
-          </g>
         </g>
 
-        {/* 
-          VEILED EASTER EGG 5: Sputnik-1 (First Artificial Satellite, 1957)
-          Polished sphere with 4 swept whip antennas, traversing upper cosmic vacuum.
-        */}
-        <g transform="translate(340, 470) rotate(-42)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          {/* Spherical Body */}
-          <circle cx="0" cy="0" r="12" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.6" />
-          <ellipse cx="0" cy="0" rx="12" ry="4" strokeDasharray="2 2" opacity="0.6" />
-          
-          {/* 4 Swept Whip Antennas (Pair 1 and Pair 2) */}
-          <line x1="-8" y1="-8" x2="-60" y2="-36" strokeWidth="1.3" />
-          <line x1="-8" y1="8" x2="-64" y2="28" strokeWidth="1.3" />
-          <line x1="8" y1="-8" x2="52" y2="-44" strokeWidth="1.1" strokeDasharray="3 1" opacity="0.7" />
-          <line x1="8" y1="8" x2="58" y2="34" strokeWidth="1.1" strokeDasharray="3 1" opacity="0.7" />
-
-          {/* Spherical Pulse Waves */}
-          <circle cx="0" cy="0" r="22" strokeDasharray="2 3" opacity="0.5" />
-          <circle cx="0" cy="0" r="34" strokeDasharray="1 4" opacity="0.3" />
-
-          {/* Cryptic Frequency Mark */}
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7" transform="rotate(42)">
-            <text x="18" y="-14">PS-01 // 20.005 MHz</text>
-          </g>
-        </g>
-
-        {/* 4. UPPER-RIGHT CYBER-MONSTERA CANOPY (Natural, uncrowded architectural foliage) */}
+        {/* 4. UPPER-RIGHT CYBER-MONSTERA CANOPY */}
         <g transform="translate(1080, 0)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
-          {/* Graceful Canopy Arch */}
           <path d="M 360,0 C 280,60 220,150 240,260 C 260,370 340,430 360,540" fill="none" />
           <path d="M 375,0 C 295,65 235,155 255,265 C 275,375 355,435 375,545" strokeDasharray="4 4" opacity="0.5" fill="none" />
 
@@ -386,7 +360,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
               d="M 0,0 C 50,-70 130,-80 170,-30 C 200,20 190,90 150,140 C 110,180 30,170 -10,120 C -40,80 -30,30 0,0 Z"
               fill="url(#leafFacetGrad)"
             />
-            {/* Fenestrations / Cutouts */}
             <ellipse cx="60" cy="-15" rx="15" ry="6" transform="rotate(-30 60 -15)" />
             <ellipse cx="105" cy="20" rx="18" ry="7" transform="rotate(-15 105 20)" />
             <ellipse cx="95" cy="75" rx="16" ry="6" transform="rotate(20 95 75)" />
@@ -394,22 +367,11 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <line x1="0" y1="0" x2="150" y2="140" strokeWidth="2.2" />
           </g>
 
-          {/* Tropical Palm Fronds Fan */}
+          {/* Palm Fronds Fan */}
           <g transform="translate(80, 160) rotate(35)">
             <path d="M 0,0 Q 60,-35 150,-15 Q 80,20 0,0" fill="url(#leafFacetGrad)" />
             <path d="M 0,0 Q 75,-15 165,15 Q 90,40 0,0" fill="url(#leafFacetGrad)" />
             <path d="M 0,0 Q 60,10 145,50 Q 70,55 0,0" fill="url(#leafFacetGrad)" />
-          </g>
-
-          {/* Chameleon Palm Mark */}
-          <g transform="translate(40, 320) rotate(-20)" strokeWidth="1.5">
-            <path d="M 0,0 C 15,-20 30,-15 25,10 C 20,30 5,35 0,0" fill="url(#leafFacetGrad)" />
-            <path d="M -15,-10 C -5,-30 10,-25 5,-5" fill="url(#leafFacetGrad)" />
-            <path d="M 20,-5 C 35,-25 50,-15 35,5" fill="url(#leafFacetGrad)" />
-            <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85">
-              <text x="35" y="10">БИО-КОМПОНЕНТ</text>
-              <line x1="0" y1="15" x2="30" y2="15" stroke="currentColor" strokeWidth="0.8" />
-            </g>
           </g>
         </g>
 
@@ -423,51 +385,38 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <circle cx="0" cy="0" r="110" strokeDasharray="4 4" opacity="0.6" />
           <circle cx="0" cy="0" r="80" strokeWidth="2" />
 
-          {/* Hemisphere Dome */}
           <path d="M -70,-25 A 75 75 0 0 1 70,-25" strokeWidth="2.5" fill="#3b0764" fillOpacity="0.2" />
           <line x1="-70" y1="-25" x2="70" y2="-25" />
 
-          {/* Optical Scanner Head */}
           <path d="M -30,-25 L -16,-65 L 16,-65 L 30,-25 Z" strokeWidth="2" fill="#581c87" fillOpacity="0.3" />
           <line x1="0" y1="-65" x2="0" y2="-100" strokeWidth="2.5" />
           <circle cx="0" cy="-100" r="4" fill="currentColor" />
 
-          {/* Hydraulic Conduits */}
           <path d="M -50,15 L -100,65 L -120,130" strokeWidth="3" />
           <path d="M -30,25 L -75,90 L -85,150" strokeWidth="2" strokeDasharray="4 4" />
 
-          <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9">
-            <text x="65" y="-50">ПЛАНЕТАРНЫЙ ПОРТ</text>
-            <line x1="20" y1="-55" x2="60" y2="-55" stroke="currentColor" strokeWidth="0.8" />
-            <text x="-35" y="15" transform="rotate(45 -35 15)">ПОРТ А</text>
-            <text x="55" y="105" fill="#4ade80">WASM REACTOR // 0.038ms</text>
-            <text x="55" y="118" fill="#c084fc">(dfs WasmNode (:f id Str) (:f ms F64))</text>
+          {/* Minimal ASL Type Schema */}
+          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85">
+            <text x="55" y="105" fill="#4ade80">0.038ms</text>
+            <text x="55" y="118" fill="#c084fc">(dfs Node (:f id Str) (:f ms F64))</text>
           </g>
         </g>
 
         {/* 
-          VEILED EASTER EGG 3: 3.5" Avionics Memory Cartridge (Floppy Disk)
-          Tilted -34° near hydraulic bus, looking like a modular avionics sub-unit.
+          VEILED EASTER EGG: 3.5" Avionics ROM Cartridge (Floppy Disk)
+          Tilted -34° near hydraulic bus
         */}
         <g transform="translate(180, 1680) rotate(-34)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          {/* Chassis with bevel corner */}
           <polygon
             points="0,0 75,0 82,7 82,88 0,88"
             fill="#3b0764"
             fillOpacity="0.25"
           />
-          {/* Metal Shutter Slider with Rectangular Read Window */}
           <rect x="15" y="0" width="40" height="32" rx="2" fill="#581c87" fillOpacity="0.35" />
           <rect x="22" y="6" width="8" height="20" rx="1" fill="currentColor" fillOpacity="0.8" />
-          {/* Center Drive Hub */}
           <circle cx="41" cy="54" r="14" strokeDasharray="2 2" opacity="0.6" />
           <circle cx="41" cy="54" r="5" fill="currentColor" opacity="0.5" />
-          {/* Write-protect slider notch */}
           <rect x="71" y="77" width="6" height="5" fill="currentColor" opacity="0.8" />
-          {/* Cryptic technical part mark */}
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.75">
-            <text x="12" y="78">ROM-144 // ASL</text>
-          </g>
         </g>
 
         {/* Saturnian Ringed Planet (OPS.RTA) in Right Margin (x: 1240, y: 1440) */}
@@ -487,38 +436,29 @@ export const CosmicLandscapeBackground: React.FC = () => (
         </g>
 
         {/* 
-          VEILED EASTER EGG 6: Lunar Module Descent Stage (1969 Apollo 11 "Eagle")
-          Tilted 14° resting gracefully along the orbital station perimeter ring.
+          VEILED EASTER EGG: Lunar Module Descent Stage (1969 Apollo 11 "Eagle")
+          Tilted 14° resting on perimeter ring
         */}
         <g transform="translate(1060, 1460) rotate(14)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          {/* Octagonal Descent Stage Chassis */}
           <polygon
             points="8,0 26,0 34,8 34,22 26,30 8,30 0,22 0,8"
             fill="#3b0764"
             fillOpacity="0.35"
           />
-          {/* Central Descent Engine Bell */}
           <path d="M 13,30 L 11,38 L 23,38 L 21,30 Z" fill="#581c87" fillOpacity="0.4" />
           
-          {/* Outrigger Landing Struts & Footpads */}
           <line x1="4" y1="24" x2="-12" y2="42" strokeWidth="1.4" />
           <ellipse cx="-12" cy="42" rx="4" ry="1.5" strokeWidth="1.2" />
           
           <line x1="30" y1="24" x2="46" y2="42" strokeWidth="1.4" />
           <ellipse cx="46" cy="42" rx="4" ry="1.5" strokeWidth="1.2" />
           
-          {/* Miniature Egress Ladder on Forward Strut */}
           <line x1="-8" y1="28" x2="-6" y2="29" strokeWidth="0.8" />
           <line x1="-10" y1="33" x2="-8" y2="34" strokeWidth="0.8" />
           <line x1="-12" y1="38" x2="-10" y2="39" strokeWidth="0.8" />
-
-          {/* Cryptic Site Callout */}
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.75" transform="rotate(-14)">
-            <text x="42" y="24">SITE: TRANQ-11</text>
-          </g>
         </g>
 
-        {/* Cable Bundles and Sensor Terminals (Right Margin, x: 1140, y: 1680) */}
+        {/* Cable Bundles and Sensor Terminals */}
         <g transform="translate(1140, 1680)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
           <path d="M 0,0 C 40,30 80,20 120,70" strokeWidth="2" />
           <path d="M 20,-10 C 60,10 90,40 140,50" />
@@ -528,9 +468,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <circle cx="160" cy="20" r="4" fill="currentColor" />
 
           {/* 
-            VEILED EASTER EGG 4: The Paperclip Wire Retainer
-            Tilted 58° clipping the two hydraulic cable conduits together!
-            No loud signs: just an authentic curved wire bracket that engineers spot.
+            VEILED EASTER EGG: Paperclip Wire Retainer
+            Holding hydraulic cables together
           */}
           <g transform="translate(55, 20) rotate(58)" stroke="url(#bioLineGrad)" strokeWidth="1.6">
             <path
@@ -539,14 +478,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
               strokeLinecap="round"
             />
             <circle cx="16" cy="30" r="22" strokeDasharray="3 2" opacity="0.4" strokeWidth="0.8" />
-            <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7">
-              <text x="32" y="32">CLIP-MAX</text>
-            </g>
-          </g>
-
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85">
-            <text x="-40" y="30">ДАТЧИК-1</text>
-            <text x="130" y="10">ПОРТ-А</text>
           </g>
         </g>
 
@@ -554,17 +485,16 @@ export const CosmicLandscapeBackground: React.FC = () => (
         {/* SCREEN 3: LOWER BLUEPRINT MATRIX & BIO-MECHANICAL GEARS (y: 2100 - 3200)  */}
         {/* ========================================================================= */}
 
-        {/* Token Fuel Gauge Callout (Left Margin, x: 70, y: 2240) */}
+        {/* Token Fuel Gauge */}
         <g transform="translate(70, 2240)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
           <circle cx="45" cy="45" r="40" strokeDasharray="4 3" opacity="0.6" />
           <path d="M 45,45 L 68,24" stroke="#4ade80" strokeWidth="2.2" />
           <circle cx="45" cy="45" r="4" fill="#4ade80" />
           
           <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9">
-            <text x="100" y="32" fontWeight="bold" fill="#c084fc">GAUGE: TOKEN FUEL</text>
-            <text x="100" y="46" fill="#4ade80">ASL SAVINGS: -80% BLOAT</text>
-            <text x="100" y="60">COGNITIVE LOAD: 0.00%</text>
-            <line x1="85" y1="38" x2="96" y2="38" stroke="currentColor" strokeWidth="0.8" />
+            <text x="100" y="36" fill="#4ade80">-80% TOKENS</text>
+            <text x="100" y="52" fill="#c084fc">0 RETRIES</text>
+            <line x1="85" y1="42" x2="96" y2="42" stroke="currentColor" strokeWidth="0.8" />
           </g>
         </g>
 
@@ -582,13 +512,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <path d="M 136,130 H 144 M 140,126 V 134" />
           <path d="M 306,50 H 314 M 310,46 V 54" />
           <path d="M 206,180 H 214 M 210,176 V 184" />
-
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.75">
-            <text x="165" y="35">G</text>
-            <text x="245" y="85">B</text>
-            <text x="315" y="55">A</text>
-            <text x="130" y="140">B</text>
-          </g>
         </g>
 
         {/* Lower Right Cyber-Canopy Roots & Bio-Mechanical Gears (x: 1140, y: 2450) */}
@@ -618,12 +541,11 @@ export const CosmicLandscapeBackground: React.FC = () => (
               />
             ))}
             <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.8">
-              <text x="-35" y="80">ШЕСТЕРЕНЧАТЫЙ БЛОК</text>
-              <text x="-35" y="92" fill="#4ade80">(mt state ((:on) (! run)))</text>
+              <text x="-35" y="85" fill="#4ade80">(mt s ((:on) (! run)))</text>
             </g>
           </g>
 
-          {/* Agent Vibe Secret S-Expression Frame */}
+          {/* Agent Vibe Secret Frame */}
           <g transform="translate(-100, 520)" stroke="url(#bioLineGrad)" strokeWidth="1">
             <line x1="0" y1="12" x2="230" y2="12" strokeDasharray="3 3" opacity="0.5" />
             <text x="10" y="26" fontFamily="monospace" fontSize="8" fill="#4ade80">
