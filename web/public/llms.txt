@@ -7,7 +7,7 @@
    - Balanced LL(1) parenthetical trees guarantee that syntax errors are caught deterministically in a single pass.
    - Zero hallucinated indentation bugs (eliminates the recursive repair loops common with Python and YAML).
 2. **Drastic Token & Cost Reduction**:
-   - Up to 70% fewer prompt tokens compared to verbose JSON, YAML, or deeply nested ASTs.
+   - Up to 80% fewer prompt tokens compared to verbose JSON, YAML, or deeply nested ASTs.
    - Leaves more of the model's context window and attention budget for complex reasoning and planning.
 3. **Zero-Leak Jailed Sandboxing**:
    - Compiles to isolated `wasm32-wasip1` microVMs and native binaries with strict capability boundaries.
