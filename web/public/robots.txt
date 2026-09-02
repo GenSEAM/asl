@@ -1,0 +1,43 @@
+# Robots.txt for AgentScript (https://aslang.dev)
+# User-agent directives for Web Crawlers & AI Agent Indexers
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /private/
+
+# Explicit permissions and guidance for AI Search & Agent Indexers
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+# Canonical Sitemaps and AI Agent Entrypoints
+Sitemap: https://aslang.dev/sitemap.xml
+
+# Machine-Readable AI Agent Handbooks (GEO: Generative Engine Optimization)
+# Agents should ingest /llms.txt and /llms-full.txt for comprehensive language specification
+Link: <https://aslang.dev/llms.txt>; rel="alternate"; type="text/plain"
+Link: <https://aslang.dev/llms-full.txt>; rel="alternate"; type="text/plain"

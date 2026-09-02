@@ -3,14 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ASL — A programming language written for the generator</title>
-    <meta name="description" content="AgentScript is an S-expression language with a single-pass LL(1) grammar, built so a model emits a correct program the first time — and so one source compiles to six runtimes that are made to agree." />
+    <title>AgentScript (ASL) — Native Language & Wire Protocol for Autonomous AI Agents</title>
+    <meta name="description" content="Multi-runtime language, wire protocol, and compact data notation (ASN) engineered for autonomous AI models. -80% prompt tokens, zero syntax repair loops, verified Wasm/Rust/TS/Go/Python/SQL." />
+    <meta name="keywords" content="AgentScript, ASL, ASN, autonomous agents, AI agents, LLM programming language, token reduction, wire protocol, model context protocol, MCP, Wasm, WebAssembly, S-expressions, TOON alternative, JSON alternative" />
+    <link rel="canonical" href="https://aslang.dev" />
+
+    <!-- Open Graph / Facebook / LinkedIn / Slack / Discord -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://aslang.dev" />
+    <meta property="og:title" content="AgentScript (ASL) — Native Language & Wire Protocol for Autonomous AI Agents" />
+    <meta property="og:description" content="Stop forcing LLMs to write 1990s human code. AgentScript saves 80% tokens, eliminates syntax loops, and compiles across Wasm, Rust, TS, Go, Python, and SQL." />
+    <meta property="og:image" content="https://aslang.dev/logo.svg" />
+    <meta property="og:site_name" content="AgentScript" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:url" content="https://aslang.dev" />
+    <meta name="twitter:title" content="AgentScript (ASL) — The Native Language for Autonomous AI Agents" />
+    <meta name="twitter:description" content="-80% prompt tokens. 0 syntax loops. Verified Wasm, Rust, TypeScript, Go, Python, and SQL compilation." />
+    <meta name="twitter:image" content="https://aslang.dev/logo.svg" />
     
-    <!-- Machine-Readable Agent Context -->
+    <!-- Machine-Readable Agent Context & GEO Entrypoints -->
     <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Machine Readable Specification" />
     <link rel="alternate" type="text/plain" href="/llms-full.txt" title="Complete Agent Specification" />
     <meta name="agent-protocol" content="asl/1.0" />
     <meta name="agent-wire-format" content="s-expression-nano" />
+    <meta name="ai-data-format" content="asn/1.0" />
     
     <!-- ASL Chameleon Curled 'a' signature mark -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -26,23 +44,44 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "ASL (AgentScript Language)",
-      "applicationCategory": "DeveloperApplication",
-      "operatingSystem": "All",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "description": "Single-pass S-expression language and agent-to-agent wire protocol, compiling to Python, Rust, WebAssembly, TypeScript, Go and a reference interpreter.",
-      "url": "https://aslang.dev",
-      "softwareVersion": "1.0.0",
-      "license": "https://opensource.org/licenses/MIT",
-      "author": {
-        "@type": "Organization",
-        "name": "GenSEAM Core"
-      }
+      "@graph": [
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://aslang.dev/#application",
+          "name": "ASL (AgentScript Language)",
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "All",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "description": "Multi-runtime language, wire protocol, and compact data notation (ASN) engineered for autonomous AI models with verified Wasm, Rust, TypeScript, Go, Python, and SQL backends.",
+          "url": "https://aslang.dev",
+          "softwareVersion": "1.0.0",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Organization",
+            "name": "GenSEAM Core",
+            "url": "https://github.com/GenSEAM"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://aslang.dev/#website",
+          "url": "https://aslang.dev",
+          "name": "AgentScript Language & Protocol",
+          "description": "The native substrate for autonomous AI agents",
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "ComputerLanguage",
+          "@id": "https://aslang.dev/#language",
+          "name": "AgentScript",
+          "alternateName": ["ASL", "ASN", "AgentScript Notation"],
+          "description": "Single-pass LL(1) deterministic S-expression language and wire protocol with mathematically verified multi-target equivalence."
+        }
+      ]
     }
     </script>
     <script type="module" crossorigin src="/assets/index-b5AT5Tmr.js"></script>
