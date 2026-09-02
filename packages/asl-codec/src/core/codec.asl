@@ -1,6 +1,7 @@
 (module asl-codec/core
   :doc "Zero-Cost Native JSON Serializer and Algebraic Value Representation for AgentScript."
-  :export [JsonValue JsonEntry make-kv render-json render-entry render-json-array render-json-object])
+  :export [JsonValue JsonEntry make-kv render-json render-entry render-json-array render-json-object
+           map-items map-entries])
 
 (defschema JsonEntry
   (:field key String "Object key")
@@ -27,13 +28,21 @@
   :doc "Joins items with commas and encloses in delimiters."
   (str open (string-join items ",") close))
 
+(defun map-items [(items (List JsonValue))] -> (List String)
+  :doc "Maps array items to rendered strings."
+  (map (fn [item] (render-json item)) items))
+
+(defun map-entries [(entries (List JsonEntry))] -> (List String)
+  :doc "Maps object entries to rendered strings."
+  (map (fn [e] (render-entry e)) entries))
+
 (defun render-json-array [(items (List JsonValue))] -> String
   :doc "Renders a list of JSON values into a JSON array string."
-  (wrap-delimited "[" (map (fn [item] (render-json item)) items) "]"))
+  (wrap-delimited "[" (map-items items) "]"))
 
 (defun render-json-object [(entries (List JsonEntry))] -> String
   :doc "Renders object entries into a JSON object string."
-  (wrap-delimited "{" (map (fn [e] (render-entry e)) entries) "}"))
+  (wrap-delimited "{" (map-entries entries) "}"))
 
 (defun render-json [(v JsonValue)] -> String
   :doc "Recursively renders algebraic JsonValue to valid JSON string."
