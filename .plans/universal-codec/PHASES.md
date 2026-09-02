@@ -1,6 +1,6 @@
-# Roadmap & Implementation Plan: Multi-Target Serializer/Deserializer SDKs (`asl-universal-codec-v1`)
+# Roadmap & Implementation Plan: Multi-Target ASN (AgentScript Notation) Codec SDKs (`asl-universal-codec-v1`)
 
-**Goal**: Establish AgentScript as the premier compact data serialization format (-80% tokens vs JSON/YAML) and communication wire protocol by compiling `packages/asl-codec` into official, zero-dependency client SDKs across TypeScript, Python, Rust, Go, and WebAssembly, and providing native structural slicing & output compaction (@pcp:d-bda8, @pcp:d-b0a9).
+**Goal**: Establish **ASN (AgentScript Notation)** as the premier compact agent-oriented data serialization format (-80% tokens vs JSON/YAML) with aggressive key compaction (`:dflt`, `:f`, `:c`, positional vectors) and communication wire protocol by compiling `packages/asl-codec` into official, zero-dependency client SDKs across TypeScript, Python, Rust, Go, and WebAssembly, and providing native structural slicing & output compaction (@pcp:d-bda8, @pcp:d-b0a9).
 
 ## Status: PLANNED (Scheduled for execution alongside `asl-agent-efficiency-v1`)
 
