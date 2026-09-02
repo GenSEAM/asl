@@ -1,0 +1,12 @@
+{
+  "name": "@genseam/asl-sh",
+  "version": "1.0.0",
+  "description": "Native AgentScript System & Process Automation Toolkit with Structured Shell Pipelines & Channel Redirection",
+  "main": "src/sh.asl",
+  "scripts": {
+    "test": "python3 ../../tools/test_runner.py tests/"
+  },
+  "keywords": ["agentscript", "process", "shell", "pipeline", "automation", "admin"],
+  "author": "GenSEAM Team",
+  "license": "MIT"
+}

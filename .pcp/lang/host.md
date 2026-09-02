@@ -44,3 +44,9 @@ This file groups d/c/r/l entries for the lang/host module.
   and a language that leaves a rule to its backends gets one such divergence per backend. The
   divergence is invisible while every program written has the right shape, which is every program
   written so far.
+
+### [d-446d] Structured Process Automation: Typed Vector Commands over Unsafe Shell Interpolation
+- **Date**: 2026-09-02
+- **Status**: Final
+- **Cluster**: lang/host
+- **Description**: Autonomous administrative scripting in AgentScript replaces brittle Bash/sh string interpolation and Python subprocess boilerplate with typed vector commands and structured process pipelines (`packages/asl-sh`). Command arguments are represented as explicit vectors (`(ProcessCmd :bin "git" :args ["status" "-s"])`), preventing shell injection vulnerabilities by design. Multi-stage pipelines stream stdout between process stages without spawning intermediate `/bin/sh` eval subshells, and outputs (exit-code, stdout, stderr, stdlog) are captured in strongly typed `(Result ProcessOutput ProcessError)` structures with timeout and path jailing enforcement.

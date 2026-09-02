@@ -87,7 +87,14 @@ def report(diags: list[Diagnostic], as_json: bool, subject: str) -> int:
 def cmd_check(args) -> int:
     """Run the semantic checker in-process (`checker/resolve.check_file`)."""
     files = sources(args.paths)
-    roots = [ROOT / "grammar" / "corpus" / "modules"]
+    base_roots = [
+        ROOT / "grammar" / "corpus" / "modules",
+        ROOT / "packages",
+        ROOT
+    ]
+    file_dirs = [f.parent for f in files]
+    file_grandparents = [f.parent.parent for f in files]
+    roots = list(dict.fromkeys(base_roots + file_dirs + file_grandparents))
 
     if getattr(args, "fix", False):
         from tools.heal import heal_file
@@ -175,6 +182,33 @@ def cmd_sandbox(args) -> int:
     """Isolated in-memory sandbox and jailed runner (@pcp:r-8d8e)."""
     from tools.sandbox_runner import run_sandbox_cli
     return run_sandbox_cli(args)
+
+
+def cmd_sh(args) -> int:
+    """Execute safe typed vector shell commands or pipelines (@pcp:d-446d)."""
+    from tools.sh_runner import ShProcessRunner
+    res = ShProcessRunner.run_cmd(
+        bin_path=args.command,
+        args=args.args,
+        cwd=getattr(args, "cwd", None),
+        timeout_sec=getattr(args, "timeout", 10.0)
+    )
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "exit_code": res.exit_code,
+            "stdout": res.stdout,
+            "stderr": res.stderr,
+            "duration_ms": res.duration_ms,
+            "timed_out": res.timed_out
+        }, indent=2))
+    else:
+        if res.stdout:
+            sys.stdout.write(res.stdout)
+            sys.stdout.flush()
+        if res.stderr:
+            sys.stderr.write(res.stderr)
+            sys.stderr.flush()
+    return res.exit_code
 
 
 sys.path.insert(0, str(ROOT / "backend"))
@@ -715,6 +749,15 @@ def main() -> int:
     p.add_argument("--no-jail", dest="enforce_jail", action="store_false", default=True, help="disable path jailing")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_sandbox)
+
+    p = sub.add_parser("sh", aliases=["process", "cmd"],
+                       help="execute safe typed vector shell commands or pipelines (@pcp:d-446d)")
+    p.add_argument("command", help="command binary to execute")
+    p.add_argument("args", nargs="*", help="command arguments")
+    p.add_argument("--timeout", type=float, default=10.0, help="timeout in seconds")
+    p.add_argument("--cwd", type=Path, default=None, help="working directory")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_sh)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
