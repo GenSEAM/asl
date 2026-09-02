@@ -46,18 +46,26 @@ const ITEMS: SearchResult[] = [
   {
     id: '5',
     category: 'toolchain',
-    title: 'ASL Quality Doctor',
-    desc: 'Automatic linter, AST repair, and formal invariant validator.',
-    href: '#quality-doctor',
+    title: 'Architectural Capabilities',
+    desc: 'Observability blueprints, terminal workflows, and ecosystem drafting tools.',
+    href: '#capabilities',
     icon: Shield,
   },
   {
     id: '6',
-    category: 'protocol',
-    title: 'SQL Studio & Relational Engine',
-    desc: 'Cross-dialect queries, schema migrations and query execution.',
-    href: '#sql-studio',
+    category: 'toolchain',
+    title: 'Universal Ecosystem Targets',
+    desc: 'Wasm, Rust, TypeScript, Go, Python, and SQL cross-compilation.',
+    href: '#toolchain',
     icon: Cpu,
+  },
+  {
+    id: '7',
+    category: 'grammar',
+    title: 'Agent Specification (llms.txt)',
+    desc: 'Machine-readable formal grammar and invariant tables for AI agents.',
+    href: '/llms.txt',
+    icon: BookOpen,
   },
 ];
 

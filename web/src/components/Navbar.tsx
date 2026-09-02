@@ -5,10 +5,11 @@ import { Wordmark } from './ui/Logo';
 import { SearchModal } from './SearchModal';
 
 const navItems = [
-  { label: 'Documentation', href: '#agent-way' },
-  { label: 'Playground', href: '#sql-studio' },
+  { label: 'The Agent Way', href: '#agent-way' },
+  { label: 'Capabilities', href: '#capabilities' },
+  { label: 'Wire Protocol', href: '#a2a-protocol' },
+  { label: 'SkyLoom Mesh', href: '#skyloom-mesh' },
   { label: 'Ecosystem', href: '#toolchain' },
-  { label: 'Roadmap', href: '#capabilities' },
 ];
 
 export const Navbar: React.FC = () => {

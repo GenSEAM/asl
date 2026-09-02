@@ -32,9 +32,13 @@ export const Footer: React.FC = () => (
         </a>
       </nav>
 
-      <span className="font-mono text-micro text-ink-3">
-        v0.4.2-alpha
-      </span>
+      <a
+        href="/llms.txt"
+        className="font-mono text-micro text-ink-3 hover:text-signal transition-colors flex items-center gap-1.5"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-signal" />
+        <span>Agent Spec (llms.txt)</span>
+      </a>
     </div>
 
     <div className="max-w-6xl mx-auto px-6 lg:px-8 mt-8 pt-6 border-t border-line/60 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-micro text-ink-3">

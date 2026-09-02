@@ -2,14 +2,14 @@ import React from 'react';
 
 /**
  * ASL Curled 'a' Chameleon Mark
- * The signature purple letter 'a' whose tail curls inward in an elegant chameleon spiral.
+ * Solid filled signature glyph matching the exact chameleon tail spiral geometry from the design concept.
  */
 export const ChameleonALogo: React.FC<{ className?: string; title?: string }> = ({
   className = 'w-8 h-8',
   title = 'ASL Chameleon Logo',
 }) => (
   <svg
-    viewBox="0 0 36 36"
+    viewBox="0 0 100 100"
     className={className}
     role="img"
     aria-label={title}
@@ -17,28 +17,32 @@ export const ChameleonALogo: React.FC<{ className?: string; title?: string }> = 
     xmlns="http://www.w3.org/2000/svg"
   >
     <defs>
-      <linearGradient id="aslTailGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="rgb(var(--signal-soft))" />
-        <stop offset="50%" stopColor="rgb(var(--signal))" />
+      <linearGradient id="chameleonTailGrad" x1="15%" y1="10%" x2="85%" y2="90%">
+        <stop offset="0%" stopColor="#d8b4fe" />
+        <stop offset="35%" stopColor="#c084fc" />
+        <stop offset="70%" stopColor="#a855f7" />
         <stop offset="100%" stopColor="#7c3aed" />
       </linearGradient>
-      <filter id="aslTailGlow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="1.5" result="blur" />
+      <linearGradient id="chameleonTailStrokeGrad" x1="10%" y1="5%" x2="90%" y2="95%">
+        <stop offset="0%" stopColor="#f3e8ff" stopOpacity="0.8" />
+        <stop offset="50%" stopColor="#c084fc" stopOpacity="0.4" />
+        <stop offset="100%" stopColor="#581c87" stopOpacity="0.6" />
+      </linearGradient>
+      <filter id="chameleonTailGlow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="3" result="blur" />
         <feComposite in="SourceGraphic" in2="blur" operator="over" />
       </filter>
     </defs>
 
-    {/* Chameleon 'a' Spiral Tail Path */}
+    {/* Chameleon Tail Spiral 'a' Solid Glyph */}
     <path
-      d="M23 11 C20.5 8 15 8.5 12 11.5 C8 15.5 8 22 12 26 C15.5 29.5 21 29.5 24.5 26 C28 22.5 28 16.5 24.5 13 C21 9.5 14 10 10.5 14.5 C6.5 19.5 7 27 12 31.5 C16.5 35.5 24.5 35 29 30 C33 25.5 33.5 17.5 29.5 12"
-      stroke="url(#aslTailGrad)"
-      strokeWidth="3.2"
-      strokeLinecap="round"
+      d="M 78,82 C 83,72 84,48 81,32 C 77,16 64,8 46,8 C 26,8 13,19 8,36 C 4,52 7,72 18,84 C 28,94 44,95 56,88 C 64,82 68,70 67,58 C 66,44 57,35 44,35 C 32,35 25,44 25,54 C 25,62 31,67 38,67 C 43,67 46,63 46,58 C 46,53 41,52 38,55 C 36,57 34,55 34,52 C 34,46 40,41 46,41 C 53,41 57,48 57,57 C 57,67 50,75 42,76 C 31,77 21,70 17,60 C 14,48 16,36 24,26 C 33,16 46,15 56,19 C 66,24 70,35 70,50 L 70,82 C 70,86 77,86 78,82 Z"
+      fill="url(#chameleonTailGrad)"
+      stroke="url(#chameleonTailStrokeGrad)"
+      strokeWidth="1.2"
       strokeLinejoin="round"
+      filter="url(#chameleonTailGlow)"
     />
-
-    {/* Central Focus Aperture */}
-    <circle cx="18" cy="19" r="3" fill="url(#aslTailGrad)" />
   </svg>
 );
 
@@ -179,22 +183,13 @@ export const Emblem: React.FC<{ className?: string }> = ({ className = 'w-24 h-2
 );
 
 /**
- * Brand Wordmark with Logo, Typography and Version Pill
+ * Brand Wordmark with Logo and Clean Typography
  */
-export const Wordmark: React.FC<{
-  className?: string;
-  version?: string;
-  showVersion?: boolean;
-}> = ({ className = '', version = 'v0.4.2-alpha', showVersion = true }) => (
+export const Wordmark: React.FC<{ className?: string }> = ({ className = '' }) => (
   <span className={`inline-flex items-center gap-2.5 ${className}`}>
     <ChameleonALogo className="w-7 h-7 text-signal shrink-0" />
     <span className="font-sans font-semibold tracking-tight text-ink text-brand text-lg">
       aslang<span className="text-signal">.dev</span>
     </span>
-    {showVersion && (
-      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full border border-line bg-surface/80 text-[10px] font-mono font-medium text-ink-3 tracking-wide">
-        {version}
-      </span>
-    )}
   </span>
 );
