@@ -207,6 +207,75 @@ Even for simple arrays, ASN eliminates comma and quote bloat:
 | **Standard ASN Objects** | ~980 tokens | ~1.9 seconds | 7% of 16K window |
 | **ASN Tabular (`@table`)** | **~380 tokens** | **~0.6 seconds** | **<2.5% of 16K window (-82%)** |
 
+---
+
+### Edge Cases & Universal Robustness in ASN Tabular Projection
+
+Any tabular or positional serialization format must answer hard production questions. Here is how ASN deterministically handles every potential edge case:
+
+#### 1. Sparse, Missing, or Optional Fields
+- **The Problem**: In JSON, if a record has no discount, the key is omitted (`{"id": 1}`). In a positional row, omitting an entry would shift all subsequent column positions.
+- **The ASN Solution**:
+  1. **Nil Sentinel (`_`)**: ASN uses `_` (1 token) for `nil` / `None` / `null`:
+     ```lisp
+     (@table [:id :sku :price :discount]
+       [1 "SSD-1TB" 89.99 _]
+       [2 "RAM-32GB" 129.50 15.00])
+     ```
+  2. **Sparse Tail Overrides**: If only 2% of rows have rare fields, keep them out of the table headers and append them as trailing keyword pairs without corrupting positional columns:
+     ```lisp
+     (@table [:id :sku :price]
+       [1 "SSD-1TB" 89.99]
+       [2 "RAM-32GB" 129.50 (:special-promo "HOLIDAY20")])
+     ```
+
+#### 2. Polymorphic / Heterogeneous Collections (Mixed Object Shapes)
+- **The Problem**: An array containing different kinds of entities (e.g. `User`, `Bot`, `SystemEvent`). A single table header would result in massive empty fields.
+- **The ASN Solution**:
+  ASN uses **Sum Types (Tagged Variants)** or **Variant Table Chunks**:
+  ```lisp
+  ;; Heterogeneous Stream using Tagged Variant Tuples
+  [(:user 1 "Alice" :admin)
+   (:bot 2 "code-bot" "gpt-4o" 1200)
+   (:event :deploy :success 1714829100)]
+  ```
+  If grouped:
+  ```lisp
+  (@variants
+    (:user [:id :name :role] [1 "Alice" :admin])
+    (:bot  [:id :name :model :tok] [2 "code-bot" "gpt-4o" 1200]))
+  ```
+
+#### 3. Deeply Nested Objects & Collections Inside Rows
+- **The Problem**: A table column contains a nested list or a nested record.
+- **The ASN Solution**:
+  S-expressions compose recursively with zero escaping!
+  ```lisp
+  (@table [:id :title :tags :metadata]
+    [1 "First Post" [:ai :wasm] (:views 1200 :stars 45)]
+    [2 "Second Post" [:rust]    (:views 800  :stars 20)])
+  ```
+  No backslashes, no JSON string escapes, 100% clean AST.
+
+#### 4. Schema Evolution & Backward/Forward Compatibility
+- **The Problem**: Producer adds a new field `[:id :sku :price :currency]`, but Consumer only expects `[:id :sku :price]`. Does positional order break?
+- **The ASN Solution**:
+  **Header-Driven Dynamic Mapping**: The deserializer does NOT assume a static compile-time column order. It reads the `@table` header tuple and binds row indices to target struct fields by name:
+  - **Unknown columns**: The consumer simply skips indices of unknown headers.
+  - **Missing columns**: The consumer automatically assigns the schema's default value (`:dflt`).
+  - *Result*: Full backward and forward compatibility, identical to JSON, but at an 82% token discount.
+
+#### 5. Chunked Streaming for Infinite Generators
+- **The Problem**: In JSON, an unclosed array `[ ...` fails `JSON.parse()` if a stream drops midway.
+- **The ASN Solution**:
+  ASN streams in self-contained `@chunk` blocks:
+  ```lisp
+  (@chunk [:id :status] [1 :ok] [2 :ok])
+  (@chunk [:id :status] [3 :retry] [4 :ok])
+  ```
+  Every chunk is balanced and valid on arrival. If the network drops at chunk 40, the first 39 chunks remain 100% valid in host memory with zero parser exceptions.
+
+
 
 ---
 
