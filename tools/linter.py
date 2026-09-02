@@ -242,6 +242,9 @@ class AslLinter:
             if getattr(node, "data", "") in ("literal", "var", "ident"):
                 return True
             if getattr(node, "data", "") == "call":
+                head_str = self._tree_to_compact_str(node.children[0]).strip() if node.children else ""
+                if head_str in ("+", "-", "*", "/", "mod"):
+                    return False
                 has_nested_calls = any(isinstance(c, Tree) and getattr(c, "data", "") in ("call", "let_form", "match_form", "if_form") for c in node.children)
                 if not has_nested_calls:
                     return True
