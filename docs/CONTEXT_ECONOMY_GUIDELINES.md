@@ -279,7 +279,75 @@ Any tabular or positional serialization format must answer hard production quest
 
 ---
 
-## 5. Context Offloading via Handles (`@offload`)
+## 5. Experimental: Structural Factoring (`@with`) & Sequence Generators (`@gen`)
+
+To push token economy to the theoretical maximum, AgentScript introduces two experimental techniques that eliminate repetitive structural boilerplate across both data protocols and language ASTs:
+
+### A. Structural Factoring: Shared Context Envelopes (`@with`)
+When an agent passes a batch of 50 or 500 records where certain properties are invariant (e.g., `:org 104`, `:currency "USD"`, `:env :prod`, `:status :active`), repeating those fields on every single row is wasteful.
+
+#### The Pattern
+Factor common invariant fields out into a parent **Context Envelope (`@with`)**:
+```lisp
+;; ✅ Common fields factored into parent envelope (Declared ONCE)
+(@with (:currency "USD" :env :prod :tenant-id 1042)
+  (@table [:id :sku :price]
+    [1 "SSD-1TB" 89.99]
+    [2 "RAM-32GB" 129.50]
+    [3 "GPU-4070" 549.00]))
+```
+- **Deserializer Behavior**: The deserializer merges the parent envelope into each materialized object.
+- **Savings**: On 500 rows with 3 common fields, this eliminates **1,500 repetitive key-value pairs**!
+
+---
+
+### B. Sequence & Pattern Generators (`@gen`)
+When testing, benchmarking, or initializing repetitive sequences (mock datasets, matrix grids, sequential state machine nodes), emitting hundreds of repetitive S-expressions burns thousands of tokens.
+
+#### The Pattern
+Use declarative **Data Generators (`@gen`)**:
+```lisp
+;; Generates 100 sequential node states in 14 tokens (instead of 1,800 tokens!)
+(@gen :for i 1 100
+  [i (str "worker-" i) :idle 0.0])
+```
+
+#### 2D Grid & Combinator Generators:
+```lisp
+;; Generates a 10x10 coordinate grid of sensor states
+(@gen :grid [x 0 9] [y 0 9]
+  [x y :online 22.5])
+```
+The receiving runtime or agent expands the generator in local memory in <0.1ms without consuming LLM token generation budget.
+
+---
+
+### C. Language-Level Structural Factoring (Schema Mixins: `@include`)
+In source code, avoid duplicating common fields (`id`, `created-at`, `tenant-id`) across dozens of schemas:
+
+```lisp
+;; Base audit struct defined once
+(dfs AuditMeta
+  (:f id U64)
+  (:f ts U64)
+  (:f tenant U64))
+
+;; Derived schemas factor in the base structure
+(dfs UserProfile
+  (@include AuditMeta)
+  (:f email Str)
+  (:f role Str))
+
+(dfs Order
+  (@include AuditMeta)
+  (:f total F64)
+  (:f items (List Str)))
+```
+*Code stays clean, maintenance is centralized, and AST size remains minimal.*
+
+---
+
+## 6. Context Offloading via Handles (`@offload`)
 
 When an agent executes an operation that yields a massive output (e.g. 50KB of raw web scraping, test logs, or large database query results), **NEVER dump the entire raw output into the conversational prompt window**.
 
@@ -301,7 +369,7 @@ This prevents conversational context exhaustion and keeps the agent's attention 
 
 ---
 
-## 6. Summary Reference Workflow
+## 7. Summary Reference Workflow
 
 ```
 [Pure Code: Pure HOW & WHAT]
