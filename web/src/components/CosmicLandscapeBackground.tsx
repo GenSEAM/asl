@@ -349,6 +349,31 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
+        {/* 
+          VEILED EASTER EGG 5: Sputnik-1 (First Artificial Satellite, 1957)
+          Polished sphere with 4 swept whip antennas, traversing upper cosmic vacuum.
+        */}
+        <g transform="translate(340, 470) rotate(-42)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
+          {/* Spherical Body */}
+          <circle cx="0" cy="0" r="12" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.6" />
+          <ellipse cx="0" cy="0" rx="12" ry="4" strokeDasharray="2 2" opacity="0.6" />
+          
+          {/* 4 Swept Whip Antennas (Pair 1 and Pair 2) */}
+          <line x1="-8" y1="-8" x2="-60" y2="-36" strokeWidth="1.3" />
+          <line x1="-8" y1="8" x2="-64" y2="28" strokeWidth="1.3" />
+          <line x1="8" y1="-8" x2="52" y2="-44" strokeWidth="1.1" strokeDasharray="3 1" opacity="0.7" />
+          <line x1="8" y1="8" x2="58" y2="34" strokeWidth="1.1" strokeDasharray="3 1" opacity="0.7" />
+
+          {/* Spherical Pulse Waves */}
+          <circle cx="0" cy="0" r="22" strokeDasharray="2 3" opacity="0.5" />
+          <circle cx="0" cy="0" r="34" strokeDasharray="1 4" opacity="0.3" />
+
+          {/* Cryptic Frequency Mark */}
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7" transform="rotate(42)">
+            <text x="18" y="-14">PS-01 // 20.005 MHz</text>
+          </g>
+        </g>
+
         {/* 4. UPPER-RIGHT CYBER-MONSTERA CANOPY (Natural, uncrowded architectural foliage) */}
         <g transform="translate(1080, 0)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
           {/* Graceful Canopy Arch */}
@@ -458,6 +483,38 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.85">
             <rect x="-35" y="65" width="70" height="18" stroke="currentColor" strokeWidth="0.8" rx="3" fill="#3b0764" fillOpacity="0.3" />
             <text x="-25" y="78">OPS.RTA</text>
+          </g>
+        </g>
+
+        {/* 
+          VEILED EASTER EGG 6: Lunar Module Descent Stage (1969 Apollo 11 "Eagle")
+          Tilted 14° resting gracefully along the orbital station perimeter ring.
+        */}
+        <g transform="translate(1060, 1460) rotate(14)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
+          {/* Octagonal Descent Stage Chassis */}
+          <polygon
+            points="8,0 26,0 34,8 34,22 26,30 8,30 0,22 0,8"
+            fill="#3b0764"
+            fillOpacity="0.35"
+          />
+          {/* Central Descent Engine Bell */}
+          <path d="M 13,30 L 11,38 L 23,38 L 21,30 Z" fill="#581c87" fillOpacity="0.4" />
+          
+          {/* Outrigger Landing Struts & Footpads */}
+          <line x1="4" y1="24" x2="-12" y2="42" strokeWidth="1.4" />
+          <ellipse cx="-12" cy="42" rx="4" ry="1.5" strokeWidth="1.2" />
+          
+          <line x1="30" y1="24" x2="46" y2="42" strokeWidth="1.4" />
+          <ellipse cx="46" cy="42" rx="4" ry="1.5" strokeWidth="1.2" />
+          
+          {/* Miniature Egress Ladder on Forward Strut */}
+          <line x1="-8" y1="28" x2="-6" y2="29" strokeWidth="0.8" />
+          <line x1="-10" y1="33" x2="-8" y2="34" strokeWidth="0.8" />
+          <line x1="-12" y1="38" x2="-10" y2="39" strokeWidth="0.8" />
+
+          {/* Cryptic Site Callout */}
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.75" transform="rotate(-14)">
+            <text x="42" y="24">SITE: TRANQ-11</text>
           </g>
         </g>
 
