@@ -1,8 +1,8 @@
 (module asl-codec/test
-  :doc "Unit tests for native JSON codec."
-  :export [run-tests]
-  :import [(core/strings :as s)])
+  :d "Unit tests for native JSON codec."
+  :x [run-tests]
+  :i [(core/strings :a s)])
 
-(defun run-tests [] -> Bool
-  :doc "Executes basic verification of codec types"
+(df run-tests [] -> Bool
+  :d "Executes basic verification of codec types"
   true)

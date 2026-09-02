@@ -1,28 +1,28 @@
 (module asl-search/engine
-  :doc "SearXNG metasearch engine and proxy pool rotator in ASL Nano"
-  :export [ProxyState ProxyNode SearchQuery SearchResult is-proxy-healthy])
+  :d "SearXNG metasearch engine and proxy pool rotator in ASL Nano"
+  :x [ProxyState ProxyNode SearchQuery SearchResult is-proxy-healthy])
 
 (dfe ProxyState
-  (:case active [] "active proxy")
-  (:case cooldown [] "cooldown proxy")
-  (:case dead [] "dead proxy"))
+  (:c active [] "active proxy")
+  (:c cooldown [] "cooldown proxy")
+  (:c dead [] "dead proxy"))
 
 (dfs ProxyNode
-  (:field endpoint Str "endpoint url")
-  (:field state ProxyState "state")
-  (:field latency-ms F64 "latency in ms")
-  (:field success-rate F64 "success rate"))
+  (:f endpoint Str "endpoint url")
+  (:f state ProxyState "state")
+  (:f latency-ms F64 "latency in ms")
+  (:f success-rate F64 "success rate"))
 
 (dfs SearchQuery
-  (:field text Str "query string")
-  (:field max-results I64 "max results count"))
+  (:f text Str "query string")
+  (:f max-results I64 "max results count"))
 
 (dfs SearchResult
-  (:field title Str "title")
-  (:field url Str "url")
-  (:field snippet Str "snippet")
-  (:field score F64 "relevance score"))
+  (:f title Str "title")
+  (:f url Str "url")
+  (:f snippet Str "snippet")
+  (:f score F64 "relevance score"))
 
 (df is-proxy-healthy [(proxy ProxyNode)] -> Bool
-  :doc "Checks if proxy is healthy"
+  :d "Checks if proxy is healthy"
   (and (< (.-latency-ms proxy) 500.0) (> (.-success-rate proxy) 0.9)))

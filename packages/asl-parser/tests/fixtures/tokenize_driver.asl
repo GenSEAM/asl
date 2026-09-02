@@ -1,10 +1,10 @@
-(module asl-parser/lexer-test
-  :d "Execution driver for the self-hosted lexer: tokenize a sample."
+(module asl-parser/tokenize-driver
+  :d "Driver for the self-hosted lexer: tokenize a sample and render tokens."
   :x [run-tokenize]
   :i [(lexer :a lex)])
 
 (df render-token [(t lex/Token)] -> String
-  :d "Render one token as kind|raw|line|col."
+  :d "Renders one token as kind|raw|line|col."
   (str (lex/token-type-name (.-kind t)) "|" (.-raw-text t) "|"
        (string-from-int64 (.-line t)) "|" (string-from-int64 (.-col t))))
 

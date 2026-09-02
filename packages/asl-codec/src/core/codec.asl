@@ -1,52 +1,52 @@
 (module asl-codec/core
-  :doc "Zero-Cost Native JSON Serializer and Algebraic Value Representation for AgentScript."
-  :export [JsonValue JsonEntry make-kv render-json render-entry render-json-array render-json-object
+  :d "Zero-Cost Native JSON Serializer and Algebraic Value Representation for AgentScript."
+  :x [JsonValue JsonEntry make-kv render-json render-entry render-json-array render-json-object
            map-items map-entries])
 
-(defschema JsonEntry
-  (:field key String "Object key")
-  (:field val JsonValue "Object value"))
+(dfs JsonEntry
+  (:f key String "Object key")
+  (:f val JsonValue "Object value"))
 
-(defenum JsonValue
-  (:case json-null  [] "Null JSON literal")
-  (:case json-bool  [(b Bool)] "Boolean JSON value")
-  (:case json-int   [(n Int64)] "64-bit signed integer value")
-  (:case json-float [(f Float64)] "64-bit floating point value")
-  (:case json-str   [(s String)] "UTF-8 string value")
-  (:case json-arr   [(items (List JsonValue))] "Ordered array of JSON values")
-  (:case json-obj   [(entries (List JsonEntry))] "Key-value JSON object"))
+(dfe JsonValue
+  (:c json-null  [] "Null JSON literal")
+  (:c json-bool  [(b Bool)] "Boolean JSON value")
+  (:c json-int   [(n Int64)] "64-bit signed integer value")
+  (:c json-float [(f Float64)] "64-bit floating point value")
+  (:c json-str   [(s String)] "UTF-8 string value")
+  (:c json-arr   [(items (List JsonValue))] "Ordered array of JSON values")
+  (:c json-obj   [(entries (List JsonEntry))] "Key-value JSON object"))
 
-(defun make-kv [(k String) (v JsonValue)] -> JsonEntry
-  :doc "Constructs a key-value JsonEntry."
+(df make-kv [(k String) (v JsonValue)] -> JsonEntry
+  :d "Constructs a key-value JsonEntry."
   (JsonEntry :key k :val v))
 
-(defun render-entry [(e JsonEntry)] -> String
-  :doc "Renders a key-value entry to JSON pair string."
+(df render-entry [(e JsonEntry)] -> String
+  :d "Renders a key-value entry to JSON pair string."
   (str "\"" (.-key e) "\":" (render-json (.-val e))))
 
-(defun wrap-delimited [(open String) (items (List String)) (close String)] -> String
-  :doc "Joins items with commas and encloses in delimiters."
+(df wrap-delimited [(open String) (items (List String)) (close String)] -> String
+  :d "Joins items with commas and encloses in delimiters."
   (str open (string-join items ",") close))
 
-(defun map-items [(items (List JsonValue))] -> (List String)
-  :doc "Maps array items to rendered strings."
+(df map-items [(items (List JsonValue))] -> (List String)
+  :d "Maps array items to rendered strings."
   (map (fn [item] (render-json item)) items))
 
-(defun map-entries [(entries (List JsonEntry))] -> (List String)
-  :doc "Maps object entries to rendered strings."
+(df map-entries [(entries (List JsonEntry))] -> (List String)
+  :d "Maps object entries to rendered strings."
   (map (fn [e] (render-entry e)) entries))
 
-(defun render-json-array [(items (List JsonValue))] -> String
-  :doc "Renders a list of JSON values into a JSON array string."
+(df render-json-array [(items (List JsonValue))] -> String
+  :d "Renders a list of JSON values into a JSON array string."
   (wrap-delimited "[" (map-items items) "]"))
 
-(defun render-json-object [(entries (List JsonEntry))] -> String
-  :doc "Renders object entries into a JSON object string."
+(df render-json-object [(entries (List JsonEntry))] -> String
+  :d "Renders object entries into a JSON object string."
   (wrap-delimited "{" (map-entries entries) "}"))
 
-(defun render-json [(v JsonValue)] -> String
-  :doc "Recursively renders algebraic JsonValue to valid JSON string."
-  (match v
+(df render-json [(v JsonValue)] -> String
+  :d "Recursively renders algebraic JsonValue to valid JSON string."
+  (mt v
     ((json-null)    "null")
     ((json-bool b)  (if b "true" "false"))
     ((json-int n)   (string-from-int64 n))

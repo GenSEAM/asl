@@ -1,51 +1,51 @@
 (module asl-fsm/fsm
-  :doc "Algebraic Finite State Machine engine in ASL"
-  :export [AgentState AgentEvent step is-terminal-state])
+  :d "Algebraic Finite State Machine engine in ASL"
+  :x [AgentState AgentEvent step is-terminal-state])
 
-(defenum AgentState
-  (:case idle [] "idle state")
-  (:case planning [] "planning state")
-  (:case coding [] "coding state")
-  (:case reviewing [] "reviewing state")
-  (:case success [] "success state")
-  (:case failed [] "failed state"))
+(dfe AgentState
+  (:c idle [] "idle state")
+  (:c planning [] "planning state")
+  (:c coding [] "coding state")
+  (:c reviewing [] "reviewing state")
+  (:c success [] "success state")
+  (:c failed [] "failed state"))
 
-(defenum AgentEvent
-  (:case start [] "start task")
-  (:case plan-ready [] "plan generated")
-  (:case code-ready [] "code generated")
-  (:case review-pass [] "review passed")
-  (:case review-fail [] "review failed")
-  (:case reset [] "reset agent"))
+(dfe AgentEvent
+  (:c start [] "start task")
+  (:c plan-ready [] "plan generated")
+  (:c code-ready [] "code generated")
+  (:c review-pass [] "review passed")
+  (:c review-fail [] "review failed")
+  (:c reset [] "reset agent"))
 
-(defun step [(state AgentState) (event AgentEvent)] -> AgentState
-  :doc "State transition function"
-  (match state
+(df step [(state AgentState) (event AgentEvent)] -> AgentState
+  :d "State transition function"
+  (mt state
     ((idle)
-     (match event
+     (mt event
        ((start) (planning))
        (_ state)))
     ((planning)
-     (match event
+     (mt event
        ((plan-ready) (coding))
        ((reset) (idle))
        (_ state)))
     ((coding)
-     (match event
+     (mt event
        ((code-ready) (reviewing))
        ((reset) (idle))
        (_ state)))
     ((reviewing)
-     (match event
+     (mt event
        ((review-pass) (success))
        ((review-fail) (coding))
        ((reset) (idle))
        (_ state)))
     (_ state)))
 
-(defun is-terminal-state [(state AgentState)] -> Bool
-  :doc "Checks if state is terminal"
-  (match state
+(df is-terminal-state [(state AgentState)] -> Bool
+  :d "Checks if state is terminal"
+  (mt state
     ((success) true)
     ((failed) true)
     (_ false)))

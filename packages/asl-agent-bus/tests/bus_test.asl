@@ -1,8 +1,8 @@
 (module asl-agent-bus/test
-  :doc "Unit tests for agent bus protocol in ASL Nano"
-  :export [run-tests]
-  :import [(core/strings :as s)])
+  :d "Unit tests for agent bus protocol in ASL Nano"
+  :x [run-tests]
+  :i [(core/strings :a s)])
 
 (df run-tests [] -> Bool
-  :doc "Runs agent bus unit tests"
+  :d "Runs agent bus unit tests"
   (= (s/concat "event: " "task") "event: task"))

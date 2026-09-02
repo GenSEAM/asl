@@ -48,7 +48,7 @@ class CloneReport:
 
 
 class AslCloneDetector:
-    def __init__(self, min_node_count: int = 6, max_duplication_threshold: float = 0.15):
+    def __init__(self, min_node_count: int = 10, max_duplication_threshold: float = 0.15):
         self.min_node_count = min_node_count
         self.max_duplication_threshold = max_duplication_threshold
 
@@ -135,15 +135,13 @@ class AslCloneDetector:
                 current_node_count += 1
                 token_str = str(child)
                 exact_parts.append(token_str)
-                # Alpha-normalize identifiers
+                # Alpha-normalize identifiers only. Literal values (numbers,
+                # strings, keywords) stay exact so a dispatch table or an
+                # index access is not conflated with a copy-paste clone.
                 if child.type in ("IDENT", "NAME", "VAR"):
                     if token_str not in var_alpha_map:
                         var_alpha_map[token_str] = f"α{len(var_alpha_map)}"
                     norm_parts.append(var_alpha_map[token_str])
-                elif child.type in ("INT", "FLOAT"):
-                    norm_parts.append("<NUM>")
-                elif child.type == "STRING":
-                    norm_parts.append("<STR>")
                 else:
                     norm_parts.append(token_str)
             elif isinstance(child, Tree):

@@ -18,34 +18,34 @@ def extract_module_info(file_path: Path) -> Dict[str, Any]:
     mod_match = re.search(r'\(module\s+([a-zA-Z0-9_\-\./]+)', text)
     module_name = mod_match.group(1) if mod_match else file_path.stem
 
-    doc_match = re.search(r':doc\s+"([^"]+)"', text)
+    doc_match = re.search(r':(?:doc|d)\s+"([^"]+)"', text)
     doc = doc_match.group(1) if doc_match else ""
 
     # Exports
     exports = []
-    exp_match = re.search(r':export\s+\[(.*?)\]', text, re.DOTALL)
+    exp_match = re.search(r':(?:export|x)\s+\[(.*?)\]', text, re.DOTALL)
     if exp_match:
         exports = [e.strip() for e in exp_match.group(1).split() if e.strip()]
 
     # Imports
     imports = []
-    imp_matches = re.findall(r'\(([a-zA-Z0-9_\-\./]+)\s+:as\s+([a-zA-Z0-9_\-]+)\)', text)
+    imp_matches = re.findall(r'\(([a-zA-Z0-9_\-\./]+)\s+:(?:as|a)\s+([a-zA-Z0-9_\-]+)\)', text)
     for imp_mod, alias in imp_matches:
         imports.append({"module": imp_mod, "alias": alias})
 
-    # Definitions
+    # Definitions (Verbose and Ultra-Nano projections)
     schemas = []
-    schema_matches = re.finditer(r'\(defschema\s+([A-Z][a-zA-Z0-9_\-]*)', text)
+    schema_matches = re.finditer(r'\((?:defschema|dfs)\s+([A-Z][a-zA-Z0-9_\-]*)', text)
     for sm in schema_matches:
         schemas.append(sm.group(1))
 
     enums = []
-    enum_matches = re.finditer(r'\(defenum\s+([A-Z][a-zA-Z0-9_\-]*)', text)
+    enum_matches = re.finditer(r'\((?:defenum|dfe)\s+([A-Z][a-zA-Z0-9_\-]*)', text)
     for em in enum_matches:
         enums.append(em.group(1))
 
     functions = []
-    fn_matches = re.finditer(r'\(defun\s+([a-z][a-zA-Z0-9_\-]*)', text)
+    fn_matches = re.finditer(r'\((?:defun|df)\s+([a-z][a-zA-Z0-9_\-]*)', text)
     for fm in fn_matches:
         functions.append(fm.group(1))
 

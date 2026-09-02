@@ -1,8 +1,8 @@
 (module asl-voice/test
-  :doc "Unit tests for voice bridge in ASL Nano"
-  :export [run-tests]
-  :import [(core/strings :as s)])
+  :d "Unit tests for voice bridge in ASL Nano"
+  :x [run-tests]
+  :i [(core/strings :a s)])
 
 (df run-tests [] -> Bool
-  :doc "Runs voice bridge unit tests"
+  :d "Runs voice bridge unit tests"
   (= (s/concat "Synthesizing " "audio") "Synthesizing audio"))

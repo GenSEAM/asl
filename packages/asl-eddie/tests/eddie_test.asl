@@ -1,7 +1,7 @@
 (module asl-eddie/test
-  :doc "Unit tests for EDDIE orchestrator in ASL Nano"
-  :export [run-tests])
+  :d "Unit tests for EDDIE orchestrator in ASL Nano"
+  :x [run-tests])
 
 (df run-tests [] -> Bool
-  :doc "Runs EDDIE orchestrator unit tests"
+  :d "Runs EDDIE orchestrator unit tests"
   (< 1 2))

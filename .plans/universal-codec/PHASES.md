@@ -13,12 +13,13 @@
 - [ ] Token reduction verification gate: assert $\ge 75\%$ prompt token reduction against standard JSON across benchmark payloads.
 
 ### Phase 2: Multi-Target Compilation & Packaging Pipeline
+- [ ] **Single-Pass LL(1) Architecture**: Zero backtracking, zero heavy parser generators, zero dependencies. Parses hundreds of MBs/sec with linear $O(n)$ complexity.
 - [ ] Leverage AgentScript's differential backend transpilers to compile `packages/asl-codec` into:
-  - **TypeScript/JavaScript**: `@genseam/asl-codec` (npm package, ESM/CJS + types).
-  - **Python**: `asl-codec` (PyPI package, wheels with zero dependencies).
-  - **Rust**: `asl-codec` (crates.io crate, `no_std` compatible).
-  - **Go**: `github.com/GenSEAM/asl-codec-go` (idiomatic Go module).
-  - **WebAssembly**: standalone `asl-codec.wasm` with JS/WASI bindings.
+  - **TypeScript/JavaScript**: `@genseam/asl-codec` (pure lightweight TS, zero-dep, ESM/CJS).
+  - **Python**: `asl-codec` (zero-dep pure Python + PyPI wheels).
+  - **Rust**: `asl-codec` (crates.io crate, `no_std` compatible, zero-allocation parser).
+  - **Go**: `github.com/GenSEAM/asl-codec-go` (zero-dep idiomatic Go module).
+  - **WebAssembly (Browser & Edge)**: standalone `asn.wasm` (<25KB binary, runs in 64KB linear page, zero-GC memory views, <0.02ms cold start in Web Workers).
 - [ ] Differential equivalence verification: run identical test suites across all 5 generated SDKs using `differential.py`.
 
 ### Phase 3: Native Slicing & Progressive Output Compaction (`asl slice`, `asl filter`)
