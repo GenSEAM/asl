@@ -5,7 +5,8 @@ import { ChameleonSchematic } from './ui/Logo';
  * CosmicLandscapeBackground
  * Comprehensive multi-screen technical blueprint canvas celebrating the evolution of computing to AI agents:
  * 1. Fixed schematic chameleon mascot perched on a graceful cyber-vine in the upper-left.
- * 2. Continuous blueprint canvas framing the page with:
+ * 2. Unobtrusive authentic AgentScript Nano code snippets embedded as blueprint technical annotations.
+ * 3. Continuous blueprint canvas framing the page with:
  *    - The Cyber-Vine branch running under the chameleon across the canopy.
  *    - The Evolution of Computing Timeline:
  *      * Era 1: 1950s Hollerith 80-Column Punch Card (IBM-029) & Vacuum Tube Triode (12AX7)
@@ -99,10 +100,16 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <path d="M 0,0 Q 22,-14 45,0 Q 22,14 0,0" fill="url(#leafFacetGrad)" strokeWidth="1.2" />
             <line x1="0" y1="0" x2="45" y2="0" strokeWidth="1" />
           </g>
-          {/* Technical Perch Marker */}
-          <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.8">
-            <text x="60" y="248">КИБЕР-ЛИАНА // ПЕРХ-01</text>
-            <text x="60" y="260" fill="#4ade80">STATUS: CHAMELEON CHILLING</text>
+          
+          {/* NANO-CODE SNIPPET 1: Chameleon Perch Telemetry Vector */}
+          <g transform="translate(50, 250)" strokeWidth="1">
+            <rect x="0" y="0" width="225" height="34" rx="4" fill="#3b0764" fillOpacity="0.25" strokeDasharray="3 3" />
+            <text x="8" y="15" fontFamily="monospace" fontSize="7.5" fill="#a855f7">
+              ;; Telemetry Vector: balanced
+            </text>
+            <text x="8" y="27" fontFamily="monospace" fontSize="8" fill="#4ade80">
+              (! cam:perch :target "vine-01" :mode :balanced)
+            </text>
           </g>
         </g>
 
@@ -112,7 +119,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
 
         {/* 1. Hollerith 80-Column Punched Card (Upper Right Margin, x: 1140, y: 120) */}
         <g transform="translate(1140, 120)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          {/* Punched Card Outline with Diagonal Clipped Corner (Top-Left corner cut) */}
           <polygon
             points="18,0 260,0 260,130 0,130 0,18"
             fill="#3b0764"
@@ -120,9 +126,7 @@ export const CosmicLandscapeBackground: React.FC = () => (
           />
           <line x1="0" y1="24" x2="260" y2="24" stroke="currentColor" strokeWidth="0.8" opacity="0.7" />
           
-          {/* Punched Rectangular Holes (Hollerith Code pattern) */}
           <g fill="currentColor" opacity="0.9">
-            {/* Column 1-10 Holes */}
             <rect x="25" y="36" width="3.5" height="7" />
             <rect x="25" y="60" width="3.5" height="7" />
             <rect x="45" y="48" width="3.5" height="7" />
@@ -140,7 +144,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <rect x="240" y="60" width="3.5" height="7" />
           </g>
 
-          {/* Card Annotations */}
           <g fontFamily="monospace" fontSize="8.5" fill="currentColor" opacity="0.9">
             <text x="25" y="16" fontWeight="bold" fill="#c084fc">IBM-029 // HOLLERITH CARD</text>
             <text x="18" y="120" fill="#a855f7">1956: FORTRAN · 80 COLUMNS OF PAIN</text>
@@ -149,32 +152,36 @@ export const CosmicLandscapeBackground: React.FC = () => (
 
         {/* 2. Vacuum Tube Triode 12AX7 (Upper Right Margin, x: 1220, y: 280) */}
         <g transform="translate(1220, 280)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          {/* Glass Dome Envelope */}
           <path d="M 0,90 L 0,40 C 0,10 60,10 60,40 L 60,90 Z" fill="#4a044e" fillOpacity="0.25" />
           
-          {/* Anode Plate */}
           <line x1="15" y1="35" x2="45" y2="35" strokeWidth="2" />
           <line x1="30" y1="15" x2="30" y2="35" />
 
-          {/* Grid Filament (Zig-zag) */}
           <path d="M 18,50 L 22,54 L 26,50 L 30,54 L 34,50 L 38,54 L 42,50" strokeWidth="1.5" strokeDasharray="1 1" />
           <line x1="18" y1="50" x2="10" y2="85" />
 
-          {/* Cathode & Heater */}
           <path d="M 22,65 L 38,65" strokeWidth="2" stroke="url(#amberGlow)" />
           <path d="M 26,75 L 30,68 L 34,75" strokeWidth="1.2" stroke="url(#amberGlow)" />
           
-          {/* Tube Base Pins */}
           <line x1="12" y1="90" x2="12" y2="102" strokeWidth="2" />
           <line x1="24" y1="90" x2="24" y2="102" strokeWidth="2" />
           <line x1="36" y1="90" x2="36" y2="102" strokeWidth="2" />
           <line x1="48" y1="90" x2="48" y2="102" strokeWidth="2" />
 
-          {/* Annotation */}
           <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.85">
             <text x="70" y="45">TRIODE 12AX7</text>
             <text x="70" y="60" fill="#fbbf24">HEATER: 6.3V</text>
             <text x="70" y="75">FIRST BYTES EMITTED</text>
+          </g>
+        </g>
+
+        {/* NANO-CODE SNIPPET 2: Orbital Mesh Function (Right Margin, x: 1100, y: 440) */}
+        <g transform="translate(1100, 440)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
+          <rect x="0" y="0" width="280" height="60" rx="6" fill="#3b0764" fillOpacity="0.3" strokeDasharray="4 3" />
+          <g fontFamily="monospace" fontSize="8" fill="currentColor">
+            <text x="12" y="18" fill="#c084fc">;; Mesh Satellite Handshake</text>
+            <text x="12" y="32" fill="#4ade80">(df orbit-sync [(sat String) (band Int64)] -&gt; Bool</text>
+            <text x="24" y="48" fill="#4ade80">  (! mesh/ping sat :hz band :timeout 40))</text>
           </g>
         </g>
 
@@ -184,28 +191,33 @@ export const CosmicLandscapeBackground: React.FC = () => (
 
         {/* 3. 3.5" Floppy Disk (Left Margin, x: 60, y: 720) */}
         <g transform="translate(60, 720)" stroke="url(#bioLineGrad)" strokeWidth="1.3">
-          {/* Floppy Chassis (with top-right corner bevel) */}
           <polygon
             points="0,0 125,0 135,10 135,140 0,140"
             fill="#3b0764"
             fillOpacity="0.3"
           />
-          {/* Metal Sliding Shutter */}
           <rect x="25" y="0" width="65" height="50" rx="3" fill="#581c87" fillOpacity="0.4" />
           <rect x="35" y="10" width="12" height="30" rx="1" fill="currentColor" fillOpacity="0.8" />
           
-          {/* Center Hub Circle */}
           <circle cx="67" cy="85" r="22" strokeDasharray="3 3" opacity="0.7" />
           <circle cx="67" cy="85" r="8" fill="currentColor" opacity="0.6" />
 
-          {/* Write Protect Notch */}
           <rect x="118" y="125" width="10" height="8" fill="currentColor" opacity="0.9" />
 
-          {/* Floppy Label */}
           <rect x="15" y="102" width="105" height="28" rx="2" stroke="currentColor" strokeWidth="0.8" fill="#1e1b4b" fillOpacity="0.5" />
           <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.95">
             <text x="20" y="114" fill="#4ade80">1.44 MB DISKETTE</text>
             <text x="20" y="124" fill="#c084fc">ASL RUNTIME FITS HERE</text>
+          </g>
+        </g>
+
+        {/* NANO-CODE SNIPPET 3: In-Memory Vector Recall (Left Margin, x: 50, y: 900) */}
+        <g transform="translate(50, 900)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
+          <rect x="0" y="0" width="270" height="58" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="3 3" />
+          <g fontFamily="monospace" fontSize="8" fill="currentColor">
+            <text x="10" y="18" fill="#c084fc">;; In-Memory Vector Recall (0.038ms)</text>
+            <text x="10" y="32" fill="#4ade80">(dfmem recall [(q String)] -&gt; (List Node)</text>
+            <text x="20" y="48" fill="#4ade80">  (! mem/search (embed q) :k 5 :max-ms 0.05))</text>
           </g>
         </g>
 
@@ -215,13 +227,11 @@ export const CosmicLandscapeBackground: React.FC = () => (
 
         {/* 4. The Paperclip Maximizer Meme (Right Margin, x: 1210, y: 840) */}
         <g transform="translate(1210, 840)" stroke="url(#bioLineGrad)" strokeWidth="1.4">
-          {/* Paperclip Contour Geometry */}
           <path
             d="M 20,70 L 20,25 C 20,10 45,10 45,25 L 45,80 C 45,100 10,100 10,80 L 10,35 C 10,22 32,22 32,35 L 32,70"
             strokeWidth="2.2"
             fill="none"
           />
-          {/* Targeting Crosshair on Paperclip */}
           <circle cx="28" cy="50" r="35" strokeDasharray="4 3" opacity="0.5" />
           <line x1="-15" y1="50" x2="70" y2="50" strokeDasharray="2 2" opacity="0.4" />
           
@@ -233,14 +243,14 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 5. 1991-2025 TabError Warning Banner (Left Margin, x: 50, y: 1120) */}
+        {/* NANO-CODE SNIPPET 4: Pure ASL Pipeline (Left Margin, x: 50, y: 1120) */}
         <g transform="translate(50, 1120)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
-          <rect x="0" y="0" width="240" height="75" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="6 3" />
+          <rect x="0" y="0" width="270" height="70" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="5 3" />
           <g fontFamily="monospace" fontSize="8" fill="currentColor" opacity="0.9">
-            <text x="12" y="18" fill="#ef4444">⚠ 1991–2025: SYNTAX DARK AGES</text>
-            <text x="12" y="34" fill="#fbbf24">TabError: 4 spaces != 1 tab</text>
-            <line x1="10" y1="42" x2="230" y2="42" stroke="currentColor" strokeWidth="0.6" strokeDasharray="2 2" />
-            <text x="12" y="56" fill="#4ade80">AGENT RETRIES: 0 (PARENS BALANCED)</text>
+            <text x="10" y="16" fill="#c084fc">;; Pure Verified Pipeline (0 Syntax Retries)</text>
+            <text x="10" y="32" fill="#4ade80">(! pipe [</text>
+            <text x="20" y="46" fill="#4ade80">  (read "src/core.asl") (check :pure) (emit :wasm)])</text>
+            <text x="10" y="60" fill="#a855f7">;; Result: 0 repair loops · -80% tokens</text>
           </g>
         </g>
 
@@ -254,7 +264,6 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <circle cx="0" cy="0" r="110" strokeDasharray="4 4" opacity="0.6" />
           <circle cx="0" cy="0" r="80" strokeWidth="2" />
 
-          {/* Station Hemisphere Dome */}
           <path d="M -70,-25 A 75 75 0 0 1 70,-25" strokeWidth="2.5" fill="#3b0764" fillOpacity="0.2" />
           <line x1="-70" y1="-25" x2="70" y2="-25" />
 
@@ -270,6 +279,17 @@ export const CosmicLandscapeBackground: React.FC = () => (
             <line x1="20" y1="-55" x2="60" y2="-55" stroke="currentColor" strokeWidth="0.8" />
             <text x="-35" y="15" transform="rotate(45 -35 15)">ПОРТ А</text>
             <text x="55" y="110">WASM REACTOR // 0.038ms</text>
+          </g>
+        </g>
+
+        {/* NANO-CODE SNIPPET 5: Typed Wasm Reactor Schema (Left Margin, x: 70, y: 1680) */}
+        <g transform="translate(70, 1680)" stroke="url(#bioLineGrad)" strokeWidth="1.2">
+          <rect x="0" y="0" width="240" height="74" rx="6" fill="#3b0764" fillOpacity="0.25" strokeDasharray="4 3" />
+          <g fontFamily="monospace" fontSize="8" fill="currentColor">
+            <text x="10" y="16" fill="#c084fc">;; Schema: Zero-Leak Wasm Core</text>
+            <text x="10" y="32" fill="#4ade80">(dfs WasmNode</text>
+            <text x="20" y="46" fill="#4ade80">  (:f id String) (:f latency Float64 :default 0.038)</text>
+            <text x="20" y="60" fill="#4ade80">  (:f sandbox (Option Keyword)))</text>
           </g>
         </g>
 
@@ -375,8 +395,18 @@ export const CosmicLandscapeBackground: React.FC = () => (
             </g>
           </g>
 
+          {/* NANO-CODE SNIPPET 6: Gear State Pattern Matching (Right Margin, x: -60, y: 440) */}
+          <g transform="translate(-60, 440)" stroke="url(#bioLineGrad)" strokeWidth="1">
+            <rect x="0" y="0" width="220" height="54" rx="4" fill="#3b0764" fillOpacity="0.25" strokeDasharray="3 3" />
+            <g fontFamily="monospace" fontSize="7.5" fill="currentColor">
+              <text x="8" y="14" fill="#c084fc">;; Exhaustive Pattern Match</text>
+              <text x="8" y="27" fill="#4ade80">(mt gear-state</text>
+              <text x="16" y="38" fill="#4ade80">  ((:running r) (! throttle r)))</text>
+            </g>
+          </g>
+
           {/* Agent Vibe Secret S-Expression Frame */}
-          <g transform="translate(-100, 480)" stroke="url(#bioLineGrad)" strokeWidth="1">
+          <g transform="translate(-80, 520)" stroke="url(#bioLineGrad)" strokeWidth="1">
             <rect x="0" y="0" width="230" height="38" rx="6" fill="#3b0764" fillOpacity="0.3" strokeDasharray="3 3" />
             <text x="10" y="24" fontFamily="monospace" fontSize="8" fill="#4ade80">
               (! agent/vibe :chill true :parens :balanced)
