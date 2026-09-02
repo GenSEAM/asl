@@ -1,25 +1,19 @@
-# Phases — asl-quality-tools-v1
+# Phases — asl-sql-module-v1
 
-Enforce Nano-Format Default, Anti-Pattern / Smell Linter, AST Structural Clone Detection, and Zero-Blocker Auto-Fixers (`asl lint`, `asl fix`, `asl fmt`) with all core domain logic implemented natively in AgentScript (`.asl`).
+Native AgentScript Cross-Dialect SQL AST Query Builder, Parameterized Emission & DDL Module (`packages/asl-sql`).
 
-## Ordered Phases
+## Phase List
 
-1. **Phase 1: Nano-Format Default Wire Enforcement & Dual-Mode Bidirectional Transcoder**
-   - Core ASL: `packages/asl-skyloom/src/core/skyloom.asl`
-   - Acceptance: `.venv/bin/python checker/gate.py && node packages/asl-skyloom/dist/tests/nano_enforcement_test.js` exits 0.
-2. **Phase 2: Native ASL Linter & Smell Detector Engine (`packages/asl-lint/src/core/lint.asl`)**
-   - Core ASL: `packages/asl-lint/src/core/lint.asl` checked by `asl check`
-   - Acceptance: `.venv/bin/python -m pytest tools/tests/test_linter.py -q` exits 0.
-3. **Phase 3: Native ASL Structural Clone & Duplicate Code Detector (`packages/asl-lint/src/core/clone.asl`)**
-   - Core ASL: `packages/asl-lint/src/core/clone.asl` checked by `asl check`
-   - Acceptance: `.venv/bin/python -m pytest tools/tests/test_clone_detector.py -q` exits 0.
-4. **Phase 4: Native ASL Autonomous Auto-Fixer & Formatter (`packages/asl-lint/src/core/heal.asl`)**
-   - Core ASL: `packages/asl-lint/src/core/heal.asl` checked by `asl check`
-   - Acceptance: `.venv/bin/python -m pytest tools/tests/test_auto_fix.py -q` exits 0.
-5. **Phase 5: Pre-Commit Quality Gate Integration & Web Doctor Dashboard**
-   - Acceptance: `.venv/bin/python agentscript lint packages/asl-skyloom/src/core/skyloom.asl && /usr/local/bin/node web/node_modules/vite/bin/vite.js build web` exits 0.
+- [ ] **Phase 1**: Native ASL SQL AST Modeling & Dialect Enums (`packages/asl-sql/src/core/sql.asl`)
+  - Criterion: `.venv/bin/python agentscript check packages/asl-sql/src/core/sql.asl` passes with 0 diagnostics.
+- [ ] **Phase 2**: Multi-Dialect Parameterized SQL Emission & Placeholder Adapter (`packages/asl-sql/src/core/render.asl`)
+  - Criterion: `.venv/bin/python agentscript check packages/asl-sql/src/core/render.asl` passes with 0 diagnostics, emitting `$n` for Postgres, `?` for SQLite.
+- [ ] **Phase 3**: DML Operations & Schema-Driven DDL Migration Generator (`packages/asl-sql/src/core/ddl.asl`)
+  - Criterion: `.venv/bin/python agentscript check packages/asl-sql/src/core/ddl.asl` passes with 0 diagnostics, generating typed `CREATE TABLE` and parameterized `INSERT`/`UPDATE`.
+- [ ] **Phase 4**: CLI Integration (`asl sql render`) & Comprehensive Test Suite (`tools/tests/test_sql.py`)
+  - Criterion: `.venv/bin/python -m pytest tools/tests/test_sql.py -q` passes 100%.
+- [ ] **Phase 5**: Interactive SQL Studio in Web Showcase (`web/src/components/SqlStudio.tsx`) & 7-Gate Verification
+  - Criterion: `node web/scripts/check-tokens.mjs` and `cd web && npm run build` pass; all 7 pre-commit gates pass cleanly.
 
 ## Out of Scope
-
-- **Dynamic Wasm Binary Monkey-Patching**: Linting and fixing operate strictly at the AST and source level before compilation.
-- **LLM Model Fine-Tuning**: Tooling operates via deterministic tree-sitter & AST transformations without model weight updates.
+- Direct socket TCP network connections to live database servers (this module is a pure AST query builder and serializer; network execution is left to host drivers).

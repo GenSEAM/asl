@@ -1,0 +1,7 @@
+{
+  "name": "asl-sql",
+  "version": "0.1.0",
+  "description": "Native AgentScript Cross-Dialect SQL AST Query Builder & Parameterized Emission Engine",
+  "entry": "src/core/sql.asl",
+  "targets": ["typescript", "wasm"]
+}
