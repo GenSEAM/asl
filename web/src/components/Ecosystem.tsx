@@ -69,6 +69,14 @@ export const Ecosystem: React.FC = () => (
       lead="Agents should not have to rewrite their logic for every deployment target. AgentScript compiles deterministically into native binaries, web sandboxes, and host scripting languages with mathematically proven equivalence."
     />
 
+    {/* Status Clarity Banner */}
+    <div className="flex justify-center -mt-6 mb-10">
+      <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wide">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        Core Language & Wire Protocol: Stable · Extended Compilers: Under Development
+      </span>
+    </div>
+
     {/* Architecture Flow Visualizer (Conceptual, Zero Code) */}
     <div className="mb-14 p-6 sm:p-8 rounded-3xl border border-line bg-surface/90 backdrop-blur-2xl shadow-e3">
       <div className="flex flex-col lg:flex-row items-center justify-between gap-6 pb-6 border-b border-line">

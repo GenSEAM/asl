@@ -18,6 +18,18 @@ export const PlaygroundView: React.FC = () => {
           lead="Experience live cross-dialect SQL query generation, formal AST smell detection, and autonomous code repairs in real time."
         />
 
+        {/* Under Active Development Banner */}
+        <div className="mb-8 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-mono text-micro font-bold uppercase tracking-wider shrink-0">
+              Under Development
+            </span>
+            <p className="text-meta font-medium text-ink-2">
+              <strong className="text-ink">Preview Release:</strong> The AgentScript Core Language and A2A Wire Protocol are verified and stable. The interactive SQL studio and AST quality doctor tools shown below are active developer previews currently under development.
+            </p>
+          </div>
+        </div>
+
         {/* Tab Switcher */}
         <div className="flex items-center gap-3 mb-10 p-1.5 rounded-2xl bg-surface border border-line max-w-md shadow-e1">
           <button

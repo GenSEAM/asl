@@ -121,8 +121,8 @@ export const Hero: React.FC = () => {
                 <Code2 className="w-3.5 h-3.5" />
                 <span>/llms-full.txt</span>
               </a>
-              <span className="text-micro text-ink-3 font-mono">
-                · Zero-leak Wasm sandbox
+              <span className="text-micro text-amber-300/90 font-mono px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+                Core & Wire Protocol: Stable · Extended Tools: Under Development
               </span>
             </div>
 

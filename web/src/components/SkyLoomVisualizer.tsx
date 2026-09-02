@@ -167,6 +167,14 @@ export const SkyLoomVisualizer: React.FC = () => {
         align="center"
       />
 
+      {/* Under Development Status Pill */}
+      <div className="flex justify-center -mt-4 mb-8">
+        <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wide">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+          Wire Protocol: Active · Mesh Engine: Under Development
+        </span>
+      </div>
+
       <div className="max-w-6xl mx-auto px-4 mt-8 space-y-8">
         {/* Telemetry Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 rounded-xl border border-line bg-surface/80 backdrop-blur-md">
