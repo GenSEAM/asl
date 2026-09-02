@@ -56,40 +56,40 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <g filter="url(#fixedAmbientGlow)">
             {/* 
               THE CYBER-VINE:
-              Starts under paws/tail at (-30, 108), cradles the feet, then sweeps UPWARDS
-              between the chameleon and the satellite heading directly towards the header (y: -20)!
+              Starts low at (-30, 145), passes right through the curled tail which wraps around it,
+              cradles the belly, and sweeps UPWARDS between chameleon & satellite to the header!
             */}
             <path
-              d="M -30,108 C 20,104 60,112 105,108 C 135,104 160,88 180,62 C 205,28 220,-2 245,-30"
+              d="M -30,145 C 5,140 25,128 48,121 C 72,114 96,106 122,96 C 152,84 178,58 198,28 C 218,-2 232,-24 246,-45"
               stroke="url(#vineBranchGrad)"
-              strokeWidth="3.2"
+              strokeWidth="3.4"
               strokeLinecap="round"
             />
             <path
-              d="M -30,113 C 20,109 60,117 105,113 C 132,109 156,94 175,68 C 200,34 215,4 240,-24"
+              d="M -30,150 C 5,145 25,133 48,126 C 72,119 96,111 122,101 C 152,89 178,63 198,33 C 218,3 232,-19 246,-40"
               stroke="url(#vineBranchGrad)"
               strokeWidth="1.2"
               strokeDasharray="3 3"
               opacity="0.6"
             />
 
-            {/* Delicate sprouting cyber-leaves climbing up to header */}
-            <g transform="translate(145, 92) rotate(-35)">
+            {/* Delicate sprouting cyber-leaves climbing up towards header */}
+            <g transform="translate(142, 80) rotate(-40)">
               <path d="M 0,0 Q 14,-9 28,0 Q 14,9 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
               <line x1="0" y1="0" x2="28" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
             </g>
-            <g transform="translate(185, 52) rotate(-55)">
+            <g transform="translate(182, 42) rotate(-58)">
               <path d="M 0,0 Q 12,-8 24,0 Q 12,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
               <line x1="0" y1="0" x2="24" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
             </g>
-            <g transform="translate(225, 6) rotate(-70)">
+            <g transform="translate(222, -4) rotate(-72)">
               <path d="M 0,0 Q 10,-7 20,0 Q 10,7 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
               <line x1="0" y1="0" x2="20" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
             </g>
 
             {/* Spiral tendril curling near header */}
             <path
-              d="M 235,-15 Q 248,-28 245,-38 Q 240,-44 230,-40 Q 225,-35 230,-30"
+              d="M 238,-28 Q 250,-40 246,-50 Q 240,-56 230,-52 Q 225,-47 230,-42"
               stroke="url(#vineBranchGrad)"
               strokeWidth="1.4"
             />
@@ -143,6 +143,14 @@ export const CosmicLandscapeBackground: React.FC = () => (
               <circle cx="53" cy="14" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
               <circle cx="98" cy="52" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
               <circle cx="38" cy="122" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+
+              {/* Front tail curl stroke: physically wraps in front of the branch */}
+              <path
+                d="M 44 86 C 37 94, 44 104, 53 102 C 59 100, 59 93, 54 91"
+                stroke="url(#chameleonGradFixed)"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+              />
             </g>
           </g>
         </svg>
