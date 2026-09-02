@@ -2,21 +2,20 @@ import React from 'react';
 
 /**
  * CosmicLandscapeBackground
- * Guaranteed-Visibility Dual-Gutter Blueprint Architecture:
+ * Full-Document Scattered & Tilted Aerospace Blueprint Architecture:
  * 1. Fixed Chameleon Perch (Top-Left): Curled tail wrapped around vine that passes through the spiral eye.
  * 2. Full-Screen Background Grid: Fixed millimetric technical blueprint grid pattern.
- * 3. Dedicated Left Gutter Stream (pinned to left edge):
- *    - Conway's Glider, Sputnik-1, 12AX7 Vacuum Triode, Turing Machine Tape,
- *      Planetary Scanner Dome, 3.5" Diskette, Token Fuel Gauge, Curiosity Wheel Morse Track,
- *      Glider Squadron Repeat.
- * 4. Dedicated Right Gutter Stream (pinned to right edge):
- *    - Apollo 11 Lunar Module, Voyager Golden Record, JWST 18-Hex Mirror,
- *      Hollerith 80-Col Card, Paperclip Wire Retainer, Ringed Planet OPS.RTA,
- *      8-bit Chrome Dino Runner, HAL-9000 Optical Turret, Bio-Mechanical Gears.
- * 
- * Crucial Fix: By separating into independent left and right gutter SVGs pinned to the viewport
- * edges, no aspect-ratio zoom/crop can ever push elements off-screen. They are 100% visible
- * across mobile, laptop, desktop, and ultrawide displays without touching center text.
+ * 3. 7800px Extended Gutter Streams (Left & Right):
+ *    - Extends all the way down to 7800px so Easter eggs NEVER stop or disappear when scrolling through all sections.
+ *    - Organically scattered positions (x wanders between 30 and 150) and tilted rotations (-60° to +65°).
+ *    - 40+ cult engineering & space exploration Easter eggs:
+ *      * Left: Conway Glider, Sputnik-1, 12AX7 Tube, Turing Tape, Astrolabe Scanner, 3.5" Diskette,
+ *              Token Fuel Gauge, Curiosity Morse Track, Wasm Matrix, Cassette Spool, Transistor TO-92,
+ *              Fiber Optic Ferrule, Radar Sweep, Silicon Wafer Die, Repeating Glider Fleet...
+ *      * Right: Apollo 11 Lunar Module, Voyager Golden Record, JWST 18-Hex Mirror, Hollerith 80-Col Card,
+ *               Clippy Wire Retainer, Saturnian Planet, Chrome 8-bit Dino, HAL-9000 Eye, Bio Gears,
+ *               Ferrite Core Memory, Shuttle Heat Tiles, 555 Timer IC, Oscilloscope Waveform, Resistor Bands...
+ * 4. Pinned to viewport edges: 100% visible on any resolution without colliding with center text.
  */
 export const CosmicLandscapeBackground: React.FC = () => (
   <div className="pointer-events-none select-none" aria-hidden="true">
@@ -158,11 +157,11 @@ export const CosmicLandscapeBackground: React.FC = () => (
       </div>
     </div>
 
-    {/* 2. DEDICATED LEFT GUTTER STREAM (Always Visible at Left Screen Margin) */}
-    <div className="absolute top-0 left-0 w-28 sm:w-36 md:w-44 lg:w-52 h-[3400px] pointer-events-none z-0 overflow-visible">
+    {/* 2. DEDICATED LEFT GUTTER STREAM (Scattered & Tilted across 7800px) */}
+    <div className="absolute top-0 left-0 w-32 sm:w-44 md:w-52 lg:w-60 h-[7800px] pointer-events-none z-0 overflow-visible">
       <svg
         className="w-full h-full text-purple-400/40 dark:text-purple-300/35"
-        viewBox="0 0 160 3400"
+        viewBox="0 0 180 7800"
         preserveAspectRatio="xMidYMin meet"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -179,8 +178,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </linearGradient>
         </defs>
 
-        {/* 1. Conway's Glider (y: 320) */}
-        <g transform="translate(60, 320)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+        {/* 1. Conway's Glider (y: 280, x: 75, rotate -24) */}
+        <g transform="translate(75, 280) rotate(-24)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
           <rect x="12" y="0" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
           <rect x="24" y="12" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
           <rect x="0" y="24" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
@@ -189,21 +188,21 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <line x1="32" y1="32" x2="52" y2="52" strokeDasharray="2 2" opacity="0.6" />
         </g>
 
-        {/* 2. Sputnik-1 (y: 560, rotate -35) */}
-        <g transform="translate(55, 560) rotate(-35)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+        {/* 2. Sputnik-1 (y: 580, x: 130, rotate 42) */}
+        <g transform="translate(130, 580) rotate(42)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
           <circle cx="0" cy="0" r="10" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.5" />
           <ellipse cx="0" cy="0" rx="10" ry="3" strokeDasharray="2 2" opacity="0.5" />
-          <line x1="-7" y1="-7" x2="-52" y2="-30" strokeWidth="1.1" />
-          <line x1="-7" y1="7" x2="-55" y2="24" strokeWidth="1.1" />
-          <line x1="7" y1="-7" x2="46" y2="-38" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
-          <line x1="7" y1="7" x2="50" y2="30" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6" transform="rotate(35)">
+          <line x1="-7" y1="-7" x2="-48" y2="-28" strokeWidth="1.1" />
+          <line x1="-7" y1="7" x2="-52" y2="22" strokeWidth="1.1" />
+          <line x1="7" y1="-7" x2="42" y2="-36" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
+          <line x1="7" y1="7" x2="46" y2="28" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6" transform="rotate(-42)">
             <text x="14" y="-10">PS-01</text>
           </g>
         </g>
 
-        {/* 3. Vacuum Triode 12AX7 (y: 840) */}
-        <g transform="translate(45, 840) rotate(-15)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+        {/* 3. Vacuum Triode 12AX7 (y: 920, x: 45, rotate -18) */}
+        <g transform="translate(45, 920) rotate(-18)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
           <path d="M 0,50 L 0,22 C 0,7 32,7 32,22 L 32,50 Z" fill="#4a044e" fillOpacity="0.2" />
           <line x1="8" y1="18" x2="24" y2="18" strokeWidth="1.6" />
           <line x1="16" y1="7" x2="16" y2="18" />
@@ -217,75 +216,163 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 4. Turing Machine Tape (y: 1160) */}
-        <g transform="translate(25, 1160)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
-          <rect x="0" y="0" width="110" height="22" rx="2" fill="#3b0764" fillOpacity="0.2" />
-          <line x1="22" y1="0" x2="22" y2="22" />
-          <line x1="44" y1="0" x2="44" y2="22" />
-          <line x1="66" y1="0" x2="66" y2="22" />
-          <line x1="88" y1="0" x2="88" y2="22" />
-          <path d="M 55,-10 L 55,-2 M 52,-5 L 55,-2 L 58,-5" strokeWidth="1.4" />
+        {/* 4. Turing Machine Tape (y: 1240, x: 110, rotate 12) */}
+        <g transform="translate(110, 1240) rotate(12)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
+          <rect x="-55" y="-11" width="110" height="22" rx="2" fill="#3b0764" fillOpacity="0.2" />
+          <line x1="-33" y1="-11" x2="-33" y2="11" />
+          <line x1="-11" y1="-11" x2="-11" y2="11" />
+          <line x1="11" y1="-11" x2="11" y2="11" />
+          <line x1="33" y1="-11" x2="33" y2="11" />
+          <path d="M 0,-18 L 0,-11 M -3,-14 L 0,-11 L 3,-14" strokeWidth="1.4" />
           <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.8">
-            <text x="8" y="15">1</text>
-            <text x="30" y="15">0</text>
-            <text x="52" y="15" fill="#4ade80">1</text>
-            <text x="74" y="15">1</text>
-            <text x="96" y="15">0</text>
+            <text x="-48" y="4">1</text>
+            <text x="-26" y="4">0</text>
+            <text x="-4" y="4" fill="#4ade80">1</text>
+            <text x="18" y="4">1</text>
+            <text x="40" y="4">0</text>
           </g>
         </g>
 
-        {/* 5. Planetary Scanner Dome (y: 1440) */}
-        <g transform="translate(50, 1440)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
-          <circle cx="0" cy="0" r="48" strokeDasharray="5 4" opacity="0.35" />
-          <path d="M -38,-12 A 40 40 0 0 1 38,-12" strokeWidth="2" fill="#3b0764" fillOpacity="0.2" />
-          <line x1="-38" y1="-12" x2="38" y2="-12" />
-          <line x1="0" y1="-38" x2="0" y2="-55" strokeWidth="2.0" />
-          <circle cx="0" cy="-55" r="3" fill="currentColor" />
-          <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.75">
-            <text x="12" y="32" fill="#4ade80">0.038ms</text>
-          </g>
+        {/* 5. Planetary Scanner Dome (y: 1560, x: 50, rotate -45) */}
+        <g transform="translate(50, 1560) rotate(-45)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
+          <circle cx="0" cy="0" r="44" strokeDasharray="5 4" opacity="0.35" />
+          <path d="M -34,-10 A 36 36 0 0 1 34,-10" strokeWidth="2" fill="#3b0764" fillOpacity="0.2" />
+          <line x1="-34" y1="-10" x2="34" y2="-10" />
+          <line x1="0" y1="-34" x2="0" y2="-50" strokeWidth="2.0" />
+          <circle cx="0" cy="-50" r="3" fill="currentColor" />
         </g>
 
-        {/* 6. 3.5" Diskette Avionics ROM (y: 1780) */}
-        <g transform="translate(45, 1780) rotate(-28)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-          <polygon points="0,0 60,0 66,6 66,70 0,70" fill="#3b0764" fillOpacity="0.25" />
-          <rect x="12" y="0" width="30" height="26" rx="2" fill="#581c87" fillOpacity="0.35" />
-          <rect x="17" y="5" width="6" height="15" rx="1" fill="currentColor" fillOpacity="0.75" />
-          <circle cx="33" cy="42" r="10" strokeDasharray="2 2" opacity="0.5" />
-          <circle cx="33" cy="42" r="3.5" fill="currentColor" opacity="0.5" />
+        {/* 6. 3.5" Diskette Avionics ROM (y: 1880, x: 135, rotate 32) */}
+        <g transform="translate(135, 1880) rotate(32)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <polygon points="0,0 55,0 60,5 60,65 0,65" fill="#3b0764" fillOpacity="0.25" />
+          <rect x="11" y="0" width="28" height="24" rx="2" fill="#581c87" fillOpacity="0.35" />
+          <rect x="16" y="4" width="5" height="14" rx="1" fill="currentColor" fillOpacity="0.75" />
+          <circle cx="30" cy="38" r="9" strokeDasharray="2 2" opacity="0.5" />
+          <circle cx="30" cy="38" r="3" fill="currentColor" opacity="0.5" />
           <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6">
-            <text x="8" y="62">ROM-144</text>
+            <text x="8" y="58">ROM-144</text>
           </g>
         </g>
 
-        {/* 7. Token Fuel Gauge (y: 2120) */}
-        <g transform="translate(35, 2120)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-          <circle cx="30" cy="30" r="26" strokeDasharray="4 3" opacity="0.5" />
-          <path d="M 30,30 L 46,16" stroke="#4ade80" strokeWidth="2.0" />
-          <circle cx="30" cy="30" r="3" fill="#4ade80" />
+        {/* 7. Token Fuel Gauge (y: 2200, x: 60, rotate -12) */}
+        <g transform="translate(60, 2200) rotate(-12)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <circle cx="0" cy="0" r="26" strokeDasharray="4 3" opacity="0.5" />
+          <path d="M 0,0 L 16,-14" stroke="#4ade80" strokeWidth="2.0" />
+          <circle cx="0" cy="0" r="3" fill="#4ade80" />
           <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.8">
-            <text x="64" y="26" fill="#4ade80">-80% TOK</text>
-            <text x="64" y="38" fill="#c084fc">0 RETRY</text>
+            <text x="32" y="-4" fill="#4ade80">-80% TOK</text>
           </g>
         </g>
 
-        {/* 8. Curiosity Rover Wheel Morse Track (y: 2460) */}
-        <g transform="translate(30, 2460)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
-          <rect x="0" y="0" width="85" height="16" rx="2" fill="#3b0764" fillOpacity="0.2" />
-          <circle cx="10" cy="8" r="1.5" fill="currentColor" />
-          <line x1="16" y1="8" x2="24" y2="8" strokeWidth="2" />
-          <line x1="28" y1="8" x2="36" y2="8" strokeWidth="2" />
-          <circle cx="44" cy="8" r="1.5" fill="currentColor" />
-          <line x1="50" y1="8" x2="58" y2="8" strokeWidth="2" />
-          <circle cx="66" cy="8" r="1.5" fill="currentColor" />
-          <line x1="72" y1="8" x2="78" y2="8" strokeWidth="2" />
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.5">
-            <text x="92" y="11">JPL-TR</text>
+        {/* 8. Curiosity Rover Wheel Morse Track (y: 2540, x: 120, rotate -28) */}
+        <g transform="translate(120, 2540) rotate(-28)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
+          <rect x="-42" y="-8" width="85" height="16" rx="2" fill="#3b0764" fillOpacity="0.2" />
+          <circle cx="-32" cy="0" r="1.5" fill="currentColor" />
+          <line x1="-26" y1="0" x2="-18" y2="0" strokeWidth="2" />
+          <line x1="-14" y1="0" x2="-6" y2="0" strokeWidth="2" />
+          <circle cx="2" cy="0" r="1.5" fill="currentColor" />
+          <line x1="8" y1="0" x2="16" y2="0" strokeWidth="2" />
+          <circle cx="24" cy="0" r="1.5" fill="currentColor" />
+          <line x1="30" y1="0" x2="36" y2="0" strokeWidth="2" />
+        </g>
+
+        {/* 9. Wasm Bytecode Hexagon Node (y: 2860, x: 40, rotate 55) */}
+        <g transform="translate(40, 2860) rotate(55)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <polygon points="0,-24 20,-12 20,12 0,24 -20,12 -20,-12" fill="#3b0764" fillOpacity="0.25" />
+          <circle cx="0" cy="0" r="8" strokeDasharray="2 2" />
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7">
+            <text x="-12" y="3">WASM</text>
           </g>
         </g>
 
-        {/* 9. Glider Squadron Repeat (y: 2820) */}
-        <g transform="translate(50, 2820)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
+        {/* 10. Dipole Antenna Array (y: 3200, x: 115, rotate -38) */}
+        <g transform="translate(115, 3200) rotate(-38)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
+          <line x1="-35" y1="0" x2="35" y2="0" strokeWidth="1.8" />
+          <line x1="0" y1="0" x2="0" y2="45" />
+          <circle cx="0" cy="0" r="3" fill="currentColor" />
+          <path d="M -20,12 Q 0,22 20,12" strokeDasharray="2 2" opacity="0.6" />
+          <path d="M -30,22 Q 0,36 30,22" strokeDasharray="2 2" opacity="0.4" />
+        </g>
+
+        {/* 11. Retro Audio Cassette Tape Spool (y: 3550, x: 55, rotate 22) */}
+        <g transform="translate(55, 3550) rotate(22)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <rect x="-35" y="-22" width="70" height="44" rx="4" fill="#3b0764" fillOpacity="0.2" />
+          <circle cx="-16" cy="0" r="8" />
+          <circle cx="16" cy="0" r="8" />
+          <line x1="-16" y1="8" x2="16" y2="8" strokeDasharray="2 2" />
+        </g>
+
+        {/* 12. Secondary Glider Fleet (y: 3900, x: 130, rotate -60) */}
+        <g transform="translate(130, 3900) rotate(-60)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
+          <rect x="8" y="0" width="6" height="6" fill="#c084fc" fillOpacity="0.4" />
+          <rect x="16" y="8" width="6" height="6" fill="#c084fc" fillOpacity="0.4" />
+          <rect x="0" y="16" width="6" height="6" fill="#c084fc" fillOpacity="0.4" />
+          <rect x="8" y="16" width="6" height="6" fill="#c084fc" fillOpacity="0.4" />
+          <rect x="16" y="16" width="6" height="6" fill="#c084fc" fillOpacity="0.4" />
+        </g>
+
+        {/* 13. Hydraulic Servo Valve (y: 4250, x: 65, rotate 15) */}
+        <g transform="translate(65, 4250) rotate(15)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
+          <rect x="-18" y="-18" width="36" height="36" rx="3" fill="#3b0764" fillOpacity="0.25" />
+          <circle cx="0" cy="0" r="8" />
+          <line x1="-28" y1="0" x2="-18" y2="0" strokeWidth="2" />
+          <line x1="18" y1="0" x2="28" y2="0" strokeWidth="2" />
+          <line x1="0" y1="-28" x2="0" y2="-18" strokeWidth="2" />
+        </g>
+
+        {/* 14. Transistor TO-92 (y: 4600, x: 125, rotate -25) */}
+        <g transform="translate(125, 4600) rotate(-25)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <path d="M -14,0 A 14 14 0 0 1 14,0 Z" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.5" />
+          <line x1="-8" y1="0" x2="-8" y2="28" />
+          <line x1="0" y1="0" x2="0" y2="32" />
+          <line x1="8" y1="0" x2="8" y2="28" />
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6">
+            <text x="18" y="12">2N3904</text>
+          </g>
+        </g>
+
+        {/* 15. Orbital Radar Sweep Arc (y: 4950, x: 50, rotate 40) */}
+        <g transform="translate(50, 4950) rotate(40)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <circle cx="0" cy="0" r="32" strokeDasharray="3 3" opacity="0.4" />
+          <circle cx="0" cy="0" r="18" strokeDasharray="2 2" opacity="0.6" />
+          <circle cx="0" cy="0" r="3" fill="currentColor" />
+          <line x1="0" y1="0" x2="28" y2="-16" stroke="#4ade80" strokeWidth="1.8" />
+        </g>
+
+        {/* 16. Silicon Die Test Pads (y: 5300, x: 110, rotate -15) */}
+        <g transform="translate(110, 5300) rotate(-15)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
+          <rect x="-24" y="-24" width="48" height="48" fill="#3b0764" fillOpacity="0.2" />
+          <rect x="-18" y="-18" width="10" height="10" fill="currentColor" fillOpacity="0.4" />
+          <rect x="8" y="-18" width="10" height="10" fill="currentColor" fillOpacity="0.4" />
+          <rect x="-18" y="8" width="10" height="10" fill="currentColor" fillOpacity="0.4" />
+          <rect x="8" y="8" width="10" height="10" fill="currentColor" fillOpacity="0.4" />
+        </g>
+
+        {/* 17. Fiber Optic Connector Ferrule (y: 5680, x: 45, rotate 30) */}
+        <g transform="translate(45, 5680) rotate(30)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
+          <rect x="-8" y="-25" width="16" height="50" rx="3" fill="#3b0764" fillOpacity="0.3" />
+          <circle cx="0" cy="0" r="2.5" fill="#4ade80" />
+          <line x1="0" y1="-35" x2="0" y2="35" strokeDasharray="4 2" stroke="#4ade80" opacity="0.7" />
+        </g>
+
+        {/* 18. Repeating Sputnik Probe (y: 6050, x: 135, rotate -48) */}
+        <g transform="translate(135, 6050) rotate(-48)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+          <circle cx="0" cy="0" r="9" fill="#3b0764" fillOpacity="0.3" />
+          <line x1="-6" y1="-6" x2="-40" y2="-22" strokeWidth="1.1" />
+          <line x1="-6" y1="6" x2="-44" y2="18" strokeWidth="1.1" />
+          <line x1="6" y1="-6" x2="36" y2="-30" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
+        </g>
+
+        {/* 19. Astrolabe Coordinate Ring (y: 6450, x: 60, rotate 18) */}
+        <g transform="translate(60, 6450) rotate(18)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
+          <circle cx="0" cy="0" r="28" strokeDasharray="4 3" />
+          <circle cx="0" cy="0" r="14" />
+          <line x1="-32" y1="0" x2="32" y2="0" />
+          <line x1="0" y1="-32" x2="0" y2="32" />
+        </g>
+
+        {/* 20. Glider Cruising to Footer (y: 6850, x: 120, rotate -35) */}
+        <g transform="translate(120, 6850) rotate(-35)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
           <rect x="10" y="0" width="7" height="7" fill="#c084fc" fillOpacity="0.4" />
           <rect x="20" y="10" width="7" height="7" fill="#c084fc" fillOpacity="0.4" />
           <rect x="0" y="20" width="7" height="7" fill="#c084fc" fillOpacity="0.4" />
@@ -295,11 +382,11 @@ export const CosmicLandscapeBackground: React.FC = () => (
       </svg>
     </div>
 
-    {/* 3. DEDICATED RIGHT GUTTER STREAM (Always Visible at Right Screen Margin) */}
-    <div className="absolute top-0 right-0 w-28 sm:w-36 md:w-44 lg:w-52 h-[3400px] pointer-events-none z-0 overflow-visible">
+    {/* 3. DEDICATED RIGHT GUTTER STREAM (Scattered & Tilted across 7800px) */}
+    <div className="absolute top-0 right-0 w-32 sm:w-44 md:w-52 lg:w-60 h-[7800px] pointer-events-none z-0 overflow-visible">
       <svg
         className="w-full h-full text-purple-400/40 dark:text-purple-300/35"
-        viewBox="0 0 160 3400"
+        viewBox="0 0 180 7800"
         preserveAspectRatio="xMidYMin meet"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
@@ -312,21 +399,21 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </linearGradient>
         </defs>
 
-        {/* 10. Apollo 11 Lunar Module (y: 240) */}
-        <g transform="translate(50, 240) rotate(12)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+        {/* 1. Apollo 11 Lunar Module (y: 220, x: 120, rotate 14) */}
+        <g transform="translate(120, 220) rotate(14)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
           <polygon points="7,0 23,0 30,7 30,20 23,27 7,27 0,20 0,7" fill="#3b0764" fillOpacity="0.3" />
           <path d="M 11,27 L 9,34 L 21,34 L 19,27 Z" fill="#581c87" fillOpacity="0.35" />
           <line x1="4" y1="21" x2="-10" y2="38" strokeWidth="1.3" />
           <ellipse cx="-10" cy="38" rx="3.5" ry="1.2" strokeWidth="1.1" />
           <line x1="26" y1="21" x2="40" y2="38" strokeWidth="1.3" />
           <ellipse cx="40" cy="38" rx="3.5" ry="1.2" strokeWidth="1.1" />
-          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6" transform="rotate(-12)">
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6" transform="rotate(-14)">
             <text x="36" y="22">TRANQ-11</text>
           </g>
         </g>
 
-        {/* 11. Voyager Golden Record Pulsar Map (y: 520) */}
-        <g transform="translate(70, 520)" stroke="url(#rightBioGrad)" strokeWidth="1.0" opacity="0.6">
+        {/* 2. Voyager Golden Record Pulsar Map (y: 520, x: 50, rotate -32) */}
+        <g transform="translate(50, 520) rotate(-32)" stroke="url(#rightBioGrad)" strokeWidth="1.0" opacity="0.65">
           <circle cx="0" cy="0" r="22" />
           <circle cx="0" cy="0" r="11" strokeDasharray="2 2" />
           <circle cx="0" cy="0" r="3" fill="currentColor" />
@@ -336,8 +423,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <line x1="0" y1="0" x2="14" y2="16" />
         </g>
 
-        {/* 12. JWST 18-Hex Mirror Array (y: 780) */}
-        <g transform="translate(60, 780)" stroke="url(#rightBioGrad)" strokeWidth="1.1">
+        {/* 3. JWST 18-Hex Mirror Array (y: 840, x: 130, rotate 48) */}
+        <g transform="translate(130, 840) rotate(48)" stroke="url(#rightBioGrad)" strokeWidth="1.1">
           {[
             { x: 0, y: 0 }, { x: 14, y: -8 }, { x: 14, y: 8 }, { x: 0, y: 16 }, { x: -14, y: 8 }, { x: -14, y: -8 }, { x: 0, y: -16 }
           ].map((h, i) => (
@@ -353,8 +440,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 13. Hollerith 80-Column Punched Card (y: 1080) */}
-        <g transform="translate(30, 1080) rotate(18)" stroke="url(#rightBioGrad)" strokeWidth="1.1">
+        {/* 4. Hollerith 80-Column Punched Card (y: 1160, x: 40, rotate -22) */}
+        <g transform="translate(40, 1160) rotate(-22)" stroke="url(#rightBioGrad)" strokeWidth="1.1">
           <polygon points="10,0 110,0 110,54 0,54 0,10" fill="#3b0764" fillOpacity="0.2" />
           <line x1="0" y1="11" x2="110" y2="11" strokeWidth="0.6" opacity="0.5" />
           <g fill="currentColor" opacity="0.75">
@@ -372,8 +459,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 14. Paperclip Wire Cable Retainer (y: 1380) */}
-        <g transform="translate(60, 1380) rotate(54)" stroke="url(#rightBioGrad)" strokeWidth="1.5">
+        {/* 5. Paperclip Wire Cable Retainer (y: 1480, x: 125, rotate 62) */}
+        <g transform="translate(125, 1480) rotate(62)" stroke="url(#rightBioGrad)" strokeWidth="1.5">
           <path
             d="M 10,38 L 10,13 C 10,5 24,5 24,13 L 24,42 C 24,52 5,52 5,42 L 5,18 C 5,11 17,11 17,18 L 17,38"
             fill="none"
@@ -385,8 +472,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 15. Saturnian Ringed Planet (y: 1680) */}
-        <g transform="translate(70, 1680)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+        {/* 6. Saturnian Ringed Planet (y: 1800, x: 55, rotate -16) */}
+        <g transform="translate(55, 1800) rotate(-16)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
           <circle cx="0" cy="0" r="34" fill="#4a044e" fillOpacity="0.25" />
           <ellipse cx="0" cy="0" rx="80" ry="24" strokeWidth="1.6" transform="rotate(-18)" />
           <ellipse cx="0" cy="0" rx="68" ry="19" strokeDasharray="4 3" transform="rotate(-18)" />
@@ -395,8 +482,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 16. Chrome 8-Bit Offline Dino Runner (y: 2040) */}
-        <g transform="translate(50, 2040)" stroke="none" fill="currentColor" opacity="0.6">
+        {/* 7. Chrome 8-Bit Offline Dino Runner (y: 2140, x: 115, rotate 8) */}
+        <g transform="translate(115, 2140) rotate(8)" stroke="none" fill="currentColor" opacity="0.6">
           <rect x="-8" y="24" width="50" height="1.5" />
           <rect x="16" y="0" width="14" height="9" />
           <rect x="20" y="2" width="2" height="2" fill="#000" />
@@ -412,8 +499,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 17. HAL 9000 Eye Turret (y: 2380) */}
-        <g transform="translate(65, 2380)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+        {/* 8. HAL 9000 Eye Turret (y: 2480, x: 45, rotate -28) */}
+        <g transform="translate(45, 2480) rotate(-28)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
           <rect x="-14" y="-22" width="28" height="44" rx="4" fill="#3b0764" fillOpacity="0.3" />
           <circle cx="0" cy="0" r="11" strokeWidth="1.5" />
           <circle cx="0" cy="0" r="6" fill="#ef4444" fillOpacity="0.8" stroke="#f87171" strokeWidth="1.1" />
@@ -423,8 +510,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 18. Bio-Mechanical Gear Drive (y: 2740) */}
-        <g transform="translate(60, 2740)" stroke="url(#rightBioGrad)" strokeWidth="1.3">
+        {/* 9. Bio-Mechanical Gear Drive (y: 2820, x: 130, rotate 45) */}
+        <g transform="translate(130, 2820) rotate(45)" stroke="url(#rightBioGrad)" strokeWidth="1.3">
           <circle cx="0" cy="0" r="32" strokeDasharray="4 3" fill="#3b0764" fillOpacity="0.2" />
           <circle cx="0" cy="0" r="13" />
           {[0, 45, 90, 135, 180, 225, 270, 315].map((deg) => (
@@ -442,13 +529,111 @@ export const CosmicLandscapeBackground: React.FC = () => (
           </g>
         </g>
 
-        {/* 19. Repeating Voyager Relay (y: 3120) */}
-        <g transform="translate(65, 3120)" stroke="url(#rightBioGrad)" strokeWidth="1.1" opacity="0.65">
-          <circle cx="0" cy="0" r="18" strokeDasharray="3 2" />
-          <circle cx="0" cy="0" r="6" fill="currentColor" />
-          <line x1="-15" y1="-7" x2="15" y2="7" />
+        {/* 10. Ferrite Core Memory Matrix (y: 3160, x: 60, rotate -50) */}
+        <g transform="translate(60, 3160) rotate(-50)" stroke="url(#rightBioGrad)" strokeWidth="1.1">
+          <rect x="-24" y="-24" width="48" height="48" fill="#3b0764" fillOpacity="0.2" />
+          {[-12, 0, 12].map((gx) =>
+            [-12, 0, 12].map((gy) => (
+              <ellipse key={`${gx}-${gy}`} cx={gx} cy={gy} rx="4" ry="2" strokeWidth="1.2" transform={`rotate(45 ${gx} ${gy})`} />
+            ))
+          )}
+          <line x1="-28" y1="-28" x2="28" y2="28" strokeDasharray="2 2" stroke="#4ade80" opacity="0.6" />
+        </g>
+
+        {/* 11. Shuttle Thermal Shield Tile Grid (y: 3500, x: 125, rotate 24) */}
+        <g transform="translate(125, 3500) rotate(24)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+          <rect x="-28" y="-20" width="56" height="40" fill="#3b0764" fillOpacity="0.25" />
+          <line x1="-28" y1="0" x2="28" y2="0" strokeWidth="1.4" />
+          <line x1="0" y1="-20" x2="0" y2="20" strokeWidth="1.4" />
+          <g fontFamily="monospace" fontSize="6" fill="currentColor" opacity="0.6">
+            <text x="-22" y="-6">VT-04</text>
+            <text x="6" y="14">VT-05</text>
+          </g>
+        </g>
+
+        {/* 12. Lunar Rover Wireframe Chassis (y: 3850, x: 45, rotate -35) */}
+        <g transform="translate(45, 3850) rotate(-35)" stroke="url(#rightBioGrad)" strokeWidth="1.3">
+          <circle cx="-18" cy="12" r="9" strokeDasharray="2 2" />
+          <circle cx="18" cy="12" r="9" strokeDasharray="2 2" />
+          <line x1="-18" y1="12" x2="18" y2="12" strokeWidth="1.8" />
+          <line x1="-10" y1="12" x2="0" y2="-8" />
+          <line x1="10" y1="12" x2="0" y2="-8" />
+          <line x1="0" y1="-8" x2="8" y2="-18" />
+        </g>
+
+        {/* 13. NE555 Timer IC Pinout (y: 4200, x: 120, rotate 52) */}
+        <g transform="translate(120, 4200) rotate(52)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+          <rect x="-18" y="-25" width="36" height="50" rx="3" fill="#3b0764" fillOpacity="0.3" />
+          <circle cx="0" cy="-25" r="4" fill="none" />
+          {[-15, -5, 5, 15].map((py) => (
+            <React.Fragment key={py}>
+              <line x1="-26" y1={py} x2="-18" y2={py} strokeWidth="1.5" />
+              <line x1="18" y1={py} x2="26" y2={py} strokeWidth="1.5" />
+            </React.Fragment>
+          ))}
+          <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7">
+            <text x="-12" y="2">NE555</text>
+          </g>
+        </g>
+
+        {/* 14. Solar Sail Rigging (y: 4550, x: 55, rotate -14) */}
+        <g transform="translate(55, 4550) rotate(-14)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+          <polygon points="0,-35 35,0 0,35 -35,0" fill="#3b0764" fillOpacity="0.2" />
+          <line x1="-35" y1="0" x2="35" y2="0" strokeWidth="1.6" />
+          <line x1="0" y1="-35" x2="0" y2="35" strokeWidth="1.6" />
+          <line x1="-25" y1="-25" x2="25" y2="25" strokeDasharray="2 2" opacity="0.5" />
+        </g>
+
+        {/* 15. CRT Oscilloscope Raster Sine Wave (y: 4900, x: 135, rotate 38) */}
+        <g transform="translate(135, 4900) rotate(38)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+          <circle cx="0" cy="0" r="28" fill="#3b0764" fillOpacity="0.25" />
+          <path d="M -22,0 Q -11,-16 0,0 Q 11,16 22,0" stroke="#4ade80" strokeWidth="1.8" />
+        </g>
+
+        {/* 16. Radio Telescope Parabolic Array (y: 5260, x: 50, rotate -42) */}
+        <g transform="translate(50, 5260) rotate(-42)" stroke="url(#rightBioGrad)" strokeWidth="1.3">
+          <path d="M -25,18 Q 0,-15 25,18" strokeWidth="2.0" />
+          <line x1="0" y1="0" x2="0" y2="-22" strokeWidth="1.5" />
+          <circle cx="0" cy="-22" r="2.5" fill="currentColor" />
+          <line x1="-8" y1="18" x2="0" y2="32" />
+          <line x1="8" y1="18" x2="0" y2="32" />
+        </g>
+
+        {/* 17. Resistor Color Band Code (y: 5640, x: 125, rotate 16) */}
+        <g transform="translate(125, 5640) rotate(16)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+          <line x1="-35" y1="0" x2="35" y2="0" strokeWidth="1.6" />
+          <rect x="-18" y="-7" width="36" height="14" rx="4" fill="#3b0764" fillOpacity="0.3" />
+          <line x1="-9" y1="-7" x2="-9" y2="7" stroke="#fbbf24" strokeWidth="2" />
+          <line x1="-3" y1="-7" x2="-3" y2="7" stroke="#c084fc" strokeWidth="2" />
+          <line x1="3" y1="-7" x2="3" y2="7" stroke="#ef4444" strokeWidth="2" />
+          <line x1="10" y1="-7" x2="10" y2="7" stroke="#fbbf24" strokeWidth="1.5" strokeDasharray="1 1" />
+        </g>
+
+        {/* 18. Secondary Apollo Module on Perimeter (y: 6020, x: 60, rotate -30) */}
+        <g transform="translate(60, 6020) rotate(-30)" stroke="url(#rightBioGrad)" strokeWidth="1.2">
+          <polygon points="5,0 17,0 22,5 22,15 17,20 5,20 0,15 0,5" fill="#3b0764" fillOpacity="0.3" />
+          <line x1="3" y1="15" x2="-8" y2="28" strokeWidth="1.2" />
+          <line x1="19" y1="15" x2="30" y2="28" strokeWidth="1.2" />
+        </g>
+
+        {/* 19. Repeating Clippy Conduit Retainer (y: 6420, x: 130, rotate 65) */}
+        <g transform="translate(130, 6420) rotate(65)" stroke="url(#rightBioGrad)" strokeWidth="1.4">
+          <path
+            d="M 8,32 L 8,10 C 8,4 20,4 20,10 L 20,35 C 20,44 4,44 4,35 L 4,15 C 4,9 14,9 14,15 L 14,32"
+            fill="none"
+            strokeLinecap="round"
+          />
+        </g>
+
+        {/* 20. Hydrogen Spin Transition Symbol (y: 6820, x: 70, rotate -12) */}
+        <g transform="translate(70, 6820) rotate(-12)" stroke="url(#rightBioGrad)" strokeWidth="1.1" opacity="0.7">
+          <circle cx="-16" cy="0" r="7" />
+          <circle cx="16" cy="0" r="7" />
+          <line x1="-9" y1="0" x2="9" y2="0" />
+          <line x1="-16" y1="-7" x2="-16" y2="-12" strokeWidth="1.5" />
+          <line x1="16" y1="7" x2="16" y2="12" strokeWidth="1.5" />
           <g fontFamily="monospace" fontSize="6.5" fill="currentColor">
-            <text x="22" y="4">EOF</text>
+            <text x="28" y="3">1420-MHZ</text>
           </g>
         </g>
       </svg>
