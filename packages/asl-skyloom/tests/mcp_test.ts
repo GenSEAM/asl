@@ -19,7 +19,7 @@ const mcp = new SkyLoomMcpServer(router);
 // 1. Tool Listing Test
 console.log('1. Verifying MCP Tool Definitions...');
 const tools = mcp.getTools();
-assert.strictEqual(tools.length, 6, 'Must expose 6 MCP tools');
+assert.strictEqual(tools.length, 8, 'Must expose 8 MCP tools');
 const toolNames = tools.map(t => t.name);
 assert(toolNames.includes('skyloom_connect'));
 assert(toolNames.includes('skyloom_send'));
@@ -27,7 +27,9 @@ assert(toolNames.includes('skyloom_poll'));
 assert(toolNames.includes('skyloom_peers'));
 assert(toolNames.includes('skyloom_mailbox_status'));
 assert(toolNames.includes('skyloom_bootstrap_peer'));
-console.log(`✓ 6 MCP tools validated: ${toolNames.join(', ')}`);
+assert(toolNames.includes('skyloom_handoff'));
+assert(toolNames.includes('skyloom_yield'));
+console.log(`✓ 8 MCP tools validated: ${toolNames.join(', ')}`);
 
 // 2. Connect Tool Calls
 console.log('2. Testing skyloom_connect tool call for 2 agents...');

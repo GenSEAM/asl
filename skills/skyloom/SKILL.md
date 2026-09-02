@@ -77,3 +77,27 @@ If you send a message to a peer that is not yet online or has crashed:
 | `skyloom_peers` | Discover active agents and their capabilities |
 | `skyloom_mailbox_status` | Check buffered offline messages |
 | `skyloom_bootstrap_peer` | Generate instruction primer for vanilla LLMs |
+| `skyloom_handoff` | Delegate task with directory scoping, owned files, and verification gate |
+| `skyloom_yield` | Return task execution status and artifacts back to delegator |
+
+---
+
+## 5. Context-Isolated Handoff & Directory Scoping
+
+To avoid $O(N^2)$ token explosions and context rot, do NOT broadcast full chat histories between agents. Instead, use context-isolated handoffs:
+
+```bash
+asl loom handoff --to agent-coder --task build_feature --cwd packages/rate --owns "src/main.asl" --gate "asl check"
+```
+
+The assignee receives a minimal S-expression:
+```lisp
+(loom:handoff :v 1 :id "handoff-001" :from "orchestrator" :to "agent-coder"
+  :task "build_feature" :cwd "packages/rate" :owns ["src/main.asl"] :gate "asl check")
+```
+When complete, the worker yields back:
+```lisp
+(loom:yield :v 1 :id "yield-001" :reply-to "handoff-001" :status "ok"
+  :verdict "PASS (0 errors)" :artifacts ["src/main.asl"])
+```
+The Zero-Leak Mesh Firewall prevents the worker from receiving unrelated project chatter.

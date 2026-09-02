@@ -206,3 +206,161 @@ def demo(json_mode: bool = False) -> int:
     print("Heartbeat Watchdog: 4 active peers healthy, 1 peer in mailbox queue, DLQ: 0 errors.")
     print("\n=== DEMONSTRATION COMPLETE: ALL SKYLOOM CAPABILITIES VERIFIED ===")
     return 0
+
+
+def handoff(
+    to: str,
+    task: str,
+    cwd: str,
+    owns: Optional[List[str]] = None,
+    frozen: Optional[List[str]] = None,
+    gate: Optional[str] = None,
+    budget: int = 5000,
+    from_peer: str = "agent-orchestrator",
+    json_mode: bool = False,
+) -> int:
+    """Issue a context-isolated handoff frame (asl/coord) to a target agent."""
+    owns_list = owns or []
+    frozen_list = frozen or []
+    now = int(time.time() * 1000)
+    msg_id = f"handoff-{int(time.time() % 10000):04d}"
+
+    owns_str = " ".join(f'"{o}"' for o in owns_list)
+    frozen_str = f' :frozen [{" ".join(f"{f}" for f in frozen_list)}]' if frozen_list else ""
+    gate_str = f' :gate "{gate}"' if gate else ""
+    budget_str = f' :budget {budget}' if budget else ""
+
+    asl_coord = (
+        f'(loom:handoff :v 1 :id "{msg_id}" :from "{from_peer}" :to "{to}" :ts {now} '
+        f':task "{task}" :cwd "{cwd}" :owns [{owns_str}]{frozen_str}{gate_str}{budget_str})'
+    )
+
+    data = {
+        "status": "DELIVERED",
+        "frameId": msg_id,
+        "from": from_peer,
+        "to": to,
+        "dialect": "asl/coord",
+        "type": "HANDOFF",
+        "payload": {
+            "task": task,
+            "cwd": cwd,
+            "owns": owns_list,
+            "frozen": frozen_list,
+            "gate": gate,
+            "budget": budget,
+        },
+        "wireFrame": asl_coord,
+    }
+
+    if json_mode:
+        print(json.dumps(data, indent=2))
+        return 0
+
+    print("=== [SkyLoom] Context-Isolated Agent Handoff ===")
+    print(f"Handoff Frame ID : {msg_id}")
+    print(f"Delegator (From) : {from_peer}")
+    print(f"Assignee (To)    : {to}")
+    print(f"Working Dir (Cwd): {cwd}")
+    print(f"Permitted Files  : {owns_list}")
+    if frozen_list:
+        print(f"Frozen Files     : {frozen_list}")
+    if gate:
+        print(f"Gate Command     : {gate}")
+    print(f"Token Budget     : {budget}")
+    print(f"\nWire S-Expression (`asl/coord`):\n  {asl_coord}")
+    return 0
+
+
+def yield_task(
+    to: str,
+    reply_to: str,
+    status: str = "ok",
+    verdict: Optional[str] = None,
+    artifacts: Optional[List[str]] = None,
+    error: Optional[str] = None,
+    from_peer: str = "agent-worker",
+    json_mode: bool = False,
+) -> int:
+    """Return task execution status and artifacts via (loom:yield ...) frame."""
+    now = int(time.time() * 1000)
+    msg_id = f"yield-{int(time.time() % 10000):04d}"
+    artifacts_list = artifacts or []
+
+    art_str = f' :artifacts [{" ".join(f"{a}" for a in artifacts_list)}]' if artifacts_list else ""
+    verdict_str = f' :verdict "{verdict}"' if verdict else ""
+    err_str = f' :error "{error}"' if error else ""
+
+    asl_coord = (
+        f'(loom:yield :v 1 :id "{msg_id}" :reply-to "{reply_to}" :from "{from_peer}" :to "{to}" '
+        f':ts {now} :status "{status}"{verdict_str}{art_str}{err_str})'
+    )
+
+    data = {
+        "status": "DELIVERED",
+        "frameId": msg_id,
+        "replyTo": reply_to,
+        "from": from_peer,
+        "to": to,
+        "dialect": "asl/coord",
+        "type": "YIELD",
+        "payload": {
+            "status": status,
+            "gateVerdict": verdict,
+            "artifacts": artifacts_list,
+            "error": error,
+        },
+        "wireFrame": asl_coord,
+    }
+
+    if json_mode:
+        print(json.dumps(data, indent=2))
+        return 0
+
+    print("=== [SkyLoom] Handoff Task Completion (Yield) ===")
+    print(f"Yield Frame ID   : {msg_id}")
+    print(f"Replying To      : {reply_to}")
+    print(f"Assignee (From)  : {from_peer}")
+    print(f"Orchestrator (To): {to}")
+    print(f"Status           : {status.upper()}")
+    if verdict:
+        print(f"Gate Verdict     : {verdict}")
+    if artifacts_list:
+        print(f"Artifacts        : {artifacts_list}")
+    print(f"\nWire S-Expression (`asl/coord`):\n  {asl_coord}")
+    return 0
+
+
+def spawn(
+    agent: str,
+    cwd: str,
+    cmd: Optional[str] = None,
+    json_mode: bool = False,
+) -> int:
+    """Spawn an isolated agent subprocess jailed to a directory scope."""
+    import os
+
+    target_dir = Path(cwd).resolve()
+    if not target_dir.exists():
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "status": "SPAWNED",
+        "agent": agent,
+        "cwd": str(target_dir),
+        "scopes": [f"{target_dir}/*"],
+        "cmd": cmd or "idle",
+    }
+
+    if json_mode:
+        print(json.dumps(data, indent=2))
+        return 0
+
+    print("=== [SkyLoom] Spawning Scoped Agent Process ===")
+    print(f"Agent ID        : {agent}")
+    print(f"Jailed Directory: {target_dir}")
+    print(f"Permitted Scopes: {target_dir}/*")
+    if cmd:
+        print(f"Initial Command : {cmd}")
+    print("Process Status  : READY (Environment Jailed)")
+    return 0

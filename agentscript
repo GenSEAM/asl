@@ -303,6 +303,48 @@ def cmd_loom(args) -> int:
         return mailbox_status(peer_id=getattr(args, "target", "agent-lonely-sub"), json_mode=json_mode)
     elif action == "primer":
         return primer(target_peer=getattr(args, "target", "vanilla-llm"), sender=getattr(args, "from_peer", "orchestrator"), json_mode=json_mode)
+    elif action == "handoff":
+        from tools.skyloom_cli import handoff
+        owns = getattr(args, "owns", None)
+        if isinstance(owns, str):
+            owns = [o.strip() for o in owns.split(",") if o.strip()]
+        frozen = getattr(args, "frozen", None)
+        if isinstance(frozen, str):
+            frozen = [f.strip() for f in frozen.split(",") if f.strip()]
+        return handoff(
+            to=getattr(args, "target", "agent-coder"),
+            task=getattr(args, "task", "execute_task"),
+            cwd=getattr(args, "cwd", "."),
+            owns=owns,
+            frozen=frozen,
+            gate=getattr(args, "gate", None),
+            budget=getattr(args, "budget", 5000),
+            from_peer=getattr(args, "from_peer", "agent-orchestrator"),
+            json_mode=json_mode,
+        )
+    elif action == "yield":
+        from tools.skyloom_cli import yield_task
+        artifacts = getattr(args, "artifacts", None)
+        if isinstance(artifacts, str):
+            artifacts = [a.strip() for a in artifacts.split(",") if a.strip()]
+        return yield_task(
+            to=getattr(args, "target", "agent-orchestrator"),
+            reply_to=getattr(args, "reply_to", "handoff-0001"),
+            status=getattr(args, "status", "ok"),
+            verdict=getattr(args, "verdict", None),
+            artifacts=artifacts,
+            error=getattr(args, "error", None),
+            from_peer=getattr(args, "from_peer", "agent-coder"),
+            json_mode=json_mode,
+        )
+    elif action == "spawn":
+        from tools.skyloom_cli import spawn
+        return spawn(
+            agent=getattr(args, "target", "agent-worker"),
+            cwd=getattr(args, "cwd", "."),
+            cmd=getattr(args, "cmd", None),
+            json_mode=json_mode,
+        )
     return list_peers(json_mode=json_mode)
 
 
@@ -575,13 +617,24 @@ def main() -> int:
 
     p = sub.add_parser("loom", aliases=["skyloom"],
                        help="SkyLoom inter-agent resilient protocol, asymmetric mesh, and mailbox")
-    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "doctor", "mcp", "demo"],
-                   help="loom action (peers, send, mailbox, primer, doctor, mcp, demo)")
+    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "doctor", "mcp", "demo", "handoff", "yield", "spawn"],
+                   help="loom action (peers, send, mailbox, primer, doctor, mcp, demo, handoff, yield, spawn)")
     p.add_argument("--to", dest="target", default="agent-planner", help="target agent ID")
     p.add_argument("--msg", dest="message", default="hello", help="message payload")
     p.add_argument("--from", dest="from_peer", default="agent-orchestrator", help="sender agent ID")
-    p.add_argument("--dialect", default="auto", choices=["auto", "asl/v1", "compact/v1", "polyglot/v1"], help="wire dialect")
+    p.add_argument("--dialect", default="auto", choices=["auto", "asl/v1", "asl/coord", "compact/v1", "polyglot/v1"], help="wire dialect")
     p.add_argument("--channel", default=None, help="topic channel")
+    p.add_argument("--task", default="execute_task", help="task name for handoff")
+    p.add_argument("--cwd", default=".", help="working directory scope for handoff/spawn")
+    p.add_argument("--owns", default=None, help="comma-separated permitted files for handoff")
+    p.add_argument("--frozen", default=None, help="comma-separated frozen files for handoff")
+    p.add_argument("--gate", default=None, help="verification gate command for handoff")
+    p.add_argument("--budget", type=int, default=5000, help="token budget limit")
+    p.add_argument("--reply-to", dest="reply_to", default="handoff-0001", help="reply-to frame ID for yield")
+    p.add_argument("--status", default="ok", help="execution status for yield (ok/failed)")
+    p.add_argument("--verdict", default=None, help="gate verification verdict string for yield")
+    p.add_argument("--artifacts", default=None, help="comma-separated generated artifacts for yield")
+    p.add_argument("--cmd", default=None, help="initial command to run in spawned agent")
     p.add_argument("--demo", action="store_true", help="run end-to-end swarm simulation demo")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_loom)

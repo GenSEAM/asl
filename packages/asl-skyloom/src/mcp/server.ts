@@ -6,6 +6,7 @@
 import { SkyLoomRouter } from '../mesh.js';
 import { LoomFrame, PeerCapability, ErrorCode } from '../types.js';
 import { AsymmetricNegotiator } from '../negotiator.js';
+import { encodeFrame } from '../codec.js';
 
 export interface McpToolDefinition {
   name: string;
@@ -109,6 +110,42 @@ export class SkyLoomMcpServer {
             senderId: { type: 'string', description: 'Sender agent ID' },
           },
           required: ['targetPeerId', 'senderId'],
+        },
+      },
+      {
+        name: 'skyloom_handoff',
+        description:
+          'Issues a context-isolated handoff frame in asl/coord dialect with directory scoping, owned files, and verification gate.',
+        parameters: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Orchestrator or delegating agent ID' },
+            to: { type: 'string', description: 'Assignee target agent ID' },
+            task: { type: 'string', description: 'Discrete task name' },
+            cwd: { type: 'string', description: 'Scoped working directory' },
+            owns: { type: 'array', items: { type: 'string' }, description: 'Permitted files agent can edit' },
+            frozen: { type: 'array', items: { type: 'string' }, description: 'Frozen files agent must not edit' },
+            gate: { type: 'string', description: 'Verification shell command' },
+            budget: { type: 'number', description: 'Maximum token budget' },
+          },
+          required: ['from', 'to', 'task', 'cwd', 'gate'],
+        },
+      },
+      {
+        name: 'skyloom_yield',
+        description: 'Yields completed task artifacts and verification status back to delegating agent.',
+        parameters: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Assignee agent ID completing work' },
+            to: { type: 'string', description: 'Orchestrator agent ID' },
+            replyTo: { type: 'string', description: 'Original handoff frame ID' },
+            status: { type: 'string', enum: ['ok', 'failed', 'rejected'], description: 'Execution verdict' },
+            gateVerdict: { type: 'string', description: 'Output summary of gate verification command' },
+            artifacts: { type: 'array', items: { type: 'string' }, description: 'Modified or created files' },
+            error: { type: 'string', description: 'Error message if failed' },
+          },
+          required: ['from', 'to', 'replyTo', 'status'],
         },
       },
     ];
@@ -252,6 +289,85 @@ export class SkyLoomMcpServer {
                   primerMarkdown: primer,
                   instruction: 'Inject this primer into your outgoing message or the target agent prompt.',
                 }),
+              },
+            ],
+          };
+        }
+
+        case 'skyloom_handoff': {
+          const { from, to, task, cwd, owns, frozen, gate, budget } = args;
+          const frame: LoomFrame = {
+            header: {
+              version: 1,
+              id: `handoff-${Date.now()}`,
+              from,
+              to,
+              dialect: 'asl/coord',
+              timestamp: Date.now(),
+            },
+            type: 'HANDOFF',
+            body: {
+              task,
+              cwd,
+              owns: owns || [],
+              frozen: frozen || [],
+              gate,
+              budget: budget || 5000,
+            },
+          };
+          const result = await this.router.route(frame);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: result.status,
+                    frameId: frame.header.id,
+                    wireFrame: encodeFrame(frame, 'asl/coord'),
+                  },
+                  null,
+                  2
+                ),
+              },
+            ],
+          };
+        }
+
+        case 'skyloom_yield': {
+          const { from, to, replyTo, status, gateVerdict, artifacts, error } = args;
+          const frame: LoomFrame = {
+            header: {
+              version: 1,
+              id: `yield-${Date.now()}`,
+              replyTo,
+              from,
+              to,
+              dialect: 'asl/coord',
+              timestamp: Date.now(),
+            },
+            type: 'YIELD',
+            body: {
+              status,
+              gateVerdict,
+              artifacts: artifacts || [],
+              error,
+            },
+          };
+          const result = await this.router.route(frame);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(
+                  {
+                    status: result.status,
+                    frameId: frame.header.id,
+                    wireFrame: encodeFrame(frame, 'asl/coord'),
+                  },
+                  null,
+                  2
+                ),
               },
             ],
           };
