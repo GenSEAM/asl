@@ -1,19 +1,24 @@
-# Phases — asl-observability-runtime-v1
+# Iteration: asl-ecosystem-audit-v1
+Goal: Full Ecosystem Audit: Packages, API contracts, Dual-Projection, Protocols, Self-Hosting ASL Parser feasibility & Hardening.
 
-Full-Spectrum Visual Observability Cockpit, Native Language Server (LSP), Jailed Sandbox Runner, and Zero-Cost Schema Codec (`packages/asl-codec`).
+## Phases
 
-## Phase List
+### Phase 1: Packages & API Contract Consistency Audit
+- Goal: Audit all 24 packages and manifests (`asl.json`), export signatures, import topologies, and docstring coverage.
+- Checkable Criterion: `.venv/bin/python tools/module_graph.py --summary && .venv/bin/python agentscript lint packages/`
 
-- [x] **Phase 1**: Visual Module Topology & Architecture Graph Inspector (`asl graph` & `web/src/components/ModuleGraphVisualizer.tsx`)
-- [x] **Phase 2**: Native Language Server (LSP) Engine with Virtual Projections (`tools/lsp.py` & `asl lsp`)
-- [ ] **Phase 3**: Ultra-Nano Syntax Expansion (`:f`, `:c`, `:d`, `:x`, `:i`, `Str`, `I64`) & Dual-Projection Transcoder
-  - Criterion: Both grammars (`agentscript.lark` and `tree-sitter-agentscript`) admit short markers; `.venv/bin/python grammar/validate.py` passes 100%; `asl transcode --to-nano` compacts schemas by $\ge 40\%$.
-- [ ] **Phase 4**: Isolated In-Memory Sandbox & Jailed Runner (`asl run --jail` / `tools/sandbox_runner.py`)
-  - Criterion: `.venv/bin/python -m pytest tools/tests/test_sandbox.py -q` passes 100%, enforcing memory ceilings, execution deadlines, and returning structured execution telemetry.
-- [ ] **Phase 5**: Zero-Cost Native Schema Codec (`packages/asl-codec/src/core/codec.asl`)
-  - Criterion: `agentscript check packages/asl-codec/src/core/codec.asl` has 0 diagnostics, Quality Score 100/100, and `pytest tools/tests/test_codec.py -q` passes roundtrip serialization.
-- [ ] **Phase 6**: Full Observability Dashboard Integration in Web Showcase & 7-Gate CI
-  - Criterion: `npm run build:web` succeeds; all 7 pre-commit verification gates pass cleanly.
+### Phase 2: Dual-Projection & Syntax Conformance Audit
+- Goal: Verify lossless bidirectional transcoding (Ultra-Nano <-> Verbose), evaluate feasibility of Self-Hosting Native ASL Parser replacing Lark/Tree-sitter.
+- Checkable Criterion: `.venv/bin/python tools/tests/test_ultra_nano.py && .venv/bin/python grammar/validate.py`
+
+### Phase 3: Protocols, Mesh & Security Isolation Audit
+- Goal: Audit SkyLoom frames, Agent-Bus sockets, SQL cross-dialect polyfills, and sandboxed jailing boundaries.
+- Checkable Criterion: `.venv/bin/python -m pytest tools/tests/test_sandbox.py tools/tests/test_sql.py tools/tests/test_graph.py -q`
+
+### Phase 4: Verification, Hardening & Ecosystem Report
+- Goal: Address all identified gaps, run full 7-gate CI pre-commit pipeline, update documentation and emit audit report.
+- Checkable Criterion: `node /Users/purplelephant/.gemini/config/skills/pcp/scripts/pcp.js actualize && npm run build:web`
 
 ## Out of Scope
-- Proprietary closed-source IDE extensions or non-LSP editors (we target the open Language Server Protocol standard compatible with VS Code, Cursor, Zed, NeoVim).
+- Breaking existing AST nodes in corpus fixtures (compatibility must remain green).
+- Adding heavy external C/Node dependencies.

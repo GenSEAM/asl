@@ -1,5 +1,4 @@
-# Project Status
-
-- Active Iteration: None (All planned iterations completed)
-- Last Completed: `asl-observability-runtime-v1` (Archived to `.plans/archive/2026-09-02-asl-observability-runtime-v1/`)
-- Readiness: Ready for next roadmap milestone or ecosystem tasks
+# Current Status: asl-ecosystem-audit-v1
+- Current Phase: Phase 1 (Packages & API Contract Consistency Audit)
+- Completed Phases: None
+- Active Work: Auditing packages, manifests, export contracts, and circular import topology.

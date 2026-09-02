@@ -1,7 +1,8 @@
 {
-  "name": "asl-codec",
+  "name": "@genseam/asl-codec",
   "version": "1.0.0",
   "description": "Zero-Cost Native Schema & JSON Codec for AgentScript",
+  "entry": "src/core/codec.asl",
   "main": "src/core/codec.asl",
   "dependencies": {}
 }
