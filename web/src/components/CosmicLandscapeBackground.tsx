@@ -288,8 +288,8 @@ export const CosmicLandscapeBackground: React.FC = () => (
           <g fontFamily="monospace" fontSize="8" fill="currentColor">
             <text x="10" y="16" fill="#c084fc">;; Schema: Zero-Leak Wasm Core</text>
             <text x="10" y="32" fill="#4ade80">(dfs WasmNode</text>
-            <text x="20" y="46" fill="#4ade80">  (:f id String) (:f latency Float64 :default 0.038)</text>
-            <text x="20" y="60" fill="#4ade80">  (:f sandbox (Option Keyword)))</text>
+            <text x="20" y="46" fill="#4ade80">  (:f id String) (:f ms Float64)</text>
+            <text x="20" y="60" fill="#4ade80">  (:f cap (Option Keyword)))</text>
           </g>
         </g>
 
