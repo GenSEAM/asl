@@ -208,6 +208,10 @@ export class DeadLetterQueue extends EventEmitter {
     return [...this.dlq];
   }
 
+  getAll(): DlqItem[] {
+    return this.getItems();
+  }
+
   clear(): void {
     this.dlq = [];
   }

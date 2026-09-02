@@ -9,6 +9,7 @@ import * as path from 'path';
 const suites = [
   'codec_test.js',
   'handoff_codec_test.js',
+  'scoping_test.js',
   'mesh_test.js',
   'negotiation_test.js',
   'resilience_test.js',

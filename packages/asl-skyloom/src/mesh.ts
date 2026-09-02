@@ -1,11 +1,12 @@
 /**
- * SkyLoom Mesh Topology Router with Integrated Resilience
+ * SkyLoom Mesh Topology Router with Integrated Resilience & Directory Scoping
  * Routes frames between N agents across 1:1, pub/sub, and broadcast patterns.
- * Solves the Lonely Agent problem via Mailboxes, and manages Heartbeats + DLQ.
+ * Solves the Lonely Agent problem via Mailboxes, manages Heartbeats + DLQ,
+ * and enforces Zero-Leak Directory Scoping / Firewall boundaries.
  */
 
 import { EventEmitter } from 'events';
-import { LoomFrame, PeerCapability, ErrorCode, Dialect } from './types.js';
+import { LoomFrame, PeerCapability, ErrorCode, Dialect, HandoffPayload } from './types.js';
 import { validateFrame, decodeFrame, encodeFrame } from './codec.js';
 import { SkyLoomMailbox, HeartbeatGuard, DeadLetterQueue } from './resilience.js';
 
@@ -21,6 +22,28 @@ export interface PeerConnection {
   peer: PeerCapability;
   send: (frame: LoomFrame) => Promise<boolean> | boolean;
   connectedAt: number;
+}
+
+/**
+ * Checks whether a given target path / channel falls within a declared scope pattern
+ * Supports exact match, wildcard '*', and directory globbing 'dir/*'
+ */
+export function isPathInScope(scopePattern: string, targetPath: string): boolean {
+  if (scopePattern === '*' || scopePattern === '**') return true;
+  const cleanScope = scopePattern.replace(/\/\*+$/, '').replace(/\/$/, '');
+  const cleanTarget = targetPath.replace(/\/$/, '');
+  if (cleanScope === cleanTarget) return true;
+  return cleanTarget.startsWith(cleanScope + '/');
+}
+
+/**
+ * Verifies if a peer is permitted to access a given scope, directory, or topic channel
+ */
+export function isPeerPermitted(peer: PeerCapability, targetScope: string): boolean {
+  if (!peer.permittedScopes || peer.permittedScopes.length === 0 || peer.permittedScopes.includes('*')) {
+    return true;
+  }
+  return peer.permittedScopes.some(pattern => isPathInScope(pattern, targetScope));
 }
 
 export class SkyLoomRouter extends EventEmitter {
@@ -55,26 +78,31 @@ export class SkyLoomRouter extends EventEmitter {
   }
 
   /**
-   * Registers a newly joined peer with its capabilities
+   * Registers a newly joined peer with its capabilities and directory scope
    * Automatically flushes any spooled mailbox frames for this peer!
    */
   registerPeer(peer: PeerCapability, sendFn: (frame: LoomFrame) => Promise<boolean> | boolean): void {
     const isNew = !this.peers.has(peer.peerId);
     this.peers.set(peer.peerId, {
-      peer,
+      peer: {
+        ...peer,
+        permittedScopes: peer.permittedScopes || ['*'],
+      },
       send: sendFn,
       connectedAt: Date.now(),
     });
 
     this.heartbeatGuard.recordHeartbeat(peer.peerId);
 
-    // Auto-subscribe to default channels
-    for (const ch of peer.supportedChannels || []) {
-      this.subscribe(peer.peerId, ch);
+    // Auto-subscribe to declared initial channels
+    if (peer.supportedChannels && peer.supportedChannels.length > 0) {
+      for (const ch of peer.supportedChannels) {
+        this.subscribe(peer.peerId, ch);
+      }
     }
 
-    this.emit('peer:registered', peer);
     if (isNew) {
+      this.emit('peer:registered', peer);
       this.emit('peer:joined', peer);
     }
 
@@ -95,6 +123,18 @@ export class SkyLoomRouter extends EventEmitter {
     if (this.peers.has(peerId)) {
       this.heartbeatGuard.recordHeartbeat(peerId);
     }
+  }
+
+  /**
+   * Updates or locks a peer's directory scope jail
+   */
+  setPeerScope(peerId: string, cwd: string, permittedScopes?: string[]): boolean {
+    const conn = this.peers.get(peerId);
+    if (!conn) return false;
+    conn.peer.cwd = cwd;
+    conn.peer.permittedScopes = permittedScopes || [cwd, `${cwd}/*`];
+    this.emit('peer:scoped', { peerId, cwd, permittedScopes: conn.peer.permittedScopes });
+    return true;
   }
 
   /**
@@ -168,7 +208,7 @@ export class SkyLoomRouter extends EventEmitter {
   }
 
   /**
-   * Primary frame router with Lonely-Agent Mailbox buffering & DLQ protection
+   * Primary frame router with Zero-Leak Scope Firewall, Lonely-Agent Mailbox & DLQ
    */
   async route(rawOrFrame: string | LoomFrame, senderOverride?: string): Promise<RouteResult> {
     let frame: LoomFrame;
@@ -182,24 +222,61 @@ export class SkyLoomRouter extends EventEmitter {
       frame.header.from = senderOverride;
     }
 
+    const from = frame.header.from;
+    const to = frame.header.to;
+    const channel = frame.channel;
+
     // Refresh heartbeat for sender
-    if (this.peers.has(frame.header.from)) {
-      this.heartbeatGuard.recordHeartbeat(frame.header.from);
+    if (this.peers.has(from)) {
+      this.heartbeatGuard.recordHeartbeat(from);
+    }
+
+    // 0. Zero-Leak Firewall: Check sender scope permissions
+    const senderConn = this.peers.get(from);
+    if (senderConn && senderConn.peer.permittedScopes && !senderConn.peer.permittedScopes.includes('*')) {
+      // Check channel scope
+      if (channel && !isPeerPermitted(senderConn.peer, channel)) {
+        this.dlq.push(
+          frame,
+          ErrorCode.ERR_SCOPE_VIOLATION,
+          `Sender "${from}" lacks permission for scope "${channel}"`
+        );
+        return {
+          status: 'DROPPED',
+          recipients: [],
+          errorCode: ErrorCode.ERR_SCOPE_VIOLATION,
+          errorReason: `Sender "${from}" lacks permission for scope "${channel}"`,
+        };
+      }
+      // Check handoff target directory scope
+      if (frame.type === 'HANDOFF') {
+        const payload = frame.body as HandoffPayload;
+        if (payload?.cwd && !isPeerPermitted(senderConn.peer, payload.cwd)) {
+          this.dlq.push(
+            frame,
+            ErrorCode.ERR_SCOPE_VIOLATION,
+            `Sender "${from}" attempted to assign handoff outside its scope: "${payload.cwd}"`
+          );
+          return {
+            status: 'DROPPED',
+            recipients: [],
+            errorCode: ErrorCode.ERR_SCOPE_VIOLATION,
+            errorReason: `Sender "${from}" lacks authority over target directory "${payload.cwd}"`,
+          };
+        }
+      }
     }
 
     this.messageLog.push(frame);
     this.emit('frame', frame);
 
-    const from = frame.header.from;
-    const to = frame.header.to;
-    const channel = frame.channel;
-
-    // 1. Broadcast to channel or all peers
+    // 1. Broadcast / Pub-Sub routing with Zero-Leak recipient filtering
     if (to === '*' || to === 'broadcast') {
       if (!channel) {
+        // Unscoped global broadcast: only deliver to un-jailed / global peers
         const recipients: string[] = [];
         for (const [id, conn] of this.peers.entries()) {
-          if (id !== from) {
+          if (id !== from && isPeerPermitted(conn.peer, '*')) {
             await conn.send(frame);
             recipients.push(id);
           }
@@ -208,7 +285,7 @@ export class SkyLoomRouter extends EventEmitter {
       } else {
         const subscribers = this.getChannelSubscribers(channel).filter(id => id !== from);
         if (subscribers.length === 0) {
-          // No subscribers for this channel: buffer in mailbox under channel name
+          // No subscribers for this channel: buffer in mailbox
           this.mailbox.enqueue(frame);
           return {
             status: 'QUEUED',
@@ -221,7 +298,8 @@ export class SkyLoomRouter extends EventEmitter {
         const recipients: string[] = [];
         for (const id of subscribers) {
           const conn = this.peers.get(id);
-          if (conn) {
+          // Zero-Leak Filter: peer must be permitted to receive this channel
+          if (conn && isPeerPermitted(conn.peer, channel)) {
             await conn.send(frame);
             recipients.push(id);
           }
@@ -242,6 +320,29 @@ export class SkyLoomRouter extends EventEmitter {
         errorCode: ErrorCode.ERR_LONELY_QUEUED,
         errorReason: `Target peer "${to}" is not online. Message buffered in SkyLoom mailbox.`,
       };
+    }
+
+    // Direct Zero-Leak Filter: Verify target peer permits receiving this scope
+    if (channel && !isPeerPermitted(targetConn.peer, channel)) {
+      this.dlq.push(
+        frame,
+        ErrorCode.ERR_SCOPE_VIOLATION,
+        `Target peer "${to}" is jailed outside channel scope "${channel}"`
+      );
+      return {
+        status: 'DROPPED',
+        recipients: [],
+        errorCode: ErrorCode.ERR_SCOPE_VIOLATION,
+        errorReason: `Target peer "${to}" cannot receive messages from scope "${channel}"`,
+      };
+    }
+
+    // If Handoff frame: auto-bind target peer's active directory scope!
+    if (frame.type === 'HANDOFF') {
+      const payload = frame.body as HandoffPayload;
+      if (payload?.cwd) {
+        this.setPeerScope(to, payload.cwd);
+      }
     }
 
     // Check dialect compatibility & auto-adapt if needed
@@ -268,16 +369,12 @@ export class SkyLoomRouter extends EventEmitter {
       return {
         status: 'DROPPED',
         recipients: [],
-        undelivered: [to],
         errorCode: ErrorCode.ERR_STALLED,
-        errorReason: `Delivery to peer "${to}" failed: ${err?.message}`,
+        errorReason: err?.message || 'Send failed',
       };
     }
   }
 
-  /**
-   * Stop router and watchdog timers
-   */
   destroy(): void {
     this.heartbeatGuard.stopWatchdog();
     if (this.mailboxTimer) {
@@ -286,10 +383,7 @@ export class SkyLoomRouter extends EventEmitter {
     }
   }
 
-  /**
-   * Get message history for diagnostics/telemetry
-   */
-  getMessageLog(limit = 100): LoomFrame[] {
-    return this.messageLog.slice(-limit);
+  getMessageLog(): LoomFrame[] {
+    return [...this.messageLog];
   }
 }
