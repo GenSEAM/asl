@@ -13,11 +13,11 @@ export const Section: React.FC<{
   className?: string;
   children: React.ReactNode;
 }> = ({ id, variant, ground = 'ground', labelledBy, className = '', children }) => {
-  const chosen = variant ?? (ground === 'transparent' ? 'transparent' : ground === 'sunken' ? 'sunken' : 'transparent');
+  const chosen = variant ?? (ground === 'transparent' ? 'transparent' : 'transparent');
   const bgStyles = {
     transparent: 'bg-transparent',
-    surface: 'bg-surface/75 backdrop-blur-2xl border-y border-line/60 shadow-e1',
-    sunken: 'bg-sunken/80 backdrop-blur-2xl border-y border-line/60 shadow-e2',
+    surface: 'bg-transparent',
+    sunken: 'bg-transparent',
   }[chosen];
 
   return (
