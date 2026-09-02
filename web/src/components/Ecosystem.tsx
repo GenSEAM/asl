@@ -63,7 +63,7 @@ export const Ecosystem: React.FC = () => (
     
     <SectionHeader
       id="toolchain-title"
-      index="04"
+      index="01"
       eyebrow="Universal Interoperability"
       title="One language. Compatible with every ecosystem your agents touch."
       lead="Agents should not have to rewrite their logic for every deployment target. AgentScript compiles deterministically into native binaries, web sandboxes, and host scripting languages with mathematically proven equivalence."

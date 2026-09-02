@@ -10,11 +10,11 @@ import { Ecosystem } from '../components/Ecosystem';
 export const HomeView: React.FC = () => (
   <main className="flex-1">
     <Hero />
+    <Ecosystem />
     <KeyCapabilities />
     <TheAgentWay />
     <AgentWireProtocol />
     <HarnessToolkit />
     <ModuleGraphVisualizer />
-    <Ecosystem />
   </main>
 );
