@@ -34,12 +34,12 @@ module.exports = grammar({
       '(', 'module', field('path', $.mod_path), repeat($.module_opt), ')'
     ),
     module_opt: $ => choice(
-      seq(':doc', field('doc', $.string)),
-      seq(':export', '[', repeat(field('export', choice($.ident, $.type_name))), ']'),
-      seq(':import', '[', repeat($.import_spec), ']'),
+      seq(choice(':doc', ':d'), field('doc', $.string)),
+      seq(choice(':export', ':x'), '[', repeat(field('export', choice($.ident, $.type_name))), ']'),
+      seq(choice(':import', ':i'), '[', repeat($.import_spec), ']'),
     ),
     import_spec: $ => seq(
-      '(', field('path', $.mod_path), ':as', field('alias', $.ident), ')'
+      '(', field('path', $.mod_path), choice(':as', ':a'), field('alias', $.ident), ')'
     ),
 
     // Type variables are bound explicitly, so a name is a type variable because
@@ -60,14 +60,14 @@ module.exports = grammar({
       field('name', $.type_name), repeat1($.enum_case), ')'
     ),
     enum_case: $ => seq(
-      '(', ':case',
+      '(', choice(':case', ':c'),
       field('name', $.ident),
       '[', repeat($.param), ']',
       field('doc', $.string), ')'
     ),
 
     field: $ => seq(
-      '(', ':field',
+      '(', choice(':field', ':f'),
       field('name', $.ident),
       field('type', $._type),
       field('doc', $.string),
@@ -89,7 +89,7 @@ module.exports = grammar({
       field('params', $.params),
       '->',
       field('return_type', $._type),
-      optional(seq(':doc', field('doc', $.string))),
+      optional(seq(choice(':doc', ':d'), field('doc', $.string))),
       repeat1(field('body', $._expr)), ')'
     ),
 
@@ -143,7 +143,7 @@ module.exports = grammar({
     else_clause: $ => seq('(', ':else', repeat1(field('body', $._expr)), ')'),
 
     match_form: $ => seq(
-      '(', 'match', field('subject', $._expr), repeat1($.match_arm), ')'
+      '(', choice('match', 'mt'), field('subject', $._expr), repeat1($.match_arm), ')'
     ),
     match_arm: $ => seq(
       '(', field('pattern', $._pattern), repeat1(field('body', $._expr)), ')'

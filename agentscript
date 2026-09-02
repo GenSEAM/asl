@@ -165,6 +165,12 @@ def cmd_lsp(args) -> int:
     return run_lsp_cli(args)
 
 
+def cmd_transcode(args) -> int:
+    """Lossless bidirectional transcoder between Nano and Verbose projections (@pcp:d-1eed)."""
+    from tools.transcoder import run_transcode_cli
+    return run_transcode_cli(args)
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -683,6 +689,14 @@ def main() -> int:
     p = sub.add_parser("lsp", help="run native Language Server Protocol (LSP 3.17) stdio server")
     p.add_argument("--stdio", action="store_true", default=True, help="communicate via stdio (default)")
     p.set_defaults(fn=cmd_lsp)
+
+    p = sub.add_parser("transcode", aliases=["project"],
+                       help="bidirectional transcoder between Nano and Verbose projections (@pcp:d-1eed)")
+    p.add_argument("file", type=Path, help="file to transcode")
+    p.add_argument("--verbose", action="store_true", help="transcode to human verbose projection")
+    p.add_argument("--nano", action="store_true", default=True, help="transcode to dense agent nano projection")
+    p.add_argument("-i", "--in-place", action="store_true", help="modify file in-place on disk")
+    p.set_defaults(fn=cmd_transcode)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
