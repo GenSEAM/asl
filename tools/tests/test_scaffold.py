@@ -25,6 +25,5 @@ def test_scaffold_project():
         assert (target / "AGENTS.md").exists()
         assert (target / "CLAUDE.md").exists()
         assert (target / ".skills" / "asl" / "SKILL.md").exists()
-        assert (target / ".skills" / "agentscript" / "SKILL.md").exists()
-        assert (target / "src" / "main.agentscript").exists()
-        assert (target / "tests" / "test_main.agentscript").exists()
+        assert (target / "src" / "main.asl").exists()
+        assert (target / "tests" / "test_main.asl").exists()

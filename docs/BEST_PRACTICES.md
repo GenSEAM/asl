@@ -81,19 +81,19 @@ Compile one ASL business module simultaneously to a React frontend, Go microserv
 
 ```bash
 # 1. Verify semantics across all files
-asl check src/main.agentscript
+asl check src/main.asl
 
 # 2. Build WebAssembly for browser edge
-asl build src/main.agentscript --target wasm -o dist/main.wasm
+asl build src/main.asl --target wasm -o dist/main.wasm
 
 # 3. Transpile to TypeScript for React web frontend
-asl build src/main.agentscript --target ts -o src/generated/main.ts
+asl build src/main.asl --target ts -o src/generated/main.ts
 
 # 4. Transpile to Go for cloud services
-asl build src/main.agentscript --target go -o cmd/server/main.go
+asl build src/main.asl --target go -o cmd/server/main.go
 
 # 5. Transpile to Rust for high-throughput native worker
-asl build src/main.agentscript --target rs -o crates/core/src/main.rs
+asl build src/main.asl --target rs -o crates/core/src/main.rs
 ```
 
 ---

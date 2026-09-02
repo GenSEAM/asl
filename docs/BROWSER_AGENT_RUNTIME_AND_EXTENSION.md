@@ -28,7 +28,7 @@ The ASL in-browser ecosystem unites three operational planes:
 ## 2. In-Browser Hot-Reloading Sandbox (`@genseam/in-browser-dev`)
 
 ### WebAssembly Web Worker Pipeline
-1. **Code Modification**: User or Agent emits `.agentscript` S-expression.
+1. **Code Modification**: User or Agent emits `.asl` S-expression.
 2. **Instant In-Memory Transpilation & Checking**: Run typechecker in `<0.015ms`.
 3. **WASI Web Worker Isolate**:
    - Compiles to `wasm32-wasip1` in memory.

@@ -146,7 +146,7 @@ def doctor(json_mode: bool = False) -> int:
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    asl_core = root / "packages" / "asl-skyloom" / "src" / "core" / "skyloom.agentscript"
+    asl_core = root / "packages" / "asl-skyloom" / "src" / "core" / "skyloom.asl"
     mcp_server_file = root / "packages" / "asl-skyloom" / "src" / "mcp" / "server.ts"
     socket_dir_ok = os.access("/tmp", os.W_OK)
 

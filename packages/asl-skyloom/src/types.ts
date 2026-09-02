@@ -1,6 +1,6 @@
 /**
  * SkyLoom: Core Protocol Types & Contracts
- * Direct correspondence with ASL nominal types in src/core/skyloom.agentscript
+ * Direct correspondence with ASL nominal types in src/core/skyloom.asl
  */
 
 export type Dialect = 'asl/v1' | 'compact/v1' | 'polyglot/v1';

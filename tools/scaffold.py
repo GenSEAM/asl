@@ -41,7 +41,7 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
         "version": "0.1.0",
         "description": f"{project_name} built with ASL (AgentScript Language)",
         "template": template,
-        "entry": "src/main.agentscript",
+        "entry": "src/main.asl",
         "watch": ["src/", "asl.json"],
         "targets": {
             "wasm": {"output": "dist/main.wasm"},
@@ -53,7 +53,7 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     created_files.append(str(manifest_path))
 
-    # 2. src/main.agentscript
+    # 2. src/main.asl
     src_dir = target_dir / "src"
     src_dir.mkdir(exist_ok=True)
     main_code = f"""(module {project_name}/main
@@ -80,11 +80,11 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
     (println (s/concat "Calculated value: " (string-from-int64 (calculate 3 4))))
     (ok ())))
 """
-    main_path = src_dir / "main.agentscript"
+    main_path = src_dir / "main.asl"
     main_path.write_text(main_code)
     created_files.append(str(main_path))
 
-    # 3. tests/test_main.agentscript
+    # 3. tests/test_main.asl
     tests_dir = target_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
     test_code = f"""; Test fixture for {project_name}
@@ -98,7 +98,7 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
 (defun run-tests [] -> Bool
   (= (app/calculate 3 4) 25))
 """
-    test_path = tests_dir / "test_main.agentscript"
+    test_path = tests_dir / "test_main.asl"
     test_path.write_text(test_code)
     created_files.append(str(test_path))
 
@@ -112,17 +112,17 @@ This project is written in **AgentScript** (an S-expression language designed fo
 2. **Deterministic S-Expressions**: S-expression tail expressions are the return value. Every branch in `match`, `if`, and `cond` must be exhaustive.
 3. **Verification Before Commit**:
    ```bash
-   agentscript check src/main.agentscript
-   agentscript build src/main.agentscript --target wasm
-   agentscript fmt src/
+   asl check src/main.asl
+   asl build src/main.asl --target wasm
+   asl fmt src/
    ```
 
 ## Targets & Toolchain
-- **WebAssembly**: `agentscript build src/main.agentscript --target wasm -o dist/main.wasm`
-- **TypeScript**: `agentscript build src/main.agentscript --target ts`
-- **Rust**: `agentscript build src/main.agentscript --target rs`
-- **Go**: `agentscript build src/main.agentscript --target go`
-- **Python**: `agentscript build src/main.agentscript --target py`
+- **WebAssembly**: `asl build src/main.asl --target wasm -o dist/main.wasm`
+- **TypeScript**: `asl build src/main.asl --target ts`
+- **Rust**: `asl build src/main.asl --target rs`
+- **Go**: `asl build src/main.asl --target go`
+- **Python**: `asl build src/main.asl --target py`
 """
     agents_path = target_dir / "AGENTS.md"
     agents_path.write_text(agents_md)

@@ -89,7 +89,18 @@ def build_project(project_dir: Path | None = None) -> tuple[int, list[dict]]:
     """Builds all targets configured in asl.json."""
     config_file, cfg = load_project_config(project_dir)
     base_dir = config_file.parent
-    entry = base_dir / cfg.get("entry", "src/main.agentscript")
+    entry_val = cfg.get("entry", "src/main.asl")
+    entry = base_dir / entry_val
+    if not entry.exists():
+        # Fallback between .asl and .agentscript extensions
+        alt_ext = ".asl" if entry.suffix == ".agentscript" else ".agentscript"
+        alt_path = entry.with_suffix(alt_ext)
+        if alt_path.exists():
+            entry = alt_path
+        elif (base_dir / "src" / "main.asl").exists():
+            entry = base_dir / "src" / "main.asl"
+        elif (base_dir / "src" / "main.agentscript").exists():
+            entry = base_dir / "src" / "main.agentscript"
     targets = cfg.get("targets", ["wasm"])
 
     results = []

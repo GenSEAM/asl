@@ -275,8 +275,10 @@ def cmd_plugin(args) -> int:
         return create_plugin_scaffold(args.create)
     if getattr(args, "add", None):
         from tools.pkg import add_package
-        return add_package(args.add)
     query = getattr(args, "search", None) or getattr(args, "query", "") or ""
+    return search_plugins(query, json_mode=getattr(args, "json", False))
+
+
 def cmd_loom(args) -> int:
     """SkyLoom: Resilient Inter-Agent Communication Protocol & Mesh."""
     from tools.skyloom_cli import list_peers, send_message, mailbox_status, primer, demo, doctor, run_mcp_server
@@ -413,8 +415,8 @@ def cmd_init(args) -> int:
             print(f"  + {f}")
         print("\nNext steps:")
         print(f"  cd {args.directory}")
-        print("  agentscript check src/main.agentscript")
-        print("  agentscript build src/main.agentscript --target wasm")
+        print("  asl check src/main.asl")
+        print("  asl build src/main.asl --target wasm")
     return 0
 
 
@@ -569,6 +571,8 @@ def main() -> int:
     p.add_argument("--add", "-a", help="install plugin from GitHub URL")
     p.add_argument("--create", "-c", help="scaffold new community plugin package")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_plugin)
+
     p = sub.add_parser("loom", aliases=["skyloom"],
                        help="SkyLoom inter-agent resilient protocol, asymmetric mesh, and mailbox")
     p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "doctor", "mcp", "demo"],

@@ -37,5 +37,5 @@ We are proud to announce the **v0.1.0 release of AgentScript (ASL)** — the fir
 asl mcp
 
 # Run code in Wasm target
-asl run --target wasm program.agentscript
+asl run --target wasm program.asl
 ```

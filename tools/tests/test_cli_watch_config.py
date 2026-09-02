@@ -20,7 +20,7 @@ def test_project_multi_target_build():
         asl_config = {
             "name": "demo-build",
             "version": "0.1.0",
-            "entry": "src/main.agentscript",
+            "entry": "src/main.asl",
             "targets": {
                 "ts": {"output": "dist/index.ts"},
                 "py": {"output": "dist/index.py"}
@@ -45,7 +45,7 @@ def test_cli_build_no_args():
         # Write rich asl.json
         asl_config = {
             "name": "demo-cli",
-            "entry": "src/main.agentscript",
+            "entry": "src/main.asl",
             "targets": {
                 "ts": {"output": "dist/bundle.ts"}
             }
