@@ -30,7 +30,7 @@ const protocolStages = [
 ];
 
 export const AgentWireProtocol: React.FC = () => (
-  <Section id="a2a-protocol" ground="sunken" labelledBy="a2a-title" className="bg-dot-grid overflow-hidden">
+  <Section id="a2a-protocol" variant="transparent" labelledBy="a2a-title" className="overflow-hidden">
 
     <SectionHeader
       id="a2a-title"

@@ -30,7 +30,7 @@ const CAPABILITIES = [
 ];
 
 export const HarnessToolkit: React.FC = () => (
-  <Section id="harness-toolkit" ground="sunken" labelledBy="harness-title" className="bg-dot-grid overflow-hidden border-t border-line">
+  <Section id="harness-toolkit" variant="surface" labelledBy="harness-title" className="overflow-hidden">
     <SectionHeader
       id="harness-title"
       index="03"

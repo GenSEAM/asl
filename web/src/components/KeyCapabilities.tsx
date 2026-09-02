@@ -7,7 +7,7 @@ import { Eyebrow } from './ui/primitives';
  */
 export const KeyCapabilities: React.FC = () => {
   return (
-    <section id="capabilities" className="relative py-24 sm:py-32 bg-sunken/40 border-t border-line">
+    <section id="capabilities" className="relative py-24 sm:py-32 bg-transparent">
       <div className="max-w-6xl mx-auto px-5 sm:px-6 lg:px-8">
         
         {/* Section Header */}

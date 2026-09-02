@@ -7,19 +7,29 @@ import React from 'react';
 
 export const Section: React.FC<{
   id?: string;
-  ground?: 'ground' | 'sunken';
+  variant?: 'transparent' | 'surface' | 'sunken';
+  ground?: 'ground' | 'sunken' | 'transparent';
   labelledBy?: string;
   className?: string;
   children: React.ReactNode;
-}> = ({ id, ground = 'ground', labelledBy, className = '', children }) => (
-  <section
-    id={id}
-    aria-labelledby={labelledBy}
-    className={`relative py-28 sm:py-36 ${ground === 'sunken' ? 'bg-sunken' : 'bg-ground'} ${className}`}
-  >
-    <div className="max-w-6xl mx-auto px-6 lg:px-8">{children}</div>
-  </section>
-);
+}> = ({ id, variant, ground = 'ground', labelledBy, className = '', children }) => {
+  const chosen = variant ?? (ground === 'transparent' ? 'transparent' : ground === 'sunken' ? 'sunken' : 'transparent');
+  const bgStyles = {
+    transparent: 'bg-transparent',
+    surface: 'bg-surface/75 backdrop-blur-2xl border-y border-line/60 shadow-e1',
+    sunken: 'bg-sunken/80 backdrop-blur-2xl border-y border-line/60 shadow-e2',
+  }[chosen];
+
+  return (
+    <section
+      id={id}
+      aria-labelledby={labelledBy}
+      className={`relative py-28 sm:py-36 transition-colors ${bgStyles} ${className}`}
+    >
+      <div className="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">{children}</div>
+    </section>
+  );
+};
 
 /* A numbered eyebrow. The index is the only ornament a section header gets. */
 export const Eyebrow: React.FC<{ index?: string; children: React.ReactNode }> = ({

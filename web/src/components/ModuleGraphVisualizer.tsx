@@ -159,7 +159,7 @@ export const ModuleGraphVisualizer: React.FC = () => {
   const activeModule = MODULES_REGISTRY.find((m) => m.id === activeModuleId) || MODULES_REGISTRY[0];
 
   return (
-    <Section id="module-graph">
+    <Section id="module-graph" variant="transparent">
       <SectionHeader
         id="module-graph-heading"
         index="06"

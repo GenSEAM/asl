@@ -43,7 +43,7 @@ const epochs: Epoch[] = [
 ];
 
 export const TheAgentWay: React.FC = () => (
-  <Section id="agent-way" labelledBy="agent-way-title">
+  <Section id="agent-way" labelledBy="agent-way-title" variant="sunken">
     <SectionHeader
       id="agent-way-title"
       index="01"

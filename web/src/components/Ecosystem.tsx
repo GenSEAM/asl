@@ -59,7 +59,7 @@ const ECOSYSTEM_TARGETS = [
 ];
 
 export const Ecosystem: React.FC = () => (
-  <Section id="toolchain" labelledBy="toolchain-title" className="bg-blueprint-grid overflow-hidden">
+  <Section id="toolchain" labelledBy="toolchain-title" variant="surface" className="overflow-hidden">
     
     <SectionHeader
       id="toolchain-title"
