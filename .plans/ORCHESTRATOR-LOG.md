@@ -1,13 +1,14 @@
-# Orchestrator Log — asl-sql-module-v1
+# Orchestrator Log — asl-observability-runtime-v1
 
 ## Decisions & Directives
-- **Self-Hosting Policy**: Core SQL representation, AST models, dialect selectors, and query serializers are written in native `.asl` (`packages/asl-sql/src/core/*.asl`).
+- **Visual Observability Paradigm**: Humans should inspect modules, topologies, SQL queries, and telemetry visually rather than reading raw code line by line.
+- **PCP Compliance**: Respect `@pcp:d-1eed` (dual-projection), `@pcp:c-adc8` (control-flow nesting), and `@pcp:r-8d8e` (virtual inspection).
 - **Direct Main Branch Policy**: Work directly on `main`, commit after each phase passes its verification gate.
 - **Tiers**: Standard / Tier 1.5 across all 5 phases.
 
 ## Roadmap Execution
-- Phase 1: Native ASL SQL AST Modeling & Dialect Enums (`packages/asl-sql/src/core/sql.asl`) [TIER 1.5] — DONE
-- Phase 2: Multi-Dialect Parameterized SQL Emission & Placeholder Adapter (`packages/asl-sql/src/core/render.asl`) [TIER 1.5] — DONE
-- Phase 3: DML Operations & Schema-Driven DDL Migration Generator (`packages/asl-sql/src/core/ddl.asl`) [TIER 1.5] — DONE
-- Phase 4: CLI Integration (`asl sql render`) & Comprehensive Test Suite (`tools/tests/test_sql.py`) [TIER 1.5] — DONE
-- Phase 5: Interactive SQL Studio in Web Showcase (`web/src/components/SqlStudio.tsx`) & 7-Gate Verification [TIER 1.5] — DONE
+- Phase 1: Visual Module Topology & Architecture Graph Inspector (`asl graph` & `web/src/components/ModuleGraphVisualizer.tsx`) [TIER 1.5] — DONE
+- Phase 2: Native Language Server (LSP) Engine with Virtual Projections (`tools/lsp.py` & `asl lsp`) [TIER 1.5] — PENDING
+- Phase 3: Isolated In-Memory Sandbox & Jailed Runner (`asl run --jail` / `tools/sandbox_runner.py`) [TIER 1.5] — PENDING
+- Phase 4: Zero-Cost Native Schema Codec (`packages/asl-codec/src/core/codec.asl`) [TIER 1.5] — PENDING
+- Phase 5: Full Observability Dashboard Integration in Web Showcase & 7-Gate CI [TIER 1.5] — PENDING

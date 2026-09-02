@@ -153,6 +153,12 @@ def cmd_view(args) -> int:
     return view_file_cli(args.file, verbose=verbose, dialect=dialect)
 
 
+def cmd_graph(args) -> int:
+    """Full-spectrum visual architecture topology and module graph inspector."""
+    from tools.module_graph import run_graph_cli
+    return run_graph_cli(args)
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -661,6 +667,12 @@ def main() -> int:
     p.add_argument("--dialect", default="postgres", choices=["postgres", "sqlite", "mysql", "clickhouse"], help="target dialect if viewing SQL")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_view)
+
+    p = sub.add_parser("graph", aliases=["topology", "arch"],
+                       help="full-spectrum visual architecture topology and module graph inspector")
+    p.add_argument("paths", nargs="*", type=Path, default=[Path("packages")], help="package directories to scan")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_graph)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")

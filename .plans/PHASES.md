@@ -1,19 +1,19 @@
-# Phases — asl-sql-module-v1
+# Phases — asl-observability-runtime-v1
 
-Native AgentScript Cross-Dialect SQL AST Query Builder, Parameterized Emission & DDL Module (`packages/asl-sql`).
+Full-Spectrum Visual Observability Cockpit, Native Language Server (LSP), Jailed Sandbox Runner, and Zero-Cost Schema Codec (`packages/asl-codec`).
 
 ## Phase List
 
-- [ ] **Phase 1**: Native ASL SQL AST Modeling & Dialect Enums (`packages/asl-sql/src/core/sql.asl`)
-  - Criterion: `.venv/bin/python agentscript check packages/asl-sql/src/core/sql.asl` passes with 0 diagnostics.
-- [ ] **Phase 2**: Multi-Dialect Parameterized SQL Emission & Placeholder Adapter (`packages/asl-sql/src/core/render.asl`)
-  - Criterion: `.venv/bin/python agentscript check packages/asl-sql/src/core/render.asl` passes with 0 diagnostics, emitting `$n` for Postgres, `?` for SQLite.
-- [ ] **Phase 3**: DML Operations & Schema-Driven DDL Migration Generator (`packages/asl-sql/src/core/ddl.asl`)
-  - Criterion: `.venv/bin/python agentscript check packages/asl-sql/src/core/ddl.asl` passes with 0 diagnostics, generating typed `CREATE TABLE` and parameterized `INSERT`/`UPDATE`.
-- [ ] **Phase 4**: CLI Integration (`asl sql render`) & Comprehensive Test Suite (`tools/tests/test_sql.py`)
-  - Criterion: `.venv/bin/python -m pytest tools/tests/test_sql.py -q` passes 100%.
-- [ ] **Phase 5**: Interactive SQL Studio in Web Showcase (`web/src/components/SqlStudio.tsx`) & 7-Gate Verification
-  - Criterion: `node web/scripts/check-tokens.mjs` and `cd web && npm run build` pass; all 7 pre-commit gates pass cleanly.
+- [ ] **Phase 1**: Visual Module Topology & Architecture Graph Inspector (`asl graph` & `web/src/components/ModuleGraphVisualizer.tsx`)
+  - Criterion: `agentscript graph --json` produces valid module DAG (imports, exports, schemas, functions); Web component renders interactive dependency topology with 0 token contrast failures.
+- [ ] **Phase 2**: Native Language Server (LSP) Engine with Virtual Projections (`tools/lsp.py` & `asl lsp`)
+  - Criterion: `.venv/bin/python -m pytest tools/tests/test_lsp.py -q` passes 100%, providing virtual documents (`asl-verbose://`, `asl-sql://`), hovers, and diagnostics over stdio JSON-RPC.
+- [ ] **Phase 3**: Isolated In-Memory Sandbox & Jailed Runner (`asl run --jail` / `tools/sandbox_runner.py`)
+  - Criterion: `.venv/bin/python -m pytest tools/tests/test_sandbox.py -q` passes 100%, enforcing memory ceilings, execution deadlines, and returning structured execution telemetry.
+- [ ] **Phase 4**: Zero-Cost Native Schema Codec (`packages/asl-codec/src/core/codec.asl`)
+  - Criterion: `agentscript check packages/asl-codec/src/core/codec.asl` has 0 diagnostics, Quality Score 100/100, and `pytest tools/tests/test_codec.py -q` passes roundtrip serialization.
+- [ ] **Phase 5**: Full Observability Dashboard Integration in Web Showcase & 7-Gate CI
+  - Criterion: `npm run build:web` succeeds; all 7 pre-commit verification gates pass cleanly.
 
 ## Out of Scope
-- Direct socket TCP network connections to live database servers (this module is a pure AST query builder and serializer; network execution is left to host drivers).
+- Proprietary closed-source IDE extensions or non-LSP editors (we target the open Language Server Protocol standard compatible with VS Code, Cursor, Zed, NeoVim).

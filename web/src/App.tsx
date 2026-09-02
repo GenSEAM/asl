@@ -7,6 +7,7 @@ import { AgentWireProtocol } from './components/AgentWireProtocol';
 import { SkyLoomVisualizer } from './components/SkyLoomVisualizer';
 import { AslQualityDoctor } from './components/AslQualityDoctor';
 import { SqlStudio } from './components/SqlStudio';
+import { ModuleGraphVisualizer } from './components/ModuleGraphVisualizer';
 import { Ecosystem } from './components/Ecosystem';
 import { Footer } from './components/Footer';
 
@@ -21,6 +22,7 @@ export const App: React.FC = () => (
         <SkyLoomVisualizer />
         <AslQualityDoctor />
         <SqlStudio />
+        <ModuleGraphVisualizer />
         <Ecosystem />
       </main>
       <Footer />
