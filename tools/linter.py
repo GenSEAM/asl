@@ -206,6 +206,10 @@ class AslLinter:
                     declared_names.append((var_name, line, col))
 
         referenced_identifiers: Set[str] = set()
+        for b in bindings:
+            if len(b.children) > 1:
+                for val_tree in b.children[1:]:
+                    self._collect_identifiers(val_tree, referenced_identifiers)
         for body in body_exprs:
             self._collect_identifiers(body, referenced_identifiers)
 
@@ -237,6 +241,10 @@ class AslLinter:
         if isinstance(node, Tree):
             if getattr(node, "data", "") in ("literal", "var", "ident"):
                 return True
+            if getattr(node, "data", "") == "call":
+                has_nested_calls = any(isinstance(c, Tree) and getattr(c, "data", "") in ("call", "let_form", "match_form", "if_form") for c in node.children)
+                if not has_nested_calls:
+                    return True
             kids = [k for k in node.children if not (isinstance(k, Token) and k.type in ("LPAR", "RPAR"))]
             if len(kids) == 1:
                 return self._is_simple_leaf(kids[0])
