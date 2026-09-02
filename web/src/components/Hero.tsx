@@ -34,14 +34,17 @@ export const Hero: React.FC = () => {
             
             {/* Brand Emblem & Name */}
             <div className="flex items-center gap-3.5">
-              <div className="p-2 rounded-2xl bg-surface/90 border border-line shadow-e2 flex items-center justify-center">
+              <div className="p-2.5 rounded-2xl bg-surface/90 border border-line shadow-e2 flex items-center justify-center">
                 <ChameleonALogo className="w-9 h-9 text-signal" />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="font-sans font-bold text-ink text-2xl sm:text-3xl tracking-tight">
-                  aslang<span className="text-signal">.dev</span>
+                  Agent<span className="text-signal">Script</span>
                 </span>
-                <span className="inline-flex items-center p-1 rounded-full text-signal bg-signal/10 border border-signal/20">
+                <span className="font-mono text-micro px-2.5 py-0.5 rounded-full border border-line bg-inset/80 text-ink-3">
+                  aslang.dev
+                </span>
+                <span className="inline-flex items-center p-1 rounded-full text-signal bg-signal/10 border border-signal/20" title="Formally Verified Language Core">
                   <ShieldCheck className="w-4 h-4" />
                 </span>
               </div>
