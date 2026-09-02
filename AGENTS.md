@@ -1,6 +1,6 @@
 # Project Agent Instructions
 
-Activate the `pcp` skill and follow its instructions.
+Activate the `pcp` and `asl` skills and follow their instructions.
 
 Read `ROADMAP.md` first for project state and the next step. `AGENT_SPEC_CORE.md` is the
 normative language definition.
