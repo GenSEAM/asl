@@ -1,0 +1,7 @@
+{
+  "name": "asl-codec",
+  "version": "1.0.0",
+  "description": "Zero-Cost Native Schema & JSON Codec for AgentScript",
+  "main": "src/core/codec.asl",
+  "dependencies": {}
+}
