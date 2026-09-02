@@ -2,6 +2,7 @@ import React from 'react';
 import { ThemeProvider } from './lib/theme';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
+import { KeyCapabilities } from './components/KeyCapabilities';
 import { TheAgentWay } from './components/TheAgentWay';
 import { AgentWireProtocol } from './components/AgentWireProtocol';
 import { SkyLoomVisualizer } from './components/SkyLoomVisualizer';
@@ -17,6 +18,7 @@ export const App: React.FC = () => (
       <Navbar />
       <main className="flex-1">
         <Hero />
+        <KeyCapabilities />
         <TheAgentWay />
         <AgentWireProtocol />
         <SkyLoomVisualizer />
