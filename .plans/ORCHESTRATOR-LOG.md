@@ -12,4 +12,4 @@
 - Phase 3: Ultra-Nano Syntax Expansion (`:f`, `:c`, `:d`, `:x`, `:i`, `Str`, `I64`) & Dual-Projection Transcoder [TIER 1.5] — DONE
 - Phase 4: Isolated In-Memory Sandbox & Jailed Runner (`asl run --jail` / `tools/sandbox_runner.py`) [TIER 1.5] — DONE
 - Phase 5: Zero-Cost Native Schema Codec (`packages/asl-codec/src/core/codec.asl`) [TIER 1.5] — DONE
-- Phase 6: Full Observability Dashboard Integration in Web Showcase & 7-Gate CI [TIER 1.5] — PENDING
+- Phase 6: Full Observability Dashboard Integration in Web Showcase & 7-Gate CI [TIER 1.5] — DONE

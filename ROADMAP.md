@@ -59,12 +59,16 @@ Everything below was checked by a command whose output was read, not inferred.
 | Measurement harness | **working** (Phase 9) — supports whole-program and function modes across all 5 targets (`python`, `typescript`, `rust`, `go`, `interp`) with strict 6-stage lifecycle tracking and offline `--dry-run` |
 | In-Memory WASI Runner | **working** (Phase 10) — pure TS zero-dependency in-memory WASI preview1 shim for browser and Node |
 | Developer Agent MCP Server | **working** (Phase 11) — stdlib-only JSON-RPC 2.0 MCP server with 78% interface compression |
-| Interactive Web Showcase | **working** (Phase 12) — Vite + React 19 + Tailwind technical showcase with live REPL, Quality Doctor & SQL Studio |
+| Interactive Web Showcase | **working** (Phase 12) — Vite + React 19 + Tailwind technical showcase with live REPL, Quality Doctor, Topology Cockpit, Jailed Sandbox & SQL Studio |
 | SkyLoom Mesh & Handoff | **working** — `packages/asl-skyloom`, `asl/coord` nano-format wire default, zero-leak directory jailing, 83.4% token reduction |
 | Native ASL Quality Suite | **working** — `packages/asl-lint`, `asl lint` (anti-pattern/smell linter), `asl clone-check` (AST clone detector), `asl fix` (autonomous repair) |
 | Native ASL SQL Module | **working** — `packages/asl-sql`, cross-dialect query builder & parameterizer (Postgres, SQLite, MySQL, ClickHouse), DDL/DML generator |
-| Pre-Commit Verification | **7/7 gates green** — Grammar, Closure (107/107), Prelude, Checker, ASL Lint (100/100 across 22 packages), Clone Check (<15%), Web Pre-Flight |
-| Unit tests | **578 pass** — `backend/tests`, `bench/algo`, `bench/harness`, `checker/tests`, `tools/tests` |
+| Native LSP 3.17 Server | **working** — `tools/lsp.py`, `asl lsp`, stdio JSON-RPC 2.0, hover docs, jump-to-definition, virtual projections (@pcp:r-8d8e) |
+| Ultra-Nano Syntax & Transcoder | **working** — single-token density (`:f`, `:c`, `:d`, `:x`, `:i`, `Str`, `I64`, `dfs`, `dfe`, `df`, `mt`), `asl transcode` (@pcp:d-1eed) |
+| In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
+| Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
+| Pre-Commit Verification | **7/7 gates green** — Grammar, Closure (107/107), Prelude, Checker, ASL Lint (100/100 across 24 packages), Clone Check (<15%), Web Pre-Flight |
+| Unit tests | **218 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests` (LSP, Graph, Ultra-Nano, Sandbox, Codec) |
 
 ### Documents, in reading order for a newcomer
 
