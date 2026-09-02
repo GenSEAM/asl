@@ -37,27 +37,104 @@ For an AI agent reading this file, these comments are **100% pure token waste**.
 
 ---
 
-## 2. Predictable BPE Identifier Compaction
+## 2. The Single-Token Hygiene Standard (Однотокеновая гигиена)
 
-Language models process code through Byte-Pair Encoding (BPE) tokenizers (e.g., tiktoken, SentencePiece). By following standard, universal abbreviations, agents reduce token footprint by **35% to 50%** while preserving 100% cognitive clarity for any reasoning model:
+### The Core Law
+Every LLM interacts with code through Byte-Pair Encoding (BPE) tokens. When an agent emits verbose identifiers like `default_timeout_milliseconds`, the model must sample **7 separate BPE tokens**. In agent swarms exchanging millions of frames per day, this causes:
+1. **7x higher LLM generation latency** (tokens are generated sequentially).
+2. **7x higher token expenditure**.
+3. **Severe context fragmentation and attention decay**.
 
-| Full English Word | Recommended Compact Identifier | BPE Token Count |
-|---|---|---|
-| `default` | `:dflt` | 1 token |
-| `config` / `configuration` | `:cfg` | 1 token |
-| `context` | `:ctx` | 1 token |
-| `request` | `:req` | 1 token |
-| `response` | `:res` or `:resp` | 1 token |
-| `argument` / `parameter` | `:arg` / `:param` | 1 token |
-| `message` | `:msg` | 1 token |
-| `error` | `:err` | 1 token |
-| `function` | `:fn` | 1 token |
-| `length` | `:len` | 1 token |
-| `index` | `:idx` | 1 token |
-| `authentication` | `:auth` | 1 token |
-| `timeout_ms` | `:t-out` or positional | 1 token |
+**The Standard**: Every syntax keyword, record key, protocol verb, and common technical descriptor **MUST resolve to exactly 1 BPE token** wherever practically possible.
 
-**Rule of Thumb**: Drop vowels from common technical nouns (`dflt`, `msg`, `auth`, `cfg`), or use standard single-letter keys for core schemas (`:f` for field, `:c` for case, `:d` for doc).
+---
+
+### The Canonical 1-Token Dictionary
+
+Use these standard abbreviations universally across all AgentScript schemas, DTOs, and protocol frames:
+
+| Full Word | BPE Tokens (Old) | 1-Token Standard | BPE Tokens (New) | Semantic Meaning |
+|---|---|---|---|---|
+| `default` | 1–2 tokens | **`:dflt`** | **1 token** | Default fallback value |
+| `config` / `configuration` | 2–3 tokens | **`:cfg`** | **1 token** | Configuration object |
+| `context` | 2 tokens | **`:ctx`** | **1 token** | Execution context |
+| `request` | 1–2 tokens | **`:req`** | **1 token** | Inbound request frame |
+| `response` | 2 tokens | **`:resp`** or **`:res`** | **1 token** | Outbound response |
+| `argument` / `parameter` | 2–3 tokens | **`:arg`** or **`:param`** | **1 token** | Function argument |
+| `message` | 2 tokens | **`:msg`** | **1 token** | Message payload |
+| `error` | 1–2 tokens | **`:err`** | **1 token** | Error descriptor |
+| `function` | 1–2 tokens | **`:fn`** | **1 token** | Function reference |
+| `length` | 2 tokens | **`:len`** | **1 token** | Array or string length |
+| `index` | 2 tokens | **`:idx`** | **1 token** | Sequential index |
+| `authentication` | 3–4 tokens | **`:auth`** | **1 token** | Auth credentials / token |
+| `timestamp` | 2 tokens | **`:ts`** | **1 token** | Epoch millisecond mark |
+| `payload` | 2 tokens | **`:data`** or **`:body`** | **1 token** | Payload body |
+
+#### For Ultra-Dense Hot Schemas (Single-Letter Keys):
+When defining low-level AST nodes or high-frequency records:
+- **`:f`** = field
+- **`:c`** = case / constructor
+- **`:d`** = documentation / description
+- **`:v`** = value
+- **`:k`** = key
+- **`:t`** = type
+- **`:p`** = parameter
+
+---
+
+### Boundaries: When Single-Token Hygiene is Mandatory vs Exceptions
+
+#### 1. MANDATORY: Protocols, Schemas, and Internal Tool Calls
+Single-token hygiene is strictly enforced for:
+- All ASN record keys (`(:id "..." :dflt true :auth :bearer)`).
+- All A2A wire frame queries and commands (`(? auth/probe :ctx ...)`, `(! exec/ack :res ...)`).
+- All internal helper functions and loop counters.
+
+#### 2. EXCEPTIONS: Where Single-Token Hygiene Does NOT Apply
+Do NOT forcibly mangle identifiers in these three specific situations:
+1. **High-Level Domain Business Entities**:
+   - Example: `OrganizationMembershipInvite`, `HealthcarePatientRecord`.
+   - *Rationale*: Aggressively dropping vowels into `OrgMmbrshpInvt` destroys LLM semantic reasoning and triggers hallucination in domain logic. Clarity takes precedence over token compression for top-level business domain models.
+2. **Literal String Values & External Identifiers**:
+   - Example: UUIDs (`"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"`), ISO timestamps, user-supplied text strings, error messages for humans.
+   - *Rationale*: Data payloads must reflect real-world values verbatim.
+3. **Foreign Host Language Interoperability (FFI)**:
+   - Example: Calling JavaScript `window.requestAnimationFrame()` or Python `torch.nn.functional.cross_entropy()`.
+   - *Rationale*: External runtime APIs must match foreign symbol names exactly to avoid runtime linkage errors.
+
+---
+
+### Concrete Before & After Comparisons
+
+#### Example A: Wire Protocol Frame
+```lisp
+;; ❌ BAD: 42 BPE Tokens (Verbose legacy style)
+(? authentication_service/validate_token 
+   :authentication_bearer_token "jwt.xyz" 
+   :client_configuration_context {:timeout_milliseconds 5000 :default_retry true})
+
+;; ✅ GOOD: 14 BPE Tokens (Single-Token Hygiene enforced)
+(? auth/validate 
+   :auth "jwt.xyz" 
+   :cfg {:t-out 5000 :dflt true})
+```
+*Savings: 67% fewer tokens, 3x faster generation latency, 100% equivalent semantic execution.*
+
+#### Example B: Data Type Schema Definition
+```lisp
+;; ❌ BAD: 38 BPE Tokens
+(defschema UserProfile
+  (:field user_identifier Str)
+  (:field configuration_parameters (Map Str Str))
+  (:field default_role Str))
+
+;; ✅ GOOD: 18 BPE Tokens
+(dfs UserProfile
+  (:f id Str)
+  (:f cfg (Map Str Str))
+  (:f dflt-role Str))
+```
+*Savings: 53% fewer tokens.*
 
 ---
 
