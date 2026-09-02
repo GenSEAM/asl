@@ -202,7 +202,7 @@ class AslLinter:
                 var_token = b.children[0]
                 var_name = str(var_token)
                 line, col = position(var_token)
-                if not var_name.startswith("_"):
+                if not (var_name.startswith("_") or var_name.startswith("unused-")):
                     declared_names.append((var_name, line, col))
 
         referenced_identifiers: Set[str] = set()
@@ -218,7 +218,7 @@ class AslLinter:
                         file=file_path,
                         line=line,
                         col=col,
-                        message=f"Unused variable binding '{name}'; prefix with '_' if deliberately unused",
+                        message=f"Unused variable binding '{name}'; prefix with 'unused-' if deliberately unused",
                         can_autofix=True,
                     )
                 )
