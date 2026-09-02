@@ -124,6 +124,13 @@ def cmd_heal(args) -> int:
     return 0
 
 
+def cmd_lint(args) -> int:
+    """Run structural quality inspection and anti-pattern linter."""
+    from tools.linter import lint_paths
+    paths = getattr(args, "paths", []) or [Path(".")]
+    return lint_paths(paths, json_mode=getattr(args, "json", False))
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -600,6 +607,11 @@ def main() -> int:
     p.add_argument("--machine", action="store_true", help="emit machine-native actionable diagnostic JSON")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_check)
+
+    p = sub.add_parser("lint", help="structural anti-pattern, smell, and quality linter")
+    p.add_argument("paths", nargs="*", type=Path, default=[Path(".")], help="file or directory paths to inspect")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_lint)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
