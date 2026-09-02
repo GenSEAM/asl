@@ -1,17 +1,13 @@
-# Orchestrator Log — skyloom-protocol-v1
+# Orchestrator Log — skyloom-handoff-v1
 
-Iteration initialized 2026-09-02.
-Goal: SkyLoom inter-agent protocol, resilient mesh, asymmetric negotiation (aware vs unaware), MCP & CLI integration, and interactive web visualizer.
+## Roadmap Execution
+- Phase 1: Coordination Dialect (`asl/coord`) & Algebraic Handoff Types [TIER 1.5] — DONE
+- Phase 2: Directory Scoping & Zero-Leak Mesh Firewall [TIER 1.5] — PENDING
+- Phase 3: Context Snapshot Compression & Handoff Serializer [TIER 1.5] — PENDING
+- Phase 4: CLI & Subprocess Worker Orchestration (`asl loom handoff` / `spawn`) [TIER 1.5] — PENDING
+- Phase 5: Comparative Multi-Agent Token Benchmark & Web Showcase Simulation [TIER 1.5] — PENDING
 
-## Phase Registry
-- Phase 1: SkyLoom Protocol Specification & Core ASL Wire Contract [TIER 1.5] — DONE
-- Phase 2: Multi-Agent Mesh Topology & Transport Router [TIER 1.5] — DONE
-- Phase 3: Asymmetric Negotiation Engine & Polyglot Adapter (Aware vs Unaware) [TIER 1.5] — DONE
-- Phase 4: Fault Tolerance, Lonely-Agent Mailbox & Heartbeat Guard [TIER 1.5] — DONE
-- Phase 5: SkyLoom MCP Server & Universal Agent Skill [TIER 1.5] — DONE
-- Phase 6: CLI Integration (`asl loom`) & Interactive Web Showcase Visualizer [TIER 1.5] — DONE
-
-## Decisions & Cross-phase Notes
-- Prior iteration `asl-core-v1` (Phases 1–18) completed and archived in `.plans/archive/2026-08-28-asl-core-v1/`.
-- Protocol core will reside in `packages/asl-skyloom` with native ASL type definitions, TypeScript / Node.js transport daemon, and MCP server.
-- Web UI showcase will mount directly into `web/` alongside existing ASL demos.
+## Cross-phase Notes
+- Prior iteration `skyloom-protocol-v1` archived in `.plans/archive/2026-09-02-skyloom-protocol-v1/`.
+- Nominal algebraic types live in `packages/asl-skyloom/src/core/skyloom.asl` and are checked clean by `checker/gate.py`.
+- Work directly on `main` branch under Direct Main Branch Policy with atomicity per phase.

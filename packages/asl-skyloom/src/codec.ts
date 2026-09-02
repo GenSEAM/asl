@@ -1,10 +1,13 @@
 /**
  * SkyLoom Triple-Dialect Codec & Wire Parser
- * Supports: ASL Native S-expression, Compact Positional, and Polyglot JSON/Markdown.
- * Hardened for robust escape handling, arbitrary payloads, and zero schema drift.
+ * Supports:
+ *  - ASL Native S-expression (`asl/v1`)
+ *  - ASL Coordination & Handoff Dialect (`asl/coord`)
+ *  - Compact Positional Token stream (`compact/v1`)
+ *  - Polyglot Markdown & JSON (`polyglot/v1`)
  */
 
-import { LoomFrame, LoomHeader, Dialect, FrameType, ErrorCode } from './types.js';
+import { LoomFrame, LoomHeader, Dialect, FrameType, ErrorCode, HandoffPayload, YieldPayload } from './types.js';
 
 export class CodecError extends Error {
   constructor(public code: ErrorCode, message: string) {
@@ -30,7 +33,19 @@ export function validateFrame(obj: any): LoomFrame {
     throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Invalid header fields (version, id, from, to required)');
   }
 
-  const validTypes: FrameType[] = ['HANDSHAKE', 'DATA', 'ACK', 'NACK', 'PING', 'PONG', 'RENDEZVOUS', 'LEAVE'];
+  const validTypes: FrameType[] = [
+    'HANDSHAKE',
+    'DATA',
+    'HANDOFF',
+    'YIELD',
+    'SPAWN',
+    'ACK',
+    'NACK',
+    'PING',
+    'PONG',
+    'RENDEZVOUS',
+    'LEAVE',
+  ];
   if (!validTypes.includes(obj.type)) {
     throw new CodecError(ErrorCode.ERR_TYPE_MISMATCH, `Unsupported frame type: ${obj.type}`);
   }
@@ -55,7 +70,7 @@ function unescapePipe(s: string): string {
 }
 
 /**
- * Encodes a LoomFrame into ASL Native S-Expression syntax
+ * Encodes a LoomFrame into ASL Native S-Expression syntax (`asl/v1`)
  */
 export function encodeAslSExpr(frame: LoomFrame): string {
   const h = frame.header;
@@ -67,7 +82,7 @@ export function encodeAslSExpr(frame: LoomFrame): string {
 }
 
 /**
- * Decodes ASL Native S-Expression into LoomFrame
+ * Decodes ASL Native S-Expression into LoomFrame (`asl/v1`)
  */
 export function decodeAslSExpr(raw: string): LoomFrame {
   const trimmed = raw.trim();
@@ -131,6 +146,168 @@ export function decodeAslSExpr(raw: string): LoomFrame {
     },
     type,
     channel,
+    body,
+  });
+}
+
+/**
+ * Encodes a LoomFrame into ASL Coordination & Handoff Dialect (`asl/coord`)
+ */
+export function encodeAslCoord(frame: LoomFrame): string {
+  const h = frame.header;
+  if (frame.type === 'HANDOFF') {
+    const payload = (frame.body || {}) as HandoffPayload;
+    const taskPart = payload.task ? ` :task "${escapeStr(payload.task)}"` : '';
+    const cwdPart = payload.cwd ? ` :cwd "${escapeStr(payload.cwd)}"` : '';
+    const ownsPart = payload.owns && payload.owns.length ? ` :owns [${payload.owns.map(o => `"${escapeStr(o)}"`).join(' ')}]` : '';
+    const frozenPart = payload.frozen && payload.frozen.length ? ` :frozen [${payload.frozen.map(f => `"${escapeStr(f)}"`).join(' ')}]` : '';
+    const gatePart = payload.gate ? ` :gate "${escapeStr(payload.gate)}"` : '';
+    const budgetPart = payload.budget ? ` :budget ${payload.budget}` : '';
+    const replyPart = h.replyTo ? ` :reply-to "${escapeStr(h.replyTo)}"` : '';
+
+    return `(loom:handoff :v ${h.version} :id "${escapeStr(h.id)}" :from "${escapeStr(h.from)}" :to "${escapeStr(h.to)}" :ts ${h.timestamp}${replyPart}${taskPart}${cwdPart}${ownsPart}${frozenPart}${gatePart}${budgetPart})`;
+  }
+
+  if (frame.type === 'YIELD') {
+    const payload = (frame.body || {}) as YieldPayload;
+    const statusPart = payload.status ? ` :status "${escapeStr(payload.status)}"` : ' :status "ok"';
+    const verdictPart = payload.gateVerdict ? ` :verdict "${escapeStr(payload.gateVerdict)}"` : '';
+    const artifactsPart = payload.artifacts && payload.artifacts.length ? ` :artifacts [${payload.artifacts.map(a => `"${escapeStr(a)}"`).join(' ')}]` : '';
+    const errPart = payload.error ? ` :error "${escapeStr(payload.error)}"` : '';
+    const replyPart = h.replyTo ? ` :reply-to "${escapeStr(h.replyTo)}"` : '';
+
+    return `(loom:yield :v ${h.version} :id "${escapeStr(h.id)}"${replyPart} :from "${escapeStr(h.from)}" :to "${escapeStr(h.to)}" :ts ${h.timestamp}${statusPart}${verdictPart}${artifactsPart}${errPart})`;
+  }
+
+  // Fallback for general frames in asl/coord
+  const bodyJson = JSON.stringify(frame.body);
+  const replyPart = h.replyTo ? ` :reply-to "${escapeStr(h.replyTo)}"` : '';
+  const chanPart = frame.channel ? ` :channel "${escapeStr(frame.channel)}"` : '';
+  return `(loom:coord :v ${h.version} :id "${escapeStr(h.id)}" :from "${escapeStr(h.from)}" :to "${escapeStr(h.to)}" :type "${frame.type}" :ts ${h.timestamp}${replyPart}${chanPart} :body ${bodyJson})`;
+}
+
+/**
+ * Decodes ASL Coordination & Handoff S-expressions (`asl/coord`)
+ */
+export function decodeAslCoord(raw: string): LoomFrame {
+  const trimmed = raw.trim();
+  const isHandoff = trimmed.startsWith('(loom:handoff');
+  const isYield = trimmed.startsWith('(loom:yield');
+  const isCoord = trimmed.startsWith('(loom:coord');
+
+  if (!isHandoff && !isYield && !isCoord) {
+    throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Invalid ASL Coordination frame delimiter');
+  }
+
+  // Parse string attributes
+  const strAttrs: Record<string, string> = {};
+  const strRegex = /:([a-zA-Z0-9_-]+)\s+"((?:[^"\\\\]|\\.)*)"/g;
+  let match: RegExpExecArray | null;
+  while ((match = strRegex.exec(trimmed)) !== null) {
+    strAttrs[match[1]] = unescapeStr(match[2]);
+  }
+
+  // Parse number attributes
+  const numAttrs: Record<string, number> = {};
+  const numRegex = /:([a-zA-Z0-9_-]+)\s+([0-9]+)/g;
+  while ((match = numRegex.exec(trimmed)) !== null) {
+    numAttrs[match[1]] = Number(match[2]);
+  }
+
+  // Parse list attributes like :owns ["a" "b"]
+  const listAttrs: Record<string, string[]> = {};
+  const listRegex = /:([a-zA-Z0-9_-]+)\s+\[(.*?)\]/g;
+  while ((match = listRegex.exec(trimmed)) !== null) {
+    const key = match[1];
+    const items = [...match[2].matchAll(/"((?:[^"\\\\]|\\.)*)"/g)].map(m => unescapeStr(m[1]));
+    listAttrs[key] = items;
+  }
+
+  const version = numAttrs['v'] ?? 1;
+  const id = strAttrs['id'];
+  const from = strAttrs['from'];
+  const to = strAttrs['to'];
+  const timestamp = numAttrs['ts'] ?? Date.now();
+  const replyTo = strAttrs['reply-to'];
+
+  if (!id || !from || !to) {
+    throw new CodecError(ErrorCode.ERR_DECODE_FAILED, 'Missing required fields in ASL coord frame');
+  }
+
+  if (isHandoff) {
+    const handoffPayload: HandoffPayload = {
+      task: strAttrs['task'] || '',
+      cwd: strAttrs['cwd'],
+      owns: listAttrs['owns'],
+      frozen: listAttrs['frozen'],
+      gate: strAttrs['gate'],
+      budget: numAttrs['budget'],
+    };
+
+    return validateFrame({
+      header: {
+        version,
+        id,
+        from,
+        to,
+        dialect: 'asl/coord',
+        timestamp,
+        replyTo,
+      },
+      type: 'HANDOFF',
+      body: handoffPayload,
+    });
+  }
+
+  if (isYield) {
+    const yieldPayload: YieldPayload = {
+      status: (strAttrs['status'] || 'ok') as 'ok' | 'failed' | 'rejected',
+      gateVerdict: strAttrs['verdict'],
+      artifacts: listAttrs['artifacts'],
+      error: strAttrs['error'],
+    };
+
+    return validateFrame({
+      header: {
+        version,
+        id,
+        from,
+        to,
+        dialect: 'asl/coord',
+        timestamp,
+        replyTo,
+      },
+      type: 'YIELD',
+      body: yieldPayload,
+    });
+  }
+
+  // General coord frame
+  const type = (strAttrs['type'] || 'DATA') as FrameType;
+  const bodyMarker = ':body ';
+  const bodyIdx = trimmed.indexOf(bodyMarker);
+  let body: unknown = null;
+  if (bodyIdx !== -1) {
+    const rawBodyPart = trimmed.slice(bodyIdx + bodyMarker.length, trimmed.length - 1).trim();
+    try {
+      body = JSON.parse(rawBodyPart);
+    } catch {
+      body = rawBodyPart;
+    }
+  }
+
+  return validateFrame({
+    header: {
+      version,
+      id,
+      from,
+      to,
+      dialect: 'asl/coord',
+      timestamp,
+      replyTo,
+    },
+    type,
+    channel: strAttrs['channel'],
     body,
   });
 }
@@ -302,6 +479,9 @@ export function decodePolyglot(raw: string): LoomFrame {
  */
 export function detectDialect(raw: string): Dialect {
   const trimmed = raw.trim();
+  if (trimmed.startsWith('(loom:handoff') || trimmed.startsWith('(loom:yield') || trimmed.startsWith('(loom:coord') || trimmed.includes(':dialect "asl/coord"')) {
+    return 'asl/coord';
+  }
   if (trimmed.startsWith('(loom:frame')) {
     return 'asl/v1';
   }
@@ -317,6 +497,8 @@ export function detectDialect(raw: string): Dialect {
 export function encodeFrame(frame: LoomFrame, targetDialect?: Dialect): string {
   const dialect = targetDialect || frame.header.dialect || 'asl/v1';
   switch (dialect) {
+    case 'asl/coord':
+      return encodeAslCoord({ ...frame, header: { ...frame.header, dialect: 'asl/coord' } });
     case 'asl/v1':
       return encodeAslSExpr({ ...frame, header: { ...frame.header, dialect: 'asl/v1' } });
     case 'compact/v1':
@@ -334,6 +516,8 @@ export function encodeFrame(frame: LoomFrame, targetDialect?: Dialect): string {
 export function decodeFrame(raw: string): LoomFrame {
   const dialect = detectDialect(raw);
   switch (dialect) {
+    case 'asl/coord':
+      return decodeAslCoord(raw);
     case 'asl/v1':
       return decodeAslSExpr(raw);
     case 'compact/v1':

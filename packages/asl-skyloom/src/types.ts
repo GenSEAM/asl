@@ -3,11 +3,14 @@
  * Direct correspondence with ASL nominal types in src/core/skyloom.asl
  */
 
-export type Dialect = 'asl/v1' | 'compact/v1' | 'polyglot/v1';
+export type Dialect = 'asl/v1' | 'asl/coord' | 'compact/v1' | 'polyglot/v1';
 
 export type FrameType =
   | 'HANDSHAKE'
   | 'DATA'
+  | 'HANDOFF'
+  | 'YIELD'
+  | 'SPAWN'
   | 'ACK'
   | 'NACK'
   | 'PING'
@@ -24,6 +27,8 @@ export enum ErrorCode {
   ERR_TIMEOUT = 1006,
   ERR_STALLED = 1007,
   ERR_DEAD_LETTER = 1008,
+  ERR_SCOPE_VIOLATION = 1009,
+  ERR_HANDOFF_REJECTED = 1010,
 }
 
 export interface LoomHeader {
@@ -44,12 +49,34 @@ export interface LoomFrame {
   signature?: string;
 }
 
+export interface HandoffPayload {
+  task: string;
+  cwd?: string;
+  owns?: string[];
+  frozen?: string[];
+  context?: Array<{ ref: string; export?: string[]; digest?: string }>;
+  gate?: string;
+  budget?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface YieldPayload {
+  status: 'ok' | 'failed' | 'rejected';
+  gateVerdict?: string;
+  artifacts?: string[];
+  tokensUsed?: number;
+  error?: string;
+  result?: unknown;
+}
+
 export interface PeerCapability {
   peerId: string;
   dialects: Dialect[];
   supportedChannels: string[];
   isAslNative: boolean;
   version: string;
+  cwd?: string;
+  permittedScopes?: string[];
   metadata?: Record<string, unknown>;
 }
 
@@ -57,20 +84,6 @@ export interface HandshakePayload {
   capabilities: PeerCapability;
   protocolVersion: string;
   tokenBudget?: number;
-}
-
-export interface AckPayload {
-  ackForId: string;
-  status: 'DELIVERED' | 'PROCESSED';
-  latencyMs?: number;
-  receiverTimestamp: number;
-}
-
-export interface NackPayload {
-  nackForId: string;
-  code: ErrorCode;
-  reason: string;
-  receiverTimestamp: number;
 }
 
 export interface MailboxStatus {

@@ -4,18 +4,22 @@
 
 (defenum Dialect
   (:case native-asl    [] "ASL S-expression AST format")
+  (:case coord-asl     [] "ASL Coordination and Handoff AST dialect")
   (:case compact-token [] "High-density positional token stream")
   (:case polyglot-json [] "Conversational JSON with self-describing preamble"))
 
 (defenum FrameType
-  (:case handshake [] "Peer capability and dialect negotiation")
-  (:case data      [] "Application-level payload")
-  (:case ack       [] "Positive delivery acknowledgement")
-  (:case nack      [] "Negative delivery acknowledgement")
-  (:case ping      [] "Liveness check")
-  (:case pong      [] "Liveness response")
-  (:case rendezvous [] "Lonely-agent mailbox check and announcement")
-  (:case leave     [] "Graceful departure"))
+  (:case handshake   [] "Peer capability and dialect negotiation")
+  (:case data        [] "Application-level payload")
+  (:case handoff     [] "Context-isolated task delegation and handoff")
+  (:case yield       [] "Handoff completion, status, and artifact return")
+  (:case spawn       [] "Direct agent process execution within scoped directory")
+  (:case ack         [] "Positive delivery acknowledgement")
+  (:case nack        [] "Negative delivery acknowledgement")
+  (:case ping        [] "Liveness check")
+  (:case pong        [] "Liveness response")
+  (:case rendezvous  [] "Lonely-agent mailbox check and announcement")
+  (:case leave       [] "Graceful departure"))
 
 (defenum ErrorCode
   (:case peer-unreachable    [] "Target peer not found in registry")
@@ -25,18 +29,24 @@
   (:case type-mismatch       [] "Payload does not conform to expected schema")
   (:case timeout             [] "No response received within deadline")
   (:case stalled             [] "Peer heartbeat ceased mid-execution")
-  (:case dead-letter         [] "Maximum retry attempts exceeded"))
+  (:case dead-letter         [] "Maximum retry attempts exceeded")
+  (:case scope-violation     [] "Agent attempted access outside permitted directory scope")
+  (:case handoff-rejected    [] "Target agent declined handoff contract"))
 
 (defun is-control-frame [(ft FrameType)] -> Bool
   :doc "Returns true if the frame is a control frame rather than application data."
   (match ft
-    ((data) false)
-    (_      true)))
+    ((data)    false)
+    ((handoff) false)
+    ((yield)   false)
+    (_         true)))
 
 (defun requires-ack [(ft FrameType)] -> Bool
   :doc "Returns true if this frame type mandates an acknowledgement."
   (match ft
     ((data)      true)
+    ((handoff)   true)
+    ((spawn)     true)
     ((handshake) true)
     (_           false)))
 
@@ -50,4 +60,6 @@
     ((type-mismatch)       1005)
     ((timeout)             1006)
     ((stalled)             1007)
-    ((dead-letter)         1008)))
+    ((dead-letter)         1008)
+    ((scope-violation)     1009)
+    ((handoff-rejected)    1010)))
