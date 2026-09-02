@@ -1,10 +1,12 @@
-# Orchestrator Log: asl-ecosystem-audit-v1
+# Orchestrator Log: asl-selfhosted-runtime-v1
 
 ## Phase Tiers
-- Phase 1: Tier 1 (Standard Audit & Verification)
-- Phase 2: Tier 1 (Dual-Projection & Self-Hosting Feasibility Investigation)
-- Phase 3: Tier 1 (Protocol Mesh & Sandboxed Security Check)
-- Phase 4: Tier 1 (Hardening & Ecosystem Report)
+- Phase 1: Tier 1 (Pure ASL Lexer & Tokenizer)
+- Phase 2: Tier 1 (Pure ASL Reader & AST Schema)
+- Phase 3: Tier 1 (CLI Tooling & Benchmark)
+- Phase 4: Tier 1 (Full 7-Gate CI Hardening)
 
-## Cross-Phase Findings
-- Initial baseline: 24 packages, 220 unit tests, 0 gate failures, 14.75% AST clone ratio.
+## Cross-Phase Decisions
+- Standalone self-hosted parser lives in `packages/asl-parser`.
+- Manifest scoped as `@genseam/asl-parser`.
+- Supports both Ultra-Nano (`dfs`, `dfe`, `df`, `:f`, `:c`) and Verbose (`defschema`, `defenum`, `defun`) transparently without regex pre-processing.
