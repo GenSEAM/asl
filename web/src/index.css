@@ -3,50 +3,51 @@
 @tailwind utilities;
 
 /*
-  Design System: High-end architectural graphite monochrome with sophisticated designer fuchsia accents.
-  Zero generic AI purple gradients. Clean, confident, editorial Swiss aesthetic.
+  Design System: High-end architectural cosmic slate monochrome with luminous electric violet and lavender accents.
+  Zero generic gradients; precision blueprint schematics, mathematical curves, and agentic UI.
 */
 @layer base {
   :root {
-    --ground: 249 248 249;
-    --sunken: 241 239 240;
+    --ground: 248 247 252;
+    --sunken: 238 235 245;
     --surface: 255 255 255;
-    --inset: 247 246 246;
+    --inset: 244 242 248;
 
-    --line: 232 227 229;
-    --line-strong: 151 135 141;
+    --line: 225 219 236;
+    --line-strong: 146 128 176;
 
-    --ink: 22 18 20;
-    --ink-2: 87 76 81;
-    --ink-3: 111 98 104;
+    --ink: 24 18 36;
+    --ink-2: 76 64 96;
+    --ink-3: 112 98 134;
 
-    /* Architectural Designer Fuchsia */
-    --signal: 197 24 96;
-    --signal-soft: 224 62 130;
+    /* Architectural Deep Electric Purple */
+    --signal: 126 34 206;
+    --signal-soft: 147 51 234;
 
-    --shadow-hue: 330 15% 12%;
-    --shadow-strength: 0.06;
+    --shadow-hue: 270 25% 10%;
+    --shadow-strength: 0.08;
   }
 
   .dark {
-    --ground: 14 11 12;
-    --sunken: 5 3 4;
-    --surface: 24 19 21;
-    --inset: 17 13 15;
+    /* Cosmic Deep Violet Slate */
+    --ground: 12 9 20;
+    --sunken: 4 2 7;
+    --surface: 24 19 39;
+    --inset: 17 13 29;
 
-    --line: 48 39 43;
-    --line-strong: 109 93 100;
+    --line: 48 38 72;
+    --line-strong: 136 102 198;
 
-    --ink: 244 241 242;
-    --ink-2: 177 165 170;
-    --ink-3: 145 131 137;
+    --ink: 246 244 255;
+    --ink-2: 198 183 253;
+    --ink-3: 152 140 175;
 
-    /* Luminous Designer Fuchsia */
-    --signal: 240 56 132;
-    --signal-soft: 214 31 105;
+    /* Electric Violet & Luminous Lilac */
+    --signal: 176 96 255;
+    --signal-soft: 198 142 255;
 
-    --shadow-hue: 0 0% 0%;
-    --shadow-strength: 0.6;
+    --shadow-hue: 270 50% 5%;
+    --shadow-strength: 0.65;
   }
 
   html {
@@ -97,8 +98,24 @@
   }
 
   .bg-dot-grid {
-    background-image: radial-gradient(rgb(var(--line-strong) / 0.15) 1px, transparent 1px);
+    background-image: radial-gradient(rgb(var(--line-strong) / 0.18) 1px, transparent 1px);
     background-size: 24px 24px;
+  }
+
+  /* Rich architectural blueprint grid with subtle coordinate tick markings */
+  .bg-blueprint-grid {
+    background-image: 
+      linear-gradient(to right, rgb(var(--line) / 0.4) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--line) / 0.4) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 50px -10px rgba(168, 85, 247, 0.25);
+  }
+
+  .glow-purple-sm {
+    box-shadow: 0 0 25px -5px rgba(168, 85, 247, 0.2);
   }
 }
 
