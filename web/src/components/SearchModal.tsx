@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Search, X, ArrowRight, Code2, BookOpen, Terminal, Sparkles, Shield, Cpu } from 'lucide-react';
+import { Search, X, ArrowRight, Code2, BookOpen, Terminal, Sparkles, Cpu, Database } from 'lucide-react';
+import { useRouter } from '../lib/router';
 
 interface SearchResult {
   id: string;
@@ -16,53 +17,53 @@ const ITEMS: SearchResult[] = [
     category: 'docs',
     title: 'The Agent Way',
     desc: 'Why languages designed for typing hands fail autonomous agents.',
-    href: '#agent-way',
+    href: '/#agent-way',
     icon: BookOpen,
   },
   {
     id: '2',
     category: 'toolchain',
-    title: 'CLI Installation & Flow',
-    desc: 'curl -fsSL https://aslang.dev/install.sh | bash',
-    href: '#install',
-    icon: Terminal,
+    title: 'Interactive Playground (SQL Studio & Quality Doctor)',
+    desc: 'Live cross-dialect SQL queries and autonomous AST repair.',
+    href: '/playground',
+    icon: Database,
   },
   {
     id: '3',
-    category: 'protocol',
-    title: 'A2A Wire Protocol',
-    desc: 'Low-latency agent-to-agent S-expression frame serialization.',
-    href: '#a2a-protocol',
-    icon: Code2,
+    category: 'toolchain',
+    title: 'Universal Ecosystem & Runtimes',
+    desc: 'Wasm, Rust, TypeScript, Go, Python, and SQL cross-compilation.',
+    href: '/ecosystem',
+    icon: Cpu,
   },
   {
     id: '4',
     category: 'grammar',
-    title: 'SkyLoom Mesh',
-    desc: 'Zero-copy distributed consensus and inter-agent memory mesh.',
-    href: '#skyloom-mesh',
+    title: 'Canons & Roadmap',
+    desc: 'Strategic trajectory, agent meshes, and self-hosted runtimes.',
+    href: '/roadmap',
     icon: Sparkles,
   },
   {
     id: '5',
-    category: 'toolchain',
-    title: 'Architectural Capabilities',
-    desc: 'Observability blueprints, terminal workflows, and ecosystem drafting tools.',
-    href: '#capabilities',
-    icon: Shield,
+    category: 'docs',
+    title: 'Documentation & CLI Reference',
+    desc: 'Toolchain commands, grammar invariants, and quick start guides.',
+    href: '/docs',
+    icon: Terminal,
   },
   {
     id: '6',
-    category: 'toolchain',
-    title: 'Universal Ecosystem Targets',
-    desc: 'Wasm, Rust, TypeScript, Go, Python, and SQL cross-compilation.',
-    href: '#toolchain',
-    icon: Cpu,
+    category: 'protocol',
+    title: 'A2A Wire Protocol',
+    desc: 'Low-latency agent-to-agent S-expression frame serialization.',
+    href: '/#a2a-protocol',
+    icon: Code2,
   },
   {
     id: '7',
     category: 'grammar',
-    title: 'Agent Specification (llms.txt)',
+    title: 'Agent Specification (/llms.txt)',
     desc: 'Machine-readable formal grammar and invariant tables for AI agents.',
     href: '/llms.txt',
     icon: BookOpen,
@@ -73,6 +74,7 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
   isOpen,
   onClose,
 }) => {
+  const { navigate } = useRouter();
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -126,7 +128,12 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
               <a
                 key={item.id}
                 href={item.href}
-                onClick={onClose}
+                onClick={(e) => {
+                  if (item.href.startsWith('/llms')) return;
+                  e.preventDefault();
+                  navigate(item.href);
+                  onClose();
+                }}
                 className="group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all"
               >
                 <div className="flex items-center gap-3">

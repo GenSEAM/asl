@@ -1,20 +1,52 @@
-# ASL (AgentScript Language) Complete Technical Handbook for Autonomous Agents
+# ASL (AgentScript Language) Complete Technical Handbook for Autonomous Agents & Models
+Version: 1.0 (Closed Formal Specification)
+Corpus Integrity: Verified across 6 differential backends (Wasm, Rust, TS, Go, Python, SQL)
 
-## 1. Grammatical Invariants
-1. Single-pass LL(1) deterministic S-expressions.
-2. Identifiers: kebab-case (e.g., `parse-json`, `dot-product`).
-3. Types: PascalCase (`I64`, `F64`, `Bool`, `Str`, `List`, `Map`, `Option`, `Result`).
-4. Effect tracking: Effectful operations are strictly suffixed with `!` (e.g., `println!`, `fetch!`, `write-file!`).
-5. Zero indentation crashes: Pure balanced parenthesis S-expressions.
+## 1. Grammatical & Lexical Invariants
+1. Single-pass LL(1) deterministic S-expressions:
+   - Every expression begins with `(` and ends with balanced `)`.
+   - Whitespace carries no indentation semantics (eliminates syntax crashes common in Python/YAML).
+2. Identifiers:
+   - Standard kebab-case (e.g., `parse-json`, `dot-product`, `make-vector`).
+   - Reserved prefix: `agentscript-` is reserved for internal compiler intrinsics.
+3. Types:
+   - PascalCase primitives: `Int64`, `Float64`, `Bool`, `String`.
+   - Parametric types: `(List T)`, `(Map K V)`, `(Option T)`, `(Result T E)`.
+4. Effect Boundaries:
+   - Pure functions declare explicit return signatures: `(defun name (args) -> Type body)`.
+   - Effectful operations (I/O, network, disk) are strictly suffixed with `!` (e.g., `println!`, `fetch!`, `read-file!`).
+5. Error Handling:
+   - Expressed via `(Ok val)` and `(Err reason)` constructs.
+   - Linearization via `try` early returns prevents deep AST nesting (>4 levels).
 
-## 2. A2A Wire Protocol Specification
-- Discovery Probe: `(?agent/probe :proto "asl/1.0" :caps [wasm schema stream])`
-- Acknowledgment: `(!agent/ack :proto "asl/1.0" :mode :nano)`
-- Query Frame: `(? <target-agent> <verb> [:key <typed-val> ...])`
-- Response Frame: `(! <source-agent> :ok <typed-payload>)` or `(! <source-agent> :err <code> :msg <str>)`
+## 2. A2A (Agent-to-Agent) Wire Protocol Specification
+Prose is the wrong wire format between machines. Agents communicate using balanced symbolic frames:
 
-## 3. Package Management
-- CLI: `asl`
-- Install Skill: `asl skill install @genseam/<pkg>`
-- Build Wasm: `asl build <file.asl> --target wasm`
-- Run Fast Sandbox: `asl run <file.asl>`
+### Frame Types:
+1. Probe / Handshake:
+   `(?agent/probe :proto "asl/1.0" :caps [wasm schema stream] :agent-id "subagent-01")`
+2. Acknowledgment:
+   `(!agent/ack :proto "asl/1.0" :mode :nano :latency-ms 0.04)`
+3. Query Frame:
+   `(? <target-agent> <verb> [:key <typed-val> ...])`
+4. Response Frame:
+   `(! <source-agent> :ok <typed-payload>)` or `(! <source-agent> :err <code> :msg <string>)`
+
+## 3. Sandboxed Execution & Isolation Invariants
+1. Memory Model:
+   - Standalone wasm32-wasip1 execution inside isolated linear memory spaces.
+   - Host path traversal is strictly prohibited: relative paths are clamped to the sandbox root.
+2. Cross-Runtime Certified Equivalence:
+   - Automated differential testing (`differential.py`) ensures numeric precision and error semantics match across all 6 backends.
+
+## 4. CLI Toolchain (asl)
+- `asl run <file.asl>`: Evaluates script in native/Wasm isolate.
+- `asl fmt <file.asl>`: Formats file canonically.
+- `asl lint --fix`: Automatically detects code smells and repairs AST bugs.
+- `asl parse <file.asl>`: Emits JSON AST schema representation.
+- `asl mcp`: Starts Model Context Protocol server over stdio or SSE.
+
+## 5. Official Distribution & Repository
+- Canonical Website: https://aslang.dev
+- Repository: https://github.com/GenSEAM/asl
+- License: MIT Open Source

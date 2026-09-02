@@ -1,37 +1,68 @@
-# ASL (AgentScript Language) — The Agent Way // Agentic Programming (AgP)
-> The universal language substrate and ecosystem glue for human-agent symbiosis and autonomous agent societies.
+# ASL (AgentScript Language) — The Native Language for Autonomous Agents
+> Compact, balanced S-expression language substrate engineered from first principles for LLMs and autonomous agent swarms.
 
-## Overview
-- Spec Version: 1.0 (Closed, 107 Safe Pure Builtins, 0 Semantic Drift)
-- Paradigm: Agentic Programming (AgP) // The Agent Way
-- Architecture: Single-pass deterministic S-expressions, typed contracts, zero indentation ambiguity
-- Performance: WASI isolate execution <0.04ms, 78% prompt token reduction via interface compression
-- Wire Protocol: AgP A2A (Agent-to-Agent) S-expression streaming over MCP, SSE, and Unix Domain Sockets
+## Why AgentScript for AI Agents?
+1. **Eliminates Syntax & Indentation Crashes**:
+   - Whitespace carries zero semantic meaning.
+   - Balanced LL(1) parenthetical trees guarantee that syntax errors are caught deterministically in a single pass.
+   - Zero hallucinated indentation bugs (eliminates the recursive repair loops common with Python and YAML).
+2. **Drastic Token & Cost Reduction**:
+   - Up to 70% fewer prompt tokens compared to verbose JSON, YAML, or deeply nested ASTs.
+   - Leaves more of the model's context window and attention budget for complex reasoning and planning.
+3. **Zero-Leak Jailed Sandboxing**:
+   - Compiles to isolated `wasm32-wasip1` microVMs and native binaries with strict capability boundaries.
+   - Path-jailed filesystem and capability-based I/O prevent host directory traversal or unauthorized network exfiltration.
+4. **Universal Multi-Target Compilation**:
+   - One canonical AST source translates with mathematically verified differential equivalence to:
+     - WebAssembly (Cloudflare Workers, Fastly, In-Browser Sandboxes)
+     - Rust (Bare-metal high-speed systems)
+     - TypeScript / JavaScript (Host runtime & web app embedding)
+     - Go (High-concurrency daemons and distributed microservices)
+     - Python (PyTorch, LangChain, DSPy ML pipelines)
+     - Relational SQL AST (Cross-dialect queries for PostgreSQL, SQLite, DuckDB, MySQL)
 
-## Core Ecosystem Packages (@genseam/*)
-- @genseam/asl: Language compiler, grammar, and differential verification gates across Rust, TS, Go, Python, and Wasm.
-- @genseam/harness: Meta-Agent Harness engine for lifecycle supervision and speculative task pool execution.
-- @genseam/skills: Universal agent skills marketplace for Claude Code, Cursor, Antigravity, and Windsurf.
-- @genseam/agent-bus: In-memory Unix socket & SSE bus for warm subagent orchestration in <0.04ms.
-- @genseam/browser-plugin: Headless DOM tree compression (-78% tokens) and WASI action runner.
-- @genseam/search: SearXNG decentralized multi-engine search with proxy pool rotation.
-- @genseam/mem: In-memory vector database and cosine similarity search in 64KB Wasm.
-
-## Installation
+## CLI Quick Reference (asl-cli)
+Install:
 ```bash
 curl -fsSL https://aslang.dev/install.sh | bash
 ```
 
-## Quick Start (AgP Contract)
+Core Commands:
+- `asl run <file.asl>`: Evaluates script inside the jailed Wasm/native runner isolate (<0.05ms startup).
+- `asl fmt <file.asl>`: Deterministic AST formatter that formats code into canonical representation.
+- `asl lint --fix`: Autonomous smell detector and AST self-repair engine.
+- `asl mcp`: Launches the Model Context Protocol (MCP) server for direct agent tool calling.
+- `asl build <file.asl> --target <wasm|rust|ts|go|python|sql>`: Compiles to target backend.
+- `asl test`: Executes test suites under the differential verification gate.
+
+## Basic Syntax & Contracts
 ```lisp
 (module math/vector
   (:export dot-product cosine-sim)
+
   (defun dot-product ((a (List F64)) (b (List F64))) (Result F64 Str)
     (if (!= (len a) (len b))
         (Err "dimension mismatch")
         (Ok (fold + 0.0 (zip-with * a b))))))
 ```
 
-## Full Reference
-- Full Documentation: https://aslang.dev/llms-full.txt
-- GitHub Repository: https://github.com/GenSEAM/asl
+## A2A Wire Protocol Frame Format
+Agent-to-agent communication switches from chatty natural language prose to compact, balanced machine frames:
+```lisp
+; Discovery Probe
+(?agent/probe :proto "asl/1.0" :caps [wasm schema stream])
+
+; Query Frame
+(? planner/dispatch :task "synthesize" :data [1 2 3])
+
+; Success Response
+(! executor/ack :ok [4 5 6])
+
+; Error Response
+(! executor/ack :err :dimension-mismatch :msg "Vectors must match length")
+```
+
+## Documentation Links
+- Full Invariant Specification & Protocol: https://aslang.dev/llms-full.txt
+- GitHub Source Repository: https://github.com/GenSEAM/asl
+- Web Showcase & Visual Architecture: https://aslang.dev

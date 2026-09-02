@@ -19,3 +19,9 @@ This file groups d/c/r/l entries for the dual-projection architecture and AST re
 - **Status**: Final
 - **Cluster**: lang/projection
 - **Description**: The toolchain must provide read-only virtual projection inspection (`asl view`, `asl sql view`, virtual IDE schemes) that renders compact AST sources into fully documented verbose representations and parameterized multi-dialect SQL targets without altering on-disk files.
+
+### [d-d31a] Dual-Audience Web Architecture: Visual Human Showcase & Agent-Centric Machine Specs
+- **Date**: 2026-09-02
+- **Status**: Final
+- **Cluster**: lang/projection
+- **Description**: The public web representation strictly decouples human cognitive exploration from autonomous agent ingestion. The human-facing experience emphasizes visual architectural blueprints, interactive topology graphs, multi-target ecosystem guarantees, and token economy metrics while eliminating intimidating walls of raw code from the landing page. Dedicated views isolate the interactive studio (`/playground`), ecosystem matrices (`/ecosystem`), and roadmap milestones (`/roadmap`). Autonomous models and agent swarms are served directly through structured machine specifications via `/llms.txt`, `/llms-full.txt`, and native Model Context Protocol (MCP) endpoints.
