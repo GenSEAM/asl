@@ -8,7 +8,7 @@ Goal: SkyLoom inter-agent protocol, resilient mesh, asymmetric negotiation (awar
 - Phase 2: Multi-Agent Mesh Topology & Transport Router [TIER 1.5] — DONE
 - Phase 3: Asymmetric Negotiation Engine & Polyglot Adapter (Aware vs Unaware) [TIER 1.5] — DONE
 - Phase 4: Fault Tolerance, Lonely-Agent Mailbox & Heartbeat Guard [TIER 1.5] — DONE
-- Phase 5: SkyLoom MCP Server & Universal Agent Skill
+- Phase 5: SkyLoom MCP Server & Universal Agent Skill [TIER 1.5] — DONE
 - Phase 6: CLI Integration (`asl loom`) & Interactive Web Showcase Visualizer
 
 ## Decisions & Cross-phase Notes
