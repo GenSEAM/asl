@@ -1,6 +1,7 @@
 import React from 'react';
 import { ThemeProvider } from './lib/theme';
 import { RouterProvider, useRouter } from './lib/router';
+import { CosmicLandscapeBackground } from './components/CosmicLandscapeBackground';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
@@ -28,9 +29,12 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-ground text-ink flex flex-col">
+    <div className="min-h-screen bg-ground text-ink flex flex-col relative">
+      <CosmicLandscapeBackground />
       <Navbar />
-      {renderView()}
+      <div className="relative z-10 flex-1 flex flex-col">
+        {renderView()}
+      </div>
       <Footer />
     </div>
   );

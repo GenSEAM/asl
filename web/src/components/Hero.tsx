@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Copy, ShieldCheck, Server, Network, FileText, Code2 } from 'lucide-react';
-import { ChameleonALogo, ChameleonSchematic } from './ui/Logo';
+import { ChameleonALogo } from './ui/Logo';
 
 const INSTALL_CMD = 'curl -sSL aslang.dev/install | sh';
 const TARGETS = ['WebAssembly', 'Rust', 'TypeScript', 'Go', 'Python', 'SQL'];
@@ -24,45 +24,7 @@ export const Hero: React.FC = () => {
   };
 
   return (
-    <section id="top" className="relative bg-ground pt-32 pb-20 sm:pt-36 sm:pb-24 overflow-hidden bg-blueprint-grid">
-      {/* Ambient background glow and watermark chameleon */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[550px] bg-purple-600/10 dark:bg-purple-900/20 blur-[140px] rounded-full pointer-events-none" />
-
-      {/* Isometric 3D Circuit Background Grid (matching design mockup) */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40 select-none">
-        <svg
-          className="w-full h-full text-purple-500/20"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 1440 900"
-          fill="none"
-        >
-          <g stroke="currentColor" strokeWidth="1" strokeDasharray="4 8">
-            {/* Perspective Ray Lines */}
-            <line x1="720" y1="200" x2="0" y2="900" />
-            <line x1="720" y1="200" x2="360" y2="900" />
-            <line x1="720" y1="200" x2="720" y2="900" />
-            <line x1="720" y1="200" x2="1080" y2="900" />
-            <line x1="720" y1="200" x2="1440" y2="900" />
-            
-            {/* Concentric Horizon Arcs */}
-            <ellipse cx="720" cy="200" rx="400" ry="120" />
-            <ellipse cx="720" cy="200" rx="700" ry="240" />
-            <ellipse cx="720" cy="200" rx="1050" ry="380" />
-          </g>
-
-          {/* Glowing Circuit Node Dots */}
-          <circle cx="580" cy="380" r="3" fill="#c084fc" className="animate-pulse" />
-          <circle cx="860" cy="380" r="3" fill="#a855f7" className="animate-pulse" />
-          <circle cx="420" cy="520" r="3.5" fill="#c084fc" />
-          <circle cx="1020" cy="520" r="3.5" fill="#a855f7" />
-          <circle cx="720" cy="580" r="4" fill="#d8b4fe" />
-        </svg>
-      </div>
-
-      {/* Large Schematic Chameleon Watermark (as shown in reference design mockup) */}
-      <div className="absolute -top-6 -left-12 sm:left-4 lg:left-12 w-80 sm:w-96 lg:w-[480px] h-auto opacity-20 dark:opacity-25 pointer-events-none select-none transition-opacity">
-        <ChameleonSchematic className="w-full h-auto text-signal" strokeWidth={2.2} glow={true} />
-      </div>
+    <section id="top" className="relative pt-32 pb-20 sm:pt-36 sm:pb-24 overflow-hidden">
 
       <div className="max-w-6xl mx-auto px-5 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
