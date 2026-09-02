@@ -1,11 +1,13 @@
 /**
- * SkyLoom Mesh Topology Router
+ * SkyLoom Mesh Topology Router with Integrated Resilience
  * Routes frames between N agents across 1:1, pub/sub, and broadcast patterns.
+ * Solves the Lonely Agent problem via Mailboxes, and manages Heartbeats + DLQ.
  */
 
 import { EventEmitter } from 'events';
 import { LoomFrame, PeerCapability, ErrorCode, Dialect } from './types.js';
 import { validateFrame, decodeFrame, encodeFrame } from './codec.js';
+import { SkyLoomMailbox, HeartbeatGuard, DeadLetterQueue } from './resilience.js';
 
 export interface RouteResult {
   status: 'DELIVERED' | 'QUEUED' | 'DROPPED';
@@ -26,12 +28,25 @@ export class SkyLoomRouter extends EventEmitter {
   private channelSubscriptions: Map<string, Set<string>> = new Map();
   private messageLog: LoomFrame[] = [];
 
-  constructor() {
+  public readonly mailbox: SkyLoomMailbox;
+  public readonly heartbeatGuard: HeartbeatGuard;
+  public readonly dlq: DeadLetterQueue;
+
+  constructor(options?: { mailboxTtlMs?: number; heartbeatTimeoutMs?: number }) {
     super();
+    this.mailbox = new SkyLoomMailbox(options?.mailboxTtlMs ?? 60000);
+    this.heartbeatGuard = new HeartbeatGuard(options?.heartbeatTimeoutMs ?? 5000);
+    this.dlq = new DeadLetterQueue();
+
+    // Start watchdog to evict dead/stalled peers
+    this.heartbeatGuard.startWatchdog((deadPeerId) => {
+      this.unregisterPeer(deadPeerId, 'heartbeat_timeout');
+    });
   }
 
   /**
    * Registers a newly joined peer with its capabilities
+   * Automatically flushes any spooled mailbox frames for this peer!
    */
   registerPeer(peer: PeerCapability, sendFn: (frame: LoomFrame) => Promise<boolean> | boolean): void {
     const isNew = !this.peers.has(peer.peerId);
@@ -41,6 +56,8 @@ export class SkyLoomRouter extends EventEmitter {
       connectedAt: Date.now(),
     });
 
+    this.heartbeatGuard.recordHeartbeat(peer.peerId);
+
     // Auto-subscribe to default channels
     for (const ch of peer.supportedChannels || []) {
       this.subscribe(peer.peerId, ch);
@@ -49,6 +66,24 @@ export class SkyLoomRouter extends EventEmitter {
     this.emit('peer:registered', peer);
     if (isNew) {
       this.emit('peer:joined', peer);
+    }
+
+    // Drain mailbox for late-arriving peer
+    const pendingFrames = this.mailbox.drain(peer.peerId);
+    if (pendingFrames.length > 0) {
+      for (const frame of pendingFrames) {
+        Promise.resolve(sendFn(frame)).catch(() => {});
+      }
+      this.emit('lonely:resolved', { peerId: peer.peerId, deliveredCount: pendingFrames.length });
+    }
+  }
+
+  /**
+   * Record a heartbeat from an active peer
+   */
+  pingPeer(peerId: string): void {
+    if (this.peers.has(peerId)) {
+      this.heartbeatGuard.recordHeartbeat(peerId);
     }
   }
 
@@ -60,6 +95,7 @@ export class SkyLoomRouter extends EventEmitter {
     if (!existing) return false;
 
     this.peers.delete(peerId);
+    this.heartbeatGuard.unregister(peerId);
 
     // Clean up channel subscriptions
     for (const [ch, subscriberSet] of this.channelSubscriptions.entries()) {
@@ -122,7 +158,7 @@ export class SkyLoomRouter extends EventEmitter {
   }
 
   /**
-   * Primary frame router
+   * Primary frame router with Lonely-Agent Mailbox buffering & DLQ protection
    */
   async route(rawOrFrame: string | LoomFrame, senderOverride?: string): Promise<RouteResult> {
     let frame: LoomFrame;
@@ -136,6 +172,11 @@ export class SkyLoomRouter extends EventEmitter {
       frame.header.from = senderOverride;
     }
 
+    // Refresh heartbeat for sender
+    if (this.peers.has(frame.header.from)) {
+      this.heartbeatGuard.recordHeartbeat(frame.header.from);
+    }
+
     this.messageLog.push(frame);
     this.emit('frame', frame);
 
@@ -143,10 +184,9 @@ export class SkyLoomRouter extends EventEmitter {
     const to = frame.header.to;
     const channel = frame.channel;
 
-    // 1. Broadcast to channel
+    // 1. Broadcast to channel or all peers
     if (to === '*' || to === 'broadcast') {
       if (!channel) {
-        // Broadcast to all connected peers except sender
         const recipients: string[] = [];
         for (const [id, conn] of this.peers.entries()) {
           if (id !== from) {
@@ -156,8 +196,18 @@ export class SkyLoomRouter extends EventEmitter {
         }
         return { status: 'DELIVERED', recipients };
       } else {
-        // Topic broadcast
         const subscribers = this.getChannelSubscribers(channel).filter(id => id !== from);
+        if (subscribers.length === 0) {
+          // No subscribers for this channel: buffer in mailbox under channel name
+          this.mailbox.enqueue(frame);
+          return {
+            status: 'QUEUED',
+            recipients: [],
+            errorCode: ErrorCode.ERR_LONELY_QUEUED,
+            errorReason: `No listeners currently subscribed to channel "${channel}"; message spooled in mailbox`,
+          };
+        }
+
         const recipients: string[] = [];
         for (const id of subscribers) {
           const conn = this.peers.get(id);
@@ -173,20 +223,21 @@ export class SkyLoomRouter extends EventEmitter {
     // 2. Direct Point-to-Point routing
     const targetConn = this.peers.get(to);
     if (!targetConn) {
+      // Lonely Agent resolution: Peer is not currently connected -> Buffer in Mailbox!
+      this.mailbox.enqueue(frame);
       return {
-        status: 'DROPPED',
+        status: 'QUEUED',
         recipients: [],
         undelivered: [to],
-        errorCode: ErrorCode.ERR_PEER_UNREACHABLE,
-        errorReason: `Target peer ${to} is not connected to SkyLoom mesh`,
+        errorCode: ErrorCode.ERR_LONELY_QUEUED,
+        errorReason: `Target peer "${to}" is not online. Message buffered in SkyLoom mailbox.`,
       };
     }
 
-    // Check dialect compatibility
+    // Check dialect compatibility & auto-adapt if needed
     const targetDialects = targetConn.peer.dialects;
     const frameDialect = frame.header.dialect;
     if (targetDialects.length > 0 && !targetDialects.includes(frameDialect)) {
-      // Auto-adapt dialect to target's preferred dialect
       const preferred = targetDialects[0];
       const adaptedFrame: LoomFrame = {
         ...frame,
@@ -199,8 +250,26 @@ export class SkyLoomRouter extends EventEmitter {
       return { status: 'DELIVERED', recipients: [to] };
     }
 
-    await targetConn.send(frame);
-    return { status: 'DELIVERED', recipients: [to] };
+    try {
+      await targetConn.send(frame);
+      return { status: 'DELIVERED', recipients: [to] };
+    } catch (err: any) {
+      this.dlq.push(frame, ErrorCode.ERR_STALLED, err?.message || 'Send failed');
+      return {
+        status: 'DROPPED',
+        recipients: [],
+        undelivered: [to],
+        errorCode: ErrorCode.ERR_STALLED,
+        errorReason: `Delivery to peer "${to}" failed: ${err?.message}`,
+      };
+    }
+  }
+
+  /**
+   * Stop router and watchdog timers
+   */
+  destroy(): void {
+    this.heartbeatGuard.stopWatchdog();
   }
 
   /**
