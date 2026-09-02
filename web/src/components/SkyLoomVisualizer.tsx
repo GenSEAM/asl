@@ -74,12 +74,12 @@ const INITIAL_AGENTS: AgentNode[] = [
 
 export const SkyLoomVisualizer: React.FC = () => {
   const [agents, setAgents] = useState<AgentNode[]>(INITIAL_AGENTS);
-  const [selectedScenario, setSelectedScenario] = useState<'aware' | 'asymmetric' | 'lonely' | 'stalled' | 'dlq'>('aware');
-  const [activeTab, setActiveTab] = useState<'asl' | 'polyglot' | 'compact'>('asl');
+  const [selectedScenario, setSelectedScenario] = useState<'aware' | 'asymmetric' | 'handoff' | 'lonely' | 'stalled' | 'dlq'>('aware');
+  const [activeTab, setActiveTab] = useState<'asl' | 'coord' | 'polyglot' | 'compact'>('asl');
   const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
   const [stats, setStats] = useState({
     framesRouted: 1428,
-    tokenSavings: '68.4%',
+    tokenSavings: '83.4%',
     avgLatency: '0.038ms',
     mailboxQueued: 2,
     dlqErrors: 0,
@@ -101,6 +101,13 @@ export const SkyLoomVisualizer: React.FC = () => {
       setStats(prev => ({
         ...prev,
         framesRouted: prev.framesRouted + 1,
+      }));
+    } else if (scenario === 'handoff') {
+      setActiveTab('coord');
+      setStats(prev => ({
+        ...prev,
+        tokenSavings: '83.4%',
+        framesRouted: prev.framesRouted + 3,
       }));
     } else if (scenario === 'lonely') {
       setActiveTab('asl');
@@ -268,7 +275,7 @@ export const SkyLoomVisualizer: React.FC = () => {
               <p className="font-mono text-micro uppercase text-ink-3 mb-2 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5" /> Interactive Chaos & Simulation Suite:
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <button
                   onClick={() => runScenario('aware')}
                   className={`px-2.5 py-1.5 rounded-lg font-mono text-micro font-medium border text-left transition-all ${
@@ -277,7 +284,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                       : 'border-line bg-surface hover:bg-inset text-ink-2'
                   }`}
                 >
-                  1. Aware ↔ Aware S-Expr
+                  1. Aware ↔ Aware
                 </button>
                 <button
                   onClick={() => runScenario('asymmetric')}
@@ -287,7 +294,17 @@ export const SkyLoomVisualizer: React.FC = () => {
                       : 'border-line bg-surface hover:bg-inset text-ink-2'
                   }`}
                 >
-                  2. Aware ↔ Unaware LLM
+                  2. Aware ↔ Unaware
+                </button>
+                <button
+                  onClick={() => runScenario('handoff')}
+                  className={`px-2.5 py-1.5 rounded-lg font-mono text-micro font-medium border text-left transition-all ${
+                    selectedScenario === 'handoff'
+                      ? 'border-ink bg-ink text-ground'
+                      : 'border-line bg-surface hover:bg-inset text-ink-2'
+                  }`}
+                >
+                  3. Handoff & Scoping
                 </button>
                 <button
                   onClick={() => runScenario('lonely')}
@@ -297,7 +314,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                       : 'border-line bg-surface hover:bg-inset text-ink-2'
                   }`}
                 >
-                  3. Lonely Mailbox Drain
+                  4. Lonely Mailbox
                 </button>
                 <button
                   onClick={() => runScenario('stalled')}
@@ -307,7 +324,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                       : 'border-line bg-surface hover:bg-inset text-ink-2'
                   }`}
                 >
-                  4. Stalled Peer Evict
+                  5. Stalled Watchdog
                 </button>
               </div>
 
@@ -353,7 +370,17 @@ export const SkyLoomVisualizer: React.FC = () => {
                         : 'text-ink-3 hover:text-ink'
                     }`}
                   >
-                    ASL Native (S-Expr)
+                    ASL Native
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('coord')}
+                    className={`px-2 py-1 rounded font-mono text-micro font-medium transition-all ${
+                      activeTab === 'coord'
+                        ? 'bg-surface text-ink shadow-sm font-bold'
+                        : 'text-ink-3 hover:text-ink'
+                    }`}
+                  >
+                    asl/coord (Handoff)
                   </button>
                   <button
                     onClick={() => setActiveTab('polyglot')}
@@ -363,7 +390,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                         : 'text-ink-3 hover:text-ink'
                     }`}
                   >
-                    Polyglot Markdown
+                    Polyglot
                   </button>
                   <button
                     onClick={() => setActiveTab('compact')}
@@ -373,7 +400,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                         : 'text-ink-3 hover:text-ink'
                     }`}
                   >
-                    Compact Token
+                    Compact
                   </button>
                 </div>
               </div>
@@ -397,6 +424,39 @@ export const SkyLoomVisualizer: React.FC = () => {
           :optimization "O3"
           :verified-by-checker true))`}
                   </pre>
+                )}
+
+                {activeTab === 'coord' && (
+                  <div className="space-y-3">
+                    <pre className="p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed">
+{`(loom:handoff
+  :v 1
+  :id "handoff-7721"
+  :from "agent-orchestrator"
+  :to "agent-coder-1"
+  :ts ${Date.now()}
+  :task "implement_rate_limiter"
+  :cwd "packages/asl-rate"
+  :owns ["src/limiter.asl" "tests/limiter_test.asl"]
+  :frozen ["src/core.asl"]
+  :gate "asl check src/limiter.asl && asl test tests/"
+  :budget 4000)`}
+                    </pre>
+                    <div className="p-3 rounded-xl bg-inset border border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+                      <div>
+                        <span className="font-mono font-bold text-ink">Context Compression Benchmark:</span>{' '}
+                        <span className="text-ink-2">Raw Chat: 1,716 tokens → SkyLoom AST: 285 tokens</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-surface border border-line font-mono font-bold text-ink">
+                          -83.4% Tokens
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-surface border border-line font-mono font-bold text-ink">
+                          Zero-Leak Firewall
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {activeTab === 'polyglot' && (

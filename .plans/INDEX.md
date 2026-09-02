@@ -4,4 +4,4 @@
 |---|---|---|---|---|
 | `asl-core-v1` | 2026-08-28 | `done` | Core language spec, 6 differential backends, Wasm runner, MCP server, Voice assistant, and Benchmark Suite | Complete (Phases 1–18 Archived in `.plans/archive/2026-08-28-asl-core-v1/`) |
 | `skyloom-protocol-v1` | 2026-09-02 | `done` | SkyLoom: Multi-Agent Protocol, Asymmetric Negotiation (Aware/Unaware), Resilient Swarm Bus, MCP & CLI Bridges, Showcase Demo | Complete (Phases 1–6 Archived in `.plans/archive/2026-09-02-skyloom-protocol-v1/`) |
-| `skyloom-handoff-v1` | 2026-09-02 | `active` | SkyLoom Handoff & Scoping Engine: `asl/coord` dialect, zero-leak directory jailing, context snapshot compression, token benchmark | Phase 1 (Planning) |
+| `skyloom-handoff-v1` | 2026-09-02 | `done` | SkyLoom Handoff & Scoping Engine: `asl/coord` dialect, zero-leak directory jailing, context snapshot compression, token benchmark | Complete (Phases 1–5 Done & Verified) |
