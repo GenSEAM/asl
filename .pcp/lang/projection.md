@@ -25,3 +25,9 @@ This file groups d/c/r/l entries for the dual-projection architecture and AST re
 - **Status**: Final
 - **Cluster**: lang/projection
 - **Description**: The public web representation strictly decouples human cognitive exploration from autonomous agent ingestion. The human-facing experience emphasizes visual architectural blueprints, interactive topology graphs, multi-target ecosystem guarantees, and token economy metrics while eliminating intimidating walls of raw code from the landing page. Dedicated views isolate the interactive studio (`/playground`), ecosystem matrices (`/ecosystem`), and roadmap milestones (`/roadmap`). Autonomous models and agent swarms are served directly through structured machine specifications via `/llms.txt`, `/llms-full.txt`, and native Model Context Protocol (MCP) endpoints.
+
+### [d-090b] Agent-Native Ergonomics: Transparent Data Boundaries over Defensive Encapsulation
+- **Date**: 2026-09-02
+- **Status**: Final
+- **Cluster**: lang/projection
+- **Description**: Autonomous agent development requires complete semantic transparency rather than defensive OOP encapsulation. Internal mutable state, private getters/setters, and inheritance trees induce severe model hallucinations and desynchronization. AgentScript standardizes on transparent data boundaries: records (`defschema`) expose explicit typed fields without hidden properties, encapsulation is enforced purely at module export lists (`:export`), effect boundaries are explicitly tracked via `!`, and dynamic behaviors are composed via pure higher-order functions. This guarantees that an agent can parse, verify, and safely reason over any data structure in a single autoregressive pass.
