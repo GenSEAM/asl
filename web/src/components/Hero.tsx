@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Copy, ShieldCheck, Server, Network, FileText, Code2 } from 'lucide-react';
-import { ChameleonALogo } from './ui/Logo';
 
 const INSTALL_CMD = 'curl -sSL aslang.dev/install | sh';
 const TARGETS = ['WebAssembly', 'Rust', 'TypeScript', 'Go', 'Python', 'SQL'];
@@ -32,22 +31,14 @@ export const Hero: React.FC = () => {
           {/* Main Hero Proposition */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* Brand Emblem & Name */}
-            <div className="flex items-center gap-3.5">
-              <div className="p-2.5 rounded-2xl bg-surface/90 border border-line shadow-e2 flex items-center justify-center">
-                <ChameleonALogo className="w-9 h-9 text-signal" />
-              </div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="font-sans font-bold text-ink text-2xl sm:text-3xl tracking-tight">
-                  Agent<span className="text-signal">Script</span>
-                </span>
-                <span className="font-mono text-micro px-2.5 py-0.5 rounded-full border border-line bg-inset/80 text-ink-3">
-                  aslang.dev
-                </span>
-                <span className="inline-flex items-center p-1 rounded-full text-signal bg-signal/10 border border-signal/20" title="Formally Verified Language Core">
-                  <ShieldCheck className="w-4 h-4" />
-                </span>
-              </div>
+            {/* Brand Title */}
+            <div className="flex items-center gap-3.5 sm:gap-4 flex-wrap">
+              <span className="font-sans font-extrabold text-ink text-3xl sm:text-4xl lg:text-5xl tracking-tight leading-none">
+                Agent<span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-300">Script</span>
+              </span>
+              <span className="inline-flex items-center p-2 rounded-2xl text-signal bg-signal/15 border border-signal/30 shadow-sm" title="Formally Verified Language Core">
+                <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
+              </span>
             </div>
 
             {/* Main Headline */}
