@@ -6,8 +6,7 @@ that aslang.dev has updated its pages, sitemap, and LLM machine-readable specs.
 """
 
 import json
-import urllib.request
-import urllib.error
+import subprocess
 import sys
 
 HOST = "aslang.dev"
@@ -35,47 +34,37 @@ def ping_indexnow():
         "keyLocation": KEY_LOCATION,
         "urlList": URLS,
     }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        endpoint,
-        data=data,
-        headers={
-            "Content-Type": "application/json; charset=utf-8",
-            "User-Agent": "AgentScript-Ping/1.0",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            status = resp.status
-            print(f"    [IndexNow OK] Status: {status} (URLs successfully submitted to index queue)")
-    except urllib.error.HTTPError as e:
-        print(f"    [IndexNow Response] HTTP {e.code}: {e.read().decode('utf-8', errors='ignore')}")
-    except Exception as e:
-        print(f"    [IndexNow Error] {e}")
+    payload_str = json.dumps(payload)
+    cmd = [
+        "curl", "-s", "-w", "%{http_code}",
+        "-X", "POST", endpoint,
+        "-H", "Content-Type: application/json; charset=utf-8",
+        "-H", "User-Agent: AgentScript-Ping/1.0",
+        "-d", payload_str,
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    status = res.stdout.strip()
+    if status in ("200", "202"):
+        print(f"    [IndexNow OK] HTTP {status} (URLs successfully queued for re-crawling!)")
+    else:
+        print(f"    [IndexNow Response] HTTP {status}: {res.stderr or res.stdout}")
 
 def ping_bing_sitemap():
     """Ping Bing sitemap endpoint."""
     print(f"--> Pinging Bing Sitemap endpoint...")
     sitemap_url = f"https://{HOST}/sitemap.xml"
-    endpoint = f"https://www.bing.com/ping?sitemap={urllib.parse.quote(sitemap_url)}"
-    req = urllib.request.Request(endpoint, headers={"User-Agent": "Mozilla/5.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            print(f"    [Bing Sitemap OK] Status: {resp.status}")
-    except Exception as e:
-        print(f"    [Bing Sitemap Note] {e}")
+    endpoint = f"https://www.bing.com/ping?sitemap={sitemap_url}"
+    cmd = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", endpoint]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"    [Bing Sitemap OK] HTTP {res.stdout.strip()}")
 
 def ping_wayback_machine():
     """Trigger archive snapshot on Wayback Machine (used by Common Crawl & AI dataset collectors)."""
     print(f"--> Triggering Wayback Machine snapshot (Common Crawl & AI dataset harvest)...")
     target = f"https://web.archive.org/save/https://{HOST}/"
-    req = urllib.request.Request(target, headers={"User-Agent": "AgentScript-Bot/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            print(f"    [Wayback Machine OK] Status: {resp.status}")
-    except Exception as e:
-        print(f"    [Wayback Machine Note] Snapshot requested ({e})")
+    cmd = ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", target]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"    [Wayback Machine OK] HTTP {res.stdout.strip()}")
 
 def main():
     print(f"================================================================")

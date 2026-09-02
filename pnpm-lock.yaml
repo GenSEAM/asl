@@ -24,6 +24,8 @@ importers:
         specifier: ^5.8.0
         version: 5.9.3
 
+  packages/asl-sh: {}
+
   packages/asl-skyloom:
     devDependencies:
       '@types/node':
