@@ -11,3 +11,4 @@ export * from './negotiator.js';
 export * from './resilience.js';
 export * from './mcp/server.js';
 export * from './mcp/stdio.js';
+export * from './handoff.js';

@@ -3,7 +3,7 @@
 ## Roadmap Execution
 - Phase 1: Coordination Dialect (`asl/coord`) & Algebraic Handoff Types [TIER 1.5] — DONE
 - Phase 2: Directory Scoping & Zero-Leak Mesh Firewall [TIER 1.5] — DONE
-- Phase 3: Context Snapshot Compression & Handoff Serializer [TIER 1.5] — PENDING
+- Phase 3: Context Snapshot Compression & Handoff Serializer [TIER 1.5] — DONE
 - Phase 4: CLI & Subprocess Worker Orchestration (`asl loom handoff` / `spawn`) [TIER 1.5] — PENDING
 - Phase 5: Comparative Multi-Agent Token Benchmark & Web Showcase Simulation [TIER 1.5] — PENDING
 
