@@ -6,7 +6,7 @@ Goal: SkyLoom inter-agent protocol, resilient mesh, asymmetric negotiation (awar
 ## Phase Registry
 - Phase 1: SkyLoom Protocol Specification & Core ASL Wire Contract [TIER 1.5] — DONE
 - Phase 2: Multi-Agent Mesh Topology & Transport Router [TIER 1.5] — DONE
-- Phase 3: Asymmetric Negotiation Engine & Polyglot Adapter (Aware vs Unaware)
+- Phase 3: Asymmetric Negotiation Engine & Polyglot Adapter (Aware vs Unaware) [TIER 1.5] — DONE
 - Phase 4: Fault Tolerance, Lonely-Agent Mailbox & Heartbeat Guard
 - Phase 5: SkyLoom MCP Server & Universal Agent Skill
 - Phase 6: CLI Integration (`asl loom`) & Interactive Web Showcase Visualizer

@@ -7,3 +7,4 @@ export * from './types.js';
 export * from './codec.js';
 export * from './mesh.js';
 export * from './transport.js';
+export * from './negotiator.js';
