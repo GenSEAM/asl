@@ -1,7 +1,7 @@
 # Status — skyloom-protocol-v1
 
-- Current Phase: Phase 2 (Multi-Agent Mesh Topology & Transport Router)
-- Status: Phase 1 Completed & Verified
+- Current Phase: Phase 3 (Asymmetric Negotiation Engine & Polyglot Adapter)
+- Status: Phase 2 Completed & Verified
 - Completed:
-  - Iteration initialization & archiving of `asl-core-v1`
-  - Phase 1: SkyLoom Protocol Specification (`docs/SKYLOOM_SPEC.md`), ASL Wire Contract (`packages/asl-skyloom/src/core/skyloom.agentscript`), Triple-Dialect Codec & tests
+  - Phase 1: Protocol Specification & ASL Wire Contract & Codecs
+  - Phase 2: Multi-Agent Mesh Topology Router, Dynamic Discovery, Channel Pub/Sub, Transports (`packages/asl-skyloom/src/mesh.ts`, `src/transport.ts`)
