@@ -31,3 +31,9 @@ This file groups d/c/r/l entries for the dual-projection architecture and AST re
 - **Status**: Final
 - **Cluster**: lang/projection
 - **Description**: Autonomous agent development requires complete semantic transparency rather than defensive OOP encapsulation. Internal mutable state, private getters/setters, and inheritance trees induce severe model hallucinations and desynchronization. AgentScript standardizes on transparent data boundaries: records (`defschema`) expose explicit typed fields without hidden properties, encapsulation is enforced purely at module export lists (`:export`), effect boundaries are explicitly tracked via `!`, and dynamic behaviors are composed via pure higher-order functions. This guarantees that an agent can parse, verify, and safely reason over any data structure in a single autoregressive pass.
+
+### [d-676f] Agent-Centric Efficiency: Semantic HTML/DOM Extraction & Hierarchical Knowledge Compaction
+- **Date**: 2026-09-02
+- **Status**: Final
+- **Cluster**: lang/projection
+- **Description**: Autonomous agent workflows suffer severe attentional degradation and token exhaustion when ingesting raw, verbose HTML markup or unindexed file dumps. AgentScript standardizes on semantic compaction across three foundational layers: (1) Semantic DOM/HTML Processing (`packages/asl-vdom`, `asl-browser-plugin`), where noisy markup is compressed into intent-first S-expressions preserving accessibility trees, component state, and element bounds with $\ge 75\%$ prompt token reduction; (2) Hierarchical Knowledge Matrix (`packages/asl-mem`, `asl-search`), which indexes codebase entities into lightweight in-memory Wasm vector stores (0.038ms latency) to return compact context digests rather than full file dumps; (3) Intent-First Element Control, allowing agents to manipulate, inspect, and test UI components by functional contract rather than brittle CSS/XPath selectors.
