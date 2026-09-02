@@ -64,7 +64,7 @@ export const Ecosystem: React.FC = () => (
     <SectionHeader
       id="toolchain-title"
       index="01"
-      eyebrow="Universal Interoperability"
+      eyebrow="Multi-Runtime Interoperability"
       title="One language. Compatible with every ecosystem your agents touch."
       lead="Agents should not have to rewrite their logic for every deployment target. AgentScript compiles deterministically into native binaries, web sandboxes, and host scripting languages with mathematically proven equivalence."
     />
@@ -115,7 +115,7 @@ export const Ecosystem: React.FC = () => (
           </div>
           <h4 className="font-semibold text-ink text-body">2. Canonical Lowering</h4>
           <p className="mt-1.5 text-meta text-ink-2 leading-relaxed">
-            Universal AST lowering translates the program into the host target while preserving exact formal semantics.
+            Multi-target AST lowering translates the program into the host target while preserving exact formal semantics.
           </p>
         </div>
 

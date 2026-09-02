@@ -45,7 +45,7 @@ export const Hero: React.FC = () => {
             <h1 className="text-display font-semibold text-ink text-balance tracking-tight leading-[1.08]">
               The Native Language for Autonomous Agents.{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-purple-300 to-indigo-300">
-                Universal, Safe & Token-Efficient.
+                Multi-Runtime, Portable & Token-Efficient.
               </span>
             </h1>
 
@@ -155,7 +155,7 @@ export const Hero: React.FC = () => {
               {/* Install Terminal Box */}
               <div className="mt-5">
                 <label htmlFor="install-input" className="font-mono text-micro uppercase text-ink-3 font-semibold block mb-2">
-                  Universal CLI Installation
+                  Multi-Platform CLI Installation
                 </label>
                 <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-ground border border-line focus-within:border-signal/50 transition-colors">
                   <span className="font-mono text-meta text-signal font-semibold select-none pl-2">$</span>
