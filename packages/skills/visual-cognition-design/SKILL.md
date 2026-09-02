@@ -20,9 +20,10 @@ description: The ASL design system — cool graphite monochrome, one purple sign
 - [ ] No arbitrary values — `text-[…]`, `rounded-[…]`, `p-[…]`. If a step is missing, add it to
       `tailwind.config.js`.
 - [ ] Radius is `2xl` or `full`. Nothing else.
-- [ ] `signal` appears only on parentheses, on the one live state in a set, and on `$`.
-- [ ] The accent is flat. No gradient-filled text, no second accent hue, no glow, no
-      glassmorphism, no photographic background wash.
+- [ ] `signal` appears only on the one live state in a set, on `$`, and on a section index.
+- [ ] The section argues from the problem and the outcome, not from a source listing.
+- [ ] The accent is flat. No gradient-filled text, no second accent hue, no blurred glow orb,
+      no glassmorphism, no photographic background wash, nothing animating perpetually.
 - [ ] Section headers alternate `align` so consecutive sections do not share a silhouette.
 - [ ] Every claim on screen traces to a gate in `ROADMAP.md`.
 - [ ] Content is readable without clicking. No tab strip, no accordion, no filter.

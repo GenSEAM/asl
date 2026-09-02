@@ -61,7 +61,7 @@ export const TheAgentWay: React.FC = () => (
           {/* The live era is marked on the rule itself, not by tinting its card. */}
           {e.current && (
             <span
-              className="absolute -top-[3px] left-0 lg:left-8 w-8 h-[5px] rounded-full bg-signal"
+              className="absolute -top-[3px] left-0 lg:left-8 w-8 h-1 rounded-full bg-signal"
               aria-hidden
             />
           )}

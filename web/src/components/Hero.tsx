@@ -30,19 +30,16 @@ export const Hero: React.FC = () => {
 
   return (
     <section id="top" className="relative bg-ground pt-36 pb-20 sm:pt-44 sm:pb-28 overflow-hidden bg-dot-grid">
-      {/* Subtle Atmospheric Lighting */}
-      <div className="glow-orb -top-40 -left-40 w-96 h-96" aria-hidden="true" />
-      <div className="glow-orb top-1/2 -right-40 w-[30rem] h-[30rem]" aria-hidden="true" />
 
       <div className="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-12 items-center">
           <div className="lg:col-span-6">
             <span className="inline-flex items-center gap-2.5 px-3.5 py-1 rounded-full border border-line bg-surface/80 backdrop-blur-md font-mono text-micro font-medium uppercase text-ink-3 shadow-e1">
-              <span className="w-2 h-2 rounded-full bg-signal animate-pulse" aria-hidden />
+              <span className="w-2 h-2 rounded-full bg-signal" aria-hidden />
               The Language for Autonomous Agents
             </span>
 
-            <h1 className="mt-7 text-display font-bold text-ink text-balance tracking-tight">
+            <h1 className="mt-7 text-display font-semibold text-ink text-balance tracking-tight">
               Code that agents write right the
               <span className="text-signal"> first time.</span>
             </h1>
@@ -75,7 +72,7 @@ export const Hero: React.FC = () => {
               <button
                 type="button"
                 onClick={copy}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-inset font-mono text-meta text-ink hover:text-signal transition-colors"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-inset font-mono text-meta text-ink hover:text-signal transition-colors"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-signal" aria-hidden /> : <Copy className="w-3.5 h-3.5" aria-hidden />}
                 {copied ? 'Copied' : failed ? 'Select it' : 'Copy'}
@@ -85,14 +82,12 @@ export const Hero: React.FC = () => {
 
           {/* Architectural Telemetry Cockpit */}
           <div className="lg:col-span-6 lg:-mr-4 xl:-mr-8">
-            <div className="relative rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3 overflow-hidden p-6 sm:p-8">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-signal/5 rounded-full blur-3xl pointer-events-none" />
-
-              <div className="flex items-center justify-between pb-6 border-b border-line">
+            <div className="relative rounded-2xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3 overflow-hidden p-6 sm:p-8">
+                            <div className="flex items-center justify-between pb-6 border-b border-line">
                 <div className="flex items-center gap-3.5">
                   <Emblem className="w-9 h-9 text-ink" />
                   <div>
-                    <h2 className="font-sans font-bold text-ink text-base">AgentScript Core</h2>
+                    <h2 className="font-sans font-semibold text-ink text-base">AgentScript Core</h2>
                     <p className="font-mono text-micro uppercase text-ink-3">Generation Engine</p>
                   </div>
                 </div>
@@ -104,49 +99,49 @@ export const Hero: React.FC = () => {
               <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
-                    <Zap className="w-4 h-4 text-signal" />
+                    <Zap className="w-4 h-4 text-ink-3" />
                     <p className="font-mono text-micro uppercase font-medium text-ink-3">Grammar Safety</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">Deterministic</p>
+                  <p className="mt-2 text-h3 font-semibold text-ink">Deterministic</p>
                   <p className="mt-1 text-meta text-ink-2">Strict balanced structure. Zero indentation bugs or ambiguous syntax trees.</p>
                 </div>
 
                 <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
-                    <Layers className="w-4 h-4 text-signal" />
+                    <Layers className="w-4 h-4 text-ink-3" />
                     <p className="font-mono text-micro uppercase font-medium text-ink-3">Context Efficiency</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">Ultra-Compact</p>
+                  <p className="mt-2 text-h3 font-semibold text-ink">Ultra-Compact</p>
                   <p className="mt-1 text-meta text-ink-2">Drastically lower token overhead compared to verbose code or nested JSON.</p>
                 </div>
 
                 <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
-                    <ShieldCheck className="w-4 h-4 text-signal" />
+                    <ShieldCheck className="w-4 h-4 text-ink-3" />
                     <p className="font-mono text-micro uppercase font-medium text-ink-3">Execution</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">Verified</p>
+                  <p className="mt-2 text-h3 font-semibold text-ink">Verified</p>
                   <p className="mt-1 text-meta text-ink-2">Programs produce consistent semantics regardless of the deployment target.</p>
                 </div>
 
                 <div className="p-4 rounded-2xl border border-line bg-ground/70 backdrop-blur-sm">
                   <div className="flex items-center gap-2 text-ink">
-                    <Cpu className="w-4 h-4 text-signal" />
+                    <Cpu className="w-4 h-4 text-ink-3" />
                     <p className="font-mono text-micro uppercase font-medium text-ink-3">Toolchain</p>
                   </div>
-                  <p className="mt-2 text-h3 font-bold text-ink">Universal</p>
+                  <p className="mt-2 text-h3 font-semibold text-ink">Universal</p>
                   <p className="mt-1 text-meta text-ink-2">Compiles seamlessly to native binaries, web runtimes, and agent tools.</p>
                 </div>
               </div>
 
               <div className="mt-6 pt-5 border-t border-line flex items-center justify-between">
                 <div className="flex items-center gap-2 font-mono text-micro uppercase text-ink-3">
-                  <Sparkles className="w-3.5 h-3.5 text-signal" />
+                  <Sparkles className="w-3.5 h-3.5 text-ink-3" />
                   <span>Target Platforms</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {TARGETS.map((t) => (
-                    <span key={t} className="font-mono text-micro text-ink-2 px-2 py-0.5 rounded-md bg-inset border border-line">
+                    <span key={t} className="font-mono text-micro text-ink-2 px-2 py-0.5 rounded-full bg-inset border border-line">
                       {t}
                     </span>
                   ))}

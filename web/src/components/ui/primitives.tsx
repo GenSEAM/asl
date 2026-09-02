@@ -58,23 +58,3 @@ export const SectionHeader: React.FC<{
   </header>
 );
 
-/*
-  Renders a source line with the parentheses carrying the signal colour — the brand idea applied
-  where it is also functional, since balance is the property the language guarantees.
-*/
-export const Sexpr: React.FC<{ code: string; className?: string }> = ({ code, className = '' }) => {
-  const parts = code.split(/([()[\]])/g);
-  return (
-    <code className={`font-mono whitespace-pre ${className}`}>
-      {parts.map((p, i) =>
-        /^[()[\]]$/.test(p) ? (
-          <span key={i} className="paren">
-            {p}
-          </span>
-        ) : (
-          <span key={i}>{p}</span>
-        ),
-      )}
-    </code>
-  );
-};

@@ -46,7 +46,9 @@ for (const [name, sel] of [['light', ':root'], ['dark', '\\.dark']]) {
   const lstar = (c) => { const y = lum(c); return y > 0.008856 ? 116 * Math.cbrt(y) - 16 : 903.3 * y; };
   for (const [a, b] of layers) {
     const d = lstar(t[a]) - lstar(t[b]);
-    console.log(`     ΔL* ${a} over ${b}: ${d.toFixed(1)}  (contrast ${ratio(t[a], t[b]).toFixed(2)}:1)`);
+    const sep = Math.abs(d) >= 2;
+    if (!sep) bad++;
+    console.log(`${sep ? '    ' : 'FAIL'} ΔL* ${a} over ${b}: ${d.toFixed(1)}  (contrast ${ratio(t[a], t[b]).toFixed(2)}:1, need |ΔL*| >= 2)`);
   }
 }
 console.log(`\n${bad} failing pairings`);

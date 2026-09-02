@@ -89,6 +89,6 @@ export const Emblem: React.FC<{ className?: string }> = ({ className = 'w-24 h-2
 export const Wordmark: React.FC<{ className?: string }> = ({ className = '' }) => (
   <span className={`flex items-center gap-2.5 ${className}`}>
     <Logo className="w-7 h-7 text-ink" />
-    <span className="font-sans font-bold tracking-tight text-ink text-brand text-lg">ASL</span>
+    <span className="font-sans font-semibold tracking-tight text-ink text-brand text-lg">ASL</span>
   </span>
 );

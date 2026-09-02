@@ -8,38 +8,38 @@
 */
 @layer base {
   :root {
-    --ground: 248 248 250;
-    --sunken: 240 240 244;
+    --ground: 249 248 249;
+    --sunken: 241 239 240;
     --surface: 255 255 255;
-    --inset: 243 243 247;
+    --inset: 247 246 246;
 
-    --line: 228 228 234;
-    --line-strong: 142 142 152;
+    --line: 232 227 229;
+    --line-strong: 151 135 141;
 
-    --ink: 18 18 22;
-    --ink-2: 82 82 94;
-    --ink-3: 110 110 122;
+    --ink: 22 18 20;
+    --ink-2: 87 76 81;
+    --ink-3: 111 98 104;
 
     /* Architectural Designer Fuchsia */
-    --signal: 214 31 105;
-    --signal-soft: 236 72 138;
+    --signal: 197 24 96;
+    --signal-soft: 224 62 130;
 
     --shadow-hue: 330 15% 12%;
     --shadow-strength: 0.06;
   }
 
   .dark {
-    --ground: 12 12 14;
-    --sunken: 7 7 9;
-    --surface: 20 20 24;
-    --inset: 15 15 18;
+    --ground: 14 11 12;
+    --sunken: 5 3 4;
+    --surface: 24 19 21;
+    --inset: 17 13 15;
 
-    --line: 38 38 46;
-    --line-strong: 92 92 108;
+    --line: 48 39 43;
+    --line-strong: 109 93 100;
 
-    --ink: 242 242 246;
-    --ink-2: 168 168 180;
-    --ink-3: 132 132 146;
+    --ink: 244 241 242;
+    --ink-2: 177 165 170;
+    --ink-3: 145 131 137;
 
     /* Luminous Designer Fuchsia */
     --signal: 240 56 132;
@@ -90,7 +90,7 @@
 }
 
 @layer components {
-  .paren { color: rgb(var(--signal)); }
+  /* A hairline that fades at both ends, so a full-bleed rule never reads as a hard band. */
   .rule-fade {
     height: 1px;
     background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.4), transparent);
@@ -99,15 +99,6 @@
   .bg-dot-grid {
     background-image: radial-gradient(rgb(var(--line-strong) / 0.15) 1px, transparent 1px);
     background-size: 24px 24px;
-  }
-
-  .glow-orb {
-    position: absolute;
-    border-radius: 9999px;
-    filter: blur(120px);
-    pointer-events: none;
-    opacity: 0.18;
-    background: radial-gradient(circle, rgb(var(--signal)), transparent 70%);
   }
 }
 

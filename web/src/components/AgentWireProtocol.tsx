@@ -31,7 +31,6 @@ const protocolStages = [
 
 export const AgentWireProtocol: React.FC = () => (
   <Section id="a2a-protocol" ground="sunken" labelledBy="a2a-title" className="bg-dot-grid overflow-hidden">
-    <div className="glow-orb top-1/3 -left-48 w-96 h-96" aria-hidden="true" />
 
     <SectionHeader
       id="a2a-title"
@@ -43,20 +42,20 @@ export const AgentWireProtocol: React.FC = () => (
     />
 
     <div className="max-w-5xl mx-auto">
-      <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3">
+      <div className="p-6 sm:p-8 rounded-2xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-8 border-b border-line">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-inset flex items-center justify-center border border-line">
-              <Bot className="w-5 h-5 text-signal" />
+              <Bot className="w-5 h-5 text-ink-2" />
             </div>
             <div>
-              <p className="font-sans font-bold text-ink">Planner Agent</p>
+              <p className="font-sans font-semibold text-ink">Planner Agent</p>
               <p className="font-mono text-micro uppercase text-ink-3">Orchestration & Task Flow</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5 px-4 py-1.5 rounded-full border border-line bg-ground">
-            <Activity className="w-4 h-4 text-signal animate-pulse" />
+            <Activity className="w-4 h-4 text-ink-3" />
             <span className="font-mono text-micro font-semibold uppercase text-ink">
               Structured Agent Protocol
             </span>
@@ -64,10 +63,10 @@ export const AgentWireProtocol: React.FC = () => (
 
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-inset flex items-center justify-center border border-line">
-              <Cpu className="w-5 h-5 text-signal" />
+              <Cpu className="w-5 h-5 text-ink-2" />
             </div>
             <div className="text-right">
-              <p className="font-sans font-bold text-ink">Execution Specialist</p>
+              <p className="font-sans font-semibold text-ink">Execution Specialist</p>
               <p className="font-mono text-micro uppercase text-ink-3">Target Runtime Worker</p>
             </div>
           </div>
@@ -81,10 +80,10 @@ export const AgentWireProtocol: React.FC = () => (
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-micro font-bold text-signal">{stage.step}</span>
+                  <span className="font-mono text-micro font-semibold text-signal">{stage.step}</span>
                   <span className="font-mono text-micro uppercase text-ink-3">{stage.tag}</span>
                 </div>
-                <h3 className="mt-3 font-sans font-bold text-ink text-base">{stage.title}</h3>
+                <h3 className="mt-3 font-sans font-semibold text-ink text-base">{stage.title}</h3>
                 <p className="mt-2 text-meta text-ink-2 leading-relaxed">{stage.desc}</p>
               </div>
             </div>
@@ -112,8 +111,8 @@ export const AgentWireProtocol: React.FC = () => (
 
           <div className="p-6 rounded-2xl border border-line bg-surface shadow-e1">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-micro uppercase text-signal font-semibold flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-signal" />
+              <span className="font-mono text-micro uppercase text-ink-2 font-semibold flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-ink-3" />
                 Structured Machine Frame
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-signal/10 text-signal font-mono text-micro font-semibold">

@@ -26,7 +26,10 @@ $PYTHON prelude/generate.py --check
 echo "--> 4/5: Semantic Type & Scope Checker Gate (checker/gate.py)..."
 $PYTHON checker/gate.py
 
-echo "--> 5/5: Web Bundle & Deployment Pre-Flight (tools/deploy_check.py)..."
+echo "--> 5/6: Design Token Contrast & Layer Separation (web/scripts/check-tokens.mjs)..."
+( cd web && node scripts/check-tokens.mjs > /dev/null )
+
+echo "--> 6/6: Web Bundle & Deployment Pre-Flight (tools/deploy_check.py)..."
 $PYTHON tools/deploy_check.py
 
 echo "=== [ASL Pre-Commit Gates] ALL GATES PASSED CLEANLY ==="

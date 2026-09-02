@@ -5,20 +5,28 @@ from drifting into four private conventions.
 
 ## 1. The idea
 
-Cool graphite monochrome. Hue is not decoration here — the only chromatic element on the page is
-the purple `signal`, and it is spent on three things and nothing else:
+Graphite monochrome at the accent's own hue. Hue is not decoration here — the only chromatic
+element on the page is the fuchsia `signal` (335°), and it is spent on three things and nothing
+else:
 
-1. the parentheses in every code sample,
-2. the one live state in a set (the current era, the active protocol),
-3. the `$` in a shell line.
+1. the one live state in a set (the current era, the active protocol),
+2. the `$` in a shell line,
+3. the numbered index on a section header.
 
-The neutrals carry a few percent of the same hue, which is what stops a saturated accent from
+Every neutral is that same 335°, held at six to twelve percent saturation — the greys are
+derived from the accent, not picked beside it. That is what stops a saturated accent from
 reading as a sticker applied to a grey page. What is out permanently is the *combination* that
 marks a generated page: violet-to-cyan gradients, clipped-gradient headlines and neon glow. A
 single flat accent is not that.
 
 The mark is `( • )` — two parentheses around one evaluated core, the smallest well-formed
-S-expression. It is also why the accent lands on parens.
+S-expression.
+
+**The page sells the outcome, not the syntax.** A visitor is buying what the language removes —
+repair loops, ambiguous structure, a program that means something different on the next runtime —
+not a look at its grammar. Sections state the problem and what it costs, then what the language
+does about it. Source listings belong in the docs; the public surface carries at most a shell
+line.
 
 ## 2. Tokens
 
@@ -33,11 +41,12 @@ name a role and never write `dark:`.** Adding a `dark:` variant to a component i
 | `inset` | A well recessed into a surface — code blocks, nested fields. |
 | `line` / `line-strong` | Hairline; `line-strong` for anything bounding a control. |
 | `ink` / `ink-2` / `ink-3` | Primary, secondary, meta. Never pure black or pure white. |
-| `signal` | The purple. See §1 for the three places it is allowed. |
+| `signal` | The fuchsia. See §1 for the three places it is allowed. |
 
-`npm run check:tokens` (from `web/`) must report **0 failing
-pairings**: every ink-on-ground combination at 4.5:1, `line-strong` at 3:1, and each layer
-separated by ΔL\* ≥ 2.
+`npm run check:tokens` (from `web/`) must report **0 failing pairings**: every ink-on-ground
+combination at 4.5:1, `line-strong` at 3:1, and each layer separated by |ΔL\*| ≥ 2. It runs in
+the pre-commit chain (`tools/hooks/pre-commit`, installed to `.git/hooks/`) as gate 5 of 6 — a
+palette change that skips it is how a red one lands.
 
 ## 3. Scales
 
@@ -59,7 +68,6 @@ the scale was missing a step — add the step instead.
 - `SectionHeader` — numbered eyebrow, title, lead. `align` is the only rhythm control a section
   gets; alternating left/centre is what stops stacked sections reading as one template.
 - `Eyebrow` — the numbered index rule.
-- `Sexpr` — renders source with the parentheses carrying `signal`.
 - `Logo` / `Wordmark`.
 
 A primitive with no callers gets deleted, not kept for later.
@@ -71,6 +79,8 @@ A primitive with no callers gets deleted, not kept for later.
 - **Every number on the page must be traceable to a gate in `ROADMAP.md`.** Benchmark figures
   with no measurement behind them are not a design choice, they are a false claim.
 - **One focus treatment** (`:focus-visible` in `index.css`) for the whole product.
-- **`prefers-reduced-motion` is honoured globally.** Nothing animates perpetually.
-- **No decorative bitmaps.** A photographic wash reads as grey haze on a light ground; atmosphere
-  is drawn with a gradient, and the hero visual is a specimen of real corpus source.
+- **`prefers-reduced-motion` is honoured globally.**
+- **No decorative bitmaps, no glow.** A photographic wash reads as haze on a light ground, and a
+  blurred accent orb reads as a stain on it. Atmosphere comes from layering and the dot grid.
+- **Nothing animates perpetually.** No `animate-pulse` on a status dot, no spinner that is not
+  reporting real progress.

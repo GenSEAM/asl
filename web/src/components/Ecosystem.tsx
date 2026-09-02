@@ -33,7 +33,6 @@ const surfaces = [
 
 export const Ecosystem: React.FC = () => (
   <Section id="toolchain" labelledBy="toolchain-title" className="bg-dot-grid overflow-hidden">
-    <div className="glow-orb top-1/2 -right-48 w-96 h-96" aria-hidden="true" />
 
     <SectionHeader
       id="toolchain-title"
@@ -44,27 +43,27 @@ export const Ecosystem: React.FC = () => (
     />
 
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,22rem)_1fr] gap-10 lg:gap-8 items-center">
-      <div className="rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-8 shadow-e3">
+      <div className="rounded-2xl border border-line bg-surface/90 backdrop-blur-xl p-8 shadow-e3">
         <div className="flex items-center justify-between pb-4 border-b border-line">
           <span className="font-mono text-micro uppercase text-ink-3">Core Thesis</span>
-          <span className="font-mono text-micro text-signal uppercase font-bold">Universal Core</span>
+          <span className="font-mono text-micro text-ink-3 uppercase font-semibold">Universal Core</span>
         </div>
         <div className="mt-6 space-y-3">
-          <h3 className="text-h3 font-bold text-ink">Single Source of Truth</h3>
+          <h3 className="text-h3 font-semibold text-ink">Single Source of Truth</h3>
           <p className="text-body text-ink-2 leading-relaxed">
             An agent generates code in one concise, unambiguous representation. The compiler translates it to the exact target environment needed.
           </p>
         </div>
         <div className="mt-8 pt-5 border-t border-line flex items-center justify-between font-mono text-micro uppercase">
           <span className="text-ink-3">Guarantee</span>
-          <span className="text-signal font-semibold flex items-center gap-1.5">
+          <span className="text-ink-2 font-semibold flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Verified Equivalence
           </span>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-line bg-surface/60 backdrop-blur-xl p-6 sm:p-8">
+      <div className="rounded-2xl border border-line bg-surface/60 backdrop-blur-xl p-6 sm:p-8">
         <p className="font-mono text-micro uppercase text-ink-3 font-semibold pb-4 border-b border-line">
           Target Environments
         </p>
@@ -83,17 +82,17 @@ export const Ecosystem: React.FC = () => (
       {surfaces.map((s) => (
         <div
           key={s.name}
-          className="p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-md shadow-e1 hover:border-line-strong transition-all flex flex-col justify-between"
+          className="p-7 rounded-2xl border border-line bg-surface/80 backdrop-blur-md shadow-e1 hover:border-line-strong transition-all flex flex-col justify-between"
         >
           <div>
             <div className="flex items-center gap-2.5">
-              <s.icon className="w-5 h-5 text-signal" />
-              <h3 className="text-h3 font-bold text-ink">{s.name}</h3>
+              <s.icon className="w-5 h-5 text-ink-3" />
+              <h3 className="text-h3 font-semibold text-ink">{s.name}</h3>
             </div>
             <p className="mt-4 text-body text-ink-2 leading-relaxed">{s.body}</p>
           </div>
           <div className="mt-6 pt-5 border-t border-line">
-            <code className="block font-mono text-meta text-ink-2 px-3 py-2 rounded-xl bg-ground border border-line">
+            <code className="block font-mono text-meta text-ink-2 px-3 py-2 rounded-2xl bg-ground border border-line">
               <span className="text-signal font-semibold">$ </span>
               {s.cmd}
             </code>
