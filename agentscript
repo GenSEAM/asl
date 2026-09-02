@@ -139,6 +139,12 @@ def cmd_clone(args) -> int:
     return clone_check_cli(paths, threshold=threshold, json_mode=getattr(args, "json", False))
 
 
+def cmd_sql(args) -> int:
+    """Run native cross-dialect SQL query builder, parameterized renderer, and DDL generator."""
+    from tools.sql_cli import run_sql_cli
+    return run_sql_cli(args)
+
+
 sys.path.insert(0, str(ROOT / "backend"))
 
 
@@ -627,6 +633,17 @@ def main() -> int:
     p.add_argument("--threshold", type=float, default=0.15, help="duplication ratio threshold (default: 0.15)")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_clone)
+
+    p = sub.add_parser("sql", aliases=["query", "db"],
+                       help="native cross-dialect SQL query builder, parameterized renderer, and DDL generator")
+    p.add_argument("action", nargs="?", default="demo", choices=["demo", "render", "ddl"], help="action to execute")
+    p.add_argument("--dialect", default="postgres", choices=["postgres", "sqlite", "mysql", "clickhouse"], help="target SQL dialect")
+    p.add_argument("--query", "-q", default=None, help="ASL S-expression query string")
+    p.add_argument("--table", default="users", help="table name for DDL")
+    p.add_argument("--fields", default="id:int64:pk,name:text,created_at:timestamp", help="comma-separated field definitions")
+    p.add_argument("--demo", action="store_true", help="run SQL studio demonstration")
+    p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    p.set_defaults(fn=cmd_sql)
 
     p = sub.add_parser("test", help="run native in-memory and WebAssembly test runner")
     p.add_argument("paths", nargs="*", type=Path, help="test files or directories to execute")
