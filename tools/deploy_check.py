@@ -15,10 +15,23 @@ def check_deployment() -> bool:
     errors = []
     print("--- Running Deployment Pre-Flight Checks ---")
 
-    # 1. Run TypeScript typecheck on web
-    print("--> Typechecking web app (tsc -p web/tsconfig.json)...")
+    # 1. Check pnpm lockfile integrity (frozen-lockfile for Cloudflare Pages)
+    print("--> Checking pnpm frozen-lockfile integrity...")
     env = os.environ.copy()
     env["PATH"] = f"/usr/local/bin:{env.get('PATH', '')}"
+    pnpm_bin = "pnpm"
+    r = subprocess.run(
+        [pnpm_bin, "install", "--frozen-lockfile"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env=env
+    )
+    if r.returncode != 0:
+        errors.append(f"pnpm lockfile is outdated (Cloudflare Pages CI will fail):\n{r.stderr or r.stdout}")
+
+    # 2. Run TypeScript typecheck on web
+    print("--> Typechecking web app (tsc -p web/tsconfig.json)...")
     node_bin = "/usr/local/bin/node" if Path("/usr/local/bin/node").exists() else "node"
     tsc_script = ROOT / "web" / "node_modules" / "typescript" / "bin" / "tsc"
     vite_script = ROOT / "web" / "node_modules" / "vite" / "bin" / "vite"
