@@ -130,3 +130,55 @@ def test_cli_loom_handoff_human():
     assert proc.returncode == 0
     assert "Context-Isolated Agent Handoff" in proc.stdout
     assert "(loom:handoff" in proc.stdout
+
+
+def test_cli_loom_transcode_bidirectional():
+    raw_nano = 'SK1|1|msg-transcode-01|alice|bob|DATA|tasks/compile|1788350000000||{"action":"build"}'
+    
+    # Nano -> Verbose
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "agentscript"),
+            "loom",
+            "transcode",
+            "--frame",
+            raw_nano,
+            "--to-dialect",
+            "verbose",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["status"] == "OK"
+    assert data["target"] == "asl/v1"
+    verbose_wire = data["wireFrame"]
+    assert "(loom:frame" in verbose_wire
+    assert ':type "DATA"' in verbose_wire
+
+    # Verbose -> Nano
+    proc_rev = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "agentscript"),
+            "loom",
+            "transcode",
+            "--frame",
+            verbose_wire,
+            "--to-dialect",
+            "nano",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    assert proc_rev.returncode == 0
+    data_rev = json.loads(proc_rev.stdout)
+    assert data_rev["status"] == "OK"
+    assert data_rev["target"] == "compact/v1"
+    assert data_rev["wireFrame"].startswith("SK1|1|msg-transcode-01|alice|bob|DATA|tasks/compile")

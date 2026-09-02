@@ -338,6 +338,14 @@ def cmd_loom(args) -> int:
             cmd=getattr(args, "cmd", None),
             json_mode=json_mode,
         )
+    elif action == "transcode":
+        from tools.skyloom_cli import transcode
+        raw_frame = getattr(args, "frame", None) or getattr(args, "message", "")
+        return transcode(
+            input_frame=raw_frame,
+            to_dialect=getattr(args, "to_dialect", "nano"),
+            json_mode=json_mode,
+        )
     return list_peers(json_mode=json_mode)
 
 
@@ -610,12 +618,14 @@ def main() -> int:
 
     p = sub.add_parser("loom", aliases=["skyloom"],
                        help="SkyLoom inter-agent resilient protocol, asymmetric mesh, and mailbox")
-    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "doctor", "mcp", "demo", "handoff", "yield", "spawn"],
-                   help="loom action (peers, send, mailbox, primer, doctor, mcp, demo, handoff, yield, spawn)")
+    p.add_argument("action", nargs="?", default="peers", choices=["peers", "send", "mailbox", "primer", "doctor", "mcp", "demo", "handoff", "yield", "spawn", "transcode"],
+                   help="loom action (peers, send, mailbox, primer, doctor, mcp, demo, handoff, yield, spawn, transcode)")
     p.add_argument("--to", dest="target", default="agent-planner", help="target agent ID")
     p.add_argument("--msg", dest="message", default="hello", help="message payload")
     p.add_argument("--from", dest="from_peer", default="agent-orchestrator", help="sender agent ID")
     p.add_argument("--dialect", default="auto", choices=["auto", "asl/v1", "asl/coord", "compact/v1", "polyglot/v1"], help="wire dialect")
+    p.add_argument("--to-dialect", dest="to_dialect", default="nano", choices=["nano", "verbose", "compact", "s-expr", "asl/v1", "compact/v1", "asl/coord"], help="target dialect for transcode")
+    p.add_argument("--frame", default=None, help="raw wire frame string for transcode")
     p.add_argument("--channel", default=None, help="topic channel")
     p.add_argument("--task", default="execute_task", help="task name for handoff")
     p.add_argument("--cwd", default=".", help="working directory scope for handoff/spawn")

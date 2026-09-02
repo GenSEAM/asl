@@ -36,7 +36,7 @@ export interface LoomHeader {
   id: string;
   from: string;
   to: string;
-  dialect: Dialect;
+  dialect?: Dialect;
   timestamp: number;
   replyTo?: string;
 }

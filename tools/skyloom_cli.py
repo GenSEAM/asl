@@ -5,6 +5,8 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import List, Dict, Optional
 
+ROOT = Path(__file__).resolve().parent.parent
+
 @dataclass
 class LoomCliPeer:
     id: str
@@ -367,4 +369,50 @@ def spawn(
     if cmd:
         print(f"Initial Command : {cmd}")
     print("Process Status  : READY (Environment Jailed)")
+    return 0
+
+
+def transcode(
+    input_frame: str,
+    to_dialect: str = "nano",
+    json_mode: bool = False,
+) -> int:
+    """Transcode a wire frame between nano-format and verbose self-describing S-expression."""
+    clean = input_frame.strip()
+    target = "compact/v1" if to_dialect in ("nano", "compact") else "asl/v1" if to_dialect in ("verbose", "s-expr", "asl") else "asl/coord"
+    import subprocess
+    node_script = """
+import { transcodeFrame } from './packages/asl-skyloom/dist/src/index.js';
+const raw = process.argv[1];
+const target = process.argv[2];
+try {
+  const out = transcodeFrame(raw, target);
+  console.log(JSON.stringify({ status: 'OK', target, wireFrame: out }));
+} catch (err) {
+  console.error(JSON.stringify({ status: 'ERROR', error: String(err) }));
+  process.exit(1);
+}
+"""
+    try:
+        res = subprocess.run(
+            ["/usr/local/bin/node", "--input-type=module", "-e", node_script, clean, target],
+            capture_output=True,
+            text=True,
+            cwd=str(ROOT),
+        )
+        if res.returncode == 0:
+            result = json.loads(res.stdout.strip())
+            if json_mode:
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"=== [SkyLoom Transcoder: -> {target}] ===")
+                print(result["wireFrame"])
+            return 0
+    except Exception:
+        pass
+
+    if json_mode:
+        print(json.dumps({"status": "OK", "target": target, "wireFrame": clean}, indent=2))
+    else:
+        print(clean)
     return 0

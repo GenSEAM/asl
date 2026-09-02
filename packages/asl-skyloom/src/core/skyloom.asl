@@ -1,6 +1,6 @@
 (module asl-skyloom/core
   :doc "SkyLoom protocol algebraic types and core frame logic."
-  :export [Dialect FrameType ErrorCode is-control-frame requires-ack error-code-to-int])
+  :export [Dialect FrameType ErrorCode is-control-frame requires-ack error-code-to-int is-nano-dialect default-wire-dialect])
 
 (defenum Dialect
   (:case native-asl    [] "ASL S-expression AST format")
@@ -63,3 +63,14 @@
     ((dead-letter)         1008)
     ((scope-violation)     1009)
     ((handoff-rejected)    1010)))
+
+(defun is-nano-dialect [(d Dialect)] -> Bool
+  :doc "Returns true if dialect is a dense nano-format (compact positional or coord AST)."
+  (match d
+    ((compact-token) true)
+    ((coord-asl)     true)
+    (_               false)))
+
+(defun default-wire-dialect [] -> Dialect
+  :doc "Returns the default primary wire dialect for all agent-to-agent transmissions."
+  (compact-token))

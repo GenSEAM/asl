@@ -15,6 +15,7 @@ const suites = [
   'negotiation_test.js',
   'resilience_test.js',
   'mcp_test.js',
+  'nano_enforcement_test.js',
 ];
 
 console.log('====================================================');

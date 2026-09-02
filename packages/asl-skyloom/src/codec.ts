@@ -480,10 +480,20 @@ export function detectDialect(raw: string): Dialect {
 }
 
 /**
+ * Checks if dialect is a dense nano-format.
+ */
+export function isNanoFormat(dialect: Dialect): boolean {
+  return dialect === 'compact/v1' || dialect === 'asl/coord';
+}
+
+/**
  * Universal Frame Encoder
+ * Strictly enforces nano-format (`compact/v1` or `asl/coord`) as the default wire dialect.
+ * Verbose S-expr (`asl/v1`) is retained for explicit diagnostics or introspection.
  */
 export function encodeFrame(frame: LoomFrame, targetDialect?: Dialect): string {
-  const dialect = targetDialect || frame.header.dialect || 'asl/v1';
+  const defaultDialect: Dialect = (frame.type === 'HANDOFF' || frame.type === 'YIELD') ? 'asl/coord' : 'compact/v1';
+  const dialect = targetDialect || frame.header.dialect || defaultDialect;
   switch (dialect) {
     case 'asl/coord':
       return encodeAslCoord({ ...frame, header: { ...frame.header, dialect: 'asl/coord' } });
@@ -513,4 +523,13 @@ export function decodeFrame(raw: string): LoomFrame {
     case 'polyglot/v1':
       return decodePolyglot(raw);
   }
+}
+
+/**
+ * Bidirectional Transcoder: Converts any wire frame into target dialect
+ * (e.g. nano-token <-> verbose S-expr).
+ */
+export function transcodeFrame(raw: string, targetDialect: Dialect): string {
+  const frame = decodeFrame(raw);
+  return encodeFrame(frame, targetDialect);
 }

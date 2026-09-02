@@ -1,10 +1,6 @@
-# Status — skyloom-handoff-v1
+# Status — asl-quality-tools-v1
 
-- Current Phase: All Phases Complete (1–5)
-- Status: Completed & Fully Verified
+- Current Phase: Phase 2 (Native ASL Linter & Smell Detector Engine)
+- Status: Phase 1 Completed & Verified
 - Completed:
-  - Phase 1: Coordination Dialect (`asl/coord`) & Algebraic Handoff Types
-  - Phase 2: Directory Scoping & Zero-Leak Mesh Firewall
-  - Phase 3: Context Snapshot Compression & Handoff Serializer
-  - Phase 4: CLI & Subprocess Worker Orchestration (`asl loom handoff` / `spawn`)
-  - Phase 5: Comparative Multi-Agent Token Benchmark & Web Showcase Simulation
+  - Phase 1: Nano-Format Default Wire Enforcement & Dual-Mode Bidirectional Transcoder

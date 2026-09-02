@@ -347,7 +347,8 @@ export class SkyLoomRouter extends EventEmitter {
 
     // Check dialect compatibility & auto-adapt if needed
     const targetDialects = targetConn.peer.dialects;
-    const frameDialect = frame.header.dialect;
+    const defaultDialect: Dialect = (frame.type === 'HANDOFF' || frame.type === 'YIELD') ? 'asl/coord' : 'compact/v1';
+    const frameDialect: Dialect = frame.header.dialect || defaultDialect;
     if (targetDialects.length > 0 && !targetDialects.includes(frameDialect)) {
       const preferred = targetDialects[0];
       const adaptedFrame: LoomFrame = {
