@@ -3,7 +3,7 @@ import { Hero } from '../components/Hero';
 import { KeyCapabilities } from '../components/KeyCapabilities';
 import { TheAgentWay } from '../components/TheAgentWay';
 import { AgentWireProtocol } from '../components/AgentWireProtocol';
-import { SkyLoomVisualizer } from '../components/SkyLoomVisualizer';
+import { HarnessToolkit } from '../components/HarnessToolkit';
 import { ModuleGraphVisualizer } from '../components/ModuleGraphVisualizer';
 import { Ecosystem } from '../components/Ecosystem';
 
@@ -13,7 +13,7 @@ export const HomeView: React.FC = () => (
     <KeyCapabilities />
     <TheAgentWay />
     <AgentWireProtocol />
-    <SkyLoomVisualizer />
+    <HarnessToolkit />
     <ModuleGraphVisualizer />
     <Ecosystem />
   </main>
