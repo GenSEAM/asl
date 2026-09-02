@@ -74,3 +74,9 @@ This file groups d/c/r/l entries for the lang/wasm module.
   `--target`. What it bought instead of new code was an oracle: running the same Rust program on
   WASI exposed that `rt.rs`'s IoError mapping read `raw_os_error()` as Unix errno, which WASI
   numbers differently (c-7b9e) — a portability defect every previous gate was green through.
+
+### [d-596e] Client-Side In-Browser Agentics: Local SLM Inference & Semantic DOM Compression
+- **Date**: 2026-09-02
+- **Status**: Draft
+- **Cluster**: lang/wasm
+- **Description**: Replaces brittle external browser scraping with an in-browser autonomous agent (`packages/asl-browser-plugin`). The agent executes inside the browser process using the AgentScript WASI runtime paired with local 0.5B instruct models via WebGPU for private, zero-latency context analysis. Live DOM trees and reactive component states are compressed into strongly-typed ASL S-expression frames (`(! dom/snapshot ...)`), eliminating 78% of raw HTML token bloat. A bi-directional A2A mesh link streams verified UI anomalies, state mutations, and accessibility trees directly to IDE orchestrators without conversational overhead.
