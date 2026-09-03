@@ -104,3 +104,24 @@
 - Checkable Criterion: `.venv/bin/python grammar/validate.py && .venv/bin/python tools/doc_examples.py --quiet && .venv/bin/python -m pytest tools/tests/test_native_parity.py -q`.
 - Pre-requisites verified: 399/399 parity tests pass, all 37 package sources parse natively.
 
+## Phase 7 completion 2026-09-03 — Lark retired from validation (@pcp:d-8d4c)
+- Tier 1 (Standard). Scope review `REVIEW-scope.md` → **reject** (4 blocking). All 4 accepted and
+  reconciled into `PLAN.md` v2 + `RECONCILIATION.md`:
+  F1 API is `native_render`/`NativeParserError`, not `native_parse`; F2 `validate.py` deletes the
+  whole Lark surface incl. `lark_spans`/`token_identity`/`PROBES` (the native reader emits no spans,
+  so the span-identity probes have no native side); F3 keep the verbose `defun` wrap in
+  `doc_examples.py`; F4 delete both Lark imports in the parity test.
+- Implemented (steps-implementer): `grammar/validate.py` compares tree-sitter vs `native_render`;
+  `tools/doc_examples.py` parses via `native_render`; `tools/tests/test_native_parity.py` drops the
+  Lark secondary arm. Checker/backends/fmt/linter/transcoder keep Lark until Phases 9–10 (out of scope).
+- Gates, all green (orchestrator re-ran the acceptance criterion, step-verifier ran the full battery):
+  validate 0 failures; doc_examples 31/15/0; parity 270 passed; closure 107/107; checker 0;
+  check_corpus 0; monomorphism 400 probes; differential 132+19 cases 0 disagreements;
+  pytest (backend/bench/checker/tools) 849 passed; pcp actualize 0 breaches; build:web ok.
+  Zero `lark` imports remain in the three validation files.
+- **Commit entanglement (3rd occurrence).** The parallel session swept `tools/doc_examples.py` into
+  `254908f` ("feat(plans): register asl-token-density-v1…"), leaving the rest of Phase 7 in `6fb458a`
+  ("feat(phase-7): migrate grammar validation and parity suite to native parser"). Work is intact and
+  green; the doc_examples.py change is mislabeled. Same failure mode as `152d1a1`/`c88c7ed`; left
+  un-rewritten pending owner decision — do not rewrite.
+
