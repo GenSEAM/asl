@@ -10,6 +10,10 @@ import {
   ChevronDown,
   X,
   ExternalLink,
+  Radio,
+  Rocket,
+  Compass,
+  Cpu,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { Wordmark } from './ui/Logo';
@@ -24,9 +28,17 @@ const navItems = [
   { label: 'Docs', href: '/docs', icon: BookOpen, desc: 'Specification & SQL studio' },
 ];
 
+const AUTOPILOT_MODES = [
+  { id: 'mars', label: 'Mars Sol-42 Relay', icon: Rocket, status: 'Active (Olympus Mons)' },
+  { id: 'swarm', label: 'Neural Swarm Mesh', icon: Radio, status: 'Synchronized (8 nodes)' },
+  { id: 'orbit', label: 'LEO Deep Autopilot', icon: Compass, status: 'Telemetry Nominal' },
+];
+
 export const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [easterEggActive, setEasterEggActive] = useState(false);
+  const [autopilotIndex, setAutopilotIndex] = useState(0);
   const curtainRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<HTMLButtonElement>(null);
   const touchStartY = useRef<number | null>(null);
@@ -82,6 +94,9 @@ export const Navbar: React.FC = () => {
     touchStartY.current = null;
   };
 
+  const currentMode = AUTOPILOT_MODES[autopilotIndex];
+  const ModeIcon = currentMode.icon;
+
   return (
     <>
       <div className="fixed top-3 left-0 right-0 z-50 flex justify-center px-2 sm:px-4 pointer-events-none">
@@ -91,14 +106,14 @@ export const Navbar: React.FC = () => {
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
-            className="w-full rounded-full border border-line/80 bg-surface/90 backdrop-blur-2xl px-2.5 sm:px-4 h-14 flex items-center justify-between shadow-e2 transition-all"
+            className="w-full rounded-full border border-line/80 bg-surface/90 backdrop-blur-2xl px-2.5 sm:px-4 h-14 flex items-center justify-between shadow-e2 transition-all relative"
           >
             {/* Logo / Wordmark */}
             <Link to="/" className="rounded-full shrink-0 flex items-center pr-1 sm:pr-2" title="aslang.dev home">
               <Wordmark />
             </Link>
 
-            {/* Navigation links: Compact icons on <900px, Icons + Labels on >=900px */}
+            {/* Navigation links: Compact icons on <1040px, Icons + Labels on >=1040px */}
             <nav aria-label="Main Navigation" className="flex items-center gap-1 sm:gap-1.5 shrink-0">
               {navItems.map((item) => {
                 const Icon = item.icon;
@@ -147,7 +162,7 @@ export const Navbar: React.FC = () => {
                 <span>llms.txt</span>
               </a>
 
-              {/* GitHub Repository Link: Icon-only below 900px, with label above */}
+              {/* GitHub Repository Link: Icon-only below 1040px, with label above */}
               <a
                 href="https://github.com/genseam/asl"
                 target="_blank"
@@ -170,23 +185,50 @@ export const Navbar: React.FC = () => {
             </div>
           </header>
 
-          {/* Curtain Pull-Down Handle hanging below the header */}
-          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto">
+          {/* Cosmic Orb & Emergent Arrow Pull-Down Handle */}
+          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-20">
             <button
               ref={handleRef}
               type="button"
               onClick={() => setIsOpen((prev) => !prev)}
-              aria-label={isOpen ? 'Close menu curtain' : 'Pull down full menu curtain'}
+              aria-label={isOpen ? 'Stow Navigation Matrix' : 'Deploy Autonomous Navigator & Mars Relay'}
               aria-expanded={isOpen}
-              className="group flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-surface/95 hover:bg-surface border border-line/80 shadow-md backdrop-blur-xl text-ink-3 hover:text-ink transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              title={isOpen ? 'Close curtain (Esc)' : 'Pull down full menu'}
+              className="group flex flex-col items-center cursor-pointer focus:outline-none"
+              title={isOpen ? 'Close curtain (Esc)' : 'Deploy Autonomous Navigation Matrix & Mars Relay'}
             >
-              <span className="w-4 h-0.5 rounded-full bg-ink-4 group-hover:bg-signal transition-colors" />
-              <ChevronDown
-                className={`w-3 h-3 transition-transform duration-300 ${
-                  isOpen ? 'rotate-180 text-signal' : 'group-hover:translate-y-0.5'
-                }`}
-              />
+              {/* Glowing Halo Aura on hover */}
+              <div className="absolute -inset-1 rounded-full bg-gradient-to-r from-rose-500/25 via-signal/35 to-amber-500/25 blur-md opacity-70 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+              {/* Celestial Orb (Mars / Cosmic Moon sphere) */}
+              <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-line-strong bg-surface p-0.5 shadow-e2 backdrop-blur-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:border-signal">
+                <div className="w-full h-full rounded-full overflow-hidden relative bg-gradient-to-br from-rose-500/50 via-purple-600/40 to-amber-500/40 flex items-center justify-center shadow-inner">
+                  {/* Planetary craters & coordinates SVG */}
+                  <svg viewBox="0 0 32 32" className="w-full h-full fill-none">
+                    <circle cx="16" cy="16" r="14" stroke="rgba(244,63,94,0.4)" strokeWidth="0.8" strokeDasharray="2 3" />
+                    <circle cx="10" cy="11" r="2.5" fill="rgba(251,146,60,0.35)" />
+                    <circle cx="21" cy="18" r="2" fill="rgba(192,132,252,0.4)" />
+                    <circle cx="14" cy="22" r="1.5" fill="rgba(244,63,94,0.35)" />
+                    <path d="M 5 17 Q 16 23 27 15" stroke="rgba(255,255,255,0.45)" strokeWidth="0.6" strokeDasharray="1 2" />
+                  </svg>
+
+                  {/* Inclined Orbital Satellite Ring */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-9 h-3.5 rounded-[100%] border border-signal/60 -rotate-25 scale-y-75 group-hover:border-signal transition-colors" />
+                  </div>
+
+                  {/* Satellite Beacon Dot */}
+                  <div className="absolute top-1 right-1.5 w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shadow-sm shadow-rose-400" />
+                </div>
+              </div>
+
+              {/* Emergent Arrow below the Orb */}
+              <div className="relative -mt-1.5 px-2 py-0.5 rounded-full bg-surface/95 border border-line/90 shadow-md backdrop-blur-xl flex items-center justify-center group-hover:border-signal/70 group-hover:bg-surface transition-all duration-300">
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-signal transition-transform duration-300 ${
+                    isOpen ? 'rotate-180 -translate-y-0.5' : 'translate-y-0 group-hover:translate-y-0.5 animate-bounce'
+                  }`}
+                />
+              </div>
             </button>
           </div>
 
@@ -194,24 +236,79 @@ export const Navbar: React.FC = () => {
           {isOpen && (
             <div
               ref={curtainRef}
-              className="pointer-events-auto mt-4 w-full rounded-3xl border border-line bg-surface/95 backdrop-blur-2xl p-4 sm:p-5 shadow-e3 transition-all duration-300 max-h-[82vh] overflow-y-auto"
+              className="pointer-events-auto mt-7 w-full rounded-3xl border border-line bg-surface/95 backdrop-blur-2xl p-4 sm:p-5 shadow-e4 transition-all duration-300 max-h-[82vh] overflow-y-auto"
             >
-              <div className="flex items-center justify-between pb-3 border-b border-line mb-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-signal animate-pulse" />
-                  <span className="font-mono text-micro uppercase tracking-wider text-ink-3 font-semibold">
-                    AgentScript Navigator
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-lg text-ink-3 hover:text-ink hover:bg-inset transition-colors"
-                  aria-label="Close curtain"
+              {/* Mars Autopilot Header & Easter Egg Banner */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-line mb-4">
+                {/* Left: Mars Relay & Interactive Coordinates */}
+                <div
+                  onClick={() => setEasterEggActive((prev) => !prev)}
+                  className="flex items-center gap-2.5 cursor-pointer group px-2 py-1 -ml-1 rounded-xl hover:bg-inset transition-colors"
+                  title="Click to toggle Mars Telemetry Console & Autopilot link"
                 >
-                  <X className="w-4 h-4" />
-                </button>
+                  <div className="relative flex items-center justify-center">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping absolute" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 relative" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 font-mono text-micro uppercase tracking-wider text-ink font-semibold">
+                      <span>Mars Sol-42 Orbit Relay</span>
+                      <span className="px-1.5 py-0.2 rounded bg-rose-500/10 text-rose-400 text-[10px] font-bold border border-rose-500/20">
+                        18.65°N 226.2°E
+                      </span>
+                    </div>
+                    <div className="font-sans text-[11px] text-ink-3 group-hover:text-signal transition-colors">
+                      Autonomous Flight Computer // Tap to open telemetry ⚡
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Interactive Autopilot Mode Switcher */}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAutopilotIndex((prev) => (prev + 1) % AUTOPILOT_MODES.length)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-signal/30 bg-signal/10 hover:bg-signal/20 text-signal font-mono text-micro font-medium transition-all cursor-pointer"
+                    title="Switch Agent Autopilot Mode"
+                  >
+                    <ModeIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden xs:inline">{currentMode.label}</span>
+                    <span className="xs:hidden">Autopilot</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsOpen(false)}
+                    className="p-1.5 rounded-lg text-ink-3 hover:text-ink hover:bg-inset transition-colors"
+                    aria-label="Close curtain"
+                    title="Close (Esc)"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
+
+              {/* Easter Egg: Autonomous Telemetry & Route Matrix */}
+              {easterEggActive && (
+                <div className="mb-4 p-3.5 rounded-2xl bg-ground/80 border border-signal/30 font-mono text-micro text-ink-2 space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between text-signal font-semibold">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="w-3.5 h-3.5" />
+                      <span>AUTONOMOUS AGENT AUTOPILOT // SOL-42 OLYMPUS MONS STATION</span>
+                    </div>
+                    <span className="text-meta text-emerald-400">STATUS: ONLINE (0.00% TOKEN TAX)</span>
+                  </div>
+                  <p className="text-ink-3 text-meta leading-relaxed">
+                    Agent trajectory locked: <span className="text-ink font-medium">Earth (aslang.dev) ➔ WASI In-Memory Sandbox ➔ SkyLoom Swarm ➔ Mars Outpost</span>.
+                    All 107 builtins verified. Memory matrix isolated via zero-leak sandboxing.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-4 text-ink-4 pt-1.5 border-t border-line/40 text-[10px]">
+                    <span>LATENCY: 0.04ms (In-Memory)</span>
+                    <span>CARRIER: ASL/Coord Protocol</span>
+                    <span>TARGET: Multi-Agent Mesh</span>
+                  </div>
+                </div>
+              )}
 
               {/* Rich navigation grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 mb-5">
@@ -223,9 +320,9 @@ export const Navbar: React.FC = () => {
                       to={item.href}
                       onClick={() => setIsOpen(false)}
                       className="flex items-start gap-3 p-3 rounded-2xl border border-line/60 bg-inset/40 hover:bg-inset hover:border-line text-ink transition-all group"
-                      activeClassName="!border-signal/50 !bg-signal/10"
+                      activeClassName="!border-signal/50 !bg-signal/10 shadow-sm"
                     >
-                      <div className="p-2 rounded-xl bg-surface border border-line text-ink-2 group-hover:text-signal transition-colors">
+                      <div className="p-2 rounded-xl bg-surface border border-line text-ink-2 group-hover:text-signal group-hover:scale-105 transition-all">
                         <Icon className="w-4 h-4" />
                       </div>
                       <div>
@@ -286,4 +383,5 @@ export const Navbar: React.FC = () => {
     </>
   );
 };
+
 
