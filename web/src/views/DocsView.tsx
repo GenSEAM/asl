@@ -16,41 +16,37 @@ import {
   Braces
 } from 'lucide-react';
 
-type LanguageTarget = 'nano' | 'verbose' | 'python' | 'rust' | 'typescript';
-type SqlTarget = 'asl' | 'sql' | 'python' | 'rust' | 'typescript';
-type DocTab = 'cli' | 'mesh' | 'stdlib' | 'data' | 'syntax' | 'control' | 'sql';
+type CodeTargetLang = 'python' | 'rust' | 'typescript' | 'go';
+type DataTargetFormat = 'json' | 'yaml';
+type SqlDialect = 'postgres' | 'mysql' | 'sqlite' | 'mssql' | 'oracle';
+type DocTab = 'cli' | 'mesh' | 'data' | 'sql' | 'syntax' | 'control' | 'stdlib';
 
-interface PolyglotSnippet {
+interface PolyglotCard {
+  id: string;
   title: string;
   description: string;
-  category: 'syntax' | 'control';
-  nano: string;
-  verbose: string;
+  asl: string;
   python: string;
   rust: string;
   typescript: string;
+  go: string;
 }
 
-const POLYGLOT_SNIPPETS: PolyglotSnippet[] = [
+const SYNTAX_CARDS: PolyglotCard[] = [
   {
-    category: 'syntax',
-    title: 'Schema Declaration & Immutable Product Types',
-    description: 'Structured records with typed fields. Transpiles to frozen dataclasses in Python, serde structs in Rust, and read-only interfaces in TypeScript.',
-    nano: `(dfs Token
+    id: 'schema-decl',
+    title: 'Schema Declaration & Typed Records',
+    description: 'Declarative immutable schemas with typed fields. Compiles into native product types across backends.',
+    asl: `(dfs Token
   (:f id Str "Unique token identifier.")
   (:f exp I64 "Unix timestamp expiration."))
 
 (df create-token [(id Str) (ttl I64)] -> Token
   :d "Construct authenticated token record."
   (Token :id id :exp (+ 1700000000 ttl)))`,
-    verbose: `(defschema Token
-  (:field id Str "Unique token identifier.")
-  (:field exp I64 "Unix timestamp expiration."))
+    python: `from dataclasses import dataclass
 
-(defun create-token [(id Str) (ttl I64)] -> Token
-  :doc "Construct authenticated token record."
-  (Token :id id :exp (+ 1700000000 ttl)))`,
-    python: `@dataclass(frozen=True)
+@dataclass(frozen=True)
 class Token:
     """Unique token identifier."""
     id: str
@@ -78,13 +74,26 @@ pub fn create_token(id: String, ttl: i64) -> Token {
 
 export function createToken(id: string, ttl: bigint): Token {
   return { id, exp: 1700000000n + ttl };
+}`,
+    go: `package auth
+
+type Token struct {
+    ID  string \`json:"id"\`
+    Exp int64  \`json:"exp"\`
+}
+
+func CreateToken(id string, ttl int64) Token {
+    return Token{
+        ID:  id,
+        Exp: 1700000000 + ttl,
+    }
 }`
   },
   {
-    category: 'syntax',
+    id: 'sum-types',
     title: 'Closed Union Types (Sum Types / Enums)',
-    description: 'Exhaustive variants checked at compile time. Lowers to tagged unions in TypeScript, native enums in Rust, and variant classes in Python.',
-    nano: `(dfe ResultStatus
+    description: 'Exhaustive sum types checked at compile time. Lowers to tagged unions, rust enums, or Go interfaces.',
+    asl: `(dfe ResultStatus
   (:c ok [(val Str)] "Successful execution.")
   (:c timeout [(ms I64)] "Network timed out.")
   (:c denied [] "Access denied."))
@@ -92,17 +101,6 @@ export function createToken(id: string, ttl: bigint): Token {
 (df status-code [(s ResultStatus)] -> I64
   :d "Map status variant to HTTP status code."
   (mt s
-    ((ok _) 200)
-    ((timeout _) 504)
-    ((denied) 403)))`,
-    verbose: `(defenum ResultStatus
-  (:case ok [(val Str)] "Successful execution.")
-  (:case timeout [(ms I64)] "Network timed out.")
-  (:case denied [] "Access denied."))
-
-(defun status-code [(s ResultStatus)] -> I64
-  :doc "Map status variant to HTTP status code."
-  (match s
     ((ok _) 200)
     ((timeout _) 504)
     ((denied) 403)))`,
@@ -148,20 +146,44 @@ export function statusCode(s: ResultStatus): number {
     case 'timeout': return 504;
     case 'denied': return 403;
   }
+}`,
+    go: `package status
+
+type ResultStatus interface {
+    isResultStatus()
+}
+
+type OkStatus struct{ Val string }
+func (OkStatus) isResultStatus() {}
+
+type TimeoutStatus struct{ Ms int64 }
+func (TimeoutStatus) isResultStatus() {}
+
+type DeniedStatus struct{}
+func (DeniedStatus) isResultStatus() {}
+
+func StatusCode(s ResultStatus) int64 {
+    switch s.(type) {
+    case OkStatus:
+        return 200
+    case TimeoutStatus:
+        return 504
+    case DeniedStatus:
+        return 403
+    default:
+        panic("unreachable")
+    }
 }`
-  },
+  }
+];
+
+const CONTROL_CARDS: PolyglotCard[] = [
   {
-    category: 'control',
-    title: 'Error Bubbling with try & Result',
-    description: 'Zero exceptions. `try` unpacks `(ok value)` or bubbles `(err reason)` early. Lowers to `?` in Rust, explicit guards in Python and TypeScript.',
-    nano: `(df parse-port [(raw Str)] -> (Result I64 Str)
+    id: 'error-handling',
+    title: 'Error Handling with try & Result',
+    description: 'No runtime exceptions. try unwraps (ok value) or bubbles up (err reason) immediately. Lowers to ? in Rust and error guards in Go.',
+    asl: `(df parse-port [(raw Str)] -> (Result I64 Str)
   :d "Parse port number with bounds verification."
-  (let [(p (try (option-to-result (string-to-int64 raw) "Not an integer")))]
-    (if (and (>= p 1) (<= p 65535))
-      (ok p)
-      (err "Port must be between 1 and 65535"))))`,
-    verbose: `(defun parse-port [(raw Str)] -> (Result I64 Str)
-  :doc "Parse port number with bounds verification."
   (let [(p (try (option-to-result (string-to-int64 raw) "Not an integer")))]
     (if (and (>= p 1) (<= p 65535))
       (ok p)
@@ -192,22 +214,32 @@ export function statusCode(s: ResultStatus): number {
   } catch {
     return { ok: false, error: "Not an integer" };
   }
+}`,
+    go: `package network
+
+import (
+    "errors"
+    "strconv"
+)
+
+func ParsePort(raw string) (int64, error) {
+    p, err := strconv.ParseInt(raw, 10, 64)
+    if err != nil {
+        return 0, errors.New("Not an integer")
+    }
+    if p >= 1 && p <= 65535 {
+        return p, nil
+    }
+    return 0, errors.New("Port must be between 1 and 65535")
 }`
   },
   {
-    category: 'control',
-    title: 'Tail-Call Recursive Algorithm (Fibonacci)',
-    description: 'Guaranteed tail-call optimization in ASL. Emits iterative loops or tail-optimized functions across backends.',
-    nano: `(df fib [(n I64)] -> I64
+    id: 'tail-recursion',
+    title: 'Tail-Call Optimized Algorithm (Fibonacci)',
+    description: 'Guaranteed TCO in ASL. Emits iterative loops or tail-optimized functions across backends without stack overflow.',
+    asl: `(df fib [(n I64)] -> I64
   :d "Tail-recursive Fibonacci sequence."
   (df loop [(i I64) (a I64) (b I64)] -> I64
-    (if (= i 0)
-      a
-      (loop (- i 1) b (+ a b))))
-  (loop n 0 1))`,
-    verbose: `(defun fib [(n I64)] -> I64
-  :doc "Tail-recursive Fibonacci sequence."
-  (defun loop [(i I64) (a I64) (b I64)] -> I64
     (if (= i 0)
       a
       (loop (- i 1) b (+ a b))))
@@ -235,54 +267,109 @@ export function statusCode(s: ResultStatus): number {
     b = next;
   }
   return a;
+}`,
+    go: `package algo
+
+func Fib(n int64) int64 {
+    var a, b int64 = 0, 1
+    for i := int64(0); i < n; i++ {
+        a, b = b, a+b
+    }
+    return a
 }`
   }
 ];
 
-interface DataSnippet {
+interface DataComparisonCard {
+  id: string;
   title: string;
   description: string;
-  nano: string;
-  verbose: string;
+  asl: string;
+  json: string;
+  yaml: string;
 }
 
-const DATA_SNIPPETS: DataSnippet[] = [
+const DATA_CARDS: DataComparisonCard[] = [
   {
-    title: 'Context Economy: Tabular Matrices',
-    description: 'Store uniform record sequences as a single key vector plus compact row vectors, saving over 65% token overhead.',
-    nano: `([:id :name :role :level]
+    id: 'tabular-matrix',
+    title: 'Tabular Data Matrix Representation',
+    description: 'Stores uniform record sequences as a single key vector plus compact row vectors. Saves over 65% token overhead versus verbose JSON objects.',
+    asl: `([:id :name :role :level]
  [[101 "Alice" :lead 5]
   [102 "Bob"   :agent 3]
   [103 "Carol" :peer 4]])`,
-    verbose: `(list
-  (User :id 101 :name "Alice" :role :lead :level 5)
-  (User :id 102 :name "Bob"   :role :agent :level 3)
-  (User :id 103 :name "Carol" :role :peer  :level 4))`
+    json: `[
+  { "id": 101, "name": "Alice", "role": "lead", "level": 5 },
+  { "id": 102, "name": "Bob", "role": "agent", "level": 3 },
+  { "id": 103, "name": "Carol", "role": "peer", "level": 4 }
+]`,
+    yaml: `- id: 101
+  name: Alice
+  role: lead
+  level: 5
+- id: 102
+  name: Bob
+  role: agent
+  level: 3
+- id: 103
+  name: Carol
+  role: peer
+  level: 4`
   },
   {
-    title: 'Constant Pool Deduplication (:pool & :ref)',
-    description: 'Declare repeated long URLs, schemas, or models once in a shared constant pool, referencing them by single-token index.',
-    nano: `(:pool ["https://api.genseam.org/v1/telemetry"
+    id: 'constant-pool',
+    title: 'Shared Value Pool Deduplication (:pool & :ref)',
+    description: 'Repeated URLs, models, and endpoints declared once in a shared pool and referenced by 1-token index. Zero duplication.',
+    asl: `(:pool ["https://api.genseam.org/v1/telemetry"
         "claude-3-7-sonnet-20250219"
         "asl/agent-mesh/node-alpha"]
   :events [([:node :model :target :ok]
             [[(:ref 2) (:ref 1) (:ref 0) true]
              [(:ref 2) (:ref 1) (:ref 0) false]]))`,
-    verbose: `(:events [([:node :model :target :ok]
-           [["asl/agent-mesh/node-alpha" "claude-3-7-sonnet-20250219" "https://api.genseam.org/v1/telemetry" true]
-            ["asl/agent-mesh/node-alpha" "claude-3-7-sonnet-20250219" "https://api.genseam.org/v1/telemetry" false]]))`
+    json: `{
+  "events": [
+    {
+      "node": "asl/agent-mesh/node-alpha",
+      "model": "claude-3-7-sonnet-20250219",
+      "target": "https://api.genseam.org/v1/telemetry",
+      "ok": true
+    },
+    {
+      "node": "asl/agent-mesh/node-alpha",
+      "model": "claude-3-7-sonnet-20250219",
+      "target": "https://api.genseam.org/v1/telemetry",
+      "ok": false
+    }
+  ]
+}`,
+    yaml: `events:
+  - node: asl/agent-mesh/node-alpha
+    model: claude-3-7-sonnet-20250219
+    target: https://api.genseam.org/v1/telemetry
+    ok: true
+  - node: asl/agent-mesh/node-alpha
+    model: claude-3-7-sonnet-20250219
+    target: https://api.genseam.org/v1/telemetry
+    ok: false`
   },
   {
+    id: 'token-traits',
     title: '1-Token Behavioral Traits & Metadata',
     description: 'Single-token keywords (:tag, :why, :use, :ref, :offload) carry zero BPE token overhead while remaining lexically distinct.',
-    nano: `(:tag "d-1eed"
+    asl: `(:tag "d-1eed"
  :why "Eliminate BPE prefix splits and preserve single-token density"
  :use "auth/crypto"
  :offload :storage/opfs)`,
-    verbose: `(:decision-tag "d-1eed"
- :architectural-rationale "Eliminate BPE prefix splits and preserve single-token density"
- :import-module "auth/crypto"
- :storage-driver :storage/opfs)`
+    json: `{
+  "decision_tag": "d-1eed",
+  "architectural_rationale": "Eliminate BPE prefix splits and preserve single-token density",
+  "import_module": "auth/crypto",
+  "storage_driver": "storage/opfs"
+}`,
+    yaml: `decision_tag: "d-1eed"
+architectural_rationale: "Eliminate BPE prefix splits and preserve single-token density"
+import_module: "auth/crypto"
+storage_driver: "storage/opfs"`
   }
 ];
 
@@ -315,19 +402,17 @@ const BUILTINS: BuiltinDoc[] = [
 
 export const DocsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DocTab>('cli');
-  const [langTarget, setLangTarget] = useState<LanguageTarget>('nano');
-  const [sqlTarget, setSqlTarget] = useState<SqlTarget>('asl');
-  const [useDataNano, setUseDataNano] = useState<boolean>(true);
-  const [copiedIndex, setCopiedIndex] = useState<string | null>(null);
+  const [targetLang, setTargetLang] = useState<CodeTargetLang>('python');
+  const [dataTarget, setDataTarget] = useState<DataTargetFormat>('json');
+  const [sqlDialect, setSqlDialect] = useState<SqlDialect>('postgres');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedIndex(id);
-    setTimeout(() => setCopiedIndex(null), 2000);
+    setCopiedKey(id);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
-
-  const filteredPolyglot = POLYGLOT_SNIPPETS.filter((s) => s.category === activeTab);
 
   const filteredBuiltins = BUILTINS.filter(
     (b) =>
@@ -344,10 +429,10 @@ export const DocsView: React.FC = () => {
           index="Reference"
           eyebrow="Documentation"
           title="AgentScript Reference & Capabilities Guide"
-          lead="The definitive guide to CLI toolchains, inter-agent mesh wire frames, standard library functions, context economy matrices, polyglot transpilation targets, and SQL queries."
+          lead="The definitive guide to CLI toolchains, inter-agent mesh wire frames, context economy matrices, cross-dialect SQL queries, polyglot transpilation targets, and standard library functions."
         />
 
-        {/* Dual Audience Banner */}
+        {/* Machine-Readable Prompt Ingestion Banner */}
         <div className="mb-10 p-6 sm:p-8 rounded-3xl border border-signal/40 bg-gradient-to-r from-surface to-surface/70 backdrop-blur-xl shadow-e2 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-signal/15 text-signal font-mono text-micro uppercase font-semibold">
@@ -389,11 +474,11 @@ export const DocsView: React.FC = () => {
             {[
               { id: 'cli', label: '1. CLI & Workflow', icon: Terminal },
               { id: 'mesh', label: '2. Agent Mesh (A2A)', icon: Boxes },
-              { id: 'stdlib', label: '3. Standard Library', icon: BookOpen },
-              { id: 'data', label: '4. Data & Economy', icon: Database },
+              { id: 'data', label: '3. Data & Economy', icon: Database },
+              { id: 'sql', label: '4. SQL & Query DSL', icon: Code2 },
               { id: 'syntax', label: '5. Syntax & Forms', icon: Braces },
               { id: 'control', label: '6. Control & Errors', icon: Workflow },
-              { id: 'sql', label: '7. SQL & Query DSL', icon: Code2 }
+              { id: 'stdlib', label: '7. Standard Library', icon: BookOpen }
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -414,42 +499,37 @@ export const DocsView: React.FC = () => {
           {(activeTab === 'syntax' || activeTab === 'control') && (
             <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line shrink-0 overflow-x-auto">
               <span className="text-micro font-mono uppercase text-ink-3 px-2">Target:</span>
-              {(['nano', 'verbose', 'python', 'rust', 'typescript'] as LanguageTarget[]).map((lang) => (
+              {(['python', 'rust', 'typescript', 'go'] as CodeTargetLang[]).map((lang) => (
                 <button
                   key={lang}
-                  onClick={() => setLangTarget(lang)}
-                  className={`px-2.5 py-1 rounded-xl text-micro font-mono font-semibold transition-all capitalize ${
-                    langTarget === lang
+                  onClick={() => setTargetLang(lang)}
+                  className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all capitalize ${
+                    targetLang === lang
                       ? 'bg-signal text-white shadow-sm'
                       : 'text-ink-2 hover:text-ink'
                   }`}
                 >
-                  {lang === 'nano' ? 'ASL Nano' : lang === 'verbose' ? 'ASL Verbose' : lang}
+                  {lang === 'typescript' ? 'TypeScript' : lang}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Nano / Verbose Toggle for Data & Economy */}
+          {/* Data Target Selector (JSON / YAML) */}
           {activeTab === 'data' && (
             <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line shrink-0">
-              <span className="text-micro font-mono uppercase text-ink-3 px-2">Projection:</span>
-              <button
-                onClick={() => setUseDataNano(true)}
-                className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all ${
-                  useDataNano ? 'bg-signal text-white shadow-sm' : 'text-ink-2 hover:text-ink'
-                }`}
-              >
-                Nano
-              </button>
-              <button
-                onClick={() => setUseDataNano(false)}
-                className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all ${
-                  !useDataNano ? 'bg-signal text-white shadow-sm' : 'text-ink-2 hover:text-ink'
-                }`}
-              >
-                Verbose
-              </button>
+              <span className="text-micro font-mono uppercase text-ink-3 px-2">Compare:</span>
+              {(['json', 'yaml'] as DataTargetFormat[]).map((fmt) => (
+                <button
+                  key={fmt}
+                  onClick={() => setDataTarget(fmt)}
+                  className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all uppercase ${
+                    dataTarget === fmt ? 'bg-signal text-white shadow-sm' : 'text-ink-2 hover:text-ink'
+                  }`}
+                >
+                  {fmt}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -486,12 +566,6 @@ export const DocsView: React.FC = () => {
                     <span className="text-signal">$ </span>asl lint --fix
                   </div>
                   <p className="text-micro text-ink-3">Autonomous smell detector and structural AST auto-repair engine.</p>
-                </div>
-                <div className="p-3.5 rounded-2xl bg-ground border border-line space-y-1">
-                  <div className="text-ink font-semibold">
-                    <span className="text-signal">$ </span>asl transcode &lt;file.asl&gt; --to nano|verbose
-                  </div>
-                  <p className="text-micro text-ink-3">Dual-projection lossless transcoder between human-readable and token-dense formats.</p>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-ground border border-line space-y-1">
                   <div className="text-ink font-semibold">
@@ -603,7 +677,7 @@ export const DocsView: React.FC = () => {
                     }
                     className="p-2 rounded-xl bg-ground hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
                   >
-                    {copiedIndex === 'mesh-invoke' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    {copiedKey === 'mesh-invoke' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
                 <pre className="p-4 rounded-2xl bg-ground border border-line text-purple-300 font-mono text-meta overflow-x-auto leading-relaxed">
@@ -630,7 +704,7 @@ export const DocsView: React.FC = () => {
                     }
                     className="p-2 rounded-xl bg-ground hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
                   >
-                    {copiedIndex === 'mesh-complete' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    {copiedKey === 'mesh-complete' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
                 <pre className="p-4 rounded-2xl bg-ground border border-line text-purple-300 font-mono text-meta overflow-x-auto leading-relaxed">
@@ -645,7 +719,335 @@ export const DocsView: React.FC = () => {
           </div>
         )}
 
-        {/* 3. Standard Library */}
+        {/* 3. Data & Economy (Side-by-Side: ASL vs JSON/YAML) */}
+        {activeTab === 'data' && (
+          <div className="space-y-6">
+            {DATA_CARDS.map((card) => {
+              const targetCode = dataTarget === 'json' ? card.json : card.yaml;
+              return (
+                <div key={card.id} className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-ink text-lg">{card.title}</h3>
+                    <p className="text-meta text-ink-2 leading-relaxed">{card.description}</p>
+                  </div>
+
+                  {/* Side-by-side: ASL vs JSON/YAML */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left: ASL Source */}
+                    <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-micro uppercase font-bold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                          ASL
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(card.asl, `${card.id}-asl`)}
+                          className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                          title="Copy ASL"
+                        >
+                          {copiedKey === `${card.id}-asl` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
+                        {card.asl}
+                      </pre>
+                    </div>
+
+                    {/* Right: Compare (JSON / YAML) */}
+                    <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-micro uppercase font-bold text-ink-2 px-2 py-0.5 rounded bg-surface border border-line">
+                          {dataTarget}
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(targetCode, `${card.id}-target`)}
+                          className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                          title={`Copy ${dataTarget.toUpperCase()}`}
+                        >
+                          {copiedKey === `${card.id}-target` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
+                        {targetCode}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 4. SQL & Query DSL (Side-by-Side: ASL vs SQL Dialects) */}
+        {activeTab === 'sql' && (
+          <div className="space-y-6">
+            <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-xl bg-purple-500/10 text-signal border border-signal/20">
+                    <Code2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-ink text-xl">Cross-Dialect SQL Generation</h3>
+                    <p className="font-mono text-micro text-ink-3">Side-by-side ASL query lowering to target database engines</p>
+                  </div>
+                </div>
+                <p className="text-meta text-ink-2 leading-relaxed">
+                  Write type-safe S-expression queries once. ASL compiles dialect-specific quoting, date arithmetic, placeholder bindings, and pagination rules automatically.
+                </p>
+              </div>
+
+              {/* SQL Dialect Selector */}
+              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line shrink-0 overflow-x-auto">
+                <span className="text-micro font-mono uppercase text-ink-3 px-2">Dialect:</span>
+                {[
+                  { id: 'postgres', label: 'PostgreSQL' },
+                  { id: 'mysql', label: 'MySQL' },
+                  { id: 'sqlite', label: 'SQLite' },
+                  { id: 'mssql', label: 'MSSQL (T-SQL)' },
+                  { id: 'oracle', label: 'Oracle' }
+                ].map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setSqlDialect(id as SqlDialect)}
+                    className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all ${
+                      sqlDialect === id
+                        ? 'bg-signal text-white shadow-sm'
+                        : 'text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Side-by-side: ASL Query vs Target SQL Dialect */}
+            <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
+              <div className="space-y-1">
+                <h4 className="font-bold text-ink text-lg">Active Admin Telemetry Query</h4>
+                <p className="text-meta text-ink-2">
+                  Demonstrates case-insensitive matching, native relative date arithmetic, descending ordering, and pagination across dialects.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left: ASL S-Expression Query */}
+                <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-micro uppercase font-bold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                      ASL Query
+                    </span>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(
+                          `(q/select ["id" "name" "email" "status"]\n  (q/from "users")\n  (q/where (q/and (q/ilike "name" "%admin%")\n                  (q/gte "created_at" (q/date-sub (q/now) 7 :days))\n                  (q/eq "status" "ACTIVE")))\n  (q/order-by "created_at" (q/desc))\n  (q/limit 25)\n  (q/offset 50))`,
+                          'sql-asl'
+                        )
+                      }
+                      className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                      title="Copy ASL Query"
+                    >
+                      {copiedKey === 'sql-asl' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
+{`(q/select ["id" "name" "email" "status"]
+  (q/from "users")
+  (q/where (q/and (q/ilike "name" "%admin%")
+                  (q/gte "created_at" (q/date-sub (q/now) 7 :days))
+                  (q/eq "status" "ACTIVE")))
+  (q/order-by "created_at" (q/desc))
+  (q/limit 25)
+  (q/offset 50))`}
+                  </pre>
+                </div>
+
+                {/* Right: Dialect-Specific Generated SQL */}
+                <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-micro uppercase font-bold text-ink-2 px-2 py-0.5 rounded bg-surface border border-line">
+                      {sqlDialect.toUpperCase()} Dialect
+                    </span>
+                    <button
+                      onClick={() => {
+                        const dialectMap: Record<SqlDialect, string> = {
+                          postgres: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE ("name" ILIKE $1)\n  AND ("created_at" >= NOW() - INTERVAL '7 days')\n  AND ("status" = $2)\nORDER BY "created_at" DESC\nLIMIT 25 OFFSET 50;`,
+                          mysql: `SELECT \`id\`, \`name\`, \`email\`, \`status\`\nFROM \`users\`\nWHERE (\`name\` LIKE ?)\n  AND (\`created_at\` >= DATE_SUB(NOW(), INTERVAL 7 DAY))\n  AND (\`status\` = ?)\nORDER BY \`created_at\` DESC\nLIMIT 50, 25;`,
+                          sqlite: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE ("name" LIKE ?1)\n  AND ("created_at" >= datetime('now', '-7 days'))\n  AND ("status" = ?2)\nORDER BY "created_at" DESC\nLIMIT 25 OFFSET 50;`,
+                          mssql: `SELECT [id], [name], [email], [status]\nFROM [users]\nWHERE ([name] LIKE @p1)\n  AND ([created_at] >= DATEADD(day, -7, GETDATE()))\n  AND ([status] = @p2)\nORDER BY [created_at] DESC\nOFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`,
+                          oracle: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE (UPPER("name") LIKE UPPER(:1))\n  AND ("created_at" >= SYSDATE - 7)\n  AND ("status" = :2)\nORDER BY "created_at" DESC\nOFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`
+                        };
+                        copyToClipboard(dialectMap[sqlDialect], 'sql-dialect');
+                      }}
+                      className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                      title="Copy Generated SQL"
+                    >
+                      {copiedKey === 'sql-dialect' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
+                    {sqlDialect === 'postgres' &&
+`SELECT "id", "name", "email", "status"
+FROM "users"
+WHERE ("name" ILIKE $1)
+  AND ("created_at" >= NOW() - INTERVAL '7 days')
+  AND ("status" = $2)
+ORDER BY "created_at" DESC
+LIMIT 25 OFFSET 50;`}
+                    {sqlDialect === 'mysql' &&
+`SELECT \`id\`, \`name\`, \`email\`, \`status\`
+FROM \`users\`
+WHERE (\`name\` LIKE ?)
+  AND (\`created_at\` >= DATE_SUB(NOW(), INTERVAL 7 DAY))
+  AND (\`status\` = ?)
+ORDER BY \`created_at\` DESC
+LIMIT 50, 25;`}
+                    {sqlDialect === 'sqlite' &&
+`SELECT "id", "name", "email", "status"
+FROM "users"
+WHERE ("name" LIKE ?1)
+  AND ("created_at" >= datetime('now', '-7 days'))
+  AND ("status" = ?2)
+ORDER BY "created_at" DESC
+LIMIT 25 OFFSET 50;`}
+                    {sqlDialect === 'mssql' &&
+`SELECT [id], [name], [email], [status]
+FROM [users]
+WHERE ([name] LIKE @p1)
+  AND ([created_at] >= DATEADD(day, -7, GETDATE()))
+  AND ([status] = @p2)
+ORDER BY [created_at] DESC
+OFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`}
+                    {sqlDialect === 'oracle' &&
+`SELECT "id", "name", "email", "status"
+FROM "users"
+WHERE (UPPER("name") LIKE UPPER(:1))
+  AND ("created_at" >= SYSDATE - 7)
+  AND ("status" = :2)
+ORDER BY "created_at" DESC
+OFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5. Syntax & Forms (Side-by-Side: ASL vs Target Language) */}
+        {activeTab === 'syntax' && (
+          <div className="space-y-6">
+            {SYNTAX_CARDS.map((card) => {
+              const targetCode = card[targetLang];
+              return (
+                <div key={card.id} className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-ink text-lg">{card.title}</h3>
+                    <p className="text-meta text-ink-2 leading-relaxed">{card.description}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left: ASL Source */}
+                    <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-micro uppercase font-bold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                          ASL
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(card.asl, `${card.id}-asl`)}
+                          className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                          title="Copy ASL"
+                        >
+                          {copiedKey === `${card.id}-asl` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
+                        {card.asl}
+                      </pre>
+                    </div>
+
+                    {/* Right: Target Language */}
+                    <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-micro uppercase font-bold text-ink-2 px-2 py-0.5 rounded bg-surface border border-line capitalize">
+                          {targetLang}
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(targetCode, `${card.id}-target`)}
+                          className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                          title={`Copy ${targetLang}`}
+                        >
+                          {copiedKey === `${card.id}-target` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
+                        {targetCode}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 6. Control & Errors (Side-by-Side: ASL vs Target Language) */}
+        {activeTab === 'control' && (
+          <div className="space-y-6">
+            {CONTROL_CARDS.map((card) => {
+              const targetCode = card[targetLang];
+              return (
+                <div key={card.id} className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-ink text-lg">{card.title}</h3>
+                    <p className="text-meta text-ink-2 leading-relaxed">{card.description}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Left: ASL Source */}
+                    <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-micro uppercase font-bold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                          ASL
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(card.asl, `${card.id}-asl`)}
+                          className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                          title="Copy ASL"
+                        >
+                          {copiedKey === `${card.id}-asl` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
+                        {card.asl}
+                      </pre>
+                    </div>
+
+                    {/* Right: Target Language */}
+                    <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-micro uppercase font-bold text-ink-2 px-2 py-0.5 rounded bg-surface border border-line capitalize">
+                          {targetLang}
+                        </span>
+                        <button
+                          onClick={() => copyToClipboard(targetCode, `${card.id}-target`)}
+                          className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                          title={`Copy ${targetLang}`}
+                        >
+                          {copiedKey === `${card.id}-target` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
+                        {targetCode}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 7. Standard Library */}
         {activeTab === 'stdlib' && (
           <div className="space-y-6">
             <div className="relative max-w-md">
@@ -686,218 +1088,6 @@ export const DocsView: React.FC = () => {
                 No builtins match query "{searchQuery}".
               </div>
             )}
-          </div>
-        )}
-
-        {/* 4. Data & Economy */}
-        {activeTab === 'data' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {DATA_SNIPPETS.map((snippet, idx) => {
-              const code = useDataNano ? snippet.nano : snippet.verbose;
-              const snippetId = `data-${idx}`;
-              const isCopied = copiedIndex === snippetId;
-
-              return (
-                <div
-                  key={snippet.title}
-                  className="p-6 rounded-3xl border border-line bg-surface shadow-e1 flex flex-col justify-between hover:border-signal/30 transition-all space-y-4"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-ink text-base">{snippet.title}</h3>
-                      <button
-                        onClick={() => copyToClipboard(code, snippetId)}
-                        className="p-1.5 rounded-xl bg-ground hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all shrink-0"
-                      >
-                        {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-                    <p className="text-meta text-ink-2 leading-relaxed">{snippet.description}</p>
-                  </div>
-
-                  <div className="rounded-2xl bg-ground border border-line p-3.5 font-mono text-meta overflow-x-auto">
-                    <pre className="text-purple-300 dark:text-purple-200 leading-relaxed whitespace-pre font-mono">
-                      {code}
-                    </pre>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 5. Syntax & Forms & 6. Control & Errors (Polyglot Lowering) */}
-        {(activeTab === 'syntax' || activeTab === 'control') && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredPolyglot.map((snippet, idx) => {
-              const code = snippet[langTarget];
-              const snippetId = `${activeTab}-${idx}-${langTarget}`;
-              const isCopied = copiedIndex === snippetId;
-
-              return (
-                <div
-                  key={snippet.title}
-                  className="p-6 rounded-3xl border border-line bg-surface shadow-e1 flex flex-col justify-between hover:border-signal/30 transition-all"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <h3 className="font-bold text-ink text-base sm:text-lg">{snippet.title}</h3>
-                        <p className="text-meta text-ink-2 mt-1 leading-relaxed">{snippet.description}</p>
-                      </div>
-                      <button
-                        onClick={() => copyToClipboard(code, snippetId)}
-                        className="p-2 rounded-xl bg-ground hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all shrink-0"
-                        title="Copy code"
-                      >
-                        {isCopied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                      </button>
-                    </div>
-
-                    <div className="relative rounded-2xl bg-ground border border-line p-4 font-mono text-meta overflow-x-auto">
-                      <div className="absolute top-2 right-2 text-micro uppercase font-semibold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
-                        {langTarget === 'nano' ? 'asl-nano' : langTarget === 'verbose' ? 'asl-verbose' : langTarget}
-                      </div>
-                      <pre className="text-purple-300 dark:text-purple-200 leading-relaxed whitespace-pre font-mono pt-4">
-                        {code}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 7. SQL & Query DSL */}
-        {activeTab === 'sql' && (
-          <div className="space-y-6">
-            <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="space-y-2 max-w-2xl">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-purple-500/10 text-signal border border-signal/20">
-                    <Code2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-ink text-xl">Cross-Dialect SQL Generation</h3>
-                    <p className="font-mono text-micro text-ink-3">ASL S-expression queries transpiled to target SQL and native database clients</p>
-                  </div>
-                </div>
-                <p className="text-meta text-ink-2 leading-relaxed">
-                  Write queries once in type-safe AgentScript S-expressions. The compiler optimizes predicate logic, parameter bindings, and emits production-ready SQL and client code.
-                </p>
-              </div>
-
-              {/* Target Selector */}
-              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line shrink-0 overflow-x-auto">
-                <span className="text-micro font-mono uppercase text-ink-3 px-2">Target:</span>
-                {[
-                  { id: 'asl', label: 'ASL Query' },
-                  { id: 'sql', label: 'Standard SQL' },
-                  { id: 'python', label: 'Python (psycopg2)' },
-                  { id: 'rust', label: 'Rust (sqlx)' },
-                  { id: 'typescript', label: 'TypeScript (Kysely)' }
-                ].map(({ id, label }) => (
-                  <button
-                    key={id}
-                    onClick={() => setSqlTarget(id as SqlTarget)}
-                    className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all ${
-                      sqlTarget === id
-                        ? 'bg-signal text-white shadow-sm'
-                        : 'text-ink-2 hover:text-ink'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* SQL Query Example Box */}
-            <div className="p-6 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-ink text-lg">Active High-Priority Users Query</h4>
-                  <p className="text-meta text-ink-2">Multi-predicate filter, descending timestamp ordering, and pagination.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    const codeMap = {
-                      asl: `(q/select ["id" "name" "email" "status"]\n  (q/from "users")\n  (q/where (q/and (q/eq "status" "active")\n                  (q/gt "login_count" 5)))\n  (q/order-by "created_at" (q/desc))\n  (q/limit 25)\n  (q/offset 0))`,
-                      sql: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE ("status" = $1) AND ("login_count" > $2)\nORDER BY "created_at" DESC\nLIMIT 25 OFFSET 0;`,
-                      python: `cursor.execute(\n    """\n    SELECT id, name, email, status\n    FROM users\n    WHERE status = %s AND login_count > %s\n    ORDER BY created_at DESC\n    LIMIT 25 OFFSET 0;\n    """,\n    ("active", 5)\n)\nactive_users = [User(*row) for row in cursor.fetchall()]`,
-                      rust: `let users = sqlx::query_as!(\n    User,\n    r#"\n    SELECT id, name, email, status\n    FROM users\n    WHERE status = $1 AND login_count > $2\n    ORDER BY created_at DESC\n    LIMIT 25 OFFSET 0\n    "#,\n    "active", 5i64\n).fetch_all(&pool).await?;`,
-                      typescript: `const users = await db.selectFrom('users')\n  .select(['id', 'name', 'email', 'status'])\n  .where('status', '=', 'active')\n  .where('login_count', '>', 5)\n  .orderBy('created_at', 'desc')\n  .limit(25)\n  .offset(0)\n  .execute();`
-                    };
-                    copyToClipboard(codeMap[sqlTarget], 'sql-copy');
-                  }}
-                  className="p-2 rounded-xl bg-ground hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
-                >
-                  {copiedIndex === 'sql-copy' ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-
-              <div className="rounded-2xl bg-ground border border-line p-5 font-mono text-meta overflow-x-auto">
-                <pre className="text-purple-300 dark:text-purple-200 leading-relaxed whitespace-pre font-mono">
-                  {sqlTarget === 'asl' &&
-`(q/select ["id" "name" "email" "status"]
-  (q/from "users")
-  (q/where (q/and (q/eq "status" "active")
-                  (q/gt "login_count" 5)))
-  (q/order-by "created_at" (q/desc))
-  (q/limit 25)
-  (q/offset 0))`}
-                  {sqlTarget === 'sql' &&
-`-- Generated parameterized SQL (PostgreSQL dialect)
-SELECT "id", "name", "email", "status"
-FROM "users"
-WHERE ("status" = $1) AND ("login_count" > $2)
-ORDER BY "created_at" DESC
-LIMIT 25 OFFSET 0;
-
--- Parameters:
---   $1 = 'active' (String)
---   $2 = 5 (Int64)`}
-                  {sqlTarget === 'python' &&
-`# Python Client Integration (psycopg2 / asyncpg)
-cursor.execute(
-    """
-    SELECT id, name, email, status
-    FROM users
-    WHERE status = %s AND login_count > %s
-    ORDER BY created_at DESC
-    LIMIT 25 OFFSET 0;
-    """,
-    ("active", 5)
-)
-active_users = [User(*row) for row in cursor.fetchall()]`}
-                  {sqlTarget === 'rust' &&
-`// Rust Client Integration (sqlx async connection pool)
-let users = sqlx::query_as!(
-    User,
-    r#"
-    SELECT id, name, email, status
-    FROM users
-    WHERE status = $1 AND login_count > $2
-    ORDER BY created_at DESC
-    LIMIT 25 OFFSET 0
-    "#,
-    "active",
-    5i64
-).fetch_all(&pool).await?;`}
-                  {sqlTarget === 'typescript' &&
-`// TypeScript Client Integration (Kysely Type-Safe Query Builder)
-const users = await db.selectFrom('users')
-  .select(['id', 'name', 'email', 'status'])
-  .where('status', '=', 'active')
-  .where('login_count', '>', 5)
-  .orderBy('created_at', 'desc')
-  .limit(25)
-  .offset(0)
-  .execute();`}
-                </pre>
-              </div>
-            </div>
           </div>
         )}
       </Section>
