@@ -79,6 +79,7 @@ For autonomous agents and tools that exchange structured data or call APIs:
 
 ## Documentation Links
 - Context Economy Guidelines: https://aslang.dev/docs#context-economy
+- Data Representation Matrix: https://aslang.dev/docs#data-matrix
 - Full Invariant Specification & Protocol: https://aslang.dev/llms-full.txt
 - GitHub Source Repository: https://github.com/GenSEAM/asl
 - Web Showcase & Visual Architecture: https://aslang.dev
