@@ -386,43 +386,103 @@ export const CosmicLandscapeBackground: React.FC = () => {
             </defs>
 
             <g filter="url(#fixedAmbientGlow)">
+              {/* 
+                THE CYBER-VINE:
+                Starts low at (-30, 145), passes right through the curled tail which wraps around it,
+                cradles the belly, and sweeps UPWARDS between chameleon & satellite to the header!
+              */}
               <path
-                d="M -30,160 C 2,142 24,118 52,95 C 78,74 104,72 134,54 C 168,34 202,0 234,-48"
+                d="M -30,145 C 5,140 25,128 48,121 C 72,114 96,106 122,96 C 152,84 178,58 198,28 C 218,-2 232,-24 246,-45"
                 stroke="url(#vineBranchGrad)"
                 strokeWidth="3.4"
                 strokeLinecap="round"
               />
               <path
-                d="M -30,165 C 2,147 24,123 52,100 C 78,79 104,77 134,59 C 168,39 202,5 234,-43"
+                d="M -30,150 C 5,145 25,133 48,126 C 72,119 96,111 122,101 C 152,89 178,63 198,33 C 218,3 232,-19 246,-40"
                 stroke="url(#vineBranchGrad)"
                 strokeWidth="1.2"
                 strokeDasharray="3 3"
-                opacity="0.55"
+                opacity="0.6"
               />
-              <g transform="translate(138, 72) rotate(-42)">
+
+              {/* Delicate sprouting cyber-leaves climbing up towards header */}
+              <g transform="translate(142, 80) rotate(-40)">
                 <path d="M 0,0 Q 14,-9 28,0 Q 14,9 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
                 <line x1="0" y1="0" x2="28" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
               </g>
-              <g transform="translate(178, 36) rotate(-60)">
+              <g transform="translate(182, 42) rotate(-58)">
                 <path d="M 0,0 Q 12,-8 24,0 Q 12,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
                 <line x1="0" y1="0" x2="24" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
               </g>
-              <g transform="translate(216, -8) rotate(-75)">
+              <g transform="translate(222, -4) rotate(-72)">
                 <path d="M 0,0 Q 10,-7 20,0 Q 10,7 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
                 <line x1="0" y1="0" x2="20" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
               </g>
 
-              {/* Chameleon Spiral 'a' Glyph */}
-              <g transform="translate(10, 8) scale(0.6)">
+              {/* Spiral tendril curling near header */}
+              <path
+                d="M 238,-28 Q 250,-40 246,-50 Q 240,-56 230,-52 Q 225,-47 230,-42"
+                stroke="url(#vineBranchGrad)"
+                strokeWidth="1.4"
+              />
+
+              {/* 
+                THE SCHEMATIC CHAMELEON:
+                Perched securely on the horizontal section of the branch.
+              */}
+              <g transform="translate(5, 0)">
+                {/* Spine and inward-spiraling tail */}
                 <path
-                  d="M 125 140 C 138 122, 142 80, 136 50 C 128 20, 102 4, 70 4 C 36 4, 14 24, 6 54 C -2 84, 4 122, 24 146 C 42 166, 72 168, 94 154 C 108 144, 114 120, 112 98 C 110 72, 94 56, 72 56 C 50 56, 38 72, 38 90 C 38 104, 48 114, 60 114 C 70 114, 74 106, 74 98 C 74 88, 66 86, 60 92 C 58 94, 54 90, 54 86 C 54 76, 64 68, 74 68 C 86 68, 94 80, 94 96 C 94 114, 82 128, 68 130 C 50 132, 32 120, 26 102 C 20 80, 24 58, 38 40 C 54 20, 76 18, 94 26 C 112 34, 118 54, 118 80 L 118 140 C 118 148, 122 144, 125 140 Z"
-                  fill="url(#chameleonGradFixed)"
-                  stroke="rgba(255,255,255,0.7)"
-                  strokeWidth="1.6"
+                  d="M 68 20 
+                     C 62 13, 56 12, 53 14 
+                     C 49 16, 49 22, 53 25
+                     C 35 28, 16 46, 12 70 
+                     C 8 95, 18 116, 38 122 
+                     C 56 127, 72 116, 70 96 
+                     C 68 81, 52 76, 44 86 
+                     C 37 94, 44 104, 53 102 
+                     C 59 100, 59 93, 54 91"
+                  stroke="url(#chameleonGradFixed)"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
                   strokeLinejoin="round"
                 />
-                <circle cx="70" cy="90" r="5" fill="#f3e8ff" />
-                <circle cx="70" cy="90" r="2.5" fill="#9333ea" />
+                {/* Snout & Head Arc */}
+                <path
+                  d="M 68 20 
+                     C 85 24, 102 36, 98 52 
+                     C 94 62, 80 65, 68 64"
+                  stroke="url(#chameleonGradFixed)"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {/* Eye circular aperture */}
+                <circle cx="82" cy="40" r="9" stroke="url(#chameleonGradFixed)" strokeWidth="2.2" />
+                <circle cx="82" cy="40" r="3" fill="rgb(var(--signal-soft))" opacity="0.9" />
+
+                {/* Underside / Belly Line */}
+                <path
+                  d="M 68 64 
+                     C 52 64, 40 68, 32 78 
+                     C 25 87, 26 96, 30 102"
+                  stroke="url(#chameleonGradFixed)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+
+                {/* Coordinate reference nodes */}
+                <circle cx="53" cy="14" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+                <circle cx="98" cy="52" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+                <circle cx="38" cy="122" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
+
+                {/* Front tail curl stroke: physically wraps in front of the branch */}
+                <path
+                  d="M 44 86 C 37 94, 44 104, 53 102 C 59 100, 59 93, 54 91"
+                  stroke="url(#chameleonGradFixed)"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                />
               </g>
             </g>
           </svg>
