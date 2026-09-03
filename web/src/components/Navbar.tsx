@@ -120,27 +120,27 @@ export const Navbar: React.FC = () => {
 
             {/* Right Action Icons: Search, llms.txt, GitHub, Theme */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Search Trigger */}
+              {/* Search Trigger: Compact icon below 1100px, with label above */}
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
-                className="flex items-center gap-2 p-2 nav:px-3 nav:py-1.5 rounded-full border border-line bg-inset/80 hover:bg-inset text-ink-3 hover:text-ink font-mono text-micro transition-all shadow-sm shrink-0"
+                className="flex items-center gap-2 p-2 min-[1100px]:px-3 min-[1100px]:py-1.5 rounded-full border border-line bg-inset/80 hover:bg-inset text-ink-3 hover:text-ink font-mono text-micro transition-all shadow-sm shrink-0"
                 aria-label="Search documentation"
                 title="Search documentation (⌘K)"
               >
                 <Search className="w-3.5 h-3.5 text-signal shrink-0" />
-                <span className="hidden nav:inline">Search</span>
-                <kbd className="hidden nav:inline-block px-1.5 py-0.5 rounded bg-surface border border-line font-mono text-[9px] text-ink-3">
+                <span className="hidden min-[1100px]:inline">Search</span>
+                <kbd className="hidden min-[1100px]:inline-block px-1.5 py-0.5 rounded bg-surface border border-line font-mono text-[9px] text-ink-3">
                   ⌘K
                 </kbd>
               </button>
 
-              {/* llms.txt Direct Button (Only on >=1150px) */}
+              {/* llms.txt Direct Button (Only on >=1200px) */}
               <a
                 href="/llms.txt"
                 target="_blank"
                 rel="noreferrer"
-                className="hidden min-[1150px]:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-signal/30 bg-signal/10 hover:bg-signal/20 text-signal font-mono text-micro font-medium transition-colors shrink-0"
+                className="hidden min-[1200px]:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-signal/30 bg-signal/10 hover:bg-signal/20 text-signal font-mono text-micro font-medium transition-colors shrink-0"
                 title="Raw model specification (/llms.txt)"
               >
                 <Sparkles className="w-3 h-3 shrink-0" />
