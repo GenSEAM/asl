@@ -96,3 +96,11 @@
     rewrite is invisible to it — correct the rationale, do not touch the audit.
   - Non-blocking F5 (drifted line cites) + sharp-edge-2 (asymmetric run-opener pre-consumption:
     `"` and `:` pre-consume, digit does not) folded into the implementer brief.
+
+## Phase 7 planning 2026-09-03 — Retiring Lark & Migrating Conformance to Native Parser (@pcp:d-8d4c)
+- Tier 1 (Standard): planner `steps-planner`.
+- Plan: `.plans/phase-7-selfhost-validation/PLAN.md` (4 items).
+- Scope: Migrate `grammar/validate.py` and `tools/doc_examples.py` to `tools.native_parser.native_parse` (pure self-hosted parser), delete retired Lark secondary tests from `tools/tests/test_native_parity.py`.
+- Checkable Criterion: `.venv/bin/python grammar/validate.py && .venv/bin/python tools/doc_examples.py --quiet && .venv/bin/python -m pytest tools/tests/test_native_parity.py -q`.
+- Pre-requisites verified: 399/399 parity tests pass, all 37 package sources parse natively.
+
