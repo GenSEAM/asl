@@ -469,11 +469,12 @@ export const DocsView: React.FC = () => {
         </div>
 
         {/* Ordered Category Navigation Bar */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-8 pb-4 border-b border-line">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 mb-8 pb-4 border-b border-line">
+          {/* Main Category Tabs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:flex xl:flex-wrap gap-2 flex-1 min-w-0">
             {[
               { id: 'cli', label: '1. CLI & Workflow', icon: Terminal },
-              { id: 'mesh', label: '2. Agent Mesh (A2A)', icon: Boxes },
+              { id: 'mesh', label: '2. Agent Mesh', icon: Boxes },
               { id: 'data', label: '3. Data & Economy', icon: Database },
               { id: 'sql', label: '4. SQL & Query DSL', icon: Code2 },
               { id: 'syntax', label: '5. Syntax & Forms', icon: Braces },
@@ -483,55 +484,108 @@ export const DocsView: React.FC = () => {
               <button
                 key={id}
                 onClick={() => setActiveTab(id as DocTab)}
-                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl font-mono text-meta font-medium transition-all ${
+                className={`flex items-center justify-center sm:justify-start gap-2 px-3 py-2 rounded-xl font-mono text-meta font-medium transition-all ${
                   activeTab === id
                     ? 'bg-signal text-white shadow-sm'
                     : 'bg-surface hover:bg-surface-2 text-ink-2 hover:text-ink border border-line'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span>{label}</span>
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{label}</span>
               </button>
             ))}
           </div>
 
-          {/* Polyglot Target Language Selector for Syntax & Control */}
-          {(activeTab === 'syntax' || activeTab === 'control') && (
-            <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line shrink-0 overflow-x-auto">
-              <span className="text-micro font-mono uppercase text-ink-3 px-2">Target:</span>
-              {(['python', 'rust', 'typescript', 'go'] as CodeTargetLang[]).map((lang) => (
-                <button
-                  key={lang}
-                  onClick={() => setTargetLang(lang)}
-                  className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all capitalize ${
-                    targetLang === lang
-                      ? 'bg-signal text-white shadow-sm'
-                      : 'text-ink-2 hover:text-ink'
-                  }`}
-                >
-                  {lang === 'typescript' ? 'TypeScript' : lang}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Contextual Sub-Control Area (Stable container, never causes layout jumping) */}
+          <div className="shrink-0 flex items-center justify-start sm:justify-end min-h-[44px]">
+            {/* Syntax & Control: Polyglot Target Language Selector */}
+            {(activeTab === 'syntax' || activeTab === 'control') && (
+              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line w-full sm:w-auto overflow-x-auto">
+                <span className="text-micro font-mono uppercase text-ink-3 px-2">Target:</span>
+                {(['python', 'rust', 'typescript', 'go'] as CodeTargetLang[]).map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() => setTargetLang(lang)}
+                    className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all capitalize ${
+                      targetLang === lang
+                        ? 'bg-signal text-white shadow-sm'
+                        : 'text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {lang === 'typescript' ? 'TypeScript' : lang}
+                  </button>
+                ))}
+              </div>
+            )}
 
-          {/* Data Target Selector (JSON / YAML) */}
-          {activeTab === 'data' && (
-            <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line shrink-0">
-              <span className="text-micro font-mono uppercase text-ink-3 px-2">Compare:</span>
-              {(['json', 'yaml'] as DataTargetFormat[]).map((fmt) => (
-                <button
-                  key={fmt}
-                  onClick={() => setDataTarget(fmt)}
-                  className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all uppercase ${
-                    dataTarget === fmt ? 'bg-signal text-white shadow-sm' : 'text-ink-2 hover:text-ink'
-                  }`}
-                >
-                  {fmt}
-                </button>
-              ))}
-            </div>
-          )}
+            {/* SQL & Query DSL: Dialect Selector */}
+            {activeTab === 'sql' && (
+              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line w-full sm:w-auto overflow-x-auto">
+                <span className="text-micro font-mono uppercase text-ink-3 px-2">Dialect:</span>
+                {[
+                  { id: 'postgres', label: 'PostgreSQL' },
+                  { id: 'mysql', label: 'MySQL' },
+                  { id: 'sqlite', label: 'SQLite' },
+                  { id: 'mssql', label: 'MSSQL' },
+                  { id: 'oracle', label: 'Oracle' }
+                ].map(({ id, label }) => (
+                  <button
+                    key={id}
+                    onClick={() => setSqlDialect(id as SqlDialect)}
+                    className={`px-2.5 py-1 rounded-xl text-micro font-mono font-semibold transition-all ${
+                      sqlDialect === id
+                        ? 'bg-signal text-white shadow-sm'
+                        : 'text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Data & Economy: JSON / YAML Compare Selector */}
+            {activeTab === 'data' && (
+              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line w-full sm:w-auto">
+                <span className="text-micro font-mono uppercase text-ink-3 px-2">Compare:</span>
+                {(['json', 'yaml'] as DataTargetFormat[]).map((fmt) => (
+                  <button
+                    key={fmt}
+                    onClick={() => setDataTarget(fmt)}
+                    className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all uppercase ${
+                      dataTarget === fmt ? 'bg-signal text-white shadow-sm' : 'text-ink-2 hover:text-ink'
+                    }`}
+                  >
+                    {fmt}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* CLI: Status Pill */}
+            {activeTab === 'cli' && (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-ground border border-line text-micro font-mono text-ink-3">
+                <ShieldCheck className="w-4 h-4 text-signal" />
+                <span>Single-Pass Deterministic</span>
+              </div>
+            )}
+
+            {/* Mesh: Status Pill */}
+            {activeTab === 'mesh' && (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-ground border border-line text-micro font-mono text-ink-3">
+                <Boxes className="w-4 h-4 text-signal" />
+                <span>SkyLoom RPC Mesh Wire</span>
+              </div>
+            )}
+
+            {/* Stdlib: Builtin Counter Pill */}
+            {activeTab === 'stdlib' && (
+              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-ground border border-line text-micro font-mono text-ink-3">
+                <BookOpen className="w-4 h-4 text-signal" />
+                <span>107 Pure Builtins</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 1. CLI & Workflow */}
