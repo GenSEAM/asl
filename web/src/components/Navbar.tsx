@@ -74,6 +74,16 @@ export const Navbar: React.FC = () => {
     return () => document.removeEventListener('mousedown', onClickOutside);
   }, [isOpen]);
 
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth >= 981) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartY.current = e.touches[0].clientY;
   };
@@ -185,8 +195,8 @@ export const Navbar: React.FC = () => {
             </div>
           </header>
 
-          {/* Cosmic Orb & Emergent Arrow Pull-Down Handle */}
-          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-20">
+          {/* Cosmic Orb & Emergent Arrow Pull-Down Handle (Visible only below 981px) */}
+          <div className="nav:hidden absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-20">
             <button
               ref={handleRef}
               type="button"
@@ -232,11 +242,11 @@ export const Navbar: React.FC = () => {
             </button>
           </div>
 
-          {/* Curtain Menu Drawer */}
+          {/* Curtain Menu Drawer (Visible only below 981px) */}
           {isOpen && (
             <div
               ref={curtainRef}
-              className="pointer-events-auto mt-7 w-full rounded-3xl border border-line bg-surface/95 backdrop-blur-2xl p-4 sm:p-5 shadow-e4 transition-all duration-300 max-h-[82vh] overflow-y-auto"
+              className="nav:hidden pointer-events-auto mt-7 w-full rounded-3xl border border-line bg-surface/95 backdrop-blur-2xl p-4 sm:p-5 shadow-e4 transition-all duration-300 max-h-[82vh] overflow-y-auto"
             >
               {/* Mars Autopilot Header & Easter Egg Banner */}
               <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-line mb-4">

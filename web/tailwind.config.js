@@ -15,7 +15,7 @@ export default {
     extend: {
       screens: {
         xs: '420px',
-        nav: '1040px',
+        nav: '981px',
       },
       fontFamily: {
         mono: ['Fira Code', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
