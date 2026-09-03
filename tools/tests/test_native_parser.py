@@ -69,10 +69,12 @@ def test_cli_parse_bad_file_nonzero(tmp_path):
 
 
 def test_cli_parse_parse_error_reports_diagnostic(tmp_path):
-    # The parser's own driver exceeds its current recursion budget, so this is
-    # a deterministic parse failure rather than a missing-file usage error.
-    f = tmp_path / "driver.asl"
-    f.write_text((HARNESS_DIR / "reader_test.asl").read_text())
+    # The lexer is now iterative (fold-based), but the reader (`ast.asl`
+    # `read-one`/`read-seq-items`) still recurses per nesting level, so
+    # pathological nesting overflows CPython's recursion limit and yields a
+    # deterministic parse failure rather than a missing-file usage error.
+    f = tmp_path / "deep.asl"
+    f.write_text("(" * 3000 + ")" * 3000)
     proc = _run_cli("parse", str(f))
     assert proc.returncode != 0
     assert ": parse:" in proc.stdout

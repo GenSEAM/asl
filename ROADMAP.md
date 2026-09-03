@@ -3,9 +3,10 @@
 Written to be read cold. A session starting from zero should be able to resume from this file
 alone, plus `AGENTS.md` for commands and `.pcp/INDEX.md` for recorded intent.
 
-**Last updated:** 2026-08-29 · **Head commit at writing:** `8679362`, plus uncommitted phase-1 work
-(module-boundary types). Every figure below was re-derived after that work and after the two review
-passes that followed it.
+**Last updated:** 2026-09-03 · **Head commit at writing:** `c88c7ed`, plus the self-hosted-parser
+completion (`asl-selfhosted-runtime-v1` Phases 3–5, uncommitted): `asl parse` CLI + native-vs-Lark
+benchmark, iterative (fold-based) lexer scanner, parse-all-packages gate. Every figure below was
+re-derived after that work by running the command that produces it.
 
 ---
 
@@ -67,8 +68,9 @@ Everything below was checked by a command whose output was read, not inferred.
 | Ultra-Nano Syntax & Transcoder | **working** — single-token density (`:f`, `:c`, `:d`, `:x`, `:i`, `Str`, `I64`, `dfs`, `dfe`, `df`, `mt`), `asl transcode` (@pcp:d-1eed) |
 | In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
 | Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
-| Pre-Commit Verification | **7/7 gates green** — Grammar, Closure (107/107), Prelude, Checker, ASL Lint (100/100 across 24 packages), Clone Check (<15%), Web Pre-Flight |
-| Unit tests | **218 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests` (LSP, Graph, Ultra-Nano, Sandbox, Codec) |
+| Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + native-vs-Lark latency/memory benchmark (`tools/native_parser.py`); lexer scanner is iterative (fold over `string-chars`), so all 37 `packages/**/*.asl` parse without recursion overflow (`tools/tests/test_native_parse_all.py`: 38 passed) |
+| Pre-Commit Verification | **15/15 gates green** (re-measured 2026-09-03) — Grammar, Closure (107/107), Prelude, Checker, check_corpus, monomorphism, differential, pytest (369), parser tests (8), ASL Lint (37/37 files), Clone Check (10.02% < 15%), check-tokens, deploy_check, PCP actualize (0 breaches), `npm run build:web` |
+| Unit tests | **377 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests` (369, incl. 38 parse-all + 6 native-parser CLI), `packages/asl-parser/tests` (8) |
 
 ### Documents, in reading order for a newcomer
 

@@ -56,3 +56,43 @@
   = installed `.git/hooks/pre-commit` 7 gates PLUS AGENTS.md wider gates (check_corpus,
   monomorphism, differential, pytest). Roadmap "24 packages" is stale → 37 `.asl` files across 14
   packages. Phase 4 binds to Phase 3's landed `tools.native_parser` API, so it runs after Phase 3.
+
+## Escalation 2026-09-03 — parser recursion (Tier 1.5, hidden-coupling)
+- Trigger: Phase 3 implementer reported the native parser recurses out on real files; orchestrator
+  re-verified: `native_render` raises `maximum recursion depth exceeded` on lexer.asl (6296 B),
+  reader.asl (2379 B), ast.asl (17628 B), sh.asl (1114 B), lint.asl (2995 B). Root cause: lexer
+  `scan`/`scan-run`/`run-emit` recurse once per character; Phase 2 scoped inputs to ≤2 KiB and
+  flagged deeper input as an accumulator-style rewrite, so this is the first time real files hit it.
+- Language has NO `while`/`loop`; iteration is `fold`/`map`/`filter`/`range`/`string-chars`, all
+  lowered to Python loops (verified: `fold` → `_agentscript.fold(f,init,xs)`, `range` →
+  `list(range(a,b))`, `map` → comprehension). Scanner must be rewritten as a fold-based state machine.
+- Escalated to Tier 1.5: plan via `steps-planner`, extra review lens `steps-architect-pro`.
+- Roadmap updated: new Phase 4 (scalability) inserted; former Phase 4 renumbered Phase 5.
+  Gate: `.venv/bin/python -m pytest tools/tests/test_native_parse_all.py -q`.
+- Note: no package `.asl` currently uses `;` line comments (verified by grep), though the Lark
+  grammar declares `%ignore COMMENT`. Comment support is NOT required to parse the 37 files; out of
+  scope for this phase, noted for later.
+
+## Commit entanglement 2026-09-03 (Phase 3)
+- Orchestrator staged Phase 3 files (`agentscript`, `tools/native_parser.py`,
+  `tools/tests/test_native_parser.py`, `.plans/phase-3/`), then a parallel session committed
+  `c88c7ed` ("feat: add dual MIT/Apache-2.0 license, guarantee background gutters, polish
+  InBrowserAgent and wire protocol") which swept the staged parser files into its own web/license
+  commit. Phase 3 work is intact in HEAD (verified: `git show HEAD:agentscript | grep -c cmd_parse`
+  → 2), but the commit is mislabeled and entangled — same failure mode as `152d1a1`. Left un-rewritten
+  pending owner decision; do not rewrite.
+
+## Phase 4-scalability plan review 2026-09-03
+- Plan: `.plans/phase-4-scalability/PLAN.md` (4 items). Architect review `REVIEW-architect.md` →
+  approve-with-amendments (4 blocking). Dispositions (all ACCEPTED):
+  - F1: red set is 20 files, not 5 (orchestrator re-verified exact 20-file list by direct probe).
+    Item 1 records the 20-file list verbatim; Item 2 declares all 20 green post-rewrite except
+    `ast.asl` deferred to Item 3.
+  - F2: Item 3 selector `-k ast` also matches `ast_driver.asl`; use `ast.asl and not ast_driver`.
+  - F3: Item 4 runs the full AGENTS.md gate set, with a per-gate "input set excludes packages/"
+    justification for any omission. `fold`/`string-chars` already in coverage.lock instantiations
+    (executed: 107), so the lock cannot move from this change.
+  - F4: closure_audit scans `grammar/corpus/valid` + spec examples only (closure_audit.py:76);
+    rewrite is invisible to it — correct the rationale, do not touch the audit.
+  - Non-blocking F5 (drifted line cites) + sharp-edge-2 (asymmetric run-opener pre-consumption:
+    `"` and `:` pre-consume, digit does not) folded into the implementer brief.

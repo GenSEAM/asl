@@ -85,10 +85,6 @@
     ("[" (tok-lbracket))
     (_   (tok-rbracket))))
 
-(df tokenize [(s String)] -> (List Token)
-  :d "Scans source text into tokens with 1-based line and column positions."
-  (scan s 0 1 1))
-
 (dfe RunMode
   (:c run-symbol  [] "Symbol or identifier run")
   (:c run-keyword [] "Keyword run after a leading colon")
@@ -111,54 +107,119 @@
     ((run-int)
      (tok-int (mt (string-to-int64 raw) ((some v) v) ((none) 0))))))
 
-(df run-emit [(mode RunMode) (raw String) (s String) (i Int64) (line Int64) (col Int64)
-              (start-line Int64) (start-col Int64)] -> (List Token)
-  :d "Emits the finished run and resumes scanning after it."
-  (mt mode
-    ((run-string)
-     (if (>= i (string-length s))
-       (list-cons (make-token (tok-string raw) raw start-line start-col)
-                  (scan s i line col))
-       (let [(closed (str raw (char-at s i)))]
-         (list-cons (make-token (tok-string closed) closed start-line start-col)
-                    (scan s (+ i 1) line (+ col 1))))))
-    (_ (list-cons (make-token (run-token mode raw) raw start-line start-col)
-                  (scan s i line col)))))
+(dfs RunState
+  (:f mode RunMode "Run mode")
+  (:f raw String "Accumulated run text, including any pre-consumed opener")
+  (:f start-line Int64 "Line where the run opened")
+  (:f start-col Int64 "Column where the run opened"))
 
-(df scan-run [(mode RunMode) (s String) (i Int64) (line Int64) (col Int64)
-              (start-line Int64) (start-col Int64) (acc String)] -> (List Token)
-  :d "Consumes one run selected by mode and resumes scanning at its end."
-  (if (>= i (string-length s))
-    (run-emit mode acc s i line col start-line start-col)
-    (let [(ch (char-at s i))]
-      (if (run-continues? mode ch)
-        (scan-run mode s (+ i 1)
-                  (if (= ch "\n") (+ line 1) line)
-                  (if (= ch "\n") 1 (+ col 1))
-                  start-line start-col (str acc ch))
-        (run-emit mode acc s i line col start-line start-col)))))
+(dfs ScanState
+  (:f toks (List Token) "Emitted tokens, kept reversed so appends are cons")
+  (:f line Int64 "Current line")
+  (:f col Int64 "Current column")
+  (:f run (Option RunState) "Open run, or none outside a run"))
 
-(df scan [(s String) (i Int64) (line Int64) (col Int64)] -> (List Token)
-  :d "One scan step: skip a whitespace char, emit a delimiter, or start a run."
-  (if (>= i (string-length s))
-    (list (make-token (tok-eof) "" line col))
-    (let [(ch (char-at s i))]
-      (cond
-        ((is-whitespace ch)
-         (scan s (+ i 1)
-               (if (= ch "\n") (+ line 1) line)
-               (if (= ch "\n") 1 (+ col 1))))
-        ((is-delimiter ch)
-         (list-cons (make-token (delim-kind ch) ch line col)
-                    (scan s (+ i 1) line (+ col 1))))
-        ((is-brace ch)
-         (list-cons (make-token (tok-symbol ch) ch line col)
-                    (scan s (+ i 1) line (+ col 1))))
-        ((= ch "\"")
-         (scan-run (run-string) s (+ i 1) line (+ col 1) line col "\""))
-        ((is-digit ch)
-         (scan-run (run-int) s i line col line col ""))
-        ((= ch ":")
-         (scan-run (run-keyword) s (+ i 1) line (+ col 1) line col ":"))
-        (:else
-         (scan-run (run-symbol) s (+ i 1) line (+ col 1) line col ch))))))
+(df consume-run [(st ScanState) (run RunState) (ch String)] -> ScanState
+  :d "Fold step when ch belongs to the open run: append it and advance position."
+  (ScanState :toks (.-toks st)
+             :line (if (= ch "\n") (+ (.-line st) 1) (.-line st))
+             :col (if (= ch "\n") 1 (+ (.-col st) 1))
+             :run (some (RunState :mode (.-mode run)
+                                  :raw (str (.-raw run) ch)
+                                  :start-line (.-start-line run)
+                                  :start-col (.-start-col run)))))
+
+(df close-string-run [(st ScanState) (run RunState) (ch String)] -> ScanState
+  :d "Fold step on a string's closing quote: the quote joins the raw and the run emits."
+  (let [(closed (str (.-raw run) ch))]
+    (ScanState :toks (list-cons (make-token (run-token (.-mode run) closed) closed
+                                            (.-start-line run) (.-start-col run))
+                                (.-toks st))
+               :line (.-line st)
+               :col (+ (.-col st) 1)
+               :run (none))))
+
+(df emit-run-and-char [(st ScanState) (run RunState) (ch String)] -> ScanState
+  :d "Fold step when ch terminates the run: emit the run, then handle ch fresh."
+  (open-char (ScanState :toks (list-cons (make-token (run-token (.-mode run) (.-raw run))
+                                                     (.-raw run)
+                                                     (.-start-line run) (.-start-col run))
+                                         (.-toks st))
+                        :line (.-line st)
+                        :col (.-col st)
+                        :run (none))
+             ch))
+
+(df open-char [(st ScanState) (ch String)] -> ScanState
+  :d "Fold step for a character outside any run."
+  (cond
+    ((is-whitespace ch)
+     (ScanState :toks (.-toks st)
+                :line (if (= ch "\n") (+ (.-line st) 1) (.-line st))
+                :col (if (= ch "\n") 1 (+ (.-col st) 1))
+                :run (none)))
+    ((is-delimiter ch)
+     (ScanState :toks (list-cons (make-token (delim-kind ch) ch (.-line st) (.-col st))
+                                 (.-toks st))
+                :line (.-line st)
+                :col (+ (.-col st) 1)
+                :run (none)))
+    ((is-brace ch)
+     (ScanState :toks (list-cons (make-token (tok-symbol ch) ch (.-line st) (.-col st))
+                                 (.-toks st))
+                :line (.-line st)
+                :col (+ (.-col st) 1)
+                :run (none)))
+    ((= ch "\"")
+     (ScanState :toks (.-toks st)
+                :line (.-line st)
+                :col (+ (.-col st) 1)
+                :run (some (RunState :mode (run-string) :raw "\""
+                                     :start-line (.-line st) :start-col (.-col st)))))
+    ((is-digit ch)
+     ;; The opening digit is the run's first character, not a pre-consumed opener.
+     (ScanState :toks (.-toks st)
+                :line (.-line st)
+                :col (+ (.-col st) 1)
+                :run (some (RunState :mode (run-int) :raw ch
+                                     :start-line (.-line st) :start-col (.-col st)))))
+    ((= ch ":")
+     (ScanState :toks (.-toks st)
+                :line (.-line st)
+                :col (+ (.-col st) 1)
+                :run (some (RunState :mode (run-keyword) :raw ":"
+                                     :start-line (.-line st) :start-col (.-col st)))))
+    (:else
+     (ScanState :toks (.-toks st)
+                :line (.-line st)
+                :col (+ (.-col st) 1)
+                :run (some (RunState :mode (run-symbol) :raw ch
+                                     :start-line (.-line st) :start-col (.-col st)))))))
+
+(df step [(st ScanState) (ch String)] -> ScanState
+  :d "One fold step: continue, close or emit an open run, else open the char."
+  (mt (.-run st)
+    ((some run)
+     (if (run-continues? (.-mode run) ch)
+       (consume-run st run ch)
+       (if (and (= (.-mode run) (run-string)) (= ch "\""))
+         (close-string-run st run ch)
+         (emit-run-and-char st run ch))))
+    ((none) (open-char st ch))))
+
+(df flush [(st ScanState)] -> (List Token)
+  :d "Emit an open run and the EOF sentinel, then restore token order."
+  (let [(emitted (mt (.-run st)
+                  ((some run)
+                   (list-cons (make-token (run-token (.-mode run) (.-raw run))
+                                          (.-raw run)
+                                          (.-start-line run) (.-start-col run))
+                              (.-toks st)))
+                  ((none) (.-toks st))))]
+    (list-reverse (list-cons (make-token (tok-eof) "" (.-line st) (.-col st))
+                             emitted))))
+
+(df tokenize [(s String)] -> (List Token)
+  :d "Scans source text into tokens with 1-based line and column positions."
+  (flush (fold step (ScanState :toks (list) :line 1 :col 1 :run (none))
+               (string-chars s))))

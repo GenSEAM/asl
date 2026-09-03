@@ -15,8 +15,18 @@ Goal: 100% Self-Hosted Pure ASL Parser & S-Expression Reader (`packages/asl-pars
 - Goal: Wire native parser into CLI as `asl parse` and provide high-speed parsing benchmark comparing memory/latency against Lark.
 - Checkable Criterion: `.venv/bin/python -m pytest tools/tests/test_native_parser.py -q`
 
-### Phase 4: Full Ecosystem Verification & 7-Gate CI Hardening
-- Goal: Parse all 24 packages with native parser, run full 7-gate CI pre-commit pipeline, verify zero regressions.
+### Phase 4: Parser Scalability — iterative scanner (escalation, added 2026-09-03)
+- Goal: The lexer's `scan`/`scan-run`/`run-emit` recurse once per character and overflow
+  CPython's recursion limit on every real file (>~1 KiB). Rewrite the scanner to be
+  non-recursive (fold/range/map over the char stream), and fix any residual per-token/per-form
+  recursion in the reader/AST that also overflows. Phase 2 knowingly scoped inputs to ≤2 KiB;
+  this phase removes that bound so the parser handles real package files.
+- Checkable Criterion: `.venv/bin/python -m pytest tools/tests/test_native_parse_all.py -q`
+  (parses every `.asl` under `packages/` through the native parser, hard-fails on zero files).
+
+### Phase 5: Full Ecosystem Verification & 7-Gate CI Hardening
+- Goal: Parse all 37 `.asl` files across 14 packages with the native parser (post-escalation),
+  run the full 7-gate CI pre-commit pipeline plus the AGENTS.md wider gates, verify zero regressions.
 - Checkable Criterion: `node /Users/purplelephant/.gemini/config/skills/pcp/scripts/pcp.js actualize && npm run build:web`
 
 ## Out of Scope
