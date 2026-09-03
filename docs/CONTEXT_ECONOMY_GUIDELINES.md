@@ -24,8 +24,8 @@ For an AI agent reading this file, these comments are **100% pure token waste**.
    - What architectural requirement (ADR) mandated this decision?
 3. **Store Intent Out-of-Band via Semantic Tags**:
    ```lisp
-   (defun calculate-hash ((payload Bytes) (nonce U64)) Bytes
-     (@tag :arch "d-sec-02" :why "resist timing-attacks via constant-time primitive")
+   (defun calculate-hash [(payload Bytes) (nonce Int64)] -> Bytes
+     (:tag "d-sec-02" :why "resist timing-attacks via constant-time primitive")
      (crypto/blake3 payload nonce))
    ```
    If an agent understands the logic, it reads only the compact code. If it needs the rationale or motivation, it queries the reference:
@@ -296,9 +296,27 @@ Any tabular or positional serialization format must answer hard production quest
 
 ---
 
-### Language-Level Structural Factoring (Schema Mixins: `@include` [Roadmap v1.0])
+### Deduplicating Arbitrary Recurring Data: Shared Value Pools (`:pool` & `:ref`)
 
-> **Compatibility Notice**: In the normative v0.2 compiler, every schema field requires a docstring `STRING` (`(:f id Int64 "doc")`). Schema mixins (`@include`) and decoupled metadata without inline docstrings are specified for the **v1.0 Suite** (`asl-decoupled-meta-v1`).
+When serializing arbitrary data (even without pre-defined schemas), long strings (URLs, trace IDs, error descriptions) and recurring sub-records often repeat dozens of times. Rather than inventing complex pattern macros, ASN uses a standard **Shared Value Pool**:
+
+```lisp
+;; ✅ Long recurring strings/objects declared ONCE in :pool, referenced by index (:ref N)
+(:pool ["https://api.internal.cluster.local/v2/telemetry/nodes" {:region :us-east :env :prod}]
+ :events
+ [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok)
+  (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :ok)
+  (:ts 1714829110 :url (:ref 0) :ctx (:ref 1) :status :warn)])
+```
+- **100% Single-Token**: `:pool` (1 token), `:ref` (1 token).
+- **Universal**: Works on any arbitrary data (strings, objects, lists, numbers) without needing to pre-declare types.
+- **Deserializer Behavior**: The deserializer simply substitutes `(:ref N)` with `pool[N]` in memory during decoding.
+
+---
+
+### Language-Level Structural Factoring (Schema Mixins: `:use` [Roadmap v1.0])
+
+> **Compatibility Notice**: In the normative v0.2 compiler, every schema field requires a docstring `STRING` (`(:f id Int64 "doc")`). Schema mixins (`:use`) and decoupled metadata without inline docstrings are specified for the **v1.0 Suite** (`asl-decoupled-meta-v1`).
 
 ```lisp
 ;; [Roadmap v1.0 Preview]
@@ -308,14 +326,14 @@ Any tabular or positional serialization format must answer hard production quest
   (:f ts Int64 "Timestamp")
   (:f tenant Int64 "Tenant"))
 
-;; Derived schemas factor in the base structure:
+;; Derived schemas factor in the base structure with 1-token :use:
 (dfs UserProfile
-  (@include AuditMeta)
+  (:use AuditMeta)
   (:f email String "Email")
   (:f role String "Role"))
 
 (dfs Order
-  (@include AuditMeta)
+  (:use AuditMeta)
   (:f total Float64 "Total")
   (:f items (List String) "Items"))
 ```
@@ -323,7 +341,7 @@ Any tabular or positional serialization format must answer hard production quest
 
 ---
 
-## 6. Context Offloading via Handles (`@offload`)
+## 6. Context Offloading via Handles (`:offload`)
 
 When an agent executes an operation that yields a massive output (e.g. 50KB of raw web scraping, test logs, or large database query results), **NEVER dump the entire raw output into the conversational prompt window**.
 
@@ -348,15 +366,15 @@ This prevents conversational context exhaustion and keeps the agent's attention 
 ## 7. Summary Reference Workflow
 
 ```
-[Pure Code: Pure HOW & WHAT]
+[Pure Code in .asl: Pure HOW & WHAT]
        │
-       ├──> (@tag :arch "d-4a1b" :doc "fn-calc")
+       ├──> (:tag "d-4a1b" :doc "fn-calc")
        │
        └──> Question: "Why does this exist? What was the motivation?"
                    │
                    ▼
-       [Out-of-Band Knowledge Matrix: asl meta get d-4a1b]
-       - Motivation: Prevent memory leak under high-concurrency SSE stream
-       - Architectural Decision: Approved in ADR-4a1b
-       - Invariants: Must release buffer within 50ms
+        [Out-of-Band Knowledge Matrix: asl meta get d-4a1b]
+        - Motivation: Prevent memory leak under high-concurrency SSE stream
+        - Architectural Decision: Approved in ADR-4a1b
+        - Invariants: Must release buffer within 50ms
 ```

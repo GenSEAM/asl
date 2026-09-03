@@ -154,9 +154,9 @@ def query_users(db):
 
 ### Case 10: Circular References & Graph Topologies
 ```lisp
-;; Anchored nodes with explicit identity references (& and @ref)
-[(& 1 :name "Orchestrator" :peers [(@ref 2)])
- (& 2 :name "Worker"       :peers [(@ref 1)])]
+;; Anchored nodes with explicit identity references (& and :ref)
+[(& 1 :name "Orchestrator" :peers [(:ref 2)])
+ (& 2 :name "Worker"       :peers [(:ref 1)])]
 ```
 *Prevents infinite recursion in serialization and deserialization.*
 

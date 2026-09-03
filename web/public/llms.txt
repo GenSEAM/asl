@@ -73,7 +73,7 @@ For autonomous agents and tools that exchange structured data or call APIs:
 
 ## Context Economy & Intent Separation Directive for AI Models
 1. **Never Explain What Code Already Says**: Code carries the HOW and WHAT. Do not emit explanatory comments describing syntax steps.
-2. **Document Only the Motivation (WHY)**: Store architectural intent, edge cases, and rationale out-of-band via semantic tags (`@tag :arch "d-xxxx" :why "..."`).
+2. **Document Only the Motivation (WHY)**: Store architectural intent, edge cases, and rationale out-of-band via semantic tags (`(:tag "d-xxxx" :why "...")`).
 3. **Single-Token Hygiene (Однотокеновая гигиена)**: All protocol keys, record fields, and technical descriptors MUST resolve to exactly 1 BPE token: `:dflt` (default), `:cfg` (config), `:ctx` (context), `:req` (request), `:resp` (response), `:arg` (parameter), `:err` (error), `:auth` (auth), `:len` (length), `:idx` (index), `:ts` (timestamp). Exceptions: Top-level domain business entities (`PatientHistoryRecord`) and external FFI calls retain full readability.
 4. **Context Offloading**: Large tool outputs (>2KB) should be offloaded by the companion agent, returning compact metadata pointers `(! data/offload :id "..." :summary "...")` instead of flooding context windows.
 
