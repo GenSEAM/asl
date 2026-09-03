@@ -8,11 +8,9 @@ an escape, a dropped module path, aliases rewritten in record keys, a parser
 that could not fail) survived because nothing compared the self-hosted parser to
 a grammar on real sources.
 
-**tree-sitter is the reference here, and Lark is a secondary check.** Lark is
-being retired; it drives constrained decoding today and nothing else. When it
-goes, delete `_lark_accepts`, `test_lark_still_agrees_with_the_reference` and the
-`lark` import — every other test in this file is already written against
-tree-sitter and needs no change.
+**tree-sitter is the reference here.** Lark was retired from this suite in
+Phase 7; the self-hosted parser is the sole check against the reference grammar
+and every test here is written against tree-sitter.
 
 Four claims are enforced:
 
@@ -45,9 +43,6 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "grammar"))
 sys.path.insert(0, str(ROOT / "prelude"))
 
-from lark import Lark  # noqa: E402
-from lark.exceptions import LarkError  # noqa: E402
-
 from tools.native_parser import NativeParserError, native_render  # noqa: E402
 
 AST_SRC = ROOT / "packages" / "asl-parser" / "src" / "ast.asl"
@@ -73,22 +68,6 @@ def reference_accepts(src: str) -> bool:
         os.unlink(name)
     out = proc.stdout + proc.stderr
     return proc.returncode == 0 and "ERROR" not in out and "MISSING" not in out
-
-
-def _lark() -> Lark:
-    """Secondary parser only. Delete with the Lark arm."""
-    if not hasattr(_lark, "_p"):
-        _lark._p = Lark.open(str(ROOT / "grammar" / "agentscript.lark"), parser="earley")
-    return _lark._p
-
-
-def _lark_accepts(src: str) -> bool:
-    """Secondary parser only. Delete with the Lark arm."""
-    try:
-        _lark().parse(src)
-        return True
-    except LarkError:
-        return False
 
 
 def _accepted_sources() -> list[Path]:
@@ -136,15 +115,6 @@ def test_native_render_reparses_under_the_reference(path):
     out = native_render(path.read_text())
     assert reference_accepts(out), (
         f"render of {path.relative_to(ROOT)} does not re-parse:\n{out[:400]}")
-
-
-@pytest.mark.parametrize(
-    "path", [pytest.param(p, id=str(p.relative_to(ROOT))) for p in ACCEPTED])
-def test_lark_still_agrees_with_the_reference(path):
-    """Secondary check. Delete this test when the Lark arm is retired."""
-    src = path.read_text()
-    assert _lark_accepts(src) == reference_accepts(src), (
-        f"the two grammars disagree about {path.relative_to(ROOT)}")
 
 
 @pytest.mark.parametrize(
