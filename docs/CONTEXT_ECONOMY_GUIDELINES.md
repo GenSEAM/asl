@@ -122,19 +122,19 @@ Do NOT forcibly mangle identifiers in these three specific situations:
 
 #### Example B: Data Type Schema Definition
 ```lisp
-;; ❌ BAD: 38 BPE Tokens
+;; ❌ BAD: 44 BPE Tokens (Verbose legacy naming)
 (defschema UserProfile
-  (:field user_identifier Str)
-  (:field configuration_parameters (Map Str Str))
-  (:field default_role Str))
+  (:field user_identifier String "Unique ID of user")
+  (:field configuration_parameters (Map String String) "Key-value config")
+  (:field default_role String "Fallback role"))
 
-;; ✅ GOOD: 18 BPE Tokens
+;; ✅ GOOD: 24 BPE Tokens (Single-Token Hygiene enforced)
 (dfs UserProfile
-  (:f id Str)
-  (:f cfg (Map Str Str))
-  (:f dflt-role Str))
+  (:f id String "ID")
+  (:f cfg (Map String String) "Config")
+  (:f dflt-role String "Role"))
 ```
-*Savings: 53% fewer tokens.*
+*Savings: 45% fewer tokens in code while remaining 100% valid under the v0.2 parser!*
 
 ---
 
@@ -181,7 +181,11 @@ To stay 100% compliant with Single-Token Hygiene, ASN does NOT introduce multi-t
 #### 1. Pre-Declared Schema Re-Use: `(Schema [rows...])`
 When a structure is declared in the schema:
 ```lisp
-(dfs Item (:f id Int) (:f sku Str) (:f price F64) (:f status Str))
+(dfs Item
+  (:f id Int64 "ID")
+  (:f sku String "SKU")
+  (:f price Float64 "Price")
+  (:f status String "Status"))
 ```
 An array of records simply re-uses the schema constructor as the group head:
 ```lisp
@@ -292,26 +296,28 @@ Any tabular or positional serialization format must answer hard production quest
 
 ---
 
-### Language-Level Structural Factoring (Schema Mixins: `@include`)
-In source code, avoid duplicating common fields (`id`, `ts`, `tenant`) across dozens of schemas:
+### Language-Level Structural Factoring (Schema Mixins: `@include` [Roadmap v1.0])
+
+> **Compatibility Notice**: In the normative v0.2 compiler, every schema field requires a docstring `STRING` (`(:f id Int64 "doc")`). Schema mixins (`@include`) and decoupled metadata without inline docstrings are specified for the **v1.0 Suite** (`asl-decoupled-meta-v1`).
 
 ```lisp
-;; Base audit struct defined once
+;; [Roadmap v1.0 Preview]
+;; Base audit struct defined once:
 (dfs AuditMeta
-  (:f id U64)
-  (:f ts U64)
-  (:f tenant U64))
+  (:f id Int64 "ID")
+  (:f ts Int64 "Timestamp")
+  (:f tenant Int64 "Tenant"))
 
-;; Derived schemas factor in the base structure
+;; Derived schemas factor in the base structure:
 (dfs UserProfile
   (@include AuditMeta)
-  (:f email Str)
-  (:f role Str))
+  (:f email String "Email")
+  (:f role String "Role"))
 
 (dfs Order
   (@include AuditMeta)
-  (:f total F64)
-  (:f items (List Str)))
+  (:f total Float64 "Total")
+  (:f items (List String) "Items"))
 ```
 *Code stays clean, maintenance is centralized, and AST size remains minimal.*
 

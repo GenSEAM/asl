@@ -29,7 +29,11 @@
 When transferring tabular records (e.g. database query results, API responses):
 ```lisp
 ;; Schema defined once in scope:
-(dfs Item (:f id Int) (:f sku Str) (:f price F64) (:f status Str))
+(dfs Item
+  (:f id Int64 "ID")
+  (:f sku String "SKU")
+  (:f price Float64 "Price")
+  (:f status String "Status"))
 
 ;; Payload: Constructor name (1 token) + pure positional rows
 (Item
