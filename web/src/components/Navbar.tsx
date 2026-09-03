@@ -179,43 +179,52 @@ export const Navbar: React.FC = () => {
             </div>
           </header>
 
-          {/* Integrated Celestial Arrow Orb prominently peeking out under the header */}
-          <div className="nav:hidden absolute left-1/2 -translate-x-1/2 -bottom-4 z-20 flex items-center justify-center pointer-events-auto">
+          {/* Seamless Celestial Pull-Tab tucked under the header (protruding downward without covering header) */}
+          <div className="nav:hidden absolute left-1/2 -translate-x-1/2 top-full -mt-2 z-0 flex items-center justify-center pointer-events-auto">
             <button
               ref={handleRef}
               type="button"
               onClick={() => setIsOpen((prev) => !prev)}
               aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={isOpen}
-              className="group flex items-center justify-center w-8 h-8 rounded-full border border-line-strong bg-surface shadow-md hover:border-signal hover:shadow-sm hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer focus:outline-none"
+              className="group flex items-center justify-center pt-2 pb-1 px-2.5 rounded-b-2xl border-b border-x border-line/80 bg-surface/95 shadow-sm backdrop-blur-xl hover:border-signal/60 hover:bg-surface hover:pt-2.5 hover:pb-1.5 transition-all duration-200 cursor-pointer focus:outline-none"
               title={isOpen ? 'Close menu (Esc)' : 'Open navigation menu'}
             >
-              {/* Orb with clearly visible, bold integrated arrow & orbital satellite */}
-              <svg viewBox="0 0 32 32" className="w-5 h-5 text-signal transition-transform duration-200">
-                {/* Subtle orbital ring */}
-                <ellipse
-                  cx="16"
-                  cy="16"
-                  rx="12"
-                  ry="5"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  strokeDasharray="2 2"
-                  className="opacity-35 -rotate-25 origin-center"
-                />
-                {/* Orbit satellite beacon dot */}
-                <circle cx="25" cy="13" r="1.5" className="fill-signal" />
-                {/* Crisp bold arrow pointing down / up */}
-                <path
-                  d={isOpen ? 'M10 18l6-6 6 6' : 'M10 13l6 6 6-6'}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="transition-all duration-200"
-                />
-              </svg>
+              {/* Celestial artwork: orbit ring, satellite beacon & in-place rotating chevron */}
+              <div className="relative flex items-center justify-center w-5 h-4">
+                {/* Subtle orbital curve */}
+                <svg viewBox="0 0 24 16" className="absolute inset-0 w-full h-full text-signal pointer-events-none">
+                  <ellipse
+                    cx="12"
+                    cy="8"
+                    rx="10"
+                    ry="4"
+                    stroke="currentColor"
+                    strokeWidth="0.9"
+                    strokeDasharray="2 2"
+                    className="opacity-40 -rotate-15 origin-center"
+                  />
+                  <circle cx="20" cy="6" r="1.2" className="fill-signal" />
+                </svg>
+
+                {/* Arrow smoothly rotating in-place without moving */}
+                <svg
+                  viewBox="0 0 24 24"
+                  className={`w-3.5 h-3.5 text-signal transition-transform duration-300 ease-out ${
+                    isOpen ? 'rotate-180' : 'group-hover:translate-y-0.5'
+                  }`}
+                  style={{ transformOrigin: 'center' }}
+                >
+                  <path
+                    d="M6 9l6 6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
             </button>
           </div>
 
