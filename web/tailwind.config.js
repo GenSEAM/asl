@@ -13,6 +13,10 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        xs: '420px',
+        nav: '900px',
+      },
       fontFamily: {
         mono: ['Fira Code', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],

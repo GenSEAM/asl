@@ -58,19 +58,33 @@ export const Link: React.FC<{
   activeClassName?: string;
   children: React.ReactNode;
   onClick?: () => void;
-}> = ({ to, className = '', activeClassName = '', children, onClick }) => {
+  title?: string;
+  'aria-label'?: string;
+} & React.AnchorHTMLAttributes<HTMLAnchorElement>> = ({
+  to,
+  className = '',
+  activeClassName = '',
+  children,
+  onClick,
+  title,
+  'aria-label': ariaLabel,
+  ...rest
+}) => {
   const { currentPath, navigate } = useRouter();
   const isActive = currentPath === to;
 
   return (
     <a
       href={to}
+      title={title}
+      aria-label={ariaLabel}
       onClick={(e) => {
         e.preventDefault();
         navigate(to);
         if (onClick) onClick();
       }}
       className={`${className} ${isActive ? activeClassName : ''}`}
+      {...rest}
     >
       {children}
     </a>
