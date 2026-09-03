@@ -179,7 +179,7 @@ export const Navbar: React.FC = () => {
             </div>
           </header>
 
-          {/* Seamless Celestial Pull-Tab tucked under the header (protruding downward without covering header) */}
+          {/* Seamless Celestial Pull-Tab tucked under the header with chevron-contoured border */}
           <div className="nav:hidden absolute left-1/2 -translate-x-1/2 top-full -mt-2 z-0 flex items-center justify-center pointer-events-auto">
             <button
               ref={handleRef}
@@ -187,44 +187,45 @@ export const Navbar: React.FC = () => {
               onClick={() => setIsOpen((prev) => !prev)}
               aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={isOpen}
-              className="group flex items-center justify-center pt-2 pb-1 px-2.5 rounded-b-2xl border-b border-x border-line/80 bg-surface/95 shadow-sm backdrop-blur-xl hover:border-signal/60 hover:bg-surface hover:pt-2.5 hover:pb-1.5 transition-all duration-200 cursor-pointer focus:outline-none"
+              className="group relative flex items-center justify-center cursor-pointer focus:outline-none transition-all duration-200 hover:translate-y-0.5 active:scale-95"
               title={isOpen ? 'Close menu (Esc)' : 'Open navigation menu'}
             >
-              {/* Celestial artwork: orbit ring, satellite beacon & in-place rotating chevron */}
-              <div className="relative flex items-center justify-center w-5 h-4">
-                {/* Subtle orbital curve */}
-                <svg viewBox="0 0 24 16" className="absolute inset-0 w-full h-full text-signal pointer-events-none">
-                  <ellipse
-                    cx="12"
-                    cy="8"
-                    rx="10"
-                    ry="4"
-                    stroke="currentColor"
-                    strokeWidth="0.9"
-                    strokeDasharray="2 2"
-                    className="opacity-40 -rotate-15 origin-center"
-                  />
-                  <circle cx="20" cy="6" r="1.2" className="fill-signal" />
-                </svg>
+              <svg width="44" height="20" viewBox="0 0 44 20" className="overflow-visible">
+                {/* Seamless Tab Body with Chevron-shaped Bottom Contour */}
+                <path
+                  d={
+                    isOpen
+                      ? 'M 6 18 L 6 14 C 6 8 16 2 22 2 C 28 2 38 8 38 14 L 38 18 Z'
+                      : 'M 6 0 L 6 4 C 6 10 16 17 22 18 C 28 17 38 10 38 4 L 38 0 Z'
+                  }
+                  className="fill-surface stroke-line/80 group-hover:stroke-signal/70 transition-all duration-300"
+                  strokeWidth="1.2"
+                />
 
-                {/* Arrow smoothly rotating in-place without moving */}
-                <svg
-                  viewBox="0 0 24 24"
-                  className={`w-3.5 h-3.5 text-signal transition-transform duration-300 ease-out ${
-                    isOpen ? 'rotate-180' : 'group-hover:translate-y-0.5'
-                  }`}
-                  style={{ transformOrigin: 'center' }}
-                >
-                  <path
-                    d="M6 9l6 6 6-6"
+                {/* Pure Lightweight Celestial Artwork: Orbit Ellipse + Satellite + Core */}
+                <g className="transition-transform duration-300">
+                  {/* Orbit ellipse ring */}
+                  <ellipse
+                    cx="22"
+                    cy={isOpen ? 10 : 8}
+                    rx="8"
+                    ry="3.2"
+                    className="stroke-signal opacity-45 group-hover:opacity-90 transition-opacity -rotate-15 origin-center"
+                    strokeWidth="0.9"
+                    strokeDasharray="2 1.5"
                     fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
                   />
-                </svg>
-              </div>
+                  {/* Orbit satellite beacon dot */}
+                  <circle cx="28" cy={isOpen ? 8.5 : 6.5} r="1.1" className="fill-signal" />
+                  {/* Core glowing celestial body */}
+                  <circle
+                    cx="22"
+                    cy={isOpen ? 10 : 8}
+                    r="1.6"
+                    className="fill-signal/80 group-hover:fill-signal transition-colors"
+                  />
+                </g>
+              </svg>
             </button>
           </div>
 
