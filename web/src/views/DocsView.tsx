@@ -347,21 +347,18 @@ const DATA_CARDS: DataComparisonCard[] = [
     ok: false`
   },
   {
-    id: 'token-traits',
-    title: '1-Token Behavioral Traits & Metadata',
-    description: 'Single-token keywords (:tag, :why, :use, :ref, :offload) carry zero BPE token overhead while remaining lexically distinct.',
-    asl: `(:tag "d-1eed"
- :why "Eliminate BPE prefix splits and preserve single-token density"
- :use "auth/crypto"
- :offload :storage/opfs)`,
+    id: 'symbolic-anchors',
+    title: 'Symbolic Anchors & External Architecture Ledgers',
+    description: 'Concise alphanumeric anchors (@d12, @auth/crypto) link runtime code to external architecture ledgers without in-band token bloat.',
+    asl: `(:ref @d-1eed
+ :target "auth/crypto"
+ :driver :storage/opfs)`,
     json: `{
-  "decision_tag": "d-1eed",
-  "architectural_rationale": "Eliminate BPE prefix splits and preserve single-token density",
+  "anchor": "@d-1eed",
   "import_module": "auth/crypto",
   "storage_driver": "storage/opfs"
 }`,
-    yaml: `decision_tag: "d-1eed"
-architectural_rationale: "Eliminate BPE prefix splits and preserve single-token density"
+    yaml: `anchor: "@d-1eed"
 import_module: "auth/crypto"
 storage_driver: "storage/opfs"`
   }
@@ -719,7 +716,7 @@ export const DocsView: React.FC = () => {
                   <button
                     onClick={() =>
                       copyToClipboard(
-                        `(:frame :task/invoke\n  :tx "tx-9942a"\n  :from "agent/coordinator"\n  :to "agent/sql-optimizer"\n  :payload (:query "SELECT * FROM metrics WHERE p99 > 200"\n            :timeout-ms 5000)\n  :tag "d-9942"\n  :why "Mitigate high latency spike detected in cluster.")`,
+                        `(:frame :task/invoke\n  :tx "tx-9942a"\n  :from "agent/coordinator"\n  :to "agent/sql-optimizer"\n  :ref @d-9942\n  :payload (:query "SELECT * FROM metrics WHERE p99 > 200"\n            :timeout-ms 5000))`,
                         'mesh-invoke'
                       )
                     }
@@ -733,10 +730,9 @@ export const DocsView: React.FC = () => {
   :tx "tx-9942a"
   :from "agent/coordinator"
   :to "agent/sql-optimizer"
+  :ref @d-9942
   :payload (:query "SELECT * FROM metrics WHERE p99 > 200"
-            :timeout-ms 5000)
-  :tag "d-9942"
-  :why "Mitigate high latency spike detected in cluster.")`}
+            :timeout-ms 5000))`}
                 </pre>
               </div>
 

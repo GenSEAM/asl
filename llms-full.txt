@@ -84,8 +84,8 @@ Repeated strings, URLs, or schema identifiers are declared once in a shared cons
              [(:ref 2) (:ref 1) (:ref 0) false]]))
 ```
 
-### 4.3 1-Token Metadata Keywords
-Keywords `:tag`, `:why`, `:use`, `:ref`, `:pool`, and `:offload` are optimized to map directly to single BPE tokens across major model vocabularies.
+### 4.3 Symbolic Anchors & External Metadata
+AgentScript rejects inline metadata bloat. Rationale, architecture constraints, and ADRs live externally in ledgers (e.g. `.pcp/`), referenced by concise alphanumeric anchors (e.g. `@d-9942`, `@auth/token`, or compact shortcodes `@a12`) costing only 1-2 tokens.
 
 ## 5. Agent-to-Agent (A2A) Wire Protocol Specification
 
@@ -96,10 +96,9 @@ Inter-agent mesh coordination uses balanced symbolic S-expression frames (`agp`)
   :tx "tx-9942a"
   :from "agent/coordinator"
   :to "agent/sql-optimizer"
+  :ref @d-9942
   :payload (:query "SELECT * FROM metrics WHERE p99 > 200"
-            :timeout-ms 5000)
-  :tag "d-9942"
-  :why "Mitigate high latency spike detected in cluster.")
+            :timeout-ms 5000))
 ```
 
 ```agp
