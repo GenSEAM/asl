@@ -113,13 +113,11 @@ const SNIPPETS: CodeSnippetProps[] = [
     category: 'data',
     title: 'Context Economy: Tabular Matrices',
     description: 'Represent tabular lists of uniform records as a single key vector plus compact row vectors, saving over 65% token overhead.',
-    nanoCode: `;; Nano Tabular Representation
-([:id :name :role :level]
+    nanoCode: `([:id :name :role :level]
  [[101 "Alice" :lead 5]
   [102 "Bob"   :agent 3]
   [103 "Carol" :peer 4]])`,
-    verboseCode: `;; Verbose Record List Equivalent
-(list
+    verboseCode: `(list
   (User :id 101 :name "Alice" :role :lead :level 5)
   (User :id 102 :name "Bob"   :role :agent :level 3)
   (User :id 103 :name "Carol" :role :peer  :level 4))`
@@ -134,8 +132,7 @@ const SNIPPETS: CodeSnippetProps[] = [
   :events [([:node :model :target :ok]
             [[(:ref 2) (:ref 1) (:ref 0) true]
              [(:ref 2) (:ref 1) (:ref 0) false]]))`,
-    verboseCode: `;; Expanded Equivalent (without pool)
-(:events [([:node :model :target :ok]
+    verboseCode: `(:events [([:node :model :target :ok]
            [["asl/agent-mesh/node-alpha" "claude-3-7-sonnet-20250219" "https://api.genseam.org/v1/telemetry" true]
             ["asl/agent-mesh/node-alpha" "claude-3-7-sonnet-20250219" "https://api.genseam.org/v1/telemetry" false]]))`
   },
@@ -315,7 +312,7 @@ export const DocsView: React.FC = () => {
                     : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                Nano (Compact)
+                Nano
               </button>
               <button
                 onClick={() => setUseNano(false)}
@@ -325,7 +322,7 @@ export const DocsView: React.FC = () => {
                     : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                Verbose (Long)
+                Verbose
               </button>
             </div>
           )}
