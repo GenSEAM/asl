@@ -1,39 +1,76 @@
-# AgentScript (ASL) — LLM reference
+# AgentScript (ASL) — Short Reference & Quickstart
 
 **Generated from `prelude/prelude.json`. Do not edit.**
 
-An S-expression language for LLM agents: balanced delimiters, whitespace-insensitive, a closed vocabulary, and a checker that runs before anything executes. One source transpiles to Python, Rust, TypeScript, Go, WebAssembly and a reference interpreter, and a differential gate fails if any two disagree.
+An S-expression language for autonomous AI agents: balanced delimiters, whitespace-insensitive, closed 107-builtin vocabulary, and a static checker. One source transpiles to Python, Rust, TypeScript, Go, WebAssembly and native runner isolate.
 
-## Forms
+## Toolchain & CLI Commands
 
-<!-- not-agentscript: a grammar summary written with `...` placeholders -->
+- `asl run <file.asl>` — Run program in sandboxed isolate (native/Wasm).
+- `asl fmt <file.asl>` — Deterministic AST canonical formatter.
+- `asl lint --fix <file.asl>` — Structural code smell detector and auto-repair.
+- `asl check <file.asl>` — Static type and semantic invariant checker.
+- `asl topo` — Module architectural dependency DAG and circularity check.
+- `asl mcp` — Model Context Protocol server for IDE agent pair programming.
+
+## Core Invariants
+
+1. Balanced parentheses; single-pass LL(1) parsing. Zero indentation hazards.
+2. Closed vocabulary: exactly 107 pure builtins. Arbitrary imports are rejected.
+3. Strict numeric typing: no implicit numeric conversions.
+4. Fallible operations return `(Result T E)`; lookups return `(Option T)`. No exceptions.
+5. Functions touching external world are marked with `!`. Operations are sandboxed.
+
+## Master Canonical Example
+
 ```lisp
-(module path/name :d "One sentence." :x [Sym ...] :i [(path/mod :a alias)])
-(dfs Name (:f key I64 "doc") ...)
-(dfe Name (:c tag [(arg I64) ...] "doc") ...)
-(df name [(arg I64)] -> I64 :d "..." body)
-(df ! main [(args (List Str))] -> (Result Unit IoError) body)
-(let [(name value) ...] body)
-(mt subject ((tag binder ...) result) ...)
-(if test then else)
-(cond ((test) value) (:else fallback))
-(try result-expr)
+(module auth/token
+  :d "Cryptographic tokens, validation, and session queues."
+  :x [Token Status hash-token validate-session]
+  :i [(sys/time :a time)])
+
+(dfs Token
+  (:f id Str "Unique token identifier.")
+  (:f exp I64 "Unix timestamp expiration."))
+
+(dfe Status
+  (:c ok [(user Str)] "Active session.")
+  (:c expired [] "Session expired.")
+  (:c denied [(reason Str)] "Access denied."))
+
+(df hash-token [(raw Str) (salt Str)] -> Str
+  :d "Deterministic token digest."
+  (string-concat raw ":" salt))
+
+(df validate-session [(raw-id Str) (exp-str Str)] -> (Result Token Str)
+  :d "Verify expiration timestamp and construct active token."
+  (let [(exp (try (option-to-result (string-to-int64 exp-str) "Invalid expiration integer")))]
+    (if (> exp 1700000000)
+      (ok (Token :id raw-id :exp exp))
+      (err "Token timestamp is in the past"))))
 ```
 
-Every short spelling above has a long one: `df` is `defun`, `dfs` is `defschema`, `dfe` is `defenum`, `mt` is `match`, `:d` is `:doc`, `:x` is `:export`, `:i` is `:import`, `:a` is `:as`, `:f` is `:field`, `:c` is `:case`. They are the same form. A short spelling counts only in the position shown — a record field named `x` is still written `(P :x 1)` and means a field, not an export list.
+## Context Economy (Data Matrices & Pools)
 
-## Types
+- Tabular matrix: `([:id :name :role] [[101 "Alice" :admin] [102 "Bob" :user]])` (saves >65% tokens).
+- Constant pool: `(:pool ["https://api.genseam.org" "agent/alpha"] :events [[(:ref 1) (:ref 0)]])`.
+- 1-token metadata: `:tag "d-1234" :why "Rationale" :use "auth/token"`.
 
-- Primitive: `Bool`, `I32` (`Int32`), `I64` (`Int64`), `F64` (`Float64`), `Str` (`String`), `Unit`
-- Constructed: `(List …)`, `(Option …)`, `(Result …)`, `(Pair …)`, `(Map …)`
-- `(Option T)` is `(some v)` / `(none)`; `(Result T E)` is `(ok v)` / `(err e)`.
-- `IoError` is a closed union: `(not-found)`, `(permission-denied)`, `(already-exists)`, `(invalid-path)`, `(interrupted)`, `(other)`.
-- A `Map` key must be orderable; `Float64` is not a legal key type.
-- Reserved width names, accepted and resolved to the type shown, carrying none of that width's semantics: `F32` → `Float64`.
+## Agent-to-Agent (A2A) Wire Frame
 
-## Vocabulary
+```agp
+(:frame :task/invoke
+  :tx "tx-9942a"
+  :from "agent/coordinator"
+  :to "agent/worker"
+  :payload (:action "verify" :target "auth/token")
+  :tag "d-9942"
+  :why "Routine background health probe.")
+```
 
-All 107 names. Nothing outside this list exists — there is no `sqrt`, no `s/concat`, no `l/map`, no `nth`.
+## Closed Vocabulary Overview (107 Builtins)
+
+All 107 names. Nothing outside this list exists:
 
 - **Arithmetic**: `+`, `-`, `*`, `/`, `mod`, `checked-div`, `checked-mod`, `neg`, `abs`, `min`, `max`
 - **Comparison and logic**: `=`, `!=`, `<`, `<=`, `>`, `>=`, `and`, `or`, `not`
@@ -44,23 +81,4 @@ All 107 names. Nothing outside this list exists — there is no `sqrt`, no `s/co
 - **Option, Result, Pair**: `some`, `none`, `ok`, `err`, `is-some?`, `is-none?`, `is-ok?`, `is-err?`, `option-or`, `result-or`, `option-map`, `result-map`, `result-map-err`, `option-to-result`, `result-to-option`, `pair`
 - **I/O**: `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`, `read-line`, `read-all`, `print`, `println`, `eprintln`, `file-read`, `file-write`, `file-append`, `file-exists?`
 
-## Rules a generator must not break
-
-1. `if` has three parts; `cond` ends with `:else`; a match covers every case.
-2. Bindings are immutable; there is no assignment.
-3. No implicit numeric conversion — convert explicitly.
-4. Fallible lookups return `(Option T)`; they never throw.
-5. A function that touches the world carries `!` on its signature.
-6. Nothing is exported unless the module header lists it.
-7. Every exported function and every record field carries a doc string.
-
-## Tools
-
-- `asl check <file>` — types and the semantic rules a grammar cannot express.
-- `asl fmt <file>` — canonical layout, preserving the file's projection.
-- `asl transcode <file> --to nano|verbose` — switch projection, structurally.
-- `asl build <file> --target wasm|rs|ts|go|py` — transpile.
-- `asl parse <file>` — the self-hosted parser.
-- MCP server (`tools/mcp/server.py`): `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`.
-
-Full specification: https://aslang.dev/llms-full.txt
+Full specification, grammar rules, and complete 107-builtin dictionary: https://aslang.dev/llms-full.txt

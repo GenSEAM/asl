@@ -87,10 +87,18 @@ def report(diags: list[Diagnostic], as_json: bool, subject: str) -> int:
 def cmd_check(args) -> int:
     """Run the semantic checker in-process (`checker/resolve.check_file`)."""
     files = sources(args.paths)
+    packages = ROOT / "packages"
+    # Each package's own `src/` is on the path because that is what imports are
+    # written against, and `checker/gate.py` resolves the same way — a CLI that
+    # resolved differently would clear a file the gate rejects.
     base_roots = [
         ROOT / "grammar" / "corpus" / "modules",
-        ROOT / "packages",
-        ROOT
+        *(d / "src" for d in sorted(packages.iterdir())
+          if d.is_dir() and (d / "src").is_dir()),
+        *(d / "src" / "core" for d in sorted(packages.iterdir())
+          if d.is_dir() and (d / "src" / "core").is_dir()),
+        packages,
+        ROOT,
     ]
     file_dirs = [f.parent for f in files]
     file_grandparents = [f.parent.parent for f in files]
@@ -174,6 +182,8 @@ def cmd_lsp(args) -> int:
 
 def cmd_transcode(args) -> int:
     """Lossless bidirectional transcoder between Nano and Verbose projections (@pcp:d-1eed)."""
+    if getattr(args, "target", None):
+        args.verbose = args.target == "verbose"
     from tools.transcoder import run_transcode_cli
     return run_transcode_cli(args)
 
@@ -521,6 +531,10 @@ def cmd_grammar(args) -> int:
         sys.stdout.write(lark_file.read_text())
         return 0
     if getattr(args, "full", False):
+        full_file = ROOT / "llms-full.txt"
+        if full_file.exists():
+            sys.stdout.write(full_file.read_text())
+            return 0
         handbook_file = ROOT / "prelude" / "HANDBOOK.md"
         sys.stdout.write(handbook_file.read_text())
         return 0
@@ -531,6 +545,11 @@ def cmd_grammar(args) -> int:
     else:
         sys.stdout.write((ROOT / "skills" / "asl" / "SKILL.md").read_text())
     return 0
+
+
+def parse_diag(file, exc) -> Diagnostic:
+    """A self-hosted parser failure placed at the token that caused it."""
+    return Diagnostic("parse", exc.message, exc.line, exc.col, str(file))
 
 
 def cmd_parse(args) -> int:
@@ -546,7 +565,7 @@ def cmd_parse(args) -> int:
         sys.stdout.write(native_render(src) + "\n")
         return 0
     except NativeParserError as exc:
-        return report([diag(args.file, "parse", str(exc))],
+        return report([parse_diag(args.file, exc)],
                       getattr(args, "json", False), "diagnostic(s)")
 
 
@@ -563,7 +582,7 @@ def _benchmark_parse(args, src: str) -> int:
     try:
         native_render(src)  # warms the cached driver singleton; untimed
     except NativeParserError as exc:
-        return report([diag(args.file, "parse", str(exc))],
+        return report([parse_diag(args.file, exc)],
                       getattr(args, "json", False), "diagnostic(s)")
 
     parser = Lark.open(str(ROOT / "grammar" / "agentscript.lark"), parser="earley")
@@ -643,20 +662,34 @@ def cmd_skill(args) -> int:
         print(json.dumps(mcp_config, indent=2))
         return 0
 
+    # `asl skill list` and `asl skill install <id>` are what every document and
+    # every harness writes; a bare word still filters, which is what it did before.
+    words = getattr(args, "query", []) or []
+    if isinstance(words, str):
+        words = [words] if words else []
+    verb = words[0] if words else ""
+    rest = words[1:]
+
     target = getattr(args, "install", None) or getattr(args, "install_id", None)
+    if verb == "install":
+        if not rest:
+            print("usage: asl skill install <id>", file=sys.stderr)
+            return 1
+        target = rest[0]
+    elif verb == "list":
+        words = rest
+
     if target:
         if target == "global":
             dest_dir = Path.home() / ".gemini" / "config" / "skills" / "asl"
-            return install_skill("asl-core", target_dir=dest_dir)
+            return install_skill("asl", target_dir=dest_dir)
         elif target == "local":
             dest_dir = Path.cwd() / ".skills" / "asl"
-            return install_skill("asl-core", target_dir=dest_dir)
+            return install_skill("asl", target_dir=dest_dir)
         else:
             return install_skill(target)
 
-    query = getattr(args, "query", "") or ""
-    return list_skills(category=query, json_mode=getattr(args, "json", False))
-    return 0
+    return list_skills(category=" ".join(words), json_mode=getattr(args, "json", False))
 
 
 def cmd_version(args) -> int:
@@ -815,6 +848,10 @@ def main() -> int:
     p = sub.add_parser("transcode", aliases=["project"],
                        help="bidirectional transcoder between Nano and Verbose projections (@pcp:d-1eed)")
     p.add_argument("file", type=Path, help="file to transcode")
+    # `--to` matches `tools/transcoder.py`'s own flag; the two entry points named
+    # the same operation differently, and the generated reference had to pick one.
+    p.add_argument("--to", dest="target", choices=["nano", "verbose"],
+                   help="projection to transcode into (default: nano)")
     p.add_argument("--verbose", action="store_true", help="transcode to human verbose projection")
     p.add_argument("--nano", action="store_true", default=True, help="transcode to dense agent nano projection")
     p.add_argument("-i", "--in-place", action="store_true", help="modify file in-place on disk")
@@ -903,7 +940,8 @@ def main() -> int:
 
     p = sub.add_parser("skill", aliases=["skills"],
                        help="universal agent skills hub and marketplace manager")
-    p.add_argument("query", nargs="?", default="", help="search or filter query")
+    p.add_argument("query", nargs="*", default=[],
+                   help="`list [filter]`, `install <id>`, or a bare filter")
     p.add_argument("--install", "-i", dest="install_id", help="install skill ID into agent harness")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_skill)

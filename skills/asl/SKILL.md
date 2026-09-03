@@ -1,45 +1,89 @@
 ---
 name: asl
-description: ASL (AgentScript Language) developer reference, S-expression syntax rules, MCP tools, and vibe-coding cheat sheet.
+description: AgentScript (ASL) reference — S-expression syntax, the closed vocabulary, the semantic rules, and the CLI and MCP tools.
 ---
 
-# ASL (AgentScript Language) Cheat Sheet (~500 tokens)
+# AgentScript (ASL)
 
-The #1 language for autonomous AI agents, vibe-coding, and universal WebAssembly execution. Compiles deterministically to WebAssembly (Main), TypeScript, Rust, Go, and Python.
+**Generated from `prelude/prelude.json`. Do not edit.**
 
-## 1. Syntax & Forms
-- **Module:** `(module path/name :doc "..." :export [Sym ...] :import [(path/mod :as alias)])`
-- **Schema:** `(defschema Name (:field key Type "doc") ...)` -> Immutable struct/class
-- **Enum:** `(defenum Name (:case tag [(arg Type) ...] "doc") ...)` -> Algebraic sum type
-- **Function:** `(defun name [(arg Type) ...] -> ReturnType :doc "..." body)`
-- **Effect:** `(defun ! main [(args (List String))] -> (Result Unit IoError) body)` (I/O marker `!`)
-- **Let:** `(let [(var val) ...] body)` (tail expression is return value)
-- **Match:** `(match expr ((tag binder ...) expr) ...)` (must be exhaustive)
-- **If/Cond:** `(if test then else)` | `(cond ((test1) val1) (:else fallback))`
+An S-expression language for autonomous AI agents: balanced delimiters, whitespace-insensitive, closed 107-builtin vocabulary, and a static checker. One source transpiles to Python, Rust, TypeScript, Go, WebAssembly and native runner isolate.
 
-## 2. Types
-- **Scalars:** `Int32`, `Int64`, `Float64`, `Bool`, `String`, `Unit` (value `()`)
-- **ADTs:** `(Option T)` (`(some v)`, `(none)`), `(Result T E)` (`(ok v)`, `(err e)`), `(Pair A B)`
-- **Collections:** `(List T)` (`[1, 2]`), `(Map K V)` (`{"k": v}`)
+## Toolchain & CLI Commands
 
-## 3. Built-in Functions
-- **Math:** `+`, `-`, `*`, `/`, `mod`, `abs`, `neg`, `f/sqrt`, `f/sin`, `f/cos`
-- **String:** `s/concat`, `s/slice`, `s/trim`, `s/upper`, `s/lower`, `s/len`, `string-from-int64`
-- **List:** `l/map`, `l/filter`, `l/fold`, `l/len`, `l/head`, `l/tail`, `cons`, `list`
-- **Map:** `m/get`, `m/put`, `m/del`, `m/keys`, `m/values`, `m/len`
-- **I/O:** `println`, `eprintln`, `file/read`, `file/write`, `file/append`, `file/exists`, `args`
+- `asl run <file.asl>` — Run program in sandboxed isolate (native/Wasm).
+- `asl fmt <file.asl>` — Deterministic AST canonical formatter.
+- `asl lint --fix <file.asl>` — Structural code smell detector and auto-repair.
+- `asl check <file.asl>` — Static type and semantic invariant checker.
+- `asl topo` — Module architectural dependency DAG and circularity check.
+- `asl mcp` — Model Context Protocol server for IDE agent pair programming.
 
-## 4. MCP Server Tools (`tools/mcp/server.py`)
-- `asex_check(source=...)`: In-memory type/semantic checker -> `{ valid, diagnostics }`
-- `asex_eval(source=..., args=...)`: Instant in-memory interpreter eval (<1ms) -> `{ stdout, stderr, exit_code }`
-- `asex_compress_module(source=...)`: AST compressor (-78% prompt tokens) -> `{ compressed }`
-- `asex_format(source=...)`: Canonical S-expression layout formatter -> `{ formatted }`
+## Core Invariants
 
-## 5. ASL CLI
-```bash
-asl init <dir> --template wasm
-asl check <file>
-asl build <file> --target wasm -o dist/main.wasm
-asl build <file> --target ts|rs|go|py
-asl fmt <dir>
+1. Balanced parentheses; single-pass LL(1) parsing. Zero indentation hazards.
+2. Closed vocabulary: exactly 107 pure builtins. Arbitrary imports are rejected.
+3. Strict numeric typing: no implicit numeric conversions.
+4. Fallible operations return `(Result T E)`; lookups return `(Option T)`. No exceptions.
+5. Functions touching external world are marked with `!`. Operations are sandboxed.
+
+## Master Canonical Example
+
+```lisp
+(module auth/token
+  :d "Cryptographic tokens, validation, and session queues."
+  :x [Token Status hash-token validate-session]
+  :i [(sys/time :a time)])
+
+(dfs Token
+  (:f id Str "Unique token identifier.")
+  (:f exp I64 "Unix timestamp expiration."))
+
+(dfe Status
+  (:c ok [(user Str)] "Active session.")
+  (:c expired [] "Session expired.")
+  (:c denied [(reason Str)] "Access denied."))
+
+(df hash-token [(raw Str) (salt Str)] -> Str
+  :d "Deterministic token digest."
+  (string-concat raw ":" salt))
+
+(df validate-session [(raw-id Str) (exp-str Str)] -> (Result Token Str)
+  :d "Verify expiration timestamp and construct active token."
+  (let [(exp (try (option-to-result (string-to-int64 exp-str) "Invalid expiration integer")))]
+    (if (> exp 1700000000)
+      (ok (Token :id raw-id :exp exp))
+      (err "Token timestamp is in the past"))))
 ```
+
+## Context Economy (Data Matrices & Pools)
+
+- Tabular matrix: `([:id :name :role] [[101 "Alice" :admin] [102 "Bob" :user]])` (saves >65% tokens).
+- Constant pool: `(:pool ["https://api.genseam.org" "agent/alpha"] :events [[(:ref 1) (:ref 0)]])`.
+- 1-token metadata: `:tag "d-1234" :why "Rationale" :use "auth/token"`.
+
+## Agent-to-Agent (A2A) Wire Frame
+
+```agp
+(:frame :task/invoke
+  :tx "tx-9942a"
+  :from "agent/coordinator"
+  :to "agent/worker"
+  :payload (:action "verify" :target "auth/token")
+  :tag "d-9942"
+  :why "Routine background health probe.")
+```
+
+## Closed Vocabulary Overview (107 Builtins)
+
+All 107 names. Nothing outside this list exists:
+
+- **Arithmetic**: `+`, `-`, `*`, `/`, `mod`, `checked-div`, `checked-mod`, `neg`, `abs`, `min`, `max`
+- **Comparison and logic**: `=`, `!=`, `<`, `<=`, `>`, `>=`, `and`, `or`, `not`
+- **String**: `string-length`, `string-empty?`, `str`, `string-slice`, `string-index-of`, `string-contains?`, `string-starts-with?`, `string-ends-with?`, `string-split`, `string-join`, `string-upper`, `string-lower`, `string-trim`, `string-reverse`, `string-replace`, `string-chars`, `string-from-int64`, `string-from-float64`, `string-to-int64`, `string-to-float64`
+- **Numeric conversion**: `int32-to-int64`, `int64-to-int32`, `int64-to-float64`, `float64-to-int64`
+- **List**: `list`, `list-empty?`, `list-length`, `list-get`, `list-head`, `list-tail`, `list-cons`, `list-append`, `list-reverse`, `list-slice`, `list-contains?`, `list-index-of`, `list-sort`, `list-sort-by`, `map`, `filter`, `fold`, `range`, `zip`, `list-sum`, `list-min`, `list-max`
+- **Map**: `map-empty`, `map-get`, `map-set`, `map-remove`, `map-has?`, `map-size`, `map-keys`, `map-values`, `map-pairs`, `map-from-pairs`
+- **Option, Result, Pair**: `some`, `none`, `ok`, `err`, `is-some?`, `is-none?`, `is-ok?`, `is-err?`, `option-or`, `result-or`, `option-map`, `result-map`, `result-map-err`, `option-to-result`, `result-to-option`, `pair`
+- **I/O**: `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`, `read-line`, `read-all`, `print`, `println`, `eprintln`, `file-read`, `file-write`, `file-append`, `file-exists?`
+
+Full specification, grammar rules, and complete 107-builtin dictionary: llms-full.txt

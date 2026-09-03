@@ -1,52 +1,1127 @@
-# ASL (AgentScript Language) Complete Technical Handbook for Autonomous Agents & Models
-Version: 1.0 (Closed Formal Specification)
+# AgentScript (ASL) — Complete Specification & Technical Reference
+
+**Generated from `prelude/prelude.json`. Do not edit.**
+
+Version: 0.2 (Closed Formal Specification)
 Corpus Integrity: Verified across 6 differential backends (Wasm, Rust, TS, Go, Python, SQL)
 
-## 1. Grammatical & Lexical Invariants
-1. Single-pass LL(1) deterministic S-expressions:
-   - Every expression begins with `(` and ends with balanced `)`.
-   - Whitespace carries no indentation semantics (eliminates syntax crashes common in Python/YAML).
-2. Identifiers:
-   - Standard kebab-case (e.g., `parse-json`, `dot-product`, `make-vector`).
-   - Reserved prefix: `agentscript-` is reserved for internal compiler intrinsics.
-3. Types:
-   - PascalCase primitives: `Int64`, `Float64`, `Bool`, `String`.
-   - Parametric types: `(List T)`, `(Map K V)`, `(Option T)`, `(Result T E)`.
-4. Effect Boundaries:
-   - Pure functions declare explicit return signatures: `(defun name (args) -> Type body)`.
-   - Effectful operations (I/O, network, disk) are strictly suffixed with `!` (e.g., `println!`, `fetch!`, `read-file!`).
-5. Error Handling:
-   - Expressed via `(Ok val)` and `(Err reason)` constructs.
-   - Linearization via `try` early returns prevents deep AST nesting (>4 levels).
+## 1. Architectural Principles & Invariants
 
-## 2. A2A (Agent-to-Agent) Wire Protocol Specification
-Prose is the wrong wire format between machines. Agents communicate using balanced symbolic frames:
+1. **Single-Pass LL(1) Deterministic Grammar**: Every expression begins with `(` and ends with balanced `)`. Whitespace carries zero semantic indentation meaning, eliminating syntax failure loops common in Python/YAML.
+2. **Closed 107-Builtin Vocabulary**: The standard library is closed. No unvetted package creep, no arbitrary host imports. A program calling symbols outside this set is rejected at compile time.
+3. **Zero Implicit Numeric Conversions**: Numbers never coerce silently. Mixing `I64` and `F64` requires explicit `(float64-to-int64)` or `(int64-to-float64)`.
+4. **Explicit Total Error Handling**: Fallible operations return `(Result T E)` with `(ok v)` / `(err e)`. Lookups return `(Option T)` with `(some v)` / `(none)`. Exceptions and hidden throws do not exist.
+5. **Effect Boundaries & Sandboxing**: Functions touching the external world carry `!` in their signature. Filesystem and socket operations are isolated inside a jailed memory space without host path leaks.
 
-### Frame Types:
-1. Probe / Handshake:
-   `(?agent/probe :proto "asl/1.0" :caps [wasm schema stream] :agent-id "subagent-01")`
-2. Acknowledgment:
-   `(!agent/ack :proto "asl/1.0" :mode :nano :latency-ms 0.04)`
-3. Query Frame:
-   `(? <target-agent> <verb> [:key <typed-val> ...])`
-4. Response Frame:
-   `(! <source-agent> :ok <typed-payload>)` or `(! <source-agent> :err <code> :msg <string>)`
+## 2. Master Canonical Example
 
-## 3. Sandboxed Execution & Isolation Invariants
-1. Memory Model:
-   - Standalone wasm32-wasip1 execution inside isolated linear memory spaces.
-   - Host path traversal is strictly prohibited: relative paths are clamped to the sandbox root.
-2. Cross-Runtime Certified Equivalence:
-   - Automated differential testing (`differential.py`) ensures numeric precision and error semantics match across all 6 backends.
+A complete, self-contained AgentScript program demonstrating module declarations, typed records, closed union enums, pattern matching, error propagation, and string operations:
 
-## 4. CLI Toolchain (asl)
-- `asl run <file.asl>`: Evaluates script in native/Wasm isolate.
-- `asl fmt <file.asl>`: Formats file canonically.
-- `asl lint --fix`: Automatically detects code smells and repairs AST bugs.
-- `asl parse <file.asl>`: Emits JSON AST schema representation.
-- `asl mcp`: Starts Model Context Protocol server over stdio or SSE.
+```lisp
+(module auth/token
+  :d "Cryptographic tokens, validation, and session queues."
+  :x [Token Status hash-token validate-session]
+  :i [(sys/time :a time)])
 
-## 5. Official Distribution & Repository
-- Canonical Website: https://aslang.dev
-- Repository: https://github.com/GenSEAM/asl
-- License: MIT Open Source
+(dfs Token
+  (:f id Str "Unique token identifier.")
+  (:f exp I64 "Unix timestamp expiration."))
+
+(dfe Status
+  (:c ok [(user Str)] "Active session.")
+  (:c expired [] "Session expired.")
+  (:c denied [(reason Str)] "Access denied."))
+
+(df hash-token [(raw Str) (salt Str)] -> Str
+  :d "Deterministic token digest."
+  (string-concat raw ":" salt))
+
+(df validate-session [(raw-id Str) (exp-str Str)] -> (Result Token Str)
+  :d "Verify expiration timestamp and construct active token."
+  (let [(exp (try (option-to-result (string-to-int64 exp-str) "Invalid expiration integer")))]
+    (if (> exp 1700000000)
+      (ok (Token :id raw-id :exp exp))
+      (err "Token timestamp is in the past"))))
+```
+
+## 3. Formal Declaration & Expression Forms
+
+<!-- not-agentscript: a grammar summary written with `...` placeholders -->
+```lisp
+(module path/name :d "One sentence." :x [Sym ...] :i [(path/mod :a alias)])
+(dfs Name (:f key I64 "doc") ...)
+(let [(name value) ...] body)
+(mt subject ((tag binder ...) result) ...)
+(if test then else)
+(cond ((test) value) (:else fallback))
+(try result-expr)
+```
+
+## 4. Context Economy Specification
+
+### 4.1 Tabular Data Matrices
+Uniform sequences of structured records are represented as a single header vector of field keys followed by compact row vectors:
+
+<!-- not-agentscript: data matrix specimen -->
+```lisp
+([:id :name :role :level]
+ [[101 "Alice" :lead 5]
+  [102 "Bob"   :agent 3]
+  [103 "Carol" :peer 4]])
+```
+This pattern eliminates repeated JSON key strings and YAML indentation tags, reducing token counts by 65-80%.
+
+### 4.2 Shared Value Pools (:pool & :ref)
+Repeated strings, URLs, or schema identifiers are declared once in a shared constant pool and referenced by single-token index:
+
+<!-- not-agentscript: pool specimen -->
+```lisp
+(:pool ["https://api.genseam.org/v1/telemetry"
+        "claude-3-7-sonnet-20250219"
+        "asl/agent-mesh/node-alpha"]
+  :events [([:node :model :target :ok]
+            [[(:ref 2) (:ref 1) (:ref 0) true]
+             [(:ref 2) (:ref 1) (:ref 0) false]]))
+```
+
+### 4.3 1-Token Metadata Keywords
+Keywords `:tag`, `:why`, `:use`, `:ref`, `:pool`, and `:offload` are optimized to map directly to single BPE tokens across major model vocabularies.
+
+## 5. Agent-to-Agent (A2A) Wire Protocol Specification
+
+Inter-agent mesh coordination uses balanced symbolic S-expression frames (`agp`):
+
+```agp
+(:frame :task/invoke
+  :tx "tx-9942a"
+  :from "agent/coordinator"
+  :to "agent/sql-optimizer"
+  :payload (:query "SELECT * FROM metrics WHERE p99 > 200"
+            :timeout-ms 5000)
+  :tag "d-9942"
+  :why "Mitigate high latency spike detected in cluster.")
+```
+
+```agp
+(:frame :task/complete
+  :tx "tx-9942a"
+  :status :ok
+  :result (:scanned 42000 :optimized-ms 1.8)
+  :memory-ref "mem://indexes/p99-idx-01")
+```
+
+## 6. Cross-Dialect SQL Specification
+
+AgentScript provides an S-expression SQL DSL that transpiles deterministically into target database dialects:
+
+```lisp
+(q/select ["id" "name" "email" "status"]
+  (q/from "users")
+  (q/where (q/and (q/ilike "name" "%admin%")
+                  (q/gte "created_at" (q/date-sub (q/now) 7 :days))
+                  (q/eq "status" "ACTIVE")))
+  (q/order-by "created_at" (q/desc))
+  (q/limit 25)
+  (q/offset 50))
+```
+
+Dialect compilation handles:
+- **Placeholders**: `$1` (Postgres), `?` (MySQL), `?1` (SQLite), `@p1` (MSSQL), `:1` (Oracle).
+- **Identifier quoting**: `"` (Postgres/SQLite/Oracle), '`' (MySQL), `[` (MSSQL).
+- **Relative date arithmetic**: `NOW() - INTERVAL '7 days'` vs `DATE_SUB` vs `datetime` vs `DATEADD` vs `SYSDATE - 7`.
+- **Pagination**: `LIMIT/OFFSET` vs `OFFSET ... ROWS FETCH NEXT ... ROWS ONLY`.
+
+## 7. Complete Closed Vocabulary Dictionary (107 Builtins)
+
+Every builtin function in AgentScript 0.2 with declared type, semantics, and target lowering templates:
+
+### Arithmetic
+
+#### `(+ a b)`
+- **Type**: `N N -> N`
+- **Description**: Sum. Traps on integer overflow.
+- **Runtime Lowering**:
+  - Python: `_agentscript.add({0}, {1})`
+  - Rust: `rt::add({0}, {1})`
+  - TypeScript: `RT.add({0}, {1})`
+  - Go: `Add({0}, {1})`
+
+#### `(- a b)`
+- **Type**: `N N -> N`
+- **Description**: Difference. Traps on integer overflow.
+- **Runtime Lowering**:
+  - Python: `_agentscript.sub({0}, {1})`
+  - Rust: `rt::sub({0}, {1})`
+  - TypeScript: `RT.sub({0}, {1})`
+  - Go: `Sub({0}, {1})`
+
+#### `(* a b)`
+- **Type**: `N N -> N`
+- **Description**: Product. Traps on integer overflow.
+- **Runtime Lowering**:
+  - Python: `_agentscript.mul({0}, {1})`
+  - Rust: `rt::mul({0}, {1})`
+  - TypeScript: `RT.mul({0}, {1})`
+  - Go: `Mul({0}, {1})`
+
+#### `(/ a b)`
+- **Type**: `N N -> N`
+- **Description**: Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type.
+- **Runtime Lowering**:
+  - Python: `_agentscript.div({0}, {1})`
+  - Rust: `rt::div({0}, {1})`
+  - TypeScript: `RT.div({0}, {1})`
+  - Go: `Div({0}, {1})`
+
+#### `(mod a b)`
+- **Type**: `N N -> N`
+- **Description**: Remainder; the sign follows the dividend. Traps on a zero divisor.
+- **Runtime Lowering**:
+  - Python: `_agentscript.mod({0}, {1})`
+  - Rust: `rt::rem({0}, {1})`
+  - TypeScript: `RT.rem({0}, {1})`
+  - Go: `Rem({0}, {1})`
+
+#### `(checked-div a b)`
+- **Type**: `N N -> (Option N)`
+- **Description**: Division, or none on a zero divisor or a quotient outside the type.
+- **Runtime Lowering**:
+  - Python: `_agentscript.checked_div({0}, {1})`
+  - Rust: `rt::checked_div({0}, {1})`
+  - TypeScript: `RT.checkedDiv({0}, {1})`
+  - Go: `CheckedDiv({0}, {1})`
+
+#### `(checked-mod a b)`
+- **Type**: `N N -> (Option N)`
+- **Description**: Remainder, or none on a zero divisor; the remainder is always in range.
+- **Runtime Lowering**:
+  - Python: `_agentscript.checked_mod({0}, {1})`
+  - Rust: `rt::checked_rem({0}, {1})`
+  - TypeScript: `RT.checkedRem({0}, {1})`
+  - Go: `CheckedRem({0}, {1})`
+
+#### `(neg a)`
+- **Type**: `N -> N`
+- **Description**: Arithmetic negation. Traps on integer overflow.
+- **Runtime Lowering**:
+  - Python: `_agentscript.neg({0})`
+  - Rust: `rt::neg({0})`
+  - TypeScript: `RT.neg({0})`
+  - Go: `Neg({0})`
+
+#### `(abs a)`
+- **Type**: `N -> N`
+- **Description**: Absolute value. Traps on integer overflow.
+- **Runtime Lowering**:
+  - Python: `_agentscript.absolute({0})`
+  - Rust: `rt::abs({0})`
+  - TypeScript: `RT.absv({0})`
+  - Go: `Abs({0})`
+
+#### `(min a b)`
+- **Type**: `N N -> N`
+- **Description**: Lesser of two values in the sort order, so NaN is the greater.
+- **Runtime Lowering**:
+  - Python: `_agentscript.min_({0}, {1})`
+  - Rust: `rt::min({0}, {1})`
+  - TypeScript: `RT.min({0}, {1})`
+  - Go: `Min({0}, {1})`
+
+#### `(max a b)`
+- **Type**: `N N -> N`
+- **Description**: Greater of two values in the sort order, so NaN is the greater.
+- **Runtime Lowering**:
+  - Python: `_agentscript.max_({0}, {1})`
+  - Rust: `rt::max({0}, {1})`
+  - TypeScript: `RT.max({0}, {1})`
+  - Go: `Max({0}, {1})`
+
+### Comparison and logic
+
+#### `(= a b)`
+- **Type**: `T T -> Bool`
+- **Description**: Structural equality.
+- **Runtime Lowering**:
+  - Python: `_agentscript.eq({0}, {1})`
+  - Rust: `({0} == {1})`
+  - TypeScript: `RT.eq({0}, {1})`
+  - Go: `Eq({0}, {1})`
+
+#### `(!= a b)`
+- **Type**: `T T -> Bool`
+- **Description**: Structural inequality.
+- **Runtime Lowering**:
+  - Python: `(not _agentscript.eq({0}, {1}))`
+  - Rust: `({0} != {1})`
+  - TypeScript: `(!RT.eq({0}, {1}))`
+  - Go: `(!Eq({0}, {1}))`
+
+#### `(< a b)`
+- **Type**: `T T -> Bool`
+- **Description**: Ordered comparison, for numbers and strings.
+- **Runtime Lowering**:
+  - Python: `({0} < {1})`
+  - Rust: `({0} < {1})`
+  - TypeScript: `(RT.cmp({0}, {1}) < 0)`
+  - Go: `({0} < {1})`
+
+#### `(<= a b)`
+- **Type**: `T T -> Bool`
+- **Description**: Ordered comparison, for numbers and strings.
+- **Runtime Lowering**:
+  - Python: `({0} <= {1})`
+  - Rust: `({0} <= {1})`
+  - TypeScript: `(RT.cmp({0}, {1}) <= 0)`
+  - Go: `({0} <= {1})`
+
+#### `(> a b)`
+- **Type**: `T T -> Bool`
+- **Description**: Ordered comparison, for numbers and strings.
+- **Runtime Lowering**:
+  - Python: `({0} > {1})`
+  - Rust: `({0} > {1})`
+  - TypeScript: `(RT.cmp({0}, {1}) > 0)`
+  - Go: `({0} > {1})`
+
+#### `(>= a b)`
+- **Type**: `T T -> Bool`
+- **Description**: Ordered comparison, for numbers and strings.
+- **Runtime Lowering**:
+  - Python: `({0} >= {1})`
+  - Rust: `({0} >= {1})`
+  - TypeScript: `(RT.cmp({0}, {1}) >= 0)`
+  - Go: `({0} >= {1})`
+
+#### `(and a b)`
+- **Type**: `Bool Bool -> Bool`
+- **Description**: Conjunction; short-circuits.
+- **Runtime Lowering**:
+  - Python: `({0} and {1})`
+  - Rust: `({0} && {1})`
+  - TypeScript: `({0} && {1})`
+  - Go: `({0} && {1})`
+
+#### `(or a b)`
+- **Type**: `Bool Bool -> Bool`
+- **Description**: Disjunction; short-circuits.
+- **Runtime Lowering**:
+  - Python: `({0} or {1})`
+  - Rust: `({0} || {1})`
+  - TypeScript: `({0} || {1})`
+  - Go: `({0} || {1})`
+
+#### `(not a)`
+- **Type**: `Bool -> Bool`
+- **Description**: Negation.
+- **Runtime Lowering**:
+  - Python: `(not {0})`
+  - Rust: `(!{0})`
+  - TypeScript: `(!{0})`
+  - Go: `(!{0})`
+
+### String
+
+#### `(string-length a)`
+- **Type**: `String -> Int64`
+- **Description**: Length in characters.
+- **Runtime Lowering**:
+  - Python: `len({0})`
+  - Rust: `rt::str_len(&{0})`
+  - TypeScript: `RT.strLen({0})`
+  - Go: `StrLen({0})`
+
+#### `(string-empty? a)`
+- **Type**: `String -> Bool`
+- **Description**: True when the string has no characters.
+- **Runtime Lowering**:
+  - Python: `(len({0}) == 0)`
+  - Rust: `{0}.is_empty()`
+  - TypeScript: `({0}.length === 0)`
+  - Go: `({0} == "")`
+
+#### `(str a b …)`
+- **Type**: `String... -> String`
+- **Description**: Concatenate strings. Takes strings only; convert first.
+- **Runtime Lowering**:
+  - Python: `"".join([{*}])`
+  - Rust: `rt::concat(&[{*}])`
+  - TypeScript: `RT.concat([{*}])`
+  - Go: `Concat({*})`
+
+#### `(string-slice a b c)`
+- **Type**: `String Int64 Int64 -> (Option String)`
+- **Description**: Half-open character slice, or none when out of range.
+- **Runtime Lowering**:
+  - Python: `_agentscript.str_slice({0}, {1}, {2})`
+  - Rust: `rt::str_slice(&{0}, {1}, {2})`
+  - TypeScript: `RT.strSlice({0}, {1}, {2})`
+  - Go: `StrSlice({0}, {1}, {2})`
+
+#### `(string-index-of a b)`
+- **Type**: `String String -> (Option Int64)`
+- **Description**: Character index of the first occurrence.
+- **Runtime Lowering**:
+  - Python: `_agentscript.str_index_of({0}, {1})`
+  - Rust: `rt::str_index_of(&{0}, &{1})`
+  - TypeScript: `RT.strIndexOf({0}, {1})`
+  - Go: `StrIndexOf({0}, {1})`
+
+#### `(string-contains? a b)`
+- **Type**: `String String -> Bool`
+- **Description**: True when the substring occurs.
+- **Runtime Lowering**:
+  - Python: `({1} in {0})`
+  - Rust: `{0}.contains(&{1})`
+  - TypeScript: `{0}.includes({1})`
+  - Go: `StrContains({0}, {1})`
+
+#### `(string-starts-with? a b)`
+- **Type**: `String String -> Bool`
+- **Description**: True when the string begins with the prefix.
+- **Runtime Lowering**:
+  - Python: `{0}.startswith({1})`
+  - Rust: `{0}.starts_with(&{1})`
+  - TypeScript: `{0}.startsWith({1})`
+  - Go: `StrStartsWith({0}, {1})`
+
+#### `(string-ends-with? a b)`
+- **Type**: `String String -> Bool`
+- **Description**: True when the string ends with the suffix.
+- **Runtime Lowering**:
+  - Python: `{0}.endswith({1})`
+  - Rust: `{0}.ends_with(&{1})`
+  - TypeScript: `{0}.endsWith({1})`
+  - Go: `StrEndsWith({0}, {1})`
+
+#### `(string-split a b)`
+- **Type**: `String String -> (List String)`
+- **Description**: Split on a separator.
+- **Runtime Lowering**:
+  - Python: `{0}.split({1})`
+  - Rust: `rt::split(&{0}, &{1})`
+  - TypeScript: `RT.split({0}, {1})`
+  - Go: `Split({0}, {1})`
+
+#### `(string-join a b)`
+- **Type**: `(List String) String -> String`
+- **Description**: Join with a separator.
+- **Runtime Lowering**:
+  - Python: `{1}.join({0})`
+  - Rust: `{0}.join(&{1})`
+  - TypeScript: `{0}.join({1})`
+  - Go: `StrJoin({0}, {1})`
+
+#### `(string-upper a)`
+- **Type**: `String -> String`
+- **Description**: Upper case.
+- **Runtime Lowering**:
+  - Python: `{0}.upper()`
+  - Rust: `{0}.to_uppercase()`
+  - TypeScript: `{0}.toUpperCase()`
+  - Go: `StrUpper({0})`
+
+#### `(string-lower a)`
+- **Type**: `String -> String`
+- **Description**: Lower case.
+- **Runtime Lowering**:
+  - Python: `{0}.lower()`
+  - Rust: `{0}.to_lowercase()`
+  - TypeScript: `{0}.toLowerCase()`
+  - Go: `StrLower({0})`
+
+#### `(string-trim a)`
+- **Type**: `String -> String`
+- **Description**: Remove leading and trailing whitespace.
+- **Runtime Lowering**:
+  - Python: `{0}.strip()`
+  - Rust: `{0}.trim().to_string()`
+  - TypeScript: `{0}.trim()`
+  - Go: `StrTrim({0})`
+
+#### `(string-reverse a)`
+- **Type**: `String -> String`
+- **Description**: Reverse the character sequence.
+- **Runtime Lowering**:
+  - Python: `{0}[::-1]`
+  - Rust: `rt::str_rev(&{0})`
+  - TypeScript: `RT.strRev({0})`
+  - Go: `StrRev({0})`
+
+#### `(string-replace a b c)`
+- **Type**: `String String String -> String`
+- **Description**: Replace every occurrence.
+- **Runtime Lowering**:
+  - Python: `{0}.replace({1}, {2})`
+  - Rust: `{0}.replace(&{1}, &{2})`
+  - TypeScript: `RT.replace({0}, {1}, {2})`
+  - Go: `StrReplace({0}, {1}, {2})`
+
+#### `(string-chars a)`
+- **Type**: `String -> (List String)`
+- **Description**: Characters as one-character strings.
+- **Runtime Lowering**:
+  - Python: `list({0})`
+  - Rust: `rt::chars(&{0})`
+  - TypeScript: `RT.chars({0})`
+  - Go: `Chars({0})`
+
+#### `(string-from-int64 a)`
+- **Type**: `Int64 -> String`
+- **Description**: Decimal rendering of an integer.
+- **Runtime Lowering**:
+  - Python: `str({0})`
+  - Rust: `rt::fmt_i64({0})`
+  - TypeScript: `String({0})`
+  - Go: `FmtI64({0})`
+
+#### `(string-from-float64 a)`
+- **Type**: `Float64 -> String`
+- **Description**: Decimal rendering of a float.
+- **Runtime Lowering**:
+  - Python: `repr(float({0}))`
+  - Rust: `rt::fmt_f64({0})`
+  - TypeScript: `RT.fmtF64({0})`
+  - Go: `FmtF64({0})`
+
+#### `(string-to-int64 a)`
+- **Type**: `String -> (Option Int64)`
+- **Description**: Parse an integer, or none when it is malformed or outside Int64.
+- **Runtime Lowering**:
+  - Python: `_agentscript.to_int({0})`
+  - Rust: `rt::to_i64(&{0})`
+  - TypeScript: `RT.toI64({0})`
+  - Go: `ToI64({0})`
+
+#### `(string-to-float64 a)`
+- **Type**: `String -> (Option Float64)`
+- **Description**: Parse a float, or none.
+- **Runtime Lowering**:
+  - Python: `_agentscript.to_float({0})`
+  - Rust: `rt::to_f64(&{0})`
+  - TypeScript: `RT.toF64({0})`
+  - Go: `ToF64({0})`
+
+### Numeric conversion
+
+#### `(int32-to-int64 a)`
+- **Type**: `Int32 -> Int64`
+- **Description**: Widen.
+- **Runtime Lowering**:
+  - Python: `{0}`
+  - Rust: `({0} as i64)`
+  - TypeScript: `{0}`
+  - Go: `int64({0})`
+
+#### `(int64-to-int32 a)`
+- **Type**: `Int64 -> (Option Int32)`
+- **Description**: Narrow, or none when out of range.
+- **Runtime Lowering**:
+  - Python: `_agentscript.to_i32({0})`
+  - Rust: `rt::to_i32({0})`
+  - TypeScript: `RT.toI32({0})`
+  - Go: `ToI32({0})`
+
+#### `(int64-to-float64 a)`
+- **Type**: `Int64 -> Float64`
+- **Description**: Convert to floating point.
+- **Runtime Lowering**:
+  - Python: `float({0})`
+  - Rust: `rt::i_to_f({0})`
+  - TypeScript: `Number({0})`
+  - Go: `float64({0})`
+
+#### `(float64-to-int64 a)`
+- **Type**: `Float64 -> (Option Int64)`
+- **Description**: Truncate toward zero, or none for NaN, infinity or out of range.
+- **Runtime Lowering**:
+  - Python: `_agentscript.f_to_i({0})`
+  - Rust: `rt::f_to_i({0})`
+  - TypeScript: `RT.fToI({0})`
+  - Go: `FToI({0})`
+
+### List
+
+#### `(list a b …)`
+- **Type**: `T... -> (List T)`
+- **Description**: Construct a list.
+- **Runtime Lowering**:
+  - Python: `[{*}]`
+  - Rust: `vec![{*}]`
+  - TypeScript: `[{*}]`
+  - Go: `ListOf({*})`
+
+#### `(list-empty? a)`
+- **Type**: `(List T) -> Bool`
+- **Description**: True when the list has no elements.
+- **Runtime Lowering**:
+  - Python: `(len({0}) == 0)`
+  - Rust: `{0}.is_empty()`
+  - TypeScript: `({0}.length === 0)`
+  - Go: `(len({0}) == 0)`
+
+#### `(list-length a)`
+- **Type**: `(List T) -> Int64`
+- **Description**: Element count.
+- **Runtime Lowering**:
+  - Python: `len({0})`
+  - Rust: `({0}.len() as i64)`
+  - TypeScript: `BigInt({0}.length)`
+  - Go: `(int64(len({0})))`
+
+#### `(list-get a b)`
+- **Type**: `(List T) Int64 -> (Option T)`
+- **Description**: Element at an index, or none.
+- **Runtime Lowering**:
+  - Python: `_agentscript.at({0}, {1})`
+  - Rust: `rt::at(&{0}, {1})`
+  - TypeScript: `RT.at({0}, {1})`
+  - Go: `At({0}, {1})`
+
+#### `(list-head a)`
+- **Type**: `(List T) -> (Option T)`
+- **Description**: First element, or none.
+- **Runtime Lowering**:
+  - Python: `_agentscript.at({0}, 0)`
+  - Rust: `rt::at(&{0}, 0)`
+  - TypeScript: `RT.at({0}, 0n)`
+  - Go: `At({0}, int64(0))`
+
+#### `(list-tail a)`
+- **Type**: `(List T) -> (Option (List T))`
+- **Description**: All but the first element, or none when empty.
+- **Runtime Lowering**:
+  - Python: `_agentscript.tail({0})`
+  - Rust: `rt::tail(&{0})`
+  - TypeScript: `RT.tail({0})`
+  - Go: `Tail({0})`
+
+#### `(list-cons a b)`
+- **Type**: `T (List T) -> (List T)`
+- **Description**: Prepend an element.
+- **Runtime Lowering**:
+  - Python: `([{0}] + {1})`
+  - Rust: `rt::cons({0}, {1})`
+  - TypeScript: `[{0}, ...{1}]`
+  - Go: `Cons({0}, {1})`
+
+#### `(list-append a b)`
+- **Type**: `(List T) (List T) -> (List T)`
+- **Description**: Concatenate two lists.
+- **Runtime Lowering**:
+  - Python: `({0} + {1})`
+  - Rust: `rt::append({0}, {1})`
+  - TypeScript: `[...{0}, ...{1}]`
+  - Go: `Append({0}, {1})`
+
+#### `(list-reverse a)`
+- **Type**: `(List T) -> (List T)`
+- **Description**: Reverse order.
+- **Runtime Lowering**:
+  - Python: `{0}[::-1]`
+  - Rust: `rt::rev({0})`
+  - TypeScript: `[...{0}].reverse()`
+  - Go: `Rev({0})`
+
+#### `(list-slice a b c)`
+- **Type**: `(List T) Int64 Int64 -> (Option (List T))`
+- **Description**: Half-open slice, or none when out of range.
+- **Runtime Lowering**:
+  - Python: `_agentscript.list_slice({0}, {1}, {2})`
+  - Rust: `rt::list_slice(&{0}, {1}, {2})`
+  - TypeScript: `RT.listSlice({0}, {1}, {2})`
+  - Go: `ListSlice({0}, {1}, {2})`
+
+#### `(list-contains? a b)`
+- **Type**: `(List T) T -> Bool`
+- **Description**: True when the element occurs.
+- **Runtime Lowering**:
+  - Python: `_agentscript.contains({0}, {1})`
+  - Rust: `{0}.contains(&{1})`
+  - TypeScript: `RT.contains({0}, {1})`
+  - Go: `Contains({0}, {1})`
+
+#### `(list-index-of a b)`
+- **Type**: `(List T) T -> (Option Int64)`
+- **Description**: Index of the first occurrence.
+- **Runtime Lowering**:
+  - Python: `_agentscript.index_of({0}, {1})`
+  - Rust: `rt::index_of(&{0}, &{1})`
+  - TypeScript: `RT.indexOf({0}, {1})`
+  - Go: `IndexOf({0}, {1})`
+
+#### `(list-sort a)`
+- **Type**: `(List T) -> (List T)`
+- **Description**: Stable ascending sort; a value holding a NaN sorts last.
+- **Runtime Lowering**:
+  - Python: `sorted({0}, key=_agentscript.order_key)`
+  - Rust: `rt::sort({0})`
+  - TypeScript: `RT.sort({0})`
+  - Go: `Sort({0})`
+
+#### `(list-sort-by a b)`
+- **Type**: `(fn [T] -> K) (List T) -> (List T)`
+- **Description**: Stable ascending sort by a derived key; a key holding a NaN sorts last.
+- **Runtime Lowering**:
+  - Python: `sorted({1}, key=_agentscript.order_by({0}))`
+  - Rust: `rt::sort_by({1}, {0})`
+  - TypeScript: `RT.sortBy({0}, {1})`
+  - Go: `SortBy({0}, {1})`
+
+#### `(map a b)`
+- **Type**: `(fn [A] -> B) (List A) -> (List B)`
+- **Description**: Apply a function to every element.
+- **Runtime Lowering**:
+  - Python: `[{0}(_x) for _x in {1}]`
+  - Rust: `{1}.into_iter().map({0}).collect::<Vec<_>>()`
+  - TypeScript: `{1}.map({0})`
+  - Go: `Map({0}, {1})`
+
+#### `(filter a b)`
+- **Type**: `(fn [T] -> Bool) (List T) -> (List T)`
+- **Description**: Keep elements satisfying a predicate.
+- **Runtime Lowering**:
+  - Python: `[_x for _x in {1} if {0}(_x)]`
+  - Rust: `rt::filter({1}, {0})`
+  - TypeScript: `{1}.filter({0})`
+  - Go: `Filter({0}, {1})`
+
+#### `(fold a b c)`
+- **Type**: `(fn [B A] -> B) B (List A) -> B`
+- **Description**: Left fold with an initial accumulator.
+- **Runtime Lowering**:
+  - Python: `_agentscript.fold({0}, {1}, {2})`
+  - Rust: `{2}.into_iter().fold({1}, {0})`
+  - TypeScript: `RT.fold({0}, {1}, {2})`
+  - Go: `Fold({0}, {1}, {2})`
+
+#### `(range a b)`
+- **Type**: `Int64 Int64 -> (List Int64)`
+- **Description**: Half-open integer range; empty when start is not below end.
+- **Runtime Lowering**:
+  - Python: `list(range({0}, {1}))`
+  - Rust: `rt::range({0}, {1})`
+  - TypeScript: `RT.range({0}, {1})`
+  - Go: `Range({0}, {1})`
+
+#### `(zip a b)`
+- **Type**: `(List A) (List B) -> (List (Pair A B))`
+- **Description**: Pair up elements, truncating to the shorter list.
+- **Runtime Lowering**:
+  - Python: `_agentscript.zip_({0}, {1})`
+  - Rust: `rt::zip({0}, {1})`
+  - TypeScript: `RT.zip({0}, {1})`
+  - Go: `Zip({0}, {1})`
+
+#### `(list-sum a)`
+- **Type**: `(List N) -> N`
+- **Description**: Sum of elements, 0 when empty. Traps on integer overflow.
+- **Runtime Lowering**:
+  - Python: `_agentscript.sum_({0})`
+  - Rust: `rt::sum({0})`
+  - TypeScript: `RT.sum({0})`
+  - Go: `Sum({0})`
+
+#### `(list-min a)`
+- **Type**: `(List T) -> (Option T)`
+- **Description**: Least element in the sort order, or none when empty.
+- **Runtime Lowering**:
+  - Python: `_agentscript.least({0})`
+  - Rust: `rt::least(&{0})`
+  - TypeScript: `RT.least({0})`
+  - Go: `Least({0})`
+
+#### `(list-max a)`
+- **Type**: `(List T) -> (Option T)`
+- **Description**: Greatest element in the sort order, or none when empty.
+- **Runtime Lowering**:
+  - Python: `_agentscript.greatest({0})`
+  - Rust: `rt::greatest(&{0})`
+  - TypeScript: `RT.greatest({0})`
+  - Go: `Greatest({0})`
+
+### Map
+
+#### `(map-empty)`
+- **Type**: `-> (Map K V)`
+- **Description**: The empty map.
+- **Runtime Lowering**:
+  - Python: `{{}}`
+  - Rust: `std::collections::BTreeMap::new()`
+  - TypeScript: `RT.MAP_EMPTY`
+  - Go: `MAP_EMPTY`
+
+#### `(map-get a b)`
+- **Type**: `(Map K V) K -> (Option V)`
+- **Description**: Value for a key, or none.
+- **Runtime Lowering**:
+  - Python: `_agentscript.m_get({0}, {1})`
+  - Rust: `rt::m_get(&{0}, &{1})`
+  - TypeScript: `RT.mGet({0}, {1})`
+  - Go: `MGet({0}, {1})`
+
+#### `(map-set a b c)`
+- **Type**: `(Map K V) K V -> (Map K V)`
+- **Description**: Map with the key bound to the value.
+- **Runtime Lowering**:
+  - Python: `_agentscript.m_set({0}, {1}, {2})`
+  - Rust: `rt::m_set({0}, {1}, {2})`
+  - TypeScript: `RT.mSet({0}, {1}, {2})`
+  - Go: `MSet({0}, {1}, {2})`
+
+#### `(map-remove a b)`
+- **Type**: `(Map K V) K -> (Map K V)`
+- **Description**: Map without the key.
+- **Runtime Lowering**:
+  - Python: `_agentscript.m_del({0}, {1})`
+  - Rust: `rt::m_del({0}, &{1})`
+  - TypeScript: `RT.mDel({0}, {1})`
+  - Go: `MDel({0}, {1})`
+
+#### `(map-has? a b)`
+- **Type**: `(Map K V) K -> Bool`
+- **Description**: True when the key is present.
+- **Runtime Lowering**:
+  - Python: `({1} in {0})`
+  - Rust: `{0}.contains_key(&{1})`
+  - TypeScript: `RT.mHas({0}, {1})`
+  - Go: `MHas({0}, {1})`
+
+#### `(map-size a)`
+- **Type**: `(Map K V) -> Int64`
+- **Description**: Number of entries.
+- **Runtime Lowering**:
+  - Python: `len({0})`
+  - Rust: `({0}.len() as i64)`
+  - TypeScript: `RT.mSize({0})`
+  - Go: `(int64(len({0})))`
+
+#### `(map-keys a)`
+- **Type**: `(Map K V) -> (List K)`
+- **Description**: Keys, sorted.
+- **Runtime Lowering**:
+  - Python: `sorted({0}.keys())`
+  - Rust: `{0}.keys().cloned().collect::<Vec<_>>()`
+  - TypeScript: `RT.mKeys({0})`
+  - Go: `MKeys({0})`
+
+#### `(map-values a)`
+- **Type**: `(Map K V) -> (List V)`
+- **Description**: Values, ordered by sorted key.
+- **Runtime Lowering**:
+  - Python: `[{0}[_k] for _k in sorted({0})]`
+  - Rust: `{0}.values().cloned().collect::<Vec<_>>()`
+  - TypeScript: `RT.mValues({0})`
+  - Go: `MValues({0})`
+
+#### `(map-pairs a)`
+- **Type**: `(Map K V) -> (List (Pair K V))`
+- **Description**: Entries as pairs, ordered by sorted key.
+- **Runtime Lowering**:
+  - Python: `_agentscript.m_pairs({0})`
+  - Rust: `rt::m_pairs(&{0})`
+  - TypeScript: `RT.mPairs({0})`
+  - Go: `MPairs({0})`
+
+#### `(map-from-pairs a)`
+- **Type**: `(List (Pair K V)) -> (Map K V)`
+- **Description**: Build from pairs; later entries win.
+- **Runtime Lowering**:
+  - Python: `_agentscript.m_from({0})`
+  - Rust: `rt::m_from({0})`
+  - TypeScript: `RT.mFrom({0})`
+  - Go: `MFrom({0})`
+
+### Option, Result, Pair
+
+#### `(some a)`
+- **Type**: `T -> (Option T)`
+- **Description**: A present value.
+- **Runtime Lowering**:
+  - Python: `_agentscript.some({0})`
+  - Rust: `Some({0})`
+  - TypeScript: `RT.some({0})`
+  - Go: `Some({0})`
+
+#### `(none)`
+- **Type**: `-> (Option T)`
+- **Description**: An absent value.
+- **Runtime Lowering**:
+  - Python: `_agentscript.NONE`
+  - Rust: `None`
+  - TypeScript: `RT.NONE`
+  - Go: `None[T]()`
+
+#### `(ok a)`
+- **Type**: `T -> (Result T E)`
+- **Description**: A successful result.
+- **Runtime Lowering**:
+  - Python: `_agentscript.ok({0})`
+  - Rust: `Ok({0})`
+  - TypeScript: `RT.ok({0})`
+  - Go: `Ok({0})`
+
+#### `(err a)`
+- **Type**: `E -> (Result T E)`
+- **Description**: A failed result.
+- **Runtime Lowering**:
+  - Python: `_agentscript.err({0})`
+  - Rust: `Err({0})`
+  - TypeScript: `RT.err({0})`
+  - Go: `Err({0})`
+
+#### `(is-some? a)`
+- **Type**: `(Option T) -> Bool`
+- **Description**: True when a value is present.
+- **Runtime Lowering**:
+  - Python: `_agentscript.is_some({0})`
+  - Rust: `{0}.is_some()`
+  - TypeScript: `({0}.tag === "some")`
+  - Go: `({0}.Present)`
+
+#### `(is-none? a)`
+- **Type**: `(Option T) -> Bool`
+- **Description**: True when no value is present.
+- **Runtime Lowering**:
+  - Python: `(not _agentscript.is_some({0}))`
+  - Rust: `{0}.is_none()`
+  - TypeScript: `({0}.tag === "none")`
+  - Go: `(!{0}.Present)`
+
+#### `(is-ok? a)`
+- **Type**: `(Result T E) -> Bool`
+- **Description**: True when the result succeeded.
+- **Runtime Lowering**:
+  - Python: `_agentscript.is_ok({0})`
+  - Rust: `{0}.is_ok()`
+  - TypeScript: `({0}.tag === "ok")`
+  - Go: `({0}.IsOk)`
+
+#### `(is-err? a)`
+- **Type**: `(Result T E) -> Bool`
+- **Description**: True when the result failed.
+- **Runtime Lowering**:
+  - Python: `(not _agentscript.is_ok({0}))`
+  - Rust: `{0}.is_err()`
+  - TypeScript: `({0}.tag === "err")`
+  - Go: `(!{0}.IsOk)`
+
+#### `(option-or a b)`
+- **Type**: `(Option T) T -> T`
+- **Description**: The value, or a fallback when absent.
+- **Runtime Lowering**:
+  - Python: `_agentscript.opt_or({0}, {1})`
+  - Rust: `{0}.unwrap_or({1})`
+  - TypeScript: `RT.optOr({0}, {1})`
+  - Go: `OptOr({0}, {1})`
+
+#### `(result-or a b)`
+- **Type**: `(Result T E) T -> T`
+- **Description**: The value, or a fallback on failure.
+- **Runtime Lowering**:
+  - Python: `_agentscript.res_or({0}, {1})`
+  - Rust: `{0}.unwrap_or({1})`
+  - TypeScript: `RT.resOr({0}, {1})`
+  - Go: `ResOr({0}, {1})`
+
+#### `(option-map a b)`
+- **Type**: `(fn [A] -> B) (Option A) -> (Option B)`
+- **Description**: Transform a present value.
+- **Runtime Lowering**:
+  - Python: `_agentscript.opt_map({0}, {1})`
+  - Rust: `{1}.map({0})`
+  - TypeScript: `RT.optMap({0}, {1})`
+  - Go: `OptMap({0}, {1})`
+
+#### `(result-map a b)`
+- **Type**: `(fn [A] -> B) (Result A E) -> (Result B E)`
+- **Description**: Transform a successful value.
+- **Runtime Lowering**:
+  - Python: `_agentscript.res_map({0}, {1})`
+  - Rust: `{1}.map({0})`
+  - TypeScript: `RT.resMap({0}, {1})`
+  - Go: `ResMap({0}, {1})`
+
+#### `(result-map-err a b)`
+- **Type**: `(fn [E] -> F) (Result T E) -> (Result T F)`
+- **Description**: Transform a failure value.
+- **Runtime Lowering**:
+  - Python: `_agentscript.res_map_err({0}, {1})`
+  - Rust: `{1}.map_err({0})`
+  - TypeScript: `RT.resMapErr({0}, {1})`
+  - Go: `ResMapErr({0}, {1})`
+
+#### `(option-to-result a b)`
+- **Type**: `(Option T) E -> (Result T E)`
+- **Description**: Absent becomes the given failure.
+- **Runtime Lowering**:
+  - Python: `_agentscript.opt_to_res({0}, {1})`
+  - Rust: `{0}.ok_or({1})`
+  - TypeScript: `RT.optToRes({0}, {1})`
+  - Go: `OptToRes({0}, {1})`
+
+#### `(result-to-option a)`
+- **Type**: `(Result T E) -> (Option T)`
+- **Description**: Failure becomes absence.
+- **Runtime Lowering**:
+  - Python: `_agentscript.res_to_opt({0})`
+  - Rust: `{0}.ok()`
+  - TypeScript: `RT.resToOpt({0})`
+  - Go: `ResToOpt({0})`
+
+#### `(pair a b)`
+- **Type**: `A B -> (Pair A B)`
+- **Description**: Construct a pair.
+- **Runtime Lowering**:
+  - Python: `_agentscript.pair({0}, {1})`
+  - Rust: `({0}, {1})`
+  - TypeScript: `new RT.ASPair({0}, {1})`
+  - Go: `MkPair({0}, {1})`
+
+### I/O
+
+#### `(not-found)`
+- **Type**: `-> IoError`
+- **Description**: The not found failure.
+- **Runtime Lowering**:
+  - Python: `("not-found",)`
+  - Rust: `rt::IoError::NotFound`
+  - TypeScript: `RT.notFound()`
+  - Go: `NotFound()`
+
+#### `(permission-denied)`
+- **Type**: `-> IoError`
+- **Description**: The permission denied failure.
+- **Runtime Lowering**:
+  - Python: `("permission-denied",)`
+  - Rust: `rt::IoError::PermissionDenied`
+  - TypeScript: `RT.permissionDenied()`
+  - Go: `PermissionDenied()`
+
+#### `(already-exists)`
+- **Type**: `-> IoError`
+- **Description**: The already exists failure.
+- **Runtime Lowering**:
+  - Python: `("already-exists",)`
+  - Rust: `rt::IoError::AlreadyExists`
+  - TypeScript: `RT.alreadyExists()`
+  - Go: `AlreadyExists()`
+
+#### `(invalid-path)`
+- **Type**: `-> IoError`
+- **Description**: The invalid path failure.
+- **Runtime Lowering**:
+  - Python: `("invalid-path",)`
+  - Rust: `rt::IoError::InvalidPath`
+  - TypeScript: `RT.invalidPath()`
+  - Go: `InvalidPath()`
+
+#### `(interrupted)`
+- **Type**: `-> IoError`
+- **Description**: The interrupted failure.
+- **Runtime Lowering**:
+  - Python: `("interrupted",)`
+  - Rust: `rt::IoError::Interrupted`
+  - TypeScript: `RT.interrupted()`
+  - Go: `Interrupted()`
+
+#### `(other)`
+- **Type**: `-> IoError`
+- **Description**: The other failure.
+- **Runtime Lowering**:
+  - Python: `("other",)`
+  - Rust: `rt::IoError::Other`
+  - TypeScript: `RT.other()`
+  - Go: `Other()`
+
+#### `(read-line)`
+- **Type**: `-> (Result (Option String) IoError)`
+- **Description**: Read one line from standard input; none at end of input.
+- **Runtime Lowering**:
+  - Python: `_agentscript.read_line()`
+  - Rust: `rt::read_line()`
+  - TypeScript: `RT.readLine()`
+  - Go: `ReadLine()`
+
+#### `(read-all)`
+- **Type**: `-> (Result String IoError)`
+- **Description**: Read all of standard input.
+- **Runtime Lowering**:
+  - Python: `_agentscript.read_all()`
+  - Rust: `rt::read_all()`
+  - TypeScript: `RT.readAll()`
+  - Go: `ReadAll()`
+
+#### `(print a)`
+- **Type**: `String -> (Result Unit IoError)`
+- **Description**: Write to standard output with no trailing newline.
+- **Runtime Lowering**:
+  - Python: `_agentscript.print_out({0})`
+  - Rust: `rt::print_out(&{0})`
+  - TypeScript: `RT.print_({0})`
+  - Go: `PrintOut({0})`
+
+#### `(println a)`
+- **Type**: `String -> (Result Unit IoError)`
+- **Description**: Write a line to standard output.
+- **Runtime Lowering**:
+  - Python: `_agentscript.println({0})`
+  - Rust: `rt::println(&{0})`
+  - TypeScript: `RT.println({0})`
+  - Go: `Println({0})`
+
+#### `(eprintln a)`
+- **Type**: `String -> (Result Unit IoError)`
+- **Description**: Write a line to standard error.
+- **Runtime Lowering**:
+  - Python: `_agentscript.eprintln({0})`
+  - Rust: `rt::eprintln(&{0})`
+  - TypeScript: `RT.eprintln({0})`
+  - Go: `Eprintln({0})`
+
+#### `(file-read a)`
+- **Type**: `String -> (Result String IoError)`
+- **Description**: Read a whole file as text.
+- **Runtime Lowering**:
+  - Python: `_agentscript.file_read({0})`
+  - Rust: `rt::file_read(&{0})`
+  - TypeScript: `RT.fileRead({0})`
+  - Go: `FileRead({0})`
+
+#### `(file-write a b)`
+- **Type**: `String String -> (Result Unit IoError)`
+- **Description**: Write text to a file, replacing it.
+- **Runtime Lowering**:
+  - Python: `_agentscript.file_write({0}, {1})`
+  - Rust: `rt::file_write(&{0}, &{1})`
+  - TypeScript: `RT.fileWrite({0}, {1})`
+  - Go: `FileWrite({0}, {1})`
+
+#### `(file-append a b)`
+- **Type**: `String String -> (Result Unit IoError)`
+- **Description**: Append text to a file, creating it if absent.
+- **Runtime Lowering**:
+  - Python: `_agentscript.file_append({0}, {1})`
+  - Rust: `rt::file_append(&{0}, &{1})`
+  - TypeScript: `RT.fileAppend({0}, {1})`
+  - Go: `FileAppend({0}, {1})`
+
+#### `(file-exists? a)`
+- **Type**: `String -> (Result Bool IoError)`
+- **Description**: Whether a path exists.
+- **Runtime Lowering**:
+  - Python: `_agentscript.file_exists({0})`
+  - Rust: `rt::file_exists(&{0})`
+  - TypeScript: `RT.ok(RT.fileExists({0}))`
+  - Go: `FileExistsRes({0})`
+
+## 8. CLI Toolchain & Model Context Protocol
+
+- `asl run <file.asl>` — Evaluates script in native/Wasm isolate.
+- `asl fmt <file.asl>` — Canonical AST formatter.
+- `asl lint --fix <file.asl>` — Smell detector and structural AST auto-repair engine.
+- `asl check <file.asl>` — Typechecker and semantic gate.
+- `asl transcode <file.asl> --to nano|verbose` — Projection transcoder.
+- `asl topo` — Module dependency DAG and circularity auditor.
+- `asl mcp` — Model Context Protocol server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`.
+
+Canonical Website: https://aslang.dev · Repository: https://github.com/GenSEAM/asl · MIT License

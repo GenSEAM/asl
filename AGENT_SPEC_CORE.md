@@ -107,6 +107,57 @@ rejected (precedent: Haxe's `_hx_`, `SPEC_REVIEW.md` §11.8). The prefix is deli
 a form the identifier rule above can actually produce — a reserved word the lexer cannot emit
 reserves nothing, and its conformance fixture would pass for an unrelated reason.
 
+### 2.1 The Nano projection
+
+**Generated from `prelude/prelude.json`** — edit there, not here.
+
+Every form below has two spellings. They are the same form: the grammars produce one tree from
+either, and no rule anywhere may distinguish them. The short spelling is what the language stores
+on disk and puts on the wire; the long one is what a human reads.
+
+| Nano | Long | Significant in |
+|---|---|---|
+| `df` | `defun` | decl-head |
+| `dfs` | `defschema` | decl-head |
+| `dfe` | `defenum` | decl-head |
+| `mt` | `match` | expr-head |
+| `:d` | `:doc` | module-opt, defun-opt |
+| `:x` | `:export` | module-opt |
+| `:i` | `:import` | module-opt |
+| `:a` | `:as` | import-spec |
+| `:f` | `:field` | field-head |
+| `:c` | `:case` | enum-case-head |
+
+A third, intermediate spelling of the declaration heads is also accepted: `def`, `schema`, `enum`. It is a
+compatibility surface and carries no meaning of its own.
+
+**An alias is significant only in the position named above, and is an ordinary atom everywhere
+else.** `:x` opens a module's export list; `(Point :x 3)` supplies a field called `x`, and no
+tool may rewrite it. This is the whole reason the table carries a position column: a projection
+applied as text substitution corrupts any record whose field is spelled like a keyword.
+
+These forms are deliberately unaliased, being one token already or too short to shorten without
+colliding with an identifier: `module`, `fn`, `let`, `if`, `cond`, `try`, and the option
+keywords `:else`, `:default`, `:json`, `:json-case`.
+
+Types have short spellings on the same terms:
+
+| Alias | Type |
+|---|---|
+| `Int` | `Int64` |
+| `I64` | `Int64` |
+| `I32` | `Int32` |
+| `F64` | `Float64` |
+| `F32` | `Float64` |
+| `Num` | `Float64` |
+| `Str` | `String` |
+| `Float` | `Float64` |
+
+`F32` resolves to `Float64` — a **reserved width name**. Core has no such width. It is accepted so that source
+written against a narrower host type parses and checks today, and it carries none of that width's
+semantics: no narrowing, no wrapping, and no trap at the narrower boundary. It exists as
+groundwork for host interop, where a real fixed-width type will replace it; until then, reaching
+for one to obtain a smaller number is a mistake the language cannot catch for you.
 ## 3. Types
 
 | Type | Notes |
@@ -248,6 +299,7 @@ Import cycles are an error. Aliases are module-local and may be chosen freely.
 
 **A module that declares `main` is a program.** The entry point is
 
+<!-- not-agentscript: a signature, shown without the body §4.2 requires of a declaration -->
 ```lisp
 (defun ! main [(args (List String))] -> (Result Unit IoError))
 ```
