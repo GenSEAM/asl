@@ -6,6 +6,7 @@ An S-expression language for LLM agents: balanced delimiters, whitespace-insensi
 
 ## Forms
 
+<!-- not-agentscript: a grammar summary written with `...` placeholders -->
 ```lisp
 (module path/name :d "One sentence." :x [Sym ...] :i [(path/mod :a alias)])
 (dfs Name (:f key I64 "doc") ...)
