@@ -6,91 +6,89 @@ judged on forms the document actually gave it. Closure degrades silently, becaus
 a helper invented to illustrate one construct reads as if it must be defined
 elsewhere. So it is checked, not asserted (PCP c-ca5c).
 
-Call heads are extracted with the project's own tree-sitter grammar rather than
-regexes: only a real parse distinguishes a call head from a binder position such
-as a parameter or a let binding.
+Call heads are extracted with the project's own self-hosted native AST rather
+than regexes: only a real parse distinguishes a call head from a binder position
+such as a parameter or a let binding. The walker lives in the parser driver
+(`packages/asl-parser/tests/reader_test.asl`) and is grade-checked against a
+live tree-sitter baseline by `tools/tests/test_closure_native_equivalence.py`,
+so a port that moves these counts silently fails that suite.
 
 Exit code is the number of undefined heads.
 """
+import functools
 import re
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).parent
+HARNESS_DIR = ROOT.parent / "packages" / "asl-parser" / "tests"
+sys.path.insert(0, str(HARNESS_DIR))
 sys.path.insert(0, str(ROOT.parent / "prelude"))
 sys.path.insert(0, str(ROOT.parent / "backend"))
 
+from harness import run_asl  # noqa: E402
 import exec_coverage  # noqa: E402
 from vocab import builtins as defined_builtins, special_forms  # noqa: E402
-TS_DIR = ROOT / "tree-sitter-agentscript"
-TS_BIN = ROOT.parent / "node_modules" / ".bin" / "tree-sitter"
 SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 
-# Every head shape the `call` rule admits, not only identifiers: `callee` is
-# any expression, so operator heads (+, <=) and qualified heads (s/upper) were
-# invisible to this gate and the closure it reported excluded them.
-#
-# A `defenum` case is a definition too — it is a constructor within its own
-# module (§4.4). Only `defun` was collected, so the first corpus fixture to
-# construct a user union case reported every one of its cases as an undefined
-# call head. Nothing had, which is why the hole survived.
-QUERY = """
-(call callee: (ident) @callee)
-(call callee: (operator) @callee)
-(call callee: (qualified) @qualified)
-(defun name: (ident) @definition)
-(enum_case name: (ident) @definition)
-"""
 
-def run_query(paths: list[Path]) -> tuple[set[str], set[str], set[str]]:
-    """The call heads, definitions and qualified heads tree-sitter finds.
+@functools.lru_cache(maxsize=None)
+def _driver() -> dict:
+    """The transpiled parser driver, loaded once per process."""
+    return run_asl(HARNESS_DIR / "reader_test.asl")
 
-    The runner's exit status is checked because the failure mode is silent in the
-    dangerous direction: a missing binary, an unbuilt grammar or a query the
-    grammar no longer admits all yield no output, and no output means no
-    undefined head, which this gate prints as closure.
+
+def _native_buckets(src: str) -> tuple[set, set, set]:
+    """The native walker's calls, definitions and qualified heads for one source.
+
+    A parse error surfaces as an exception rather than as empty buckets: no
+    output means no undefined head, which this gate would print as closure.
     """
-    if not paths:
-        raise RuntimeError("closure over no sources is not closure")
-    with tempfile.TemporaryDirectory() as d:
-        qfile = Path(d) / "closure.scm"
-        qfile.write_text(QUERY)
-        proc = subprocess.run(
-            [str(TS_BIN), "query", str(qfile), *[str(p.resolve()) for p in paths]],
-            cwd=TS_DIR, capture_output=True, text=True,
-        )
-    if proc.returncode != 0:
-        raise RuntimeError(
-            f"tree-sitter query failed (exit {proc.returncode}): "
-            + (proc.stderr.strip().splitlines() or ["no stderr"])[-1][:160])
-    calls, defs, qualified = set(), set(), set()
-    bucket = {"callee": calls, "definition": defs, "qualified": qualified}
-    for line in proc.stdout.splitlines():
-        m = re.search(r"capture: \d+ - (callee|definition|qualified), .*text: `([^`]*)`", line)
-        if m:
-            bucket[m.group(1)].add(m.group(2))
-    if not calls or not defs:
-        raise RuntimeError(
-            f"{len(paths)} source(s) yielded {len(calls)} call head(s) and {len(defs)} "
-            "definition(s); the query matched nothing, so closure is unmeasured")
-    return calls, defs, qualified
+    res = _driver()["closure_heads"](src)
+    if res[0] == "err":
+        e = res[1]
+        raise RuntimeError(f"{e['line']}:{e['col']}: {e['msg']}")
+    if res[0] != "ok":
+        raise RuntimeError(f"unexpected result tag: {res[0]}")
+    b = res[1]
+    return set(b["calls"]), set(b["defs"]), set(b["qualified"])
 
 
-def main() -> int:
+def collect_sources() -> list[Path]:
+    """The corpus fixtures and spec examples the gate audits.
+
+    Spec examples become real files so the real parser sees them; a block
+    marked `not-agentscript` is deliberately not a program and is skipped.
+    """
     sources = sorted((ROOT / "corpus" / "valid").glob("*.agentscript"))
-
-    # Spec examples become real files so the real parser sees them.
     tmp = Path(tempfile.mkdtemp())
-    for i, block in enumerate(re.findall(r"```lisp\n(.*?)```", SPEC.read_text(), re.S)):
+    text = SPEC.read_text()
+    for i, m in enumerate(re.finditer(r"```lisp\n(.*?)```", text, re.S)):
+        block = m.group(1)
         if "(defun" not in block and "(defschema" not in block:
             continue  # fragment, not a compilable unit
+        if re.search(r"<!-- not-agentscript:.*?-->\s*$", text[:m.start()], re.S):
+            continue
         p = tmp / f"spec_{i:02d}.agentscript"
         p.write_text(block)
         sources.append(p)
+    return sources
 
-    calls, local, qualified = run_query(sources)
+
+def main() -> int:
+    sources = collect_sources()
+    calls, local, qualified = set(), set(), set()
+    for p in sources:
+        c, d, q = _native_buckets(p.read_text())
+        calls |= c
+        local |= d
+        qualified |= q
+    if not calls or not local:
+        raise RuntimeError(
+            f"{len(sources)} source(s) yielded {len(calls)} call head(s) and "
+            f"{len(local)} definition(s); the walker matched nothing, so "
+            "closure is unmeasured")
     builtins = defined_builtins()
     known = builtins | local | special_forms()
     undefined = sorted(calls - known)

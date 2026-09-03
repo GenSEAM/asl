@@ -324,32 +324,29 @@ def test_a_case_whose_seeded_file_is_gone_does_not_abort_the_gate(source, monkey
 # --- the same class, elsewhere in the gate machinery ----------------------
 
 
-def test_a_failing_tree_sitter_is_not_read_as_closure(tmp_path, monkeypatch):
+def test_a_native_parse_failure_is_not_read_as_closure():
     """No output means no undefined head, which the closure gate printed as
-    "spec and corpus are closed"."""
+    "spec and corpus are closed". The native walker surfaces a parse error as
+    an exception instead of empty buckets."""
     import closure_audit as ca
-    fake = tmp_path / "ts"
-    fake.write_text("#!/bin/sh\necho 'grammar not built' >&2\nexit 1\n")
-    fake.chmod(0o755)
-    monkeypatch.setattr(ca, "TS_BIN", fake)
-    with pytest.raises(RuntimeError, match="tree-sitter query failed"):
-        ca.run_query([ROOT / "grammar" / "corpus" / "valid" / "08-io.agentscript"])
+    with pytest.raises(RuntimeError):
+        ca._native_buckets("(defun f [")
 
 
-def test_a_query_that_matches_nothing_is_not_read_as_closure(tmp_path, monkeypatch):
+def test_an_empty_bucket_is_not_read_as_closure(monkeypatch):
+    """A walker that matched nothing is unmeasured, not closed; the native
+    walker's empty buckets must not print the OK line."""
     import closure_audit as ca
-    fake = tmp_path / "ts"
-    fake.write_text("#!/bin/sh\nexit 0\n")
-    fake.chmod(0o755)
-    monkeypatch.setattr(ca, "TS_BIN", fake)
+    monkeypatch.setattr(ca, "_native_buckets", lambda src: (set(), set(), set()))
     with pytest.raises(RuntimeError, match="closure is unmeasured"):
-        ca.run_query([ROOT / "grammar" / "corpus" / "valid" / "08-io.agentscript"])
+        ca.main()
 
 
-def test_closure_over_no_sources_is_refused():
+def test_closure_over_no_sources_is_refused(monkeypatch):
     import closure_audit as ca
-    with pytest.raises(RuntimeError, match="no sources"):
-        ca.run_query([])
+    monkeypatch.setattr(ca, "collect_sources", lambda: [])
+    with pytest.raises(RuntimeError, match="closure is unmeasured"):
+        ca.main()
 
 
 def test_closure_does_not_claim_every_builtin_executed_when_some_are_unreached(monkeypatch, capsys):
@@ -357,7 +354,7 @@ def test_closure_does_not_claim_every_builtin_executed_when_some_are_unreached(m
     `106/107` and the name of the builtin that never ran. It must only print
     when the executed count actually equals the declared one."""
     import closure_audit as ca
-    monkeypatch.setattr(ca, "run_query", lambda paths: (set(), set(), set()))
+    monkeypatch.setattr(ca, "_native_buckets", lambda src: ({"f"}, {"f"}, set()))
     monkeypatch.setattr(ca.exec_coverage, "check", lambda: (
         [], {"executed": ["x"], "declared": 2, "pct": 50,
              "unreached": ["string-reverse"]}))
