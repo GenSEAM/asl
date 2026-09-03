@@ -293,12 +293,12 @@ export const AslQualityDoctor: React.FC = () => {
             </span>
             <div className="flex flex-col gap-2">
               {VERIFICATION_GATES.map((g, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs font-mono">
+                <div key={idx} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-xs font-mono">
                   <span className="text-ink-2">
                     <span className="text-ink-3 mr-2">{g.step}</span>
                     {g.name}
                   </span>
-                  <span className="text-signal font-medium bg-ground px-2 py-0.5 rounded border border-line">
+                  <span className="text-signal font-medium bg-ground px-2 py-0.5 rounded border border-line shrink-0">
                     ✓ {g.status}
                   </span>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Home,
   Terminal,
@@ -7,11 +7,9 @@ import {
   BookOpen,
   Search,
   Sparkles,
-  X,
-  ExternalLink,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
-import { Wordmark } from './ui/Logo';
+import { ChameleonALogo } from './ui/Logo';
 import { SearchModal } from './SearchModal';
 import { Link } from '../lib/router';
 
@@ -24,16 +22,11 @@ const navItems = [
 ];
 
 export const Navbar: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const curtainRef = useRef<HTMLDivElement>(null);
-  const handleRef = useRef<HTMLButtonElement>(null);
-  const touchStartY = useRef<number | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsOpen(false);
         setIsSearchOpen(false);
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -45,82 +38,38 @@ export const Navbar: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (
-        isOpen &&
-        curtainRef.current &&
-        !curtainRef.current.contains(e.target as Node) &&
-        handleRef.current &&
-        !handleRef.current.contains(e.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
-  }, [isOpen]);
-
-  useEffect(() => {
-    const onResize = () => {
-      if (window.innerWidth >= 981) {
-        setIsOpen(false);
-      }
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartY.current = e.touches[0].clientY;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartY.current === null) return;
-    const diff = e.touches[0].clientY - touchStartY.current;
-    if (!isOpen && diff > 25) {
-      setIsOpen(true);
-      touchStartY.current = null;
-    } else if (isOpen && diff < -25) {
-      setIsOpen(false);
-      touchStartY.current = null;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchStartY.current = null;
-  };
-
   return (
     <>
-      <div className="fixed top-3 left-0 right-0 z-50 flex justify-center px-2 sm:px-4 pointer-events-none">
+      <div className="fixed top-2 sm:top-3 left-0 right-0 z-50 flex justify-center px-2 sm:px-4 pointer-events-none w-full max-w-[100vw]">
         <div className="relative pointer-events-auto max-w-6xl w-full">
-          {/* Main Top Header Toolbar */}
-          <header
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            className="relative z-10 w-full rounded-full border border-line/80 bg-surface/90 backdrop-blur-2xl px-2.5 sm:px-4 h-14 flex items-center justify-between shadow-e2 transition-all"
-          >
+          {/* Main Top Header Toolbar: Fully expanded & perfectly responsive */}
+          <header className="relative z-10 w-full rounded-full border border-line/80 bg-surface/90 backdrop-blur-2xl px-2 xs:px-3 sm:px-4 h-12 sm:h-14 flex items-center justify-between shadow-e2 transition-all">
             {/* Logo / Wordmark */}
-            <Link to="/" className="rounded-full shrink-0 flex items-center pr-1 sm:pr-2" title="aslang.dev home">
-              <Wordmark />
+            <Link
+              to="/"
+              className="rounded-full shrink-0 flex items-center gap-1.5 sm:gap-2 pr-1 sm:pr-2 group"
+              title="aslang.dev home"
+            >
+              <ChameleonALogo className="w-6 h-6 sm:w-7 sm:h-7 text-signal shrink-0 group-hover:scale-105 transition-transform" />
+              <span className="font-sans font-bold tracking-tight text-ink text-sm sm:text-base hidden min-[360px]:inline">
+                asl<span className="hidden xs:inline">ang<span className="text-signal">.dev</span></span>
+              </span>
             </Link>
 
-            {/* Navigation links: Compact icons on <981px, Icons + Labels on >=981px */}
-            <nav aria-label="Main Navigation" className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Navigation links: Fully expanded on mobile & desktop */}
+            <nav aria-label="Main Navigation" className="flex items-center gap-0.5 xs:gap-1 sm:gap-1.5 shrink-0">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     to={item.href}
-                    className="p-2 nav:px-3.5 nav:py-1.5 rounded-full font-mono text-meta text-ink-2 hover:text-ink hover:bg-inset transition-colors flex items-center gap-1.5 shrink-0"
+                    className="p-1.5 xs:p-2 nav:px-3.5 nav:py-1.5 rounded-full font-mono text-meta text-ink-2 hover:text-ink hover:bg-inset transition-colors flex items-center gap-1.5 shrink-0"
                     activeClassName="!text-signal !bg-signal/10 !font-semibold shadow-sm"
                     title={item.label}
                     aria-label={item.label}
                   >
-                    <Icon className="w-4 h-4 shrink-0 text-current" />
+                    <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-current" />
                     <span className="hidden nav:inline">{item.label}</span>
                   </Link>
                 );
@@ -128,12 +77,12 @@ export const Navbar: React.FC = () => {
             </nav>
 
             {/* Right Action Icons: Search, llms.txt, GitHub, Theme */}
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Search Trigger: Compact icon below 1100px, with label above */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              {/* Search Trigger */}
               <button
                 type="button"
                 onClick={() => setIsSearchOpen(true)}
-                className="flex items-center gap-2 p-2 min-[1100px]:px-3 min-[1100px]:py-1.5 rounded-full border border-line bg-inset/80 hover:bg-inset text-ink-3 hover:text-ink font-mono text-micro transition-all shadow-sm shrink-0"
+                className="flex items-center gap-1.5 p-1.5 xs:p-2 min-[1100px]:px-3 min-[1100px]:py-1.5 rounded-full border border-line bg-inset/80 hover:bg-inset text-ink-3 hover:text-ink font-mono text-micro transition-all shadow-sm shrink-0"
                 aria-label="Search documentation"
                 title="Search documentation (⌘K)"
               >
@@ -156,12 +105,12 @@ export const Navbar: React.FC = () => {
                 <span>llms.txt</span>
               </a>
 
-              {/* GitHub Repository Link: Icon-only below 981px, with label above */}
+              {/* GitHub Repository Link: Hidden on small mobile to fit iPhone 12 mini perfectly */}
               <a
                 href="https://github.com/genseam/asl"
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 p-2 nav:px-3 nav:py-1.5 rounded-full border border-line bg-surface hover:bg-inset text-ink font-mono text-meta font-medium shadow-sm transition-all shrink-0"
+                className="hidden sm:flex items-center gap-1.5 p-2 nav:px-3 nav:py-1.5 rounded-full border border-line bg-surface hover:bg-inset text-ink font-mono text-meta font-medium shadow-sm transition-all shrink-0"
                 aria-label="GitHub Repository"
                 title="GitHub Repository"
               >
@@ -178,145 +127,6 @@ export const Navbar: React.FC = () => {
               <ThemeToggle />
             </div>
           </header>
-
-          {/* Seamless Celestial Pull-Tab tucked under the header with chevron-contoured border */}
-          <div className="nav:hidden absolute left-1/2 -translate-x-1/2 top-full -mt-2 z-0 flex items-center justify-center pointer-events-auto">
-            <button
-              ref={handleRef}
-              type="button"
-              onClick={() => setIsOpen((prev) => !prev)}
-              aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
-              aria-expanded={isOpen}
-              className="group relative flex items-center justify-center cursor-pointer focus:outline-none transition-all duration-200 hover:translate-y-0.5 active:scale-90 active:opacity-85 touch-manipulation before:absolute before:-inset-x-6 before:-inset-y-3 before:content-['']"
-              title={isOpen ? 'Close menu (Esc)' : 'Open navigation menu'}
-            >
-              <svg width="44" height="20" viewBox="0 0 44 20" className="overflow-visible">
-                {/* Seamless Tab Body with Chevron-shaped Bottom Contour */}
-                <path
-                  d={
-                    isOpen
-                      ? 'M 6 18 L 6 14 C 6 8 16 2 22 2 C 28 2 38 8 38 14 L 38 18 Z'
-                      : 'M 6 0 L 6 4 C 6 10 16 17 22 18 C 28 17 38 10 38 4 L 38 0 Z'
-                  }
-                  className="fill-surface stroke-line/80 group-hover:stroke-signal/70 transition-all duration-300"
-                  strokeWidth="1.2"
-                />
-
-                {/* Pure Lightweight Celestial Artwork: Orbit Ellipse + Satellite + Core */}
-                <g className="transition-transform duration-300">
-                  {/* Orbit ellipse ring */}
-                  <ellipse
-                    cx="22"
-                    cy={isOpen ? 10 : 8}
-                    rx="8"
-                    ry="3.2"
-                    className="stroke-signal opacity-45 group-hover:opacity-90 transition-opacity -rotate-15 origin-center"
-                    strokeWidth="0.9"
-                    strokeDasharray="2 1.5"
-                    fill="none"
-                  />
-                  {/* Orbit satellite beacon dot */}
-                  <circle cx="28" cy={isOpen ? 8.5 : 6.5} r="1.1" className="fill-signal" />
-                  {/* Core glowing celestial body */}
-                  <circle
-                    cx="22"
-                    cy={isOpen ? 10 : 8}
-                    r="1.6"
-                    className="fill-signal/80 group-hover:fill-signal transition-colors"
-                  />
-                </g>
-              </svg>
-            </button>
-          </div>
-
-          {/* Clean Streamlined Curtain Menu Drawer */}
-          {isOpen && (
-            <div
-              ref={curtainRef}
-              className="nav:hidden pointer-events-auto mt-4 w-full rounded-3xl border border-line bg-surface/95 backdrop-blur-2xl p-4 sm:p-5 shadow-e3 transition-all duration-300 max-h-[82vh] overflow-y-auto"
-            >
-              {/* Subtle Header with mini easter-egg badge */}
-              <div className="flex items-center justify-between pb-3 border-b border-line mb-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-signal" />
-                  <span className="font-mono text-micro uppercase tracking-wider text-ink font-semibold">
-                    Orbit Relay
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full bg-signal/10 text-signal font-mono text-[10px] font-medium border border-signal/20">
-                    v0.2.0 • 107 builtins
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-lg text-ink-3 hover:text-ink hover:bg-inset transition-colors"
-                  aria-label="Close menu"
-                  title="Close (Esc)"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Clean navigation grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3.5">
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.href}
-                      to={item.href}
-                      onClick={() => setIsOpen(false)}
-                      className="flex items-center gap-2.5 p-2.5 rounded-xl border border-line/60 bg-inset/40 hover:bg-inset hover:border-line text-ink transition-all group"
-                      activeClassName="!border-signal/50 !bg-signal/10 shadow-sm"
-                    >
-                      <div className="p-1.5 rounded-lg bg-surface border border-line text-ink-2 group-hover:text-signal transition-colors">
-                        <Icon className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-mono text-meta font-medium text-ink group-hover:text-signal transition-colors">
-                        {item.label}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-
-              {/* Quick links & Model Spec footer */}
-              <div className="pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2.5 font-mono text-micro text-ink-3">
-                <div className="flex items-center gap-2">
-                  <a
-                    href="/llms.txt"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-signal/10 hover:bg-signal/20 text-signal font-medium transition-colors"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>llms.txt</span>
-                  </a>
-                  <a
-                    href="/llms-full.txt"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-inset hover:bg-surface border border-line text-ink-2 hover:text-ink font-medium transition-colors"
-                  >
-                    <span>llms-full.txt</span>
-                  </a>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="hidden sm:inline text-ink-4">⌘K for search</span>
-                  <a
-                    href="https://github.com/genseam/asl"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-ink-2 hover:text-ink transition-colors"
-                  >
-                    <span>GitHub</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -325,6 +135,3 @@ export const Navbar: React.FC = () => {
     </>
   );
 };
-
-
-

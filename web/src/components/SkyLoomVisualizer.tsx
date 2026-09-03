@@ -356,9 +356,9 @@ export const SkyLoomVisualizer: React.FC = () => {
           {/* Wire Format & Live Packet Inspector */}
           <div className="lg:col-span-2 p-6 rounded-2xl border border-line bg-surface flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between pb-4 border-b border-line mb-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-line mb-4">
                 <div className="flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-ink-2" />
+                  <Code2 className="w-4 h-4 text-ink-2 shrink-0" />
                   <span className="font-mono text-micro uppercase font-semibold text-ink">
                     SkyLoom Wire Frame Inspector
                   </span>
@@ -369,7 +369,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-inset border border-line">
+                <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-lg bg-inset border border-line max-w-full">
                   <button
                     onClick={() => setActiveTab('asl')}
                     className={`px-2 py-1 rounded font-mono text-micro font-medium transition-all ${

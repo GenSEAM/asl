@@ -25,7 +25,7 @@ export const Hero: React.FC = () => {
   return (
     <section id="top" className="relative pt-32 pb-20 sm:pt-36 sm:pb-24 overflow-hidden">
 
-      <div className="max-w-6xl mx-auto px-5 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
           
           {/* Main Hero Proposition */}
@@ -164,7 +164,7 @@ export const Hero: React.FC = () => {
                     type="text"
                     readOnly
                     value={INSTALL_CMD}
-                    className="flex-1 bg-transparent font-mono text-meta text-ink outline-none select-all"
+                    className="flex-1 min-w-0 bg-transparent font-mono text-meta text-ink outline-none select-all"
                   />
                   <button
                     type="button"

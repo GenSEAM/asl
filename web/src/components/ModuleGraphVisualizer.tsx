@@ -275,7 +275,7 @@ export const ModuleGraphVisualizer: React.FC = () => {
 
           {/* Deep Architectural Inspector Panel */}
           <div className="lg:col-span-7 flex flex-col rounded-xl border border-border bg-surface-elevated overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-surface">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 sm:px-5 py-3 sm:py-4 border-b border-border bg-surface">
               <div className="flex items-center gap-2">
                 <button
                   type="button"

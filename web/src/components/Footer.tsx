@@ -3,7 +3,7 @@ import { Logo } from './ui/Logo';
 
 export const Footer: React.FC = () => (
   <footer className="py-14 border-t border-line bg-sunken/60">
-    <div className="max-w-6xl mx-auto px-6 lg:px-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div className="flex items-center gap-3">
         <Logo className="w-7 h-7 text-signal" />
         <span className="flex items-baseline gap-2">
@@ -41,7 +41,7 @@ export const Footer: React.FC = () => (
       </a>
     </div>
 
-    <div className="max-w-6xl mx-auto px-6 lg:px-8 mt-8 pt-6 border-t border-line/60 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-micro text-ink-3">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-line/60 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-micro text-ink-3">
       <p>MIT licensed. Single-pass S-expression language for autonomous agents.</p>
       <p>Formally verified determinism across runtimes.</p>
     </div>

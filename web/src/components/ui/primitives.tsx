@@ -26,7 +26,7 @@ export const Section: React.FC<{
       aria-labelledby={labelledBy}
       className={`relative py-28 sm:py-36 transition-colors ${bgStyles} ${className}`}
     >
-      <div className="max-w-6xl mx-auto px-6 lg:px-8 relative z-10">{children}</div>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">{children}</div>
     </section>
   );
 };

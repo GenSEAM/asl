@@ -29,7 +29,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-ground text-ink flex flex-col relative">
+    <div className="min-h-screen bg-ground text-ink flex flex-col relative w-full max-w-[100vw] overflow-x-hidden">
       <CosmicLandscapeBackground />
       <Navbar />
       <div className="relative z-10 flex-1 flex flex-col">

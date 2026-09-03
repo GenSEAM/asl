@@ -459,10 +459,10 @@ export const DocsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Ordered Category Navigation Bar */}
-        <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 mb-8 pb-4 border-b border-line">
-          {/* Main Category Tabs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:flex xl:flex-wrap gap-2 flex-1 min-w-0">
+        {/* Category Navigation & Contextual Controls (Fixed 50/50 Split) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 mb-8 pb-6 border-b border-line items-stretch">
+          {/* Left Column (50%): Main Category Tabs */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 h-full">
             {[
               { id: 'cli', label: '1. CLI & Workflow', icon: Terminal },
               { id: 'mesh', label: '2. Agent Mesh', icon: Boxes },
@@ -471,111 +471,190 @@ export const DocsView: React.FC = () => {
               { id: 'syntax', label: '5. Syntax & Forms', icon: Braces },
               { id: 'control', label: '6. Control & Errors', icon: Workflow },
               { id: 'stdlib', label: '7. Standard Library', icon: BookOpen }
-            ].map(({ id, label, icon: Icon }) => (
+            ].map(({ id, label, icon: Icon }, idx) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id as DocTab)}
-                className={`flex items-center justify-center sm:justify-start gap-2 px-3 py-2 rounded-xl font-mono text-meta font-medium transition-all ${
+                className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl font-mono text-meta font-medium transition-all text-left border ${
+                  idx === 6 ? 'sm:col-span-2' : ''
+                } ${
                   activeTab === id
-                    ? 'bg-signal text-white shadow-sm'
-                    : 'bg-surface hover:bg-surface-2 text-ink-2 hover:text-ink border border-line'
+                    ? 'bg-signal text-white border-signal shadow-sm'
+                    : 'bg-surface hover:bg-surface-2 text-ink-2 hover:text-ink border-line'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className={`w-4 h-4 shrink-0 ${activeTab === id ? 'text-white' : 'text-signal'}`} />
                 <span className="truncate">{label}</span>
               </button>
             ))}
           </div>
 
-          {/* Contextual Sub-Control Area (Stable container, never causes layout jumping) */}
-          <div className="shrink-0 flex items-center justify-start sm:justify-end min-h-[44px]">
-            {/* Syntax & Control: Polyglot Target Language Selector */}
-            {(activeTab === 'syntax' || activeTab === 'control') && (
-              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line w-full sm:w-auto overflow-x-auto">
-                <span className="text-micro font-mono uppercase text-ink-3 px-2">Target:</span>
-                {(['python', 'rust', 'typescript', 'go'] as CodeTargetLang[]).map((lang) => (
-                  <button
-                    key={lang}
-                    onClick={() => setTargetLang(lang)}
-                    className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all capitalize ${
-                      targetLang === lang
-                        ? 'bg-signal text-white shadow-sm'
-                        : 'text-ink-2 hover:text-ink'
-                    }`}
-                  >
-                    {lang === 'typescript' ? 'TypeScript' : lang}
-                  </button>
-                ))}
+          {/* Right Column (50%): Contextual Controls & Feature Highlight Panel */}
+          <div className="rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-e1 flex flex-col justify-between space-y-4">
+            {/* Header info for current active tab */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {activeTab === 'cli' && <Terminal className="w-4 h-4 text-signal" />}
+                  {activeTab === 'mesh' && <Boxes className="w-4 h-4 text-signal" />}
+                  {activeTab === 'data' && <Database className="w-4 h-4 text-signal" />}
+                  {activeTab === 'sql' && <Code2 className="w-4 h-4 text-signal" />}
+                  {activeTab === 'syntax' && <Braces className="w-4 h-4 text-signal" />}
+                  {activeTab === 'control' && <Workflow className="w-4 h-4 text-signal" />}
+                  {activeTab === 'stdlib' && <BookOpen className="w-4 h-4 text-signal" />}
+                  <h4 className="font-bold text-ink text-base">
+                    {activeTab === 'cli' && 'Deterministic Toolchain'}
+                    {activeTab === 'mesh' && 'SkyLoom RPC Mesh Wire'}
+                    {activeTab === 'data' && 'Serialization & Token Matrix'}
+                    {activeTab === 'sql' && 'Cross-Dialect SQL Lowering'}
+                    {activeTab === 'syntax' && 'Polyglot Product Types'}
+                    {activeTab === 'control' && 'Linearized Control & Result'}
+                    {activeTab === 'stdlib' && '107 Pure Builtin Primitives'}
+                  </h4>
+                </div>
+                <span className="text-micro font-mono uppercase px-2 py-0.5 rounded bg-ground border border-line text-ink-3">
+                  {activeTab === 'cli' && 'CLI / Runtime'}
+                  {activeTab === 'mesh' && '18 Tokens/Frame'}
+                  {activeTab === 'data' && 'ASN vs JSON/YAML'}
+                  {activeTab === 'sql' && '5 Dialects'}
+                  {activeTab === 'syntax' && '4 Targets'}
+                  {activeTab === 'control' && 'Algebraic Errors'}
+                  {activeTab === 'stdlib' && 'Zero Host Escape'}
+                </span>
               </div>
-            )}
+              <p className="text-meta text-ink-2 leading-relaxed">
+                {activeTab === 'cli' && 'Single-pass compiler, isolated wasm sandboxing, and verifiable AST bytecode execution without host leakages.'}
+                {activeTab === 'mesh' && 'Ultra-dense wire protocol for inter-agent communication via Unix domain sockets and SSE streams.'}
+                {activeTab === 'data' && 'Zero-overhead binary and S-expression serialization with measured 64% token reduction over JSON.'}
+                {activeTab === 'sql' && 'Compile S-expression relational queries into dialect-accurate SQL with native escaping and bind parameters.'}
+                {activeTab === 'syntax' && 'Declarative schemas and closed sum-types transpiled directly into idiomatic, typed code across languages.'}
+                {activeTab === 'control' && 'Guaranteed TCO recursion, early returns with try unwrapping, and strict Result error handling.'}
+                {activeTab === 'stdlib' && 'Immutable list algorithms, string builders, safe sandboxed file I/O, and mathematical primitives.'}
+              </p>
+            </div>
 
-            {/* SQL & Query DSL: Dialect Selector */}
-            {activeTab === 'sql' && (
-              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line w-full sm:w-auto overflow-x-auto">
-                <span className="text-micro font-mono uppercase text-ink-3 px-2">Dialect:</span>
-                {[
-                  { id: 'postgres', label: 'PostgreSQL' },
-                  { id: 'mysql', label: 'MySQL' },
-                  { id: 'sqlite', label: 'SQLite' },
-                  { id: 'mssql', label: 'MSSQL' },
-                  { id: 'oracle', label: 'Oracle' }
-                ].map(({ id, label }) => (
-                  <button
-                    key={id}
-                    onClick={() => setSqlDialect(id as SqlDialect)}
-                    className={`px-2.5 py-1 rounded-xl text-micro font-mono font-semibold transition-all ${
-                      sqlDialect === id
-                        ? 'bg-signal text-white shadow-sm'
-                        : 'text-ink-2 hover:text-ink'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Interactive Selector / Status Info */}
+            <div className="pt-3 border-t border-line">
+              {/* Syntax & Control: Polyglot Target Language Selector */}
+              {(activeTab === 'syntax' || activeTab === 'control') && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-micro font-mono uppercase text-ink-3">
+                    <span>Target Language Representation:</span>
+                    <span className="text-signal font-semibold capitalize">{targetLang}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 p-1 bg-ground rounded-2xl border border-line">
+                    {(['python', 'rust', 'typescript', 'go'] as CodeTargetLang[]).map((lang) => (
+                      <button
+                        key={lang}
+                        onClick={() => setTargetLang(lang)}
+                        className={`py-1.5 px-2 rounded-xl text-micro font-mono font-semibold transition-all capitalize text-center ${
+                          targetLang === lang
+                            ? 'bg-signal text-white shadow-sm'
+                            : 'text-ink-2 hover:text-ink hover:bg-surface'
+                        }`}
+                      >
+                        {lang === 'typescript' ? 'TypeScript' : lang}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            {/* Data & Economy: JSON / YAML Compare Selector */}
-            {activeTab === 'data' && (
-              <div className="flex items-center gap-1.5 bg-ground p-1.5 rounded-2xl border border-line w-full sm:w-auto">
-                <span className="text-micro font-mono uppercase text-ink-3 px-2">Compare:</span>
-                {(['json', 'yaml'] as DataTargetFormat[]).map((fmt) => (
-                  <button
-                    key={fmt}
-                    onClick={() => setDataTarget(fmt)}
-                    className={`px-3 py-1 rounded-xl text-micro font-mono font-semibold transition-all uppercase ${
-                      dataTarget === fmt ? 'bg-signal text-white shadow-sm' : 'text-ink-2 hover:text-ink'
-                    }`}
-                  >
-                    {fmt}
-                  </button>
-                ))}
-              </div>
-            )}
+              {/* SQL & Query DSL: Dialect Selector */}
+              {activeTab === 'sql' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-micro font-mono uppercase text-ink-3">
+                    <span>Target SQL Dialect Engine:</span>
+                    <span className="text-signal font-semibold capitalize">{sqlDialect}</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 p-1 bg-ground rounded-2xl border border-line">
+                    {[
+                      { id: 'postgres', label: 'Postgres' },
+                      { id: 'mysql', label: 'MySQL' },
+                      { id: 'sqlite', label: 'SQLite' },
+                      { id: 'mssql', label: 'MSSQL' },
+                      { id: 'oracle', label: 'Oracle' }
+                    ].map(({ id, label }) => (
+                      <button
+                        key={id}
+                        onClick={() => setSqlDialect(id as SqlDialect)}
+                        className={`py-1.5 px-1 rounded-xl text-micro font-mono font-semibold transition-all text-center truncate ${
+                          sqlDialect === id
+                            ? 'bg-signal text-white shadow-sm'
+                            : 'text-ink-2 hover:text-ink hover:bg-surface'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            {/* CLI: Status Pill */}
-            {activeTab === 'cli' && (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-ground border border-line text-micro font-mono text-ink-3">
-                <ShieldCheck className="w-4 h-4 text-signal" />
-                <span>Single-Pass Deterministic</span>
-              </div>
-            )}
+              {/* Data & Economy: JSON / YAML Compare Selector */}
+              {activeTab === 'data' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-micro font-mono uppercase text-ink-3">
+                    <span>Comparative Format Target:</span>
+                    <span className="text-signal font-semibold uppercase">{dataTarget}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-ground rounded-2xl border border-line">
+                    {(['json', 'yaml'] as DataTargetFormat[]).map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => setDataTarget(fmt)}
+                        className={`py-1.5 px-3 rounded-xl text-micro font-mono font-semibold transition-all uppercase text-center ${
+                          dataTarget === fmt
+                            ? 'bg-signal text-white shadow-sm'
+                            : 'text-ink-2 hover:text-ink hover:bg-surface'
+                        }`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            {/* Mesh: Status Pill */}
-            {activeTab === 'mesh' && (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-ground border border-line text-micro font-mono text-ink-3">
-                <Boxes className="w-4 h-4 text-signal" />
-                <span>SkyLoom RPC Mesh Wire</span>
-              </div>
-            )}
+              {/* CLI: Status Pill */}
+              {activeTab === 'cli' && (
+                <div className="flex items-center justify-between gap-2 p-2 rounded-2xl bg-ground border border-line">
+                  <div className="flex items-center gap-2 text-micro font-mono text-ink-3 pl-1">
+                    <ShieldCheck className="w-4 h-4 text-signal" />
+                    <span>Pure Single-Pass Toolchain</span>
+                  </div>
+                  <span className="text-micro font-mono font-semibold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                    AST &bull; Checker &bull; Lowers
+                  </span>
+                </div>
+              )}
 
-            {/* Stdlib: Builtin Counter Pill */}
-            {activeTab === 'stdlib' && (
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-ground border border-line text-micro font-mono text-ink-3">
-                <BookOpen className="w-4 h-4 text-signal" />
-                <span>107 Pure Builtins</span>
-              </div>
-            )}
+              {/* Mesh: Status Pill */}
+              {activeTab === 'mesh' && (
+                <div className="flex items-center justify-between gap-2 p-2 rounded-2xl bg-ground border border-line">
+                  <div className="flex items-center gap-2 text-micro font-mono text-ink-3 pl-1">
+                    <Boxes className="w-4 h-4 text-signal" />
+                    <span>SkyLoom IPC Wire</span>
+                  </div>
+                  <span className="text-micro font-mono font-semibold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                    Unix Socket &bull; SSE Mesh
+                  </span>
+                </div>
+              )}
+
+              {/* Stdlib: Builtin Counter Pill */}
+              {activeTab === 'stdlib' && (
+                <div className="flex items-center justify-between gap-2 p-2 rounded-2xl bg-ground border border-line">
+                  <div className="flex items-center gap-2 text-micro font-mono text-ink-3 pl-1">
+                    <BookOpen className="w-4 h-4 text-signal" />
+                    <span>Total Standard Library Scope</span>
+                  </div>
+                  <span className="text-micro font-mono font-semibold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                    107 Pure Builtins
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

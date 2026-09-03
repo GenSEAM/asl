@@ -223,12 +223,12 @@ export const SqlStudio: React.FC = () => {
                 <code>{template.aslQuery}</code>
               </pre>
 
-              <div className="mt-4 p-3 rounded-lg bg-surface border border-border flex items-center justify-between text-xs">
+              <div className="mt-4 p-3 rounded-lg bg-surface border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2 text-content-muted">
                   <span className="text-status-pass font-bold">✓</span>
                   <span>AST Safety: Total Totality & Deterministic Parameter Extraction</span>
                 </div>
-                <span className="text-2xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-accent/10 text-accent">
+                <span className="text-2xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-accent/10 text-accent shrink-0">
                   AST Validated
                 </span>
               </div>
