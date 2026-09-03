@@ -23,11 +23,9 @@ throwaway declaration before it is called a failure, so a bare expression like
   tools/doc_examples.py            report every block and its verdict
   tools/doc_examples.py --quiet    print only failures and the summary
 
-It parses with the Lark grammar because that is the parser with a Python entry
-point today. **Lark is being retired**; when it goes, point `parses()` at the
-tree-sitter grammar or at the self-hosted parser in `packages/asl-parser`. The
-gate is about whether a published example is a program, not about which parser
-decides that.
+It parses with the self-hosted parser (`packages/asl-parser`, via
+`tools.native_parser`), the engine the language ships. The gate is about whether
+a published example is a program, not about which parser decides that.
 """
 import argparse
 import re
@@ -35,9 +33,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "grammar"))
+sys.path.insert(0, str(ROOT))
 
-from parse import parse_text  # noqa: E402
+from tools.native_parser import NativeParserError, native_render  # noqa: E402
 
 FENCE = re.compile(r"^```(lisp|agentscript)\s*$(.*?)^```\s*$", re.M | re.S)
 OPT_OUT = re.compile(r"<!--\s*not-agentscript:\s*(.+?)\s*-->\s*$", re.M)
@@ -66,15 +64,15 @@ def parses(src: str) -> str | None:
     A block is tried whole, then as a declaration body, because documentation
     quotes expressions as often as it quotes whole modules."""
     try:
-        parse_text(src)
+        native_render(src)
         return None
-    except Exception as whole:
+    except NativeParserError as whole:
         wrapped = f'(defun agentscript-doc-example [] -> Unit\n{src}\n())'
         try:
-            parse_text(wrapped)
+            native_render(wrapped)
             return None
-        except Exception:
-            return str(whole).splitlines()[0][:120]
+        except NativeParserError:
+            return f"line {whole.line}:{whole.col}: {whole.message}"
 
 
 def main() -> int:

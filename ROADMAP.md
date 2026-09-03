@@ -248,6 +248,12 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    and AST (`packages/asl-parser`) are built, passing all 399 parity tests (`test_native_parity.py`) and parsing
    all package sources without stack overflow. Immediate milestone: migrate all ecosystem validation gates
    (`validate.py`, `doc_examples.py`, `closure_audit.py`, `checker/gate.py`) and retiring Lark completely.
+8. **Native In-Language Constitutional Engine (`packages/asl-pcp`)** — **planned**. A self-hosted implementation
+   of the Project Constitution Protocol (PCP) written natively in pure AgentScript:
+   - In-memory algebraic model of shortcodes, invariants, and decisions (`Shortcode`, `Rule`, `Ledger`).
+   - AST anchor scanner built on `packages/asl-parser` to extract `@xyz` 3-character anchors (`@d01`, `@s02`, `@h99`) and module/method references.
+   - Tabular ASN architecture ledgers (`constitution.asn`) replacing heavy YAML files (-70% token overhead).
+   - In-language runtime API (`pcp/verify-module`, `pcp/check-invariants`, `pcp/query`) allowing agents to enforce architectural constraints and verify invariants directly within running programs.
 
 ---
 

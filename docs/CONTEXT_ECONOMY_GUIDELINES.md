@@ -42,25 +42,25 @@ The declaration keeps a one-line `:d`, and nothing else:
 
 ```lisp
 (df calculate-hash [(payload String) (nonce Int64)] -> String
-  :d "Fingerprint a payload with its nonce. Rationale: d-sec-02."
+  :d "Fingerprint a payload with its nonce."
+  "@s02"
   (str payload (string-from-int64 nonce)))
 ```
 
-The rationale itself is ASN, stored beside the code rather than inside it:
+**Recommendation on Symbolic Anchors**: Default to ultra-minimalist **3-alphanumeric character tags** (e.g. `@s02`, `@d01`, `@sec`, `@h99`) which guarantee 1–2 token density across BPE vocabularies. If an artificial tag is undesirable, reference the code path directly via module and method (e.g. `auth/calculate-hash`).
+
+The rationale itself is stored out-of-band in the architecture ledger rather than inside code:
 
 ```asn
-(:tag "d-sec-02"
- :fn "calculate-hash"
- :why "A constant-time primitive, so a comparison cannot leak by timing."
- :adr "ADR-4a1b")
+([:id :type :fn :invariant :why]
+ [["s02" :decision "calculate-hash" "constant-time" "A constant-time primitive, so comparison cannot leak by timing."]])
 ```
 
-An agent that understands the logic reads only the declaration. One that needs the reason asks for
-it:
+An agent that understands the logic reads only the declaration. One that needs the reason queries it out-of-band:
 
 ```bash
-asl meta get d-sec-02
-asl meta get calculate-hash
+asl meta get s02
+asl meta get auth/calculate-hash
 ```
 
 ---
