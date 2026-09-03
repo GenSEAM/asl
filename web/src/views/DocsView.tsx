@@ -38,22 +38,19 @@ const SYNTAX_CARDS: PolyglotCard[] = [
     title: 'Schema Declaration & Typed Records',
     description: 'Declarative immutable schemas with typed fields. Compiles into native product types across backends.',
     asl: `(dfs Token
-  (:f id Str "Unique token identifier.")
-  (:f exp I64 "Unix timestamp expiration."))
+  (:f id Str)
+  (:f exp I64))
 
 (df create-token [(id Str) (ttl I64)] -> Token
-  :d "Construct authenticated token record."
   (Token :id id :exp (+ 1700000000 ttl)))`,
     python: `from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Token:
-    """Unique token identifier."""
     id: str
     exp: int
 
 def create_token(id: str, ttl: int) -> Token:
-    """Construct authenticated token record."""
     return Token(id=id, exp=1700000000 + ttl)`,
     rust: `#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Token {
@@ -94,12 +91,11 @@ func CreateToken(id string, ttl int64) Token {
     title: 'Closed Union Types (Sum Types / Enums)',
     description: 'Exhaustive sum types checked at compile time. Lowers to tagged unions, rust enums, or Go interfaces.',
     asl: `(dfe ResultStatus
-  (:c ok [(val Str)] "Successful execution.")
-  (:c timeout [(ms I64)] "Network timed out.")
-  (:c denied [] "Access denied."))
+  (:c ok [(val Str)])
+  (:c timeout [(ms I64)])
+  (:c denied []))
 
 (df status-code [(s ResultStatus)] -> I64
-  :d "Map status variant to HTTP status code."
   (mt s
     ((ok _) 200)
     ((timeout _) 504)
@@ -183,7 +179,6 @@ const CONTROL_CARDS: PolyglotCard[] = [
     title: 'Error Handling with try & Result',
     description: 'No runtime exceptions. try unwraps (ok value) or bubbles up (err reason) immediately. Lowers to ? in Rust and error guards in Go.',
     asl: `(df parse-port [(raw Str)] -> (Result I64 Str)
-  :d "Parse port number with bounds verification."
   (let [(p (try (option-to-result (string-to-int64 raw) "Not an integer")))]
     (if (and (>= p 1) (<= p 65535))
       (ok p)
@@ -238,7 +233,6 @@ func ParsePort(raw string) (int64, error) {
     title: 'Tail-Call Optimized Algorithm (Fibonacci)',
     description: 'Guaranteed TCO in ASL. Emits iterative loops or tail-optimized functions across backends without stack overflow.',
     asl: `(df fib [(n I64)] -> I64
-  :d "Tail-recursive Fibonacci sequence."
   (df loop [(i I64) (a I64) (b I64)] -> I64
     (if (= i 0)
       a
