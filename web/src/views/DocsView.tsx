@@ -872,9 +872,9 @@ export const DocsView: React.FC = () => {
             {/* Side-by-side: ASL Query vs Target SQL Dialect */}
             <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
               <div className="space-y-1">
-                <h4 className="font-bold text-ink text-lg">Active Admin Telemetry Query</h4>
+                <h4 className="font-bold text-ink text-lg">Top Performers by Team: CTE, Window Ranking & Joins</h4>
                 <p className="text-meta text-ink-2">
-                  Demonstrates case-insensitive matching, native relative date arithmetic, descending ordering, and pagination across dialects.
+                  Demonstrates CTE expressions, window partitioning, null-safe aggregation, relative date arithmetic, and dialect pagination.
                 </p>
               </div>
 
@@ -888,7 +888,7 @@ export const DocsView: React.FC = () => {
                     <button
                       onClick={() =>
                         copyToClipboard(
-                          `(q/select ["id" "name" "email" "status"]\n  (q/from "users")\n  (q/where (q/and (q/ilike "name" "%admin%")\n                  (q/gte "created_at" (q/date-sub (q/now) 7 :days))\n                  (q/eq "status" "ACTIVE")))\n  (q/order-by "created_at" (q/desc))\n  (q/limit 25)\n  (q/offset 50))`,
+                          `(q/with [(:ranked-users\n  (q/select ["u.id" "u.name" "u.team"\n             (q/coalesce (q/sum "o.amount") 0.0 :as "total_spent")\n             (q/over (q/dense-rank)\n               :partition-by "u.team"\n               :order-by [(q/desc (q/coalesce (q/sum "o.amount") 0.0))]\n               :as "rank")]\n    (q/from "users" :as "u")\n    (q/left-join "orders" :as "o"\n      :on (q/and (q/eq "u.id" "o.user_id")\n                 (q/gte "o.created_at" (q/date-sub (q/now) 30 :days))\n                 (q/eq "o.status" "SETTLED")))\n    (q/group-by ["u.id" "u.name" "u.team"])))]\n  (q/select ["id" "name" "team" "total_spent" "rank"]\n    (q/from :ranked-users)\n    (q/where (q/lte "rank" 3))\n    (q/order-by ["team" (q/asc "rank")])\n    (q/limit 50)))`,
                           'sql-asl'
                         )
                       }
@@ -899,14 +899,24 @@ export const DocsView: React.FC = () => {
                     </button>
                   </div>
                   <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
-{`(q/select ["id" "name" "email" "status"]
-  (q/from "users")
-  (q/where (q/and (q/ilike "name" "%admin%")
-                  (q/gte "created_at" (q/date-sub (q/now) 7 :days))
-                  (q/eq "status" "ACTIVE")))
-  (q/order-by "created_at" (q/desc))
-  (q/limit 25)
-  (q/offset 50))`}
+{`(q/with [(:ranked-users
+  (q/select ["u.id" "u.name" "u.team"
+             (q/coalesce (q/sum "o.amount") 0.0 :as "total_spent")
+             (q/over (q/dense-rank)
+               :partition-by "u.team"
+               :order-by [(q/desc (q/coalesce (q/sum "o.amount") 0.0))]
+               :as "rank")]
+    (q/from "users" :as "u")
+    (q/left-join "orders" :as "o"
+      :on (q/and (q/eq "u.id" "o.user_id")
+                 (q/gte "o.created_at" (q/date-sub (q/now) 30 :days))
+                 (q/eq "o.status" "SETTLED")))
+    (q/group-by ["u.id" "u.name" "u.team"])))]
+  (q/select ["id" "name" "team" "total_spent" "rank"]
+    (q/from :ranked-users)
+    (q/where (q/lte "rank" 3))
+    (q/order-by ["team" (q/asc "rank")])
+    (q/limit 50)))`}
                   </pre>
                 </div>
 
@@ -919,11 +929,11 @@ export const DocsView: React.FC = () => {
                     <button
                       onClick={() => {
                         const dialectMap: Record<SqlDialect, string> = {
-                          postgres: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE ("name" ILIKE $1)\n  AND ("created_at" >= NOW() - INTERVAL '7 days')\n  AND ("status" = $2)\nORDER BY "created_at" DESC\nLIMIT 25 OFFSET 50;`,
-                          mysql: `SELECT \`id\`, \`name\`, \`email\`, \`status\`\nFROM \`users\`\nWHERE (\`name\` LIKE ?)\n  AND (\`created_at\` >= DATE_SUB(NOW(), INTERVAL 7 DAY))\n  AND (\`status\` = ?)\nORDER BY \`created_at\` DESC\nLIMIT 50, 25;`,
-                          sqlite: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE ("name" LIKE ?1)\n  AND ("created_at" >= datetime('now', '-7 days'))\n  AND ("status" = ?2)\nORDER BY "created_at" DESC\nLIMIT 25 OFFSET 50;`,
-                          mssql: `SELECT [id], [name], [email], [status]\nFROM [users]\nWHERE ([name] LIKE @p1)\n  AND ([created_at] >= DATEADD(day, -7, GETDATE()))\n  AND ([status] = @p2)\nORDER BY [created_at] DESC\nOFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`,
-                          oracle: `SELECT "id", "name", "email", "status"\nFROM "users"\nWHERE (UPPER("name") LIKE UPPER(:1))\n  AND ("created_at" >= SYSDATE - 7)\n  AND ("status" = :2)\nORDER BY "created_at" DESC\nOFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`
+                          postgres: `WITH ranked_users AS (\n  SELECT "u"."id", "u"."name", "u"."team",\n         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",\n         DENSE_RANK() OVER (\n           PARTITION BY "u"."team"\n           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC\n         ) AS "rank"\n  FROM "users" AS "u"\n  LEFT JOIN "orders" AS "o"\n    ON ("u"."id" = "o"."user_id")\n   AND ("o"."created_at" >= NOW() - INTERVAL '30 days')\n   AND ("o"."status" = $1)\n  GROUP BY "u"."id", "u"."name", "u"."team"\n)\nSELECT "id", "name", "team", "total_spent", "rank"\nFROM ranked_users\nWHERE ("rank" <= 3)\nORDER BY "team" ASC, "rank" ASC\nLIMIT 50;`,
+                          mysql: `WITH ranked_users AS (\n  SELECT \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`,\n         COALESCE(SUM(\`o\`.\`amount\`), 0.0) AS \`total_spent\`,\n         DENSE_RANK() OVER (\n           PARTITION BY \`u\`.\`team\`\n           ORDER BY COALESCE(SUM(\`o\`.\`amount\`), 0.0) DESC\n         ) AS \`rank\`\n  FROM \`users\` AS \`u\`\n  LEFT JOIN \`orders\` AS \`o\`\n    ON (\`u\`.\`id\` = \`o\`.\`user_id\`)\n   AND (\`o\`.\`created_at\` >= DATE_SUB(NOW(), INTERVAL 30 DAY))\n   AND (\`o\`.\`status\` = ?)\n  GROUP BY \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`\n)\nSELECT \`id\`, \`name\`, \`team\`, \`total_spent\`, \`rank\`\nFROM ranked_users\nWHERE (\`rank\` <= 3)\nORDER BY \`team\` ASC, \`rank\` ASC\nLIMIT 50;`,
+                          sqlite: `WITH ranked_users AS (\n  SELECT "u"."id", "u"."name", "u"."team",\n         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",\n         DENSE_RANK() OVER (\n           PARTITION BY "u"."team"\n           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC\n         ) AS "rank"\n  FROM "users" AS "u"\n  LEFT JOIN "orders" AS "o"\n    ON ("u"."id" = "o"."user_id")\n   AND ("o"."created_at" >= datetime('now', '-30 days'))\n   AND ("o"."status" = ?1)\n  GROUP BY "u"."id", "u"."name", "u"."team"\n)\nSELECT "id", "name", "team", "total_spent", "rank"\nFROM ranked_users\nWHERE ("rank" <= 3)\nORDER BY "team" ASC, "rank" ASC\nLIMIT 50;`,
+                          mssql: `WITH ranked_users AS (\n  SELECT [u].[id], [u].[name], [u].[team],\n         ISNULL(SUM([o].[amount]), 0.0) AS [total_spent],\n         DENSE_RANK() OVER (\n           PARTITION BY [u].[team]\n           ORDER BY ISNULL(SUM([o].[amount]), 0.0) DESC\n         ) AS [rank]\n  FROM [users] AS [u]\n  LEFT JOIN [orders] AS [o]\n    ON ([u].[id] = [o].[user_id])\n   AND ([o].[created_at] >= DATEADD(day, -30, GETDATE()))\n   AND ([o].[status] = @p1)\n  GROUP BY [u].[id], [u].[name], [u].[team]\n)\nSELECT TOP (50) [id], [name], [team], [total_spent], [rank]\nFROM ranked_users\nWHERE ([rank] <= 3)\nORDER BY [team] ASC, [rank] ASC;`,
+                          oracle: `WITH ranked_users AS (\n  SELECT "u"."id", "u"."name", "u"."team",\n         NVL(SUM("o"."amount"), 0.0) AS "total_spent",\n         DENSE_RANK() OVER (\n           PARTITION BY "u"."team"\n           ORDER BY NVL(SUM("o"."amount"), 0.0) DESC\n         ) AS "rank"\n  FROM "users" "u"\n  LEFT JOIN "orders" "o"\n    ON ("u"."id" = "o"."user_id")\n   AND ("o"."created_at" >= SYSDATE - 30)\n   AND ("o"."status" = :1)\n  GROUP BY "u"."id", "u"."name", "u"."team"\n)\nSELECT "id", "name", "team", "total_spent", "rank"\nFROM ranked_users\nWHERE ("rank" <= 3)\nORDER BY "team" ASC, "rank" ASC\nFETCH FIRST 50 ROWS ONLY;`
                         };
                         copyToClipboard(dialectMap[sqlDialect], 'sql-dialect');
                       }}
@@ -935,45 +945,104 @@ export const DocsView: React.FC = () => {
                   </div>
                   <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
                     {sqlDialect === 'postgres' &&
-`SELECT "id", "name", "email", "status"
-FROM "users"
-WHERE ("name" ILIKE $1)
-  AND ("created_at" >= NOW() - INTERVAL '7 days')
-  AND ("status" = $2)
-ORDER BY "created_at" DESC
-LIMIT 25 OFFSET 50;`}
+`WITH ranked_users AS (
+  SELECT "u"."id", "u"."name", "u"."team",
+         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",
+         DENSE_RANK() OVER (
+           PARTITION BY "u"."team"
+           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC
+         ) AS "rank"
+  FROM "users" AS "u"
+  LEFT JOIN "orders" AS "o"
+    ON ("u"."id" = "o"."user_id")
+   AND ("o"."created_at" >= NOW() - INTERVAL '30 days')
+   AND ("o"."status" = $1)
+  GROUP BY "u"."id", "u"."name", "u"."team"
+)
+SELECT "id", "name", "team", "total_spent", "rank"
+FROM ranked_users
+WHERE ("rank" <= 3)
+ORDER BY "team" ASC, "rank" ASC
+LIMIT 50;`}
                     {sqlDialect === 'mysql' &&
-`SELECT \`id\`, \`name\`, \`email\`, \`status\`
-FROM \`users\`
-WHERE (\`name\` LIKE ?)
-  AND (\`created_at\` >= DATE_SUB(NOW(), INTERVAL 7 DAY))
-  AND (\`status\` = ?)
-ORDER BY \`created_at\` DESC
-LIMIT 50, 25;`}
+`WITH ranked_users AS (
+  SELECT \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`,
+         COALESCE(SUM(\`o\`.\`amount\`), 0.0) AS \`total_spent\`,
+         DENSE_RANK() OVER (
+           PARTITION BY \`u\`.\`team\`
+           ORDER BY COALESCE(SUM(\`o\`.\`amount\`), 0.0) DESC
+         ) AS \`rank\`
+  FROM \`users\` AS \`u\`
+  LEFT JOIN \`orders\` AS \`o\`
+    ON (\`u\`.\`id\` = \`o\`.\`user_id\`)
+   AND (\`o\`.\`created_at\` >= DATE_SUB(NOW(), INTERVAL 30 DAY))
+   AND (\`o\`.\`status\` = ?)
+  GROUP BY \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`
+)
+SELECT \`id\`, \`name\`, \`team\`, \`total_spent\`, \`rank\`
+FROM ranked_users
+WHERE (\`rank\` <= 3)
+ORDER BY \`team\` ASC, \`rank\` ASC
+LIMIT 50;`}
                     {sqlDialect === 'sqlite' &&
-`SELECT "id", "name", "email", "status"
-FROM "users"
-WHERE ("name" LIKE ?1)
-  AND ("created_at" >= datetime('now', '-7 days'))
-  AND ("status" = ?2)
-ORDER BY "created_at" DESC
-LIMIT 25 OFFSET 50;`}
+`WITH ranked_users AS (
+  SELECT "u"."id", "u"."name", "u"."team",
+         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",
+         DENSE_RANK() OVER (
+           PARTITION BY "u"."team"
+           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC
+         ) AS "rank"
+  FROM "users" AS "u"
+  LEFT JOIN "orders" AS "o"
+    ON ("u"."id" = "o"."user_id")
+   AND ("o"."created_at" >= datetime('now', '-30 days'))
+   AND ("o"."status" = ?1)
+  GROUP BY "u"."id", "u"."name", "u"."team"
+)
+SELECT "id", "name", "team", "total_spent", "rank"
+FROM ranked_users
+WHERE ("rank" <= 3)
+ORDER BY "team" ASC, "rank" ASC
+LIMIT 50;`}
                     {sqlDialect === 'mssql' &&
-`SELECT [id], [name], [email], [status]
-FROM [users]
-WHERE ([name] LIKE @p1)
-  AND ([created_at] >= DATEADD(day, -7, GETDATE()))
-  AND ([status] = @p2)
-ORDER BY [created_at] DESC
-OFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`}
+`WITH ranked_users AS (
+  SELECT [u].[id], [u].[name], [u].[team],
+         ISNULL(SUM([o].[amount]), 0.0) AS [total_spent],
+         DENSE_RANK() OVER (
+           PARTITION BY [u].[team]
+           ORDER BY ISNULL(SUM([o].[amount]), 0.0) DESC
+         ) AS [rank]
+  FROM [users] AS [u]
+  LEFT JOIN [orders] AS [o]
+    ON ([u].[id] = [o].[user_id])
+   AND ([o].[created_at] >= DATEADD(day, -30, GETDATE()))
+   AND ([o].[status] = @p1)
+  GROUP BY [u].[id], [u].[name], [u].[team]
+)
+SELECT TOP (50) [id], [name], [team], [total_spent], [rank]
+FROM ranked_users
+WHERE ([rank] <= 3)
+ORDER BY [team] ASC, [rank] ASC;`}
                     {sqlDialect === 'oracle' &&
-`SELECT "id", "name", "email", "status"
-FROM "users"
-WHERE (UPPER("name") LIKE UPPER(:1))
-  AND ("created_at" >= SYSDATE - 7)
-  AND ("status" = :2)
-ORDER BY "created_at" DESC
-OFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`}
+`WITH ranked_users AS (
+  SELECT "u"."id", "u"."name", "u"."team",
+         NVL(SUM("o"."amount"), 0.0) AS "total_spent",
+         DENSE_RANK() OVER (
+           PARTITION BY "u"."team"
+           ORDER BY NVL(SUM("o"."amount"), 0.0) DESC
+         ) AS "rank"
+  FROM "users" "u"
+  LEFT JOIN "orders" "o"
+    ON ("u"."id" = "o"."user_id")
+   AND ("o"."created_at" >= SYSDATE - 30)
+   AND ("o"."status" = :1)
+  GROUP BY "u"."id", "u"."name", "u"."team"
+)
+SELECT "id", "name", "team", "total_spent", "rank"
+FROM ranked_users
+WHERE ("rank" <= 3)
+ORDER BY "team" ASC, "rank" ASC
+FETCH FIRST 50 ROWS ONLY;`}
                   </pre>
                 </div>
               </div>
