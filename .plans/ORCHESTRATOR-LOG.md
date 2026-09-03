@@ -125,3 +125,37 @@
   green; the doc_examples.py change is mislabeled. Same failure mode as `152d1a1`/`c88c7ed`; left
   un-rewritten pending owner decision — do not rewrite.
 
+## Phase 8 planning 2026-09-03 — Native AST Call-Head Extraction for Closure Audit (@pcp:d-8d4c)
+- Tier 1.5 (Middle): planner `steps-planner`, extra plan-review lens `steps-architect-pro`.
+  Reason: the scout surfaced the coupling risk that the native AST drops node-kind tags, so the
+  walker must re-derive tree-sitter's `call` classification from head text (PascalCase → record
+  construction, not a call; special-form heads → not a call; `/` → qualified). Exact set-equality
+  against the tree-sitter baseline is the only guard against silently drifting the gate's counts.
+- Scout digest: `closure_audit.py` has two halves — call-head extraction (one tree-sitter query) and
+  coverage (delegated to `exec_coverage.check()`, untouched by this port). `coverage.lock` matching is
+  therefore unaffected; the port only replaces the query half.
+
+## Phase 8 completion 2026-09-03 — closure audit on the native AST (@pcp:d-8d4c)
+- Tier 1.5 (Middle). Reviews: scope → approve-with-amendments (0 blocking); architect →
+  approve-with-amendments (**3 blocking**). Reconciled into `PLAN.md` v2 + `RECONCILIATION.md`:
+  B1 rule 9 disambiguates qualified-ctor vs qualified-callee by head spelling (tail PascalCase vs
+  lowercase, grammar.js:266/:269), not "second element is a keyword"; B2 rule 11 buckets only
+  `ident`/`operator` heads, never a literal head (`(-1 2)` is a call node the query captures nothing
+  from); B3 the expr-position `cons` rule is pinned in the probe (`cons ∈ calls`). N1/N2: line-cite
+  and Item-4 wording.
+- Implemented (steps-implementer + steps-fixer): `closure-heads` ASL walker in
+  `packages/asl-parser/tests/reader_test.asl` (iterative doubling-budget work list, rules 1–12);
+  `grammar/closure_audit.py` ported (deletes `QUERY`/`run_query`/`TS_BIN`/subprocess, adds
+  `_native_buckets`/`collect_sources`); 4 stale `test_gate_machinery.py` tests migrated to the native
+  surface. Exact set-equality is pinned by `tools/tests/test_closure_native_equivalence.py`
+  (tree-sitter baseline kept inside the test, not the gate).
+- **Reversion incident.** The parallel session ran `git checkout -- .` and reverted the tracked
+  Phase 8 files mid-verification. The walker was unrecoverable (never `git add`ed, absent from
+  dangling objects); `closure_audit.py` and the test fixes were re-applied from the plan. Per the
+  owner's decision, the phase was re-implemented and committed immediately as `7ba39c8`. The
+  equivalence test and `.plans/phase-8/` survived (untracked).
+- Gates, all green (final step-verifier, independent): closure `10/107/137/156`, `107/107 (100%)`,
+  zero tree-sitter/subprocess; equivalence `3 passed`; gate-machinery `32 passed`; validate 0;
+  checker 0; check_corpus 0; monomorphism 400 probes; differential `132+19` 0 disagreements;
+  pytest (backend/bench/checker/tools) `852 passed`.
+

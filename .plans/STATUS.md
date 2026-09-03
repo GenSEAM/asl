@@ -1,5 +1,5 @@
 # Current Status: asl-selfhosted-runtime-v1
-- Current Phase: **Phase 8** (Native AST Call-Head Extraction for Closure Audit) — next after Phase 7 (@pcp:d-8d4c)
+- Current Phase: **Phase 9** (Self-Hosted Semantic Type Checker, `packages/asl-checker`) — next after Phase 8 (@pcp:d-8d4c)
 - Phases 1–2: lexer/reader/AST (done prior session, verified)
 - Phase 3: `asl parse` CLI + benchmark (`tools/native_parser.py`, `tools/tests/test_native_parser.py`) — done
 - Phase 4 (escalation): iterative fold-based lexer scanner; `tools/tests/test_native_parse_all.py` parses all 37 `packages/**/*.asl` — done
@@ -8,8 +8,8 @@
   string escapes, module path, positional Nano aliases, a real `(Result ... ParseError)`
   failure path, an iterative reader and renderer, and parity gate (399 passed) — done
 - Phase 7: Retiring Lark & Migrating Conformance (`grammar/validate.py`) & Doc Validation (`tools/doc_examples.py`) to Native Self-Hosted Parser — done (zero Lark in the three validation files; full gate battery green)
-- Phase 8: Native AST Call-Head Extraction for Closure Audit (`grammar/closure_audit.py`) — next
-- Phase 9: Self-Hosted Semantic Type Checker (`packages/asl-checker`) in pure ASL — scheduled
+- Phase 8: Native AST Call-Head Extraction for Closure Audit (`grammar/closure_audit.py`) — done (native walker, exact set-equality vs tree-sitter baseline; full battery green)
+- Phase 9: Self-Hosted Semantic Type Checker (`packages/asl-checker`) in pure ASL — next
 - Phase 10: Complete Self-Hosted Bootstrap & Native CI Pipeline (`packages/asl-compiler`) — scheduled
 
 ## Measured this session (2026-09-03)
@@ -31,6 +31,14 @@
   `pcp actualize` 0 breaches, `npm run build:web` ok.
   Zero `lark` imports remain in `grammar/validate.py`, `tools/doc_examples.py`,
   `tools/tests/test_native_parity.py`.
+- Phase 8 gates, all green (orchestrator + final step-verifier, independently):
+  `grammar/closure_audit.py` → `10 qualified / 107 builtins / 137 defs / 156 call heads`,
+  `107/107 (100%)`, `OK: spec and corpus are closed…`, exit 0, zero tree-sitter/subprocess;
+  `pytest tools/tests/test_closure_native_equivalence.py` `3 passed` (set-equality vs tree-sitter baseline);
+  `pytest backend/tests/test_gate_machinery.py` `32 passed` (4 tests migrated to native surface);
+  full battery: validate 0, checker 0, check_corpus 0, monomorphism 400 probes,
+  differential `132+19` cases 0 disagreements, `pytest backend/tests bench/algo checker/tests tools/tests`
+  `852 passed`.
 
 ## Notes
 - Phase 3 code landed entangled in `c88c7ed` (parallel-session commit) — see ORCHESTRATOR-LOG.md.
@@ -40,6 +48,11 @@
   Phase 7 landed in `6fb458a` ("feat(phase-7): migrate grammar validation and parity suite to
   native parser"). Work is intact and green; the doc_examples.py change is mislabeled. Left
   un-rewritten pending owner decision — do not rewrite.
+- **Phase 8 reversion (parallel session).** The parallel session ran `git checkout -- .` and
+  reverted the tracked Phase 8 files mid-verification; the `closure-heads` walker was
+  unrecoverable (never `git add`ed, not in dangling objects). Re-implemented from the v2 plan
+  and committed immediately as `7ba39c8` per the owner's decision to protect against re-revert.
+  Lesson recorded: on this shared tree, phase code must be committed the moment it is green.
 - **`;` line comments: Phase 6 item (a) is withdrawn.** The owner has abandoned `;` comments
   for free-standing string literals, and a parallel session is converting existing ones. The
   handling written before that decision stays in `lexer.asl` because both reference grammars
