@@ -1,0 +1,9 @@
+{
+  "id": "alias-keys",
+  "src": "grammar/corpus/valid/31-alias-keys.agentscript",
+  "entry": "probe",
+  "cases": [
+    [[], "1|2|3|4|5|6",
+     "the six Nano option letters as ordinary record keys, each bound to a distinct value so a key resolved to the wrong field shows as a transposition"]
+  ]
+}

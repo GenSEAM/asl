@@ -1,10 +1,8 @@
-; A map built, queried and shrunk, with its size printed before and after the
-; removal: a map-remove that does nothing is indistinguishable from a correct one
-; unless both sizes are shown, and one case removes a key that is absent. The key
-; order is the specification's, not the insertion order, and the two backends
-; reach it by different routes — sorted() on one, BTreeMap on the other.
-;
-; run: lifecycle("a b a c", "a") == "3|T|2|b,c"
+"A map built, queried and shrunk, with its size printed before and after the"
+"removal: a map-remove that does nothing is indistinguishable from a correct one"
+"unless both sizes are shown, and one case removes a key that is absent. The key"
+"order is the specification's, not the insertion order, and the two backends"
+"reach it by different routes — sorted() on one, BTreeMap on the other."
 
 (module map/lifecycle
   :doc "Count words, then remove one and report what is left."

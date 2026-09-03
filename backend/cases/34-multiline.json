@@ -1,0 +1,13 @@
+{
+  "id": "multiline-strings",
+  "src": "grammar/corpus/valid/34-multiline-strings.agentscript",
+  "entry": "render",
+  "cases": [
+    [["fmt"], "AgentScript\n===========\nusage: fmt [--width N] FILE\n\n  --width N  wrap at N columns\n  --help     show this text",
+     "the substitution is a no-op, so this case is the literal itself: two raw newlines from the banner, a blank line inside the usage block, and an escape-form newline joining them, each of which has to arrive as one character"],
+    [["asl"], "AgentScript\n===========\nusage: asl [--width N] FILE\n\n  --width N  wrap at N columns\n  --help     show this text",
+     "a replacement of equal length, so a target that lost or doubled a newline shifts the whole tail rather than only the substituted word"],
+    [[""], "AgentScript\n===========\nusage:  [--width N] FILE\n\n  --width N  wrap at N columns\n  --help     show this text",
+     "the empty replacement: it shortens the line the substitution sits on and must leave every newline around it exactly where it was"]
+  ]
+}

@@ -129,3 +129,77 @@ def parse_signature(sig: str) -> tuple[list[dict], bool, dict]:
         take()
     ret = one()
     return args, variadic, ret
+
+
+# ---------- the Nano projection ----------
+# An alias is significant only in the position `where` names. Reading these
+# through one function is what stops a record key spelled `:x` from being
+# rewritten to `:export` by a tool that pattern-matches on text (PCP d-1eed).
+
+def projection() -> dict:
+    return _data()["projection"]
+
+
+def head_spellings() -> dict[str, list[str]]:
+    """Verbose head -> every spelling that names it, verbose first."""
+    return {h["verbose"]: [h["verbose"], *h.get("also", []), h["nano"]]
+            for h in projection()["heads"]}
+
+
+def option_spellings() -> dict[str, list[str]]:
+    """Verbose option keyword -> every spelling that names it, verbose first."""
+    return {o["verbose"]: [o["verbose"], o["nano"]] for o in projection()["options"]}
+
+
+def head_aliases() -> dict[str, str]:
+    """Any head spelling -> its verbose spelling, including the identity."""
+    return {s: v for v, ss in head_spellings().items() for s in ss}
+
+
+def option_aliases() -> dict[str, str]:
+    """Any option spelling -> its verbose spelling, including the identity."""
+    return {s: v for v, ss in option_spellings().items() for s in ss}
+
+
+def nano_head(verbose: str) -> str:
+    """The canonical Nano spelling of a head; the argument when it has none."""
+    for h in projection()["heads"]:
+        if h["verbose"] == verbose:
+            return h["nano"]
+    return verbose
+
+
+def nano_option(verbose: str) -> str:
+    """The canonical Nano spelling of an option keyword; the argument when none."""
+    for o in projection()["options"]:
+        if o["verbose"] == verbose:
+            return o["nano"]
+    return verbose
+
+
+def reserved_widths() -> dict[str, str]:
+    """Width aliases Core has no type for: name -> the type they resolve to.
+
+    They parse and check today and carry none of the narrower width's semantics.
+    Groundwork for host interop; a real fixed-width type replaces the entry.
+    """
+    return {k: v for k, v in _data()["types"].get("reserved_widths", {}).items()
+            if not k.startswith("$")}
+
+
+def resolve_type(name: str) -> str:
+    """A type name in its Core spelling: `I64` -> `Int64`, `Point` -> `Point`.
+
+    Every backend must go through this. Emitting the alias verbatim is what made
+    `rustc`, `tsc` and `go vet` reject a Nano module while Python accepted it.
+    """
+    return type_aliases().get(name, name)
+
+
+def nano_type(name: str) -> str:
+    """The Nano spelling of a Core type: `Int64` -> `I64`. Identity when none.
+
+    Recorded in prelude.json rather than derived, because `Int` and `I64` both
+    resolve to `Int64` and the shorter one is not the projection's spelling.
+    """
+    return _data()["types"].get("nano", {}).get(name, name)

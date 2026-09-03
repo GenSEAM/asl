@@ -81,7 +81,7 @@ is commodity (`RESEARCH_REPORT.md` §2.2). Claims about parser convenience or to
 ## 2. Lexical structure
 
 ```
-comment    ::= ";" <any char except newline>* 
+note       ::= string-lit                     ; free-standing, bound to nothing
 ident      ::= [a-z] [a-z0-9-]* [?!]?          ; kebab-case
 qualified  ::= ident "/" ident                 ; alias-qualified, e.g. s/upper
 qual-type  ::= ident "/" type-name             ; alias-qualified type, e.g. s/Shape
@@ -97,7 +97,9 @@ bool-lit   ::= "true" | "false"
 unit-lit   ::= "()"
 ```
 
-Identifiers are case-sensitive. Whitespace and comments are insignificant except as separators.
+Identifiers are case-sensitive. Whitespace and notes are insignificant — a note is a string
+literal bound to nothing, the only comment form, erased by every backend. `;` line comments are
+retired: a `;` outside a string is now a lexical error.
 
 `/` is both the division operator and the qualified-name separator. They never collide: division
 is a standalone token surrounded by separators, while a qualified name has no internal whitespace.
@@ -337,7 +339,8 @@ variable because it was declared one, never because of how it is spelled:
 
 ```lisp
 (Point :x 3 :y 4)
-(Config :name "svc")          ; retries defaults to 3
+(Config :name "svc")
+"retries defaults to 3"
 ```
 
 A PascalCase identifier in head position is a constructor. Every field without a `:default` must
@@ -402,8 +405,10 @@ and its fields or cases travel with it.
 ### 4.3 `fn`
 
 ```lisp
-(fn [(x Int64)] -> Int64 (* x 2))    ; annotated
-(map (fn [x] (* x 2)) xs)            ; annotations elided: `map` fixes them
+(fn [(x Int64)] -> Int64 (* x 2))
+"annotated"
+(map (fn [x] (* x 2)) xs)
+"annotations elided: map fixes them"
 ```
 
 `(fn [!] [<param>*] [-> <Type>] <body-expr>+)`, where each `<param>` is `<ident>` or
@@ -729,8 +734,8 @@ Every builtin, with its type. Nothing outside this table and §4-5 exists in Cor
 Complete, uses only forms defined above, and is the shape few-shot prompts should use.
 
 ```lisp
-; Return the longest run of identical characters in s, as (Pair char length).
-; Empty input yields (none).
+"Return the longest run of identical characters in s, as (Pair char length)."
+"Empty input yields (none)."
 
 (defun run-length [(chars (List String)) (cur String) (n Int64) (best (Pair String Int64))]
         -> (Pair String Int64)

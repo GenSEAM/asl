@@ -146,3 +146,9 @@ This file groups d/c/r/l entries for the spec/coverage module.
   sufficient. The shapes compose — `(Option (List T))`, `(List (Pair K V))`,
   `(Result (Option Int64) IoError)` are all reachable from the vocabulary — and no flat tag spells
   any of them.
+
+### [c-1c5a] The gates read the corpus while the shipped packages and the documentation went ungraded
+- **Date**: 2026-09-03
+- **Status**: Final
+- **Cluster**: spec/coverage
+- **Description**: `checker/gate.py` and `grammar/closure_audit.py` read `grammar/corpus/` and the specification's own examples, and nothing else. The corpus is not the shipped code and it is not the published prose, so two whole surfaces were unverified while every gate reported green. Measured: `packages/asl-mem/src/store.asl` called `sqrt` and `list-zip-with`, neither of which exists, so the package advertised as a vector store could never have run; `packages/asl-eddie` and `packages/asl-lint` each contained `(== a b)`, which lexes as `=` applied to `=` and lowered to code no target accepts. In the documentation, the `llms.txt` the website served taught `(:export ...)`, `Ok`/`Err`, `len` and `zip-with`; `BEST_PRACTICES.md` taught `defextern`; `COMPACT_SYNTAX.md` taught `(schema Point [x:Num y:Num])`; a blog post showed a `defun` with no body. None of it parses. The gate now covers every `.asl` under `packages/` with the same search roots the test harnesses use, and `tools/doc_examples.py` parses every fenced AgentScript example in the repository's Markdown, with other languages given their own fence and deliberate non-examples opting out with a stated reason.

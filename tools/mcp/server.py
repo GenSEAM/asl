@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from resolve import Diagnostic, check_file  # noqa: E402
 from fmt import fmt  # noqa: E402
 from tsutil import search_json, ast_json  # noqa: E402
-from mcp.compressor import compress_module  # noqa: E402
+from mcp.compressor import CompressError, compress_module  # noqa: E402
 
 MODULES_DIR = ROOT / "grammar" / "corpus" / "modules"
 INTERP_BIN = ROOT / "target" / "debug" / "agentscript-interp"
@@ -186,8 +186,12 @@ def handle_format(args: dict) -> dict:
 
 def handle_compress(args: dict) -> dict:
     source = args.get("source", "")
-    compressed = compress_module(source)
-    return {"compressed": compressed}
+    try:
+        return {"compressed": compress_module(source)}
+    except CompressError as exc:
+        # A caller's malformed module is its problem to fix, not a server fault,
+        # so it comes back in the result the way `asex_check` reports one.
+        return {"compressed": "", "error": str(exc)}
 
 
 def handle_ast_query(args: dict) -> dict:

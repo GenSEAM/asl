@@ -30,7 +30,11 @@
 
 ### Phase 4: Output Token Economy & Universal CLI Interfaces
 - [ ] **Output Generation Token Economy Benchmark**:
-  - Benchmark model output generation tokens: compare generating 5-line ASL Nano pipelines vs 50-line Python/TS/Bash scripts.
+  - Benchmark model output generation tokens: compare generating 5-line ASL Nano pipelines vs
+    50-line Python/TS/Bash scripts. **Measure the program, not the spelling.** The projection's own
+    short spellings save 3.6% of bytes and 0.00% of tokens (`bench/token_projection.py`, PCP
+    `c-e5aa`), so any saving here has to come from the pipeline being shorter than the script, and
+    the benchmark must be built so the two causes cannot be confused.
   - Assert $\ge 70\%$ output token reduction and $5\times$ faster decode turnaround latency.
 - [ ] **CLI Integration in `agentscript`**:
   - `asl dom compress <file.html|url>`: outputs compressed S-expression DOM tree.

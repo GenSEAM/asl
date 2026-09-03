@@ -1,0 +1,1 @@
+num(7, 2) == "9|3|1|14|5|7|-7|2|7|some 3|some 1" and wrap_mod() == 0 and all(__import__('unittest').TestCase().assertRaises(_agentscript.Trap, f) is None for f in [trap_div, trap_neg, trap_abs, trap_add, trap_sub, trap_mul, trap_sum])

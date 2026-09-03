@@ -13,8 +13,12 @@ def test_cli_skill_subcommand():
         cwd=ROOT
     )
     assert proc.returncode == 0
-    assert "Agent Skills Marketplace" in proc.stdout
-    assert "asl-core" in proc.stdout
+    # Every skill the repository ships is named, and nothing else is. The old
+    # assertion looked for a marketplace banner over four entries with no files.
+    assert "Agent skills" in proc.stdout
+    for d in sorted((ROOT / "skills").iterdir()):
+        if (d / "SKILL.md").is_file():
+            assert d.name in proc.stdout
 
 
 def test_cli_setup_alias():

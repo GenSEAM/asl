@@ -1,0 +1,4 @@
+; Delimiters must balance. This is the property every streaming claim rests on:
+; a severed connection leaves the documents that already arrived readable only
+; because an unbalanced one is not a document.
+(:pool ["a" "b"] :data [(:ref 0)

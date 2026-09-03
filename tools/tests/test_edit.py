@@ -72,7 +72,7 @@ def test_every_form_class_is_editable(src_file, name):
     for op in ("replace", "delete", "insert"):
         run = run_cli("edit", op, str(p),
                       "--range", "0:0-0:0" if op != "insert" else "0:0",
-                      "--text", "; x\n")
+                      "--text", '"x"\n')
         assert run.returncode == 0, f"{name}/{op}: {run.stderr}"
         assert json.loads(run.stdout)["applied"] is True
 

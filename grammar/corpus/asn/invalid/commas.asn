@@ -1,0 +1,3 @@
+; There is no comma. Whitespace separates, which is the whole of the numeric
+; vector saving — a comma is a token that carries nothing.
+[1, 2, 3, 4]

@@ -1,6 +1,4 @@
-; Records, construction, field access, arithmetic.
-;
-; run: manhattan(origin(), scale(Point(x=1, y=2), 3)) == 9 and Config(name="a", retries=3) == {"name": "a", "retries": 3}
+"Records, construction, field access, arithmetic."
 
 (defschema Point
   (:field x Int64 "Horizontal coordinate")

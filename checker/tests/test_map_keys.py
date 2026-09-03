@@ -1,7 +1,7 @@
 """The map-key-order narrowing, at the places the corpus gate cannot pin.
 
-`; expect-only:` compares a SET of codes, so no fixture can state "one
-diagnostic". The nested case reported its Float64 twice for exactly that reason
+A leading `"expect-only:"` note compares a SET of codes, so no fixture can state
+"one diagnostic". The nested case reported its Float64 twice for exactly that reason
 and every gate stayed green. These tests pin the count, and they pin the routes
 by which a key type is determined without ever being written down.
 """

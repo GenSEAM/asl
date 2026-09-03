@@ -1,0 +1,10 @@
+{
+  "encoding": "cl100k_base",
+  "counts": {
+    "json": 51,
+    "toon": 34,
+    "nano-keyed": 27,
+    "nano-positional": 18
+  },
+  "saving_vs_json": 0.6471
+}

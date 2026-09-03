@@ -32,7 +32,7 @@
 
 (df is-fix-successful [(res FixResult)] -> Bool
   :d "Returns true if all identified patches were applied and score meets quality gate."
-  (if (== (.-total-fixes res) (.-applied-fixes res))
+  (if (= (.-total-fixes res) (.-applied-fixes res))
     (>= (.-new-quality-score res) 70)
     false))
 

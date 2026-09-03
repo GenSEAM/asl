@@ -4,19 +4,21 @@ Universal agent skills for Claude Code, Cursor, Antigravity, Windsurf, OpenDevin
 
 ## Installation
 ```bash
-# Install ASL Core skill into local workspace (.skills/asl-core)
-asl skill install asl-core
+# Install the language reference into the local workspace (.skills/asl)
+asl skill install asl
 
 # Install into global harness config
-asl skill install asl-core --global
+asl skill --install global
 ```
 
-## Available Skills:
-- `asl-core`: Authoritative ASL language grammar, §9 semantic rules, and standard library handbook.
-- `asl-eddie`: 3-layer swarm orchestrator, consultative ambiguity resolver, and task pool DAG.
-- `asl-browser`: In-browser WASI runner and DOM compressor (-78% tokens).
-- `asl-search`: SearXNG aggregator with proxy rotation.
-- `asl-mem`: Zero-server in-memory vector database and cosine similarity in 64KB Wasm.
+## Available skills
+
+`asl skill list` reads this directory, so the list below and the command cannot disagree.
+
+- `asl` — the language reference: Nano syntax, the closed vocabulary, the semantic rules, the
+  CLI and the MCP tools. **Generated** from `prelude/prelude.json` by `prelude/generate.py`;
+  editing `skills/asl/SKILL.md` by hand is work the `--check` gate will reject.
+- `skyloom` — the inter-agent protocol: frames, dialect negotiation and the swarm mesh.
 
 ## License
-MIT © GenSEAM Core Team
+Dual-licensed MIT or Apache-2.0, at your option. © GenSEAM Core Team

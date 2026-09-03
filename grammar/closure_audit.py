@@ -31,11 +31,17 @@ SPEC = ROOT.parent / "AGENT_SPEC_CORE.md"
 # Every head shape the `call` rule admits, not only identifiers: `callee` is
 # any expression, so operator heads (+, <=) and qualified heads (s/upper) were
 # invisible to this gate and the closure it reported excluded them.
+#
+# A `defenum` case is a definition too — it is a constructor within its own
+# module (§4.4). Only `defun` was collected, so the first corpus fixture to
+# construct a user union case reported every one of its cases as an undefined
+# call head. Nothing had, which is why the hole survived.
 QUERY = """
 (call callee: (ident) @callee)
 (call callee: (operator) @callee)
 (call callee: (qualified) @qualified)
 (defun name: (ident) @definition)
+(enum_case name: (ident) @definition)
 """
 
 def run_query(paths: list[Path]) -> tuple[set[str], set[str], set[str]]:

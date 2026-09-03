@@ -58,11 +58,43 @@ def spec_tables() -> str:
     return "\n".join(out)
 
 
-def shape_block(rows: list[tuple[str, str | None]]) -> list[str]:
-    """Code lines with their `;` comments aligned one column past the widest."""
-    width = max((len(code) for code, note in rows if note is not None), default=0)
-    return [code if note is None else f"{code.ljust(width)}  ; {note}".rstrip()
-            for code, note in rows]
+def shape_lines() -> list[str]:
+    """The handbook's Shape example, with prose carried as notes, not `;`."""
+    df, dfs, dfe = (vocab.nano_head(x) for x in ("defun", "defschema", "defenum"))
+    d, x, i, a, f, c = (vocab.nano_option(k) for k in
+                        (":doc", ":export", ":import", ":as", ":field", ":case"))
+    i64 = vocab.nano_type("Int64")
+    f64 = vocab.nano_type("Float64")
+    return [
+        '"A note is a string bound to nothing — the only comment form."',
+        "",
+        "(module my/mod",
+        f'  {d} "One sentence."',
+        f"  {x} [f Point]",
+        f"  {i} [(other/mod {a} o)])",
+        "",
+        '"NOTHING is public unless listed; a PascalCase entry exports a type."',
+        '"o/name is a value; o/Type is a type."',
+        "",
+        f"({dfs} Point",
+        f'  ({f} x {i64} "Doc."))',
+        '"doc is required on every field."',
+        "",
+        f"({dfe} Shape",
+        f'  ({c} circle [(r {f64})] "Doc.")',
+        f'  ({c} point  []{" " * len(f64)}      "Doc."))',
+        '"a closed union."',
+        "",
+        f"({df} area [(s o/Shape)] -> {f64}",
+        f'  {d} "Doc."',
+        "  0.0)",
+        '"an imported type in a signature; its cases are (o/circle r)."',
+        "",
+        f"({df} {{A}} id [(x A)] -> A",
+        f'  {d} "Required when exported."',
+        "  x)",
+        '"{A} binds a type variable."',
+    ]
 
 
 def alias_rows() -> list[tuple[str, str]]:
@@ -74,10 +106,8 @@ def alias_rows() -> list[tuple[str, str]]:
 def handbook() -> str:
     p = PRELUDE
     sf = p["special_forms"]
-    df, dfs, dfe, mt = (vocab.nano_head(x) for x in
-                        ("defun", "defschema", "defenum", "match"))
-    d, x, i, a, f, c = (vocab.nano_option(k) for k in
-                        (":doc", ":export", ":import", ":as", ":field", ":case"))
+    df, mt = (vocab.nano_head(x) for x in ("defun", "match"))
+    d, x = (vocab.nano_option(k) for k in (":doc", ":export"))
     i64, f64 = vocab.nano_type("Int64"), vocab.nano_type("Float64")
     st = vocab.nano_type("String")
     lines = [
@@ -95,28 +125,7 @@ def handbook() -> str:
         "## Shape",
         "",
         "```lisp",
-        *shape_block([
-            ("(module my/mod", "every file is a module"),
-            (f'  {d} "One sentence."', "required"),
-            (f"  {x} [f Point]", "NOTHING is public unless listed; a"),
-            ("", "  PascalCase entry exports a type"),
-            (f"  {i} [(other/mod {a} o)])", "o/name for a value, o/Type for a type"),
-            ("", None),
-            (f"({dfs} Point", "a record"),
-            (f'  ({f} x {i64} "Doc."))', "doc required on every field"),
-            ("", None),
-            (f"({dfe} Shape", "a closed union"),
-            (f'  ({c} circle [(r {f64})] "Doc.")', None),
-            (f'  ({c} point  []{" " * len(f64)}      "Doc."))', None),
-            ("", None),
-            (f"({df} area [(s o/Shape)] -> {f64}", "an imported type in a signature;"),
-            (f'  {d} "Doc."', "  its cases are (o/circle r)"),
-            ("  0.0)", None),
-            ("", None),
-            (f"({df} {{A}} id [(x A)] -> A", "{A} binds a type variable"),
-            (f'  {d} "Required when exported."', None),
-            ("  x)", None),
-        ]),
+        *shape_lines(),
         "```",
         "",
         "## Projection",

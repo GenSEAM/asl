@@ -1,0 +1,9 @@
+"expect-only: builtin-reference"
+"§6 gives a builtin a type, not a value: Core has no first-class reference to"
+"one, so a higher-order position takes an `fn` that calls it. Nothing rejected"
+"this before, and both backends lowered it to a name that does not exist in"
+"their own output — `string_upper(_x)` on Python, `string_upper.clone()` on"
+"Rust — because builtins are lowered as inline templates, never as functions."
+(defun shout [(xs (List String))] -> (List String)
+  :doc "Passes a builtin by name where a function value is expected."
+  (map string-upper xs))

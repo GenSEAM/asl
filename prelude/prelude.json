@@ -78,6 +78,18 @@
       "Unit": "Unit",
       "Float": "Float64"
     },
+    "nano": {
+      "Int64": "I64",
+      "Int32": "I32",
+      "Float64": "F64",
+      "String": "Str",
+      "Bool": "Bool",
+      "Unit": "Unit"
+    },
+    "reserved_widths": {
+      "$comment": "A width alias Core does not actually have. Accepted, resolved to the type named here, and carrying none of that width's semantics -- no narrowing, no wrap, no trap at the narrower boundary. Groundwork for host interop (C, C++, Rust) where a real fixed-width type will land later.",
+      "F32": "Float64"
+    },
     "unions": {
       "IoError": [
         "not-found",
@@ -86,6 +98,90 @@
         "invalid-path",
         "interrupted",
         "other"
+      ]
+    }
+  },
+  "projection": {
+    "$comment": "The Nano projection. Every entry is an ALIAS FOR A POSITION, never a global rewrite: `nano` means `verbose` only where `where` says, and anywhere else it is an ordinary atom. A record key spelled :x is therefore legal and untouched. Consumers: both grammars (generated), the transcoder, the interface compressor, the formatter and the self-hosted parser.",
+    "heads": [
+      {
+        "verbose": "defun",
+        "nano": "df",
+        "also": [
+          "def"
+        ],
+        "where": "decl-head"
+      },
+      {
+        "verbose": "defschema",
+        "nano": "dfs",
+        "also": [
+          "schema"
+        ],
+        "where": "decl-head"
+      },
+      {
+        "verbose": "defenum",
+        "nano": "dfe",
+        "also": [
+          "enum"
+        ],
+        "where": "decl-head"
+      },
+      {
+        "verbose": "match",
+        "nano": "mt",
+        "also": [],
+        "where": "expr-head"
+      }
+    ],
+    "options": [
+      {
+        "verbose": ":doc",
+        "nano": ":d",
+        "where": "module-opt, defun-opt"
+      },
+      {
+        "verbose": ":export",
+        "nano": ":x",
+        "where": "module-opt"
+      },
+      {
+        "verbose": ":import",
+        "nano": ":i",
+        "where": "module-opt"
+      },
+      {
+        "verbose": ":as",
+        "nano": ":a",
+        "where": "import-spec"
+      },
+      {
+        "verbose": ":field",
+        "nano": ":f",
+        "where": "field-head"
+      },
+      {
+        "verbose": ":case",
+        "nano": ":c",
+        "where": "enum-case-head"
+      }
+    ],
+    "unaliased": {
+      "$comment": "Forms deliberately without a Nano spelling: they are already one token, or shortening them would collide with an identifier shape.",
+      "forms": [
+        "module",
+        "fn",
+        "let",
+        "if",
+        "cond",
+        "try"
+      ],
+      "options": [
+        ":else",
+        ":default",
+        ":json",
+        ":json-case"
       ]
     }
   },

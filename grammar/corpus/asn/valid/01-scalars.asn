@@ -1,0 +1,8 @@
+; Every ASN scalar in one vector, including the two Core §2 already produces for
+; other purposes: `()` is unit, and `_` is nil in a position the language grammar
+; has no phrase for. Neither costs a new lexeme, which is the whole basis of the
+; claim that ASN shares the language's lexical structure rather than forking it.
+;
+; canonical: [1 -1 1.5 -1.5 "text" "he said \"hi\"" true false () :status _]
+
+[1 -1 1.5 -1.5 "text" "he said \"hi\"" true false () :status _]

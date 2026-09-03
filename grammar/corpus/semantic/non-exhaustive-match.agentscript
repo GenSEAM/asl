@@ -1,6 +1,6 @@
-; expect: rule-4
-; A match over a closed union that omits a case. Every arm is well-formed, so
-; the omission is only visible against the defenum that declares the union.
+"expect: rule-4"
+"A match over a closed union that omits a case. Every arm is well-formed, so"
+"the omission is only visible against the defenum that declares the union."
 (defenum Shape
   (:case circle [(radius Float64)] "A circle")
   (:case square [(side Float64)]   "A square"))

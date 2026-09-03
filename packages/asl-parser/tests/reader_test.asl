@@ -9,23 +9,19 @@
     ((some r) r)
     ((none)   (list))))
 
+(df err-text [(e a/ParseError)] -> String
+  :d "A parse error as line:col: message, the shape the CLI reports."
+  (str (string-from-int64 (.-line e)) ":" (string-from-int64 (.-col e)) ": "
+       (.-msg e)))
+
 (df proj-parse [(src String)] -> String
   :d "Project the module header and every declaration to flat text."
-  (let [(forms (a/parse src))]
-    (str (mt (list-head forms)
-           ((some t) (proj-form t))
-           ((none)   "none"))
-         (proj-rest (tail-forms forms)))))
-
-(df proj-rest [(forms (List a/TopForm))] -> String
-  :d "Project remaining forms, each joined with a leading pipe."
-  (mt (list-head forms)
-    ((some t)
-     (let [(rest (tail-forms forms))]
-       (if (list-empty? rest)
-         (str "|" (proj-form t))
-         (str "|" (proj-form t) (proj-rest rest)))))
-    ((none) "")))
+  (mt (a/parse src)
+    ((err e) (err-text e))
+    ((ok forms)
+     (if (list-empty? forms)
+       "none"
+       (string-join (map (fn [(t a/TopForm)] -> String (proj-form t)) forms) "|")))))
 
 (df proj-form [(t a/TopForm)] -> String
   :d "One form's projection line."
@@ -36,8 +32,8 @@
     ((a/top-defun d)  (proj-defun d))))
 
 (df proj-module [(m a/ModuleNode)] -> String
-  :d "Module header projection: doc, counts."
-  (str "module|" (.-docstring m) "|"
+  :d "Module header projection: path, doc, counts."
+  (str "module|" (.-path m) "|" (.-docstring m) "|"
        (string-from-int64 (list-length (.-exported m))) "|"
        (string-from-int64 (list-length (.-imports m))) "|"
        (string-from-int64 (list-length (.-defs m)))))
@@ -65,30 +61,33 @@
 
 (df proj-heads [(src String)] -> String
   :d "Project the dialect-sensitive fields for head-equality."
-  (let [(forms (a/parse src))
-        (m (mt (list-head forms)
-             ((some t) (mt t
-                         ((a/top-module mn) (some mn))
-                         ((a/top-schema _)  (none))
-                         ((a/top-enum _)    (none))
-                         ((a/top-defun _)   (none))))
-             ((none) (none))))]
-    (str (mt m
-           ((some mn)
-            (str (.-docstring mn) "|"
-                 (string-join (.-exported mn) ",") "|"
-                 (string-join (map (fn [(p (Pair String String))] -> String
-                                     (str (.-first p) ":" (.-second p)))
-                                   (.-imports mn))
-                              ",")))
-           ((none) ""))
-         (head-decls (tail-forms forms)))))
+  (mt (a/parse src)
+    ((err e) (err-text e))
+    ((ok forms)
+     (str (mt (list-head forms)
+            ((some t) (mt t
+                        ((a/top-module mn) (proj-module-heads mn))
+                        ((a/top-schema _)  "")
+                        ((a/top-enum _)    "")
+                        ((a/top-defun _)   "")))
+            ((none) ""))
+          (head-decls (tail-forms forms))))))
+
+(df proj-module-heads [(mn a/ModuleNode)] -> String
+  :d "The module header's dialect-sensitive projection."
+  (str (.-docstring mn) "|"
+       (string-join (.-exported mn) ",") "|"
+       (string-join (map (fn [(p (Pair String String))] -> String
+                           (str (.-first p) ":" (.-second p)))
+                         (.-imports mn))
+                    ",")))
 
 (df head-decls [(forms (List a/TopForm))] -> String
-  :d "Per-declaration head projections joined by a pipe."
-  (mt (list-head forms)
-    ((some t) (str "|" (head-decl t) (head-decls (tail-forms forms))))
-    ((none) "")))
+  :d "Per-declaration head projections, each with a leading pipe."
+  (if (list-empty? forms)
+    ""
+    (str "|" (string-join (map (fn [(t a/TopForm)] -> String (head-decl t)) forms)
+                          "|"))))
 
 (df head-decl [(t a/TopForm)] -> String
   :d "One declaration's dialect-sensitive projection."
@@ -118,8 +117,8 @@
                             (.-body d))
                        " ")))))
 
-(df render-all [(src String)] -> String
+(df render-all [(src String)] -> (Result String a/ParseError)
   :d "Parse and render every top form, joined by newlines."
-  (string-join (map (fn [(t a/TopForm)] -> String (a/render-node t))
-                    (a/parse src))
-               "\n"))
+  (let [(forms (try (a/parse src)))]
+    (ok (string-join (map (fn [(t a/TopForm)] -> String (a/render-node t)) forms)
+                     "\n"))))

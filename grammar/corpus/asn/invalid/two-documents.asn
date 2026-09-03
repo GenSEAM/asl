@@ -1,0 +1,5 @@
+; A document is exactly one balanced value. Two values in one text is a stream,
+; and delimiting a stream is framing — docs/AGENTIC_PROTOCOL.md's job, not this
+; grammar's.
+(:chunk (Item [1 "ok"]))
+(:chunk (Item [2 "ok"]))

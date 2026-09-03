@@ -1,0 +1,9 @@
+; A heterogeneous collection. Each element is a `dfe` case constructor written
+; exactly as Core §4.4 writes it — kebab-case head, positional arguments — so the
+; collection is self-describing without a `{type, data}` wrapper on every item.
+;
+; canonical: [(user 1 "Alice" :admin) (bot 2 "code-bot" 1200) (deploy-event :success 1714829100)]
+
+[(user 1 "Alice" :admin)
+ (bot 2 "code-bot" 1200)
+ (deploy-event :success 1714829100)]

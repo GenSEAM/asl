@@ -1,15 +1,12 @@
-; Every numeric builtin at Int64 and at Float64, in the same shape, because
-; "exercised" has meant "exercised at one type": `/` and `mod` were counted as
-; covered while their Rust lowerings took i64 alone. The float leg is the half
-; that did not compile. Truncation toward zero, the zero divisor, the Int32
-; boundary and 2^53+1 each get their own case.
-;
-; The Int64 boundary is the second half: the type is fixed, so an operation whose
-; result leaves it traps rather than widening — which one host does by not having
-; a width at all. The trapping entries are asserted here because a trap is not a
-; value and the differential harness compares values.
-;
-; run: num(7, 2) == "9|3|1|14|5|7|-7|2|7|some 3|some 1" and wrap_mod() == 0 and all(__import__('unittest').TestCase().assertRaises(_agentscript.Trap, f) is None for f in [trap_div, trap_neg, trap_abs, trap_add, trap_sub, trap_mul, trap_sum])
+"Every numeric builtin at Int64 and at Float64, in the same shape, because"
+"\"exercised\" has meant \"exercised at one type\": `/` and `mod` were counted as"
+"covered while their Rust lowerings took i64 alone. The float leg is the half"
+"that did not compile. Truncation toward zero, the zero divisor, the Int32"
+"boundary and 2^53+1 each get their own case."
+"The Int64 boundary is the second half: the type is fixed, so an operation whose"
+"result leaves it traps rather than widening — which one host does by not having"
+"a width at all. The trapping entries are asserted here because a trap is not a"
+"value and the differential harness compares values."
 
 (module math/report
   :doc "Report the numeric vocabulary over one pair of values."

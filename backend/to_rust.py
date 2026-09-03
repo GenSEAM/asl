@@ -26,16 +26,19 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "grammar"))
 
 from modules import closure, declared_path, imports  # noqa: E402
+from _literals import string_literal  # noqa: E402
 from parse import FORM_KW, parser  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "prelude"))
 
-from vocab import unions  # noqa: E402
+from vocab import resolve_type, unions  # noqa: E402
 
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
 LOWER = {b["name"]: b["rs"] for b in PRELUDE["builtins"]}
 
-PRIM = {"Bool": "bool", "Int32": "i32", "Int64": "i64", "Int": "i64",
+# Keyed by Core names only. A Nano alias is resolved before it gets here;
+# a second spelling in this table is a second alias map, which is the defect.
+PRIM = {"Bool": "bool", "Int32": "i32", "Int64": "i64",
         "Float64": "f64", "String": "String", "Unit": "()",
         "IoError": "rt::IoError"}
 
@@ -175,6 +178,7 @@ class ToRust:
             alias, _, member = s.partition("/")
             target = self.alias_mod.get(alias, "")
             return self.unit_types.get(target, {}).get(member, member)
+        s = resolve_type(s)
         return PRIM[s] if s in PRIM else self.types.get(s, s)
 
     def rtype(self, n) -> str:
@@ -182,7 +186,7 @@ class ToRust:
             n = n.children[0] if len(n.children) == 1 else n
         if isinstance(n, Token):
             return self.tname(str(n))
-        head = self.tok(n.children[0])
+        head = resolve_type(self.tok(n.children[0]))
         args = [self.rtype(a) for a in n.children[1:]]
         return {
             "List": f"Vec<{args[0]}>" if args else "Vec<()>",
@@ -226,6 +230,7 @@ class ToRust:
                 seen: set[str] = set()
                 for t in self.member_types(n):
                     for s in self.type_names_in(t):
+                        s = resolve_type(s)
                         seen.add(self.unit_types[mod_path].get(s, s))
                     for s in self.qual_type_names_in(t):
                         alias, _, member = s.partition("/")
@@ -711,7 +716,7 @@ class ToRust:
         if tok.type == "BOOL":
             return "true" if s == "true" else "false"
         if tok.type == "STRING":
-            return f"{s}.to_string()"
+            return f"{string_literal(s)}.to_string()"
         if tok.type in ("INT", "FLOAT"):
             # Rust's `-1` is a unary operation, not a primary, and a method
             # binds tighter than the sign: any template that suffixes onto its

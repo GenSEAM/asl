@@ -25,8 +25,8 @@ sys.path.insert(0, str(ROOT / "grammar"))
 import differential as d  # noqa: E402
 
 RECORD = """\
-; Fields in the order the derived comparison uses them: the measurement decides,
-; and `seq` is only there to make a kept order visible.
+"Fields in the order the derived comparison uses them: the measurement decides,"
+"and `seq` is only there to make a kept order visible."
 (defschema Reading
   (:field v Float64 "The measurement.")
   (:field seq Int64 "Arrival order."))

@@ -1,0 +1,1 @@
+lifecycle("a b a c", "a") == "3|T|2|b,c"

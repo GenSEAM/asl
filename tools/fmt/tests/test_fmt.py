@@ -3,12 +3,12 @@
 Canonical means idempotent: the second pass must be a no-op, byte for byte, or a
 later stage cannot use formatted output as an identity. Meaning-preserving means the
 formatted text parses to the same tree, which is the only definition that does not
-depend on the printer's own opinions. And comments must survive: Lark discards them,
-so the recovery pass is the part most likely to lose something, and losing a comment
-is the one failure a reader cannot see in a diff of the code.
+depend on the printer's own opinions. Notes are string literals and therefore tree
+nodes, so they need no recovery pass; the placement tests below pin that a note keeps
+its line the way a comment used to.
 
 Idempotence alone accepts a no-op formatter, so the suite also pins a
-canonical-output fixture (tree preservation over a known good program) and comment
+canonical-output fixture (tree preservation over a known good program) and note
 survival in the placements a person actually writes.
 """
 import subprocess
@@ -61,14 +61,6 @@ def test_formatting_preserves_the_tree(path):
     assert shape(fmt.parse(out, str(path))) == shape(fmt.parse(src, str(path)))
 
 
-@pytest.mark.parametrize("path", CORPUS, ids=ids(CORPUS))
-def test_every_comment_survives(path):
-    src = path.read_text()
-    before = [c.text for c in fmt.scan_comments(src)]
-    after = [c.text for c in fmt.scan_comments(fmt.format_source(src, str(path)))]
-    assert after == before
-
-
 # ---------- the canonical fixture ----------
 
 HERE = Path(__file__).parent
@@ -80,137 +72,32 @@ def test_canonical_fixture_formats_to_its_expected_form():
     assert fmt.format_source(src, str(HERE / "canonical.agentscript")) == expected
 
 
-# ---------- comments in the places a tree cannot hold them ----------
+# ---------- notes in the places a person writes them ----------
 
-# One module rather than several, and every current form in it once: the probe below
-# inserts a comment before each of its lines in turn, so the cost is one parse per
-# line and the coverage is one comment position per syntactic construct.
-PROBE_SUBJECT = '''; header
-(module probe/every-form
-  :doc "Every construct the printer has a rule for."
-  :export [pick]
-  :import [(core/strings :as s)])
-
-(defschema Point
-  (:field x Int64 "across" :default 0)
-  (:field y Int64 "down"))
-
-(defenum {T} Shape
-  (:case dot  []                "nothing")
-  (:case box  [(w T) (h T)]     "a box"))
-
-(defun pick [(n Int64) (p Point)] -> (Result Int64 String)
-  :doc "Every expression form in one body."
-  (let [(m (Point :x 1 :y 2))
-        (k (.-x p))]
-    (cond
-      ((= n 0) (ok 0))
-      ((< n 0) (ok (if (> k 0) 1 2)))
-      (:else
-       (match (pick-hello n)
-         ((some v) (ok (s/upper (+ v 1))))
-         ((none)   (err "none")))))))
-
-(defun pick-hello [(n Int64)] -> (Option Int64)
-  (try (ok (+ n 1))))
-'''
+def test_a_note_above_a_declaration_stays_attached_to_it():
+    out = fmt_str('"what this one is for"\n(defun f [] -> Int64 1)\n')
+    assert out.splitlines()[:2] == ['"what this one is for"', '(defun f [] -> Int64']
 
 
-def test_a_comment_inserted_anywhere_survives():
-    """A probe comment before every line of a module that uses every form."""
-    lines = PROBE_SUBJECT.splitlines(True)
-    want = shape(fmt.parse(PROBE_SUBJECT, "<probe>"))
-    for i, line in enumerate(lines):
-        indent = len(line) - len(line.lstrip())
-        probe = f"{' ' * indent}; probe {i}\n"
-        out = fmt.format_source("".join(lines[:i] + [probe] + lines[i:]), "<probe>")
-        assert f"; probe {i}" in out, f"lost the probe inserted before line {i + 1}"
-        assert shape(fmt.parse(out, "<probe>")) == want, f"tree changed at line {i + 1}"
+def test_a_note_separated_by_a_blank_line_stays_separated():
+    out = fmt_str('"a file header"\n\n(defun f [] -> Int64 1)\n')
+    assert out.splitlines()[:3] == ['"a file header"', '', '(defun f [] -> Int64']
 
 
-def test_a_comment_above_a_declaration_stays_attached_to_it():
-    out = fmt_str('; what this one is for\n(defun f [] -> Int64 1)\n')
-    assert out.splitlines()[:2] == ["; what this one is for", "(defun f [] -> Int64"]
+def test_a_note_inside_a_body_keeps_its_place():
+    out = fmt_str('(defun f [(x Int64)] -> Int64\n  "why the one"\n  (+ x 1))\n')
+    assert '"why the one"' in out and fmt_str(out) == out
 
 
-def test_a_comment_separated_by_a_blank_line_stays_separated():
-    out = fmt_str('; a file header\n\n(defun f [] -> Int64 1)\n')
-    assert out.splitlines()[:3] == ["; a file header", "", "(defun f [] -> Int64"]
-
-
-def test_a_comment_inside_a_body_keeps_its_place():
-    out = fmt_str('(defun f [(x Int64)] -> Int64\n  ; why the one\n  (+ x 1))\n')
-    assert out == '(defun f [(x Int64)] -> Int64\n  ; why the one\n  (+ x 1))\n'
-
-
-def test_a_trailing_comment_stays_on_its_line():
-    out = fmt_str('(defun g [(o (Option Int64))] -> Int64\n'
-                  '  (match o\n'
-                  '    ((some n) n)  ; the value\n'
-                  '    ((none) 0)))\n')
-    assert "((some n) n) ; the value" in out
-
-
-def test_a_comment_between_arguments_forces_the_call_open():
-    out = fmt_str('(defun f [] -> Int64\n  (+ 1\n     ; the second matters\n     2))\n')
-    assert out.splitlines() == ["(defun f [] -> Int64",
-                                "  (+ 1",
-                                "     ; the second matters",
-                                "     2))"]
-
-
-def test_a_comment_at_the_end_of_the_file_is_kept():
-    assert fmt_str('(defun f [] -> Int64 1)\n; a closing note\n').endswith(
-        "; a closing note\n")
-
-
-@pytest.mark.parametrize("src", [
-    '(defun f [] -> Int64\n  (g 1) ; one\n  )\n',
-    '(module m\n  :doc "d" ; note\n  )\n',
-    '(module m :doc "d" :export [aaa\n   bbb ; last\n   ])\n',
-    '(defun f [(x Int64)] -> Int64\n  (match x (1 2) (_ 3) ; fallback\n    ))\n',
-    '(defun f [] -> Int64\n  (let [(a 1)] a ; result\n  ))\n',
-    '(defun f [(a Int64)] -> Int64\n  (g a\n     1 ; two\n     ))\n',
-    '(defschema Point\n  (:field x Int64 "x")\n  (:field yyyyyy Int64 "y")\n  ; note\n  )\n',
-    '(defun f [(x Int64)] -> Int64\n  (match x (1 2) ((cons h t) 3) (_ 4)\n    ; note\n    ))\n',
-], ids=["defun body", "module opt", "export list", "match arm", "let body",
-        "call argument", "schema closer", "match closer"])
-def test_a_comment_at_a_closing_delimiter_still_parses(src):
-    out = fmt_str(src)
-    assert shape(fmt.parse(out, "<t>")) == shape(fmt.parse(src, "<t>"))
-    assert "; " in out
-    assert fmt_str(out) == out, f"not idempotent:\n{out}\n{fmt_str(out)}"
-
-
-def test_a_trailing_comment_is_not_stolen_by_an_earlier_item_on_the_line():
-    once = fmt_str('(module m :doc "d" :export [aaa\n   bbb ; last\n   ])\n')
-    assert "bbb ; last" in once and fmt_str(once) == once
+def test_a_note_after_the_last_expression_stays_inside_the_form():
+    out = fmt_str('(defun f [] -> Int64\n  1\n  "a closing note"\n  )\n')
+    assert '"a closing note")' in out and fmt_str(out) == out
 
 
 def test_a_semicolon_inside_a_string_is_not_a_comment():
     src = '(defun f [] -> String "a ; b")\n'
     assert fmt.scan_comments(src) == []
     assert '"a ; b"' in fmt_str(src)
-
-
-def test_a_comment_between_let_bindings_stays_between_them():
-    out = fmt_str('(defun f [] -> Int64\n  (let [(a 1)\n        ; why b\n'
-                  '        (b 2)]\n    (+ a b)))\n')
-    assert out.splitlines()[1:4] == ["  (let [(a 1)", "        ; why b", "        (b 2)]"]
-
-
-def test_a_comment_after_the_last_expression_stays_inside_the_form():
-    out = fmt_str('(defun f [] -> Int64\n  1\n  ; a closing note\n  )\n')
-    assert out == "(defun f [] -> Int64\n  1\n  ; a closing note\n)\n"
-    assert fmt_str(out) == out
-
-
-def test_a_comment_inside_a_signature_moves_but_is_not_lost():
-    out = fmt_str('(defun f [(x Int64) ; the input\n          (y Int64)] -> Int64\n'
-                  '  (+ x y))\n')
-    assert out == ("(defun f [(x Int64) (y Int64)] -> Int64\n"
-                   "  ; the input\n"
-                   "  (+ x y))\n")
 
 
 # ---------- refusal ----------

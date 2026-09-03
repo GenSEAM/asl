@@ -1,0 +1,3 @@
+; A bare identifier is not a value. Names appear only as heads, which is what
+; keeps a payload from naming anything in the consumer's scope.
+status

@@ -1,6 +1,6 @@
-; I/O and the effect marker. `!` on a declaration says it touches the world; it
-; is inferred inside a body but written on the signature, because a caller reads
-; the signature and not the body.
+"I/O and the effect marker. `!` on a declaration says it touches the world; it"
+"is inferred inside a body but written on the signature, because a caller reads"
+"the signature and not the body."
 
 (module io-demo
   :doc "Copies a file and echoes it back, reporting a missing source rather than

@@ -37,7 +37,7 @@ sys.path.insert(0, str(ROOT / "prelude"))
 sys.path.insert(0, str(ROOT / "checker"))
 
 from collect import collect  # noqa: E402
-from vocab import parse_signature, type_aliases  # noqa: E402
+from vocab import parse_signature, resolve_type  # noqa: E402
 from _ts import compile_ts  # noqa: E402
 
 # Imports are linked into one artifact, so every transpile here needs the search
@@ -46,7 +46,6 @@ ROOTS = [ROOT / "grammar" / "corpus" / "modules"]
 CASES = ROOT / "backend" / "cases"
 TASKS = ROOT / "bench" / "tasks"
 
-ALIASES = type_aliases()
 PRIMITIVE_RUST = {"Int32": "i32", "Int64": "i64", "Float64": "f64",
                   "String": "String", "Bool": "bool"}
 NONFINITE = {"nan": "f64::NAN", "inf": "f64::INFINITY", "-inf": "f64::NEG_INFINITY"}
@@ -79,7 +78,7 @@ def con(spec: dict) -> str:
     name = spec.get("con")
     if name is None:
         raise RuntimeError(f"a type variable is not an admissible input: {spec}")
-    return ALIASES.get(name, name)
+    return resolve_type(name)
 
 
 def rust_type(spec: dict) -> str:
@@ -788,6 +787,27 @@ def program_cases() -> list[tuple[Path, list[dict]]]:
         # across the two, and the higher-order case compiles cleanly on both.
         (valid / "15-shadowed-binders.agentscript", [
             {"argv": [], "stdout": "7 6 101 102\n", "stderr": "", "exit": 0},
+        ]),
+        # The Nano projection under execution, on the arm no function-mode case
+        # reaches. A type alias is resolved by four transpilers and by the
+        # interpreter independently, so only running all six proves they agree
+        # on what `F32`, `I32`, `Str` and `Num` name.
+        (valid / "30-nano-program.agentscript", [
+            {"argv": ["12.5"], "stdout": "12.5 high by 2.5\ncount=1\n",
+             "stderr": "", "exit": 0},
+            {"argv": ["3.5"], "stdout": "3.5 ok\ncount=1\n",
+             "stderr": "", "exit": 0},
+            # No argument at all: the default reading, and the Int32-typed run
+            # size at zero rather than at the width's boundary.
+            {"argv": [], "stdout": "0 ok\ncount=0\n", "stderr": "", "exit": 0},
+        ]),
+        # A multi-line literal crossing a process boundary. A newline that a
+        # target unescaped into two characters, or wrote as its own line ending,
+        # is a stdout mismatch here rather than a compile error -- and the
+        # compile error is the half that Rust never had.
+        (valid / "34-multiline-program.agentscript", [
+            {"argv": [], "stdout": "usage: notes FILE\n       notes --help\n",
+             "stderr": "", "exit": 0},
         ]),
         (valid / "19-io-errors.agentscript", [
             {"argv": ["log.txt"], "files": {"log.txt": ("A\n", 0o644)}, "stdin": "B",

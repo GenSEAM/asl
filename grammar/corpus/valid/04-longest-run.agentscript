@@ -1,6 +1,4 @@
-; The worked example from AGENT_SPEC_CORE.md section 7.
-;
-; run: longest_run("aabbbc") == ("some", ("pair", "b", 3)) and longest_run("") == ("none",)
+"The worked example from AGENT_SPEC_CORE.md section 7."
 
 (defun run-length [(chars (List String)) (cur String) (n Int64) (best (Pair String Int64))]
         -> (Pair String Int64)

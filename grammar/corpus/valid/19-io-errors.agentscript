@@ -1,8 +1,8 @@
-; A log appender, and the whole IoError surface it can reach. The six cases are
-; ordinary nullary constructors, so `--labels` executes every one of them and
-; pins its spelling; the host mapping from errno to case is what only a real
-; failing call reaches, and two of them (a missing parent, an unreadable file)
-; are driven by backend/differential.py.
+"A log appender, and the whole IoError surface it can reach. The six cases are"
+"ordinary nullary constructors, so `--labels` executes every one of them and"
+"pins its spelling; the host mapping from errno to case is what only a real"
+"failing call reaches, and two of them (a missing parent, an unreadable file)"
+"are driven by backend/differential.py."
 
 (module io/log
   :doc "Append a line of input to a file and show the result."

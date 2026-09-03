@@ -1,0 +1,7 @@
+; Named record construction, the Core §4.1 shape reused verbatim as data. The
+; head is PascalCase and every argument is a `:key value` pair, so a decoder
+; binds by name and field order does not matter.
+;
+; canonical: (Item :id 1 :sku "SSD-1TB" :price 89.99)
+
+(Item :id 1 :sku "SSD-1TB" :price 89.99)

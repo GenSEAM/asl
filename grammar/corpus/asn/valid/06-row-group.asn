@@ -1,0 +1,14 @@
+; Schema-grouped rows: the constructor name is written once and each row is a
+; bare positional vector. Element i fills field i in the schema's DECLARATION
+; order — the one ordering both ends read off the same `dfs`.
+;
+; The `status` column is a String and carries "in-stock", not `:in-stock`. Core
+; declares no keyword type, so a keyword in a schema-bound column has nothing to
+; bind to; `bench/asn_tokens.py` shows the two spellings cost the same anyway.
+;
+; canonical: (Item [1 "SSD-1TB" 89.99 "in-stock"] [2 "RAM-32GB" 129.5 "in-stock"] [3 "GPU-4070" 549.0 "low-stock"])
+
+(Item
+  [1 "SSD-1TB"  89.99 "in-stock"]
+  [2 "RAM-32GB" 129.5 "in-stock"]
+  [3 "GPU-4070" 549.0 "low-stock"])

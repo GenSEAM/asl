@@ -1,6 +1,6 @@
-; expect-only: type-arity
-; §3 writes Result applied — `(Result T E)`. Bare, it names no type, and the
-; error half the `try` form propagates into does not exist to be read.
+"expect-only: type-arity"
+"§3 writes Result applied — `(Result T E)`. Bare, it names no type, and the"
+"error half the `try` form propagates into does not exist to be read."
 (defun parse-it [(s String)] -> (Result Int64 String)
   :doc "A fallible helper to try."
   (ok 1))

@@ -1,0 +1,10 @@
+; A shared value pool. Long recurring values are written once in `:pool` and
+; referenced by index. `(:ref 0)` is an ordinary record whose single key is
+; reserved, so deduplication needs no construct the grammar did not already have.
+;
+; canonical: (:pool ["https://api.internal.invalid/v2/telemetry/nodes" {:region :us-east :env :prod}] :data [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok) (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :warn)])
+
+(:pool ["https://api.internal.invalid/v2/telemetry/nodes"
+        {:region :us-east :env :prod}]
+ :data [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok)
+        (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :warn)])

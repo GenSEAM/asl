@@ -28,16 +28,19 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "grammar"))
 
 from modules import closure, declared_path, imports  # noqa: E402
+from _literals import string_literal  # noqa: E402
 from parse import FORM_KW, parser  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "prelude"))
 
-from vocab import parse_signature, unions  # noqa: E402
+from vocab import parse_signature, resolve_type, unions  # noqa: E402
 
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
 LOWER = {b["name"]: b["go"] for b in PRELUDE["builtins"]}
 
-PRIM = {"Bool": "bool", "Int32": "int32", "Int64": "int64", "Int": "int64",
+# Keyed by Core names only. A Nano alias is resolved before it gets here;
+# a second spelling in this table is a second alias map, which is the defect.
+PRIM = {"Bool": "bool", "Int32": "int32", "Int64": "int64",
         "Float64": "float64", "String": "string", "Unit": "Unit",
         "IoError": "IoError"}
 
@@ -279,12 +282,13 @@ class ToGo:
             s = str(node)
             if getattr(node, "type", None) == "QUALIFIED_TYPE":
                 return ty_con(self.qual_type(s))
+            s = resolve_type(s)
             if s in PRIM:
                 return ty_con(s)
             if s in self.genv:
                 return ty_var(s)
             return ty_con(self.local_type(s))
-        head_tok = self.tok(node.children[0])
+        head_tok = resolve_type(self.tok(node.children[0]))
         is_qual = (isinstance(node.children[0], Token)
                    and node.children[0].type == "QUALIFIED_TYPE")
         if is_qual:
@@ -1223,6 +1227,11 @@ class ToGo:
             if s == "-0.0":
                 return "NegZero()"
             return s
+        if tok.type == "STRING":
+            return string_literal(s)
+        # Go has no `()` literal; the runtime's empty struct is Unit's inhabitant.
+        if tok.type == "UNIT":
+            return "Unit{}"
         if tok.type in ("QUALIFIED", "QUALIFIED_TYPE"):
             return self.qual(s)
         if tok.type == "IDENT":

@@ -5,12 +5,8 @@ Printing from the tree rather than editing text is what makes the output canonic
 and the delimiters balanced by construction — there is no path by which this
 emits a program that does not parse, only one by which it refuses to start.
 
-Comments are the one thing a tree does not carry: `grammar/as-lang.lark` ends with
-`%ignore COMMENT`, and the corpus uses comments to carry the intent of a fixture.
-They are recovered by a second, independent pass — a string-aware scan of the
-source that records every comment with its position — and re-attached during
-printing by position. A node whose source span contains a comment is therefore
-never printed flat, because a comment has to end its line.
+Comments are notes — free-standing string literals — and a note is a tree node like
+any other, so it is printed by its own rule and needs no recovery pass.
 
 Diagnostics are the checker's `Diagnostic` (fields `code`, `message`, `line`, `col`,
 `path`); the formatter's former `rule` field is the checker's `code: str`, so a parse
@@ -38,6 +34,13 @@ from parse import parser as _grammar_parser, FORM_KW as _TOOLCHAIN_FORM_KW  # no
 sys.path.insert(0, str(ROOT / "checker"))
 from resolve import Diagnostic  # noqa: E402
 
+# The Nano projection, so the printer can ask what an option keyword *means*
+# without caring which of its two spellings the source used.
+sys.path.insert(0, str(ROOT / "prelude"))
+from vocab import option_aliases  # noqa: E402
+
+_OPTION_MEANING = option_aliases()
+
 # Soft target: a signature or a long atom overruns it rather than break. 80 is the
 # column the corpus was written to — its three wrapped :export lists each break at
 # the first name that would cross it — and it is the width with the least churn
@@ -63,8 +66,13 @@ ALWAYS_BROKEN = {"module_decl", "defschema", "defenum", "defun", "defentry",
                  "defextern", "defopaque", "match_form", "cond_form", "if_form",
                  "let_form"}
 
-# Keyword options whose payload is a bracketed list rather than a single value.
+# Keyword options whose payload is a bracketed list rather than a single value,
+# named by meaning: `:x` is `:export` here and must keep its brackets.
 BRACKETED = {":export", ":import", ":extern", ":effects"}
+
+
+def bracketed(head: str) -> bool:
+    return _OPTION_MEANING.get(head, head) in BRACKETED
 
 # Pattern heads that are spelled with delimiters: `(none)`, `(cons h t)`. The rest
 # of the pattern alternatives are bare.
@@ -240,6 +248,21 @@ def kids(node: Tree) -> list:
             if not (isinstance(k, Token) and k.type in FORM_KW)]
 
 
+def keyword(n: Tree, *types: str) -> str:
+    """The form keyword of `n` as the source spelled it.
+
+    A head and an option keyword each have a Nano and a verbose spelling, and the
+    grammar keeps the token that was written. Printing a fixed word instead is
+    what made the formatter rewrite every Nano module into verbose and then refuse
+    its own output; the projection is the author's, not the printer's.
+    """
+    for c in n.children:
+        if isinstance(c, Token) and c.type in types:
+            return str(c)
+    raise FormatError(Diagnostic("internal",
+                                 f"`{n.data}` has no {'/'.join(types)} token", 0, 0, ""))
+
+
 def unwrap(n):
     """Strip the single-child `expr`/`toplevel` wrappers the grammar inserts."""
     while isinstance(n, Tree) and n.data in ("expr", "toplevel") and len(n.children) == 1:
@@ -372,18 +395,20 @@ class Printer:
             return "(module " + " ".join(self.flat(x) for x in k) + ")"
         if d == "module_opt":
             return self._flat_kw_opt(n)
+        if d == "note":
+            return self.flat(k[0]) if k else ""
         if d == "import_spec":
-            return f"({self.flat(k[0])} :as {self.flat(k[1])})"
+            return f"({self.flat(k[0])} {keyword(n, 'AS_KW')} {self.flat(k[1])})"
         if d == "extern_spec":
             return f"({self.flat(k[0])} {self.flat(k[1])} :as {self.flat(k[2])})"
         if d == "defschema":
-            return "(defschema " + " ".join(self.flat(x) for x in k) + ")"
+            return f"({keyword(n, 'DEFSCHEMA')} " + " ".join(self.flat(x) for x in k) + ")"
         if d == "field":
-            return "(:field " + " ".join(self.flat(x) for x in k) + ")"
-        if d == "field_opt":
+            return f"({keyword(n, 'FIELD_KW')} " + " ".join(self.flat(x) for x in k) + ")"
+        if d in ("field_opt", "schema_opt"):
             return self._flat_kw_opt(n)
         if d == "defun":
-            return "(defun " + self._flat_signature(k) + ")"
+            return f"({keyword(n, 'DEFUN')} " + self._flat_signature(k) + ")"
         if d == "defentry":
             return "(defentry " + self._flat_signature(k) + ")"
         if d == "defextern":
@@ -393,10 +418,10 @@ class Printer:
         if d == "defopaque":
             return f"(defopaque {self.flat(k[0])} :doc {self.flat(k[1])})"
         if d == "defenum":
-            return "(defenum " + " ".join(self.flat(x) for x in k) + ")"
+            return f"({keyword(n, 'DEFENUM')} " + " ".join(self.flat(x) for x in k) + ")"
         if d == "enum_case":
             name, ps, doc = k[0], k[1:-1], k[-1]
-            return (f"(:case {self.flat(name)} "
+            return (f"({keyword(n, 'CASE_KW')} {self.flat(name)} "
                     f"[{' '.join(self.flat(p) for p in ps)}] {self.flat(doc)})")
         if d == "let_form":
             binds = [x for x in k if isinstance(x, Tree) and x.data == "binding"]
@@ -414,7 +439,7 @@ class Printer:
         if d == "else_clause":
             return "(:else " + " ".join(self.flat(x) for x in k) + ")"
         if d == "match_form":
-            return "(match " + " ".join(self.flat(x) for x in k) + ")"
+            return f"({keyword(n, 'MATCH')} " + " ".join(self.flat(x) for x in k) + ")"
         if d == "enum_pattern":
             return "(" + " ".join(self.flat(x) for x in k) + ")"
         if d == "pattern":
@@ -438,14 +463,14 @@ class Printer:
             return self.flat(k[0]) if len(k) == 1 \
                 else "(" + " ".join(self.flat(x) for x in k) + ")"
         if d == "doc_opt":
-            return ":doc " + self.flat(k[0])
+            return f"{keyword(n, 'DOC_KW')} " + self.flat(k[0])
         raise FormatError(Diagnostic("internal", f"no printing rule for `{d}`", 0, 0, ""))
 
     def _flat_kw_opt(self, n: Tree) -> str:
         """`:doc "..."`, `:effects [a b]`, `:target :py` — a keyword and its payload."""
         head = str(n.children[0])
         rest = n.children[1:]
-        if head in BRACKETED:
+        if bracketed(head):
             return f"{head} [" + " ".join(self.flat(x) for x in rest) + "]"
         return f"{head} " + " ".join(self.flat(x) for x in rest)
 
@@ -581,11 +606,19 @@ class Printer:
         return self._stack(f"(module {self.flat(k[0])}", k[1:], col, col + 2, 1, n)
 
     def _break_defschema(self, n, k, col):
-        head, fields = _split_type_head("defschema", k, self)
+        head, rest = _split_type_head(keyword(n, "DEFSCHEMA"), k, self)
+        opts = [x for x in rest if isinstance(x, Tree) and x.data == "schema_opt"]
+        # A `:json-case` row is not a column of the field table, so it joins the
+        # head. Where a comment sits among them the whole declaration stacks,
+        # because only `_stack` re-attaches one to the member it was written on.
+        if opts and self.holds_comment(n):
+            return self._stack(head, rest, col, col + 2, 1, n)
+        head += "".join("\n" + " " * (col + 2) + self.flat(o) for o in opts)
+        fields = [x for x in rest if x not in opts]
         return self._table(head, fields, col, lambda f: _field_cells(f, self), n)
 
     def _break_defenum(self, n, k, col):
-        head, cases = _split_type_head("defenum", k, self)
+        head, cases = _split_type_head(keyword(n, "DEFENUM"), k, self)
         return self._table(head, cases, col, lambda c: _case_cells(c, self), n)
 
     def _table(self, head: str, rows: list, col: int, cells, node) -> str:
@@ -604,7 +637,7 @@ class Printer:
         return self._stack(head, rows, col, indent, 1, node)
 
     def _break_defun(self, n, k, col):
-        return self._callable("defun", n, k, col)
+        return self._callable(keyword(n, "DEFUN"), n, k, col)
 
     def _break_defentry(self, n, k, col):
         return self._callable("defentry", n, k, col)
@@ -658,7 +691,9 @@ class Printer:
 
     def _break_match_form(self, n, k, col):
         subj, arms = k[0], k[1:]
-        return self._clauses(f"(match {self.emit(subj, col + 7)}", arms, col, n)
+        word = keyword(n, "MATCH")
+        return self._clauses(f"({word} {self.emit(subj, col + len(word) + 2)}",
+                             arms, col, n)
 
     def _clauses(self, head: str, arms: list, col: int, node) -> str:
         """`match` and `cond` share a shape: a head, then one clause per line.
@@ -739,7 +774,7 @@ class Printer:
         """`:export [a b` with the names filled and aligned under the first."""
         head = str(n.children[0])
         rest = list(n.children[1:])
-        if head not in BRACKETED or not rest:
+        if not bracketed(head) or not rest:
             return self.flat(n)
         acol = col + len(head) + 2
         body, sealed = self._fill(rest, acol)
@@ -795,14 +830,14 @@ def _field_cells(f: Tree, p: Printer) -> list[str]:
     k = kids(f)
     name, ty, doc, opts = k[0], k[1], k[2], k[3:]
     tail = " ".join([p.flat(doc)] + [p.flat(o) for o in opts])
-    return [":field", p.flat(name), p.flat(ty), tail]
+    return [keyword(f, "FIELD_KW"), p.flat(name), p.flat(ty), tail]
 
 
 def _case_cells(c: Tree, p: Printer) -> list[str]:
     k = kids(c)
     name, params, doc = k[0], k[1:-1], k[-1]
     plist = "[" + " ".join(p.flat(x) for x in params) + "]"
-    return [":case", p.flat(name), plist, p.flat(doc)]
+    return [keyword(c, "CASE_KW"), p.flat(name), plist, p.flat(doc)]
 
 
 def _clause_cells(a: Tree, p: Printer) -> list[str]:

@@ -1,5 +1,12 @@
 # ASL Universal Runtime & Ecosystem Compatibility Matrix
+
 ### Cross-Platform WebAssembly, JavaScript Engines, and Python Accelerators
+
+> **Unverified figures.** Every performance number on this page is a projection or a
+> vendor claim, not a measurement this repository can reproduce. `DESIGN.md` §5 requires a
+> published number to be traceable to a gate; these are not, and are kept only as an order
+> of magnitude to design against. `ROADMAP.md` §2 lists the figures that do have a gate,
+> and `bench/token_frames.py` is the shape a claim has to take to earn a place here.
 
 > **"Write once in ASL. Execute seamlessly on Browser, iOS (App Store compliant), Android, Node, Bun, Deno, CPython, PyPy, and Cython."**
 

@@ -1,0 +1,4 @@
+; expect: ref-no-pool
+; A reference with no pool in any enclosing record resolves against nothing.
+; Scope is lexical and decidable from the text alone, so this is decidable too.
+(:data [(:ts 1714829100 :url (:ref 0))])

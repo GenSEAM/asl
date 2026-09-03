@@ -1,9 +1,7 @@
-; A binder inside an imported module must win over a top-level name it collides
-; with. The higher-order case is the sharp one: passing the shadowed name to
-; `map` compiles, type-checks and runs on both targets while calling the wrong
-; function, so only a written-down expected output catches it.
-;
-; run: string_from_shadow() == "7 6 101 102"
+"A binder inside an imported module must win over a top-level name it collides"
+"with. The higher-order case is the sharp one: passing the shadowed name to"
+"`map` compiles, type-checks and runs on both targets while calling the wrong"
+"function, so only a written-down expected output catches it."
 
 (module shadow-demo
   :doc "Reads names an imported module both defines and rebinds."

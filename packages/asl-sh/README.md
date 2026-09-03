@@ -13,15 +13,18 @@
 
 ```lisp
 (module admin/deploy
-  (:import [asl-sh :as sh]))
+  :d "Report on the working tree using the typed process toolkit."
+  :x [main]
+  :i [(core/process :a proc)
+      (core/log :a log)])
 
-(defun ! main [(args (List String))] -> (Result Unit String)
-  ;; Execute safe vector command
-  (match (sh/exec! (sh/cmd "git" ["status" "--short"]))
+(df ! main [(args (List String))] -> (Result Unit IoError)
+  :d "Run `git status --short` and log the outcome."
+  (mt (proc/exec! (proc/cmd "git" (list "status" "--short")))
     ((ok out)
      (if (= (.-exit-code out) 0)
-         (sh/info! "deploy" (concat "Git status clean: " (.-stdout out)))
-         (sh/err!  "deploy" (concat "Git error: " (.-stderr out))))
-     (ok (unit)))
-    ((err e) (err "Command execution failed"))))
+       (log/info! "deploy" (str "git status clean: " (.-stdout out)))
+       (log/err! "deploy" (str "git failed: " (.-stderr out)))))
+    ((err e) (log/err! "deploy" "command execution failed")))
+  (ok ()))
 ```

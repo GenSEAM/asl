@@ -1,0 +1,4 @@
+; expect: envelope-data-kind
+; An envelope merges its shared fields into the ELEMENTS of `:data`, so `:data`
+; must be something with elements: a vector, a row group, or a table.
+(:curr "USD" :env :prod :data 42)

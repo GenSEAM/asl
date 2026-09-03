@@ -1,5 +1,5 @@
-; Search-path companion: it speaks in another module's type, so rule 13 has to
-; be checked against the module that DEFINES a type, not the one naming it.
+"Search-path companion: it speaks in another module's type, so rule 13 has to"
+"be checked against the module that DEFINES a type, not the one naming it."
 
 (module text/report
   :doc "Rendering for shapes declared in another module."

@@ -1,0 +1,12 @@
+; An offload pointer: the compact stand-in a tool returns instead of a 50KB blob.
+; It is an ordinary record. The `(! data/offload …)` spelling it used to carry is
+; a protocol FRAME, and `!` is not a character Core §2 produces; the payload is
+; ASN and the frame around it is docs/AGENTIC_PROTOCOL.md's business.
+;
+; canonical: (:offload "scrape-9481" :summary "Extracted 42 product items. Status 200. Zero parse errors." :size-bytes 54200 :sample [(:sku "A1" :price 24.50) (:sku "A2" :price 12.00)])
+
+(:offload "scrape-9481"
+ :summary "Extracted 42 product items. Status 200. Zero parse errors."
+ :size-bytes 54200
+ :sample [(:sku "A1" :price 24.50)
+          (:sku "A2" :price 12.00)])

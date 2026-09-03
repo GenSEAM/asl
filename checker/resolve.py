@@ -33,6 +33,11 @@ from vocab import (builtins, effectful, parse_signature, signatures,  # noqa: E4
 
 RESERVED = "agentscript-"
 
+# Names that only ever head a call. A special form is not a value either, but the
+# grammar already keeps `let` and `if` out of argument position; a builtin is not
+# so protected, because it is an ordinary IDENT wherever it appears.
+BUILTIN_NAMES = builtins()
+
 # Arity of the built-in union tags, which are constructors and patterns both.
 TAGS = {"some": 1, "none": 0, "ok": 1, "err": 1, "list": 0, "cons": 2, "pair": 2}
 UNIONS = {"Option": {"some", "none"}, "Result": {"ok", "err"}, "List": {"list", "cons"}}
@@ -340,10 +345,10 @@ class Checker:
                     self.expr(child, scope)
             self.effect_ok.pop()
 
-    def expr(self, node: Tree, scope: set[str]) -> None:
+    def expr(self, node: Tree, scope: set[str], value: bool = True) -> None:
         child = node.children[0]
         if isinstance(child, Token):
-            self.name(child, scope)
+            self.name(child, scope, value)
             return
         getattr(self, f"_{child.data}", self._recurse)(child, scope)
 
@@ -357,12 +362,23 @@ class Checker:
             if isinstance(k, Tree):
                 (self.expr if k.data == "expr" else self._recurse)(k, scope)
 
-    def name(self, token: Token, scope: set[str]) -> None:
+    def name(self, token: Token, scope: set[str], value: bool = True) -> None:
         text = str(token)
         if token.type == "QUALIFIED" or text.startswith(RESERVED):
             return                            # rules 9 and 7 own these
         if token.type in ("IDENT", "OPERATOR") and text not in scope | self.globals:
             self.report("rule-2", f"{text} is not defined", token)
+            return
+        if value and text not in scope and text in BUILTIN_NAMES:
+            # §6 gives a builtin a type, not a value: Core has no first-class
+            # reference to one, and `fn` is how a builtin reaches a higher-order
+            # position. Nothing rejected this, and nothing had to: `(== a 0.0)`
+            # lexes as `=` applied to `=`, `a` and `0.0`, which typed clean and
+            # lowered to `_agentscript.eq(=, a)` and to `(= == a.clone())` —
+            # neither of which is a program in its own target.
+            self.report("builtin-reference",
+                        f"{text} is a builtin, not a value; wrap it in an fn to pass it",
+                        token)
 
     # -- forms --
 
@@ -376,9 +392,10 @@ class Checker:
         inner = head.children[0]
         self.effect_rule(inner, args, node)
         if not (isinstance(inner, Token) and inner.type in ("IDENT", "QUALIFIED")):
-            self.expr(head, scope)
+            # A call's head is the one place a builtin name is not a value.
+            self.expr(head, scope, value=False)
             return
-        self.name(inner, scope)
+        self.name(inner, scope, value=False)
         callee = str(inner)
         if callee in scope:
             return                            # a lambda in a binding; arity is a type-layer fact
@@ -393,9 +410,13 @@ class Checker:
         the callee's parameters, and rule 9 has already established the member is
         public.
 
-        Builtin arity is deliberately absent here: `list` is variadic as a
-        constructor and nullary as a pattern, and telling them apart needs the
-        real signatures the type layer reads."""
+        Builtin arity comes from §6's declared signature. It was left out because
+        `list` is variadic as a constructor and nullary as a pattern — but a
+        pattern never reaches this method, so only the variadic case has to be
+        excused, and excusing all of them cost a silent wrong answer: `(and a b c)`
+        checked clean and lowered to `(a and b)`, dropping `c` with nothing said.
+        Six clauses of `is-symbol-char` in the self-hosted lexer never ran for
+        exactly that reason."""
         alias, sep, member = callee.partition("/")
         if sep:
             target = self.loader.load(self.mod.imports.get(alias, ""))
@@ -409,7 +430,13 @@ class Checker:
         if callee in self.mod.funs:
             return len(self.mod.funs[callee].params)
         params = self.mod.case_params(callee)
-        return None if params is None else len(params)
+        if params is not None:
+            return len(params)
+        sig = signatures().get(callee)
+        if sig is None:
+            return None
+        declared, variadic, _ = parse_signature(sig)
+        return None if variadic else len(declared)
 
     def effect_rule(self, inner, args, node: Tree) -> None:
         """A call is effectful when its callee is, or when an effectful lambda is

@@ -1,196 +1,311 @@
 # AgentScript Data Representation & Edge-Case Coverage Matrix
 
-> **Universal Coverage Guarantee**: This normative specification proves that AgentScript Notation (ASN) and the S-Expression AST deterministically handle every real-world data shape, edge case, and failure mode with **zero token bloat** and **strict single-token hygiene**.
+> **Advisory.** This document is normative for nothing. [`ASN_SPEC.md`](ASN_SPEC.md) defines ASN;
+> this page illustrates it, one real-world data shape at a time. Where the two disagree, the
+> specification is right and this page is a bug.
+>
+> Every example below is a document `grammar/asn.lark` accepts and
+> `packages/asl-codec` reads. `grammar/validate_asn.py` parses each one on every run, so an example
+> cannot rot into a form no reader takes — which is what happened to the previous version of this
+> page, where roughly a dozen constructs parsed under neither grammar.
+>
+> Every percentage is a figure `bench/asn_tokens.py` counts under `cl100k_base`, locked in
+> `bench/asn_tokens.lock`. The version of this page that asserted -82%, -75%, -70%, -60%, -50%,
+> -45% and -99% had measured none of them, and the real numbers are roughly half the claimed ones.
 
 ---
 
-## 1. Full Taxonomy of Data Cases
+## 1. Taxonomy of data cases
 
-| # | Data Case | Legacy JSON Failure Mode | ASN Native Representation | Token Efficiency |
+| # | Data case | JSON failure mode | ASN representation | Measured |
 |---|---|---|---|---|
-| **01** | **Flat Homogeneous Records** | Key names repeated on every object | `(Item [1 "SSD" 89.99] [2 "RAM" 129.50])` | **-82% tokens** |
-| **02** | **Sparse / Nullable Fields** | Missing keys shift positional arrays | Nil sentinel `_` or sparse tail overrides `(:promo "X")` | **-75% tokens** |
-| **03** | **Polymorphic / Mixed Collections** | Disjoint unions require bloated `{type, data}` | Tagged Variant Constructors: `[(User "A") (Bot "B")]` | **-70% tokens** |
-| **04** | **Deep Recursive Trees** | Heavy quote escaping & bracket nesting | Native balanced S-expressions: `(Node :div [(Node :p "text")])` | **-60% tokens** |
-| **05** | **Dynamic Key Dictionaries (Maps)** | Heavy quotes on every key | Keyword maps `{:k1 v1 :k2 v2}` or pairs `[("k.1" v1)]` | **-45% tokens** |
-| **06** | **Large Binary & Raw Blobs** | Context window exhaustion (>100KB Base64) | Offload Pointers: `(! data/offload :id "b1" :summary "...")` | **-99% tokens** |
-| **07** | **Multiline Code with Quotes** | Broken parser from unescaped quotes `\"` | Multi-line raw strings: `#"""SELECT * FROM "users""""#` | **Zero parse errors** |
-| **08** | **Chunked Real-Time Streams** | Unclosed `[` breaks `JSON.parse()` | Independent balanced chunks: `(:chunk (Item [1 :ok]))` | **100% streaming-safe** |
-| **09** | **Matrices & Numeric Tensors** | Comma bloat doubles token count | Comma-free vectors: `[[1.0 0.0] [0.0 1.0]]` | **-50% tokens** |
-| **10** | **Circular References & Graphs** | `TypeError: Converting circular structure` | Explicit ID-Ref anchors: `[(& 1 :to [2]) (& 2 :to [1])]` | **Infinite-loop safe** |
-| **11** | **Schema Evolution & Drift** | Missing keys crash static decoders | Dynamic header mapping + default fallbacks (`:dflt`) | **100% backward-compat** |
-| **12** | **Failure & Error Signals** | Inconsistent HTTP error shapes | Native algebraic results: `(! ack :err :code :msg "...")` | **Instant failure check** |
+| **01** | Flat homogeneous records | Key names repeated on every object | Schema-grouped rows `(Item [1 "SSD-1TB" 89.99])` | **-58%** at 100 rows |
+| **02** | Sparse / nullable fields | Missing keys shift positional arrays | Nil sentinel `_`, or a sparse tail override `(:promo "X")` | — |
+| **03** | Polymorphic collections | Disjoint unions need a `{type, data}` wrapper | Union case values `[(user 1 "Alice") (bot 2 "code-bot")]` | — |
+| **04** | Deep recursive trees | Quote escaping and bracket nesting | Balanced S-expressions, zero escapes | — |
+| **05** | Dynamic key dictionaries | Quotes on every key | `{:k1 v1}`, or `{("dotted.key" v)}` for keys a keyword cannot spell | **-25%** on a four-element vector |
+| **06** | Large binary blobs | Context exhaustion on base64 | An offload pointer record, the blob left on disk | — |
+| **07** | Multi-line code with quotes | Escaping | Core §2's five escapes, or a vector of lines | — |
+| **08** | Chunked real-time streams | An unclosed `[` breaks `JSON.parse` | Every document is balanced; framing is the protocol's | — |
+| **09** | Matrices and tensors | Comma bloat | Whitespace-delimited nested vectors | **-13%** on a 3×3 |
+| **10** | Circular references | `TypeError: Converting circular structure` | `:pool` entries named by `(:ref N)` | — |
+| **11** | Schema evolution | Missing keys crash static decoders | Ad-hoc tables map by header name; absent fields take `:default` | — |
+| **12** | Failure signals | Inconsistent HTTP error shapes | Protocol frames, not ASN — see [`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md) | — |
+
+A dash means the case is about correctness, not size. Cases 02, 03, 04, 07, 10 and 11 exist because
+JSON gets them *wrong* or unsafe, and no honest percentage attaches to "does not crash".
 
 ---
 
-## 2. Concrete Syntax & Behavior by Case
+## 2. Concrete syntax and behaviour, case by case
 
-### Case 01: Flat Homogeneous Records
-When transferring tabular records (e.g. database query results, API responses):
+### Case 01 — flat homogeneous records
+
+The schema is declared once, in AgentScript:
+
 ```lisp
-;; Schema defined once in scope:
 (dfs Item
-  (:f id Int64 "ID")
-  (:f sku String "SKU")
-  (:f price Float64 "Price")
-  (:f status String "Status"))
-
-;; Payload: Constructor name (1 token) + pure positional rows
-(Item
-  [1 "SSD-1TB" 89.99 :in-stock]
-  [2 "RAM-32GB" 129.50 :in-stock]
-  [3 "GPU-4070" 549.00 :low-stock])
+  (:f id     Int64   "ID")
+  (:f sku    String  "SKU")
+  (:f price  Float64 "Price")
+  (:f status String  "Stock status"))
 ```
+
+The payload names the constructor once and writes bare positional rows:
+
+```asn
+(Item
+  [1 "SSD-1TB"  89.99 "in-stock"]
+  [2 "RAM-32GB" 129.50 "in-stock"]
+  [3 "GPU-4070" 549.00 "low-stock"])
+```
+
+`status` is declared `String`, so the column carries `"in-stock"` and not `:in-stock`. Core §3
+declares no keyword type, so a keyword in a schema-bound column has nothing to bind to
+(`ASN_SPEC.md` §3.2). Measured in context this costs one token per cell — ` :in-stock` is three and
+` "in-stock"` is four — and the rule is kept for type soundness, not for price.
+
+Element *i* of a row fills field *i* in **declaration order**. A short row takes each missing
+field's `:default`; a field with no `:default` and no value is an error, not a silent nil.
+
+**Measured:** 100 rows of four fields cost 3,802 tokens as pretty-printed JSON and 1,601 as a row
+group — 58% fewer. Against ASN records with the keys repeated (2,600 tokens) the grouping saves
+38%.
 
 ---
 
-### Case 02: Sparse / Optional / Nullable Fields
-When records contain missing or optional values:
-```lisp
-;; Nil Sentinel (_) for known schema optional fields:
+### Case 02 — sparse, optional and nullable fields
+
+`_` is nil. It denotes `(none)` where the field's declared type is an `(Option T)`, and is an error
+where it is not — a non-optional field has no nil inhabitant, so accepting one would build a value
+the checker says cannot exist.
+
+```asn
 (Item
-  [1 "SSD-1TB" 89.99 _]
+  [1 "SSD-1TB"  89.99 _]
   [2 "RAM-32GB" 129.50 15.00])
-
-;; Sparse tail overrides for rare properties:
-(Item
-  [1 "SSD-1TB" 89.99]
-  [2 "RAM-32GB" 129.50 (:special-promo "HOLIDAY20")])
 ```
+
+A field carried by two per cent of rows does not belong in the schema. It is written as a trailing
+record, past the last positional column:
+
+```asn
+(Promo
+  [1 "SSD-1TB"  89.99]
+  [2 "RAM-32GB" 129.50 (:promo "HOLIDAY20")])
+```
+
+`Promo` declares three fields, so the record at index 3 is an override. **Position decides, not
+shape**: below index 3 the same record would be an ordinary positional value, which is what a row
+must be able to say when a field's own type is a record.
 
 ---
 
-### Case 03: Polymorphic / Heterogeneous Collections
-When a collection contains multiple disparate types (Sum Types / Tagged Variants):
-```lisp
-;; Stream of mixed event shapes:
-[(UserEvent :login "alice" 1714829100)
- (BotAction  :exec "git pull" :t-out 5000)
- (SysAlert   :mem-warn :lvl-3 "92% used")]
+### Case 03 — polymorphic collections
+
+A union case is written exactly as Core §4.4 writes it: kebab-case head, positional arguments. The
+collection is self-describing without a wrapper on every item.
+
+```asn
+[(user 1 "Alice" :admin)
+ (bot 2 "code-bot" 1200)
+ (deploy-event :success 1714829100)]
 ```
+
+A PascalCase head is a *record* constructor and takes `:key value` pairs instead. The two are told
+apart by the head's case, never by a tag field.
 
 ---
 
-### Case 04: Deep Recursive Trees (AST, DOM, Org-Charts)
-```lisp
-(Element :html []
-  (Element :head []
-    (Element :title [] "Dashboard"))
-  (Element :body [(:class "dark-mode")]
-    (Element :main []
-      (Element :h1 [] "Telemetry")
-      (Element :p [] "Status: Online"))))
+### Case 04 — deep recursive trees
+
+```asn
+(Element :tag :html :kids
+  [(Element :tag :head :kids
+     [(Element :tag :title :text "Dashboard")])
+   (Element :tag :body :class "dark-mode" :kids
+     [(Element :tag :h1 :text "Telemetry")
+      (Element :tag :p  :text "Status: Online")])])
 ```
-*Zero escape characters. Parsing is identical to standard S-expressions.*
+
+Not one escape character, at any depth.
 
 ---
 
-### Case 05: Dynamic Key-Value Maps
-```lisp
-;; Known keyword keys (Single-token):
+### Case 05 — dynamic key-value maps
+
+```asn
 {:theme "dark" :font "mono" :retries 3}
+```
 
-;; Dynamic string keys with dots or non-identifier characters:
+Keys a keyword cannot spell — a dotted path, an integer, a boolean — use the parenthesised entry:
+
+```asn
 {("system.memory.max" 16384)
  ("system.cpu.cores" 8)
- ("custom.env.flag" true)}
+ (:custom-env-flag true)}
 ```
+
+A float may not be a map key. Core §3 forbids `Float64` as a `(Map K V)` key because its equality
+is IEEE-754, and a `NaN` key could never be looked up again; the grammar refuses one rather than
+leaving it to a checker.
+
+**Measured:** `["alpha", "beta", "gamma", "delta"]` is 12 tokens and `[:alpha :beta :gamma :delta]`
+is 9 — 25% fewer, not the 45% this page used to claim.
 
 ---
 
-### Case 06: Heavy Binary Payloads & Large Blobs
-```lisp
-;; Inline small hash / crypto key:
-(:algo :blake3 :hash (bytes/hex "4f8a12e3...b7"))
+### Case 06 — heavy binary payloads
 
-;; Large payload (>2KB) offloaded to companion memory:
-(! data/offload
-  :id "blob-8941"
-  :summary "10MB raw audio WAV. Sample rate 44.1kHz."
-  :size-bytes 10485760
-  :sha256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+Small digests go inline:
+
+```asn
+(:algo :blake3 :hash "4f8a12e3b7")
 ```
+
+Anything large is left where it is and named:
+
+```asn
+(:offload "blob-8941"
+ :summary "10MB raw audio WAV, 44.1kHz."
+ :size-bytes 10485760
+ :sha256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+```
+
+This is an ordinary record. The `(! data/offload …)` spelling this page used to carry is a
+protocol **frame**, and `!` is not a character Core §2 produces; the payload is ASN and the frame
+around it belongs to [`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md).
+
+The old "-99% tokens" figure compared a pointer with a blob nobody was ever going to send, which
+makes it a statement about the offloading idea rather than about the notation. It is deleted.
 
 ---
 
-### Case 07: Multiline Text & Code Blocks with Quotes
-```lisp
-(CodeSnippet :lang :python :body
-#"""
-def query_users(db):
-    cursor = db.cursor()
-    cursor.execute('SELECT "id", "name" FROM users WHERE status = "active"')
-    return cursor.fetchall()
-"""#)
+### Case 07 — multi-line text and code
+
+```asn
+(:lang :python
+ :body "def query_users(db):\n    cursor = db.cursor()\n    cursor.execute('SELECT \"id\" FROM users')\n    return cursor.fetchall()")
 ```
-*No backslash escapes (`\"`) that confuse LLM tokenizers.*
+
+Or, where the escapes get dense, a vector of lines the consumer joins:
+
+```asn
+(:lang :python
+ :lines ["def query_users(db):"
+         "    cursor = db.cursor()"
+         "    return cursor.fetchall()"])
+```
+
+There is no `#"""…"""#` raw string. `#` is a character the language lexer cannot produce, and a
+data format that adds one has forked the lexer it claims to share (`ASN_SPEC.md` §12.2).
 
 ---
 
-### Case 08: Chunked Streaming (SSE & HTTP Chunked)
-```lisp
-;; Frame 1
+### Case 08 — chunked streaming
+
+Every ASN document is balanced, so a stream severed mid-flight leaves every document that already
+arrived readable. That is a consequence of the value grammar, not a construct in it.
+
+A chunk record is an ordinary record whose key happens to be `:chunk`:
+
+```asn
 (:chunk (SensorReading [1 22.4] [2 22.8]))
-
-;; Frame 2
-(:chunk (SensorReading [3 23.1] [4 22.9]))
-
-;; Termination frame
-(:end :status :ok)
 ```
-*Every chunk is completely balanced. A severed connection preserves all previous chunks.*
+
+ASN gives it no meaning. What delimits one chunk from the next, and what ends a stream, is framing,
+and framing is [`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md)'s.
 
 ---
 
-### Case 09: Numeric Matrices & Tensors
-```lisp
-;; 3x3 Transformation Matrix (Zero commas, whitespace delimited)
-[[1.0  0.0  0.0]
- [0.0  1.0  0.0]
- [0.0  0.0  1.0]]
+### Case 09 — numeric matrices and tensors
+
+```asn
+[[1.0 0.0 0.0]
+ [0.0 1.0 0.0]
+ [0.0 0.0 1.0]]
 ```
+
+**Measured:** the JSON spelling of this matrix is 45 tokens and the ASN spelling is 39 — 13% fewer.
+The old "-50%" assumed a comma costs a token everywhere; in `cl100k_base` a comma usually merges
+with the digit beside it.
 
 ---
 
-### Case 10: Circular References & Graph Topologies
-```lisp
-;; Anchored nodes with explicit identity references (& and :ref)
-[(& 1 :name "Orchestrator" :peers [(:ref 2)])
- (& 2 :name "Worker"       :peers [(:ref 1)])]
+### Case 10 — circular references and graphs
+
+One mechanism serves deduplication and identity alike. Values are written once in `:pool` and named
+by index; two `(:ref 0)` occurrences denote *the same* entry, not two equal copies.
+
+```asn
+(:pool [(:name "Orchestrator" :peers [(:ref 1)])
+        (:name "Worker"       :peers [(:ref 0)])]
+ :data [(:ref 0) (:ref 1)])
 ```
-*Prevents infinite recursion in serialization and deserialization.*
+
+A reference may precede the entry it names — unavoidable in a cycle — because resolution is by
+index and not by document order. A dangling index is a decode error and never nil.
+
+The `(& 1 :name "x")` anchor this page used to specify is **deleted**, not respelled: `&` is in no
+Core §2 token, and an anchor was never a second idea (`ASN_SPEC.md` §8.1).
+
+**Measured:** on three events sharing a URL and a context map, pooling saves 12% (121 tokens to
+107). The pool pays on repetition, so the figure grows with the payload; it is not a constant.
 
 ---
 
-### Case 11: Schema Drift & Backward Compatibility
-```lisp
-;; Dynamic Header Table:
+### Case 11 — schema drift and compatibility
+
+```asn
 ([:id :sku :price :currency]
- [[1 "SSD-1TB" 89.99 "USD"]
+ [[1 "SSD-1TB"  89.99 "USD"]
   [2 "RAM-32GB" 129.50 "USD"]])
+```
 
-;; Rule 1: Consumer lacking :currency simply drops index 3.
-;; Rule 2: Consumer expecting :rating assigns :rating :dflt.
+- A column the consumer does not know is **ignored**, so a producer that adds a field does not
+  break an older consumer.
+- A field the consumer expects and the header omits takes its `:default` from the `defschema`. No
+  `:default` declared is an error.
+- A row whose length differs from the header's is an error. A table is a rectangle, and `_` is
+  already there for a missing cell.
+
+The default comes from `:default`. There is no `:dflt`: measured in context, ` :dflt` costs
+**three** tokens against ` :default`'s two, so the abbreviation is a regression as well as a second
+name for one option (`ASN_SPEC.md` §13).
+
+---
+
+### Case 12 — errors and failure modes
+
+An error is a **frame**, not a value, and belongs to [`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md).
+Its payload is ASN:
+
+```asn
+(:status :err
+ :code :permission-denied
+ :msg "Path '/etc/shadow' is outside the jailed workspace"
+ :retry false)
 ```
 
 ---
 
-### Case 12: Errors & Failure Modes
-```lisp
-;; Structured error response:
-(! ack
-  :status :err
-  :code :permission-denied
-  :msg "Path '/etc/shadow' is outside jailed workspace"
-  :retry false)
-```
+## 3. What the guarantees actually are
 
----
+The four properties this page used to call invariants, restated as what a gate enforces:
 
-## 3. Completeness Verification
+1. **One-pass parsing.** Every parenthesised form is decided by its first token, and a row group is
+   told from a named construction by the second. No rule anywhere backtracks —
+   `grammar/asn.lark` is the executable statement of that.
+2. **Balanced documents.** A document is exactly one balanced value, which is what makes a severed
+   stream lose only the document in flight.
+3. **Termination on a cycle.** The reader does not substitute `(:ref N)` at all; resolution is a
+   separate, depth-bounded operation with a defined failure. Nothing loops.
+4. **A closed error set.** Every failure a decoder may report is one of the codes `ASN_SPEC.md` §11
+   names, and `packages/asl-codec/tests/test_asn.py` fails on a code outside that set.
 
-Every case in this matrix satisfies the **Four Invariants of AgentScript**:
-1. **Bounded Context**: No case requires unbounded token expansion.
-2. **Single-Token Hygiene**: All structural syntax keys resolve to 1 BPE token.
-3. **One-Pass Balanced Parsing**: Deterministic $O(N)$ linear parse time with zero regex backtrack.
-4. **Memory Safety**: No circular deserializer crashes, no unclosed stream panics.
+**Single-token hygiene is not among them.** It was asserted here and it is not true. `:pool`,
+`:ref` and `:default` are two tokens each, and abbreviating an identifier saves no tokens at all:
+across all 36 fixtures in `grammar/corpus/valid`, the verbose and Nano projections cost an
+identical 15,931 tokens (`bench/token_projection.py`). What ASN actually removes is **structure** —
+quotes around keys, commas, braces, and a field name repeated on every row — and that is what every
+measured figure above is measuring.

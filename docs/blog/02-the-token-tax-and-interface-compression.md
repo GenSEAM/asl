@@ -14,7 +14,7 @@ In ASL, every module cleanly separates public interface definitions (`defschema`
 The ASL toolchain includes an AST compressor that strips private bodies while preserving complete type contracts:
 
 ```lisp
-; Compressed Interface (82 tokens vs 390 tokens in original file)
+"Compressed Interface (82 tokens vs 390 tokens in original file)"
 (module store/orders
   :export [Order OrderStatus calculate-total]
   :doc "Order management and tax calculations")
@@ -28,8 +28,13 @@ The ASL toolchain includes an AST compressor that strips private bodies while pr
   (:field total Float64 "Net price"))
 
 (defun calculate-total [(items (List Order)) (tax-rate Float64)] -> Float64
-  :doc "Sums order items with regional tax applied")
+  :doc "Sums order items with regional tax applied"
+  0.0)
 ```
+
+The stub body is not decoration. §4.2 requires at least one body expression, so a compressed
+interface that dropped the body would not be a program — and for a while the compressor emitted
+exactly that.
 
 ---
 

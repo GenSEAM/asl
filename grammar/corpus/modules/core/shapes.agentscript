@@ -1,6 +1,6 @@
-; Search-path companion: the module whose type the importing fixtures name.
-; Its export list carries a type beside a function, which is what the whole
-; boundary rests on.
+"Search-path companion: the module whose type the importing fixtures name."
+"Its export list carries a type beside a function, which is what the whole"
+"boundary rests on."
 
 (module core/shapes
   :doc "Plane figures and their measurements."

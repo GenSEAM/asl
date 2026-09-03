@@ -1,0 +1,1 @@
+transform("aXbXc") == "axbxc|AXBXC|cXbXa|a-b-c|aXbXc|n=5|none|0.0"

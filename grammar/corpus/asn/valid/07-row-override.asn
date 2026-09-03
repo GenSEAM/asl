@@ -1,0 +1,11 @@
+; A sparse tail override. `Promo` declares three fields, so the record at index 3
+; sits past the last positional column and supplies a rare field by name without
+; shifting anything. Position decides and not shape: below index 3 the same
+; record would be an ordinary positional value, which is what a row must be able
+; to say when a field's own type is a record.
+;
+; canonical: (Promo [1 "SSD-1TB" 89.99] [2 "RAM-32GB" 129.5 (:promo "HOLIDAY20")])
+
+(Promo
+  [1 "SSD-1TB"  89.99]
+  [2 "RAM-32GB" 129.5 (:promo "HOLIDAY20")])

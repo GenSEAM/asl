@@ -1,36 +1,44 @@
 #!/usr/bin/env bash
+# The verification chain. ROADMAP.md's state table quotes this file's result, so
+# a gate that is claimed there and not run here makes the claim worthless — which
+# was the case: the table said fifteen gates and this hook ran six.
 set -e
 
-echo "=== [ASL Pre-Commit Gates] Running Verification Chain ==="
-
-# Set standard PATH
 export PATH="/usr/local/bin:$PATH"
-
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
 
 PYTHON=".venv/bin/python"
-if [ ! -f "$PYTHON" ]; then
-    PYTHON="python3"
-fi
+[ -f "$PYTHON" ] || PYTHON="python3"
 
-echo "--> 1/5: Grammar Conformance & Parity (validate.py)..."
-$PYTHON grammar/validate.py
+GATES=(
+  "Grammar conformance and parity|$PYTHON grammar/validate.py"
+  "Closure and executed vocabulary|$PYTHON grammar/closure_audit.py"
+  "Generated artifacts are current|$PYTHON prelude/generate.py --check"
+  "Semantic checker, corpus and packages|$PYTHON checker/gate.py"
+  "Documentation examples parse|$PYTHON tools/doc_examples.py --quiet"
+  "Published token counts|$PYTHON bench/token_frames.py --check"
+  "Projection token measurement|$PYTHON bench/token_projection.py --check"
+  "Corpus transpiles and compiles|$PYTHON backend/check_corpus.py"
+  "Tier-A monomorphism probes|$PYTHON backend/monomorphism.py"
+  "Cross-target differential|$PYTHON backend/differential.py"
+  "Unit tests|$PYTHON -m pytest backend/tests bench/algo checker/tests tools/tests -q"
+  "Self-hosted parser tests|$PYTHON -m pytest packages/asl-parser/tests -q"
+  "ASL lint|$PYTHON agentscript lint packages"
+  "AST clone detection|$PYTHON agentscript clone-check packages"
+  "Design token contrast|( cd web && node scripts/check-tokens.mjs >/dev/null )"
+  "Web bundle and deploy pre-flight|$PYTHON tools/deploy_check.py"
+)
 
-echo "--> 2/5: Closure & Executed Vocabulary Audit (closure_audit.py)..."
-$PYTHON grammar/closure_audit.py
+echo "=== [ASL Pre-Commit Gates] Running Verification Chain ==="
+total=${#GATES[@]}
+i=0
+for entry in "${GATES[@]}"; do
+  i=$((i + 1))
+  name="${entry%%|*}"
+  cmd="${entry#*|}"
+  echo "--> ${i}/${total}: ${name}"
+  eval "$cmd"
+done
 
-echo "--> 3/5: Prelude Code Generator Check (prelude/generate.py --check)..."
-$PYTHON prelude/generate.py --check
-
-echo "--> 4/5: Semantic Type & Scope Checker Gate (checker/gate.py)..."
-$PYTHON checker/gate.py
-
-echo "--> 5/6: Design Token Contrast & Layer Separation (web/scripts/check-tokens.mjs)..."
-( cd web && node scripts/check-tokens.mjs > /dev/null )
-
-echo "--> 6/6: Web Bundle & Deployment Pre-Flight (tools/deploy_check.py)..."
-$PYTHON tools/deploy_check.py
-
-echo "=== [ASL Pre-Commit Gates] ALL GATES PASSED CLEANLY ==="
-exit 0
+echo "=== [ASL Pre-Commit Gates] ALL ${total} GATES PASSED CLEANLY ==="

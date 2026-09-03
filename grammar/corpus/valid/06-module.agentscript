@@ -1,5 +1,4 @@
-; run: shout("hi") == "HI!"
-; v0.2: module header, type parameters, closed unions, keyed collection.
+"v0.2: module header, type parameters, closed unions, keyed collection."
 
 (module text/casing
   :doc "Case-conversion and tallying helpers for report rendering."

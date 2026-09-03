@@ -1,11 +1,15 @@
 """Phase-gate test: every real package ``.asl`` source parses through the
 self-hosted parser.
 
-This is the only test that drives ``native_render`` over the real package
-sources. The self-hosted lexer used to recurse once per character, which
-overflowed CPython's recursion limit on real files (the 20-file red list was
-recorded in ``.plans/phase-4-scalability/``). It now scans iteratively, so all
-37 files must render non-empty verbose output.
+The self-hosted lexer used to recurse once per character, which overflowed
+CPython's recursion limit on real files (the 20-file red list was recorded in
+``.plans/phase-4-scalability/``). It now scans iteratively, and since Phase 6 so
+do the reader and the renderer, so every file must render non-empty verbose
+output whatever its size or nesting depth.
+
+This asserts only that the parser accepts the sources.
+``tools/tests/test_native_parity.py`` is what checks the render against the
+reference grammar, and what checks the sources the parser must *reject*.
 """
 
 from pathlib import Path
@@ -25,7 +29,7 @@ def _package_files():
     return sorted((ROOT / "packages").rglob("*.asl"))
 
 
-ASL_FILES = _package_files()  # 37 files measured with `find packages -name '*.asl' | wc -l`
+ASL_FILES = _package_files()
 
 
 def test_packages_walk_finds_sources():

@@ -1,0 +1,264 @@
+{
+  "encoding": "cl100k_base",
+  "fixtures": 36,
+  "verbose_tokens": 14771,
+  "nano_tokens": 14771,
+  "verbose_bytes": 55696,
+  "nano_bytes": 53612,
+  "token_saving_pct": 0.0,
+  "byte_saving_pct": 3.74,
+  "rows": [
+    {
+      "fixture": "01-basics.agentscript",
+      "verbose_tokens": 164,
+      "nano_tokens": 164,
+      "verbose_bytes": 519,
+      "nano_bytes": 469
+    },
+    {
+      "fixture": "02-match.agentscript",
+      "verbose_tokens": 214,
+      "nano_tokens": 214,
+      "verbose_bytes": 666,
+      "nano_bytes": 610
+    },
+    {
+      "fixture": "03-strings.agentscript",
+      "verbose_tokens": 249,
+      "nano_tokens": 249,
+      "verbose_bytes": 888,
+      "nano_bytes": 828
+    },
+    {
+      "fixture": "04-longest-run.agentscript",
+      "verbose_tokens": 188,
+      "nano_tokens": 188,
+      "verbose_bytes": 609,
+      "nano_bytes": 571
+    },
+    {
+      "fixture": "05-constructors.agentscript",
+      "verbose_tokens": 262,
+      "nano_tokens": 262,
+      "verbose_bytes": 854,
+      "nano_bytes": 787
+    },
+    {
+      "fixture": "06-module.agentscript",
+      "verbose_tokens": 418,
+      "nano_tokens": 418,
+      "verbose_bytes": 1509,
+      "nano_bytes": 1394
+    },
+    {
+      "fixture": "07-lambda-elision.agentscript",
+      "verbose_tokens": 259,
+      "nano_tokens": 259,
+      "verbose_bytes": 932,
+      "nano_bytes": 883
+    },
+    {
+      "fixture": "08-io.agentscript",
+      "verbose_tokens": 383,
+      "nano_tokens": 383,
+      "verbose_bytes": 1574,
+      "nano_bytes": 1528
+    },
+    {
+      "fixture": "09-imported-types.agentscript",
+      "verbose_tokens": 174,
+      "nano_tokens": 174,
+      "verbose_bytes": 632,
+      "nano_bytes": 603
+    },
+    {
+      "fixture": "10-imported-generic-types.agentscript",
+      "verbose_tokens": 161,
+      "nano_tokens": 161,
+      "verbose_bytes": 570,
+      "nano_bytes": 538
+    },
+    {
+      "fixture": "11-name-coexistence.agentscript",
+      "verbose_tokens": 285,
+      "nano_tokens": 285,
+      "verbose_bytes": 1103,
+      "nano_bytes": 1047
+    },
+    {
+      "fixture": "12-transitive-use.agentscript",
+      "verbose_tokens": 116,
+      "nano_tokens": 116,
+      "verbose_bytes": 478,
+      "nano_bytes": 457
+    },
+    {
+      "fixture": "13-module-program.agentscript",
+      "verbose_tokens": 245,
+      "nano_tokens": 245,
+      "verbose_bytes": 968,
+      "nano_bytes": 935
+    },
+    {
+      "fixture": "14-sequenced-bodies.agentscript",
+      "verbose_tokens": 786,
+      "nano_tokens": 786,
+      "verbose_bytes": 2619,
+      "nano_bytes": 2537
+    },
+    {
+      "fixture": "15-shadowed-binders.agentscript",
+      "verbose_tokens": 253,
+      "nano_tokens": 253,
+      "verbose_bytes": 992,
+      "nano_bytes": 958
+    },
+    {
+      "fixture": "16-recursive-schema.agentscript",
+      "verbose_tokens": 248,
+      "nano_tokens": 248,
+      "verbose_bytes": 833,
+      "nano_bytes": 788
+    },
+    {
+      "fixture": "17-nested-cons.agentscript",
+      "verbose_tokens": 184,
+      "nano_tokens": 184,
+      "verbose_bytes": 664,
+      "nano_bytes": 640
+    },
+    {
+      "fixture": "18-pattern-binders.agentscript",
+      "verbose_tokens": 136,
+      "nano_tokens": 136,
+      "verbose_bytes": 547,
+      "nano_bytes": 533
+    },
+    {
+      "fixture": "19-io-errors.agentscript",
+      "verbose_tokens": 591,
+      "nano_tokens": 591,
+      "verbose_bytes": 2384,
+      "nano_bytes": 2333
+    },
+    {
+      "fixture": "20-option-result-ctors.agentscript",
+      "verbose_tokens": 350,
+      "nano_tokens": 350,
+      "verbose_bytes": 1215,
+      "nano_bytes": 1166
+    },
+    {
+      "fixture": "21-option-result-combinators.agentscript",
+      "verbose_tokens": 313,
+      "nano_tokens": 313,
+      "verbose_bytes": 1189,
+      "nano_bytes": 1166
+    },
+    {
+      "fixture": "22-boolean-algebra.agentscript",
+      "verbose_tokens": 267,
+      "nano_tokens": 267,
+      "verbose_bytes": 903,
+      "nano_bytes": 874
+    },
+    {
+      "fixture": "23-numeric.agentscript",
+      "verbose_tokens": 1625,
+      "nano_tokens": 1625,
+      "verbose_bytes": 6261,
+      "nano_bytes": 6094
+    },
+    {
+      "fixture": "24-list-reshaping.agentscript",
+      "verbose_tokens": 538,
+      "nano_tokens": 538,
+      "verbose_bytes": 1882,
+      "nano_bytes": 1804
+    },
+    {
+      "fixture": "25-list-aggregation.agentscript",
+      "verbose_tokens": 1094,
+      "nano_tokens": 1094,
+      "verbose_bytes": 4188,
+      "nano_bytes": 4056
+    },
+    {
+      "fixture": "26-map-lifecycle.agentscript",
+      "verbose_tokens": 366,
+      "nano_tokens": 366,
+      "verbose_bytes": 1401,
+      "nano_bytes": 1346
+    },
+    {
+      "fixture": "27-string-query.agentscript",
+      "verbose_tokens": 393,
+      "nano_tokens": 393,
+      "verbose_bytes": 1571,
+      "nano_bytes": 1514
+    },
+    {
+      "fixture": "28-string-transforms.agentscript",
+      "verbose_tokens": 293,
+      "nano_tokens": 293,
+      "verbose_bytes": 1234,
+      "nano_bytes": 1203
+    },
+    {
+      "fixture": "29-literals.agentscript",
+      "verbose_tokens": 784,
+      "nano_tokens": 784,
+      "verbose_bytes": 3227,
+      "nano_bytes": 3164
+    },
+    {
+      "fixture": "30-nano-program.agentscript",
+      "verbose_tokens": 500,
+      "nano_tokens": 500,
+      "verbose_bytes": 1846,
+      "nano_bytes": 1772
+    },
+    {
+      "fixture": "30-nano-projection.agentscript",
+      "verbose_tokens": 1327,
+      "nano_tokens": 1327,
+      "verbose_bytes": 4902,
+      "nano_bytes": 4701
+    },
+    {
+      "fixture": "31-alias-keys.agentscript",
+      "verbose_tokens": 422,
+      "nano_tokens": 422,
+      "verbose_bytes": 1598,
+      "nano_bytes": 1533
+    },
+    {
+      "fixture": "32-json-case.agentscript",
+      "verbose_tokens": 235,
+      "nano_tokens": 235,
+      "verbose_bytes": 988,
+      "nano_bytes": 931
+    },
+    {
+      "fixture": "33-notes.agentscript",
+      "verbose_tokens": 296,
+      "nano_tokens": 296,
+      "verbose_bytes": 1212,
+      "nano_bytes": 1183
+    },
+    {
+      "fixture": "34-multiline-program.agentscript",
+      "verbose_tokens": 177,
+      "nano_tokens": 177,
+      "verbose_bytes": 747,
+      "nano_bytes": 724
+    },
+    {
+      "fixture": "34-multiline-strings.agentscript",
+      "verbose_tokens": 475,
+      "nano_tokens": 475,
+      "verbose_bytes": 1991,
+      "nano_bytes": 1942
+    }
+  ]
+}

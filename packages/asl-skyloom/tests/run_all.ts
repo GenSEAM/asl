@@ -16,6 +16,7 @@ const suites = [
   'resilience_test.js',
   'mcp_test.js',
   'nano_enforcement_test.js',
+  'spec_examples_test.js',
 ];
 
 console.log('====================================================');
@@ -38,7 +39,7 @@ for (const suite of suites) {
 
 console.log('\n====================================================');
 if (failed === 0) {
-  console.log('  ALL 5 SKYLOOM TEST SUITES PASSED CLEANLY (100%)    ');
+  console.log(`  ALL ${suites.length} SKYLOOM TEST SUITES PASSED CLEANLY (100%)`);
   console.log('====================================================');
   process.exit(0);
 } else {

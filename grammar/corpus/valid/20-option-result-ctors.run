@@ -1,0 +1,1 @@
+classify("3", "x") == ("pair", "some/ok:3|TFTF", "none/err:x|FTFT")

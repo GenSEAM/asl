@@ -54,7 +54,7 @@ def test_none_return_is_unit():
 
 def test_unmappable_functions_are_reported_not_dropped_silently():
     out = generate()
-    assert "; Not generated, and why:" in out
+    assert '"Not generated, and why:"' in out
     assert "scan_all" in out and "to_arrow" in out
 
 

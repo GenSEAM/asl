@@ -1,6 +1,6 @@
-; expect-only: map-key-order
-; A record is orderable only if every field is. Point holds a Float64, so the
-; Rust lowering derives no Ord for it and BTreeMap<Point, _> does not compile.
+"expect-only: map-key-order"
+"A record is orderable only if every field is. Point holds a Float64, so the"
+"Rust lowering derives no Ord for it and BTreeMap<Point, _> does not compile."
 
 (defschema Point
   (:field x Float64 "Horizontal coordinate")

@@ -1,6 +1,4 @@
-; String builtins, let bindings, try propagation.
-;
-; run: [shout("  hi "), initials("ada lovelace"), parse_pair(" 21 "), evens_below(6), total([1, 2, 3])] == ["HI!", "A.L", ("ok", 42), [0, 2, 4], 6]
+"String builtins, let bindings, try propagation."
 
 (defun shout [(s String)] -> String
   (str (string-upper (string-trim s)) "!"))

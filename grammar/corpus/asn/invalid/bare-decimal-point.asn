@@ -1,0 +1,3 @@
+; Core §3's number rule carries over unchanged: a float is digits, a point,
+; digits, both sides required. `.5` and `1.` are not numbers here either.
+[.5 1.]

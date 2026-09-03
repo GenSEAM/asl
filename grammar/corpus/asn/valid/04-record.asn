@@ -1,0 +1,11 @@
+; An anonymous record: a parenthesised form whose first token is a keyword. Its
+; keys include `:d`, which is the Nano alias for `:doc` in a module header and
+; nothing whatsoever here. ASN has none of the positions §2.1 names, so this is
+; an ordinary field called `d` and no tool may rewrite it.
+;
+; canonical: (:ts 1714829100 :url "https://example.invalid/v2" :d "an ordinary key" :status :ok)
+
+(:ts 1714829100
+ :url "https://example.invalid/v2"
+ :d "an ordinary key"
+ :status :ok)

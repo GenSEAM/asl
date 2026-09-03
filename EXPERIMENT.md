@@ -224,3 +224,31 @@ This adds resolution to the instrument; it does not move the pre-registered gate
 threshold against the Python and JavaScript baselines is unchanged, and no threshold is defined
 over the new stage. The dry-run path gained a third canned sample — one that parses and fails the
 checker — so the new stage is exercised rather than assumed reachable.
+
+### 2026-09-03-a — the I/O blocking dependency is resolved (made BEFORE any results)
+
+No arm has run and no result has been observed. This amendment records that a dependency the
+2026-08-20-b amendment named as blocking has since been met.
+
+That amendment stated: "Core has **no I/O at all** — it is on the deliberate exclusion list. The
+language must gain an I/O surface before any arm can run." **It has.** §6.8 declares nine I/O
+builtins, failures are values of the closed union `IoError`, effects are tracked by a `!` marker on
+the signature (§4.2, §5.7), and a program's entry point is `main` (§4.0). Every backend lowers it,
+and the differential gate compares whole programs on stdout *and* exit status across all six
+targets, including a failing path, so the error mapping each host derives independently is checked
+rather than assumed. PCP `r-56bf`, `d-4533`.
+
+The earlier amendment's text is left as written. Pre-registration means the record of what was
+believed when is not edited afterwards; a later fact goes in a later entry, dated, which is what
+this is.
+
+**What is still blocking, restated so the two are not confused.** The language is no longer the
+constraint. Two things are:
+
+1. **The harness has whole-program mode and no task uses it.** `bench/harness/run.py` still drives
+   an entry function with cases, and `bench/tasks/histogram.json` is a pure-function task, so the
+   terminal-bench shape this amendment series chose has nothing written against it.
+2. **Gateway access** — the endpoint, the exact model identifier, and the environment variable
+   holding the credential. Unchanged since it was recorded; PCP `l-298e`.
+
+No threshold moves. The 15 pp gate against the Python and JavaScript baselines stands as written.

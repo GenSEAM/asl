@@ -24,6 +24,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "grammar"))
 
 from modules import closure, declared_path, imports  # noqa: E402
+from _literals import string_literal  # noqa: E402
 from parse import FORM_KW, parser  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "prelude"))
@@ -477,7 +478,9 @@ class Transpiler:
         s = str(tok)
         if tok.type == "BOOL":
             return "True" if s == "true" else "False"
-        if tok.type in ("INT", "FLOAT", "STRING"):
+        if tok.type == "STRING":
+            return string_literal(s)
+        if tok.type in ("INT", "FLOAT"):
             return s
         if tok.type == "UNIT":
             return "None"

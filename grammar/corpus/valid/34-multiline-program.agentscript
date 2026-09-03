@@ -1,0 +1,20 @@
+"The same literal crossing a process boundary, which is the arm no function-mode"
+"case reaches. A newline that arrived as two characters, or as a target's own"
+"line ending, shows up here as a stdout mismatch between the six runners rather"
+"than as a compile error."
+
+"A top-level note spanning two lines, which every backend erases outright and
+ which therefore proves the erasure, not the escaping."
+
+(module text/usage-program
+  :doc "Prints its own help text and exits."
+  :export [help-text])
+
+(defun help-text [] -> String
+  :doc "Two lines and a continuation, as one literal."
+  "usage: notes FILE
+       notes --help")
+
+(defun ! main [(args (List String))] -> (Result Unit IoError)
+  :doc "Print the help text."
+  (println (help-text)))

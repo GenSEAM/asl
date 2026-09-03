@@ -10,7 +10,59 @@
 //! is walked by a Builder that owns the source.
 
 use crate::ast::*;
+use std::collections::HashMap;
+use std::sync::OnceLock;
 use tree_sitter::Node;
+
+/// The vocabulary itself, compiled in. Everything the projection means is read
+/// from here: a table written out in this file would be a second source, which
+/// is exactly the defect that let three backends emit `I64` where the target
+/// needed `Int64`.
+fn prelude() -> &'static serde_json::Value {
+    static PRELUDE: OnceLock<serde_json::Value> = OnceLock::new();
+    PRELUDE.get_or_init(|| {
+        const SRC: &str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"), "/../../prelude/prelude.json"));
+        serde_json::from_str(SRC).expect("prelude.json is not valid JSON")
+    })
+}
+
+/// A type name in its Core spelling: `I64` -> `Int64`, `Point` -> `Point`.
+fn type_aliases() -> &'static HashMap<String, String> {
+    static ALIASES: OnceLock<HashMap<String, String>> = OnceLock::new();
+    ALIASES.get_or_init(|| {
+        prelude()["types"]["aliases"]
+            .as_object()
+            .expect("prelude.json declares no types.aliases")
+            .iter()
+            .map(|(k, core)| {
+                (k.clone(), core.as_str().expect("an alias maps to a name").to_string())
+            })
+            .collect()
+    })
+}
+
+/// Any spelling of a module-header option keyword mapped to its verbose one.
+/// Recognizing the keyword by a text prefix made `:i` an option this walk did
+/// not know, so every import a Nano module declared was dropped in silence and
+/// the alias it bound came back unbound at the use site.
+fn option_aliases() -> &'static HashMap<String, String> {
+    static OPTIONS: OnceLock<HashMap<String, String>> = OnceLock::new();
+    OPTIONS.get_or_init(|| {
+        let mut out = HashMap::new();
+        for o in prelude()["projection"]["options"]
+            .as_array()
+            .expect("prelude.json declares no projection.options")
+        {
+            let verbose = o["verbose"].as_str().expect("an option has a verbose spelling");
+            out.insert(verbose.to_string(), verbose.to_string());
+            if let Some(nano) = o["nano"].as_str() {
+                out.insert(nano.to_string(), verbose.to_string());
+            }
+        }
+        out
+    })
+}
 
 pub fn syntax_error(node: Node) -> bool {
     node.is_error() || node.is_missing()
@@ -79,12 +131,15 @@ impl<'src> Builder<'src> {
     fn parse_type(&self, node: Node) -> Type {
         let t = self.text(node);
         match node.kind() {
-            "type_name" => match t.as_str() {
-                "Int32" => Type::Int32,
-                "Int64" => Type::Int64,
-                "Float64" => Type::Float64,
-                other => Type::Named(other.to_string()),
-            },
+            "type_name" => {
+                let core = type_aliases().get(&t).map(String::as_str).unwrap_or(t.as_str());
+                match core {
+                    "Int32" => Type::Int32,
+                    "Int64" => Type::Int64,
+                    "Float64" => Type::Float64,
+                    other => Type::Named(other.to_string()),
+                }
+            }
             "qualified_type" => {
                 let (a, m) = t.split_once('/').expect("qualified_type always has /");
                 Type::Qualified(a.to_string(), m.to_string())
@@ -322,8 +377,9 @@ impl<'src> Builder<'src> {
                         if opt.kind() != "module_opt" {
                             continue;
                         }
-                        let kw = opt.child(0).map(|x| self.text(x)).unwrap_or_default();
-                        if kw.starts_with(":import") {
+                        let spelt = opt.child(0).map(|x| self.text(x)).unwrap_or_default();
+                        let kw = option_aliases().get(&spelt).cloned().unwrap_or(spelt);
+                        if kw == ":import" {
                             for sub in self.children(opt) {
                                 if sub.kind() == "import_spec" {
                                     let p = self.field(sub, "path").unwrap();
@@ -331,7 +387,7 @@ impl<'src> Builder<'src> {
                                     imports.push((self.text(alias), self.text(p)));
                                 }
                             }
-                        } else if kw.starts_with(":export") {
+                        } else if kw == ":export" {
                             for sub in self.children(opt) {
                                 exports.push(self.text(sub));
                             }
@@ -353,6 +409,9 @@ impl<'src> Builder<'src> {
                     }
                     enum_cases.push((name, cases));
                 }
+                // A note is bound to nothing and evaluates to nothing; it is the
+                // language's comment now, so erasing it is the whole handling.
+                "note" => {}
                 "comment" => {}
                 other => panic!("unrecognized toplevel node: {}", other),
             }

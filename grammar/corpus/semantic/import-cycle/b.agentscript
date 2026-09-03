@@ -1,5 +1,5 @@
-; expect: rule-11
-; The other half; see a.agentscript.
+"expect: rule-11"
+"The other half; see a.agentscript."
 (module b
   :doc "Imports a, which imports b."
   :export [from-b]

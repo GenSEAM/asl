@@ -10,12 +10,14 @@
     ((none)   "none")))
 
 (df proj-module [] -> String
-  :d "Project doc, export/import arity and defs arity of a module node."
-  (let [(m (a/ModuleNode :docstring "\"module docs\""
+  :d "Project path, doc, export/import arity and defs arity of a module node."
+  (let [(m (a/ModuleNode :path "demo/mod"
+                         :docstring "\"module docs\""
                          :exported (list "alpha" "beta")
                          :imports (list (pair "core/x" "cx"))
                          :defs (list)))]
-    (str (.-docstring m) "|" (string-from-int64 (list-length (.-exported m)))
+    (str (.-path m) "|" (.-docstring m) "|"
+         (string-from-int64 (list-length (.-exported m)))
          "|" (string-from-int64 (list-length (.-imports m)))
          "|" (string-from-int64 (list-length (.-defs m))))))
 

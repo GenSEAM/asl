@@ -1,6 +1,6 @@
-; Search-path companion for corpus/valid/06-module.agentscript, which imports it.
-; It is not a gate case: it exists so rule 9 has a real export list to check a
-; qualified name against, which no fixture could do while the module was absent.
+"Search-path companion for corpus/valid/06-module.agentscript, which imports it."
+"It is not a gate case: it exists so rule 9 has a real export list to check a"
+"qualified name against, which no fixture could do while the module was absent."
 
 (module core/strings
   :doc "String helpers reached by the module fixture through an alias."

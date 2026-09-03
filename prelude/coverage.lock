@@ -142,6 +142,7 @@
       "Int64"
     ],
     "<": [
+      "Float64",
       "Int64"
     ],
     "<=": [
@@ -155,6 +156,7 @@
       "String"
     ],
     ">": [
+      "Float64",
       "Int64"
     ],
     ">=": [
@@ -236,6 +238,7 @@
       "(Result Int64 String)"
     ],
     "is-some?": [
+      "(Option Float64)",
       "(Option Int64)"
     ],
     "list": [
@@ -264,7 +267,8 @@
     ],
     "list-head": [
       "(List Float64)",
-      "(List Int64)"
+      "(List Int64)",
+      "(List String)"
     ],
     "list-index-of": [
       "(List Float64)",
@@ -285,6 +289,7 @@
       "(List Float64)"
     ],
     "list-reverse": [
+      "(List Float64)",
       "(List Int64)"
     ],
     "list-slice": [
@@ -384,9 +389,13 @@
     ],
     "option-or": [
       "(Option Float64)",
+      "(Option Int32)",
       "(Option Int64)",
+      "(Option String)",
       "Float64",
-      "Int64"
+      "Int32",
+      "Int64",
+      "String"
     ],
     "option-to-result": [
       "(Option Int64)",
@@ -514,6 +523,9 @@
     "interrupted": "the constructor is executed; the host EINTR mapping is not reachable deterministically",
     "other": "the constructor is executed; the fallback host mapping is not reachable deterministically"
   },
-  "unexecuted": {},
+  "unexecuted": {
+    "32-json-case.agentscript": "wire-naming controls are pinned but no serializer executes them; PCP d-1671",
+    "33-notes.agentscript": "notes are erased at every target and have no runtime to execute; PCP l-a250"
+  },
   "note": "instantiations covers root-unit call sites only; an imported module's body contributes builtin names but no instantiations. Int32 has no Python representation, so the Python side never executes Int32 arithmetic: tier_a compiles it, and the 400/400 figure does not mean it ran."
 }

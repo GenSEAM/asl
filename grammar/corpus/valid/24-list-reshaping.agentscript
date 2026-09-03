@@ -1,9 +1,7 @@
-; Reshaping a list, with the composed return shapes the differential harness has
-; to encode: `(Option (List T))` and `(List (Pair A B))`. The slice cases sit on
-; both ends of the half-open interval, and `list-get` reads index 1 — neither the
-; head nor the last element, so an off-by-one is visible.
-;
-; run: reshape(4) == "[9,0,1,2,3]|[0,1,2,3,100,200,300]|[3,2,1,0]|some [1,2,3]|some 0|some 1"
+"Reshaping a list, with the composed return shapes the differential harness has"
+"to encode: `(Option (List T))` and `(List (Pair A B))`. The slice cases sit on"
+"both ends of the half-open interval, and `list-get` reads index 1 — neither the"
+"head nor the last element, so an off-by-one is visible."
 
 (module list/reshape
   :doc "Reshape a range and report every result."

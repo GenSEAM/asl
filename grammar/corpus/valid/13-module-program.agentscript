@@ -1,8 +1,8 @@
-; A whole program across a module boundary: an imported union matched, an
-; imported function called, and one module reached through two aliases. The two
-; targets represent that union completely differently — a tagged tuple on one, a
-; namespaced variant on the other — and each derives its representation
-; independently, so only running both proves they agree.
+"A whole program across a module boundary: an imported union matched, an"
+"imported function called, and one module reached through two aliases. The two"
+"targets represent that union completely differently — a tagged tuple on one, a"
+"namespaced variant on the other — and each derives its representation"
+"independently, so only running both proves they agree."
 
 (module text/show
   :doc "Prints a description and a measurement of an imported shape."

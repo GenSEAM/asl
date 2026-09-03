@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 from transcoder import to_ultra_nano  # noqa: E402
 
+# `:json-case` leads the fields: that is where the grammar's `schema_opt*` sits.
 VERBOSE = """
 (module asl-parser/sample
   :doc "A sample module for dual projection."
@@ -15,9 +16,9 @@ VERBOSE = """
   :import [(core/strings :as s)])
 
 (defschema Point
+  :json-case camel
   (:field x Int64 "Horizontal coordinate")
-  (:field y Int64 "Vertical coordinate" :default 0)
-  :json-case camel)
+  (:field y Int64 "Vertical coordinate" :default 0))
 
 (defenum Shape
   (:case circle [(radius Float64)] "A circle")
@@ -41,9 +42,9 @@ NANO_HAND = """
   :i [(core/strings :a s)])
 
 (dfs Point
+  :json-case camel
   (:f x Int64 "Horizontal coordinate")
-  (:f y Int64 "Vertical coordinate" :default 0)
-  :json-case camel)
+  (:f y Int64 "Vertical coordinate" :default 0))
 
 (dfe Shape
   (:c circle [(radius Float64)] "A circle")
@@ -61,9 +62,10 @@ NANO_HAND = """
 """
 
 # Hand-written from the fixture by applying the transcoder mapping once, at the
-# field level: module doc, 3 exports, one import, four declarations, then per
-# form the name/effect/param-count/return/json-case/case-count values.
-EXPECT_PARSE = ('module|"A sample module for dual projection."|3|1|4'
+# field level: module path, module doc, 3 exports, one import, four
+# declarations, then per form the name/effect/param-count/return/json-case/
+# case-count values.
+EXPECT_PARSE = ('module|asl-parser/sample|"A sample module for dual projection."|3|1|4'
                 "|schema|Point|2|camel"
                 "|enum|Shape|2"
                 "|defun|add|F|2|Int64|T"
@@ -80,11 +82,11 @@ EXPECT_HEADS = ('"A sample module for dual projection."|add,area,Shape|core/stri
                 '|(match sh ((circle r) r) ((point) 0))')
 
 # Canonical verbose render of every top form, traced by hand from render-node.
-EXPECT_RENDER = ('(module :doc "A sample module for dual projection." '
+EXPECT_RENDER = ('(module asl-parser/sample :doc "A sample module for dual projection." '
                  ":export [add area Shape] :import [(core/strings :as s)])"
                  "\n"
-                 "(defschema Point (:field x Int64 \"Horizontal coordinate\") "
-                 "(:field y Int64 \"Vertical coordinate\" :default 0) :json-case camel)"
+                 "(defschema Point :json-case camel (:field x Int64 \"Horizontal coordinate\") "
+                 "(:field y Int64 \"Vertical coordinate\" :default 0))"
                  "\n"
                  "(defenum Shape (:case circle [(radius Float64)] \"A circle\") "
                  "(:case point [] \"A degenerate shape\"))"
@@ -95,6 +97,13 @@ EXPECT_RENDER = ('(module :doc "A sample module for dual projection." '
                  "(defun area [(sh Shape)] -> Float64 "
                  ":doc \"Area of a shape, zero for degenerate cases.\" "
                  "(match sh ((circle r) r) ((point) 0)))")
+
+
+def _render(ns, src):
+    """The driver's `(Result String ParseError)` unwrapped, failing on `err`."""
+    res = ns["render_all"](src)
+    assert res[0] == "ok", f"parse failed: {res}"
+    return res[1]
 
 
 def test_reader_files_check_clean():
@@ -121,7 +130,7 @@ def test_ast_nodes_run():
     from harness import run_asl
     fixture = ROOT / "packages" / "asl-parser" / "tests" / "fixtures" / "ast_driver.asl"
     ns = run_asl(fixture)
-    assert ns["proj_module"]() == '"module docs"|2|1|0'
+    assert ns["proj_module"]() == 'demo/mod|"module docs"|2|1|0'
     assert ns["proj_schema"]() == "Point|1|x|some camel"
     assert ns["proj_enum"]() == 'Shape|point|"a dot"'
     assert ns["proj_defun"]() == "twice|T|F|1|Int64|1"
@@ -157,9 +166,55 @@ def test_nano_verbose_roundtrip():
     driver = ROOT / "packages" / "asl-parser" / "tests" / "reader_test.asl"
     ns = run_asl(driver)
     nano_auto = to_ultra_nano(VERBOSE)
-    for fn, expected in (("proj_parse", EXPECT_PARSE),
-                         ("proj_heads", EXPECT_HEADS),
-                         ("render_all", EXPECT_RENDER)):
-        assert ns[fn](VERBOSE) == expected
-        assert ns[fn](nano_auto) == expected
-        assert ns[fn](NANO_HAND) == expected
+    for src in (VERBOSE, nano_auto, NANO_HAND):
+        assert ns["proj_parse"](src) == EXPECT_PARSE
+        assert ns["proj_heads"](src) == EXPECT_HEADS
+        assert _render(ns, src) == EXPECT_RENDER
+
+
+def test_json_case_read_in_both_dialects():
+    """`:json-case` written after the fields still renders in its grammar slot.
+
+    The parser reads the option wherever it was written; the render puts it
+    where `schema_opt*` admits it, which is what keeps the output re-parseable.
+    """
+    from harness import run_asl
+    driver = ROOT / "packages" / "asl-parser" / "tests" / "reader_test.asl"
+    ns = run_asl(driver)
+    verbose = '(defschema Tag :json-case camel (:field name String "The tag"))'
+    trailing = '(defschema Tag (:field name String "The tag") :json-case camel)'
+    nano = '(dfs Tag (:f name String "The tag") :json-case camel)'
+    for src in (verbose, trailing, nano):
+        assert ns["proj_parse"](src) == "schema|Tag|1|camel"
+        assert _render(ns, src) == verbose
+
+
+def test_parse_error_carries_line_and_column():
+    """A rejected source yields a located diagnostic, not a silent empty form.
+
+    The unclosed `(` opens on line 2 column 1, which is what the reader reports
+    when the token stream ends with a frame still open.
+    """
+    from harness import run_asl
+    driver = ROOT / "packages" / "asl-parser" / "tests" / "reader_test.asl"
+    ns = run_asl(driver)
+    src = '(module t/x :doc "d")\n(defun broken [] -> Int64 :doc "b" (+ 1 2)\n'
+    res = ns["render_all"](src)
+    assert res[0] == "err", res
+    assert res[1] == {"msg": "unclosed delimiter", "line": 2, "col": 1}
+    assert ns["proj_parse"](src) == "2:1: unclosed delimiter"
+
+
+def test_nested_forms_do_not_recurse_per_level():
+    """A 3000-deep body renders without exhausting CPython's stack.
+
+    The reader walks an explicit frame stack and the renderer drains an explicit
+    work list, so neither depends on nesting depth for its own call depth.
+    """
+    from harness import run_asl
+    driver = ROOT / "packages" / "asl-parser" / "tests" / "reader_test.asl"
+    ns = run_asl(driver)
+    depth = 3000
+    body = "(id " * depth + "1" + ")" * depth
+    src = f'(defun deep [] -> Int64 :doc "d" {body})'
+    assert _render(ns, src) == f'(defun deep [] -> Int64 :doc "d" {body})'

@@ -1,10 +1,8 @@
-; A multi-expression body in every position the grammar admits one: a function
-; body, a `let` body, a `cond` clause, an `:else` clause, a `match` arm and a
-; lambda body. Each non-final expression is a `println`, so a backend that
-; evaluates one without emitting it prints a line short — which two backends can
-; do in agreement. The expected output is written down in backend/differential.py.
-;
-; run: tally([1, 2, 3]) == 6
+"A multi-expression body in every position the grammar admits one: a function"
+"body, a `let` body, a `cond` clause, an `:else` clause, a `match` arm and a"
+"lambda body. Each non-final expression is a `println`, so a backend that"
+"evaluates one without emitting it prints a line short — which two backends can"
+"do in agreement. The expected output is written down in backend/differential.py."
 
 (module seq-demo
   :doc "Every multi-expression body position, each with an observable effect."

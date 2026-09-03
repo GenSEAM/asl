@@ -14,10 +14,18 @@
 
 start: toplevel*
 
+// A bare string at top level is a note bound to nothing — the only comment
+// mechanism. The body position already admitted one; top level did not, so a
+// file banner or a note between declarations had nowhere to live (PCP l-a250).
+// `;` line comments are retired: no longer declared here or in
+// AGENT_SPEC_CORE.md §2, and a `;` outside a string is now a lexer error.
 toplevel: module_decl
         | defschema
         | defun
         | defenum
+        | note
+
+note: STRING
 
 // ---------- module header (v0.2) ----------
 
@@ -34,7 +42,13 @@ type_params: "{" TYPE_NAME* "}"
 
 // ---------- declarations ----------
 
-defschema: "(" DEFSCHEMA type_params? TYPE_NAME field+ ")"
+// §4.1's `:json-case` pins the wire spelling of every field at the declaration.
+// It is normative and neither grammar accepted it: the form the specification
+// defines could not be written. It sits in the header, before the fields it
+// governs, which is also the only position an Earley parse resolves without
+// ambiguity against a trailing field list.
+defschema: "(" DEFSCHEMA type_params? TYPE_NAME schema_opt* field+ ")"
+schema_opt: JSON_CASE_KW IDENT
 
 field: "(" FIELD_KW IDENT type STRING field_opt* ")"
 
@@ -127,12 +141,27 @@ literal: INT
 // still valid IDENT shapes, which is intentional — Core has no reserved words at
 // the lexical level, only positionally significant heads.
 
-DEFSCHEMA: "defschema" | "schema" | "dfs"
+// BEGIN GENERATED PROJECTION — prelude/generate.py from prelude/prelude.json.
+// A spelling is significant only where the rules above admit its terminal:
+// a record key written `:x` is a KEYWORD, never EXPORT_KW, because no
+// ctor_arg position accepts one.
+
 DEFUN: "defun" | "def" | "df"
+DEFSCHEMA: "defschema" | "schema" | "dfs"
+DEFENUM: "defenum" | "enum" | "dfe"
+MATCH: "match" | "mt"
+
+DOC_KW: ":doc" | ":d"
+EXPORT_KW: ":export" | ":x"
+IMPORT_KW: ":import" | ":i"
+AS_KW: ":as" | ":a"
+FIELD_KW: ":field" | ":f"
+CASE_KW: ":case" | ":c"
+// END GENERATED PROJECTION
+
 LET: "let"
 IF: "if"
 COND: "cond"
-MATCH: "match" | "mt"
 TRY: "try"
 FN: "fn"
 OK: "ok"
@@ -144,15 +173,10 @@ CONS: "cons"
 PAIR: "pair"
 
 MODULE: "module"
-DEFENUM: "defenum" | "enum" | "dfe"
-DOC_KW: ":doc" | ":d"
-EXPORT_KW: ":export" | ":x"
-IMPORT_KW: ":import" | ":i"
-AS_KW: ":as" | ":a"
-CASE_KW: ":case" | ":c"
-
-FIELD_KW: ":field" | ":f"
 DEFAULT_KW: ":default"
+// Priority: ":json-case" must out-rank ":json" and the general KEYWORD regex,
+// both of which also match its prefix.
+JSON_CASE_KW.3: ":json-case"
 JSON_KW: ":json"
 ELSE_KW: ":else"
 
@@ -196,8 +220,5 @@ INT: /-?[0-9]+/
 FLOAT: /-?[0-9]+\.[0-9]+/
 STRING: /"([^"\\]|\\.)*"/
 
-COMMENT: /;[^\n]*/
-
 %import common.WS
 %ignore WS
-%ignore COMMENT

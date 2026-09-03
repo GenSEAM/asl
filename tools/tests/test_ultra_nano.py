@@ -56,7 +56,8 @@ def test_bidirectional_transcoding(parser):
     # 1. Compress to Ultra-Nano
     nano_out = to_ultra_nano(verbose_src)
     assert "(dfs Vec" in nano_out
-    assert "(:f x Int64" in nano_out
+    # Type aliases are part of the projection: `Int64` tightens to `I64`.
+    assert "(:f x I64" in nano_out
     assert ":d \"Vector service\"" in nano_out
     assert ":x [Vec calc]" in nano_out
     assert "(df calc" in nano_out
@@ -76,3 +77,55 @@ def test_bidirectional_transcoding(parser):
     # 4. Verify expanded parses in Lark
     tree_verbose = parser.parse(expanded)
     assert tree_verbose is not None
+
+
+RECORD_KEY_MODULE = """"A comment naming :doc and defun, which the transcoder must leave alone."
+(module t/keys
+  :doc "A record whose field names are the six option letters."
+  :export [P mk])
+
+(defschema P
+  (:field x Int64 "X")
+  (:field d Int64 "D")
+  (:field a Int64 "A")
+  (:field i Int64 "I")
+  (:field f Int64 "F")
+  (:field c Int64 "C"))
+
+(defun mk [] -> P
+  :doc "Construct it."
+  (P :x 1 :d 2 :a 3 :i 4 :f 5 :c 6))
+"""
+
+RECORD_KEYS = "(P :x 1 :d 2 :a 3 :i 4 :f 5 :c 6)"
+
+
+def test_record_keys_are_never_option_keywords(parser):
+    """A Nano alias is significant in head and option position only (@pcp:d-1eed).
+
+    The regex transcoder this replaced turned `(P :x 1 :d 2)` into
+    `(P :export 1 :doc 2)`, so every field below it stopped resolving.
+    """
+    nano = to_ultra_nano(RECORD_KEY_MODULE)
+    assert "(dfs P" in nano and "(df mk" in nano
+    assert RECORD_KEYS in nano
+    parser.parse(nano)
+
+    back = to_verbose(nano)
+    assert RECORD_KEYS in back
+    assert ":export 1" not in back
+    parser.parse(back)
+
+
+def test_transcoding_is_reversible_and_idempotent():
+    nano = to_ultra_nano(RECORD_KEY_MODULE)
+    assert to_verbose(nano) == RECORD_KEY_MODULE
+    assert to_ultra_nano(nano) == nano
+    assert to_ultra_nano(to_verbose(nano)) == nano
+
+
+def test_comments_and_prose_survive_transcoding():
+    """Only token spans are replaced, so nothing outside the grammar can move."""
+    nano = to_ultra_nano(RECORD_KEY_MODULE)
+    assert nano.splitlines()[0] == RECORD_KEY_MODULE.splitlines()[0]
+    assert len(nano.splitlines()) == len(RECORD_KEY_MODULE.splitlines())

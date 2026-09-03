@@ -1,6 +1,5 @@
-; run: unwrap() == 1
-; A parameterised imported type instantiated at Int64, destructured recursively,
-; and an imported record constructed and read through .-field.
+"A parameterised imported type instantiated at Int64, destructured recursively,"
+"and an imported record constructed and read through .-field."
 
 (module text/sizes
   :doc "Measurements over trees declared in another module."

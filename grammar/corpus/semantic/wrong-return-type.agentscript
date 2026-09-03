@@ -1,5 +1,5 @@
-; expect: type
-; The body is well-formed and its value has nothing to do with the declared
-; return type.
+"expect: type"
+"The body is well-formed and its value has nothing to do with the declared"
+"return type."
 (defun label [] -> String
   1)

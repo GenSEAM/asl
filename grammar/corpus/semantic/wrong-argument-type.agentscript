@@ -1,5 +1,5 @@
-; expect: type
-; string-length is declared String -> Int64 in the prelude; the call site says
-; otherwise. Only the signature makes this visible.
+"expect: type"
+"string-length is declared String -> Int64 in the prelude; the call site says"
+"otherwise. Only the signature makes this visible."
 (defun size [] -> Int64
   (string-length 42))

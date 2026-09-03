@@ -1,380 +1,419 @@
 # AgentScript Context Economy & Intent Separation Guidelines
 
-> **The Golden Rule**: Code carries the **HOW** and the **WHAT**. Never write comments explaining what the code already says. Document only the **WHY**, the **MOTIVATION**, and the **ARCHITECTURAL INVARIANTS** — and store them out-of-band to keep code 100% compact algorithms.
+> **Advisory.** This document is normative for nothing. [`AGENT_SPEC_CORE.md`](../AGENT_SPEC_CORE.md)
+> defines the language, [`ASN_SPEC.md`](ASN_SPEC.md) defines the data format, and
+> [`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md) defines the wire. This page is advice about using
+> them well.
+>
+> Every `lisp` example is parsed on every run by `grammar/validate_asn.py`, against
+> `agentscript.lark` when it is a declaration and `asn.lark` when it is data. Every number comes
+> from `bench/asn_tokens.py` and is locked in `bench/asn_tokens.lock`.
+>
+> The previous version of this page asserted -80%, -75%, -70%, -67%, -50% and -45%, and a table
+> claiming fourteen abbreviations were each one BPE token. None of it had been counted. When it was,
+> four of those abbreviations turned out to cost *more* than the word they replaced.
 
 ---
 
-## 1. Separation of Code and Intent
+## 1. Separation of code and intent
 
-### The Problem in Legacy Codebases
-Human developers often write comments describing literal actions:
+### The problem
+
+Human code carries comments that restate it:
+
 ```python
 # Loop through the orders and add up total prices
 total = 0
 for order in orders:
     total += order.price  # add order price
 ```
-For an AI agent reading this file, these comments are **100% pure token waste**. The code already says what it does. Reading 5,000 lines of such comments burns context windows, causes attention dilution, and triggers comment-rot when code changes.
 
-### The AgentScript Standard
-1. **Zero Explanatory Comments in Code**: The code is self-sufficient. Variable and function names are crisp.
-2. **Document Only the Motivation (The "WHY")**:
-   - Why was this algorithm chosen over another?
-   - What edge case or race condition is this protecting against?
-   - What architectural requirement (ADR) mandated this decision?
-3. **Store Intent Out-of-Band via Semantic Tags**:
-   ```lisp
-   (defun calculate-hash [(payload Bytes) (nonce Int64)] -> Bytes
-     (:tag "d-sec-02" :why "resist timing-attacks via constant-time primitive")
-     (crypto/blake3 payload nonce))
-   ```
-   If an agent understands the logic, it reads only the compact code. If it needs the rationale or motivation, it queries the reference:
-   ```bash
-   asl meta get d-sec-02
-   # or by symbol:
-   asl meta get calculate-hash
-   ```
+For an agent reading the file these are pure cost. The code already says what it does, and a
+comment that paraphrases it rots the moment the code changes.
 
----
+### The standard
 
-## 2. The Single-Token Hygiene Standard (Однотокеновая гигиена)
+1. **No comment that restates the code.** Names carry the *what*.
+2. **Comments carry the why**: the tradeoff, the workaround, the spec quirk, the race the ordering
+   protects against.
+3. **Longer rationale goes out of band**, keyed by a shortcode.
 
-### The Core Law
-Every LLM interacts with code through Byte-Pair Encoding (BPE) tokens. When an agent emits verbose identifiers like `default_timeout_milliseconds`, the model must sample **7 separate BPE tokens**. In agent swarms exchanging millions of frames per day, this causes:
-1. **7x higher LLM generation latency** (tokens are generated sequentially).
-2. **7x higher token expenditure**.
-3. **Severe context fragmentation and attention decay**.
+The declaration keeps a one-line `:d`, and nothing else:
 
-**The Standard**: Every syntax keyword, record key, protocol verb, and common technical descriptor **MUST resolve to exactly 1 BPE token** wherever practically possible.
-
----
-
-### The Canonical 1-Token Dictionary
-
-Use these standard abbreviations universally across all AgentScript schemas, DTOs, and protocol frames:
-
-| Full Word | BPE Tokens (Old) | 1-Token Standard | BPE Tokens (New) | Semantic Meaning |
-|---|---|---|---|---|
-| `default` | 1–2 tokens | **`:dflt`** | **1 token** | Default fallback value |
-| `config` / `configuration` | 2–3 tokens | **`:cfg`** | **1 token** | Configuration object |
-| `context` | 2 tokens | **`:ctx`** | **1 token** | Execution context |
-| `request` | 1–2 tokens | **`:req`** | **1 token** | Inbound request frame |
-| `response` | 2 tokens | **`:resp`** or **`:res`** | **1 token** | Outbound response |
-| `argument` / `parameter` | 2–3 tokens | **`:arg`** or **`:param`** | **1 token** | Function argument |
-| `message` | 2 tokens | **`:msg`** | **1 token** | Message payload |
-| `error` | 1–2 tokens | **`:err`** | **1 token** | Error descriptor |
-| `function` | 1–2 tokens | **`:fn`** | **1 token** | Function reference |
-| `length` | 2 tokens | **`:len`** | **1 token** | Array or string length |
-| `index` | 2 tokens | **`:idx`** | **1 token** | Sequential index |
-| `authentication` | 3–4 tokens | **`:auth`** | **1 token** | Auth credentials / token |
-| `timestamp` | 2 tokens | **`:ts`** | **1 token** | Epoch millisecond mark |
-| `payload` | 2 tokens | **`:data`** or **`:body`** | **1 token** | Payload body |
-
-#### For Ultra-Dense Hot Schemas (Single-Letter Keys):
-When defining low-level AST nodes or high-frequency records:
-- **`:f`** = field
-- **`:c`** = case / constructor
-- **`:d`** = documentation / description
-- **`:v`** = value
-- **`:k`** = key
-- **`:t`** = type
-- **`:p`** = parameter
-
----
-
-### Boundaries: When Single-Token Hygiene is Mandatory vs Exceptions
-
-#### 1. MANDATORY: Protocols, Schemas, and Internal Tool Calls
-Single-token hygiene is strictly enforced for:
-- All ASN record keys (`(:id "..." :dflt true :auth :bearer)`).
-- All A2A wire frame queries and commands (`(? auth/probe :ctx ...)`, `(! exec/ack :res ...)`).
-- All internal helper functions and loop counters.
-
-#### 2. EXCEPTIONS: Where Single-Token Hygiene Does NOT Apply
-Do NOT forcibly mangle identifiers in these three specific situations:
-1. **High-Level Domain Business Entities**:
-   - Example: `OrganizationMembershipInvite`, `HealthcarePatientRecord`.
-   - *Rationale*: Aggressively dropping vowels into `OrgMmbrshpInvt` destroys LLM semantic reasoning and triggers hallucination in domain logic. Clarity takes precedence over token compression for top-level business domain models.
-2. **Literal String Values & External Identifiers**:
-   - Example: UUIDs (`"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"`), ISO timestamps, user-supplied text strings, error messages for humans.
-   - *Rationale*: Data payloads must reflect real-world values verbatim.
-3. **Foreign Host Language Interoperability (FFI)**:
-   - Example: Calling JavaScript `window.requestAnimationFrame()` or Python `torch.nn.functional.cross_entropy()`.
-   - *Rationale*: External runtime APIs must match foreign symbol names exactly to avoid runtime linkage errors.
-
----
-
-### Concrete Before & After Comparisons
-
-#### Example A: Wire Protocol Frame
 ```lisp
-;; ❌ BAD: 42 BPE Tokens (Verbose legacy style)
-(? authentication_service/validate_token 
-   :authentication_bearer_token "jwt.xyz" 
-   :client_configuration_context {:timeout_milliseconds 5000 :default_retry true})
-
-;; ✅ GOOD: 14 BPE Tokens (Single-Token Hygiene enforced)
-(? auth/validate 
-   :auth "jwt.xyz" 
-   :cfg {:t-out 5000 :dflt true})
+(df calculate-hash [(payload String) (nonce Int64)] -> String
+  :d "Fingerprint a payload with its nonce. Rationale: d-sec-02."
+  (str payload (string-from-int64 nonce)))
 ```
-*Savings: 67% fewer tokens, 3x faster generation latency, 100% equivalent semantic execution.*
 
-#### Example B: Data Type Schema Definition
-```lisp
-;; ❌ BAD: 44 BPE Tokens (Verbose legacy naming)
-(defschema UserProfile
-  (:field user_identifier String "Unique ID of user")
-  (:field configuration_parameters (Map String String) "Key-value config")
-  (:field default_role String "Fallback role"))
+The rationale itself is ASN, stored beside the code rather than inside it:
 
-;; ✅ GOOD: 24 BPE Tokens (Single-Token Hygiene enforced)
-(dfs UserProfile
-  (:f id String "ID")
-  (:f cfg (Map String String) "Config")
-  (:f dflt-role String "Role"))
+```asn
+(:tag "d-sec-02"
+ :fn "calculate-hash"
+ :why "A constant-time primitive, so a comparison cannot leak by timing."
+ :adr "ADR-4a1b")
 ```
-*Savings: 45% fewer tokens in code while remaining 100% valid under the v0.2 parser!*
+
+An agent that understands the logic reads only the declaration. One that needs the reason asks for
+it:
+
+```bash
+asl meta get d-sec-02
+asl meta get calculate-hash
+```
 
 ---
 
-## 3. Positional Frames vs Key-Value Noise
+## 2. Key length is a measurement, and the measurement says no
 
-In hot execution paths, passing repetitive schema keys consumes up to 70% of payload tokens.
+Abbreviating an identifier **saves bytes and does not save tokens**. Across every fixture in
+`grammar/corpus/valid`, transcoded by the real transcoder and counted under `cl100k_base`, the
+verbose and Nano projections cost an **identical** number of tokens — a saving of exactly
+**0.00%** — against roughly 3.6% of bytes.
 
-### Bad (Chatty Key-Value Noise — 68 Tokens):
-```json
-{
-  "action": "execute_command",
-  "command": "git",
-  "arguments": ["status", "--porcelain"],
-  "timeout_milliseconds": 5000,
-  "working_directory": "/workspace"
-}
+Run `bench/token_projection.py` for the current totals. They are not quoted here on purpose: the
+corpus grows and its fixtures get edited, so any absolute figure printed in prose goes stale
+without anything noticing. The result that does not move is the one the argument rests on, and
+`grammar/validate_asn.py` asserts it against `bench/token_projection.lock` so this paragraph cannot
+outlive it.
+
+A BPE vocabulary already encodes the long form cheaply: `(defun` is one token and so is `(df`.
+
+Per spelling it is a tie almost everywhere. Here is the table this page used to publish, remeasured:
+
+| Word | Tokens | Abbreviation | Tokens | In context | Isolated |
+|---|---|---|---|---|---|
+| `:timeout-milliseconds` | 4 | `:t-out` | 3 | **win** | win |
+| `:working-directory` | 3 | `:cwd` | 2 | **win** | win |
+| `:config` | 2 | `:cfg` | 2 | tie | tie |
+| `:context` | 2 | `:ctx` | 2 | tie | tie |
+| `:request` | 2 | `:req` | 2 | tie | tie |
+| `:response` | 2 | `:resp` | 2 | tie | tie |
+| `:argument` | 2 | `:arg` | 2 | tie | tie |
+| `:message` | 2 | `:msg` | 2 | tie | ~~loss~~ |
+| `:error` | 2 | `:err` | 2 | tie | ~~loss~~ |
+| `:function` | 2 | `:fn` | 2 | tie | ~~loss~~ |
+| `:length` | 2 | `:len` | 2 | tie | tie |
+| `:index` | 2 | `:idx` | 2 | tie | ~~loss~~ |
+| `:authentication` | 2 | `:auth` | 2 | tie | tie |
+| `:timestamp` | 2 | `:ts` | 2 | tie | tie |
+| `:payload` | 2 | `:data` | 2 | tie | ~~win~~ |
+| `:field` | 2 | `:f` | 2 | tie | ~~win~~ |
+| `:case` | 2 | `:c` | 2 | tie | ~~win~~ |
+| `:doc` | 2 | `:d` | 2 | tie | ~~win~~ |
+| `:value` | 2 | `:v` | 2 | tie | tie |
+| `:default` | 2 | `:dflt` | 3 | **loss** | ~~tie~~ |
+
+Two wins, seventeen ties, one loss. The two wins are both **compounds** — a word the tokenizer does
+not carry whole — and the loss is `:dflt`, which is why `ASN_SPEC.md` §13 keeps `:default`.
+
+### Why the earlier table was wrong
+
+The first correction of this page measured each keyword on its own. That is not the keyword a
+document contains. In real text a key follows a space, and BPE merges the space into the token, so
+` :field` is two and ` :f` is two while bare `:field` is two and bare `:f` is one.
+
+Nine of the twenty verdicts change between the two measurements — every row struck through in the
+last column above. Six of them were published here as wins and are ties. `bench/asn_tokens.py`
+therefore counts each pair **both** ways and records the difference, so the flaw stays visible
+instead of being quietly corrected.
+
+The lesson generalises past this table: **a token count taken out of context is not evidence about
+a payload.** Measure the string where it sits.
+
+### What to do instead
+
+- **Do not abbreviate for tokens.** Abbreviate for readability or wire bytes if you like, and say
+  which — but the token argument is not available.
+- **Compounds are the exception.** `:timeout-milliseconds` to `:t-out` saves one token of four and
+  `:working-directory` to `:cwd` one of three, because neither is a word the tokenizer holds whole.
+- **Remove the key instead of shortening it.** That is §3 and §4, and it is where the tokens
+  actually are: 58% against JSON for schema-grouped rows, against zero for seventeen of the
+  renames above, one token for two of them, and minus one for `:dflt`.
+
+`:err`, `:msg`, `:fn`, `:idx`, `:cfg` and `:ctx` are all fine and all free. Keep them for
+consistency and house style. Do not keep them, or introduce them, on the grounds of token count.
+
+### Where short names are wrong regardless
+
+1. **Domain entities.** `OrganizationMembershipInvite` mangled into `OrgMmbrshpInvt` costs an agent
+   its grip on what the type means, and a hallucinated field is worth far more than two tokens —
+   which, per the table above, is more than the mangling would have saved anyway.
+2. **Literal values.** UUIDs, ISO timestamps, human-facing error text. A payload reflects the world
+   verbatim.
+3. **Foreign symbols.** An FFI name must match the host's exactly or the call does not link.
+
+---
+
+## 3. Positional frames against keyed frames
+
+When both ends already know a signature, repeating its parameter names on every call is redundant.
+Given this declaration:
+
+```lisp
+(df run-command [(bin String) (args (List String)) (t-out Int64) (cwd String)] -> String
+  :d "Run a binary with arguments, a timeout in milliseconds, and a working directory."
+  (str bin " in " cwd))
 ```
 
-### Good (Positional AgentScript Wire Frame — 14 Tokens):
+the arguments can travel positionally. Measured over the four spellings of one command,
+`bench/token_frames.py` gives:
+
+| Spelling | Tokens |
+|---|---|
+| JSON | 51 |
+| TOON | 34 |
+| Nano, keyed | 27 |
+| Nano, positional | 18 |
+
+Positional Nano is 65% smaller than the JSON frame. That figure is locked in
+`bench/token_frames.lock`.
+
+The frame itself — the `!`, `?` and `~` heads — belongs to
+[`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md) and is **not** ASN. Those three characters are not
+producible by `AGENT_SPEC_CORE.md` §2's lexer at all, which is a problem that document has to
+resolve for itself:
+
+<!-- not-agentscript: a protocol frame; `!` is not a character AGENT_SPEC_CORE.md section 2 produces -->
 ```lisp
 (! cmd "git" ["status" "--porcelain"] 5000 "/workspace")
 ```
-Both machines already know the parameter order from the formal signature `(defun cmd ((bin Str) (args (List Str)) (timeout-ms U64) (cwd Str)) ...)`. Repeating parameter names is redundant.
+
+A frame's *payload* is ASN, and that part parses:
+
+```asn
+(:bin "git" :args ["status" "--porcelain"] :t-out 5000 :cwd "/workspace")
+```
+
+**Positional is not free.** It costs the reader the names, so it pays where a signature is fixed
+and hot, and costs where a shape is evolving. Prefer keys at an interface boundary and positions
+inside a loop.
 
 ---
 
-## 4. Array & Tabular Object Deduplication in ASN
+## 4. Deduplicating tabular data
 
-### The Disaster of Arrays of Objects in JSON
-In JSON, an array of objects repeats every field name on **every single item**:
+### The problem
+
+In JSON, an array of objects repeats every field name on every item:
+
 ```json
 [
-  {"id": 1, "sku": "SSD-1TB", "price": 89.99, "status": "in_stock"},
-  {"id": 2, "sku": "RAM-32GB", "price": 129.50, "status": "in_stock"},
-  {"id": 3, "sku": "GPU-4070", "price": 549.00, "status": "low_stock"}
+  {"id": 1, "sku": "SSD-1TB", "price": 89.99, "status": "in-stock"},
+  {"id": 2, "sku": "RAM-32GB", "price": 129.50, "status": "in-stock"},
+  {"id": 3, "sku": "GPU-4070", "price": 549.00, "status": "low-stock"}
 ]
 ```
-If you return 100 database records with 6 fields each, JSON transmits **600 duplicated keys, 600 colons, 600 commas, and 100 curly brace pairs**. For 1,000 rows, this consumes **15,000 to 25,000 pure boilerplate tokens**!
 
-### The ASN Solution: Schema Constructor Grouping & Key-Row Pairs
+At 100 rows of four fields that is 400 repeated keys, and 3,802 tokens.
 
-To stay 100% compliant with Single-Token Hygiene, ASN does NOT introduce multi-token keywords like `@table` or `@with` (which split into `@` + `word`). Instead, ASN re-uses **existing native structures** and **standard S-expression pairs**:
+### Schema-grouped rows
 
-#### 1. Pre-Declared Schema Re-Use: `(Schema [rows...])`
-When a structure is declared in the schema:
+Declare the shape once:
+
 ```lisp
 (dfs Item
-  (:f id Int64 "ID")
-  (:f sku String "SKU")
-  (:f price Float64 "Price")
-  (:f status String "Status"))
+  (:f id     Int64   "ID")
+  (:f sku    String  "SKU")
+  (:f price  Float64 "Price")
+  (:f status String  "Stock status"))
 ```
-An array of records simply re-uses the schema constructor as the group head:
-```lisp
-;; ✅ Native Schema Grouping: Constructor declared ONCE, rows are zero-key positional vectors
+
+Then name the constructor once and write bare positional rows:
+
+```asn
 (Item
-  [1 "SSD-1TB" 89.99 :in-stock]
-  [2 "RAM-32GB" 129.50 :in-stock]
-  [3 "GPU-4070" 549.00 :low-stock])
+  [1 "SSD-1TB"  89.99 "in-stock"]
+  [2 "RAM-32GB" 129.50 "in-stock"]
+  [3 "GPU-4070" 549.00 "low-stock"])
 ```
-*Token count:* `Item` is **1 token**. Each row has **0 keys**. Zero token bloat.
 
-#### 2. Ad-Hoc Dynamic Tables: `([keys...] [[rows...]])`
-When data is dynamic (e.g. ad-hoc SQL query results without a pre-compiled schema), ASN uses a standard 2-vector tuple `(Keys Rows)` without any extra keywords:
-```lisp
-;; ✅ Pure Ad-Hoc Table: ([keys] [[rows]]) — Zero special keywords!
+| 100 rows, four fields | Tokens | Against JSON |
+|---|---|---|
+| JSON, pretty-printed | 3,802 | — |
+| ASN records, keys repeated | 2,600 | -32% |
+| ASN schema-grouped rows | **1,601** | **-58%** |
+
+The `-82%` this page used to claim was never counted. The real figure is 58%, and it is worth
+having.
+
+ASN needs no `@table` or `@with` keyword to get there. It reuses the constructor position the
+language already has.
+
+### Ad-hoc tables
+
+Without a compiled schema — an ad-hoc query result, a CSV import — the header travels with the
+data as a bare two-element form:
+
+```asn
 ([:id :sku :price :status]
- [[1 "SSD-1TB" 89.99 :in-stock]
-  [2 "RAM-32GB" 129.50 :in-stock]
-  [3 "GPU-4070" 549.00 :low-stock]])
+ [[1 "SSD-1TB"  89.99 "in-stock"]
+  [2 "RAM-32GB" 129.50 "in-stock"]
+  [3 "GPU-4070" 549.00 "low-stock"]])
 ```
 
-### Factoring Out Common Invariants (Shared Field Envelopes)
-Instead of inventing an external `@with` form, common invariant fields are placed directly in the parent record, with the positional items in a `:data` vector:
+Mapping is by header name, so an unknown column is ignored and an absent one takes its `:default`.
+A row whose length differs from the header's is an error: a table is a rectangle, and `_` is
+already there for a missing cell.
 
-```lisp
-;; ✅ Common fields in parent record, rows in positional list (100% 1-token keys)
+### Shared-field envelopes
+
+A field with the same value on every row goes in the parent instead:
+
+```asn
 (:curr "USD" :env :prod :tenant 1042
- :data (Item
-         [1 "SSD-1TB" 89.99]
+ :data (Order
+         [1 "SSD-1TB"  89.99]
          [2 "RAM-32GB" 129.50]
          [3 "GPU-4070" 549.00]))
 ```
-- Every key (`:curr`, `:env`, `:tenant`, `:data`) is **1 token**.
-- The receiver merges the parent keys into each materialized item.
-- On 500 rows, this saves **1,500 duplicate key-value pairs** with zero syntax overhead.
 
-### Primitive Array & Vector Economy
-Even for simple arrays, ASN eliminates comma and quote bloat:
-- **JSON**: `["alpha", "beta", "gamma", "delta"]` $\rightarrow$ 13 tokens
-- **ASN**: `[:alpha :beta :gamma :delta]` $\rightarrow$ 5 tokens (whitespace-delimited, single-token keyword symbols)
-- **Numeric Vectors**: `[1 2 3 4 5 6 7 8 9 10]` vs `[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]` (-50% tokens by omitting commas).
+The receiver merges each shared field into every element of `:data`, **one level deep**, and where
+an element carries the key itself the **element wins** — the envelope is a default for the group,
+not an override, so a row can opt out without splitting the envelope.
 
-### Token Scorecard: 100 Database Records (4 Fields Each)
-| Format | Token Count | Generation Latency | Context Window Impact |
-|---|---|---|---|
-| **Verbose JSON** | ~2,100 tokens | ~4.2 seconds | 16% of 16K window |
-| **Standard ASN Objects** | ~980 tokens | ~1.9 seconds | 7% of 16K window |
-| **ASN Schema Grouping `(Item ...)`** | **~380 tokens** | **~0.6 seconds** | **<2.5% of 16K window (-82%)** |
+**Measured:** on three rows carrying three shared fields, the envelope saves 11% (65 tokens to 58).
+It grows with the row count, so on 500 rows it is most of the payload; on three it is a rounding
+error. Reach for it when the group is large.
 
----
+### Vectors
 
-### Edge Cases & Universal Robustness in Tabular Projections
+- `["alpha", "beta", "gamma", "delta"]` is 12 tokens; `[:alpha :beta :gamma :delta]` is 9. **-25%**,
+  not the 45% claimed here before.
+- A 3×3 float matrix is 45 tokens as JSON and 39 as ASN. **-13%**, not 50%: in `cl100k_base` a
+  comma usually merges with the digit beside it rather than costing a token of its own.
 
-Any tabular or positional serialization format must answer hard production questions. Here is how ASN deterministically handles every potential edge case:
+### Edge cases
 
-#### 1. Sparse, Missing, or Optional Fields
-- **The Problem**: In JSON, if a record has no discount, the key is omitted (`{"id": 1}`). In a positional row, omitting an entry would shift all subsequent column positions.
-- **The ASN Solution**:
-  1. **Nil Sentinel (`_`)**: ASN uses `_` (1 token) for `nil` / `None` / `null`:
-     ```lisp
-     (Item
-       [1 "SSD-1TB" 89.99 _]
-       [2 "RAM-32GB" 129.50 15.00])
-     ```
-  2. **Sparse Tail Overrides**: If only 2% of rows have rare fields, keep them out of the table headers and append them as trailing keyword pairs without corrupting positional columns:
-     ```lisp
-     (Item
-       [1 "SSD-1TB" 89.99]
-       [2 "RAM-32GB" 129.50 (:promo "HOLIDAY20")])
-     ```
+**Sparse fields.** `_` is nil. It denotes `(none)` where the field is an `(Option T)` and is an
+error where it is not, because a non-optional field has no nil inhabitant to denote.
 
-#### 2. Polymorphic / Heterogeneous Collections (Mixed Object Shapes)
-- **The Problem**: An array containing different kinds of entities (e.g. `User`, `Bot`, `SystemEvent`).
-- **The ASN Solution**:
-  ASN uses **Sum Types (Tagged Variant Constructors)**:
-  ```lisp
-  ;; Heterogeneous Stream using Tagged Variant Constructors
-  [(User 1 "Alice" :admin)
-   (Bot 2 "code-bot" "gpt-4o" 1200)
-   (Event :deploy :success 1714829100)]
-  ```
-
-#### 3. Deeply Nested Objects & Collections Inside Rows
-- **The Problem**: A table column contains a nested list or a nested record.
-- **The ASN Solution**:
-  S-expressions compose recursively with zero escaping!
-  ```lisp
-  (Post
-    [1 "First Post" [:ai :wasm] (:views 1200 :stars 45)]
-    [2 "Second Post" [:rust]    (:views 800  :stars 20)])
-  ```
-  No backslashes, no JSON string escapes, 100% clean AST.
-
-#### 4. Schema Evolution & Backward/Forward Compatibility
-- **The Problem**: Producer adds a new field, but Consumer expects older version.
-- **The ASN Solution**:
-  When using ad-hoc `([keys...] [[rows...]])`, mapping is dynamic by header name. Unknown columns are ignored; missing expected columns take the schema default (`:dflt`).
-
-#### 5. Chunked Streaming for Infinite Generators
-- **The Problem**: In JSON, an unclosed array `[ ...` fails `JSON.parse()` if a stream drops midway.
-- **The ASN Solution**:
-  ASN streams in self-contained chunk blocks:
-  ```lisp
-  (:chunk (Item [1 :ok] [2 :ok]))
-  (:chunk (Item [3 :retry] [4 :ok]))
-  ```
-  Every chunk is balanced and valid on arrival. If the network drops at chunk 40, the first 39 chunks remain 100% valid in host memory with zero parser exceptions.
-
----
-
-### Deduplicating Arbitrary Recurring Data: Shared Value Pools (`:pool` & `:ref`)
-
-When serializing arbitrary data (even without pre-defined schemas), long strings (URLs, trace IDs, error descriptions) and recurring sub-records often repeat dozens of times. Rather than inventing complex pattern macros, ASN uses a standard **Shared Value Pool**:
-
-```lisp
-;; ✅ Long recurring strings/objects declared ONCE in :pool, referenced by index (:ref N)
-(:pool ["https://api.internal.cluster.local/v2/telemetry/nodes" {:region :us-east :env :prod}]
- :events
- [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok)
-  (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :ok)
-  (:ts 1714829110 :url (:ref 0) :ctx (:ref 1) :status :warn)])
+```asn
+(Item
+  [1 "SSD-1TB"  89.99 _]
+  [2 "RAM-32GB" 129.50 15.00])
 ```
-- **100% Single-Token**: `:pool` (1 token), `:ref` (1 token).
-- **Universal**: Works on any arbitrary data (strings, objects, lists, numbers) without needing to pre-declare types.
-- **Deserializer Behavior**: The deserializer simply substitutes `(:ref N)` with `pool[N]` in memory during decoding.
+
+A field carried by two per cent of rows is written as a trailing record instead, past the last
+positional column:
+
+```asn
+(Promo
+  [1 "SSD-1TB"  89.99]
+  [2 "RAM-32GB" 129.50 (:promo "HOLIDAY20")])
+```
+
+**Mixed shapes.** A union case is a kebab-case head with positional arguments, exactly as Core §4.4
+writes it:
+
+```asn
+[(user 1 "Alice" :admin)
+ (bot 2 "code-bot" "gpt-4o" 1200)
+ (deploy-event :success 1714829100)]
+```
+
+A PascalCase head is a record constructor and takes `:key value` pairs. The two are told apart by
+the head's case, not by a tag field.
+
+**Nesting.** A row column may hold a vector or a record:
+
+```asn
+(Post
+  [1 "First Post"  [:ai :wasm] (:views 1200 :stars 45)]
+  [2 "Second Post" [:rust]     (:views 800  :stars 20)])
+```
+
+**Streaming.** Every ASN document is balanced, so a stream cut at chunk 40 leaves the first 39
+readable. What delimits one chunk from the next is framing, and framing belongs to
+[`AGENTIC_PROTOCOL.md`](AGENTIC_PROTOCOL.md).
 
 ---
 
-### Language-Level Structural Factoring (Schema Mixins: `:use` [Roadmap v1.0])
+## 5. Shared value pools
 
-> **Compatibility Notice**: In the normative v0.2 compiler, every schema field requires a docstring `STRING` (`(:f id Int64 "doc")`). Schema mixins (`:use`) and decoupled metadata without inline docstrings are specified for the **v1.0 Suite** (`asl-decoupled-meta-v1`).
+Long values that recur — a URL, a trace id, a context map — are written once and named by index:
 
+```asn
+(:pool ["https://api.internal.invalid/v2/telemetry/nodes"
+        {:region :us-east :env :prod}]
+ :data [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok)
+        (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :ok)
+        (:ts 1714829110 :url (:ref 0) :ctx (:ref 1) :status :warn)])
+```
+
+Two `(:ref 0)` occurrences denote *the same* entry, not two equal copies, which is what also makes
+the pool the way to write a cyclic graph. A reference may precede the entry it names; a dangling
+index is a decode error and never nil. See [`ASN_SPEC.md`](ASN_SPEC.md) §8 for the scoping and
+resolution rules.
+
+**Measured:** on the three events above, pooling saves 12% (121 tokens to 107). Neither `:pool` nor
+`:ref` is one token — both are two — so the pool pays through repetition alone, and a pool that
+carries a value used twice is not worth its own two tokens.
+
+---
+
+## 6. Schema mixins — a proposal, not a feature
+
+Composing a schema from a shared base is a **language** question and belongs to
+[`AGENT_SPEC_CORE.md`](../AGENT_SPEC_CORE.md), not to a data format: a payload never sees how a
+schema was assembled, only the field list it produced.
+
+The form below **does not parse under v0.2** and is reproduced as a proposal:
+
+<!-- not-agentscript: `:use` is a v1.0 proposal for AGENT_SPEC_CORE.md and has no v0.2 spelling -->
 ```lisp
-;; [Roadmap v1.0 Preview]
-;; Base audit struct defined once:
 (dfs AuditMeta
   (:f id Int64 "ID")
   (:f ts Int64 "Timestamp")
   (:f tenant Int64 "Tenant"))
 
-;; Derived schemas factor in the base structure with 1-token :use:
 (dfs UserProfile
   (:use AuditMeta)
   (:f email String "Email")
   (:f role String "Role"))
-
-(dfs Order
-  (:use AuditMeta)
-  (:f total Float64 "Total")
-  (:f items (List String) "Items"))
 ```
-*Code stays clean, maintenance is centralized, and AST size remains minimal.*
+
+Under v0.2 every field carries a doc-string and there is no `:use`. Write the fields out.
 
 ---
 
-## 6. Context Offloading via Handles (`:offload`)
+## 7. Context offloading
 
-When an agent executes an operation that yields a massive output (e.g. 50KB of raw web scraping, test logs, or large database query results), **NEVER dump the entire raw output into the conversational prompt window**.
+When a tool produces 50KB of output, do not put it in the prompt. Store it and return a pointer:
 
-### The Offloading Protocol
-1. The execution tool/companion stores the full blob in local memory, disk, or temporary KV store (`.asl/offload/<id>.bin`).
-2. The tool returns a compact **Offload Pointer**:
-   ```lisp
-   (! data/offload
-     :id "scrape-9481"
-     :summary "Extracted 42 product items. Status: 200 OK. Zero parsing errors."
-     :size-bytes 54200
-     :sample [(:sku "A1" :price 24.50) (:sku "A2" :price 12.00)])
-   ```
-3. The reasoning agent reads the 3-line summary. If and only if it needs a specific slice, it queries:
-   ```lisp
-   (? data/slice :id "scrape-9481" :offset 10 :limit 5)
-   ```
-This prevents conversational context exhaustion and keeps the agent's attention sharp.
+```asn
+(:offload "scrape-9481"
+ :summary "Extracted 42 product items. Status 200. Zero parse errors."
+ :size-bytes 54200
+ :sample [(:sku "A1" :price 24.50)
+          (:sku "A2" :price 12.00)])
+```
+
+The reasoning agent reads the summary. If it needs a slice, it asks for one, and that request is a
+protocol frame rather than a value:
+
+<!-- not-agentscript: a protocol frame; `?` is not a character AGENT_SPEC_CORE.md section 2 produces -->
+```lisp
+(? data/slice :id "scrape-9481" :offset 10 :limit 5)
+```
+
+This page used to score offloading at "-99% tokens", comparing a pointer against a blob nobody was
+going to send. That is a statement about the idea, not about the notation, so it carries no number
+here.
 
 ---
 
-## 7. Summary Reference Workflow
+## 8. The workflow, end to end
 
 ```
-[Pure Code in .asl: Pure HOW & WHAT]
-       │
-       ├──> (:tag "d-4a1b" :doc "fn-calc")
-       │
-       └──> Question: "Why does this exist? What was the motivation?"
-                   │
-                   ▼
-        [Out-of-Band Knowledge Matrix: asl meta get d-4a1b]
-        - Motivation: Prevent memory leak under high-concurrency SSE stream
-        - Architectural Decision: Approved in ADR-4a1b
-        - Invariants: Must release buffer within 50ms
+[ .asl source: the how and the what ]
+        |
+        +--> :d "... Rationale: d-4a1b."
+        |
+        +--> "why does this exist?"
+                    |
+                    v
+        [ out-of-band ASN: asl meta get d-4a1b ]
+        (:tag "d-4a1b" :why "..." :adr "ADR-4a1b" :invariant "release within 50ms")
 ```

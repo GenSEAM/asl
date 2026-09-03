@@ -1,0 +1,10 @@
+{
+  "id": "nano-widen",
+  "src": "grammar/corpus/valid/30-nano-projection.agentscript",
+  "entry": "widen",
+  "cases": [
+    [[7], 7, "an ordinary value at the narrow alias"],
+    [[-2147483648], -2147483648, "Int32's least value, which the alias must not narrow further"],
+    [[2147483647], 2147483647, "Int32's greatest value; F32 aside, this is the only alias whose target width differs from the default"]
+  ]
+}

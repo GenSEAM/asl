@@ -16,17 +16,42 @@
  * explicit expression rules below rather than relying on that.
  */
 
+// BEGIN GENERATED PROJECTION — prelude/generate.py from prelude/prelude.json.
+// Head and option-keyword spellings. Each is significant only in the
+// position its rule admits, so a record key written `:x` stays a keyword.
+const HEAD = {
+  defun: ['defun', 'def', 'df'],
+  defschema: ['defschema', 'schema', 'dfs'],
+  defenum: ['defenum', 'enum', 'dfe'],
+  match: ['match', 'mt'],
+};
+
+const OPT = {
+  ':doc': [':doc', ':d'],
+  ':export': [':export', ':x'],
+  ':import': [':import', ':i'],
+  ':as': [':as', ':a'],
+  ':field': [':field', ':f'],
+  ':case': [':case', ':c'],
+};
+// END GENERATED PROJECTION
+
 module.exports = grammar({
   name: 'agentscript',
 
   word: $ => $.ident,
 
-  extras: $ => [/\s/, $.comment],
+  extras: $ => [/\s/],
 
   rules: {
     source_file: $ => repeat($._toplevel),
 
-    _toplevel: $ => choice($.module_decl, $.defschema, $.defun, $.defenum),
+    _toplevel: $ => choice($.module_decl, $.defschema, $.defun, $.defenum, $.note),
+
+    // A bare string at top level is a note bound to nothing — the only comment
+    // mechanism. Only the body position accepted one, so a file banner had
+    // nowhere to live (PCP l-a250). `;` line comments are retired.
+    note: $ => $.string,
 
     // ---------- module header (v0.2) ----------
 
@@ -34,12 +59,12 @@ module.exports = grammar({
       '(', 'module', field('path', $.mod_path), repeat($.module_opt), ')'
     ),
     module_opt: $ => choice(
-      seq(choice(':doc', ':d'), field('doc', $.string)),
-      seq(choice(':export', ':x'), '[', repeat(field('export', choice($.ident, $.type_name))), ']'),
-      seq(choice(':import', ':i'), '[', repeat($.import_spec), ']'),
+      seq(choice(...OPT[':doc']), field('doc', $.string)),
+      seq(choice(...OPT[':export']), '[', repeat(field('export', choice($.ident, $.type_name))), ']'),
+      seq(choice(...OPT[':import']), '[', repeat($.import_spec), ']'),
     ),
     import_spec: $ => seq(
-      '(', field('path', $.mod_path), choice(':as', ':a'), field('alias', $.ident), ')'
+      '(', field('path', $.mod_path), choice(...OPT[':as']), field('alias', $.ident), ')'
     ),
 
     // Type variables are bound explicitly, so a name is a type variable because
@@ -48,26 +73,30 @@ module.exports = grammar({
 
     // ---------- declarations ----------
 
+    // §4.1's `:json-case` pins the wire spelling of every field at the
+    // declaration. It is normative and neither grammar accepted it, so the form
+    // the specification defines could not be written.
     defschema: $ => seq(
-      '(', choice('defschema', 'schema', 'dfs'),
+      '(', choice(...HEAD.defschema),
       optional(field('type_params', $.type_params)),
-      field('name', $.type_name), repeat1($.field), ')'
+      field('name', $.type_name), repeat($.schema_opt), repeat1($.field), ')'
     ),
+    schema_opt: $ => seq(':json-case', field('json_case', $.ident)),
 
     defenum: $ => seq(
-      '(', choice('defenum', 'enum', 'dfe'),
+      '(', choice(...HEAD.defenum),
       optional(field('type_params', $.type_params)),
       field('name', $.type_name), repeat1($.enum_case), ')'
     ),
     enum_case: $ => seq(
-      '(', choice(':case', ':c'),
+      '(', choice(...OPT[':case']),
       field('name', $.ident),
       '[', repeat($.param), ']',
       field('doc', $.string), ')'
     ),
 
     field: $ => seq(
-      '(', choice(':field', ':f'),
+      '(', choice(...OPT[':field']),
       field('name', $.ident),
       field('type', $._type),
       field('doc', $.string),
@@ -82,14 +111,14 @@ module.exports = grammar({
     // `!` marks a declaration that touches the world; mandatory on the
     // signature because the signature is the module surface.
     defun: $ => seq(
-      '(', choice('defun', 'def', 'df'),
+      '(', choice(...HEAD.defun),
       optional(field('effect', '!')),
       optional(field('type_params', $.type_params)),
       field('name', $.ident),
       field('params', $.params),
       '->',
       field('return_type', $._type),
-      optional(seq(choice(':doc', ':d'), field('doc', $.string))),
+      optional(seq(choice(...OPT[':doc']), field('doc', $.string))),
       repeat1(field('body', $._expr)), ')'
     ),
 
@@ -143,7 +172,7 @@ module.exports = grammar({
     else_clause: $ => seq('(', ':else', repeat1(field('body', $._expr)), ')'),
 
     match_form: $ => seq(
-      '(', choice('match', 'mt'), field('subject', $._expr), repeat1($.match_arm), ')'
+      '(', choice(...HEAD.match), field('subject', $._expr), repeat1($.match_arm), ')'
     ),
     match_arm: $ => seq(
       '(', field('pattern', $._pattern), repeat1(field('body', $._expr)), ')'
@@ -243,7 +272,5 @@ module.exports = grammar({
     keyword: $ => /:[a-z][a-z0-9]*(-[a-z0-9]+)*/,
     field_ref: $ => /\.-[a-z][a-z0-9]*(-[a-z0-9]+)*/,
     wildcard: $ => '_',
-
-    comment: $ => token(seq(';', /[^\n]*/)),
   },
 });

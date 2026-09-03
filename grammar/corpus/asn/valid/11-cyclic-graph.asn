@@ -1,0 +1,12 @@
+; A cycle, expressed with the same pool that does deduplication. Entry 0 points
+; at entry 1 and entry 1 points back, so a `:ref` necessarily precedes the entry
+; it names: resolution is by index and never by document order.
+;
+; This is what replaced the `&` anchor. `&` is in no Core §2 token, and anchoring
+; was never a second idea — an anchor is a pool entry somebody points at twice.
+;
+; canonical: (:pool [(:name "Orchestrator" :peers [(:ref 1)]) (:name "Worker" :peers [(:ref 0)])] :data [(:ref 0) (:ref 1)])
+
+(:pool [(:name "Orchestrator" :peers [(:ref 1)])
+        (:name "Worker"       :peers [(:ref 0)])]
+ :data [(:ref 0) (:ref 1)])

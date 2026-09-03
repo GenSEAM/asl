@@ -1,9 +1,7 @@
-; Both polarities of every Option and Result predicate, inside a single case: one
-; half of the pair parses and one does not, so a predicate stuck at `true` fails
-; on the other half. The pair is returned positionally, which is what makes an
-; argument swap in `pair` visible at all — both components are String.
-;
-; run: classify("3", "x") == ("pair", "some/ok:3|TFTF", "none/err:x|FTFT")
+"Both polarities of every Option and Result predicate, inside a single case: one"
+"half of the pair parses and one does not, so a predicate stuck at `true` fails"
+"on the other half. The pair is returned positionally, which is what makes an"
+"argument swap in `pair` visible at all — both components are String."
 
 (module parse/classify
   :doc "Report how a token parses, from both the Option and the Result side."

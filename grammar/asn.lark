@@ -1,0 +1,120 @@
+// ASN (AgentScript Notation) — Lark grammar (Earley).
+// Normative source: docs/ASN_SPEC.md
+//
+// ASN is a DATA language layered on AGENT_SPEC_CORE.md §2's lexical structure.
+// It shares that section's tokens exactly and defines its own phrase structure:
+// there are no expressions here, no `defun`, no operators, no `->`. A separate
+// file rather than a mode of `agentscript.lark` because the two admit disjoint
+// phrases at every position — a data grammar that also accepted `(let ...)`
+// would let a payload smuggle a program past a decoder.
+//
+// The SHARED TERMINALS block below is copied character-for-character from
+// `agentscript.lark`. `grammar/validate_asn.py` compares the two texts and
+// fails on any difference: "layered on Core's lexical structure" is a claim
+// worth exactly what a gate enforces, and a hand-copied terminal is precisely
+// the kind of thing that drifts silently.
+//
+// Scope: this grammar enforces STRUCTURE. Duplicate keys, `(:ref N)`
+// resolution, table rectangularity and sparse-override placement are not
+// context-free; `packages/asl-codec` owns them and
+// `grammar/corpus/asn/semantic/` keeps them visible.
+
+// A document is exactly ONE balanced value. A sequence of documents is a
+// stream, and framing a stream belongs to docs/AGENTIC_PROTOCOL.md, not here.
+start: value
+
+value: scalar
+     | vector
+     | map
+     | record
+     | table
+     | ctor
+     | row_group
+     | case_value
+
+// ---------- scalars ----------
+// `_` is the nil sentinel. It is the same token Core spells WILDCARD in a
+// pattern; ASN gives it a value meaning in a position Core has no phrase for,
+// so the lexer is untouched.
+
+scalar: INT
+      | FLOAT
+      | STRING
+      | BOOL
+      | UNIT
+      | KEYWORD
+      | WILDCARD
+
+// ---------- sequences ----------
+
+vector: "[" value* "]"
+
+// A map's keys are dynamic. `:kw value` is the cheap form; the parenthesised
+// entry carries a key no keyword can spell (a dotted path, an integer id).
+// FLOAT is absent by construction: §3 forbids a Float64 map key, and a format
+// that admits one produces a NaN key no consumer can look up again.
+map: "{" map_entry* "}"
+map_entry: KEYWORD value           -> kw_entry
+         | "(" map_key value ")"   -> pair_entry
+map_key: STRING | INT | BOOL | KEYWORD
+
+// ---------- records ----------
+// An anonymous record: keys are field-like, always keywords. This is also the
+// shape of `(:ref 0)` and of a shared-field envelope `(:curr "USD" :data ...)`.
+
+record: "(" (KEYWORD value)+ ")"
+
+// ---------- tables ----------
+// The ad-hoc table: a header vector of column keywords and a vector of row
+// vectors. Written as a bare 2-tuple so it needs no head keyword at all.
+
+table: "(" "[" KEYWORD* "]" "[" row* "]" ")"
+
+// ---------- schema-bound forms ----------
+// One PascalCase head, two payload shapes, disambiguated by the first token
+// after the head: a KEYWORD opens named construction, a `[` opens row groups.
+// Mixing them in one form is unparseable rather than merely discouraged.
+
+ctor: "(" type_head (KEYWORD value)* ")"
+row_group: "(" type_head row+ ")"
+type_head: TYPE_NAME | QUALIFIED_TYPE
+
+row: "[" value* "]"
+
+// A kebab-case head is a `defenum` case constructor with positional arguments,
+// exactly as Core §4.4 writes it. This is what makes a heterogeneous collection
+// self-describing without a `{type, data}` wrapper.
+case_value: "(" case_head value* ")"
+case_head: IDENT | QUALIFIED
+
+// ---------- terminals ----------
+// BEGIN SHARED TERMINALS — copied verbatim from agentscript.lark.
+// grammar/validate_asn.py fails if these lines drift from that file.
+
+WILDCARD: "_"
+
+BOOL: "true" | "false"
+UNIT: "()"
+
+TYPE_NAME: /[A-Z][A-Za-z0-9]*/
+IDENT: /[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+KEYWORD: /:[a-z][a-z0-9]*(-[a-z0-9]+)*/
+
+QUALIFIED.2: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[a-z][a-z0-9]*(-[a-z0-9]+)*[?!]?/
+QUALIFIED_TYPE.2: /[a-z][a-z0-9]*(-[a-z0-9]+)*\/[A-Z][A-Za-z0-9]*/
+
+INT: /-?[0-9]+/
+FLOAT: /-?[0-9]+\.[0-9]+/
+STRING: /"([^"\\]|\\.)*"/
+// END SHARED TERMINALS
+
+// ASN keeps `;` line comments although Core §2 retired them (PCP l-a250). A
+// note — a bare string — cannot stand in ASN: a document is one value and a
+// bare string IS a value, so no position makes a note unambiguous. COMMENT is
+// therefore the one terminal ASN adds of its own, outside the shared block the
+// drift gate compares.
+COMMENT: /;[^\n]*/
+
+%import common.WS
+%ignore WS
+%ignore COMMENT

@@ -14,7 +14,10 @@ def test_cli_grammar_subcommand():
     )
     assert proc.returncode == 0
     assert "ASL" in proc.stdout
-    assert "LLM Reference Sheet" in proc.stdout
+    # The reference is generated from prelude.json; asserting its title pinned a
+    # hand-written heading instead. Assert what makes it a reference.
+    assert "Generated from `prelude/prelude.json`" in proc.stdout
+    assert "string-to-int64" in proc.stdout
 
 
 def test_cli_ref_alias():
@@ -26,7 +29,10 @@ def test_cli_ref_alias():
     )
     assert proc.returncode == 0
     assert "ASL" in proc.stdout
-    assert "LLM Reference Sheet" in proc.stdout
+    # The reference is generated from prelude.json; asserting its title pinned a
+    # hand-written heading instead. Assert what makes it a reference.
+    assert "Generated from `prelude/prelude.json`" in proc.stdout
+    assert "string-to-int64" in proc.stdout
 
 
 def test_cli_top_level_ref_flag():
@@ -38,7 +44,10 @@ def test_cli_top_level_ref_flag():
     )
     assert proc.returncode == 0
     assert "ASL" in proc.stdout
-    assert "LLM Reference Sheet" in proc.stdout
+    # The reference is generated from prelude.json; asserting its title pinned a
+    # hand-written heading instead. Assert what makes it a reference.
+    assert "Generated from `prelude/prelude.json`" in proc.stdout
+    assert "string-to-int64" in proc.stdout
 
 
 def test_cli_grammar_lark_flag():

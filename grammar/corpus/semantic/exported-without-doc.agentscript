@@ -1,7 +1,7 @@
-; expect: rule-8
-; :doc is mandatory on every exported defun (AGENT_SPEC_CORE 9, rule 8).
-; Only a checker can see this: the grammar makes :doc optional because it is
-; optional for private functions, and export status is not a syntactic property.
+"expect: rule-8"
+":doc is mandatory on every exported defun (AGENT_SPEC_CORE 9, rule 8)."
+"Only a checker can see this: the grammar makes :doc optional because it is"
+"optional for private functions, and export status is not a syntactic property."
 (module m
   :doc "Module carrying an undocumented export."
   :export [visible])

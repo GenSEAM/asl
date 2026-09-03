@@ -33,11 +33,12 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "grammar"))
 
 from modules import closure, declared_path, imports  # noqa: E402
+from _literals import string_literal  # noqa: E402
 from parse import FORM_KW, parser  # noqa: E402
 
 sys.path.insert(0, str(ROOT / "prelude"))
 
-from vocab import unions  # noqa: E402
+from vocab import resolve_type, unions  # noqa: E402
 
 PRELUDE = json.loads((ROOT / "prelude" / "prelude.json").read_text())
 LOWER = {b["name"]: b["ts"] for b in PRELUDE["builtins"]}
@@ -45,7 +46,9 @@ LOWER = {b["name"]: b["ts"] for b in PRELUDE["builtins"]}
 # Int32 shares `bigint` with Int64: a JavaScript number is a double and loses
 # integers past 2^53. The runtime enforces the Int64 bound; the narrower width is
 # checked only by the typed backends, exactly as in the Python runtime.
-PRIM = {"Bool": "boolean", "Int32": "bigint", "Int64": "bigint", "Int": "bigint",
+# Keyed by Core names only. A Nano alias is resolved before it gets here;
+# a second spelling in this table is a second alias map, which is the defect.
+PRIM = {"Bool": "boolean", "Int32": "bigint", "Int64": "bigint",
         "Float64": "number", "String": "string", "Unit": "void"}
 
 # Reserved words and the strict-mode reserved set. Spec §8 appends `_` on a
@@ -142,7 +145,7 @@ class ToTypeScript:
         if isinstance(n, Token):
             if getattr(n, "type", None) == "QUALIFIED_TYPE":
                 return self.qual(str(n))
-            s = str(n)
+            s = resolve_type(str(n))
             if s in PRIM:
                 return PRIM[s]
             if s in self.tparams:
@@ -150,7 +153,7 @@ class ToTypeScript:
             if s in self.local:
                 return self.local[s]
             return s
-        head = self.tok(n.children[0])
+        head = resolve_type(self.tok(n.children[0]))
         if isinstance(n.children[0], Token) and n.children[0].type == "QUALIFIED_TYPE":
             head = self.qual(head)
         elif head not in self.tparams and head in self.local:
@@ -630,7 +633,9 @@ class ToTypeScript:
             return self.qual(s)
         if tok.type == "INT":
             return f"{s}n"
-        if tok.type in ("BOOL", "FLOAT", "STRING"):
+        if tok.type == "STRING":
+            return string_literal(s)
+        if tok.type in ("BOOL", "FLOAT"):
             return s
         return self.resolve(s)
 

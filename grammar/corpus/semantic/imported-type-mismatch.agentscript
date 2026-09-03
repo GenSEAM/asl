@@ -1,7 +1,7 @@
-; expect-only: type
-; A locally declared Shape where the imported one is required. Identity is
-; nominal and keyed by defining module, so the two must not unify — this is the
-; only fixture covering that direction.
+"expect-only: type"
+"A locally declared Shape where the imported one is required. Identity is"
+"nominal and keyed by defining module, so the two must not unify — this is the"
+"only fixture covering that direction."
 (module text/clash
   :doc "Passes a local value where an imported type is required."
   :export [Shape relay]

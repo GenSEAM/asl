@@ -48,7 +48,7 @@
 
 (df fast-triage [(prompt String)] -> TriageVerdict
   :d "Layer 1: Ultra-fast triage"
-  (if (== prompt "help")
+  (if (= prompt "help")
     (consult)
     (swarm)))
 

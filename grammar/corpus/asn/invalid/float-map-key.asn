@@ -1,0 +1,5 @@
+; Core §3 forbids Float64 as a `(Map K V)` key: its equality is IEEE-754, so a
+; NaN key could never be looked up again. A data format that admitted one would
+; emit payloads no consumer could decode, so the grammar refuses it rather than
+; leaving it to a checker.
+{(1.5 "half") (2.5 "two and a half")}

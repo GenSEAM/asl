@@ -1,6 +1,6 @@
 # Decoupled Metadata & Semantic Annotation Protocol (`asl-decoupled-meta-v1`)
 
-> **Goal**: Eliminate prompt-bloating comments and docstrings from AgentScript code by introducing first-class AST Semantic Tags (`@tag`), an out-of-band documentation matrix (`.asl/meta.db`), in-memory Language Server indexing ($O(1)$ in <0.05ms), and vector-powered RAG search tooling.
+> **Goal**: Eliminate prompt-bloating comments and docstrings from AgentScript code by introducing first-class AST semantic tags (`:tag`), an out-of-band documentation matrix (`.asl/meta.db`), in-memory Language Server indexing ($O(1)$ in <0.05ms), and vector-powered RAG search tooling.
 
 ---
 
@@ -12,7 +12,7 @@
 3. **Context Window Exhaustion**: Loading 5 files with extensive documentation fills 80% of an LLM's active working memory.
 
 ### The AgentScript Solution
-- **Pure Algorithmic Code on Disk**: Code contains only ultra-compact, 1-token shortcode tags (`@tag :arch "d-1eed" :doc "fn-calc"`).
+- **Pure Algorithmic Code on Disk**: Code contains only ultra-compact, 1-token shortcode tags (`(:tag :arch "d-1eed" :doc "fn-calc")`).
 - **Out-of-Band Knowledge Matrix**: Prose documentation, architectural decisions (ADRs), invariants, and rationale live in an external structured store (`.asl/meta.db` or `.asl/docs/`).
 - **In-Memory Language Server Index**: The Language Server indexes all tags into RAM on startup, offering instant $O(1)$ (<0.05ms) lookups for external agents.
 - **Vector Semantic Search**: Agents search for intent (*"Find token expiration logic"*) across documentation embeddings and get the exact AST node span without scanning code files.
@@ -29,18 +29,27 @@
 
 ---
 
-### Phase 1: First-Class AST Semantic Tags (`@tag`)
-- **Syntax**: Add `(@tag ...)` node to AgentScript grammar as valid annotations inside `module`, `defun`, `schema`, and `case`.
+### Phase 1: First-Class AST Semantic Tags (`:tag`)
+- **Syntax**: Add a `(:tag ...)` node to both grammars, admitted inside `module`, `defun`,
+  `defschema` and `defenum` case positions. **`@` is not an identifier character and lexes as
+  its own token, so `@tag` costs two BPE tokens** — the opposite of this iteration's goal.
+  Commit `acb2ef3` already replaced every `@` prefix in the repository with a `:` keyword;
+  this plan must not reintroduce one.
   ```lisp
   (module auth/jwt
-    (@tag :arch "d-4a1b" :spec "sec-08" :doc "m-auth-jwt")
+    (:tag :arch "d-4a1b" :spec "sec-08" :doc "m-auth-jwt")
 
-    (defun verify-token ((token Str) (pubkey Key)) (Result Claims AuthErr)
-      (@tag :inv "constant-time" :perf "p-120us" :doc "fn-verify-jwt")
-      ...))
+    (df verify-token [(token Str) (pubkey Key)] -> (Result Claims AuthErr)
+      :d "Verify a JWT against a public key."
+      (:tag :inv "constant-time" :perf "p-120us" :doc "fn-verify-jwt")
+      (ok (Claims :sub "u1"))))
   ```
-- **Zero Runtime Cost**: Transpilers (Wasm, Rust, TS, Go, Python, SQL) erase `@tag` nodes during emission (0 byte binary overhead).
-- **Gate**: Grammar validation (`grammar/validate.py`) and AST parser tests verifying `@tag` parsing across all constructs.
+- **Zero Runtime Cost**: every backend erases `:tag` nodes during emission.
+- **Gate**: `grammar/validate.py` (both grammars agree), `checker/gate.py` (a tag binds nothing
+  and resolves nothing), `tools/tests/test_native_parity.py` (the self-hosted parser reads it
+  too), and a transcoder round-trip. There are four encodings of the syntax — Lark,
+  tree-sitter, `packages/asl-parser`, and `tools/transcoder.py` — and a new node reaching
+  only the first is the drift this project has already been bitten by.
 
 ---
 
@@ -61,7 +70,7 @@
 ---
 
 ### Phase 3: In-Memory Language Server Index (`asl-lsp`)
-- **In-Memory RAM Index**: Language Server indexes all `@tag` references in the project on startup in <5ms.
+- **In-Memory RAM Index**: Language Server indexes all `:tag` references in the project on startup in <5ms.
 - **Bi-directional Indexing**:
   - `tag_id -> List[ASTNodeSpan]` (Which functions implement decision `d-1eed`?)
   - `ASTNodeSpan -> List[tag_id]` (What architectural constraints govern this function?)
@@ -82,7 +91,7 @@
 ---
 
 ### Phase 5: Automated Bidirectional Verification Gate (`asl meta check`)
-- **Orphan Detection**: Fails if an `@tag` in code has no corresponding entry in `.asl/meta.db`.
+- **Orphan Detection**: Fails if a `:tag` in code has no corresponding entry in `.asl/meta.db`.
 - **Dangling Reference Detection**: Warns if a documentation entry has no code implementing it.
 - **Signature Drift Protection**: If an agent alters a function signature (e.g. adds a parameter), `asl meta check` flags that the decoupled documentation is stale and requires review.
 - **CI/CD Integration**: Integrated into `tools/deploy_check.py` and pre-commit hooks.
@@ -93,7 +102,12 @@
 
 | Metric | Legacy Embedded Comments | Decoupled Metadata (`asl meta`) | Improvement |
 |---|---|---|---|
-| **Prompt Token Cost per File** | ~1,800 tokens (logic + comments) | ~400 tokens (pure logic + tags) | **-78% Token Consumption** |
-| **Architectural Retrieval Latency** | 450ms (file scan + regex grep) | 0.04ms (in-memory inverted index) | **>10,000x Faster** |
-| **Documentation Drift** | High (silent comment rot) | Zero (enforced by `asl meta check`) | **Deterministic Integrity** |
-| **Multilingual Support** | Impossible without code duplication | Native (tag-based locale store) | **100% Decoupled** |
+| **Prompt token cost per file** | logic + prose | logic + tags | to be measured |
+| **Architectural retrieval** | file scan + grep | in-memory inverted index | to be measured |
+| **Documentation drift** | silent comment rot | rejected by `asl meta check` | enforced, not measured |
+| **Multilingual support** | code duplication | tag-keyed locale store | structural |
+
+Every "to be measured" above is a number this iteration must produce with a command, in the shape
+of `bench/token_frames.py` and its lock file: a figure on a page with no way to re-derive it is the
+thing `DESIGN.md` §5 forbids. The earlier draft of this table asserted -78%, 0.04ms and >10,000x
+with nothing behind any of them.

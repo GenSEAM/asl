@@ -1,10 +1,8 @@
-; Querying a string. Both arguments are String, so a haystack/needle swap
-; type-checks and compiles: the cases assert the index, not merely that one was
-; found. The needle sits at the start in one case and at the end in another,
-; which is what separates string-starts-with? from string-ends-with?, and the
-; last case is non-ASCII, where a byte offset and a character offset differ.
-;
-; run: query("banana", "na") == "6|some 2|T|F|T|F|6"
+"Querying a string. Both arguments are String, so a haystack/needle swap"
+"type-checks and compiles: the cases assert the index, not merely that one was"
+"found. The needle sits at the start in one case and at the end in another,"
+"which is what separates string-starts-with? from string-ends-with?, and the"
+"last case is non-ASCII, where a byte offset and a character offset differ."
 
 (module string/query
   :doc "Report where and whether a needle occurs in a haystack."

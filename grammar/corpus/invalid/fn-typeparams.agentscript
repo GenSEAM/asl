@@ -1,4 +1,4 @@
-; A lambda takes neither type parameters nor :doc (AGENT_SPEC_CORE 4.3).
-; Type parameters are bound by the enclosing named declaration.
+"A lambda takes neither type parameters nor :doc (AGENT_SPEC_CORE 4.3)."
+"Type parameters are bound by the enclosing named declaration."
 (defun f [] -> Int64
   ((fn {A} [(x A)] -> A x) 1))

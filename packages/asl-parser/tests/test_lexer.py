@@ -52,3 +52,51 @@ def test_lexer_files_check_clean():
 
     assert len(check_file(lexer_file, roots)) == 0
     assert len(check_file(test_file, roots)) == 0
+
+
+def _dump():
+    from harness import run_asl
+    fixture = ROOT / "packages" / "asl-parser" / "tests" / "fixtures" / "tokenize_driver.asl"
+    return run_asl(fixture)["dump"]
+
+
+def test_lexical_rules_of_section_2():
+    """The uncontested lexical rules of AGENT_SPEC_CORE 2, on the token stream.
+
+    Each was a defect the parity gate found once. They are pinned at the lexer
+    rather than through a parse so that removing a rule fails here, naming the
+    rule, instead of surfacing as an unrelated parse error later. Comment
+    handling is deliberately absent: it is in flux, so the parity gate derives
+    it from the reference grammar instead.
+    """
+    dump = _dump()
+
+    # A `;` inside a string literal is text. What `;` means OUTSIDE one is not
+    # asserted here: the project is replacing `;` comments with free-standing
+    # string literals, so `tools/tests/test_native_parity.py` derives that answer
+    # from the reference grammar rather than this file pinning it.
+    assert dump('"; not a comment"') == ['STRING|"; not a comment"']
+
+    # A float is one token, and the point does not split the run.
+    assert dump("89.99") == ["FLOAT|89.99"]
+    assert dump("(+ 89.99 0.5)") == [
+        "LPAREN|(", "SYMBOL|+", "FLOAT|89.99", "FLOAT|0.5", "RPAREN|)"]
+
+    # A sign belongs to the digits it touches, and to nothing else.
+    assert dump("-1") == ["INT|-1"]
+    assert dump("- 1") == ["SYMBOL|-", "INT|1"]
+    assert dump("-2.5") == ["FLOAT|-2.5"]
+    assert dump("->") == ["SYMBOL|->"]
+
+    # An escaped quote stays inside the string.
+    assert dump('"say \\"hi\\""') == ['STRING|"say \\"hi\\""']
+
+    # `.5` and `1.` are not numbers, and an unclosed string is not a string.
+    assert dump(".5") == ["ERROR|.5"]
+    assert dump("1.") == ["ERROR|1."]
+    assert dump('"unterminated') == ['ERROR|"unterminated']
+
+    # Braces and quotes end a symbol run; `and` is binary, and the chain this
+    # replaced dropped the clauses that said so.
+    assert dump("{T}") == ["SYMBOL|{", "SYMBOL|T", "SYMBOL|}"]
+    assert dump("a:b") == ["SYMBOL|a", "KEYWORD|:b"]

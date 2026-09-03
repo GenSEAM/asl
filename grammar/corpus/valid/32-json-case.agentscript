@@ -1,0 +1,22 @@
+"§4.1's wire-naming controls, which are pinned now even though Core ships no"
+"serializer, so that adding one later cannot silently change the format. Both"
+"grammars rejected `:json-case` until this fixture existed: the specification"
+"defined a form no parser accepted, and nothing was looking."
+(module wire/naming
+  :doc "Records whose serialized field names differ from their source names."
+  :export [Account Ledger describe])
+
+(defschema Account
+  :json-case camel
+  (:field holder-name String "Name on the account")
+  (:field opened-at   Int64  "Creation time, epoch seconds")
+  (:field nickname    String "Display label" :default "unnamed"))
+
+(defschema Ledger
+  :json-case snake
+  (:field account Account "The account this ledger belongs to")
+  (:field balance Int64   "Minor units" :json "balance_minor"))
+
+(defun describe [(l Ledger)] -> String
+  :doc "One line naming the holder and the balance."
+  (str (.-holder-name (.-account l)) ": " (string-from-int64 (.-balance l))))

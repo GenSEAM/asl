@@ -1,9 +1,7 @@
-; Transforming a string, with every operation reported beside the one it could be
-; confused with: lower beside upper, replace over an input that contains the
-; needle more than once, reverse over a non-palindrome, and both parsers over
-; inputs that only one of them accepts.
-;
-; run: transform("aXbXc") == "axbxc|AXBXC|cXbXa|a-b-c|aXbXc|n=5|none|0.0"
+"Transforming a string, with every operation reported beside the one it could be"
+"confused with: lower beside upper, replace over an input that contains the"
+"needle more than once, reverse over a non-palindrome, and both parsers over"
+"inputs that only one of them accepts."
 
 (module string/transform
   :doc "Report every string transformation over one line."

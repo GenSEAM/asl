@@ -1,0 +1,12 @@
+; Multi-line source carrying its own quotes, written with Core §2's five escapes
+; and with no raw-string form. `#"""…"""#` is rejected because `#` is a character
+; the language lexer cannot produce, and a data format that adds one has forked
+; the lexer it claims to share. A vector of lines is the alternative when the
+; escapes get dense.
+;
+; canonical: (:lang :python :body "def query_users(db):\n    cursor = db.cursor()\n    cursor.execute('SELECT \"id\" FROM users')\n    return cursor.fetchall()" :lines ["def query_users(db):" "    return db.cursor()"])
+
+(:lang :python
+ :body "def query_users(db):\n    cursor = db.cursor()\n    cursor.execute('SELECT \"id\" FROM users')\n    return cursor.fetchall()"
+ :lines ["def query_users(db):"
+         "    return db.cursor()"])

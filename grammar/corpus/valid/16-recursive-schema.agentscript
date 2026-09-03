@@ -1,9 +1,7 @@
-; A self-referential record. The field naming its own declaration has no
-; statically known size on the Rust target, so it is boxed — and the box has to
-; be put on at construction and taken off at every read, or the declaration is
-; the only place the three agree.
-;
-; run: depth(chain()) == 3
+"A self-referential record. The field naming its own declaration has no"
+"statically known size on the Rust target, so it is boxed — and the box has to"
+"be put on at construction and taken off at every read, or the declaration is"
+"the only place the three agree."
 
 (defschema Node
   (:field value Int64         "The payload")

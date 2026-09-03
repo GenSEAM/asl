@@ -35,6 +35,7 @@ and deterministic AgentS DSL S-expressions that transpile into native TypeScript
 
 Use `defschema` to define strongly-typed records.
 
+<!-- not-agentscript: v0 syntax; this draft is frozen and superseded by AGENT_SPEC_CORE.md -->
 ```lisp
 (defschema SearchRequest
   (:field query       String  "The prompt query string")
@@ -46,6 +47,7 @@ Use `defschema` to define strongly-typed records.
 
 Use `defun` with explicit return types for typed compilation.
 
+<!-- not-agentscript: v0 syntax; this draft is frozen and superseded by AGENT_SPEC_CORE.md -->
 ```lisp
 (defun process-query (req SearchRequest) -> (Result String String)
   (let ((q-text (.query req)))
@@ -58,6 +60,7 @@ Use `defun` with explicit return types for typed compilation.
 
 Use `defagent` for autonomous tool calling and structured LLM responses.
 
+<!-- not-agentscript: v0 syntax; this draft is frozen and superseded by AGENT_SPEC_CORE.md -->
 ```lisp
 (defagent WebSearchAgent
   :description "Agent for searching web resources"
@@ -76,6 +79,7 @@ Use `defagent` for autonomous tool calling and structured LLM responses.
 
 Use `defui` with `signal`, `computed`, and `effect` for React and Vue component generation.
 
+<!-- not-agentscript: v0 syntax; this draft is frozen and superseded by AGENT_SPEC_CORE.md -->
 ```lisp
 (defschema CounterProps
   (:field initial-count Int :default 0))
@@ -116,6 +120,7 @@ Never import raw platform libraries directly when a Meta-Library exists.
 
 Call native object methods using dot notation:
 
+<!-- not-agentscript: v0 syntax; this draft is frozen and superseded by AGENT_SPEC_CORE.md -->
 ```lisp
 (.method-name object arg1 arg2)
 ```
@@ -124,6 +129,7 @@ Call native object methods using dot notation:
 
 Use `if-target` ONLY when target-specific execution is required:
 
+<!-- not-agentscript: v0 syntax; this draft is frozen and superseded by AGENT_SPEC_CORE.md -->
 ```lisp
 (if-target
   :python (py:exec "import os; print(os.getcwd())")

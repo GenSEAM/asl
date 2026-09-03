@@ -4,37 +4,68 @@
 
 Language version 0.2. This is the complete vocabulary: if a name is not on this page, it does not exist. Write nothing else.
 
+Write the **Nano** spelling shown here. The long spelling of every form is equally valid and means the same thing — see Projection — but Nano is what the language stores and sends, so generating it directly saves a conversion.
+
 ## Shape
 
 ```lisp
-(module my/mod                  ; every file is a module
-  :doc "One sentence."          ; required
-  :export [f Point]             ; NOTHING is public unless listed; a
-                                ;   PascalCase entry exports a type
-  :import [(other/mod :as o)])  ; o/name for a value, o/Type for a type
+"A note is a string bound to nothing — the only comment form."
 
-(defschema Point                ; a record
-  (:field x Int64 "Doc."))      ; doc required on every field
+(module my/mod
+  :d "One sentence."
+  :x [f Point]
+  :i [(other/mod :a o)])
 
-(defenum Shape                  ; a closed union
-  (:case circle [(r Float64)] "Doc.")
-  (:case point  []            "Doc."))
+"NOTHING is public unless listed; a PascalCase entry exports a type."
+"o/name is a value; o/Type is a type."
 
-(defun area [(s o/Shape)] -> Float64  ; an imported type in a signature;
-  :doc "Doc."                         ;   its cases are (o/circle r)
+(dfs Point
+  (:f x I64 "Doc."))
+"doc is required on every field."
+
+(dfe Shape
+  (:c circle [(r F64)] "Doc.")
+  (:c point  []         "Doc."))
+"a closed union."
+
+(df area [(s o/Shape)] -> F64
+  :d "Doc."
   0.0)
+"an imported type in a signature; its cases are (o/circle r)."
 
-(defun {A} id [(x A)] -> A      ; {A} binds a type variable
-  :doc "Required when exported."
+(df {A} id [(x A)] -> A
+  :d "Required when exported."
   x)
+"{A} binds a type variable."
 ```
+
+## Projection
+
+Each row is one form under two spellings. They parse to the same tree.
+
+| Nano | Long |
+|---|---|
+| `df` | `defun` |
+| `dfs` | `defschema` |
+| `dfe` | `defenum` |
+| `mt` | `match` |
+| `:d` | `:doc` |
+| `:x` | `:export` |
+| `:i` | `:import` |
+| `:a` | `:as` |
+| `:f` | `:field` |
+| `:c` | `:case` |
+
+**A short spelling counts only in the position it names.** `:x` is the export list of a module header and nothing else, so a record whose field is called `x` is built with `(P :x 1)` and that key is an ordinary key. Reading these as global find-and-replace is what corrupts a record.
+
+These forms have one spelling: `module`, `fn`, `let`, `if`, `cond`, `try`, `:else`, `:default`, `:json`, `:json-case`.
 
 ## Rules that have no exceptions
 
 1. `if` takes exactly three parts — condition, then, else. There is no one-armed `if`.
-2. `cond` must end with `:else`. `match` must cover every case.
+2. `cond` must end with `:else`. `mt` must cover every case.
 3. Bindings never change. There is no assignment.
-4. Numbers never convert implicitly. Mixing `Int64` and `Float64` is an error.
+4. Numbers never convert implicitly. Mixing `I64` and `F64` is an error.
 5. Lookups that can fail return `(Option T)`. They never throw.
 6. Read a record field with `(.-field r)`. Build one with `(Point :x 1 :y 2)`.
 7. A name is a type variable only if it appears in that declaration's `{ }`.
@@ -42,17 +73,19 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 ## Handling failure
 
 ```lisp
-(match (string-to-int64 s)      ; take apart an Option or Result
-  ((some n) n)
-  ((none)   0))
+(df or-zero [(s Str)] -> I64
+  :d "Take apart an Option or a Result with mt."
+  (mt (string-to-int64 s)
+    ((some n) n)
+    ((none)   0)))
 
-(defun f [(s String)] -> (Result Int64 String)
-  :doc "try unwraps ok, or returns the err from f immediately."
+(df f [(s Str)] -> (Result I64 Str)
+  :d "try unwraps ok, or returns the err from f immediately."
   (let [(n (try (option-to-result (string-to-int64 s) "bad")))]
     (ok (* n 2))))
 ```
 
-`try` is legal only inside a `defun` returning a `Result`. Prefer it over nested `match`.
+`try` is legal only inside a `df` returning a `Result`. Prefer it over nested `mt`.
 
 ## Never write this
 
@@ -62,23 +95,23 @@ Language version 0.2. This is the complete vocabulary: if a name is not on this 
 | `(set! x 1)` | there is no assignment; bind a new name with `let` |
 | `(+ 1 2.0)` | `(+ 1 (float64-to-int64 2.0))` — no implicit conversion |
 | `(.x p)` | `(.-x p)` — the dash is part of field access |
-| `(defun f (x Int64) ...)` | `(defun f [(x Int64)] ...)` — parameters are a vector |
+| `(df f (x I64) ...)` | `(df f [(x I64)] ...)` — parameters are a vector |
 | `(string->int64 s)` | `(string-to-int64 s)` — `->` is the return arrow only |
 | `(nth xs 0)` | `(list-get xs 0)` — only names on this page exist |
 
 ## Forms
 
-- Declarations: `module`, `defschema`, `defenum`, `defun`
-- Expressions: `fn`, `let`, `if`, `cond`, `match`, `try`
+- Declarations: `module`, `dfs`, `dfe`, `df`
+- Expressions: `fn`, `let`, `if`, `cond`, `mt`, `try`
 - Constructors: `ok`, `err`, `some`, `none`, `list`, `pair`, `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`
 - Patterns: `ok`, `err`, `some`, `none`, `list`, `cons`, `pair`, `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`, a literal, a name (binds), or `_`
 
 ## Types
 
-- Primitive: `Bool`, `Int32`, `Int64`, `Float64`, `String`, `Unit`
+- Primitive: `Bool`, `I32` (`Int32`), `I64` (`Int64`), `F64` (`Float64`), `Str` (`String`), `Unit`
 - Constructed: `(List …)`, `(Option …)`, `(Result …)`, `(Pair …)`, `(Map …)`
-- `Int` means `Int64`.
 - A `Map` key must be orderable: `Float64` is not a legal key type.
+- Reserved width names — `F32` is `Float64`. They are accepted so source written for a narrower host type parses, and they carry none of that width's behaviour: no narrowing, no wrap, no trap at the narrower boundary. Do not reach for one to get a smaller number.
 
 ## Vocabulary
 

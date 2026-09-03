@@ -6,11 +6,11 @@
 ### *Stop forcing LLMs to write Python & parse bloated JSON.*
 
 [![Website](https://img.shields.io/badge/website-aslang.dev-9333ea.svg)](https://aslang.dev)
-[![Token Savings](https://img.shields.io/badge/tokens--80%25%20bloat-4ade80.svg)](https://aslang.dev)
+[![Token Savings](https://img.shields.io/badge/wire%20frame-64.7%25%20smaller%20than%20JSON-4ade80.svg)](bench/token_frames.py)
 [![Syntax Errors](https://img.shields.io/badge/syntax%20retries-0-emerald.svg)](https://aslang.dev)
 [![LLM Context](https://img.shields.io/badge/LLM-llms.txt-blue.svg)](https://aslang.dev/llms.txt)
-[![Differential Targets](https://img.shields.io/badge/compiles%20to-Wasm%20%7C%20Rust%20%7C%20TS%20%7C%20Go%20%7C%20Py%20%7C%20SQL-purple.svg)](https://aslang.dev/ecosystem)
-[![License: MIT](https://img.shields.io/badge/License-MIT-gray.svg)](LICENSE)
+[![Differential Targets](https://img.shields.io/badge/compiles%20to-Wasm%20%7C%20Rust%20%7C%20TS%20%7C%20Go%20%7C%20Py-purple.svg)](https://aslang.dev/ecosystem)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-gray.svg)](LICENSE)
 
 **AgentScript** is the world's first programming language and structured wire substrate engineered from first principles for **Autonomous AI Agents, Swarms, and LLM Tooling**.
 
@@ -24,14 +24,21 @@
 
 Every major programming language was designed for human typists sitting at keyboards:
 - **Python / YAML**: Fragile whitespace. One hallucinated space indentation throws a fatal `TabError` that burns 3 recursive repair turns.
-- **JSON / Tool-Calling**: Syntactic bloat. Repetitive `"keys":`, quotes, colons, and commas waste **up to 80% of prompt token budgets** before the model even starts reasoning.
+- **JSON / Tool-Calling**: Syntactic bloat. Repeated `"keys":`, quotes, colons and commas are
+  paid for on every object in every array, before the model starts reasoning.
 - **Docker / Containers**: Heavy cold-starts. Spinning up a container just to run a math check takes seconds and megabytes of memory.
 
 **AgentScript solves this at the language substrate layer:**
-- 🛡️ **Balanced LL(1) Parentheses**: Whitespace is irrelevant. Parentheses balance deterministically in a single pass. **0 syntax repair loops.**
-- 📉 **-80% Token Reduction**: Clean S-expression nano projections strip syntactic clutter. No quotes around keys, no commas, no braces.
-- ⚡ **0.038ms In-Memory MicroVM**: Sandboxed `wasm32-wasip1` runtime with strict capability-jailed I/O and zero host directory traversal.
-- 🎯 **Mathematical Differential Equivalence**: One canonical `.asl` AST compiles with proven cross-target equivalence to **WebAssembly, Rust, TypeScript, Go, Python, and SQL**.
+- 🛡️ **Balanced Delimiters**: whitespace carries no meaning, so there is no indentation to get
+  wrong and a malformed program is caught by counting rather than by running it.
+- 📉 **Smaller On The Wire**: no quotes around keys, no commas, no braces. On the worked example
+  below a command frame is **64.7% smaller** than its JSON form, counted by
+  `bench/token_frames.py` and pinned by a lock file.
+- ⚡ **In-Memory MicroVM**: sandboxed `wasm32-wasip1` runtime with capability-jailed I/O and no
+  host directory traversal.
+- 🎯 **Differential Equivalence, Enforced**: one `.asl` source compiles to **WebAssembly, Rust,
+  TypeScript, Go and Python**, and a gate runs every corpus program on all of them plus a
+  reference interpreter and fails on any disagreement in value, stdout or exit status.
 
 ---
 
@@ -64,7 +71,7 @@ You don't need to rewrite your entire project to reap the benefits. Adopt AgentS
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ 4. FULL AGENTSCRIPT CORE LANGUAGE                                       │
 │    Write verified autonomous logic that compiles deterministically      │
-│    into Wasm, Rust, TypeScript, Go, Python, and SQL.                    │
+│    into Wasm, Rust, TypeScript, Go, and Python.                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +81,7 @@ You don't need to rewrite your entire project to reap the benefits. Adopt AgentS
 
 Here is what happens when an AI agent issues a structured command or task handoff:
 
-### The Old Way: Verbose JSON (42 tokens, fragile quotes)
+### The Old Way: Verbose JSON
 ```json
 {
   "action": "execute_command",
@@ -87,7 +94,7 @@ Here is what happens when an AI agent issues a structured command or task handof
 }
 ```
 
-### The Intermediate Way: TOON (Tabular YAML/CSV, ~25 tokens, whitespace-sensitive)
+### The Intermediate Way: TOON (tabular YAML/CSV, whitespace-sensitive)
 ```yaml
 action: execute_command
 payload: [binary, working_dir, timeout_ms]
@@ -95,14 +102,26 @@ payload: [binary, working_dir, timeout_ms]
 arguments: [status, --short]
 ```
 
-### The Native Agent Way: AgentScript Nano (11 tokens, -73.8% savings, LL(1) verified)
-```lisp
-(! cmd :bin "git" :args ["status" "--short"] :cwd "/app" :timeout 5000)
+### The Native Agent Way: AgentScript Nano
+```agp
+(! cmd :bin "git" :args ["status" "--short"] :cwd "/app" :timeout-ms 5000)
 ```
-*Or positional zero-key form (9 tokens, **-78.6% tokens**):*
-```lisp
+*Or the positional, zero-key form:*
+```agp
 (! cmd "git" ["status" "--short"] "/app" 5000)
 ```
+
+| Frame | `cl100k_base` tokens |
+|---|---|
+| JSON | 51 |
+| TOON | 34 |
+| Nano, keyed | 27 |
+| Nano, positional | **18** |
+
+The positional frame is **64.7% smaller** than the JSON one. Re-run the count yourself with
+`bench/token_frames.py`; `--check` compares it against `bench/token_frames.lock` so the figure on
+this page cannot drift away from the payloads above. This is one example rather than a benchmark —
+the project's measured claims are the ones `ROADMAP.md` names beside the gate that produced each.
 
 ---
 
@@ -136,14 +155,20 @@ asl build --target go   -o dist/agent.go
 asl build --target py   -o dist/agent.py
 ```
 
-### 3. Native Progressive Slicing & Compaction
+### 3. Inspect and Project Without Rewriting Files
 ```bash
-# Extract targeted AST subtrees without heavy jq/yq
-asl slice packages/asl-sh/asl.json .dependencies
+# Read a compact module as fully spelled-out source, on screen only
+asl view src/main.asl
 
-# Proxy noisy terminal/test commands (-80% terminal log bloat)
-asl filter npm test
+# Switch a file between the Nano and the long projection
+asl transcode src/main.asl --to verbose
+
+# Structural search over the AST rather than grep
+asl search src/main.asl 'defun'
 ```
+
+*Planned, not yet shipped:* `asl slice` (native `jq`/`yq` replacement) and `asl filter`
+(terminal-output compactor) — see `.plans/universal-codec/PHASES.md`.
 
 ---
 
@@ -170,4 +195,5 @@ If you are an AI coding assistant (Cursor, Claude Code, Antigravity, Cline, Wind
 
 ## 📜 License
 
-AgentScript is open-source software licensed under the [MIT License](LICENSE). Built with precision by the **GenSEAM** team.
+AgentScript is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
+option. Built by the **GenSEAM** team.

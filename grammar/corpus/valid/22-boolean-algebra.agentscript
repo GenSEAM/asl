@@ -1,9 +1,7 @@
-; Every comparison and both connectives, reported as eight independent columns.
-; A strict operator written where a non-strict one belongs differs only at the
-; boundary, so the cases put `x` exactly on `lo` and exactly on `hi`; and both
-; connectives take all the operand combinations that separate them.
-;
-; run: band(3, 3, 7) == "TTFTFFTF"
+"Every comparison and both connectives, reported as eight independent columns."
+"A strict operator written where a non-strict one belongs differs only at the"
+"boundary, so the cases put `x` exactly on `lo` and exactly on `hi`; and both"
+"connectives take all the operand combinations that separate them."
 
 (module range/band
   :doc "Report where a value sits relative to a closed range."

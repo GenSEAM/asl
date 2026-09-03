@@ -63,8 +63,8 @@ def run_test_file(test_file: Path) -> list[TestResult]:
 
     content = test_file.read_text()
 
-    # 2. Check for inline `; run: ...` expectations
-    run_matches = re.findall(r";\s*run:\s*(.+)", content)
+    # 2. Check for inline `"run: ..."` expectations carried as notes
+    run_matches = re.findall(r'"\s*run:\s*(.+)', content)
     for i, expr in enumerate(run_matches, 1):
         t0 = time.perf_counter()
         # Evaluate assertion

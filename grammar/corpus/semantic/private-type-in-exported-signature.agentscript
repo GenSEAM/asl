@@ -1,7 +1,7 @@
-; expect-only: rule-13
-; `area` is exported and its parameter type is declared here and not exported,
-; so no importer can write the type of what it receives. This is the scenario
-; PCP r-ea8c records, and it survives the lexical half of the fix untouched.
+"expect-only: rule-13"
+"`area` is exported and its parameter type is declared here and not exported,"
+"so no importer can write the type of what it receives. This is the scenario"
+"PCP r-ea8c records, and it survives the lexical half of the fix untouched."
 (module text/leak
   :doc "Exports a function over a type it keeps private."
   :export [area])

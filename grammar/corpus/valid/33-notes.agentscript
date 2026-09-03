@@ -1,0 +1,24 @@
+"A note is a string literal bound to nothing. The body position already admitted
+one; the top level did not, so a file banner or a note between declarations had
+nowhere to live. A note is an ADDITION beside the `;` comment, not a replacement
+for it: §2 still declares `;` and 33 of the 34 fixtures here open with one."
+
+(module text/notes
+  :doc "Two functions and the notes that explain why they are shaped this way."
+  :export [initials shout])
+
+"Notes sit between declarations as well as inside them, and every backend erases
+a top-level one. A note may span lines: the backends escape the newline on the
+way out, which they did not until this fixture asked them to."
+
+(defun initials [(name String)] -> String
+  :doc "First character of each whitespace-separated word, upper-cased."
+  "Splitting on a single space rather than on whitespace is deliberate: the
+   vocabulary has no whitespace-class split, and the caller trims."
+  (string-join (map (fn [w] (string-upper (option-or (string-slice w 0 1) "")))
+                    (string-split (string-trim name) " "))
+               ""))
+
+(defun shout [(s String)] -> String
+  :doc "Upper-cased with a trailing exclamation mark."
+  (str (string-upper s) "!"))

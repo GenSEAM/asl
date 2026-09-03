@@ -3,7 +3,11 @@
 
 import sys
 from pathlib import Path
+
 from tools.sql_cli import parse_sql_sexpr, AslSqlRenderer
+from tools.transcoder import NANO, VERBOSE, TranscodeError, transcode_text
+
+RULE = "=" * 74
 
 
 def view_file_cli(path: Path, verbose: bool = True, dialect: str = "postgres") -> int:
@@ -16,26 +20,33 @@ def view_file_cli(path: Path, verbose: bool = True, dialect: str = "postgres") -
 
     # If file represents or contains a SQL S-expression query
     if any(k in content for k in ("(select", "(q/select", "(insert", "(q/insert", "(create-table")):
-        print(f"==========================================================================")
-        print(f"           Virtual SQL Projection: {path.name} [{dialect.upper()}]        ")
-        print(f"==========================================================================")
+        print(RULE)
+        print(f"           Virtual SQL Projection: {path.name} [{dialect.upper()}]")
+        print(RULE)
         try:
             tree = parse_sql_sexpr(content)
             renderer = AslSqlRenderer(dialect=dialect)
             sql, params = renderer.render_query_tree(tree)
             print(f"\n[Live Parameterized SQL ({dialect.upper()})]:")
             print(f"  {sql}")
-            print(f"\n[Extracted Parameters]:")
+            print("\n[Extracted Parameters]:")
             print(f"  {params}\n")
             return 0
-        except Exception as e:
+        except Exception:
             # Fall back to standard ASL projection if not pure query tree
             pass
 
-    # Standard ASL module virtual projection
-    mode = "VERBOSE" if verbose else "NANO"
-    print(f"==========================================================================")
-    print(f"           Virtual ASL Projection: {path.name} ({mode})                  ")
-    print(f"==========================================================================")
-    print(content)
+    # The projection is computed, not announced: the banner used to head the
+    # file's own unconverted text, so a Nano module read VERBOSE (@pcp:d-1eed).
+    target = VERBOSE if verbose else NANO
+    try:
+        projected = transcode_text(content, target, str(path))
+    except TranscodeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(RULE)
+    print(f"           Virtual ASL Projection: {path.name} ({target.upper()})")
+    print(RULE)
+    print(projected, end="" if projected.endswith("\n") else "\n")
     return 0

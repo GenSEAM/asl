@@ -1,0 +1,1 @@
+outcome(_agentscript.ok("hi")) == "hi" and outcome(_agentscript.err(("not-found",))) == "missing" and outcome(_agentscript.err(("other",))) == "other"

@@ -35,6 +35,9 @@ and a grammar that rejected them would be over-tight.
 .venv/bin/python grammar/closure_audit.py
 .venv/bin/python prelude/generate.py --check
 .venv/bin/python checker/gate.py
+.venv/bin/python bench/token_frames.py --check
+.venv/bin/python bench/token_projection.py --check
+.venv/bin/python tools/doc_examples.py --quiet
 .venv/bin/python backend/check_corpus.py
 .venv/bin/python backend/monomorphism.py
 .venv/bin/python backend/differential.py
@@ -68,10 +71,35 @@ read as placeholders and fail far from their cause.
 transpiling proves the backend covers the forms the grammar admits. Those two drift apart
 silently otherwise.
 
-`checker/gate.py` runs the semantic checker over both corpora: `corpus/valid` must check clean and
-every `corpus/semantic` fixture must be rejected **under the rule its `; expect:` header names**.
-Asserting the code matters more than asserting rejection — the reserved-prefix fixture once passed
-because an unrelated lexical rule rejected it, which removed the pressure to write the real check.
+`checker/gate.py` runs the semantic checker over both corpora **and over every `.asl` file under
+`packages/`**: `corpus/valid` must check clean and every `corpus/semantic` fixture must be rejected
+**under the rule its leading `"expect:"` note names**. Asserting the code matters more than asserting
+rejection — the reserved-prefix fixture once passed because an unrelated lexical rule rejected it,
+which removed the pressure to write the real check.
+
+The `packages/` half was added because the corpus is not the shipped code. While the gate read the
+corpus alone, `packages/asl-mem` called `sqrt` and `list-zip-with` — neither of which exists — and
+two packages contained `(== a b)`, which lexes as `=` applied to `=`, and lowered to
+`_agentscript.eq(=, a)` on Python and `(= == a.clone())` on Rust. Every gate was green throughout.
+Package sources resolve against their own `src/` and `src/core/`, which is what the test harnesses
+already do; a gate that resolved differently would grade a different program than the one that runs.
+
+`doc_examples.py` parses every AgentScript example fenced ```` ```lisp ```` or ```` ```agentscript ````
+anywhere in the repository's Markdown. Fenced code is compiled by nothing, so the documentation
+drifted away from the language repeatedly and silently: the `llms.txt` the site served taught
+`(:export ...)`, `Ok`/`Err` and `zip-with`; `BEST_PRACTICES.md` taught `defextern`;
+`COMPACT_SYNTAX.md` taught `(schema Point [x:Num y:Num])`; a blog post showed a `defun` with no
+body. None of it parses.
+
+Other languages get their own fence and are not graded against Core's grammar: ```` ```agp ```` for
+wire frames, ```` ```asn ```` for data payloads. A block that is deliberately invalid in every
+language — a specimen of what JSON does wrong, a sketch of a form Core does not have — opts out with
+`<!-- not-agentscript: reason -->` on the line before the fence. **The reason is mandatory**: an
+opt-out with no stated cause is how a broken example hides.
+
+`bench/token_frames.py --check` pins the only token figure the README publishes. `DESIGN.md` §5
+requires every published number to be reproducible by a command, and the front page carried four
+that were not: it claimed 42 / 25 / 11 / 9 tokens where `cl100k_base` gives 51 / 34 / 27 / 18.
 
 `check_corpus.py` invokes `rustc` on the Rust output, and `py_compile` on the Python output, rather
 than trusting the transpiler's exit code. It did not, once, and every fixture passed while the Rust
@@ -96,18 +124,33 @@ taken from the specification — not from observing what the transpiler happened
 `checker/tests` covers the type layer's internals. A unifier that accepts everything leaves every gate
 green, so the pieces whose failure is silent are tested directly rather than through a verdict.
 
-### The vocabulary has one source
+### The vocabulary and the projection have one source
 
-`prelude/prelude.json` is authoritative. The specification's §6 tables and `prelude/HANDBOOK.md`
-are **generated** — editing them by hand is wasted work that the `--check` gate will reject.
+`prelude/prelude.json` is authoritative for both the closed vocabulary and the Nano projection.
+Seven artifacts are **generated** from it, and editing any of them by hand is work the `--check`
+gate rejects:
+
+| Artifact | What it carries |
+|---|---|
+| `AGENT_SPEC_CORE.md` §2.1 | the projection: every alias and the position it is significant in |
+| `AGENT_SPEC_CORE.md` §6 | the builtin tables |
+| `prelude/HANDBOOK.md` | the agent-facing reference that goes into a prompt |
+| `llms.txt`, `web/public/llms.txt` | the machine-readable card, one text in two locations |
+| `skills/asl/SKILL.md` | the same card as a harness skill |
+| `grammar/agentscript.lark` | the `BEGIN/END GENERATED PROJECTION` terminal block |
+| `grammar/tree-sitter-agentscript/grammar.js` | the `HEAD` and `OPT` spelling tables |
 
 ```bash
 .venv/bin/python prelude/generate.py
 ```
 
-`HANDBOOK.md` is what goes into an agent's prompt, not the full specification: it is the same
-vocabulary at roughly 2,600 tokens against 6,500, and the prompt is resent on every call, so this
-dominates the cost of a run.
+The two `llms.txt` copies were separately hand-written once and drifted: the one the site served
+taught `(:export ...)`, `Ok`/`Err`, `len` and `zip-with`, none of which the language has. They are
+one generated text now for that reason.
+
+`HANDBOOK.md` is what goes into an agent's prompt, not the full specification, and the prompt is
+resent on every call, so its size dominates the cost of a run. `prelude/budget.lock` ratchets it;
+`asl tokens` re-measures.
 
 ### Regenerating the parser
 
@@ -117,9 +160,44 @@ After editing `grammar/tree-sitter-agentscript/grammar.js`:
 cd grammar/tree-sitter-agentscript && ../../node_modules/.bin/tree-sitter generate
 ```
 
-`src/` is generated and git-ignored. **Both grammars must change together** — `agentscript.lark` drives
-constrained decoding, `grammar.js` drives tooling, and silent drift means they enforce different
-languages.
+`src/` is generated and git-ignored.
+
+### The syntax has four encodings, and they must change together
+
+- `grammar/tree-sitter-agentscript/grammar.js` — the reference grammar; drives editor
+  tooling and the closure audit.
+- `grammar/agentscript.lark` — drives constrained decoding, and is being retired.
+- `packages/asl-parser/src/{lexer,reader,ast}.asl` — the self-hosted parser, written in
+  AgentScript and executed by transpiling to Python.
+- `tools/transcoder.py` — the Nano/Verbose projection, which rewrites token spans the
+  reference grammar has already classified.
+
+Silent drift means they enforce different languages, and it is not hypothetical: the
+self-hosted parser went four phases without `;` comments, with `89.99` lexed as two tokens,
+with `-1` read as a symbol, with a dropped module path, and with no way to fail at all,
+because nothing held it against the grammar.
+
+```bash
+.venv/bin/python -m pytest tools/tests/test_native_parity.py -q
+```
+
+The parity gate. Every fixture under `grammar/corpus/{valid,semantic,modules}` and every
+`packages/**/*.asl` must be accepted by the self-hosted parser wherever the reference grammar
+accepts it, and its verbose rendering must re-parse under it — a render that loses a form
+fails here even when the parse succeeded. Every `grammar/corpus/invalid` fixture must be
+*rejected*, with a diagnostic carrying a line and a column, so "accepts everything" cannot
+satisfy the first claim vacuously. It hard-fails on zero files. It also pins the Nano alias
+tables duplicated into `src/ast.asl` — a parser written in AgentScript cannot read
+`prelude/prelude.json` — to the readers in `prelude/vocab.py`, for heads, options and types.
+
+Where the language is in flux the gate asks the reference grammar rather than writing an
+answer down, so the self-hosted parser follows a language change without the test needing an
+edit. `;` comments are the live case: the gate parses a `;` source with tree-sitter and holds
+the lexer to whichever verdict comes back.
+
+A Nano alias is an alias **for a position**, never a global rewrite: `:x` is `:export` in a
+module option slot and an ordinary record key in `(P :x 1)`. Every consumer resolves it
+positionally, and `prelude/prelude.json`'s `projection` section is the one source.
 
 ### Structural search
 
@@ -160,10 +238,36 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
 - `EXPERIMENT.md` is pre-registered: amendments must be dated and must state whether they were
   made before or after seeing results.
 
-### Dual-Projection Protocol (@pcp:d-1eed, @pcp:c-adc8, @pcp:r-8d8e)
+### Dual-Projection Protocol (@pcp:d-1eed, @pcp:d-ddc2, @pcp:c-adc8, @pcp:r-8d8e)
 
-- **Storage & Wire Default (@pcp:d-1eed)**: Repository `.asl` files on disk and inter-agent protocol frames standardize on the compact **Nano format** (`asl/coord`, dense S-expressions) to conserve LLM token budgets and eliminate token bloat.
-- **Human-Facing Projections**: In chat, user explanations, and educational examples, agents must present the **Verbose projection** for cognitive clarity.
-- **Non-Mutating Virtual Inspection (@pcp:r-8d8e)**: Do NOT use Git clean/smudge filters or automated on-save hooks that mutate files under user focus. Use virtual IDE schemes (`asl-verbose://`), `asl view <file>`, or explicit user-requested conversion (`asl transcode`).
-- **Control-Flow Linearization (@pcp:c-adc8)**: Keep S-expression control nesting $\le 4$ levels. Avoid deeply nested `match`/`if` trees by leveraging `try` early returns and local helper functions.
-
+- **The projection saves bytes, not tokens (@pcp:c-e5aa)**: measured over the whole valid corpus
+  under `cl100k_base`, Nano is 3.6% fewer bytes and **0.00% fewer tokens** — 15,931 either way.
+  `(defun` and `(df` are one token each; ` :export` and ` :x` are two each. Do not repeat the token
+  argument for the projection; `bench/token_projection.py --check` pins the figure. The *wire and
+  data* formats are a different claim and a true one: removing structure takes a command frame from
+  51 tokens to 18 (`bench/token_frames.py`).
+- **Storage, wire and generation default (@pcp:d-1eed, @pcp:d-ddc2)**: `.asl` files on disk, inter-agent
+  frames, and every agent-facing artifact the toolchain generates use the compact **Nano** spelling —
+  `df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `I64`, `F64`, `Str`. The handbook,
+  both `llms.txt` copies and the harness skill are emitted that way, so a model generates the stored
+  form rather than the long form plus a conversion.
+- **Human-facing projection**: in chat, explanations and teaching examples, present the long
+  spelling. `asl view` and `asl transcode --to verbose` produce it without touching the file.
+- **An alias is positional (@pcp:d-ddc2)**: a short spelling means something only in the position
+  `AGENT_SPEC_CORE.md` §2.1 names, and is an ordinary atom everywhere else. **A record whose field is
+  called `x` is built with `(P :x 1)` and no tool may rewrite that key.** Every projection tool must
+  therefore work on the parse tree. A regex turned `(P :x 1 :d 2 :a 3 :i 4)` into
+  `(P :export 1 :doc 2 :as 3 :import 4)`, and the self-hosted parser's `norm-atom` did the same.
+- **Reserved width names (@pcp:d-3504)**: `F32` resolves to `Float64` and carries none of a narrower
+  type's behaviour — no narrowing, no wrapping, no trap at the narrower boundary. It exists so source
+  written against a host that has the width parses today. Do not reach for one to get a smaller
+  number.
+- **Comments are string literals (@pcp:l-a250)**: `;` line comments are retired; a comment is a
+  free-standing string literal bound to nothing — a **note**. Both grammars admit one at top level
+  and inside a declaration body, every backend erases the top-level form, and the native lexer
+  rejects `;`. Newlines inside a note are safe: the backends escape them.
+- **Non-mutating virtual inspection (@pcp:r-8d8e)**: do not use Git clean/smudge filters or on-save
+  hooks that mutate files under the user's focus. Use `asl view`, a virtual IDE scheme, or an
+  explicit `asl transcode`.
+- **Control-flow linearization (@pcp:c-adc8)**: keep control nesting at four levels or fewer. Prefer
+  `try` early returns and local helpers over deep `match`/`if` trees.

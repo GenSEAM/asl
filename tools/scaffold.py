@@ -87,8 +87,7 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
     # 3. tests/test_main.asl
     tests_dir = target_dir / "tests"
     tests_dir.mkdir(exist_ok=True)
-    test_code = f"""; Test fixture for {project_name}
-; run: [calculate(3, 4), greet((Config :name "test" :debug false))] == [25, "Hello from AgentScript: test"]
+    test_code = f""""Test fixture for {project_name}"
 
 (module {project_name}/test
   :doc "Test suite"
@@ -108,7 +107,7 @@ def scaffold_project(target_dir: Path, template: str = "cli", embed_skill: bool 
 This project is written in **AgentScript** (an S-expression language designed for autonomous AI agents and WebAssembly execution).
 
 ## Developer Protocol for AI Agents
-1. **Never guess syntax**: Consult `.skills/agentscript/SKILL.md` or `agentscript tokens` if in doubt.
+1. **Never guess syntax**: Consult `.skills/asl/SKILL.md` or `agentscript tokens` if in doubt.
 2. **Deterministic S-Expressions**: S-expression tail expressions are the return value. Every branch in `match`, `if`, and `cond` must be exhaustive.
 3. **Verification Before Commit**:
    ```bash

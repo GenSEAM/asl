@@ -9,7 +9,7 @@ the target compiler measures the transpiler's exit code, nothing more.
 The same reasoning applies to Python, where the gate was still doing exactly
 that: the module fixture transpiled to `s/concat(...)` and passed. py_compile
 exits 0 on that output — it is a division expression — so a fixture may also
-declare, in a `; run:` header, one expression over its own emitted names that has
+declare one expression in a `<name>.run` sidecar, over its own emitted names that has
 to evaluate true. Compiling proves the shape; only running proves the meaning.
 
 There is no skip list, and there is not going to be one: a `skipped` column still
@@ -38,13 +38,9 @@ def transpile(backend: str, f: Path) -> tuple[bool, str, str]:
 
 
 def declared_run(f: Path) -> str | None:
-    """The expression a fixture declares in its leading comments, or None."""
-    for line in f.read_text().splitlines():
-        if not line.startswith(";"):
-            return None
-        if "; run:" in line:
-            return line.split("; run:", 1)[1].strip()
-    return None
+    """The expression a fixture declares in its `<name>.run` sidecar, or None."""
+    side = f.with_name(f.stem + ".run")
+    return side.read_text().strip() if side.is_file() else None
 
 
 def execute(py_src: str, expr: str) -> tuple[bool, str]:
@@ -90,7 +86,7 @@ def main() -> int:
         if expr is not None:
             if "==" not in expr:
                 ran = "FAIL"
-                fails.append(f"{f.name}: `; run:` header has no `==` assertion: `{expr}`")
+                fails.append(f"{f.name}: `.run` sidecar has no `==` assertion: `{expr}`")
             elif not py_ok:
                 ran = "FAIL"
             else:

@@ -56,7 +56,9 @@
 - Define the plugin interface:
   - Hooks: `on_init`, `on_tool_call`, `on_context_compile`, `on_verify`.
 - Implement `asl-plugin-pcp` as an external optional package:
-  - Translates `@tag :arch "..."` into Project Constitution checks without touching core compiler logic.
+  - Translates `(:tag :arch "...")` nodes into Project Constitution checks without touching core
+    compiler logic. (`:tag`, not `@tag` — `@` is not an identifier character and costs a second
+    BPE token; see `.plans/decoupled-meta/PHASES.md` Phase 1.)
 
 ### Phase 3: In-Browser Companion Shell (`packages/asl-browser-plugin`)
 - Mounts `asl-agent-core` into Chrome / Firefox extension runtime.

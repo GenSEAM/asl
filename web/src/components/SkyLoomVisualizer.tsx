@@ -18,7 +18,7 @@ interface AgentNode {
   id: string;
   name: string;
   role: string;
-  dialect: 'asl/v1' | 'compact/v1' | 'polyglot/v1';
+  dialect: 'asl/v1' | 'asl/coord' | 'compact/v1' | 'polyglot/v1';
   isAslNative: boolean;
   status: 'active' | 'stalled' | 'lonely' | 'offline';
   mailboxCount: number;
@@ -426,11 +426,10 @@ export const SkyLoomVisualizer: React.FC = () => {
   :ts ${Date.now()}
   :type "DATA"
   :channel "tasks/codegen"
-  :body (loom:task
-          :action "compile_wasm"
-          :module "core/matrix"
-          :optimization "O3"
-          :verified-by-checker true))`}
+  :body {"action":"compile_wasm","module":"core/matrix","opt":"O3","timeout-ms":5000})
+
+;; The envelope is an s-expression; the body is JSON until ASN lands.
+;; asl/coord (next tab) is already fully typed.`}
                   </pre>
                 )}
 

@@ -1,45 +1,78 @@
-# ⚡ ASL Nano Specification (Canonical Standard)
+# ASL Nano — the compact projection
 
-**ASL Nano** is the primary, agent-native syntax for AgentScript. Designed specifically for LLM code generation and multi-agent swarms, it eliminates human-centric syntax verbosity while preserving deterministic S-expression structure and full §9 verification.
+**Normative text lives in [`AGENT_SPEC_CORE.md`](../AGENT_SPEC_CORE.md) §2.1**, which is generated
+from `prelude/prelude.json`. This page is orientation; where the two differ, the specification wins
+and this page is the bug.
 
----
+Nano is not a second language. It is a set of shorter spellings for forms the language already has,
+and both grammars produce the same tree from either spelling. It is what the toolchain writes to
+disk, puts on the wire, and generates into every agent-facing artifact; the long spelling is what a
+person reads, and `asl view` and `asl transcode` move between them without touching the file.
 
-## 1. Syntax Mapping
+**What it buys, measured.** Fewer bytes, and not fewer tokens. Across every fixture in
+`grammar/corpus/valid`, under `cl100k_base`: 58,175 bytes against 56,091, a 3.6% saving, and
+15,931 tokens against 15,931 — no saving at all. A BPE vocabulary already encodes the long form
+cheaply, so `(defun` and `(df` are one token each and ` :export` and ` :x` are two each.
+`bench/token_projection.py` is the measurement.
 
-| Construct | Legacy Verbose | Dense Sugar | **ASL Nano (Canonical)** |
-| :--- | :--- | :--- | :--- |
-| **Function Definition** | `(defun name [args] -> Ret body)` | `(def name [args] -> Ret body)` | **`(df name [args] -> Ret body)`** |
-| **Schema Definition** | `(defschema Name fields...)` | `(schema Name fields...)` | **`(dfs Name fields...)`** |
-| **Enum / ADT Definition**| `(defenum Name cases...)` | `(enum Name cases...)` | **`(dfe Name cases...)`** |
-| **64-bit Float** | `Float64` | `Num` / `Float` | **`F64`** |
-| **64-bit Integer** | `Int64` | `Int` | **`I64`** |
-| **String** | `String` | `Str` | **`Str`** |
-| **Boolean** | `Bool` | `Bool` | **`Bool`** |
-| **Unit** | `Unit` | `Unit` | **`Unit`** |
+Do not confuse this with the wire and data formats, where the saving is real and large: removing
+*structure* — quotes around keys, commas, braces, field names repeated on every row — takes a
+command frame from 51 tokens to 18, which `bench/token_frames.py` measures. Structural compaction
+works. Abbreviating identifiers does not.
 
----
+## The spellings
 
-## 2. Example: Autonomous Vector Engine in ASL Nano
+| Nano | Long | Significant in |
+|---|---|---|
+| `df` | `defun` | declaration head |
+| `dfs` | `defschema` | declaration head |
+| `dfe` | `defenum` | declaration head |
+| `mt` | `match` | expression head |
+| `:d` | `:doc` | module header, `defun` |
+| `:x` | `:export` | module header |
+| `:i` | `:import` | module header |
+| `:a` | `:as` | import spec |
+| `:f` | `:field` | `defschema` field |
+| `:c` | `:case` | `defenum` case |
+
+`def`, `schema` and `enum` are also accepted for the three declaration heads, as a compatibility
+surface carrying no meaning of its own.
+
+Types: `I64` is `Int64`, `I32` is `Int32`, `F64` is `Float64`, `Str` is `String`. `Int`, `Num` and
+`Float` are older aliases and still resolve. `F32` is a **reserved width name** — Core has no
+32-bit float, so it resolves to `Float64` and carries none of a narrower type's behaviour. It
+exists so that source written against a host that does have the width parses today.
+
+## The rule that matters
+
+**A short spelling counts only in the position named above.** Everywhere else it is an ordinary
+atom. A record whose field is called `x` is built with `(P :x 1)` and that key means a field, not
+an export list.
+
+This is why the toolchain converts projections through the parse tree rather than by substituting
+text. A regex that rewrites `:x` wherever it appears turns that record into `(P :export 1)`, which
+is a different program.
+
+## Example
 
 ```lisp
 (module math/vector
-  :doc "High-performance vector operations in ASL Nano"
-  :export [Point dot-product norm])
+  :d "Dot product and Euclidean norm over coordinate lists."
+  :x [Point dot norm-squared])
 
 (dfs Point
-  (:field x F64 "x coordinate")
-  (:field y F64 "y coordinate"))
+  (:f x F64 "Horizontal coordinate")
+  (:f y F64 "Vertical coordinate"))
 
-(df dot-product [(a (List F64)) (b (List F64))] -> F64
-  :doc "Vector dot product"
-  (list-sum (list-zip-with * a b)))
+(df dot [(a (List F64)) (b (List F64))] -> F64
+  :d "Sum of the pairwise products of two coordinate lists."
+  (list-sum (map (fn [p] (* (.-first p) (.-second p))) (zip a b))))
 
-(df norm [(v (List F64))] -> F64
-  :doc "Euclidean vector norm"
-  (sqrt (dot-product v v)))
+(df norm-squared [(v (List F64))] -> F64
+  :d "The squared Euclidean norm, which needs no square root."
+  (dot v v))
 ```
 
----
-
-## 3. Backward Compatibility Invariant
-All legacy forms (`defun`, `defschema`, `defenum`, `Float64`, `Int64`, `String`) remain 100% valid and verified across all compiler backends (Wasm, TypeScript, Rust, Go, Python, C Interpreter).
+Note what the example does **not** do: there is no `sqrt` and no `list-zip-with`, because neither
+is in the vocabulary. `prelude/HANDBOOK.md` is the complete list, and
+`.venv/bin/python grammar/closure_audit.py` fails on any example that reaches outside it.

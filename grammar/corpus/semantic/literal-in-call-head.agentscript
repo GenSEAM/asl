@@ -1,8 +1,8 @@
-; expect-only: not-callable
-; `(-1 2)` is a call whose callee is the number -1, because a sign binds to the
-; digits after it. Written with a space, `(- 1 2)` is subtraction; written
-; without, it is this. Both backends only discover it at compile time — a
-; TypeError from Python, E0618 from rustc — so the checker names it instead.
+"expect-only: not-callable"
+"`(-1 2)` is a call whose callee is the number -1, because a sign binds to the"
+"digits after it. Written with a space, `(- 1 2)` is subtraction; written"
+"without, it is this. Both backends only discover it at compile time — a"
+"TypeError from Python, E0618 from rustc — so the checker names it instead."
 (defun difference [] -> Int64
   :doc "Subtraction, misspelt as an application of a literal."
   (-1 2))

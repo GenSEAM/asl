@@ -1,0 +1,5 @@
+; expect: pool-kind
+; `:pool` is indexed by integer, so its value must be a vector. A map has no
+; index 0 for `(:ref 0)` to resolve against, and a pool that cannot be indexed
+; is not a pool.
+(:pool {:a "one" :b "two"} :data ["x" "y"])

@@ -161,8 +161,16 @@ class AslLspServer:
             except Exception as e:
                 return f"-- SQL AST Parsing Error: {e}\n\n{content}"
 
-        # Verbose ASL projection
-        return content
+        # The projection is a conversion, not a label: this returned the buffer
+        # unchanged, so a Nano module previewed as Nano (@pcp:d-1eed). The
+        # transcoder is handed text and never the file, so the preview cannot
+        # mutate it (@pcp:r-8d8e).
+        from tools.transcoder import NANO, VERBOSE, TranscodeError, transcode_text
+        target = NANO if projection == NANO else VERBOSE
+        try:
+            return transcode_text(content, target, uri)
+        except TranscodeError as exc:
+            return f"; projection unavailable: {exc}\n\n{content}"
 
     def _extract_word_at(self, line: str, char: int) -> str:
         if not line or char >= len(line):

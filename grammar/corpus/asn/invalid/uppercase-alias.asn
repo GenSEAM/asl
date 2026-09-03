@@ -1,0 +1,5 @@
+; A qualified head's alias half is a Core §2 `ident`, always lower-case: the
+; language writes `s/Point`, never `S/x`. A reader that classified a head by its
+; MEMBER alone accepted this while the grammar refused it, which is a reader
+; enforcing a different format from the one the grammar defines.
+(S/x 1)

@@ -1,5 +1,5 @@
-; Search-path companion: a parameterised recursive union and a parameterised
-; record, both exported, so an importer can instantiate them across the boundary.
+"Search-path companion: a parameterised recursive union and a parameterised"
+"record, both exported, so an importer can instantiate them across the boundary."
 
 (module core/trees
   :doc "A parameterised binary tree and a one-field cell for its payload."

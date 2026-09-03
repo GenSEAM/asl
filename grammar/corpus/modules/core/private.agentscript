@@ -1,5 +1,5 @@
-; Search-path companion: everything it declares stays private, so a fixture can
-; reach for a type, a case and a record that exist and are not published.
+"Search-path companion: everything it declares stays private, so a fixture can"
+"reach for a type, a case and a record that exist and are not published."
 
 (module core/private
   :doc "A module whose type declarations stay private to it."

@@ -18,6 +18,8 @@
     ((lex/tok-keyword _) "KEYWORD")
     ((lex/tok-string _) "STRING")
     ((lex/tok-int _)    "INT")
+    ((lex/tok-float _)  "FLOAT")
+    ((lex/tok-error _)  "ERROR")
     ((lex/tok-eof)      "EOF")))
 
 (df len-list [(xs (List Int64))] -> Int64

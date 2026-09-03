@@ -1,7 +1,7 @@
-; expect-only: ctor
-; `value` has no :default, and construction rules do not change across a module
-; boundary. Validating keys against the local schema table instead reports
-; nothing at all here.
+"expect-only: ctor"
+"`value` has no :default, and construction rules do not change across a module"
+"boundary. Validating keys against the local schema table instead reports"
+"nothing at all here."
 (module text/empty-cell
   :doc "Constructs an imported record without its required field."
   :export [make]

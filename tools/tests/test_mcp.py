@@ -118,13 +118,12 @@ def test_mcp_asex_compress_module():
   :export [calculate ComplexNumber])
 
 (defschema ComplexNumber
-  :doc "A complex number."
   (:field r Float64 "Real part")
   (:field i Float64 "Imaginary part"))
 
 (defun calculate [(a Int64) (b Int64)] -> Int64
   :doc "Performs complex calculation."
-  (let [temp (* a 2)]
+  (let [(temp (* a 2))]
     (+ temp b)))"""
     res = send_mcp_request({
         "jsonrpc": "2.0",
@@ -140,5 +139,8 @@ def test_mcp_asex_compress_module():
     assert "(module math-lib" in comp
     assert "(defschema ComplexNumber" in comp
     assert "(defun calculate [(a Int64) (b Int64)] -> Int64" in comp
-    assert "panic" in comp
-    assert "let [temp" not in comp  # body expressions omitted
+    # The stub is a call to the declaration itself; `panic` is in no vocabulary,
+    # so the old stub made the compressed module unparseable.
+    assert "(calculate a b)" in comp
+    assert "panic" not in comp
+    assert "let [(temp" not in comp  # body expressions omitted

@@ -1,0 +1,5 @@
+; `&` is in no Core §2 token — not an identifier, not a keyword, not an operator,
+; not a literal — so the identity anchor `(& 1 :name "x")` two documents used to
+; specify was never lexable. It is deleted rather than respelled: an anchor is a
+; pool entry somebody points at twice, and `:pool` already had to exist.
+(& 1 :name "Orchestrator" :peers [(:ref 2)])

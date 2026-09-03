@@ -1,7 +1,6 @@
-; run: label(core_shapes__circle(2.0)) == "circle"
-; A type crossing a module boundary: named in a signature, matched through its
-; imported cases, and constructed. This is also the fixture that names an
-; imported type and therefore has to import its module (§4.0).
+"A type crossing a module boundary: named in a signature, matched through its"
+"imported cases, and constructed. This is also the fixture that names an"
+"imported type and therefore has to import its module (§4.0)."
 
 (module text/labels
   :doc "Short labels for imported shapes."

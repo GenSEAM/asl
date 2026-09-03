@@ -1,7 +1,7 @@
-; expect-only: rule-9
-; core/private declares Vault and does not export it. This reaches the checker
-; through the ctor head, a different path from the qualified-name scan; an
-; implementation that only did the latter reports rule-2 here.
+"expect-only: rule-9"
+"core/private declares Vault and does not export it. This reaches the checker"
+"through the ctor head, a different path from the qualified-name scan; an"
+"implementation that only did the latter reports rule-2 here."
 (module text/crack
   :doc "Constructs a record its import keeps private."
   :export [make]

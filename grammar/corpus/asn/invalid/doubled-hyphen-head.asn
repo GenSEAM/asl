@@ -1,0 +1,4 @@
+; Core §2's kebab rule puts at least one character between hyphens and none at
+; the end, so `a--b` and `a-` are not identifiers. The head is checked against
+; the whole rule and not just its first letter.
+[(a--b 1) (c- 2)]

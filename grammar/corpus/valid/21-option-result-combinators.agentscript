@@ -1,9 +1,7 @@
-; The Option and Result combinators in a chain, with the failure carried all the
-; way to the output. A pipeline that routes its failure through result-to-option
-; discards the error, which is how three different `result-map-err` bodies once
-; produced byte-identical output; here the mapped error is printed.
-;
-; run: resolve("21", 0) == "ok:43|43|43"
+"The Option and Result combinators in a chain, with the failure carried all the"
+"way to the output. A pipeline that routes its failure through result-to-option"
+"discards the error, which is how three different `result-map-err` bodies once"
+"produced byte-identical output; here the mapped error is printed."
 
 (module parse/resolve
   :doc "Parse a number, transform it, and report every failure route."

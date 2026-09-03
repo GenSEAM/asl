@@ -79,3 +79,9 @@ This file groups d/c/r/l entries for the lang/lexical module.
   a clean tree. The gates that actually prove the rename are the word-bounded scans (`\bAgentS\b`,
   `tree-sitter-agents\b`) plus the byte-identity canaries: `prelude/coverage.lock` untouched,
   `backend/cases/*.json` changed only in `"src"`, differential expectations unchanged.
+
+### [l-a250] Comments become unattached string literals, and the replacement does not reach top level
+- **Date**: 2026-09-03
+- **Status**: Resolved
+- **Cluster**: lang/lexical
+- **Description**: `;` line comments are retired in favour of **free-standing string literals bound to nothing** — notes. A note parses under both grammars at top level and inside a declaration body, checks clean, and lowers harmlessly on every target; `grammar/corpus/valid/33-notes.agentscript` gates the note and `34-multiline-strings.agentscript` gates the newline escape (the backends escape a newline in a string literal). The removal is complete in the core: `;` is gone from `AGENT_SPEC_CORE.md` §2 and both core grammars, and the native lexer (`packages/asl-parser/src/lexer.asl`) emits an error token for `;`. The conventions that depended on `;` moved with it: `checker/gate.py` reads the rule name from a leading `"expect:"`/`"expect-only:"` note instead of a `; expect:` header, `check_corpus.py` reads run assertions from a `<fixture>.run` sidecar instead of a `; run:` header, and the formatter gained a `note` printer. **Deliberate exception**: ASN keeps `;` line comments because a bare string is a data value there, so the note is not unambiguous; its `COMMENT` terminal lives outside the shared-core terminal block and `docs/ASN_SPEC.md` records the divergence.

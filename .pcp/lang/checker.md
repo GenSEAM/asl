@@ -144,3 +144,15 @@ This file groups d/c/r/l entries for the lang/checker module.
 - **Costs accepted**: only the root unit's sites are reported. The checker collects an imported
   module's header and never walks its body, so no instantiation exists for it to report, and the
   tracer records sites in the root unit only to match.
+
+### [c-5d55] A builtin name in value position typed clean and lowered to a dangling reference
+- **Date**: 2026-09-03
+- **Status**: Final
+- **Cluster**: lang/checker
+- **Description**: §6 gives a builtin a type, not a value: Core has no first-class reference to one, and a higher-order position takes an `fn` that calls it. Nothing enforced that. `(map string-upper xs)` checked clean and emitted `string_upper(_x)` on Python and `string_upper.clone()` on Rust — a name that exists in neither output, because builtins are lowered as inline templates rather than as functions. The same hole made a common typo silent: `==` is not an operator, so `(== a 0.0)` lexes as `=` applied to `=`, `a` and `0.0`, which typed clean and lowered to `_agentscript.eq(=, a)` and to `(= == a.clone())`. The resolver now reports `builtin-reference` for a builtin name outside call-head position, and two fixtures pin it.
+
+### [c-eddd] Builtin call arity went unchecked and silently dropped arguments
+- **Date**: 2026-09-03
+- **Status**: Final
+- **Cluster**: lang/checker
+- **Description**: `callee_arity` deliberately returned nothing for builtins, reasoning that `list` is variadic as a constructor and nullary as a pattern and that telling them apart needs the type layer. A pattern never reaches a call node, so only the variadic case actually needed excusing — and excusing all of them cost a wrong answer rather than a missing diagnostic: `(and a b c)` checked clean and the Python backend emitted `(a and b)`, discarding the third operand with nothing reported. It was found in the self-hosted lexer, where four of `is-symbol-char`'s six clauses had never run. Arity now comes from §6's declared signature for every non-variadic builtin.

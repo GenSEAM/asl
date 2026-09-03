@@ -1,0 +1,17 @@
+{
+  "id": "nano-projection",
+  "src": "grammar/corpus/valid/30-nano-projection.agentscript",
+  "entry": "summarise",
+  "cases": [
+    [["s1", "1,2,3"], "S1|3|2.0|drifting:2.0|rising",
+     "the ordinary path: Str through an imported helper, Int from a length, Num from a mean, and an F32-declared spread that has to be a Float64 on every target"],
+    [["flat", "5,5"], "FLAT|2|5.0|steady|flat",
+     "a spread of zero and equal ends: the two arms no other case takes, and the only place `>` and `>=` on the drift would differ"],
+    [["hi", "500,400"], "HI|2|450.0|out:450.0|falling",
+     "outside the window and descending: the enum case carrying a Num payload, which is where an unresolved alias reached a constructor rather than a signature"],
+    [["", ""], "|0|0.0|steady|flat",
+     "the empty feed, whose mean sits exactly on the window's lower bound: `<` accepts it and `<=` would not"],
+    [["mix", "2,x,4"], "MIX|2|3.0|drifting:2.0|rising",
+     "an unparsable token, dropped rather than read as zero: reading it as zero would give a mean of 2.0 and a spread of 4.0"]
+  ]
+}

@@ -1,8 +1,13 @@
 (module asl-parser/ast
   :d "Typed AST nodes for the four section-4 heads, parseable from either dialect."
   :x [ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField
-           TopForm parse render-node]
+           TopForm ParseError parse render-node]
   :i [(lexer :a lx) (reader :a rd)])
+
+(dfs ParseError
+  (:f msg String "What the parser could not accept")
+  (:f line Int64 "1-based source line of the offending token")
+  (:f col Int64 "1-based source column of the offending token"))
 
 (dfs Param
   (:f name String "Parameter name")
@@ -21,6 +26,7 @@
   (:f docstring String "Case doc string, as written including quotes"))
 
 (dfs ModuleNode
+  (:f path String "Module path as written after the module head")
   (:f docstring String "Module :doc string, as written including quotes")
   (:f exported (List String) "Names on the :export vector, in source order")
   (:f imports (List (Pair String String)) "Imported module path and alias")
@@ -53,59 +59,136 @@
   (:c top-enum   [(node EnumNode)] "A defenum declaration")
   (:c top-defun  [(node DefunNode)] "A defun declaration"))
 
-(df norm-atom [(a String)] -> String
-  :d "Map an Ultra-Nano atom to its verbose spelling."
-  (let [(nanos (list "df" "dfs" "dfe" "mt" ":f" ":c" ":d" ":x" ":i" ":a"))
-        (verbs (list "defun" "defschema" "defenum" "match"
-                     ":field" ":case" ":doc" ":export" ":import" ":as"))]
-    (mt (list-index-of nanos a)
-      ((some i) (mt (list-get verbs i) ((some v) v) ((none) a)))
-      ((none) a))))
+"The Nano projection, mirroring prelude.json's `projection` section. It is
+duplicated here because a parser written in AgentScript cannot read the JSON;
+`tools/tests/test_native_parity.py` fails if the two tables disagree."
+(df head-spellings [] -> (List String)
+  :d "Every spelling accepted in head position, aligned with head-verbose-names."
+  (list "defun" "def" "df"
+        "defschema" "schema" "dfs"
+        "defenum" "enum" "dfe"
+        "match" "mt"
+        ":field" ":f"
+        ":case" ":c"))
 
-(df parse [(src String)] -> (List TopForm)
-  :d "Tokenize and parse a module source into typed top forms."
-  (let [(forms (.-first (read-forms (lx/tokenize src) (list))))]
-    (build-module forms)))
+(df head-verbose-names [] -> (List String)
+  :d "The verbose spelling each entry of head-spellings names, in the same order."
+  (list "defun" "defun" "defun"
+        "defschema" "defschema" "defschema"
+        "defenum" "defenum" "defenum"
+        "match" "match"
+        ":field" ":field"
+        ":case" ":case"))
 
-(df read-forms [(toks (List lx/Token)) (acc (List rd/SExpr))]
-  -> (Pair (List rd/SExpr) (List lx/Token))
-  :d "Read every top-level SExpr from a token stream until the EOF token."
-  (mt (list-head toks)
-    ((some t)
-     (if (= (.-raw-text t) "")
-       (pair (list-reverse acc) toks)
-       (let [(sub (read-one toks))]
-         (read-forms (.-second sub) (list-cons (.-first sub) acc)))))
-    ((none) (pair (list-reverse acc) (list)))))
+(df option-spellings [] -> (List String)
+  :d "Every spelling accepted in an option slot, aligned with option-verbose-names."
+  (list ":doc" ":d" ":export" ":x" ":import" ":i" ":as" ":a"))
 
-(df read-one [(toks (List lx/Token))] -> (Pair rd/SExpr (List lx/Token))
-  :d "Read one SExpr and return it with the remaining tokens."
-  (mt (list-head toks)
-    ((some t)
-     (let [(raw (.-raw-text t))]
-       (cond
-         ((= raw "(") (read-seq-items (tail-toks toks) ")" (list)))
-         ((= raw "[") (read-seq-items (tail-toks toks) "]" (list)))
-         (:else (pair (rd/make-atom (norm-atom raw)) (tail-toks toks))))))
-    ((none) (pair (rd/make-atom "") (list)))))
+(df option-verbose-names [] -> (List String)
+  :d "The verbose spelling each entry of option-spellings names, in the same order."
+  (list ":doc" ":doc" ":export" ":export" ":import" ":import" ":as" ":as"))
 
-(df read-seq-items [(toks (List lx/Token)) (close String) (acc (List rd/SExpr))]
-  -> (Pair rd/SExpr (List lx/Token))
-  :d "Read list or vector items up to the closing delimiter, which is consumed."
-  (mt (list-head toks)
-    ((some t)
-     (if (= (.-raw-text t) close)
-       (pair (if (= close ")")
-               (rd/make-list (list-reverse acc))
-               (rd/make-vect (list-reverse acc)))
-             (tail-toks toks))
-       (let [(sub (read-one toks))]
-         (read-seq-items (.-second sub) close (list-cons (.-first sub) acc)))))
-    ((none) (pair (rd/make-atom "") (list)))))
+(df type-spellings [] -> (List String)
+  :d "Every accepted type spelling, aligned with type-verbose-names."
+  (list "Int" "I64" "I32" "F64" "F32" "Num" "Str" "Bool" "Unit" "Float"))
 
-(df tail-toks [(toks (List lx/Token))] -> (List lx/Token)
-  :d "The token list without its head; empty when absent."
-  (mt (list-tail toks)
+(df type-verbose-names [] -> (List String)
+  :d "The Core spelling each entry of type-spellings names, in the same order."
+  (list "Int64" "Int64" "Int32" "Float64" "Float64" "Float64" "String" "Bool"
+        "Unit" "Float64"))
+
+(df alias-lookup [(spellings (List String)) (verbs (List String)) (a String)]
+  -> String
+  :d "The verbose spelling a names in this table, or a unchanged."
+  (mt (list-index-of spellings a)
+    ((some i) (mt (list-get verbs i) ((some v) v) ((none) a)))
+    ((none) a)))
+
+(df head-verbose [(a String)] -> String
+  :d "Resolve a head spelling; an alias is significant in head position only."
+  (alias-lookup (head-spellings) (head-verbose-names) a))
+
+(df option-verbose [(a String)] -> String
+  :d "Resolve an option keyword; an alias is significant in an option slot only."
+  (alias-lookup (option-spellings) (option-verbose-names) a))
+
+(df type-verbose [(a String)] -> String
+  :d "Resolve a type spelling; significant in type position only."
+  (alias-lookup (type-spellings) (type-verbose-names) a))
+
+(df resolve-type-text [(t String)] -> String
+  :d "A rendered type with every name in its Core spelling.
+
+  Done on the rendered text rather than the tree: a type holds nothing but names,
+  parens and spaces, so splitting on those reaches every name without a second
+  traversal — and without recursing once per type constructor."
+  (let [(spaced (string-replace (string-replace t "(" " ( ") ")" " ) "))
+        (words (filter (fn [(w String)] -> Bool (not (string-empty? w)))
+                       (string-split spaced " ")))
+        (mapped (string-join
+                  (map (fn [(w String)] -> String (type-verbose w)) words) " "))]
+    (string-replace (string-replace mapped "( " "(") " )" ")")))
+
+(df char-at [(s String) (i Int64)] -> String
+  :d "The single character at index i, or the empty string past the end."
+  (mt (string-slice s i (+ i 1))
+    ((some c) c)
+    ((none)   "")))
+
+(df chars-within? [(allowed String) (s String)] -> Bool
+  :d "True when every character of s appears in allowed."
+  (fold (fn [(acc Bool) (c String)] -> Bool (and acc (string-contains? allowed c)))
+        true
+        (string-chars s)))
+
+(df drop-suffix [(s String)] -> String
+  :d "s without a trailing ? or ! marker."
+  (if (or (string-ends-with? s "?") (string-ends-with? s "!"))
+    (mt (string-slice s 0 (- (string-length s) 1))
+      ((some p) p)
+      ((none)   ""))
+    s))
+
+(df kebab-ident? [(s String)] -> Bool
+  :d "True for §2's ident shape: lowercase, digits and hyphens, optional ?/! tail."
+  (let [(core (drop-suffix s))]
+    (and (not (string-empty? core))
+         (and (string-contains? "abcdefghijklmnopqrstuvwxyz" (char-at core 0))
+              (chars-within? "abcdefghijklmnopqrstuvwxyz0123456789-" core)))))
+
+(df pascal-name? [(s String)] -> Bool
+  :d "True for §2's type-name shape: an uppercase head then alphanumerics."
+  (and (not (string-empty? s))
+       (and (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" (char-at s 0))
+            (chars-within?
+              "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" s))))
+
+(df mod-path? [(s String)] -> Bool
+  :d "True for §2's mod-path shape: one or more kebab idents joined by '/'."
+  (and (not (string-empty? s))
+       (fold (fn [(acc Bool) (seg String)] -> Bool (and acc (kebab-ident? seg)))
+             true
+             (string-split s "/"))))
+
+(dfs PosForm
+  (:f expr rd/SExpr "One top-level form")
+  (:f line Int64 "Line of the form's first token")
+  (:f col Int64 "Column of the form's first token"))
+
+(dfs Frame
+  (:f items (List rd/SExpr) "Completed children, kept reversed")
+  (:f paren Bool "True for a ( ) list, false for a [ ] vector")
+  (:f line Int64 "Line of the opening delimiter")
+  (:f col Int64 "Column of the opening delimiter"))
+
+(dfs ReadState
+  (:f stack (List Frame) "Open frames, innermost first")
+  (:f out (List PosForm) "Completed top-level forms, kept reversed")
+  (:f fail (Option ParseError) "The first error; once set nothing else is read"))
+
+(df frame-tail [(fs (List Frame))] -> (List Frame)
+  :d "The frame stack without its top; empty when absent."
+  (mt (list-tail fs)
     ((some r) r)
     ((none)   (list))))
 
@@ -132,6 +215,12 @@
   :d "The i-th element rendered to its atom text."
   (rd/sexpr-head (nth-expr items i)))
 
+(df list-head-text [(items (List rd/SExpr))] -> String
+  :d "The head element's atom text, or the empty string."
+  (mt (list-head items)
+    ((some h) (rd/sexpr-head h))
+    ((none)   "")))
+
 (df atoms-to-strings [(xs (List rd/SExpr))] -> (List String)
   :d "Map every atom element to its text."
   (map (fn [(x rd/SExpr)] -> String (rd/sexpr-head x)) xs))
@@ -145,21 +234,196 @@
        (find-opt (tail-exprs items) key)))
     ((none) (none))))
 
-(df list-head-text [(items (List rd/SExpr))] -> String
-  :d "The head element's atom text, or the empty string."
-  (mt (list-head items)
-    ((some h) (rd/sexpr-head h))
-    ((none)   "")))
+(dfs OptScan
+  (:f acc (List rd/SExpr) "Rewritten items, kept reversed")
+  (:f pending-import Bool "The previous item was the :import keyword"))
 
-(df build-module [(forms (List rd/SExpr))] -> (List TopForm)
-  :d "Wrap the module header and every declaration into top forms."
-  (mt (list-head forms)
-    ((some mform)
-     (let [(exported (module-exported mform))
-           (decls (decl-forms (tail-exprs forms) exported (list)))
-           (m (module-node mform decls))]
-       (list-cons (top-module m) decls)))
-    ((none) (list))))
+(df norm-import-spec [(s rd/SExpr)] -> rd/SExpr
+  :d "One (path :as alias) spec with its alias keyword spelled verbose."
+  (let [(its (sexpr-items s))]
+    (if (and (= (list-length its) 3) (= (option-verbose (nth-string its 1)) ":as"))
+      (rd/make-list (list (nth-expr its 0) (rd/make-atom ":as") (nth-expr its 2)))
+      s)))
+
+(df norm-import-vect [(v rd/SExpr)] -> rd/SExpr
+  :d "The :import vector with every spec normalized; anything else untouched."
+  (mt v
+    ((rd/sexpr-vect specs)
+     (rd/make-vect (map (fn [(s rd/SExpr)] -> rd/SExpr (norm-import-spec s)) specs)))
+    ((rd/sexpr-list _) v)
+    ((rd/sexpr-atom _) v)))
+
+(df norm-option-step [(st OptScan) (x rd/SExpr)] -> OptScan
+  :d "Fold step over a declaration's own items, rewriting option keywords only."
+  (if (.-pending-import st)
+    (OptScan :acc (list-cons (norm-import-vect x) (.-acc st)) :pending-import false)
+    (if (rd/is-atom? x)
+      (let [(v (option-verbose (rd/sexpr-head x)))]
+        (OptScan :acc (list-cons (rd/make-atom v) (.-acc st))
+                 :pending-import (= v ":import")))
+      (OptScan :acc (list-cons x (.-acc st)) :pending-import false))))
+
+(df norm-options [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Rewrite the option keywords in one declaration's own slots."
+  (list-reverse
+    (.-acc (fold norm-option-step (OptScan :acc (list) :pending-import false) items))))
+
+(df takes-options? [(head String)] -> Bool
+  :d "The two heads whose own slots admit an aliased option keyword."
+  (or (= head "module") (= head "defun")))
+
+(df normalize-form [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Resolve a Nano head, and the option keywords that head's own slots admit.
+
+  Position is the whole point: a record key spelled :x is an ordinary keyword
+  because no option slot of a module or defun is where it sits."
+  (mt (list-head items)
+    ((some h)
+     (if (rd/is-atom? h)
+       (let [(v (head-verbose (rd/sexpr-head h)))
+             (rest (tail-exprs items))]
+         (list-cons (rd/make-atom v)
+                    (if (takes-options? v) (norm-options rest) rest)))
+       items))
+    ((none) items)))
+
+(df form-defect [(items (List rd/SExpr))] -> String
+  :d "A message when a nested form is illegal where it stands, else empty."
+  (if (and (= (list-head-text items) "fn") (= (nth-string items 1) "{"))
+    "a lambda takes neither type parameters nor :doc"
+    ""))
+
+(df read-fail [(st ReadState) (msg String) (line Int64) (col Int64)] -> ReadState
+  :d "The read state carrying its first error."
+  (ReadState :stack (.-stack st) :out (.-out st)
+             :fail (some (ParseError :msg msg :line line :col col))))
+
+(df emit-node [(st ReadState) (node rd/SExpr) (line Int64) (col Int64)] -> ReadState
+  :d "Add a completed node to the innermost open frame, or to the top level."
+  (mt (list-head (.-stack st))
+    ((some f)
+     (ReadState :stack (list-cons (Frame :items (list-cons node (.-items f))
+                                         :paren (.-paren f)
+                                         :line (.-line f) :col (.-col f))
+                                  (frame-tail (.-stack st)))
+                :out (.-out st)
+                :fail (none)))
+    ((none)
+     (ReadState :stack (list)
+                :out (list-cons (PosForm :expr node :line line :col col) (.-out st))
+                :fail (none)))))
+
+(df push-frame [(st ReadState) (paren Bool) (t lx/Token)] -> ReadState
+  :d "Open a frame for a ( or [ delimiter."
+  (ReadState :stack (list-cons (Frame :items (list) :paren paren
+                                      :line (.-line t) :col (.-col t))
+                               (.-stack st))
+             :out (.-out st)
+             :fail (none)))
+
+(df finish-frame [(st ReadState) (f Frame) (t lx/Token)] -> ReadState
+  :d "Close the innermost frame into a node and hand it to its parent."
+  (let [(items (list-reverse (.-items f)))
+        (defect (if (.-paren f) (form-defect items) ""))
+        (node (if (.-paren f)
+                (rd/make-list (normalize-form items))
+                (rd/make-vect items)))
+        (popped (ReadState :stack (frame-tail (.-stack st))
+                           :out (.-out st) :fail (none)))]
+    (if (= defect "")
+      (emit-node popped node (.-line f) (.-col f))
+      (read-fail st defect (.-line t) (.-col t)))))
+
+(df close-frame [(st ReadState) (paren Bool) (t lx/Token)] -> ReadState
+  :d "Consume a ) or ] delimiter, which must close a frame of the same shape."
+  (mt (list-head (.-stack st))
+    ((some f)
+     (if (= (.-paren f) paren)
+       (finish-frame st f t)
+       (read-fail st (str "mismatched closing delimiter '" (.-raw-text t) "'")
+                  (.-line t) (.-col t))))
+    ((none) (read-fail st (str "unexpected closing delimiter '" (.-raw-text t) "'")
+                       (.-line t) (.-col t)))))
+
+(df finish-read [(st ReadState)] -> ReadState
+  :d "At end of input every frame must have been closed."
+  (mt (list-head (.-stack st))
+    ((some f) (read-fail st "unclosed delimiter" (.-line f) (.-col f)))
+    ((none)   st)))
+
+(df read-token [(st ReadState) (t lx/Token)] -> ReadState
+  :d "One token of the scan: a delimiter moves the frame stack, anything else is an atom."
+  (mt (.-kind t)
+    ((lx/tok-lparen)   (push-frame st true t))
+    ((lx/tok-lbracket) (push-frame st false t))
+    ((lx/tok-rparen)   (close-frame st true t))
+    ((lx/tok-rbracket) (close-frame st false t))
+    ((lx/tok-eof)      (finish-read st))
+    ((lx/tok-error m)  (read-fail st m (.-line t) (.-col t)))
+    (_ (emit-node st (rd/make-atom (.-raw-text t)) (.-line t) (.-col t)))))
+
+(df read-step [(st ReadState) (t lx/Token)] -> ReadState
+  :d "Fold step over the token stream; the first error stops the read."
+  (mt (.-fail st)
+    ((some _) st)
+    ((none)   (read-token st t))))
+
+(df read-forms [(toks (List lx/Token))] -> (Result (List PosForm) ParseError)
+  :d "Read every top-level form with an explicit frame stack, never by recursion."
+  (let [(st (fold read-step
+                  (ReadState :stack (list) :out (list) :fail (none))
+                  toks))]
+    (mt (.-fail st)
+      ((some e) (err e))
+      ((none)   (ok (list-reverse (.-out st)))))))
+
+(df perr [(msg String) (pf PosForm)] -> ParseError
+  :d "An error located at the start of the form that carries it."
+  (ParseError :msg msg :line (.-line pf) :col (.-col pf)))
+
+(df parse [(src String)] -> (Result (List TopForm) ParseError)
+  :d "Tokenize and parse a module source into typed top forms."
+  (let [(forms (try (read-forms (lx/tokenize src))))]
+    (build-module forms)))
+
+(df module-form? [(pf PosForm)] -> Bool
+  :d "True when a top-level form is the module header."
+  (and (rd/is-list? (.-expr pf)) (= (rd/sexpr-head (.-expr pf)) "module")))
+
+(df second-form [(forms (List PosForm))] -> (Option PosForm)
+  :d "The second element of a form list, or none."
+  (mt (list-tail forms)
+    ((some r) (list-head r))
+    ((none)   (none))))
+
+(df module-path [(mods (List PosForm))] -> (Result String ParseError)
+  :d "The module path, or an error when no header names one.
+
+  A second header is rejected rather than dropped: a file has one module surface,
+  and silently keeping the first is how a header stops meaning anything."
+  (mt (second-form mods)
+    ((some extra) (err (perr "a second module header" extra)))
+    ((none)
+     (mt (list-head mods)
+       ((some m)
+        (let [(p (nth-string (sexpr-items (.-expr m)) 1))]
+          (if (mod-path? p)
+            (ok p)
+            (err (perr "module header needs a path" m)))))
+       ((none) (ok ""))))))
+
+(df build-module [(forms (List PosForm))] -> (Result (List TopForm) ParseError)
+  :d "Wrap the module header, when present, and every declaration into top forms."
+  (let [(mods (filter (fn [(p PosForm)] -> Bool (module-form? p)) forms))
+        (rest (filter (fn [(p PosForm)] -> Bool (not (module-form? p))) forms))
+        (path (try (module-path mods)))
+        (exported (mt (list-head mods)
+                    ((some m) (module-exported (.-expr m)))
+                    ((none)   (list))))
+        (decls (try (decl-forms rest exported)))]
+    (mt (list-head mods)
+      ((some m) (ok (list-cons (top-module (module-node (.-expr m) path decls)) decls)))
+      ((none)   (ok decls)))))
 
 (df module-exported [(m rd/SExpr)] -> (List String)
   :d "The module's exported names from its :export vector."
@@ -180,36 +444,51 @@
   (let [(items (sexpr-items t))]
     (pair (nth-string items 0) (nth-string items 2))))
 
-(df module-node [(m rd/SExpr) (defs (List TopForm))] -> ModuleNode
+(df module-node [(m rd/SExpr) (path String) (defs (List TopForm))] -> ModuleNode
   :d "The module header as a typed module node."
-  (ModuleNode :docstring (mt (find-opt (sexpr-items m) ":doc")
-                     ((some v) (rd/sexpr-head v))
-                     ((none)   ""))
+  (ModuleNode :path path
+              :docstring (mt (find-opt (sexpr-items m) ":doc")
+                           ((some v) (rd/sexpr-head v))
+                           ((none)   ""))
               :exported (module-exported m)
               :imports (module-imports m)
               :defs defs))
 
-(df decl-forms [(sexprs (List rd/SExpr)) (exported (List String))
-                   (acc (List TopForm))] -> (List TopForm)
-  :d "Convert every declaration SExpr to a typed top form, in order."
-  (mt (list-head sexprs)
-    ((some s)
-     (decl-forms (tail-exprs sexprs) exported
-                 (list-cons (decl-form s exported) acc)))
-    ((none) (list-reverse acc))))
+(df decl-step [(acc (Result (List TopForm) ParseError)) (pf PosForm)
+                  (exported (List String))]
+  -> (Result (List TopForm) ParseError)
+  :d "Add one converted declaration, keeping the first error. Bare strings are comments."
+  (mt acc
+    ((err e) (err e))
+    ((ok xs)
+     (let [(s (.-expr pf))]
+       (if (and (rd/is-atom? s) (string-starts-with? (rd/sexpr-head s) "\""))
+         (ok xs)
+         (mt (decl-form pf exported)
+           ((ok t)  (ok (list-cons t xs)))
+           ((err e) (err e))))))))
 
-(df decl-form [(s rd/SExpr) (exported (List String))] -> TopForm
-  :d "Dispatch one declaration on its dual head."
-  (cond
-    ((rd/is-dual-head? s "defun" "df")      (top-defun (fun-node s exported)))
-    ((rd/is-dual-head? s "defschema" "dfs") (top-schema (schema-node s)))
-    ((rd/is-dual-head? s "defenum" "dfe")   (top-enum (enum-node s)))
-    (:else (top-defun (retained-defun s)))))
+(df decl-forms [(forms (List PosForm)) (exported (List String))]
+  -> (Result (List TopForm) ParseError)
+  :d "Convert every declaration to a typed top form, in order, or fail."
+  (result-map (fn [(xs (List TopForm))] -> (List TopForm) (list-reverse xs))
+              (fold (fn [(acc (Result (List TopForm) ParseError)) (pf PosForm)]
+                      -> (Result (List TopForm) ParseError)
+                      (decl-step acc pf exported))
+                    (ok (list))
+                    forms)))
 
-(df retained-defun [(s rd/SExpr)] -> DefunNode
-  :d "Hold an unclassified top-level form as a generic body SExpr."
-  (DefunNode :name "" :type-vars (list) :is-exported false :effect false
-             :params (list) :ret-type "" :docstring "" :body (list s)))
+(df decl-form [(pf PosForm) (exported (List String))] -> (Result TopForm ParseError)
+  :d "Dispatch one top-level declaration on its normalized head."
+  (let [(s (.-expr pf))
+        (h (rd/sexpr-head s))]
+    (cond
+      ((not (rd/is-list? s))
+       (err (perr "expected a top-level declaration" pf)))
+      ((= h "defun")     (fun-node s exported pf))
+      ((= h "defschema") (schema-node s pf))
+      ((= h "defenum")   (enum-node s pf))
+      (:else (err (perr (str "not a declaration head: '" h "'") pf))))))
 
 (df read-type-vars [(items (List rd/SExpr))]
   -> (Pair (List String) (List rd/SExpr))
@@ -242,8 +521,15 @@
        (pair "" items)))
     ((none) (pair "" items))))
 
-(df fun-node [(s rd/SExpr) (exported (List String))] -> DefunNode
-  :d "Build a typed defun node from its SExpr form."
+(df params-vector? [(v (Option rd/SExpr))] -> Bool
+  :d "True when a defun's parameter slot holds a [ ] vector."
+  (mt v
+    ((some p) (rd/is-vect? p))
+    ((none)   false)))
+
+(df fun-node [(s rd/SExpr) (exported (List String)) (pf PosForm)]
+  -> (Result TopForm ParseError)
+  :d "Build a typed defun node from its SExpr form, or reject the signature."
   (let [(items (sexpr-items s))
         (rest1 (tail-exprs items))
         (eff (mt (list-head rest1)
@@ -254,19 +540,33 @@
         (rest3 (.-second tv))
         (name (list-head-text rest3))
         (rest4 (tail-exprs rest3))
-        (params (mt (list-head rest4)
+        (pslot (list-head rest4))
+        (params (mt pslot
                   ((some p) (param-list p))
                   ((none)   (list))))
         (rest5 (tail-exprs rest4))
+        (arrow (list-head-text rest5))
         (ret (mt (list-head (tail-exprs rest5))
-               ((some r) (rd/render-sexpr r))
+               ((some r) (resolve-type-text (rd/render-sexpr r)))
                ((none)   "")))
-        (rest6 (tail-exprs (tail-exprs rest5)))
-        (docpart (split-doc rest6))
-        (exp (list-contains? exported name))]
-    (DefunNode :name name :type-vars (.-first tv) :is-exported exp
-               :effect eff :params params :ret-type ret
-               :docstring (.-first docpart) :body (.-second docpart))))
+        (docpart (split-doc (tail-exprs (tail-exprs rest5))))]
+    (cond
+      ((not (kebab-ident? name))
+       (err (perr (str "defun name is not kebab-case: '" name "'") pf)))
+      ((not (params-vector? pslot))
+       (err (perr "defun parameters must be a [ ] vector" pf)))
+      ((not (= arrow "->"))
+       (err (perr "defun return type must be introduced by ->" pf)))
+      ((string-empty? ret)
+       (err (perr "defun has no return type" pf)))
+      ((list-empty? (.-second docpart))
+       (err (perr "defun has no body" pf)))
+      (:else
+       (ok (top-defun (DefunNode :name name :type-vars (.-first tv)
+                                 :is-exported (list-contains? exported name)
+                                 :effect eff :params params :ret-type ret
+                                 :docstring (.-first docpart)
+                                 :body (.-second docpart))))))))
 
 (df param-list [(v rd/SExpr)] -> (List Param)
   :d "Parameter records from a params vector."
@@ -276,28 +576,44 @@
   :d "One (name Type) parameter as a typed record."
   (let [(items (sexpr-items p))]
     (Param :name (nth-string items 0)
-           :type (rd/render-sexpr (nth-expr items 1)))))
+           :type (resolve-type-text (rd/render-sexpr (nth-expr items 1))))))
 
-(df schema-node [(s rd/SExpr)] -> SchemaNode
-  :d "Build a typed schema node from its SExpr form."
+(df all-heads? [(forms (List rd/SExpr)) (head String)] -> Bool
+  :d "True when every form carries the given head."
+  (fold (fn [(acc Bool) (f rd/SExpr)] -> Bool
+          (and acc (= (rd/sexpr-head f) head)))
+        true
+        forms))
+
+(df schema-node [(s rd/SExpr) (pf PosForm)] -> (Result TopForm ParseError)
+  :d "Build a typed schema node from its SExpr form, or reject its shape."
   (let [(items (sexpr-items s))
         (tv (read-type-vars (tail-exprs items)))
         (rest (.-second tv))
         (name (list-head-text rest))
-        (fields (map (fn [(f rd/SExpr)] -> AstField (field-node f))
-                     (filter (fn [(f rd/SExpr)] -> Bool (rd/is-list? f))
-                             (tail-exprs rest))))
+        (fforms (filter (fn [(f rd/SExpr)] -> Bool (rd/is-list? f)) (tail-exprs rest)))
         (jc (mt (find-opt items ":json-case")
               ((some v) (some (rd/sexpr-head v)))
               ((none)   (none))))]
-    (SchemaNode :name name :type-vars (.-first tv) :fields fields
-                :json-case jc)))
+    (cond
+      ((not (pascal-name? name))
+       (err (perr (str "defschema name is not PascalCase: '" name "'") pf)))
+      ((list-empty? fforms)
+       (err (perr "defschema needs at least one field" pf)))
+      ((not (all-heads? fforms ":field"))
+       (err (perr "every defschema member must be a (:field ...) form" pf)))
+      (:else
+       (ok (top-schema (SchemaNode :name name :type-vars (.-first tv)
+                                   :fields (map (fn [(f rd/SExpr)] -> AstField
+                                                  (field-node f))
+                                                fforms)
+                                   :json-case jc)))))))
 
 (df field-node [(f rd/SExpr)] -> AstField
   :d "One (:field name Type doc ...) form as a typed record."
   (let [(items (sexpr-items f))]
     (AstField :name (nth-string items 1)
-              :type (rd/render-sexpr (nth-expr items 2))
+              :type (resolve-type-text (rd/render-sexpr (nth-expr items 2)))
               :docstring (nth-string items 3)
               :default (opt-after-key items ":default")
               :json (opt-after-key items ":json"))))
@@ -308,16 +624,24 @@
     ((some v) (some (rd/sexpr-head v)))
     ((none)   (none))))
 
-(df enum-node [(s rd/SExpr)] -> EnumNode
-  :d "Build a typed enum node from its SExpr form."
+(df enum-node [(s rd/SExpr) (pf PosForm)] -> (Result TopForm ParseError)
+  :d "Build a typed enum node from its SExpr form, or reject its shape."
   (let [(items (sexpr-items s))
         (tv (read-type-vars (tail-exprs items)))
         (rest (.-second tv))
         (name (list-head-text rest))
-        (cases (filter (fn [(c rd/SExpr)] -> Bool (rd/is-list? c))
-                       (tail-exprs rest)))]
-    (EnumNode :name name :type-vars (.-first tv)
-              :cases (map (fn [(c rd/SExpr)] -> EnumCase (case-node c)) cases))))
+        (cforms (filter (fn [(c rd/SExpr)] -> Bool (rd/is-list? c)) (tail-exprs rest)))]
+    (cond
+      ((not (pascal-name? name))
+       (err (perr (str "defenum name is not PascalCase: '" name "'") pf)))
+      ((list-empty? cforms)
+       (err (perr "defenum needs at least one case" pf)))
+      ((not (all-heads? cforms ":case"))
+       (err (perr "every defenum member must be a (:case ...) form" pf)))
+      (:else
+       (ok (top-enum (EnumNode :name name :type-vars (.-first tv)
+                               :cases (map (fn [(c rd/SExpr)] -> EnumCase (case-node c))
+                                           cforms))))))))
 
 (df case-node [(c rd/SExpr)] -> EnumCase
   :d "One (:case name [fields] doc) form as a typed record."
@@ -338,7 +662,10 @@
 
 (df render-module [(m ModuleNode)] -> String
   :d "Canonical verbose module header text."
-  (let [(exp (if (list-empty? (.-exported m))
+  (let [(doc (if (string-empty? (.-docstring m))
+               ""
+               (str " :doc " (.-docstring m))))
+        (exp (if (list-empty? (.-exported m))
                ""
                (str " :export [" (string-join (.-exported m) " ") "]")))
         (imp (if (list-empty? (.-imports m))
@@ -349,7 +676,7 @@
                                       (.-imports m))
                                  " ")
                     "]")))]
-    (str "(module :doc " (.-docstring m) exp imp ")")))
+    (str "(module " (.-path m) doc exp imp ")")))
 
 (df render-import [(p (Pair String String))] -> String
   :d "One import spec as canonical text."
@@ -387,7 +714,10 @@
   (str "(" (.-name p) " " (.-type p) ")"))
 
 (df render-schema [(s SchemaNode)] -> String
-  :d "Canonical verbose schema text."
+  :d "Canonical verbose schema text.
+
+  :json-case leads the fields because that is the one place the grammar's
+  `schema_opt*` sits; the parser still reads it wherever it was written."
   (let [(tv (render-type-vars (.-type-vars s)))
         (fields (render-joined (map (fn [(f AstField)] -> String (render-field f))
                                     (.-fields s))
@@ -395,7 +725,7 @@
         (jc (mt (.-json-case s)
               ((some v) (str " :json-case " v))
               ((none)   "")))]
-    (str "(defschema " tv (.-name s) fields jc ")")))
+    (str "(defschema " tv (.-name s) jc fields ")")))
 
 (df render-field [(f AstField)] -> String
   :d "One field as canonical text."

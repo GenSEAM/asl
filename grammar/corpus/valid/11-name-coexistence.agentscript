@@ -1,7 +1,6 @@
-; run: relay(core_shapes__circle(1.0)) == "circle"
-; A local Shape and an imported one coexist: distinct types, distinct spellings.
-; core/shapes is imported under two aliases, and a value reached through one is
-; handed to a function typed by the other — they must be the same type.
+"A local Shape and an imported one coexist: distinct types, distinct spellings."
+"core/shapes is imported under two aliases, and a value reached through one is"
+"handed to a function typed by the other — they must be the same type."
 
 (module text/coexist
   :doc "A locally declared Shape beside an imported one."

@@ -52,6 +52,7 @@ exact line where it becomes unwritable.
 
 **Program 1 — fetch and parse.** Get a URL, parse JSON into a schema, return a `Result`.
 
+<!-- not-agentscript: quoted from the superseded v0 draft this document critiques -->
 ```lisp
 (defschema User
   (:field id   Int    "User id")
@@ -75,6 +76,7 @@ map the error — of which the spec defines zero (**B1** again, **G6**).
 
 **Program 2 — agent with a tool.** The use case §3.3 is titled after.
 
+<!-- not-agentscript: quoted from the superseded v0 draft this document critiques -->
 ```lisp
 (defschema WeatherQuery (:field city    String "City name"))
 (defschema WeatherReply (:field summary String "Forecast summary"))
@@ -97,6 +99,7 @@ and nothing in the spec can construct a `WeatherReply` to return (**B2**).
 
 **Program 3 — dynamic list UI.** Render `(List Item)` with a computed total.
 
+<!-- not-agentscript: quoted from the superseded v0 draft this document critiques -->
 ```lisp
 (defschema Item
   (:field label String "Row label")
@@ -117,6 +120,7 @@ Stops at the first dynamic child. No `map`, `for`, `ui:for`, or recursion is def
 
 **Program 4 — JSON round-trip.** The only one of the four that is writable:
 
+<!-- not-agentscript: quoted from the superseded v0 draft this document critiques -->
 ```lisp
 (defschema SearchRequest
   (:field query       String "The prompt query string")

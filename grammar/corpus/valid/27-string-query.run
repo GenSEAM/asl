@@ -1,0 +1,1 @@
+query("banana", "na") == "6|some 2|T|F|T|F|6"

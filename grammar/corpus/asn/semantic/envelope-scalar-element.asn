@@ -1,0 +1,5 @@
+; expect: envelope-scalar-element
+; A scalar element has no field to merge into. Dropping the shared fields for it
+; silently would make one payload mean two different things depending on an
+; element's type, so the merge is refused instead.
+(:curr "USD" :data [(:sku "A1" :price 24.50) "A2"])

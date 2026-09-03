@@ -1,0 +1,1 @@
+[sum_list([1, 2, 3, 4]), first_or([], 9), safe_div(7, 2), describe(safe_div(7, 0)), classify(-5)] == [10, 9, ("ok", 3), "division by zero", "negative"]

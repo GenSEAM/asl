@@ -393,9 +393,13 @@ try {
   process.exit(1);
 }
 """
-    try:
+    import shutil
+    node = shutil.which("node")
+    if not node:
+        error = {"status": "ERROR", "target": target, "error": "node is not on PATH"}
+    else:
         res = subprocess.run(
-            ["/usr/local/bin/node", "--input-type=module", "-e", node_script, clean, target],
+            [node, "--input-type=module", "-e", node_script, clean, target],
             capture_output=True,
             text=True,
             cwd=str(ROOT),
@@ -408,11 +412,13 @@ try {
                 print(f"=== [SkyLoom Transcoder: -> {target}] ===")
                 print(result["wireFrame"])
             return 0
-    except Exception:
-        pass
+        error = {"status": "ERROR", "target": target,
+                 "error": (res.stderr or res.stdout).strip() or f"node exited {res.returncode}"}
 
+    # Echoing the input back as a successful transcode would hide a broken codec.
     if json_mode:
-        print(json.dumps({"status": "OK", "target": target, "wireFrame": clean}, indent=2))
+        print(json.dumps(error, indent=2))
     else:
-        print(clean)
-    return 0
+        print(f"=== [SkyLoom Transcoder: -> {target}] FAILED ===", file=sys.stderr)
+        print(error["error"], file=sys.stderr)
+    return 1

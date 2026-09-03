@@ -194,9 +194,9 @@ building backends first would have optimised the part already known to be small.
 
 Fixtures for semantic-only rules live in `grammar/corpus/semantic/`. They **must parse** — a
 grammar that rejects them is over-tight — and each must be *rejected by the checker under the rule
-its `; expect:` header names*. A fixture rejected for the wrong reason fails the gate: that is how
+its leading `"expect:"` note names*. A fixture rejected for the wrong reason fails the gate: that is how
 the reserved-prefix rule looked defended while nothing enforced it (PCP `c-099a`). A stronger
-header, `; expect-only:`, asserts the fixture reports that code *and nothing else* — 17 of the 34
+note, `"expect-only:"`, asserts the fixture reports that code *and nothing else* — 17 of the 34
 carry it, because a rule can otherwise fire correctly while a stale failure from an earlier pass is
 still reported alongside it (PCP `c-c6a3`). Every new check adds fixtures there.
 
@@ -294,25 +294,14 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
   multi-line as a matter of course. **Closed**: the four literal emission sites escape a newline on
   the way out, `grammar/corpus/valid/34-multiline-strings.agentscript` compiles it on every target,
   and `33-notes.agentscript` carries multi-line notes again.
-* **`;` comments are being replaced by unattached string literals, and the top-level form had to be
-  built before the conversion could land.** The project has abandoned `;` line comments in favour of
-  **free-standing string literals bound to nothing**, and a parallel session is converting existing
-  comments over. `;` remains in the Lark grammar, which is being retired and is not worth
-  maintaining.
-  A bare string inside a declaration body already worked: it parses under both grammars, checks
-  clean, and lowers harmlessly on every target — `"...".to_string();` on Rust, `void ("...")` on
-  TypeScript, `_ = "..."` on Go, a string statement on Python. **At top level it did not parse at
-  all**, because `toplevel` admitted only `module_decl`, `defschema`, `defun` and `defenum` — so a
-  file banner, a licence header, or a note between declarations had nowhere to live, and every
-  correctly-converted file became a parse error. From inside that reads as a tool corrupting files
-  on a loop, and it was reported as one. **Closed**: both grammars carry a `note` production, every
-  backend already erased it, and `grammar/corpus/valid/33-notes.agentscript` gates it. PCP `l-a250`.
-  One thing still depends on it. The `; expect:` headers that drive `checker/gate.py` are read out
-  of the source text rather than off the parse tree, so they survive today by accident of how the
-  gate works; the moment `;` leaves the grammars, that convention needs a replacement or the
-  semantic gate loses the thing it asserts against. `prelude/HANDBOOK.md`'s generated shape block still teaches `;`, correctly, because `;`
-  is still what both grammars accept; it must be regenerated in the change that removes `;`, not
-  before.
+* **`;` comments are retired; a comment is a free-standing string literal bound to nothing.**
+  `;` is gone from `AGENT_SPEC_CORE.md` §2 and both core grammars, and the native lexer rejects it.
+  A comment is now a **note** — a string literal bound to nothing, admitted at top level and inside
+  a declaration body and erased at every backend. The `; expect:`/`; expect-only:` headers that
+  drove `checker/gate.py` became leading `"expect:"`/`"expect-only:"` notes, and `; run:` assertions
+  moved to `<fixture>.run` sidecars read by `check_corpus.py`. ASN keeps `;` on its own authority —
+  a bare string is a data value there, so the note is not unambiguous — with its `COMMENT` terminal
+  outside the shared-core block and the divergence documented in `docs/ASN_SPEC.md`. PCP `l-a250`.
 * **The website publishes numbers with no gate behind them, which `DESIGN.md` §5 forbids.** A sweep
   of `web/src` finds `80%`, `0.038ms`, `0.05ms`, `78%`, `70%`, `68.4%`, `160%`, `97%` and others.
   Two of them are real — `83.4%` is the SkyLoom handoff reduction and `78%` the MCP interface

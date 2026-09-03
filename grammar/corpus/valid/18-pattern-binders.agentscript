@@ -1,8 +1,6 @@
-; A bare identifier in a pattern is a binder; a parenthesised one names a case.
-; Both readings of one name appear here: the prelude seeds `not-found` as an
-; IoError case, so the collision is live without anything being declared.
-;
-; run: outcome(_agentscript.ok("hi")) == "hi" and outcome(_agentscript.err(("not-found",))) == "missing" and outcome(_agentscript.err(("other",))) == "other"
+"A bare identifier in a pattern is a binder; a parenthesised one names a case."
+"Both readings of one name appear here: the prelude seeds `not-found` as an"
+"IoError case, so the collision is live without anything being declared."
 
 (defun outcome [(r (Result String IoError))] -> String
   :doc "`not-found` binds the payload in the first arm and names a case in the

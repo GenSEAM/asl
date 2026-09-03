@@ -1,0 +1,45 @@
+"The STRING terminal admits a raw newline between the quotes, and now that a"
+"comment is spelled as a free-standing string, a note running to a second line"
+"is ordinary source. Every backend passed the token through"
+"verbatim, so the raw newline landed between the target's quotes. Rust takes a"
+"multi-line literal and Python, TypeScript and Go reject one, so three of four"
+"emitted source their own compiler refused, while the grammar, the checker and"
+"every gate stayed green over it: no fixture had ever written one."
+"A raw tab rides along because it is the other character the grammar lets"
+"through as itself, and `lines` splits on the escape form of the same newline"
+"the banner spells raw, so the two spellings have to arrive as one character."
+
+"Help text is where a multi-line literal stops being exotic and becomes the
+ ordinary case, which is why this module is written as help text."
+
+(module text/usage
+  :doc "A program's help text, spelled as the multi-line literals it really is."
+  :export [banner usage cells lines render])
+
+(defun banner [] -> String
+  :doc "The banner, whose rule line is part of one literal."
+  "AgentScript
+===========")
+
+(defun usage [] -> String
+  :doc "The usage block: four lines, one of them empty, so consecutive newlines
+        are covered as well as single ones."
+  "usage: fmt [--width N] FILE
+
+  --width N  wrap at N columns
+  --help     show this text")
+
+(defun cells [] -> String
+  :doc "A raw tab between the quotes, which reaches every target escaped."
+  "a	b	c")
+
+(defun lines [] -> Int64
+  :doc "How many lines the banner has."
+  "A note inside a body, itself running to a second line: its value is
+   discarded like any other non-final expression, and no backend may let its
+   newline reach the target."
+  (list-length (string-split (banner) "\n")))
+
+(defun render [(name String)] -> String
+  :doc "The banner over the usage block, under the name the caller gives."
+  (string-replace (str (banner) "\n" (usage)) "fmt" name))

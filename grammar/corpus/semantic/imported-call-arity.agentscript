@@ -1,8 +1,8 @@
-; expect-only: arity
-; `s/circle` is exported and well-shaped, so rule 9 is satisfied; only the
-; declaration in core/shapes says the case takes one argument. Arity does not
-; stop being checkable at a module boundary — the import table carries the
-; callee's parameters.
+"expect-only: arity"
+"`s/circle` is exported and well-shaped, so rule 9 is satisfied; only the"
+"declaration in core/shapes says the case takes one argument. Arity does not"
+"stop being checkable at a module boundary — the import table carries the"
+"callee's parameters."
 (module text/too-many
   :doc "Calls an imported constructor with the wrong number of arguments."
   :export [big]

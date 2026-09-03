@@ -104,38 +104,43 @@ Allow autonomous agents to test algorithmic hypotheses in memory without risk:
 
 ```lisp
 (module agent/scratchpad
-  :doc "In-memory combinatorial search test"
-  :export [find-optimal-path]
-  :import [(core/math :as m)])
+  :d "Cheapest-node selection over an in-memory candidate list."
+  :x [Node cheapest])
 
-(defschema Node
-  (:field id Int64 "Node identifier")
-  (:field cost Float64 "Path weight"))
+(dfs Node
+  (:f id I64 "Node identifier")
+  (:f cost F64 "Path weight"))
 
-(defun find-optimal-path [(nodes (List Node))] -> (Option Node)
-  :doc "Filter and select minimum cost node in memory"
-  (match nodes
-    ((list) (none))
-    ((cons head tail) (some head))))
+(df cheapest [(nodes (List Node))] -> (Option Node)
+  :d "The node with the lowest cost, or none when the list is empty."
+  (list-head (list-sort-by (fn [(n Node)] -> F64 (.-cost n)) nodes)))
 ```
+
+Note `Node` on the export list: rule 13 refuses an exported signature that names a private type,
+because no importer could write the type of what it receives. This example is checked by
+`.venv/bin/python agentscript check` like every other example on this page.
 
 ---
 
-### Recipe 5: Host FFI & Foreign Declarations (`defextern`)
+### Recipe 5: Host FFI — not yet available
 
-When integrating with external native libraries or hardware APIs:
+> **Status: not implemented.** `AGENT_SPEC_CORE.md` §0 lists FFI as deliberately out of Core until
+> the checker can make a foreign call total, and neither grammar accepts a `defextern` form. The
+> shape below is a **sketch of the intended surface**, kept so the eventual design is additive; it
+> does not parse today, and `tools/bindgen` emits it against no grammar. Do not write it.
 
+<!-- not-agentscript: a sketch of the FFI surface Core deliberately does not have yet -->
 ```lisp
-(module ext/crypto
-  :doc "Foreign binding to native host cryptography"
-  :export [sha256-hash])
-
-(defextern sha256-hash [(data String)] -> String
-  :doc "Platform-specific native SHA-256 implementation"
+;; SKETCH — does not parse. See AGENT_SPEC_CORE.md §0 and PCP d-4b8c.
+(defextern sha256-hash [(data Str)] -> (Result Str IoError)
+  :d "Platform-specific native SHA-256 implementation."
   :target :rs "native_crypto::sha256"
-  :target :ts "crypto.createHash('sha256').update"
+  :target :ts "crypto.createHash"
   :target :py "hashlib.sha256")
 ```
+
+The open question that gates it is not syntax but semantics: how a foreign call's failure crosses
+the boundary without making the language untotal.
 
 ---
 
