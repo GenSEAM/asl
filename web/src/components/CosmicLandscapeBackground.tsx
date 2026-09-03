@@ -233,19 +233,19 @@ const LeftDeflectingGutterStream: React.FC = () => {
 
     const itemDef = LEFT_ITEMS[k % LEFT_ITEMS.length];
 
-    // Smooth deflection to the left when approaching chameleon (viewY <= 480)
+    // Smooth deflection to the left when approaching chameleon (viewY <= 560)
     let xOff = 0;
     let extraRot = 0;
     let opacity = 0.85;
 
-    if (viewY <= 480) {
-      // t ranges from 0 (at 480px) to 1 (at 120px)
-      const t = Math.max(0, Math.min(1, (480 - viewY) / 360));
-      // Ease curve: veers smoothly to the left
-      const ease = Math.pow(t, 1.7);
-      xOff = -ease * 240; // Drifts 240px to the left (off-screen)
-      extraRot = -ease * 35; // Banks 35 degrees into the turn
-      opacity = Math.max(0, 0.85 * (1 - ease * 1.2));
+    if (viewY <= 560) {
+      // t ranges from 0 (at 560px) to 1 (at 140px)
+      const t = Math.max(0, Math.min(1, (560 - viewY) / 420));
+      // Organic smoothstep S-curve for ultra-fluid banking
+      const ease = t * t * (3 - 2 * t);
+      xOff = -ease * 260; // Sweeps 260px to the left (completely off-screen)
+      extraRot = -ease * 42; // Banks 42 degrees dynamically into the turn
+      opacity = Math.max(0, 0.85 * (1 - Math.pow(t, 1.3)));
     }
 
     visibleItems.push({
@@ -280,12 +280,15 @@ const LeftDeflectingGutterStream: React.FC = () => {
 
         {/* Blueprint dashed guideline showing the diversion trajectory out to the left */}
         <path
-          d="M 120,480 C 110,380 50,260 -60,140"
+          d="M 125,560 C 115,440 60,300 -80,180"
           stroke="url(#leftBioGrad)"
-          strokeWidth="1.2"
-          strokeDasharray="4 4"
-          opacity="0.25"
+          strokeWidth="1.4"
+          strokeDasharray="5 3"
+          opacity="0.35"
         />
+        <g fontFamily="monospace" fontSize="6" fill="#c084fc" opacity="0.35" transform="translate(16, 290) rotate(-38)">
+          <text x="0" y="0">&lt;&lt; DIVERSION-ARC &lt;&lt;</text>
+        </g>
 
         {visibleItems.map(({ key, x, y, rot, opacity, render }) => (
           <g
@@ -294,6 +297,7 @@ const LeftDeflectingGutterStream: React.FC = () => {
             stroke="url(#leftBioGrad)"
             strokeWidth="1.2"
             opacity={opacity}
+            style={{ transition: 'transform 0.08s ease-out, opacity 0.08s ease-out' }}
           >
             {render()}
           </g>
