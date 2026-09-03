@@ -388,40 +388,40 @@ export const CosmicLandscapeBackground: React.FC = () => {
             <g filter="url(#fixedAmbientGlow)">
               {/* 
                 THE CYBER-VINE:
-                Starts low at (-30, 145), passes right through the curled tail which wraps around it,
-                cradles the belly, and sweeps UPWARDS between chameleon & satellite to the header!
+                Starts low on left edge at (-30, 160), passes directly through the tail's circular spiral eye at (52, 95),
+                cradles under the belly at (95, 74), and sweeps UPWARDS to the top header (-50)!
               */}
               <path
-                d="M -30,145 C 5,140 25,128 48,121 C 72,114 96,106 122,96 C 152,84 178,58 198,28 C 218,-2 232,-24 246,-45"
+                d="M -30,160 C 2,142 24,118 52,95 C 78,74 104,72 134,54 C 168,34 202,0 234,-48"
                 stroke="url(#vineBranchGrad)"
                 strokeWidth="3.4"
                 strokeLinecap="round"
               />
               <path
-                d="M -30,150 C 5,145 25,133 48,126 C 72,119 96,111 122,101 C 152,89 178,63 198,33 C 218,3 232,-19 246,-40"
+                d="M -30,165 C 2,147 24,123 52,100 C 78,79 104,77 134,59 C 168,39 202,5 234,-43"
                 stroke="url(#vineBranchGrad)"
                 strokeWidth="1.2"
                 strokeDasharray="3 3"
-                opacity="0.6"
+                opacity="0.55"
               />
 
-              {/* Delicate sprouting cyber-leaves climbing up towards header */}
-              <g transform="translate(142, 80) rotate(-40)">
+              {/* Sprouting cyber-leaves climbing up to header */}
+              <g transform="translate(138, 72) rotate(-42)">
                 <path d="M 0,0 Q 14,-9 28,0 Q 14,9 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
                 <line x1="0" y1="0" x2="28" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
               </g>
-              <g transform="translate(182, 42) rotate(-58)">
+              <g transform="translate(178, 36) rotate(-60)">
                 <path d="M 0,0 Q 12,-8 24,0 Q 12,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
                 <line x1="0" y1="0" x2="24" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
               </g>
-              <g transform="translate(222, -4) rotate(-72)">
+              <g transform="translate(216, -8) rotate(-75)">
                 <path d="M 0,0 Q 10,-7 20,0 Q 10,7 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
                 <line x1="0" y1="0" x2="20" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
               </g>
 
               {/* Spiral tendril curling near header */}
               <path
-                d="M 238,-28 Q 250,-40 246,-50 Q 240,-56 230,-52 Q 225,-47 230,-42"
+                d="M 232,-35 Q 244,-47 240,-56 Q 234,-62 225,-58 Q 220,-52 225,-47"
                 stroke="url(#vineBranchGrad)"
                 strokeWidth="1.4"
               />
