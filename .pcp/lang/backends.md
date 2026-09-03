@@ -255,3 +255,11 @@ This file groups d/c/r/l entries for the lang/backends module.
   needs a binding that is read again *after* the match, which no fixture had. The failure is a
   compile error rather than a wrong answer, so it looks like a language restriction rather than a
   backend gap.
+
+### [d-8d4c] Full self-hosted validation migration and retirement of legacy Lark/Python parsers
+- **Date**: 2026-09-03
+- **Status**: Active
+- **Cluster**: lang/backends
+- **Description**: All ecosystem validation, conformance gates (`validate.py`, `doc_examples.py`, `closure_audit.py`, `checker/gate.py`), and test suites migrate from legacy Python-based parsers (Earley/Lark and tree-sitter CLI shims) to the 100% self-hosted pure AgentScript parser and toolchain (`packages/asl-parser`). Lark is formally retired. Validation follows a three-stage bootstrap ladder: (1) Native parser parity & gate replacement, (2) Self-hosted semantic type checker (`packages/asl-checker`), (3) Self-hosted multi-target code generation (`packages/asl-compiler`).
+- **Rationale**: A language claiming self-containment, closed vocabulary, and deterministic multi-backend execution cannot permanently rely on Python-hosted Lark or external C/Node tree-sitter binaries for its validation gates. Having four encodings of the syntax invites silent divergence. Running the ecosystem's gates through the self-hosted ASL parser written in ASL itself validates the language, exercises the standard library at scale, and eliminates external toolchain dependencies.
+- **Why Non-Obvious**: Relying on tree-sitter or Lark for CI while writing a self-hosted parser produces an illusion of safety: the self-hosted parser might pass superficial unit tests while diverging on subtle corner cases (delimiter tracking, multiline escapes, alias resolution). Holding every corpus fixture, every package source, and every markdown example directly against the self-hosted parser is what guarantees the self-hosted implementation is authoritative.

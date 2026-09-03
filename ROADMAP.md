@@ -3,10 +3,14 @@
 Written to be read cold. A session starting from zero should be able to resume from this file
 alone, plus `AGENTS.md` for commands and `.pcp/INDEX.md` for recorded intent.
 
-**Last updated:** 2026-09-03 · **Head commit at writing:** `c88c7ed`, plus the self-hosted-parser
-completion (`asl-selfhosted-runtime-v1` Phases 3–5, uncommitted): `asl parse` CLI + native-vs-Lark
-benchmark, iterative (fold-based) lexer scanner, parse-all-packages gate. Every figure below was
-re-derived after that work by running the command that produces it.
+**Last updated:** 2026-09-03 · **Head commit at writing:** `3f0fe6b`, plus an uncommitted
+consistency pass over the whole surface — the Nano projection given one source and a §2.1, the
+gates widened from the corpus to the shipped packages and the documentation, and several defects
+those widened gates immediately found. Every figure below was re-derived by running the command
+that produces it.
+
+**Read §6 before trusting anything here.** The gaps listed there are the ones this project knows
+about; the ones it did not know about were found by making a gate look somewhere it had not looked.
 
 ---
 
@@ -44,7 +48,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | Language specification | **v0.2 complete** — `AGENT_SPEC_CORE.md` |
 | Grammars | **two, agreeing** — Lark (Earley) and tree-sitter |
 | Tooling (AST, structural search, fmt, bindgen, distributor) | **working** (Phase 6) — queries return real captures, formatter idempotent on corpus, bindgen text-level verified |
-| Conformance gate | **green** — 74 fixtures × 2 grammars (69 must parse, 5 must be rejected), 0 failures, plus 7 token-identity probes compared across both parsers |
+| Conformance gate | **green** — 0 failures across both grammars; `grammar/validate.py` re-derives the fixture counts on every run |
 | Closure gate | **green** — no example calls an undefined name: **107/107 builtins evaluated (100%)** against `prelude/coverage.lock` |
 | Python backend | **working** — all 32 corpus and benchmark fixtures transpile, `py_compile` accepts every one, participating in differential gate |
 | Rust backend | **working** — all 32 corpus and benchmark fixtures transpile, `rustc` accepts every one, `backend/monomorphism.py` compiles all 400 admissible probes |
@@ -53,10 +57,10 @@ Everything below was checked by a command whose output was read, not inferred.
 | WebAssembly target | **working** (Phase 4) — `wasm32-wasip1` under `node:wasi`, participating in differential gate in program mode |
 | Reference interpreter | **working** (Phase 5) — Rust tree-walking interpreter (`crates/agentscript-interp/`), participating in differential gate in both program and function modes |
 | Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and named checks (`type-arity`, `map-key-order`) |
-| Semantic gate | **green** — 34 fixtures clean, 40 semantic fixtures each rejected under declared rule header |
+| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 40 `.asl` files under `packages/` check clean |
 | I/O surface | **working** — read/write, files, `IoError`, tracked effects, `main` |
 | Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible probes through checker, `rustc` and `py_compile` |
-| Differential gate | **green** — 120 function cases + 15 whole-program cases across all 6 targets (Python, Rust, Wasm, Interp, TS, Go: 135 runs each), 0 disagreements |
+| Differential gate | **green** — 129 function cases + 18 whole-program cases across all 6 targets (Python, Rust, Wasm, Interp, TS, Go), 0 disagreements |
 | Measurement harness | **working** (Phase 9) — supports whole-program and function modes across all 5 targets (`python`, `typescript`, `rust`, `go`, `interp`) with strict 6-stage lifecycle tracking and offline `--dry-run` |
 | In-Memory WASI Runner | **working** (Phase 10) — pure TS zero-dependency in-memory WASI preview1 shim for browser and Node |
 | Developer Agent MCP Server | **working** (Phase 11) — stdlib-only JSON-RPC 2.0 MCP server with 78% interface compression |
@@ -65,12 +69,15 @@ Everything below was checked by a command whose output was read, not inferred.
 | Native ASL Quality Suite | **working** — `packages/asl-lint`, `asl lint` (anti-pattern/smell linter), `asl clone-check` (AST clone detector), `asl fix` (autonomous repair) |
 | Native ASL SQL Module | **working** — `packages/asl-sql`, cross-dialect query builder & parameterizer (Postgres, SQLite, MySQL, ClickHouse), DDL/DML generator |
 | Native LSP 3.17 Server | **working** — `tools/lsp.py`, `asl lsp`, stdio JSON-RPC 2.0, hover docs, jump-to-definition, virtual projections (@pcp:r-8d8e) |
-| Ultra-Nano Syntax & Transcoder | **working** — single-token density (`:f`, `:c`, `:d`, `:x`, `:i`, `Str`, `I64`, `dfs`, `dfe`, `df`, `mt`), `asl transcode` (@pcp:d-1eed) |
+| Nano projection & transcoder | **working** — short spellings (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `Str`, `I64`, `F64`), `asl transcode`, `asl view` (@pcp:d-1eed, `d-ddc2`). **It buys 3.6% of bytes and 0.0% of tokens** — see §6 and `bench/token_projection.py` |
 | In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
 | Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
 | Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + native-vs-Lark latency/memory benchmark (`tools/native_parser.py`); lexer scanner is iterative (fold over `string-chars`), so all 37 `packages/**/*.asl` parse without recursion overflow (`tools/tests/test_native_parse_all.py`: 38 passed) |
-| Pre-Commit Verification | **15/15 gates green** (re-measured 2026-09-03) — Grammar, Closure (107/107), Prelude, Checker, check_corpus, monomorphism, differential, pytest (369), parser tests (8), ASL Lint (37/37 files), Clone Check (10.02% < 15%), check-tokens, deploy_check, PCP actualize (0 breaches), `npm run build:web` |
-| Unit tests | **377 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests` (369, incl. 38 parse-all + 6 native-parser CLI), `packages/asl-parser/tests` (8) |
+| Nano projection | **one source** — `prelude/prelude.json`'s `projection` section generates §2.1, both grammars' spelling tables, the handbook, both `llms.txt` copies and the harness skill |
+| Documentation examples | **gated** — `tools/doc_examples.py` parses every fenced AgentScript block in the repository's Markdown; other languages get their own fence, deliberate non-examples opt out with a stated reason |
+| Package sources | **gated** — `checker/gate.py` checks all 40 `.asl` files under `packages/`, not the corpus alone |
+| Pre-Commit Verification | **16 gates, and the hook now runs all of them.** It ran six while this table claimed fifteen; the list lives in `tools/hooks/pre-commit` and the banner counts it, so the two cannot disagree again. Added today: the documentation-example gate, two token-measurement locks, and the package half of the semantic gate |
+| Unit tests | **838 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests`, `packages/asl-parser/tests` |
 
 ### Documents, in reading order for a newcomer
 
@@ -81,10 +88,28 @@ Everything below was checked by a command whose output was read, not inferred.
    the project's chars/4 approximation. This is the artifact that goes into a prompt.
 2. `ROADMAP.md` — this file.
 3. `EXPERIMENT.md` — pre-registered measurement protocol and pass/fail thresholds. **Read §9
-   first**: two amendments supersede parts of the body.
+   first**: five amendments supersede parts of the body, and the most recent records that the I/O
+   dependency an earlier one called blocking has been met.
 4. `RESEARCH_REPORT.md` — evidence on whether the concept is viable at all. Read §3 and §5.
 5. `SPEC_REVIEW.md` — critique of the original v0 draft; explains why v0.2 looks as it does.
 6. `AGENT_SPEC.md` — the original v0 draft, **frozen, superseded, kept only for provenance**.
+
+### Which document governs what
+
+Several documents have called themselves normative, and until this was written down they could
+disagree with no way to say which was wrong.
+
+| Document | Governs |
+|---|---|
+| `AGENT_SPEC_CORE.md` | the language: forms, types, the projection (§2.1), the vocabulary (§6) |
+| `docs/ASN_SPEC.md` | data payloads — AgentScript Notation |
+| `docs/AGENTIC_PROTOCOL.md` | the wire: frames, dialects, error codes |
+| `prelude/prelude.json` | the vocabulary and the projection, as data; the four above quote it |
+
+`docs/CONTEXT_ECONOMY_GUIDELINES.md`, `docs/DATA_REPRESENTATION_MATRIX.md`, `docs/BEST_PRACTICES.md`,
+`docs/NANO_SYNTAX.md` and `docs/COMPACT_SYNTAX.md` are **advisory**. They are normative for nothing,
+their examples are gated by `tools/doc_examples.py`, and where one disagrees with a document above,
+the document above wins and the advisory one is the bug.
 
 ---
 
@@ -102,7 +127,10 @@ Full detail in `AGENT_SPEC_CORE.md`. This is orientation only.
   exhaustive, lookups return `Option` rather than trapping.
 * **No implicit conversion**, fixed numeric widths (`Int32`/`Int64`/`Float64`), trapping overflow.
 * **`Result` + `try`** for fallible code: `match` eliminates, `try` propagates without nesting.
-* **Deliberately excluded:** agents, UI, async, FFI, JSON serialization, I/O.
+* **Deliberately excluded:** agents, UI, async, FFI, JSON serialization. **I/O is in** — nine
+  builtins, the closed union `IoError`, effects tracked by a `!` marker on the signature, and
+  `main` as the entry point (§4.0). It was excluded while the benchmark was pure functions and
+  stopped being defensible when the unit of measurement became a whole working program.
 
 ### The one evidence-backed argument for S-expressions
 
@@ -150,9 +178,12 @@ The handbook, which is resent on every model call, grew from ~2,642 to ~3,012 to
 Typed module boundaries took it to 12,311 characters, ~3,078 tokens. Measured against the head
 commit's 10,599 characters, the uncommitted work is **+16%** in total on that cost.
 
-**Next: the harness's whole-program mode**, ROADMAP item 4 below. `bench/harness/run.py` still
-calls an entry function with cases and `bench/tasks/histogram.json` is a pure-function task, so the
-terminal-bench shape chosen in `EXPERIMENT.md` amendment 2026-08-20-b is not implemented yet.
+**Next: the harness's whole-program mode.** The measurement harness supports whole-program and
+function modes across all five targets (see the table in §2), but `bench/harness/run.py` still
+drives an entry function with cases and `bench/tasks/histogram.json` is a pure-function task, so
+the terminal-bench shape chosen in `EXPERIMENT.md` amendment 2026-08-20-b has no task written
+against it. The mode exists; nothing uses it. That is the gap, and it is smaller than the previous
+wording ("not implemented yet") suggested.
 
 ### Why it came before the backends
 
@@ -191,13 +222,17 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    `differential.py`; the code survives into the compiler frontend.
 2. ~~**I/O surface**~~ — done, PCP `r-56bf`. Effects are tracked by a marker rather than left
    implicit, so the concurrency question stays open instead of being foreclosed.
-3. **Python and JavaScript backends** — the measurement targets. Rust and Go remain the compiler's
-   own self-hosting targets and are unchanged as a product goal.
+3. ~~**Python and JavaScript backends**~~ — **done**. Python, TypeScript, Go and Rust all
+   transpile the corpus and are compile-gated by their own toolchains; all six targets participate
+   in the differential gate. Rust and Go remain the compiler's own self-hosting targets and are
+   unchanged as a product goal.
 4. **Benchmark harness** — terminal-bench, comparing generated AgentScript transpiled to Python/JS
    against real Python/JS solutions to the same tasks.
 5. **Measurement** — see §5. Blocked.
-6. **Native backends** — Rust and Go, for self-hosting. Gated behind the checker *and* an
-   unrecorded ownership decision (PCP `l-880d`).
+6. **Native backends** — Rust and Go **exist and compile the corpus**; what remains gated is not
+   the backend but the ownership model behind it (PCP `l-880d`): the Rust output uses a
+   conservative clone-at-every-use strategy chosen instead of a model. The cost of that strategy is
+   now measurable rather than hypothetical.
 6b. **WebAssembly target** — the cheap half is already reachable: the Rust backend's output is
    accepted for `wasm32-unknown-unknown` unchanged, and every rustc-gated corpus fixture produces
    a valid module (magic `0061736d`), so a target arrives with no new code generation. That route
@@ -209,8 +244,10 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    `d-4b8c` answers for host bindings, asked again for a different boundary. Direct Wasm code
    generation, bypassing Rust, is a separate and much larger commitment: it owns memory layout and
    reclamation for recursive unions.
-7. **Self-hosting probe** — write the AgentScript lexer in AgentScript. Prediction on record: it needs
-   closed unions, which v0.2 now has, so the probe is newly worth running.
+7. **Self-hosting probe & validation migration (@pcp:d-8d4c)** — **done & active**. The pure ASL lexer, reader,
+   and AST (`packages/asl-parser`) are built, passing all 399 parity tests (`test_native_parity.py`) and parsing
+   all package sources without stack overflow. Immediate milestone: migrate all ecosystem validation gates
+   (`validate.py`, `doc_examples.py`, `closure_audit.py`, `checker/gate.py`) and retiring Lark completely.
 
 ---
 
@@ -218,8 +255,9 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
 
 Measurement cannot start, now for two independent reasons.
 
-**Language:** resolved. Core has I/O (PCP `r-56bf`). What remains on this side is the harness,
-which still drives a pure entry function rather than a whole program.
+**Language:** resolved. Core has I/O (PCP `r-56bf`), and `EXPERIMENT.md` amendment 2026-09-03-a
+records it against the amendment that called it blocking. What remains on this side is not the
+language but the tasks: the harness has a whole-program mode and no task written against it.
 
 **Access** (PCP `l-298e`) — required:
 
@@ -240,6 +278,137 @@ The harness can be written and unit-tested without any of this. It cannot be run
 ---
 
 ## 6. Known gaps — do not mistake green gates for a validated language
+
+Six entries below were added on 2026-09-03 by widening two gates from the corpus to the shipped
+packages and the published prose. Every one of them had been green in every gate the project ever
+ran, which is the lesson: **a gate that reads one directory measures that directory.**
+
+* **A string literal containing a newline lowers to a syntax error on three of four backends.**
+  §2's `string-lit` puts no constraint on the characters between the quotes, and each backend passes
+  the source token through verbatim, so a raw newline lands inside the target's quotes. Rust
+  survives — it allows multi-line string literals — and Python, TypeScript and Go do not: measured,
+  `check_corpus.py` reports `SyntaxError: unterminated string literal`, `tsc rejected the output`
+  and `go vet rejected the output` for the same fixture. The checker exits 0 and both grammars
+  accept it, so nothing sees it before the target compiler does. It was academic while strings were
+  data; it is on the critical path now that a **note is a string literal**, because notes are
+  multi-line as a matter of course. **Closed**: the four literal emission sites escape a newline on
+  the way out, `grammar/corpus/valid/34-multiline-strings.agentscript` compiles it on every target,
+  and `33-notes.agentscript` carries multi-line notes again.
+* **`;` comments are being replaced by unattached string literals, and the top-level form had to be
+  built before the conversion could land.** The project has abandoned `;` line comments in favour of
+  **free-standing string literals bound to nothing**, and a parallel session is converting existing
+  comments over. `;` remains in the Lark grammar, which is being retired and is not worth
+  maintaining.
+  A bare string inside a declaration body already worked: it parses under both grammars, checks
+  clean, and lowers harmlessly on every target — `"...".to_string();` on Rust, `void ("...")` on
+  TypeScript, `_ = "..."` on Go, a string statement on Python. **At top level it did not parse at
+  all**, because `toplevel` admitted only `module_decl`, `defschema`, `defun` and `defenum` — so a
+  file banner, a licence header, or a note between declarations had nowhere to live, and every
+  correctly-converted file became a parse error. From inside that reads as a tool corrupting files
+  on a loop, and it was reported as one. **Closed**: both grammars carry a `note` production, every
+  backend already erased it, and `grammar/corpus/valid/33-notes.agentscript` gates it. PCP `l-a250`.
+  One thing still depends on it. The `; expect:` headers that drive `checker/gate.py` are read out
+  of the source text rather than off the parse tree, so they survive today by accident of how the
+  gate works; the moment `;` leaves the grammars, that convention needs a replacement or the
+  semantic gate loses the thing it asserts against. `prelude/HANDBOOK.md`'s generated shape block still teaches `;`, correctly, because `;`
+  is still what both grammars accept; it must be regenerated in the change that removes `;`, not
+  before.
+* **The website publishes numbers with no gate behind them, which `DESIGN.md` §5 forbids.** A sweep
+  of `web/src` finds `80%`, `0.038ms`, `0.05ms`, `78%`, `70%`, `68.4%`, `160%`, `97%` and others.
+  Two of them are real — `83.4%` is the SkyLoom handoff reduction and `78%` the MCP interface
+  compression, both named in §2 above — and the rest trace to nothing. `bench/token_frames.py` and
+  its lock file are the shape a published number has to take: a command anyone can re-run, and a
+  gate that fails when the figure moves. **Not fixed here**: a parallel session is editing `web/`
+  right now, and two sessions rewriting the same components is how work is lost. The rule already
+  exists; what is missing is a gate that enforces it over `web/src` the way `check:tokens` enforces
+  the palette.
+* **Lark is being retired, and two of this project's rules still assume it is permanent.**
+  `AGENTS.md`'s "both grammars must change together" and `grammar/validate.py`'s cross-parser parity
+  are written around Lark and tree-sitter as co-equal. Lark drives constrained decoding
+  (`EXPERIMENT.md` arm C), tree-sitter drives tooling, and the self-hosted parser in
+  `packages/asl-parser` is the one being invested in. `tools/doc_examples.py`, added today, parses
+  with Lark and will have to move. Nothing is broken; the rules just describe a world that is
+  ending, and whoever retires Lark has to rewrite them rather than discover them.
+* **The Nano projection saves bytes and does not save tokens, and the whole justification for it was
+  the tokens.** Every document that describes the projection, and the "single-token hygiene"
+  standard behind it, argues from token cost. Nothing had measured it. Measured now, under
+  `cl100k_base`, over every fixture in `grammar/corpus/valid`, transcoded by the real transcoder:
+
+  | | verbose | Nano |
+  |---|---|---|
+  | bytes | 58,175 | 56,091 (**-3.6%**) |
+  | tokens | 15,931 | 15,931 (**0.0%**) |
+
+  Per spelling it is a tie in all fourteen cases, because a BPE vocabulary already encodes the long
+  form cheaply: `(defun` and `(df` are one token each, ` :export` and ` :x` two each, ` Float64`
+  and ` F64` two each, ` String` and ` Str` one each. On a realistic hand-written module Nano came
+  out **half a percent worse**. `bench/token_projection.py` is the measurement and
+  `bench/token_projection.lock` pins it.
+
+  **What this does and does not overturn.** It does not touch the wire and data formats: removing
+  *structure* — quotes around keys, commas, braces, field names repeated on every row — genuinely
+  saves tokens, and `bench/token_frames.py` measures a command frame at 18 tokens against JSON's 51,
+  **-64.7%**. Structural compaction works; abbreviating identifiers does not. Those two claims were
+  being made in the same breath and only one of them is true.
+  Nano keeps a defensible rationale — fewer bytes on disk and on the wire, less visual noise, and it
+  is now what the toolchain generates (PCP `d-ddc2`) — but **the token argument must stop being
+  made** until someone re-measures under the tokenizer of the model actually being served. This
+  repository has no such measurement, and `cl100k_base` is a GPT vocabulary, not every model's.
+* **A module's declared name and the path an importer must write are two different things, and
+  nothing checks that they agree.** Measured over all 37 package modules: **all 37 diverge**.
+  `packages/asl-sh/src/core/process.asl` declares `asl-sh/process` and is reachable only as
+  `core/process`; `packages/asl-parser/src/lexer.asl` declares `asl-parser/lexer` and is reachable
+  only as `lexer`; nine modules declare `asl-*/test`. Resolution goes by file path (`grammar/modules.py`
+  `find`), while §8 mangles a qualified name by its **defining module path** — so the two notions of
+  identity are already both load-bearing and already disagree. Nothing has broken yet because no
+  mangling collision has occurred. Closing it means either renaming every package module to match
+  its path or making resolution honour the declared name, and the second reintroduces the "one
+  definition, two names" problem §8 exists to prevent. **Owner decision owed.** Until then
+  `checker/gate.py` and `asl check` both resolve by path across every package's `src/`, so at least
+  they grade the same program.
+* **A builtin name in value position typed clean and lowered to a name that does not exist.** §6
+  gives a builtin a type, not a value, and nothing said so. `(map string-upper xs)` checked clean
+  and emitted `string_upper(_x)` on Python and `string_upper.clone()` on Rust — builtins are lowered
+  as inline templates, never as functions, so neither name is defined in its own output. The same
+  hole silently accepted a common typo: `==` is not an operator, so `(== a 0.0)` lexes as `=` applied
+  to `=`, `a` and `0.0`, and lowered to `_agentscript.eq(=, a)` and `(= == a.clone())`. Two packages
+  shipped it. **Closed** by the `builtin-reference` check; fixtures `builtin-as-value.agentscript`
+  and `doubled-equals.agentscript`. PCP `c-5d55`.
+* **Builtin call arity was unchecked, and it dropped arguments rather than reporting.**
+  `(and a b c)` checked clean and the Python backend emitted `(a and b)`, discarding the third
+  operand. Found in the self-hosted lexer, where four of `is-symbol-char`'s six clauses had never
+  run. The exemption was written for `list`, which is variadic as a constructor and nullary as a
+  pattern — but a pattern never reaches a call node, so only the variadic case needed it.
+  **Closed**; arity now comes from §6's declared signature. Fixture `builtin-arity.agentscript`.
+  PCP `c-eddd`.
+* **`:json-case` was normative since v0.2 and accepted by neither grammar.** §4.1 specifies it;
+  `(defschema Point :json-case camel ...)` did not parse. The specification defined a form that
+  could not be written, and no fixture existed to notice. **Closed** in both grammars, in header
+  position; fixture `32-json-case.agentscript`, parked on `coverage.lock`'s unexecuted list because
+  Core ships no serializer to execute it. PCP `d-1671`.
+* **The closure audit did not count a `defenum` case as a definition.** It collected `defun` names
+  only, so the first corpus fixture to construct a user union case reported every one of its cases
+  as an undefined call head. No fixture had, until one did. **Closed.**
+* **Three of four backends emitted Nano type aliases verbatim.** A module written with `I64` lowered
+  to `pub v: I64` on Rust, `readonly v: I64` on TypeScript and `v I64` on Go; `rustc`, `tsc` and
+  `go vet` reject all three. Only the Python backend resolved aliases. The corpus contained no
+  Nano-spelled fixture, so `check_corpus.py`, `differential.py` and `monomorphism.py` had only ever
+  seen the long spelling. **Closed**; alias resolution has one source and the corpus now carries
+  Nano fixtures.
+* **The published prose taught a language that does not exist.** The `llms.txt` the website served
+  differed from the repository's and taught `(:export ...)`, `Ok`/`Err`, `len` and `zip-with`;
+  `llms.txt` and both skill files listed `sqrt`, `s/concat`, `l/map`, `m/get` and `file/read`, none
+  of which are in the vocabulary; `docs/BEST_PRACTICES.md` taught `defextern`; a blog post showed a
+  `defun` with no body; the README asserted four token counts that were wrong in every position
+  (42 / 25 / 11 / 9 against a measured 51 / 34 / 27 / 18). **Closed**: those artifacts are generated
+  from `prelude/prelude.json`, `tools/doc_examples.py` parses every fenced example, and
+  `bench/token_frames.py` pins the one figure the README still publishes. PCP `c-1c5a`.
+* **`packages/asl-mem` could never have run.** Its `vector-norm` called `sqrt` and `list-zip-with`,
+  neither of which exists. It is now written in the vocabulary — a Newton-Raphson square root at a
+  fixed iteration count — and agrees with `math.sqrt` to within one ULP across the range tested.
+  The underlying gap remains: **the language has no square root**, and a numeric library that needs
+  one must write it. Whether §6 should gain one is an open question, not an oversight.
+
 
 * **Vocabulary coverage is 107/107 executed, and the metric changed to make that mean
   something.** The old figure counted a call head found by a static scan over the corpus and the
