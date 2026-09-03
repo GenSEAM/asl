@@ -342,7 +342,7 @@ export const CosmicLandscapeBackground: React.FC = () => {
   const CYCLE_HEIGHT = 1800;
 
   return (
-    <div className="pointer-events-none select-none" aria-hidden="true">
+    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden z-0" aria-hidden="true">
       {/* 1. Ambient Lighting Auras & Grid */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div className="absolute top-6 left-6 w-[550px] h-[550px] bg-purple-600/12 dark:bg-purple-900/20 blur-[150px] rounded-full" />
@@ -489,15 +489,12 @@ export const CosmicLandscapeBackground: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. DEDICATED LEFT CYCLIC GUTTER STREAM (14,400px continuous repeating loop) */}
-      <div
-        className="absolute top-0 left-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none z-0 overflow-visible"
-        style={{ height: `${CYCLES.length * CYCLE_HEIGHT}px` }}
-      >
+      {/* 2. DEDICATED LEFT CYCLIC GUTTER STREAM (Strictly bounded to page height) */}
+      <div className="absolute top-0 bottom-0 left-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none overflow-hidden">
         <svg
           className="w-full h-full text-purple-400/40 dark:text-purple-300/35"
           viewBox={`0 0 180 ${CYCLES.length * CYCLE_HEIGHT}`}
-          preserveAspectRatio="xMidYMin meet"
+          preserveAspectRatio="xMidYMin slice"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
@@ -513,7 +510,7 @@ export const CosmicLandscapeBackground: React.FC = () => {
             </linearGradient>
           </defs>
 
-          {/* 8 seamlessly repeating cycles down the left gutter */}
+          {/* Seamlessly repeating cycles down the left gutter */}
           {CYCLES.map((cycleIdx) => (
             <g key={cycleIdx} transform={`translate(0, ${cycleIdx * CYCLE_HEIGHT})`}>
               <LeftGutterCycle />
@@ -522,15 +519,12 @@ export const CosmicLandscapeBackground: React.FC = () => {
         </svg>
       </div>
 
-      {/* 3. DEDICATED RIGHT CYCLIC GUTTER STREAM (14,400px continuous repeating loop) */}
-      <div
-        className="absolute top-0 right-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none z-0 overflow-visible"
-        style={{ height: `${CYCLES.length * CYCLE_HEIGHT}px` }}
-      >
+      {/* 3. DEDICATED RIGHT CYCLIC GUTTER STREAM (Strictly bounded to page height) */}
+      <div className="absolute top-0 bottom-0 right-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none overflow-hidden">
         <svg
           className="w-full h-full text-purple-400/40 dark:text-purple-300/35"
           viewBox={`0 0 180 ${CYCLES.length * CYCLE_HEIGHT}`}
-          preserveAspectRatio="xMidYMin meet"
+          preserveAspectRatio="xMidYMin slice"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
@@ -542,7 +536,7 @@ export const CosmicLandscapeBackground: React.FC = () => {
             </linearGradient>
           </defs>
 
-          {/* 8 seamlessly repeating cycles down the right gutter */}
+          {/* Seamlessly repeating cycles down the right gutter */}
           {CYCLES.map((cycleIdx) => (
             <g key={cycleIdx} transform={`translate(0, ${cycleIdx * CYCLE_HEIGHT})`}>
               <RightGutterCycle />
