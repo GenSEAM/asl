@@ -174,25 +174,49 @@ In JSON, an array of objects repeats every field name on **every single item**:
 ```
 If you return 100 database records with 6 fields each, JSON transmits **600 duplicated keys, 600 colons, 600 commas, and 100 curly brace pairs**. For 1,000 rows, this consumes **15,000 to 25,000 pure boilerplate tokens**!
 
-### The ASN Solution: Tabular Schema Projection (`@table` / `@rows`)
-In ASN, column headers are declared **exactly once**. Every subsequent item is emitted as a zero-key positional tuple:
+### The ASN Solution: Schema Constructor Grouping & Key-Row Pairs
 
+To stay 100% compliant with Single-Token Hygiene, ASN does NOT introduce multi-token keywords like `@table` or `@with` (which split into `@` + `word`). Instead, ASN re-uses **existing native structures** and **standard S-expression pairs**:
+
+#### 1. Pre-Declared Schema Re-Use: `(Schema [rows...])`
+When a structure is declared in the schema:
 ```lisp
-;; ✅ ASN Tabular Record Stream: Header declared ONCE, rows are pure positional values
-(@table [:id :sku :price :status]
+(dfs Item (:f id Int) (:f sku Str) (:f price F64) (:f status Str))
+```
+An array of records simply re-uses the schema constructor as the group head:
+```lisp
+;; ✅ Native Schema Grouping: Constructor declared ONCE, rows are zero-key positional vectors
+(Item
   [1 "SSD-1TB" 89.99 :in-stock]
   [2 "RAM-32GB" 129.50 :in-stock]
   [3 "GPU-4070" 549.00 :low-stock])
 ```
+*Token count:* `Item` is **1 token**. Each row has **0 keys**. Zero token bloat.
 
-#### Typed Model Rows (`@rows`):
-When returning typed domain models:
+#### 2. Ad-Hoc Dynamic Tables: `([keys...] [[rows...]])`
+When data is dynamic (e.g. ad-hoc SQL query results without a pre-compiled schema), ASN uses a standard 2-vector tuple `(Keys Rows)` without any extra keywords:
 ```lisp
-(@rows Product [:id :sku :price :status]
-  [1 "SSD-1TB" 89.99 :in-stock]
+;; ✅ Pure Ad-Hoc Table: ([keys] [[rows]]) — Zero special keywords!
+([:id :sku :price :status]
+ [[1 "SSD-1TB" 89.99 :in-stock]
   [2 "RAM-32GB" 129.50 :in-stock]
-  [3 "GPU-4070" 549.00 :low-stock])
+  [3 "GPU-4070" 549.00 :low-stock]])
 ```
+
+### Factoring Out Common Invariants (Shared Field Envelopes)
+Instead of inventing an external `@with` form, common invariant fields are placed directly in the parent record, with the positional items in a `:data` vector:
+
+```lisp
+;; ✅ Common fields in parent record, rows in positional list (100% 1-token keys)
+(:curr "USD" :env :prod :tenant 1042
+ :data (Item
+         [1 "SSD-1TB" 89.99]
+         [2 "RAM-32GB" 129.50]
+         [3 "GPU-4070" 549.00]))
+```
+- Every key (`:curr`, `:env`, `:tenant`, `:data`) is **1 token**.
+- The receiver merges the parent keys into each materialized item.
+- On 500 rows, this saves **1,500 duplicate key-value pairs** with zero syntax overhead.
 
 ### Primitive Array & Vector Economy
 Even for simple arrays, ASN eliminates comma and quote bloat:
@@ -205,11 +229,11 @@ Even for simple arrays, ASN eliminates comma and quote bloat:
 |---|---|---|---|
 | **Verbose JSON** | ~2,100 tokens | ~4.2 seconds | 16% of 16K window |
 | **Standard ASN Objects** | ~980 tokens | ~1.9 seconds | 7% of 16K window |
-| **ASN Tabular (`@table`)** | **~380 tokens** | **~0.6 seconds** | **<2.5% of 16K window (-82%)** |
+| **ASN Schema Grouping `(Item ...)`** | **~380 tokens** | **~0.6 seconds** | **<2.5% of 16K window (-82%)** |
 
 ---
 
-### Edge Cases & Universal Robustness in ASN Tabular Projection
+### Edge Cases & Universal Robustness in Tabular Projections
 
 Any tabular or positional serialization format must answer hard production questions. Here is how ASN deterministically handles every potential edge case:
 
@@ -218,32 +242,26 @@ Any tabular or positional serialization format must answer hard production quest
 - **The ASN Solution**:
   1. **Nil Sentinel (`_`)**: ASN uses `_` (1 token) for `nil` / `None` / `null`:
      ```lisp
-     (@table [:id :sku :price :discount]
+     (Item
        [1 "SSD-1TB" 89.99 _]
        [2 "RAM-32GB" 129.50 15.00])
      ```
   2. **Sparse Tail Overrides**: If only 2% of rows have rare fields, keep them out of the table headers and append them as trailing keyword pairs without corrupting positional columns:
      ```lisp
-     (@table [:id :sku :price]
+     (Item
        [1 "SSD-1TB" 89.99]
-       [2 "RAM-32GB" 129.50 (:special-promo "HOLIDAY20")])
+       [2 "RAM-32GB" 129.50 (:promo "HOLIDAY20")])
      ```
 
 #### 2. Polymorphic / Heterogeneous Collections (Mixed Object Shapes)
-- **The Problem**: An array containing different kinds of entities (e.g. `User`, `Bot`, `SystemEvent`). A single table header would result in massive empty fields.
+- **The Problem**: An array containing different kinds of entities (e.g. `User`, `Bot`, `SystemEvent`).
 - **The ASN Solution**:
-  ASN uses **Sum Types (Tagged Variants)** or **Variant Table Chunks**:
+  ASN uses **Sum Types (Tagged Variant Constructors)**:
   ```lisp
-  ;; Heterogeneous Stream using Tagged Variant Tuples
-  [(:user 1 "Alice" :admin)
-   (:bot 2 "code-bot" "gpt-4o" 1200)
-   (:event :deploy :success 1714829100)]
-  ```
-  If grouped:
-  ```lisp
-  (@variants
-    (:user [:id :name :role] [1 "Alice" :admin])
-    (:bot  [:id :name :model :tok] [2 "code-bot" "gpt-4o" 1200]))
+  ;; Heterogeneous Stream using Tagged Variant Constructors
+  [(User 1 "Alice" :admin)
+   (Bot 2 "code-bot" "gpt-4o" 1200)
+   (Event :deploy :success 1714829100)]
   ```
 
 #### 3. Deeply Nested Objects & Collections Inside Rows
@@ -251,79 +269,31 @@ Any tabular or positional serialization format must answer hard production quest
 - **The ASN Solution**:
   S-expressions compose recursively with zero escaping!
   ```lisp
-  (@table [:id :title :tags :metadata]
+  (Post
     [1 "First Post" [:ai :wasm] (:views 1200 :stars 45)]
     [2 "Second Post" [:rust]    (:views 800  :stars 20)])
   ```
   No backslashes, no JSON string escapes, 100% clean AST.
 
 #### 4. Schema Evolution & Backward/Forward Compatibility
-- **The Problem**: Producer adds a new field `[:id :sku :price :currency]`, but Consumer only expects `[:id :sku :price]`. Does positional order break?
+- **The Problem**: Producer adds a new field, but Consumer expects older version.
 - **The ASN Solution**:
-  **Header-Driven Dynamic Mapping**: The deserializer does NOT assume a static compile-time column order. It reads the `@table` header tuple and binds row indices to target struct fields by name:
-  - **Unknown columns**: The consumer simply skips indices of unknown headers.
-  - **Missing columns**: The consumer automatically assigns the schema's default value (`:dflt`).
-  - *Result*: Full backward and forward compatibility, identical to JSON, but at an 82% token discount.
+  When using ad-hoc `([keys...] [[rows...]])`, mapping is dynamic by header name. Unknown columns are ignored; missing expected columns take the schema default (`:dflt`).
 
 #### 5. Chunked Streaming for Infinite Generators
 - **The Problem**: In JSON, an unclosed array `[ ...` fails `JSON.parse()` if a stream drops midway.
 - **The ASN Solution**:
-  ASN streams in self-contained `@chunk` blocks:
+  ASN streams in self-contained chunk blocks:
   ```lisp
-  (@chunk [:id :status] [1 :ok] [2 :ok])
-  (@chunk [:id :status] [3 :retry] [4 :ok])
+  (:chunk (Item [1 :ok] [2 :ok]))
+  (:chunk (Item [3 :retry] [4 :ok]))
   ```
   Every chunk is balanced and valid on arrival. If the network drops at chunk 40, the first 39 chunks remain 100% valid in host memory with zero parser exceptions.
 
-
-
 ---
 
-## 5. Experimental: Structural Factoring (`@with`) & Sequence Generators (`@gen`)
-
-To push token economy to the theoretical maximum, AgentScript introduces two experimental techniques that eliminate repetitive structural boilerplate across both data protocols and language ASTs:
-
-### A. Structural Factoring: Shared Context Envelopes (`@with`)
-When an agent passes a batch of 50 or 500 records where certain properties are invariant (e.g., `:org 104`, `:currency "USD"`, `:env :prod`, `:status :active`), repeating those fields on every single row is wasteful.
-
-#### The Pattern
-Factor common invariant fields out into a parent **Context Envelope (`@with`)**:
-```lisp
-;; ✅ Common fields factored into parent envelope (Declared ONCE)
-(@with (:currency "USD" :env :prod :tenant-id 1042)
-  (@table [:id :sku :price]
-    [1 "SSD-1TB" 89.99]
-    [2 "RAM-32GB" 129.50]
-    [3 "GPU-4070" 549.00]))
-```
-- **Deserializer Behavior**: The deserializer merges the parent envelope into each materialized object.
-- **Savings**: On 500 rows with 3 common fields, this eliminates **1,500 repetitive key-value pairs**!
-
----
-
-### B. Sequence & Pattern Generators (`@gen`)
-When testing, benchmarking, or initializing repetitive sequences (mock datasets, matrix grids, sequential state machine nodes), emitting hundreds of repetitive S-expressions burns thousands of tokens.
-
-#### The Pattern
-Use declarative **Data Generators (`@gen`)**:
-```lisp
-;; Generates 100 sequential node states in 14 tokens (instead of 1,800 tokens!)
-(@gen :for i 1 100
-  [i (str "worker-" i) :idle 0.0])
-```
-
-#### 2D Grid & Combinator Generators:
-```lisp
-;; Generates a 10x10 coordinate grid of sensor states
-(@gen :grid [x 0 9] [y 0 9]
-  [x y :online 22.5])
-```
-The receiving runtime or agent expands the generator in local memory in <0.1ms without consuming LLM token generation budget.
-
----
-
-### C. Language-Level Structural Factoring (Schema Mixins: `@include`)
-In source code, avoid duplicating common fields (`id`, `created-at`, `tenant-id`) across dozens of schemas:
+### Language-Level Structural Factoring (Schema Mixins: `@include`)
+In source code, avoid duplicating common fields (`id`, `ts`, `tenant`) across dozens of schemas:
 
 ```lisp
 ;; Base audit struct defined once

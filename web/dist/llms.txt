@@ -65,7 +65,7 @@ Agent-to-agent communication switches from chatty natural language prose to comp
 ## ASN (AgentScript Notation) — The Compact Data Format Alternative to JSON (-80% Tokens)
 For autonomous agents and tools that exchange structured data or call APIs:
 - **Format**: Balanced S-expression DTO format with zero commas, colons, or quote bloat.
-- **Tabular Array Deduplication (`@table`)**: Eliminates repeated keys across object arrays. Headers are declared ONCE: `(@table [:id :sku :price :status] [1 "SSD" 89.99 :in-stock] [2 "RAM" 129.50 :in-stock])`. Saves 82% tokens over JSON.
+- **Array Deduplication (Schema Grouping & Key-Row Pairs)**: Eliminates repeated keys across object arrays. Re-uses schema constructor: `(Item [1 "SSD" 89.99 :in-stock] [2 "RAM" 129.50 :in-stock])`, or ad-hoc pairs `([:id :sku :price :status] [[1 "SSD" 89.99] [2 "RAM" 129.50]])`. Saves 82% tokens over JSON with zero special keywords.
 - **Key Abbreviations**: `:f` (field), `:c` (case), `:d` (doc), `:dflt` (default value).
 - **Positional Tuples**: Zero-key positional arguments `(! cmd "git" ["status"] 5000)` saving 100% of parameter key tokens.
 - **Client Libraries**: Zero-dependency SDKs for TypeScript (`@genseam/asl-codec`), Python (`asl-codec`), Rust (`asl-codec`), Go (`asl-codec-go`), and WebAssembly (`asn.wasm` for browsers & edge workers).
