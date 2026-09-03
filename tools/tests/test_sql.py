@@ -144,3 +144,14 @@ def test_upsert_polyfills():
     # MySQL
     mysql_sql = render_upsert_query("users", ["id", "name", "visits"], ["1", "'Alice'", "10"], ["id"], ["name", "visits"], dialect="mysql")
     assert "ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `visits` = VALUES(`visits`)" in mysql_sql
+
+    # MSSQL
+    mssql_sql = render_upsert_query("users", ["id", "name", "visits"], ["1", "'Alice'", "10"], ["id"], ["name", "visits"], dialect="mssql")
+    assert "MERGE INTO [users] WITH (HOLDLOCK) AS [t]" in mssql_sql
+    assert "WHEN MATCHED THEN\n  UPDATE SET [name] = [s].[name], [visits] = [s].[visits]" in mssql_sql
+
+    # Oracle
+    oracle_sql = render_upsert_query("users", ["id", "name", "visits"], ["1", "'Alice'", "10"], ["id"], ["name", "visits"], dialect="oracle")
+    assert 'MERGE INTO "users" "t"' in oracle_sql
+    assert 'USING (SELECT 1 AS "id", \'Alice\' AS "name", 10 AS "visits" FROM dual) "s"' in oracle_sql
+    assert 'WHEN MATCHED THEN\n  UPDATE SET "t"."name" = "s"."name", "t"."visits" = "s"."visits"' in oracle_sql

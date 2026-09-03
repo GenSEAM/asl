@@ -228,18 +228,45 @@ def render_ddl_table(table_name: str, fields: List[Tuple[str, str, bool]], diale
 
 
 def render_upsert_query(table_name: str, columns: List[str], values: List[str], conflict_cols: List[str], update_cols: List[str], dialect: str = "postgres") -> str:
-    """Renders cross-dialect UPSERT query (Postgres/SQLite ON CONFLICT vs MySQL ON DUPLICATE KEY)."""
-    quote = '`' if dialect in ("mysql", "clickhouse") else '"'
-    cols_str = ", ".join(f"{quote}{c}{quote}" for c in columns)
-    vals_str = ", ".join(values)
-    base = f"INSERT INTO {quote}{table_name}{quote} ({cols_str}) VALUES ({vals_str})"
-    if dialect in ("postgres", "sqlite"):
-        conflicts = ", ".join(f"{quote}{c}{quote}" for c in conflict_cols)
-        updates = ", ".join(f"{quote}{c}{quote} = EXCLUDED.{quote}{c}{quote}" for c in update_cols)
-        return f"{base} ON CONFLICT ({conflicts}) DO UPDATE SET {updates};"
+    """Renders cross-dialect UPSERT query (Postgres/SQLite ON CONFLICT vs MySQL ON DUPLICATE KEY vs MSSQL/Oracle MERGE)."""
+    d = dialect.lower()
+    if d == "mssql":
+        cols_str = ", ".join(f"[{c}]" for c in columns)
+        vals_str = ", ".join(values)
+        on_clause = " AND ".join(f"[t].[{c}] = [s].[{c}]" for c in conflict_cols)
+        updates = ", ".join(f"[{c}] = [s].[{c}]" for c in update_cols)
+        s_cols = ", ".join(f"[{c}]" for c in columns)
+        return (f"MERGE INTO [{table_name}] WITH (HOLDLOCK) AS [t]\n"
+                f"USING (VALUES ({vals_str})) AS [s] ({s_cols})\n"
+                f"ON ({on_clause})\n"
+                f"WHEN MATCHED THEN\n"
+                f"  UPDATE SET {updates}\n"
+                f"WHEN NOT MATCHED THEN\n"
+                f"  INSERT ({cols_str}) VALUES ({vals_str});")
+    elif d == "oracle":
+        cols_str = ", ".join(f'"{c}"' for c in columns)
+        on_clause = " AND ".join(f'"t"."{c}" = "s"."{c}"' for c in conflict_cols)
+        updates = ", ".join(f'"t"."{c}" = "s"."{c}"' for c in update_cols)
+        dual_cols = ", ".join(f'{v} AS "{c}"' for c, v in zip(columns, values))
+        s_vals = ", ".join(f'"s"."{c}"' for c in columns)
+        return (f'MERGE INTO "{table_name}" "t"\n'
+                f'USING (SELECT {dual_cols} FROM dual) "s"\n'
+                f'ON ({on_clause})\n'
+                f'WHEN MATCHED THEN\n'
+                f'  UPDATE SET {updates}\n'
+                f'WHEN NOT MATCHED THEN\n'
+                f'  INSERT ({cols_str}) VALUES ({s_vals});')
+    elif d in ("postgres", "sqlite"):
+        cols_str = ", ".join(f'"{c}"' for c in columns)
+        vals_str = ", ".join(values)
+        conflicts = ", ".join(f'"{c}"' for c in conflict_cols)
+        updates = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in update_cols)
+        return f'INSERT INTO "{table_name}" ({cols_str}) VALUES ({vals_str})\nON CONFLICT ({conflicts}) DO UPDATE SET {updates};'
     else:  # MySQL
-        updates = ", ".join(f"{quote}{c}{quote} = VALUES({quote}{c}{quote})" for c in update_cols)
-        return f"{base} ON DUPLICATE KEY UPDATE {updates};"
+        cols_str = ", ".join(f"`{c}`" for c in columns)
+        vals_str = ", ".join(values)
+        updates = ", ".join(f"`{c}` = VALUES(`{c}`)" for c in update_cols)
+        return f"INSERT INTO `{table_name}` ({cols_str}) VALUES ({vals_str})\nON DUPLICATE KEY UPDATE {updates};"
 
 
 def run_sql_cli(args) -> int:

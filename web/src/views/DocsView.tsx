@@ -869,12 +869,12 @@ export const DocsView: React.FC = () => {
               </div>
             </div>
 
-            {/* Side-by-side: ASL Query vs Target SQL Dialect */}
+            {/* Card 1: Analytical Query (JSON, Concat, Date Intervals, Pagination) */}
             <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
               <div className="space-y-1">
-                <h4 className="font-bold text-ink text-lg">Top Performers by Team: CTE, Window Ranking & Joins</h4>
+                <h4 className="font-bold text-ink text-lg">1. Analytical Query: JSON Extraction, String Concat & Date Math</h4>
                 <p className="text-meta text-ink-2">
-                  Demonstrates CTE expressions, window partitioning, null-safe aggregation, relative date arithmetic, and dialect pagination.
+                  Demonstrates structural divergence in string concatenation (pipes vs CONCAT), JSON navigation (operators vs functions), date arithmetic, and pagination.
                 </p>
               </div>
 
@@ -888,35 +888,32 @@ export const DocsView: React.FC = () => {
                     <button
                       onClick={() =>
                         copyToClipboard(
-                          `(q/with [(:ranked-users\n  (q/select ["u.id" "u.name" "u.team"\n             (q/coalesce (q/sum "o.amount") 0.0 :as "total_spent")\n             (q/over (q/dense-rank)\n               :partition-by "u.team"\n               :order-by [(q/desc (q/coalesce (q/sum "o.amount") 0.0))]\n               :as "rank")]\n    (q/from "users" :as "u")\n    (q/left-join "orders" :as "o"\n      :on (q/and (q/eq "u.id" "o.user_id")\n                 (q/gte "o.created_at" (q/date-sub (q/now) 30 :days))\n                 (q/eq "o.status" "SETTLED")))\n    (q/group-by ["u.id" "u.name" "u.team"])))]\n  (q/select ["id" "name" "team" "total_spent" "rank"]\n    (q/from :ranked-users)\n    (q/where (q/lte "rank" 3))\n    (q/order-by ["team" (q/asc "rank")])\n    (q/limit 50)))`,
-                          'sql-asl'
+                          `(q/select\n  [(q/col "e.id")\n   (q/concat [(q/col "u.first_name") " " (q/col "u.last_name")] :as "full_name")\n   (q/json-get "e.payload" "role" :as "user_role")\n   (q/coalesce (q/col "e.latency_ms") 0 :as "latency_ms")]\n  (q/from "audit_events" :as "e")\n  (q/inner-join "users" :as "u"\n    :on (q/eq "e.user_id" "u.id"))\n  (q/where\n    (q/and\n      (q/gte (q/col "e.created_at") (q/date-sub (q/now) 7 :days))\n      (q/eq (q/json-get "e.payload" "status") "FAILED")))\n  (q/order-by (q/col "e.created_at") (q/desc))\n  (q/limit 25)\n  (q/offset 50))`,
+                          'sql-query-asl'
                         )
                       }
                       className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
                       title="Copy ASL Query"
                     >
-                      {copiedKey === 'sql-asl' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedKey === 'sql-query-asl' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                   <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
-{`(q/with [(:ranked-users
-  (q/select ["u.id" "u.name" "u.team"
-             (q/coalesce (q/sum "o.amount") 0.0 :as "total_spent")
-             (q/over (q/dense-rank)
-               :partition-by "u.team"
-               :order-by [(q/desc (q/coalesce (q/sum "o.amount") 0.0))]
-               :as "rank")]
-    (q/from "users" :as "u")
-    (q/left-join "orders" :as "o"
-      :on (q/and (q/eq "u.id" "o.user_id")
-                 (q/gte "o.created_at" (q/date-sub (q/now) 30 :days))
-                 (q/eq "o.status" "SETTLED")))
-    (q/group-by ["u.id" "u.name" "u.team"])))]
-  (q/select ["id" "name" "team" "total_spent" "rank"]
-    (q/from :ranked-users)
-    (q/where (q/lte "rank" 3))
-    (q/order-by ["team" (q/asc "rank")])
-    (q/limit 50)))`}
+{`(q/select
+  [(q/col "e.id")
+   (q/concat [(q/col "u.first_name") " " (q/col "u.last_name")] :as "full_name")
+   (q/json-get "e.payload" "role" :as "user_role")
+   (q/coalesce (q/col "e.latency_ms") 0 :as "latency_ms")]
+  (q/from "audit_events" :as "e")
+  (q/inner-join "users" :as "u"
+    :on (q/eq "e.user_id" "u.id"))
+  (q/where
+    (q/and
+      (q/gte (q/col "e.created_at") (q/date-sub (q/now) 7 :days))
+      (q/eq (q/json-get "e.payload" "status") "FAILED")))
+  (q/order-by (q/col "e.created_at") (q/desc))
+  (q/limit 25)
+  (q/offset 50))`}
                   </pre>
                 </div>
 
@@ -929,120 +926,184 @@ export const DocsView: React.FC = () => {
                     <button
                       onClick={() => {
                         const dialectMap: Record<SqlDialect, string> = {
-                          postgres: `WITH ranked_users AS (\n  SELECT "u"."id", "u"."name", "u"."team",\n         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",\n         DENSE_RANK() OVER (\n           PARTITION BY "u"."team"\n           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC\n         ) AS "rank"\n  FROM "users" AS "u"\n  LEFT JOIN "orders" AS "o"\n    ON ("u"."id" = "o"."user_id")\n   AND ("o"."created_at" >= NOW() - INTERVAL '30 days')\n   AND ("o"."status" = $1)\n  GROUP BY "u"."id", "u"."name", "u"."team"\n)\nSELECT "id", "name", "team", "total_spent", "rank"\nFROM ranked_users\nWHERE ("rank" <= 3)\nORDER BY "team" ASC, "rank" ASC\nLIMIT 50;`,
-                          mysql: `WITH ranked_users AS (\n  SELECT \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`,\n         COALESCE(SUM(\`o\`.\`amount\`), 0.0) AS \`total_spent\`,\n         DENSE_RANK() OVER (\n           PARTITION BY \`u\`.\`team\`\n           ORDER BY COALESCE(SUM(\`o\`.\`amount\`), 0.0) DESC\n         ) AS \`rank\`\n  FROM \`users\` AS \`u\`\n  LEFT JOIN \`orders\` AS \`o\`\n    ON (\`u\`.\`id\` = \`o\`.\`user_id\`)\n   AND (\`o\`.\`created_at\` >= DATE_SUB(NOW(), INTERVAL 30 DAY))\n   AND (\`o\`.\`status\` = ?)\n  GROUP BY \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`\n)\nSELECT \`id\`, \`name\`, \`team\`, \`total_spent\`, \`rank\`\nFROM ranked_users\nWHERE (\`rank\` <= 3)\nORDER BY \`team\` ASC, \`rank\` ASC\nLIMIT 50;`,
-                          sqlite: `WITH ranked_users AS (\n  SELECT "u"."id", "u"."name", "u"."team",\n         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",\n         DENSE_RANK() OVER (\n           PARTITION BY "u"."team"\n           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC\n         ) AS "rank"\n  FROM "users" AS "u"\n  LEFT JOIN "orders" AS "o"\n    ON ("u"."id" = "o"."user_id")\n   AND ("o"."created_at" >= datetime('now', '-30 days'))\n   AND ("o"."status" = ?1)\n  GROUP BY "u"."id", "u"."name", "u"."team"\n)\nSELECT "id", "name", "team", "total_spent", "rank"\nFROM ranked_users\nWHERE ("rank" <= 3)\nORDER BY "team" ASC, "rank" ASC\nLIMIT 50;`,
-                          mssql: `WITH ranked_users AS (\n  SELECT [u].[id], [u].[name], [u].[team],\n         ISNULL(SUM([o].[amount]), 0.0) AS [total_spent],\n         DENSE_RANK() OVER (\n           PARTITION BY [u].[team]\n           ORDER BY ISNULL(SUM([o].[amount]), 0.0) DESC\n         ) AS [rank]\n  FROM [users] AS [u]\n  LEFT JOIN [orders] AS [o]\n    ON ([u].[id] = [o].[user_id])\n   AND ([o].[created_at] >= DATEADD(day, -30, GETDATE()))\n   AND ([o].[status] = @p1)\n  GROUP BY [u].[id], [u].[name], [u].[team]\n)\nSELECT TOP (50) [id], [name], [team], [total_spent], [rank]\nFROM ranked_users\nWHERE ([rank] <= 3)\nORDER BY [team] ASC, [rank] ASC;`,
-                          oracle: `WITH ranked_users AS (\n  SELECT "u"."id", "u"."name", "u"."team",\n         NVL(SUM("o"."amount"), 0.0) AS "total_spent",\n         DENSE_RANK() OVER (\n           PARTITION BY "u"."team"\n           ORDER BY NVL(SUM("o"."amount"), 0.0) DESC\n         ) AS "rank"\n  FROM "users" "u"\n  LEFT JOIN "orders" "o"\n    ON ("u"."id" = "o"."user_id")\n   AND ("o"."created_at" >= SYSDATE - 30)\n   AND ("o"."status" = :1)\n  GROUP BY "u"."id", "u"."name", "u"."team"\n)\nSELECT "id", "name", "team", "total_spent", "rank"\nFROM ranked_users\nWHERE ("rank" <= 3)\nORDER BY "team" ASC, "rank" ASC\nFETCH FIRST 50 ROWS ONLY;`
+                          postgres: `SELECT "e"."id",\n       "u"."first_name" || ' ' || "u"."last_name" AS "full_name",\n       "e"."payload"->>'role' AS "user_role",\n       COALESCE("e"."latency_ms", 0) AS "latency_ms"\nFROM "audit_events" AS "e"\nINNER JOIN "users" AS "u"\n  ON "e"."user_id" = "u"."id"\nWHERE ("e"."created_at" >= NOW() - INTERVAL '7 days')\n  AND ("e"."payload"->>'status' = $1)\nORDER BY "e"."created_at" DESC\nLIMIT 25 OFFSET 50;`,
+                          mysql: `SELECT \`e\`.\`id\`,\n       CONCAT(\`u\`.\`first_name\`, ' ', \`u\`.\`last_name\`) AS \`full_name\`,\n       JSON_UNQUOTE(JSON_EXTRACT(\`e\`.\`payload\`, '$.role')) AS \`user_role\`,\n       COALESCE(\`e\`.\`latency_ms\`, 0) AS \`latency_ms\`\nFROM \`audit_events\` AS \`e\`\nINNER JOIN \`users\` AS \`u\`\n  ON \`e\`.\`user_id\` = \`u\`.\`id\`\nWHERE (\`e\`.\`created_at\` >= DATE_SUB(NOW(), INTERVAL 7 DAY))\n  AND (JSON_UNQUOTE(JSON_EXTRACT(\`e\`.\`payload\`, '$.status')) = ?)\nORDER BY \`e\`.\`created_at\` DESC\nLIMIT 50, 25;`,
+                          sqlite: `SELECT "e"."id",\n       "u"."first_name" || ' ' || "u"."last_name" AS "full_name",\n       json_extract("e"."payload", '$.role') AS "user_role",\n       COALESCE("e"."latency_ms", 0) AS "latency_ms"\nFROM "audit_events" AS "e"\nINNER JOIN "users" AS "u"\n  ON "e"."user_id" = "u"."id"\nWHERE ("e"."created_at" >= datetime('now', '-7 days'))\n  AND (json_extract("e"."payload", '$.status') = ?1)\nORDER BY "e"."created_at" DESC\nLIMIT 25 OFFSET 50;`,
+                          mssql: `SELECT [e].[id],\n       CONCAT([u].[first_name], ' ', [u].[last_name]) AS [full_name],\n       JSON_VALUE([e].[payload], '$.role') AS [user_role],\n       ISNULL([e].[latency_ms], 0) AS [latency_ms]\nFROM [audit_events] AS [e]\nINNER JOIN [users] AS [u]\n  ON [e].[user_id] = [u].[id]\nWHERE ([e].[created_at] >= DATEADD(day, -7, GETDATE()))\n  AND (JSON_VALUE([e].[payload], '$.status') = @p1)\nORDER BY [e].[created_at] DESC\nOFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`,
+                          oracle: `SELECT "e"."id",\n       "u"."first_name" || ' ' || "u"."last_name" AS "full_name",\n       JSON_VALUE("e"."payload", '$.role') AS "user_role",\n       NVL("e"."latency_ms", 0) AS "latency_ms"\nFROM "audit_events" "e"\nINNER JOIN "users" "u"\n  ON "e"."user_id" = "u"."id"\nWHERE ("e"."created_at" >= SYSDATE - 7)\n  AND (JSON_VALUE("e"."payload", '$.status') = :1)\nORDER BY "e"."created_at" DESC\nOFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`
                         };
-                        copyToClipboard(dialectMap[sqlDialect], 'sql-dialect');
+                        copyToClipboard(dialectMap[sqlDialect], 'sql-dialect-query');
                       }}
                       className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
                       title="Copy Generated SQL"
                     >
-                      {copiedKey === 'sql-dialect' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedKey === 'sql-dialect-query' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
                   <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
                     {sqlDialect === 'postgres' &&
-`WITH ranked_users AS (
-  SELECT "u"."id", "u"."name", "u"."team",
-         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",
-         DENSE_RANK() OVER (
-           PARTITION BY "u"."team"
-           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC
-         ) AS "rank"
-  FROM "users" AS "u"
-  LEFT JOIN "orders" AS "o"
-    ON ("u"."id" = "o"."user_id")
-   AND ("o"."created_at" >= NOW() - INTERVAL '30 days')
-   AND ("o"."status" = $1)
-  GROUP BY "u"."id", "u"."name", "u"."team"
-)
-SELECT "id", "name", "team", "total_spent", "rank"
-FROM ranked_users
-WHERE ("rank" <= 3)
-ORDER BY "team" ASC, "rank" ASC
-LIMIT 50;`}
+`SELECT "e"."id",
+       "u"."first_name" || ' ' || "u"."last_name" AS "full_name",
+       "e"."payload"->>'role' AS "user_role",
+       COALESCE("e"."latency_ms", 0) AS "latency_ms"
+FROM "audit_events" AS "e"
+INNER JOIN "users" AS "u"
+  ON "e"."user_id" = "u"."id"
+WHERE ("e"."created_at" >= NOW() - INTERVAL '7 days')
+  AND ("e"."payload"->>'status' = $1)
+ORDER BY "e"."created_at" DESC
+LIMIT 25 OFFSET 50;`}
                     {sqlDialect === 'mysql' &&
-`WITH ranked_users AS (
-  SELECT \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`,
-         COALESCE(SUM(\`o\`.\`amount\`), 0.0) AS \`total_spent\`,
-         DENSE_RANK() OVER (
-           PARTITION BY \`u\`.\`team\`
-           ORDER BY COALESCE(SUM(\`o\`.\`amount\`), 0.0) DESC
-         ) AS \`rank\`
-  FROM \`users\` AS \`u\`
-  LEFT JOIN \`orders\` AS \`o\`
-    ON (\`u\`.\`id\` = \`o\`.\`user_id\`)
-   AND (\`o\`.\`created_at\` >= DATE_SUB(NOW(), INTERVAL 30 DAY))
-   AND (\`o\`.\`status\` = ?)
-  GROUP BY \`u\`.\`id\`, \`u\`.\`name\`, \`u\`.\`team\`
-)
-SELECT \`id\`, \`name\`, \`team\`, \`total_spent\`, \`rank\`
-FROM ranked_users
-WHERE (\`rank\` <= 3)
-ORDER BY \`team\` ASC, \`rank\` ASC
-LIMIT 50;`}
+`SELECT \`e\`.\`id\`,
+       CONCAT(\`u\`.\`first_name\`, ' ', \`u\`.\`last_name\`) AS \`full_name\`,
+       JSON_UNQUOTE(JSON_EXTRACT(\`e\`.\`payload\`, '$.role')) AS \`user_role\`,
+       COALESCE(\`e\`.\`latency_ms\`, 0) AS \`latency_ms\`
+FROM \`audit_events\` AS \`e\`
+INNER JOIN \`users\` AS \`u\`
+  ON \`e\`.\`user_id\` = \`u\`.\`id\`
+WHERE (\`e\`.\`created_at\` >= DATE_SUB(NOW(), INTERVAL 7 DAY))
+  AND (JSON_UNQUOTE(JSON_EXTRACT(\`e\`.\`payload\`, '$.status')) = ?)
+ORDER BY \`e\`.\`created_at\` DESC
+LIMIT 50, 25;`}
                     {sqlDialect === 'sqlite' &&
-`WITH ranked_users AS (
-  SELECT "u"."id", "u"."name", "u"."team",
-         COALESCE(SUM("o"."amount"), 0.0) AS "total_spent",
-         DENSE_RANK() OVER (
-           PARTITION BY "u"."team"
-           ORDER BY COALESCE(SUM("o"."amount"), 0.0) DESC
-         ) AS "rank"
-  FROM "users" AS "u"
-  LEFT JOIN "orders" AS "o"
-    ON ("u"."id" = "o"."user_id")
-   AND ("o"."created_at" >= datetime('now', '-30 days'))
-   AND ("o"."status" = ?1)
-  GROUP BY "u"."id", "u"."name", "u"."team"
-)
-SELECT "id", "name", "team", "total_spent", "rank"
-FROM ranked_users
-WHERE ("rank" <= 3)
-ORDER BY "team" ASC, "rank" ASC
-LIMIT 50;`}
+`SELECT "e"."id",
+       "u"."first_name" || ' ' || "u"."last_name" AS "full_name",
+       json_extract("e"."payload", '$.role') AS "user_role",
+       COALESCE("e"."latency_ms", 0) AS "latency_ms"
+FROM "audit_events" AS "e"
+INNER JOIN "users" AS "u"
+  ON "e"."user_id" = "u"."id"
+WHERE ("e"."created_at" >= datetime('now', '-7 days'))
+  AND (json_extract("e"."payload", '$.status') = ?1)
+ORDER BY "e"."created_at" DESC
+LIMIT 25 OFFSET 50;`}
                     {sqlDialect === 'mssql' &&
-`WITH ranked_users AS (
-  SELECT [u].[id], [u].[name], [u].[team],
-         ISNULL(SUM([o].[amount]), 0.0) AS [total_spent],
-         DENSE_RANK() OVER (
-           PARTITION BY [u].[team]
-           ORDER BY ISNULL(SUM([o].[amount]), 0.0) DESC
-         ) AS [rank]
-  FROM [users] AS [u]
-  LEFT JOIN [orders] AS [o]
-    ON ([u].[id] = [o].[user_id])
-   AND ([o].[created_at] >= DATEADD(day, -30, GETDATE()))
-   AND ([o].[status] = @p1)
-  GROUP BY [u].[id], [u].[name], [u].[team]
-)
-SELECT TOP (50) [id], [name], [team], [total_spent], [rank]
-FROM ranked_users
-WHERE ([rank] <= 3)
-ORDER BY [team] ASC, [rank] ASC;`}
+`SELECT [e].[id],
+       CONCAT([u].[first_name], ' ', [u].[last_name]) AS [full_name],
+       JSON_VALUE([e].[payload], '$.role') AS [user_role],
+       ISNULL([e].[latency_ms], 0) AS [latency_ms]
+FROM [audit_events] AS [e]
+INNER JOIN [users] AS [u]
+  ON [e].[user_id] = [u].[id]
+WHERE ([e].[created_at] >= DATEADD(day, -7, GETDATE()))
+  AND (JSON_VALUE([e].[payload], '$.status') = @p1)
+ORDER BY [e].[created_at] DESC
+OFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`}
                     {sqlDialect === 'oracle' &&
-`WITH ranked_users AS (
-  SELECT "u"."id", "u"."name", "u"."team",
-         NVL(SUM("o"."amount"), 0.0) AS "total_spent",
-         DENSE_RANK() OVER (
-           PARTITION BY "u"."team"
-           ORDER BY NVL(SUM("o"."amount"), 0.0) DESC
-         ) AS "rank"
-  FROM "users" "u"
-  LEFT JOIN "orders" "o"
-    ON ("u"."id" = "o"."user_id")
-   AND ("o"."created_at" >= SYSDATE - 30)
-   AND ("o"."status" = :1)
-  GROUP BY "u"."id", "u"."name", "u"."team"
-)
-SELECT "id", "name", "team", "total_spent", "rank"
-FROM ranked_users
-WHERE ("rank" <= 3)
-ORDER BY "team" ASC, "rank" ASC
-FETCH FIRST 50 ROWS ONLY;`}
+`SELECT "e"."id",
+       "u"."first_name" || ' ' || "u"."last_name" AS "full_name",
+       JSON_VALUE("e"."payload", '$.role') AS "user_role",
+       NVL("e"."latency_ms", 0) AS "latency_ms"
+FROM "audit_events" "e"
+INNER JOIN "users" "u"
+  ON "e"."user_id" = "u"."id"
+WHERE ("e"."created_at" >= SYSDATE - 7)
+  AND (JSON_VALUE("e"."payload", '$.status') = :1)
+ORDER BY "e"."created_at" DESC
+OFFSET 50 ROWS FETCH NEXT 25 ROWS ONLY;`}
+                  </pre>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Atomic Mutation (Cross-Dialect UPSERT vs MERGE INTO) */}
+            <div className="p-6 sm:p-8 rounded-3xl border border-line bg-surface shadow-e1 space-y-4">
+              <div className="space-y-1">
+                <h4 className="font-bold text-ink text-lg">2. Atomic Mutation: Cross-Dialect UPSERT vs MERGE INTO</h4>
+                <p className="text-meta text-ink-2">
+                  Demonstrates clause-level architectural divergence: ON CONFLICT in PostgreSQL/SQLite vs ON DUPLICATE KEY in MySQL vs MERGE INTO in Oracle & MSSQL.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left: ASL S-Expression Upsert */}
+                <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-micro uppercase font-bold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
+                      ASL Upsert
+                    </span>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(
+                          `(q/upsert "user_metrics"\n  :columns ["user_id" "visits" "last_active"]\n  :values  [1042 1 (q/now)]\n  :on-conflict ["user_id"]\n  :do-update   ["visits" (q/plus (q/col "visits") 1)\n                "last_active" (q/now)])`,
+                          'sql-upsert-asl'
+                        )
+                      }
+                      className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                      title="Copy ASL Upsert"
+                    >
+                      {copiedKey === 'sql-upsert-asl' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
+{`(q/upsert "user_metrics"
+  :columns ["user_id" "visits" "last_active"]
+  :values  [1042 1 (q/now)]
+  :on-conflict ["user_id"]
+  :do-update   ["visits" (q/plus (q/col "visits") 1)
+                "last_active" (q/now)])`}
+                  </pre>
+                </div>
+
+                {/* Right: Dialect-Specific Generated Upsert / Merge */}
+                <div className="rounded-2xl bg-ground border border-line p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-micro uppercase font-bold text-ink-2 px-2 py-0.5 rounded bg-surface border border-line">
+                      {sqlDialect.toUpperCase()} Mutation
+                    </span>
+                    <button
+                      onClick={() => {
+                        const dialectMap: Record<SqlDialect, string> = {
+                          postgres: `INSERT INTO "user_metrics" ("user_id", "visits", "last_active")\nVALUES ($1, $2, NOW())\nON CONFLICT ("user_id")\nDO UPDATE SET "visits" = "user_metrics"."visits" + 1,\n              "last_active" = NOW();`,
+                          mysql: `INSERT INTO \`user_metrics\` (\`user_id\`, \`visits\`, \`last_active\`)\nVALUES (?, ?, NOW())\nON DUPLICATE KEY UPDATE \`visits\` = \`visits\` + 1,\n                        \`last_active\` = NOW();`,
+                          sqlite: `INSERT INTO "user_metrics" ("user_id", "visits", "last_active")\nVALUES (?1, ?2, datetime('now'))\nON CONFLICT ("user_id")\nDO UPDATE SET "visits" = "user_metrics"."visits" + 1,\n              "last_active" = datetime('now');`,
+                          mssql: `MERGE INTO [user_metrics] WITH (HOLDLOCK) AS [t]\nUSING (VALUES (@p1, @p2)) AS [s] ([user_id], [visits])\nON ([t].[user_id] = [s].[user_id])\nWHEN MATCHED THEN\n  UPDATE SET [visits] = [t].[visits] + 1, [last_active] = GETDATE()\nWHEN NOT MATCHED THEN\n  INSERT ([user_id], [visits], [last_active])\n  VALUES ([s].[user_id], [s].[visits], GETDATE());`,
+                          oracle: `MERGE INTO "user_metrics" "t"\nUSING (SELECT :1 AS "user_id", :2 AS "visits" FROM dual) "s"\nON ("t"."user_id" = "s"."user_id")\nWHEN MATCHED THEN\n  UPDATE SET "visits" = "t"."visits" + 1, "last_active" = SYSDATE\nWHEN NOT MATCHED THEN\n  INSERT ("user_id", "visits", "last_active")\n  VALUES ("s"."user_id", "s"."visits", SYSDATE);`
+                        };
+                        copyToClipboard(dialectMap[sqlDialect], 'sql-dialect-upsert');
+                      }}
+                      className="p-1.5 rounded-lg bg-surface hover:bg-surface-2 border border-line text-ink-2 hover:text-ink transition-all"
+                      title="Copy Generated Mutation"
+                    >
+                      {copiedKey === 'sql-dialect-upsert' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
+                    {sqlDialect === 'postgres' &&
+`INSERT INTO "user_metrics" ("user_id", "visits", "last_active")
+VALUES ($1, $2, NOW())
+ON CONFLICT ("user_id")
+DO UPDATE SET "visits" = "user_metrics"."visits" + 1,
+              "last_active" = NOW();`}
+                    {sqlDialect === 'mysql' &&
+`INSERT INTO \`user_metrics\` (\`user_id\`, \`visits\`, \`last_active\`)
+VALUES (?, ?, NOW())
+ON DUPLICATE KEY UPDATE \`visits\` = \`visits\` + 1,
+                        \`last_active\` = NOW();`}
+                    {sqlDialect === 'sqlite' &&
+`INSERT INTO "user_metrics" ("user_id", "visits", "last_active")
+VALUES (?1, ?2, datetime('now'))
+ON CONFLICT ("user_id")
+DO UPDATE SET "visits" = "user_metrics"."visits" + 1,
+              "last_active" = datetime('now');`}
+                    {sqlDialect === 'mssql' &&
+`MERGE INTO [user_metrics] WITH (HOLDLOCK) AS [t]
+USING (VALUES (@p1, @p2)) AS [s] ([user_id], [visits])
+ON ([t].[user_id] = [s].[user_id])
+WHEN MATCHED THEN
+  UPDATE SET [visits] = [t].[visits] + 1, [last_active] = GETDATE()
+WHEN NOT MATCHED THEN
+  INSERT ([user_id], [visits], [last_active])
+  VALUES ([s].[user_id], [s].[visits], GETDATE());`}
+                    {sqlDialect === 'oracle' &&
+`MERGE INTO "user_metrics" "t"
+USING (SELECT :1 AS "user_id", :2 AS "visits" FROM dual) "s"
+ON ("t"."user_id" = "s"."user_id")
+WHEN MATCHED THEN
+  UPDATE SET "visits" = "t"."visits" + 1, "last_active" = SYSDATE
+WHEN NOT MATCHED THEN
+  INSERT ("user_id", "visits", "last_active")
+  VALUES ("s"."user_id", "s"."visits", SYSDATE);`}
                   </pre>
                 </div>
               </div>
