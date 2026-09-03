@@ -1,9 +1,54 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Logo } from './ui/Logo';
 
-export const Footer: React.FC = () => (
-  <footer className="py-14 border-t border-line bg-sunken/60">
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+export const Footer: React.FC = () => {
+  const [clickedCount, setClickedCount] = useState(0);
+
+  const easterEggQuotes = [
+    "Psst! You made it all the way to the end of the runtime.",
+    "Formally verified from head to tail! 🦎",
+    "Zero heap allocations down here.",
+    "Watching over your AST trees from this branch.",
+    "Deterministic execution reached EOF."
+  ];
+
+  return (
+    <footer className="relative pt-12 pb-14 border-t border-line bg-sunken/60">
+      {/* Chameleon Easter Egg: Sitting in the top part of the footer before everything else */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-8 flex flex-col items-center justify-center">
+        <button
+          type="button"
+          onClick={() => setClickedCount((prev) => prev + 1)}
+          className="group relative flex flex-col items-center focus:outline-none cursor-pointer"
+          title="Click the chameleon easter egg!"
+          aria-label="AgentScript Mascot Chameleon Easter Egg"
+        >
+          {/* Emergent Speech Bubble on hover or click */}
+          <div className="opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0 mb-3 px-3.5 py-1.5 rounded-2xl bg-surface/95 backdrop-blur-xl border border-line shadow-e2 text-micro font-mono text-ink flex items-center gap-2 pointer-events-none">
+            <span className="w-1.5 h-1.5 rounded-full bg-signal animate-pulse shrink-0" />
+            <span>{easterEggQuotes[clickedCount % easterEggQuotes.length]}</span>
+          </div>
+
+          <div className="relative">
+            {/* Subtle atmospheric ambient glow behind chameleon */}
+            <div className="absolute inset-0 rounded-full bg-purple-500/15 blur-2xl group-hover:bg-purple-500/25 transition-all scale-110 pointer-events-none" />
+            
+            <img
+              src="/chameleon.png"
+              alt="AgentScript Mascot Chameleon Easter Egg"
+              width="130"
+              height="138"
+              className="relative z-10 w-24 sm:w-28 h-auto select-none transition-all duration-300 transform group-hover:scale-110 group-active:scale-95 drop-shadow-[0_12px_24px_rgba(168,85,247,0.2)]"
+            />
+          </div>
+
+          <span className="mt-2 font-mono text-2xs uppercase tracking-widest text-ink-3 group-hover:text-signal transition-colors">
+            EOF • Leon the Chameleon
+          </span>
+        </button>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
       <div className="flex items-center gap-3">
         <Logo className="w-7 h-7 text-signal" />
         <span className="flex items-baseline gap-2">
@@ -46,4 +91,5 @@ export const Footer: React.FC = () => (
       <p>Formally verified determinism across runtimes.</p>
     </div>
   </footer>
-);
+  );
+};
