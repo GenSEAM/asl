@@ -5,140 +5,303 @@ import React from 'react';
  * Full-Document Cyclic Scattered & Tilted Aerospace Blueprint Architecture:
  * 1. Fixed Chameleon Perch (Top-Left): Curled tail wrapped around vine passing through spiral eye.
  * 2. Full-Screen Background Grid: Fixed technical blueprint grid pattern.
- * 3. Bounded Cyclic Gutter Streams (Left & Right):
- *    - Strict top-0 bottom-0 overflow-hidden bounds: NEVER stretches document scroll height.
- *    - Generous spacing (~280px, equal to chameleon height): exactly 1 artifact in view at a time.
- *    - High top offset on left side (starts after y: 520px in cycle 0): zero overlap with chameleon!
- *    - Scattered x-coordinates (zig-zagging 40px to 135px) and varied tilts (-45° to +55°).
+ * 3. Left Deflecting Stream:
+ *    - Items scroll up normally, but as they approach the chameleon (y <= 480 in viewport),
+ *      they smoothly veer off to the left (X -> -220px) and bank into a turn, disappearing off-screen!
+ *    - Zero collision with the chameleon!
+ * 4. Right Gutter Stream:
+ *    - Strictly bounded to document height with ~280px generous spacing.
  */
 
 const CYCLE_HEIGHT = 2800;
 const CYCLES = [0, 1, 2, 3, 4]; // 5 * 2800 = 14,000px continuous coverage
 
-// Left Gutter 2800px Cycle (10 elements spaced by 280px)
-const LeftGutterCycle: React.FC<{ isFirstCycle?: boolean }> = ({ isFirstCycle }) => (
-  <>
-    {/* 1. Conway's Glider (y: 240, x: 50, rotate -28) — suppressed in cycle 0 to leave chameleon completely clear! */}
-    {!isFirstCycle && (
-      <g transform="translate(50, 240) rotate(-28)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
+// Definition of Left Gutter Easter Eggs
+const LEFT_ITEMS = [
+  {
+    baseX: 130,
+    baseRot: 40,
+    render: () => (
+      <>
+        {/* Sputnik-1 */}
+        <circle cx="0" cy="0" r="10" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.5" />
+        <ellipse cx="0" cy="0" rx="10" ry="3" strokeDasharray="2 2" opacity="0.5" />
+        <line x1="-7" y1="-7" x2="-48" y2="-28" strokeWidth="1.1" />
+        <line x1="-7" y1="7" x2="-52" y2="22" strokeWidth="1.1" />
+        <line x1="7" y1="-7" x2="42" y2="-36" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
+        <line x1="7" y1="7" x2="46" y2="28" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
+        <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6" transform="rotate(-40)">
+          <text x="14" y="-10">PS-01</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 40,
+    baseRot: -18,
+    render: () => (
+      <>
+        {/* Vacuum Triode 12AX7 */}
+        <path d="M 0,50 L 0,22 C 0,7 32,7 32,22 L 32,50 Z" fill="#4a044e" fillOpacity="0.2" />
+        <line x1="8" y1="18" x2="24" y2="18" strokeWidth="1.6" />
+        <line x1="16" y1="7" x2="16" y2="18" />
+        <path d="M 10,26 L 13,29 L 16,26 L 19,29 L 22,26" strokeWidth="1.1" strokeDasharray="1 1" />
+        <path d="M 11,36 L 21,36" stroke="url(#amberGlowL)" strokeWidth="1.6" />
+        <line x1="7" y1="50" x2="7" y2="58" />
+        <line x1="16" y1="50" x2="16" y2="60" />
+        <line x1="25" y1="50" x2="25" y2="58" />
+        <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.55">
+          <text x="36" y="28">V-12</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 120,
+    baseRot: 15,
+    render: () => (
+      <>
+        {/* Turing Machine Tape */}
+        <rect x="-55" y="-11" width="110" height="22" rx="2" fill="#3b0764" fillOpacity="0.2" />
+        <line x1="-33" y1="-11" x2="-33" y2="11" />
+        <line x1="-11" y1="-11" x2="-11" y2="11" />
+        <line x1="11" y1="-11" x2="11" y2="11" />
+        <line x1="33" y1="-11" x2="33" y2="11" />
+        <path d="M 0,-18 L 0,-11 M -3,-14 L 0,-11 L 3,-14" strokeWidth="1.4" />
+        <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.8">
+          <text x="-48" y="4">1</text>
+          <text x="-26" y="4">0</text>
+          <text x="-4" y="4" fill="#4ade80">1</text>
+          <text x="18" y="4">1</text>
+          <text x="40" y="4">0</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 45,
+    baseRot: -45,
+    render: () => (
+      <>
+        {/* Astrolabe */}
+        <circle cx="0" cy="0" r="44" strokeDasharray="5 4" opacity="0.35" />
+        <path d="M -34,-10 A 36 36 0 0 1 34,-10" strokeWidth="2" fill="#3b0764" fillOpacity="0.2" />
+        <line x1="-34" y1="-10" x2="34" y2="-10" />
+        <line x1="0" y1="-34" x2="0" y2="-50" strokeWidth="2.0" />
+        <circle cx="0" cy="-50" r="3" fill="currentColor" />
+      </>
+    ),
+  },
+  {
+    baseX: 135,
+    baseRot: 30,
+    render: () => (
+      <>
+        {/* 3.5" Diskette */}
+        <polygon points="0,0 55,0 60,5 60,65 0,65" fill="#3b0764" fillOpacity="0.25" />
+        <rect x="11" y="0" width="28" height="24" rx="2" fill="#581c87" fillOpacity="0.35" />
+        <rect x="16" y="4" width="5" height="14" rx="1" fill="currentColor" fillOpacity="0.75" />
+        <circle cx="30" cy="38" r="9" strokeDasharray="2 2" opacity="0.5" />
+        <circle cx="30" cy="38" r="3" fill="currentColor" opacity="0.5" />
+        <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6">
+          <text x="8" y="58">ROM-144</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 50,
+    baseRot: -12,
+    render: () => (
+      <>
+        {/* Fuel Gauge */}
+        <circle cx="0" cy="0" r="26" strokeDasharray="4 3" opacity="0.5" />
+        <path d="M 0,0 L 16,-14" stroke="#4ade80" strokeWidth="2.0" />
+        <circle cx="0" cy="0" r="3" fill="#4ade80" />
+        <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.8">
+          <text x="32" y="-4" fill="#4ade80">-80% TOK</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 125,
+    baseRot: -26,
+    render: () => (
+      <>
+        {/* Curiosity Rover Track */}
+        <rect x="-42" y="-8" width="85" height="16" rx="2" fill="#3b0764" fillOpacity="0.2" />
+        <circle cx="-32" cy="0" r="1.5" fill="currentColor" />
+        <line x1="-26" y1="0" x2="-18" y2="0" strokeWidth="2" />
+        <line x1="-14" y1="0" x2="-6" y2="0" strokeWidth="2" />
+        <circle cx="2" cy="0" r="1.5" fill="currentColor" />
+        <line x1="8" y1="0" x2="16" y2="0" strokeWidth="2" />
+        <circle cx="24" cy="0" r="1.5" fill="currentColor" />
+        <line x1="30" y1="0" x2="36" y2="0" strokeWidth="2" />
+      </>
+    ),
+  },
+  {
+    baseX: 40,
+    baseRot: 50,
+    render: () => (
+      <>
+        {/* Wasm Hexagon */}
+        <polygon points="0,-24 20,-12 20,12 0,24 -20,12 -20,-12" fill="#3b0764" fillOpacity="0.25" />
+        <circle cx="0" cy="0" r="8" strokeDasharray="2 2" />
+        <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7">
+          <text x="-12" y="3">WASM</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 125,
+    baseRot: -25,
+    render: () => (
+      <>
+        {/* 2N3904 Transistor */}
+        <path d="M -14,0 A 14 14 0 0 1 14,0 Z" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.5" />
+        <line x1="-8" y1="0" x2="-8" y2="28" />
+        <line x1="0" y1="0" x2="0" y2="32" />
+        <line x1="8" y1="0" x2="8" y2="28" />
+        <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6">
+          <text x="18" y="12">2N3904</text>
+        </g>
+      </>
+    ),
+  },
+  {
+    baseX: 50,
+    baseRot: -28,
+    render: () => (
+      <>
+        {/* Conway Glider */}
         <rect x="12" y="0" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
         <rect x="24" y="12" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
         <rect x="0" y="24" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
         <rect x="12" y="24" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
         <rect x="24" y="24" width="8" height="8" fill="#c084fc" fillOpacity="0.45" />
         <line x1="32" y1="32" x2="52" y2="52" strokeDasharray="2 2" opacity="0.6" />
-      </g>
-    )}
+      </>
+    ),
+  },
+];
 
-    {/* 2. Sputnik-1 (y: 520, x: 130, rotate 40) — First element on left in cycle 0, starts safely below chameleon */}
-    <g transform="translate(130, 520) rotate(40)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-      <circle cx="0" cy="0" r="10" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.5" />
-      <ellipse cx="0" cy="0" rx="10" ry="3" strokeDasharray="2 2" opacity="0.5" />
-      <line x1="-7" y1="-7" x2="-48" y2="-28" strokeWidth="1.1" />
-      <line x1="-7" y1="7" x2="-52" y2="22" strokeWidth="1.1" />
-      <line x1="7" y1="-7" x2="42" y2="-36" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
-      <line x1="7" y1="7" x2="46" y2="28" strokeWidth="1.0" strokeDasharray="2 1" opacity="0.6" />
-      <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6" transform="rotate(-40)">
-        <text x="14" y="-10">PS-01</text>
-      </g>
-    </g>
+// Left Stream with Smooth Deflection veering to the left before reaching chameleon
+const LeftDeflectingGutterStream: React.FC = () => {
+  const [scrollY, setScrollY] = React.useState(0);
+  const [viewportH, setViewportH] = React.useState(typeof window !== 'undefined' ? window.innerHeight : 900);
+  const [docH, setDocH] = React.useState(typeof document !== 'undefined' ? document.documentElement.scrollHeight : 12000);
 
-    {/* 3. Vacuum Triode 12AX7 (y: 800, x: 40, rotate -18) */}
-    <g transform="translate(40, 800) rotate(-18)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-      <path d="M 0,50 L 0,22 C 0,7 32,7 32,22 L 32,50 Z" fill="#4a044e" fillOpacity="0.2" />
-      <line x1="8" y1="18" x2="24" y2="18" strokeWidth="1.6" />
-      <line x1="16" y1="7" x2="16" y2="18" />
-      <path d="M 10,26 L 13,29 L 16,26 L 19,29 L 22,26" strokeWidth="1.1" strokeDasharray="1 1" />
-      <path d="M 11,36 L 21,36" stroke="url(#amberGlowL)" strokeWidth="1.6" />
-      <line x1="7" y1="50" x2="7" y2="58" />
-      <line x1="16" y1="50" x2="16" y2="60" />
-      <line x1="25" y1="50" x2="25" y2="58" />
-      <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.55">
-        <text x="36" y="28">V-12</text>
-      </g>
-    </g>
+  React.useEffect(() => {
+    let ticking = false;
+    const update = () => {
+      setScrollY(window.scrollY);
+      setViewportH(window.innerHeight);
+      setDocH(document.documentElement.scrollHeight);
+      ticking = false;
+    };
 
-    {/* 4. Turing Machine Tape (y: 1080, x: 120, rotate 15) */}
-    <g transform="translate(120, 1080) rotate(15)" stroke="url(#leftBioGrad)" strokeWidth="1.1">
-      <rect x="-55" y="-11" width="110" height="22" rx="2" fill="#3b0764" fillOpacity="0.2" />
-      <line x1="-33" y1="-11" x2="-33" y2="11" />
-      <line x1="-11" y1="-11" x2="-11" y2="11" />
-      <line x1="11" y1="-11" x2="11" y2="11" />
-      <line x1="33" y1="-11" x2="33" y2="11" />
-      <path d="M 0,-18 L 0,-11 M -3,-14 L 0,-11 L 3,-14" strokeWidth="1.4" />
-      <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.8">
-        <text x="-48" y="4">1</text>
-        <text x="-26" y="4">0</text>
-        <text x="-4" y="4" fill="#4ade80">1</text>
-        <text x="18" y="4">1</text>
-        <text x="40" y="4">0</text>
-      </g>
-    </g>
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(update);
+        ticking = true;
+      }
+    };
 
-    {/* 5. Astrolabe Coordinate Scanner (y: 1360, x: 45, rotate -45) */}
-    <g transform="translate(45, 1360) rotate(-45)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
-      <circle cx="0" cy="0" r="44" strokeDasharray="5 4" opacity="0.35" />
-      <path d="M -34,-10 A 36 36 0 0 1 34,-10" strokeWidth="2" fill="#3b0764" fillOpacity="0.2" />
-      <line x1="-34" y1="-10" x2="34" y2="-10" />
-      <line x1="0" y1="-34" x2="0" y2="-50" strokeWidth="2.0" />
-      <circle cx="0" cy="-50" r="3" fill="currentColor" />
-    </g>
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, []);
 
-    {/* 6. 3.5" Diskette Avionics ROM (y: 1640, x: 135, rotate 30) */}
-    <g transform="translate(135, 1640) rotate(30)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-      <polygon points="0,0 55,0 60,5 60,65 0,65" fill="#3b0764" fillOpacity="0.25" />
-      <rect x="11" y="0" width="28" height="24" rx="2" fill="#581c87" fillOpacity="0.35" />
-      <rect x="16" y="4" width="5" height="14" rx="1" fill="currentColor" fillOpacity="0.75" />
-      <circle cx="30" cy="38" r="9" strokeDasharray="2 2" opacity="0.5" />
-      <circle cx="30" cy="38" r="3" fill="currentColor" opacity="0.5" />
-      <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6">
-        <text x="8" y="58">ROM-144</text>
-      </g>
-    </g>
+  const STEP = 280;
+  const START_Y = 520;
+  const maxK = Math.max(0, Math.floor((docH - START_Y - 200) / STEP));
+  const minK = Math.max(0, Math.floor((scrollY - 100 - START_Y) / STEP));
+  const endK = Math.min(maxK, Math.ceil((scrollY + viewportH + 100 - START_Y) / STEP));
 
-    {/* 7. Token Fuel Gauge (y: 1920, x: 50, rotate -12) */}
-    <g transform="translate(50, 1920) rotate(-12)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-      <circle cx="0" cy="0" r="26" strokeDasharray="4 3" opacity="0.5" />
-      <path d="M 0,0 L 16,-14" stroke="#4ade80" strokeWidth="2.0" />
-      <circle cx="0" cy="0" r="3" fill="#4ade80" />
-      <g fontFamily="monospace" fontSize="7" fill="currentColor" opacity="0.8">
-        <text x="32" y="-4" fill="#4ade80">-80% TOK</text>
-      </g>
-    </g>
+  const visibleItems = [];
+  for (let k = minK; k <= endK; k++) {
+    const docY = START_Y + k * STEP;
+    const viewY = docY - scrollY;
+    if (viewY < -100 || viewY > viewportH + 100) continue;
 
-    {/* 8. Curiosity Rover Morse Track (y: 2200, x: 125, rotate -26) */}
-    <g transform="translate(125, 2200) rotate(-26)" stroke="url(#leftBioGrad)" strokeWidth="1.3">
-      <rect x="-42" y="-8" width="85" height="16" rx="2" fill="#3b0764" fillOpacity="0.2" />
-      <circle cx="-32" cy="0" r="1.5" fill="currentColor" />
-      <line x1="-26" y1="0" x2="-18" y2="0" strokeWidth="2" />
-      <line x1="-14" y1="0" x2="-6" y2="0" strokeWidth="2" />
-      <circle cx="2" cy="0" r="1.5" fill="currentColor" />
-      <line x1="8" y1="0" x2="16" y2="0" strokeWidth="2" />
-      <circle cx="24" cy="0" r="1.5" fill="currentColor" />
-      <line x1="30" y1="0" x2="36" y2="0" strokeWidth="2" />
-    </g>
+    const itemDef = LEFT_ITEMS[k % LEFT_ITEMS.length];
 
-    {/* 9. Wasm Bytecode Hexagon (y: 2480, x: 40, rotate 50) */}
-    <g transform="translate(40, 2480) rotate(50)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-      <polygon points="0,-24 20,-12 20,12 0,24 -20,12 -20,-12" fill="#3b0764" fillOpacity="0.25" />
-      <circle cx="0" cy="0" r="8" strokeDasharray="2 2" />
-      <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.7">
-        <text x="-12" y="3">WASM</text>
-      </g>
-    </g>
+    // Smooth deflection to the left when approaching chameleon (viewY <= 480)
+    let xOff = 0;
+    let extraRot = 0;
+    let opacity = 0.85;
 
-    {/* 10. Transistor TO-92 (y: 2760, x: 125, rotate -25) */}
-    <g transform="translate(125, 2760) rotate(-25)" stroke="url(#leftBioGrad)" strokeWidth="1.2">
-      <path d="M -14,0 A 14 14 0 0 1 14,0 Z" fill="#3b0764" fillOpacity="0.3" strokeWidth="1.5" />
-      <line x1="-8" y1="0" x2="-8" y2="28" />
-      <line x1="0" y1="0" x2="0" y2="32" />
-      <line x1="8" y1="0" x2="8" y2="28" />
-      <g fontFamily="monospace" fontSize="6.5" fill="currentColor" opacity="0.6">
-        <text x="18" y="12">2N3904</text>
-      </g>
-    </g>
-  </>
-);
+    if (viewY <= 480) {
+      // t ranges from 0 (at 480px) to 1 (at 120px)
+      const t = Math.max(0, Math.min(1, (480 - viewY) / 360));
+      // Ease curve: veers smoothly to the left
+      const ease = Math.pow(t, 1.7);
+      xOff = -ease * 240; // Drifts 240px to the left (off-screen)
+      extraRot = -ease * 35; // Banks 35 degrees into the turn
+      opacity = Math.max(0, 0.85 * (1 - ease * 1.2));
+    }
+
+    visibleItems.push({
+      key: k,
+      x: itemDef.baseX + xOff,
+      y: viewY,
+      rot: itemDef.baseRot + extraRot,
+      opacity,
+      render: itemDef.render,
+    });
+  }
+
+  return (
+    <div className="fixed top-0 bottom-0 left-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none z-0 overflow-visible">
+      <svg
+        className="w-full h-full text-purple-400/40 dark:text-purple-300/35 overflow-visible"
+        viewBox={`0 0 180 ${viewportH}`}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id="leftBioGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#c084fc" stopOpacity="0.8" />
+            <stop offset="60%" stopColor="#a855f7" stopOpacity="0.5" />
+            <stop offset="100%" stopColor="#7e22ce" stopOpacity="0.3" />
+          </linearGradient>
+          <linearGradient id="amberGlowL" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.75" />
+            <stop offset="100%" stopColor="#d97706" stopOpacity="0.3" />
+          </linearGradient>
+        </defs>
+
+        {/* Blueprint dashed guideline showing the diversion trajectory out to the left */}
+        <path
+          d="M 120,480 C 110,380 50,260 -60,140"
+          stroke="url(#leftBioGrad)"
+          strokeWidth="1.2"
+          strokeDasharray="4 4"
+          opacity="0.25"
+        />
+
+        {visibleItems.map(({ key, x, y, rot, opacity, render }) => (
+          <g
+            key={key}
+            transform={`translate(${x}, ${y}) rotate(${rot})`}
+            stroke="url(#leftBioGrad)"
+            strokeWidth="1.2"
+            opacity={opacity}
+          >
+            {render()}
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+};
 
 // Right Gutter 2800px Cycle (10 elements spaced by 280px)
 const RightGutterCycle: React.FC = () => (
@@ -439,35 +602,8 @@ export const CosmicLandscapeBackground: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. DEDICATED LEFT CYCLIC GUTTER STREAM (Strictly bounded to page height) */}
-      <div className="absolute top-0 bottom-0 left-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none overflow-hidden">
-        <svg
-          className="w-full h-full text-purple-400/40 dark:text-purple-300/35"
-          viewBox={`0 0 180 ${CYCLES.length * CYCLE_HEIGHT}`}
-          preserveAspectRatio="xMidYMin slice"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <defs>
-            <linearGradient id="leftBioGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#c084fc" stopOpacity="0.8" />
-              <stop offset="60%" stopColor="#a855f7" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#7e22ce" stopOpacity="0.3" />
-            </linearGradient>
-            <linearGradient id="amberGlowL" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.75" />
-              <stop offset="100%" stopColor="#d97706" stopOpacity="0.3" />
-            </linearGradient>
-          </defs>
-
-          {/* Seamlessly repeating cycles down the left gutter */}
-          {CYCLES.map((cycleIdx) => (
-            <g key={cycleIdx} transform={`translate(0, ${cycleIdx * CYCLE_HEIGHT})`}>
-              <LeftGutterCycle isFirstCycle={cycleIdx === 0} />
-            </g>
-          ))}
-        </svg>
-      </div>
+      {/* 2. DEDICATED LEFT DEFLECTING GUTTER STREAM (Smoothly veers left before chameleon) */}
+      <LeftDeflectingGutterStream />
 
       {/* 3. DEDICATED RIGHT CYCLIC GUTTER STREAM (Strictly bounded to page height) */}
       <div className="absolute top-0 bottom-0 right-0 w-32 sm:w-44 md:w-52 lg:w-60 pointer-events-none overflow-hidden">
