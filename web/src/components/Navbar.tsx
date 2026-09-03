@@ -187,7 +187,7 @@ export const Navbar: React.FC = () => {
               onClick={() => setIsOpen((prev) => !prev)}
               aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={isOpen}
-              className="group relative flex items-center justify-center cursor-pointer focus:outline-none transition-all duration-200 hover:translate-y-0.5 active:scale-95"
+              className="group relative flex items-center justify-center cursor-pointer focus:outline-none transition-all duration-200 hover:translate-y-0.5 active:scale-90 active:opacity-85 touch-manipulation before:absolute before:-inset-x-6 before:-inset-y-3 before:content-['']"
               title={isOpen ? 'Close menu (Esc)' : 'Open navigation menu'}
             >
               <svg width="44" height="20" viewBox="0 0 44 20" className="overflow-visible">
