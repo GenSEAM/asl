@@ -179,38 +179,38 @@ export const Navbar: React.FC = () => {
             </div>
           </header>
 
-          {/* Integrated Celestial Arrow Orb tucked under the header */}
-          <div className="nav:hidden absolute left-1/2 -translate-x-1/2 -bottom-2.5 z-0 flex items-center justify-center pointer-events-auto">
+          {/* Integrated Celestial Arrow Orb prominently peeking out under the header */}
+          <div className="nav:hidden absolute left-1/2 -translate-x-1/2 -bottom-4 z-20 flex items-center justify-center pointer-events-auto">
             <button
               ref={handleRef}
               type="button"
               onClick={() => setIsOpen((prev) => !prev)}
-              aria-label={isOpen ? 'Close menu' : 'Open menu'}
+              aria-label={isOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={isOpen}
-              className="group flex items-center justify-center w-7 h-7 rounded-full border border-line bg-surface/95 shadow-sm hover:border-signal/50 transition-all duration-200 hover:translate-y-1 active:scale-95 cursor-pointer focus:outline-none"
-              title={isOpen ? 'Close menu (Esc)' : 'Open menu'}
+              className="group flex items-center justify-center w-8 h-8 rounded-full border border-line-strong bg-surface shadow-md hover:border-signal hover:shadow-sm hover:scale-110 active:scale-95 transition-all duration-200 cursor-pointer focus:outline-none"
+              title={isOpen ? 'Close menu (Esc)' : 'Open navigation menu'}
             >
-              {/* Orb with integrated arrow & orbital satellite */}
-              <svg viewBox="0 0 28 28" className="w-4 h-4 text-ink-3 group-hover:text-signal transition-colors">
-                {/* Subtle orbit ring */}
+              {/* Orb with clearly visible, bold integrated arrow & orbital satellite */}
+              <svg viewBox="0 0 32 32" className="w-5 h-5 text-signal transition-transform duration-200">
+                {/* Subtle orbital ring */}
                 <ellipse
-                  cx="14"
-                  cy="14"
-                  rx="11"
-                  ry="4.5"
+                  cx="16"
+                  cy="16"
+                  rx="12"
+                  ry="5"
                   stroke="currentColor"
-                  strokeWidth="0.9"
+                  strokeWidth="1"
                   strokeDasharray="2 2"
-                  className="opacity-40 -rotate-25 origin-center"
+                  className="opacity-35 -rotate-25 origin-center"
                 />
                 {/* Orbit satellite beacon dot */}
-                <circle cx="22" cy="11" r="1.3" className="fill-signal" />
-                {/* Arrow smoothly integrated inside the orb */}
+                <circle cx="25" cy="13" r="1.5" className="fill-signal" />
+                {/* Crisp bold arrow pointing down / up */}
                 <path
-                  d={isOpen ? 'M9.5 16l4.5-4.5 4.5 4.5' : 'M9.5 12l4.5 4.5 4.5-4.5'}
+                  d={isOpen ? 'M10 18l6-6 6 6' : 'M10 13l6 6 6-6'}
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.8"
+                  strokeWidth="2.4"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   className="transition-all duration-200"
