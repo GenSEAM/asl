@@ -9,8 +9,15 @@
   2. *ASL S-Expression Tool-Calling Protocol*: Replaces bloated multi-kilobyte JSON tool schemas with dense S-expressions `(call :tool <name> <args>)`, reducing prompt token consumption by 70–80%.
   3. *High-Density Graph & Vector Memory*: Extends `asl-mem` with entity relations, data freshness timestamps, contradiction resolution, and binary ASN serialization (`asl-codec`).
   4. *Anti-Hallucination Epistemic Proxy*: Hard grounding firewall validating exact snippet quotes, isolated prompt caching namespaces, and citation tracking.
-- **Status**: Paused at Phase 1; snapshot preserved in `.plans/iterations/2026-09-04-080000-agent-intelligence/`.
-
+- **Status**: COMPLETED on `main` (all 6 phases green and verified).
+- **Execution Log**:
+  - **Phase 1 (asl-context)**: Pure ASL HTML/DOM boilerplate stripper, entity decoder, multi-format extractors, sliding-window RAG chunker. Tests: `context_test.asl`. Commit `621481b`.
+  - **Phase 2 (asl-search)**: Multi-ecosystem package registry search (npm, PyPI, Crates.io, Go, GitHub/C), deep link targets. Tests: `search_test.asl`. Commit `4236ddb`.
+  - **Phase 3 (asl-mem)**: Knowledge graph edges, timestamp-based contradiction resolution, ASN compact encoding (`@v:{...}`, `@n:{...}`). Tests: `mem_test.asl`. Commit `f353124`.
+  - **Phase 4 (asl-toolcall)**: ASL S-expression tool calling protocol `(call :tool ...)`, parser, validator, zero-JSON dispatcher. Tests: `toolcall_test.asl`. Commit `a6f7cc2`.
+  - **Phase 5 (asl-harness)**: Anti-hallucination grounding firewall, verbatim quote verification against retrieved docs, namespace-isolated prompt caches, action firewall. Tests: `harness_test.asl`. Commit `39e2807`.
+  - **Phase 6 (bench & docs)**: Tool calling benchmark (`bench/token_toolcall.py`: -48.1% keyed, -67.3% positional vs JSON). Commit `7219fd3`.
+  - **Full Health Audit**: All gates verified clean (grammar parity, closure audit 107/107, semantic checker 56/56 packages, target compilers python/rustc/tsc/govet, monomorphism 400 probes, differential parity across 6 runtimes 0 disagreements, 913/913 unit tests passed, web showcase built cleanly).
 ---
 
 ## Iteration 2026-09-04-blog-and-agentic-content
