@@ -18,9 +18,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from resolve import check_file  # noqa: E402
+from resolve import check_file as py_check_file  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
+if "--native" in sys.argv:
+    sys.path.insert(0, str(ROOT))
+    from tools.native_checker import native_check_file as check_file  # noqa: E402
+else:
+    check_file = py_check_file
 CORPUS = ROOT / "grammar" / "corpus"
 ROOTS = [CORPUS / "modules"]
 PACKAGES = ROOT / "packages"

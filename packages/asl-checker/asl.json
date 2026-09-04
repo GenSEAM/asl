@@ -1,0 +1,10 @@
+{
+  "name": "@genseam/asl-checker",
+  "version": "1.0.0",
+  "description": "100% Self-Hosted Pure AgentScript Semantic Type Checker",
+  "entry": "src/check.asl",
+  "main": "src/check.asl",
+  "dependencies": {
+    "@genseam/asl-parser": "^1.0.0"
+  }
+}

@@ -116,8 +116,13 @@ def cmd_check(args) -> int:
         return 0 if all(r["valid"] for r in reports) else 1
 
     diags: list[Diagnostic] = []
-    for f in files:
-        diags += check_file(f, roots)
+    if getattr(args, "native", False):
+        from tools.native_checker import native_check_file
+        for f in files:
+            diags += native_check_file(f, roots)
+    else:
+        for f in files:
+            diags += check_file(f, roots)
     diags.sort(key=lambda d: (d.path, d.line, d.col, d.code))
     return report(diags, getattr(args, "json", False), f"diagnostic(s) across {len(files)} file(s)")
 
@@ -349,14 +354,22 @@ def cmd_search(args) -> int:
 
 
 def cmd_websearch(args) -> int:
-    """Metasearch aggregator via SearXNG with proxy pool support."""
-    from tools.search import query_searxng, format_results_markdown
-    items = query_searxng(args.query, instance_url=getattr(args, "instance", None), proxy=getattr(args, "proxy", None))
+    """Unified multi-engine search aggregator for AI agents."""
+    from tools.search import search_multi, format_results_markdown
+    engines = [e.strip() for e in args.engines.split(",")] if getattr(args, "engines", None) else None
+    items = search_multi(
+        args.query,
+        engines=engines,
+        limit=getattr(args, "limit", 5),
+        instance_url=getattr(args, "instance", None),
+        proxy=getattr(args, "proxy", None),
+    )
     if getattr(args, "json", False):
         print(json.dumps([item.__dict__ for item in items], indent=2))
     else:
         print(format_results_markdown(args.query, items))
     return 0
+
 
 
 def cmd_test(args) -> int:
@@ -798,6 +811,7 @@ def main() -> int:
     p.add_argument("paths", nargs="*", type=Path)
     p.add_argument("--fix", action="store_true", help="auto-repair fixable rule violations")
     p.add_argument("--machine", action="store_true", help="emit machine-native actionable diagnostic JSON")
+    p.add_argument("--native", action="store_true", help="run self-hosted pure AgentScript semantic checker (@pcp:d-8d4c)")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_check)
 
@@ -1003,8 +1017,10 @@ def main() -> int:
     p.set_defaults(fn=cmd_search)
 
     p = sub.add_parser("websearch", aliases=["searxng", "find"],
-                       help="metasearch aggregator via SearXNG with proxy pool support")
+                       help="multi-engine search aggregator (ddg, github, arxiv, wiki, hn, brave, google)")
     p.add_argument("query", help="search query text")
+    p.add_argument("--sources", "--engines", dest="engines", help="comma-separated engines (ddg, github, arxiv, wiki, hn, brave, google, tavily)")
+    p.add_argument("--limit", type=int, default=5, help="max results per engine (default: 5)")
     p.add_argument("--instance", help="custom SearXNG instance URL")
     p.add_argument("--proxy", help="proxy URL (http://... or socks5://...)")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
