@@ -486,10 +486,55 @@
       next
       (read-run next (* budget 2)))))
 
+(dfs CommentState
+  (:f in-string Bool "True when inside double quotes")
+  (:f in-escape Bool "True when preceded by backslash inside string")
+  (:f in-comment Bool "True when inside comment until newline")
+  (:f out (List String) "Reversed list of output characters"))
+
+(df comment-step [(st CommentState) (c String)] -> CommentState
+  (if (.-in-comment st)
+    (if (= c "\n")
+      (CommentState :in-string false :in-escape false :in-comment false
+                    :out (list-cons "\n" (.-out st)))
+      (CommentState :in-string false :in-escape false :in-comment true
+                    :out (list-cons " " (.-out st))))
+    (if (.-in-string st)
+      (if (.-in-escape st)
+        (CommentState :in-string true :in-escape false :in-comment false
+                      :out (list-cons c (.-out st)))
+        (if (= c "\\")
+          (CommentState :in-string true :in-escape true :in-comment false
+                        :out (list-cons c (.-out st)))
+          (if (= c "\"")
+            (CommentState :in-string false :in-escape false :in-comment false
+                          :out (list-cons c (.-out st)))
+            (CommentState :in-string true :in-escape false :in-comment false
+                          :out (list-cons c (.-out st))))))
+      (if (= c "\"")
+        (CommentState :in-string true :in-escape false :in-comment false
+                      :out (list-cons c (.-out st)))
+        (if (= c ";")
+          (CommentState :in-string false :in-escape false :in-comment true
+                        :out (list-cons " " (.-out st)))
+          (CommentState :in-string false :in-escape false :in-comment false
+                        :out (list-cons c (.-out st))))))))
+
+(df strip-comments [(src String)] -> String
+  :d "Core §2 comments are insignificant except as separators: replace them with
+      spaces so token positions and separators are preserved without the lexer
+      stumbling over unexpected semicolons."
+  (string-join
+    (list-reverse
+      (.-out (fold comment-step
+                   (CommentState :in-string false :in-escape false :in-comment false :out (list))
+                   (string-chars src))))
+    ""))
+
 (df asn-read [(src String)] -> (Result AsnValue String)
   :d "Read one ASN document. A document is exactly one balanced value: framing a
       sequence of them belongs to docs/AGENTIC_PROTOCOL.md, not here."
-  (finish (read-run (rst (lx/tokenize src) (list) (list) "") 64)))
+  (finish (read-run (rst (lx/tokenize (strip-comments src)) (list) (list) "") 64)))
 
 (df finish [(st ReadState)] -> (Result AsnValue String)
   :d "The document a finished read denotes, or the code it failed under."
