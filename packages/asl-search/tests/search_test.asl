@@ -1,7 +1,8 @@
 (module asl-search/test
-  :d "Unit tests for multi-engine metasearch aggregator in ASL Nano"
+  :d "Unit tests for multi-engine metasearch aggregator and ecosystem intelligence in ASL Nano"
   :x [run-tests]
-  :i [(engine :a eng)])
+  :i [(engine :a eng)
+      (ecosystems :a eco)])
 
 (df test-url-builders [] -> Bool
   :d "Verifies query endpoint generation for search providers."
@@ -45,11 +46,25 @@
         (md (eng/format-rag-context "asl" (list r)))]
     (string-contains? md "## Search Results for: 'asl' (1 items)")))
 
+(df test-ecosystems [] -> Bool
+  :d "Verifies ecosystem package search URL generation and formatting."
+  (let [(npm-url (eco/build-ecosystem-url "npm" "agentscript" 5))
+        (crates-url (eco/build-ecosystem-url "crates" "serde" 3))
+        (pkg (eco/PackageInfo :name "serde" :ecosystem "crates" :version "1.0.210" :description "Serialization" :repo-url "https://crates.io/crates/serde" :popularity 100000))
+        (pkg-md (eco/format-package-markdown pkg))
+        (deep (eco/create-deep-targets (list (eng/SearchResult :title "Docs" :url "https://aslang.dev" :snippet "S" :engine "ddg" :score 1.0)) 2))]
+    (and (string-contains? npm-url "registry.npmjs.org")
+         (and (string-contains? crates-url "crates.io/api")
+              (and (string-contains? pkg-md "serde")
+                   (= (list-length deep) 1))))))
+
 (df run-tests [] -> Bool
   :d "Runs all asl-search unit tests."
   (and (test-url-builders)
        (and (test-url-cleaning)
             (and (test-proxy-health)
                  (and (test-result-merge)
-                      (test-rag-formatting))))))
+                      (and (test-rag-formatting)
+                           (test-ecosystems)))))))
+
 
