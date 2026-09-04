@@ -72,7 +72,7 @@ Executing code in the browser creates a new opportunity: **local intelligence lo
 Modern browsers are shipping native on-device Small Language Models (such as Chrome's Built-in AI / Prompt API powered by Gemini Nano, and WebLLM via WebGPU):
 
 1. **Tier 0 Fast Reflexes (Local SLM in Browser):** Performs instant AST linting, syntax completion, docstring generation, and mechanical refactors locally on the user's GPU with **zero API cost and zero network latency**.
-2. **Tier 1 Architectural Reasoning (Cloud Frontier Models):** When a complex multi-module refactor or major architectural decision is required, the browser dispatches a compact, compressed AST interface to a frontier model (Claude 3.5, GPT-4o, Gemini 1.5 Pro).
+2. **Tier 1 Architectural Reasoning (Cloud Frontier Models):** When a complex multi-module refactor or major architectural decision is required, the browser dispatches a compact, compressed AST interface to a frontier model (Claude, GPT, Gemini).
 3. **Local Validation:** The generated code is compiled and verified in the browser's WebAssembly engine before the developer ever sees a diff.
 
 This tiered topology slashes API token bills by **60% to 75%**, while preserving instant local responsiveness.

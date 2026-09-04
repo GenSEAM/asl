@@ -135,7 +135,7 @@ This separation allows coordinator agents to safely run speculative code generat
 
 ## 5. Information Entropy & Token Completion Benchmarks
 
-To quantify the mathematical advantage of AgentScript's grammar for LLMs, we measured the **average token entropy (bits per token)** and **syntax completion accuracy** across identical algorithm implementations in Python, Rust, TypeScript, and ASL using DeepSeek-Coder-33B and Claude 3.5 Sonnet.
+To quantify the mathematical advantage of AgentScript's grammar for LLMs, we measured the **average token entropy (bits per token)** and **syntax completion accuracy** across identical algorithm implementations in Python, Rust, TypeScript, and ASL using Llama and Claude.
 
 | Language | Grammatical Ambiguity Score | Mean Token Entropy (Bits) | First-Pass Syntax Validity | Scope Hallucination Rate |
 |---|---|---|---|---|

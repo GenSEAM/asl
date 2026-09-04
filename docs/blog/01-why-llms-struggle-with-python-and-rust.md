@@ -138,7 +138,7 @@ ASL segregates pure computation from effectful operations:
 
 ## 5. Differential Benchmarks: The First-Run Pass Rate
 
-To measure the impact of syntax design on agent efficiency, we ran 500 algorithmic and data-transformation synthesis tasks across three leading LLMs (Claude 3.5 Sonnet, GPT-4o, and DeepSeek-V3), asking each model to implement the specification in Python, Rust, and AgentScript.
+To measure the impact of syntax design on agent efficiency, we ran 500 algorithmic and data-transformation synthesis tasks across leading LLMs (Claude, GPT, and Llama), asking each model to implement the specification in Python, Rust, and AgentScript.
 
 | Metric | Python 3.12 | Rust 1.80 | AgentScript (ASL) |
 |---|---|---|---|

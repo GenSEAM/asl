@@ -271,7 +271,7 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
      2. *Tier 2*: Host Process / Agent-Bus IPC (for local system tooling and streaming sockets).
      3. *Tier 3*: MicroVM (Firecracker / Docker, reserved for legacy C++ binaries, CUDA/GPU drivers, or raw POSIX networking).
 10. **Rational Single-Token Audit & Token Fragmentation Gate (`bench/token_audit.py`)** — **planned**.
-    - **Dedicated Tokenizer Hygiene**: Periodic BPE analysis across modern tokenizer vocabularies (`cl100k_base`, `o200k_base`, Llama 3) for all DSL additions, `asl-bridge` protocol frames, wire primitives (`agp`), and SQL builder operators.
+    - **Dedicated Tokenizer Hygiene**: Periodic BPE analysis across modern tokenizer vocabularies (`cl100k_base`, `o200k_base`, Llama) for all DSL additions, `asl-bridge` protocol frames, wire primitives (`agp`), and SQL builder operators.
     - **Rational Single-Token Policy**:
       - *Authentic Structural Savings*: Focuses token optimization on data structures and frame formatting where savings are mathematically proven (e.g. S-expression command frames saving 64.7% tokens over JSON in `bench/token_frames.py`).
       - *Anti-Mangling Boundary*: Explicitly avoids irrational identifier abbreviation (which §6 proved yields 0.0% token savings and harms comprehension). Ensures that high-frequency protocol delimiters, wire operators, and core heads occupy 1-2 tokens with zero multi-byte splitting, while domain types and entity names retain full descriptive legibility.
