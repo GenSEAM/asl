@@ -19,7 +19,7 @@ const metadataMap = {
     slug: 'why-llms-struggle-with-python-and-rust',
     category: 'Language Design',
     date: '2026-09-01',
-    author: 'ASL Systems Group',
+    author: 'GenSEAM',
     readTime: '6 min read',
     excerpt: 'Why indentation and borrow-checked syntax cost LLMs 25% to 40% of their compute in repair loops, and what deterministic single-pass S-expressions solve.',
     tags: ['Grammars', 'LLM Autoregression', 'Syntax Repair Loop', 'S-Expressions']
@@ -28,7 +28,7 @@ const metadataMap = {
     slug: 'the-token-tax-and-interface-compression',
     category: 'Context Architecture',
     date: '2026-09-02',
-    author: 'ASL Systems Group',
+    author: 'GenSEAM',
     readTime: '5 min read',
     excerpt: 'How AST interface extraction slashes multi-agent token consumption by 78.2% and eliminates context rot across distributed agent handoffs.',
     tags: ['Context Rot', 'Token Compression', 'AST Extraction', 'Multi-Agent']
@@ -37,7 +37,7 @@ const metadataMap = {
     slug: 'from-vibe-code-to-wasm-in-0-04ms',
     category: 'Runtime & Execution',
     date: '2026-09-02',
-    author: 'ASL WebAssembly Group',
+    author: 'GenSEAM',
     readTime: '5 min read',
     excerpt: 'Replacing heavy Docker containers and microVMs with zero-overhead in-memory WebAssembly sandboxes running test suites in 0.038ms.',
     tags: ['WebAssembly', 'WASI', 'MicroVMs', 'Sub-millisecond Sandboxing']
@@ -46,7 +46,7 @@ const metadataMap = {
     slug: 'agent-script-the-optimal-agent-language',
     category: 'Language Theory',
     date: '2026-09-03',
-    author: 'ASL Systems & Compiler Group',
+    author: 'GenSEAM',
     readTime: '8 min read',
     excerpt: 'Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs.',
     tags: ['Homoiconicity', 'Algebraic Types', 'Exhaustive Matching', 'Deterministic AST']
@@ -55,7 +55,7 @@ const metadataMap = {
     slug: 'token-economy-and-structural-compression',
     category: 'Token Optimization',
     date: '2026-09-03',
-    author: 'ASL Systems & Compiler Group',
+    author: 'GenSEAM',
     readTime: '8 min read',
     excerpt: 'The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how structural compaction cuts prompt overhead by 65%.',
     tags: ['Byte-Pair Encoding', 'Structural Compaction', 'Tabular Serialization', 'Token Ceiling']
@@ -64,7 +64,7 @@ const metadataMap = {
     slug: 'inter-agent-protocols-and-wire-frames',
     category: 'Protocols & Mesh',
     date: '2026-09-04',
-    author: 'ASL Systems & Protocol Group',
+    author: 'GenSEAM',
     readTime: '7 min read',
     excerpt: 'Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and zero-drift delegations.',
     tags: ['SeamBus', 'Simba', 'AgP Wire Protocol', 'Typed Frames', 'Conversational Mesh']
@@ -73,7 +73,7 @@ const metadataMap = {
     slug: 'the-agent-native-developer-cockpit',
     category: 'Developer Tooling',
     date: '2026-09-04',
-    author: 'ASL Systems & Compiler Group',
+    author: 'GenSEAM',
     readTime: '9 min read',
     excerpt: 'The complete agent-native developer cockpit: sub-0.05ms LSP, AST structural clone linters, autonomous auto-fixers, and live visual observability.',
     tags: ['Language Server Protocol', 'AST Auto-Fixer', 'Observability', 'Sandboxing']
@@ -82,7 +82,7 @@ const metadataMap = {
     slug: 'multi-dimensional-observability-for-autonomous-systems',
     category: 'Observability & Telemetry',
     date: '2026-09-04',
-    author: 'ASL Systems & Observability Group',
+    author: 'GenSEAM',
     readTime: '7 min read',
     excerpt: 'How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and jailed capability traces.',
     tags: ['Multi-Dimensional Observability', 'AST Topology', 'Token Telemetry', 'Capability Tracing']
@@ -91,7 +91,7 @@ const metadataMap = {
     slug: 'universal-cross-platform-glue-without-drift',
     category: 'Cross-Platform Runtimes',
     date: '2026-09-04',
-    author: 'ASL Systems & Compiler Group',
+    author: 'GenSEAM',
     readTime: '8 min read',
     excerpt: 'Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python.',
     tags: ['Differential Verification', 'Multi-Backend', 'Cross-Platform Glue', 'Polyglot Parity']
@@ -100,7 +100,7 @@ const metadataMap = {
     slug: 'epistemic-grounding-and-anti-hallucination-firewalls',
     category: 'Safety & Grounding',
     date: '2026-09-04',
-    author: 'ASL Systems & Safety Group',
+    author: 'GenSEAM',
     readTime: '8 min read',
     excerpt: 'Halting agent hallucinations at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing.',
     tags: ['Epistemic Grounding', 'Anti-Hallucination', 'Closure Audit', 'Zero-Leak Jailing']
@@ -109,7 +109,7 @@ const metadataMap = {
     slug: 'zero-server-in-browser-agent-runtimes',
     category: 'Browser Technologies',
     date: '2026-09-04',
-    author: 'ASL WebAssembly & Runtime Group',
+    author: 'GenSEAM',
     readTime: '7 min read',
     excerpt: 'Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs.',
     tags: ['In-Browser Dev', 'WebAssembly', 'OPFS', 'Tiered Local SLMs', 'Offline-First']
@@ -118,7 +118,7 @@ const metadataMap = {
     slug: 'cross-dialect-sql-without-hallucinations',
     category: 'Relational Data & SQL',
     date: '2026-09-04',
-    author: 'ASL Systems & Compiler Group',
+    author: 'GenSEAM',
     readTime: '8 min read',
     excerpt: 'Why agents writing raw SQL fail 28% of the time, and how homoiconic relational S-expressions lower deterministically to Postgres, SQLite, MySQL, and Oracle without injection risk.',
     tags: ['Cross-Dialect SQL', 'Relational Algebra', 'SQL Injection Eradication', 'Multi-Engine']
@@ -127,7 +127,7 @@ const metadataMap = {
     slug: 'git-native-agent-memory-and-vector-recall',
     category: 'Memory & Vector Systems',
     date: '2026-09-04',
-    author: 'ASL Systems & Observability Group',
+    author: 'GenSEAM',
     readTime: '7 min read',
     excerpt: 'Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits.',
     tags: ['Agent Memory', 'Vector Recall', 'Git-Native', 'In-Memory Wasm', 'Zero-Network']
