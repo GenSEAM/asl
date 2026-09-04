@@ -10,9 +10,9 @@
       slice-str-or]
   :i [(reader :a rd) (mangle :a m) (builtins :a b) (rtypes :a cg-ty)])
 
-(df slice-str-or [(s String) (start Int64) (end Int64) (def String)] -> String
+(df slice-str-or [(s String) (start Int64) (end Int64) (fallback String)] -> String
   :d "Safe string slice."
-  (option-or (string-slice s start end) def))
+  (option-or (string-slice s start end) fallback))
 
 (df is-ident? [(s String)] -> Bool
   :d "True if string represents a simple variable identifier suitable for cloning."

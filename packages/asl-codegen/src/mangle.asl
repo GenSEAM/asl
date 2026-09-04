@@ -7,9 +7,9 @@
   :d "Checks if mangled identifier collides with a Rust keyword or entry name."
   (list-contains? (list "type" "match" "fn" "let" "loop" "move" "ref" "impl" "mod" "use" "const" "static" "crate" "super" "self" "struct" "enum" "trait" "where" "for" "while" "return" "break" "continue" "as" "in" "main") m))
 
-(df slice-or [(s String) (start Int64) (end Int64) (def String)] -> String
+(df slice-or [(s String) (start Int64) (end Int64) (fallback String)] -> String
   :d "Safe string slice with fallback default."
-  (option-or (string-slice s start end) def))
+  (option-or (string-slice s start end) fallback))
 
 (df mangle-ident [(s String)] -> String
   :d "Mangles an ASL kebab-case identifier into a safe Rust snake_case identifier."
