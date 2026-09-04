@@ -19,8 +19,8 @@
         (defun-node (a/DefunNode :name "add" :type-vars (list) :is-exported true :effect false :params (list p1 p2) :ret-type "Int" :docstring "" :body body))
         (aliases (map-empty))
         (d-out (em/emit-defun defun-node aliases))
-        (mod-node (a/ModuleNode :path "calc" :docstring "" :exported (list "add") :imports (list) :defs (list (a/top-schema schema) (a/top-enum en) (a/top-defun defun-node))))
-        (prog-out (em/emit-rust-program mod-node (list)))]
+        (forms (list (a/top-schema schema) (a/top-enum en) (a/top-defun defun-node)))
+        (prog-out (em/emit-rust-program forms (list)))]
     (cond
       ((not (string-contains? s-out "pub struct Point")) "fail struct name")
       ((not (string-contains? s-out "pub x: i64,")) "fail struct field x")

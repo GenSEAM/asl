@@ -3,7 +3,7 @@
   :x [emit-defschema
       emit-defenum
       emit-defun
-      emit-module
+      emit-top-forms
       emit-rust-program
       has-main-fn?]
   :i [(ast :a a) (mangle :a m) (rtypes :a cg-ty) (expr :a ex)])
@@ -60,10 +60,9 @@
         (body-str (ex/emit-body-seq (.-body d) aliases))]
     (str "pub fn " name gen-str "(" args-str ") -> " ret-str " {\n    " body-str "\n}\n")))
 
-(df has-main-fn? [(m a/ModuleNode)] -> Bool
-  :d "True if module contains a top-level function named main."
-  (let [(defs (.-defs m))
-        (mains (filter (fn [(top a/TopForm)] -> Bool
+(df has-main-fn? [(defs (List a/TopForm))] -> Bool
+  :d "True if declarations contain a top-level function named main."
+  (let [(mains (filter (fn [(top a/TopForm)] -> Bool
                          (mt top
                            ((a/top-defun d) (= (.-name d) "main"))
                            (_ false)))
@@ -83,30 +82,43 @@
         (map-empty)
         imports))
 
-(df emit-module [(m a/ModuleNode)] -> String
-  :d "Emits all top forms declared in an ASL module."
-  (let [(aliases (build-aliases-map (.-imports m)))
-        (rendered-defs (map (fn [(top a/TopForm)] -> String
+(df emit-top-forms [(defs (List a/TopForm)) (aliases (Map String String))] -> String
+  :d "Emits all top forms declared in a list of TopForm."
+  (let [(rendered-defs (map (fn [(top a/TopForm)] -> String
                               (mt top
                                 ((a/top-schema s) (emit-defschema s))
                                 ((a/top-enum e) (emit-defenum e))
                                 ((a/top-defun d) (emit-defun d aliases))
-                                ((a/top-module _) "")))
-                            (.-defs m)))]
+                                ((a/top-module m) (emit-top-forms (.-defs m) (build-aliases-map (.-imports m))))))
+                            defs))]
     (string-join rendered-defs "\n")))
 
-(df emit-rust-program [(root a/ModuleNode) (deps (List a/ModuleNode))] -> String
-  :d "Assembles complete standalone Rust source file with runtime link and dependencies."
+(df extract-module-info [(forms (List a/TopForm))] -> (Pair (Map String String) (Pair (List a/TopForm) Bool))
+  :d "Extracts aliases, declarations, and has-main flag from forms."
+  (if (<= (list-length forms) 0)
+      (pair (map-empty) (pair (list) false))
+      (let [(first-form (option-or (list-get forms 0) (a/top-schema (a/SchemaNode :name "" :type-vars (list) :fields (list) :json-case (none)))))]
+        (mt first-form
+          ((a/top-module m)
+           (let [(aliases (build-aliases-map (.-imports m)))
+                 (defs (.-defs m))
+                 (hm (has-main-fn? defs))]
+             (pair aliases (pair defs hm))))
+          (_
+           (let [(defs forms)
+                 (hm (has-main-fn? defs))]
+             (pair (map-empty) (pair defs hm))))))))
+
+(df emit-rust-program [(root-forms (List a/TopForm)) (deps (List a/TopForm))] -> String
+  :d "Assembles complete standalone Rust source file with runtime link."
   (let [(header "#![allow(dead_code, unused_variables, unused_mut, unused_parens)]\nmod rt;\n\n")
-        (dep-modules (map (fn [(dep a/ModuleNode)] -> String
-                            (let [(mod-name (m/rust-mod-name (.-path dep)))
-                                  (body (emit-module dep))]
-                              (str "pub mod " mod-name " {\n"
-                                   "    #![allow(dead_code, unused_variables, unused_mut, unused_parens)]\n"
-                                   "    #[allow(unused_imports)]\n"
-                                   "    use super::rt;\n\n"
-                                   body "\n}\n\n")))
-                          deps))
-        (root-body (emit-module root))
-        (entry (emit-host-entry (has-main-fn? root)))]
-    (str header (string-join dep-modules "") root-body entry)))
+        (dep-rendered (if (> (list-length deps) 0)
+                          (str (emit-top-forms deps (map-empty)) "\n\n")
+                          ""))
+        (info (extract-module-info root-forms))
+        (aliases (.-first info))
+        (defs (.-first (.-second info)))
+        (has-main (.-second (.-second info)))
+        (root-body (emit-top-forms defs aliases))
+        (entry (emit-host-entry has-main))]
+    (str header dep-rendered root-body entry)))
