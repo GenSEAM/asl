@@ -1,4 +1,4 @@
-# Token Economy & Nano Projection: The Mathematics of Agentic Serialization
+# Token Economy & Projections: The Mathematics of Agentic Serialization
 *By the ASL Systems & Compiler Group | September 2026*
 
 In AI-assisted software engineering, tokens are currency and bandwidth. Every extra token injected into an agent prompt increases API inference bills, introduces latency into tool-calling loops, and dilutes the attention matrix.
@@ -19,10 +19,10 @@ When developers invent abbreviated keywords, they often trigger tokenizer fragme
 
 ### The Empirical Measurement
 
-Across all 36 canonical fixtures in `grammar/corpus/valid`, transcoded between verbose syntax and compact Nano syntax and evaluated against `cl100k_base`:
+Across all 36 canonical fixtures in `grammar/corpus/valid`, transcoded between verbose syntax and compact standard ASL syntax and evaluated against `cl100k_base`:
 
 * **Verbose Representation:** 55,696 bytes | 14,771 tokens
-* **Nano Representation:** 53,612 bytes | 14,771 tokens
+* **Standard ASL Representation:** 53,612 bytes | 14,771 tokens
 * **Measured Token Saving:** **0.00%**
 * **Measured Byte Saving:** **3.74%**
 
@@ -44,13 +44,13 @@ Truncating keywords to save tokens is a Cargo Cult practice.
 
 ---
 
-## 2. Dual Projection: Verbose for Humans, Nano for Wire
+## 2. Dual Projection: ASL Verbose for Debugging, ASL for Execution
 
-If Nano does not reduce token counts, why does AgentScript support dual projection?
+If the compact syntax does not reduce token counts over verbose keywords, why does AgentScript support dual projection?
 
 Because **human readability and machine transmission serve different consumers**:
 
-| Feature | Verbose Projection | Nano Projection | Significant In |
+| Feature | ASL Verbose | ASL (Standard) | Significant In |
 |---|---|---|---|
 | Function Head | `defun` | `df` | Declaration head |
 | Schema Head | `defschema` | `dfs` | Declaration head |
@@ -65,9 +65,9 @@ Because **human readability and machine transmission serve different consumers**
 
 ### Isomorphic AST Transcoding
 
-In AgentScript, Nano is not an alternate dialect; it is a **lossless AST projection**. 
+In AgentScript, standard syntax is the compact representation; ASL Verbose is an **isomorphic AST projection** for human debugging.
 
-Verbose:
+ASL Verbose (for debugging and human reading):
 ```lisp
 (module math/vector
   :doc "Dot product and vector operations."
@@ -82,7 +82,7 @@ Verbose:
   (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b))))
 ```
 
-Nano:
+AgentScript (Standard ASL):
 ```lisp
 (module math/vector
   :d "Dot product and vector operations."
@@ -163,7 +163,7 @@ timeout_ms: 50
 ```
 *Token count:* **34 tokens**
 
-3. **AgP Nano-Keyed Frame:**
+3. **AgP Keyed Frame:**
 ```agp
 (? agent-coder synthesize-fsm :states ["idle" "active" "error"] :timeout-ms 50)
 ```

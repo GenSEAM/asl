@@ -52,13 +52,31 @@
   - Capability negotiator & tool registry.
   - In-memory event bus & message framing.
 
-### Phase 2: Meaningful Defaults & Plugin Lifecycle (`asl plugin`)
-- Define the plugin interface:
-  - Hooks: `on_init`, `on_tool_call`, `on_context_compile`, `on_verify`.
-- Implement `asl-plugin-pcp` as an external optional package:
+### Phase 2: Onion Middleware & Reorderable Plugin Engine (`asl plugin`, `packages/asl-harness`)
+- **Extensible Onion Pipeline**:
+  - Middleware hooks wrapping tool dispatch, prompt assembly, and inference:
+    - `pre_tool_call`: validate or mutate arguments before execution.
+    - `post_tool_call`: inspect, audit, or sanitize tool results before returning to context.
+    - `filter_tool_call`: block unauthorized or dangerous actions.
+    - `on_error`: auto-retry or fallback handlers.
+  - **Topological Sorting & Priority Stacking**:
+    - Numeric priority (`priority: I64`, e.g. 100 for auth, 500 for logging, 900 for final sanitize).
+    - Relative dependency ordering (`before: ["plugin-id"]`, `after: ["plugin-id"]`).
+    - Deterministic DAG topological resolution: third-party plugins can seamlessly slot between existing standard plugins without tight coupling.
+- **Anti-Hallucination & Epistemic Grounding Plugin**:
+  - Validates factual claims against exact source quotes `(source-id, quote, confidence)`.
+  - Blocks hallucinations and flags contradictions before committing actions.
+- **Implement `asl-plugin-pcp` as an external optional package**:
   - Translates `(:tag :arch "...")` nodes into Project Constitution checks without touching core
     compiler logic. (`:tag`, not `@tag` — `@` is not an identifier character and costs a second
     BPE token; see `.plans/decoupled-meta/PHASES.md` Phase 1.)
+
+### Phase 2.5: CDP Browser Automation & Web Research Tooling (`packages/asl-harness/bridges/browser_cdp.py`)
+- Immediate browser automation tools without waiting for full in-extension runtime:
+  - Connects to existing Chrome debugging session (`--remote-debugging-port`) or launches headless Chromium via CDP.
+  - Generates token-compact accessibility tree snapshots (`@eN` refs) via `asl-vdom` parser.
+  - Purpose-built workflows: interacting with Gemini Chat, NotebookLM, deep research papers, ChatGPT web UI, extracting code and research specs.
+  - Serves as the driver protocol that the in-browser extension (`packages/asl-browser-plugin`) will adopt natively.
 
 ### Phase 3: In-Browser Companion Shell (`packages/asl-browser-plugin`)
 - Mounts `asl-agent-core` into Chrome / Firefox extension runtime.
@@ -73,3 +91,12 @@
   - Live token counter & prompt budget meter.
   - Streaming tool execution logs.
   - Multi-agent swarm topology graph right in your terminal.
+
+### Phase 6: Headless CI Shell & Distributed Swarm Mesh (`asl ci`, `asl-agent-bus`)
+- Deterministic batch CI runner with structured machine reports (JSON / JUnit).
+- Integration with `@genseam/asl-agent-bus` Unix socket & SSE bus for multi-agent negotiation.
+
+### Phase 7: Polyglot AST Code Intelligence & MCP Tool Export
+- Tree-sitter AST symbol & call-graph analysis for Python, Rust, Go, C, JS/TS.
+- Exposes ASL tools to external agents (Antigravity, Claude Code, Cursor) via MCP server and local socket proxy.
+
