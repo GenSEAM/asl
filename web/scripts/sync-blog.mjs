@@ -152,11 +152,21 @@ const posts = files.map(filename => {
     tags: ['AgentScript', 'Engineering']
   };
 
+  const order = parseInt(filename.split('-')[0], 10) || 0;
+
   return {
     ...meta,
+    order,
     title,
     content: rawContent
   };
+});
+
+// Sort posts descending (newest first by date and order)
+posts.sort((a, b) => {
+  const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+  if (dateDiff !== 0) return dateDiff;
+  return (b.order || 0) - (a.order || 0);
 });
 
 const tsContent = `// Generated automatically by scripts/sync-blog.mjs - DO NOT EDIT DIRECTLY
@@ -169,6 +179,7 @@ export interface BlogPost {
   readTime: string;
   excerpt: string;
   tags: string[];
+  order?: number;
   content: string;
 }
 
