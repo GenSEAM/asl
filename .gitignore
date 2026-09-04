@@ -18,3 +18,4 @@ results/*.json
 .claude/worktrees/
 .tokensave/
 packages/asl-skyloom/dist/
+.DS_Store
