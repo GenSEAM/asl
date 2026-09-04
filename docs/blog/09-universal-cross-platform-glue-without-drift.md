@@ -1,5 +1,5 @@
 # Universal Cross-Platform Glue: One Source Across WebAssembly, Rust, Go, TypeScript & Python
-*By the ASL Systems & Compiler Group*
+*By GenSEAM | September 2026*
 
 Modern enterprise architectures are polyglot by necessity. 
 

@@ -1,5 +1,5 @@
 # The 78% Token Tax: How Interface Compression Solves Agent Context Rot
-*By the ASL Systems & Compiler Group | September 2026*
+*By GenSEAM | September 2026*
 
 In multi-agent software engineering swarms, the limiting factor is rarely model intelligence. Frontier LLMs can reason through complex algorithms, synthesize tricky data structures, and resolve subtle edge cases. 
 

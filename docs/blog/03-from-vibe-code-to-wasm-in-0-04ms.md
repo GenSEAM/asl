@@ -1,5 +1,5 @@
 # From Vibe-Code to WebAssembly in 0.04ms: The Architecture of Instant Agentic Sandboxing
-*By the ASL Systems & Compiler Group | September 2026*
+*By GenSEAM | September 2026*
 
 Autonomous software engineering ("vibe-coding") relies on rapid feedback loops: an agent synthesizes an implementation, executes a test suite, inspects failures, and refines the code.
 

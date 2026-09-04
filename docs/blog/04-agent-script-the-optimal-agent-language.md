@@ -1,5 +1,5 @@
 # AgentScript: Why S-Expressions and Algebraic Types are Mathematically Optimal for LLMs
-*By the ASL Systems & Compiler Group | September 2026*
+*By GenSEAM | September 2026*
 
 Programming languages designed between 1970 and 2015 share a common design premise: **syntax must optimize for human visual cognition**.
 

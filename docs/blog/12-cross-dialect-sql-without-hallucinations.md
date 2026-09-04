@@ -1,5 +1,5 @@
 # Cross-Dialect SQL Without Hallucinations: Compiling S-Expressions to Relational Engines
-*By the ASL Systems & Compiler Group | September 2026*
+*By GenSEAM | September 2026*
 
 When autonomous coding agents are tasked with database operations—schema migrations, analytical queries, data filtering—the default industry pattern is to prompt the LLM to emit raw SQL strings:
 

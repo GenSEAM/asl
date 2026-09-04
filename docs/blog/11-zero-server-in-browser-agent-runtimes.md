@@ -1,5 +1,5 @@
 # Zero-Server In-Browser Agent Runtimes: Developing in WebAssembly and OPFS
-*By the ASL WebAssembly & Runtime Group*
+*By GenSEAM | September 2026*
 
 The dominant architecture for AI developer tools today relies on a centralized, server-heavy paradigm:
 

@@ -12,7 +12,7 @@
       <link>https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</link>
       <guid isPermaLink="true">https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Observability Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Memory &amp; Vector Systems</category>
       <description>Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits.</description>
     </item>
@@ -21,7 +21,7 @@
       <link>https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</link>
       <guid isPermaLink="true">https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Compiler Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Relational Data &amp; SQL</category>
       <description>Why agents writing raw SQL fail 28% of the time, and how homoiconic relational S-expressions lower deterministically to Postgres, SQLite, MySQL, and Oracle without injection risk.</description>
     </item>
@@ -30,7 +30,7 @@
       <link>https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</link>
       <guid isPermaLink="true">https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL WebAssembly &amp; Runtime Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Browser Technologies</category>
       <description>Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs.</description>
     </item>
@@ -39,7 +39,7 @@
       <link>https://aslang.dev/blog/epistemic-grounding-and-anti-hallucination-firewalls</link>
       <guid isPermaLink="true">https://aslang.dev/blog/epistemic-grounding-and-anti-hallucination-firewalls</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Safety Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Safety &amp; Grounding</category>
       <description>Halting agent hallucinations at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing.</description>
     </item>
@@ -48,7 +48,7 @@
       <link>https://aslang.dev/blog/universal-cross-platform-glue-without-drift</link>
       <guid isPermaLink="true">https://aslang.dev/blog/universal-cross-platform-glue-without-drift</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Compiler Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Cross-Platform Runtimes</category>
       <description>Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python.</description>
     </item>
@@ -57,7 +57,7 @@
       <link>https://aslang.dev/blog/multi-dimensional-observability-for-autonomous-systems</link>
       <guid isPermaLink="true">https://aslang.dev/blog/multi-dimensional-observability-for-autonomous-systems</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Observability Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Observability &amp; Telemetry</category>
       <description>How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and jailed capability traces.</description>
     </item>
@@ -66,7 +66,7 @@
       <link>https://aslang.dev/blog/the-agent-native-developer-cockpit</link>
       <guid isPermaLink="true">https://aslang.dev/blog/the-agent-native-developer-cockpit</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Compiler Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Developer Tooling</category>
       <description>The complete agent-native developer cockpit: sub-0.05ms LSP, AST structural clone linters, autonomous auto-fixers, and live visual observability.</description>
     </item>
@@ -75,7 +75,7 @@
       <link>https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</link>
       <guid isPermaLink="true">https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Protocol Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Protocols &amp; Mesh</category>
       <description>Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and zero-drift delegations.</description>
     </item>
@@ -84,7 +84,7 @@
       <link>https://aslang.dev/blog/token-economy-and-structural-compression</link>
       <guid isPermaLink="true">https://aslang.dev/blog/token-economy-and-structural-compression</guid>
       <pubDate>Thu, 03 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Compiler Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Token Optimization</category>
       <description>The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how structural compaction cuts prompt overhead by 65%.</description>
     </item>
@@ -93,7 +93,7 @@
       <link>https://aslang.dev/blog/agent-script-the-optimal-agent-language</link>
       <guid isPermaLink="true">https://aslang.dev/blog/agent-script-the-optimal-agent-language</guid>
       <pubDate>Thu, 03 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems &amp; Compiler Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Language Theory</category>
       <description>Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs.</description>
     </item>
@@ -102,7 +102,7 @@
       <link>https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</link>
       <guid isPermaLink="true">https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</guid>
       <pubDate>Wed, 02 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL WebAssembly Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Runtime &amp; Execution</category>
       <description>Replacing heavy Docker containers and microVMs with zero-overhead in-memory WebAssembly sandboxes running test suites in 0.038ms.</description>
     </item>
@@ -111,7 +111,7 @@
       <link>https://aslang.dev/blog/the-token-tax-and-interface-compression</link>
       <guid isPermaLink="true">https://aslang.dev/blog/the-token-tax-and-interface-compression</guid>
       <pubDate>Wed, 02 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Context Architecture</category>
       <description>How AST interface extraction slashes multi-agent token consumption by 78.2% and eliminates context rot across distributed agent handoffs.</description>
     </item>
@@ -120,7 +120,7 @@
       <link>https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</link>
       <guid isPermaLink="true">https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</guid>
       <pubDate>Tue, 01 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (ASL Systems Group)</author>
+      <author>dev@aslang.dev (GenSEAM)</author>
       <category>Language Design</category>
       <description>Why indentation and borrow-checked syntax cost LLMs 25% to 40% of their compute in repair loops, and what deterministic single-pass S-expressions solve.</description>
     </item>

@@ -1,5 +1,5 @@
 # Sub-Millisecond Vector Recall & Git-Native Memory Matrices for Autonomous Agents
-*By the ASL Systems & Observability Group | September 2026*
+*By GenSEAM | September 2026*
 
 Autonomous agents cannot act effectively without persistent episodic memory. When a coding agent explores a 200-module codebase, inspects test failures, or verifies architectural invariants, it must retain what it learned across subagent delegations and session boundaries.
 

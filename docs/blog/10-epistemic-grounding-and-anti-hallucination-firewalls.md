@@ -1,5 +1,5 @@
 # The Epistemic Grounding Firewall: Halting Agent Hallucinations at the AST Boundary
-*By the ASL Systems & Safety Group*
+*By GenSEAM | September 2026*
 
 Prompt engineering is an inadequate defense against autonomous agent failure.
 

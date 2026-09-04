@@ -1,5 +1,5 @@
 # Token Economy & Projections: The Mathematics of Agentic Serialization
-*By the ASL Systems & Compiler Group | September 2026*
+*By GenSEAM | September 2026*
 
 In AI-assisted software engineering, tokens are currency and bandwidth. Every extra token injected into an agent prompt increases API inference bills, introduces latency into tool-calling loops, and dilutes the attention matrix.
 

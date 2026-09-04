@@ -1,5 +1,5 @@
 # Multi-Dimensional Observability: How to Govern Autonomous Swarms Without Reading Raw Logs
-*By the ASL Systems & Observability Group*
+*By GenSEAM | September 2026*
 
 The standard failure mode of scaling autonomous coding swarms is the **Observability Inversion Trap**.
 
