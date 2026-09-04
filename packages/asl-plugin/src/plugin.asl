@@ -52,7 +52,7 @@
   (fold (fn [(acc (Map Str (List Str))) (c PluginCapability)] -> (Map Str (List Str))
           (let [(c-name (.-name c))
                 (existing (option-or (map-get acc c-name) (list)))
-                (updated (list-append existing (list plugin-id)))]
+                (updated (list-cons plugin-id existing))]
             (map-set acc c-name updated)))
         cap-index
         caps))
@@ -77,7 +77,7 @@
   (let [(matches (filter (fn [(c PluginCapability)] -> Bool
                            (= (.-name c) capability-name))
                          (.-capabilities manifest)))]
-    (> (list-length matches) 0)))
+    (not (list-empty? matches))))
 
 (df validate-manifest [(manifest PluginManifest)] -> (Result Unit Str)
   :d "Validates that a plugin manifest meets all core structural requirements."
@@ -109,6 +109,6 @@
        (let [(exp-matches (filter (fn [(e PluginExport)] -> Bool
                                     (= (.-symbol-name e) (.-symbol-name call)))
                                   (.-exports m)))]
-         (if (<= (list-length exp-matches) 0)
+         (if (list-empty? exp-matches)
              (PluginResult :success false :payload "" :error-msg (str "Symbol not exported by plugin: " (.-symbol-name call)))
              (PluginResult :success true :payload (str "ok:" (.-payload call)) :error-msg "")))))))

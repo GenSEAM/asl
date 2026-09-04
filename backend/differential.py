@@ -50,7 +50,7 @@ PRIMITIVE_RUST = {"Int32": "i32", "Int64": "i64", "Float64": "f64",
                   "String": "String", "Bool": "bool"}
 NONFINITE = {"nan": "f64::NAN", "inf": "f64::INFINITY", "-inf": "f64::NEG_INFINITY"}
 
-RUN_COUNTS = {"python": 0, "rust": 0, "wasm": 0, "interp": 0, "ts": 0}
+RUN_COUNTS = {"python": 0, "rust": 0, "wasm": 0, "ts": 0}
 
 
 def render_type(node) -> str:
@@ -262,28 +262,6 @@ def run_rust(src: Path, task: dict) -> list:
         return json.loads(check_run(r, f"rust {task['entry']}"))
 
 
-def run_interp(src: Path, task: dict) -> list:
-    """The reference interpreter's function-mode arm.
-
-    The binary evaluates the entry `defun` directly from the tree-sitter AST and
-    serializes each return in the same canonical JSON the python/rust harnesses
-    produce. Each case's argument JSON is passed as its own `--arg`, so one
-    process prints the whole result array.
-    """
-    binp = ROOT / "target" / "debug" / "agentscript-interp"
-    if not binp.exists():
-        subprocess.run(["rustup", "run", "stable", "cargo", "build",
-                        "--manifest-path", str(ROOT / "Cargo.toml")],
-                       check=True, cwd=ROOT, capture_output=True, text=True)
-    cmd = [str(binp)]
-    for r in ROOTS:
-        cmd += ["--root", str(r)]
-    cmd += ["--call", task["entry"], str(src)]
-    for args, *_ in task["cases"]:
-        cmd += ["--arg", json.dumps(args)]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-    RUN_COUNTS["interp"] += len(task["cases"])
-    return json.loads(check_run(r, f"interp {task['entry']}"))
 
 
 def function_tasks() -> list[dict]:
@@ -308,28 +286,26 @@ def functions(task: dict) -> int:
     src = task["src"]
     py = run_python(src, task)
     rs = run_rust(src, task)
-    ip = run_interp(src, task)
     ts = run_typescript(src, task)
-    if not (len(py) == len(rs) == len(ip) == len(ts) == len(task["cases"])):
+    if not (len(py) == len(rs) == len(ts) == len(task["cases"])):
         raise RuntimeError(
             f"{task['id']}: {len(task['cases'])} case(s) produced {len(py)} python, "
-            f"{len(rs)} rust, {len(ip)} interp and {len(ts)} ts result(s); "
+            f"{len(rs)} rust and {len(ts)} ts result(s); "
             f"a truncated comparison is not a comparison")
     bad = 0
     print(f"\n{task['id']} — {task['entry']}")
-    print(f"{'input':<12} {'expected':<18} {'python':<18} {'rust':<18} {'interp':<18} {'ts':<18}")
-    print("-" * 104)
-    for k, (case, p, r, i, t) in enumerate(zip(task["cases"], py, rs, ip, ts)):
+    print(f"{'input':<12} {'expected':<18} {'python':<18} {'rust':<18} {'ts':<18}")
+    print("-" * 86)
+    for k, (case, p, r, t) in enumerate(zip(task["cases"], py, rs, ts)):
         args, want = case[0], case[1]
-        agree = (p == want) and (r == want) and (i == want) and (t == want)
+        agree = (p == want) and (r == want) and (t == want)
         bad += 0 if agree else 1
         shown = ", ".join(repr(a) for a in args)
         # Sorted keys: a Map has no declared iteration order, so equal maps
         # reach the same object by different routes on different hosts.
         show = {"sort_keys": True}
         print(f"{shown:<12} {json.dumps(want, **show):<18} {json.dumps(p, **show):<18} "
-              f"{json.dumps(r, **show):<18} {json.dumps(i, **show):<18} "
-              f"{json.dumps(t, **show):<18}"
+              f"{json.dumps(r, **show):<18} {json.dumps(t, **show):<18}"
               + ("" if agree else "  <-- DISAGREE"))
     return bad
 
@@ -381,26 +357,6 @@ def build_rust_wasm(src: Path, d: Path, roots: list[Path] | None = None) -> list
             str(d / "main.wasm")]
 
 
-def build_interpreter(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
-    """The reference interpreter, evaluated directly from the tree-sitter AST.
-
-    Same shape as the other arms: SOURCE first (the corpus file), then the
-    search root the module fixtures live under. argv append after --root/SOURCE,
-    matching the other arms' `cmd + argv` form. The binary is built by the
-    workspace before the gate runs (I1; replay.py shares build_interpreter).
-    """
-    if roots is None:
-        roots = ROOTS
-    binp = ROOT / "target" / "debug" / "agentscript-interp"
-    if not binp.exists():
-        subprocess.run(["rustup", "run", "stable", "cargo", "build",
-                        "--manifest-path", str(ROOT / "Cargo.toml")],
-                       check=True, cwd=ROOT, capture_output=True, text=True)
-    cmd = [str(binp)]
-    for r in roots:
-        cmd += ["--root", str(r)]
-    cmd += [str(src)]
-    return cmd
 
 
 def build_typescript(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
@@ -508,8 +464,8 @@ def programs(src: Path, cases: list[dict]) -> int:
     re-opening that hole by omission.
     """
     bad = 0
-    print(f"\n{'argv':<18} {'python':<18} {'rust':<18} {'wasm':<18} {'interp':<18} {'ts':<18} {'stderr':<14} exit")
-    print("-" * 134)
+    print(f"\n{'argv':<18} {'python':<18} {'rust':<18} {'wasm':<18} {'ts':<18} {'stderr':<14} exit")
+    print("-" * 114)
     for case in cases:
         argv = case.get("argv", [])
         files = case.get("files", {})
@@ -520,8 +476,7 @@ def programs(src: Path, cases: list[dict]) -> int:
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             runners = {"python": build_python(src, d), "rust": build_rust(src, d),
-                       "wasm": build_rust_wasm(src, d), "interp": build_interpreter(src, d),
-                       "ts": build_typescript(src, d)}
+                       "wasm": build_rust_wasm(src, d), "ts": build_typescript(src, d)}
             seen = {}
             for name, cmd in runners.items():
                 RUN_COUNTS[name] += 1
@@ -535,18 +490,17 @@ def programs(src: Path, cases: list[dict]) -> int:
                 r = subprocess.run(cmd + argv, cwd=run, input=stdin,
                                    capture_output=True, text=True)
                 seen[name] = (r.stdout, r.stderr, r.returncode)
-            agree = (seen["python"] == seen["rust"] == seen["wasm"]
-                     == seen["interp"] == seen["ts"])
+            agree = (seen["python"] == seen["rust"] == seen["wasm"] == seen["ts"])
             declared_ok = seen["python"] == want
             bad += 0 if (agree and declared_ok) else 1
             note = ("" if agree else "  <-- DISAGREE") + \
                    ("" if declared_ok else "  <-- NOT THE DECLARED OUTPUT/STATUS")
             print(f"{' '.join(argv):<18} {seen['python'][0]!r:<18} "
                   f"{seen['rust'][0]!r:<18} {seen['wasm'][0]!r:<18} "
-                  f"{seen['interp'][0]!r:<18} {seen['ts'][0]!r:<18} "
+                  f"{seen['ts'][0]!r:<18} "
                   f"{seen['python'][1]!r:<14} "
                   f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}/"
-                  f"{seen['interp'][2]}/{seen['ts'][2]}" + note)
+                  f"{seen['ts'][2]}" + note)
     return bad
 
 
@@ -655,7 +609,7 @@ def main() -> int:
         program_total += len(group)
     counts_str = " ".join(f"{k}={v}" for k, v in RUN_COUNTS.items())
     print(f"\n{bad} disagreement(s) across {cases} function cases "
-          f"+ {program_total} program cases (python/rust/wasm/interp/ts) [{counts_str}]")
+          f"+ {program_total} program cases (python/rust/wasm/ts) [{counts_str}]")
     return bad
 
 

@@ -188,15 +188,11 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
 
 (df frame-tail [(fs (List Frame))] -> (List Frame)
   :d "The frame stack without its top; empty when absent."
-  (mt (list-tail fs)
-    ((some r) r)
-    ((none)   (list))))
+  (option-or (list-tail fs) (list)))
 
 (df tail-exprs [(items (List rd/SExpr))] -> (List rd/SExpr)
   :d "The SExpr list without its head; empty when absent."
-  (mt (list-tail items)
-    ((some r) r)
-    ((none)   (list))))
+  (option-or (list-tail items) (list)))
 
 (df sexpr-items [(s rd/SExpr)] -> (List rd/SExpr)
   :d "The elements of a list or vector SExpr; empty for an atom."

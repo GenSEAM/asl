@@ -11,7 +11,6 @@ BACKENDS = {
     "ts": "to_typescript.py",
     "rs": "to_rust.py",
     "py": "to_python.py",
-    "interp": "agentscript-interp"
 }
 
 

@@ -16,9 +16,7 @@
 
 (df tail-forms [(xs (List a/TopForm))] -> (List a/TopForm)
   :d "Drop the head of a top-form list."
-  (mt (list-tail xs)
-    ((some r) r)
-    ((none)   (list))))
+  (option-or (list-tail xs) (list)))
 
 (df err-text [(e a/ParseError)] -> String
   :d "A parse error as line:col: message, the shape the CLI reports."
@@ -140,9 +138,7 @@ ever walked; patterns and binders contribute nothing."
 
 (df tail-exprs [(items (List rd/SExpr))] -> (List rd/SExpr)
   :d "The SExpr list without its head; empty when absent."
-  (mt (list-tail items)
-    ((some r) r)
-    ((none)   (list))))
+  (option-or (list-tail items) (list)))
 
 (df sexpr-items [(s rd/SExpr)] -> (List rd/SExpr)
   :d "The elements of a list or vector SExpr; empty for an atom."
@@ -177,11 +173,12 @@ ever walked; patterns and binders contribute nothing."
 
 (df drop-marker [(s String)] -> String
   :d "The ident without a trailing ? or ! marker."
-  (if (or (string-ends-with? s "?") (string-ends-with? s "!"))
-    (mt (string-slice s 0 (- (string-length s) 1))
-      ((some p) p)
-      ((none)   ""))
-    s))
+  (let [(n (string-length s))]
+    (cond
+      ((<= n 0) s)
+      ((or (string-ends-with? s "?") (string-ends-with? s "!"))
+       (option-or (string-slice s 0 (- n 1)) ""))
+      (:else s))))
 
 (df kebab-ident? [(s String)] -> Bool
   :d "True for the grammar's ident shape: lowercase, digits, hyphens, markers."
@@ -358,10 +355,13 @@ ever walked; patterns and binders contribute nothing."
 
   The batch size doubles because a tree's node count is not known in advance and
   recursion is then O(log n) in the total rather than O(depth) per node."
-  (let [(next (fold c-tick st (range 0 budget)))]
-    (if (list-empty? (.-work next))
-      next
-      (c-run next (* budget 2)))))
+  (if (list-empty? (.-work st))
+    st
+    (let [(batch (range 0 budget))
+          (stepped (fold c-tick st batch))]
+      (mt (list-empty? (.-work stepped))
+        (true stepped)
+        (false (c-run stepped (+ budget budget)))))))
 
 (df c-top [(st CState) (t a/TopForm)] -> CState
   :d "One top form: defun bodies are walked, enum case names are definitions."

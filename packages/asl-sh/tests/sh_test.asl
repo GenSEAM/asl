@@ -19,7 +19,7 @@
                  :timestamp 1700000000
                  :subsystem "worker"))
         (formatted (log/format-entry entry))]
-    (> (string-length formatted) 0)))
+    (not (string-empty? formatted))))
 
 (df ! run-tests! [] -> (Result Unit String)
   :d "Runs all validation checks for asl-sh."

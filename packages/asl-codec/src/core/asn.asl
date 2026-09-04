@@ -122,15 +122,15 @@
 
 (df tok-tail [(toks (List lx/Token))] -> (List lx/Token)
   :d "The token list without its head; empty when absent."
-  (mt (list-tail toks) ((some r) r) ((none) (list))))
+  (option-or (list-tail toks) (list)))
 
 (df frame-tail [(fs (List Frame))] -> (List Frame)
   :d "The frame stack without its head; empty when absent."
-  (mt (list-tail fs) ((some r) r) ((none) (list))))
+  (option-or (list-tail fs) (list)))
 
 (df item-tail [(items (List AsnValue))] -> (List AsnValue)
   :d "The value list without its head; empty when absent."
-  (mt (list-tail items) ((some r) r) ((none) (list))))
+  (option-or (list-tail items) (list)))
 
 (df fail [(st ReadState) (code String)] -> ReadState
   :d "Abandon the read, keeping the first code and draining the input so the
@@ -187,7 +187,7 @@
 (df strip-ident-suffix [(s String)] -> String
   :d "One trailing `?` or `!`, removed. Core §2 admits at most one."
   (if (or (string-ends-with? s "?") (string-ends-with? s "!"))
-    (mt (string-slice s 0 (- (string-length s) 1)) ((some r) r) ((none) ""))
+    (option-or (string-slice s 0 (- (string-length s) 1)) "")
     s))
 
 (df ident-ok? [(s String)] -> Bool
@@ -511,7 +511,7 @@
 
 (df w-tail [(items (List WItem))] -> (List WItem)
   :d "The work list without its head; empty when absent."
-  (mt (list-tail items) ((some r) r) ((none) (list))))
+  (option-or (list-tail items) (list)))
 
 (df w-atom? [(v AsnValue)] -> Bool
   :d "True for a value that renders without delimiters of its own."
@@ -620,10 +620,11 @@
 (df w-run [(st WState) (budget Int64)] -> WState
   :d "Run work-list steps in doubling batches until the work list drains, for the
       reason `read-run` gives."
-  (let [(next (fold w-tick st (range 0 budget)))]
-    (if (list-empty? (.-work next))
-      next
-      (w-run next (* budget 2)))))
+  (let [(limit budget)
+        (next (fold w-tick st (range 0 limit)))]
+    (cond
+      ((list-empty? (.-work next)) next)
+      (:else (w-run next (+ budget budget))))))
 
 (df asn-write [(v AsnValue)] -> String
   :d "The canonical text of a value: one space between siblings, none against a

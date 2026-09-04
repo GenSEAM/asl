@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "checker"))
 sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "backend"))
 
 from resolve import Diagnostic, check_file  # noqa: E402
 from fmt import fmt  # noqa: E402
@@ -26,7 +27,6 @@ from tsutil import search_json, ast_json  # noqa: E402
 from mcp.compressor import CompressError, compress_module  # noqa: E402
 
 MODULES_DIR = ROOT / "grammar" / "corpus" / "modules"
-INTERP_BIN = ROOT / "target" / "debug" / "agentscript-interp"
 
 TOOLS = [
     {
@@ -90,14 +90,6 @@ TOOLS = [
 ]
 
 
-def ensure_interp_built() -> Path:
-    if not INTERP_BIN.exists():
-        subprocess.run(["rustup", "run", "stable", "cargo", "build",
-                        "--manifest-path", str(ROOT / "Cargo.toml")],
-                       check=True, cwd=ROOT, capture_output=True, text=True)
-    return INTERP_BIN
-
-
 def handle_check(args: dict) -> dict:
     source = args.get("source")
     paths = args.get("paths") or []
@@ -132,35 +124,42 @@ def handle_eval(args: dict) -> dict:
     source = args.get("source")
     path_str = args.get("path")
     cli_args = args.get("args") or []
-    roots = [MODULES_DIR]
-    bin_path = ensure_interp_built()
 
     if source:
-        with tempfile.NamedTemporaryFile(suffix=".agentscript", mode="w", delete=False) as tf:
-            tf.write(source)
-            target_path = Path(tf.name)
-        cleanup = True
+        src_text = source
+        target_path = ROOT / "eval_temp.agentscript"
     elif path_str:
         target_path = Path(path_str)
-        cleanup = False
+        if not target_path.exists():
+            return {"stdout": "", "stderr": f"Path not found: {path_str}", "exit_code": 1, "success": False}
+        src_text = target_path.read_text()
     else:
         return {"stdout": "", "stderr": "No source or path provided", "exit_code": 1, "success": False}
 
+    roots = [target_path.parent, ROOT / "grammar" / "corpus" / "valid", ROOT / "grammar" / "corpus" / "modules"]
+
     try:
-        cmd = [str(bin_path)]
-        for r in roots:
-            cmd += ["--root", str(r)]
-        cmd += [str(target_path)] + cli_args
-        res = subprocess.run(cmd, capture_output=True, text=True)
+        from to_python import Transpiler
+        py_code = Transpiler().transpile(src_text, path=target_path, roots=roots)
+        with tempfile.TemporaryDirectory() as td:
+            tpath = Path(td)
+            (tpath / "runtime.py").write_text((ROOT / "backend" / "runtime.py").read_text())
+            cand = tpath / "cand.py"
+            cand.write_text(py_code)
+            res = subprocess.run([sys.executable, str(cand)] + cli_args, capture_output=True, text=True)
+            return {
+                "stdout": res.stdout,
+                "stderr": res.stderr,
+                "exit_code": res.returncode,
+                "success": res.returncode == 0
+            }
+    except Exception as exc:
         return {
-            "stdout": res.stdout,
-            "stderr": res.stderr,
-            "exit_code": res.returncode,
-            "success": res.returncode == 0
+            "stdout": "",
+            "stderr": str(exc),
+            "exit_code": 1,
+            "success": False
         }
-    finally:
-        if cleanup and target_path.exists():
-            target_path.unlink()
 
 
 def handle_format(args: dict) -> dict:

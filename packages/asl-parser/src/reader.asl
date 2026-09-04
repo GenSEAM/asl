@@ -69,9 +69,7 @@
 
 (df r-tail [(items (List RItem))] -> (List RItem)
   :d "The work list without its head; empty when absent."
-  (mt (list-tail items)
-    ((some r) r)
-    ((none)   (list))))
+  (option-or (list-tail items) (list)))
 
 (df r-separated [(items (List SExpr))] -> (List RItem)
   :d "Child expressions with a single space between neighbours."
@@ -82,7 +80,7 @@
                   (fold (fn [(acc (List RItem)) (x SExpr)] -> (List RItem)
                           (list-cons (r-expr x) (list-cons (r-text " ") acc)))
                         (list)
-                        (mt (list-tail items) ((some r) r) ((none) (list)))))))
+                        (option-or (list-tail items) (list))))))
     ((none) (list))))
 
 (df r-expand [(open String) (items (List SExpr)) (close String)] -> (List RItem)

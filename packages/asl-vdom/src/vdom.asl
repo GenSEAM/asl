@@ -13,5 +13,5 @@
 (df is-valid-node [(node VNode)] -> Bool
   :d "Validates VNode"
   (mt node
-    ((text-node content) (> (string-length content) 0))
-    ((element-node tag _) (> (string-length tag) 0))))
+    ((text-node content) (not (string-empty? content)))
+    ((element-node tag _) (not (string-empty? tag)))))

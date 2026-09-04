@@ -48,8 +48,10 @@
 
 (df run-tests [] -> Bool
   :d "Runs all asl-mem unit tests."
-  (and (test-vector-similarity)
-       (and (test-knowledge-graph)
-            (and (test-contradiction-resolution)
-                 (test-compact-encoding)))))
+  (fold (fn [(acc Bool) (p Bool)] -> Bool (and acc p))
+        true
+        (list (test-vector-similarity)
+              (test-knowledge-graph)
+              (test-contradiction-resolution)
+              (test-compact-encoding))))
 

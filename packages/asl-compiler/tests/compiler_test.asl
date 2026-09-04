@@ -30,11 +30,13 @@
   (let [(src "(df type-err [] -> I64 \"not-an-int\")")
         (res (comp/compile-standalone-source src "type_err.asl"))]
     (and (not (.-ok res))
-         (> (list-length (.-diagnostics res)) 0))))
+         (not (list-empty? (.-diagnostics res))))))
 
 (df run-tests [] -> Bool
   :d "Runs all compiler pipeline tests."
-  (and (test-compile-clean-function)
-       (and (test-compile-clean-schema)
-            (and (test-compile-parse-error)
-                 (test-compile-type-error)))))
+  (fold (fn [(acc Bool) (p Bool)] -> Bool (and acc p))
+        true
+        (list (test-compile-clean-function)
+              (test-compile-clean-schema)
+              (test-compile-parse-error)
+              (test-compile-type-error))))

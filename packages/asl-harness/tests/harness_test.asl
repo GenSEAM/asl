@@ -88,9 +88,11 @@
 
 (df run-tests [] -> Bool
   :d "Runs all asl-harness unit tests."
-  (and (test-adapter-name)
-       (and (test-valid-grounding)
-            (and (test-hallucinated-quote)
-                 (and (test-missing-doc)
-                      (and (test-namespace-cache)
-                           (test-proxy-firewall-action)))))))
+  (fold (fn [(acc Bool) (p Bool)] -> Bool (and acc p))
+        true
+        (list (test-adapter-name)
+              (test-valid-grounding)
+              (test-hallucinated-quote)
+              (test-missing-doc)
+              (test-namespace-cache)
+              (test-proxy-firewall-action))))
