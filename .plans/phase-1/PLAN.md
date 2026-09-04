@@ -1,42 +1,65 @@
-# Phase 1 Plan: ASL Harness Core Schema & Epistemic State Machine
+# Phase 1 Plan: Decoupled ASL Context Engine & Multi-Format RAG Extractor (`packages/asl-context`)
 
 ## Goal
-Implement pure AgentScript data models, epistemic ledger, and FSM transition function for the portable agent harness in `packages/asl-harness/src/`.
+Implement a standalone, pure AgentScript package `packages/asl-context` that decouples context extraction, HTML boilerplate stripping, multi-format parsing, chunking, and RAG context compression from `asl-search`. Zero Python runtime dependencies.
+
+## Acceptance Criterion
+`.venv/bin/python checker/gate.py && .venv/bin/python ./agentscript test packages/asl-context/tests/context_test.asl`
 
 ## Work Items
 
-### Item 1: Core Lifecycle Enums & Effect Data Structures
-- **File**: `packages/asl-harness/src/core.asl`
+### Item 1: Package Manifest & Scaffolding
+- **Files**: `packages/asl-context/asl.json`, `packages/asl-context/README.md`
 - **Specification**:
-  - `AgentState`: `(idle)`, `(planning)`, `(acting)`, `(verifying)`, `(reflecting)`, `(completed)`, `(failed)`
-  - `AgentEvent`: `(start [task: Str])`, `(plan-ready [steps: (List Str)])`, `(effect-done [effect-id: Str result: Str])`, `(verified [approved: Bool reason: Str])`, `(abort [reason: Str])`
-  - `AgentEffect`: `(search [query: Str max-results: I64])`, `(fetch [url: Str])`, `(infer [prompt: Str schema-name: Str])`, `(memory-query [query: Str top-k: I64])`, `(memory-save [key: Str val: Str])`, `(run-tool [tool: Str args-json: Str])`, `(emit-final [answer: Str])`
-- **Gate**: `.venv/bin/python checker/gate.py && .venv/bin/python tools/native_parser.py packages/asl-harness/src/core.asl`
+  - Name: `@genseam/asl-context`
+  - Entry: `src/context.asl`
+  - Targets: `wasm`, `ts`, `py`
+  - Documentation of schemas and exported APIs
+- **Failing Gate**: `test -f packages/asl-context/asl.json`
 
-### Item 2: Epistemic Ledger & Grounding Fact Structure
-- **File**: `packages/asl-harness/src/ledger.asl`
+### Item 2: Core Data Types & HTML Boilerplate Stripper
+- **File**: `packages/asl-context/src/context.asl`
 - **Specification**:
-  - `EpistemicFact`: `id: Str`, `claim: Str`, `source-id: Str`, `exact-snippet: Str`, `confidence: F64`, `verified: Bool`
-  - `EpistemicLedger`: `task: Str`, `facts: (List EpistemicFact)`, `unverified-count: I64`, `token-budget: I64`, `context-used: I64`
-  - Helpers: `create-ledger`, `record-fact`, `mark-fact-verified`, `compute-unverified`, `calculate-remaining-tokens`
-- **Gate**: `.venv/bin/python checker/gate.py && .venv/bin/python tools/native_parser.py packages/asl-harness/src/ledger.asl`
+  - `ExtractedDoc`: `title: Str`, `content: Str`, `format: Str`, `source: Str`, `char-count: I64`
+  - `ContextChunk`: `id: Str`, `content: Str`, `index: I64`, `char-count: I64`, `source: Str`
+  - `decode-html-entities`: replaces `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`, `&apos;`, `&nbsp;`
+  - `strip-enclosed`: recursively removes substrings enclosed between open and close delimiters
+  - `strip-tag-blocks`: removes entire blocks (`<script>`, `<style>`, `<nav>`, `<header>`, `<footer>`)
+  - `strip-html-comments`: removes `<!-- ... -->`
+  - `strip-html-tags`: converts block tag boundaries to spaces/newlines, removes `<...>`
+  - `normalize-whitespace`: collapses consecutive spaces and blank lines
+  - `clean-html`: composite pipeline returning clean article text
+- **Failing Gate**: `.venv/bin/python -c "from checker.gate import check_file, package_roots; from pathlib import Path; p = Path('packages/asl-context/src/context.asl'); assert p.is_file()"`
 
-### Item 3: Pure State Transition Function (FSM)
-- **File**: `packages/asl-harness/src/state_machine.asl`
+### Item 3: Multi-Format Extractors
+- **File**: `packages/asl-context/src/context.asl`
 - **Specification**:
-  - `step: (state: AgentState, event: AgentEvent, ledger: EpistemicLedger) -> (Pair AgentState (List AgentEffect))`
-  - Transition invariants:
-    - `idle` + `start` -> transitions to `planning`, emits initial model inference or memory recall effect.
-    - `planning` + `plan-ready` -> transitions to `verifying` (or `acting` if plan is groundable).
-    - `acting` + `effect-done` -> transitions to `verifying` before committing to state.
-    - `verifying` + `verified(true)` -> advances to next action or `completed`.
-    - `verifying` + `verified(false)` -> transitions to `reflecting` and emits replan or correction effect.
-    - `is-terminal-state: (state: AgentState) -> Bool`
-- **Gate**: `.venv/bin/python checker/gate.py && .venv/bin/python tools/native_parser.py packages/asl-harness/src/state_machine.asl`
+  - `extract-html`: extracts title and article text from HTML source
+  - `extract-markdown`: strips markdown syntax, code fences, link URLs, keeping clean text
+  - `extract-plaintext`: normalizes raw text paragraphs and control characters
+  - `extract-json-kv`: extracts primary content from common JSON fields (`content`, `text`, `title`, `snippet`, `body`)
+  - `extract-xml-atom`: extracts title and summary/content from Atom/RSS/XML feeds
+  - `extract-context`: polymorphic format dispatcher based on format string
+- **Failing Gate**: `.venv/bin/python -c "from checker.gate import check_file, package_roots; from pathlib import Path; p = Path('packages/asl-context/src/context.asl'); assert not check_file(p, package_roots(p))"`
 
-### Item 4: Unit Test Suite for State Machine & Ledger
-- **File**: `packages/asl-harness/tests/state_machine_test.asl`
+### Item 4: Sliding-Window Chunking & RAG Context Compression
+- **File**: `packages/asl-context/src/context.asl`
 - **Specification**:
-  - Tests step transitions across full happy path: `idle` -> `planning` -> `acting` -> `verifying` -> `completed`.
-  - Tests rejection and reflection path: ungrounded fact transitions to `reflecting`.
-- **Gate**: `.venv/bin/python checker/gate.py && .venv/bin/python tools/native_checker.py packages/asl-harness/tests/state_machine_test.asl`
+  - `chunk-text`: sliding-window chunker with safe `(max 1 (- max-chars overlap-chars))` step
+  - `chunk-doc`: chunks `ExtractedDoc` into `(List ContextChunk)`
+  - `format-chunk-markdown`: renders `[Chunk i](source): content`
+  - `format-context-rag`: consolidated markdown prompt context block with token estimation
+  - `format-docs-rag`: formats multiple extracted docs into indexed prompt context
+- **Failing Gate**: `.venv/bin/python -c "from checker.gate import check_file, package_roots; from pathlib import Path; p = Path('packages/asl-context/src/context.asl'); diags = check_file(p, package_roots(p)); assert diags == []"`
+
+### Item 5: Comprehensive Unit Test Suite
+- **File**: `packages/asl-context/tests/context_test.asl`
+- **Specification**:
+  - `test-decode-entities`: tests entity unescaping
+  - `test-html-cleaner`: tests script/style removal and text extraction
+  - `test-multi-format`: tests markdown, json, xml extractors
+  - `test-chunking`: tests sliding window chunk step and boundaries
+  - `test-rag-format`: tests consolidated prompt context markdown
+  - `run-tests`: runs all test cases and returns `Bool`
+- **Failing Gate**: `.venv/bin/python ./agentscript test packages/asl-context/tests/context_test.asl`
+

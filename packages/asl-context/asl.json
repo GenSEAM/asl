@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl-context",
+  "version": "0.1.0",
+  "description": "Pure AgentScript context engine: HTML/DOM boilerplate stripping, multi-format text extraction, chunking, and RAG context compression",
+  "entry": "src/context.asl",
+  "targets": {
+    "wasm": {"output": "dist/context.wasm"},
+    "ts": {"output": "dist/context.ts"},
+    "py": {"output": "dist/context.py"}
+  }
+}

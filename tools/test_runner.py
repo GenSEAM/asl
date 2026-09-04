@@ -49,7 +49,7 @@ def run_test_file(test_file: Path) -> list[TestResult]:
     results: list[TestResult] = []
 
     # 1. Semantic Check
-    roots = [test_file.parent, ROOT / "grammar" / "corpus" / "valid", ROOT / "grammar" / "corpus" / "modules"]
+    roots = [test_file.parent, test_file.parent.parent / "src", ROOT / "grammar" / "corpus" / "valid", ROOT / "grammar" / "corpus" / "modules"]
     diags = check_file(test_file, roots)
     if diags:
         results.append(TestResult(

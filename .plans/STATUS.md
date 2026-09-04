@@ -1,6 +1,6 @@
 # Iteration Status
 
-- **Iteration ID**: `2026-09-03-portable-harness`
-- **Current Phase**: Architectural Gap Analysis & Detailed Full-Roadmap Planning (Phases 1-7).
-- **Completed**: Gap & Consistency Audit complete; Invariants established; Detailed Phase Plans authored.
+- **Iteration ID**: `2026-09-04-asl-syntax-branding-cleanup`
+- **Current Phase**: Phase 1: Main README Face-Off & Quickstart Refactor (`README.md`).
+- **Completed**: None yet; Phase 1 starting.
 - **Active Plan**: `.plans/PHASES.md`

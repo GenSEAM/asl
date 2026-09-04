@@ -1,55 +1,46 @@
-# Portable Agent Harness: Phases & Acceptance Criteria (Refined v1.1)
+# ASL Syntax & Branding Cleanup: Phases & Acceptance Criteria
 
-Goal: Build a portable, dual-host agent harness (Browser & Local CLI) powered by AgentScript (ASL) core logic and pure functional FSM, featuring pluggable adapters for metasearch/data actualization, hybrid epistemic memory, anti-hallucination precision guardrails, and sandboxed tool execution.
+Goal: Eliminate "Nano" terminology from all public surfaces, READMEs, and documentation across the repository and packages. Establish that AgentScript (ASL) is compact by default; the long projection is "ASL Verbose" (purely for human debugging/inspection via `asl view`). Remove TOON from the main README Face-Off, show a strict 1-to-1 comparison between JSON and native ASL (positional zero-key form), and document where the keyed form is required.
 
-## Architectural Invariants (Post Gap-Analysis)
-1. **Pure Functional ASL Core (Elm/Redux Pattern)**: ASL contains no async runtime and no raw networking. The ASL core is a pure state machine: `step: (State, Event) -> (State, List Effect)`. The host bridge (TS/Node/Wasm) executes effects asynchronously and posts events back.
-2. **Isomorphic Dual Host (Parity without Leaks)**: Host runtime handles environment-specific I/O. In Browser: Fetch/CORS-proxy, OPFS/IndexedDB, in-memory WASI. In Local CLI: POSIX fs, SQLite, child_process.
-3. **Epistemic Ledger for Grounding**: Hallucination prevention is enforced via algebraic tracking: facts require exact snippet references (`source-id`, `snippet-quote`, `confidence`). Unverified facts fail pre-execution assertion gates.
-4. **Context Window Economy**: Raw search/DOM payloads are never injected directly; they pass through ASL chunking, similarity reranking (`asl-mem`), and token budget compression.
+## Architectural Invariants
+1. **ASL is Compact by Default**: The standard syntax of AgentScript is the concise S-expression notation. It is not called "Nano"; it is simply ASL.
+2. **ASL Verbose is Solely for Debugging**: The expanded form is ASL Verbose, accessed via `asl view` and `asl transcode --to verbose` for inspection.
+3. **1:1 Face-Off without Intermediaries**: Main README compares Verbose JSON directly to AgentScript (ASL) positional zero-key form. TOON is removed.
+4. **No Python Modifications**: Python files and benchmarks are untouched.
 
 ---
 
 ## Ordered Phases
 
-### Phase 1: ASL Harness Core Schema & Epistemic State Machine
-- **Objective**: Implement pure ASL data models and transition rules for the agent execution lifecycle: `AgentState`, `AgentEvent`, `AgentEffect`, `EpistemicLedger` (facts, citations, confidence, verification status), and context window budget calculator.
-- **Paths**: `packages/asl-harness/src/core.asl`, `packages/asl-harness/src/state_machine.asl`, `packages/asl-harness/src/ledger.asl`
-- **Acceptance Criterion**: `.venv/bin/python checker/gate.py && .venv/bin/python tools/native_parser.py packages/asl-harness/src/core.asl`
+### Phase 1: Main README Face-Off & Quickstart Refactor (`README.md`)
+- **Objective**: 
+  - Remove TOON from the Face-Off comparison.
+  - Present strict 1:1 comparison: Verbose JSON vs AgentScript (ASL).
+  - Feature positional zero-key form `(! cmd "git" ["status" "--short"] "/app" 5000)` (18 tokens, -64.7%).
+  - Add an explanatory callout demonstrating where positional notation is insufficient and keyed form is used (sparse optional fields, default overrides).
+  - Update quickstart and tools sections to reference ASL Verbose (`asl view`, `asl transcode --to verbose`).
+  - Eliminate all occurrences of "Nano" from `README.md`.
+- **Paths**: `README.md`
+- **Acceptance Criterion**: `! grep -i "nano" README.md && ! grep -i "toon" README.md && .venv/bin/python tools/doc_examples.py --quiet`
 
-### Phase 2: Pluggable Adapter Contracts & Isomorphic Host Effect Loop
-- **Objective**: Define ASL effect specifications (`Effect: Search`, `Effect: Store`, `Effect: RunTool`, `Effect: InferModel`) and the TypeScript asynchronous effect-driver loop supporting both Browser (Web Workers, Fetch/CORS proxy, in-memory WASI) and Local Node/Native (fs, child_process, SQLite).
-- **Paths**: `packages/asl-harness/src/adapters.asl`, `packages/asl-harness/bridges/host.ts`, `packages/asl-harness/bridges/browser_host.ts`, `packages/asl-harness/bridges/node_host.ts`
-- **Acceptance Criterion**: `npx tsx packages/asl-harness/bridges/tests/test_host_bridge.ts`
+### Phase 2: Packages and Skills READMEs Audit (`packages/*/README.md`, `skills/README.md`)
+- **Objective**:
+  - Remove "Nano" references across `packages/*/README.md` and `skills/README.md`.
+  - Update `skills/README.md` to reference standard ASL syntax.
+  - Update `packages/asl-context/README.md` and any other package READMEs.
+- **Paths**: `skills/README.md`, `packages/asl-context/README.md`
+- **Acceptance Criterion**: `git grep -i -E "nano syntax|nano format|agentscript nano|pure asl nano" packages/ skills/ || true` returns 0 matches.
 
-### Phase 3: Metasearch, CORS-Aware Fetcher & Live Data Actualization
-- **Objective**: Metasearch aggregation in `asl-search` (SearXNG endpoints, query expansion, proxy health rotation), browser CORS handling / fallback modes, HTML-to-markdown extraction, and ASL freshness scoring.
-- **Paths**: `packages/asl-search/src/engine.asl`, `packages/asl-search/src/actualize.asl`, `packages/asl-harness/bridges/search_adapter.ts`
-- **Acceptance Criterion**: `.venv/bin/python checker/gate.py && npx tsx packages/asl-search/tests/test_search_actualize.ts`
+### Phase 3: Documentation & Web Alignment (`docs/`, `web/`)
+- **Objective**:
+  - Update `docs/NANO_SYNTAX.md` header and content to frame standard ASL vs ASL Verbose.
+  - Update `docs/CONTEXT_ECONOMY_GUIDELINES.md` table and prose.
+  - Update `docs/blog/05-token-economy-and-nano-projection.md` to frame ASL vs ASL Verbose.
+  - Update `web/` metadata and components (`ModuleGraphVisualizer.tsx`, `RoadmapView.tsx`, `index.html`) to replace "Nano" with "ASL" or "ASL Verbose".
+- **Paths**: `docs/NANO_SYNTAX.md`, `docs/CONTEXT_ECONOMY_GUIDELINES.md`, `docs/blog/05-token-economy-and-nano-projection.md`, `web/src/views/RoadmapView.tsx`, `web/src/components/ModuleGraphVisualizer.tsx`, `web/index.html`
+- **Acceptance Criterion**: `.venv/bin/python tools/doc_examples.py --quiet && npm --prefix web run build`
 
-### Phase 4: Epistemic State & Hybrid Memory Store (IndexedDB/OPFS + SQLite)
-- **Objective**: Hybrid memory matrix combining ASL vector cosine similarity (`asl-mem/store.asl`) with structured metadata tagging, citation linking, and dual-backend persistence (Browser IndexedDB/OPFS & Local SQLite via `asl-sql`).
-- **Paths**: `packages/asl-mem/src/store.asl`, `packages/asl-mem/src/epistemic_index.asl`, `packages/asl-harness/bridges/memory_adapter.ts`
-- **Acceptance Criterion**: `.venv/bin/python checker/gate.py && npx tsx packages/asl-mem/tests/test_epistemic_memory.ts`
-
-### Phase 5: Anti-Hallucination & Precision Guardrails (Grounding Pipeline)
-- **Objective**: Construct grounding verification pipeline in ASL: citation verification against retrieved search/doc snippets, algebraic schema conformity via `asl-codec`, AST invariant checks via `asl-lint`, and pre-execution assertion gates.
-- **Paths**: `packages/asl-harness/src/grounding.asl`, `packages/asl-harness/src/verifier.asl`, `packages/asl-harness/tests/test_grounding.ts`
-- **Acceptance Criterion**: `.venv/bin/python checker/gate.py && npx tsx packages/asl-harness/tests/test_grounding.ts`
-
-### Phase 6: Multi-Modal Tool Runtime Mesh (DOM, Sandboxed CLI, Mesh Bus)
-- **Objective**: Safe sandboxed tool execution bridging ASL Nano contracts to Browser DOM actions (`asl-browser-plugin`), sandboxed shell commands (`asl-sh` / WASI runner), and agent mesh messaging (`asl-agent-bus` / `asl-skyloom`).
-- **Paths**: `packages/asl-harness/src/tools.asl`, `packages/asl-harness/bridges/tool_mesh.ts`, `packages/asl-harness/tests/test_tool_mesh.ts`
-- **Acceptance Criterion**: `npx tsx packages/asl-harness/tests/test_tool_mesh.ts`
-
-### Phase 7: End-to-End Dual-Host Harness Validation (Local CLI & In-Browser WASI)
-- **Objective**: Full end-to-end evaluation suite running whole-program agent tasks (planning, search retrieval, grounded synthesis, memory recall, and tool execution) across both Node.js CLI and headless browser Wasm runtime.
-- **Paths**: `packages/asl-harness/tests/e2e_local.ts`, `packages/asl-harness/tests/e2e_browser.ts`, `packages/asl-harness/package.json`
-- **Acceptance Criterion**: `npm run --prefix packages/asl-harness test:e2e`
-
----
-
-## Out of Scope & Rationale
-- **Modifications to ASL Core Language Grammar**: The v0.2 core specification is frozen and normative. All harness semantics are implemented using standard ASL constructs and modular packages.
-- **External SaaS Vector DB dependencies (Pinecone, Weaviate)**: Violates offline, zero-dependency, and in-browser portability goals. We rely on self-contained ASL cosine-similarity (`asl-mem`) backed by SQLite / OPFS.
-- **Proprietary Single-Provider Lock-In**: The model interface is abstracted over standard JSON-RPC / REST schemas allowing arbitrary providers (Gemini, Claude, OpenAI, local llama.cpp / Ollama).
+### Phase 4: Full Verification & Repository Gate
+- **Objective**: Run full validation suite ensuring all docs, examples, locks, and builds pass cleanly.
+- **Paths**: All modified files.
+- **Acceptance Criterion**: `.venv/bin/python bench/token_frames.py --check && .venv/bin/python tools/doc_examples.py --quiet && npm --prefix web run build`

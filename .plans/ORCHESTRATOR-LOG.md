@@ -1,12 +1,53 @@
 # Orchestrator Log
 
-## Iteration 2026-09-03-portable-harness
+## Iteration 2026-09-04-agent-intelligence
 
-- **Goal**: Portable Dual-Host Agent Harness (Browser & Local) with Search, Epistemic Memory & Anti-Hallucination Guardrails in ASL.
-- **Created**: 2026-09-03
-- **Architectural Gap & Consistency Review (2026-09-03)**:
-  1. *Async/Purity Gap*: ASL has no native async or thread concurrency. Resolution: Elm/Redux architecture. Pure ASL state machine emits typed `AgentEffect`s; asynchronous host bridge (TS/Node) executes I/O and sends `AgentEvent`s back.
-  2. *Browser Network/CORS Gap*: Direct browser fetch to SearXNG/external URLs fails on CORS. Resolution: Tri-modal fetch adapter: extension mode (`asl-browser-plugin`), CORS-proxy gateway mode, and local Node mode.
-  3. *Grounding Verification Gap*: Abstract "citations" defined as concrete algebraic tuples: `(source-id, exact-snippet, confidence-score)`. ASL validator checks string containment and n-gram overlap before letting FSM proceed to action execution.
-  4. *Vector Scaling Gap*: Pure ASL `(List F64)` linear scan is O(N). Suitable for episodic working memory (<1,000 items). For larger stores, SQLite/OPFS persistence indexes metadata, and ASL performs reranking over top candidates.
-  5. *Dual-Host Parity*: Wasm + TS dual path verified against existing in-memory WASI preview1 runner (`ROADMAP.md` Phase 10).
+- **Goal**: Unified High-Density Agent Intelligence Suite in Pure ASL: Decoupled Context Engine, Ecosystem Code/Deep Search, Compact Semantic Graph Memory, ASL S-Expression Tool-Calling, and Anti-Hallucination Proxy.
+- **Created**: 2026-09-04
+- **Key Architectural Decisions**:
+  1. *Decoupled Context & Search Separation*: `asl-search` strictly queries and returns links; a dedicated package `packages/asl-context` handles HTML boilerplate stripping, multi-format (JSON/HTML/XML) normalization, and token-dense RAG compression.
+  2. *ASL S-Expression Tool-Calling Protocol*: Replaces bloated multi-kilobyte JSON tool schemas with dense S-expressions `(call :tool <name> <args>)`, reducing prompt token consumption by 70–80%.
+  3. *High-Density Graph & Vector Memory*: Extends `asl-mem` with entity relations, data freshness timestamps, contradiction resolution, and binary ASN serialization (`asl-codec`).
+  4. *Anti-Hallucination Epistemic Proxy*: Hard grounding firewall validating exact snippet quotes, isolated prompt caching namespaces, and citation tracking.
+- **Status**: Paused at Phase 1; snapshot preserved in `.plans/iterations/2026-09-04-080000-agent-intelligence/`.
+
+---
+
+## Iteration 2026-09-04-blog-and-agentic-content
+
+- **Goal**: Add engineering blog to website homepage (`HomeView.tsx`), implement interactive article reader view, and author high-impact SEO & agentic-optimized technical essays on AgentScript (S-expressions, token economy, Nano notation, inter-agent data passing, and developer tools).
+- **Created**: 2026-09-04
+- **Tier**: Tier 1 (Standard)
+- **Key Architectural Decisions**:
+  1. *Dual Human & Agent Optimization*: Articles serve human engineers with clear narrative technical writing, diagrams, and benchmarks while offering structured, dense S-expressions and metadata for LLMs and crawler search engines.
+  2. *Static Bundle Integration*: All articles compile cleanly into the Vite/React static bundle (`web/`) with zero external CMS runtime dependencies.
+  3. *Accurate Spec Conformance*: All ASL code snippets in blog posts pass `doc_examples.py` parser gate.
+  4. *Cosmic Blueprint Aesthetic*: Visual continuity with the existing dark blueprint theme, micro-labels, and monospaced typography.
+
+### Phase 1: High-Impact SEO & Agentic Content Essays (`docs/blog/*.md`)
+- **Tier**: Tier 0 (Fast-Track)
+- **Rationale**: Direct authoring of structured Markdown essays in `docs/blog/` verified by deterministic gates (`tools/doc_examples.py --quiet && grammar/validate.py`).
+- **Status**: Dispatched to `steps-implementer`.
+- **Status**: Paused for priority Agent Core, Plugin Pipeline & Multi-Harness suite.
+
+---
+
+## Iteration 2026-09-04-agent-core-harness
+
+- **Goal**: Core Agent Engine with Onion Middleware & Plugin Pipeline, Browser Automation Tooling (CDP/Debug for Gemini, NotebookLM, Deep Research), Multi-Distribution Shells (Browser Extension, CI, CLI, Mesh), Epistemic Grounding Firewall, and Polyglot AST Tools.
+- **Created**: 2026-09-04
+- **Tier**: Tier 1 (Standard)
+- **Key Architectural Decisions**:
+  1. *Composable Onion Middleware*: Unified interceptor stack around tool calls, LLM completions, and lifecycle events (`pre-call`, `post-call`, `filter`, `mutate`, `audit`). Allows dynamic priority and before/after topological sorting so plugins stack cleanly without coupling.
+  2. *Dual Browser Automation*: CDP debug client to drive existing/headless browsers for interactive sessions (Gemini chat, NotebookLM, deep research, web app interaction) today, with binary AST/DOM extraction (`asl-vdom` + `@eN` accessibility refs).
+  3. *Multi-Distribution Architecture*: Unified pure ASL core shared across distributions: local CLI (`asl harness cli`), headless CI runner (`asl harness ci`), in-browser WebExtension (`packages/asl-browser-plugin`), and distributed mesh node (`asl-agent-bus`).
+  4. *Epistemic Grounding Firewall*: Hard anti-hallucination verification checking exact quotes against retrieved context, citation tracing, and contradiction resolution.
+---
+
+## Iteration 2026-09-04-asl-syntax-branding-cleanup
+
+- **Goal**: Eliminate "Nano" terminology everywhere. Standardize on ASL (compact default) and ASL Verbose (for debugging via `asl view`). Update README.md face-off to 1:1 JSON vs ASL positional zero-key form with a note on keyed form. No python code changes.
+- **Created**: 2026-09-04T10:35:00+03:00
+- **Tier**: Tier 0 (Fast-Track / Direct Implementation with verification gates)
+- **Status**: Starting Phase 1
+

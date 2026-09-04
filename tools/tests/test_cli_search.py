@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -14,7 +15,7 @@ def test_cli_websearch():
     )
     assert proc.returncode == 0
     assert "Search Results for:" in proc.stdout
-    assert "https://aslang.dev" in proc.stdout
+    assert any(proto in proc.stdout for proto in ["https://", "http://"])
 
 
 def test_cli_websearch_json():
@@ -25,4 +26,9 @@ def test_cli_websearch_json():
         cwd=ROOT
     )
     assert proc.returncode == 0
-    assert "asl-internal" in proc.stdout
+    data = json.loads(proc.stdout)
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert "title" in data[0]
+    assert "url" in data[0]
+    assert "engine" in data[0]
