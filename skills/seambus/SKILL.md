@@ -1,6 +1,6 @@
 ---
-name: skyloom
-description: Universal Inter-Agent Communication Protocol & Resilient Swarm Mesh (SeamBus / Simba alias). Use when coordinating multiple AI agents, exchanging structured tasks, communicating across agent boundaries (aware vs unaware models), or routing messages via SeamBus / SkyLoom CLI, Wasm SDK, or MCP server.
+name: seambus
+description: Universal Inter-Agent Communication Protocol & Resilient Swarm Mesh (SeamBus / Simba). Use when coordinating multiple AI agents, exchanging structured tasks, communicating across agent boundaries (aware vs unaware models), or routing messages via SeamBus CLI, Wasm SDK, or MCP server.
 ---
 
 # SeamBus (Simba) Agent Protocol Skill

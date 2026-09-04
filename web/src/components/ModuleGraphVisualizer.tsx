@@ -40,10 +40,10 @@ const MODULES_REGISTRY: ModuleNode[] = [
     dependencies: ['asl-sql/core'],
   },
   {
-    id: 'asl-skyloom-core',
-    name: 'asl-skyloom/core',
+    id: 'asl-seambus-core',
+    name: 'asl-seambus/core',
     category: 'mesh',
-    doc: 'SkyLoom protocol algebraic types, asymmetric negotiation, and core frame logic.',
+    doc: 'SeamBus protocol algebraic types, asymmetric negotiation, and core frame logic.',
     schemas: ['FrameHeader', 'NegotiationState'],
     enums: ['Dialect', 'FrameType', 'ErrorCode'],
     exportsCount: 8,

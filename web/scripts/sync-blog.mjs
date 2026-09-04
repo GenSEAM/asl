@@ -66,8 +66,8 @@ const metadataMap = {
     date: '2026-09-04',
     author: 'ASL Systems & Protocol Group',
     readTime: '7 min read',
-    excerpt: 'Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SkyLoom mesh buses, and zero-drift handoffs.',
-    tags: ['SkyLoom', 'AgP Wire Protocol', 'Typed Frames', 'Conversational Mesh']
+    excerpt: 'Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and zero-drift delegations.',
+    tags: ['SeamBus', 'Simba', 'AgP Wire Protocol', 'Typed Frames', 'Conversational Mesh']
   },
   '07-the-agent-native-developer-cockpit.md': {
     slug: 'the-agent-native-developer-cockpit',

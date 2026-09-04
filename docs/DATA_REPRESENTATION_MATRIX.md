@@ -264,7 +264,7 @@ Core §2 token, and an anchor was never a second idea (`ASN_SPEC.md` §8.1).
 
 - A column the consumer does not know is **ignored**, so a producer that adds a field does not
   break an older consumer.
-- A field the consumer expects and the header omits takes its `:default` from the `defschema`. No
+- A field the consumer expects and the header omits takes its `:default` from the `dfs` (or `defschema`). No
   `:default` declared is an error.
 - A row whose length differs from the header's is an error. A table is a rectangle, and `_` is
   already there for a missing cell.

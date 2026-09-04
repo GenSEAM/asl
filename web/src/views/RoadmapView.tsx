@@ -25,7 +25,7 @@ const MILESTONES: Milestone[] = [
   },
   {
     status: 'completed',
-    tag: 'SkyLoom-Mesh',
+    tag: 'SeamBus-Mesh',
     title: 'Resilient Multi-Agent Mesh & Wire Protocol',
     desc: 'High-frequency sub-millisecond agent-to-agent protocol and state coordination mesh.',
     items: [

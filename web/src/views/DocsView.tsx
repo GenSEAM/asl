@@ -504,7 +504,7 @@ export const DocsView: React.FC = () => {
                   {activeTab === 'stdlib' && <BookOpen className="w-4 h-4 text-signal" />}
                   <h4 className="font-bold text-ink text-base">
                     {activeTab === 'cli' && 'Deterministic Toolchain'}
-                    {activeTab === 'mesh' && 'SkyLoom RPC Mesh Wire'}
+                    {activeTab === 'mesh' && 'SeamBus RPC Mesh Wire'}
                     {activeTab === 'data' && 'Serialization & Token Matrix'}
                     {activeTab === 'sql' && 'Cross-Dialect SQL Lowering'}
                     {activeTab === 'syntax' && 'Polyglot Product Types'}
@@ -634,7 +634,7 @@ export const DocsView: React.FC = () => {
                 <div className="flex items-center justify-between gap-2 p-2 rounded-2xl bg-ground border border-line">
                   <div className="flex items-center gap-2 text-micro font-mono text-ink-3 pl-1">
                     <Boxes className="w-4 h-4 text-signal" />
-                    <span>SkyLoom IPC Wire</span>
+                    <span>SeamBus IPC Wire</span>
                   </div>
                   <span className="text-micro font-mono font-semibold text-signal px-2 py-0.5 rounded bg-signal/10 border border-signal/20">
                     Unix Socket &bull; SSE Mesh
@@ -779,7 +779,7 @@ export const DocsView: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-ink text-xl">Agent-to-Agent (A2A) Wire Protocol</h3>
-                    <p className="font-mono text-micro text-ink-3">High-frequency S-expression RPC frames for SkyLoom mesh</p>
+                    <p className="font-mono text-micro text-ink-3">High-frequency S-expression RPC frames for SeamBus mesh</p>
                   </div>
                 </div>
                 <p className="text-meta text-ink-2 leading-relaxed">

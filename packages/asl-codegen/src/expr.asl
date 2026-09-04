@@ -3,6 +3,7 @@
   :x [emit-expr
       emit-atom
       emit-pattern
+      emit-body-seq
       is-ident?
       slice-str-or]
   :i [(reader :a rd) (mangle :a m) (builtins :a b) (rtypes :a cg-ty)])
@@ -270,6 +271,15 @@
                            inits))]
       (str clean-rec " { " (string-join field-strs ", ") " }"))))
 
+(df is-pascal-head? [(head String)] -> Bool
+  :d "True if head appears to be a PascalCase record or case constructor."
+  (if (< (string-length head) 1)
+      false
+      (let [(c0 (slice-str-or head 0 1 ""))]
+        (and (= (string-upper c0) c0)
+             (and (not (= c0 "_"))
+                  (not (string-contains? head "/")))))))
+
 (df emit-call [(items (List rd/SExpr)) (aliases (Map String String))] -> String
   :d "Lowers a general call form or builtin."
   (let [(head (nth-atom items 0))
@@ -290,15 +300,10 @@
            (:else (str target "." (m/mangle-ident field) ".clone()")))))
       ((is-some? (b/builtin-template head))
        (option-or (b/render-builtin head args) ""))
-      ((let [(c0 (slice-str-or head 0 1 ""))]
-         (and (>= (string-length head) 2)
-              (string-starts-with? head ":")))
+      ((and (>= (string-length head) 2)
+            (string-starts-with? head ":"))
        (emit-record-init items aliases))
-      ((let [(c0 (slice-str-or head 0 1 ""))]
-         (and (>= (string-length head) 1)
-              (and (= (string-upper c0) c0)
-                   (and (not (= c0 "_"))
-                        (not (string-contains? head "/"))))))
+      ((is-pascal-head? head)
        (if (and (> (list-length items) 1)
                 (string-starts-with? (nth-atom items 1) ":"))
            (emit-record-init items aliases)

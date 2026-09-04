@@ -18,7 +18,7 @@ asl skill --install global
 - `asl` — the language reference: compact syntax, the closed vocabulary, the semantic rules, the
   CLI and the MCP tools. **Generated** from `prelude/prelude.json` by `prelude/generate.py`;
   editing `skills/asl/SKILL.md` by hand is work the `--check` gate will reject.
-- `skyloom` — the inter-agent protocol: frames, dialect negotiation and the swarm mesh.
+- `seambus` (`skyloom`) — the inter-agent protocol: frames, dialect negotiation, `pass`/`ret` delegations and the swarm mesh.
 
 ## License
 Dual-licensed MIT or Apache-2.0, at your option. © GenSEAM Core Team

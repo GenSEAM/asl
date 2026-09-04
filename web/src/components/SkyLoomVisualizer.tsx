@@ -160,8 +160,7 @@ export const SkyLoomVisualizer: React.FC = () => {
     <Section id="skyloom-mesh" ground="sunken" labelledBy="skyloom-title" className="overflow-hidden border-t border-line py-16">
       <SectionHeader
         id="skyloom-title"
-        index="03"
-        eyebrow="SkyLoom Resilient Swarm Mesh"
+        eyebrow="SeamBus Resilient Swarm Mesh"
         title="Zero-Drift Inter-Agent Protocol & Asymmetric Mesh"
         lead="A unified high-speed machine protocol connecting ASL-native aware agents, unprimed vanilla LLMs, and warm CLI subagents with self-healing mailbox queues, heartbeat watchdogs, and zero schema drift."
         align="center"
@@ -360,7 +359,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Code2 className="w-4 h-4 text-ink-2 shrink-0" />
                   <span className="font-mono text-micro uppercase font-semibold text-ink">
-                    SkyLoom Wire Frame Inspector
+                    SeamBus Wire Frame Inspector
                   </span>
                   {isTransmitting && (
                     <span className="flex items-center gap-1 font-mono text-micro text-ink font-bold animate-pulse">
@@ -417,7 +416,7 @@ export const SkyLoomVisualizer: React.FC = () => {
               <div className="relative">
                 {activeTab === 'asl' && (
                   <pre className="p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed">
-{`(loom:frame
+{`(sb
   :v 1
   :id "msg-9f201"
   :from "agent-orchestrator"
@@ -436,9 +435,9 @@ export const SkyLoomVisualizer: React.FC = () => {
                 {activeTab === 'coord' && (
                   <div className="space-y-3">
                     <pre className="p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed">
-{`(loom:handoff
+{`(pass
   :v 1
-  :id "handoff-7721"
+  :id "h-7721"
   :from "agent-orchestrator"
   :to "agent-coder-1"
   :ts ${Date.now()}
@@ -452,7 +451,7 @@ export const SkyLoomVisualizer: React.FC = () => {
                     <div className="p-3 rounded-xl bg-inset border border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
                       <div>
                         <span className="font-mono font-bold text-ink">Context Compression Benchmark:</span>{' '}
-                        <span className="text-ink-2">Raw Chat: 1,716 tokens → SkyLoom AST: 285 tokens</span>
+                        <span className="text-ink-2">Raw Chat: 1,716 tokens → SeamBus AST: 285 tokens</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="px-2 py-0.5 rounded bg-surface border border-line font-mono font-bold text-ink">
@@ -468,9 +467,9 @@ export const SkyLoomVisualizer: React.FC = () => {
 
                 {activeTab === 'polyglot' && (
                   <pre className="p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed">
-{`<!-- SKYLOOM_HEADER: {"v":1,"id":"msg-9f201","from":"agent-orchestrator","to":"agent-vanilla-llm","dialect":"polyglot/v1","type":"DATA"} -->
-[SkyLoom Autonomous Protocol Primer]
-You are communicating with agent "agent-orchestrator" over SkyLoom.
+{`<!-- SEAMBUS_HEADER: {"v":1,"id":"msg-9f201","from":"agent-orchestrator","to":"agent-vanilla-llm","dialect":"polyglot/v1","type":"DATA"} -->
+[SeamBus Autonomous Protocol Primer]
+You are communicating with agent "agent-orchestrator" over SeamBus.
 Please execute the requested task and reply in a fenced JSON code block:
 
 \`\`\`json
@@ -480,13 +479,13 @@ Please execute the requested task and reply in a fenced JSON code block:
   "replyTo": "msg-9f201"
 }
 \`\`\`
-<!-- SKYLOOM_FOOTER -->`}
+<!-- SEAMBUS_FOOTER -->`}
                   </pre>
                 )}
 
                 {activeTab === 'compact' && (
                   <pre className="p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed">
-{`SK1|1|msg-9f201|agent-orchestrator|agent-coder-1|DATA|tasks/codegen|${Date.now()}||{"action":"compile_wasm","module":"core/matrix","opt":"O3"}`}
+{`SB1|1|msg-9f201|agent-orchestrator|agent-coder-1|DATA|tasks/codegen|${Date.now()}||{"action":"compile_wasm","module":"core/matrix","opt":"O3"}`}
                   </pre>
                 )}
               </div>
@@ -504,7 +503,7 @@ Please execute the requested task and reply in a fenced JSON code block:
               <div className="flex items-center gap-2">
                 <span className="font-mono text-micro text-ink-3 uppercase font-medium">Access Modes:</span>
                 <span className="px-2 py-0.5 rounded bg-inset border border-line font-mono text-micro font-semibold text-ink">
-                  CLI ($ asl loom)
+                  CLI ($ asl bus)
                 </span>
                 <span className="px-2 py-0.5 rounded bg-inset border border-line font-mono text-micro font-semibold text-ink">
                   MCP Server

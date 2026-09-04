@@ -85,40 +85,39 @@ Because the taxonomy is closed, failure handling is deterministic. An agent rece
 
 ---
 
-## 3. SkyLoom: The Session & Coordination Mesh
+## 3. SeamBus: The Session & Coordination Mesh
 
-Above the AgP frame layer sits **SkyLoom**, the session and routing layer that orchestrates agent lifecycles, capability negotiation, and context-isolated handoffs.
+Above the AgP frame layer sits **SeamBus** (also known as **Simba**), the high-frequency session and routing layer that orchestrates agent lifecycles, capability negotiation, and context-isolated task delegations.
 
 ```
 Coordinator (Alpha)                              Worker (Beta)
         │                                              │
         │── 1. Handshake Probe ───────────────────────>│
-        │   (? agent probe :proto "asl/1.0")           │
+        │   (? agent probe :proto "asl")               │
         │                                              │
         │<─ 2. Capability Ack ─────────────────────────│
         │   (! agent :ok (proto :name "asl"            │
         │                       :format :compact))     │
         │                                              │
-        │── 3. Context-Isolated Handoff ──────────────>│
-        │   (loom:handoff :id "h-99"                   │
-        │                 :scope "pkg/auth"            │
-        │                 :task "audit-jwt")           │
+        │── 3. Context-Isolated Delegation ───────────>│
+        │   (pass :id "h-99"                           │
+        │         :in "pkg/auth"                       │
+        │         :do "audit-jwt")                     │
         │                                              │
-        │<─ 4. Typed Yield ────────────────────────────│
-        │   (loom:yield :id "h-99"                     │
-        │               :status :ok                    │
-        │               :gate "pass"                   │
-        │               :diff "patch.diff")            │
+        │<─ 4. Typed Return ───────────────────────────│
+        │   (ret :id "h-99"                            │
+        │        :ok "patch.diff"                      │
+        │        :gate "pass")                         │
 ```
 
-### Context-Isolated Handoff (`loom:handoff`)
+### Context-Isolated Delegation (`pass`) & Return (`ret`)
 
 When a coordinator delegates work to a subagent, passing the coordinator's entire conversational history pollutes the worker's context.
 
-SkyLoom uses **hermetic handoffs**:
-1. **Scope Jailing:** The handoff frame specifies the explicit directory root (`:scope "pkg/auth"`) the subagent is permitted to read and modify. Filesystem access outside this path triggers an instant `:scope-violation`.
+SeamBus enforces **hermetic task handoffs**:
+1. **Scope Jailing:** The `pass` frame specifies the explicit directory root (`:in "pkg/auth"`) the subagent is permitted to read and modify. Filesystem access outside this path triggers an instant `:scope-violation`.
 2. **Minimal Contract Input:** The subagent receives only the target task definition, the compressed interface contracts of required modules, and explicit verification criteria.
-3. **Deterministic Yield (`loom:yield`):** Upon completion, the subagent returns a structured yield frame carrying execution status, verification gate verdicts, and artifact references.
+3. **Deterministic Return (`ret`):** Upon completion, the subagent returns a structured return frame carrying execution status (`:ok` or `:err`), verification gate verdicts, and artifact references.
 
 ---
 
@@ -128,7 +127,7 @@ To verify whether AgP prevents context decay, we simulated a sequential task del
 
 Each agent was required to receive an invariant configuration schema, apply a local transformation, and forward the state. We compared AgP against a standard JSON-RPC protocol and an unstructured Markdown chat protocol:
 
-| Metric | Natural Language Chat | JSON-RPC 2.0 | AgP / SkyLoom Mesh |
+| Metric | Natural Language Chat | JSON-RPC 2.0 | AgP / SeamBus Mesh |
 |---|---|---|---|
 | **Context Size after 10 Hops** | 38,400 tokens | 8,900 tokens | **1,850 tokens** |
 | **Token Reduction vs Chat** | Baseline (0.0%) | -76.8% | **-95.2%** |
@@ -146,4 +145,5 @@ In AgP, because each handoff is an immutable, typed S-expression validated again
 
 Autonomous agent swarms cannot scale on top of human conversational metaphors.
 
-By establishing strict sigil-headed S-expression frames, a closed error taxonomy, and context-isolated SkyLoom handoffs, AgentScript provides the missing systems substrate for multi-agent software engineering: **zero chatter, zero drift, and sub-millisecond coordination**.
+By establishing strict sigil-headed S-expression frames, a closed error taxonomy, and context-isolated SeamBus delegations (`pass` / `ret`), AgentScript provides the missing systems substrate for multi-agent software engineering: **zero chatter, zero drift, and sub-millisecond coordination**.
+

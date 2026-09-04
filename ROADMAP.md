@@ -65,7 +65,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | In-Memory WASI Runner | **working** (Phase 10) — pure TS zero-dependency in-memory WASI preview1 shim for browser and Node |
 | Developer Agent MCP Server | **working** (Phase 11) — stdlib-only JSON-RPC 2.0 MCP server with 78% interface compression |
 | Interactive Web Showcase | **working** (Phase 12) — Vite + React 19 + Tailwind technical showcase with live REPL, Quality Doctor, Topology Cockpit, Jailed Sandbox & SQL Studio |
-| SkyLoom Mesh & Handoff | **working** — `packages/asl-skyloom`, `asl/coord` nano-format wire default, zero-leak directory jailing, 83.4% token reduction |
+| SeamBus (Simba) Mesh & Delegation | **working** — `packages/asl-skyloom`, `asl/coord` nano-format wire default, zero-leak directory jailing, 83.4% token reduction |
 | Native ASL Quality Suite | **working** — `packages/asl-lint`, `asl lint` (anti-pattern/smell linter), `asl clone-check` (AST clone detector), `asl fix` (autonomous repair) |
 | Native ASL SQL Module | **working** — `packages/asl-sql`, cross-dialect query builder & parameterizer (Postgres, SQLite, MySQL, ClickHouse), DDL/DML generator |
 | Native LSP 3.17 Server | **working** — `tools/lsp.py`, `asl lsp`, stdio JSON-RPC 2.0, hover docs, jump-to-definition, virtual projections (@pcp:r-8d8e) |
@@ -313,7 +313,7 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
   outside the shared-core block and the divergence documented in `docs/ASN_SPEC.md`. PCP `l-a250`.
 * **The website publishes numbers with no gate behind them, which `DESIGN.md` §5 forbids.** A sweep
   of `web/src` finds `80%`, `0.038ms`, `0.05ms`, `78%`, `70%`, `68.4%`, `160%`, `97%` and others.
-  Two of them are real — `83.4%` is the SkyLoom handoff reduction and `78%` the MCP interface
+  Two of them are real — `83.4%` is the SeamBus delegation reduction and `78%` the MCP interface
   compression, both named in §2 above — and the rest trace to nothing. `bench/token_frames.py` and
   its lock file are the shape a published number has to take: a command anyone can re-run, and a
   gate that fails when the figure moves. **Not fixed here**: a parallel session is editing `web/`
