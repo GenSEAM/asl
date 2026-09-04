@@ -82,6 +82,18 @@
         (map-empty)
         imports))
 
+(df emit-module [(m a/ModuleNode)] -> String
+  :d "Emits a nested Rust module for a dependency."
+  (let [(modname (m/rust-mod-name (.-path m)))
+        (aliases (build-aliases-map (.-imports m)))
+        (body (emit-top-forms (.-defs m) aliases))]
+    (str "pub mod " modname " {\n"
+         "    #![allow(dead_code, unused_variables, unused_mut, unused_parens)]\n"
+         "    #[allow(unused_imports)]\n"
+         "    use super::rt;\n\n"
+         body
+         "\n}\n")))
+
 (df emit-top-forms [(defs (List a/TopForm)) (aliases (Map String String))] -> String
   :d "Emits all top forms declared in a list of TopForm."
   (let [(rendered-defs (map (fn [(top a/TopForm)] -> String
@@ -89,7 +101,7 @@
                                 ((a/top-schema s) (emit-defschema s))
                                 ((a/top-enum e) (emit-defenum e))
                                 ((a/top-defun d) (emit-defun d aliases))
-                                ((a/top-module m) (emit-top-forms (.-defs m) (build-aliases-map (.-imports m))))))
+                                ((a/top-module m) (emit-module m))))
                             defs))]
     (string-join rendered-defs "\n")))
 
