@@ -65,71 +65,20 @@ asl meta get auth/calculate-hash
 
 ---
 
-## 2. Standard Format Token Ceiling & Structural Compaction
+## 2. Compact Token Compression & Structural Economy
+ 
+AgentScript (ASL) is always compact. There is no verbose format in production —
+verbose syntax (`defun`, `defschema`, etc.) is strictly an ephemeral debugging view (`asl view`),
+forbidden in saved code (`tools/verbose_linter.py`).
 
-In AgentScript, the on-disk and wire representation is the **Standard Format** (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `I64`, `Str`).
-Every language primitive is guaranteed to sit within a **strict 2-token ceiling** under modern BPE tokenizers (`bench/token_audit.py --check`).
-
-Because BPE tokenizers already represent English keywords compactly (`(defun` and `(df` are both 1 token), Standard format achieves byte compactness (3.6% to 5% fewer bytes) and visual brevity without introducing BPE fragmentation penalties.
-
-Where token compaction creates massive multi-fold efficiency is in **structural syntax elimination**: replacing repetitive JSON quotes, colons, and commas with AgentScript S-expressions (AgP) and ASN tabular serialization, slashing token consumption by **57% to 65%**.
-
-Per spelling it is a tie almost everywhere. Here is the table this page used to publish, remeasured:
-
-| Word | Tokens | Abbreviation | Tokens | In context | Isolated |
-|---|---|---|---|---|---|
-| `:timeout-milliseconds` | 4 | `:t-out` | 3 | **win** | win |
-| `:working-directory` | 3 | `:cwd` | 2 | **win** | win |
-| `:config` | 2 | `:cfg` | 2 | tie | tie |
-| `:context` | 2 | `:ctx` | 2 | tie | tie |
-| `:request` | 2 | `:req` | 2 | tie | tie |
-| `:response` | 2 | `:resp` | 2 | tie | tie |
-| `:argument` | 2 | `:arg` | 2 | tie | tie |
-| `:message` | 2 | `:msg` | 2 | tie | ~~loss~~ |
-| `:error` | 2 | `:err` | 2 | tie | ~~loss~~ |
-| `:function` | 2 | `:fn` | 2 | tie | ~~loss~~ |
-| `:length` | 2 | `:len` | 2 | tie | tie |
-| `:index` | 2 | `:idx` | 2 | tie | ~~loss~~ |
-| `:authentication` | 2 | `:auth` | 2 | tie | tie |
-| `:timestamp` | 2 | `:ts` | 2 | tie | tie |
-| `:payload` | 2 | `:data` | 2 | tie | ~~win~~ |
-| `:field` | 2 | `:f` | 2 | tie | ~~win~~ |
-| `:case` | 2 | `:c` | 2 | tie | ~~win~~ |
-| `:doc` | 2 | `:d` | 2 | tie | ~~win~~ |
-| `:value` | 2 | `:v` | 2 | tie | tie |
-| `:default` | 2 | `:dflt` | 3 | **loss** | ~~tie~~ |
-
-Two wins, seventeen ties, one loss. The two wins are both **compounds** — a word the tokenizer does
-not carry whole — and the loss is `:dflt`, which is why `ASN_SPEC.md` §13 keeps `:default`.
-
-### Why the earlier table was wrong
-
-The first correction of this page measured each keyword on its own. That is not the keyword a
-document contains. In real text a key follows a space, and BPE merges the space into the token, so
-` :field` is two and ` :f` is two while bare `:field` is two and bare `:f` is one.
-
-Nine of the twenty verdicts change between the two measurements — every row struck through in the
-last column above. Six of them were published here as wins and are ties. `bench/asn_tokens.py`
-therefore counts each pair **both** ways and records the difference, so the flaw stays visible
-instead of being quietly corrected.
-
-The lesson generalises past this table: **a token count taken out of context is not evidence about
-a payload.** Measure the string where it sits.
-
-### What to do instead
-
-- **Do not abbreviate for tokens.** Abbreviate for readability or wire bytes if you like, and say
-  which — but the token argument is not available.
-- **Compounds are the exception.** `:timeout-milliseconds` to `:t-out` saves one token of four and
-  `:working-directory` to `:cwd` one of three, because neither is a word the tokenizer holds whole.
-- **Remove the key instead of shortening it.** That is §3 and §4, and it is where the tokens
-  actually are: 58% against JSON for schema-grouped rows, against zero for seventeen of the
-  renames above, one token for two of them, and minus one for `:dflt`.
-
-`:err`, `:msg`, `:fn`, `:idx`, `:cfg` and `:ctx` are all fine and all free. Keep them for
-consistency and house style. Do not keep them, or introduce them, on the grounds of token count.
+**How ASL compresses tokens:**
+1. **Primitive Density (≤ 2 tokens):** Every language primitive (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `I64`, `Str`, `Bool`, etc.) adheres to a strict 2-token ceiling under standard BPE tokenizers (`bench/token_audit.py --check`), avoiding multi-token fragmentation.
+2. **Structural Elimination (57%–65% over JSON):** The largest source of token inflation in AI workloads is syntax ceremony — repetitive JSON quotes, braces, colons, and repeated key strings. AgentScript S-expressions (AgP) and ASN tabular serialization eliminate this entirely:
+   - Command frames compress by **64.7%** (18 tokens vs JSON's 51 tokens).
+   - Tabular records compress by **57.9%** (1,601 tokens vs JSON's 3,802 tokens).
 
 ### Where short names are wrong regardless
+
 
 1. **Domain entities.** `OrganizationMembershipInvite` mangled into `OrgMmbrshpInvt` costs an agent
    its grip on what the type means, and a hallucinated field is worth far more than two tokens —

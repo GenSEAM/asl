@@ -4,27 +4,18 @@
 from `prelude/prelude.json`. This page is orientation; where the two differ, the specification wins
 and this page is the bug.
 
-AgentScript (ASL) is compact by default. The concise syntax (`df`, `dfs`, `dfe`, `mt`, `Str`, `I64`, `F64`)
-is simply **AgentScript (ASL)** — what the toolchain writes to disk, puts on the wire, and generates
-into agent-facing artifacts.
+AgentScript (ASL) is always compact. There is no verbose format in production —
+verbose syntax (`defun`, `defschema`, etc.) is strictly an ephemeral debugging and preview
+tool (`asl view`), completely forbidden in saved code (`tools/verbose_linter.py`).
 
-**ASL Verbose** is an alternate projection intended exclusively for human inspection and debugging.
-The tool `asl view` displays a module in its verbose spelling on screen without touching the file,
-and `asl transcode --to verbose` converts it when debugging. Both grammars produce the exact same AST
-from either spelling.
-
-**Token and Byte Efficiency.** Standard format guarantees that every single primitive declaration head,
-expression head, option keyword, and primitive type alias sits at or below a **strict 2-token ceiling**
-under BPE tokenizers (`bench/token_audit.py --check`), while saving 3.6% to 5% bytes on disk and wire.
-Modern BPE tokenizers encode single words compactly (`(defun` and `(df` are one token each),
-meaning Standard format achieves optimal visual brevity and disk efficiency without tokenizer fragmentation penalties.
-
-Where token compaction becomes massive is when Standard format syntax composes with AgentScript's
-structural wire frames (AgP) and tabular data serialization (ASN):
-- **Command Frames (AgP vs JSON):** 51 tokens down to 18 tokens (**-64.7% token reduction**, `bench/token_frames.py`).
-- **Tabular Records (ASN vs JSON):** 3,802 tokens down to 1,601 tokens (**-57.9% token reduction**, `bench/asn_tokens.py`).
-- **Standard Format Enforcement:** `tools/verbose_linter.py` ensures that all code saved in the repository
-remains strictly in the Standard format.
+**We compress tokens:**
+1. **Primitive Density (≤ 2 tokens):** Every language primitive sits at or below a strict 2-token
+   ceiling under BPE tokenizers (`bench/token_audit.py --check`), eliminating multi-token fragmentation.
+2. **Structural Compaction (57%–65% over JSON):** Removing syntax ceremony (quotes, braces,
+   commas, repeated key strings) through AgP wire frames and ASN tabular data yields massive
+   token reductions:
+   - **Command Frames (AgP vs JSON):** 51 tokens down to 18 tokens (**-64.7% token reduction**, `bench/token_frames.py`).
+   - **Tabular Records (ASN vs JSON):** 3,802 tokens down to 1,601 tokens (**-57.9% token reduction**, `bench/asn_tokens.py`).
 
 ## The spellings
 
