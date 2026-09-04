@@ -19,7 +19,7 @@ const metadataMap = {
     slug: 'why-llms-struggle-with-python-and-rust',
     category: 'Language Design',
     date: '2026-09-01',
-    author: 'ASL Engineering Team',
+    author: 'ASL Systems Group',
     readTime: '6 min read',
     excerpt: 'Why indentation and borrow-checked syntax cost LLMs 25% to 40% of their compute in repair loops, and what deterministic single-pass S-expressions solve.',
     tags: ['Grammars', 'LLM Autoregression', 'Syntax Repair Loop', 'S-Expressions']
@@ -37,7 +37,7 @@ const metadataMap = {
     slug: 'from-vibe-code-to-wasm-in-0-04ms',
     category: 'Runtime & Execution',
     date: '2026-09-02',
-    author: 'ASL Systems Group',
+    author: 'ASL WebAssembly Group',
     readTime: '5 min read',
     excerpt: 'Replacing heavy Docker containers and microVMs with zero-overhead in-memory WebAssembly sandboxes running test suites in 0.038ms.',
     tags: ['WebAssembly', 'WASI', 'MicroVMs', 'Sub-millisecond Sandboxing']
@@ -51,20 +51,20 @@ const metadataMap = {
     excerpt: 'Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs.',
     tags: ['Homoiconicity', 'Algebraic Types', 'Exhaustive Matching', 'Deterministic AST']
   },
-  '05-token-economy-and-nano-projection.md': {
-    slug: 'token-economy-and-nano-projection',
+  '05-token-economy-and-structural-compression.md': {
+    slug: 'token-economy-and-structural-compression',
     category: 'Token Optimization',
     date: '2026-09-03',
     author: 'ASL Systems & Compiler Group',
     readTime: '8 min read',
-    excerpt: 'The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how tabular serialization cuts prompt overhead by 65%.',
-    tags: ['Byte-Pair Encoding', 'Nano Projection', 'Tabular Serialization', 'Token Ceiling']
+    excerpt: 'The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how structural compaction cuts prompt overhead by 65%.',
+    tags: ['Byte-Pair Encoding', 'Structural Compaction', 'Tabular Serialization', 'Token Ceiling']
   },
   '06-inter-agent-protocols-and-wire-frames.md': {
     slug: 'inter-agent-protocols-and-wire-frames',
     category: 'Protocols & Mesh',
     date: '2026-09-04',
-    author: 'ASL Systems & Compiler Group',
+    author: 'ASL Systems & Protocol Group',
     readTime: '7 min read',
     excerpt: 'Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SkyLoom mesh buses, and zero-drift handoffs.',
     tags: ['SkyLoom', 'AgP Wire Protocol', 'Typed Frames', 'Conversational Mesh']
@@ -77,6 +77,42 @@ const metadataMap = {
     readTime: '9 min read',
     excerpt: 'The complete agent-native developer cockpit: sub-0.05ms LSP, AST structural clone linters, autonomous auto-fixers, and live visual observability.',
     tags: ['Language Server Protocol', 'AST Auto-Fixer', 'Observability', 'Sandboxing']
+  },
+  '08-multi-dimensional-observability-for-autonomous-systems.md': {
+    slug: 'multi-dimensional-observability-for-autonomous-systems',
+    category: 'Observability & Telemetry',
+    date: '2026-09-04',
+    author: 'ASL Systems & Observability Group',
+    readTime: '7 min read',
+    excerpt: 'How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and jailed capability traces.',
+    tags: ['Multi-Dimensional Observability', 'AST Topology', 'Token Telemetry', 'Capability Tracing']
+  },
+  '09-universal-cross-platform-glue-without-drift.md': {
+    slug: 'universal-cross-platform-glue-without-drift',
+    category: 'Cross-Platform Runtimes',
+    date: '2026-09-04',
+    author: 'ASL Systems & Compiler Group',
+    readTime: '8 min read',
+    excerpt: 'Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python.',
+    tags: ['Differential Verification', 'Multi-Backend', 'Cross-Platform Glue', 'Polyglot Parity']
+  },
+  '10-epistemic-grounding-and-anti-hallucination-firewalls.md': {
+    slug: 'epistemic-grounding-and-anti-hallucination-firewalls',
+    category: 'Safety & Grounding',
+    date: '2026-09-04',
+    author: 'ASL Systems & Safety Group',
+    readTime: '8 min read',
+    excerpt: 'Halting agent hallucinations at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing.',
+    tags: ['Epistemic Grounding', 'Anti-Hallucination', 'Closure Audit', 'Zero-Leak Jailing']
+  },
+  '11-zero-server-in-browser-agent-runtimes.md': {
+    slug: 'zero-server-in-browser-agent-runtimes',
+    category: 'Browser Technologies',
+    date: '2026-09-04',
+    author: 'ASL WebAssembly & Runtime Group',
+    readTime: '7 min read',
+    excerpt: 'Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs.',
+    tags: ['In-Browser Dev', 'WebAssembly', 'OPFS', 'Tiered Local SLMs', 'Offline-First']
   }
 };
 

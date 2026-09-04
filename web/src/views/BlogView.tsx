@@ -69,7 +69,7 @@ export const BlogView: React.FC = () => {
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-signal text-ground font-mono text-xs font-semibold hover:opacity-90 transition-opacity"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Browse All 7 Essays</span>
+            <span>Browse All {BLOG_POSTS.length} Essays</span>
           </button>
         </div>
       </main>

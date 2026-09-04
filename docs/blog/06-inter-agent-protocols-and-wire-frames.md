@@ -96,8 +96,8 @@ Coordinator (Alpha)                              Worker (Beta)
         │   (? agent probe :proto "asl/1.0")           │
         │                                              │
         │<─ 2. Capability Ack ─────────────────────────│
-        │   (! agent :ok (proto :v "asl/1.0"           │
-        │                       :mode :nano))          │
+        │   (! agent :ok (proto :name "asl"            │
+        │                       :format :compact))     │
         │                                              │
         │── 3. Context-Isolated Handoff ──────────────>│
         │   (loom:handoff :id "h-99"                   │

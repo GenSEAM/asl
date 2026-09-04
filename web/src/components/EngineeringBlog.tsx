@@ -89,7 +89,7 @@ export const EngineeringBlog: React.FC = () => {
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-line bg-surface hover:border-signal text-sm font-mono text-ink hover:text-signal transition-all shadow-sm group"
         >
           <BookOpen className="w-4 h-4 text-signal" />
-          <span>Explore All 7 Technical Essays in the Blog</span>
+          <span>Explore All {BLOG_POSTS.length} Technical Essays in the Blog</span>
           <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
         </button>
       </div>

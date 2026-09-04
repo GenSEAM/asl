@@ -51,9 +51,9 @@
     <priority>0.9</priority>
   </url>
 
-  <!-- Technical Essay 5: Token Economy & Nano Projection -->
+  <!-- Technical Essay 5: Token Economy & Structural Compression -->
   <url>
-    <loc>https://aslang.dev/blog/token-economy-and-nano-projection</loc>
+    <loc>https://aslang.dev/blog/token-economy-and-structural-compression</loc>
     <lastmod>2026-09-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
@@ -70,6 +70,38 @@
   <!-- Technical Essay 7: The Agent-Native Developer Cockpit -->
   <url>
     <loc>https://aslang.dev/blog/the-agent-native-developer-cockpit</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 8: Multi-Dimensional Observability for Autonomous Systems -->
+  <url>
+    <loc>https://aslang.dev/blog/multi-dimensional-observability-for-autonomous-systems</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 9: Universal Cross-Platform Glue Without Drift -->
+  <url>
+    <loc>https://aslang.dev/blog/universal-cross-platform-glue-without-drift</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 10: The Epistemic Grounding Firewall -->
+  <url>
+    <loc>https://aslang.dev/blog/epistemic-grounding-and-anti-hallucination-firewalls</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 11: Zero-Server In-Browser Agent Runtimes -->
+  <url>
+    <loc>https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</loc>
     <lastmod>2026-09-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
