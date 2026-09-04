@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl-toolcall",
+  "version": "0.1.0",
+  "description": "ASL S-Expression tool calling protocol, schema compressor, and zero-JSON dispatcher",
+  "entry": "src/protocol.asl",
+  "targets": {
+    "wasm": {"output": "dist/toolcall.wasm"},
+    "ts": {"output": "dist/toolcall.ts"},
+    "py": {"output": "dist/toolcall.py"}
+  }
+}
