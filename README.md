@@ -9,7 +9,7 @@
 [![Token Savings](https://img.shields.io/badge/wire%20frame-64.7%25%20smaller%20than%20JSON-4ade80.svg)](bench/token_frames.py)
 [![Syntax Errors](https://img.shields.io/badge/syntax%20retries-0-emerald.svg)](https://aslang.dev)
 [![LLM Context](https://img.shields.io/badge/LLM-llms.txt-blue.svg)](https://aslang.dev/llms.txt)
-[![Differential Targets](https://img.shields.io/badge/compiles%20to-Wasm%20%7C%20Rust%20%7C%20TS%20%7C%20Go%20%7C%20Py-purple.svg)](https://aslang.dev/ecosystem)
+[![Differential Targets](https://img.shields.io/badge/compiles%20to-Wasm%20%7C%20Rust%20%7C%20TS%20%7C%20Py-purple.svg)](https://aslang.dev/ecosystem)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-gray.svg)](LICENSE)
 
 **AgentScript** is the world's first programming language and structured wire substrate engineered from first principles for **Autonomous AI Agents, Swarms, and LLM Tooling**.
@@ -37,7 +37,7 @@ Every major programming language was designed for human typists sitting at keybo
 - ⚡ **In-Memory MicroVM**: sandboxed `wasm32-wasip1` runtime with capability-jailed I/O and no
   host directory traversal.
 - 🎯 **Differential Equivalence, Enforced**: one `.asl` source compiles to **WebAssembly, Rust,
-  TypeScript, Go and Python**, and a gate runs every corpus program on all of them plus a
+  TypeScript, and Python**, and a gate runs every corpus program on all of them plus a
   reference interpreter and fails on any disagreement in value, stdout or exit status.
 
 ---
@@ -48,9 +48,9 @@ You don't need to rewrite your entire project to reap the benefits. Adopt AgentS
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ 1. COMPACT AGENT DATA FORMAT (-80% Prompt Tokens)                       │
+│ 1. COMPACT AGENT DATA FORMAT (57%–65% Token Reduction)                  │
 │    Use it purely as a token-saving alternative to JSON/YAML for LLMs.   │
-│    Zero-dependency SDKs for Python, TypeScript, Rust, Go, and Wasm.     │
+│    Zero-dependency SDKs for Python, TypeScript, Rust, and Wasm.         │
 └────────────────────────────────────┬────────────────────────────────────┘
                                      │
                                      ▼
@@ -71,7 +71,7 @@ You don't need to rewrite your entire project to reap the benefits. Adopt AgentS
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ 4. FULL AGENTSCRIPT CORE LANGUAGE                                       │
 │    Write verified autonomous logic that compiles deterministically      │
-│    into Wasm, Rust, TypeScript, Go, and Python.                         │
+│    into Wasm, Rust, TypeScript, and Python.                             │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -144,7 +144,6 @@ asl test
 asl build --target wasm -o dist/agent.wasm
 asl build --target rust -o dist/agent.rs
 asl build --target ts   -o dist/agent.ts
-asl build --target go   -o dist/agent.go
 asl build --target py   -o dist/agent.py
 ```
 
@@ -173,7 +172,7 @@ asl search src/main.asl 'defun'
 | **`packages/asl-skyloom`** | **[A2A Swarm Protocol]** | Sub-millisecond in-memory mesh coordination & context snapshots |
 | **`packages/asl-vdom`** | **[UI & DOM Compactor]** | Compresses raw HTML/DOM into intent-first S-expressions (-78% tokens) |
 | **`packages/asl-mem`** | **[Vector Memory Matrix]** | Zero-server in-memory vector store running in 64KB Wasm (0.038ms recall) |
-| **`packages/asl-codec`** | **[Universal Codec]** | Multi-target serialization SDKs across TS, Python, Rust, Go, and Wasm |
+| **`packages/asl-codec`** | **[Universal Codec]** | Multi-target serialization SDKs across TS, Python, Rust, and Wasm |
 | **`packages/asl-lint`** | **[Quality Doctor]** | Architectural AST linting, structural clone detection, and autonomous `$ asl heal` |
 
 ---

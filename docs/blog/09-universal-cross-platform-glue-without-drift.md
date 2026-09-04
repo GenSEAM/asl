@@ -1,11 +1,11 @@
-# Universal Cross-Platform Glue: One Source Across WebAssembly, Rust, Go, TypeScript & Python
+# Universal Cross-Platform Glue: One Source Across WebAssembly, Rust, TypeScript & Python
 *By GenSEAM | September 2026*
 
 Modern enterprise architectures are polyglot by necessity. 
 
-High-frequency services and data engines are built in **Rust** or **Go** for latency and raw compute efficiency. Web frontends and interactive tools run in **TypeScript** and modern reactive frameworks. Machine learning data pipelines, evaluation harnesses, and orchestration scripts live in **Python**. Edge compute and secure client sandboxes execute in **WebAssembly**.
+High-frequency services and data engines are built in **Rust** for latency and raw compute efficiency. Web frontends and interactive tools run in **TypeScript** and modern reactive frameworks. Machine learning data pipelines, evaluation harnesses, and orchestration scripts live in **Python**. Edge compute and secure client sandboxes execute in **WebAssembly**.
 
-This polyglot reality creates the **Multi-Ecosystem Glue Tax**: engineering organizations spend thousands of engineering hours writing, debugging, and maintaining fragile "glue code" to keep business logic synchronized across five different programming languages.
+This polyglot reality creates the **Multi-Ecosystem Glue Tax**: engineering organizations spend thousands of engineering hours writing, debugging, and maintaining fragile "glue code" to keep business logic synchronized across different programming languages.
 
 ---
 
@@ -14,8 +14,8 @@ This polyglot reality creates the **Multi-Ecosystem Glue Tax**: engineering orga
 When the same core data structures or business validation rules are re-implemented across different language ecosystems, subtle semantic discrepancies inevitably arise:
 
 1. **Numeric Precision and Serialization Incompatibilities:** JavaScript's `Number` is an IEEE 754 double-precision float that loses integer precision beyond $2^{53} - 1$. Passing a 64-bit ID from a Rust microservice through a TypeScript API gateway frequently results in silent truncation.
-2. **Nullable and Optional Representation Disparities:** Python treats `None` as a singleton object; Go uses typed `nil` pointers with zero-value structs; Rust enforces `Option<T>` with strict ownership semantics; TypeScript allows both `undefined` and `null`. Serializing nested optionals between these ecosystems regularly causes runtime panics.
-3. **Validation and Parsing Inconsistencies:** A regular expression or string normalization rule that passes in Python 3.12 may behave differently in Go's `regexp` package (which uses RE2 and rejects backtracking) or JavaScript's V8 engine.
+2. **Nullable and Optional Representation Disparities:** Python treats `None` as a singleton object; Rust enforces `Option<T>` with strict ownership semantics; TypeScript allows both `undefined` and `null`. Serializing nested optionals between these ecosystems regularly causes runtime panics.
+3. **Validation and Parsing Inconsistencies:** String normalization and regex behavior varies subtly across Python, JavaScript V8, and native engines.
 
 The standard industry attempt to solve this—Protocol Buffers, OpenAPI schemas, or JSON Schema generators—only standardizes data transfer formats. They do not standardize **executable logic**. When algorithms, business rules, or state machines need to run identically across ecosystems, teams are forced to rewrite the logic in each target language.
 
@@ -25,16 +25,16 @@ The standard industry attempt to solve this—Protocol Buffers, OpenAPI schemas,
                                   │   Algorithm & Models   │
                                   └───────────┬────────────┘
                                               │
-                    ┌─────────────────────────┼─────────────────────────┐
-                    │                         │                         │
-                    ▼                         ▼                         ▼
-         ┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
-         │  Native Rust Crate  │   │   Native Go Module  │   │  TypeScript Library │
-         │  - Zero overhead    │   │  - Idiomatic structs│   │  - Strict TS types  │
-         │  - High throughput  │   │  - Cloud microserv. │   │  - Web frontend/Node│
-         └─────────────────────┘   └─────────────────────┘   └─────────────────────┘
-                    │                         │                         │
-                    └─────────────────────────┼─────────────────────────┘
+                    ┌─────────────────────────┴─────────────────────────┐
+                    │                                                   │
+                    ▼                                                   ▼
+         ┌─────────────────────┐                             ┌─────────────────────┐
+         │  Native Rust Crate  │                             │  TypeScript Library │
+         │  - Zero overhead    │                             │  - Strict TS types  │
+         │  - High throughput  │                             │  - Web frontend/Node│
+         └─────────────────────┘                             └─────────────────────┘
+                    │                                                   │
+                    └─────────────────────────┬─────────────────────────┘
                                               │
                     ┌─────────────────────────┴─────────────────────────┐
                     ▼                                                   ▼
@@ -47,7 +47,7 @@ The standard industry attempt to solve this—Protocol Buffers, OpenAPI schemas,
 
 ---
 
-## 2. One Source, Six Deterministic Backends
+## 2. One Source, Five Deterministic Backends
 
 AgentScript (ASL) was designed to act as the universal semantic substrate. Instead of writing custom bindings and manual translations, developers (and autonomous agents) author core logic in pure ASL:
 
@@ -92,7 +92,7 @@ Cross-compilation without rigorous verification is merely wishful thinking. Diff
 
 AgentScript enforces portability through a mandatory **Differential Test Gate (`backend/differential.py`)**:
 
-1. **Function-Level Differential Testing:** Takes pure ASL programs, executes identical test inputs across the Rust, Python, TypeScript, and Go runtimes, and asserts bit-for-bit return value equivalence.
+1. **Function-Level Differential Testing:** Takes pure ASL programs, executes identical test inputs across the Rust, Python, and TypeScript runtimes, and asserts bit-for-bit return value equivalence.
 2. **Program-Level I/O Differential Testing:** Compiles whole programs across native binaries and WebAssembly (`node:wasi`), capturing standard output, error codes, and filesystem mutations to guarantee byte-for-byte agreement.
 
 If an arithmetic operation behaves differently in Python than in Rust or WebAssembly, the gate halts immediately. Portability is treated as a formal compiler invariant, not an aspiration.
@@ -104,7 +104,7 @@ If an arithmetic operation behaves differently in Python than in Rust or WebAsse
 By adopting AgentScript as the shared logic and protocol layer across polyglot architectures:
 
 * **Zero Glue Code Overhead:** Teams no longer write hand-crafted C-FFI wrappers, SWIG layers, or redundant TypeScript types.
-* **Elimination of Cross-Stack Bugs:** Logic tested and verified in an agent's browser playground behaves identically when deployed to a high-throughput Go microservice or Python data worker.
+* **Elimination of Cross-Stack Bugs:** Logic tested and verified in an agent's browser playground behaves identically when deployed to a high-throughput Rust native service or Python data worker.
 * **Accelerated Multi-Agent Refactoring:** An autonomous agent can refactor an algorithmic module once in ASL, run local WebAssembly verification in 0.04ms, and deploy the verified update across the entire polyglot infrastructure.
 
 AgentScript transforms cross-platform development from an endless chore of manual translation into a unified, automated, and mathematically verified pipeline.

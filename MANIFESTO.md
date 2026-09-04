@@ -16,7 +16,7 @@ Every major language in production today was designed for human keyboards and vi
 
 When autonomous agents or vibe-coders attempt to build non-trivial software in these languages, they spend up to **40% of their compute and context budget** on repair loops: fixing syntax errors, resolving unclosed braces, or chasing borrow checker complaints.
 
-**ASL removes that entire friction layer.** It is an immutable, single-pass S-expression language with mathematical totality, explicit effect boundaries, and direct compilation to WebAssembly, TypeScript, Rust, Go, and Python.
+**ASL removes that entire friction layer.** It is an immutable, single-pass S-expression language with mathematical totality, explicit effect boundaries, and direct compilation to WebAssembly, TypeScript, Rust, and Python.
 
 ---
 
@@ -49,14 +49,14 @@ ASL is the single source of truth for application business logic:
                           │ (.asl / .agentscript)  │
                           └───────────┬────────────┘
                                       │
-        ┌──────────────┬──────────────┼──────────────┬──────────────┐
-        ▼              ▼              ▼              ▼              ▼
-   WebAssembly     TypeScript        Rust            Go           Python
-   (Browser/Edge) (React/Vue/UI)  (Native Core)  (Microservice)  (ML Pipelines)
+        ┌──────────────┬──────────────┴──────────────┬──────────────┐
+        ▼              ▼                             ▼              ▼
+   WebAssembly     TypeScript                       Rust          Python
+   (Browser/Edge) (React/Vue/UI)                 (Native Core)  (ML Pipelines)
 ```
 
 * **Frontend:** One core logic module drives React hooks, Vue composables, Angular services, and Svelte runes.
-* **Backend:** The same module compiles to Go microservices or Rust native binaries with **0 semantic drift**.
+* **Backend:** The same module compiles to Rust native binaries or WebAssembly sandboxes with **0 semantic drift**.
 
 ---
 
@@ -67,8 +67,8 @@ We do not trust compiler promises without empirical proof:
 * **74 Corpus & Semantic Fixtures** checked under dual Lark and Tree-sitter parsers.
 * **107/107 Standard Library Functions** verified with 100% closure audit.
 * **400 Monomorphism Probes** compiled simultaneously by `rustc` and `py_compile`.
-* **0 Disagreements** across 135 differential test cases executed simultaneously on Python, Rust, WebAssembly, TypeScript, Go, and Interpreter.
-* **534 Unit Tests** passing in CI.
+* **0 Disagreements** across 135 differential test cases executed simultaneously on Python, Rust, WebAssembly, TypeScript, and Interpreter.
+* **943 Unit Tests** passing in CI.
 
 ---
 

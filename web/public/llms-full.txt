@@ -3,7 +3,7 @@
 **Generated from `prelude/prelude.json`. Do not edit.**
 
 Version: 0.2 (Closed Formal Specification)
-Corpus Integrity: Verified across 6 differential backends (Wasm, Rust, TS, Go, Python, SQL)
+Corpus Integrity: Verified across 5 differential backends (Wasm, Rust, TS, Python, SQL)
 
 ## 1. Architectural Principles & Invariants
 
@@ -69,7 +69,7 @@ Uniform sequences of structured records are represented as a single header vecto
   [102 "Bob"   :agent 3]
   [103 "Carol" :peer 4]])
 ```
-This pattern eliminates repeated JSON key strings and YAML indentation tags, reducing token counts by 65-80%.
+This pattern eliminates repeated JSON key strings and YAML indentation tags, reducing token counts by 57–65%.
 
 ### 4.2 Shared Value Pools (:pool & :ref)
 Repeated strings, URLs, or schema identifiers are declared once in a shared constant pool and referenced by single-token index:
@@ -155,7 +155,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.add({0}, {1})`
   - Rust: `rt::add({0}, {1})`
   - TypeScript: `RT.add({0}, {1})`
-  - Go: `Add({0}, {1})`
 
 #### `(- a b)`
 - **Type**: `N N -> N`
@@ -164,7 +163,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.sub({0}, {1})`
   - Rust: `rt::sub({0}, {1})`
   - TypeScript: `RT.sub({0}, {1})`
-  - Go: `Sub({0}, {1})`
 
 #### `(* a b)`
 - **Type**: `N N -> N`
@@ -173,7 +171,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.mul({0}, {1})`
   - Rust: `rt::mul({0}, {1})`
   - TypeScript: `RT.mul({0}, {1})`
-  - Go: `Mul({0}, {1})`
 
 #### `(/ a b)`
 - **Type**: `N N -> N`
@@ -182,7 +179,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.div({0}, {1})`
   - Rust: `rt::div({0}, {1})`
   - TypeScript: `RT.div({0}, {1})`
-  - Go: `Div({0}, {1})`
 
 #### `(mod a b)`
 - **Type**: `N N -> N`
@@ -191,7 +187,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.mod({0}, {1})`
   - Rust: `rt::rem({0}, {1})`
   - TypeScript: `RT.rem({0}, {1})`
-  - Go: `Rem({0}, {1})`
 
 #### `(checked-div a b)`
 - **Type**: `N N -> (Option N)`
@@ -200,7 +195,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.checked_div({0}, {1})`
   - Rust: `rt::checked_div({0}, {1})`
   - TypeScript: `RT.checkedDiv({0}, {1})`
-  - Go: `CheckedDiv({0}, {1})`
 
 #### `(checked-mod a b)`
 - **Type**: `N N -> (Option N)`
@@ -209,7 +203,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.checked_mod({0}, {1})`
   - Rust: `rt::checked_rem({0}, {1})`
   - TypeScript: `RT.checkedRem({0}, {1})`
-  - Go: `CheckedRem({0}, {1})`
 
 #### `(neg a)`
 - **Type**: `N -> N`
@@ -218,7 +211,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.neg({0})`
   - Rust: `rt::neg({0})`
   - TypeScript: `RT.neg({0})`
-  - Go: `Neg({0})`
 
 #### `(abs a)`
 - **Type**: `N -> N`
@@ -227,7 +219,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.absolute({0})`
   - Rust: `rt::abs({0})`
   - TypeScript: `RT.absv({0})`
-  - Go: `Abs({0})`
 
 #### `(min a b)`
 - **Type**: `N N -> N`
@@ -236,7 +227,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.min_({0}, {1})`
   - Rust: `rt::min({0}, {1})`
   - TypeScript: `RT.min({0}, {1})`
-  - Go: `Min({0}, {1})`
 
 #### `(max a b)`
 - **Type**: `N N -> N`
@@ -245,7 +235,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.max_({0}, {1})`
   - Rust: `rt::max({0}, {1})`
   - TypeScript: `RT.max({0}, {1})`
-  - Go: `Max({0}, {1})`
 
 ### Comparison and logic
 
@@ -256,7 +245,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.eq({0}, {1})`
   - Rust: `({0} == {1})`
   - TypeScript: `RT.eq({0}, {1})`
-  - Go: `Eq({0}, {1})`
 
 #### `(!= a b)`
 - **Type**: `T T -> Bool`
@@ -265,7 +253,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `(not _agentscript.eq({0}, {1}))`
   - Rust: `({0} != {1})`
   - TypeScript: `(!RT.eq({0}, {1}))`
-  - Go: `(!Eq({0}, {1}))`
 
 #### `(< a b)`
 - **Type**: `T T -> Bool`
@@ -274,7 +261,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} < {1})`
   - Rust: `({0} < {1})`
   - TypeScript: `(RT.cmp({0}, {1}) < 0)`
-  - Go: `({0} < {1})`
 
 #### `(<= a b)`
 - **Type**: `T T -> Bool`
@@ -283,7 +269,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} <= {1})`
   - Rust: `({0} <= {1})`
   - TypeScript: `(RT.cmp({0}, {1}) <= 0)`
-  - Go: `({0} <= {1})`
 
 #### `(> a b)`
 - **Type**: `T T -> Bool`
@@ -292,7 +277,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} > {1})`
   - Rust: `({0} > {1})`
   - TypeScript: `(RT.cmp({0}, {1}) > 0)`
-  - Go: `({0} > {1})`
 
 #### `(>= a b)`
 - **Type**: `T T -> Bool`
@@ -301,7 +285,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} >= {1})`
   - Rust: `({0} >= {1})`
   - TypeScript: `(RT.cmp({0}, {1}) >= 0)`
-  - Go: `({0} >= {1})`
 
 #### `(and a b)`
 - **Type**: `Bool Bool -> Bool`
@@ -310,7 +293,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} and {1})`
   - Rust: `({0} && {1})`
   - TypeScript: `({0} && {1})`
-  - Go: `({0} && {1})`
 
 #### `(or a b)`
 - **Type**: `Bool Bool -> Bool`
@@ -319,7 +301,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} or {1})`
   - Rust: `({0} || {1})`
   - TypeScript: `({0} || {1})`
-  - Go: `({0} || {1})`
 
 #### `(not a)`
 - **Type**: `Bool -> Bool`
@@ -328,7 +309,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `(not {0})`
   - Rust: `(!{0})`
   - TypeScript: `(!{0})`
-  - Go: `(!{0})`
 
 ### String
 
@@ -339,7 +319,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `len({0})`
   - Rust: `rt::str_len(&{0})`
   - TypeScript: `RT.strLen({0})`
-  - Go: `StrLen({0})`
 
 #### `(string-empty? a)`
 - **Type**: `String -> Bool`
@@ -348,7 +327,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `(len({0}) == 0)`
   - Rust: `{0}.is_empty()`
   - TypeScript: `({0}.length === 0)`
-  - Go: `({0} == "")`
 
 #### `(str a b …)`
 - **Type**: `String... -> String`
@@ -357,7 +335,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `"".join([{*}])`
   - Rust: `rt::concat(&[{*}])`
   - TypeScript: `RT.concat([{*}])`
-  - Go: `Concat({*})`
 
 #### `(string-slice a b c)`
 - **Type**: `String Int64 Int64 -> (Option String)`
@@ -366,7 +343,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.str_slice({0}, {1}, {2})`
   - Rust: `rt::str_slice(&{0}, {1}, {2})`
   - TypeScript: `RT.strSlice({0}, {1}, {2})`
-  - Go: `StrSlice({0}, {1}, {2})`
 
 #### `(string-index-of a b)`
 - **Type**: `String String -> (Option Int64)`
@@ -375,7 +351,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.str_index_of({0}, {1})`
   - Rust: `rt::str_index_of(&{0}, &{1})`
   - TypeScript: `RT.strIndexOf({0}, {1})`
-  - Go: `StrIndexOf({0}, {1})`
 
 #### `(string-contains? a b)`
 - **Type**: `String String -> Bool`
@@ -384,7 +359,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({1} in {0})`
   - Rust: `{0}.contains(&{1})`
   - TypeScript: `{0}.includes({1})`
-  - Go: `StrContains({0}, {1})`
 
 #### `(string-starts-with? a b)`
 - **Type**: `String String -> Bool`
@@ -393,7 +367,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.startswith({1})`
   - Rust: `{0}.starts_with(&{1})`
   - TypeScript: `{0}.startsWith({1})`
-  - Go: `StrStartsWith({0}, {1})`
 
 #### `(string-ends-with? a b)`
 - **Type**: `String String -> Bool`
@@ -402,7 +375,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.endswith({1})`
   - Rust: `{0}.ends_with(&{1})`
   - TypeScript: `{0}.endsWith({1})`
-  - Go: `StrEndsWith({0}, {1})`
 
 #### `(string-split a b)`
 - **Type**: `String String -> (List String)`
@@ -411,7 +383,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.split({1})`
   - Rust: `rt::split(&{0}, &{1})`
   - TypeScript: `RT.split({0}, {1})`
-  - Go: `Split({0}, {1})`
 
 #### `(string-join a b)`
 - **Type**: `(List String) String -> String`
@@ -420,7 +391,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{1}.join({0})`
   - Rust: `{0}.join(&{1})`
   - TypeScript: `{0}.join({1})`
-  - Go: `StrJoin({0}, {1})`
 
 #### `(string-upper a)`
 - **Type**: `String -> String`
@@ -429,7 +399,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.upper()`
   - Rust: `{0}.to_uppercase()`
   - TypeScript: `{0}.toUpperCase()`
-  - Go: `StrUpper({0})`
 
 #### `(string-lower a)`
 - **Type**: `String -> String`
@@ -438,7 +407,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.lower()`
   - Rust: `{0}.to_lowercase()`
   - TypeScript: `{0}.toLowerCase()`
-  - Go: `StrLower({0})`
 
 #### `(string-trim a)`
 - **Type**: `String -> String`
@@ -447,7 +415,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.strip()`
   - Rust: `{0}.trim().to_string()`
   - TypeScript: `{0}.trim()`
-  - Go: `StrTrim({0})`
 
 #### `(string-reverse a)`
 - **Type**: `String -> String`
@@ -456,7 +423,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}[::-1]`
   - Rust: `rt::str_rev(&{0})`
   - TypeScript: `RT.strRev({0})`
-  - Go: `StrRev({0})`
 
 #### `(string-replace a b c)`
 - **Type**: `String String String -> String`
@@ -465,7 +431,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}.replace({1}, {2})`
   - Rust: `{0}.replace(&{1}, &{2})`
   - TypeScript: `RT.replace({0}, {1}, {2})`
-  - Go: `StrReplace({0}, {1}, {2})`
 
 #### `(string-chars a)`
 - **Type**: `String -> (List String)`
@@ -474,7 +439,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `list({0})`
   - Rust: `rt::chars(&{0})`
   - TypeScript: `RT.chars({0})`
-  - Go: `Chars({0})`
 
 #### `(string-from-int64 a)`
 - **Type**: `Int64 -> String`
@@ -483,7 +447,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `str({0})`
   - Rust: `rt::fmt_i64({0})`
   - TypeScript: `String({0})`
-  - Go: `FmtI64({0})`
 
 #### `(string-from-float64 a)`
 - **Type**: `Float64 -> String`
@@ -492,7 +455,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `repr(float({0}))`
   - Rust: `rt::fmt_f64({0})`
   - TypeScript: `RT.fmtF64({0})`
-  - Go: `FmtF64({0})`
 
 #### `(string-to-int64 a)`
 - **Type**: `String -> (Option Int64)`
@@ -501,7 +463,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.to_int({0})`
   - Rust: `rt::to_i64(&{0})`
   - TypeScript: `RT.toI64({0})`
-  - Go: `ToI64({0})`
 
 #### `(string-to-float64 a)`
 - **Type**: `String -> (Option Float64)`
@@ -510,7 +471,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.to_float({0})`
   - Rust: `rt::to_f64(&{0})`
   - TypeScript: `RT.toF64({0})`
-  - Go: `ToF64({0})`
 
 ### Numeric conversion
 
@@ -521,7 +481,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}`
   - Rust: `({0} as i64)`
   - TypeScript: `{0}`
-  - Go: `int64({0})`
 
 #### `(int64-to-int32 a)`
 - **Type**: `Int64 -> (Option Int32)`
@@ -530,7 +489,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.to_i32({0})`
   - Rust: `rt::to_i32({0})`
   - TypeScript: `RT.toI32({0})`
-  - Go: `ToI32({0})`
 
 #### `(int64-to-float64 a)`
 - **Type**: `Int64 -> Float64`
@@ -539,7 +497,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `float({0})`
   - Rust: `rt::i_to_f({0})`
   - TypeScript: `Number({0})`
-  - Go: `float64({0})`
 
 #### `(float64-to-int64 a)`
 - **Type**: `Float64 -> (Option Int64)`
@@ -548,7 +505,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.f_to_i({0})`
   - Rust: `rt::f_to_i({0})`
   - TypeScript: `RT.fToI({0})`
-  - Go: `FToI({0})`
 
 ### List
 
@@ -559,7 +515,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `[{*}]`
   - Rust: `vec![{*}]`
   - TypeScript: `[{*}]`
-  - Go: `ListOf({*})`
 
 #### `(list-empty? a)`
 - **Type**: `(List T) -> Bool`
@@ -568,7 +523,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `(len({0}) == 0)`
   - Rust: `{0}.is_empty()`
   - TypeScript: `({0}.length === 0)`
-  - Go: `(len({0}) == 0)`
 
 #### `(list-length a)`
 - **Type**: `(List T) -> Int64`
@@ -577,7 +531,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `len({0})`
   - Rust: `({0}.len() as i64)`
   - TypeScript: `BigInt({0}.length)`
-  - Go: `(int64(len({0})))`
 
 #### `(list-get a b)`
 - **Type**: `(List T) Int64 -> (Option T)`
@@ -586,7 +539,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.at({0}, {1})`
   - Rust: `rt::at(&{0}, {1})`
   - TypeScript: `RT.at({0}, {1})`
-  - Go: `At({0}, {1})`
 
 #### `(list-head a)`
 - **Type**: `(List T) -> (Option T)`
@@ -595,7 +547,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.at({0}, 0)`
   - Rust: `rt::at(&{0}, 0)`
   - TypeScript: `RT.at({0}, 0n)`
-  - Go: `At({0}, int64(0))`
 
 #### `(list-tail a)`
 - **Type**: `(List T) -> (Option (List T))`
@@ -604,7 +555,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.tail({0})`
   - Rust: `rt::tail(&{0})`
   - TypeScript: `RT.tail({0})`
-  - Go: `Tail({0})`
 
 #### `(list-cons a b)`
 - **Type**: `T (List T) -> (List T)`
@@ -613,7 +563,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `([{0}] + {1})`
   - Rust: `rt::cons({0}, {1})`
   - TypeScript: `[{0}, ...{1}]`
-  - Go: `Cons({0}, {1})`
 
 #### `(list-append a b)`
 - **Type**: `(List T) (List T) -> (List T)`
@@ -622,7 +571,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({0} + {1})`
   - Rust: `rt::append({0}, {1})`
   - TypeScript: `[...{0}, ...{1}]`
-  - Go: `Append({0}, {1})`
 
 #### `(list-reverse a)`
 - **Type**: `(List T) -> (List T)`
@@ -631,7 +579,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{0}[::-1]`
   - Rust: `rt::rev({0})`
   - TypeScript: `[...{0}].reverse()`
-  - Go: `Rev({0})`
 
 #### `(list-slice a b c)`
 - **Type**: `(List T) Int64 Int64 -> (Option (List T))`
@@ -640,7 +587,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.list_slice({0}, {1}, {2})`
   - Rust: `rt::list_slice(&{0}, {1}, {2})`
   - TypeScript: `RT.listSlice({0}, {1}, {2})`
-  - Go: `ListSlice({0}, {1}, {2})`
 
 #### `(list-contains? a b)`
 - **Type**: `(List T) T -> Bool`
@@ -649,7 +595,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.contains({0}, {1})`
   - Rust: `{0}.contains(&{1})`
   - TypeScript: `RT.contains({0}, {1})`
-  - Go: `Contains({0}, {1})`
 
 #### `(list-index-of a b)`
 - **Type**: `(List T) T -> (Option Int64)`
@@ -658,7 +603,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.index_of({0}, {1})`
   - Rust: `rt::index_of(&{0}, &{1})`
   - TypeScript: `RT.indexOf({0}, {1})`
-  - Go: `IndexOf({0}, {1})`
 
 #### `(list-sort a)`
 - **Type**: `(List T) -> (List T)`
@@ -667,7 +611,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `sorted({0}, key=_agentscript.order_key)`
   - Rust: `rt::sort({0})`
   - TypeScript: `RT.sort({0})`
-  - Go: `Sort({0})`
 
 #### `(list-sort-by a b)`
 - **Type**: `(fn [T] -> K) (List T) -> (List T)`
@@ -676,7 +619,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `sorted({1}, key=_agentscript.order_by({0}))`
   - Rust: `rt::sort_by({1}, {0})`
   - TypeScript: `RT.sortBy({0}, {1})`
-  - Go: `SortBy({0}, {1})`
 
 #### `(map a b)`
 - **Type**: `(fn [A] -> B) (List A) -> (List B)`
@@ -685,7 +627,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `[{0}(_x) for _x in {1}]`
   - Rust: `{1}.into_iter().map({0}).collect::<Vec<_>>()`
   - TypeScript: `{1}.map({0})`
-  - Go: `Map({0}, {1})`
 
 #### `(filter a b)`
 - **Type**: `(fn [T] -> Bool) (List T) -> (List T)`
@@ -694,7 +635,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `[_x for _x in {1} if {0}(_x)]`
   - Rust: `rt::filter({1}, {0})`
   - TypeScript: `{1}.filter({0})`
-  - Go: `Filter({0}, {1})`
 
 #### `(fold a b c)`
 - **Type**: `(fn [B A] -> B) B (List A) -> B`
@@ -703,7 +643,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.fold({0}, {1}, {2})`
   - Rust: `{2}.into_iter().fold({1}, {0})`
   - TypeScript: `RT.fold({0}, {1}, {2})`
-  - Go: `Fold({0}, {1}, {2})`
 
 #### `(range a b)`
 - **Type**: `Int64 Int64 -> (List Int64)`
@@ -712,7 +651,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `list(range({0}, {1}))`
   - Rust: `rt::range({0}, {1})`
   - TypeScript: `RT.range({0}, {1})`
-  - Go: `Range({0}, {1})`
 
 #### `(zip a b)`
 - **Type**: `(List A) (List B) -> (List (Pair A B))`
@@ -721,7 +659,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.zip_({0}, {1})`
   - Rust: `rt::zip({0}, {1})`
   - TypeScript: `RT.zip({0}, {1})`
-  - Go: `Zip({0}, {1})`
 
 #### `(list-sum a)`
 - **Type**: `(List N) -> N`
@@ -730,7 +667,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.sum_({0})`
   - Rust: `rt::sum({0})`
   - TypeScript: `RT.sum({0})`
-  - Go: `Sum({0})`
 
 #### `(list-min a)`
 - **Type**: `(List T) -> (Option T)`
@@ -739,7 +675,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.least({0})`
   - Rust: `rt::least(&{0})`
   - TypeScript: `RT.least({0})`
-  - Go: `Least({0})`
 
 #### `(list-max a)`
 - **Type**: `(List T) -> (Option T)`
@@ -748,7 +683,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.greatest({0})`
   - Rust: `rt::greatest(&{0})`
   - TypeScript: `RT.greatest({0})`
-  - Go: `Greatest({0})`
 
 ### Map
 
@@ -759,7 +693,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `{{}}`
   - Rust: `std::collections::BTreeMap::new()`
   - TypeScript: `RT.MAP_EMPTY`
-  - Go: `MAP_EMPTY`
 
 #### `(map-get a b)`
 - **Type**: `(Map K V) K -> (Option V)`
@@ -768,7 +701,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.m_get({0}, {1})`
   - Rust: `rt::m_get(&{0}, &{1})`
   - TypeScript: `RT.mGet({0}, {1})`
-  - Go: `MGet({0}, {1})`
 
 #### `(map-set a b c)`
 - **Type**: `(Map K V) K V -> (Map K V)`
@@ -777,7 +709,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.m_set({0}, {1}, {2})`
   - Rust: `rt::m_set({0}, {1}, {2})`
   - TypeScript: `RT.mSet({0}, {1}, {2})`
-  - Go: `MSet({0}, {1}, {2})`
 
 #### `(map-remove a b)`
 - **Type**: `(Map K V) K -> (Map K V)`
@@ -786,7 +717,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.m_del({0}, {1})`
   - Rust: `rt::m_del({0}, &{1})`
   - TypeScript: `RT.mDel({0}, {1})`
-  - Go: `MDel({0}, {1})`
 
 #### `(map-has? a b)`
 - **Type**: `(Map K V) K -> Bool`
@@ -795,7 +725,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `({1} in {0})`
   - Rust: `{0}.contains_key(&{1})`
   - TypeScript: `RT.mHas({0}, {1})`
-  - Go: `MHas({0}, {1})`
 
 #### `(map-size a)`
 - **Type**: `(Map K V) -> Int64`
@@ -804,7 +733,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `len({0})`
   - Rust: `({0}.len() as i64)`
   - TypeScript: `RT.mSize({0})`
-  - Go: `(int64(len({0})))`
 
 #### `(map-keys a)`
 - **Type**: `(Map K V) -> (List K)`
@@ -813,7 +741,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `sorted({0}.keys())`
   - Rust: `{0}.keys().cloned().collect::<Vec<_>>()`
   - TypeScript: `RT.mKeys({0})`
-  - Go: `MKeys({0})`
 
 #### `(map-values a)`
 - **Type**: `(Map K V) -> (List V)`
@@ -822,7 +749,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `[{0}[_k] for _k in sorted({0})]`
   - Rust: `{0}.values().cloned().collect::<Vec<_>>()`
   - TypeScript: `RT.mValues({0})`
-  - Go: `MValues({0})`
 
 #### `(map-pairs a)`
 - **Type**: `(Map K V) -> (List (Pair K V))`
@@ -831,7 +757,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.m_pairs({0})`
   - Rust: `rt::m_pairs(&{0})`
   - TypeScript: `RT.mPairs({0})`
-  - Go: `MPairs({0})`
 
 #### `(map-from-pairs a)`
 - **Type**: `(List (Pair K V)) -> (Map K V)`
@@ -840,7 +765,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.m_from({0})`
   - Rust: `rt::m_from({0})`
   - TypeScript: `RT.mFrom({0})`
-  - Go: `MFrom({0})`
 
 ### Option, Result, Pair
 
@@ -851,7 +775,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.some({0})`
   - Rust: `Some({0})`
   - TypeScript: `RT.some({0})`
-  - Go: `Some({0})`
 
 #### `(none)`
 - **Type**: `-> (Option T)`
@@ -860,7 +783,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.NONE`
   - Rust: `None`
   - TypeScript: `RT.NONE`
-  - Go: `None[T]()`
 
 #### `(ok a)`
 - **Type**: `T -> (Result T E)`
@@ -869,7 +791,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.ok({0})`
   - Rust: `Ok({0})`
   - TypeScript: `RT.ok({0})`
-  - Go: `Ok({0})`
 
 #### `(err a)`
 - **Type**: `E -> (Result T E)`
@@ -878,7 +799,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.err({0})`
   - Rust: `Err({0})`
   - TypeScript: `RT.err({0})`
-  - Go: `Err({0})`
 
 #### `(is-some? a)`
 - **Type**: `(Option T) -> Bool`
@@ -887,7 +807,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.is_some({0})`
   - Rust: `{0}.is_some()`
   - TypeScript: `({0}.tag === "some")`
-  - Go: `({0}.Present)`
 
 #### `(is-none? a)`
 - **Type**: `(Option T) -> Bool`
@@ -896,7 +815,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `(not _agentscript.is_some({0}))`
   - Rust: `{0}.is_none()`
   - TypeScript: `({0}.tag === "none")`
-  - Go: `(!{0}.Present)`
 
 #### `(is-ok? a)`
 - **Type**: `(Result T E) -> Bool`
@@ -905,7 +823,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.is_ok({0})`
   - Rust: `{0}.is_ok()`
   - TypeScript: `({0}.tag === "ok")`
-  - Go: `({0}.IsOk)`
 
 #### `(is-err? a)`
 - **Type**: `(Result T E) -> Bool`
@@ -914,7 +831,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `(not _agentscript.is_ok({0}))`
   - Rust: `{0}.is_err()`
   - TypeScript: `({0}.tag === "err")`
-  - Go: `(!{0}.IsOk)`
 
 #### `(option-or a b)`
 - **Type**: `(Option T) T -> T`
@@ -923,7 +839,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.opt_or({0}, {1})`
   - Rust: `{0}.unwrap_or({1})`
   - TypeScript: `RT.optOr({0}, {1})`
-  - Go: `OptOr({0}, {1})`
 
 #### `(result-or a b)`
 - **Type**: `(Result T E) T -> T`
@@ -932,7 +847,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.res_or({0}, {1})`
   - Rust: `{0}.unwrap_or({1})`
   - TypeScript: `RT.resOr({0}, {1})`
-  - Go: `ResOr({0}, {1})`
 
 #### `(option-map a b)`
 - **Type**: `(fn [A] -> B) (Option A) -> (Option B)`
@@ -941,7 +855,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.opt_map({0}, {1})`
   - Rust: `{1}.map({0})`
   - TypeScript: `RT.optMap({0}, {1})`
-  - Go: `OptMap({0}, {1})`
 
 #### `(result-map a b)`
 - **Type**: `(fn [A] -> B) (Result A E) -> (Result B E)`
@@ -950,7 +863,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.res_map({0}, {1})`
   - Rust: `{1}.map({0})`
   - TypeScript: `RT.resMap({0}, {1})`
-  - Go: `ResMap({0}, {1})`
 
 #### `(result-map-err a b)`
 - **Type**: `(fn [E] -> F) (Result T E) -> (Result T F)`
@@ -959,7 +871,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.res_map_err({0}, {1})`
   - Rust: `{1}.map_err({0})`
   - TypeScript: `RT.resMapErr({0}, {1})`
-  - Go: `ResMapErr({0}, {1})`
 
 #### `(option-to-result a b)`
 - **Type**: `(Option T) E -> (Result T E)`
@@ -968,7 +879,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.opt_to_res({0}, {1})`
   - Rust: `{0}.ok_or({1})`
   - TypeScript: `RT.optToRes({0}, {1})`
-  - Go: `OptToRes({0}, {1})`
 
 #### `(result-to-option a)`
 - **Type**: `(Result T E) -> (Option T)`
@@ -977,7 +887,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.res_to_opt({0})`
   - Rust: `{0}.ok()`
   - TypeScript: `RT.resToOpt({0})`
-  - Go: `ResToOpt({0})`
 
 #### `(pair a b)`
 - **Type**: `A B -> (Pair A B)`
@@ -986,7 +895,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.pair({0}, {1})`
   - Rust: `({0}, {1})`
   - TypeScript: `new RT.ASPair({0}, {1})`
-  - Go: `MkPair({0}, {1})`
 
 ### I/O
 
@@ -997,7 +905,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `("not-found",)`
   - Rust: `rt::IoError::NotFound`
   - TypeScript: `RT.notFound()`
-  - Go: `NotFound()`
 
 #### `(permission-denied)`
 - **Type**: `-> IoError`
@@ -1006,7 +913,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `("permission-denied",)`
   - Rust: `rt::IoError::PermissionDenied`
   - TypeScript: `RT.permissionDenied()`
-  - Go: `PermissionDenied()`
 
 #### `(already-exists)`
 - **Type**: `-> IoError`
@@ -1015,7 +921,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `("already-exists",)`
   - Rust: `rt::IoError::AlreadyExists`
   - TypeScript: `RT.alreadyExists()`
-  - Go: `AlreadyExists()`
 
 #### `(invalid-path)`
 - **Type**: `-> IoError`
@@ -1024,7 +929,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `("invalid-path",)`
   - Rust: `rt::IoError::InvalidPath`
   - TypeScript: `RT.invalidPath()`
-  - Go: `InvalidPath()`
 
 #### `(interrupted)`
 - **Type**: `-> IoError`
@@ -1033,7 +937,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `("interrupted",)`
   - Rust: `rt::IoError::Interrupted`
   - TypeScript: `RT.interrupted()`
-  - Go: `Interrupted()`
 
 #### `(other)`
 - **Type**: `-> IoError`
@@ -1042,7 +945,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `("other",)`
   - Rust: `rt::IoError::Other`
   - TypeScript: `RT.other()`
-  - Go: `Other()`
 
 #### `(read-line)`
 - **Type**: `-> (Result (Option String) IoError)`
@@ -1051,7 +953,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.read_line()`
   - Rust: `rt::read_line()`
   - TypeScript: `RT.readLine()`
-  - Go: `ReadLine()`
 
 #### `(read-all)`
 - **Type**: `-> (Result String IoError)`
@@ -1060,7 +961,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.read_all()`
   - Rust: `rt::read_all()`
   - TypeScript: `RT.readAll()`
-  - Go: `ReadAll()`
 
 #### `(print a)`
 - **Type**: `String -> (Result Unit IoError)`
@@ -1069,7 +969,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.print_out({0})`
   - Rust: `rt::print_out(&{0})`
   - TypeScript: `RT.print_({0})`
-  - Go: `PrintOut({0})`
 
 #### `(println a)`
 - **Type**: `String -> (Result Unit IoError)`
@@ -1078,7 +977,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.println({0})`
   - Rust: `rt::println(&{0})`
   - TypeScript: `RT.println({0})`
-  - Go: `Println({0})`
 
 #### `(eprintln a)`
 - **Type**: `String -> (Result Unit IoError)`
@@ -1087,7 +985,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.eprintln({0})`
   - Rust: `rt::eprintln(&{0})`
   - TypeScript: `RT.eprintln({0})`
-  - Go: `Eprintln({0})`
 
 #### `(file-read a)`
 - **Type**: `String -> (Result String IoError)`
@@ -1096,7 +993,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.file_read({0})`
   - Rust: `rt::file_read(&{0})`
   - TypeScript: `RT.fileRead({0})`
-  - Go: `FileRead({0})`
 
 #### `(file-write a b)`
 - **Type**: `String String -> (Result Unit IoError)`
@@ -1105,7 +1001,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.file_write({0}, {1})`
   - Rust: `rt::file_write(&{0}, &{1})`
   - TypeScript: `RT.fileWrite({0}, {1})`
-  - Go: `FileWrite({0}, {1})`
 
 #### `(file-append a b)`
 - **Type**: `String String -> (Result Unit IoError)`
@@ -1114,7 +1009,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.file_append({0}, {1})`
   - Rust: `rt::file_append(&{0}, &{1})`
   - TypeScript: `RT.fileAppend({0}, {1})`
-  - Go: `FileAppend({0}, {1})`
 
 #### `(file-exists? a)`
 - **Type**: `String -> (Result Bool IoError)`
@@ -1123,7 +1017,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
   - Python: `_agentscript.file_exists({0})`
   - Rust: `rt::file_exists(&{0})`
   - TypeScript: `RT.ok(RT.fileExists({0}))`
-  - Go: `FileExistsRes({0})`
 
 ## 8. CLI Toolchain & Model Context Protocol
 
@@ -1131,7 +1024,7 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
 - `asl fmt <file.asl>` — Canonical AST formatter.
 - `asl lint --fix <file.asl>` — Smell detector and structural AST auto-repair engine.
 - `asl check <file.asl>` — Typechecker and semantic gate.
-- `asl transcode <file.asl> --to nano|verbose` — Projection transcoder.
+- `asl transcode <file.asl> --to verbose` — Projection transcoder (standard compact to verbose preview).
 - `asl topo` — Module dependency DAG and circularity auditor.
 - `asl mcp` — Model Context Protocol server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`.
 

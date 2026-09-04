@@ -7,7 +7,7 @@ description: AgentScript (ASL) reference — S-expression syntax, the closed voc
 
 **Generated from `prelude/prelude.json`. Do not edit.**
 
-An S-expression language for autonomous AI agents: balanced delimiters, whitespace-insensitive, closed 107-builtin vocabulary, and a static checker. One source transpiles to Python, Rust, TypeScript, Go, WebAssembly and native runner isolate.
+An S-expression language for autonomous AI agents: balanced delimiters, whitespace-insensitive, closed 107-builtin vocabulary, and a static checker. One source transpiles to Python, Rust, TypeScript, WebAssembly and native runner isolate.
 
 ## Toolchain & CLI Commands
 

@@ -56,7 +56,7 @@ export const Hero: React.FC = () => {
 
             {/* Sub-proposition */}
             <p className="text-lead text-ink-2 max-w-prose leading-relaxed">
-              Every existing language was designed for human typists with fragile indentation. AgentScript is engineered from first principles for autonomous models: single-pass balanced S-expressions, zero syntax repair loops, 80% token savings, and verified multi-target compilation into Wasm, Rust, TypeScript, Go, Python, and SQL.
+              Every existing language was designed for human typists with fragile indentation. AgentScript is engineered from first principles for autonomous models: single-pass balanced S-expressions, zero syntax repair loops, 57%–65% token savings over JSON, and verified multi-target compilation into Wasm, Rust, TypeScript, and Python.
             </p>
 
             {/* Prominent Agent Specification Links right in Hero */}
@@ -105,7 +105,7 @@ export const Hero: React.FC = () => {
                     Token & Time Economy
                   </h3>
                   <p className="text-meta text-ink-3 mt-1 leading-relaxed">
-                    Saves up to 80% prompt tokens compared to verbose JSON/YAML. Frees model attention budget for reasoning.
+                    57%–65% token compaction over verbose JSON/YAML, with a strict ≤ 2-token primitive ceiling.
                   </p>
                 </div>
               </div>
@@ -125,7 +125,7 @@ export const Hero: React.FC = () => {
                     Differential Verification
                   </h3>
                   <p className="text-meta text-ink-3 mt-1 leading-relaxed">
-                    Single source compiles with verified equivalence across Wasm, Rust, TypeScript, Go, Python, and SQL.
+                    Single source compiles with verified equivalence across Wasm, Rust, TypeScript, and Python.
                   </p>
                 </div>
               </div>
@@ -186,7 +186,7 @@ export const Hero: React.FC = () => {
               <div className="mt-6 pt-5 border-t border-line/60 grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-2xl bg-inset/70 border border-line/60">
                   <span className="font-mono text-micro text-ink-3 uppercase block">Token Reduction</span>
-                  <span className="text-lg font-bold text-signal font-mono">-80% Bloat</span>
+                  <span className="text-lg font-bold text-signal font-mono">57%–65%</span>
                 </div>
                 <div className="p-3 rounded-2xl bg-inset/70 border border-line/60">
                   <span className="font-mono text-micro text-ink-3 uppercase block">Syntax Errors</span>

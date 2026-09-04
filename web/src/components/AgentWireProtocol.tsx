@@ -12,7 +12,7 @@ const protocolStages = [
   {
     step: '02',
     title: 'ASN Wire Frames',
-    desc: 'Replaces conversational English with compact S-expressions. -80% tokens.',
+    desc: 'Replaces conversational English with compact S-expressions. 57%–65% token compaction.',
     tag: 'Compact',
   },
   {
@@ -36,7 +36,7 @@ export const AgentWireProtocol: React.FC = () => (
       index="04"
       eyebrow="Agent-to-Agent Mesh Protocol"
       title="Machines Shouldn't Chat Like Humans."
-      lead="When autonomous agents talk to each other in conversational English, you burn 80% of your token budget on polite greetings, repetitive prompts, and JSON parse failures. AgentScript Wire Frames replace conversational chat with instant, typed machine frames."
+      lead="When autonomous agents talk to each other in conversational English, context windows are wasted on polite greetings, repetitive prompts, and JSON parse failures. AgentScript Wire Frames replace conversational chat with instant, typed machine frames."
       align="center"
     />
 

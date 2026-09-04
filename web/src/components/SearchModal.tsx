@@ -33,7 +33,7 @@ const ITEMS: SearchResult[] = [
     id: '3',
     category: 'toolchain',
     title: 'Multi-Runtime Ecosystem',
-    desc: 'Wasm, Rust, TypeScript, Go, Python, and SQL cross-compilation.',
+    desc: 'Wasm, Rust, TypeScript, Python, and SQL cross-compilation.',
     href: '/ecosystem',
     icon: Cpu,
   },

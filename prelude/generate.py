@@ -329,7 +329,7 @@ def llms(for_web: bool) -> str:
         "",
         "An S-expression language for autonomous AI agents: balanced delimiters, whitespace-insensitive, "
         "closed 107-builtin vocabulary, and a static checker. One source transpiles to Python, Rust, "
-        "TypeScript, Go, WebAssembly and native runner isolate.",
+        "TypeScript, WebAssembly and native runner isolate.",
         "",
         "## Toolchain & CLI Commands",
         "",
@@ -425,7 +425,7 @@ def llms_full(for_web: bool) -> str:
         "**Generated from `prelude/prelude.json`. Do not edit.**",
         "",
         f"Version: {p['version']} (Closed Formal Specification)",
-        "Corpus Integrity: Verified across 6 differential backends (Wasm, Rust, TS, Go, Python, SQL)",
+        "Corpus Integrity: Verified across 5 differential backends (Wasm, Rust, TS, Python, SQL)",
         "",
         "## 1. Architectural Principles & Invariants",
         "",
@@ -491,7 +491,7 @@ def llms_full(for_web: bool) -> str:
         '  [102 "Bob"   :agent 3]',
         '  [103 "Carol" :peer 4]])',
         "```",
-        "This pattern eliminates repeated JSON key strings and YAML indentation tags, reducing token counts by 65-80%.",
+        "This pattern eliminates repeated JSON key strings and YAML indentation tags, reducing token counts by 57–65%.",
         "",
         "### 4.2 Shared Value Pools (:pool & :ref)",
         "Repeated strings, URLs, or schema identifiers are declared once in a shared constant pool and referenced by single-token index:",
@@ -581,7 +581,6 @@ def llms_full(for_web: bool) -> str:
             lines.append(f"  - Python: `{b.get('py', '')}`")
             lines.append(f"  - Rust: `{b.get('rs', '')}`")
             lines.append(f"  - TypeScript: `{b.get('ts', '')}`")
-            lines.append(f"  - Go: `{b.get('go', '')}`")
             lines.append("")
 
     lines += [
@@ -591,7 +590,7 @@ def llms_full(for_web: bool) -> str:
         "- `asl fmt <file.asl>` — Canonical AST formatter.",
         "- `asl lint --fix <file.asl>` — Smell detector and structural AST auto-repair engine.",
         "- `asl check <file.asl>` — Typechecker and semantic gate.",
-        "- `asl transcode <file.asl> --to nano|verbose` — Projection transcoder.",
+        "- `asl transcode <file.asl> --to verbose` — Projection transcoder (standard compact to verbose preview).",
         "- `asl topo` — Module dependency DAG and circularity auditor.",
         "- `asl mcp` — Model Context Protocol server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`.",
         "",

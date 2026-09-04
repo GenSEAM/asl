@@ -14,11 +14,11 @@ const MILESTONES: Milestone[] = [
   {
     status: 'completed',
     tag: 'v1.0-Core',
-    title: 'Formal Grammar & 6 Differential Backends',
-    desc: 'Establish closed, deterministic S-expression language with 107 safe pure builtins and 6 differential compilation targets.',
+    title: 'Formal Grammar & Differential Backends',
+    desc: 'Establish closed, deterministic S-expression language with 107 safe pure builtins and differential compilation targets.',
     items: [
       'Single-pass LL(1) balanced S-expression parser',
-      'Differential verification gates (Python, Rust, Wasm, Go, TypeScript)',
+      'Differential verification gates (Python, Rust, Wasm, TypeScript)',
       'Cross-backend IoError & numeric parity testing',
       'Compact coordinate protocol (asl/coord)',
     ],

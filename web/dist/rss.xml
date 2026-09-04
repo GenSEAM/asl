@@ -5,7 +5,7 @@
     <link>https://aslang.dev/blog</link>
     <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
     <language>en-us</language>
-    <lastBuildDate>Fri, 04 Sep 2026 20:42:36 GMT</lastBuildDate>
+    <lastBuildDate>Fri, 04 Sep 2026 20:54:40 GMT</lastBuildDate>
     <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Sub-Millisecond Vector Recall &amp; Git-Native Memory Matrices for Autonomous Agents</title>
@@ -44,7 +44,7 @@
       <description>Halting agent hallucinations at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing.</description>
     </item>
     <item>
-      <title>Universal Cross-Platform Glue: One Source Across WebAssembly, Rust, Go, TypeScript &amp; Python</title>
+      <title>Universal Cross-Platform Glue: One Source Across WebAssembly, Rust, TypeScript &amp; Python</title>
       <link>https://aslang.dev/blog/universal-cross-platform-glue-without-drift</link>
       <guid isPermaLink="true">https://aslang.dev/blog/universal-cross-platform-glue-without-drift</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>

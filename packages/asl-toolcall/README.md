@@ -4,7 +4,7 @@ ASL S-Expression tool calling protocol, schema compressor, and zero-JSON dispatc
 
 ## Why ASL Tool Calling?
 
-Standard LLM tool calling forces large JSON Schema definitions into system prompts and emits verbose JSON arguments `{"tool": "search", "parameters": {"query": "...", "limit": 5}}`. For agentic loops, this wastes 70–80% of tokens purely on JSON braces, quotes, and duplicated schema overhead.
+Standard LLM tool calling forces large JSON Schema definitions into system prompts and emits verbose JSON arguments `{"tool": "search", "parameters": {"query": "...", "limit": 5}}`. For agentic loops, this wastes 57%–65% of tokens purely on JSON braces, quotes, and duplicated schema overhead.
 
 `asl-toolcall` replaces JSON tool calls with native AgentScript S-expressions:
 
