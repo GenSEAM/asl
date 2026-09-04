@@ -14,8 +14,8 @@
 
 (df is-ident? [(s String)] -> Bool
   :d "True if string represents a simple variable identifier suitable for cloning."
-  (let [(len (string-length s))]
-    (if (<= len 0)
+  (let [(s-len (string-length s))]
+    (if (<= s-len 0)
         false
         (let [(first (slice-str-or s 0 1 ""))]
           (and (not (= first "\""))
@@ -141,15 +141,15 @@
 
 (df emit-body-seq [(body (List rd/SExpr)) (aliases (Map String String))] -> String
   :d "Emits a sequence of body expressions."
-  (let [(len (list-length body))]
-    (if (<= len 0)
+  (let [(body-len (list-length body))]
+    (if (<= body-len 0)
         "()"
-        (if (= len 1)
+        (if (= body-len 1)
             (emit-expr (option-or (list-get body 0) (rd/sexpr-atom "()")) aliases)
             (let [(stmts (map (fn [(e rd/SExpr)] -> String
                                 (str (emit-expr e aliases) "; "))
                               body))
-                  (last-idx (- len 1))
+                  (last-idx (- body-len 1))
                   (last-expr (emit-expr (option-or (list-get body last-idx) (rd/sexpr-atom "()")) aliases))
                   (prior-stmts (list-slice stmts 0 last-idx))]
               (mt prior-stmts
@@ -256,8 +256,8 @@
   :d "Emits struct constructor initialization: (Record :f1 v1 :f2 v2 ...)."
   (let [(rec-name (nth-atom items 0))
         (clean-rec (m/pascal-ident rec-name))
-        (len (list-length items))]
-    (let [(inits (range 0 (/ (- len 1) 2)))
+        (items-len (list-length items))]
+    (let [(inits (range 0 (/ (- items-len 1) 2)))
           (field-strs (map (fn [(idx Int64)] -> String
                              (let [(k-pos (+ 1 (* idx 2)))
                                    (v-pos (+ 2 (* idx 2)))
