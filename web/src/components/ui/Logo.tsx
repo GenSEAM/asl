@@ -62,7 +62,7 @@ export const ChameleonSchematic: React.FC<{
   className?: string;
   strokeWidth?: number;
   glow?: boolean;
-}> = ({ className = 'w-48 h-48', strokeWidth = 2.4, glow = true }) => (
+}> = ({ className = 'w-48 h-48', strokeWidth = 2.0, glow = false }) => (
   <svg
     viewBox="0 0 120 140"
     className={className}
@@ -73,9 +73,9 @@ export const ChameleonSchematic: React.FC<{
   >
     <defs>
       <linearGradient id="chameleonLineGrad" x1="20%" y1="0%" x2="80%" y2="100%">
-        <stop offset="0%" stopColor="rgb(var(--signal-soft))" />
-        <stop offset="70%" stopColor="rgb(var(--signal))" />
-        <stop offset="100%" stopColor="#9333ea" />
+        <stop offset="0%" stopColor="#d8b4fe" />
+        <stop offset="50%" stopColor="#c084fc" />
+        <stop offset="100%" stopColor="#818cf8" />
       </linearGradient>
       {glow && (
         <filter id="chameleonAmbientGlow" x="-30%" y="-30%" width="160%" height="160%">
@@ -87,20 +87,14 @@ export const ChameleonSchematic: React.FC<{
 
     <g filter={glow ? 'url(#chameleonAmbientGlow)' : undefined}>
       {/* 
-        Main Body & Spine Curve:
-        Forehead curves up to crest (crest divider removed for clean continuity),
-        smooth arch down the spine into the inward-curling spiral tail.
+        Head Crest & Snout Profile:
+        Starts at apex of crest, curves down brow/snout, around the mouth to throat.
       */}
       <path
-        d="M 68 20 
-           C 62 13, 56 12, 53 14 
-           C 49 16, 49 22, 53 25
-           C 35 28, 16 46, 12 70 
-           C 8 95, 18 116, 38 122 
-           C 56 127, 72 116, 70 96 
-           C 68 81, 52 76, 44 86 
-           C 37 94, 44 104, 53 102 
-           C 59 100, 59 93, 54 91"
+        d="M 52 14
+           C 62 16, 78 26, 84 38
+           C 88 47, 85 54, 76 56
+           C 66 58, 54 54, 48 46"
         stroke="url(#chameleonLineGrad)"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -108,13 +102,20 @@ export const ChameleonSchematic: React.FC<{
       />
 
       {/* 
-        Snout & Head Arc:
-        Curved front snout connecting to upper forehead line.
+        Crest Back to Spine & Inward Spiral Tail:
+        Continuous majestic curve from crest apex, down the spine, 
+        swooping into the iconic curled spiral tail.
       */}
       <path
-        d="M 68 20 
-           C 85 24, 102 36, 98 52 
-           C 94 62, 80 65, 68 64"
+        d="M 52 14
+           C 44 14, 38 22, 42 30
+           C 30 36, 16 52, 14 74
+           C 11 98, 22 118, 42 124
+           C 62 130, 80 118, 78 96
+           C 75 80, 58 74, 46 84
+           C 38 92, 44 104, 54 102
+           C 60 100, 60 92, 54 90
+           C 50 89, 47 92, 49 95"
         stroke="url(#chameleonLineGrad)"
         strokeWidth={strokeWidth}
         strokeLinecap="round"
@@ -122,41 +123,40 @@ export const ChameleonSchematic: React.FC<{
       />
 
       {/* 
-        Eye:
-        Crisp circular aperture situated in head.
+        Concentric Focal Eye (Characteristic Chameleon Turret):
       */}
       <circle
-        cx="82"
+        cx="72"
         cy="40"
-        r="9"
+        r="11"
         stroke="url(#chameleonLineGrad)"
         strokeWidth={strokeWidth}
       />
       <circle
-        cx="82"
+        cx="72"
         cy="40"
-        r="3"
-        fill="rgb(var(--signal-soft))"
-        opacity="0.9"
-      />
-
-      {/* 
-        Belly & Chest Guideline:
-        Curving gently along the underside into the tail base.
-      */}
-      <path
-        d="M 68 64 
-           C 52 64, 40 68, 32 78 
-           C 25 87, 26 96, 30 102"
+        r="4.5"
         stroke="url(#chameleonLineGrad)"
         strokeWidth={strokeWidth * 0.9}
+        fill="rgba(216, 180, 254, 0.25)"
+      />
+
+      {/* 
+        Throat to Chest Contour:
+      */}
+      <path
+        d="M 48 46
+           C 56 52, 60 62, 54 72
+           C 48 80, 38 82, 34 88"
+        stroke="url(#chameleonLineGrad)"
+        strokeWidth={strokeWidth * 0.8}
         strokeLinecap="round"
       />
 
-      {/* Subtle blueprint coordinate nodes for schematic aesthetic */}
-      <circle cx="53" cy="14" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.6" />
-      <circle cx="98" cy="52" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.6" />
-      <circle cx="38" cy="122" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.6" />
+      {/* Subtle blueprint coordinate nodes */}
+      <circle cx="52" cy="14" r="1.5" fill="#d8b4fe" opacity="0.8" />
+      <circle cx="84" cy="38" r="1.5" fill="#d8b4fe" opacity="0.8" />
+      <circle cx="42" cy="124" r="1.5" fill="#d8b4fe" opacity="0.8" />
     </g>
   </svg>
 );

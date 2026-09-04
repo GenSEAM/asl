@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Check, Copy, ShieldCheck, Server, Network, FileText, Code2 } from 'lucide-react';
+import { ChameleonWatermark } from './ui/Logo';
 
 const INSTALL_CMD = 'curl -sSL aslang.dev/install | sh';
 const TARGETS = ['WebAssembly', 'Rust', 'TypeScript', 'Go', 'Python', 'SQL'];
@@ -24,6 +25,10 @@ export const Hero: React.FC = () => {
 
   return (
     <section id="top" className="relative pt-32 pb-20 sm:pt-36 sm:pb-24 overflow-hidden">
+      {/* Large Schematic Chameleon Watermark hanging in the corner */}
+      <div className="absolute -top-12 -right-12 sm:-top-8 sm:right-4 lg:right-12 w-72 sm:w-96 lg:w-[460px] h-72 sm:h-96 lg:h-[460px] pointer-events-none select-none opacity-15 sm:opacity-20 transition-opacity duration-700">
+        <ChameleonWatermark className="w-full h-full" />
+      </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">

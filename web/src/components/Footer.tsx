@@ -39,7 +39,7 @@ export const Footer: React.FC = () => {
               alt="AgentScript Mascot Chameleon"
               width="130"
               height="138"
-              className="relative z-10 w-24 sm:w-28 h-auto select-none transition-all duration-300 transform group-hover:scale-105 group-active:scale-95 drop-shadow-[0_12px_24px_rgba(168,85,247,0.2)]"
+              className="relative z-10 w-24 sm:w-28 h-auto select-none rounded-2xl transition-all duration-300 transform group-hover:scale-105 group-active:scale-95 shadow-md"
             />
           </div>
 

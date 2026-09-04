@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" fill="none">
+  <defs>
+    <linearGradient id="chameleonLineGrad" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#d8b4fe" />
+      <stop offset="50%" stop-color="#c084fc" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Head Crest & Snout Profile -->
+  <path
+    d="M 52 14
+       C 62 16, 78 26, 84 38
+       C 88 47, 85 54, 76 56
+       C 66 58, 54 54, 48 46"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="2.0"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Crest Back to Spine & Inward Spiral Tail -->
+  <path
+    d="M 52 14
+       C 44 14, 38 22, 42 30
+       C 30 36, 16 52, 14 74
+       C 11 98, 22 118, 42 124
+       C 62 130, 80 118, 78 96
+       C 75 80, 58 74, 46 84
+       C 38 92, 44 104, 54 102
+       C 60 100, 60 92, 54 90
+       C 50 89, 47 92, 49 95"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="2.0"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Concentric Focal Eye (Chameleon Turret) -->
+  <circle
+    cx="72"
+    cy="40"
+    r="11"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="2.0"
+  />
+  <circle
+    cx="72"
+    cy="40"
+    r="4.5"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="1.8"
+    fill="rgba(216, 180, 254, 0.25)"
+  />
+
+  <!-- Throat to Chest Contour -->
+  <path
+    d="M 48 46
+       C 56 52, 60 62, 54 72
+       C 48 80, 38 82, 34 88"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="1.6"
+    stroke-linecap="round"
+  />
+
+  <!-- Subtle blueprint coordinate nodes -->
+  <circle cx="52" cy="14" r="1.5" fill="#d8b4fe" opacity="0.8" />
+  <circle cx="84" cy="38" r="1.5" fill="#d8b4fe" opacity="0.8" />
+  <circle cx="42" cy="124" r="1.5" fill="#d8b4fe" opacity="0.8" />
+</svg>
