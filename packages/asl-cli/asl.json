@@ -9,6 +9,8 @@
     "@genseam/asl-checker": "^1.0.0",
     "@genseam/asl-codegen": "^1.0.0",
     "@genseam/asl-compiler": "^1.0.0",
-    "@genseam/asl-lint": "^1.0.0"
+    "@genseam/asl-lint": "^1.0.0",
+    "@genseam/asl-codec": "^1.0.0"
   }
 }
+
