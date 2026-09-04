@@ -62,10 +62,10 @@
 
 (df run-tests [] -> Bool
   :d "Runs all asl-context unit tests."
-  (and (test-decode-entities)
-       (and (test-clean-html)
-            (and (test-extract-html)
-                 (and (test-extract-markdown)
-                      (and (test-extract-json)
-                           (and (test-chunking)
-                                (test-rag-formatting))))))))
+  (if (not (test-decode-entities)) false
+    (if (not (test-clean-html)) false
+      (if (not (test-extract-html)) false
+        (if (not (test-extract-markdown)) false
+          (if (not (test-extract-json)) false
+            (if (not (test-chunking)) false
+              (test-rag-formatting))))))))
