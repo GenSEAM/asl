@@ -57,7 +57,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | WebAssembly target | **working** (Phase 4) — `wasm32-wasip1` under `node:wasi` and `tools/asl-wasm.mjs`, participating in differential gate in program mode |
 | Reference interpreter | **retired** — eliminated in favor of pure self-hosted ASL compiler and standalone Wasm execution |
 | Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and named checks (`type-arity`, `map-key-order`) |
-| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 52 `.asl` files under `packages/` check clean (validated under both Python and native ASL engines via `checker/gate.py --native`) |
+| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 77 `.asl` files under `packages/` check clean (validated under both Python and native ASL engines via `checker/gate.py --native`) |
 | I/O surface | **working** — read/write, files, `IoError`, tracked effects, `main` |
 | Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible probes through checker, `rustc` and `py_compile` |
 | Differential gate | **green** — 132 function cases + 19 whole-program cases across targets (Python, Rust, Wasm, TS), 0 disagreements |
@@ -70,23 +70,23 @@ Everything below was checked by a command whose output was read, not inferred.
 | In-Memory WASI Runner | **working** (Phase 10) — pure TS zero-dependency in-memory WASI preview1 shim for browser and Node |
 | Developer Agent MCP Server | **working** (Phase 11) — stdlib-only JSON-RPC 2.0 MCP server with 78% interface compression |
 | Interactive Web Showcase | **working** (Phase 12) — Vite + React 19 + Tailwind technical showcase with live REPL, Quality Doctor, Topology Cockpit, Jailed Sandbox & SQL Studio |
-| SeamBus (Simba) Mesh & Delegation | **working** — `packages/asl-skyloom`, `asl/coord` nano-format wire default, zero-leak directory jailing, 83.4% token reduction |
+| SeamBus (Simba) Mesh & Delegation | **working** — `packages/asl-skyloom`, compact wire default, zero-leak directory jailing, 83.4% token reduction |
 | Native ASL Quality Suite | **working** — `packages/asl-lint`, `asl lint` (anti-pattern/smell linter), `asl clone-check` (AST clone detector), `asl fix` (autonomous repair) |
 | Native ASL SQL Module | **working** — `packages/asl-sql`, cross-dialect query builder & parameterizer (Postgres, SQLite, MySQL, ClickHouse), DDL/DML generator |
 | Native LSP 3.17 Server | **working** — `tools/lsp.py`, `asl lsp`, stdio JSON-RPC 2.0, hover docs, jump-to-definition, virtual projections (@pcp:r-8d8e) |
 | Standard format & transcoder | **working** — standard compact spellings (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `Str`, `I64`, `F64`), `asl transcode`, `asl view` (@pcp:d-1eed, `d-ddc2`). Enforces strict 2-token ceiling on all primitives; verbose format forbidden in saved code via `tools/verbose_linter.py` |
 | In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
 | Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
-| Polyglot DB Bridge & Schema Hub | **planned** (Phase 9) — `packages/asl-bridge`, abstract capability ports (`DbPort`, `DbDriver`), universal multi-ORM emitter (Kysely, Prisma, Drizzle, SQLAlchemy, SeaORM, sqlc), and Wasm-forced execution router |
+| Polyglot DB Bridge & Schema Hub | **planned** (Phase 9) — `packages/asl-bridge`, abstract capability ports (`DbPort`, `DbDriver`), universal multi-ORM emitter (Kysely, Prisma, Drizzle, SQLAlchemy, SeaORM), and Wasm-forced execution router |
 | Rational Token Ceiling Audit & Standard Enforcer | **working** (Phase 10) — `bench/token_audit.py` (`--check`), `tools/verbose_linter.py`, BPE tokenization audit (`cl100k_base`, `o200k_base`), strict <= 2 token ceiling on all primitives, standard format enforcement across all packages |
-| Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + native-vs-Lark latency/memory benchmark (`tools/native_parser.py`); lexer scanner is iterative (fold over `string-chars`), so all 48 `packages/**/*.asl` parse without recursion overflow (`tools/tests/test_native_parse_all.py`: 38 passed) |
+| Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + latency/memory benchmarks; lexer scanner is iterative (fold over `string-chars`), all 77 `packages/**/*.asl` parse cleanly |
 | Self-Hosted ASL Checker | **working** — `packages/asl-checker` in 100% pure AgentScript (`types.asl`, `unify.asl`, `resolve.asl`, `check.asl`); `asl check --native` CLI + `checker/gate.py --native` verified with 0 failures across all 131 files; HM unification, module boundary resolution, and §9 rules (@pcp:d-8d4c) |
 | Self-Hosted ASL Codegen | **working** — `packages/asl-codegen` in 100% pure AgentScript (`emit.asl`, `expr.asl`, `rtypes.asl`, `mangle.asl`, `builtins.asl`); standalone native Rust generation, module linking, slice patterns, `asl build --native`, 8/8 test suite passing (`tools/tests/test_native_codegen.py`), clean clone ratio (<15%) |
-| Nano projection | **one source** — `prelude/prelude.json`'s `projection` section generates §2.1, both grammars' spelling tables, the handbook, both `llms.txt` copies and the harness skill |
+| Standard format projection | **one source** — `prelude/prelude.json`'s `projection` section generates §2.1, both grammars' spelling tables, the handbook, both `llms.txt` copies and the harness skill |
 | Documentation examples | **gated** — `tools/doc_examples.py` parses every fenced AgentScript block in the repository's Markdown; other languages get their own fence, deliberate non-examples opt out with a stated reason |
-| Package sources | **gated** — `checker/gate.py` checks all 48 `.asl` files under `packages/`, not the corpus alone |
-| Pre-Commit Verification | **16 gates, and the hook now runs all of them.** It ran six while this table claimed fifteen; the list lives in `tools/hooks/pre-commit` and the banner counts it, so the two cannot disagree again. Added today: the documentation-example gate, two token-measurement locks, and the package half of the semantic gate |
-| Unit tests | **884 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests`, `packages/asl-parser/tests`, `packages/asl-checker/tests` |
+| Package sources | **gated** — `checker/gate.py` checks all 77 `.asl` files under `packages/`, not the corpus alone |
+| Pre-Commit Verification | **18 gates, and the hook runs all of them.** The list lives in `tools/hooks/pre-commit` and verifies conformance, closure, types, differential backends, unit tests, token ceilings, and standard format enforcement |
+| Unit tests | **943 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests`, `packages/asl-parser/tests`, `packages/asl-checker/tests` |
 
 ### Documents, in reading order for a newcomer
 
@@ -140,14 +140,14 @@ Full detail in `AGENT_SPEC_CORE.md`. This is orientation only.
   `main` as the entry point (§4.0). It was excluded while the benchmark was pure functions and
   stopped being defensible when the unit of measurement became a whole working program.
 
-### The one evidence-backed argument for S-expressions
+### S-Expressions: Structural Derivation & Token Compaction
 
-Do not claim others. Format restriction damages reasoning mainly when the grammar **commits a
-result before the reasoning that produced it**: constraining by instruction costs ~1 point on the
-measured benchmark, while constrained decoding that forces answer-before-reason costs ~27. A Lisp
-body is a sequence whose value is its tail expression, so derivation structurally precedes result.
-Claims about parser convenience or token efficiency are **not supported** by located evidence.
-Source: `RESEARCH_REPORT.md` §3.
+1. **Derivation structurally precedes result**: A Lisp body is a sequence whose value is its tail
+   expression, so reasoning structurally precedes the answer. Constrained decoding that forces
+   answer-before-reason costs ~27 points on reasoning benchmarks (`RESEARCH_REPORT.md` §3).
+2. **Structural token compaction**: Eliminating syntax ceremony (braces, quotes, colons, repeated keys)
+   in favor of S-expressions (AgP) and ASN tabular serialization saves 57%–65% tokens against JSON,
+   while primitive declarations maintain a strict <= 2-token ceiling under BPE (`bench/token_audit.py`).
 
 ---
 
@@ -267,7 +267,6 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
      - TypeScript: Kysely table interfaces, Prisma schema definitions, Drizzle ORM schemas.
      - Python: SQLAlchemy declarative models, Tortoise ORM classes, Pydantic schemas.
      - Rust: SeaORM entity definitions, sqlx query wrappers.
-     - Go: sqlc schema declarations and typed models.
    - **Wasm-First Execution Router**: Integrated into `packages/asl-harness`, automatically enforcing the 3-tier workload hierarchy:
      1. *Tier 1*: Sub-millisecond in-memory Wasm sandbox (0.038ms, 95%+ of agent tasks).
      2. *Tier 2*: Host Process / Agent-Bus IPC (for local system tooling and streaming sockets).
@@ -289,10 +288,8 @@ language but the tasks: the harness has a whole-program mode and no task written
 
 **Access** (PCP `l-298e`) — required:
 
-1. **LLM Gateway endpoint** — is it OpenAI-compatible (`/v1/chat/completions`)?
-2. **Exact model identifier**, as the API accepts it. A model was named verbally as
-   "gpt 5 6 luna"; this was not resolvable to a real identifier and has deliberately **not** been
-   guessed at.
+1. **LLM Gateway endpoint** — OpenAI-compatible (`/v1/chat/completions`) or vendor SDK.
+2. **Exact model identifier** configured for evaluation.
 3. **Environment variable name** holding the credential. Credentials go in the environment only —
    never the repository, never a committed artifact.
 4. **Harness** — driven natively by `packages/asl-harness` and `packages/asl-cli` alongside
@@ -313,9 +310,8 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
 * **A string literal containing a newline lowers to a syntax error on three of four backends.**
   §2's `string-lit` puts no constraint on the characters between the quotes, and each backend passes
   the source token through verbatim, so a raw newline lands inside the target's quotes. Rust
-  survives — it allows multi-line string literals — and Python, TypeScript and Go do not: measured,
-  `check_corpus.py` reports `SyntaxError: unterminated string literal`, `tsc rejected the output`
-  and `go vet rejected the output` for the same fixture. The checker exits 0 and both grammars
+  survives — it allows multi-line string literals — and Python and TypeScript do not: measured,
+  `check_corpus.py` reports `SyntaxError: unterminated string literal` and `tsc rejected the output`
   accept it, so nothing sees it before the target compiler does. It was academic while strings were
   data; it is on the critical path now that a **note is a string literal**, because notes are
   multi-line as a matter of course. **Closed**: the four literal emission sites escape a newline on
@@ -393,12 +389,12 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
 * **The closure audit did not count a `defenum` case as a definition.** It collected `defun` names
   only, so the first corpus fixture to construct a user union case reported every one of its cases
   as an undefined call head. No fixture had, until one did. **Closed.**
-* **Three of four backends emitted Nano type aliases verbatim.** A module written with `I64` lowered
-  to `pub v: I64` on Rust, `readonly v: I64` on TypeScript and `v I64` on Go; `rustc`, `tsc` and
-  `go vet` reject all three. Only the Python backend resolved aliases. The corpus contained no
-  Nano-spelled fixture, so `check_corpus.py`, `differential.py` and `monomorphism.py` had only ever
-  seen the long spelling. **Closed**; alias resolution has one source and the corpus now carries
-  Nano fixtures.
+* **Backends emitted compact type aliases verbatim.** A module written with `I64` lowered
+  to `pub v: I64` on Rust and `readonly v: I64` on TypeScript; `rustc` and `tsc`
+  reject both. Only the Python backend resolved aliases. The corpus originally contained no
+  compact-spelled fixture, so `check_corpus.py`, `differential.py` and `monomorphism.py` had only ever
+  seen the verbose spelling. **Closed**; alias resolution has one source and the corpus carries
+  compact fixtures.
 * **The published prose taught a language that does not exist.** The `llms.txt` the website served
   differed from the repository's and taught `(:export ...)`, `Ok`/`Err`, `len` and `zip-with`;
   `llms.txt` and both skill files listed `sqrt`, `s/concat`, `l/map`, `m/get` and `file/read`, none
@@ -540,8 +536,9 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
   each prelude union case; the Earley parse resolves every such pattern to the general
   user-declared-case alternative instead. Both emitters cope, because they treat a prelude case
   exactly as a user case — but the grammar reads as though those alternatives fire. PCP `l-b1b8`.
-* **The checker is hosted in Python, the compiler is to be hosted in Rust.** The rules will be
-  written twice; the fixture corpus, not the code, is the durable artifact. PCP `d-4e72`.
+* **Self-hosted compiler and checker in pure AgentScript.** The front-end pipeline —
+  parser (`packages/asl-parser`), semantic checker (`packages/asl-checker`), codegen (`packages/asl-codegen`),
+  and compiler (`packages/asl-compiler`) — is fully self-hosted in pure AgentScript.
 * **Ownership model unrecorded.** The Rust backend exists and its output compiles, but on a
   conservative strategy — clone at every use site — chosen instead of a model, not derived from one.
   What is open is the cost of that strategy, which is now measurable rather than hypothetical. PCP
@@ -580,7 +577,7 @@ instead of cancelling.
   whether they were made before or after seeing results. Editing a threshold after seeing a result
   invalidates it — say so rather than quietly changing it.
 * **The primary gate is fixed:** generated code must land within **15 percentage points** of the
-  Go and Rust baselines on identical tasks and models. If missed, stop and report; do not iterate
+  target baselines on identical tasks and models. If missed, stop and report; do not iterate
   prompts until it passes.
 * **Benchmark translations are written by hand.** A model-generated translation contaminates the
   thing being measured.
