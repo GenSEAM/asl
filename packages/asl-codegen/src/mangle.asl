@@ -1,19 +1,11 @@
 (module asl-codegen/mangle
   :d "Identifier and module path mangling for Rust emission."
-  :x [mangle-ident pascal-ident rust-mod-name capitalize-seg is-rust-keyword? slice-or]
+  :x [mangle-ident pascal-ident rust-mod-name short-mod-name capitalize-seg is-rust-keyword? slice-or]
   :i [])
 
 (df is-rust-keyword? [(m String)] -> Bool
   :d "Checks if mangled identifier collides with a Rust keyword or entry name."
-  (or (= m "type")
-      (or (= m "match")
-          (or (= m "fn")
-              (or (= m "let")
-                  (or (= m "loop")
-                      (or (= m "move")
-                          (or (= m "ref")
-                              (or (= m "impl")
-                                  (= m "main"))))))))))
+  (list-contains? (list "type" "match" "fn" "let" "loop" "move" "ref" "impl" "mod" "use" "const" "static" "crate" "super" "self" "struct" "enum" "trait" "where" "for" "while" "return" "break" "continue" "as" "in" "main") m))
 
 (df slice-or [(s String) (start Int64) (end Int64) (def String)] -> String
   :d "Safe string slice with fallback default."
@@ -45,13 +37,28 @@
 
 (df pascal-ident [(s String)] -> String
   :d "Converts kebab-case or snake_case identifier to PascalCase."
-  (let [(norm (string-replace s "_" "-"))
-        (segs (string-split norm "-"))
-        (caps (map capitalize-seg segs))]
-    (string-join caps "")))
+  (if (and (not (string-contains? s "-"))
+           (not (string-contains? s "_")))
+      (if (and (> (string-length s) 0)
+               (= (string-upper (slice-or s 0 1 "")) (slice-or s 0 1 "")))
+          s
+          (capitalize-seg s))
+      (let [(norm (string-replace s "_" "-"))
+            (segs (string-split norm "-"))
+            (caps (map capitalize-seg segs))]
+        (string-join caps ""))))
 
 (df rust-mod-name [(mod-path String)] -> String
   :d "Derives a flat Rust module name from an ASL module path."
   (let [(segs (string-split mod-path "/"))
         (mangled (map mangle-ident segs))]
     (string-join mangled "_")))
+
+(df short-mod-name [(mod-path String)] -> String
+  :d "Extracts and mangles the terminal segment of a module path."
+  (if (string-contains? mod-path "/")
+      (let [(parts (string-split mod-path "/"))
+            (last-idx (- (list-length parts) 1))
+            (last-part (option-or (list-get parts last-idx) mod-path))]
+        (rust-mod-name last-part))
+      (rust-mod-name mod-path)))

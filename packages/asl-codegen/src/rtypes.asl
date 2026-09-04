@@ -6,18 +6,24 @@
       type-mentions-io-error?
       type-mentions-float?
       emit-derives
+      any-true?
       boxed-type-if-recursive]
   :i [(types :a ty) (mangle :a m)])
+
+(df any-true? [(flags (List Bool))] -> Bool
+  :d "True if any boolean in list is true."
+  (fold (fn [(acc Bool) (cur Bool)] (or acc cur)) false flags))
 
 (df primitive-rust-type [(name String)] -> (Option String)
   :d "Maps primitive Core ASL types to Rust native types."
   (let [(canon (ty/resolve-type-alias name))]
     (cond
-      ((= canon "Bool") (some "bool"))
-      ((= canon "Int32") (some "i32"))
       ((= canon "Int64") (some "i64"))
+      ((= canon "Int32") (some "i32"))
       ((= canon "Float64") (some "f64"))
+      ((= canon "Float32") (some "f32"))
       ((= canon "String") (some "String"))
+      ((= canon "Bool") (some "bool"))
       ((= canon "Unit") (some "()"))
       ((= canon "IoError") (some "rt::IoError"))
       (:else (none)))))
@@ -63,12 +69,18 @@
                  (str "std::collections::BTreeMap<" (get-arg-type args 0) ", " (get-arg-type args 1) ">")
                  "std::collections::BTreeMap<(), ()>"))
             (:else
-             (let [(clean-name (if (string-contains? name "/")
-                                   (string-replace name "/" "_")
-                                   name))]
+             (let [(type-base (mt mod-opt
+                                ((some m-name) (str (m/mangle-ident m-name) "::" (m/pascal-ident name)))
+                                ((none)
+                                 (if (string-contains? name "/")
+                                     (let [(parts (string-split name "/"))
+                                           (alias (option-or (list-get parts 0) ""))
+                                           (mem (option-or (list-get parts 1) name))]
+                                       (str (m/mangle-ident alias) "::" (m/pascal-ident mem)))
+                                     (m/pascal-ident name)))))]
                (if (> (list-length args) 0)
-                   (str clean-name "<" (string-join (map emit-type args) ", ") ">")
-                   clean-name))))))))))
+                   (str type-base "<" (string-join (map emit-type args) ", ") ">")
+                   type-base))))))))))
 
 (df emit-type-str [(s String)] -> String
   :d "Parses a type string and emits its Rust type representation."
@@ -83,8 +95,7 @@
     ((ty/ty-con name args mod-opt shown-opt)
      (if (or (= name "IoError") (= (ty/resolve-type-alias name) "IoError"))
          true
-         (let [(checks (map type-mentions-io-error? args))]
-           (fold (fn [(acc Bool) (cur Bool)] (or acc cur)) false checks))))))
+         (any-true? (map type-mentions-io-error? args))))))
 
 (df type-mentions-float? [(t ty/Type)] -> Bool
   :d "Checks if a type transitively mentions Float64."
@@ -94,8 +105,7 @@
     ((ty/ty-con name args mod-opt shown-opt)
      (if (or (= name "Float64") (= (ty/resolve-type-alias name) "Float64"))
          true
-         (let [(checks (map type-mentions-float? args))]
-           (fold (fn [(acc Bool) (cur Bool)] (or acc cur)) false checks))))))
+         (any-true? (map type-mentions-float? args))))))
 
 (df emit-derives [(has-io Bool) (has-float Bool)] -> String
   :d "Emits Rust derive attribute according to comparability and orderability."

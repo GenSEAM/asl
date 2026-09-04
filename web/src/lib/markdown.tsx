@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { HighlightedCode } from './syntaxHighlight';
 
 interface MarkdownRendererProps {
   content: string;
@@ -260,8 +261,10 @@ const CodeBlock: React.FC<{ code: string; language: string }> = ({ code, languag
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
       </div>
-      <pre className="p-4 overflow-x-auto text-[13px] font-mono leading-relaxed text-ink bg-ground/50">
-        <code>{code}</code>
+      <pre className="p-4 overflow-x-auto text-[13px] font-mono leading-relaxed bg-ground/50">
+        <code>
+          <HighlightedCode code={code} language={language} />
+        </code>
       </pre>
     </div>
   );

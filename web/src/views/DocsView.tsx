@@ -15,6 +15,7 @@ import {
   Database,
   Braces
 } from 'lucide-react';
+import { HighlightedCode } from '../lib/syntaxHighlight';
 
 type CodeTargetLang = 'python' | 'rust' | 'typescript' | 'go';
 type DataTargetFormat = 'json' | 'yaml';
@@ -870,8 +871,8 @@ export const DocsView: React.FC = () => {
                           {copiedKey === `${card.id}-asl` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
-                        {card.asl}
+                      <pre className="font-mono text-meta leading-relaxed overflow-x-auto whitespace-pre">
+                        <HighlightedCode code={card.asl} language="agentscript" />
                       </pre>
                     </div>
 
@@ -889,8 +890,8 @@ export const DocsView: React.FC = () => {
                           {copiedKey === `${card.id}-target` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
-                        {targetCode}
+                      <pre className="font-mono text-meta leading-relaxed overflow-x-auto whitespace-pre">
+                        <HighlightedCode code={targetCode} language={dataTarget} />
                       </pre>
                     </div>
                   </div>
@@ -1213,8 +1214,8 @@ WHEN NOT MATCHED THEN
                           {copiedKey === `${card.id}-asl` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
-                        {card.asl}
+                      <pre className="font-mono text-meta leading-relaxed overflow-x-auto whitespace-pre">
+                        <HighlightedCode code={card.asl} language="agentscript" />
                       </pre>
                     </div>
 
@@ -1232,8 +1233,8 @@ WHEN NOT MATCHED THEN
                           {copiedKey === `${card.id}-target` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
-                        {targetCode}
+                      <pre className="font-mono text-meta leading-relaxed overflow-x-auto whitespace-pre">
+                        <HighlightedCode code={targetCode} language={targetLang} />
                       </pre>
                     </div>
                   </div>
@@ -1270,8 +1271,8 @@ WHEN NOT MATCHED THEN
                           {copiedKey === `${card.id}-asl` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <pre className="font-mono text-meta text-purple-300 leading-relaxed overflow-x-auto whitespace-pre">
-                        {card.asl}
+                      <pre className="font-mono text-meta leading-relaxed overflow-x-auto whitespace-pre">
+                        <HighlightedCode code={card.asl} language="agentscript" />
                       </pre>
                     </div>
 
@@ -1289,8 +1290,8 @@ WHEN NOT MATCHED THEN
                           {copiedKey === `${card.id}-target` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
                       </div>
-                      <pre className="font-mono text-meta text-ink-2 leading-relaxed overflow-x-auto whitespace-pre">
-                        {targetCode}
+                      <pre className="font-mono text-meta leading-relaxed overflow-x-auto whitespace-pre">
+                        <HighlightedCode code={targetCode} language={targetLang} />
                       </pre>
                     </div>
                   </div>
