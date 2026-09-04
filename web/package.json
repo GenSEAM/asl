@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/sync-blog.mjs && tsc && vite build",
+    "sync:blog": "node scripts/sync-blog.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "preview": "vite preview"
   },

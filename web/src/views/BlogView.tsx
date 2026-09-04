@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from '../lib/router';
 import { BLOG_POSTS, getAllCategories, getRelatedPosts, getBlogPostBySlug } from '../lib/blog';
 import { MarkdownRenderer } from '../lib/markdown';
@@ -35,6 +35,16 @@ export const BlogView: React.FC = () => {
     return getBlogPostBySlug(activeSlug);
   }, [activeSlug]);
 
+  useEffect(() => {
+    if (activePost) {
+      document.title = `${activePost.title} — AgentScript Blog`;
+    } else if (activeSlug) {
+      document.title = 'Essay Not Found — AgentScript Blog';
+    } else {
+      document.title = 'Engineering Blog — AgentScript (ASL)';
+    }
+  }, [activePost, activeSlug]);
+
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
@@ -43,6 +53,28 @@ export const BlogView: React.FC = () => {
     { name: 'All', count: BLOG_POSTS.length },
     ...getAllCategories()
   ], []);
+
+  // Handle 404 for invalid essay slug
+  if (activeSlug && !activePost) {
+    return (
+      <main className="flex-1 max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
+        <div className="p-8 sm:p-12 border border-line rounded-xl bg-surface/80 backdrop-blur-md shadow-e2">
+          <BookOpen className="w-12 h-12 text-ink-3 mx-auto mb-4" />
+          <h1 className="text-xl sm:text-2xl font-bold text-ink mb-2">Essay Not Found</h1>
+          <p className="text-sm text-ink-2 mb-6">
+            The requested technical essay <code className="font-mono text-signal bg-surface-2 px-1.5 py-0.5 rounded border border-line">{activeSlug}</code> does not exist in our archive.
+          </p>
+          <button
+            onClick={() => navigate('/blog')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-signal text-ground font-mono text-xs font-semibold hover:opacity-90 transition-opacity"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>Browse All 7 Essays</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   const filteredPosts = useMemo(() => {
     return BLOG_POSTS.filter((post) => {

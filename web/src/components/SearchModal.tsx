@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { Search, X, ArrowRight, Code2, BookOpen, Terminal, Sparkles, Cpu, Database } from 'lucide-react';
+import { Search, X, ArrowRight, Code2, BookOpen, Terminal, Sparkles, Cpu, Database, Newspaper } from 'lucide-react';
 import { useRouter } from '../lib/router';
+import { BLOG_POSTS } from '../lib/blog';
 
 interface SearchResult {
   id: string;
-  category: 'docs' | 'toolchain' | 'grammar' | 'protocol';
+  category: 'docs' | 'toolchain' | 'grammar' | 'protocol' | 'blog';
   title: string;
   desc: string;
   href: string;
@@ -70,6 +71,17 @@ const ITEMS: SearchResult[] = [
   },
 ];
 
+const BLOG_ITEMS: SearchResult[] = BLOG_POSTS.map((p) => ({
+  id: `blog-${p.slug}`,
+  category: 'blog',
+  title: p.title,
+  desc: p.excerpt,
+  href: `/blog/${p.slug}`,
+  icon: Newspaper,
+}));
+
+const ALL_ITEMS: SearchResult[] = [...ITEMS, ...BLOG_ITEMS];
+
 export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({
   isOpen,
   onClose,
@@ -78,9 +90,9 @@ export const SearchModal: React.FC<{ isOpen: boolean; onClose: () => void }> = (
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return ITEMS;
+    if (!query.trim()) return ALL_ITEMS;
     const q = query.toLowerCase();
-    return ITEMS.filter(
+    return ALL_ITEMS.filter(
       (item) =>
         item.title.toLowerCase().includes(q) ||
         item.desc.toLowerCase().includes(q) ||
