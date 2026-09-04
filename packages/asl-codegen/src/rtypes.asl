@@ -111,8 +111,7 @@
   :d "Emits Rust derive attribute according to comparability and orderability."
   (cond
     (has-io "#[derive(Debug, Clone, PartialEq)]")
-    (has-float "#[derive(Debug, Clone, PartialEq, PartialOrd)]")
-    (:else "#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]")))
+    (:else "#[derive(Debug, Clone, PartialEq, PartialOrd)]")))
 
 (df boxed-type-if-recursive [(rendered-type String) (decl-name String) (is-recursive Bool)] -> String
   :d "Wraps a field type in Box if it is directly recursive."

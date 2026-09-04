@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "checker"))
 sys.path.insert(0, str(ROOT / "backend"))
 from resolve import check_file
+from gate import package_roots
 
 
 @dataclass
@@ -49,7 +50,7 @@ def run_test_file(test_file: Path) -> list[TestResult]:
     results: list[TestResult] = []
 
     # 1. Semantic Check
-    roots = [test_file.parent, test_file.parent.parent / "src", ROOT / "grammar" / "corpus" / "valid", ROOT / "grammar" / "corpus" / "modules"]
+    roots = package_roots(test_file)
     diags = check_file(test_file, roots)
     if diags:
         results.append(TestResult(

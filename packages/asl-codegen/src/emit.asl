@@ -216,6 +216,12 @@
                  (hm (has-main-fn? defs))]
              (pair (map-empty) (pair defs hm))))))))
 
+(df emit-use-alias [(src-mod String) (tgt-alias String)] -> String
+  :d "Emits a pub use self statement if alias differs from source module."
+  (if (not (= src-mod tgt-alias))
+      (str "#[allow(unused_imports)]\npub use self::" src-mod " as " tgt-alias ";\n")
+      ""))
+
 (df emit-rust-program [(root-forms (List a/TopForm)) (deps (List a/TopForm))] -> String
   :d "Assembles complete standalone Rust source file with runtime link."
   (let [(header "#![allow(dead_code, unused_variables, unused_mut, unused_parens)]\nmod rt;\n\n")
@@ -235,12 +241,14 @@
                                                          (let [(r-mod (m/rust-mod-name (.-path m)))
                                                                (s-mod (m/short-mod-name (.-path m)))]
                                                            (str "#[allow(unused_imports)]\npub use self::" r-mod "::*;\n"
-                                                                (if (not (= s-mod r-mod))
-                                                                    (str "#[allow(unused_imports)]\npub use self::" r-mod " as " s-mod ";\n")
-                                                                    ""))))
+                                                                (emit-use-alias r-mod s-mod))))
                                                         (_ "")))
-                                                    deps))]
-                                (str (string-join use-lines "") "\n"))
+                                                    deps))
+                                    (alias-lines (map (fn [(p (Pair String String))] -> String
+                                                        (emit-use-alias (m/short-mod-name (.-second p))
+                                                                        (m/mangle-ident (.-first p))))
+                                                      (map-pairs root-aliases)))]
+                                (str (string-join use-lines "") (string-join alias-lines "") "\n"))
                               ""))
         (root-body (emit-top-forms defs merged-root-aliases all-enums))
         (entry (emit-host-entry has-main))]
