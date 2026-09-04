@@ -1423,15 +1423,15 @@ Monitoring autonomous software generation requires capturing three orthogonal di
 
 In human software engineering, architectural drift happens slowly over months. In agentic swarms, an autonomous agent can turn a clean modular monolith into a tangled dependency graph in forty seconds.
 
-In AgentScript (ASL), every module explicitly declares its exports (\`:export\` / \`:x\`) and imports (\`:import\` / \`:i\`). Because ASL code is an exact representation of its Abstract Syntax Tree, the compiler generates a deterministic dependency DAG without executing a single line of code:
+In AgentScript (ASL), every module explicitly declares its exports (\`:x\`) and imports (\`:i\`). Because ASL code is an exact representation of its Abstract Syntax Tree, the compiler generates a deterministic dependency DAG without executing a single line of code:
 
 \`\`\`lisp
 (module store/checkout
-  :doc "Checkout transaction coordinator"
-  :export [process-checkout]
-  :import [(store/cart :as cart)
-           (store/payment :as pay)
-           (sys/time :as time)])
+  :d "Checkout transaction coordinator"
+  :x [process-checkout]
+  :i [(store/cart :a cart)
+      (store/payment :a pay)
+      (sys/time :a time)])
 \`\`\`
 
 ### Real-Time Cycle and Boundary Auditing
@@ -1853,15 +1853,15 @@ AgentScript provides native algebraic vector operations inside \`packages/asl-me
 
 \`\`\`agp
 ;; Definition of a vector item in asl-mem
-(schema VectorItem
-  (:field id Str "Unique memory snapshot identifier")
-  (:field embedding (List F64) "Dense semantic embedding vector")
-  (:field payload Str "Verifiable AgentScript literal payload")
-  (:field ref Str "Cryptographic shortcode @pcp:d-xxxx or symbol name"))
+(dfs VectorItem
+  (:f id Str "Unique memory snapshot identifier")
+  (:f text Str "Text payload the vector was derived from")
+  (:f vector (List F64) "Dense semantic embedding vector"))
 
-(schema VectorStore
-  (:field dim I64 "Embedding dimension (e.g. 384, 768, 1536)")
-  (:field items (List VectorItem) "In-memory vector collection"))
+(dfs VectorStore
+  (:f name Str "Store name")
+  (:f dimensions I64 "Embedding dimension (e.g. 384, 768, 1536)")
+  (:f items (List VectorItem) "In-memory vector collection"))
 \`\`\`
 
 ### Sub-0.05ms Dot-Product Calculation
@@ -1869,18 +1869,17 @@ The cosine similarity kernel is evaluated directly inside the Wasm execution san
 
 \`\`\`agp
 ;; In-memory dot product and norm calculation
-(df vec-dot [(a (List F64)) (b (List F64))] -> F64
-  :d "Calculate dot product between two float vectors."
-  (list-fold (list-zip-with a b (*)) 0.0 (+)))
+(df dot [(a (List F64)) (b (List F64))] -> F64
+  :d "Sum of pairwise products, truncating to the shorter vector."
+  (list-sum (map (fn [(p (Pair F64 F64))] -> F64 (* (.-first p) (.-second p)))
+                 (zip a b))))
 
-(df vec-cosine [(q (List F64)) (candidate (List F64))] -> F64
-  :d "Sub-millisecond cosine similarity."
-  (let [(dot (vec-dot q candidate))
-        (norm-q (sqrt (vec-dot q q)))
-        (norm-c (sqrt (vec-dot candidate candidate)))]
-    (if (or (== norm-q 0.0) (== norm-c 0.0))
+(df cosine-similarity [(a (List F64)) (b (List F64))] -> F64
+  :d "Cosine of the angle between two vectors; 0.0 when either has no length."
+  (let [(denom (* (vector-norm a) (vector-norm b)))]
+    (if (= denom 0.0)
       0.0
-      (/ dot (* norm-q norm-c)))))
+      (/ (dot a b) denom))))
 \`\`\`
 
 When evaluated in the AgentScript WebAssembly runtime, a top-10 nearest neighbor search across 1,000 project memories completes in **0.038ms**—over 6,000 times faster than an external vector database API call.

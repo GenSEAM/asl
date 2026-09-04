@@ -211,7 +211,7 @@ Four, all carrying the same `LoomFrame`.
 | `compact/v1` | `SK1\|v\|id\|from\|to\|type\|channel\|ts\|reply-to\|body` | Default wire dialect for high-frequency loops |
 | `polyglot/v1` | Markdown envelope with a JSON block | Peers that have never heard of SkyLoom |
 
-`asl/coord` and `compact/v1` are the **nano** dialects (`isNanoFormat`). `encodeFrame` defaults
+`asl/coord` and `compact/v1` are the **compact** dialects (`isCompactFormat`). `encodeFrame` defaults
 to `asl/coord` for `HANDOFF` and `YIELD` frames and to `compact/v1` for everything else;
 `asl/v1` is only produced when asked for by name.
 

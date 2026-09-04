@@ -40,15 +40,15 @@ Monitoring autonomous software generation requires capturing three orthogonal di
 
 In human software engineering, architectural drift happens slowly over months. In agentic swarms, an autonomous agent can turn a clean modular monolith into a tangled dependency graph in forty seconds.
 
-In AgentScript (ASL), every module explicitly declares its exports (`:export` / `:x`) and imports (`:import` / `:i`). Because ASL code is an exact representation of its Abstract Syntax Tree, the compiler generates a deterministic dependency DAG without executing a single line of code:
+In AgentScript (ASL), every module explicitly declares its exports (`:x`) and imports (`:i`). Because ASL code is an exact representation of its Abstract Syntax Tree, the compiler generates a deterministic dependency DAG without executing a single line of code:
 
 ```lisp
 (module store/checkout
-  :doc "Checkout transaction coordinator"
-  :export [process-checkout]
-  :import [(store/cart :as cart)
-           (store/payment :as pay)
-           (sys/time :as time)])
+  :d "Checkout transaction coordinator"
+  :x [process-checkout]
+  :i [(store/cart :a cart)
+      (store/payment :a pay)
+      (sys/time :a time)])
 ```
 
 ### Real-Time Cycle and Boundary Auditing

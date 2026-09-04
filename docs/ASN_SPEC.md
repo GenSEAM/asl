@@ -21,7 +21,7 @@ JSON document has to JavaScript's lexer. `grammar/asn.lark` carries the terminal
 block and `grammar/validate_asn.py` fails when that copy drifts from `grammar/agentscript.lark`,
 so "no new lexeme" is a gate rather than a promise.
 
-**ASN keys are data.** `AGENT_SPEC_CORE.md` §2.1 makes a Nano alias significant only in the one
+**ASN keys are data.** `AGENT_SPEC_CORE.md` §2.1 makes an ASL compact alias significant only in the one
 position it names. ASN has none of those positions, so `:f`, `:d`, `:x`, `:c`, `:i` and `:a` in an
 ASN payload are ordinary keys spelled with those letters and mean nothing else. No tool may
 rewrite them.
@@ -148,7 +148,7 @@ A keyword is **not** admissible where a value is bound to a declared Core type, 
 declares no keyword type. Concretely: a keyword may not fill a column of a `row-group` (§6) or a
 `table` (§7) that a schema maps to any Core type at all. Write the string, or write the enum case.
 
-The spelling of that type in the `defschema` is irrelevant. Core §2.1 gives types a Nano axis —
+The spelling of that type in the `defschema` is irrelevant. Core §2.1 gives types a compact alias axis —
 `Str` for `String`, `I64` for `Int64`, `F64` for `Float64` — and makes the two spellings the same
 form, which no rule anywhere may distinguish. A field declared `Str` and one declared `String` bind
 identically here.
@@ -559,7 +559,7 @@ payload, which sees only the resulting field list in declaration order.
 
 ## 13. `:dflt` is not a spelling of `:default`
 
-`prelude/prelude.json` lists `:default` under `unaliased`, deliberately without a Nano spelling,
+`prelude/prelude.json` lists `:default` under `unaliased`, deliberately without a compact alias,
 on the grounds that it is already short enough. The measurement agrees, and it is not close:
 
 Run `bench/asn_tokens.py` for the current figures; `bench/asn_tokens.lock` fails the build when
