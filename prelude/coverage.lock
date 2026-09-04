@@ -525,7 +525,9 @@
   },
   "unexecuted": {
     "32-json-case.agentscript": "wire-naming controls are pinned but no serializer executes them; PCP d-1671",
-    "33-notes.agentscript": "notes are erased at every target and have no runtime to execute; PCP l-a250"
+    "33-notes.agentscript": "notes are erased at every target and have no runtime to execute; PCP l-a250",
+    "35-metadata-tags.agentscript": "metadata tags are erased at every target and have no runtime to execute; PCP d-1eed"
   },
+
   "note": "instantiations covers root-unit call sites only; an imported module's body contributes builtin names but no instantiations. Int32 has no Python representation, so the Python side never executes Int32 arithmetic: tier_a compiles it, and the 400/400 figure does not mean it ran."
 }

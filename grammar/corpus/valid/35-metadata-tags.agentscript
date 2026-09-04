@@ -1,0 +1,26 @@
+"Decoupled metadata tags (:tag and @tag) in module, defun, defschema, and defenum."
+
+(module demo/meta-tags
+  :doc "Demonstrates decoupled metadata annotations."
+  (:tag :arch "d-1eed" :spec "sec-08" :doc "m-meta-tags")
+  :export [User Role verify-credentials])
+
+(defschema User
+  (:tag :model "db-user" :arch "d-4a1b")
+  (:field id Int64 "Unique user identifier" (:tag :pk "true"))
+  (:field username String "User login handle")
+  (:field active Bool "Whether account is active" :default true))
+
+(defenum Role
+  (:tag :domain "auth-roles")
+  (:case admin [] "Administrator role" (:tag :level "super"))
+  (:case guest [] "Guest role" (:tag :level "public")))
+
+(defun verify-credentials [(user User) (token String)] -> Bool
+  :doc "Verify token for the user."
+  (:tag :inv "constant-time" :perf "p-120us" :doc "fn-verify-creds")
+  (if (.-active user)
+    true
+    false))
+
+(@tag :global "provenance" :source "system")

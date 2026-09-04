@@ -16,6 +16,78 @@ class AslLspServer:
     def __init__(self):
         self.documents: Dict[str, str] = {}
         self.root_path: Path = ROOT
+        # In-memory RAM index for decoupled metadata tags (O(1) in <0.05ms)
+        self.tag_index: Dict[str, List[Dict[str, Any]]] = {}
+        self.node_index: Dict[str, List[Dict[str, Any]]] = {}
+
+    def _index_document(self, uri: str, text: str) -> None:
+        """Indexes all :tag and @tag annotations in document into RAM (@pcp:d-1eed)."""
+        # Clear existing entries for this URI
+        for tag_id, spans in list(self.tag_index.items()):
+            self.tag_index[tag_id] = [s for s in spans if s.get("uri") != uri]
+            if not self.tag_index[tag_id]:
+                del self.tag_index[tag_id]
+        self.node_index[uri] = []
+
+        lines = text.splitlines()
+        # Find all declarations
+        decl_re = re.compile(r'\(((?:defun|def|df|defschema|schema|dfs|defenum|enum|dfe|module))\s+(?:!\s+)?(?:\{[^}]*\}\s+)?([a-zA-Z0-9_\-\/]+)', re.MULTILINE)
+        for m in decl_re.finditer(text):
+            kind = m.group(1)
+            name = m.group(2)
+            start_pos = m.start()
+            start_line = text[:start_pos].count('\n')
+            # Extract exact declaration snippet using balanced parentheses
+            depth = 0
+            end_pos = len(text)
+            for i in range(start_pos, len(text)):
+                if text[i] == '(':
+                    depth += 1
+                elif text[i] == ')':
+                    depth -= 1
+                    if depth == 0:
+                        end_pos = i + 1
+                        break
+            snippet = text[start_pos:end_pos]
+            end_line = text[:end_pos].count('\n')
+            # Docstring (either :doc or :d)
+            doc_m = re.search(r'(?::doc|:d)\s+"([^"\\]*(?:\\.[^"\\]*)*)"', snippet)
+            doc_str = doc_m.group(1) if doc_m else ""
+
+            # Extract tags inside this declaration
+            tags_map: Dict[str, Any] = {}
+            for tm in re.finditer(r'\((?::tag|@tag)\s+([^)]*)\)', snippet):
+                raw = tm.group(1).strip()
+                for kv in re.finditer(r':([a-zA-Z0-9_\-]+)\s+(?:"([^"\\]*(?:\\.[^"\\]*)*)"|([a-zA-Z0-9_\-\/]+))', raw):
+                    k = kv.group(1)
+                    v = kv.group(2) if kv.group(2) is not None else kv.group(3)
+                    tags_map[k] = v
+                for s in re.finditer(r'"([^"\\]*(?:\\.[^"\\]*)*)"', raw):
+                    val = s.group(1)
+                    if val not in tags_map.values():
+                        tags_map.setdefault("id", val)
+
+            end_line = min(len(lines) - 1, start_line + snippet.count('\n'))
+            node_span = {
+                "uri": uri,
+                "name": name,
+                "kind": kind,
+                "range": {
+                    "start": {"line": start_line, "character": 0},
+                    "end": {"line": end_line, "character": len(lines[end_line]) if end_line < len(lines) else 0}
+                },
+                "doc": doc_str,
+                "tags": tags_map
+            }
+            self.node_index[uri].append(node_span)
+
+            # Index every tag identifier
+            for tag_val in list(tags_map.values()):
+                if isinstance(tag_val, str):
+                    self.tag_index.setdefault(tag_val, []).append(node_span)
+            for tag_k, tag_v in tags_map.items():
+                if isinstance(tag_v, str):
+                    self.tag_index.setdefault(f"{tag_k}:{tag_v}", []).append(node_span)
 
     def handle_request(self, request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Dispatches JSON-RPC request to appropriate LSP handler."""
@@ -31,7 +103,8 @@ class AslLspServer:
                     "definitionProvider": True,
                     "documentSymbolProvider": True,
                     "experimental": {
-                        "virtualDocumentProvider": True
+                        "virtualDocumentProvider": True,
+                        "metadataIndexing": True
                     }
                 },
                 "serverInfo": {
@@ -45,6 +118,7 @@ class AslLspServer:
             uri = doc.get("uri", "")
             text = doc.get("text", "")
             self.documents[uri] = text
+            self._index_document(uri, text)
             return None
 
         elif method == "textDocument/didChange":
@@ -52,7 +126,9 @@ class AslLspServer:
             uri = doc.get("uri", "")
             changes = params.get("contentChanges", [])
             if changes:
-                self.documents[uri] = changes[-1].get("text", "")
+                text = changes[-1].get("text", "")
+                self.documents[uri] = text
+                self._index_document(uri, text)
             return None
 
         elif method == "textDocument/hover":
@@ -70,6 +146,18 @@ class AslLspServer:
             text = self.documents.get(uri, "")
             loc = self._compute_definition(uri, text, pos.get("line", 0), pos.get("character", 0))
             return self._response(req_id, loc)
+
+        elif method in ("lsp/tag-lookup", "asl/tagLookup", "tagLookup"):
+            # O(1) in-memory tag lookup (<0.05ms)
+            tag = params.get("tag") or params.get("tag_id") or params.get("id", "")
+            matches = self.tag_index.get(tag, [])
+            return self._response(req_id, {"tag": tag, "results": matches, "count": len(matches)})
+
+        elif method in ("lsp/node-meta", "asl/nodeMeta", "nodeMeta"):
+            target_uri = params.get("uri") or params.get("file", "")
+            line = params.get("line", 0)
+            meta = self._compute_node_meta(target_uri, line)
+            return self._response(req_id, meta)
 
         elif method in ("asl/virtualDocument", "asl/preview"):
             # Non-mutating virtual document provider (@pcp:r-8d8e)
@@ -97,6 +185,17 @@ class AslLspServer:
             "result": result
         }
 
+    def _compute_node_meta(self, file_or_uri: str, line: int) -> Optional[Dict[str, Any]]:
+        """Returns node metadata and decoupled tags for a given line."""
+        for uri, nodes in self.node_index.items():
+            if uri == file_or_uri or file_or_uri in uri:
+                for node in nodes:
+                    start_l = node["range"]["start"]["line"]
+                    end_l = node["range"]["end"]["line"]
+                    if start_l <= line <= end_l:
+                        return node
+        return None
+
     def _compute_hover(self, text: str, line: int, char: int) -> Optional[Dict[str, Any]]:
         lines = text.splitlines()
         if line >= len(lines):
@@ -106,14 +205,32 @@ class AslLspServer:
         if not word:
             return None
 
-        pattern = rf'\((defun|defschema|defenum)\s+{re.escape(word)}\b'
+        # Check if hovering on a tag identifier
+        if word in self.tag_index:
+            tag_nodes = self.tag_index[word]
+            refs = [f"- `{n['name']}` ({n['kind']}) in `{n['uri'].split('/')[-1]}`:L{n['range']['start']['line']+1}" for n in tag_nodes[:5]]
+            markdown = f"**Decoupled Semantic Tag `{word}`**\n\nImplemented/Referenced by:\n" + "\n".join(refs)
+            return {"contents": {"kind": "markdown", "value": markdown}}
+
+        pattern = rf'\((defun|def|df|defschema|schema|dfs|defenum|enum|dfe|module)\s+(?:!\s+)?(?:\{{[^}}]*\}}\s+)?{re.escape(word)}\b'
         match = re.search(pattern, text)
         if match:
             kind = match.group(1)
-            snippet = text[match.end():match.end() + 500]
-            doc_match = re.search(r':doc\s+"([^"]+)"', snippet)
+            snippet = text[match.end():match.end() + 1000]
+            doc_match = re.search(r'(?::doc|:d)\s+"([^"\\]*(?:\\.[^"\\]*)*)"', snippet)
             doc_str = doc_match.group(1) if doc_match else "No docstring provided."
-            markdown = f"**AgentScript `{word}`** ({kind})\n\n{doc_str}"
+
+            # Extract tags in snippet
+            tags_list = []
+            for tm in re.finditer(r'\((?::tag|@tag)\s+([^)]*)\)', snippet):
+                raw = tm.group(1).strip()
+                for kv in re.finditer(r':([a-zA-Z0-9_\-]+)\s+(?:"([^"\\]*(?:\\.[^"\\]*)*)"|([a-zA-Z0-9_\-\/]+))', raw):
+                    k = kv.group(1)
+                    v = kv.group(2) if kv.group(2) is not None else kv.group(3)
+                    tags_list.append(f"- `:{k}`: `\"{v}\"`")
+
+            tags_section = f"\n\n**Metadata Tags:**\n" + "\n".join(tags_list) if tags_list else ""
+            markdown = f"**AgentScript `{word}`** ({kind})\n\n{doc_str}{tags_section}"
             return {"contents": {"kind": "markdown", "value": markdown}}
 
         # Check standard prelude
@@ -131,9 +248,17 @@ class AslLspServer:
         if not word:
             return None
 
-        # Find line where (defun word ...) or (defschema word ...) appears
+        # Check if word is a tag id
+        if word in self.tag_index and self.tag_index[word]:
+            target_node = self.tag_index[word][0]
+            return {
+                "uri": target_node["uri"],
+                "range": target_node["range"]
+            }
+
+        # Find line where (defun word ...) or (df word ...) appears
         for idx, l in enumerate(lines):
-            if re.search(rf'\((defun|defschema|defenum)\s+{re.escape(word)}\b', l):
+            if re.search(rf'\((?:defun|def|df|defschema|schema|dfs|defenum|enum|dfe|module)\s+(?:!\s+)?(?:\{{[^}}]*\}}\s+)?{re.escape(word)}\b', l):
                 return {
                     "uri": uri,
                     "range": {

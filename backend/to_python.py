@@ -214,7 +214,7 @@ class Transpiler:
 
     def defun(self, node) -> list[str]:
         kids = [k for k in self.kids(node)
-                if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt"))]
+                if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt", "tag_node"))]
         name = self.tok(kids[0])
         names = [self.tok(p.children[0]) for p in kids[1].children
                  if isinstance(p, Tree) and p.data == "param"]

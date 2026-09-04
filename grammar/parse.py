@@ -20,7 +20,7 @@ GRAMMAR = Path(__file__).parent / "agentscript.lark"
 FORM_KW = {"DEFUN", "DEFSCHEMA", "DEFENUM", "MODULE", "IF", "COND", "MATCH",
            "TRY", "LET", "FN", "ARROW", "ELSE_KW", "CASE_KW", "FIELD_KW",
            "DOC_KW", "EXPORT_KW", "IMPORT_KW", "AS_KW", "DEFAULT_KW", "JSON_KW",
-           "OK", "ERR", "SOME", "NONE", "LIST", "CONS", "PAIR", "BANG"}
+           "OK", "ERR", "SOME", "NONE", "LIST", "CONS", "PAIR", "BANG", "TAG_HEAD"}
 
 _parser: Lark | None = None
 

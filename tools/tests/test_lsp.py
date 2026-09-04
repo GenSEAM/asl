@@ -80,3 +80,74 @@ def test_lsp_virtual_document_provider():
     content = resp["result"]["content"]
     assert "SELECT \"id\", \"name\" FROM \"users\"" in content
     assert "Live Virtual SQL Projection [POSTGRES]" in content
+
+
+def test_lsp_metadata_tag_indexing():
+    server = AslLspServer()
+    doc_uri = "file:///workspace/auth/jwt.asl"
+    code = """(module auth/jwt
+  :d "JWT authentication module"
+  (:tag :arch "d-1eed" :spec "sec-08" :doc "m-auth-jwt")
+  :x [verify-token])
+
+(df verify-token [(token Str) (pubkey Key)] -> (Result Claims AuthErr)
+  :d "Verify a JWT against a public key."
+  (:tag :inv "constant-time" :perf "p-120us" :doc "fn-verify-jwt")
+  (ok (Claims :sub "u1")))
+"""
+    server.handle_request({
+        "jsonrpc": "2.0",
+        "method": "textDocument/didOpen",
+        "params": {"textDocument": {"uri": doc_uri, "text": code}}
+    })
+
+    # Test tag lookup for 'd-1eed'
+    lookup_resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "lsp/tag-lookup",
+        "params": {"tag": "d-1eed"}
+    })
+    assert lookup_resp["id"] == 5
+    assert lookup_resp["result"]["count"] == 1
+    assert lookup_resp["result"]["results"][0]["name"] == "auth/jwt"
+
+    # Test tag lookup for 'constant-time'
+    lookup_resp2 = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "lsp/tag-lookup",
+        "params": {"tag": "constant-time"}
+    })
+    assert lookup_resp2["id"] == 6
+    assert lookup_resp2["result"]["count"] == 1
+    assert lookup_resp2["result"]["results"][0]["name"] == "verify-token"
+
+    # Test node metadata lookup on line 7 (inside verify-token)
+    meta_resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "lsp/node-meta",
+        "params": {"uri": doc_uri, "line": 7}
+    })
+    assert meta_resp["id"] == 7
+    node = meta_resp["result"]
+    assert node["name"] == "verify-token"
+    assert node["tags"]["inv"] == "constant-time"
+    assert node["tags"]["perf"] == "p-120us"
+
+    # Test hover shows metadata tags
+    hover_resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "textDocument/hover",
+        "params": {
+            "textDocument": {"uri": doc_uri},
+            "position": {"line": 5, "character": 7}
+        }
+    })
+    assert hover_resp["id"] == 8
+    val = hover_resp["result"]["contents"]["value"]
+    assert "constant-time" in val
+    assert "p-120us" in val
+

@@ -450,6 +450,12 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
               :imports (module-imports m)
               :defs defs))
 
+(df is-tag? [(s rd/SExpr)] -> Bool
+  :d "True when an SExpr is a (:tag ...) or (@tag ...) metadata form."
+  (and (rd/is-list? s)
+       (let [(h (rd/sexpr-head s))]
+         (or (= h ":tag") (= h "@tag")))))
+
 (df decl-step [(acc (Result (List TopForm) ParseError)) (pf PosForm)
                   (exported (List String))]
   -> (Result (List TopForm) ParseError)
@@ -458,7 +464,8 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
     ((err e) (err e))
     ((ok xs)
      (let [(s (.-expr pf))]
-       (if (and (rd/is-atom? s) (string-starts-with? (rd/sexpr-head s) "\""))
+       (if (or (and (rd/is-atom? s) (string-starts-with? (rd/sexpr-head s) "\""))
+               (is-tag? s))
          (ok xs)
          (mt (decl-form pf exported)
            ((ok t)  (ok (list-cons t xs)))
@@ -506,16 +513,22 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
        (collect-vars (tail-exprs items) (list-cons (rd/sexpr-head h) acc))))
     ((none) (pair (list-reverse acc) (list)))))
 
+(df filter-tags [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Remove metadata tag forms from an expression list."
+  (filter (fn [(x rd/SExpr)] -> Bool (not (is-tag? x))) items))
+
 (df split-doc [(items (List rd/SExpr))] -> (Pair String (List rd/SExpr))
-  :d "Split a leading :doc pair off a form's remaining items."
+  :d "Split a leading :doc pair off a form's remaining items, dropping tags."
   (mt (list-head items)
     ((some h)
-     (if (and (rd/is-atom? h) (= (rd/sexpr-head h) ":doc"))
-       (mt (list-head (tail-exprs items))
-         ((some d) (pair (rd/sexpr-head d) (tail-exprs (tail-exprs items))))
-         ((none)   (pair "" (list))))
-       (pair "" items)))
-    ((none) (pair "" items))))
+     (cond
+       ((is-tag? h) (split-doc (tail-exprs items)))
+       ((and (rd/is-atom? h) (= (rd/sexpr-head h) ":doc"))
+        (mt (list-head (tail-exprs items))
+          ((some d) (pair (rd/sexpr-head d) (filter-tags (tail-exprs (tail-exprs items)))))
+          ((none)   (pair "" (list)))))
+       (:else (pair "" (filter-tags items)))))
+    ((none) (pair "" (list)))))
 
 (df params-vector? [(v (Option rd/SExpr))] -> Bool
   :d "True when a defun's parameter slot holds a [ ] vector."
@@ -587,7 +600,7 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
         (tv (read-type-vars (tail-exprs items)))
         (rest (.-second tv))
         (name (list-head-text rest))
-        (fforms (filter (fn [(f rd/SExpr)] -> Bool (rd/is-list? f)) (tail-exprs rest)))
+        (fforms (filter (fn [(f rd/SExpr)] -> Bool (and (rd/is-list? f) (not (is-tag? f)))) (tail-exprs rest)))
         (jc (mt (find-opt items ":json-case")
               ((some v) (some (rd/sexpr-head v)))
               ((none)   (none))))]
@@ -626,7 +639,7 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
         (tv (read-type-vars (tail-exprs items)))
         (rest (.-second tv))
         (name (list-head-text rest))
-        (cforms (filter (fn [(c rd/SExpr)] -> Bool (rd/is-list? c)) (tail-exprs rest)))]
+        (cforms (filter (fn [(c rd/SExpr)] -> Bool (and (rd/is-list? c) (not (is-tag? c)))) (tail-exprs rest)))]
     (cond
       ((not (pascal-name? name))
        (err (perr (str "defenum name is not PascalCase: '" name "'") pf)))

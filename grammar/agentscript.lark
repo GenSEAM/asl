@@ -24,6 +24,7 @@ toplevel: module_decl
         | defun
         | defenum
         | note
+        | tag_node
 
 note: STRING
 
@@ -33,6 +34,7 @@ module_decl: "(" MODULE mod_path module_opt* ")"
 module_opt: DOC_KW STRING
           | EXPORT_KW "[" (IDENT|TYPE_NAME)* "]"
           | IMPORT_KW "[" import_spec* "]"
+          | tag_node
 import_spec: "(" mod_path AS_KW IDENT ")"
 mod_path: MOD_PATH | IDENT
 
@@ -49,20 +51,22 @@ type_params: "{" TYPE_NAME* "}"
 // ambiguity against a trailing field list.
 defschema: "(" DEFSCHEMA type_params? TYPE_NAME schema_opt* field+ ")"
 schema_opt: JSON_CASE_KW IDENT
+          | tag_node
 
 field: "(" FIELD_KW IDENT type STRING field_opt* ")"
 
 field_opt: DEFAULT_KW literal
          | JSON_KW STRING
+         | tag_node
 
 // The `!` marks a declaration that touches the world. It is inferred inside a
 // body but mandatory here, because the signature is the module surface and a
 // caller must see an effect without reading the body (PCP d-f99b).
-defun: "(" DEFUN BANG? type_params? IDENT params ARROW type doc_opt? expr+ ")"
+defun: "(" DEFUN BANG? type_params? IDENT params ARROW type doc_opt? tag_node* expr+ ")"
 doc_opt: DOC_KW STRING
 
-defenum: "(" DEFENUM type_params? TYPE_NAME enum_case+ ")"
-enum_case: "(" CASE_KW IDENT "[" param* "]" STRING ")"
+defenum: "(" DEFENUM type_params? TYPE_NAME tag_node* enum_case+ ")"
+enum_case: "(" CASE_KW IDENT "[" param* "]" STRING tag_node* ")"
 
 params: "[" param* "]"
 param: "(" IDENT type ")"
@@ -113,10 +117,20 @@ try_form: "(" TRY expr ")"
 // position implies, and writing it costs the budget the language exists to spend
 // on problem-solving (PCP r-a624). Named declarations keep theirs — they are the
 // module surface, read without the body — so `params` stays strict.
-fn_form: "(" FN BANG? fn_params (ARROW type)? expr+ ")"
+fn_form: "(" FN BANG? fn_params (ARROW type)? tag_node* expr+ ")"
 fn_params: "[" fn_param* "]"
 fn_param: IDENT
         | "(" IDENT type ")"
+
+// ---------- metadata tags (decoupled meta) ----------
+
+tag_node: "(" TAG_HEAD tag_field* ")"
+tag_field: KEYWORD
+         | literal
+         | IDENT
+         | QUALIFIED
+         | tag_vector
+tag_vector: "[" (KEYWORD | literal | IDENT | QUALIFIED)* "]"
 
 // A PascalCase head is record construction: (Point :x 3 :y 4)
 ctor: "(" (TYPE_NAME|QUALIFIED_TYPE) ctor_arg* ")"
@@ -177,6 +191,7 @@ DEFAULT_KW: ":default"
 // Priority: ":json-case" must out-rank ":json" and the general KEYWORD regex,
 // both of which also match its prefix.
 JSON_CASE_KW.3: ":json-case"
+TAG_HEAD.3: ":tag" | "@tag"
 JSON_KW: ":json"
 ELSE_KW: ":else"
 

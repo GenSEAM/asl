@@ -46,7 +46,7 @@ module.exports = grammar({
   rules: {
     source_file: $ => repeat($._toplevel),
 
-    _toplevel: $ => choice($.module_decl, $.defschema, $.defun, $.defenum, $.note),
+    _toplevel: $ => choice($.module_decl, $.defschema, $.defun, $.defenum, $.note, $.tag_node),
 
     // A bare string at top level is a note bound to nothing — the only comment
     // mechanism. Only the body position accepted one, so a file banner had
@@ -62,6 +62,7 @@ module.exports = grammar({
       seq(choice(...OPT[':doc']), field('doc', $.string)),
       seq(choice(...OPT[':export']), '[', repeat(field('export', choice($.ident, $.type_name))), ']'),
       seq(choice(...OPT[':import']), '[', repeat($.import_spec), ']'),
+      $.tag_node,
     ),
     import_spec: $ => seq(
       '(', field('path', $.mod_path), choice(...OPT[':as']), field('alias', $.ident), ')'
@@ -81,18 +82,22 @@ module.exports = grammar({
       optional(field('type_params', $.type_params)),
       field('name', $.type_name), repeat($.schema_opt), repeat1($.field), ')'
     ),
-    schema_opt: $ => seq(':json-case', field('json_case', $.ident)),
+    schema_opt: $ => choice(
+      seq(':json-case', field('json_case', $.ident)),
+      $.tag_node,
+    ),
 
     defenum: $ => seq(
       '(', choice(...HEAD.defenum),
       optional(field('type_params', $.type_params)),
-      field('name', $.type_name), repeat1($.enum_case), ')'
+      field('name', $.type_name), repeat($.tag_node), repeat1($.enum_case), ')'
     ),
     enum_case: $ => seq(
       '(', choice(...OPT[':case']),
       field('name', $.ident),
       '[', repeat($.param), ']',
-      field('doc', $.string), ')'
+      field('doc', $.string),
+      repeat($.tag_node), ')'
     ),
 
     field: $ => seq(
@@ -106,6 +111,7 @@ module.exports = grammar({
     field_opt: $ => choice(
       seq(':default', field('default', $._literal)),
       seq(':json', field('json_name', $.string)),
+      $.tag_node,
     ),
 
     // `!` marks a declaration that touches the world; mandatory on the
@@ -119,6 +125,7 @@ module.exports = grammar({
       '->',
       field('return_type', $._type),
       optional(seq(choice(...OPT[':doc']), field('doc', $.string))),
+      repeat($.tag_node),
       repeat1(field('body', $._expr)), ')'
     ),
 
@@ -187,6 +194,7 @@ module.exports = grammar({
       optional(field('effect', '!')),
       field('params', $.fn_params),
       optional(seq('->', field('return_type', $._type))),
+      repeat($.tag_node),
       repeat1(field('body', $._expr)), ')'
     ),
 
@@ -195,6 +203,20 @@ module.exports = grammar({
       field('name', $.ident),
       seq('(', field('name', $.ident), field('type', $._type), ')')
     ),
+
+    // ---------- metadata tags (decoupled meta) ----------
+
+    tag_node: $ => seq(
+      '(', choice(':tag', '@tag'), repeat($.tag_field), ')'
+    ),
+    tag_field: $ => choice(
+      $.keyword,
+      $._literal,
+      $.ident,
+      $.qualified,
+      $.tag_vector,
+    ),
+    tag_vector: $ => seq('[', repeat(choice($.keyword, $._literal, $.ident, $.qualified)), ']'),
 
     // §6.5/§6.6 builtins whose heads double as pattern heads.
     constructor_call: $ => choice(

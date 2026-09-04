@@ -126,10 +126,12 @@ def collect(path: Path) -> Module:
             mod.has_header = True
             mod.name = tok(decl.children[1])
             for opt in decl.children[2:]:
+                if not (isinstance(opt, Tree) and opt.children):
+                    continue
                 head = opt.children[0]
-                if head.type == "DOC_KW":
+                if isinstance(head, Token) and head.type == "DOC_KW":
                     mod.doc = True
-                elif head.type == "EXPORT_KW":
+                elif isinstance(head, Token) and head.type == "EXPORT_KW":
                     # One list, and the entry's case decides its kind: type names
                     # are PascalCase and identifiers are not, so no keyword is
                     # needed and there is no second contract to disagree with.
@@ -137,7 +139,7 @@ def collect(path: Path) -> Module:
                         bucket = (mod.exported_types if t.type == "TYPE_NAME"
                                   else mod.exports)
                         bucket.append(str(t))
-                elif head.type == "IMPORT_KW":
+                elif isinstance(head, Token) and head.type == "IMPORT_KW":
                     for spec in opt.children[1:]:
                         alias = tok(spec.children[-1])
                         mod.imports[alias] = tok(spec.children[0])
@@ -165,6 +167,7 @@ def collect(path: Path) -> Module:
                     fname = tok(parts[0])
                     for o in k.children:
                         if (isinstance(o, Tree) and o.data == "field_opt"
+                                and o.children and isinstance(o.children[0], Token)
                                 and o.children[0].type == "DEFAULT_KW"):
                             defaults[fname] = o.children[1]
                     fields[fname] = (parts[1], fname in defaults)
