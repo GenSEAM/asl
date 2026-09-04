@@ -1,0 +1,12 @@
+{
+  "name": "@genseam/asl-agent-core",
+  "version": "0.1.0",
+  "description": "AgentScript Unified Agent Core: composable onion middleware, capability negotiator, event bus, and execution pipeline",
+  "main": "src/core.asl",
+  "scripts": {
+    "test": "python3 ../../tools/test_runner.py tests/"
+  },
+  "keywords": ["agentscript", "agent", "core", "onion", "middleware", "pipeline"],
+  "author": "GenSEAM Team",
+  "license": "MIT"
+}

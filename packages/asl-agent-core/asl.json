@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl-agent-core",
+  "version": "0.1.0",
+  "description": "AgentScript Unified Agent Core: composable onion middleware, capability negotiator, event bus, and execution pipeline",
+  "entry": "src/core.asl",
+  "targets": {
+    "wasm": {"output": "dist/core.wasm"},
+    "ts": {"output": "dist/core.ts"},
+    "py": {"output": "dist/core.py"}
+  }
+}
