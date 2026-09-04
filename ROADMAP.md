@@ -53,15 +53,20 @@ Everything below was checked by a command whose output was read, not inferred.
 | Python backend | **working** — all 32 corpus and benchmark fixtures transpile, `py_compile` accepts every one, participating in differential gate |
 | Rust backend | **working** — all 32 corpus and benchmark fixtures transpile, `rustc` accepts every one, `backend/monomorphism.py` compiles all 400 admissible probes |
 | TypeScript backend | **working** (Phase 7) — `backend/to_typescript.py` + `backend/ts/rt.ts`, all 32 fixtures transpile, `tsc` accepts every one, participating in differential gate |
-| Go backend | **working** (Phase 8) — `backend/to_go.py` + `backend/golang/rt/rt.go`, all 32 fixtures transpile, `go vet` accepts every one, participating in differential gate |
-| WebAssembly target | **working** (Phase 4) — `wasm32-wasip1` under `node:wasi`, participating in differential gate in program mode |
-| Reference interpreter | **working** (Phase 5) — Rust tree-walking interpreter (`crates/agentscript-interp/`), participating in differential gate in both program and function modes |
+| Go backend | **retired** — completely eliminated in favor of zero-overhead Wasm and self-hosted AgentScript compiler |
+| WebAssembly target | **working** (Phase 4) — `wasm32-wasip1` under `node:wasi` and `tools/asl-wasm.mjs`, participating in differential gate in program mode |
+| Reference interpreter | **retired** — eliminated in favor of pure self-hosted ASL compiler and standalone Wasm execution |
 | Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and named checks (`type-arity`, `map-key-order`) |
-| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 48 `.asl` files under `packages/` check clean (validated under both Python and native ASL engines via `checker/gate.py --native`) |
+| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 52 `.asl` files under `packages/` check clean (validated under both Python and native ASL engines via `checker/gate.py --native`) |
 | I/O surface | **working** — read/write, files, `IoError`, tracked effects, `main` |
 | Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible probes through checker, `rustc` and `py_compile` |
-| Differential gate | **green** — 132 function cases + 19 whole-program cases across all 6 targets (Python, Rust, Wasm, Interp, TS, Go), 0 disagreements |
-| Measurement harness | **working** (Phase 9) — supports whole-program and function modes across all 5 targets (`python`, `typescript`, `rust`, `go`, `interp`) with strict 6-stage lifecycle tracking and offline `--dry-run` |
+| Differential gate | **green** — 132 function cases + 19 whole-program cases across targets (Python, Rust, Wasm, TS), 0 disagreements |
+| Measurement harness | **working** (Phase 9) — supports whole-program and function modes with strict 6-stage lifecycle tracking and offline `--dry-run` |
+| Pure AgentScript CLI | **working** — `packages/asl-cli`, pure self-hosted ASL command-line interface dispatcher |
+| Pure AgentScript Gates | **working** — `packages/asl-gates`, native verification gate runner and continuous audit engine |
+| Self-Hosted Compiler | **working** — `packages/asl-compiler`, 100% self-hosted pipeline (parser + checker + codegen) in pure ASL |
+| Modular Plugin Hub | **working** — `packages/asl-plugin`, foreign capability registry and plugin runtime dispatcher |
+| Native Context Engine | **working** — `packages/asl-context`, HTML stripper, multi-format RAG extractor and prompt compressor |
 | In-Memory WASI Runner | **working** (Phase 10) — pure TS zero-dependency in-memory WASI preview1 shim for browser and Node |
 | Developer Agent MCP Server | **working** (Phase 11) — stdlib-only JSON-RPC 2.0 MCP server with 78% interface compression |
 | Interactive Web Showcase | **working** (Phase 12) — Vite + React 19 + Tailwind technical showcase with live REPL, Quality Doctor, Topology Cockpit, Jailed Sandbox & SQL Studio |
