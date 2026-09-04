@@ -3,8 +3,16 @@
   "version": "1.0.0",
   "description": "Native AgentScript System & Process Automation Toolkit with Structured Shell Pipelines & Channel Redirection",
   "main": "src/sh.asl",
+  "exports": {
+    ".": "./bridge/index.ts",
+    "./bridge": "./bridge/index.ts",
+    "./supervisor": "./bridge/supervisor.ts",
+    "./ring-buffer": "./bridge/ring_buffer.ts",
+    "./query": "./bridge/query_engine.ts"
+  },
   "scripts": {
-    "test": "python3 ../../tools/test_runner.py tests/"
+    "test": "python3 ../../tools/test_runner.py tests/",
+    "test:bridge": "npx tsx tests/test_host_supervisor.ts && npx tsx tests/test_query.ts"
   },
   "keywords": ["agentscript", "process", "shell", "pipeline", "automation", "admin"],
   "author": "GenSEAM Team",

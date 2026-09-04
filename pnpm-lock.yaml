@@ -18,6 +18,8 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/asl-agent-core: {}
+
   packages/asl-browser-plugin:
     devDependencies:
       typescript:
