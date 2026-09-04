@@ -1,5 +1,5 @@
 (module asl-harness/harness
-  :d "Universal Multi-Modal Agent Harness in ASL Nano"
+  :d "Universal Multi-Modal Agent Harness in ASL"
   :x [AdapterKind AgentHarness get-adapter-name])
 
 (dfe AdapterKind
