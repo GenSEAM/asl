@@ -160,8 +160,10 @@
                        (ok (pair first-tok (option-or (list-tail remaining) (list))))))]
               (mt parsed-pair
                 ((err e) (err e))
-                ((ok (pair tool-name arg-tokens))
-                 (let [(args (parse-arg-pairs arg-tokens))]
+                ((ok p)
+                 (let [(tool-name (.-first p))
+                       (arg-tokens (.-second p))
+                       (args (parse-arg-pairs arg-tokens))]
                    (ok (ToolInvocation
                          :tool-name tool-name
                          :args args

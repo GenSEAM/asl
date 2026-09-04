@@ -7,8 +7,8 @@
   :d "Verifies top-level forms emission and program assembly."
   (let [(f1 (a/AstField :name "x" :type "Int" :docstring "" :default (none) :json (none)))
         (f2 (a/AstField :name "y" :type "Int" :docstring "" :default (none) :json (none)))
-        (schema (a/SchemaNode :name "Point" :type-vars (list) :fields (list f1 f2) :json-case (none)))
-        (s-out (em/emit-defschema schema))
+        (s-node (a/SchemaNode :name "Point" :type-vars (list) :fields (list f1 f2) :json-case (none)))
+        (s-out (em/emit-defschema s-node))
         (c1 (a/EnumCase :name "active" :fields (list) :docstring ""))
         (c2 (a/EnumCase :name "inactive" :fields (list) :docstring ""))
         (en (a/EnumNode :name "Status" :type-vars (list) :cases (list c1 c2)))
@@ -19,7 +19,7 @@
         (defun-node (a/DefunNode :name "add" :type-vars (list) :is-exported true :effect false :params (list p1 p2) :ret-type "Int" :docstring "" :body body))
         (aliases (map-empty))
         (d-out (em/emit-defun defun-node aliases))
-        (forms (list (a/top-schema schema) (a/top-enum en) (a/top-defun defun-node)))
+        (forms (list (a/top-schema s-node) (a/top-enum en) (a/top-defun defun-node)))
         (prog-out (em/emit-rust-program forms (list)))]
     (cond
       ((not (string-contains? s-out "pub struct Point")) "fail struct name")

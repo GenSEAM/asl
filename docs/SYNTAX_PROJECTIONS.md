@@ -13,16 +13,18 @@ The tool `asl view` displays a module in its verbose spelling on screen without 
 and `asl transcode --to verbose` converts it when debugging. Both grammars produce the exact same AST
 from either spelling.
 
-**What it buys, measured.** Fewer bytes, and not fewer tokens. Across every fixture in
-`grammar/corpus/valid`, under `cl100k_base`: 58,175 bytes against 56,091, a 3.6% saving, and
-15,931 tokens against 15,931 — no saving at all. A BPE vocabulary already encodes the long form
-cheaply, so `(defun` and `(df` are one token each and ` :export` and ` :x` are two each.
-`bench/token_projection.py` is the measurement.
+**Token and Byte Efficiency.** Standard format guarantees that every single primitive declaration head,
+expression head, option keyword, and primitive type alias sits at or below a **strict 2-token ceiling**
+under BPE tokenizers (`bench/token_audit.py --check`), while saving 3.6% to 5% bytes on disk and wire.
+Modern BPE tokenizers encode single words compactly (`(defun` and `(df` are one token each),
+meaning Standard format achieves optimal visual brevity and disk efficiency without tokenizer fragmentation penalties.
 
-Do not confuse this with the wire and data formats, where the saving is real and large: removing
-*structure* — quotes around keys, commas, braces, field names repeated on every row — takes a
-command frame from 51 tokens to 18, which `bench/token_frames.py` measures. Structural compaction
-works. Abbreviating identifiers does not.
+Where token compaction becomes massive is when Standard format syntax composes with AgentScript's
+structural wire frames (AgP) and tabular data serialization (ASN):
+- **Command Frames (AgP vs JSON):** 51 tokens down to 18 tokens (**-64.7% token reduction**, `bench/token_frames.py`).
+- **Tabular Records (ASN vs JSON):** 3,802 tokens down to 1,601 tokens (**-57.9% token reduction**, `bench/asn_tokens.py`).
+- **Standard Format Enforcement:** `tools/verbose_linter.py` ensures that all code saved in the repository
+remains strictly in the Standard format.
 
 ## The spellings
 

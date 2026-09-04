@@ -17,8 +17,8 @@ about; the ones it did not know about were found by making a gate look somewhere
 ## 1. What this project is
 
 AgentScript is an S-expression language designed so that LLM agents can generate large, reusable units
-of working code in a single pass, transpiled to native Rust and Go (the priority targets), with
-TypeScript and Python secondary.
+of working code in a single pass, compiling directly to high-speed WebAssembly and TypeScript, driven
+by a pure self-hosted AgentScript toolchain.
 
 **WebAssembly is the target the language is aimed at** (PCP `d-f484`): the role is a typed glue
 layer between ecosystems that meet as compiled modules rather than as source, with the module's
@@ -74,11 +74,11 @@ Everything below was checked by a command whose output was read, not inferred.
 | Native ASL Quality Suite | **working** — `packages/asl-lint`, `asl lint` (anti-pattern/smell linter), `asl clone-check` (AST clone detector), `asl fix` (autonomous repair) |
 | Native ASL SQL Module | **working** — `packages/asl-sql`, cross-dialect query builder & parameterizer (Postgres, SQLite, MySQL, ClickHouse), DDL/DML generator |
 | Native LSP 3.17 Server | **working** — `tools/lsp.py`, `asl lsp`, stdio JSON-RPC 2.0, hover docs, jump-to-definition, virtual projections (@pcp:r-8d8e) |
-| Nano projection & transcoder | **working** — short spellings (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `Str`, `I64`, `F64`), `asl transcode`, `asl view` (@pcp:d-1eed, `d-ddc2`). **It buys 3.6% of bytes and 0.0% of tokens** — see §6 and `bench/token_projection.py` |
+| Standard format & transcoder | **working** — standard compact spellings (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `Str`, `I64`, `F64`), `asl transcode`, `asl view` (@pcp:d-1eed, `d-ddc2`). Enforces strict 2-token ceiling on all primitives; verbose format forbidden in saved code via `tools/verbose_linter.py` |
 | In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
 | Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
 | Polyglot DB Bridge & Schema Hub | **planned** (Phase 9) — `packages/asl-bridge`, abstract capability ports (`DbPort`, `DbDriver`), universal multi-ORM emitter (Kysely, Prisma, Drizzle, SQLAlchemy, SeaORM, sqlc), and Wasm-forced execution router |
-| Rational Single-Token Audit | **planned** (Phase 10) — `bench/token_audit.py`, periodic BPE tokenization audit (`cl100k_base`, `o200k_base`), rational 1-2 token boundary enforcement for protocol frames and keywords without destructive identifier mangling |
+| Rational Token Ceiling Audit & Standard Enforcer | **working** (Phase 10) — `bench/token_audit.py` (`--check`), `tools/verbose_linter.py`, BPE tokenization audit (`cl100k_base`, `o200k_base`), strict <= 2 token ceiling on all primitives, standard format enforcement across all packages |
 | Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + native-vs-Lark latency/memory benchmark (`tools/native_parser.py`); lexer scanner is iterative (fold over `string-chars`), so all 48 `packages/**/*.asl` parse without recursion overflow (`tools/tests/test_native_parse_all.py`: 38 passed) |
 | Self-Hosted ASL Checker | **working** — `packages/asl-checker` in 100% pure AgentScript (`types.asl`, `unify.asl`, `resolve.asl`, `check.asl`); `asl check --native` CLI + `checker/gate.py --native` verified with 0 failures across all 131 files; HM unification, module boundary resolution, and §9 rules (@pcp:d-8d4c) |
 | Self-Hosted ASL Codegen | **working** — `packages/asl-codegen` in 100% pure AgentScript (`emit.asl`, `expr.asl`, `rtypes.asl`, `mangle.asl`, `builtins.asl`); standalone native Rust generation, module linking, slice patterns, `asl build --native`, 8/8 test suite passing (`tools/tests/test_native_codegen.py`), clean clone ratio (<15%) |
@@ -230,17 +230,14 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    `differential.py`; the code survives into the compiler frontend.
 2. ~~**I/O surface**~~ — done, PCP `r-56bf`. Effects are tracked by a marker rather than left
    implicit, so the concurrency question stays open instead of being foreclosed.
-3. ~~**Python and JavaScript backends**~~ — **done**. Python, TypeScript, Go and Rust all
-   transpile the corpus and are compile-gated by their own toolchains; all six targets participate
-   in the differential gate. Rust and Go remain the compiler's own self-hosting targets and are
-   unchanged as a product goal.
+3. ~~**Python, TypeScript and Wasm targets**~~ — **done**. Python, TypeScript, Wasm and Rust all
+   transpile the corpus and are compile-gated by their own toolchains; participating
+   in the differential gate. Go has been completely retired in favor of pure self-hosted ASL.
 4. **Benchmark harness** — terminal-bench, comparing generated AgentScript transpiled to Python/JS
    against real Python/JS solutions to the same tasks.
 5. **Measurement** — see §5. Blocked.
-6. **Native backends** — Rust and Go **exist and compile the corpus**; what remains gated is not
-   the backend but the ownership model behind it (PCP `l-880d`): the Rust output uses a
-   conservative clone-at-every-use strategy chosen instead of a model. The cost of that strategy is
-   now measurable rather than hypothetical.
+6. **Wasm and Native Targets** — Wasm (`wasm32-wasip1`) and Rust exist and compile the corpus;
+   Go backend has been retired in favor of zero-overhead Wasm and self-hosted ASL codegen (`packages/asl-codegen`).
 6b. **WebAssembly target** — the cheap half is already reachable: the Rust backend's output is
    accepted for `wasm32-unknown-unknown` unchanged, and every rustc-gated corpus fixture produces
    a valid module (magic `0061736d`), so a target arrives with no new code generation. That route
@@ -275,12 +272,10 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
      1. *Tier 1*: Sub-millisecond in-memory Wasm sandbox (0.038ms, 95%+ of agent tasks).
      2. *Tier 2*: Host Process / Agent-Bus IPC (for local system tooling and streaming sockets).
      3. *Tier 3*: MicroVM (Firecracker / Docker, reserved for legacy C++ binaries, CUDA/GPU drivers, or raw POSIX networking).
-10. **Rational Single-Token Audit & Token Fragmentation Gate (`bench/token_audit.py`)** — **planned**.
-    - **Dedicated Tokenizer Hygiene**: Periodic BPE analysis across modern tokenizer vocabularies (`cl100k_base`, `o200k_base`, Llama) for all DSL additions, `asl-bridge` protocol frames, wire primitives (`agp`), and SQL builder operators.
-    - **Rational Single-Token Policy**:
-      - *Authentic Structural Savings*: Focuses token optimization on data structures and frame formatting where savings are mathematically proven (e.g. S-expression command frames saving 64.7% tokens over JSON in `bench/token_frames.py`).
-      - *Anti-Mangling Boundary*: Explicitly avoids irrational identifier abbreviation (which §6 proved yields 0.0% token savings and harms comprehension). Ensures that high-frequency protocol delimiters, wire operators, and core heads occupy 1-2 tokens with zero multi-byte splitting, while domain types and entity names retain full descriptive legibility.
-    - **Automated Regression Pinning**: `bench/token_audit.py --check` with `bench/token_audit.lock`, integrated into pre-commit verification to prevent silent token bloat or BPE fragmentation traps during vocabulary evolution.
+10. **Rational Token Ceiling Audit & Standard Format Enforcer (`bench/token_audit.py`, `tools/verbose_linter.py`)** — **done & active**.
+    - **Dedicated Tokenizer Hygiene**: Periodic BPE analysis across modern tokenizer vocabularies (`cl100k_base`, `o200k_base`) enforcing the **2-Token Ceiling** on every language primitive (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `I64`, `Str`, `Bool`, `Unit`).
+    - **Standard Format Enforcement**: `tools/verbose_linter.py` scans saved `.asl` source files and forbids verbose projection syntax (`defun`, `defschema`, `defenum`, `match`, `:doc`, `:export`, `:import`, `Int64`, `String`) from being committed to disk. All code on disk is strictly preserved in the Standard format.
+    - **Automated Regression Gates**: `bench/token_audit.py --check` and `tools/verbose_linter.py` integrated into the pre-commit chain.
 
 ---
 
@@ -300,11 +295,10 @@ language but the tasks: the harness has a whole-program mode and no task written
    guessed at.
 3. **Environment variable name** holding the credential. Credentials go in the environment only —
    never the repository, never a committed artifact.
-4. **Harness** — terminal-bench was chosen as the driving agent/benchmark over Factory Droid and
-   over SWE-bench. SWE-bench was rejected because its tasks are edits inside existing Python
-   repositories and require interoperating with arbitrary host code, which Core cannot express
-   without FFI; measuring there would report a deliberate scope boundary as a language failure.
-   Needed: the headless invocation and how a specification is supplied to it.
+4. **Harness** — driven natively by `packages/asl-harness` and `packages/asl-cli` alongside
+   terminal-bench; external agent wrappers (such as Factory Droid or SWE-bench) were evaluated
+   and rejected in favor of self-contained in-memory Wasm execution and pure ASL test runners.
+   Needed: final benchmark dataset scoring automation.
 
 The harness can be written and unit-tested without any of this. It cannot be run.
 

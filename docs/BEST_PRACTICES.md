@@ -77,23 +77,17 @@ Connect the ASL MCP Server (`tools/mcp/server.py`) to Claude Desktop, Cursor, or
 
 ### Recipe 3: Multi-Target Production CI/CD Pipeline
 
-Compile one ASL business module simultaneously to a React frontend, Go microservice, and Rust native binary:
+Compile one ASL business module simultaneously to high-speed WebAssembly and TypeScript:
 
 ```bash
 # 1. Verify semantics across all files
 asl check src/main.asl
 
-# 2. Build WebAssembly for browser edge
+# 2. Build WebAssembly for browser edge and serverless runtimes
 asl build src/main.asl --target wasm -o dist/main.wasm
 
-# 3. Transpile to TypeScript for React web frontend
+# 3. Transpile to TypeScript for React web frontend and Node/Bun services
 asl build src/main.asl --target ts -o src/generated/main.ts
-
-# 4. Transpile to Go for cloud services
-asl build src/main.asl --target go -o cmd/server/main.go
-
-# 5. Transpile to Rust for high-throughput native worker
-asl build src/main.asl --target rs -o crates/core/src/main.rs
 ```
 
 ---

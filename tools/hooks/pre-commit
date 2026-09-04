@@ -28,6 +28,8 @@ GATES=(
   "AST clone detection|$PYTHON agentscript clone-check packages"
   "Design token contrast|( cd web && node scripts/check-tokens.mjs >/dev/null )"
   "Web bundle and deploy pre-flight|$PYTHON tools/deploy_check.py"
+  "Token ceiling audit|$PYTHON bench/token_audit.py --check"
+  "Standard format enforcement|$PYTHON tools/verbose_linter.py packages"
 )
 
 echo "=== [ASL Pre-Commit Gates] Running Verification Chain ==="

@@ -8,7 +8,7 @@
 > of magnitude to design against. `ROADMAP.md` §2 lists the figures that do have a gate,
 > and `bench/token_frames.py` is the shape a claim has to take to earn a place here.
 
-> **"Write once in ASL. Execute seamlessly on Browser, iOS (App Store compliant), Android, Node, Bun, Deno, CPython, PyPy, and Cython."**
+> **"Write once in ASL. Execute seamlessly across Browser, Node, Bun, Deno, Edge Workers, and WebAssembly (wasm32-wasip1)."**
 
 ---
 
@@ -50,29 +50,27 @@ ASL emits pure, zero-dependency ES Modules (`.ts` / `.mjs`) with standard type d
 
 ---
 
-## 3. Python Ecosystem & Acceleration Matrix
+## 3. Python Reference Runtime
 
-Python performance varies wildly between workloads. ASL bridges standard CPython with high-performance execution engines:
+ASL provides a reference lowering into standard PEP 484 type-annotated Python for differential verification and host interop:
 
-| Python Runtime | Compatibility | How ASL Integrates | Performance Boost |
+| Python Runtime | Compatibility | How ASL Integrates | Execution Role |
 | :--- | :--- | :--- | :--- |
-| **CPython (3.10 – 3.13)** | **100% Native** | Emits clean PEP 484 type-annotated standard Python | Reference baseline |
-| **PyPy (JIT)** | **100% Compatible** | Pure mathematical loops JIT-compile with 0 C-extension friction | **4x – 12x faster** |
-| **Cython** | **Supported** | Generates static C-types (`cdef`) for compilation into native `.so` / `.pyd` | **15x – 50x faster** |
-| **Numba JIT** | **Math Bridge** | Annotates vector/matrix functions with `@njit(fastmath=True)` | **30x – 100x faster** |
+| **CPython (3.10 – 3.13)** | **100% Native** | Emits clean PEP 484 type-annotated standard Python | Reference verification baseline |
+| **PyPy (JIT)** | **100% Compatible** | Fast JIT compilation of reference AST execution | High-speed alternative Python runner |
 
 ---
 
-## 4. The Polyglot Pipeline: Uniting Python, Rust, and Wasm
+## 4. The Unified Pipeline: WebAssembly, TypeScript, and Edge
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           THE ASL GLUE ARCHITECTURE                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ 1. Frontend (React / Svelte):   Consumes Wasm binary in-memory (<0.04ms)   │
-│ 2. Mobile App (iOS / Android):  Runs Wasm3 interpreter (App Store safe)    │
-│ 3. ML Pipeline (Python / PyPy): Imports generated Python with Numba math   │
-│ 4. Cloud Gateway (Go / Rust):   Runs native compiled Go/Rust structs       │
+│ 2. Mobile App (iOS / Android):  Runs Wasm3/WASI interpreter (App Store safe)│
+│ 3. Edge / Cloud Services:       Executes wasm32-wasip1 on Cloudflare / Deno │
+│ 4. Node / Bun Host Runtimes:    Direct zero-dependency TypeScript modules   │
 │                                                                             │
 │ ──> ZERO Protobuf/gRPC serialization drift across your entire tech stack    │
 └─────────────────────────────────────────────────────────────────────────────┘

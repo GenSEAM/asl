@@ -5,7 +5,7 @@ We are proud to announce the **v0.1.0 release of AgentScript (ASL)** — the fir
 ## Highlights
 
 ### 1. Zero-Drift Multi-Target Compilation & Differential Verification
-- **6 Cross-Platform Execution Targets:** Native Rust, Go, Python, TypeScript, Wasm (`wasm32-wasip1`), and a Reference Tree-Walking Interpreter.
+- **Execution Targets:** WebAssembly (`wasm32-wasip1`), TypeScript, Python (reference), Native Rust, and in-browser execution.
 - **Strict Differential Verification Gate:** 135 continuous test runs across all 6 targets with **0 disagreements** on return values, stdout, stderr, and exit codes.
 - **100% Executed Vocabulary Coverage:** 107/107 standard library builtins evaluated and mutation-tested.
 
