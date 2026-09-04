@@ -24,7 +24,10 @@ URLS = [
     f"https://{HOST}/blog/universal-cross-platform-glue-without-drift",
     f"https://{HOST}/blog/epistemic-grounding-and-anti-hallucination-firewalls",
     f"https://{HOST}/blog/zero-server-in-browser-agent-runtimes",
+    f"https://{HOST}/blog/cross-dialect-sql-without-hallucinations",
+    f"https://{HOST}/blog/git-native-agent-memory-and-vector-recall",
     f"https://{HOST}/sitemap.xml",
+    f"https://{HOST}/rss.xml",
     f"https://{HOST}/llms.txt",
     f"https://{HOST}/llms-full.txt",
 ]

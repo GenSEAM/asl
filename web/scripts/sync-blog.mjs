@@ -185,3 +185,49 @@ export const getFeaturedBlogPosts = (limit: number = 4): BlogPost[] => {
 
 fs.writeFileSync(path.join(outDir, 'posts.ts'), tsContent, 'utf8');
 console.log(`Successfully synced ${posts.length} blog posts into web/src/data/blog/posts.ts`);
+
+// Generate RSS 2.0 Feed
+const buildRssDate = (dateStr) => {
+  const d = new Date(dateStr);
+  return d.toUTCString();
+};
+
+const escapeXml = (unsafe) => {
+  return unsafe.replace(/[<>&'"]/g, (c) => {
+    switch (c) {
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '&': return '&amp;';
+      case '\'': return '&apos;';
+      case '"': return '&quot;';
+    }
+  });
+};
+
+const rssItemsXml = posts.map(post => `    <item>
+      <title>${escapeXml(post.title)}</title>
+      <link>https://aslang.dev/blog/${post.slug}</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/${post.slug}</guid>
+      <pubDate>${buildRssDate(post.date)}</pubDate>
+      <author>dev@aslang.dev (${escapeXml(post.author)})</author>
+      <category>${escapeXml(post.category)}</category>
+      <description>${escapeXml(post.excerpt)}</description>
+    </item>`).join('\n');
+
+const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AgentScript (ASL) — Engineering &amp; Systems Blog</title>
+    <link>https://aslang.dev/blog</link>
+    <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
+    <language>en-us</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
+${rssItemsXml}
+  </channel>
+</rss>
+`;
+
+const publicDir = path.join(rootDir, 'web/public');
+fs.writeFileSync(path.join(publicDir, 'rss.xml'), rssXml, 'utf8');
+console.log(`Generated RSS 2.0 feed with ${posts.length} items at web/public/rss.xml`);
