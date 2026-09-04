@@ -19,12 +19,11 @@ for sub in ("grammar", "backend", "prelude"):
     sys.path.insert(0, str(ROOT / sub))
 
 from _literals import string_literal  # noqa: E402
-from to_go import ToGo  # noqa: E402
 from to_python import Transpiler as ToPython  # noqa: E402
 from to_rust import ToRust  # noqa: E402
 from to_typescript import ToTypeScript  # noqa: E402
 
-BACKENDS = {"go": ToGo, "python": ToPython, "rust": ToRust, "typescript": ToTypeScript}
+BACKENDS = {"python": ToPython, "rust": ToRust, "typescript": ToTypeScript}
 MODULES = ROOT / "grammar" / "corpus" / "modules"
 
 TEMPLATE = """(module t/raw

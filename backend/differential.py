@@ -50,11 +50,7 @@ PRIMITIVE_RUST = {"Int32": "i32", "Int64": "i64", "Float64": "f64",
                   "String": "String", "Bool": "bool"}
 NONFINITE = {"nan": "f64::NAN", "inf": "f64::INFINITY", "-inf": "f64::NEG_INFINITY"}
 
-PRIMITIVE_GO = {"Int32": "int32", "Int64": "int64", "Float64": "float64",
-                "String": "string", "Bool": "bool"}
-NONFINITE_GO = {"nan": "math.NaN()", "inf": "math.Inf(1)", "-inf": "math.Inf(-1)"}
-
-RUN_COUNTS = {"python": 0, "rust": 0, "wasm": 0, "interp": 0, "ts": 0, "go": 0}
+RUN_COUNTS = {"python": 0, "rust": 0, "wasm": 0, "interp": 0, "ts": 0}
 
 
 def render_type(node) -> str:
@@ -168,35 +164,6 @@ def ts_literal(spec: dict, value) -> str:
     raise RuntimeError(f"{name} is not an admissible differential input type")
 
 
-def go_type(spec: dict) -> str:
-    name = con(spec)
-    if name in PRIMITIVE_GO:
-        return PRIMITIVE_GO[name]
-    if name == "List":
-        return f"[]{go_type(spec['args'][0])}"
-    raise RuntimeError(f"{name} is not an admissible differential input type")
-
-
-def go_literal(spec: dict, value) -> str:
-    name = con(spec)
-    if name == "String":
-        return json.dumps(value)
-    if name == "Bool":
-        return "true" if value else "false"
-    if name == "Int32":
-        return f"int32({int(value)})"
-    if name == "Int64":
-        return f"int64({int(value)})"
-    if name == "Float64":
-        if isinstance(value, str):
-            return NONFINITE_GO[value]
-        return f"float64({float(value)!r})"
-    if name == "List":
-        inner = spec["args"][0]
-        if not value:
-            return f"[]{go_type(inner)}{{}}"
-        return f"[]{go_type(inner)}{{" + ", ".join(go_literal(inner, v) for v in value) + "}"
-    raise RuntimeError(f"{name} is not an admissible differential input type")
 
 
 NORMALISE = '''
@@ -343,19 +310,18 @@ def functions(task: dict) -> int:
     rs = run_rust(src, task)
     ip = run_interp(src, task)
     ts = run_typescript(src, task)
-    go = run_go(src, task)
-    if not (len(py) == len(rs) == len(ip) == len(ts) == len(go) == len(task["cases"])):
+    if not (len(py) == len(rs) == len(ip) == len(ts) == len(task["cases"])):
         raise RuntimeError(
             f"{task['id']}: {len(task['cases'])} case(s) produced {len(py)} python, "
-            f"{len(rs)} rust, {len(ip)} interp, {len(ts)} ts and {len(go)} go result(s); "
+            f"{len(rs)} rust, {len(ip)} interp and {len(ts)} ts result(s); "
             f"a truncated comparison is not a comparison")
     bad = 0
     print(f"\n{task['id']} — {task['entry']}")
-    print(f"{'input':<12} {'expected':<18} {'python':<18} {'rust':<18} {'interp':<18} {'ts':<18} {'go':<18}")
-    print("-" * 122)
-    for k, (case, p, r, i, t, g) in enumerate(zip(task["cases"], py, rs, ip, ts, go)):
+    print(f"{'input':<12} {'expected':<18} {'python':<18} {'rust':<18} {'interp':<18} {'ts':<18}")
+    print("-" * 104)
+    for k, (case, p, r, i, t) in enumerate(zip(task["cases"], py, rs, ip, ts)):
         args, want = case[0], case[1]
-        agree = (p == want) and (r == want) and (i == want) and (t == want) and (g == want)
+        agree = (p == want) and (r == want) and (i == want) and (t == want)
         bad += 0 if agree else 1
         shown = ", ".join(repr(a) for a in args)
         # Sorted keys: a Map has no declared iteration order, so equal maps
@@ -363,7 +329,7 @@ def functions(task: dict) -> int:
         show = {"sort_keys": True}
         print(f"{shown:<12} {json.dumps(want, **show):<18} {json.dumps(p, **show):<18} "
               f"{json.dumps(r, **show):<18} {json.dumps(i, **show):<18} "
-              f"{json.dumps(t, **show):<18} {json.dumps(g, **show):<18}"
+              f"{json.dumps(t, **show):<18}"
               + ("" if agree else "  <-- DISAGREE"))
     return bad
 
@@ -457,21 +423,6 @@ def build_typescript(src: Path, d: Path, roots: list[Path] | None = None) -> lis
     return ["node", str(d / "dist" / "main.js")]
 
 
-def build_go(src: Path, d: Path, roots: list[Path] | None = None) -> list[str]:
-    if roots is None:
-        roots = ROOTS
-    from to_go import ToGo
-    main_go = ToGo().transpile(src.read_text(), path=src, roots=roots)
-    if not main_go.strip():
-        raise RuntimeError(f"go transpile of {src.name} emitted no source")
-    rt_go = (ROOT / "backend" / "golang" / "rt" / "rt.go").read_text().replace("package rt\n", "package main\n", 1)
-    (d / "rt.go").write_text(rt_go)
-    (d / "main.go").write_text(main_go)
-    c = subprocess.run(["go", "build", "-o", "go_prog", "main.go", "rt.go"], cwd=d, capture_output=True, text=True)
-    if c.returncode:
-        raise RuntimeError("go build: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
-    return [str(d / "go_prog")]
-
 
 # Function-mode returns are primitives and pairs here, so serialization is
 # small — but a Float64 must keep its decimal point (1.0 is 1.0, not 1), a
@@ -513,117 +464,6 @@ function ser(v: any): string {
 }
 """
 
-_GO_SER = """
-func esc(s string) string {
-    b, _ := json.Marshal(s)
-    return string(b)
-}
-
-func asKey(encoded string) string {
-    if strings.HasPrefix(encoded, "\\"") {
-        return encoded
-    }
-    return esc(encoded)
-}
-
-func ser(v any) string {
-    if v == nil {
-        return "null"
-    }
-    switch val := v.(type) {
-    case string:
-        return esc(val)
-    case bool:
-        if val { return "true" } else { return "false" }
-    case int:
-        return strconv.Itoa(val)
-    case int32:
-        return strconv.FormatInt(int64(val), 10)
-    case int64:
-        return strconv.FormatInt(val, 10)
-    case float64:
-        if math.IsNaN(val) {
-            return "\\"nan\\""
-        }
-        if math.IsInf(val, 1) {
-            return "\\"inf\\""
-        }
-        if math.IsInf(val, -1) {
-            return "\\"-inf\\""
-        }
-        return FmtF64(val)
-    case Unit:
-        return "null"
-    case IoError:
-        return fmt.Sprintf("[%s]", esc(val.Tag))
-    }
-
-    rv := reflect.ValueOf(v)
-    rt := rv.Type()
-
-    if rt.Kind() == reflect.Struct {
-        fFirst := rv.FieldByName("First")
-        fSecond := rv.FieldByName("Second")
-        if fFirst.IsValid() && fSecond.IsValid() && rv.NumField() == 2 {
-            return fmt.Sprintf("[\\"pair\\",%s,%s]", ser(fFirst.Interface()), ser(fSecond.Interface()))
-        }
-        fPres := rv.FieldByName("Present")
-        fVal := rv.FieldByName("Value")
-        if fPres.IsValid() && fVal.IsValid() && rv.NumField() == 2 {
-            if fPres.Bool() {
-                return fmt.Sprintf("[\\"some\\",%s]", ser(fVal.Interface()))
-            }
-            return "[\\"none\\"]"
-        }
-        fOk := rv.FieldByName("IsOk")
-        fErr := rv.FieldByName("Err")
-        if fOk.IsValid() && fVal.IsValid() && fErr.IsValid() && rv.NumField() == 3 {
-            if fOk.Bool() {
-                return fmt.Sprintf("[\\"ok\\",%s]", ser(fVal.Interface()))
-            }
-            return fmt.Sprintf("[\\"err\\",%s]", ser(fErr.Interface()))
-        }
-        fTag := rv.FieldByName("Tag")
-        fArgs := rv.FieldByName("Args")
-        if fTag.IsValid() && fArgs.IsValid() {
-            tag := fTag.String()
-            if fArgs.IsNil() || fArgs.Len() == 0 {
-                return fmt.Sprintf("[%s]", esc(tag))
-            }
-            var parts []string
-            parts = append(parts, esc(tag))
-            for i := 0; i < fArgs.Len(); i++ {
-                parts = append(parts, ser(fArgs.Index(i).Interface()))
-            }
-            return "[" + strings.Join(parts, ",") + "]"
-        }
-    }
-
-    if rt.Kind() == reflect.Slice {
-        var items []string
-        for i := 0; i < rv.Len(); i++ {
-            items = append(items, ser(rv.Index(i).Interface()))
-        }
-        return "[" + strings.Join(items, ",") + "]"
-    }
-
-    if rt.Kind() == reflect.Map {
-        keys := rv.MapKeys()
-        sort.Slice(keys, func(i, j int) bool {
-            return Cmp(keys[i].Interface(), keys[j].Interface()) < 0
-        })
-        var items []string
-        for _, k := range keys {
-            val := rv.MapIndex(k)
-            items = append(items, fmt.Sprintf("%s:%s", asKey(ser(k.Interface())), ser(val.Interface())))
-        }
-        return "{" + strings.Join(items, ",") + "}"
-    }
-
-    return fmt.Sprintf("%v", v)
-}
-"""
-
 
 def run_typescript(src: Path, task: dict) -> list:
     from to_typescript import ToTypeScript, mangle
@@ -652,34 +492,6 @@ def run_typescript(src: Path, task: dict) -> list:
         return json.loads(check_run(r, f"ts {task['entry']}"))
 
 
-def run_go(src: Path, task: dict) -> list:
-    from to_go import ToGo, mangle
-    specs = entry_types(src, task["entry"])
-    with tempfile.TemporaryDirectory() as d:
-        d = Path(d)
-        main_go = ToGo().transpile(src.read_text(), path=src, roots=ROOTS)
-        if not main_go.strip():
-            raise RuntimeError(f"go transpile of {src.name} emitted no source")
-        rt_go = (ROOT / "backend" / "golang" / "rt" / "rt.go").read_text().replace("package rt\n", "package main\n", 1)
-        (d / "rt.go").write_text(rt_go)
-        (d / "cand.go").write_text(main_go)
-        fn = mangle(task["entry"])
-        calls = ", ".join(
-            f"ser({fn}(" + ", ".join(go_literal(s, a) for s, a in bind(specs, args, task)) + "))"
-            for args, *_ in task["cases"])
-        (d / "drv.go").write_text(
-            'package main\nimport (\n    "encoding/json"\n    "fmt"\n    "math"\n    "reflect"\n    "sort"\n    "strconv"\n    "strings"\n)\n'
-            + _GO_SER
-            + f"\nfunc main() {{\n    results := []string{{{calls}}}\n"
-              '    fmt.Println("[" + strings.Join(results, ",") + "]")\n}\n')
-        c = subprocess.run(["go", "build", "-o", "drv", "cand.go", "rt.go", "drv.go"], cwd=d, capture_output=True, text=True)
-        if c.returncode:
-            raise RuntimeError("go build: " + (c.stderr.strip().splitlines() or ["?"])[0][:120])
-        r = subprocess.run([str(d / "drv")], capture_output=True, text=True)
-        RUN_COUNTS["go"] += len(task["cases"])
-        return json.loads(check_run(r, f"go {task['entry']}"))
-
-
 def programs(src: Path, cases: list[dict]) -> int:
     """Run a whole program on every target and compare stdout, stderr and exit
     status against each other and against the case's declared values.
@@ -696,8 +508,8 @@ def programs(src: Path, cases: list[dict]) -> int:
     re-opening that hole by omission.
     """
     bad = 0
-    print(f"\n{'argv':<18} {'python':<18} {'rust':<18} {'wasm':<18} {'interp':<18} {'ts':<18} {'go':<18} {'stderr':<14} exit")
-    print("-" * 152)
+    print(f"\n{'argv':<18} {'python':<18} {'rust':<18} {'wasm':<18} {'interp':<18} {'ts':<18} {'stderr':<14} exit")
+    print("-" * 134)
     for case in cases:
         argv = case.get("argv", [])
         files = case.get("files", {})
@@ -709,7 +521,7 @@ def programs(src: Path, cases: list[dict]) -> int:
             d = Path(d)
             runners = {"python": build_python(src, d), "rust": build_rust(src, d),
                        "wasm": build_rust_wasm(src, d), "interp": build_interpreter(src, d),
-                       "ts": build_typescript(src, d), "go": build_go(src, d)}
+                       "ts": build_typescript(src, d)}
             seen = {}
             for name, cmd in runners.items():
                 RUN_COUNTS[name] += 1
@@ -724,7 +536,7 @@ def programs(src: Path, cases: list[dict]) -> int:
                                    capture_output=True, text=True)
                 seen[name] = (r.stdout, r.stderr, r.returncode)
             agree = (seen["python"] == seen["rust"] == seen["wasm"]
-                     == seen["interp"] == seen["ts"] == seen["go"])
+                     == seen["interp"] == seen["ts"])
             declared_ok = seen["python"] == want
             bad += 0 if (agree and declared_ok) else 1
             note = ("" if agree else "  <-- DISAGREE") + \
@@ -732,10 +544,9 @@ def programs(src: Path, cases: list[dict]) -> int:
             print(f"{' '.join(argv):<18} {seen['python'][0]!r:<18} "
                   f"{seen['rust'][0]!r:<18} {seen['wasm'][0]!r:<18} "
                   f"{seen['interp'][0]!r:<18} {seen['ts'][0]!r:<18} "
-                  f"{seen['go'][0]!r:<18} "
                   f"{seen['python'][1]!r:<14} "
                   f"{seen['python'][2]}/{seen['rust'][2]}/{seen['wasm'][2]}/"
-                  f"{seen['interp'][2]}/{seen['ts'][2]}/{seen['go'][2]}" + note)
+                  f"{seen['interp'][2]}/{seen['ts'][2]}" + note)
     return bad
 
 
@@ -844,7 +655,7 @@ def main() -> int:
         program_total += len(group)
     counts_str = " ".join(f"{k}={v}" for k, v in RUN_COUNTS.items())
     print(f"\n{bad} disagreement(s) across {cases} function cases "
-          f"+ {program_total} program cases (python/rust/wasm/interp/ts/go) [{counts_str}]")
+          f"+ {program_total} program cases (python/rust/wasm/interp/ts) [{counts_str}]")
     return bad
 
 

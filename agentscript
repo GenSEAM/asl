@@ -33,7 +33,7 @@ from resolve import Diagnostic, check_file  # noqa: E402
 from tools import tsutil  # noqa: E402
 from tools.fmt import fmt  # noqa: E402
 
-BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "ts": "to_typescript.py", "go": "to_go.py", "wasm": "wasm", "native-rs": "native-rs"}
+BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "ts": "to_typescript.py", "wasm": "wasm", "native-rs": "native-rs"}
 TREE_SITTER = ROOT / "node_modules" / ".bin" / "tree-sitter"
 GRAMMAR_DIR = ROOT / "grammar" / "tree-sitter-agentscript"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")

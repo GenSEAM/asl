@@ -10,7 +10,6 @@ ROOT = Path(__file__).resolve().parent.parent
 BACKENDS = {
     "ts": "to_typescript.py",
     "rs": "to_rust.py",
-    "go": "to_go.py",
     "py": "to_python.py",
     "interp": "agentscript-interp"
 }

@@ -20,13 +20,12 @@ ROOT = Path(__file__).parent.parent.parent
 for sub in ("grammar", "backend", "prelude"):
     sys.path.insert(0, str(ROOT / sub))
 
-from to_go import ToGo  # noqa: E402
 from to_python import Transpiler as ToPython  # noqa: E402
 from to_rust import ToRust  # noqa: E402
 from to_typescript import ToTypeScript  # noqa: E402
 from vocab import reserved_widths, type_aliases  # noqa: E402
 
-BACKENDS = {"rust": ToRust, "typescript": ToTypeScript, "go": ToGo, "python": ToPython}
+BACKENDS = {"rust": ToRust, "typescript": ToTypeScript, "python": ToPython}
 
 # The identity entries say nothing about resolution; a rename is the whole test.
 RENAMES = sorted((a, core) for a, core in type_aliases().items() if a != core)

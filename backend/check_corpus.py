@@ -62,14 +62,12 @@ def main() -> int:
         print("no corpus sources were found; the gate would pass by having nothing to do")
         return 1
     print(f"{'fixture':<26} {'python':<12} {'compile':<10} {'run':<10} "
-          f"{'rust':<12} {'rustc':<10} {'ts':<12} {'tsc':<10} "
-          f"{'go':<12} {'govet':<10}")
-    print("-" * 132)
+          f"{'rust':<12} {'rustc':<10} {'ts':<12} {'tsc':<10}")
+    print("-" * 110)
     for f in CORPUS:
         py_ok, py_src, py_err = transpile("to_python.py", f)
         rs_ok, rs_src, rs_err = transpile("to_rust.py", f)
         ts_ok, ts_src, ts_err = transpile("to_typescript.py", f)
-        go_ok, go_src, go_err = transpile("to_go.py", f)
         pyc = "-"
         if py_ok:
             with tempfile.TemporaryDirectory(dir="/tmp") as d:
@@ -118,34 +116,15 @@ def main() -> int:
                     tsc_ = "ok" if c.returncode == 0 else "FAIL"
                     if c.returncode:
                         fails.append(f"{f.name}: tsc rejected the output")
-        govet = "-"
-        if go_ok:
-            if not go_src.strip():
-                govet = "FAIL"
-                fails.append(f"{f.name}: go backend emitted no source")
-            else:
-                with tempfile.TemporaryDirectory(dir="/tmp") as d:
-                    rt_go_src = (ROOT / "backend" / "golang" / "rt" / "rt.go").read_text()
-                    rt_go_src = rt_go_src.replace("package rt\n", "package main\n", 1)
-                    (Path(d) / "rt.go").write_text(rt_go_src)
-                    (Path(d) / "main.go").write_text(go_src)
-                    c = subprocess.run(["go", "vet", "main.go", "rt.go"], cwd=d,
-                                       capture_output=True, text=True)
-                    govet = "ok" if c.returncode == 0 else "FAIL"
-                    if c.returncode:
-                        fails.append(f"{f.name}: go vet rejected the output")
         if not py_ok:
             fails.append(f"{f.name}: python backend: {py_err}")
         if not rs_ok:
             fails.append(f"{f.name}: rust backend: {rs_err}")
         if not ts_ok:
             fails.append(f"{f.name}: ts backend: {ts_err}")
-        if not go_ok:
-            fails.append(f"{f.name}: go backend: {go_err}")
         print(f"{f.name:<26} {'ok' if py_ok else 'FAIL':<12} {pyc:<10} {ran:<10} "
               f"{'ok' if rs_ok else 'FAIL':<12} {rustc:<10} "
-              f"{'ok' if ts_ok else 'FAIL':<12} {tsc_:<10} "
-              f"{'ok' if go_ok else 'FAIL':<12} {govet:<10}", flush=True)
+              f"{'ok' if ts_ok else 'FAIL':<12} {tsc_:<10}", flush=True)
     print()
     for x in fails:
         print("  " + x)
