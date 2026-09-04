@@ -54,8 +54,8 @@ In AgentScript (ASL), the language specification guarantees **lexical and symbol
 
 Every call head in an ASL expression must resolve to one of three things:
 1. One of the closed 107 standard builtins declared in the normative specification.
-2. A locally bound binder (introduced via `defun`, `let`, or lambda parameters).
-3. An explicitly imported symbol from an upstream module (`:import [(pkg/module :as m)]`).
+2. A locally bound binder (introduced via `df`, `let`, or lambda parameters).
+3. An explicitly imported symbol from an upstream module (`:i [(pkg/module :a m)]`).
 
 Before an agent-generated module is permitted to execute, the compiler runs the **Closure Audit (`grammar/closure_audit.py`)**:
 
@@ -95,7 +95,7 @@ This eliminates the "lazy summary" failure mode where agents invent API features
 When an agent executes tests or performs file modifications, AgentScript enforces **Zero-Leak Jailing**:
 
 1. **Isolated Filesystem Sandboxes:** The agent's file access is restricted to an in-memory virtual filesystem or a strictly designated project directory. Attempting to traverse upward (`../../`) or access absolute system paths (`/etc`, `/usr`, `~`) causes an immediate sandbox trap.
-2. **Pure vs. Effectful Function Separation:** Pure functions (`defun`) cannot perform I/O. Any code that touches disk, network, or console must be declared with an explicit effect sigil (`!`) and must be granted explicit capability tokens by the orchestrator harness.
+2. **Pure vs. Effectful Function Separation:** Pure functions (`df`) cannot perform I/O. Any code that touches disk, network, or console must be declared with an explicit effect sigil (`!`) and must be granted explicit capability tokens by the orchestrator harness.
 3. **Subprocess Supervision:** All subprocess executions are executed through structured supervisory pipelines (`asl sh`), capturing stdout/stderr in memory rings and preventing zombie process hangs.
 
 ---

@@ -19,3 +19,4 @@ results/*.json
 .tokensave/
 packages/asl-skyloom/dist/
 .DS_Store
+rust_out

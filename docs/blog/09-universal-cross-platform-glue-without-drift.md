@@ -53,24 +53,24 @@ AgentScript (ASL) was designed to act as the universal semantic substrate. Inste
 
 ```lisp
 (module math/vector
-  :doc "2D vector transformations and geometry"
-  :export [Vec2 dot-product magnitude normalize])
+  :d "2D vector transformations and geometry"
+  :x [Vec2 dot-product magnitude normalize])
 
-(defschema Vec2
-  (:field x Float64 "X coordinate")
-  (:field y Float64 "Y coordinate"))
+(dfs Vec2
+  (:f x F64 "X coordinate")
+  (:f y F64 "Y coordinate"))
 
-(defun dot-product [(a Vec2) (b Vec2)] -> Float64
-  :doc "Calculates the dot product of two vectors"
+(df dot-product [(a Vec2) (b Vec2)] -> F64
+  :d "Calculates the dot product of two vectors"
   (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b))))
 
-(defun magnitude [(v Vec2)] -> Float64
-  :doc "Calculates Euclidean length"
+(df magnitude [(v Vec2)] -> F64
+  :d "Calculates Euclidean length"
   (sqrt (+ (* (.-x v) (.-x v)) (* (.-y v) (.-y v)))))
 
-(defun normalize [(v Vec2)] -> Vec2
-  :doc "Returns unit vector or zero vector if length is zero"
-  (let [m (magnitude v)]
+(df normalize [(v Vec2)] -> Vec2
+  :d "Returns unit vector or zero vector if length is zero"
+  (let [(m (magnitude v))]
     (if (= m 0.0)
       (Vec2 :x 0.0 :y 0.0)
       (Vec2 :x (/ (.-x v) m) :y (/ (.-y v) m)))))

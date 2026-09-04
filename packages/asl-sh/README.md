@@ -18,7 +18,7 @@
   :i [(core/process :a proc)
       (core/log :a log)])
 
-(df ! main [(args (List String))] -> (Result Unit IoError)
+(df ! main [(args (List Str))] -> (Result Unit IoError)
   :d "Run `git status --short` and log the outcome."
   (mt (proc/exec! (proc/cmd "git" (list "status" "--short")))
     ((ok out)

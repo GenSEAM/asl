@@ -8,19 +8,19 @@ A practical guide for software engineers, AI agent developers, and vibe-coders b
 
 ### Rule 1: Single-Pass S-Expression Design
 * **Derivations Precede Results:** In ASL, body expressions evaluate sequentially, and the tail expression is the return value. Place bindings and assertions before the final result.
-* **Exhaustive Matching:** Always handle every enum variant in `match`. Never rely on default catch-alls unless explicitly necessary.
-* **Fixed Bitwidths:** Choose between `Int32`, `Int64`, or `Float64` deliberately. ASL prohibits implicit conversions to eliminate silent numeric drift.
+* **Exhaustive Matching:** Always handle every enum variant in `mt` (ASL Verbose: `match`). Never rely on default catch-alls unless explicitly necessary.
+* **Fixed Bitwidths:** Choose between `I32`, `I64`, or `F64` deliberately. ASL prohibits implicit conversions to eliminate silent numeric drift.
 
 ### Rule 2: Explicit Effect Boundaries (`!`)
 * Keep computational domain logic **pure**.
 * Mark functions that touch files, stdout/stderr, environment variables, or host clocks with the `!` marker:
   ```lisp
-  ; Pure function (no marker)
-  (defun calculate-discount [(price Float64) (rate Float64)] -> Float64
+  "Pure function (no marker)"
+  (df calculate-discount [(price F64) (rate F64)] -> F64
     (* price (- 1.0 rate)))
 
-  ; Effectful entrypoint (explicit !)
-  (defun ! main [(args (List String))] -> (Result Unit IoError)
+  "Effectful entrypoint (explicit !)"
+  (df ! main [(args (List Str))] -> (Result Unit IoError)
     (println "Starting calculation...")
     (ok ()))
   ```
@@ -151,5 +151,5 @@ the boundary without making the language untotal.
 | **Silent null returns** | Causes runtime crashes | Use `(Option T)` with `(some v)` or `(none)` |
 | **Unchecked error codes** | Unsafe error propagation | Use `(Result T E)` with `(ok v)` or `(err e)` |
 | **Underscores in symbols** | Violates kebab-case grammar | Use kebab-case: `user-service`, `parse-int` |
-| **Side effects in pure funs** | Breaks determinism | Add `!` marker: `(defun ! sync-data ...)` |
-| **Catch-all wildcard matching** | Hides missing enum cases | Enumerate all cases explicitly in `match` |
+| **Side effects in pure funs** | Breaks determinism | Add `!` marker: `(df ! sync-data ...)` |
+| **Catch-all wildcard matching** | Hides missing enum cases | Enumerate all cases explicitly in `mt` |

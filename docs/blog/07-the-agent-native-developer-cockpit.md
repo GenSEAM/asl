@@ -41,21 +41,21 @@ The AgentScript **Doctor & Self-Healing Engine** (`tools/heal.py`) turns diagnos
 
 ```lisp
 (module telemetry/metrics
-  :doc "In-memory telemetry counters for agent cockpit."
-  :export [Counter record-tick])
+  :d "In-memory telemetry counters for agent cockpit."
+  :x [Counter record-tick])
 
-(defschema Counter
-  (:field name String "Metric name")
-  (:field ticks Int64 "Cumulative ticks"))
+(dfs Counter
+  (:f name Str "Metric name")
+  (:f ticks I64 "Cumulative ticks"))
 
-(defun record-tick [(c Counter)] -> Counter
-  :doc "Increment counter tick value."
+(df record-tick [(c Counter)] -> Counter
+  :d "Increment counter tick value."
   (Counter :name (.-name c) :ticks (+ (.-ticks c) 1)))
 ```
 
 ### Automated Repair Rules:
 
-* **Rule 13 Auto-Repair (Unexported Public Types):** If an agent exports a schema or function signature that references a locally defined type, but forgets to add that type to the module's `:export` list, `heal.py` detects the violation and automatically edits the `:export [...]` block.
+* **Rule 13 Auto-Repair (Unexported Public Types):** If an agent exports a schema or function signature that references a locally defined type, but forgets to add that type to the module's `:x` list, `heal.py` detects the violation and automatically edits the `:x [...]` block.
 * **Arity Tree Normalization:** If an agent attempts to concatenate multiple string expressions in a single call, the healer automatically rewrites the call into a balanced binary tree of `s/concat` nodes.
 * **Closed-Loop Healing Pipeline:**
   ```

@@ -81,16 +81,16 @@ AgentScript (ASL) rejects both indentation-based scoping and implicit operator p
 
 ```lisp
 (module math/geometry
-  :doc "Geometric primitives with compile-time validation."
-  :export [Shape area])
+  :d "Geometric primitives with compile-time validation."
+  :x [Shape area])
 
-(defenum Shape
-  (:case circle [(radius Float64)] "Circle with radius")
-  (:case rect [(width Float64) (height Float64)] "Rectangle with width and height"))
+(dfe Shape
+  (:c circle [(radius F64)] "Circle with radius")
+  (:c rect [(width F64) (height F64)] "Rectangle with width and height"))
 
-(defun area [(s Shape)] -> Float64
-  :doc "Calculate area across all shape variants."
-  (match s
+(df area [(s Shape)] -> F64
+  :d "Calculate area across all shape variants."
+  (mt s
     ((circle r) (* 3.141592653589793 (* r r)))
     ((rect w h) (* w h))))
 ```
@@ -120,7 +120,7 @@ Beyond syntax parsing, models generate broken code when type invariants are impl
 
 Null pointers and unhandled enum variants account for over 50% of runtime exceptions in agent-generated Python (`AttributeError: 'NoneType' object has no attribute 'x'`).
 
-In ASL, enumerations are algebraic data types (`defenum`), and pattern matching (`match`) is verified for exhaustiveness by the compiler (`asl-checker`). If an agent adds a new variant to a data model and fails to handle it in an existing function, compilation halts immediately with a deterministic compiler diagnostic:
+In ASL, enumerations are algebraic data types (`dfe`, or `defenum` in ASL Verbose), and pattern matching (`mt`, or `match`) is verified for exhaustiveness by the compiler (`asl-checker`). If an agent adds a new variant to a data model and fails to handle it in an existing function, compilation halts immediately with a deterministic compiler diagnostic:
 
 ```text
 semantic/non-exhaustive-match: case 'rect' not covered in match over Shape

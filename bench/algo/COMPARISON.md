@@ -9,22 +9,22 @@ Return each most-frequent letter of a space-separated string, with its count. Ti
 ## 1. AgentScript source — hand-written
 
 ```lisp
-(defun tally [(m (Map String Int64)) (w String)] -> (Map String Int64)
-  :doc "Increment the count for one letter."
-  (match (map-get m w)
+(df tally [(m (Map Str I64)) (w Str)] -> (Map Str I64)
+  :d "Increment the count for one letter."
+  (mt (map-get m w)
     ((some n) (map-set m w (+ n 1)))
     ((none)   (map-set m w 1))))
 
-(defun histogram [(text String)] -> (Map String Int64)
-  :doc "Letters occurring most often, with their counts. Empty input yields an empty map."
-  (let [(words (filter (fn [(w String)] -> Bool (not (string-empty? w)))
+(df histogram [(text Str)] -> (Map Str I64)
+  :d "Letters occurring most often, with their counts. Empty input yields an empty map."
+  (let [(words (filter (fn [(w Str)] -> Bool (not (string-empty? w)))
                        (string-split (string-trim text) " ")))
         (counts (fold tally (map-empty) words))]
-    (match (list-max (map-values counts))
+    (mt (list-max (map-values counts))
       ((none) (map-empty))
       ((some top)
        (map-from-pairs
-         (filter (fn [(p (Pair String Int64))] -> Bool (= (.-second p) top))
+         (filter (fn [(p (Pair Str I64))] -> Bool (= (.-second p) top))
                  (map-pairs counts)))))))
 ```
 

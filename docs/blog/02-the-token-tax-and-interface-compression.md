@@ -32,25 +32,25 @@ Consider an uncompressed order processing module (390 tokens):
 <!-- not-agentscript: full implementation showing private helpers -->
 ```lisp
 (module store/orders
-  :doc "Order management and tax calculations"
-  :export [Order OrderStatus calculate-total])
+  :d "Order management and tax calculations"
+  :x [Order OrderStatus calculate-total])
 
-(defenum OrderStatus
-  (:case pending [] "Awaiting payment")
-  (:case completed [(tx-id String)] "Processed successfully"))
+(dfe OrderStatus
+  (:c pending [] "Awaiting payment")
+  (:c completed [(tx-id Str)] "Processed successfully"))
 
-(defschema Order
-  (:field id Int64 "Order ID")
-  (:field total Float64 "Net price"))
+(dfs Order
+  (:f id I64 "Order ID")
+  (:f total F64 "Net price"))
 
-;; Private internal helper - irrelevant to external callers
-(defun regional-tax-multiplier [(rate Float64)] -> Float64
+"Private internal helper - irrelevant to external callers"
+(df regional-tax-multiplier [(rate F64)] -> F64
   (+ 1.0 (/ rate 100.0)))
 
-(defun calculate-total [(items (List Order)) (tax-rate Float64)] -> Float64
-  :doc "Sums order items with regional tax applied"
-  (let [subtotal (list-sum (map (fn [o] (.-total o)) items))
-        multiplier (regional-tax-multiplier tax-rate)]
+(df calculate-total [(items (List Order)) (tax-rate F64)] -> F64
+  :d "Sums order items with regional tax applied"
+  (let [(subtotal (list-sum (map (fn [(o Order)] -> F64 (.-total o)) items)))
+        (multiplier (regional-tax-multiplier tax-rate))]
     (* subtotal multiplier)))
 ```
 
@@ -58,19 +58,19 @@ When passed to a peer subagent that merely needs to construct orders or query pr
 
 ```lisp
 (module store/orders
-  :doc "Order management and tax calculations"
-  :export [Order OrderStatus calculate-total])
+  :d "Order management and tax calculations"
+  :x [Order OrderStatus calculate-total])
 
-(defenum OrderStatus
-  (:case pending [] "Awaiting payment")
-  (:case completed [(tx-id String)] "Processed successfully"))
+(dfe OrderStatus
+  (:c pending [] "Awaiting payment")
+  (:c completed [(tx-id Str)] "Processed successfully"))
 
-(defschema Order
-  (:field id Int64 "Order ID")
-  (:field total Float64 "Net price"))
+(dfs Order
+  (:f id I64 "Order ID")
+  (:f total F64 "Net price"))
 
-(defun calculate-total [(items (List Order)) (tax-rate Float64)] -> Float64
-  :doc "Sums order items with regional tax applied"
+(df calculate-total [(items (List Order)) (tax-rate F64)] -> F64
+  :d "Sums order items with regional tax applied"
   0.0)
 ```
 
@@ -81,9 +81,9 @@ In naive string-truncation or regex-based tools (like dumping Python with `pass`
 In AgentScript, the grammar (§4.2) dictates that a function declaration must contain at least one body expression. A compressor that blindly drops the body emits broken syntax that cannot be analyzed by downstream tooling.
 
 `asex_compress_module` solves this at the AST level:
-* It prunes all private, unexported top-level declarations (`defun`, helper constants).
-* For exported functions, it preserves the identifier, parameter binders with type annotations, the return type arrow (`-> Type`), and the `:doc` docstring.
-* It replaces the function body with a deterministic, type-satisfying default stub (`0.0` for `Float64`, `0` for `Int64`, `""` for `String`, `()` for `Unit`).
+* It prunes all private, unexported top-level declarations (`df`, helper constants).
+* For exported functions, it preserves the identifier, parameter binders with type annotations, the return type arrow (`-> Type`), and the `:d` docstring.
+* It replaces the function body with a deterministic, type-satisfying default stub (`0.0` for `F64`, `0` for `I64`, `""` for `Str`, `()` for `Unit`).
 
 The resulting compressed representation is not a partial text fragment: **it is a fully valid, compilable AgentScript program**.
 
@@ -113,8 +113,8 @@ In a typical 32k or 64k token context window budget allocated for context retrie
 
 Token savings are meaningless if they cause functional regressions. How does interface compression guarantee that subagents write correct code against stubs?
 
-1. **Closed Type Signatures:** Because `asex_compress_module` preserves exact schemas (`defschema`) and algebraic variants (`defenum`), the calling subagent has full type-checker guarantees. If it passes a `String` where an `Int64` is required, `asl-checker` halts with a compile-time diagnostic before any test execution occurs.
-2. **Contract-Preserving Docstrings:** Docstrings in ASL are normative interface contracts. Retaining `:doc` strings ensures that behavioral invariants, units of measurement (e.g. `:timeout-ms`), and precondition requirements remain directly in the subagent's attention heads.
+1. **Closed Type Signatures:** Because `asex_compress_module` preserves exact schemas (`dfs`) and algebraic variants (`dfe`), the calling subagent has full type-checker guarantees. If it passes a `Str` where an `I64` is required, `asl-checker` halts with a compile-time diagnostic before any test execution occurs.
+2. **Contract-Preserving Docstrings:** Docstrings in ASL are normative interface contracts. Retaining `:d` strings ensures that behavioral invariants, units of measurement (e.g. `:timeout-ms`), and precondition requirements remain directly in the subagent's attention heads.
 3. **Hermetic Boundary Enforcement:** Private helper functions simply do not exist in the compressed AST. A subagent cannot hallucinate a dependency on a private helper because the token sequence describing that helper was never rendered into its prompt.
 
 ### Summary

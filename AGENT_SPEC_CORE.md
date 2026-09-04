@@ -10,7 +10,7 @@ cannot be judged on forms the specification never gave it.
 
 ## 0. Scope
 
-**In:** modules, `defschema`, `defenum`, `defun`, `fn`, type parameters, `let`, `if`, `cond`,
+**In:** modules, `dfs` (`defschema`), `dfe` (`defenum`), `df` (`defun`), `fn`, type parameters, `let`, `if`, `cond`,
 `match`, `try`, records, `Result`, `Option`, `Pair`, `List`, `Map`, strings, arithmetic,
 comparison, `Bool` / `Int32` / `Int64` / `Float64` / `String` / `Unit`.
 
@@ -231,7 +231,7 @@ and this language's output is defined on every target:
 - values holding a `NaN` tie with one another, and every sort is stable, so they keep their input
   order;
 - a value of a user enum or union type orders by **declaration order** — the order its cases are
-  written in the `defenum` — never by case name, so `(list-sort (list (zed) (alpha)))` with `zed`
+  written in the `dfe` (or `defenum`) — never by case name, so `(list-sort (list (zed) (alpha)))` with `zed`
   declared before `alpha` yields `(zed alpha)`;
 - everything else is ordered as `<` orders it.
 
@@ -250,24 +250,23 @@ the body: a later pass composes a module by reading only this.
 
 ```lisp
 (module text/casing
-  :doc "Case-conversion helpers for report rendering."
-  :export [shout initials]
-  :import [(core/strings :as s)
-           (core/lists   :as l)])
+  :d "Case-conversion helpers for report rendering."
+  :x [shout initials]
+  :i [(core/strings :a s)
+      (core/lists   :a l)])
 ```
 
-* `:doc` — mandatory. One sentence on what the module is for.
-* `:export` — the public surface. **Everything not listed is private to the module.** An entry
-  is a function name or a type name, and its case decides which: `:export [describe Shape]`
+* `:d` (`:doc`) — mandatory. One sentence on what the module is for.
+* `:x` (`:export`) — the public surface. **Everything not listed is private to the module.** An entry
+  is a function name or a type name, and its case decides which: `:x [describe Shape]`
   publishes one of each. This is the only place in the language where spelling decides a kind,
   and it is a deliberate exception — a second `:export-types` vector would be a second
   contract, free to disagree with the first about what is public.
-* `:import` — each entry binds a module path to a short alias; members are then reached as
+* `:i` (`:import`) — each entry binds a module path to an alias (using `:a` / `:as`); members are then reached as
   `alias/name`, and an exported type as `alias/TypeName`.
 
-**An exported type is transparent.** Exporting a `defenum` publishes its cases, written
-`alias/case-name` both as constructors and as patterns; exporting a `defschema` publishes its
-fields, for construction and for `.-field` access. Exhaustiveness forces this: §9 rule 4
+**An exported type is transparent.** Exporting a `dfe` publishes its cases, written
+`alias/case-name` both as constructors and as patterns; exporting a `dfs` publishes its fields, for construction and for `.-field` access. Exhaustiveness forces this: §9 rule 4
 requires every `match` to cover its union, so an importer that cannot see every case cannot
 write a legal one. There is no opaque form in v0.2, because an opaque type is an abstract
 handle and what may be done with one depends on an ownership model this version deliberately
@@ -303,7 +302,7 @@ Import cycles are an error. Aliases are module-local and may be chosen freely.
 
 <!-- not-agentscript: a signature, shown without the body §4.2 requires of a declaration -->
 ```lisp
-(defun ! main [(args (List String))] -> (Result Unit IoError))
+(df ! main [(args (List Str))] -> (Result Unit IoError))
 ```
 
 and its `Result` is the process's exit status: `ok` exits zero, `err` exits non-zero with the case
@@ -311,28 +310,29 @@ name on standard error. Arguments arrive as a parameter rather than through a hi
 program's input is visible in its contract and testable without substituting an environment. A
 module without `main` is a library and gets no entry point.
 
-### 4.1 `defschema`
+### 4.1 `dfs` — records (ASL Verbose: `defschema`)
 
 ```lisp
-(defschema Point
-  (:field x Int64 "Horizontal coordinate")
-  (:field y Int64 "Vertical coordinate"))
+(dfs Point
+  (:f x I64 "Horizontal coordinate")
+  (:f y I64 "Vertical coordinate"))
 
-(defschema Config
-  (:field name    String "Display name")
-  (:field retries Int64  "Attempt count" :default 3))
+(dfs Config
+  (:f name    Str "Display name")
+  (:f retries I64 "Attempt count" :default 3))
 ```
 
-`(defschema [{<type-vars>}] <TypeName> <field>+)`, with
-`(:field <ident> <Type> <doc-string> [:default <literal>] [:json <string>])`.
+`(dfs [{<type-vars>}] <TypeName> <field>+)`, with
+`(:f <ident> <Type> <doc-string> [:default <literal>] [:json <string>])`.
+(The verbose spellings `defschema` and `:field` are also supported).
 The doc-string is mandatory — it is cheap, and it is what an LLM reads.
 
 Records may be parameterised. Type variables are bound in a leading `{ }`, so a name is a type
 variable because it was declared one, never because of how it is spelled:
 
 ```lisp
-(defschema {T} Box
-  (:field value T "The wrapped value"))
+(dfs {T} Box
+  (:f value T "The wrapped value"))
 ```
 
 **Construction** (resolves `SPEC_REVIEW.md` B2, which left records unconstructable):
@@ -357,21 +357,22 @@ silently change the wire format (resolves A2): `:json-case` on the schema select
 `kebab` (default, name verbatim) / `camel` / `snake` / `pascal`, and `:json "..."` on a field
 overrides it. Shape copied from serde and pydantic, which converged independently (§11.5).
 
-### 4.2 `defun`
+### 4.2 `df` (ASL Verbose: `defun`)
 
 ```lisp
-(defun add [(a Int64) (b Int64)] -> Int64
+(df add [(a I64) (b I64)] -> I64
   (+ a b))
 
-(defun safe-div [(a Int64) (b Int64)] -> (Result Int64 String)
+(df safe-div [(a I64) (b I64)] -> (Result I64 Str)
   (if (= b 0)
     (err "division by zero")
     (ok (/ a b))))
 ```
 
-`(defun [!] [{<type-vars>}] <ident> [<params>] -> <Type> [:doc <string>] <body-expr>+)`. The
+`(df [!] [{<type-vars>}] <ident> [<params>] -> <Type> [:d <string>] <body-expr>+)`. The
 parameter list is a **vector**, and `->` is a literal token in the form, not an expression
-(resolves A9). The body is one or more expressions evaluated in order; the value is the last one.
+(resolves A9). In ASL Verbose, `df` is spelled `defun` and `:d` is `:doc`. The body is one or more
+expressions evaluated in order; the value is the last one.
 
 The optional `!` marks a function that **touches the world** — anything in §6's I/O group, or
 anything that calls something marked. It is written on the signature and not inferred away,
@@ -379,15 +380,15 @@ because the signature is what a caller reads (§4.0); a marker on a function tha
 perform no effect is legal, since tightening a contract later must not break its callers. Calling a
 marked function from an unmarked one is an error (§5.7).
 
-`:doc` is **mandatory for every exported function** and optional otherwise. v0.1 required a
-doc-string on record fields but gave functions nowhere to put one, which is backwards: an agent
-composing a module reads its functions, not its field layouts.
+`:d` (or `:doc` in ASL Verbose) is **mandatory for every exported function** and optional otherwise.
+v0.1 required a doc-string on record fields but gave functions nowhere to put one, which is backwards:
+an agent composing a module reads its functions, not its field layouts.
 
 Functions may be parameterised over types, bound in a leading `{ }`:
 
 ```lisp
-(defun {A B} swap [(p (Pair A B))] -> (Pair B A)
-  :doc "Exchange the two components of a pair."
+(df {A B} swap [(p (Pair A B))] -> (Pair B A)
+  :d "Exchange the two components of a pair."
   (pair (.-second p) (.-first p)))
 ```
 
@@ -397,15 +398,15 @@ concrete type (PCP `r-8f23`).
 Parameters are vectors throughout the language — v0 used a list for `defun` and a vector for
 `defui`, which was inconsistent (C4). Core standardizes on the vector.
 
-Visibility comes from the module's `:export` list (§4.0), not from position. A top-level
-definition that is not exported is private to its module, and that is what drives Go's
-capitalization (§8). A `defschema` or `defenum` is exported by naming it on that same list,
-and its fields or cases travel with it.
+Visibility comes from the module's `:x` list (or `:export` in ASL Verbose, §4.0), not from position.
+A top-level definition that is not exported is private to its module, and that is what drives Go's
+capitalization (§8). A `dfs` or `dfe` is exported by naming it on that same list, and its fields or
+cases travel with it.
 
 ### 4.3 `fn`
 
 ```lisp
-(fn [(x Int64)] -> Int64 (* x 2))
+(fn [(x I64)] -> I64 (* x 2))
 "annotated"
 (map (fn [x] (* x 2)) xs)
 "annotations elided: map fixes them"
@@ -422,30 +423,30 @@ the position implies, so writing one carries no information. Where nothing deter
 lambda bound by `let` and never applied, say — they are **required**, and a checker rejects the
 elision rather than typing the lambda by accident of what its body happens to allow.
 
-Named declarations are the opposite case and keep their mandatory annotations: `defun`, `defschema`
-and `defenum` are the module surface, read without the body (§4.0).
+Named declarations are the opposite case and keep their mandatory annotations: `df`, `dfs`
+and `dfe` are the module surface, read without the body (§4.0).
 
-It is **not** simply `defun` without a name: a lambda takes neither type parameters nor `:doc`.
+It is **not** simply `df` without a name: a lambda takes neither type parameters nor `:d`.
 Type parameters are bound by the named declaration that encloses it, and a lambda has no exported
 surface to document. Both grammars enforce this, and a fixture pins it.
 
-### 4.4 `defenum` — closed unions
+### 4.4 `dfe` — closed unions (ASL Verbose: `defenum`)
 
 ```lisp
-(defenum Shape
-  (:case circle    [(radius Float64)]                  "A circle")
-  (:case rectangle [(width Float64) (height Float64)]  "An axis-aligned rectangle")
-  (:case point     []                                  "A degenerate zero-area shape"))
+(dfe Shape
+  (:c circle    [(radius F64)]                  "A circle")
+  (:c rectangle [(width F64) (height F64)]  "An axis-aligned rectangle")
+  (:c point     []                                  "A degenerate zero-area shape"))
 ```
 
-`(defenum [{<type-vars>}] <TypeName> <case>+)` with
-`(:case <ident> [<fields>] <doc-string>)`. Case names are kebab-case identifiers and are used as
+`(dfe [{<type-vars>}] <TypeName> <case>+)` with
+`(:c <ident> [<fields>] <doc-string>)` (in ASL Verbose: `defenum`, `:case`). Case names are kebab-case identifiers and are used as
 both constructors and patterns within their own module, exactly like the built-in `ok` /
 `some`; an importer writes them `alias/case-name` in both positions (§4.0):
 
 ```lisp
 (circle 2.0)
-(match sh
+(mt sh
   ((circle r)      (* 3.14159 (* r r)))
   ((rectangle w h) (* w h))
   ((point)         0.0))
@@ -454,12 +455,12 @@ both constructors and patterns within their own module, exactly like the built-i
 Enums may be parameterised, which is what makes recursive container types expressible:
 
 ```lisp
-(defenum {T} Tree
-  (:case leaf []                            "An empty subtree")
-  (:case node [(value T) (left (Tree T)) (right (Tree T))] "An interior node"))
+(dfe {T} Tree
+  (:c leaf []                            "An empty subtree")
+  (:c node [(value T) (left (Tree T)) (right (Tree T))] "An interior node"))
 ```
 
-Matching an enum must be exhaustive, as for every other `match`. Without closed unions a domain
+Matching an enum must be exhaustive, as for every other `mt`. Without closed unions a domain
 state is encoded as a string or an integer, which discards type safety at precisely the points
 where it would have paid, and the compiler's own AST is inexpressible (PCP `r-b539`).
 
@@ -475,7 +476,7 @@ where it would have paid, and the compiler's own AST is inexpressible (PCP `r-b5
 
 Bindings are evaluated **in order**, and each may refer to those before it (`let*` semantics,
 resolving A6). Bindings are **immutable** — Core has no `set!`. Shadowing an outer name is
-permitted. `let` is not recursive; use `defun` for recursion.
+permitted. `let` is not recursive; use `df` for recursion.
 
 ### 5.2 `if` — total
 
@@ -498,18 +499,18 @@ Both branches are **mandatory** and must have the same type; the condition must 
 Clauses are tested in order. `:else` is **mandatory** and must be last — a `cond` is always total,
 for the same reason `if` is.
 
-### 5.4 `match`
+### 5.4 `mt` (ASL Verbose: `match`)
 
 ```lisp
-(match (string-to-int64 s)
+(mt (string-to-int64 s)
   ((some n) (* n 2))
   ((none)   0))
 
-(match (option-to-result (list-head xs) "empty list")
+(mt (option-to-result (list-head xs) "empty list")
   ((ok n)    n)
   ((err msg) (string-length msg)))
 
-(match xs
+(mt xs
   ((list)      0)
   ((cons h t)  (+ h (sum-list t))))
 ```
@@ -523,18 +524,18 @@ Patterns, and nothing else:
 | `(list)` | the empty list |
 | `(cons <p> <p>)` | a non-empty list, binding head and tail |
 | `(pair <p> <p>)` | a `Pair` |
-| literal | equal `Int32`/`Int64`/`Bool`/`String` value |
-| `(<case> <p>*)` | a `defenum` case, binding its fields (§4.4) |
+| literal | equal `I32`/`I64`/`Bool`/`Str` value |
+| `(<case> <p>*)` | a `dfe` case, binding its fields (§4.4) |
 | `<ident>` | anything, binding it |
 | `_` | anything, binding nothing |
 
-Match must be **exhaustive**; a non-exhaustive `match` is a compile error. All arms must share a
+Match must be **exhaustive**; a non-exhaustive `mt` is a compile error. All arms must share a
 type.
 
 ### 5.5 `try` — Result propagation
 
 ```lisp
-(defun parse-port [(text String)] -> (Result Int64 String)
+(df parse-port [(text Str)] -> (Result I64 Str)
   (let [(raw (try (option-to-result (list-get (string-split text ":") 1)
                                     "missing port")))
         (n   (try (option-to-result (string-to-int64 (string-trim raw))
@@ -545,13 +546,13 @@ type.
 ```
 
 `(try e)` where `e : (Result T E)` evaluates to `T`, or returns `(err …)` from the enclosing
-`defun` immediately. Legal only inside a `defun` whose return type is `(Result _ E)` with a
+`df` immediately. Legal only inside a `df` whose return type is `(Result _ E)` with a
 matching `E`, and **not inside an `fn`** — a lambda is not the function `try` returns from, so the
 form there has no meaning to give it.
 
-Together `match` and `try` resolve `SPEC_REVIEW.md` B1 — v0 could construct `ok`/`err` and had no
+Together `mt` and `try` resolve `SPEC_REVIEW.md` B1 — v0 could construct `ok`/`err` and had no
 way to consume them, making every I/O-shaped program unwritable. Precedent: Gleam's
-`use`/`result.try` and Rust's `?` (§11.2). `try` exists specifically because `match`-only code
+`use`/`result.try` and Rust's `?` (§11.2). `try` exists specifically because `mt`-only code
 nests deeply, and nesting depth is the dominant LLM syntax-failure mode.
 
 ### 5.6 Evaluation order
@@ -562,7 +563,7 @@ short-circuit; nothing else does. The compiler may not reorder or elide any call
 ### 5.7 Effects
 
 A form is **effectful** when it calls an I/O builtin (§6), calls a function marked `!`, or hands a
-lambda marked `!` to something. An effectful form is legal only inside a `defun` or `fn` that
+lambda marked `!` to something. An effectful form is legal only inside a `df` or `fn` that
 carries the marker; otherwise it is an error (§9 rule 12).
 
 Effects need no ordering rule of their own: §5.6 already fixes evaluation as strict, left to right,
@@ -737,9 +738,9 @@ Complete, uses only forms defined above, and is the shape few-shot prompts shoul
 "Return the longest run of identical characters in s, as (Pair char length)."
 "Empty input yields (none)."
 
-(defun run-length [(chars (List String)) (cur String) (n Int64) (best (Pair String Int64))]
-        -> (Pair String Int64)
-  (match chars
+(df run-length [(chars (List Str)) (cur Str) (n I64) (best (Pair Str I64))]
+        -> (Pair Str I64)
+  (mt chars
     ((list)
      (if (> n (.-second best)) (pair cur n) best))
     ((cons h t)
@@ -748,8 +749,8 @@ Complete, uses only forms defined above, and is the shape few-shot prompts shoul
        (let [(best2 (if (> n (.-second best)) (pair cur n) best))]
          (run-length t h 1 best2))))))
 
-(defun longest-run [(s String)] -> (Option (Pair String Int64))
-  (match (string-chars s)
+(df longest-run [(s Str)] -> (Option (Pair Str I64))
+  (mt (string-chars s)
     ((list)     (none))
     ((cons h t) (some (run-length t h 1 (pair h 1))))))
 ```
@@ -795,21 +796,21 @@ a silent merge.
 A Core program is well-formed iff:
 
 1. Delimiters balance, and every form is a list, vector, map, or atom.
-2. Every identifier is defined in §6, bound by `defun`/`fn`/`let`, declared by
-   `defschema`/`defenum`, or imported under an alias declared in the module header.
-3. Every `defun` declares parameter types and a return type.
-4. Every `if` and `cond` is total; every `match` is exhaustive.
-5. Every `try` sits in a `defun` returning a compatible `(Result _ E)`.
+2. Every identifier is defined in §6, bound by `df`/`fn`/`let`, declared by
+   `dfs`/`dfe`, or imported under an alias declared in the module header.
+3. Every `df` declares parameter types and a return type.
+4. Every `if` and `cond` is total; every `mt` is exhaustive.
+5. Every `try` sits in a `df` returning a compatible `(Result _ E)`.
 6. No numeric operation mixes types; all conversions are explicit.
 7. No identifier begins with `agentscript-`.
-8. The module header carries a `:doc`, and every exported `defun` carries a `:doc`.
-9. Every qualified name `alias/member` uses an alias bound in `:import`, and the member — a
+8. The module header carries a `:d` (or `:doc`), and every exported `df` carries a `:d` (or `:doc`).
+9. Every qualified name `alias/member` uses an alias bound in `:i` (`:import`), and the member — a
    function, a type name, or a case of an exported union — is exported by that module.
 10. Every type variable used in a signature is bound in that declaration's `{ }`.
 11. There are no import cycles.
-12. Every effectful form sits inside a `defun` or `fn` marked `!`.
-13. Every type named in the signature of an exported `defun`, in every field type of an
-    exported `defschema`, and in every case-parameter type of an exported `defenum`, is a §3
+12. Every effectful form sits inside a `df` or `fn` marked `!`.
+13. Every type named in the signature of an exported `df`, in every field type of an
+    exported `dfs`, and in every case-parameter type of an exported `dfe`, is a §3
     built-in, a type variable bound in that declaration's `{ }`, or a type exported by the
     module that defines it. A signature naming a private type is not a contract: no importer
     can write the type of what it receives.

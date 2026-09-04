@@ -41,7 +41,7 @@ comment that paraphrases it rots the moment the code changes.
 The declaration keeps a one-line `:d`, and nothing else:
 
 ```lisp
-(df calculate-hash [(payload String) (nonce Int64)] -> String
+(df calculate-hash [(payload Str) (nonce I64)] -> Str
   :d "Fingerprint a payload with its nonce."
   "@s02"
   (str payload (string-from-int64 nonce)))
@@ -152,7 +152,7 @@ When both ends already know a signature, repeating its parameter names on every 
 Given this declaration:
 
 ```lisp
-(df run-command [(bin String) (args (List String)) (t-out Int64) (cwd String)] -> String
+(df run-command [(bin Str) (args (List Str)) (t-out I64) (cwd Str)] -> Str
   :d "Run a binary with arguments, a timeout in milliseconds, and a working directory."
   (str bin " in " cwd))
 ```

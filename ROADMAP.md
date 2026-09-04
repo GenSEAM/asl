@@ -107,8 +107,8 @@ disagree with no way to say which was wrong.
 | `docs/AGENTIC_PROTOCOL.md` | the wire: frames, dialects, error codes |
 | `prelude/prelude.json` | the vocabulary and the projection, as data; the four above quote it |
 
-`docs/CONTEXT_ECONOMY_GUIDELINES.md`, `docs/DATA_REPRESENTATION_MATRIX.md`, `docs/BEST_PRACTICES.md`,
-`docs/NANO_SYNTAX.md` and `docs/COMPACT_SYNTAX.md` are **advisory**. They are normative for nothing,
+`docs/CONTEXT_ECONOMY_GUIDELINES.md`, `docs/DATA_REPRESENTATION_MATRIX.md`, `docs/BEST_PRACTICES.md`
+and `docs/NANO_SYNTAX.md` are **advisory**. They are normative for nothing,
 their examples are gated by `tools/doc_examples.py`, and where one disagrees with a document above,
 the document above wins and the advisory one is the bug.
 
