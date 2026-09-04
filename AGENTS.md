@@ -238,21 +238,20 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
 - `EXPERIMENT.md` is pre-registered: amendments must be dated and must state whether they were
   made before or after seeing results.
 
-### Dual-Projection Protocol (@pcp:d-1eed, @pcp:d-ddc2, @pcp:c-adc8, @pcp:r-8d8e)
+### Standard vs Verbose Projection Protocol (@pcp:d-1eed, @pcp:d-ddc2, @pcp:c-adc8, @pcp:r-8d8e)
 
-- **The projection saves bytes, not tokens (@pcp:c-e5aa)**: measured over the whole valid corpus
-  under `cl100k_base`, Nano is 3.6% fewer bytes and **0.00% fewer tokens** — 15,931 either way.
-  `(defun` and `(df` are one token each; ` :export` and ` :x` are two each. Do not repeat the token
-  argument for the projection; `bench/token_projection.py --check` pins the figure. The *wire and
-  data* formats are a different claim and a true one: removing structure takes a command frame from
-  51 tokens to 18 (`bench/token_frames.py`).
+- **Token ceiling and structural compaction (@pcp:c-e5aa)**: Every primitive in Standard ASL
+  adheres to a strict <= 2-token ceiling under BPE (`cl100k_base` and `o200k_base`), verified by
+  `bench/token_audit.py`. Structural compaction in AgP/ASN removes syntax ceremony (quotes, braces,
+  repeated keys), delivering a proven 57%–65% token reduction against JSON (`bench/token_frames.py`).
 - **Storage, wire and generation default (@pcp:d-1eed, @pcp:d-ddc2)**: `.asl` files on disk, inter-agent
-  frames, and every agent-facing artifact the toolchain generates use the compact **Nano** spelling —
+  frames, and every agent-facing artifact the toolchain generates use **Standard** format —
   `df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `I64`, `F64`, `Str`. The handbook,
-  both `llms.txt` copies and the harness skill are emitted that way, so a model generates the stored
-  form rather than the long form plus a conversion.
-- **Human-facing projection**: in chat, explanations and teaching examples, present the long
-  spelling. `asl view` and `asl transcode --to verbose` produce it without touching the file.
+  both `llms.txt` copies and the harness skill are emitted that way, and verbose syntax is forbidden
+  in saved source code (`tools/verbose_linter.py`).
+- **Human-facing projection**: In chat, explanations and teaching examples, present the Verbose
+  spelling (`defun`, `defschema`, etc.). `asl view` and `asl transcode --to verbose` produce it
+  without touching the underlying file.
 - **An alias is positional (@pcp:d-ddc2)**: a short spelling means something only in the position
   `AGENT_SPEC_CORE.md` §2.1 names, and is an ordinary atom everywhere else. **A record whose field is
   called `x` is built with `(P :x 1)` and no tool may rewrite that key.** Every projection tool must

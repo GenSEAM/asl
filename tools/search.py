@@ -500,7 +500,7 @@ def search_multi(
             SearchResultItem(
                 title=f"WebAssembly & Agentic Computing: {query}",
                 url="https://aslang.dev/docs/runtimes",
-                snippet="High-performance S-expression execution in WebAssembly, iOS Wasm3, and Python Numba.",
+                snippet="High-performance S-expression execution in WebAssembly, Wasm3, and TypeScript.",
                 engine="asl-docs",
                 score=1.0
             )

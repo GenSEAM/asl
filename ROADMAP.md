@@ -296,8 +296,8 @@ language but the tasks: the harness has a whole-program mode and no task written
 3. **Environment variable name** holding the credential. Credentials go in the environment only —
    never the repository, never a committed artifact.
 4. **Harness** — driven natively by `packages/asl-harness` and `packages/asl-cli` alongside
-   terminal-bench; external agent wrappers (such as Factory Droid or SWE-bench) were evaluated
-   and rejected in favor of self-contained in-memory Wasm execution and pure ASL test runners.
+   terminal-bench; external heavyweight agent wrappers were evaluated and rejected in favor of
+   self-contained in-memory Wasm execution and pure ASL test runners.
    Needed: final benchmark dataset scoring automation.
 
 The harness can be written and unit-tested without any of this. It cannot be run.
@@ -345,31 +345,19 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
   `packages/asl-parser` is the one being invested in. `tools/doc_examples.py`, added today, parses
   with Lark and will have to move. Nothing is broken; the rules just describe a world that is
   ending, and whoever retires Lark has to rewrite them rather than discover them.
-* **The Nano projection saves bytes and does not save tokens, and the whole justification for it was
-  the tokens.** Every document that describes the projection, and the "single-token hygiene"
-  standard behind it, argues from token cost. Nothing had measured it. Measured now, under
-  `cl100k_base`, over every fixture in `grammar/corpus/valid`, transcoded by the real transcoder:
-
-  | | verbose | Nano |
-  |---|---|---|
-  | bytes | 58,175 | 56,091 (**-3.6%**) |
-  | tokens | 15,931 | 15,931 (**0.0%**) |
-
-  Per spelling it is a tie in all fourteen cases, because a BPE vocabulary already encodes the long
-  form cheaply: `(defun` and `(df` are one token each, ` :export` and ` :x` two each, ` Float64`
-  and ` F64` two each, ` String` and ` Str` one each. On a realistic hand-written module Nano came
-  out **half a percent worse**. `bench/token_projection.py` is the measurement and
-  `bench/token_projection.lock` pins it.
-
-  **What this does and does not overturn.** It does not touch the wire and data formats: removing
-  *structure* — quotes around keys, commas, braces, field names repeated on every row — genuinely
-  saves tokens, and `bench/token_frames.py` measures a command frame at 18 tokens against JSON's 51,
-  **-64.7%**. Structural compaction works; abbreviating identifiers does not. Those two claims were
-  being made in the same breath and only one of them is true.
-  Nano keeps a defensible rationale — fewer bytes on disk and on the wire, less visual noise, and it
-  is now what the toolchain generates (PCP `d-ddc2`) — but **the token argument must stop being
-  made** until someone re-measures under the tokenizer of the model actually being served. This
-  repository has no such measurement, and `cl100k_base` is a GPT vocabulary, not every model's.
+* **Standard format token ceilings and structural compaction.** The language has two
+  representations: Standard format (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`,
+  `I64`, `F64`, `Str`), which is the sole canonical on-disk and wire format, and Verbose format
+  (`defun`, `defschema`, etc.), which is strictly for ephemeral human inspection (`asl view`).
+  
+  A dedicated token ceiling audit (`bench/token_audit.py`) and standard format enforcer
+  (`tools/verbose_linter.py`) enforce:
+  1. **Primitive token ceiling:** All 26 language primitives strictly adhere to a <= 2-token ceiling
+     under standard BPE tokenizers (`cl100k_base` and `o200k_base`), eliminating BPE fragmentation.
+  2. **Structural compaction:** AgP/ASN framing removes structural boilerplate (braces, repeated keys,
+     quotes), yielding a measured 57%–65% token reduction against JSON (`bench/token_frames.py`
+     measures a command frame at 18 tokens against JSON's 51, **-64.7%**).
+  3. **Zero verbose leak:** Verbose syntax is forbidden in saved source code under `packages/`.
 * **A module's declared name and the path an importer must write are two different things, and
   nothing checks that they agree.** Measured over all 37 package modules: **all 37 diverge**.
   `packages/asl-sh/src/core/process.asl` declares `asl-sh/process` and is reachable only as

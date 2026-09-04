@@ -78,11 +78,10 @@ AgentScript (ASL) was designed to act as the universal semantic substrate. Inste
 
 From this single source file, the ASL compiler deterministically emits native code across priority targets:
 
-* **To Rust (`backend/to_rust.py`):** Emits idiomatic, zero-allocation Rust structs with `#[derive(Clone, Debug, PartialEq)]` and native math functions.
-* **To Go (`backend/to_go.py`):** Emits idiomatic Go structs, typed error returns, and packages compatible with standard `go build`.
+* **To WebAssembly (`wasm32-wasip1`):** Emits compact, zero-overhead WebAssembly bytecode running in-browser or edge runtimes with sub-millisecond instantiation.
 * **To TypeScript (`backend/to_typescript.py`):** Emits strict TypeScript interfaces and ES module exports ready for browser and Node.js consumption.
-* **To Python (`backend/to_python.py`):** Emits clean, typed Python dataclasses compatible with `mypy --strict`.
-* **To WebAssembly (`wasm32-wasip1`):** Emits compact WebAssembly bytecode running in-browser or edge runtimes with sub-millisecond instantiation.
+* **To Python (`backend/to_python.py`):** Emits clean, typed Python code for host integration.
+* **To Rust (`backend/to_rust.py`):** Emits zero-allocation native Rust structs and WASI runner targets.
 * **To Cross-Dialect SQL (`asl-sql`):** Parameterized queries and schema migrations compilable to Postgres, SQLite, MySQL, and Oracle.
 
 ---
