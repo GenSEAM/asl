@@ -20,7 +20,7 @@ const MILESTONES: Milestone[] = [
       'Single-pass LL(1) balanced S-expression parser',
       'Differential verification gates (Python, Rust, Wasm, Go, TypeScript)',
       'Cross-backend IoError & numeric parity testing',
-      'Dual-projection Nano coordinate protocol (asl/coord)',
+      'Compact coordinate protocol (asl/coord)',
     ],
   },
   {

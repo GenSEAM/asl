@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-export type Route = '/' | '/playground' | '/ecosystem' | '/roadmap' | '/docs';
+export type Route = '/' | '/playground' | '/ecosystem' | '/roadmap' | '/docs' | '/blog';
 
 interface RouterContextType {
   currentPath: string;

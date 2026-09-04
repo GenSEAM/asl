@@ -6,23 +6,87 @@
   <!-- Core Home Landing Page -->
   <url>
     <loc>https://aslang.dev/</loc>
-    <lastmod>2026-09-02</lastmod>
-    <changefreq>weekly</changefreq>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+
+  <!-- Engineering Blog & Technical Writing -->
+  <url>
+    <loc>https://aslang.dev/blog</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <!-- Technical Essay 1: S-Expressions vs Python & Rust -->
+  <url>
+    <loc>https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</loc>
+    <lastmod>2026-09-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 2: The 78% Token Tax & Interface Compression -->
+  <url>
+    <loc>https://aslang.dev/blog/the-token-tax-and-interface-compression</loc>
+    <lastmod>2026-09-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 3: In-Memory WASI Sandboxing in 0.04ms -->
+  <url>
+    <loc>https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</loc>
+    <lastmod>2026-09-02</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 4: Mathematical Optimality of AgentScript for LLMs -->
+  <url>
+    <loc>https://aslang.dev/blog/agent-script-the-optimal-agent-language</loc>
+    <lastmod>2026-09-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 5: Token Economy & Nano Projection -->
+  <url>
+    <loc>https://aslang.dev/blog/token-economy-and-nano-projection</loc>
+    <lastmod>2026-09-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 6: Inter-Agent Protocols & Wire Frames -->
+  <url>
+    <loc>https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 7: The Agent-Native Developer Cockpit -->
+  <url>
+    <loc>https://aslang.dev/blog/the-agent-native-developer-cockpit</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
   </url>
 
   <!-- Multi-Runtime Ecosystem -->
   <url>
     <loc>https://aslang.dev/ecosystem</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.85</priority>
   </url>
 
   <!-- Canons, Roadmaps & Strategy -->
   <url>
     <loc>https://aslang.dev/roadmap</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -30,7 +94,7 @@
   <!-- Interactive SQL Studio & AST Playground -->
   <url>
     <loc>https://aslang.dev/playground</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -38,7 +102,7 @@
   <!-- Formal Language Specification & Docs -->
   <url>
     <loc>https://aslang.dev/docs</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -46,7 +110,7 @@
   <!-- Machine-Readable LLM Specification Index -->
   <url>
     <loc>https://aslang.dev/llms.txt</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>
@@ -54,7 +118,7 @@
   <!-- Full Normative Machine-Readable Specification for Agents -->
   <url>
     <loc>https://aslang.dev/llms-full.txt</loc>
-    <lastmod>2026-09-02</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
   </url>

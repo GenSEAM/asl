@@ -1,5 +1,5 @@
 (module asl-mem/test
-  :d "Unit tests for in-memory vector database, graph intelligence, and compact encoding in ASL Nano"
+  :d "Unit tests for in-memory vector database, graph intelligence, and compact encoding in ASL"
   :x [run-tests]
   :i [(store :a s)
       (graph :a g)

@@ -386,7 +386,7 @@ export const ModuleGraphVisualizer: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-content font-medium">Dual-Projection Compliance (@pcp:d-1eed)</span>
-                      <span className="font-mono text-accent font-bold">Nano Verified</span>
+                      <span className="font-mono text-accent font-bold">ASL Verified</span>
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-content font-medium">Virtual Inspection (@pcp:r-8d8e)</span>

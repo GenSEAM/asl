@@ -1,5 +1,5 @@
 (module asl-fsm/test
-  :d "Unit tests for FSM engine in ASL Nano"
+  :d "Unit tests for FSM engine in ASL"
   :x [run-tests])
 
 (df run-tests [] -> Bool

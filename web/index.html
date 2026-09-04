@@ -27,7 +27,7 @@
     <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Machine Readable Specification" />
     <link rel="alternate" type="text/plain" href="/llms-full.txt" title="Complete Agent Specification" />
     <meta name="agent-protocol" content="asl/1.0" />
-    <meta name="agent-wire-format" content="s-expression-nano" />
+    <meta name="agent-wire-format" content="s-expression-asl" />
     <meta name="ai-data-format" content="asn/1.0" />
     
     <!-- ASL Chameleon Curled 'a' signature mark -->
@@ -80,6 +80,18 @@
           "name": "AgentScript",
           "alternateName": ["ASL", "ASN", "AgentScript Notation"],
           "description": "Single-pass LL(1) deterministic S-expression language and wire protocol with mathematically verified multi-target equivalence."
+        },
+        {
+          "@type": "Blog",
+          "@id": "https://aslang.dev/blog#blog",
+          "url": "https://aslang.dev/blog",
+          "name": "AgentScript Engineering Blog",
+          "description": "Deep architectural essays on compiler engineering, deterministic S-expressions, token economics, in-memory WebAssembly sandboxing, and inter-agent wire protocols.",
+          "publisher": {
+            "@type": "Organization",
+            "name": "AgentScript Engineering Group",
+            "url": "https://aslang.dev"
+          }
         }
       ]
     }

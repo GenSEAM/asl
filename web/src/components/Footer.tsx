@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Logo } from './ui/Logo';
+import { Link } from '../lib/router';
 
 export const Footer: React.FC = () => {
   const [clickedCount, setClickedCount] = useState(0);
@@ -60,20 +61,20 @@ export const Footer: React.FC = () => {
         </div>
 
         <nav aria-label="Footer" className="flex flex-wrap items-center gap-6 font-mono text-meta">
-          <a href="#agent-way" className="text-ink-2 hover:text-ink transition-colors">
-            Specification
-          </a>
-          <a href="#capabilities" className="text-ink-2 hover:text-ink transition-colors">
-            Capabilities
-          </a>
-          <a href="#toolchain" className="text-ink-2 hover:text-ink transition-colors">
+          <Link to="/docs" className="text-ink-2 hover:text-ink transition-colors">
+            Documentation
+          </Link>
+          <Link to="/blog" className="text-ink-2 hover:text-ink transition-colors">
+            Blog
+          </Link>
+          <Link to="/ecosystem" className="text-ink-2 hover:text-ink transition-colors">
             Ecosystem
-          </a>
+          </Link>
+          <Link to="/roadmap" className="text-ink-2 hover:text-ink transition-colors">
+            Roadmap
+          </Link>
           <a href="https://github.com/genseam/asl" target="_blank" rel="noreferrer" className="text-ink-2 hover:text-ink transition-colors">
             GitHub
-          </a>
-          <a href="/llms.txt" className="text-ink-2 hover:text-ink transition-colors">
-            Security
           </a>
         </nav>
 

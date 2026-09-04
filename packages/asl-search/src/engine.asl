@@ -1,5 +1,5 @@
 (module asl-search/engine
-  :d "Decentralized multi-engine metasearch aggregator, URL deduplicator, and RAG context compressor in ASL Nano."
+  :d "Decentralized multi-engine metasearch aggregator, URL deduplicator, and RAG context compressor in ASL."
   :x [ProxyState ProxyNode SearchEngine SearchQuery SearchResult CurlCommand is-proxy-healthy select-healthy-proxies build-search-url make-curl-command clean-url merge-search-results format-result-markdown format-rag-context])
 
 (dfe ProxyState

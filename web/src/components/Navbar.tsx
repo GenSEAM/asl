@@ -5,6 +5,7 @@ import {
   Layers,
   Milestone,
   BookOpen,
+  Newspaper,
   Search,
   Sparkles,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const navItems = [
   { label: 'Ecosystem', href: '/ecosystem', icon: Layers },
   { label: 'Roadmap', href: '/roadmap', icon: Milestone },
   { label: 'Docs', href: '/docs', icon: BookOpen },
+  { label: 'Blog', href: '/blog', icon: Newspaper },
 ];
 
 export const Navbar: React.FC = () => {

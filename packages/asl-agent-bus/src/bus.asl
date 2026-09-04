@@ -1,5 +1,5 @@
 (module asl-agent-bus/bus
-  :d "Inter-Agent Swarm Bus Protocol in ASL Nano"
+  :d "Inter-Agent Swarm Bus Protocol in ASL"
   :x [AgentMessage BusEvent format-sse-event is-broadcast]
   :i [(core/strings :a s)])
 

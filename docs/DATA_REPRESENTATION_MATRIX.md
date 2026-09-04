@@ -305,7 +305,7 @@ The four properties this page used to call invariants, restated as what a gate e
 
 **Single-token hygiene is not among them.** It was asserted here and it is not true. `:pool`,
 `:ref` and `:default` are two tokens each, and abbreviating an identifier saves no tokens at all:
-across all 36 fixtures in `grammar/corpus/valid`, the verbose and Nano projections cost an
+across all 36 fixtures in `grammar/corpus/valid`, the verbose and standard ASL projections cost an
 identical 15,931 tokens (`bench/token_projection.py`). What ASN actually removes is **structure** —
 quotes around keys, commas, braces, and a field name repeated on every row — and that is what every
 measured figure above is measuring.

@@ -9,23 +9,18 @@ import { PlaygroundView } from './views/PlaygroundView';
 import { EcosystemView } from './views/EcosystemView';
 import { RoadmapView } from './views/RoadmapView';
 import { DocsView } from './views/DocsView';
+import { BlogView } from './views/BlogView';
 
 const AppContent: React.FC = () => {
   const { currentPath } = useRouter();
 
   const renderView = () => {
-    switch (currentPath) {
-      case '/playground':
-        return <PlaygroundView />;
-      case '/ecosystem':
-        return <EcosystemView />;
-      case '/roadmap':
-        return <RoadmapView />;
-      case '/docs':
-        return <DocsView />;
-      default:
-        return <HomeView />;
-    }
+    if (currentPath === '/playground') return <PlaygroundView />;
+    if (currentPath === '/ecosystem') return <EcosystemView />;
+    if (currentPath === '/roadmap') return <RoadmapView />;
+    if (currentPath === '/docs') return <DocsView />;
+    if (currentPath === '/blog' || currentPath.startsWith('/blog/')) return <BlogView />;
+    return <HomeView />;
   };
 
   return (

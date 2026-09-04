@@ -10,5 +10,5 @@
     "linux_x64": "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-x64.tar.gz",
     "linux_arm64": "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-arm64.tar.gz"
   },
-  "release_notes": "ASL Nano (df, dfs, dfe, F64, I64, Str, Bool) official 1.0 release with in-memory WebAssembly execution and Universal Agent Skills Hub."
+  "release_notes": "ASL (df, dfs, dfe, F64, I64, Str, Bool) official 1.0 release with in-memory WebAssembly execution and Universal Agent Skills Hub."
 }

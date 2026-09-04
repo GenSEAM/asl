@@ -1,5 +1,5 @@
 (module asl-voice/test
-  :d "Unit tests for voice bridge in ASL Nano"
+  :d "Unit tests for voice bridge in ASL"
   :x [run-tests]
   :i [(core/strings :a s)])
 

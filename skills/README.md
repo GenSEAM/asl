@@ -15,7 +15,7 @@ asl skill --install global
 
 `asl skill list` reads this directory, so the list below and the command cannot disagree.
 
-- `asl` — the language reference: Nano syntax, the closed vocabulary, the semantic rules, the
+- `asl` — the language reference: compact syntax, the closed vocabulary, the semantic rules, the
   CLI and the MCP tools. **Generated** from `prelude/prelude.json` by `prelude/generate.py`;
   editing `skills/asl/SKILL.md` by hand is work the `--check` gate will reject.
 - `skyloom` — the inter-agent protocol: frames, dialect negotiation and the swarm mesh.

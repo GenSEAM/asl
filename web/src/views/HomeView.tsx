@@ -7,6 +7,7 @@ import { InBrowserAgent } from '../components/InBrowserAgent';
 import { AgentWireProtocol } from '../components/AgentWireProtocol';
 import { HarnessToolkit } from '../components/HarnessToolkit';
 import { ModuleGraphVisualizer } from '../components/ModuleGraphVisualizer';
+import { EngineeringBlog } from '../components/EngineeringBlog';
 
 export const HomeView: React.FC = () => (
   <main className="flex-1">
@@ -17,6 +18,7 @@ export const HomeView: React.FC = () => (
     <AgentWireProtocol />
     <HarnessToolkit />
     <ModuleGraphVisualizer />
+    <EngineeringBlog />
     <InBrowserAgent />
   </main>
 );

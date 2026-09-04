@@ -28,7 +28,7 @@ Agent Query (JSON-RPC) ──> In-Memory Document Store ──> Regex/AST Indexe
 ### Key Architectural Capabilities:
 
 1. **Sub-0.05ms Response Dispatches:** Hover lookups (`textDocument/hover`), definition jumping (`textDocument/definition`), and document symbol indexing (`textDocument/documentSymbol`) execute in under **50 microseconds**.
-2. **Virtual Document Projections:** Agents can request virtual projections of open buffers. A coordinator agent working with high-density prompts can request the `nano` projection of a module directly from the LSP without touching the physical file on disk.
+2. **Virtual Document Projections:** Agents can request virtual projections of open buffers. A coordinator agent working with high-density prompts can request the compact ASL projection of a module directly from the LSP without touching the physical file on disk.
 3. **Zero-Daemon Overhead:** The server can run as a persistent stdlib JSON-RPC process or as a fast in-process library call inside the agent's Python runtime.
 
 ---

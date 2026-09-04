@@ -1,5 +1,5 @@
 (module asl-eddie/test
-  :d "Unit tests for EDDIE orchestrator in ASL Nano"
+  :d "Unit tests for EDDIE orchestrator in ASL"
   :x [run-tests])
 
 (df run-tests [] -> Bool

@@ -69,7 +69,7 @@ asl meta get auth/calculate-hash
 
 Abbreviating an identifier **saves bytes and does not save tokens**. Across every fixture in
 `grammar/corpus/valid`, transcoded by the real transcoder and counted under `cl100k_base`, the
-verbose and Nano projections cost an **identical** number of tokens — a saving of exactly
+verbose and standard ASL projections cost an **identical** number of tokens — a saving of exactly
 **0.00%** — against roughly 3.6% of bytes.
 
 Run `bench/token_projection.py` for the current totals. They are not quoted here on purpose: the
@@ -157,17 +157,15 @@ Given this declaration:
   (str bin " in " cwd))
 ```
 
-the arguments can travel positionally. Measured over the four spellings of one command,
+the arguments can travel positionally. Measured over the spellings of one command,
 `bench/token_frames.py` gives:
 
 | Spelling | Tokens |
 |---|---|
 | JSON | 51 |
-| TOON | 34 |
-| Nano, keyed | 27 |
-| Nano, positional | 18 |
+| AgentScript (ASL, positional) | 18 |
 
-Positional Nano is 65% smaller than the JSON frame. That figure is locked in
+Positional AgentScript is 65% smaller than the JSON frame. That figure is locked in
 `bench/token_frames.lock`.
 
 The frame itself — the `!`, `?` and `~` heads — belongs to

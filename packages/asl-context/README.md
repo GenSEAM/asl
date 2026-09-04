@@ -1,9 +1,9 @@
 # @genseam/asl-context (Pure AgentScript Context Engine)
 
-Decoupled multi-format context extraction, HTML/DOM boilerplate stripping, and token-dense RAG compression in pure AgentScript (ASL Nano).
+Decoupled multi-format context extraction, HTML/DOM boilerplate stripping, and token-dense RAG compression in pure AgentScript (ASL).
 
 ## Features
-- **Zero Python Runtime:** 100% written in pure AgentScript Nano (`.asl`). Compiles to WebAssembly, TypeScript, and Rust.
+- **Zero Python Runtime:** 100% written in pure AgentScript (`.asl`). Compiles to WebAssembly, TypeScript, and Rust.
 - **HTML Boilerplate Stripping:** Recursively removes `<script>`, `<style>`, `<nav>`, `<header>`, `<footer>`, comments (`<!-- ... -->`), and non-content tags.
 - **Entity Unescaping:** Fast unescaping of HTML entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&#39;`, `&apos;`, `&nbsp;`).
 - **Multi-Format Extraction:** Clean, normalized text extraction from HTML, Markdown, Plaintext, JSON Key-Value payloads, and XML/Atom feeds.

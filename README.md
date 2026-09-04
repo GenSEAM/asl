@@ -77,7 +77,7 @@ You don't need to rewrite your entire project to reap the benefits. Adopt AgentS
 
 ---
 
-## 🥊 The Face-Off: JSON vs TOON vs AgentScript
+## 🥊 The Face-Off: JSON vs AgentScript
 
 Here is what happens when an AI agent issues a structured command or task handoff:
 
@@ -94,19 +94,8 @@ Here is what happens when an AI agent issues a structured command or task handof
 }
 ```
 
-### The Intermediate Way: TOON (tabular YAML/CSV, whitespace-sensitive)
-```yaml
-action: execute_command
-payload: [binary, working_dir, timeout_ms]
-  git, /app, 5000
-arguments: [status, --short]
-```
-
-### The Native Agent Way: AgentScript Nano
-```agp
-(! cmd :bin "git" :args ["status" "--short"] :cwd "/app" :timeout-ms 5000)
-```
-*Or the positional, zero-key form:*
+### The Native Agent Way: AgentScript (ASL)
+Positional zero-key form — delimiter-balanced, zero syntactic overhead:
 ```agp
 (! cmd "git" ["status" "--short"] "/app" 5000)
 ```
@@ -114,14 +103,18 @@ arguments: [status, --short]
 | Frame | `cl100k_base` tokens |
 |---|---|
 | JSON | 51 |
-| TOON | 34 |
-| Nano, keyed | 27 |
-| Nano, positional | **18** |
+| AgentScript (ASL) | **18** |
 
 The positional frame is **64.7% smaller** than the JSON one. Re-run the count yourself with
 `bench/token_frames.py`; `--check` compares it against `bench/token_frames.lock` so the figure on
 this page cannot drift away from the payloads above. This is one example rather than a benchmark —
 the project's measured claims are the ones `ROADMAP.md` names beside the gate that produced each.
+
+> **Where positional is not enough:** Positional zero-key notation is optimal when parameter order is fixed and fully specified. For sparse payloads with optional fields or default overrides where positional indexing fails (e.g. overriding only `:timeout-ms` without dummy placeholders for preceding parameters), AgentScript seamlessly supports self-documenting keyed pairs:
+> ```agp
+> (! cmd :bin "git" :timeout-ms 5000)
+> ```
+> *(27 tokens — still 47% smaller than JSON, with zero ambiguity).*
 
 ---
 
@@ -157,10 +150,10 @@ asl build --target py   -o dist/agent.py
 
 ### 3. Inspect and Project Without Rewriting Files
 ```bash
-# Read a compact module as fully spelled-out source, on screen only
+# Read a module as fully spelled-out ASL Verbose (for debugging and human reading, on screen only)
 asl view src/main.asl
 
-# Switch a file between the Nano and the long projection
+# Switch a file to ASL Verbose for debugging
 asl transcode src/main.asl --to verbose
 
 # Structural search over the AST rather than grep

@@ -1,13 +1,17 @@
-# ASL Nano — the compact projection
+# ASL Syntax & Projections (ASL Standard vs ASL Verbose)
 
 **Normative text lives in [`AGENT_SPEC_CORE.md`](../AGENT_SPEC_CORE.md) §2.1**, which is generated
 from `prelude/prelude.json`. This page is orientation; where the two differ, the specification wins
 and this page is the bug.
 
-Nano is not a second language. It is a set of shorter spellings for forms the language already has,
-and both grammars produce the same tree from either spelling. It is what the toolchain writes to
-disk, puts on the wire, and generates into every agent-facing artifact; the long spelling is what a
-person reads, and `asl view` and `asl transcode` move between them without touching the file.
+AgentScript (ASL) is compact by default. The concise syntax (`df`, `dfs`, `dfe`, `mt`, `Str`, `I64`, `F64`)
+is simply **AgentScript (ASL)** — what the toolchain writes to disk, puts on the wire, and generates
+into agent-facing artifacts.
+
+**ASL Verbose** is an alternate projection intended exclusively for human inspection and debugging.
+The tool `asl view` displays a module in its verbose spelling on screen without touching the file,
+and `asl transcode --to verbose` converts it when debugging. Both grammars produce the exact same AST
+from either spelling.
 
 **What it buys, measured.** Fewer bytes, and not fewer tokens. Across every fixture in
 `grammar/corpus/valid`, under `cl100k_base`: 58,175 bytes against 56,091, a 3.6% saving, and
@@ -22,7 +26,7 @@ works. Abbreviating identifiers does not.
 
 ## The spellings
 
-| Nano | Long | Significant in |
+| ASL (Standard) | ASL Verbose | Significant in |
 |---|---|---|
 | `df` | `defun` | declaration head |
 | `dfs` | `defschema` | declaration head |
