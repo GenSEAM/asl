@@ -103,14 +103,22 @@ def audit_builtins(enc, vocab: dict) -> Tuple[List[dict], List[str]]:
     """Audits builtins in prelude.json, warning on token fragmentation (>2 tokens)."""
     records = []
     warnings = []
+    builtin_aliases = {}
+    b_table = vocab.get("projection", {}).get("builtins", [])
+    if isinstance(b_table, list):
+        builtin_aliases = {b["verbose"]: b["nano"] for b in b_table}
+    elif isinstance(b_table, dict):
+        builtin_aliases = dict(b_table)
+
     for b in vocab.get("builtins", []):
         name = b["name"]
-        tokens = enc.encode(name)
+        effective = builtin_aliases.get(name, name)
+        tokens = enc.encode(effective)
         cnt = len(tokens)
-        rec = {"name": name, "tokens": cnt, "token_ids": tokens}
+        rec = {"name": name, "effective": effective, "tokens": cnt, "token_ids": tokens}
         records.append(rec)
         if cnt > 2:
-            warnings.append(f"Builtin '{name}' fragments into {cnt} tokens: {tokens}")
+            warnings.append(f"Builtin '{effective}' fragments into {cnt} tokens: {tokens}")
     return records, warnings
 
 

@@ -167,6 +167,248 @@
         "where": "enum-case-head"
       }
     ],
+    "builtins": [
+      {
+        "verbose": "string-starts-with?",
+        "nano": "starts?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-ends-with?",
+        "nano": "ends?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-length",
+        "nano": "len",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-head",
+        "nano": "head",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-tail",
+        "nano": "tail",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-reverse",
+        "nano": "rev",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-sum",
+        "nano": "sum",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-split",
+        "nano": "split",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-join",
+        "nano": "join",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-trim",
+        "nano": "trim",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-slice",
+        "nano": "slice",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-chars",
+        "nano": "chars",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-to-float64",
+        "nano": "f64",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-to-int64",
+        "nano": "i64",
+        "where": "call-head"
+      },
+      {
+        "verbose": "map-keys",
+        "nano": "keys",
+        "where": "call-head"
+      },
+      {
+        "verbose": "map-values",
+        "nano": "vals",
+        "where": "call-head"
+      },
+      {
+        "verbose": "map-has?",
+        "nano": "has?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-empty?",
+        "nano": "empty?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "is-some?",
+        "nano": "some?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "is-none?",
+        "nano": "none?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "is-ok?",
+        "nano": "ok?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "is-err?",
+        "nano": "err?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-empty?",
+        "nano": "blank?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-slice",
+        "nano": "substr",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-index-of",
+        "nano": "str-find",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-contains?",
+        "nano": "includes?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-lower",
+        "nano": "lower",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-reverse",
+        "nano": "strrev",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-replace",
+        "nano": "replace",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-from-int64",
+        "nano": "str-i",
+        "where": "call-head"
+      },
+      {
+        "verbose": "string-from-float64",
+        "nano": "str-f",
+        "where": "call-head"
+      },
+      {
+        "verbose": "int32-to-int64",
+        "nano": "widen",
+        "where": "call-head"
+      },
+      {
+        "verbose": "int64-to-int32",
+        "nano": "narrow",
+        "where": "call-head"
+      },
+      {
+        "verbose": "int64-to-float64",
+        "nano": "float",
+        "where": "call-head"
+      },
+      {
+        "verbose": "float64-to-int64",
+        "nano": "trunc",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-contains?",
+        "nano": "contains?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-index-of",
+        "nano": "index-of",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-sort-by",
+        "nano": "sort-by",
+        "where": "call-head"
+      },
+      {
+        "verbose": "map-pairs",
+        "nano": "pairs",
+        "where": "call-head"
+      },
+      {
+        "verbose": "map-from-pairs",
+        "nano": "to-map",
+        "where": "call-head"
+      },
+      {
+        "verbose": "result-map-err",
+        "nano": "err-map",
+        "where": "call-head"
+      },
+      {
+        "verbose": "option-to-result",
+        "nano": "opt-res",
+        "where": "call-head"
+      },
+      {
+        "verbose": "result-to-option",
+        "nano": "res-opt",
+        "where": "call-head"
+      },
+      {
+        "verbose": "permission-denied",
+        "nano": "denied",
+        "where": "call-head"
+      },
+      {
+        "verbose": "already-exists",
+        "nano": "exists",
+        "where": "call-head"
+      },
+      {
+        "verbose": "file-exists?",
+        "nano": "exists?",
+        "where": "call-head"
+      },
+      {
+        "verbose": "list-append",
+        "nano": "append",
+        "where": "call-head"
+      },
+      {
+        "verbose": "file-append",
+        "nano": "append-file",
+        "where": "call-head"
+      }
+    ],
     "unaliased": {
       "$comment": "Forms deliberately without a Nano spelling: they are already one token, or shortening them would collide with an identifier shape.",
       "forms": [

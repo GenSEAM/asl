@@ -177,6 +177,30 @@ def nano_option(verbose: str) -> str:
     return verbose
 
 
+def builtin_spellings() -> dict[str, list[str]]:
+    """Verbose builtin -> [verbose, nano] or [verbose]."""
+    b_table = projection().get("builtins", [])
+    if isinstance(b_table, list):
+        return {b["verbose"]: [b["verbose"], b["nano"]] for b in b_table}
+    elif isinstance(b_table, dict):
+        return {v: [v, n] for v, n in b_table.items()}
+    return {}
+
+
+def builtin_aliases() -> dict[str, str]:
+    """Any builtin spelling -> its verbose spelling, including the identity."""
+    return {s: v for v, ss in builtin_spellings().items() for s in ss}
+
+
+def nano_builtin(verbose: str) -> str:
+    """The canonical Nano spelling of a builtin; identity when none."""
+    for v, ss in builtin_spellings().items():
+        if v == verbose:
+            return ss[1] if len(ss) > 1 else ss[0]
+    return verbose
+
+
+
 def reserved_widths() -> dict[str, str]:
     """Width aliases Core has no type for: name -> the type they resolve to.
 

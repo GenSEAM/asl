@@ -98,9 +98,10 @@ def shape_lines() -> list[str]:
 
 
 def alias_rows() -> list[tuple[str, str]]:
-    """(verbose, nano) for every aliased spelling, heads then options."""
+    """(verbose, nano) for every aliased spelling, heads then options then builtins."""
     return ([(h["verbose"], h["nano"]) for h in PRELUDE["projection"]["heads"]]
-            + [(o["verbose"], o["nano"]) for o in PRELUDE["projection"]["options"]])
+            + [(o["verbose"], o["nano"]) for o in PRELUDE["projection"]["options"]]
+            + [(b["verbose"], b["nano"]) for b in PRELUDE["projection"].get("builtins", [])])
 
 
 def handbook() -> str:
@@ -269,7 +270,9 @@ def spec_projection() -> str:
                      [(e["verbose"], e["nano"], e["where"])
                       for e in PRELUDE["projection"]["heads"]]
                      + [(e["verbose"], e["nano"], e["where"])
-                        for e in PRELUDE["projection"]["options"]])
+                        for e in PRELUDE["projection"]["options"]]
+                     + [(e["verbose"], e["nano"], e.get("where", "call-head"))
+                        for e in PRELUDE["projection"].get("builtins", [])])
     also = ", ".join(
         f"`{sp}`" for e in PRELUDE["projection"]["heads"] for sp in e.get("also", []))
     types = "\n".join(f"| `{a}` | `{t}` |" for a, t in PRELUDE["types"]["aliases"].items()
