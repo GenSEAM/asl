@@ -77,7 +77,7 @@ The hallucination is halted in **1.8 milliseconds** at the parser boundary. It n
 When autonomous agents retrieve information from documentation or external search engines, the **Grounding Firewall (`asl-harness`)** enforces quote verification before downstream actions are taken:
 
 * When an agent extracts a fact or API requirement, it must return an epistemic tuple:
-  ```lisp
+  ```agentscript
   (claim :statement "Timeout parameter must be specified in milliseconds"
          :source-id "doc-402"
          :exact-quote "timeout-ms: Integer duration in milliseconds"

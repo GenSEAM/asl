@@ -92,8 +92,7 @@ Everything below was checked by a command whose output was read, not inferred.
    first**: five amendments supersede parts of the body, and the most recent records that the I/O
    dependency an earlier one called blocking has been met.
 4. `RESEARCH_REPORT.md` — evidence on whether the concept is viable at all. Read §3 and §5.
-5. `SPEC_REVIEW.md` — critique of the original v0 draft; explains why v0.2 looks as it does.
-6. `AGENT_SPEC.md` — the original v0 draft, **frozen, superseded, kept only for provenance**.
+
 
 ### Which document governs what
 

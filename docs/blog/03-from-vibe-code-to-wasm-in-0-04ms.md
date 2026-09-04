@@ -37,7 +37,7 @@ LLM Synthesis ──> Compile to Wasm (<12ms) ──> Instantiate & Run WASI (0.
 
 AgentScript compiles directly to `wasm32-wasip1` bytecode. Rather than dispatching execution to an external daemon, the ASL toolchain executes the module inside an in-process, memory-isolated WebAssembly engine (V8 / Wasmtime / Wasmer embedded via C-FFI):
 
-```lisp
+```agentscript
 (module cipher/crc32
   :d "In-memory cyclic redundancy checksum with zero syscall overhead."
   :x [checksum])

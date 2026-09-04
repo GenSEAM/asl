@@ -51,7 +51,7 @@ The standard industry attempt to solve this—Protocol Buffers, OpenAPI schemas,
 
 AgentScript (ASL) was designed to act as the universal semantic substrate. Instead of writing custom bindings and manual translations, developers (and autonomous agents) author core logic in pure ASL:
 
-```lisp
+```agentscript
 (module math/vector
   :d "2D vector transformations and geometry"
   :x [Vec2 dot-product magnitude normalize])

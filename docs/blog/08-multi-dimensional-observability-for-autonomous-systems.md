@@ -42,7 +42,7 @@ In human software engineering, architectural drift happens slowly over months. I
 
 In AgentScript (ASL), every module explicitly declares its exports (`:x`) and imports (`:i`). Because ASL code is an exact representation of its Abstract Syntax Tree, the compiler generates a deterministic dependency DAG without executing a single line of code:
 
-```lisp
+```agentscript
 (module store/checkout
   :d "Checkout transaction coordinator"
   :x [process-checkout]
@@ -60,7 +60,7 @@ When a subagent generates or modifies code:
 
 The coordinator agent does not read compiler output logs. It receives a structured S-expression frame identifying the exact topological edge that violated the architecture:
 
-```lisp
+```agentscript
 (fault :type :circular-dependency
        :cycle [store/checkout store/payment store/checkout]
        :action :reject)

@@ -602,7 +602,7 @@ The hallucination is halted in **1.8 milliseconds** at the parser boundary. It n
 When autonomous agents retrieve information from documentation or external search engines, the **Grounding Firewall (\`asl-harness\`)** enforces quote verification before downstream actions are taken:
 
 * When an agent extracts a fact or API requirement, it must return an epistemic tuple:
-  \`\`\`lisp
+  \`\`\`agentscript
   (claim :statement "Timeout parameter must be specified in milliseconds"
          :source-id "doc-402"
          :exact-quote "timeout-ms: Integer duration in milliseconds"
@@ -683,7 +683,7 @@ The standard industry attempt to solve this—Protocol Buffers, OpenAPI schemas,
 
 AgentScript (ASL) was designed to act as the universal semantic substrate. Instead of writing custom bindings and manual translations, developers (and autonomous agents) author core logic in pure ASL:
 
-\`\`\`lisp
+\`\`\`agentscript
 (module math/vector
   :d "2D vector transformations and geometry"
   :x [Vec2 dot-product magnitude normalize])
@@ -785,7 +785,7 @@ In human software engineering, architectural drift happens slowly over months. I
 
 In AgentScript (ASL), every module explicitly declares its exports (\`:x\`) and imports (\`:i\`). Because ASL code is an exact representation of its Abstract Syntax Tree, the compiler generates a deterministic dependency DAG without executing a single line of code:
 
-\`\`\`lisp
+\`\`\`agentscript
 (module store/checkout
   :d "Checkout transaction coordinator"
   :x [process-checkout]
@@ -803,7 +803,7 @@ When a subagent generates or modifies code:
 
 The coordinator agent does not read compiler output logs. It receives a structured S-expression frame identifying the exact topological edge that violated the architecture:
 
-\`\`\`lisp
+\`\`\`agentscript
 (fault :type :circular-dependency
        :cycle [store/checkout store/payment store/checkout]
        :action :reject)
@@ -897,7 +897,7 @@ Traditional compilers and linters are passive: they find a fault, emit a formatt
 
 The AgentScript **Doctor & Self-Healing Engine** (\`tools/heal.py\`) turns diagnostics into immediate, deterministic AST repairs:
 
-\`\`\`lisp
+\`\`\`agentscript
 (module telemetry/metrics
   :d "In-memory telemetry counters for agent cockpit."
   :x [Counter record-tick])
@@ -1239,7 +1239,7 @@ Because **human readability and machine transmission serve different consumers**
 In AgentScript, standard syntax is the compact representation; ASL Verbose is an **isomorphic AST projection** for human debugging.
 
 ASL Verbose (for debugging and human reading):
-\`\`\`lisp
+\`\`\`agentscript
 (module math/vector
   :doc "Dot product and vector operations."
   :export [Point dot])
@@ -1254,7 +1254,7 @@ ASL Verbose (for debugging and human reading):
 \`\`\`
 
 AgentScript (Standard ASL):
-\`\`\`lisp
+\`\`\`agentscript
 (module math/vector
   :d "Dot product and vector operations."
   :x [Point dot])
@@ -1289,7 +1289,7 @@ AgentScript enforces the **2-Token Ceiling**:
 2. **One-Line Docstrings:** \`:doc\` defines the contract and invariants.
 3. **Symbolic Rationale Anchors:** Long architectural justifications are extracted out-of-band into the project memory ledger (\`.asl/mem/\`), referenced in code by a compact 3-character tag (e.g. \`@s02\`, \`@sec\`, \`@d01\`):
 
-\`\`\`lisp
+\`\`\`agentscript
 (df calculate-signature [(payload Str) (key Str)] -> Str
   :d "HMAC-SHA256 digest calculation."
   "@s02"
@@ -1407,7 +1407,7 @@ In conventional compilers, source code undergoes a multi-stage translation: lexi
 
 In AgentScript, the syntax **is** the AST. This property is known as **homoiconicity**.
 
-\`\`\`lisp
+\`\`\`agentscript
 (module core/fsm
   :d "Finite state machine with exhaustive pattern matching and effect isolation."
   :x [State Event step])
@@ -1470,7 +1470,7 @@ In an attention mechanism, calculating these interactions requires multiple laye
 In AgentScript, **operator precedence does not exist**:
 
 <!-- not-agentscript: unambiguous prefix demonstration -->
-\`\`\`lisp
+\`\`\`agentscript
 (let [result (if (> (+ a (* b c)) d) e f)]
   result)
 \`\`\`
@@ -1507,7 +1507,7 @@ AgentScript enforces explicit effect boundaries:
 * **Pure Functions:** By default, functions in ASL are pure mathematical transformations. They have no access to the filesystem, network sockets, system clocks, or process state. They are deterministic, idempotent, and provably thread-safe.
 * **Effectful Procedures (\`!\`):** Any procedure that performs I/O or mutates external state must carry an exclamation mark sigil (\`!\`) or run inside a restricted capability context.
 
-\`\`\`lisp
+\`\`\`agentscript
 (df pure-calculation [(x I64) (y I64)] -> I64
   (+ x y))
 
@@ -1576,7 +1576,7 @@ LLM Synthesis ──> Compile to Wasm (<12ms) ──> Instantiate & Run WASI (0.
 
 AgentScript compiles directly to \`wasm32-wasip1\` bytecode. Rather than dispatching execution to an external daemon, the ASL toolchain executes the module inside an in-process, memory-isolated WebAssembly engine (V8 / Wasmtime / Wasmer embedded via C-FFI):
 
-\`\`\`lisp
+\`\`\`agentscript
 (module cipher/crc32
   :d "In-memory cyclic redundancy checksum with zero syscall overhead."
   :x [checksum])
@@ -1680,7 +1680,7 @@ In AgentScript (ASL), modules enforce a strict separation between public interfa
 Consider an uncompressed order processing module (390 tokens):
 
 <!-- not-agentscript: full implementation showing private helpers -->
-\`\`\`lisp
+\`\`\`agentscript
 (module store/orders
   :d "Order management and tax calculations"
   :x [Order OrderStatus calculate-total])
@@ -1706,7 +1706,7 @@ Consider an uncompressed order processing module (390 tokens):
 
 When passed to a peer subagent that merely needs to construct orders or query prices, the ASL toolchain projects this file through AST interface extraction down to **82 tokens**:
 
-\`\`\`lisp
+\`\`\`agentscript
 (module store/orders
   :d "Order management and tax calculations"
   :x [Order OrderStatus calculate-total])
@@ -1852,7 +1852,7 @@ An LLM generating token $t_{450}$ cannot "look ahead" to see the lifetime variab
 
 AgentScript (ASL) rejects both indentation-based scoping and implicit operator precedence. Instead, it adopts **Single-Pass S-Expressions**.
 
-\`\`\`lisp
+\`\`\`agentscript
 (module math/geometry
   :d "Geometric primitives with compile-time validation."
   :x [Shape area])
@@ -1878,7 +1878,7 @@ AgentScript (ASL) rejects both indentation-based scoping and implicit operator p
    \`\`\`
    requires the model to evaluate 6 distinct layers of operator precedence tables. In ASL, prefix notation makes the order of evaluation explicit by construction:
    <!-- not-agentscript: snippet showing boolean precedence in prefix form -->
-   \`\`\`lisp
+   \`\`\`agentscript
    (or (and (> (+ a (* b c)) d) e) f)
    \`\`\`
 4. **Single-Pass LL(1) Parsing:** The parser requires zero backtracking and zero lookahead buffers. If a token stream is well-formed, it constructs the tree in a single linear scan of $O(N)$ time and space.

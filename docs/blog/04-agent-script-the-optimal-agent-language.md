@@ -21,7 +21,7 @@ In conventional compilers, source code undergoes a multi-stage translation: lexi
 
 In AgentScript, the syntax **is** the AST. This property is known as **homoiconicity**.
 
-```lisp
+```agentscript
 (module core/fsm
   :d "Finite state machine with exhaustive pattern matching and effect isolation."
   :x [State Event step])
@@ -84,7 +84,7 @@ In an attention mechanism, calculating these interactions requires multiple laye
 In AgentScript, **operator precedence does not exist**:
 
 <!-- not-agentscript: unambiguous prefix demonstration -->
-```lisp
+```agentscript
 (let [result (if (> (+ a (* b c)) d) e f)]
   result)
 ```
@@ -121,7 +121,7 @@ AgentScript enforces explicit effect boundaries:
 * **Pure Functions:** By default, functions in ASL are pure mathematical transformations. They have no access to the filesystem, network sockets, system clocks, or process state. They are deterministic, idempotent, and provably thread-safe.
 * **Effectful Procedures (`!`):** Any procedure that performs I/O or mutates external state must carry an exclamation mark sigil (`!`) or run inside a restricted capability context.
 
-```lisp
+```agentscript
 (df pure-calculation [(x I64) (y I64)] -> I64
   (+ x y))
 

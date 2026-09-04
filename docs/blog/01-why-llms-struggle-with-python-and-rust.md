@@ -79,7 +79,7 @@ An LLM generating token $t_{450}$ cannot "look ahead" to see the lifetime variab
 
 AgentScript (ASL) rejects both indentation-based scoping and implicit operator precedence. Instead, it adopts **Single-Pass S-Expressions**.
 
-```lisp
+```agentscript
 (module math/geometry
   :d "Geometric primitives with compile-time validation."
   :x [Shape area])
@@ -105,7 +105,7 @@ AgentScript (ASL) rejects both indentation-based scoping and implicit operator p
    ```
    requires the model to evaluate 6 distinct layers of operator precedence tables. In ASL, prefix notation makes the order of evaluation explicit by construction:
    <!-- not-agentscript: snippet showing boolean precedence in prefix form -->
-   ```lisp
+   ```agentscript
    (or (and (> (+ a (* b c)) d) e) f)
    ```
 4. **Single-Pass LL(1) Parsing:** The parser requires zero backtracking and zero lookahead buffers. If a token stream is well-formed, it constructs the tree in a single linear scan of $O(N)$ time and space.

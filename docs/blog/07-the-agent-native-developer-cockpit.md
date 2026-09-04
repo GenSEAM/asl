@@ -39,7 +39,7 @@ Traditional compilers and linters are passive: they find a fault, emit a formatt
 
 The AgentScript **Doctor & Self-Healing Engine** (`tools/heal.py`) turns diagnostics into immediate, deterministic AST repairs:
 
-```lisp
+```agentscript
 (module telemetry/metrics
   :d "In-memory telemetry counters for agent cockpit."
   :x [Counter record-tick])

@@ -68,7 +68,7 @@ Because **human readability and machine transmission serve different consumers**
 In AgentScript, standard syntax is the compact representation; ASL Verbose is an **isomorphic AST projection** for human debugging.
 
 ASL Verbose (for debugging and human reading):
-```lisp
+```agentscript
 (module math/vector
   :doc "Dot product and vector operations."
   :export [Point dot])
@@ -83,7 +83,7 @@ ASL Verbose (for debugging and human reading):
 ```
 
 AgentScript (Standard ASL):
-```lisp
+```agentscript
 (module math/vector
   :d "Dot product and vector operations."
   :x [Point dot])
@@ -118,7 +118,7 @@ AgentScript enforces the **2-Token Ceiling**:
 2. **One-Line Docstrings:** `:doc` defines the contract and invariants.
 3. **Symbolic Rationale Anchors:** Long architectural justifications are extracted out-of-band into the project memory ledger (`.asl/mem/`), referenced in code by a compact 3-character tag (e.g. `@s02`, `@sec`, `@d01`):
 
-```lisp
+```agentscript
 (df calculate-signature [(payload Str) (key Str)] -> Str
   :d "HMAC-SHA256 digest calculation."
   "@s02"

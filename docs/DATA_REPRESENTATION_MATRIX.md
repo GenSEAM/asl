@@ -45,10 +45,10 @@ The schema is declared once, in AgentScript:
 
 ```lisp
 (dfs Item
-  (:f id     Int64   "ID")
-  (:f sku    String  "SKU")
-  (:f price  Float64 "Price")
-  (:f status String  "Stock status"))
+  (:f id     I64 "ID")
+  (:f sku    Str "SKU")
+  (:f price  F64 "Price")
+  (:f status Str "Stock status"))
 ```
 
 The payload names the constructor once and writes bare positional rows:

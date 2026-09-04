@@ -212,10 +212,10 @@ Declare the shape once:
 
 ```lisp
 (dfs Item
-  (:f id     Int64   "ID")
-  (:f sku    String  "SKU")
-  (:f price  Float64 "Price")
-  (:f status String  "Stock status"))
+  (:f id     I64 "ID")
+  (:f sku    Str "SKU")
+  (:f price  F64 "Price")
+  (:f status Str "Stock status"))
 ```
 
 Then name the constructor once and write bare positional rows:
@@ -362,14 +362,14 @@ The form below **does not parse under v0.2** and is reproduced as a proposal:
 <!-- not-agentscript: `:use` is a v1.0 proposal for AGENT_SPEC_CORE.md and has no v0.2 spelling -->
 ```lisp
 (dfs AuditMeta
-  (:f id Int64 "ID")
-  (:f ts Int64 "Timestamp")
-  (:f tenant Int64 "Tenant"))
+  (:f id I64 "ID")
+  (:f ts I64 "Timestamp")
+  (:f tenant I64 "Tenant"))
 
 (dfs UserProfile
   (:use AuditMeta)
-  (:f email String "Email")
-  (:f role String "Role"))
+  (:f email Str "Email")
+  (:f role Str "Role"))
 ```
 
 Under v0.2 every field carries a doc-string and there is no `:use`. Write the fields out.

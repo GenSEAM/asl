@@ -30,7 +30,7 @@ In AgentScript (ASL), modules enforce a strict separation between public interfa
 Consider an uncompressed order processing module (390 tokens):
 
 <!-- not-agentscript: full implementation showing private helpers -->
-```lisp
+```agentscript
 (module store/orders
   :d "Order management and tax calculations"
   :x [Order OrderStatus calculate-total])
@@ -56,7 +56,7 @@ Consider an uncompressed order processing module (390 tokens):
 
 When passed to a peer subagent that merely needs to construct orders or query prices, the ASL toolchain projects this file through AST interface extraction down to **82 tokens**:
 
-```lisp
+```agentscript
 (module store/orders
   :d "Order management and tax calculations"
   :x [Order OrderStatus calculate-total])

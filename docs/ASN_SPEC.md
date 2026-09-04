@@ -229,9 +229,9 @@ Three keys are **reserved** in a record and always carry the meaning this docume
 
 ```lisp
 (dfs Item
-  (:f id    Int64   "ID")
-  (:f sku   String  "SKU")
-  (:f price Float64 "Price"))
+  (:f id    I64 "ID")
+  (:f sku   Str "SKU")
+  (:f price F64 "Price"))
 ```
 
 ```asn
