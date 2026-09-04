@@ -248,7 +248,7 @@ def cmd_build(args) -> int:
 
     if not args.file.is_file():
         return report([diag(args.file, "build", "no such file")], args.json, "diagnostic(s)")
-    if getattr(args, "native", False) or args.target == "native-rs":
+    if args.target == "native-rs" or (getattr(args, "native", False) and args.target != "wasm"):
         from tools.native_codegen import native_emit_rust
         try:
             rs_src = native_emit_rust(args.file.read_text(), path=args.file)
@@ -261,10 +261,14 @@ def cmd_build(args) -> int:
             return report([diag(args.file, "build", str(exc))], getattr(args, "json", False), "diagnostic(s)")
     if args.target == "wasm":
         import tempfile
-        from to_rust import ToRust
         roots = [ROOT / "grammar" / "corpus" / "modules"]
         try:
-            rs_src = ToRust().transpile(args.file.read_text(), path=args.file, roots=roots)
+            if getattr(args, "native", False):
+                from tools.native_codegen import native_emit_rust
+                rs_src = native_emit_rust(args.file.read_text(), path=args.file, roots=roots)
+            else:
+                from to_rust import ToRust
+                rs_src = ToRust().transpile(args.file.read_text(), path=args.file, roots=roots)
             with tempfile.TemporaryDirectory(dir="/tmp") as d:
                 (Path(d) / "rt.rs").write_text((ROOT / "backend" / "rust" / "rt.rs").read_text())
                 (Path(d) / "main.rs").write_text(rs_src)
