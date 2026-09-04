@@ -68,6 +68,19 @@ def build_single_target(src_file: Path, target: str, out_file: Path | None = Non
             dt = (time.perf_counter() - t0) * 1000.0
             return False, str(exc), dt
 
+    if target in ("native-rs", "native"):
+        from tools.native_codegen import native_emit_rust
+        try:
+            rs_src = native_emit_rust(src_file.read_text(), path=src_file)
+            dt = (time.perf_counter() - t0) * 1000.0
+            if out_file:
+                out_file.parent.mkdir(parents=True, exist_ok=True)
+                out_file.write_text(rs_src)
+            return True, "OK (native-rs)", dt
+        except Exception as exc:
+            dt = (time.perf_counter() - t0) * 1000.0
+            return False, str(exc), dt
+
     if target in BACKENDS:
         script = ROOT / "backend" / BACKENDS[target]
         run = subprocess.run([sys.executable, str(script), str(src_file),

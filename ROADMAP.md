@@ -72,8 +72,11 @@ Everything below was checked by a command whose output was read, not inferred.
 | Nano projection & transcoder | **working** — short spellings (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`, `Str`, `I64`, `F64`), `asl transcode`, `asl view` (@pcp:d-1eed, `d-ddc2`). **It buys 3.6% of bytes and 0.0% of tokens** — see §6 and `bench/token_projection.py` |
 | In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
 | Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
+| Polyglot DB Bridge & Schema Hub | **planned** (Phase 9) — `packages/asl-bridge`, abstract capability ports (`DbPort`, `DbDriver`), universal multi-ORM emitter (Kysely, Prisma, Drizzle, SQLAlchemy, SeaORM, sqlc), and Wasm-forced execution router |
+| Rational Single-Token Audit | **planned** (Phase 10) — `bench/token_audit.py`, periodic BPE tokenization audit (`cl100k_base`, `o200k_base`), rational 1-2 token boundary enforcement for protocol frames and keywords without destructive identifier mangling |
 | Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + native-vs-Lark latency/memory benchmark (`tools/native_parser.py`); lexer scanner is iterative (fold over `string-chars`), so all 48 `packages/**/*.asl` parse without recursion overflow (`tools/tests/test_native_parse_all.py`: 38 passed) |
 | Self-Hosted ASL Checker | **working** — `packages/asl-checker` in 100% pure AgentScript (`types.asl`, `unify.asl`, `resolve.asl`, `check.asl`); `asl check --native` CLI + `checker/gate.py --native` verified with 0 failures across all 131 files; HM unification, module boundary resolution, and §9 rules (@pcp:d-8d4c) |
+| Self-Hosted ASL Codegen | **working** — `packages/asl-codegen` in 100% pure AgentScript (`emit.asl`, `expr.asl`, `rtypes.asl`, `mangle.asl`, `builtins.asl`); standalone native Rust generation, module linking, slice patterns, `asl build --native`, 8/8 test suite passing (`tools/tests/test_native_codegen.py`), clean clone ratio (<15%) |
 | Nano projection | **one source** — `prelude/prelude.json`'s `projection` section generates §2.1, both grammars' spelling tables, the handbook, both `llms.txt` copies and the harness skill |
 | Documentation examples | **gated** — `tools/doc_examples.py` parses every fenced AgentScript block in the repository's Markdown; other languages get their own fence, deliberate non-examples opt out with a stated reason |
 | Package sources | **gated** — `checker/gate.py` checks all 48 `.asl` files under `packages/`, not the corpus alone |
@@ -244,18 +247,35 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    `d-4b8c` answers for host bindings, asked again for a different boundary. Direct Wasm code
    generation, bypassing Rust, is a separate and much larger commitment: it owns memory layout and
    reclamation for recursive unions.
-7. **Self-hosting frontend & validation migration (@pcp:d-8d4c)** — **done & active**. The pure ASL lexer,
-   reader, and AST (`packages/asl-parser`) and pure ASL semantic type checker (`packages/asl-checker`) are built,
-   passing all 399 parity tests and all 131 fixtures with 0 failures under `checker/gate.py --native`.
-   Immediate milestone: self-hosted code generator (`packages/asl-codegen`) emitting native Rust, migrating
-   all ecosystem validation gates (`validate.py`, `doc_examples.py`, `closure_audit.py`, `checker/gate.py`) and
-   retiring Lark and Python completely.
+7. **Self-hosting frontend, typechecker & codegen (@pcp:d-8d4c)** — **done & active**. The pure ASL lexer,
+   reader, and AST (`packages/asl-parser`), pure ASL semantic type checker (`packages/asl-checker`), and native
+   Rust codegen (`packages/asl-codegen`) are built and integrated (`asl build --native`). Passing all 399 parity
+   tests, 8/8 native codegen tests, and 0 failures under `checker/gate.py --native`.
+   Next milestone: migrating remaining validation scripts (`validate.py`, `doc_examples.py`, `closure_audit.py`)
+   to the native toolchain to retire Lark and Python completely from the pipeline.
 8. **Native In-Language Constitutional Engine (`packages/asl-pcp`)** — **planned**. A self-hosted implementation
    of the Project Constitution Protocol (PCP) written natively in pure AgentScript:
    - In-memory algebraic model of shortcodes, invariants, and decisions (`Shortcode`, `Rule`, `Ledger`).
    - AST anchor scanner built on `packages/asl-parser` to extract `@xyz` 3-character anchors (`@d01`, `@s02`, `@h99`) and module/method references.
    - Tabular ASN architecture ledgers (`constitution.asn`) replacing heavy YAML files (-70% token overhead).
    - In-language runtime API (`pcp/verify-module`, `pcp/check-invariants`, `pcp/query`) allowing agents to enforce architectural constraints and verify invariants directly within running programs.
+9. **Polyglot Bridge, Universal Multi-ORM Transpilation & Execution Matrix (`packages/asl-bridge`)** — **planned**.
+   - **Zero-Pollution Capability Port Architecture**: Typed abstract database and host capability ports (`DbPort`, `DbDriver`, `ResultSet`) implemented in pure AgentScript. Enables ASL modules to orchestrate in-memory Wasm SQLite, host network sockets (Postgres, MySQL), or Agent-Bus IPC channels without breaking the mathematical closed-vocabulary guarantee.
+   - **Universal Schema Bridge (`asl-schema-bridge`)**: Bidirectional transpilation between AgentScript data schemas (`dfs`, `TableDef`) and ecosystem ORMs / query builders:
+     - TypeScript: Kysely table interfaces, Prisma schema definitions, Drizzle ORM schemas.
+     - Python: SQLAlchemy declarative models, Tortoise ORM classes, Pydantic schemas.
+     - Rust: SeaORM entity definitions, sqlx query wrappers.
+     - Go: sqlc schema declarations and typed models.
+   - **Wasm-First Execution Router**: Integrated into `packages/asl-harness`, automatically enforcing the 3-tier workload hierarchy:
+     1. *Tier 1*: Sub-millisecond in-memory Wasm sandbox (0.038ms, 95%+ of agent tasks).
+     2. *Tier 2*: Host Process / Agent-Bus IPC (for local system tooling and streaming sockets).
+     3. *Tier 3*: MicroVM (Firecracker / Docker, reserved for legacy C++ binaries, CUDA/GPU drivers, or raw POSIX networking).
+10. **Rational Single-Token Audit & Token Fragmentation Gate (`bench/token_audit.py`)** — **planned**.
+    - **Dedicated Tokenizer Hygiene**: Periodic BPE analysis across modern tokenizer vocabularies (`cl100k_base`, `o200k_base`, Llama 3) for all DSL additions, `asl-bridge` protocol frames, wire primitives (`agp`), and SQL builder operators.
+    - **Rational Single-Token Policy**:
+      - *Authentic Structural Savings*: Focuses token optimization on data structures and frame formatting where savings are mathematically proven (e.g. S-expression command frames saving 64.7% tokens over JSON in `bench/token_frames.py`).
+      - *Anti-Mangling Boundary*: Explicitly avoids irrational identifier abbreviation (which §6 proved yields 0.0% token savings and harms comprehension). Ensures that high-frequency protocol delimiters, wire operators, and core heads occupy 1-2 tokens with zero multi-byte splitting, while domain types and entity names retain full descriptive legibility.
+    - **Automated Regression Pinning**: `bench/token_audit.py --check` with `bench/token_audit.lock`, integrated into pre-commit verification to prevent silent token bloat or BPE fragmentation traps during vocabulary evolution.
 
 ---
 

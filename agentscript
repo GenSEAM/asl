@@ -33,7 +33,7 @@ from resolve import Diagnostic, check_file  # noqa: E402
 from tools import tsutil  # noqa: E402
 from tools.fmt import fmt  # noqa: E402
 
-BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "ts": "to_typescript.py", "go": "to_go.py", "wasm": "wasm"}
+BACKENDS = {"py": "to_python.py", "rs": "to_rust.py", "ts": "to_typescript.py", "go": "to_go.py", "wasm": "wasm", "native-rs": "native-rs"}
 TREE_SITTER = ROOT / "node_modules" / ".bin" / "tree-sitter"
 GRAMMAR_DIR = ROOT / "grammar" / "tree-sitter-agentscript"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -248,6 +248,17 @@ def cmd_build(args) -> int:
 
     if not args.file.is_file():
         return report([diag(args.file, "build", "no such file")], args.json, "diagnostic(s)")
+    if getattr(args, "native", False) or args.target == "native-rs":
+        from tools.native_codegen import native_emit_rust
+        try:
+            rs_src = native_emit_rust(args.file.read_text(), path=args.file)
+            if getattr(args, "output", None):
+                args.output.write_text(rs_src)
+            else:
+                sys.stdout.write(rs_src)
+            return 0
+        except Exception as exc:
+            return report([diag(args.file, "build", str(exc))], getattr(args, "json", False), "diagnostic(s)")
     if args.target == "wasm":
         import tempfile
         from to_rust import ToRust
@@ -977,6 +988,7 @@ def main() -> int:
     p.add_argument("file", nargs="?", type=Path, help="source file to build (or builds all in asl.json)")
     p.add_argument("--target", choices=sorted(BACKENDS), help="target backend (optional if defined in asl.json)")
     p.add_argument("-o", "--output", type=Path, help="write output artifact to file path")
+    p.add_argument("--native", action="store_true", help="use self-hosted pure AgentScript native codegen")
     p.add_argument("--watch", "-w", action="store_true", help="watch for file changes and recompile")
     p.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
     p.set_defaults(fn=cmd_build)
