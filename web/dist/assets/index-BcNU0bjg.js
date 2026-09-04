@@ -1869,15 +1869,15 @@ The cosine similarity kernel is evaluated directly inside the Wasm execution san
 
 \`\`\`agp
 ;; In-memory dot product and norm calculation
-(defun vec-dot [(a (List F64)) (b (List F64))] -> F64
-  :doc "Calculate dot product between two float vectors."
+(df vec-dot [(a (List F64)) (b (List F64))] -> F64
+  :d "Calculate dot product between two float vectors."
   (list-fold (list-zip-with a b (*)) 0.0 (+)))
 
-(defun vec-cosine [(q (List F64)) (candidate (List F64))] -> F64
-  :doc "Sub-millisecond cosine similarity."
-  (let [dot (vec-dot q candidate)
-        norm-q (sqrt (vec-dot q q))
-        norm-c (sqrt (vec-dot candidate candidate))]
+(df vec-cosine [(q (List F64)) (candidate (List F64))] -> F64
+  :d "Sub-millisecond cosine similarity."
+  (let [(dot (vec-dot q candidate))
+        (norm-q (sqrt (vec-dot q q)))
+        (norm-c (sqrt (vec-dot candidate candidate)))]
     (if (or (== norm-q 0.0) (== norm-c 0.0))
       0.0
       (/ dot (* norm-q norm-c)))))
