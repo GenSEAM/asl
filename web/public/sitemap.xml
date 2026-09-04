@@ -107,6 +107,22 @@
     <priority>0.9</priority>
   </url>
 
+  <!-- Technical Essay 12: Cross-Dialect SQL Without Hallucinations -->
+  <url>
+    <loc>https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 13: Sub-Millisecond Vector Recall & Git-Native Memory -->
+  <url>
+    <loc>https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</loc>
+    <lastmod>2026-09-04</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
   <!-- Multi-Runtime Ecosystem -->
   <url>
     <loc>https://aslang.dev/ecosystem</loc>

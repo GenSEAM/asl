@@ -113,6 +113,24 @@ const metadataMap = {
     readTime: '7 min read',
     excerpt: 'Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs.',
     tags: ['In-Browser Dev', 'WebAssembly', 'OPFS', 'Tiered Local SLMs', 'Offline-First']
+  },
+  '12-cross-dialect-sql-without-hallucinations.md': {
+    slug: 'cross-dialect-sql-without-hallucinations',
+    category: 'Relational Data & SQL',
+    date: '2026-09-04',
+    author: 'ASL Systems & Compiler Group',
+    readTime: '8 min read',
+    excerpt: 'Why agents writing raw SQL fail 28% of the time, and how homoiconic relational S-expressions lower deterministically to Postgres, SQLite, MySQL, and Oracle without injection risk.',
+    tags: ['Cross-Dialect SQL', 'Relational Algebra', 'SQL Injection Eradication', 'Multi-Engine']
+  },
+  '13-git-native-agent-memory-and-vector-recall.md': {
+    slug: 'git-native-agent-memory-and-vector-recall',
+    category: 'Memory & Vector Systems',
+    date: '2026-09-04',
+    author: 'ASL Systems & Observability Group',
+    readTime: '7 min read',
+    excerpt: 'Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits.',
+    tags: ['Agent Memory', 'Vector Recall', 'Git-Native', 'In-Memory Wasm', 'Zero-Network']
   }
 };
 
