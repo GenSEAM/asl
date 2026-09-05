@@ -2,7 +2,13 @@
 # AgentScript Language CLI (Pure Shell Dispatcher)
 set -eo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 
 CMD="${1:-help}"
 shift || true
@@ -181,6 +187,29 @@ case "$CMD" in
       fi
     fi
     exec "$ROOT/packages/asl-gates/bin/gate.sh"
+    ;;
+  gen:web|gen-web)
+    WEB_DIR="$ROOT/web"
+    if [ ! -d "$WEB_DIR" ]; then
+      echo "Error: web directory not found at $WEB_DIR"
+      exit 1
+    fi
+
+    # 1. Verify source models
+    for m in "$WEB_DIR/asl-src/api/packages.asl" "$WEB_DIR/asl-src/api/plugins.asl" "$WEB_DIR/asl-src/api/skills.asl" "$WEB_DIR/asl-src/api/version.asl" "$WEB_DIR/asl-src/scripts/installer.asl"; do
+      if [ ! -f "$m" ]; then
+        echo "Error: missing source model: $m"
+        exit 1
+      fi
+      if ! "$ROOT/asl" check "$m" > /dev/null 2>&1; then
+        echo "Error: invalid ASL syntax in: $m"
+        exit 1
+      fi
+    done
+
+    # 2. Dynamically compile ASL models into web targets via gen-web.mjs
+    node "$WEB_DIR/scripts/gen-web.mjs" "$WEB_DIR"
+    exit 0
     ;;
   version|-v|--version)
     echo "asl 0.3.0 (pure AgentScript self-hosted toolchain)"

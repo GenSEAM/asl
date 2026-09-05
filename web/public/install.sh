@@ -1,4 +1,5 @@
 #!/bin/bash
+# GENERATED FROM AGENTSCRIPT (ASL). DO NOT EDIT MANUALLY.
 set -e
 
 echo "🚀 Installing ASL (AgentScript Language) CLI..."
@@ -22,6 +23,6 @@ ln -sf "${CLONE_DIR}/agentscript" "${INSTALL_DIR}/agentscript"
 echo "✓ ASL successfully installed to ${INSTALL_DIR}/asl"
 echo ""
 echo "👉 Add ASL to your PATH:"
-echo '   export PATH="${HOME}/.asl/bin:${PATH}"'
+echo '   export PATH="'${HOME}/.asl/bin':${PATH}"'
 echo ""
 echo "⚡ Try running: asl --version"
