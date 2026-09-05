@@ -16,10 +16,21 @@
   (:f mode I64 "1 for output, 0 for input")
   (:f state I64 "Current binary voltage level (1 or 0)"))
 
-(df pin-output [] -> I64 1)
-(df pin-input [] -> I64 0)
-(df pin-high [] -> I64 1)
-(df pin-low [] -> I64 0)
+(df pin-output [] -> I64
+  :d "Constant representing GPIO OUTPUT mode."
+  1)
+
+(df pin-input [] -> I64
+  :d "Constant representing GPIO INPUT mode."
+  0)
+
+(df pin-high [] -> I64
+  :d "Constant representing HIGH digital voltage level."
+  1)
+
+(df pin-low [] -> I64
+  :d "Constant representing LOW digital voltage level."
+  0)
 
 (df make-pin [(pin-num I64) (mode I64)] -> Pin
   :d "Constructs a Pin configuration record."
