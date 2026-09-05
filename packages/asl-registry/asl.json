@@ -1,0 +1,10 @@
+{
+  "name": "@genseam/asl-registry",
+  "version": "0.3.0",
+  "description": "Universal Multi-Ecosystem Package Registry & Git-Native Dependency Inspector for ASL, npm, PyPI, Crates.io, Go, and GitHub",
+  "entry": "src/registry.asl",
+  "main": "src/registry.asl",
+  "dependencies": {
+    "@genseam/asl-codec": "^0.3.0"
+  }
+}

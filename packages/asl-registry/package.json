@@ -1,0 +1,9 @@
+{
+  "name": "@genseam/asl-registry",
+  "version": "0.3.0",
+  "description": "Universal Multi-Ecosystem Package Registry & Git-Native Dependency Inspector for ASL, npm, PyPI, Crates.io, Go, and GitHub",
+  "main": "src/registry.asl",
+  "module": "src/registry.asl",
+  "types": "dist/types.d.ts",
+  "license": "Apache-2.0"
+}
