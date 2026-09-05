@@ -15,11 +15,11 @@
   - `core-selfhost-retire-lark`: `done` (Stage 2 Harness completed 100%!)
   - `vdom-dual-perception`: `done` (commit `cbf218b`)
   - `ui-transpiler-mvp`: `done` (commit `c593abd`)
-  - `agent-browser-cdp`: `done`
+  - `agent-browser-cdp`: `done` (commit `1dd68a7`)
+  - `browser-agent-extension`: `done`
 - **Execution Mode**: Strict sequential single-phase progression (1 agent at a time per user directive).
 - **Sequential Queue**:
-  - `browser-agent-extension` (ready)
-  - `web-showcase-pages` (pending)
+  - `web-showcase-pages` (ready)
   - `ecosystem-full-verification` (final)
 - **State**: SEQUENTIAL EXECUTION ACTIVE (1/1)
 

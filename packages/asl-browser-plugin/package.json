@@ -4,7 +4,8 @@
   "description": "Cross-browser Manifest V3 extension providing in-memory ASL WASI runner, DOM tree extraction, and agent harness",
   "private": true,
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npx tsx test/plugin.test.ts"
   },
   "dependencies": {},
   "devDependencies": {
