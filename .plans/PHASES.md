@@ -1,19 +1,19 @@
-# Autonomous ASL Frontier & Native Engine Initiative — PHASES
+# Non-ASL Eradication Initiative — PHASES
 
 ## Overview
-Implement standalone native AOT compilation for the ASL CLI, state-vector quantum simulation in pure ASL, unified single-source physics reactor in `asl-vdom`, and ephemeral bridge migration in `intel`.
+Eliminate remaining TypeScript and Python files across satellite repositories and the web showcase, porting host bridges, perception logic, browser plugin sources, and verification gates to pure AgentScript.
 
 ## Phases DAG
 
 ```mermaid
 graph TD
-    subgraph Wave 0 [Wave 0: Standalone CLI & Quantum State Engine]
-        P1[Phase 1: asl-native-standalone-cli]
-        P2[Phase 2: asl-quantum-telemetry-engine]
+    subgraph Wave 0 [Wave 0: Satellite Repos & Browser Plugin ASL Port]
+        P1[Phase 1: satellite-ts-py-purge]
+        P2[Phase 2: browser-plugin-asl-port]
     end
-    subgraph Wave 1 [Wave 1: Physics Reactor & Ephemeral Intelligence]
-        P3[Phase 3: asl-physics-reactor-core]
-        P4[Phase 4: asl-bridge-ephemeral-port]
+    subgraph Wave 1 [Wave 1: Native Verification Gates & Web Views Port]
+        P3[Phase 3: asl-native-claims-gate]
+        P4[Phase 4: asl-web-views-port]
     end
     P1 --> P3
     P2 --> P4
@@ -21,7 +21,7 @@ graph TD
 
 | Phase ID | Owns | Depends On | Priority | Gate Command | Status |
 |---|---|---|---|---|---|
-| `asl-native-standalone-cli` | `pack/src/standalone.asl`, `pack/bridges/bundler.js`, `pack/tests/` | `[]` | `P0` | `node asl/bin/asl test pack/tests/standalone.test.asl` | `done` |
-| `asl-quantum-telemetry-engine` | `packages/asl-quantum/src/simulator.asl`, `packages/asl-quantum/src/quantum.asl`, `packages/asl-quantum/tests/` | `[]` | `P0` | `node bin/asl test packages/asl-quantum/tests/simulator_test.asl` | `done` |
-| `asl-physics-reactor-core` | `packages/asl-vdom/src/physics_reactor.asl`, `packages/asl-vdom/tests/` | `[asl-native-standalone-cli]` | `P1` | `node bin/asl test packages/asl-vdom/tests/physics_test.asl` | `done` |
-| `asl-bridge-ephemeral-port` | `intel/src/extractor.asl`, `intel/tests/` | `[asl-quantum-telemetry-engine]` | `P1` | `node bin/asl gate intel/src/extractor.asl` | `done` |
+| `satellite-ts-py-purge` | `harness/`, `mem/`, `agent-bus/`, `eddie/`, `voice/`, `vdom/` | `[]` | `P0` | `node asl/bin/asl gate harness/src/browser_cdp.asl mem/src/driver.asl vdom/src/perception.asl` | `done` |
+| `browser-plugin-asl-port` | `browser-plugin/src/*.asl` | `[]` | `P0` | `node asl/bin/asl gate browser-plugin/src/background.asl browser-plugin/src/content.asl` | `done` |
+| `asl-native-claims-gate` | `packages/asl-gates/src/site_claims.asl` | `[satellite-ts-py-purge]` | `P1` | `node bin/asl gate packages/asl-gates/src/site_claims.asl` | `done` |
+| `asl-web-views-port` | `web/asl-src/ArchitectureView.asl`, `web/asl-src/EcosystemView.asl` | `[browser-plugin-asl-port]` | `P1` | `node bin/asl gate web/asl-src/ArchitectureView.asl web/asl-src/EcosystemView.asl` | `done` |

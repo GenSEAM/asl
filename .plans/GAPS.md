@@ -1,39 +1,24 @@
-# Gap Audit: Multi-Repository Naming & Workspace Mapping
+# Gap Analysis: Non-ASL Eradication Initiative
 
-**Verdict**: `APPROVE-WITH-AMENDMENTS`
-**Focus**: Repository directory naming alignment (`search` -> `web-search`), submodule mapping integrity, and backward compatibility.
-
----
-
-## 1. Gap Analysis (Completeness & Edge Cases)
-
-| Target Area | Identified Gap / Risk | Architectural Remedy |
-|---|---|---|
-| **Directory Ambiguity** | `search/` conflicts semantically with local code search (`asl intel --search`) while declaring `@genseam/asl-web-search` in `manifest.asn`. | Rename directory `search` -> `web-search`. |
-| **Path Breakage Risk** | Hardcoded paths in existing developer scripts or editor bookmarks targeting `projects/asex/search`. | Leave a backward-compatible filesystem symlink: `search -> web-search`. |
-| **Submodule Mapping Drift** | If directory `search` is renamed without updating root `.gitmodules`, `git submodule status/update` fails. | Update `.gitmodules` entry `path = web-search` alongside the rename. |
-| **Sync Tool Desync** | `tools/sync_workspace.py` hardcodes `search` in `REPOS` list. | Update `REPOS` list to `"web-search"`. |
-| **Orphaned Local Repos** | `pack/` and `intel/` exist as local Git repos but are not registered in root `.gitmodules`. | Register `pack` and `intel` in root `.gitmodules` for uniform workspace tracking. |
+**Verdict**: `APPROVE`
+**Lenses**: Completeness, Invariants, Anti-Overengineering
 
 ---
 
-## 2. Consistency Analysis (Invariants)
-
-* **Invariant: Package Name <-> Repository Semantic Parity**:
-  - `manifest.asn`: `(:package @genseam/asl-web-search ...)`
-  - Directory: `web-search/`
-  - Eliminates cognitive friction between web search and local code search.
-* **Invariant: Effective Decision Mode**:
-  - Only rename what has real semantic divergence; do not rename 15 repos for cosmetic reasons.
+## 1. Completeness & Edge Cases
+- **CDP Protocol Port in Harness**:
+  - `harness/src/browser_cdp.asl` must model WebSocket JSON-RPC requests to Chrome DevTools Protocol using standard S-expression records without requiring python websockets.
+- **Browser Plugin Manifest Compilation**:
+  - `browser-plugin/src/manifest.asn` must compile directly to `dist/manifest.json` on build, while source files remain 100% pure `.asl`.
+- **Claims Verification**:
+  - `packages/asl-gates/src/site_claims.asl` verifies percentage and latency regex matches against `published_claims.asn`.
 
 ---
 
-## 3. Anti-Overengineering (Critic Filter)
-
-* **Rejection of Mass Rename (Variant 2)**:
-  - Renaming all 15 repositories to add `asl-*` prefix (`asl-mem`, `asl-vdom`, `asl-voice`, etc.) is **REJECTED**:
-    1. Causes massive churn across `.gitmodules`, CI configs, and git submodules.
-    2. Zero functional or token-saving benefit.
-* **Approval of Targeted Rename (Variant 1)**:
-  - Only `search` -> `web-search` is changed because it solves an actual semantic conflict.
-  - Shortest working diff wins.
+## 2. Invariants & Wave Execution
+- **Wave 0**:
+  - Stream A: `satellite-ts-py-purge` (`harness`, `mem`, `agent-bus`, `eddie`, `voice`, `vdom`)
+  - Stream B: `browser-plugin-asl-port` (`browser-plugin`)
+- **Wave 1**:
+  - Stream A: `asl-native-claims-gate` (`asl/packages/asl-gates`)
+  - Stream B: `asl-web-views-port` (`asl/web/asl-src`)
