@@ -77,4 +77,29 @@
           :rationale "Verifies token compaction measurement")
     (:sym :name "test-empty-and-malformed" :kind :fn :tokens 4
           :rationale "Verifies graceful error handling on empty or invalid inputs")
+    (:sym :name "SvgTranspileResult" :kind :type :tokens 1)
+    (:sym :name "asn-to-svg" :kind :fn :tokens 3
+          :rationale "Transpiles compact ASN vector S-expressions into valid SVG XML")
+    (:sym :name "svg-to-asn" :kind :fn :tokens 3
+          :rationale "Parses raw SVG XML into compact ASN vector S-expressions")
+    (:sym :name "make-vector-card" :kind :fn :tokens 3
+          :rationale "Generates responsive UI card vector graphic with rounded gradient rect and typography")
+    (:sym :name "make-vector-flowchart" :kind :fn :tokens 3
+          :rationale "Generates sequential node-and-arrow flowchart vector graphic")
+    (:sym :name "measure-svg-compaction" :kind :fn :tokens 3
+          :rationale "Computes token delta between raw SVG XML and compact ASN vector representation")
+    (:sym :name "test-asn-svg" :kind :fn :tokens 3
+          :rationale "Verifies ASN to SVG vector transpile")
+    (:sym :name "test-svg-asn" :kind :fn :tokens 3
+          :rationale "Verifies SVG XML parsing into ASN vector S-expression")
+    (:sym :name "test-vector-card" :kind :fn :tokens 3
+          :rationale "Verifies UI vector card generation")
+    (:sym :name "test-vector-flow" :kind :fn :tokens 3
+          :rationale "Verifies vector flowchart generation")
+    (:sym :name "test-svg-compaction" :kind :fn :tokens 3
+          :rationale "Verifies token savings measurement between SVG and ASN")
+    (:sym :name "test-svg-malformed" :kind :fn :tokens 3
+          :rationale "Verifies rejection of invalid or empty SVG inputs")
+    (:sym :name "run-svg-tests" :kind :fn :tokens 3
+          :rationale "Executes complete vector transpile test suite")
   ])
