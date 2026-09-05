@@ -14,21 +14,43 @@ BACKENDS = {
 }
 
 
+def parse_asn(text: str) -> dict:
+    """Parses standard ASN/ASL package metadata into a dictionary."""
+    import re
+    data = {}
+    pkg_m = re.search(r':package\s+["\']?([^"\']\S*)["\']?', text)
+    if pkg_m:
+        data["name"] = pkg_m.group(1).strip('"\'')
+    ver_m = re.search(r':version\s+["\']([^"\']+)["\']', text)
+    if ver_m:
+        data["version"] = ver_m.group(1)
+    entry_m = re.search(r':entry\s+["\']([^"\']+)["\']', text)
+    if entry_m:
+        data["entry"] = entry_m.group(1)
+    for m in re.finditer(r':([a-zA-Z0-9_-]+)\s+"([^"]*)"', text):
+        k, v = m.group(1), m.group(2)
+        if k not in data:
+            data[k] = v
+    return data
+
+
 def load_project_config(dir_path: Path | None = None) -> tuple[Path, dict]:
-    """Finds and loads asl.json or asex.json in dir_path or its parents."""
+    """Finds and loads manifest.asn, asl.asn, asl.json or asex.json in dir_path or its parents."""
     cur = (dir_path or Path.cwd()).resolve()
     while True:
-        for name in ["asl.json", "asex.json"]:
+        for name in ["manifest.asn", "asl.asn", "asl.json", "asex.json"]:
             cand = cur / name
             if cand.is_file():
                 try:
+                    if cand.suffix == ".asn":
+                        return cand, parse_asn(cand.read_text())
                     return cand, json.loads(cand.read_text())
                 except Exception as exc:
                     raise ValueError(f"Failed to parse {cand}: {exc}")
         if cur.parent == cur:
             break
         cur = cur.parent
-    raise FileNotFoundError("No asl.json or asex.json found in current or parent directories.")
+    raise FileNotFoundError("No manifest.asn, asl.asn, asl.json or asex.json found in current or parent directories.")
 
 
 def build_single_target(src_file: Path, target: str, out_file: Path | None = None) -> tuple[bool, str, float]:
