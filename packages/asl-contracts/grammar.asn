@@ -1,0 +1,33 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-contracts
+(:grammar
+  :package @genseam/asl-contracts
+  :version "0.1.0"
+  :tokens-baseline 2
+  :symbols [
+    ;; Core Contract Types & Records (<= 2 tokens)
+    (:sym :name "BlockContext" :kind :type :tokens 2)
+    (:sym :name "ContractEvent" :kind :type :tokens 2)
+    (:sym :name "ContractError" :kind :type :tokens 2)
+    (:sym :name "TransitionResult" :kind :type :tokens 2)
+    (:sym :name "transition-success" :kind :fn :tokens 2)
+    (:sym :name "transition-revert" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+
+    ;; Extended Identifiers (> 2 tokens with required :rationale)
+    (:sym :name "is-valid-address" :kind :fn :tokens 3
+          :rationale "Cryptographic 0x-prefixed 42-character hex address format validator")
+    (:sym :name "make-block-context" :kind :fn :tokens 3
+          :rationale "Block execution environment constructor distinguishing transaction invocation context")
+    (:sym :name "validate-non-negative-balance" :kind :fn :tokens 4
+          :rationale "Critical safety invariant verifying non-negative coin balances to prevent underflow exploits")
+    (:sym :name "test-address-validation" :kind :fn :tokens 3
+          :rationale "Unit test suite verifying valid and invalid address strings")
+    (:sym :name "test-block-context" :kind :fn :tokens 3
+          :rationale "Unit test suite verifying execution context field initialization")
+    (:sym :name "test-transition-result" :kind :fn :tokens 3
+          :rationale "Unit test suite checking success and revert transition outputs")
+    (:sym :name "test-balance-invariant" :kind :fn :tokens 3
+          :rationale "Unit test suite proving non-negative balance guard enforcement")
+  ]
+)
