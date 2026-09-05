@@ -1,5 +1,6 @@
 import React from 'react';
 import { GraphCanvas } from '../components/GraphCanvas';
+import { PolyglotStudio } from '../components/PolyglotStudio';
 import { Cpu, Zap, Activity, ShieldCheck, Gauge } from 'lucide-react';
 
 export const GraphShowcaseView: React.FC = () => {
@@ -25,6 +26,9 @@ export const GraphShowcaseView: React.FC = () => {
 
       {/* Main Interactive Simulator */}
       <GraphCanvas />
+
+      {/* Polyglot UI Transpiler Studio */}
+      <PolyglotStudio />
 
       {/* Architecture & Telemetry Explanation */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
