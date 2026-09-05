@@ -10,12 +10,14 @@ import { EcosystemView } from './views/EcosystemView';
 import { RoadmapView } from './views/RoadmapView';
 import { DocsView } from './views/DocsView';
 import { BlogView } from './views/BlogView';
+import { GraphShowcaseView } from './views/GraphShowcaseView';
 
 const AppContent: React.FC = () => {
   const { currentPath } = useRouter();
 
   const renderView = () => {
     if (currentPath === '/playground') return <PlaygroundView />;
+    if (currentPath === '/graph' || currentPath === '/graph-reactor') return <GraphShowcaseView />;
     if (currentPath === '/ecosystem') return <EcosystemView />;
     if (currentPath === '/roadmap') return <RoadmapView />;
     if (currentPath === '/docs') return <DocsView />;
