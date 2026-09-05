@@ -75,3 +75,37 @@ ASL provides a reference lowering into standard PEP 484 type-annotated Python fo
 │ ──> ZERO Protobuf/gRPC serialization drift across your entire tech stack    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 5. AI Agent Platforms & Harness Portability Matrix
+
+AgentScript is engineered as the universal, lightweight, agent-native execution substrate. It eliminates heavy Python virtual environments, multi-gigabyte Docker daemons, and fragile host dependencies, allowing autonomous agents to execute, verify, and reason over code instantaneously.
+
+| Agent Platform / Harness | Integration Mechanism | Cold-Start Launch | Memory Ceiling (RSS) | Code Intelligence & Search | Sandboxed Execution | Verification Suite |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Google Antigravity (AGY)** | Native Harness Skill (`skills/asl/SKILL.md`) | **< 0.04 ms** (Wasm) | **<= 24 MB** | Native TokenSave + AST Search | In-Memory Jailed WASI | `asl gate` (19 gates) |
+| **Claude Code** | Custom Subcommands & Slash Tools | **< 100 ms** (Host CLI) | **<= 24 MB** | `asl context` Sub-Symbol Graph | Directory Traversal Guard | `asl test packages` |
+| **OpenAI / Codex Swarm** | Function Calling & System Prompts | **< 0.04 ms** (Wasm) | **<= 16 MB** | Deterministic S-Expr AST | Wasm preview1 isolated memory | Pure ASL self-checker |
+| **Factory Droid** | Shell Plugin & Autonomous Sandbox | **< 100 ms** (Host CLI) | **<= 24 MB** | `asl search` (AST-Grep) | Zero-prompt capability jail | `asl gate` |
+| **OpenCode** | Open Agent Runner & CLI Toolchain | **< 100 ms** (Host CLI) | **<= 24 MB** | Built-in symbol resolver | In-memory stream reducer (`asl-sh`) | Full differential gate |
+| **Cursor / Windsurf / IDEs** | stdio LSP 3.17 (`asl lsp`) + MCP | **< 50 ms** (JSON-RPC) | **<= 20 MB** | Real-time hover docs & AST jump | Virtual Projection (`asl view`) | Instant linter |
+
+---
+
+## 6. Editorial Taxonomy & Blog Category Matrix
+
+To capture the architectural solutions developed across the ASL ecosystem, the technical writing and research publications are organized into the following core categories:
+
+| Category | Core Subject & Theses | Planned / Published Essays |
+| :--- | :--- | :--- |
+| **Agent Platforms & Portability** | Lightweight, zero-server agent execution across heterogeneous harnesses (AGY, Claude Code, Codex, Factory Droid, OpenCode). Eliminating Python/Docker baggage in agent swarms. | *Universal Portability for Autonomous Agents: Running Pure ASL Across Modern Agent Runtimes* |
+| **Dual-Plane Code & Architecture Records** | Complete separation of executable source code from architectural intent, requirements, invariants, and technical debt. Deprecating in-code comment bloat in favor of unified `@adr:`, `@rule:`, `@debt:` records in `asl-mem`. | *The Death of In-Code Comments: Anchoring ADRs and Invariants in External Agent Memory* |
+| **Compiler-Native Code Intelligence** | Embedding AST-Grep structural queries (`asl search`) and TokenSave sub-symbol graphs (`asl context`) directly into the `asl` binary for sub-millisecond, token-efficient agent navigation. | *Compiler-Native Code Intelligence: Why Agent Languages Must Self-Host Their Semantic Graphs* |
+| **Memory & Vector Systems** | Sub-millisecond in-memory vector recall and Git-native memory matrices (`asl-mem`), eliminating cloud vector DB latency. | *Sub-Millisecond Vector Recall & Git-Native Memory Matrices for Autonomous Agents* (Essay 13) |
+| **Relational Data & SQL** | Eliminating SQL hallucinations and injection vulnerabilities via homoiconic relational S-expressions lowering to Postgres, SQLite, MySQL, and Oracle. | *Cross-Dialect SQL Without Hallucinations* (Essay 12) |
+| **Browser Technologies** | Zero-server in-browser development via WebAssembly, OPFS, and in-memory WASI with tiered local SLMs. | *Zero-Server In-Browser Agent Runtimes* (Essay 11) |
+| **Safety & Grounding** | Compiler-enforced lexical closure audits, deterministic citation verification, and hardware path jailing. | *The Epistemic Grounding Firewall* (Essay 10) |
+| **Cross-Platform Runtimes** | Deterministic multi-target lowering across WebAssembly, Rust, TypeScript, and Python without semantic drift. | *Universal Cross-Platform Glue* (Essay 09) |
+| **Context Architecture & Token Economy** | Eliminating context rot and structural syntax overhead; achieving 57%–65% token savings over JSON. | *Token Economy and Structural Compression* (Essays 02, 05) |
+
