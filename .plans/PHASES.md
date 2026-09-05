@@ -1,27 +1,28 @@
-# Non-ASL Eradication Initiative — PHASES
+# Embedded Hardware & Arduino Frontier — PHASES
 
 ## Overview
-Eliminate remaining TypeScript and Python files across satellite repositories and the web showcase, porting host bridges, perception logic, browser plugin sources, and verification gates to pure AgentScript.
+Implement embedded C and Arduino code generation in `@genseam/asl-codegen`, create `@genseam/asl-arduino` with direct hardware GPIO/Serial abstractions, integrate virtual signal simulation test gates, and document in the editorial matrix.
 
 ## Phases DAG
 
 ```mermaid
 graph TD
-    subgraph Wave 0 [Wave 0: Satellite Repos & Browser Plugin ASL Port]
-        P1[Phase 1: satellite-ts-py-purge]
-        P2[Phase 2: browser-plugin-asl-port]
+    subgraph Wave 0 [Wave 0: Embedded CodeGen & Hardware Package]
+        P1[Phase 1: embedded-c-codegen]
+        P2[Phase 2: asl-arduino-package]
     end
-    subgraph Wave 1 [Wave 1: Native Verification Gates & Web Views Port]
-        P3[Phase 3: asl-native-claims-gate]
-        P4[Phase 4: asl-web-views-port]
+    subgraph Wave 1 [Wave 1: Verification Gate & Editorial Record]
+        P3[Phase 3: embedded-simulator-gate]
+        P4[Phase 4: editorial-embedded-topic]
     end
     P1 --> P3
-    P2 --> P4
+    P2 --> P3
+    P1 --> P4
 ```
 
 | Phase ID | Owns | Depends On | Priority | Gate Command | Status |
 |---|---|---|---|---|---|
-| `satellite-ts-py-purge` | `harness/`, `mem/`, `agent-bus/`, `eddie/`, `voice/`, `vdom/` | `[]` | `P0` | `node asl/bin/asl gate harness/src/browser_cdp.asl mem/src/driver.asl vdom/src/perception.asl` | `done` |
-| `browser-plugin-asl-port` | `browser-plugin/src/*.asl` | `[]` | `P0` | `node asl/bin/asl gate browser-plugin/src/background.asl browser-plugin/src/content.asl` | `done` |
-| `asl-native-claims-gate` | `packages/asl-gates/src/site_claims.asl` | `[satellite-ts-py-purge]` | `P1` | `node bin/asl gate packages/asl-gates/src/site_claims.asl` | `done` |
-| `asl-web-views-port` | `web/asl-src/ArchitectureView.asl`, `web/asl-src/EcosystemView.asl` | `[browser-plugin-asl-port]` | `P1` | `node bin/asl gate web/asl-src/ArchitectureView.asl web/asl-src/EcosystemView.asl` | `done` |
+| `embedded-c-codegen` | `packages/asl-codegen/src/emit-c.asl`, `packages/asl-codegen/tests/c-codegen-test.asl` | `[]` | `P0` | `node asl/bin/asl gate asl/packages/asl-codegen/src/emit-c.asl` | `done` |
+| `asl-arduino-package` | `packages/asl-arduino/` | `[]` | `P0` | `node asl/bin/asl gate asl/packages/asl-arduino/src/gpio.asl asl/packages/asl-arduino/src/serial.asl` | `done` |
+| `embedded-simulator-gate` | `packages/asl-arduino/tests/` | `[embedded-c-codegen, asl-arduino-package]` | `P1` | `node asl/bin/asl test asl/packages/asl-arduino/tests/gpio-test.asl` | `done` |
+| `editorial-embedded-topic` | `editorial-matrix/`, `asl/README.md` | `[embedded-c-codegen]` | `P1` | `python3 editorial-matrix/scripts/validate_articles.py` | `done` |
