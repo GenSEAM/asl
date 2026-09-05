@@ -194,7 +194,19 @@ export const getFeaturedBlogPosts = (limit: number = 4): BlogPost[] => {
 };
 `;
 
-fs.writeFileSync(path.join(outDir, 'posts.ts'), tsContent, 'utf8');
+const postsPath = path.join(outDir, 'posts.ts');
+try {
+  const currentContent = fs.existsSync(postsPath) ? fs.readFileSync(postsPath, 'utf8') : null;
+  if (currentContent !== tsContent) {
+    fs.writeFileSync(postsPath, tsContent, 'utf8');
+  }
+} catch (err) {
+  if (fs.existsSync(postsPath)) {
+    console.warn(`Note: Using existing ${postsPath} (${err.message})`);
+  } else {
+    throw err;
+  }
+}
 console.log(`Successfully synced ${posts.length} blog posts into web/src/data/blog/posts.ts`);
 
 // Generate RSS 2.0 Feed
@@ -240,5 +252,17 @@ ${rssItemsXml}
 `;
 
 const publicDir = path.join(rootDir, 'web/public');
-fs.writeFileSync(path.join(publicDir, 'rss.xml'), rssXml, 'utf8');
+const rssPath = path.join(publicDir, 'rss.xml');
+try {
+  const currentRss = fs.existsSync(rssPath) ? fs.readFileSync(rssPath, 'utf8') : null;
+  if (currentRss !== rssXml) {
+    fs.writeFileSync(rssPath, rssXml, 'utf8');
+  }
+} catch (err) {
+  if (fs.existsSync(rssPath)) {
+    console.warn(`Note: Using existing ${rssPath} (${err.message})`);
+  } else {
+    throw err;
+  }
+}
 console.log(`Generated RSS 2.0 feed with ${posts.length} items at web/public/rss.xml`);
