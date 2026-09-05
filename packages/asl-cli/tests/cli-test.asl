@@ -1,6 +1,6 @@
 (module asl-cli/test
   :d "Unit tests for pure AgentScript CLI dispatcher."
-  :x [test-version test-help test-dispatch-version test-dispatch-unknown test-dispatch-missing run-tests]
+  :x [test-version test-help test-dispatch-version test-dispatch-gate test-dispatch-unknown test-dispatch-missing run-tests]
   :i [(cli :a c)])
 
 (df test-version [] -> Bool
@@ -17,6 +17,12 @@
   :d "Verifies dispatch-cmd handles version."
   (mt (c/dispatch-cmd "version" (list))
     ((ok ver) (string-contains? ver "0.3.0"))
+    ((err _) false)))
+
+(df ! test-dispatch-gate [] -> Bool
+  :d "Verifies dispatch-cmd gate processes file list."
+  (mt (c/dispatch-cmd "gate" (list "test.asl"))
+    ((ok msg) (string-contains? msg "verified cleanly"))
     ((err _) false)))
 
 (df ! test-dispatch-unknown [] -> Bool
@@ -38,5 +44,6 @@
         (list (test-version)
               (test-help)
               (test-dispatch-version)
+              (test-dispatch-gate)
               (test-dispatch-unknown)
               (test-dispatch-missing))))

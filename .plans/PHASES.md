@@ -24,7 +24,7 @@ graph TD
 
 | Phase ID | Owns | Depends On | Priority | Gate Command | Status |
 |---|---|---|---|---|---|
-| `asl-web-components-port` | `web/asl-src/components/` | `[]` | `P0` | `node asl/bin/asl gate asl/web/asl-src/components/Hero.asl asl/web/asl-src/components/UnifiedPackageMatrix.asl asl/web/asl-src/components/AslQualityDoctor.asl && npm --prefix asl/web run build` | `pending` |
-| `editorial-syndication-dispatch` | `editorial-matrix/syndication/` | `[]` | `P0` | `python3 editorial-matrix/scripts/validate_articles.py` | `pending` |
-| `asl-native-compiler-wire` | `packages/asl-compiler/` | `[asl-web-components-port]` | `P1` | `node asl/bin/asl gate asl/packages/asl-compiler/src/compiler.asl` | `pending` |
-| `asl-native-gate-runner` | `packages/asl-cli/`, `packages/asl-gates/` | `[editorial-syndication-dispatch]` | `P1` | `node asl/bin/asl gate asl/packages/asl-cli/src/cli.asl asl/packages/asl-gates/src/gates.asl` | `pending` |
+| `asl-web-components-port` | `web/asl-src/components/` | `[]` | `P0` | `node asl/bin/asl gate asl/web/asl-src/components/Hero.asl asl/web/asl-src/components/UnifiedPackageMatrix.asl asl/web/asl-src/components/AslQualityDoctor.asl && npm --prefix asl/web run build` | `done` |
+| `editorial-syndication-dispatch` | `editorial-matrix/syndication/` | `[]` | `P0` | `python3 editorial-matrix/scripts/validate_articles.py` | `done` |
+| `asl-native-compiler-wire` | `packages/asl-compiler/` | `[asl-web-components-port]` | `P1` | `node asl/bin/asl gate asl/packages/asl-compiler/src/compiler.asl` | `done` |
+| `asl-native-gate-runner` | `packages/asl-cli/`, `packages/asl-gates/` | `[editorial-syndication-dispatch]` | `P1` | `node asl/bin/asl gate asl/packages/asl-cli/src/cli.asl asl/packages/asl-gates/src/gates.asl` | `done` |
