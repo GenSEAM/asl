@@ -13,11 +13,11 @@
   - `shrody-asl-port`: `done` (commit `c6b82e8`)
   - `shrody-benchmark-e2e`: `done` (commit `2473be3`)
   - `core-selfhost-retire-lark`: `done` (Stage 2 Harness completed 100%!)
-  - `vdom-dual-perception`: `done`
+  - `vdom-dual-perception`: `done` (commit `cbf218b`)
+  - `ui-transpiler-mvp`: `done`
 - **Execution Mode**: Strict sequential single-phase progression (1 agent at a time per user directive).
 - **Sequential Queue**:
-  - `ui-transpiler-mvp` (ready)
-  - `agent-browser-cdp` (pending on `ui-transpiler-mvp`)
+  - `agent-browser-cdp` (ready)
   - `browser-agent-extension` (pending)
   - `web-showcase-pages` (pending)
   - `ecosystem-full-verification` (final)
