@@ -7,5 +7,10 @@
   - Phase 2: `z3-smt-formal-verifier` (Wave 1, P1)
   - Phase 3: `wasm-stylus-target` (Wave 1, P1)
   - Phase 4: `agent-escrow-benchmark` (Wave 2, P1)
-- Plan Review & GAP Check: Cross-phase dependency verified. Disjoint ownership confirmed.
-- Status: Batch Ahead planning complete. Ready for Wave 0 execution.
+- Editorial Integration: Added Pillars 12 and 13 (Topics 51–57) to `editorial-matrix/CONTENT_ROADMAP_30_TOPICS.md`.
+
+## Executed Waves & Phases
+- **Wave 0**:
+  - `asl-contract-spec-and-ast` [Tier 0]: Implemented `manifest.asn`, `spec.asl`, and `spec_test.asl`. Verified via `asl test asl/packages/asl-contracts/tests/spec_test.asl` and full gate suite (30/30 suites passing). Status: DONE (commit `64485a0`).
+
+Ready for Wave 1 parallel execution (`z3-smt-formal-verifier` & `wasm-stylus-target`).
