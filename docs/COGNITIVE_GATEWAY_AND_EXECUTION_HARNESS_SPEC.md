@@ -233,3 +233,44 @@ Emits a compact ASN-encoded structural snapshot:
 | `@genseam/asl-core` | `packages/agent-core` | Blackboard Engine | Task-Premise DAG $G=(V,E,P)$, OCC structural sharing, Falsified Premise log |
 | `@genseam/asl-lens` | `packages/asl-lens` | Architecture Cartography | Static AST dependency analyzer, dependency drift radar, Web Cockpit API |
 | `@genseam/asl-cockpit` | `apps/asl-cockpit` | Operator Dashboard | Interactive Cytoscape/React Flow DAG visualizer, Time-travel debugger UI |
+
+---
+
+## 10. The Pluggable Constructor & Multi-Tier Extensibility Architecture
+
+The entire GenSEAM / AgentScript ecosystem is architected as an **open, modular constructor** rather than a rigid monolithic runtime. Out-of-the-box, it ships with battle-tested, optimal defaults calibrated for the target model (Gemma 31B), while exposing granular configuration toggles, model profiles, experimental flags, and a dual-tier plugin system.
+
+```
++-------------------------------------------------------------------------+
+|                  Tier 2: Language & Compiler Extensions                 |
+|  * Custom Compilation Backends (Stylus Wasm, EVM, eBPF, Native LLVM)   |
+|  * Dialect Macros & AST Transforms (@genseam/asl-plugin)                |
+|  * Foreign Host Capabilities (Cap-DB, Cap-FS, Cap-Net, Cap-Wasm)       |
++-------------------------------------------------------------------------+
+                                    |
+                                    v
++-------------------------------------------------------------------------+
+|                 Tier 1: Harness Middleware & Plugin Pipeline            |
+|  * Model Optimization Profiles (Gemma 31B, Claude, DeepSeek, Custom)    |
+|  * Granular Feature Flags (Firewall, FSM Normalizer, In-Memory REPL)    |
+|  * Experimental Feature Sandbox (:experimental ["exp-speculative"...]) |
+|  * Pluggable Tool Interceptors & Security Middleware (Onion Pipeline)   |
++-------------------------------------------------------------------------+
+```
+
+### 10.1. Declarative Configuration & Model Profiles
+The harness configuration (`HarnessConfig` in `harness/src/config.asl`) allows users and autonomous agents to declaratively customize runtime behavior:
+- **Optimal Defaults**: Ships with `profile-gemma-31b` enabled by default (strict Action Firewall, single-pass FSM normalizer, sub-millisecond in-memory REPL, ASN perceptual pointers).
+- **Profile Switching**: Easily swapped to alternative model families (Claude, DeepSeek, Llama) with distinct token budgets and cognitive boundary rules.
+- **Granular Toggles**: Every individual mechanism (firewall, cache, normalizer, REPL, lens) can be toggled independently via `toggle-feature`.
+
+### 10.2. Experimental Sandboxing
+Cutting-edge heuristics and experimental capabilities are safely isolated behind experimental feature flags (`enable-experimental` / `experimental-enabled?`):
+- Speculative token generation & grammar caching.
+- SMT-driven live pre-flight constraint validation.
+- Custom vector memory quantizers and hardware-accelerated SIMD kernels.
+
+### 10.3. Two-Tier User Extensibility Model
+1. **Harness Runtime Plugins**: Community developers can author plugins implementing `HarnessPlugin` and register them via `register-plugin`. Plugins hook into pre-call, post-call, model-response, and error stages of the execution lifecycle.
+2. **Language & Compiler Plugins (`asl-plugin`)**: Developers can extend AgentScript itself by authoring Wasm or FFI plugins providing custom capabilities, adding custom AST syntax macros, or compiling ASL contracts to novel target execution environments (such as Arbitrum Stylus Wasm, Solana BPF, or RISC-V microcontrollers).
+
