@@ -89,4 +89,24 @@ All 107 names. Nothing outside this list exists:
 - **Option, Result, Pair**: `some`, `none`, `ok`, `err`, `is-some?`, `is-none?`, `is-ok?`, `is-err?`, `option-or`, `result-or`, `option-map`, `result-map`, `result-map-err`, `option-to-result`, `result-to-option`, `pair`
 - **I/O**: `not-found`, `permission-denied`, `already-exists`, `invalid-path`, `interrupted`, `other`, `read-line`, `read-all`, `print`, `println`, `eprintln`, `file-read`, `file-write`, `file-append`, `file-exists?`
 
+---
+
+## 5. Deterministic L7 Cognitive Gateway & Execution Harness Architecture
+
+1. **Tri-Channel Multiplexing & Quarantining**:
+   - **Channel A (UI)**: Natural conversational output streamed to the user; execution narration stripped.
+   - **Channel B (Quarantined CoT)**: Ephemeral reasoning tokens (`<think>...</think>`) strictly segregated from user output.
+   - **Channel C (Structured Tools)**: S-expression frames (`(call :tool ...)`) dispatched directly to the execution harness.
+2. **Verbal Execution Simulation Ban (ESH Protection)**:
+   - Self-declared completion ("All tests pass", "Everything verified") without a verified runtime return code 0 is blocked.
+3. **Dual-Track LCS Grounding**:
+   - Longest Common Subsequence ratio $\ge 0.85$ between model code proposals and target files.
+4. **Blackboard Task-Premise DAG $G=(V,E,P,H)$**:
+   - Append-only Falsified Premise Registry $\mathcal{F}_{\text{falsified}}$ with Optimistic Concurrency Control (OCC). Refuted premises trigger immediate cascading invalidation (`task-invalidated`), preventing retry loops.
+5. **AST Mutation Gate & Sanitizer**:
+   - Blocks cheating edits that delete or comment out test assertions ($\Delta_{\text{AST}} = T_{\text{post}} \setminus T_{\text{pre}}$).
+   - Sanitizes test tracebacks to $<300$ tokens, stripping framework noise (`site-packages`, `pluggy`, runtime internals).
+6. **Perceptual Pointers**:
+   - Offloads raw DOM/PDF/media to content-addressed storage (BLAKE3), injecting lightweight `(:ptr ...)` tokens and extracting verified scalar facts `(:fact ...)`.
+
 Full specification, grammar rules, and complete 107-builtin dictionary: llms-full.txt
