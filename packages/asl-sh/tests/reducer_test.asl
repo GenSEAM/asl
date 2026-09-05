@@ -42,13 +42,9 @@
   (let [(uniq (red/dedup-lines (list "alpha" "beta" "gamma")))
         (dups (red/dedup-lines (list "alpha" "beta" "beta" "beta" "gamma")))
         (single (red/dedup-lines (list "lone")))]
-    (and (= (list-length uniq) 3)
-         (and (= (list-length dups) 4)
-              (and (= (option-or (list-get dups 0) "") "alpha")
-                   (and (= (option-or (list-get dups 1) "") "beta")
-                        (and (= (option-or (list-get dups 2) "") "  ... [repeated 2 more times] ...")
-                             (and (= (option-or (list-get dups 3) "") "gamma")
-                                  (= (list-length single) 1)))))))))
+    (and (= uniq (list "alpha" "beta" "gamma"))
+         (and (= dups (list "alpha" "beta" "  ... [repeated 2 more times] ..." "gamma"))
+              (= (list-length single) 1)))))
 
 (df test-retention-windowing [] -> Bool
   :d "Validates head/tail windowing and eviction marker insertion for oversized buffers."
@@ -61,12 +57,7 @@
     (and (= (.-second res-small) 0)
          (and (= (list-length (.-first res-small)) 3)
               (and (= evicted-big 6)
-                   (and (= (list-length lines-big) 5)
-                        (and (= (option-or (list-get lines-big 0) "") "0")
-                             (and (= (option-or (list-get lines-big 1) "") "1")
-                                  (and (= (option-or (list-get lines-big 2) "") "... [6 lines evicted from buffer] ...")
-                                       (and (= (option-or (list-get lines-big 3) "") "8")
-                                            (= (option-or (list-get lines-big 4) "") "9")))))))))))
+                   (= lines-big (list "0" "1" "... [6 lines evicted from buffer] ..." "8" "9")))))))
 
 (df test-diagnostic-extraction [] -> Bool
   :d "Validates structured diagnostic extraction across tsc, rustc, pytest, and python tracebacks."

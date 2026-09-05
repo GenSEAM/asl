@@ -5,46 +5,32 @@
 
 "run: (run-tests)"
 
+(df extract-ids [(items (List on/Middleware))] -> (List Str)
+  :d "Helper extracting middleware IDs into list"
+  (map (fn [(m on/Middleware)] -> Str (.-id m)) items))
+
 (df test-priority-sorting [] -> Bool
   :d "Verifies numeric priority ordering of independent middlewares."
   (let [(m-audit (on/make-middleware "mw-audit" "Audit" (on/kind-audit) 500 (list) (list)))
         (m-auth (on/make-middleware "mw-auth" "Auth" (on/kind-pre-call) 100 (list) (list)))
         (m-sanitize (on/make-middleware "mw-sanitize" "Sanitize" (on/kind-post-call) 900 (list) (list)))
-        (sorted (on/sort-middlewares (list m-audit m-auth m-sanitize)))]
-    (let [(first-id (mt (list-head sorted) ((some m) (.-id m)) ((none) "")))
-          (tail1 (option-or (list-tail sorted) (list)))
-          (second-id (mt (list-head tail1) ((some m) (.-id m)) ((none) "")))
-          (tail2 (option-or (list-tail tail1) (list)))
-          (third-id (mt (list-head tail2) ((some m) (.-id m)) ((none) "")))]
-      (and (= first-id "mw-auth")
-           (and (= second-id "mw-audit")
-                (= third-id "mw-sanitize"))))))
+        (ids (extract-ids (on/sort-middlewares (list m-audit m-auth m-sanitize))))]
+    (= ids (list "mw-auth" "mw-audit" "mw-sanitize"))))
 
 (df test-dependency-override [] -> Bool
   :d "Verifies that explicit before dependency overrides numeric priority."
   (let [(m-logger (on/make-middleware "mw-logger" "Logger" (on/kind-pre-call) 800 (list "mw-auth") (list)))
         (m-auth (on/make-middleware "mw-auth" "Auth" (on/kind-pre-call) 100 (list) (list)))
         (m-sanitize (on/make-middleware "mw-sanitize" "Sanitize" (on/kind-post-call) 900 (list) (list)))
-        (sorted (on/sort-middlewares (list m-auth m-logger m-sanitize)))]
-    (let [(first-id (mt (list-head sorted) ((some m) (.-id m)) ((none) "")))
-          (tail1 (option-or (list-tail sorted) (list)))
-          (second-id (mt (list-head tail1) ((some m) (.-id m)) ((none) "")))
-          (tail2 (option-or (list-tail tail1) (list)))
-          (third-id (mt (list-head tail2) ((some m) (.-id m)) ((none) "")))]
-      (and (= first-id "mw-logger")
-           (and (= second-id "mw-auth")
-                (= third-id "mw-sanitize"))))))
+        (ids (extract-ids (on/sort-middlewares (list m-auth m-logger m-sanitize))))]
+    (= ids (list "mw-logger" "mw-auth" "mw-sanitize"))))
 
 (df test-after-dependency [] -> Bool
   :d "Verifies that explicit after dependency forces precedence regardless of priority."
   (let [(m-gate (on/make-middleware "mw-gate" "Gate" (on/kind-filter) 900 (list) (list)))
         (m-check (on/make-middleware "mw-check" "Check" (on/kind-pre-call) 100 (list) (list "mw-gate")))
-        (sorted (on/sort-middlewares (list m-check m-gate)))]
-    (let [(first-id (mt (list-head sorted) ((some m) (.-id m)) ((none) "")))
-          (tail1 (option-or (list-tail sorted) (list)))
-          (second-id (mt (list-head tail1) ((some m) (.-id m)) ((none) "")))]
-      (and (= first-id "mw-gate")
-           (= second-id "mw-check")))))
+        (ids (extract-ids (on/sort-middlewares (list m-check m-gate))))]
+    (= ids (list "mw-gate" "mw-check"))))
 
 (df test-filter-interceptor [] -> Bool
   :d "Verifies filter middleware passes safe inputs and blocks forbidden payloads."

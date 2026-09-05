@@ -25,7 +25,7 @@ from native_checker import native_check_file, native_check_source  # noqa: E402
 def test_corpus_valid_equivalence():
     """All 34 valid corpus files must produce exactly 0 diagnostics with native checker."""
     valid_files = sorted(CORPUS.glob("valid/*.agentscript"))
-    assert len(valid_files) == 36, f"Expected 36 valid fixtures, found {len(valid_files)}"
+    assert len(valid_files) == 37, f"Expected 37 valid fixtures, found {len(valid_files)}"
     roots = [MODULES]
     for path in valid_files:
         native_diags = native_check_file(path, roots)

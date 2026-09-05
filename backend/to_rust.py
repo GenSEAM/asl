@@ -315,7 +315,7 @@ class ToRust:
 
     def fun_name(self, n) -> str:
         k = [x for x in self.kids(n)
-             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt"))]
+             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         return self.tok(k[0])
 
     def qual(self, text: str) -> str:
@@ -347,14 +347,14 @@ class ToRust:
         for n in tops:
             if n.data == "defun" and self.tok(
                     [x for x in self.kids(n)
-                     if not (isinstance(x, Tree) and x.data == "type_params")][0]) == "main":
+                     if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))][0]) == "main":
                 return ["", "fn main() {",
                         "    let args: Vec<String> = std::env::args().skip(1).collect();",
                         "    std::process::exit(rt::main_exit(main_(args)));", "}"]
         return []
 
     def defschema(self, n) -> list[str]:
-        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data == "type_params")]
+        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         name = self.tok(k[0])
         fields = [f for f in n.children if isinstance(f, Tree) and f.data == "field"]
         gen = self.generics(self.type_params(n))
@@ -372,7 +372,7 @@ class ToRust:
         return lines + ["}", ""]
 
     def defenum(self, n) -> list[str]:
-        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data == "type_params")]
+        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         name = self.tok(k[0])
         gen = self.generics(self.type_params(n))
         path = self.prefix + name
@@ -392,7 +392,7 @@ class ToRust:
 
     def defun(self, n) -> list[str]:
         k = [x for x in self.kids(n)
-             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt"))]
+             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         name = mangle(self.tok(k[0]))
         ps = [p for p in k[1].children if isinstance(p, Tree) and p.data == "param"]
         args = ", ".join(f"{mangle(self.tok(self.kids(p)[0]))}: {self.rtype(self.kids(p)[1])}"
@@ -417,6 +417,7 @@ class ToRust:
         vanishes from the output entirely."""
         pad = "    " * ind
         last = None
+        body = [b for b in body if not (isinstance(b, Tree) and b.data == "tag_node")]
         for i, b in enumerate(body):
             last = self.expr(b, stmts, ind)
             if i < len(body) - 1:
@@ -427,6 +428,8 @@ class ToRust:
         pad = "    " * ind
         if isinstance(n, Token):
             return self.atom(n)
+        if n.data == "tag_node":
+            return '""'
         if n.data in ("expr", "literal"):
             return self.expr(n.children[0], stmts, ind)
 

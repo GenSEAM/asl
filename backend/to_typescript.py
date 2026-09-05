@@ -241,7 +241,7 @@ class ToTypeScript:
 
     def decl_name(self, node) -> str:
         kids = [k for k in self.kids(node)
-                if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt"))]
+                if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt", "tag_node"))]
         return self.tok(kids[0])
 
     def unit(self, tree) -> list[str]:
@@ -269,7 +269,7 @@ class ToTypeScript:
             if node.data != "defun":
                 continue
             body = [k for k in self.kids(node)
-                    if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt"))]
+                    if not (isinstance(k, Tree) and k.data in ("type_params", "doc_opt", "tag_node"))]
             if str(body[0]) == "main":
                 return ["", "RT.mainExit(main(RT.args()));"]
         return []
@@ -278,7 +278,7 @@ class ToTypeScript:
 
     def defschema(self, n) -> list[str]:
         self.tparams = set(self.type_param_names(n))
-        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data == "type_params")]
+        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         name = self.tok(k[0])
         gen = self.type_params(n)
         fields = [f for f in n.children if isinstance(f, Tree) and f.data == "field"]
@@ -294,7 +294,7 @@ class ToTypeScript:
 
     def defenum(self, n) -> list[str]:
         self.tparams = set(self.type_param_names(n))
-        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data == "type_params")]
+        k = [x for x in self.kids(n) if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         name = self.tok(k[0])
         gen = self.type_params(n)
         cases = [c for c in n.children if isinstance(c, Tree) and c.data == "enum_case"]
@@ -316,7 +316,7 @@ class ToTypeScript:
     def defun(self, n) -> list[str]:
         self.tparams = set(self.type_param_names(n))
         k = [x for x in self.kids(n)
-             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt"))]
+             if not (isinstance(x, Tree) and x.data in ("type_params", "doc_opt", "tag_node"))]
         name = mangle(self.tok(k[0]))
         gen = self.type_params(n)
         args = self.param_list(k[1])
@@ -366,6 +366,7 @@ class ToTypeScript:
         pad = "    " * ind
         self.push()
         lines: list[str] = []
+        exprs = [e for e in exprs if not (isinstance(e, Tree) and e.data == "tag_node")]
         for e in exprs[:-1]:
             lines.append(f"{pad}void ({self.expr(e, ind)});")
         last = self.unwrap_expr(exprs[-1]) if exprs else None
@@ -399,6 +400,9 @@ class ToTypeScript:
         n = self.unwrap_expr(n)
         if isinstance(n, Token):
             return self.atom(n)
+
+        if n.data == "tag_node":
+            return '""'
 
         if n.data == "let_form":
             return self.iife(self.block([n], ind + 1), ind)

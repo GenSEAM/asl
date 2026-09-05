@@ -23,8 +23,8 @@ def test_builtins_audit_warns_on_inflation():
     records, warnings = audit_builtins(enc, vocab)
 
     assert len(records) == 107
-    # Multi-word builtins like string-starts-with? fragment into >2 tokens
-    assert len(warnings) > 0
+    # All 107 builtins now have aliases conforming to <=2 tokens ceiling
+    assert len(warnings) == 0, f"Expected 0 warnings, got {warnings}"
 
 
 def test_token_audit_check_mode():
