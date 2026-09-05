@@ -1,24 +1,12 @@
-# Phase 3: Pure ASL Physics Reactor Core (`asl-physics-reactor-core`)
+# Phase 3: `asl-native-compiler-wire` Plan
 
-## Goal
-Implement a single-source physics reactor engine in `packages/asl-vdom/src/physics_reactor.asl` written in pure AgentScript. It defines the N-body Coulomb repulsion, Hooke spring force, and velocity damping equations, serving as the single source of truth for both Wasm SIMD and JS web showcase targets.
+## Objective
+Wire the end-to-end self-hosted compiler in `packages/asl-compiler/src/compiler.asl` to support multi-target emission (`rust`, `c-embedded`, `wasi`) and module linking.
 
 ## Work Items
-1. **Physics Equations in Pure ASL**:
-   - `packages/asl-vdom/src/physics_reactor.asl`:
-     - Structures: `Particle` (`:f x F64`, `:f y F64`, `:f vx F64`, `:f vy F64`), `Spring` (`:f from-idx I64`, `:f to-idx I64`, `:f length F64`, `:f stiffness F64`).
-     - Functions:
-       - `coulomb-repulsion-force [(dx F64) (dy F64) (repulsion F64)] -> Pair`: calculates inverse-square repulsive force with softening factor to avoid division by zero.
-       - `hooke-spring-force [(dx F64) (dy F64) (rest-len F64) (stiffness F64)] -> Pair`: calculates linear restorative spring force along edge.
-       - `euler-step [(p Particle) (fx F64) (fy F64) (dt F64) (damping F64)] -> Particle`: updates velocity with damping and updates position.
-2. **Unit Test Suite**:
-   - `packages/asl-vdom/tests/physics_test.asl`:
-     - Test that two overlapping particles experience repulsive force away from each other.
-     - Test that a stretched spring pulls connected nodes inward.
-     - Test that velocity damping reduces kinetic energy over successive steps.
+1. Add target selection parameter to `compile-source` (`:trg rust`, `:trg c-embedded`).
+2. Integrate `asl-codegen/emit-c` into `compile-source` when target is `c-embedded`.
+3. Unit test in `packages/asl-compiler/tests/compiler-test.asl`.
 
 ## Acceptance Gate
-```bash
-node bin/asl test packages/asl-vdom/tests/physics_test.asl
-```
-Must pass cleanly with exit code 0.
+`node asl/bin/asl gate asl/packages/asl-compiler/src/compiler.asl`

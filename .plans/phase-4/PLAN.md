@@ -1,20 +1,12 @@
-# Phase 4: Ephemeral Bridge & Intelligence Port (`asl-bridge-ephemeral-port`)
+# Phase 4: `asl-native-gate-runner` Plan
 
-## Goal
-Implement a pure ASL AST extractor in `intel/src/extractor.asl` that parses ASL modules, extracts symbol declarations (`dfs`, `dfe`, `df`), and generates dense ASN intelligence records, eliminating the need for persistent `.js` extraction scripts.
+## Objective
+Enhance `packages/asl-cli/src/cli.asl` and `packages/asl-gates/src/gates.asl` to execute multi-file verification suites directly without falling back to python scripts.
 
 ## Work Items
-1. **Pure ASL AST Extractor**:
-   - `intel/src/extractor.asl`:
-     - Functions to scan and index symbols, signatures, and docstrings from ASL files into standard ASN tuples `(:symbol name :kind type :doc doc)`.
-2. **Unit Test Suite**:
-   - `intel/tests/extractor_test.asl`:
-     - Test extracting definitions from standard ASL test fixtures.
-3. **Hygiene & Verification**:
-   - Ensure `intel/manifest.asn` exports the new ASL extractor module.
+1. Support batch glob and file lists in `asl-gates/src/gates.asl`.
+2. Connect `dispatch-cmd "gate"` in `asl-cli` directly to `asl-gates/gates/run-suite`.
+3. Add regression tests in `packages/asl-cli/tests/cli-test.asl`.
 
 ## Acceptance Gate
-```bash
-node bin/asl gate intel/src/extractor.asl intel/tests/extractor_test.asl
-```
-Must verify cleanly with 0 errors.
+`node asl/bin/asl gate asl/packages/asl-cli/src/cli.asl asl/packages/asl-gates/src/gates.asl`

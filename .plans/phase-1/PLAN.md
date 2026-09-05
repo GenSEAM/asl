@@ -1,19 +1,12 @@
-# Phase 1: Standalone Native AOT CLI Packager (`asl-native-standalone-cli`)
+# Phase 1: `asl-web-components-port` Plan
 
-## Goal
-Implement binary bundling and packaging logic in `@genseam/asl-pack` so that ASL source files can be packaged into standalone executables with the `ASLPACK!` 16-byte fixed footer and macOS ad-hoc codesign command generation.
+## Objective
+Port key showcase UI components from React TSX into pure declarative ASL modules compiled via `vite-plugin-asl`.
 
 ## Work Items
-1. **Packaging Manifest & Footer Formatter**:
-   - Verify `pack/src/standalone.asl` calculates 16-byte fixed footer footprint (8-byte length + 8-byte magic string `ASLPACK!`).
-   - Add platform detection for macOS ad-hoc AMFI code-signing (`codesign -s - --force <bin>`).
-2. **Bundle Generator Bridge**:
-   - In `pack/bridges/bundler.js`: support `createStandaloneBundle` appending bytecode payload and trailer.
-3. **Unit Test Suite**:
-   - `pack/tests/standalone.test.asl`: assert magic string equals `"ASLPACK!"`, footer size is 16, and codesign is required on macOS ARM64.
+1. `Hero.asl`: Top hero banner with headline, token reduction metrics, and primary CTA buttons.
+2. `UnifiedPackageMatrix.asl`: Interactive package directory highlighting all official packages (Core, Harness, Visual, Quantum, Arduino).
+3. `AslQualityDoctor.asl`: Interactive quality score and AST smell diagnostics visualizer.
 
 ## Acceptance Gate
-```bash
-node asl/bin/asl test pack/tests/standalone.test.asl
-```
-Must pass 100% cleanly.
+`node asl/bin/asl gate asl/web/asl-src/components/Hero.asl asl/web/asl-src/components/UnifiedPackageMatrix.asl asl/web/asl-src/components/AslQualityDoctor.asl && npm --prefix asl/web run build`
