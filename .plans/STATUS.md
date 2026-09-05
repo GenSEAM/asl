@@ -14,11 +14,11 @@
   - `shrody-benchmark-e2e`: `done` (commit `2473be3`)
   - `core-selfhost-retire-lark`: `done` (Stage 2 Harness completed 100%!)
   - `vdom-dual-perception`: `done` (commit `cbf218b`)
-  - `ui-transpiler-mvp`: `done`
+  - `ui-transpiler-mvp`: `done` (commit `c593abd`)
+  - `agent-browser-cdp`: `done`
 - **Execution Mode**: Strict sequential single-phase progression (1 agent at a time per user directive).
 - **Sequential Queue**:
-  - `agent-browser-cdp` (ready)
-  - `browser-agent-extension` (pending)
+  - `browser-agent-extension` (ready)
   - `web-showcase-pages` (pending)
   - `ecosystem-full-verification` (final)
 - **State**: SEQUENTIAL EXECUTION ACTIVE (1/1)
