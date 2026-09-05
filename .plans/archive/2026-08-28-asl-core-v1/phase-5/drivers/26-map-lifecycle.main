@@ -1,3 +1,0 @@
-(defun ! main [(args (List String))] -> (Result Unit IoError)
-  (println (lifecycle "a b a c" "a"))
-  (println (lifecycle "b a c" "z")))

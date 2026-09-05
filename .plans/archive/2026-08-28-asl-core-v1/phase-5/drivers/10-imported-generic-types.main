@@ -1,3 +1,0 @@
-(defun ! main [(args (List String))] -> (Result Unit IoError)
-  (println (string-from-int64 (depth-of (t/node 1 (t/leaf) (t/leaf)))))
-  (println (string-from-int64 (unwrap))))
