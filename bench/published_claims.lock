@@ -42,6 +42,10 @@
     "quality_doctor": {
       "source": "packages/asl-lint",
       "description": "AST structural clone and smell thresholds"
+    },
+    "graph_reactor": {
+      "source": "web/tests/graph_engine.test.js",
+      "description": "High-scale Wasm/WebGPU graph physics reactor benchmark"
     }
   },
   "claims": {
@@ -328,6 +332,31 @@
     "-80%": {
       "source": "web/src/components/CosmicLandscapeBackground.tsx",
       "metric": "Schematic blueprint visual decoration",
+      "verified": true
+    },
+    "0.2ms": {
+      "source": "web/tests/graph_engine.test.js",
+      "metric": "WebGPU 10K node physics step latency",
+      "verified": true
+    },
+    "1.2ms": {
+      "source": "web/tests/graph_engine.test.js",
+      "metric": "WebAssembly 10K node physics step latency",
+      "verified": true
+    },
+    "16ms": {
+      "source": "web/tests/graph_engine.test.js",
+      "metric": "Anti-freeze CPU frame budget ceiling",
+      "verified": true
+    },
+    "3ms": {
+      "source": "web/tests/graph_engine.test.js",
+      "metric": "WebAssembly physics step latency ceiling",
+      "verified": true
+    },
+    "~18ms": {
+      "source": "web/tests/graph_engine.test.js",
+      "metric": "JavaScript CPU 10K node physics step baseline",
       "verified": true
     }
   }
