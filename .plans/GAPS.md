@@ -1,32 +1,39 @@
-# Cross-Phase Gap Review: Autonomous ASL Frontier & Native Engine
+# Gap Audit: Multi-Repository Naming & Workspace Mapping
 
-**Verdict**: `APPROVE`
-**Mode**: Batch Ahead Cross-Phase Gap Review
-
----
-
-## 1. Completeness & Edge Case Coverage
-
-| Phase | Critical Invariant | Potential Edge Case | Guard / Solution |
-|---|---|---|---|
-| **Phase 1: Standalone CLI** | 16-byte fixed trailer footprint | AMFI refusal on modified Mach-O on macOS | `codesign -s - --force` automatically planned by `standalone.asl` |
-| **Phase 2: Quantum Simulator** | Conservation of quantum probability ($\sum \|a_i\|^2 = 1.0$) | Floating point rounding error | In unit tests, use tolerance $|\sum P_i - 1.0| < 10^{-5}$ |
-| **Phase 3: Physics Reactor** | Energy conservation & numerical stability | Coincident nodes ($dx=0, dy=0$) causing division by zero | Add $\epsilon = 0.01$ softening factor in distance calculation: $\sqrt{dx^2 + dy^2 + \epsilon^2}$ |
-| **Phase 4: Ephemeral Extractor** | Symbol indexing completeness | Modules using Ultra-Nano aliases (`dfs`, `dfe`) | Pattern match covers both canonical and nano definitions |
+**Verdict**: `APPROVE-WITH-AMENDMENTS`
+**Focus**: Repository directory naming alignment (`search` -> `web-search`), submodule mapping integrity, and backward compatibility.
 
 ---
 
-## 2. Disjoint Ownership & Wave Execution Plan
+## 1. Gap Analysis (Completeness & Edge Cases)
 
-| Wave | Concurrency (Max 2) | Phases | Shared Files | Conflict Risk |
-|---|---|---|---|---|
-| **Wave 0** | 2 parallel streams | Phase 1 (`pack/`) + Phase 2 (`packages/asl-quantum/`) | **NONE** (disjoint) | Zero |
-| **Wave 1** | 2 parallel streams | Phase 3 (`packages/asl-vdom/`) + Phase 4 (`intel/`) | **NONE** (disjoint) | Zero |
+| Target Area | Identified Gap / Risk | Architectural Remedy |
+|---|---|---|
+| **Directory Ambiguity** | `search/` conflicts semantically with local code search (`asl intel --search`) while declaring `@genseam/asl-web-search` in `manifest.asn`. | Rename directory `search` -> `web-search`. |
+| **Path Breakage Risk** | Hardcoded paths in existing developer scripts or editor bookmarks targeting `projects/asex/search`. | Leave a backward-compatible filesystem symlink: `search -> web-search`. |
+| **Submodule Mapping Drift** | If directory `search` is renamed without updating root `.gitmodules`, `git submodule status/update` fails. | Update `.gitmodules` entry `path = web-search` alongside the rename. |
+| **Sync Tool Desync** | `tools/sync_workspace.py` hardcodes `search` in `REPOS` list. | Update `REPOS` list to `"web-search"`. |
+| **Orphaned Local Repos** | `pack/` and `intel/` exist as local Git repos but are not registered in root `.gitmodules`. | Register `pack` and `intel` in root `.gitmodules` for uniform workspace tracking. |
 
 ---
 
-## 3. Anti-Overengineering Verdict
-All 4 phases adhere strictly to **Effective Decision Mode**:
-- Pure S-expression logic in `.asl`.
-- Zero new external runtime dependencies.
-- Intermediate outputs restricted to memory / `/tmp/` and strictly unlinked.
+## 2. Consistency Analysis (Invariants)
+
+* **Invariant: Package Name <-> Repository Semantic Parity**:
+  - `manifest.asn`: `(:package @genseam/asl-web-search ...)`
+  - Directory: `web-search/`
+  - Eliminates cognitive friction between web search and local code search.
+* **Invariant: Effective Decision Mode**:
+  - Only rename what has real semantic divergence; do not rename 15 repos for cosmetic reasons.
+
+---
+
+## 3. Anti-Overengineering (Critic Filter)
+
+* **Rejection of Mass Rename (Variant 2)**:
+  - Renaming all 15 repositories to add `asl-*` prefix (`asl-mem`, `asl-vdom`, `asl-voice`, etc.) is **REJECTED**:
+    1. Causes massive churn across `.gitmodules`, CI configs, and git submodules.
+    2. Zero functional or token-saving benefit.
+* **Approval of Targeted Rename (Variant 1)**:
+  - Only `search` -> `web-search` is changed because it solves an actual semantic conflict.
+  - Shortest working diff wins.
