@@ -334,13 +334,10 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
   right now, and two sessions rewriting the same components is how work is lost. The rule already
   exists; what is missing is a gate that enforces it over `web/src` the way `check:tokens` enforces
   the palette.
-* **Lark is being retired, and two of this project's rules still assume it is permanent.**
-  `AGENTS.md`'s "both grammars must change together" and `grammar/validate.py`'s cross-parser parity
-  are written around Lark and tree-sitter as co-equal. Lark drives constrained decoding
-  (`EXPERIMENT.md` arm C), tree-sitter drives tooling, and the self-hosted parser in
-  `packages/asl-parser` is the one being invested in. `tools/doc_examples.py`, added today, parses
-  with Lark and will have to move. Nothing is broken; the rules just describe a world that is
-  ending, and whoever retires Lark has to rewrite them rather than discover them.
+* **Lark is retired from validation gates, replaced by native self-hosted parser and Tree-sitter.**
+  `grammar/validate.py` now asserts cross-parser parity between the self-hosted parser
+  (`packages/asl-parser`) and tree-sitter. `tools/doc_examples.py` parses with `tools.native_parser`.
+  Lark remains solely for constrained decoding experiments (`EXPERIMENT.md` arm C).
 * **Standard format token ceilings and structural compaction.** The language has two
   representations: Standard format (`df`, `dfs`, `dfe`, `mt`, `:d`, `:x`, `:i`, `:a`, `:f`, `:c`,
   `I64`, `F64`, `Str`), which is the sole canonical on-disk and wire format, and Verbose format
