@@ -33,14 +33,20 @@ Portal Sitemap
 │   ├── Web Cockpit Architecture Galaxy (`web`)
 │   ├── Live SSE Telemetry Stream & Epistemic HUD
 │   └── 1-Click State Rollback & Falsified Premise Trees
-├── 6. Advanced Frontiers & Niche Targets
+├── 6. Polyglot Coexistence & Progressive Migration
+│   ├── The Strangler Fig Pattern: Module-by-Module Migration
+│   ├── The Python-to-Rust Bridge: 100x Speedup with 0 Borrow-Checker Friction
+│   ├── Declarative Target Directives (`:target (:python-native-ffi ...)`)
+│   ├── Vue.js & React Coexistence: Offloading State Machines to Wasm
+│   └── Dual Test Harnesses: Bit-for-Bit Parity Verification
+├── 7. Advanced Frontiers & Niche Targets
 │   ├── Verifiable Smart Contracts (`@genseam/asl-contracts`)
 │   ├── Compiling to Arbitrum Stylus Wasm & CosmWasm
 │   ├── Automated Formal Verification via Z3 SMT
 │   ├── Micro-Escrow & Multi-Agent Economic Bounties
 │   ├── Bare-Metal ANSI C Compilation (Arduino & Robotics)
 │   └── Quantum Circuit Simulation (`@genseam/asl-quantum`)
-└── 7. Community, Plugins & Extensibility
+└── 8. Community, Plugins & Extensibility
     ├── Authoring Custom Harness Middlewares
     ├── Compiler AST Plugins & Custom Backends (`asl-plugin`)
     └── Contributing & Steps Roadmap Protocol
