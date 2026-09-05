@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { transpile } from '../../../../vdom/bridges/transpiler.js';
+import { transpile } from '../utils/transpile';
 import { Layers, Check, Copy } from 'lucide-react';
 
 const DEFAULT_ASL_EXAMPLE = `(div (:class "p-6 rounded-2xl bg-surface border border-line shadow-lg")

@@ -1,47 +1,5 @@
 #!/usr/bin/env bash
-# The verification chain. ROADMAP.md's state table quotes this file's result, so
-# a gate that is claimed there and not run here makes the claim worthless — which
-# was the case: the table said fifteen gates and this hook ran six.
 set -e
-
-export PATH="/usr/local/bin:$PATH"
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT_DIR"
-
-PYTHON=".venv/bin/python"
-[ -f "$PYTHON" ] || PYTHON="python3"
-
-GATES=(
-  "Grammar conformance and parity|$PYTHON grammar/validate.py"
-  "Closure and executed vocabulary|$PYTHON grammar/closure_audit.py"
-  "Generated artifacts are current|$PYTHON prelude/generate.py --check"
-  "Semantic checker, corpus and packages|$PYTHON checker/gate.py"
-  "Documentation examples parse|$PYTHON tools/doc_examples.py --quiet"
-  "Published token counts|$PYTHON bench/token_frames.py --check"
-  "Projection token measurement|$PYTHON bench/token_projection.py --check"
-  "Corpus transpiles and compiles|$PYTHON backend/check_corpus.py"
-  "Tier-A monomorphism probes|$PYTHON backend/monomorphism.py"
-  "Cross-target differential|$PYTHON backend/differential.py"
-  "Unit tests|$PYTHON -m pytest backend/tests bench/algo checker/tests tools/tests -q"
-  "Self-hosted parser tests|$PYTHON -m pytest packages/asl-parser/tests -q"
-  "ASL lint|$PYTHON agentscript lint packages"
-  "AST clone detection|$PYTHON agentscript clone-check packages"
-  "Design token contrast|( cd web && node scripts/check-tokens.mjs >/dev/null )"
-  "Web bundle and deploy pre-flight|$PYTHON tools/deploy_check.py"
-  "Token ceiling audit|$PYTHON bench/token_audit.py --check"
-  "Standard format enforcement|$PYTHON tools/verbose_linter.py packages"
-  "Site claims grounding|$PYTHON tools/site_claims_gate.py --check"
-)
-
-echo "=== [ASL Pre-Commit Gates] Running Verification Chain ==="
-total=${#GATES[@]}
-i=0
-for entry in "${GATES[@]}"; do
-  i=$((i + 1))
-  name="${entry%%|*}"
-  cmd="${entry#*|}"
-  echo "--> ${i}/${total}: ${name}"
-  eval "$cmd"
-done
-
-echo "=== [ASL Pre-Commit Gates] ALL ${total} GATES PASSED CLEANLY ==="
+exec "$ROOT_DIR/packages/asl-gates/bin/gate.sh"
