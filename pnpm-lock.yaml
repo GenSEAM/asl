@@ -28,6 +28,8 @@ importers:
 
   packages/asl-sh: {}
 
+  packages/asl-shrody: {}
+
   packages/asl-skyloom:
     devDependencies:
       '@types/node':
@@ -36,6 +38,8 @@ importers:
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
+
+  packages/asl-vdom: {}
 
   web:
     dependencies:

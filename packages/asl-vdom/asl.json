@@ -1,7 +1,7 @@
 {
   "name": "@genseam/asl-vdom",
   "version": "0.1.0",
-  "description": "Declarative S-Expression Virtual DOM renderer bridging React 19, Vue 3, and Svelte 5",
+  "description": "Declarative S-Expression Virtual DOM & Dual Perception Compactor (AXTree + D2Snap DOM Downsampling) in AgentScript",
   "entry": "src/vdom.asl",
   "targets": {
     "wasm": {"output": "dist/vdom.wasm"},

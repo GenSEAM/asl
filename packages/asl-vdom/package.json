@@ -1,0 +1,29 @@
+{
+  "name": "@genseam/asl-vdom",
+  "version": "0.1.0",
+  "description": "Declarative S-Expression Virtual DOM & Dual Perception Compactor (AXTree + D2Snap DOM Downsampling) in AgentScript",
+  "main": "src/vdom.asl",
+  "module": "bridges/ts/index.ts",
+  "types": "bridges/ts/index.ts",
+  "exports": {
+    ".": "./bridges/ts/index.ts",
+    "./perception": "./bridges/ts/perception.ts"
+  },
+  "scripts": {
+    "test": "python3 ../../agentscript test tests/vdom_test.asl",
+    "test:bridge": "npx tsx tests/perception_test.ts",
+    "typecheck": "tsc --noEmit bridges/ts/index.ts"
+  },
+  "keywords": [
+    "agentscript",
+    "vdom",
+    "dual-perception",
+    "axtree",
+    "accessibility",
+    "dom-compaction",
+    "dom-diff",
+    "agent"
+  ],
+  "author": "GenSEAM Team",
+  "license": "MIT"
+}
