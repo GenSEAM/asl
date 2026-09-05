@@ -95,23 +95,50 @@ case "$CMD" in
     exit 0
     ;;
   audit)
-    if [ -z "$1" ]; then
-      echo "Usage: asl audit <file.asl>"
+    TARGET="${1:-.}"
+    if [ -d "$TARGET" ]; then
+      echo "=== [ASL Multi-Level Audit] Auditing directory: $TARGET ==="
+      FAIL=0
+      COUNT=0
+      for f in $(find "$TARGET" -name "*.asl" -not -path "*/.*/*" -not -path "*/node_modules/*"); do
+        COUNT=$((COUNT + 1))
+        if ! "$ROOT/asl" check "$f" > /dev/null 2>&1; then
+          echo "    ✗ Micro-Tier FAIL: $f delimiter/AST balance error"
+          FAIL=1
+        fi
+        if ! "$ROOT/asl" lint "$f" > /dev/null 2>&1; then
+          echo "    ✗ Meso-Tier FAIL: $f keyword idiom violation"
+          FAIL=1
+        fi
+        if ! grep -qE '^\(module[ \t]+' "$f"; then
+          echo "    ✗ Macro-Tier FAIL: $f missing '(module ...)' declaration"
+          FAIL=1
+        fi
+      done
+      if [ "$FAIL" -eq 1 ]; then
+        echo "=== [ASL Multi-Level Audit] Audit FAILED with errors ==="
+        exit 1
+      fi
+      echo "=== [ASL Multi-Level Audit] All $COUNT .asl files in $TARGET passed Micro, Meso, and Macro tiers cleanly! ==="
+      exit 0
+    elif [ -f "$TARGET" ]; then
+      echo "--> [1/3] Micro-Tier: Auditing AST form and delimiter balance..."
+      "$ROOT/asl" check "$TARGET"
+      echo "--> [2/3] Meso-Tier: Auditing keyword idioms and export signatures..."
+      "$ROOT/asl" lint "$TARGET"
+      echo "--> [3/3] Macro-Tier: Auditing module declaration and structure..."
+      HAS_MOD=$(grep -E '^\(module[ \t]+' "$TARGET" || true)
+      if [ -z "$HAS_MOD" ]; then
+        echo "    ✗ Missing standard '(module ...)' declaration in $TARGET"
+        exit 1
+      fi
+      echo "    ✓ Module header verified cleanly: $HAS_MOD"
+      echo "=== [ASL Multi-Level Audit] All 3 Tiers (Micro, Meso, Macro) PASSED cleanly for $TARGET ==="
+      exit 0
+    else
+      echo "Error: target not found: $TARGET"
       exit 1
     fi
-    echo "--> [1/3] Micro-Tier: Auditing AST form and delimiter balance..."
-    "$ROOT/asl" check "$1"
-    echo "--> [2/3] Meso-Tier: Auditing keyword idioms and export signatures..."
-    "$ROOT/asl" lint "$1"
-    echo "--> [3/3] Macro-Tier: Auditing module declaration and structure..."
-    HAS_MOD=$(grep -E '^\(module[ \t]+' "$1" || true)
-    if [ -z "$HAS_MOD" ]; then
-      echo "    ✗ Missing standard '(module ...)' declaration in $1"
-      exit 1
-    fi
-    echo "    ✓ Module header verified cleanly: $HAS_MOD"
-    echo "=== [ASL Multi-Level Audit] All 3 Tiers (Micro, Meso, Macro) PASSED cleanly for $1 ==="
-    exit 0
     ;;
   test)
     if [ -n "$1" ]; then
