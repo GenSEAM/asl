@@ -1,4 +1,4 @@
-(module asl-quantum/tests/quantum_test
+(module asl-quantum/tests/quantum-test
   :d "Unit test suite for Quantum DSL: circuit construction, gate application, and OpenQASM 3.0 generation."
   :x [test-bell-circuit
       test-ghz-circuit
@@ -11,13 +11,13 @@
   :d "Verifies Bell pair circuit has 2 qubits and 2 classical bits."
   (let [(bell (q/build-bell-pair))]
     (and
-      (== (.-num-qubits bell) 2)
-      (== (.-num-clbits bell) 2))))
+      (= (.-num-qubits bell) 2)
+      (= (.-num-clbits bell) 2))))
 
 (df test-ghz-circuit [] -> Bool
   :d "Verifies GHZ state circuit has 3 qubits."
   (let [(ghz (q/build-ghz-state))]
-    (== (.-num-qubits ghz) 3)))
+    (= (.-num-qubits ghz) 3)))
 
 (df test-openqasm-header [] -> Bool
   :d "Verifies synthesized OpenQASM contains version header and register declarations."

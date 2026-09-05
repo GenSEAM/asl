@@ -24,7 +24,7 @@
   (QuantumCircuit
     :num-qubits (.-num-qubits c)
     :num-clbits (.-num-clbits c)
-    :ops (list-append (.-ops c) op)))
+    :ops (list-append (.-ops c) (list op))))
 
 (df h [(c QuantumCircuit) (q I64)] -> QuantumCircuit
   :d "Applies Hadamard gate to qubit."

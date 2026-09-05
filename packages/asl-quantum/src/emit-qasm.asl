@@ -8,11 +8,11 @@
 (df format-gate-qasm [(op g/QuantumOp)] -> Str
   :d "Formats a single quantum gate into standard OpenQASM 3.0 instruction."
   (mt (.-kind op)
-    ((g-h) (str "h q[" (string-from-int64 (.-q1 op)) "];"))
-    ((g-x) (str "x q[" (string-from-int64 (.-q1 op)) "];"))
-    ((g-z) (str "z q[" (string-from-int64 (.-q1 op)) "];"))
-    ((g-cx) (str "cx q[" (string-from-int64 (.-q2 op)) "], q[" (string-from-int64 (.-q1 op)) "];"))
-    ((g-msr) (str "c[" (string-from-int64 (.-cl op)) "] = measure q[" (string-from-int64 (.-q1 op)) "];"))))
+    ((g/g-h) (str "h q[" (string-from-int64 (.-q1 op)) "];"))
+    ((g/g-x) (str "x q[" (string-from-int64 (.-q1 op)) "];"))
+    ((g/g-z) (str "z q[" (string-from-int64 (.-q1 op)) "];"))
+    ((g/g-cx) (str "cx q[" (string-from-int64 (.-q2 op)) "], q[" (string-from-int64 (.-q1 op)) "];"))
+    ((g/g-msr) (str "c[" (string-from-int64 (.-cl op)) "] = measure q[" (string-from-int64 (.-q1 op)) "];"))))
 
 (df emit-openqasm [(c circ/QuantumCircuit)] -> Str
   :d "Synthesizes complete OpenQASM 3.0 program with headers, registers, and gate body."
