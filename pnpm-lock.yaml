@@ -20,11 +20,15 @@ importers:
 
   packages/asl-agent-core: {}
 
+  packages/asl-bridge: {}
+
   packages/asl-browser-plugin:
     devDependencies:
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
+
+  packages/asl-pcp: {}
 
   packages/asl-sh: {}
 
