@@ -1,21 +1,27 @@
-# Pure ASL & Ephemeral Architecture Initiative — PHASES
+# Autonomous ASL Frontier & Native Engine Initiative — PHASES
 
 ## Overview
-Eliminate non-ASL persistent files, replace JSON configs with native ASN data frames, enforce ephemeral execution for host bridges/tests (compilation to memory/tmp -> execution -> auto-unlink, zero `.js`/`.ts`/`.py` in git), isolate foreign language emissions strictly to `dist/`, and standardize single-token FFI syscalls.
+Implement standalone native AOT compilation for the ASL CLI, state-vector quantum simulation in pure ASL, unified single-source physics reactor in `asl-vdom`, and ephemeral bridge migration in `intel`.
 
 ## Phases DAG
 
 ```mermaid
 graph TD
-    P1[Phase 1: asn-metadata-migration] --> P2[Phase 2: ephemeral-runner-pipeline]
-    P1 --> P3[Phase 3: dist-git-isolation-hygiene]
-    P2 --> P4[Phase 4: single-token-ffi-spec]
-    P3 --> P4
+    subgraph Wave 0 [Wave 0: Standalone CLI & Quantum State Engine]
+        P1[Phase 1: asl-native-standalone-cli]
+        P2[Phase 2: asl-quantum-telemetry-engine]
+    end
+    subgraph Wave 1 [Wave 1: Physics Reactor & Ephemeral Intelligence]
+        P3[Phase 3: asl-physics-reactor-core]
+        P4[Phase 4: asl-bridge-ephemeral-port]
+    end
+    P1 --> P3
+    P2 --> P4
 ```
 
-| Phase ID | Owns | Depends On | Gate Command | Isolation | Status |
+| Phase ID | Owns | Depends On | Priority | Gate Command | Status |
 |---|---|---|---|---|---|
-| `asn-metadata-migration` | `*/asl.asn`, `*/manifest.asn`, `pack/` | `[]` | `node asl/bin/asl gate pack/src/pack.asl` | `single-tree` | `done` |
-| `ephemeral-runner-pipeline` | `pack/bridges/asl_runner.js`, `*/benchmark/` | `[asn-metadata-migration]` | `node asl/bin/asl test pack/tests/standalone.test.asl` | `single-tree` | `done` |
-| `dist-git-isolation-hygiene` | `*/.gitignore`, `harness/`, `browser-plugin/` | `[asn-metadata-migration]` | `python3 tools/sync_workspace.py` | `single-tree` | `done` |
-| `single-token-ffi-spec` | `asl/`, `pack/src/ffi_linker.asl` | `[ephemeral-runner-pipeline, dist-git-isolation-hygiene]` | `node asl/bin/asl check pack/src/ffi_linker.asl` | `single-tree` | `done` |
+| `asl-native-standalone-cli` | `pack/src/standalone.asl`, `pack/bridges/bundler.js`, `pack/tests/` | `[]` | `P0` | `node asl/bin/asl test pack/tests/standalone.test.asl` | `done` |
+| `asl-quantum-telemetry-engine` | `packages/asl-quantum/src/simulator.asl`, `packages/asl-quantum/src/quantum.asl`, `packages/asl-quantum/tests/` | `[]` | `P0` | `node bin/asl test packages/asl-quantum/tests/simulator_test.asl` | `done` |
+| `asl-physics-reactor-core` | `packages/asl-vdom/src/physics_reactor.asl`, `packages/asl-vdom/tests/` | `[asl-native-standalone-cli]` | `P1` | `node bin/asl test packages/asl-vdom/tests/physics_test.asl` | `done` |
+| `asl-bridge-ephemeral-port` | `intel/src/extractor.asl`, `intel/tests/` | `[asl-quantum-telemetry-engine]` | `P1` | `node bin/asl gate intel/src/extractor.asl` | `done` |

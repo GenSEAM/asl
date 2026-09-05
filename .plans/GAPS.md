@@ -1,48 +1,32 @@
-# Comprehensive Gap Audit: Pure ASL & Ephemeral Architecture
+# Cross-Phase Gap Review: Autonomous ASL Frontier & Native Engine
 
-**Verdict**: `APPROVE-WITH-AMENDMENTS`
-**Lenses**: Completeness (Omission), Consistency (Invariants), Anti-Overengineering (Adequacy)
+**Verdict**: `APPROVE`
+**Mode**: Batch Ahead Cross-Phase Gap Review
 
 ---
 
-## 1. Completeness Analysis (Gap Detection)
+## 1. Completeness & Edge Case Coverage
 
-| Area | Finding / Evidence | Risk / Impact | Amendment / Remedy |
+| Phase | Critical Invariant | Potential Edge Case | Guard / Solution |
 |---|---|---|---|
-| **Ephemeral Test Leaks** | `pack/bridges/asl_runner.js` creates runners | Process crash or SIGINT could leave `/tmp/asl_*.mjs` files on disk | Implement `process.on('exit')` and `try...finally` auto-unlink in ephemeral execution loop |
-| **Chrome Extension Manifest** | Chrome requires physical `manifest.json` on disk | Unpacked extension cannot load directly from `manifest.asn` | Direct emission to `dist/manifest.json` on build; strictly add `dist/` to `.gitignore` |
-| **Bytecode Cache In Git** | `harness/bridges/__pycache__/*.pyc` committed in git | Pollutes repository with binary cache artifacts | Run `git rm` on all `.pyc` files and enforce global ignore |
-| **Token Bloat in FFI** | Multi-token `:turn` (2 tokens) and `(ffi:import ...)` (3 tokens) | Wastes LLM context budget during agent tool calling | Standardize single-letter directives: `:k` (kernel syscall) and `:t` (turn frame) |
+| **Phase 1: Standalone CLI** | 16-byte fixed trailer footprint | AMFI refusal on modified Mach-O on macOS | `codesign -s - --force` automatically planned by `standalone.asl` |
+| **Phase 2: Quantum Simulator** | Conservation of quantum probability ($\sum \|a_i\|^2 = 1.0$) | Floating point rounding error | In unit tests, use tolerance $|\sum P_i - 1.0| < 10^{-5}$ |
+| **Phase 3: Physics Reactor** | Energy conservation & numerical stability | Coincident nodes ($dx=0, dy=0$) causing division by zero | Add $\epsilon = 0.01$ softening factor in distance calculation: $\sqrt{dx^2 + dy^2 + \epsilon^2}$ |
+| **Phase 4: Ephemeral Extractor** | Symbol indexing completeness | Modules using Ultra-Nano aliases (`dfs`, `dfe`) | Pattern match covers both canonical and nano definitions |
 
 ---
 
-## 2. Architectural Consistency & Invariants
+## 2. Disjoint Ownership & Wave Execution Plan
 
-* **Single Source of Truth Invariant**:
-  - Code: exclusively **`.asl`** (AgentScript).
-  - Data / Schemas / Manifests: exclusively **`.asn`** (AgentScript Notation).
-  - JSON usage eliminated across all internal packages (`asl.json` $\rightarrow$ `manifest.asn`).
-* **Source vs Artifact Separation**:
-  - `build/`: transient execution, test runners, and ephemeral benchmarks (deleted on exit).
-  - `dist/`: compiled targets (Wasm, TSX, Python/Rust). Completely ignored in git.
-* **Effective Decision Mode Compliance**:
-  - Minimal diff, zero external dependencies, no complex macro wrappers.
+| Wave | Concurrency (Max 2) | Phases | Shared Files | Conflict Risk |
+|---|---|---|---|---|
+| **Wave 0** | 2 parallel streams | Phase 1 (`pack/`) + Phase 2 (`packages/asl-quantum/`) | **NONE** (disjoint) | Zero |
+| **Wave 1** | 2 parallel streams | Phase 3 (`packages/asl-vdom/`) + Phase 4 (`intel/`) | **NONE** (disjoint) | Zero |
 
 ---
 
-## 3. Anti-Overengineering (Critic Filter)
-
-* **YAGNI Pass**:
-  - No speculative schema generators.
-  - S-expression parser in `tools/project.py` is under 25 lines of direct regex/parsing logic without adding third-party YAML/JSON parsers.
-* **Diff Efficiency**:
-  - Single-letter directives (`:k`, `:t`) eliminate boilerplate while enforcing 1 BPE token density.
-
----
-
-## 4. Execution Readiness
-
-- **Phase 1 (`asn-metadata-migration`)**: Manifests created across all satellite repos, `tools/project.py` updated.
-- **Phase 2 (`ephemeral-runner-pipeline`)**: Implement ephemeral runner with auto-unlink in `pack/`.
-- **Phase 3 (`dist-git-isolation-hygiene`)**: Gitignore enforcement and `.pyc` removal.
-- **Phase 4 (`single-token-ffi-spec`)**: Implement `:k` and `:t` single-token directives in grammar & runtime.
+## 3. Anti-Overengineering Verdict
+All 4 phases adhere strictly to **Effective Decision Mode**:
+- Pure S-expression logic in `.asl`.
+- Zero new external runtime dependencies.
+- Intermediate outputs restricted to memory / `/tmp/` and strictly unlinked.
