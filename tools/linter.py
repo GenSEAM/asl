@@ -50,13 +50,78 @@ def calculate_quality_score(errors: int, warnings: int) -> int:
 
 
 class AslLinter:
-    def __init__(self, max_allowed_nesting: int = 5):
+    def __init__(
+        self,
+        max_allowed_nesting: int = 5,
+        max_file_lines: int = 600,
+        min_file_lines: int = 30,
+        enable_size_checks: bool = True,
+    ):
         self.max_allowed_nesting = max_allowed_nesting
+        self.max_file_lines = max_file_lines
+        self.min_file_lines = min_file_lines
+        self.enable_size_checks = enable_size_checks
 
     def lint_file(self, file_path: Path) -> QualityReport:
         content = file_path.read_text()
         tree = parse_file(file_path)
-        return self.lint_tree(tree, file_path.name, str(file_path))
+        report = self.lint_tree(tree, file_path.name, str(file_path))
+
+        # Best Practice File Sizing & Granularity Signals (Agent Ergonomics)
+        if self.enable_size_checks:
+            lines = content.splitlines()
+            line_count = len(lines)
+            str_path = str(file_path)
+            is_test_or_fixture = any(k in str_path for k in ("tests", "test", "examples", "fixtures", "corpus"))
+
+            # 1. file-too-large: warns when module exceeds agent single-pass context window
+            if line_count > self.max_file_lines:
+                sev = "warning" if line_count > (self.max_file_lines * 1.5) else "info"
+                report.smells.append(
+                    LintSmell(
+                        code="file-too-large",
+                        severity=sev,
+                        file=str_path,
+                        line=1,
+                        col=1,
+                        message=f"Module length ({line_count} lines) exceeds recommended agent context window ceiling ({self.max_file_lines} lines)",
+                        can_autofix=False,
+                    )
+                )
+                if sev == "warning":
+                    report.warning_count += 1
+                    report.score = calculate_quality_score(report.error_count, report.warning_count)
+
+            # 2. micro-fragmentation: signals overly granular micro-files that waste agent roundtrips
+            if not is_test_or_fixture and line_count < self.min_file_lines:
+                report.smells.append(
+                    LintSmell(
+                        code="micro-fragmentation",
+                        severity="info",
+                        file=str_path,
+                        line=1,
+                        col=1,
+                        message=f"Micro-module has only {line_count} lines (< {self.min_file_lines}); consider consolidating into a cohesive subsystem module",
+                        can_autofix=False,
+                    )
+                )
+
+            # 3. excessive-comments: suggests moving heavy prose blocks to Knowledge Plane (asl-mem)
+            notes_count = sum(1 for l in lines if l.strip().startswith('"') and l.strip().endswith('"'))
+            if line_count > 40 and (notes_count / line_count) > 0.35:
+                report.smells.append(
+                    LintSmell(
+                        code="excessive-comments",
+                        severity="info",
+                        file=str_path,
+                        line=1,
+                        col=1,
+                        message="Prose/note density exceeds 35% of code plane; prefer recording rationale in Knowledge Plane (asl-mem ADRs: @adr:, @rule:)",
+                        can_autofix=False,
+                    )
+                )
+
+        return report
 
     def lint_source(self, source: str, file_name: str = "<stdin>") -> QualityReport:
         tree = parse_text(source)
@@ -259,9 +324,19 @@ class AslLinter:
         return " ".join(self._tree_to_compact_str(c) for c in node.children if c is not None)
 
 
-def lint_paths(paths: List[Path], json_mode: bool = False) -> int:
+def lint_paths(
+    paths: List[Path],
+    json_mode: bool = False,
+    max_lines: int = 600,
+    min_lines: int = 30,
+    enable_size_checks: bool = True,
+) -> int:
     """CLI runner for ASL Linter."""
-    linter = AslLinter()
+    linter = AslLinter(
+        max_file_lines=max_lines,
+        min_file_lines=min_lines,
+        enable_size_checks=enable_size_checks,
+    )
     all_reports: List[QualityReport] = []
     total_smells = 0
     total_errors = 0
@@ -313,7 +388,7 @@ def lint_paths(paths: List[Path], json_mode: bool = False) -> int:
         status = "FAIL" if r.should_block else "PASS"
         print(f"\n[{status}] {rel} — Quality Score: {r.score}/100 (Errors: {r.error_count}, Warnings: {r.warning_count}, Nesting: {r.max_nesting})")
         for s in r.smells:
-            sev_badge = "[ERROR]" if s.severity == "error" else "[WARN]"
+            sev_badge = "[ERROR]" if s.severity == "error" else ("[WARN]" if s.severity == "warning" else "[INFO]")
             fix_badge = " [auto-fixable]" if s.can_autofix else ""
             print(f"  {sev_badge} {r.file}:{s.line}:{s.col} [{s.code}] {s.message}{fix_badge}")
 
@@ -331,5 +406,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AgentScript Structural Quality Linter")
     parser.add_argument("paths", nargs="+", type=Path, help="Paths or directories to lint")
     parser.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+    parser.add_argument("--no-size-checks", action="store_true", help="Disable file size and granularity checks")
+    parser.add_argument("--max-lines", type=int, default=600, help="Ceiling for file-too-large warning (default: 600)")
+    parser.add_argument("--min-lines", type=int, default=30, help="Floor for micro-fragmentation info (default: 30)")
     args = parser.parse_args()
-    sys.exit(lint_paths(args.paths, json_mode=args.json))
+    sys.exit(
+        lint_paths(
+            args.paths,
+            json_mode=args.json,
+            max_lines=args.max_lines,
+            min_lines=args.min_lines,
+            enable_size_checks=not args.no_size_checks,
+        )
+    )

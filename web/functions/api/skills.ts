@@ -31,7 +31,7 @@ export async function onRequestGet(context: any) {
       verified: true
     },
     {
-      id: "asl-search",
+      id: "asl-web-search",
       name: "SearXNG Web Search Engine",
       category: "Metasearch & Retrieval",
       description: "Zero-telemetry metasearch aggregator and proxy rotation pool for autonomous agents.",

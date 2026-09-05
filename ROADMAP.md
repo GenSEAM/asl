@@ -78,11 +78,12 @@ Everything below was checked by a command whose output was read, not inferred.
 | In-Memory Jailed Sandbox | **working** — `tools/sandbox_runner.py`, `asl run --jail`, strict memory caps, execution deadlines, telemetry |
 | Native Schema Codec | **working** — `packages/asl-codec`, algebraic JsonValue serializer, zero-dependency data interchange |
 | Process Guard & Stream Reducer | **working** — `packages/asl-sh`, streaming reducer (500h/1500t retention, middle-eviction) and TypeScript supervisor bridge |
-| Agent Core & Onion Middleware | **working** — `packages/asl-agent-core`, composable onion middleware pipeline and capability negotiator |
-| Shrody Micro-Agent | **working** — `packages/asl-shrody`, sandboxed capability agent (<100ms launch, zero-prompt permissions, intent triage) |
+| Agent Core & FSM State Machine | **working** — `packages/asl-agent-core`, composable onion middleware pipeline, capability negotiator, FSM engine, and tool calling |
+| EDDIE Swarm Orchestrator & Frontline Agent | **working** — `packages/asl-eddie`, 3-layer superposition swarm orchestrator, intent triage, and sandboxed ReAct frontline agent |
 | VDOM & Dual Perception | **working** — `packages/asl-vdom`, AXTree representation (`@eN` refs), D2Snap DOM downsampling, declarative TSX compiler |
 | Browser Agent Copilot & CDP | **working** — `packages/asl-browser-plugin` Manifest V3 extension with in-memory WASI, and `packages/asl-harness` async CDP client |
-| Native Constitutional Engine | **working** — `packages/asl-pcp`, in-language PCP shortcode, invariant, scanner & ASN ledger engine |
+| Knowledge Plane & Vector Recall | **working** — `packages/asl-mem`, hierarchical memory matrix, paged LRU vector store, and architectural ledger records (`@adr:`, `@rule:`, `@debt:`) |
+| Decentralized Web & Ecosystem Search | **working** — `packages/asl-web-search`, multi-engine SearXNG aggregator, proxy pool rotator, and cross-ecosystem package intelligence |
 | Polyglot DB Bridge & Router | **working** — `packages/asl-bridge`, abstract capability ports, universal multi-ORM emitter (Kysely, Drizzle, SQLAlchemy, SeaORM), 3-tier router |
 | Rational Token Ceiling Audit & Standard Enforcer | **working** (Phase 10) — `bench/token_audit.py` (`--check`), `tools/verbose_linter.py`, BPE tokenization audit (`cl100k_base`, `o200k_base`), strict <= 2 token ceiling on all primitives, standard format enforcement across all packages |
 | Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + latency/memory benchmarks; lexer scanner is iterative (fold over `string-chars`), all 105 `packages/**/*.asl` parse cleanly |
@@ -262,12 +263,12 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    tests, 8/8 native codegen tests, and 0 failures under `checker/gate.py --native`.
    Next milestone: migrating remaining validation scripts (`validate.py`, `doc_examples.py`, `closure_audit.py`)
    to the native toolchain to retire Lark and Python completely from the pipeline.
-8. **Native In-Language Constitutional Engine (`packages/asl-pcp`)** — **done & active**. A self-hosted implementation
-   of the Project Constitution Protocol (PCP) written natively in pure AgentScript:
-   - In-memory algebraic model of shortcodes, invariants, and decisions (`Shortcode`, `Rule`, `Ledger`).
-   - AST anchor scanner built on `packages/asl-parser` to extract `@xyz` 3-character anchors (`@d01`, `@s02`, `@h99`) and module/method references.
+8. **Native Architectural Knowledge Plane (`packages/asl-mem/src/records.asl`)** — **done & active**. A self-hosted
+   implementation of the Project Constitution Protocol (PCP) and architectural ledger written in pure AgentScript:
+   - In-memory algebraic model of shortcodes, invariants, decisions, rules, and technical debt (`Shortcode`, `AdrRule`, `RecordsLedger`).
+   - AST anchor scanner built on `packages/asl-parser` to extract `@pcp:<type>-<4-hex>`, `@adr:`, `@rule:`, and `@debt:` references.
    - Tabular ASN architecture ledgers (`constitution.asn`) replacing heavy YAML files (-70% token overhead).
-   - In-language runtime API (`pcp/verify-module`, `pcp/check-invariants`, `pcp/query`) allowing agents to enforce architectural constraints and verify invariants directly within running programs.
+   - In-language runtime API (`records/verify-module`, `records/check-invariants`, `records/query-rule`) allowing agents to enforce architectural constraints and verify invariants directly within running programs.
 9. **Polyglot Bridge, Universal Multi-ORM Transpilation & Execution Matrix (`packages/asl-bridge`)** — **done & active**.
    - **Zero-Pollution Capability Port Architecture**: Typed abstract database and host capability ports (`DbPort`, `DbDriver`, `ResultSet`) implemented in pure AgentScript. Enables ASL modules to orchestrate in-memory Wasm SQLite, host network sockets (Postgres, MySQL), or Agent-Bus IPC channels without breaking the mathematical closed-vocabulary guarantee.
    - **Universal Schema Bridge (`asl-schema-bridge`)**: Bidirectional transpilation between AgentScript data schemas (`dfs`, `TableDef`) and ecosystem ORMs / query builders:

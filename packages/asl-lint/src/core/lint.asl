@@ -14,7 +14,10 @@
   (:c dead-branch          [] "Pattern branch unreachable due to prior wildcard")
   (:c excessive-nesting    [] "Expression nesting exceeds maximum cognitive depth threshold")
   (:c unused-binding       [] "Local variable binding declared but never read")
-  (:c bare-result-discard  [] "Result type evaluated and discarded without inspecting error"))
+  (:c bare-result-discard  [] "Result type evaluated and discarded without inspecting error")
+  (:c file-too-large       [] "Module line count exceeds single-pass context window ceiling")
+  (:c micro-fragmentation  [] "Overly granular micro-file; consider consolidating into subsystem")
+  (:c excessive-comments   [] "Prose density too high; prefer Knowledge Plane records over code comments"))
 
 (dfs Smell
   (:f code SmellCode "Smell classification code")
@@ -69,4 +72,7 @@
     ((unused-binding)      true)
     ((excessive-nesting)   false)
     ((dead-branch)         false)
-    ((bare-result-discard) false)))
+    ((bare-result-discard) false)
+    ((file-too-large)      false)
+    ((micro-fragmentation) false)
+    ((excessive-comments)  false)))

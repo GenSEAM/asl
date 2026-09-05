@@ -153,13 +153,13 @@ export const PACKAGES: PackageSpec[] = [
     },
   },
   {
-    id: '@genseam/asl-shrody',
-    name: 'asl-shrody',
+    id: '@genseam/asl-eddie',
+    name: 'asl-eddie',
     stage: 'Stage 2: Harness',
     stageNum: 2,
     status: 'Active',
-    tagline: 'Sandboxed voice & ReAct agent core, <100ms launch, zero-prompt capability permissions',
-    description: 'High-velocity ReAct agent runtime engineered for instant voice and autonomous workflows. Launches in under 100ms with a strict <=24MB RSS ceiling, zero permission prompts for authorized workspace paths, and conversational barge-in latency under 5ms.',
+    tagline: 'Superposition swarm orchestrator, intent triage & ReAct frontline agent',
+    description: 'High-velocity ReAct agent runtime and swarm orchestrator engineered for instant voice and autonomous workflows. Launches in under 100ms with a strict <=24MB RSS ceiling, zero permission prompts for authorized workspace paths, and conversational barge-in latency under 5ms.',
     icon: Zap,
     metrics: [
       { label: 'Cold Start', value: '<100ms' },
@@ -174,18 +174,18 @@ export const PACKAGES: PackageSpec[] = [
       'Instant conversational barge-in cutoff (<5ms) for natural speech',
     ],
     interfaces: ['(execute-react-loop)', '(triage-intent)', '(workspace-jail)', '(barge-in-cutoff)'],
-    installCmd: 'asl pkg add @genseam/asl-shrody',
+    installCmd: 'asl pkg add @genseam/asl-eddie',
     codeSnippet: {
       lang: 'agentscript',
       filename: 'voice/assistant.asl',
       code: `(module voice/assistant
   :d "Low-latency voice assistant with instant barge-in cutoff."
-  :i [(asl-shrody/agent :a shrody)
-      (asl-shrody/policy :a policy)])
+  :i [(asl-eddie/agent :a eddie)
+      (asl-eddie/policy :a policy)])
 
 ;; Jailed ReAct loop with <100ms launch and zero permission prompts
-(shrody/execute-react-loop
-  :intent (shrody/triage-intent user-speech-frame)
+(eddie/execute-react-loop
+  :intent (eddie/triage-intent user-speech-frame)
   :policy (policy/workspace-jail "/workspace" :allow-read-only ["/tmp"])
   :barge-in-ms 5)`,
     },
@@ -331,6 +331,42 @@ const compactFrame = await DomExtractor.extractAslFrame(activeTabId);
 
 // Stream compact S-expression frame to agent mesh bus
 await runner.dispatchA2AFrame(compactFrame);`,
+    },
+  },
+  {
+    id: '@genseam/asl-web-search',
+    name: 'asl-web-search',
+    stage: 'Stage 2: Harness',
+    stageNum: 2,
+    status: 'Active',
+    tagline: 'Decentralized SearXNG metasearch aggregator & ecosystem intelligence',
+    description: 'Zero-telemetry metasearch aggregator, proxy pool rotator, and ecosystem dependency resolver. Queries GitHub, PyPI, crates.io, and npm without tracking or rate-limits, extracting deep RAG context in compact S-expression frames.',
+    icon: Search,
+    metrics: [
+      { label: 'Telemetry', value: 'Zero Tracking' },
+      { label: 'Proxy Rotation', value: 'Dynamic Pool' },
+      { label: 'Ecosystems', value: 'npm, pypi, crates, go' },
+      { label: 'Privacy', value: '100% Client-Side' },
+    ],
+    highlights: [
+      'Aggregates multi-engine web search with automatic proxy pool rotation',
+      'Resolves cross-ecosystem package dependencies, versions, and metadata',
+      'Extracts clean Markdown and compact RAG frames with 0 tracking',
+      'Pure ASL implementation compiling directly to Wasm and TypeScript',
+    ],
+    interfaces: ['(engine/search-web)', '(ecosystems/resolve-package)', '(ecosystems/format-rag)'],
+    installCmd: 'asl pkg add @genseam/asl-web-search',
+    codeSnippet: {
+      lang: 'agentscript',
+      filename: 'search/query.asl',
+      code: `(module search/query
+  :d "Decentralized ecosystem search and RAG extraction."
+  :i [(asl-web-search/engine :a eng)
+      (asl-web-search/ecosystems :a eco)])
+
+;; Query package intelligence across PyPI, crates.io, and npm
+(let [(pkg (eco/resolve-package "pypi" "fastapi"))]
+  (eco/format-rag pkg))`,
     },
   },
 ];

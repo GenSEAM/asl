@@ -1,7 +1,7 @@
 {
   "name": "@genseam/asl-mem",
-  "version": "0.1.0",
-  "description": "Zero-server in-memory vector database and semantic cosine similarity search in 64KB Wasm",
+  "version": "0.3.0",
+  "description": "Zero-server in-memory vector database, semantic knowledge graph, and ADR/Invariant Records ledger in ASL",
   "entry": "src/store.asl",
   "targets": {
     "wasm": {"output": "dist/mem.wasm"},

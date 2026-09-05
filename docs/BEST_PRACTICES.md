@@ -147,3 +147,40 @@ the boundary without making the language untotal.
 | **Underscores in symbols** | Violates kebab-case grammar | Use kebab-case: `user-service`, `parse-int` |
 | **Side effects in pure funs** | Breaks determinism | Add `!` marker: `(df ! sync-data ...)` |
 | **Catch-all wildcard matching** | Hides missing enum cases | Enumerate all cases explicitly in `mt` |
+
+---
+
+## 4. Module Sizing, Granularity & Linter Signals for AI Agents
+
+To maintain peak generation accuracy and prevent attention decay during autonomous agent workflows, ASL enforces architectural ergonomics directly through `asl lint`.
+
+### The Agentic Module Sweet Spot: 150 – 500 LOC
+* **Why not monolithic files (>600 LOC)?** Massive files consume excessive context window budget, increase completion latency, and drastically increase git diff conflict probability.
+* **Why not micro-fragmentation (<30 LOC)?** Excessive file splitting into 10-line snippets forces agents into endless back-and-forth tool call loops, depleting round-trips and fragmenting architectural reasoning.
+* **The Sweet Spot (150–500 LOC):** Group tightly-coupled data structures (`dfs`), enums (`dfe`), and their operations into a single cohesive domain module that fits inside a single LLM view/edit pass (1.5k–4k tokens).
+
+### Active Linter Signals (`asl lint`)
+The linter emits actionable quality signals to guide developers and agents:
+
+1. **`file-too-large`**: Warns when a module exceeds the single-pass context window threshold (>600 lines).
+2. **`micro-fragmentation`**: Flags micro-files (<30 lines) containing isolated single definitions that should be grouped with their parent subsystem.
+3. **`excessive-comments`**: Detects files where prose comment density exceeds 35% of the file, recommending moving architecture justifications to the **Knowledge Plane** (`asl-mem` ADRs: `@adr:d-xxxx` / `@rule:l-xxxx`).
+
+### Configuring or Suppressing Signals
+All sizing signals are enabled by default but are completely configurable or suppressible:
+* Via CLI:
+  ```bash
+  asl lint --no-size-checks
+  asl lint --max-lines 1000 --min-lines 15
+  ```
+* Via `asl.json` manifest:
+  <!-- not-agentscript: json configuration schema -->
+  ```json
+  {
+    "lint": {
+      "max_file_lines": 800,
+      "min_file_lines": 20,
+      "allow_micro_files": true
+    }
+  }
+  ```

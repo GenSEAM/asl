@@ -1,7 +1,7 @@
 {
   "name": "@genseam/asl-agent-core",
-  "version": "0.1.0",
-  "description": "AgentScript Unified Agent Core: composable onion middleware, capability negotiator, event bus, and execution pipeline",
+  "version": "0.3.0",
+  "description": "AgentScript Unified Agent Core: composable onion middleware, capability negotiator, FSM state machines, and tool calling",
   "entry": "src/core.asl",
   "targets": {
     "wasm": {"output": "dist/core.wasm"},

@@ -8,9 +8,13 @@ An S-expression language for autonomous AI agents: balanced delimiters, whitespa
 
 - `asl run <file.asl>` — Run program in sandboxed isolate (native/Wasm).
 - `asl fmt <file.asl>` — Deterministic AST canonical formatter.
-- `asl lint --fix <file.asl>` — Structural code smell detector and auto-repair.
+- `asl lint <file.asl>` — Structural quality & best-practice file sizing inspector.
 - `asl check <file.asl>` — Static type and semantic invariant checker.
-- `asl topo` — Module architectural dependency DAG and circularity check.
+- `asl graph --callers <sym>` — Code intelligence: callers and references across modules.
+- `asl graph --impact <sym>` — Code intelligence: transitive change impact radius.
+- `asl graph --node <sym>` — Code intelligence: symbol definition and location.
+- `asl registry <pkg>` — Universal package and dependency inspector across ecosystems.
+- `asl gate` — Pure native verification gate runner.
 - `asl mcp` — Model Context Protocol server for IDE agent pair programming.
 
 ## Core Invariants

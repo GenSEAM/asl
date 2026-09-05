@@ -1,7 +1,7 @@
 {
-  "name": "@genseam/eddie",
-  "version": "0.1.0",
-  "description": "Adaptive Swarm Orchestrator, Intent Classifier & Speculative Task Pool for AgentScript",
+  "name": "@genseam/asl-eddie",
+  "version": "0.3.0",
+  "description": "Autonomous ReAct Agent Core, Capability Sandboxing, Intent Triage & Swarm Orchestrator in ASL",
   "entry": "src/eddie.asl",
   "targets": {
     "ts": {

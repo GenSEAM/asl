@@ -9,9 +9,9 @@ ROOT = Path(__file__).resolve().parent.parent
 PACKAGES_DIR = ROOT / "packages"
 
 PACKAGES = [
-    ("asl-search", "search", "Decentralized SearXNG metasearch aggregator and proxy pool rotator for AI agents"),
+    ("asl-web-search", "search", "Decentralized SearXNG metasearch aggregator and proxy pool rotator for AI agents"),
     ("asl-mem", "mem", "Zero-server in-memory vector database and cosine similarity search in 64KB WebAssembly"),
-    ("asl-fsm", "fsm", "Algebraic Finite State Machine engine with mathematically verified exhaustive transitions"),
+    ("asl-agent-core", "agent-core", "Unified Agent Core: composable onion middleware, capability negotiator, FSM, and tool calling"),
     ("asl-vdom", "vdom", "Declarative S-Expression Virtual DOM renderer bridging React 19, Vue 3, and Svelte 5"),
     ("asl-harness", "harness", "Universal multi-modal agent harness with Code, Browser, Computer-Use, and Chat adapters"),
     ("asl-browser-plugin", "browser-plugin", "Cross-browser extension (Manifest V3) with in-memory WASI runner & DOM compressor"),

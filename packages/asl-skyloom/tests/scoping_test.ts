@@ -14,7 +14,7 @@ console.log('1. Testing path scope matching logic...');
 assert(isPathInScope('*', 'any/path/at/all'), 'Wildcard must match anything');
 assert(isPathInScope('packages/asl-rate/*', 'packages/asl-rate/src/limiter.asl'), 'Subpath must match');
 assert(isPathInScope('packages/asl-rate', 'packages/asl-rate/src/limiter.asl'), 'Root prefix must match');
-assert(!isPathInScope('packages/asl-rate/*', 'packages/asl-search/src/engine.asl'), 'Disjoint path must NOT match');
+assert(!isPathInScope('packages/asl-rate/*', 'packages/asl-web-search/src/engine.asl'), 'Disjoint path must NOT match');
 assert(!isPathInScope('web/*', 'services/api/routes.asl'), 'Cross-boundary path must NOT match');
 console.log('✓ Path matching assertions verified');
 

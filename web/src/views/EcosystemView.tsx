@@ -16,7 +16,7 @@ export const EcosystemView: React.FC = () => {
               The Unified Package Matrix & Multi-Runtime Engine
             </h1>
             <p className="mt-6 text-lead text-ink-2 max-w-prose">
-              Autonomous agents require more than a syntax parser. AgentScript provides a comprehensive, mathematically verified suite of 8 official packages spanning foundational ASN codecs, process isolation, onion middleware, high-speed A2A buses, and dual-perception VDOM.
+              Autonomous agents require more than a syntax parser. AgentScript provides a comprehensive, mathematically verified suite of 9 official packages spanning foundational ASN codecs, process isolation, onion middleware, high-speed A2A buses, and dual-perception VDOM.
             </p>
           </div>
 
@@ -75,9 +75,10 @@ export const EcosystemView: React.FC = () => {
                 </div>
                 <div className="pt-3 border-t border-line/60 space-y-1 font-mono text-micro">
                   <div className="text-purple-300 font-semibold">• @genseam/asl-agent-core</div>
-                  <div className="text-purple-300 font-semibold">• @genseam/asl-shrody</div>
+                  <div className="text-purple-300 font-semibold">• @genseam/asl-eddie</div>
                   <div className="text-purple-300 font-semibold">• @genseam/asl-agent-bus</div>
                   <div className="text-purple-300 font-semibold">• @genseam/asl-mem</div>
+                  <div className="text-purple-300 font-semibold">• @genseam/asl-web-search</div>
                 </div>
               </div>
 

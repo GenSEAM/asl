@@ -223,44 +223,44 @@ def harvest_benchmark_sources() -> Dict[str, Dict[str, Any]]:
         "verified": True,
     }
 
-    # 4. Shrody benchmark: packages/asl-shrody/benchmark/run.js
+    # 4. Shrody benchmark: packages/asl-eddie/benchmark/run.js
     claims["<100ms"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody cold start latency threshold",
         "verified": True,
     }
     claims["100ms"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody cold start latency ceiling",
         "verified": True,
     }
     claims["24MB"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody peak memory ceiling",
         "verified": True,
     }
     claims["<=24MB"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody RSS peak memory ceiling",
         "verified": True,
     }
     claims["-72.7%"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody tool calling token reduction",
         "verified": True,
     }
     claims["72.7%"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody tool calling token reduction",
         "verified": True,
     }
     claims["<5ms"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody conversational barge-in latency threshold",
         "verified": True,
     }
     claims["5ms"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Shrody conversational barge-in latency threshold",
         "verified": True,
     }
@@ -441,7 +441,7 @@ def harvest_benchmark_sources() -> Dict[str, Dict[str, Any]]:
         "verified": True,
     }
     claims["480ms"] = {
-        "source": "packages/asl-shrody/benchmark/run.js",
+        "source": "packages/asl-eddie/benchmark/run.js",
         "metric": "Legacy runtime cold start baseline",
         "verified": True,
     }

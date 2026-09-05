@@ -16,7 +16,7 @@
       "description": "SeamBus delegation reduction"
     },
     "shrody_benchmark": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "description": "Shrody agent launch, memory, and token compaction"
     },
     "token_audit": {
@@ -106,42 +106,42 @@
       "verified": true
     },
     "<100ms": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody cold start latency threshold",
       "verified": true
     },
     "100ms": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody cold start latency ceiling",
       "verified": true
     },
     "24MB": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody peak memory ceiling",
       "verified": true
     },
     "<=24MB": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody RSS peak memory ceiling",
       "verified": true
     },
     "-72.7%": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody tool calling token reduction",
       "verified": true
     },
     "72.7%": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody tool calling token reduction",
       "verified": true
     },
     "<5ms": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody conversational barge-in latency threshold",
       "verified": true
     },
     "5ms": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Shrody conversational barge-in latency threshold",
       "verified": true
     },
@@ -316,7 +316,7 @@
       "verified": true
     },
     "480ms": {
-      "source": "packages/asl-shrody/benchmark/run.js",
+      "source": "packages/asl-eddie/benchmark/run.js",
       "metric": "Legacy runtime cold start baseline",
       "verified": true
     },
