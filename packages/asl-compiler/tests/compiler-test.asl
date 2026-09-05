@@ -1,6 +1,6 @@
 (module asl-compiler/test
   :d "Unit tests for 100% self-hosted compiler pipeline"
-  :x [run-tests]
+  :x [test-compile-clean-function test-compile-clean-schema test-compile-embedded-target test-compile-parse-error test-compile-type-error run-tests]
   :i [(compiler :a comp)])
 
 (df test-compile-clean-function [] -> Bool
@@ -18,6 +18,13 @@
     (and (.-ok res)
          (string-contains? (.-code res) "pub struct Point"))))
 
+(df test-compile-embedded-target [] -> Bool
+  :d "Verifies compilation to embedded C target."
+  (let [(src "(df blink [] -> Unit ())")
+        (res (comp/compile-standalone-target src "c-embedded" "blink.asl"))]
+    (and (.-ok res)
+         (string-contains? (.-code res) "<stdint.h>"))))
+
 (df test-compile-parse-error [] -> Bool
   :d "Verifies rejection of syntactically malformed code."
   (let [(src "(df broken [)")
@@ -34,9 +41,8 @@
 
 (df run-tests [] -> Bool
   :d "Runs all compiler pipeline tests."
-  (fold (fn [(acc Bool) (p Bool)] -> Bool (and acc p))
-        true
-        (list (test-compile-clean-function)
-              (test-compile-clean-schema)
-              (test-compile-parse-error)
-              (test-compile-type-error))))
+  (and (test-compile-clean-function)
+       (and (test-compile-clean-schema)
+            (and (test-compile-embedded-target)
+                 (and (test-compile-parse-error)
+                      (test-compile-type-error))))))
