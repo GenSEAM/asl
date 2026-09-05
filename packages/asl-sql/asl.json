@@ -1,6 +1,6 @@
 {
   "name": "@genseam/asl-sql",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "description": "Native AgentScript Cross-Dialect SQL AST Query Builder & Parameterized Emission Engine",
   "entry": "src/core/sql.asl",
   "main": "src/core/sql.asl",

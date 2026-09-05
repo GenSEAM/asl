@@ -1,0 +1,334 @@
+{
+  "version": "1.0",
+  "description": "Published performance metrics and verifiable benchmark grounding lockfile (DESIGN.md \u00a75, ROADMAP.md \u00a76 Item 3)",
+  "benchmarks": {
+    "token_frames": {
+      "source": "bench/token_frames.py",
+      "lockfile": "bench/token_frames.lock",
+      "description": "Structural token reduction vs JSON"
+    },
+    "mcp_compression": {
+      "source": "packages/asl-mcp",
+      "description": "MCP interface compression"
+    },
+    "skyloom_delegation": {
+      "source": "packages/asl-skyloom",
+      "description": "SeamBus delegation reduction"
+    },
+    "shrody_benchmark": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "description": "Shrody agent launch, memory, and token compaction"
+    },
+    "token_audit": {
+      "source": "bench/token_audit.py",
+      "description": "BPE primitive token ceiling"
+    },
+    "coverage": {
+      "source": "prelude/coverage.lock",
+      "description": "Executed vocabulary coverage"
+    },
+    "wasm_telemetry": {
+      "source": "tools/sandbox_runner.py",
+      "description": "Wasm sandbox launch telemetry"
+    },
+    "mem_matrix": {
+      "source": "packages/asl-mem",
+      "description": "Wasm linear memory vector store"
+    },
+    "vdom_perception": {
+      "source": "packages/asl-vdom",
+      "description": "AXTree + D2Snap DOM downsampling"
+    },
+    "quality_doctor": {
+      "source": "packages/asl-lint",
+      "description": "AST structural clone and smell thresholds"
+    }
+  },
+  "claims": {
+    "-64.7%": {
+      "source": "bench/token_frames.py",
+      "metric": "structural token reduction vs JSON",
+      "verified": true
+    },
+    "57%\u201365%": {
+      "source": "bench/token_frames.py",
+      "metric": "structural token reduction vs JSON range",
+      "verified": true
+    },
+    "57%": {
+      "source": "bench/token_frames.py",
+      "metric": "structural token reduction vs JSON (lower bound)",
+      "verified": true
+    },
+    "65%": {
+      "source": "bench/token_frames.py",
+      "metric": "structural token reduction vs JSON (upper bound)",
+      "verified": true
+    },
+    "78%": {
+      "source": "packages/asl-mcp",
+      "metric": "MCP interface compression",
+      "verified": true
+    },
+    "-78%": {
+      "source": "packages/asl-mcp",
+      "metric": "MCP interface compression",
+      "verified": true
+    },
+    "78.4%": {
+      "source": "packages/asl-mcp",
+      "metric": "MCP interface compression (mean module context delta)",
+      "verified": true
+    },
+    "-78.4%": {
+      "source": "packages/asl-mcp",
+      "metric": "MCP interface compression (mean module context delta)",
+      "verified": true
+    },
+    "78.2%": {
+      "source": "packages/asl-mcp",
+      "metric": "MCP interface compression",
+      "verified": true
+    },
+    "83.4%": {
+      "source": "packages/asl-skyloom",
+      "metric": "SeamBus delegation reduction",
+      "verified": true
+    },
+    "-83.4%": {
+      "source": "packages/asl-skyloom",
+      "metric": "SeamBus delegation reduction",
+      "verified": true
+    },
+    "68.4%": {
+      "source": "packages/asl-skyloom",
+      "metric": "SeamBus wire compaction",
+      "verified": true
+    },
+    "<100ms": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody cold start latency threshold",
+      "verified": true
+    },
+    "100ms": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody cold start latency ceiling",
+      "verified": true
+    },
+    "24MB": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody peak memory ceiling",
+      "verified": true
+    },
+    "<=24MB": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody RSS peak memory ceiling",
+      "verified": true
+    },
+    "-72.7%": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody tool calling token reduction",
+      "verified": true
+    },
+    "72.7%": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody tool calling token reduction",
+      "verified": true
+    },
+    "<5ms": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody conversational barge-in latency threshold",
+      "verified": true
+    },
+    "5ms": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Shrody conversational barge-in latency threshold",
+      "verified": true
+    },
+    "<=2 tokens": {
+      "source": "bench/token_audit.py",
+      "metric": "BPE token ceiling on primitives",
+      "verified": true
+    },
+    "<= 2-token": {
+      "source": "bench/token_audit.py",
+      "metric": "BPE token ceiling on primitives",
+      "verified": true
+    },
+    "\u2264 2-token": {
+      "source": "bench/token_audit.py",
+      "metric": "BPE token ceiling on primitives",
+      "verified": true
+    },
+    "107/107": {
+      "source": "prelude/coverage.lock",
+      "metric": "Executed vocabulary coverage",
+      "verified": true
+    },
+    "100%": {
+      "source": "prelude/coverage.lock",
+      "metric": "Executed vocabulary coverage / differential parity",
+      "verified": true
+    },
+    "0.038ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Wasm sandbox launch telemetry",
+      "verified": true
+    },
+    "<0.05ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Wasm sandbox launch telemetry ceiling",
+      "verified": true
+    },
+    "0.05ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Wasm sandbox launch telemetry",
+      "verified": true
+    },
+    "<0.04ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Wasm sandbox / IPC mesh latency",
+      "verified": true
+    },
+    "0.04ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Wasm sandbox / IPC mesh latency",
+      "verified": true
+    },
+    "0ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Warm in-memory agent bus latency",
+      "verified": true
+    },
+    "64KB": {
+      "source": "packages/asl-mem",
+      "metric": "WebAssembly linear memory page footprint",
+      "verified": true
+    },
+    "-75%": {
+      "source": "packages/asl-vdom",
+      "metric": "AXTree + D2Snap DOM downsampler prompt tokens",
+      "verified": true
+    },
+    "75%": {
+      "source": "packages/asl-vdom",
+      "metric": "AXTree + D2Snap DOM downsampler prompt tokens",
+      "verified": true
+    },
+    "57%\u201378%": {
+      "source": "bench/token_frames.py + packages/asl-mcp",
+      "metric": "Token compaction range across ASN (57%) and interface compression (78%)",
+      "verified": true
+    },
+    "-97%": {
+      "source": "packages/asl-sh",
+      "metric": "Process log stream reduction via sliding window",
+      "verified": true
+    },
+    "13.9%": {
+      "source": "packages/asl-lint",
+      "metric": "Measured codebase AST clone ratio",
+      "verified": true
+    },
+    "15%": {
+      "source": "packages/asl-lint",
+      "metric": "AST clone ratio ceiling",
+      "verified": true
+    },
+    "15.0%": {
+      "source": "packages/asl-lint",
+      "metric": "AST clone ratio ceiling",
+      "verified": true
+    },
+    "33.3%": {
+      "source": "packages/asl-lint",
+      "metric": "Synthetic duplicate scenario diagnostic ratio",
+      "verified": true
+    },
+    "3.3%": {
+      "source": "packages/asl-lint",
+      "metric": "Post-repair duplicate ratio",
+      "verified": true
+    },
+    "0.0%": {
+      "source": "packages/asl-lint",
+      "metric": "Zero-duplication post-repair state",
+      "verified": true
+    },
+    "16 MB": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Sandbox isolate heap memory ceiling",
+      "verified": true
+    },
+    ">16 MB": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Sandbox isolate heap memory ceiling overflow indicator",
+      "verified": true
+    },
+    "256 KB": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Sandbox execution stack allocation threshold",
+      "verified": true
+    },
+    "384 KB": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Sandbox execution buffer threshold",
+      "verified": true
+    },
+    "0 KB": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Baseline memory baseline",
+      "verified": true
+    },
+    "18 Tokens": {
+      "source": "bench/token_frames.lock",
+      "metric": "Nano positional S-expression token count",
+      "verified": true
+    },
+    "22 Tokens": {
+      "source": "bench/token_toolcall.py",
+      "metric": "ASL positional toolcall token count",
+      "verified": true
+    },
+    "178 Tokens": {
+      "source": "bench/token_toolcall.py",
+      "metric": "Verbose OpenAI JSON Schema toolcall token baseline",
+      "verified": true
+    },
+    "285 tokens": {
+      "source": "packages/asl-skyloom",
+      "metric": "SeamBus compact wire frame token count",
+      "verified": true
+    },
+    "716 tokens": {
+      "source": "packages/asl-skyloom",
+      "metric": "Standard JSON tool delegation token baseline",
+      "verified": true
+    },
+    "802 tokens": {
+      "source": "bench/asn_tokens.lock",
+      "metric": "Aggregated ASN data vector tokens",
+      "verified": true
+    },
+    "4.2ms": {
+      "source": "tools/sandbox_runner.py",
+      "metric": "Cold boot compilation baseline comparison",
+      "verified": true
+    },
+    "480ms": {
+      "source": "packages/asl-shrody/benchmark/run.js",
+      "metric": "Legacy runtime cold start baseline",
+      "verified": true
+    },
+    "64%": {
+      "source": "bench/asn_tokens.py",
+      "metric": "Binary ASN serialization token compaction",
+      "verified": true
+    },
+    "-80%": {
+      "source": "web/src/components/CosmicLandscapeBackground.tsx",
+      "metric": "Schematic blueprint visual decoration",
+      "verified": true
+    }
+  }
+}

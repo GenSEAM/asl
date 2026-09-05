@@ -1,4 +1,4 @@
-# In-Browser Agent Runtime, Hot-Reload Sandbox & Companion Extension (ASL v1.0)
+# In-Browser Agent Runtime, Hot-Reload Sandbox & Companion Extension (ASL v0.3)
 
 > **Unverified figures.** Every performance number on this page is a projection or a
 > vendor claim, not a measurement this repository can reproduce. `DESIGN.md` §5 requires a

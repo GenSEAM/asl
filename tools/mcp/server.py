@@ -240,7 +240,7 @@ def process_message(msg: dict) -> dict | None:
             "result": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "asex-mcp", "version": "1.0.0"}
+                "serverInfo": {"name": "asex-mcp", "version": "0.3.0"}
             }
         }
     elif method == "notifications/initialized":

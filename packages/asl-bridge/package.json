@@ -1,0 +1,25 @@
+{
+  "name": "@genseam/asl-bridge",
+  "version": "0.1.0",
+  "description": "AgentScript Polyglot Bridge: capability ports, universal multi-ORM transpilation matrix, and workload routing",
+  "main": "src/ports.asl",
+  "module": "bridge/index.ts",
+  "types": "bridge/index.ts",
+  "exports": {
+    ".": "./bridge/index.ts"
+  },
+  "scripts": {
+    "test": "python3 ../../agentscript test tests/bridge_test.asl"
+  },
+  "keywords": [
+    "agentscript",
+    "bridge",
+    "polyglot",
+    "orm",
+    "ports",
+    "transpilation",
+    "router"
+  ],
+  "author": "GenSEAM Team",
+  "license": "MIT"
+}

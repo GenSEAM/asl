@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl-bridge",
+  "version": "0.1.0",
+  "description": "AgentScript Polyglot Bridge: capability ports, universal multi-ORM transpilation matrix, and workload routing",
+  "entry": "src/ports.asl",
+  "targets": {
+    "wasm": {"output": "dist/bridge.wasm"},
+    "ts": {"output": "dist/bridge.ts"},
+    "py": {"output": "dist/bridge.py"}
+  }
+}

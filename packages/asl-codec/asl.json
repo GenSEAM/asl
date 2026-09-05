@@ -1,15 +1,12 @@
 {
   "name": "@genseam/asl-codec",
-  "version": "1.0.0",
-  "description": "ASN (AgentScript Notation) reader and writer, plus a native algebraic JSON serializer",
-  "entry": "src/core/asn.asl",
-  "main": "src/core/asn.asl",
-  "modules": [
-    "src/core/asn.asl",
-    "src/core/asn-check.asl",
-    "src/core/codec.asl"
-  ],
+  "version": "0.3.0",
+  "description": "AgentScript Native Schema Codec & Structural Compact Serializer",
+  "entry": "src/core/codec.asl",
+  "targets": {
+    "asl": "src/core/codec.asl"
+  },
   "dependencies": {
-    "@genseam/asl-parser": "1.0.0"
+    "@genseam/asl-parser": "0.3.0"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@genseam/asl-skyloom",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "description": "SkyLoom: Resilient Inter-Agent Communication Protocol & Mesh for AgentScript",
   "entry": "src/core/skyloom.asl",
   "targets": {

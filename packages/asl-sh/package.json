@@ -1,6 +1,6 @@
 {
   "name": "@genseam/asl-sh",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "description": "Native AgentScript System & Process Automation Toolkit with Structured Shell Pipelines & Channel Redirection",
   "main": "src/sh.asl",
   "exports": {

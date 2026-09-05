@@ -109,7 +109,7 @@ class AslLspServer:
                 },
                 "serverInfo": {
                     "name": "agentscript-lsp",
-                    "version": "1.0.0"
+                    "version": "0.3.0"
                 }
             })
 

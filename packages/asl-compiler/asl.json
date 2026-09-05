@@ -1,12 +1,12 @@
 {
   "name": "@genseam/asl-compiler",
-  "version": "1.0.0",
-  "description": "Unified 100% Self-Hosted AgentScript Compiler Pipeline (Parser + Checker + Codegen)",
+  "version": "0.3.0",
+  "description": "Pure AgentScript 100% Self-Hosted Compiler Toolchain",
   "entry": "src/compiler.asl",
   "main": "src/compiler.asl",
   "dependencies": {
-    "@genseam/asl-parser": "^1.0.0",
-    "@genseam/asl-checker": "^1.0.0",
-    "@genseam/asl-codegen": "^1.0.0"
+    "@genseam/asl-parser": "^0.3.0",
+    "@genseam/asl-checker": "^0.3.0",
+    "@genseam/asl-codegen": "^0.3.0"
   }
 }

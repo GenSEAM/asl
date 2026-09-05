@@ -5,7 +5,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "0.3.0"
 VERSION_ENDPOINT = "https://aslang.dev/version.json"
 
 

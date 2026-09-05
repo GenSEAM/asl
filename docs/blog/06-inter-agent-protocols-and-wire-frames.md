@@ -21,7 +21,7 @@ Agents do not need to be polite to each other. They need typed, deterministic, l
 
 ---
 
-## 1. AgP: The AgentScript Wire Protocol (v1.0)
+## 1. AgP: The AgentScript Wire Protocol (v0.3)
 
 **AgP (Agentic Protocol)** replaces natural language chatter with typed, single-pass S-expression frames. It is designed to run transparently over standard transports:
 * **Model Context Protocol (MCP)** JSON-RPC 2.0 stdio & SSE

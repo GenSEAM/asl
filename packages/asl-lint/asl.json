@@ -1,6 +1,6 @@
 {
   "name": "@genseam/asl-lint",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "description": "AgentScript Native Quality, Smell, and Anti-Pattern Analysis Engine",
   "entry": "src/core/lint.asl",
   "targets": {

@@ -30,6 +30,7 @@ GATES=(
   "Web bundle and deploy pre-flight|$PYTHON tools/deploy_check.py"
   "Token ceiling audit|$PYTHON bench/token_audit.py --check"
   "Standard format enforcement|$PYTHON tools/verbose_linter.py packages"
+  "Site claims grounding|$PYTHON tools/site_claims_gate.py --check"
 )
 
 echo "=== [ASL Pre-Commit Gates] Running Verification Chain ==="

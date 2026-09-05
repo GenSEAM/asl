@@ -13,7 +13,7 @@ interface Milestone {
 const MILESTONES: Milestone[] = [
   {
     status: 'completed',
-    tag: 'v1.0-Core',
+    tag: 'v0.3-Core',
     title: 'Formal Grammar & Differential Backends',
     desc: 'Establish closed, deterministic S-expression language with 107 safe pure builtins and differential compilation targets.',
     items: [

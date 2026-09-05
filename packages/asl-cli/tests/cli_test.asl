@@ -5,7 +5,7 @@
 
 (df test-version [] -> Bool
   :d "Verifies format-version outputs canonical string."
-  (string-contains? (c/format-version) "asl 1.0.0"))
+  (string-contains? (c/format-version) "asl 0.3.0"))
 
 (df test-help [] -> Bool
   :d "Verifies format-help contains usage commands."
@@ -16,7 +16,7 @@
 (df ! test-dispatch-version [] -> Bool
   :d "Verifies dispatch-cmd handles version."
   (mt (c/dispatch-cmd "version" (list))
-    ((ok ver) (string-contains? ver "1.0.0"))
+    ((ok ver) (string-contains? ver "0.3.0"))
     ((err _) false)))
 
 (df ! test-dispatch-unknown [] -> Bool

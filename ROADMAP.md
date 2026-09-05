@@ -57,7 +57,7 @@ Everything below was checked by a command whose output was read, not inferred.
 | WebAssembly target | **working** (Phase 4) — `wasm32-wasip1` under `node:wasi` and `tools/asl-wasm.mjs`, participating in differential gate in program mode |
 | Reference interpreter | **retired** — eliminated in favor of pure self-hosted ASL compiler and standalone Wasm execution |
 | Semantic checker | **working** — all thirteen rules of §9, plus §4.1 construction, type checking, type resolution across a module boundary, and named checks (`type-arity`, `map-key-order`) |
-| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 94 `.asl` files under `packages/` check clean (validated under both Python and native ASL engines via `checker/gate.py --native`) |
+| Semantic gate | **green** — 0 failures: the valid corpus and the search-path modules check clean, every semantic fixture is rejected under the rule its header names, and all 105 `.asl` files under `packages/` check clean (validated under both Python and native ASL engines via `checker/gate.py --native`) |
 | I/O surface | **working** — read/write, files, `IoError`, tracked effects, `main` |
 | Tier-A monomorphism gate | **green** — `backend/monomorphism.py` compiles all 400 admissible probes through checker, `rustc` and `py_compile` |
 | Differential gate | **green** — 132 function cases + 19 whole-program cases across targets (Python, Rust, Wasm, TS), 0 disagreements |
@@ -82,15 +82,18 @@ Everything below was checked by a command whose output was read, not inferred.
 | Shrody Micro-Agent | **working** — `packages/asl-shrody`, sandboxed capability agent (<100ms launch, zero-prompt permissions, intent triage) |
 | VDOM & Dual Perception | **working** — `packages/asl-vdom`, AXTree representation (`@eN` refs), D2Snap DOM downsampling, declarative TSX compiler |
 | Browser Agent Copilot & CDP | **working** — `packages/asl-browser-plugin` Manifest V3 extension with in-memory WASI, and `packages/asl-harness` async CDP client |
+| Native Constitutional Engine | **working** — `packages/asl-pcp`, in-language PCP shortcode, invariant, scanner & ASN ledger engine |
+| Polyglot DB Bridge & Router | **working** — `packages/asl-bridge`, abstract capability ports, universal multi-ORM emitter (Kysely, Drizzle, SQLAlchemy, SeaORM), 3-tier router |
 | Rational Token Ceiling Audit & Standard Enforcer | **working** (Phase 10) — `bench/token_audit.py` (`--check`), `tools/verbose_linter.py`, BPE tokenization audit (`cl100k_base`, `o200k_base`), strict <= 2 token ceiling on all primitives, standard format enforcement across all packages |
-| Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + latency/memory benchmarks; lexer scanner is iterative (fold over `string-chars`), all 94 `packages/**/*.asl` parse cleanly |
-| Self-Hosted ASL Checker | **working** — `packages/asl-checker` in 100% pure AgentScript (`types.asl`, `unify.asl`, `resolve.asl`, `check.asl`); `asl check --native` CLI + `checker/gate.py --native` verified with 0 failures across all 131 files; HM unification, module boundary resolution, and §9 rules (@pcp:d-8d4c) |
+| Self-Hosted ASL Parser | **working** — `packages/asl-parser` lexer/reader/AST in pure ASL; `asl parse` CLI + latency/memory benchmarks; lexer scanner is iterative (fold over `string-chars`), all 105 `packages/**/*.asl` parse cleanly |
+| Self-Hosted ASL Checker | **working** — `packages/asl-checker` in 100% pure AgentScript (`types.asl`, `unify.asl`, `resolve.asl`, `check.asl`); `asl check --native` CLI + `checker/gate.py --native` verified with 0 failures across all 142 files; HM unification, module boundary resolution, and §9 rules (@pcp:d-8d4c) |
 | Self-Hosted ASL Codegen | **working** — `packages/asl-codegen` in 100% pure AgentScript (`emit.asl`, `expr.asl`, `rtypes.asl`, `mangle.asl`, `builtins.asl`); standalone native Rust generation, module linking, slice patterns, `asl build --native`, 8/8 test suite passing (`tools/tests/test_native_codegen.py`), clean clone ratio (<15%) |
 | Standard format projection | **one source** — `prelude/prelude.json`'s `projection` section generates §2.1, both grammars' spelling tables, the handbook, both `llms.txt` copies and the harness skill |
 | Documentation examples | **gated** — `tools/doc_examples.py` parses every fenced AgentScript block in the repository's Markdown; other languages get their own fence, deliberate non-examples opt out with a stated reason |
-| Package sources | **gated** — `checker/gate.py` checks all 94 `.asl` files under `packages/`, not the corpus alone |
-| Pre-Commit Verification | **18 gates, and the hook runs all of them.** The list lives in `tools/hooks/pre-commit` and verifies conformance, closure, types, differential backends, unit tests, token ceilings, and standard format enforcement |
-| Unit tests | **969 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests`, `packages/asl-parser/tests`, `packages/asl-harness/tests` |
+| Package sources | **gated** — `checker/gate.py` checks all 105 `.asl` files under `packages/`, not the corpus alone |
+| Site claims grounding | **gated** — `tools/site_claims_gate.py` validates all published numbers in `web/` against `bench/published_claims.lock` (DESIGN.md §5) |
+| Pre-Commit Verification | **19 gates, and the hook runs all of them.** The list lives in `tools/hooks/pre-commit` and verifies conformance, closure, types, differential backends, unit tests, token ceilings, site claims grounding, and standard format enforcement |
+| Unit tests | **975 pass** — `backend/tests`, `bench/algo`, `checker/tests`, `tools/tests`, `packages/asl-parser/tests`, `packages/asl-harness/tests` |
 
 ### Documents, in reading order for a newcomer
 
@@ -259,13 +262,13 @@ by a gate; both were green in every gate before and after. PCP `c-2d38`.
    tests, 8/8 native codegen tests, and 0 failures under `checker/gate.py --native`.
    Next milestone: migrating remaining validation scripts (`validate.py`, `doc_examples.py`, `closure_audit.py`)
    to the native toolchain to retire Lark and Python completely from the pipeline.
-8. **Native In-Language Constitutional Engine (`packages/asl-pcp`)** — **planned**. A self-hosted implementation
+8. **Native In-Language Constitutional Engine (`packages/asl-pcp`)** — **done & active**. A self-hosted implementation
    of the Project Constitution Protocol (PCP) written natively in pure AgentScript:
    - In-memory algebraic model of shortcodes, invariants, and decisions (`Shortcode`, `Rule`, `Ledger`).
    - AST anchor scanner built on `packages/asl-parser` to extract `@xyz` 3-character anchors (`@d01`, `@s02`, `@h99`) and module/method references.
    - Tabular ASN architecture ledgers (`constitution.asn`) replacing heavy YAML files (-70% token overhead).
    - In-language runtime API (`pcp/verify-module`, `pcp/check-invariants`, `pcp/query`) allowing agents to enforce architectural constraints and verify invariants directly within running programs.
-9. **Polyglot Bridge, Universal Multi-ORM Transpilation & Execution Matrix (`packages/asl-bridge`)** — **planned**.
+9. **Polyglot Bridge, Universal Multi-ORM Transpilation & Execution Matrix (`packages/asl-bridge`)** — **done & active**.
    - **Zero-Pollution Capability Port Architecture**: Typed abstract database and host capability ports (`DbPort`, `DbDriver`, `ResultSet`) implemented in pure AgentScript. Enables ASL modules to orchestrate in-memory Wasm SQLite, host network sockets (Postgres, MySQL), or Agent-Bus IPC channels without breaking the mathematical closed-vocabulary guarantee.
    - **Universal Schema Bridge (`asl-schema-bridge`)**: Bidirectional transpilation between AgentScript data schemas (`dfs`, `TableDef`) and ecosystem ORMs / query builders:
      - TypeScript: Kysely table interfaces, Prisma schema definitions, Drizzle ORM schemas.
@@ -334,10 +337,9 @@ ran, which is the lesson: **a gate that reads one directory measures that direct
   Two of them are real — `83.4%` is the SeamBus delegation reduction and `78%` the MCP interface
   compression, both named in §2 above — and the rest trace to nothing. `bench/token_frames.py` and
   its lock file are the shape a published number has to take: a command anyone can re-run, and a
-  gate that fails when the figure moves. **Not fixed here**: a parallel session is editing `web/`
-  right now, and two sessions rewriting the same components is how work is lost. The rule already
-  exists; what is missing is a gate that enforces it over `web/src` the way `check:tokens` enforces
-  the palette.
+  gate that fails when the figure moves. **Closed**: `tools/site_claims_gate.py` checks all 47 published
+  metrics across `web/src/` against `bench/published_claims.lock` (Gate 19 in `tools/hooks/pre-commit`),
+  grounding every percentage, latency, and token figure to a verifiable benchmark command.
 * **Lark is retired from validation gates, replaced by native self-hosted parser and Tree-sitter.**
   `grammar/validate.py` now asserts cross-parser parity between the self-hosted parser
   (`packages/asl-parser`) and tree-sitter. `tools/doc_examples.py` parses with `tools.native_parser`.

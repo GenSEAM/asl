@@ -1,16 +1,15 @@
 {
   "name": "@genseam/asl-cli",
-  "version": "1.0.0",
-  "description": "Pure AgentScript CLI Toolchain Dispatcher",
+  "version": "0.3.0",
+  "description": "Pure AgentScript Native CLI Toolchain",
   "entry": "src/cli.asl",
   "main": "src/cli.asl",
   "dependencies": {
-    "@genseam/asl-parser": "^1.0.0",
-    "@genseam/asl-checker": "^1.0.0",
-    "@genseam/asl-codegen": "^1.0.0",
-    "@genseam/asl-compiler": "^1.0.0",
-    "@genseam/asl-lint": "^1.0.0",
-    "@genseam/asl-codec": "^1.0.0"
+    "@genseam/asl-parser": "^0.3.0",
+    "@genseam/asl-checker": "^0.3.0",
+    "@genseam/asl-codegen": "^0.3.0",
+    "@genseam/asl-compiler": "^0.3.0",
+    "@genseam/asl-lint": "^0.3.0",
+    "@genseam/asl-codec": "^0.3.0"
   }
 }
-

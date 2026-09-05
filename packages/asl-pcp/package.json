@@ -1,0 +1,25 @@
+{
+  "name": "@genseam/asl-pcp",
+  "version": "0.1.0",
+  "description": "Project Constitution Protocol (PCP) native in-language engine: shortcode verification, AST scanning, tabular ASN ledger parsing, and invariant enforcement",
+  "main": "src/pcp.asl",
+  "module": "bridge/index.ts",
+  "types": "bridge/index.ts",
+  "exports": {
+    ".": "./bridge/index.ts"
+  },
+  "scripts": {
+    "test": "python3 ../../agentscript test tests/pcp_test.asl"
+  },
+  "keywords": [
+    "agentscript",
+    "pcp",
+    "constitution",
+    "protocol",
+    "shortcodes",
+    "invariants",
+    "ledger"
+  ],
+  "author": "GenSEAM Team",
+  "license": "MIT"
+}

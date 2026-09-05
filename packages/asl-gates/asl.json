@@ -1,12 +1,12 @@
 {
   "name": "@genseam/asl-gates",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "description": "Pure AgentScript Verification Gate Runners & Continuous Audit Engine",
   "entry": "src/gates.asl",
   "main": "src/gates.asl",
   "dependencies": {
-    "@genseam/asl-parser": "^1.0.0",
-    "@genseam/asl-checker": "^1.0.0",
-    "@genseam/asl-compiler": "^1.0.0"
+    "@genseam/asl-parser": "^0.3.0",
+    "@genseam/asl-checker": "^0.3.0",
+    "@genseam/asl-compiler": "^0.3.0"
   }
 }

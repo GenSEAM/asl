@@ -1,4 +1,4 @@
-# AgP — The AgentScript Wire Protocol (v1.0)
+# AgP — The AgentScript Wire Protocol (v0.3)
 
 **This document is the single normative specification for agent-to-agent communication in
 AgentScript.** It has two layers and nothing else describes them:

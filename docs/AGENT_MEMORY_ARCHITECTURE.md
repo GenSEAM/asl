@@ -1,4 +1,4 @@
-# ASL Hierarchical Memory & Observability Architecture (v1.0)
+# ASL Hierarchical Memory & Observability Architecture (v0.3)
 
 > **Unverified figures.** Every performance number on this page is a projection or a
 > vendor claim, not a measurement this repository can reproduce. `DESIGN.md` §5 requires a

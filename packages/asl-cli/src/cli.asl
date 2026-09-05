@@ -5,7 +5,7 @@
 
 (df format-version [] -> Str
   :d "Returns AgentScript native CLI version string."
-  "asl 1.0.0 (pure AgentScript self-hosted toolchain)")
+  "asl 0.3.0 (pure AgentScript self-hosted toolchain)")
 
 (df format-help [] -> Str
   :d "Returns AgentScript native CLI help usage manual."
