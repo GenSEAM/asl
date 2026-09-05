@@ -56,5 +56,36 @@
 - **Goal**: Eliminate "Nano" terminology everywhere. Standardize on ASL (compact default) and ASL Verbose (for debugging via `asl view`). Update README.md face-off to 1:1 JSON vs ASL positional zero-key form with a note on keyed form. No python code changes.
 - **Created**: 2026-09-04T10:35:00+03:00
 - **Tier**: Tier 0 (Fast-Track / Direct Implementation with verification gates)
-- **Status**: Starting Phase 1
+- **Status**: Completed on main (all occurrences eliminated, doc_examples and token audits passing).
+
+---
+
+## Iteration master-unified-ecosystem-v1
+
+- **Goal**: Full ecosystem plan reconciliation and master parallel DAG formulation.
+- **Created**: 2026-09-05T01:00:00+03:00
+- **Reconciliation Actions**:
+  1. *Purged Obsolete "Nano" terminology*: Ensured all upcoming plans use Standard ASL (compact default) and ASL Verbose (debugging only).
+  2. *Consolidated Shell & Process Supervision*: Merged `asl-sh-admin-toolkit-v1` and `asl-proc-guard` into unified phases (`sh-proc-guard-core` and `sh-proc-guard-bridge`).
+  3. *Eliminated Perception/Harness Redundancy*: Isolated `vdom-dual-perception` (`packages/asl-vdom`) as foundational DOM downsampler, cleanly separating it from `agent-browser-cdp` and `browser-agent-extension`.
+  4. *Scheduled Disjoint Parallel Waves*: Grouped 15 phases into 4 strictly non-overlapping waves (Wave 0 through Wave 3).
+- **Status**: Execution started on branch `feat-master-ecosystem-v1`.
+- **User Parameters**: Parallelism capped at 3 concurrent agents; Batch Ahead mode with gap verification; full roadmap scope.
+- **Wave 0 (Stage 1 Core Foundations) - COMPLETED & COMMITTED**:
+  - `core-token-aliases`: Committed as `941d0b6`. Verified by `prelude/generate.py --check`, `token_audit.py --check`, `token_ceiling.py --check` (258 forms <= 2 tokens, 0 warnings), and `closure_audit.py` (107/107 executed, 100%).
+  - `asn-codec-phase2`: Committed as `733337e`. Verified by `pytest packages/asl-codec` (231/231 tests passed), `validate_asn.py` (0 failures across 42 fixtures).
+  - `sh-proc-guard-core`: Committed as `284f756`. Verified by `checker/gate.py` (all 67 packages clean), unit tests in `reducer_test.asl`.
+- **Wave 1 - COMPLETED & COMMITTED**:
+  - `core-decoupled-meta`: Committed as `99168b7`. Completes Stage 1 CORE. Verified by `validate.py` (0 failures), `checker/gate.py`, `test_lsp.py` (4 passed), `exec_coverage.py` (100%), and `closure_audit.py` (107/107, 100%).
+  - `sh-proc-guard-bridge`: Committed as `340b811`. Verified by `test_host_supervisor.ts` (10/10 passed) and `test_query.ts` (13/13 passed).
+  - `agent-core-engine`: Committed as `9c986b9`. GAP-3 enforced (zero-dependency `asl.json`). Verified by `checker/gate.py` and `onion_test.asl`.
+- **Policy Transition**: User instructed to execute all remaining phases strictly one by one.
+- **Phase asn-codec-phase3 (Sequential #1) - COMPLETED & COMMITTED**:
+  - Committed as `b8d60a1`. Verified by `tools/asn_cli.py --help`, `bench/asn_tokens.py --check` (97 samples, 10 published percentages, 20 abbreviation rows), and `checker/gate.py`.
+- **Phase shrody-asl-port (Sequential #2)**: Dispatched to Implementer. Owns: `packages/asl-shrody/`. GAP-3 enforced (Item 1: zero-dependency `asl.json`).
+
+
+
+
+
 

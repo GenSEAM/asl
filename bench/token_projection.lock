@@ -1,12 +1,12 @@
 {
   "encoding": "cl100k_base",
-  "fixtures": 36,
-  "verbose_tokens": 14771,
-  "nano_tokens": 14771,
-  "verbose_bytes": 55696,
-  "nano_bytes": 53612,
+  "fixtures": 37,
+  "verbose_tokens": 15041,
+  "nano_tokens": 15041,
+  "verbose_bytes": 56613,
+  "nano_bytes": 54481,
   "token_saving_pct": 0.0,
-  "byte_saving_pct": 3.74,
+  "byte_saving_pct": 3.77,
   "rows": [
     {
       "fixture": "01-basics.agentscript",
@@ -259,6 +259,13 @@
       "nano_tokens": 475,
       "verbose_bytes": 1991,
       "nano_bytes": 1942
+    },
+    {
+      "fixture": "35-metadata-tags.agentscript",
+      "verbose_tokens": 270,
+      "nano_tokens": 270,
+      "verbose_bytes": 917,
+      "nano_bytes": 869
     }
   ]
 }
