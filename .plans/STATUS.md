@@ -10,10 +10,10 @@
   - `sh-proc-guard-bridge`: `done` (commit `340b811`)
   - `agent-core-engine`: `done` (commit `9c986b9`)
   - `asn-codec-phase3`: `done` (commit `b8d60a1`)
-  - `shrody-asl-port`: `done`
+  - `shrody-asl-port`: `done` (commit `c6b82e8`)
+  - `shrody-benchmark-e2e`: `done`
 - **Execution Mode**: Strict sequential single-phase progression (1 agent at a time per user directive).
 - **Sequential Queue**:
-  - `shrody-benchmark-e2e` (ready)
   - `core-selfhost-retire-lark` (ready)
   - **STAGE 3: VISUAL & ECOSYSTEM** (`vdom-dual-perception`, `ui-transpiler-mvp`, etc.)
 - **State**: SEQUENTIAL EXECUTION ACTIVE (1/1)
