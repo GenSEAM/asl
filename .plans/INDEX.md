@@ -1,6 +1,6 @@
-# @genseam/asl Iteration & Plans Index
+# Steps Iteration Index: @genseam/asl
 
-All completed historical iteration plans (Stages 1–3, 26 iterations) have been archived to the dedicated `archive/plans/asl/` repository directory.
-
-Active status: 100% COMPLETE & VERIFIED on `main`.
-All 19 pre-commit gates passing green.
+| Iteration ID | Created | Status | Current Phase | Description |
+|---|---|---|---|---|
+| `iter-smart-contracts-01` | 2026-09-05 | `active` | `asl-contract-spec-and-ast` | AgentScript Verifiable Smart Contracts: SMT-LIB2 formal proofs, Arbitrum Stylus Wasm ABI, and Agent Escrow |
+| `tri-frontier-expansion` | 2026-09-05 | `done` | `completed` | Tri-frontier expansion: web components, editorial syndication, self-hosted compiler |

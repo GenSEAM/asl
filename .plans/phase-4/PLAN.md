@@ -1,12 +1,25 @@
-# Phase 4: `asl-native-gate-runner` Plan
+# Phase 4 Plan: Verifiable Agent-to-Agent Escrow Contract Benchmark (`agent-escrow-benchmark`)
 
 ## Objective
-Enhance `packages/asl-cli/src/cli.asl` and `packages/asl-gates/src/gates.asl` to execute multi-file verification suites directly without falling back to python scripts.
+Build and benchmark a reference Agent Escrow Contract in pure AgentScript:
+- Use Case: Agent A deposits bounty (e.g. 0.05 ETH) for context digest task. Agent B submits hash receipt. Timeout refunds Agent A.
+- Demonstrate mathematical proof: Zero funds can be locked indefinitely or drained by unauthorized parties.
+- Benchmark: Compare gas/token efficiency vs Solidity equivalent on Arbitrum Stylus and EVM.
 
 ## Work Items
-1. Support batch glob and file lists in `asl-gates/src/gates.asl`.
-2. Connect `dispatch-cmd "gate"` in `asl-cli` directly to `asl-gates/gates/run-suite`.
-3. Add regression tests in `packages/asl-cli/tests/cli-test.asl`.
 
-## Acceptance Gate
-`node asl/bin/asl gate asl/packages/asl-cli/src/cli.asl asl/packages/asl-gates/src/gates.asl`
+### Item 1: Reference Escrow Contract (`examples/escrow.asl`)
+- **Target**: `asl/packages/asl-contracts/examples/escrow.asl`
+- **Details**:
+  - Escrow State: `(dfe EscrowState [created funded completed refunded])`.
+  - Pure transitions: `deposit`, `submit-proof`, `claim`, `timeout-refund`.
+- **Gate**: `asl check asl/packages/asl-contracts/examples/escrow.asl`
+
+### Item 2: End-to-End Escrow & Safety Proof Test Suite (`tests/escrow_test.asl`)
+- **Target**: `asl/packages/asl-contracts/tests/escrow_test.asl`
+- **Details**: Run full lifecycle (deposit -> proof -> claim), verify timeout logic, and verify that SMT safety theorem passes.
+- **Gate**: `PATH="$PWD/asl:$PATH" asl test asl/packages/asl-contracts/tests/escrow_test.asl`
+
+## Acceptance Criteria
+- Complete escrow lifecycle passes all invariants.
+- SMT proof confirms absence of fund drain vulnerability.
