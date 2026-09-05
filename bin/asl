@@ -1,0 +1,2 @@
+#!/usr/bin/env node
+import "../../pack/bridges/asl_runner.js";
