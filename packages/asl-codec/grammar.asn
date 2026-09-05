@@ -1,0 +1,80 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-codec
+(:grammar
+  :package @genseam/asl-codec
+  :version "0.1.0"
+  :tokens-baseline 2
+  :symbols [
+    ;; Core Types and Functions (<= 2 tokens)
+    (:sym :name "JsonValue" :kind :type :tokens 1)
+    (:sym :name "JsonEntry" :kind :type :tokens 1)
+    (:sym :name "make-kv" :kind :fn :tokens 2)
+    (:sym :name "render-json" :kind :fn :tokens 2)
+    (:sym :name "render-entry" :kind :fn :tokens 2)
+    (:sym :name "map-items" :kind :fn :tokens 2)
+    (:sym :name "map-entries" :kind :fn :tokens 2)
+    (:sym :name "AsnValue" :kind :type :tokens 1)
+    (:sym :name "AsnEntry" :kind :type :tokens 1)
+    (:sym :name "AsnField" :kind :type :tokens 1)
+    (:sym :name "asn-read" :kind :fn :tokens 2)
+    (:sym :name "asn-write" :kind :fn :tokens 2)
+    (:sym :name "value-ok?" :kind :fn :tokens 2)
+    (:sym :name "is-vec?" :kind :fn :tokens 2)
+    (:sym :name "is-kw?" :kind :fn :tokens 2)
+    (:sym :name "vec-items" :kind :fn :tokens 2)
+    (:sym :name "AsnDiag" :kind :type :tokens 1)
+    (:sym :name "asn-check" :kind :fn :tokens 2)
+    (:sym :name "diag-codes" :kind :fn :tokens 2)
+    (:sym :name "TranspileResult" :kind :type :tokens 1)
+    (:sym :name "canon" :kind :type :tokens 1)
+    (:sym :name "shape" :kind :type :tokens 1)
+    (:sym :name "kinds" :kind :type :tokens 1)
+    (:sym :name "verdict" :kind :type :tokens 1)
+    (:sym :name "idem" :kind :type :tokens 1)
+    (:sym :name "decoded-field" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+
+    ;; Symbols with > 2 tokens (with verified :rationale)
+    (:sym :name "render-json-array" :kind :fn :tokens 3
+          :rationale "Renders JSON array literal from list of values")
+    (:sym :name "render-json-object" :kind :fn :tokens 3
+          :rationale "Renders JSON object literal from list of key-value entries")
+    (:sym :name "asn-int-value" :kind :fn :tokens 3
+          :rationale "Extracts signed integer payload from ASN value")
+    (:sym :name "asn-float-value" :kind :fn :tokens 3
+          :rationale "Extracts floating point payload from ASN value")
+    (:sym :name "asn-string-value" :kind :fn :tokens 3
+          :rationale "Extracts UTF-8 string payload from ASN value")
+    (:sym :name "json-to-asn" :kind :fn :tokens 3
+          :rationale "Transpiles JSON objects and arrays into compact ASN S-expressions")
+    (:sym :name "asn-to-json" :kind :fn :tokens 3
+          :rationale "Transpiles compact ASN S-expressions into strict RFC 8259 JSON")
+    (:sym :name "yaml-to-asn" :kind :fn :tokens 3
+          :rationale "Transpiles YAML key-value hierarchies into compact ASN S-expressions")
+    (:sym :name "asn-to-yaml" :kind :fn :tokens 3
+          :rationale "Transpiles ASN S-expressions into structured YAML format")
+    (:sym :name "html-to-vdom-asn" :kind :fn :tokens 4
+          :rationale "Transpiles HTML element trees into compact Virtual DOM S-expressions")
+    (:sym :name "vdom-asn-to-html" :kind :fn :tokens 4
+          :rationale "Serializes Virtual DOM S-expressions back to valid HTML5 markup")
+    (:sym :name "measure-transpile-savings" :kind :fn :tokens 3
+          :rationale "Measures empirical token reduction percentage between formats")
+    (:sym :name "test-json-to-asn-object" :kind :fn :tokens 5
+          :rationale "Verifies JSON object conversion into compact ASN")
+    (:sym :name "test-json-to-asn-array" :kind :fn :tokens 5
+          :rationale "Verifies JSON array conversion into compact ASN")
+    (:sym :name "test-asn-to-json" :kind :fn :tokens 4
+          :rationale "Verifies round-trip ASN to JSON conversion")
+    (:sym :name "test-yaml-to-asn" :kind :fn :tokens 4
+          :rationale "Verifies YAML key-value hierarchy conversion")
+    (:sym :name "test-asn-to-yaml" :kind :fn :tokens 4
+          :rationale "Verifies ASN to YAML serialization")
+    (:sym :name "test-html-to-vdom-asn" :kind :fn :tokens 5
+          :rationale "Verifies HTML element conversion into VDOM S-expression")
+    (:sym :name "test-vdom-asn-to-html" :kind :fn :tokens 5
+          :rationale "Verifies VDOM S-expression serialization to HTML")
+    (:sym :name "test-measure-savings" :kind :fn :tokens 3
+          :rationale "Verifies token compaction measurement")
+    (:sym :name "test-empty-and-malformed" :kind :fn :tokens 4
+          :rationale "Verifies graceful error handling on empty or invalid inputs")
+  ])
