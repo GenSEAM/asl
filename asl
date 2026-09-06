@@ -203,6 +203,16 @@ case "$CMD" in
     [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
     exec "$NODE_BIN" "$MEM_DAEMON" coverage "$@"
     ;;
+  telemetry|metrics|bench)
+    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    exec "$NODE_BIN" "$MEM_DAEMON" telemetry "$@"
+    ;;
+  gen:slm|slm-preset|bundle-slm)
+    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    exec "$NODE_BIN" "$MEM_DAEMON" gen:slm "$@"
+    ;;
   gen:web|gen-web)
     WEB_DIR="$ROOT/web"
     if [ ! -d "$WEB_DIR" ]; then
@@ -429,6 +439,11 @@ case "$CMD" in
           echo "Usage: asl intel outline <file>"
           exit 1
         fi
+        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        if [ -f "$MEM_DAEMON" ]; then
+          exec "$NODE_BIN" "$MEM_DAEMON" outline "$TARGET"
+        fi
         EXT="${TARGET##*.}"
         if [ "$EXT" = "asl" ]; then
           awk '
@@ -457,6 +472,11 @@ case "$CMD" in
         if [ -z "$SYM" ]; then
           echo "Usage: asl intel search <symbol>"
           exit 1
+        fi
+        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        if [ -f "$MEM_DAEMON" ]; then
+          exec "$NODE_BIN" "$MEM_DAEMON" search "$SYM"
         fi
         (grep -rnE "\((df|dfs|dfe)[ \t]+$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null || true) | awk -F: -v s="$SYM" '{print "(:symbol :name \"" s "\" :path \"" $1 "\" :line " $2 " :kind \"asl\")"}'
         (grep -rnE "(function|class|interface|type|def|fn)[ \t]+$SYM\\b" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | awk -F: -v s="$SYM" '{print "(:symbol :name \"" s "\" :path \"" $1 "\" :line " $2 ")"}'
