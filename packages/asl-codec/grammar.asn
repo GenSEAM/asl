@@ -130,4 +130,31 @@
           :rationale "Unit test verifying serialization of computed style into dense ASN format")
     (:sym :name "run-css-tests" :kind :fn :tokens 3
           :rationale "Executes complete CSS cascade unit test suite")
+
+    ;; Phase 35 ASN Documentation Schema & Dual-Target Compiler Symbols
+    (:sym :name "DocSymbol" :kind :type :tokens 1)
+    (:sym :name "DocModule" :kind :type :tokens 1)
+    (:sym :name "create-doc-symbol" :kind :fn :tokens 3
+          :rationale "Constructs DocSymbol record with signature and description")
+    (:sym :name "create-doc-module" :kind :fn :tokens 3
+          :rationale "Constructs DocModule record with problems, solutions, and invariants")
+    (:sym :name "compile-doc-to-markdown" :kind :fn :tokens 4
+          :rationale "Compiles structured ASN DocModule into human-readable Markdown documentation")
+    (:sym :name "extract-agent-doc-stub" :kind :fn :tokens 4
+          :rationale "Extracts compact token-dense ASN stub for AI agents omitting prose")
+    (:sym :name "estimate-doc-token-savings" :kind :fn :tokens 4
+          :rationale "Calculates token compaction percentage between agent stub and full markdown")
+    (:sym :name "test-create-doc-module" :kind :fn :tokens 4
+          :rationale "Verifies initialization of DocModule with symbols and invariants")
+    (:sym :name "test-compile-doc-to-markdown" :kind :fn :tokens 4
+          :rationale "Verifies compilation of DocModule into structured Markdown sections")
+    (:sym :name "test-extract-agent-doc-stub" :kind :fn :tokens 4
+          :rationale "Verifies extraction of token-dense ASN stub for targeted agent lookup")
+    (:sym :name "test-extract-missing-symbol" :kind :fn :tokens 4
+          :rationale "Verifies querying non-existent symbol in DocModule returns none")
+    (:sym :name "test-estimate-doc-token-savings" :kind :fn :tokens 4
+          :rationale "Verifies that agent ASN stubs achieve substantial token reduction")
+    (:sym :name "run-doc-engine-tests" :kind :fn :tokens 3
+          :rationale "Runs complete unit test suite for documentation schema and compiler")
   ])
+
