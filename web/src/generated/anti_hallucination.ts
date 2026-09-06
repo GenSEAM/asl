@@ -106,7 +106,10 @@ export class AntiHallucinationHarness {
             continue;
           }
           if (c === '"') {
-            return { code: extracted, toolKind: 'html' };
+            const remainder = rest.slice(i + 1).trim();
+            if (remainder.length === 0 || remainder.startsWith(')')) {
+              return { code: extracted, toolKind: 'html' };
+            }
           }
           extracted += c;
         }
@@ -134,7 +137,15 @@ export class AntiHallucinationHarness {
       return { code: inner, toolKind: 'html' };
     }
 
-    // 6. Direct HTML or DOCTYPE
+    // 6. Multi-Block Markdown (e.g. ```html ... ``` followed by ```javascript ... ```)
+    const htmlBlock = text.match(/```(?:html)\n([\s\S]*?)```/i);
+    const jsBlock = text.match(/```(?:javascript|js)\n([\s\S]*?)```/i);
+    if (htmlBlock && jsBlock) {
+      const combined = `${htmlBlock[1].trim()}\n<script>\n${jsBlock[1].trim()}\n</script>`;
+      return { code: combined, toolKind: 'html' };
+    }
+
+    // 7. Direct HTML or DOCTYPE
     if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('<canvas') || text.includes('<div')) {
       return { code: text, toolKind: 'html' };
     }

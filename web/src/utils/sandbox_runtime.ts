@@ -137,6 +137,73 @@ export function prepareSandboxDocument(rawHtml: string): string {
 </script>
 `;
 
+export function cleanRawCode(rawHtml: string): string {
+  let text = rawHtml.trim();
+
+  // 1. If wrapped in ASL toolcall: (:call :tool "write" :path "index.html" :content "...")
+  if (text.includes(':content ') && (text.includes('(:call') || text.includes('(:c '))) {
+    const idx = text.indexOf(':content ');
+    let rest = text.slice(idx + 9).trim();
+    if (rest.startsWith('"')) {
+      const lastQuoteIdx = rest.lastIndexOf('"');
+      if (lastQuoteIdx > 0) {
+        rest = rest.slice(1, lastQuoteIdx);
+      } else {
+        rest = rest.slice(1);
+      }
+      text = rest.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
+    }
+  }
+
+  // 2. Strip all markdown code fences
+  text = text.replace(/```(?:html|javascript|js|css|json|asn|asl)?\n?/gi, '')
+             .replace(/\n?```/g, '')
+             .trim();
+
+  // 3. Detect loose JavaScript outside <script> tags
+  const hasScriptOpen = text.includes('<script>') || text.includes('<script ');
+  const hasHtmlTags = /<[a-zA-Z0-9_\-]+[^>]*>[\s\S]*<\/[a-zA-Z0-9_\-]+>/i.test(text);
+  const hasJsSignals = /(?:const|let|var|function|document\.|window\.|requestAnimationFrame)\s+/i.test(text);
+
+  if (hasHtmlTags && hasJsSignals && !hasScriptOpen) {
+    const matches = [...text.matchAll(/<\/(?:div|canvas|section|main|body|html|p|span|button|table|svg)>/gi)];
+    if (matches.length > 0) {
+      const lastTag = matches[matches.length - 1];
+      if (lastTag.index !== undefined) {
+        const cutIndex = lastTag.index + lastTag[0].length;
+        const htmlPart = text.slice(0, cutIndex).trim();
+        const jsPart = text.slice(cutIndex).trim();
+        if (jsPart.length > 0 && /(?:const|let|var|function|document\.|window\.|requestAnimationFrame)/i.test(jsPart)) {
+          text = `${htmlPart}\n<script>\n${jsPart}\n</script>`;
+        }
+      }
+    }
+  }
+
+  // 4. If JavaScript is placed after </html>, move it inside <body> or before </html>
+  if (text.includes('</html>')) {
+    const htmlEndIdx = text.indexOf('</html>');
+    const afterHtml = text.slice(htmlEndIdx + 7).trim();
+    if (afterHtml.length > 0 && /(?:const|let|var|function|document\.|window\.)/i.test(afterHtml)) {
+      const scriptWrapped = afterHtml.includes('<script') ? afterHtml : `<script>\n${afterHtml}\n</script>`;
+      text = text.slice(0, htmlEndIdx) + `\n${scriptWrapped}\n</html>`;
+    }
+  }
+
+  // 5. Ensure unclosed <script> tag is closed
+  const scriptOpenCount = (text.match(/<script\b[^>]*>/gi) || []).length;
+  const scriptCloseCount = (text.match(/<\/script>/gi) || []).length;
+  if (scriptOpenCount > scriptCloseCount) {
+    text += '\n</script>'.repeat(scriptOpenCount - scriptCloseCount);
+  }
+
+  return text;
+}
+
+export function prepareSandboxDocument(rawHtml: string): string {
+  const sanitized = cleanRawCode(rawHtml);
+  const trimmed = sanitized.trim();
+
   if (trimmed.includes('<html') || trimmed.includes('<!DOCTYPE')) {
     // Inject runtime into existing head
     if (trimmed.includes('<head>')) {
@@ -157,3 +224,4 @@ export function prepareSandboxDocument(rawHtml: string): string {
 </body>
 </html>`;
 }
+
