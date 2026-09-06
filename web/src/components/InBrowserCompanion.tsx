@@ -32,6 +32,7 @@ export interface PromptTemplate {
   id: string;
   title: string;
   shortTitle: string;
+  icon: string;
   studio: 'svg' | 'games' | 'website';
   prompt: string;
 }
@@ -41,35 +42,40 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'gem',
     title: '💎 Neon Crystal Gem',
-    shortTitle: '💎 Gem',
+    shortTitle: 'Gem',
+    icon: '💎',
     studio: 'svg',
     prompt: 'Draw a compact glowing neon crystal gemstone badge in ASN notation with geometric facets, gradient shine, and centered 320x320 canvas.'
   },
   {
     id: 'rocket',
     title: '🚀 Space Rocket Icon',
-    shortTitle: '🚀 Rocket',
+    shortTitle: 'Rocket',
+    icon: '🚀',
     studio: 'svg',
     prompt: 'Draw a compact stylized space rocket icon in ASN notation inside a dark circular 320x320 badge with fiery booster exhaust.'
   },
   {
     id: 'lightning',
     title: '⚡ Lightning Shield',
-    shortTitle: '⚡ Shield',
+    shortTitle: 'Shield',
+    icon: '⚡',
     studio: 'svg',
     prompt: 'Draw a sharp energetic golden lightning bolt emblem in ASN notation on a dark hexagonal badge with glowing cyan trim.'
   },
   {
     id: 'chameleon',
     title: '🦎 Stylized Chameleon',
-    shortTitle: '🦎 Chameleon',
+    shortTitle: 'Chameleon',
+    icon: '🦎',
     studio: 'svg',
     prompt: 'Draw a compact stylized chameleon profile in ASN notation coiled on a branch with vivid green and turquoise gradients.'
   },
   {
     id: 'hex-portal',
     title: '🔮 Cyberpunk Hex Portal',
-    shortTitle: '🔮 Portal',
+    shortTitle: 'Portal',
+    icon: '🔮',
     studio: 'svg',
     prompt: 'Draw a futuristic cyberpunk portal emblem in ASN notation with glowing purple and cyan concentric rings in a 320x320 viewport.'
   },
@@ -78,35 +84,40 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'tetris',
     title: '🕹️ Retro Arcade Tetris',
-    shortTitle: '🕹️ Tetris',
+    shortTitle: 'Tetris',
+    icon: '🕹️',
     studio: 'games',
     prompt: 'Write a retro arcade Tetris game in index.html with falling tetrominoes, canvas rendering, arrow controls, score counter, and game over state.'
   },
   {
     id: 'flappy',
     title: '🐤 Flappy Bird Playable',
-    shortTitle: '🐤 Flappy',
+    shortTitle: 'Flappy',
+    icon: '🐤',
     studio: 'games',
     prompt: 'Write a playable Flappy Bird game in index.html with canvas physics, spacebar flap, pipe obstacles, and live score.'
   },
   {
     id: 'snake',
     title: '🐍 Cyber Snake Arcade',
-    shortTitle: '🐍 Snake',
+    shortTitle: 'Snake',
+    icon: '🐍',
     studio: 'games',
     prompt: 'Write a playable cyberpunk Snake game in index.html with canvas rendering, arrow movement, neon food, and score.'
   },
   {
     id: 'pong',
     title: '🏓 Neon Arcade Pong',
-    shortTitle: '🏓 Pong',
+    shortTitle: 'Pong',
+    icon: '🏓',
     studio: 'games',
     prompt: 'Write a playable neon arcade Pong game in index.html with AI paddle, player paddle, ball deflection physics, and score.'
   },
   {
     id: 'particles',
     title: '🌌 Gravity Particle Sandbox',
-    shortTitle: '🌌 Physics',
+    shortTitle: 'Physics',
+    icon: '🌌',
     studio: 'games',
     prompt: 'Write an interactive particle physics sandbox in index.html with 200 colorful gravity particles following mouse cursor and bouncing off screen borders.'
   },
@@ -115,35 +126,40 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'hero-saas',
     title: '🌐 Modern SaaS Hero Section',
-    shortTitle: '🌐 Hero',
+    shortTitle: 'Hero',
+    icon: '🌐',
     studio: 'website',
     prompt: 'Write a responsive dark-mode SaaS landing hero section with glowing gradient headline, subtitle, primary/secondary CTA buttons, and interactive feature badges.'
   },
   {
     id: 'metric-card',
     title: '📊 Live Metric Dashboard Card',
-    shortTitle: '📊 Metrics',
+    shortTitle: 'Metrics',
+    icon: '📊',
     studio: 'website',
     prompt: 'Write a sleek dark telemetry card with live ticking request counter, latency gauge, uptime badge, and interactive refresh button.'
   },
   {
     id: 'pricing-grid',
     title: '💳 Interactive Pricing Grid',
-    shortTitle: '💳 Pricing',
+    shortTitle: 'Pricing',
+    icon: '💳',
     studio: 'website',
     prompt: 'Write an interactive 3-tier pricing table (Starter, Pro, Enterprise) with monthly/annual billing toggle and highlight on the recommended tier.'
   },
   {
     id: 'portfolio',
     title: '💼 Dark Developer Portfolio',
-    shortTitle: '💼 Portfolio',
+    shortTitle: 'Portfolio',
+    icon: '💼',
     studio: 'website',
     prompt: 'Write a personal developer portfolio section with avatar, skills tags (ASL, TypeScript, WebGPU), interactive project cards, and contact button.'
   },
   {
     id: 'calc',
     title: '🧮 Dark Scientific Calculator',
-    shortTitle: '🧮 Calc',
+    shortTitle: 'Calc',
+    icon: '🧮',
     studio: 'website',
     prompt: 'Write a sleek dark-mode scientific calculator in index.html with digital display, buttons, and clear arithmetic operations.'
   }
@@ -637,29 +653,32 @@ export const InBrowserCompanion: React.FC = () => {
 
           {/* Section 2: Unified Directive Prompt & Inline Presets */}
           <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
-            {/* Header: Label + Compact Presets in One Line */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            {/* Title */}
+            <div className="flex items-center justify-between">
               <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase flex items-center gap-1.5 shrink-0">
                 <Code2 className="w-3.5 h-3.5 text-signal" />
                 <span>Directive Prompt</span>
               </span>
+            </div>
 
-              {/* Compact Preset Chips in a Single Neat Row */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                <span className="text-[10px] font-mono text-ink-muted uppercase shrink-0 mr-0.5">Presets:</span>
+            {/* Presets in One Line Under Title (Icon Only) */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-mono text-ink-muted uppercase shrink-0 mr-1">Presets:</span>
+              <div className="flex items-center gap-1.5">
                 {filteredTemplates.map((tpl) => (
                   <button
                     key={tpl.id}
                     type="button"
                     onClick={() => handleSelectTemplate(tpl)}
                     title={tpl.title}
-                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+                    aria-label={tpl.title}
+                    className={`w-8 h-8 rounded-xl border flex items-center justify-center text-sm transition-all shrink-0 cursor-pointer ${
                       customPrompt === tpl.prompt
-                        ? 'bg-signal text-white border-signal font-bold shadow-sm'
-                        : 'bg-surface-2 border-line hover:border-line-hover text-ink-muted hover:text-ink'
+                        ? 'bg-signal/20 text-signal border-signal shadow-sm scale-105'
+                        : 'bg-surface-2 border-line hover:border-line-hover text-ink-muted hover:text-ink hover:scale-105'
                     }`}
                   >
-                    {tpl.shortTitle}
+                    <span>{tpl.icon}</span>
                   </button>
                 ))}
               </div>
