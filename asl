@@ -287,17 +287,30 @@ case "$CMD" in
     case "$SUBCMD" in
       outline)
         if [ -z "$TARGET" ] || [ ! -f "$TARGET" ]; then
-          echo "Usage: asl intel outline <file.asl>"
+          echo "Usage: asl intel outline <file>"
           exit 1
         fi
-        awk '
-        BEGIN { print "(:module-outline :file \"" ARGV[1] "\" :symbols ["; }
-        /^\(module[ \t]+/ { print "  (:module :name \"" $2 "\")" }
-        /^\(df[ \t]+/ { print "  (:fn :name \"" $2 "\" :line " NR ")" }
-        /^\(dfs[ \t]+/ { print "  (:struct :name \"" $2 "\" :line " NR ")" }
-        /^\(dfe[ \t]+/ { print "  (:enum :name \"" $2 "\" :line " NR ")" }
-        END { print "])"; }
-        ' "$TARGET"
+        EXT="${TARGET##*.}"
+        if [ "$EXT" = "asl" ]; then
+          awk '
+          BEGIN { print "(:module-outline :file \"" ARGV[1] "\" :symbols ["; }
+          /^\(module[ \t]+/ { print "  (:module :name \"" $2 "\")" }
+          /^\(df[ \t]+/ { print "  (:fn :name \"" $2 "\" :line " NR ")" }
+          /^\(dfs[ \t]+/ { print "  (:struct :name \"" $2 "\" :line " NR ")" }
+          /^\(dfe[ \t]+/ { print "  (:enum :name \"" $2 "\" :line " NR ")" }
+          END { print "])"; }
+          ' "$TARGET"
+        elif [ "$EXT" = "md" ]; then
+          exec "$ROOT/asl" doc outline "$TARGET"
+        else
+          awk '
+          BEGIN { print "(:file-outline :file \"" ARGV[1] "\" :symbols ["; }
+          /^[ \t]*(export[ \t]+)?(async[ \t]+)?function[ \t]+([a-zA-Z0-9_$]+)/ { print "  (:fn :line " NR " :name \"" $0 "\")" }
+          /^[ \t]*(export[ \t]+)?(class|interface|type)[ \t]+([a-zA-Z0-9_$]+)/ { print "  (:type :line " NR " :name \"" $0 "\")" }
+          /^[ \t]*(def|class)[ \t]+([a-zA-Z0-9_]+)/ { print "  (:def :line " NR " :name \"" $0 "\")" }
+          END { print "])"; }
+          ' "$TARGET"
+        fi
         exit 0
         ;;
       search)
@@ -306,18 +319,20 @@ case "$CMD" in
           echo "Usage: asl intel search <symbol>"
           exit 1
         fi
-        grep -rnE "\((df|dfs|dfe)[ \t]+$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: -v s="$SYM" '{print "(:symbol :name \"" s "\" :path \"" $1 "\" :line " $2 ")"}'
+        (grep -rnE "\((df|dfs|dfe)[ \t]+$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null || true) | awk -F: -v s="$SYM" '{print "(:symbol :name \"" s "\" :path \"" $1 "\" :line " $2 " :kind \"asl\")"}'
+        (grep -rnE "(function|class|interface|type|def|fn)[ \t]+$SYM\\b" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | awk -F: -v s="$SYM" '{print "(:symbol :name \"" s "\" :path \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
       callers)
         SYM="$TARGET"
-        grep -rnE "\([a-zA-Z0-9_-]+/$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: -v s="$SYM" '{print "(:caller :symbol \"" s "\" :file \"" $1 "\" :line " $2 ")"}'
+        (grep -rnE "\([a-zA-Z0-9_-]+/$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null || true) | awk -F: -v s="$SYM" '{print "(:caller :symbol \"" s "\" :file \"" $1 "\" :line " $2 ")"}'
+        (grep -rnE "\\b$SYM\\(" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | head -n 25 | awk -F: -v s="$SYM" '{print "(:caller :symbol \"" s "\" :file \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
       impact)
         SYM="$TARGET"
         echo "(:impact-analysis :target \"$SYM\" :scope \"workspace\")"
-        grep -rnE "$SYM" --include="*.asl" . 2>/dev/null | head -n 10 | awk -F: '{print "  (:affected :file \"" $1 "\" :line " $2 ")"}'
+        (grep -rnE "\\b$SYM\\b" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | head -n 15 | awk -F: '{print "  (:affected :file \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
       *)
