@@ -1,6 +1,6 @@
 (module asl-gates/gates
   :d "Pure AgentScript verification gate runners and continuous audit engine."
-  :x [verify-source-syntax verify-file-semantic run-suite main]
+  :x [verify-source-syntax verify-file-semantic verify-foreign-ext run-suite main]
   :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk)])
 
 (df verify-source-syntax [(src Str)] -> Bool
@@ -22,6 +22,18 @@
           (if (list-empty? diags)
               (ok ())
               (err (str path ": " (string-from-int64 (list-length diags)) " semantic error(s)")))))))))
+
+(df verify-foreign-ext [(ext Str)] -> Bool
+  :d "Returns true if file extension complies with pure ASL zero-foreign policy."
+  (not (or (= ext ".py")
+           (or (= ext ".js")
+               (or (= ext ".mjs")
+                   (or (= ext ".ts")
+                       (or (= ext ".tsx")
+                           (or (= ext ".rs")
+                               (or (= ext ".c")
+                                   (or (= ext ".cpp")
+                                       (= ext ".h")))))))))))
 
 (df ! run-suite [(paths (List Str))] -> (Result I64 Str)
   :d "Executes semantic verification gate across a collection of ASL source paths."

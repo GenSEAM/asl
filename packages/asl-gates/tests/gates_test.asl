@@ -1,6 +1,6 @@
 (module asl-gates/test
   :d "Unit tests for pure AgentScript verification gate runners."
-  :x [test-syntax-valid test-syntax-invalid run-tests]
+  :x [test-syntax-valid test-syntax-invalid test-foreign-ext run-tests]
   :i [(gates :a g)])
 
 (df test-syntax-valid [] -> Bool
@@ -11,9 +11,17 @@
   :d "Verifies invalid syntax is rejected by gate parser."
   (not (g/verify-source-syntax "(module broken (:export unclosed")))
 
+(df test-foreign-ext [] -> Bool
+  :d "Verifies foreign extension rejection policy."
+  (and (not (g/verify-foreign-ext ".py"))
+       (and (not (g/verify-foreign-ext ".ts"))
+            (and (not (g/verify-foreign-ext ".js"))
+                 (g/verify-foreign-ext ".asl")))))
+
 (df run-tests [] -> Bool
   :d "Runs all pure ASL gate tests."
   (fold (fn [(acc Bool) (p Bool)] -> Bool (and acc p))
         true
         (list (test-syntax-valid)
-              (test-syntax-invalid))))
+              (test-syntax-invalid)
+              (test-foreign-ext))))
