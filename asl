@@ -549,8 +549,26 @@ case "$CMD" in
     [ ! -f "$SKILLS_RUNNER" ] && SKILLS_RUNNER="$ROOT/tools/skills-installer.mjs"
     exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
     ;;
+  upgrade|update)
+    VERSION_URL="https://asl-lang.dev/version.asn"
+    echo "🔍 Checking for AgentScript updates from ${VERSION_URL}..."
+    REMOTE_ASN="$(curl -fsSL "${VERSION_URL}" 2>/dev/null || true)"
+    if [ -z "$REMOTE_ASN" ]; then
+      echo "✗ Could not check for updates (offline or network error)."
+      exit 1
+    fi
+    REMOTE_VER="$(echo "$REMOTE_ASN" | grep ':version' | head -1 | awk -F'"' '{print $2}')"
+    LOCAL_VER="0.1.0"
+    if [ "$REMOTE_VER" = "$LOCAL_VER" ]; then
+      echo "✓ AgentScript is already up to date (v${LOCAL_VER})."
+      exit 0
+    fi
+    echo "🚀 Upgrading AgentScript: v${LOCAL_VER} ➔ v${REMOTE_VER}..."
+    curl -fsSL https://asl-lang.dev/install.sh | bash
+    echo "✓ Successfully updated to v${REMOTE_VER}!"
+    exit 0
+    ;;
   version|-v|--version)
-
     echo "asl 0.1.0 (pure AgentScript self-hosted toolchain)"
     exit 0
     ;;
@@ -568,6 +586,7 @@ case "$CMD" in
     echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index)"
     echo "  mem <subcmd>    In-memory vector memory engine (index, query, search, ptr)"
     echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
+    echo "  upgrade         Update ASL CLI to latest published release"
     echo "  version         Display toolchain version"
     echo "  help            Display this usage guide"
     exit 0

@@ -1,0 +1,7 @@
+;; AgentScript Production Release Manifest
+(:release
+  :version "0.1.0"
+  :tag "v0.1.0"
+  :date "2026-09-08"
+  :channel :stable
+  :binary-base "https://github.com/GenSEAM/asl/releases/download/v0.1.0")
