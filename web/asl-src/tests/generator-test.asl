@@ -1,6 +1,6 @@
 (module asl-web/generator-test
   :d "Unit verification test suite for Web API and installer ASL models"
-  :x [test-packages-catalog test-plugins-catalog test-skills-catalog test-version-info test-installer-config run-tests]
+  :x [test-packages-catalog test-plugins-catalog test-skills-catalog test-version-info test-installer-config test-installer-script-generation run-tests]
   :i [(api/packages :a pkg)
       (api/plugins :a plg)
       (api/skills :a skl)
@@ -37,10 +37,20 @@
     (and (= (.-cli_name cfg) "asl")
          (string-contains? (.-repo_url cfg) "github.com"))))
 
+(df test-installer-script-generation [] -> Bool
+  :d "Validates pure ASL generation of POSIX Bash installer with automatic PATH setup"
+  (let [(script (inst/generate-install-script))]
+    (and (string-contains? script "#!/bin/bash")
+         (and (string-contains? script "export PATH=")
+              (and (string-contains? script ".local/bin/asl")
+                   (and (string-contains? script ".zshrc")
+                        (string-contains? script ".bashrc")))))))
+
 (df run-tests [] -> Bool
   :d "Runs all generator model unit tests"
   (and (test-packages-catalog)
        (and (test-plugins-catalog)
             (and (test-skills-catalog)
                  (and (test-version-info)
-                      (test-installer-config))))))
+                      (and (test-installer-config)
+                           (test-installer-script-generation)))))))
