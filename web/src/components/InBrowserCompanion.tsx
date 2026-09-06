@@ -370,16 +370,17 @@ export const InBrowserCompanion: React.FC = () => {
   :desc "Autonomous Vector Graphics Drawing in AgentScript ASN notation. Transpiles to crisp W3C SVG."
   :rules [
     (:rule :type "mandatory" :text "Output ONLY a single valid ASN vector expression: (:svg :w 320 :h 320 :v \\\"0 0 320 320\\\" ...)")
+    (:rule :type "contractions" :text "Use ONLY standard 1-token ASN contractions for maximum token compaction: :rc, :circ, :poly, :ln, :p, :pts (points), :f (fill), :s (stroke), :sw (stroke-width). Never use verbose words like :fill, :stroke, :stroke-width, or :points.")
     (:rule :type "canvas" :text "Always format on 320x320 canvas: :w 320 :h 320 :v \\\"0 0 320 320\\\" starting with dark badge background: (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f \\\"#090d16\\\").")
-    (:rule :type "colors" :text "Every element MUST have explicit visible color: specify fill :f (e.g. '#38bdf8', '#a855f7', '#34d399', '#fbbf24') or stroke :s (e.g. '#38bdf8'). Never leave elements without fill or stroke.")
-    (:rule :type "geometry" :text "Compose the requested subject centered around (160, 160) using: polygons (:poly :points \\\"x1,y1 x2,y2 x3,y3 ...\\\" :f \\\"...\\\" :s \\\"...\\\") for geometric facets and crystals; circles (:circ :cx ... :cy ... :r ... :f ... :s ...) for rings/cores; paths (:p :d \\\"M x1 y1 L x2 y2 ... Z\\\" :f ... :s ...) for contours; lines (:ln :x1 ... :y1 ... :x2 ... :y2 ... :s ... :sw ...) for accents.")
+    (:rule :type "colors" :text "Every element MUST have explicit visible color: specify fill :f (e.g. '#38bdf8', '#a855f7', '#34d399', '#fbbf24') or stroke :s (e.g. '#38bdf8'). Never omit :f or :s.")
+    (:rule :type "geometry" :text "Compose centered around (160, 160) using: polygons (:poly :pts \\\"x1,y1 x2,y2 x3,y3 ...\\\" :f \\\"...\\\" :s \\\"...\\\"); circles (:circ :cx ... :cy ... :r ... :f ... :s ...); paths (:p :d \\\"M x1 y1 L x2 y2 ... Z\\\" :f ... :s ...); lines (:ln :x1 ... :y1 ... :x2 ... :y2 ... :s ... :sw ...).")
     (:rule :type "layers" :text "Layer cleanly: 1. Base card (:rc), 2. Outer decorative aura/ring (:circ or :poly), 3. Central subject geometry with distinct colored facets.")
   ]
   :syntax
   (:svg :w 320 :h 320 :v "0 0 320 320"
     (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f "#090d16")
     (:circ :cx 160 :cy 160 :r 120 :f "rgba(15, 23, 42, 0.6)" :s "rgba(56, 189, 248, 0.3)" :sw 2)
-    (:poly :points "160,70 230,125 200,215 120,215 90,125" :f "#1e293b" :s "#38bdf8" :sw 2)
+    (:poly :pts "160,70 230,125 200,215 120,215 90,125" :f "#1e293b" :s "#38bdf8" :sw 2)
     (:circ :cx 160 :cy 155 :r 25 :f "#38bdf8" :s "#ffffff" :sw 2)))`;
       } else if (activeStudio === 'games') {
         systemPrompt = `(:skill :name "asl-arcade-game"
@@ -413,7 +414,10 @@ export const InBrowserCompanion: React.FC = () => {
         systemPrompt = "First, perform an in-depth step-by-step reasoning analysis inside <think>...</think> covering layout, coordinate bounds, state management, and edge cases. Then output the pure code/ASN.\n\n" + systemPrompt;
       }
 
-      if (multiPassEnabled) {
+      // For SVG vector drawing, direct ASN synthesis is significantly faster and eliminates hallucinations
+      const shouldUseMultiPass = multiPassEnabled && activeStudio !== 'svg';
+
+      if (shouldUseMultiPass) {
         await webLlmRunner.generateMultiPassStreaming(
           targetPrompt,
           activeStudio,
@@ -446,6 +450,7 @@ export const InBrowserCompanion: React.FC = () => {
           { enableThinking: reasoningEnabled && isReasoningSupported }
         );
       } else {
+        setAslPlan('');
         const temperature = activeStudio === 'svg' ? 0.65 : 0.45;
         await webLlmRunner.generateStreaming(
           targetPrompt,
@@ -690,6 +695,7 @@ export const InBrowserCompanion: React.FC = () => {
               <span className="text-ink-muted text-[11px] flex items-center gap-1.5 font-bold">
                 <Layers className="w-3.5 h-3.5 text-signal" />
                 <span>Dual-Pass Agent:</span>
+                {activeStudio === 'svg' && <span className="text-[10px] text-signal font-normal">(Direct in SVG)</span>}
               </span>
               <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-line">
                 <button
@@ -698,7 +704,7 @@ export const InBrowserCompanion: React.FC = () => {
                   disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
                   title="Single-pass direct generation"
                   className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
-                    !multiPassEnabled
+                    !multiPassEnabled || activeStudio === 'svg'
                       ? 'bg-inset text-ink border border-line/60 shadow-sm'
                       : 'text-ink-muted hover:text-ink'
                   }`}
@@ -708,12 +714,12 @@ export const InBrowserCompanion: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMultiPassEnabled(true)}
-                  disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
-                  title="Two-pass: Pass 1 (Architectural Plan @ T=0.7) -> Pass 2 (Deterministic Code @ T=0.15)"
+                  disabled={generationPhase === 'generating' || generationPhase === 'downloading' || activeStudio === 'svg'}
+                  title={activeStudio === 'svg' ? "SVG Studio synthesizes directly from high-density ASN" : "Two-pass: Pass 1 (Architectural Plan @ T=0.7) -> Pass 2 (Deterministic Code @ T=0.15)"}
                   className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
-                    multiPassEnabled
+                    multiPassEnabled && activeStudio !== 'svg'
                       ? 'bg-signal text-white shadow-sm'
-                      : 'text-ink-muted hover:text-ink'
+                      : 'text-ink-muted hover:text-ink disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed'
                   }`}
                 >
                   Dual (Plan ➔ Emit)
@@ -999,7 +1005,7 @@ export const InBrowserCompanion: React.FC = () => {
           )}
 
           {/* Collapsible ASL Architectural Blueprint Accordion (Pass 1) */}
-          {aslPlan.trim() && (
+          {aslPlan.trim() && activeStudio !== 'svg' && (
             <div className="rounded-2xl bg-surface border border-line p-3 text-xs font-mono shadow-sm">
               <button
                 type="button"

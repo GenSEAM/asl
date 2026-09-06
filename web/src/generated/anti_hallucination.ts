@@ -16,17 +16,18 @@ export interface FsmRepairReport {
 
 export class AntiHallucinationHarness {
   public extractThinking(raw: string): { thinking: string; code: string } {
-    const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+    const sanitized = raw.replace(/<\|[a-zA-Z0-9_\-]+\|>/g, '');
+    const thinkMatch = sanitized.match(/<think>([\s\S]*?)<\/think>/i);
     if (thinkMatch) {
       const thinking = thinkMatch[1].trim();
-      const code = raw.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+      const code = sanitized.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
       return { thinking, code };
     }
-    const unclosedMatch = raw.match(/<think>([\s\S]*)$/i);
+    const unclosedMatch = sanitized.match(/<think>([\s\S]*)$/i);
     if (unclosedMatch) {
       return { thinking: unclosedMatch[1].trim(), code: '' };
     }
-    return { thinking: '', code: raw };
+    return { thinking: '', code: sanitized };
   }
 
   public stripMarkdownFences(raw: string): string {

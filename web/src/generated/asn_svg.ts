@@ -155,28 +155,38 @@ export function renderNode(node: AsnNode): string {
       const rx = p.rx ?? p.r ?? 0;
       const ry = p.ry ?? p.r ?? rx;
       const rAttr = rx ? `rx="${rx}" ry="${ry}"` : '';
-      return `<rect x="${p.x ?? 0}" y="${p.y ?? 0}" width="${p.w ?? 100}" height="${p.h ?? 100}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${rAttr} ${opacity} />`;
+      const fill = p.f || p.fill || 'none';
+      const stroke = p.s || p.stroke || 'none';
+      const sw = p.sw || p['stroke-width'] || 1;
+      return `<rect x="${p.x ?? 0}" y="${p.y ?? 0}" width="${p.w ?? 100}" height="${p.h ?? 100}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${rAttr} ${opacity} />`;
     }
     case 'circ':
     case 'circle': {
-      return `<circle cx="${p.cx ?? 160}" cy="${p.cy ?? 160}" r="${p.r ?? 50}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${opacity} />`;
+      const fill = p.f || p.fill || 'none';
+      const stroke = p.s || p.stroke || 'none';
+      const sw = p.sw || p['stroke-width'] || 1;
+      return `<circle cx="${p.cx ?? 160}" cy="${p.cy ?? 160}" r="${p.r ?? 50}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${opacity} />`;
     }
     case 'ln':
     case 'line': {
-      return `<line x1="${p.x1 ?? 0}" y1="${p.y1 ?? 0}" x2="${p.x2 ?? 100}" y2="${p.y2 ?? 100}" stroke="${p.s || '#38bdf8'}" stroke-width="${p.sw || 2}" stroke-linecap="round" ${opacity} />`;
+      const stroke = p.s || p.stroke || '#38bdf8';
+      const sw = p.sw || p['stroke-width'] || 2;
+      return `<line x1="${p.x1 ?? 0}" y1="${p.y1 ?? 0}" x2="${p.x2 ?? 100}" y2="${p.y2 ?? 100}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" ${opacity} />`;
     }
     case 'p':
     case 'path': {
-      const fill = p.f || (p.s ? 'none' : 'none');
-      const stroke = p.s || (p.f ? 'none' : '#38bdf8');
-      return `<path d="${p.d || ''}" fill="${fill}" stroke="${stroke}" stroke-width="${p.sw || 2}" stroke-linecap="round" stroke-linejoin="round" ${opacity} />`;
+      const fill = p.f || p.fill || 'none';
+      const stroke = p.s || p.stroke || (fill !== 'none' ? 'none' : '#38bdf8');
+      const sw = p.sw || p['stroke-width'] || 2;
+      return `<path d="${p.d || ''}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" ${opacity} />`;
     }
     case 'poly':
     case 'polygon': {
-      const pts = p.points || p.pts || '';
-      const fill = p.f || (p.s ? 'none' : 'rgba(56, 189, 248, 0.2)');
-      const stroke = p.s || (p.f ? 'none' : '#38bdf8');
-      return `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${p.sw || 1}" ${opacity} />`;
+      const pts = p.pts || p.points || '';
+      const fill = p.f || p.fill || (p.s || p.stroke ? 'none' : 'rgba(56, 189, 248, 0.2)');
+      const stroke = p.s || p.stroke || (fill !== 'none' ? 'none' : '#38bdf8');
+      const sw = p.sw || p['stroke-width'] || 1;
+      return `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${opacity} />`;
     }
     case 'txt':
     case 'text': {

@@ -242,7 +242,14 @@ class WebLlmRunner {
       // -------------------------------------------------------------
       onStepChange('plan', 'Pass 1/2: Architectural Blueprint & Planning (T=0.7)...');
 
-      let planPrompt = `(:skill :name "asl-architect-planner"
+      let planPrompt = activeStudio === 'svg'
+        ? `(:skill :name "asl-vector-planner"
+  :desc "Compact ASN Vector Blueprint."
+  :rules [
+    (:rule :type "mandatory" :text "Output ONLY an ASN plan: (:plan :type \\"svg\\" :palette [...] :layers [:base :aura :subject])")
+    (:rule :type "contractions" :text "Dense 1-token ASN notation only: :rc :circ :poly :ln :pts :f :s :sw")
+  ])`
+        : `(:skill :name "asl-architect-planner"
   :desc "Compact Architectural Blueprint in ASL notation for browser code emission."
   :rules [
     (:rule :type "mandatory" :text "Output ONLY an ASL plan: (:plan :type \\"${activeStudio}\\" :state [...] :layout [...] :components [...] :palette [...])")
@@ -288,7 +295,9 @@ class WebLlmRunner {
       // -------------------------------------------------------------
       onStepChange('emit', 'Pass 2/2: Deterministic Code Synthesis (T=0.15)...');
 
-      const synthesisUserPrompt = `[ARCHITECTURAL BLUEPRINT]:\n${planRaw.trim()}\n\n[USER REQUEST]:\n${userPrompt}\n\nEmit the complete working code strictly following the blueprint.`;
+      const synthesisUserPrompt = activeStudio === 'svg'
+        ? `[COMPOSITION BLUEPRINT]:\n${planRaw.trim()}\n\n[USER REQUEST]:\n${userPrompt}\n\nEmit ONLY the valid ASN vector expression: (:svg :w 320 :h 320 :v "0 0 320 320" ...)`
+        : `[ARCHITECTURAL BLUEPRINT]:\n${planRaw.trim()}\n\n[USER REQUEST]:\n${userPrompt}\n\nEmit the complete working code strictly following the blueprint.`;
 
       const synthParams: any = {
         messages: [
