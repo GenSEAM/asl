@@ -69,14 +69,14 @@ CLAIMS_COUNT=$(grep -E ":claim" bench/published_claims.asn | wc -l | tr -d ' ')
 echo "    ✓ Grounded $CLAIMS_COUNT benchmark claims across published registry."
 
 # Gate 4: Zero-Foreign Code Policy Enforcement
-echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Python, 0 JavaScript in code packages)..."
-FOREIGN_FILES=$(find packages -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" \) | wc -l | tr -d ' ')
+echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Python, 0 JavaScript, 0 TypeScript, 0 Rust, 0 C in code packages)..."
+FOREIGN_FILES=$(find packages -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" \) | wc -l | tr -d ' ')
 if [ "$FOREIGN_FILES" -ne 0 ]; then
   echo "    ✗ Policy violation: found $FOREIGN_FILES foreign files in packages/:"
-  find packages -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" \)
+  find packages -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" \)
   exit 1
 fi
-echo "    ✓ Zero foreign files in packages (100% pure AgentScript)."
+echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C)."
 
 # Gate 5: ASL Gate Test Suite
 echo "--> [5/7] Executing pure ASL gate test suites..."
