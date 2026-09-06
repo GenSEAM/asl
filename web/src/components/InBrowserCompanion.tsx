@@ -3,6 +3,7 @@ import {
   Sparkles,
   Gamepad2,
   Palette,
+  Globe,
   RotateCcw,
   Maximize2,
   Minimize2,
@@ -16,78 +17,119 @@ import {
   HardDrive,
   Download,
   CheckCircle2,
-  Loader2
+  XCircle,
+  Copy,
+  Check,
+  Smartphone,
+  Tablet,
+  Monitor
 } from 'lucide-react';
 import { webLlmRunner, IN_BROWSER_MODELS, InBrowserModelSpec, WebLlmProgress } from '../utils/webllm_runner';
 import { prepareSandboxDocument } from '../utils/sandbox_runtime';
+import { runInBrowserGates, VerificationResult } from '../utils/browser_gate';
 
 export interface PromptTemplate {
   id: string;
   title: string;
-  category: 'games' | 'svg' | 'apps';
+  studio: 'svg' | 'games' | 'website';
   prompt: string;
 }
 
 export const PROMPT_TEMPLATES: PromptTemplate[] = [
-  {
-    id: 'tetris',
-    title: '🕹️ Retro Arcade Tetris',
-    category: 'games',
-    prompt: 'Write a retro arcade Tetris game in index.html with falling tetrominoes, canvas rendering, arrow controls, score counter, and game over state.'
-  },
-  {
-    id: 'flappy',
-    title: '🐤 Flappy Bird Playable',
-    category: 'games',
-    prompt: 'Write a playable Flappy Bird game in index.html with canvas physics, spacebar flap, pipe obstacles, and live score.'
-  },
-  {
-    id: 'snake',
-    title: '🐍 Cyber Snake Arcade',
-    category: 'games',
-    prompt: 'Write a playable cyberpunk Snake game in index.html with canvas rendering, arrow movement, neon food, and score.'
-  },
-  {
-    id: 'pong',
-    title: '🏓 Neon Arcade Pong',
-    category: 'games',
-    prompt: 'Write a playable neon arcade Pong game in index.html with AI paddle, player paddle, ball deflection physics, and score.'
-  },
+  // 1. SVG STUDIO (Vector Badges, Icons, Emblems)
   {
     id: 'gem',
     title: '💎 Neon Crystal Gem',
-    category: 'svg',
+    studio: 'svg',
     prompt: 'Draw a compact glowing neon crystal gemstone badge in ASN notation with geometric facets, gradient shine, and centered 320x320 canvas.'
   },
   {
     id: 'rocket',
     title: '🚀 Space Rocket Icon',
-    category: 'svg',
+    studio: 'svg',
     prompt: 'Draw a compact stylized space rocket icon in ASN notation inside a dark circular 320x320 badge with fiery booster exhaust.'
   },
   {
     id: 'lightning',
     title: '⚡ Lightning Shield',
-    category: 'svg',
+    studio: 'svg',
     prompt: 'Draw a sharp energetic golden lightning bolt emblem in ASN notation on a dark hexagonal badge with glowing cyan trim.'
   },
   {
     id: 'chameleon',
     title: '🦎 Stylized Chameleon',
-    category: 'svg',
+    studio: 'svg',
     prompt: 'Draw a compact stylized chameleon profile in ASN notation coiled on a branch with vivid green and turquoise gradients.'
   },
   {
-    id: 'calc',
-    title: '🧮 Dark Calculator',
-    category: 'apps',
-    prompt: 'Write a sleek dark-mode scientific calculator in index.html with digital display, buttons, and clear arithmetic operations.'
+    id: 'hex-portal',
+    title: '🔮 Cyberpunk Hex Portal',
+    studio: 'svg',
+    prompt: 'Draw a futuristic cyberpunk portal emblem in ASN notation with glowing purple and cyan concentric rings in a 320x320 viewport.'
+  },
+
+  // 2. TOYS & GAMES STUDIO (Playable Canvas Games & Physics)
+  {
+    id: 'tetris',
+    title: '🕹️ Retro Arcade Tetris',
+    studio: 'games',
+    prompt: 'Write a retro arcade Tetris game in index.html with falling tetrominoes, canvas rendering, arrow controls, score counter, and game over state.'
   },
   {
-    id: 'cat-boutique',
-    title: '🐱 Kitten Boutique',
-    category: 'apps',
-    prompt: 'Write an interactive kitten adoption boutique in index.html with kitten cards, adoption counter, and playful filters.'
+    id: 'flappy',
+    title: '🐤 Flappy Bird Playable',
+    studio: 'games',
+    prompt: 'Write a playable Flappy Bird game in index.html with canvas physics, spacebar flap, pipe obstacles, and live score.'
+  },
+  {
+    id: 'snake',
+    title: '🐍 Cyber Snake Arcade',
+    studio: 'games',
+    prompt: 'Write a playable cyberpunk Snake game in index.html with canvas rendering, arrow movement, neon food, and score.'
+  },
+  {
+    id: 'pong',
+    title: '🏓 Neon Arcade Pong',
+    studio: 'games',
+    prompt: 'Write a playable neon arcade Pong game in index.html with AI paddle, player paddle, ball deflection physics, and score.'
+  },
+  {
+    id: 'particles',
+    title: '🌌 Gravity Particle Sandbox',
+    studio: 'games',
+    prompt: 'Write an interactive particle physics sandbox in index.html with 200 colorful gravity particles following mouse cursor and bouncing off screen borders.'
+  },
+
+  // 3. WEBSITES & UI STUDIO (Responsive Site Sections & Components)
+  {
+    id: 'hero-saas',
+    title: '🌐 Modern SaaS Hero Section',
+    studio: 'website',
+    prompt: 'Write a responsive dark-mode SaaS landing hero section with glowing gradient headline, subtitle, primary/secondary CTA buttons, and interactive feature badges.'
+  },
+  {
+    id: 'metric-card',
+    title: '📊 Live Metric Dashboard Card',
+    studio: 'website',
+    prompt: 'Write a sleek dark telemetry card with live ticking request counter, latency gauge, uptime badge, and interactive refresh button.'
+  },
+  {
+    id: 'pricing-grid',
+    title: '💳 Interactive Pricing Grid',
+    studio: 'website',
+    prompt: 'Write an interactive 3-tier pricing table (Starter, Pro, Enterprise) with monthly/annual billing toggle and highlight on the recommended tier.'
+  },
+  {
+    id: 'portfolio',
+    title: '💼 Dark Developer Portfolio',
+    studio: 'website',
+    prompt: 'Write a personal developer portfolio section with avatar, skills tags (ASL, TypeScript, WebGPU), interactive project cards, and contact button.'
+  },
+  {
+    id: 'calc',
+    title: '🧮 Dark Scientific Calculator',
+    studio: 'website',
+    prompt: 'Write a sleek dark-mode scientific calculator in index.html with digital display, buttons, and clear arithmetic operations.'
   }
 ];
 
@@ -110,39 +152,37 @@ export const MODELS: ModelOption[] = [
     inBrowserSpec: IN_BROWSER_MODELS[0]
   },
   {
-    id: 'qwen-coder-0.5b-fp16',
-    name: 'Qwen 2.5 Coder 0.5B (Unquantized)',
-    badge: 'q0f16 (FP16) · 980MB',
-    speed: '~45 t/s',
-    desc: 'Quantization: q0f16 (Unquantized FP16). VRAM: 1.6GB. 100% raw mathematical weights without quantization error.',
-    inBrowserSpec: IN_BROWSER_MODELS[1]
-  },
-  {
     id: 'qwen-coder-1.5b-q4',
-    name: 'Qwen 2.5 Coder 1.5B',
+    name: 'Qwen 2.5 Coder 1.5B (Recommended)',
     badge: 'q4f16_1 · 850MB',
     speed: '~38 t/s',
     desc: 'Quantization: q4f16_1 (4-bit). VRAM: 1.6GB. Strong multi-step reasoning for structured UI and game loops.',
-    inBrowserSpec: IN_BROWSER_MODELS[2]
+    inBrowserSpec: IN_BROWSER_MODELS[1]
   },
   {
     id: 'qwen-coder-3b-q4',
-    name: 'Qwen 2.5 Coder 3B',
+    name: 'Qwen 2.5 Coder 3B (Pro)',
     badge: 'q4f16_1 · 1.7GB',
     speed: '~25 t/s',
     desc: 'Quantization: q4f16_1 (4-bit). VRAM: 2.5GB (~2GB memory footprint). Top-tier coding engine for complex state machines.',
-    inBrowserSpec: IN_BROWSER_MODELS[3]
+    inBrowserSpec: IN_BROWSER_MODELS[2]
   }
 ];
 
 export const InBrowserCompanion: React.FC = () => {
   const [selectedModelId, setSelectedModelId] = useState<string>('qwen-coder-0.5b-q4');
-  const [activeCategory, setActiveCategory] = useState<'games' | 'svg' | 'apps'>('games');
+  const [activeStudio, setActiveStudio] = useState<'svg' | 'games' | 'website'>('svg');
   const [customPrompt, setCustomPrompt] = useState<string>(PROMPT_TEMPLATES[0].prompt);
   const [refinementPrompt, setRefinementPrompt] = useState<string>('');
   const [reasoningLevel, setReasoningLevel] = useState<'off' | 'low' | 'high'>('off');
   const [liveReasoning, setLiveReasoning] = useState<string>('');
   const [isThinkingOpen, setIsThinkingOpen] = useState<boolean>(false);
+
+  // Viewport Switcher for Website Studio
+  const [viewportWidth, setViewportWidth] = useState<'100%' | '768px' | '375px'>('100%');
+
+  // Copy state
+  const [isCopied, setIsCopied] = useState<boolean>(false);
 
   // WebGPU Hardware Support State
   const [hasWebGpu, setHasWebGpu] = useState<boolean | null>(null);
@@ -155,11 +195,14 @@ export const InBrowserCompanion: React.FC = () => {
   // Generation & Engine States
   const [generationPhase, setGenerationPhase] = useState<'idle' | 'downloading' | 'generating' | 'completed' | 'error'>('idle');
   const [downloadProgress, setDownloadProgress] = useState<WebLlmProgress | null>(null);
-  const [renderedCode, setRenderedCode] = useState<string>(''); // Pure rendered sandbox output (no raw ASL/ASN)
+  const [renderedCode, setRenderedCode] = useState<string>('');
   const [streamedTokens, setStreamedTokens] = useState<number>(0);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [generationLatencyMs, setGenerationLatencyMs] = useState<number>(0);
   const [tokPerSec, setTokPerSec] = useState<number>(0);
+
+  // Live Verification Gate Result
+  const [gateResult, setGateResult] = useState<VerificationResult | null>(null);
 
   const [fullScreen, setFullScreen] = useState<boolean>(false);
   const [renderKey, setRenderKey] = useState<number>(0);
@@ -202,6 +245,16 @@ export const InBrowserCompanion: React.FC = () => {
       }
     };
   }, []);
+
+  // Run gate verification whenever renderedCode or activeStudio changes
+  useEffect(() => {
+    if (renderedCode.trim() && generationPhase === 'completed') {
+      const res = runInBrowserGates(renderedCode, activeStudio);
+      setGateResult(res);
+    } else {
+      setGateResult(null);
+    }
+  }, [renderedCode, activeStudio, generationPhase]);
 
   const handleSelectTemplate = (tpl: PromptTemplate) => {
     setCustomPrompt(tpl.prompt);
@@ -253,6 +306,7 @@ export const InBrowserCompanion: React.FC = () => {
     setRenderedCode('');
     setStreamedTokens(0);
     setGenerationError(null);
+    setGateResult(null);
 
     try {
       const isGpuReady = await webLlmRunner.isWebGpuAvailable();
@@ -269,66 +323,56 @@ export const InBrowserCompanion: React.FC = () => {
       setCachedModels(prev => ({ ...prev, [currentModel.id]: true }));
 
       setGenerationPhase('generating');
-      const isSvgTask = activeCategory === 'svg' || targetPrompt.toLowerCase().includes('svg') || targetPrompt.toLowerCase().includes('draw') || targetPrompt.toLowerCase().includes('vector');
-      const isGameTask = activeCategory === 'games' || targetPrompt.toLowerCase().includes('game') || targetPrompt.toLowerCase().includes('arcade') || targetPrompt.toLowerCase().includes('play');
 
-      // Tailored affirmative skill prompts with pre-injected runtime APIs
+      // Tailored affirmative skill prompts per studio
       let systemPrompt = '';
-      if (isSvgTask) {
+      if (activeStudio === 'svg') {
         systemPrompt = `(:skill :name "asl-svg"
   :desc "Autonomous Vector Graphics Drawing in AgentScript ASN notation. Transpiles to crisp W3C SVG."
   :rules [
-    (:rule :type "mandatory" :text "Output ONLY a single valid (:svg ...) root expression. No markdown fences, no explanation prose.")
-    (:rule :type "mandatory" :text "Always specify compact square dimensions :w 320 :h 320 :v \\"0 0 320 320\\" on root (:svg ...).")
-    (:rule :type "content" :text "Draw strictly the subject requested by the user prompt. Never draw a robot or face unless specifically asked.")
-    (:rule :type "primitives" :text "Use standard ASN shapes:
-      - Gradient defs: (:def (:grad :id \\"g1\\" :x1 \\"0%\\" :y1 \\"0%\\" :x2 \\"100%\\" :y2 \\"100%\\" (:stop :offset \\"0%\\" :col \\"#06b6d4\\") (:stop :offset \\"100%\\" :col \\"#3b82f6\\")))
-      - Dark Card Background: (:rc :x 10 :y 10 :w 300 :h 300 :f \\"#090d16\\" :rx 24 :s \\"rgba(255,255,255,0.08)\\" :sw 1)
-      - Centered Subject: Keep all coordinates centered around (160, 160) inside the 320x320 box using (:circ ...), (:rc ...), and paths (:p :d \\"...\\" :f \\"...\\" :s \\"...\\")
-      - Clean Highlights: (:circ :cx 160 :cy 160 :r 8 :f \\"#ffffff\\" :o 0.9)
-      - Label text: (:txt :x 160 :y 280 :text \\"EMBLEM\\" :f \\"#94a3b8\\" :sz 11 :weight \\"bold\\" :align \\"middle\\")")
-    (:rule :type "mandatory" :text "All parentheses must be strictly balanced.")
+    (:rule :type "mandatory" :text "Output ONLY a single valid ASN vector expression: (:svg :w 320 :h 320 :v \\\"0 0 320 320\\\" ...)")
+    (:rule :type "mandatory" :text "Format strictly inside 320x320 square canvas: :w 320 :h 320 :v \\\"0 0 320 320\\\"")
+    (:rule :type "primitives" :text "Use ASN shapes: (:rc :x ... :y ... :w ... :h ... :rx ... :f ... :s ... :sw ...) for rects; (:circ :cx ... :cy ... :r ... :f ... :s ...) for circles; (:p :d \\\"...\\\" :f ... :s ...) for path outlines; (:g ... children) for groups.")
+    (:rule :type "palette" :text "Use glowing cyberpunk / cosmic gradients: deep dark background, neon cyan (#38bdf8), violet (#818cf8), emerald (#34d399), gold (#fbbf24).")
   ]
   :example
   (:svg :w 320 :h 320 :v "0 0 320 320"
-    (:def
-      (:grad :id "neonGlow" :x1 "0%" :y1 "0%" :x2 "100%" :y2 "100%"
-        (:stop :offset "0%" :col "#06b6d4")
-        (:stop :offset "100%" :col "#3b82f6")))
-    (:rc :x 10 :y 10 :w 300 :h 300 :f "#090d16" :rx 24 :s "rgba(255,255,255,0.08)" :sw 1)
-    (:circ :cx 160 :cy 160 :r 85 :f "none" :s "url(#neonGlow)" :sw 3)
-    (:p :d "M 160 95 L 215 160 L 160 225 L 105 160 Z" :f "url(#neonGlow)" :o 0.85)
-    (:circ :cx 160 :cy 160 :r 12 :f "#ffffff")
-    (:txt :x 160 :y 280 :text "CRYSTAL" :f "#94a3b8" :sz 11 :weight "bold" :align "middle")))`;
-      } else if (isGameTask) {
+    (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f "#090d16")
+    (:circ :cx 160 :cy 160 :r 110 :f "none" :s "#38bdf8" :sw 3)
+    (:circ :cx 160 :cy 160 :r 85 :f "#1e293b" :s "#818cf8" :sw 2)
+    (:p :d "M 160 85 L 210 135 L 180 235 L 140 235 L 110 135 Z" :f "#38bdf8" :s "#ffffff" :sw 2)
+    (:p :d "M 160 85 L 180 140 L 160 235 L 140 140 Z" :f "#0284c7")
+    (:circ :cx 160 :cy 160 :r 15 :f "#ffffff" :s "#38bdf8" :sw 2)))`;
+      } else if (activeStudio === 'games') {
         systemPrompt = `(:skill :name "asl-arcade-game"
-  :desc "Autonomous Retro Arcade Canvas Game Engine synthesis in isolated browser sandbox."
+  :desc "Autonomous Playable Canvas 2D Game in a self-contained HTML document."
   :rules [
-    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \\"write\\" :path \\"index.html\\" :content \\"<!DOCTYPE html>...\\")")
-    (:rule :type "mandatory" :text "Single self-contained file with HTML, CSS, and JS.")
-    (:rule :type "apis" :text "The sandbox pre-injects window.Sound for retro sound effects: Sound.jump(), Sound.coin(), Sound.laser(), Sound.hit(), Sound.boom(), Sound.powerup(), Sound.gameover(). Trigger them!")
-    (:rule :type "apis" :text "Tailwind CSS is pre-loaded. Keyboard arrow keys & spacebar scrolling are already prevented.")
-    (:rule :type "structure" :text "Include: 1) Top Glass HUD with Title and Score counter, 2) Centered 600x400 <canvas id='game'> with sleek border, 3) Complete requestAnimationFrame loop with player movement, score increase, collision, game over, and restart on click or space.")
+    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \\\"write\\\" :path \\\"index.html\\\" :content \\\"<!DOCTYPE html>...\\\")")
+    (:rule :type "mandatory" :text "Single self-contained file with HTML, inline CSS, and complete interactive JS game loop.")
+    (:rule :type "canvas" :text "Use <canvas id='game' width='600' height='400'></canvas> with requestAnimationFrame(loop).")
+    (:rule :type "controls" :text "Support Arrow keys / WASD / Spacebar controls with clean event listeners.")
+    (:rule :type "features" :text "Include live score counter, collision detection, game over restart state, and window.Sound effects.")
   ]
   :example
   (:call :tool "write" :path "index.html" :content "<div class='flex flex-col items-center gap-3'><div class='flex justify-between w-[600px] px-4 py-2 rounded-xl bg-slate-900/80 border border-slate-700/50'><span class='font-mono font-bold text-sky-400'>ARCADE</span><span id='score' class='font-mono font-bold text-white'>SCORE: 0</span></div><canvas id='game' width='600' height='400' class='rounded-xl border border-sky-500/30 bg-slate-950 shadow-2xl'></canvas><div class='text-xs font-mono text-slate-400'>[← →] Move · [Space] Action</div></div><script>const c=document.getElementById('game'),ctx=c.getContext('2d'),sc=document.getElementById('score');let p={x:280,y:340,w:40,h:20,vx:0},score=0,over=false;window.addEventListener('keydown',e=>{if(e.code==='ArrowLeft')p.vx=-5;if(e.code==='ArrowRight')p.vx=5;if(e.code==='Space'&&over){score=0;over=false;Sound.powerup();}});window.addEventListener('keyup',e=>{if(e.code==='ArrowLeft'||e.code==='ArrowRight')p.vx=0;});function loop(){p.x=Math.max(0,Math.min(560,p.x+p.vx));ctx.fillStyle='#090d16';ctx.fillRect(0,0,600,400);ctx.fillStyle='#38bdf8';ctx.fillRect(p.x,p.y,p.w,p.h);if(!over){score++;sc.innerText='SCORE: '+score;}requestAnimationFrame(loop);}loop();</script>"))`;
       } else {
-        systemPrompt = `(:skill :name "asl-sandbox-app"
-  :desc "Autonomous Interactive Dark-Mode Single-Page Web Application."
+        // Websites & UI Studio
+        systemPrompt = `(:skill :name "asl-website-ui"
+  :desc "Autonomous Modern Responsive Website Section & Web UI Component."
   :rules [
-    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \\"write\\" :path \\"index.html\\" :content \\"<!DOCTYPE html>...\\")")
-    (:rule :type "mandatory" :text "Single self-contained file with HTML, CSS, and interactive JS.")
-    (:rule :type "apis" :text "Tailwind CSS is pre-loaded. Use modern sleek styling: bg-slate-900 cards, border border-slate-800, text-sky-400 accents, smooth transitions.")
-    (:rule :type "apis" :text "window.Sound is available: Sound.coin(), Sound.powerup(), Sound.hit().")
-    (:rule :type "structure" :text "Include: 1) Title header with status badge, 2) Clean input controls, interactive cards, or dynamic counters, 3) Complete working event listeners and state management.")
+    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \\\"write\\\" :path \\\"index.html\\\" :content \\\"<!DOCTYPE html>...\\\")")
+    (:rule :type "mandatory" :text "Single self-contained file with HTML, Tailwind CSS classes, and interactive JS.")
+    (:rule :type "styling" :text "Tailwind CSS is pre-loaded. Use modern dark aesthetic: bg-slate-950, text-white, border border-slate-800, text-sky-400 accents, smooth hover states.")
+    (:rule :type "interactivity" :text "Include working interactive elements (toggles, filters, tabs, counters, copy buttons) with clean Vanilla JS.")
+    (:rule :type "responsive" :text "Ensure fluid layout that adapts seamlessly from mobile (375px) to desktop (1200px).")
   ]
   :example
-  (:call :tool "write" :path "index.html" :content "<div class='max-w-md w-full p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl flex flex-col gap-4 font-sans'><div class='flex items-center justify-between border-b border-slate-800 pb-3'><h2 class='text-lg font-bold text-white'>Interactive Utility</h2><span class='px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-xs font-mono font-bold'>READY</span></div><div id='display' class='w-full p-4 rounded-xl bg-slate-950 text-right font-mono text-2xl text-white font-bold tracking-wider'>0</div><div class='grid grid-cols-4 gap-2'><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\\"1\\")'>1</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\\"2\\")'>2</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\\"+\\")'>+</button><button class='p-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-mono font-bold transition-all' onclick='reset()'>C</button></div></div><script>let val='0';const d=document.getElementById('display');function add(c){val=val==='0'?c:val+c;d.innerText=val;Sound.coin();}function reset(){val='0';d.innerText=val;Sound.hit();}</script>"))`;
+  (:call :tool "write" :path "index.html" :content "<div class='w-full max-w-4xl mx-auto p-6 flex flex-col gap-6 font-sans text-slate-100'><div class='flex items-center justify-between border-b border-slate-800 pb-4'><div class='flex items-center gap-3'><div class='w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 font-mono font-bold'>⚡</div><div><h2 class='text-base font-bold'>Cloud Analytics</h2><p class='text-xs text-slate-400'>Real-time edge telemetry</p></div></div><span class='px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold flex items-center gap-1.5'><span class='w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse'></span>ONLINE</span></div><div class='grid grid-cols-1 md:grid-cols-3 gap-4'><div class='p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1'><span class='text-xs text-slate-400 font-mono'>REQUESTS</span><span class='text-2xl font-bold font-mono text-sky-400' id='req'>14,820</span><span class='text-[10px] text-emerald-400 font-mono'>+18.4% this hour</span></div><div class='p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1'><span class='text-xs text-slate-400 font-mono'>P99 LATENCY</span><span class='text-2xl font-bold font-mono text-white'>4.2ms</span><span class='text-[10px] text-slate-400 font-mono'>Client-side WebGPU</span></div><div class='p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1'><span class='text-xs text-slate-400 font-mono'>TOKEN SAVINGS</span><span class='text-2xl font-bold font-mono text-emerald-400'>83.8%</span><span class='text-[10px] text-slate-400 font-mono'>Dense ASN protocol</span></div></div></div><script>let count=14820;setInterval(()=>{count+=Math.floor(Math.random()*15);document.getElementById('req').innerText=count.toLocaleString();},2000);</script>"))`;
       }
 
       // Reasoning guidance injection
       if (reasoningLevel === 'low') {
-        systemPrompt = "First, outline your architectural steps and geometry inside <think>...</think> (brief, 2-3 sentences). Then output the pure code/ASN.\n\n" + systemPrompt;
+        systemPrompt = "First, outline your architectural steps inside <think>...</think> (brief, 2-3 sentences). Then output the pure code/ASN.\n\n" + systemPrompt;
       } else if (reasoningLevel === 'high') {
         systemPrompt = "First, perform an in-depth step-by-step reasoning analysis inside <think>...</think> covering layout, coordinate bounds, state management, and edge cases. Then output the pure code/ASN.\n\n" + systemPrompt;
       }
@@ -369,9 +413,9 @@ export const InBrowserCompanion: React.FC = () => {
     }
   };
 
-  const handleRefine = () => {
-    if (!refinementPrompt.trim()) return;
-    const req = refinementPrompt.trim();
+  const handleRefine = (explicitOverride?: string) => {
+    const req = (explicitOverride || refinementPrompt).trim();
+    if (!req) return;
     const prevCode = renderedCode.trim();
     let iteratePrompt = '';
     if (prevCode) {
@@ -380,12 +424,21 @@ export const InBrowserCompanion: React.FC = () => {
       iteratePrompt = `${customPrompt}\n\n[USER REFINEMENT]:\n${req}`;
     }
     setCustomPrompt(prev => `${prev}\n\n[REFINEMENT]: ${req}`);
-    setRefinementPrompt('');
+    if (!explicitOverride) {
+      setRefinementPrompt('');
+    }
     executeGeneration(iteratePrompt);
   };
 
-  const filteredTemplates = PROMPT_TEMPLATES.filter(it => it.category === activeCategory);
-  const isSvg = renderedCode.trim().startsWith('<svg') || customPrompt.toLowerCase().includes('svg') || activeCategory === 'svg';
+  const handleCopyCode = () => {
+    if (!renderedCode.trim()) return;
+    navigator.clipboard.writeText(renderedCode.trim());
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const filteredTemplates = PROMPT_TEMPLATES.filter(it => it.studio === activeStudio);
+  const isSvg = activeStudio === 'svg' || renderedCode.trim().startsWith('<svg') || customPrompt.toLowerCase().includes('svg');
 
   return (
     <div className="flex flex-col gap-6 w-full relative">
@@ -407,29 +460,93 @@ export const InBrowserCompanion: React.FC = () => {
 
       {/* Main Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LEFT SIDEBAR: Model Select with Cache/Download & Directive Prompt */}
+        {/* LEFT SIDEBAR: Studio Modes, Model Select & Directive Prompt */}
         <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-4">
-          {/* Compact Model Select with Cache Status & Download Action */}
+          {/* Studio Selector: 3 Environments */}
+          <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-signal" />
+                <span>Creative Studio</span>
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-signal/15 text-signal font-bold">
+                Tri-Studio
+              </span>
+            </div>
+
+            {/* 3 Environment Tabs */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-surface-2 border border-line">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveStudio('svg');
+                  const first = PROMPT_TEMPLATES.find(i => i.studio === 'svg');
+                  if (first) handleSelectTemplate(first);
+                }}
+                className={`py-2 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                  activeStudio === 'svg'
+                    ? 'bg-signal text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <Palette className="w-4 h-4" />
+                <span>SVG Art</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveStudio('games');
+                  const first = PROMPT_TEMPLATES.find(i => i.studio === 'games');
+                  if (first) handleSelectTemplate(first);
+                }}
+                className={`py-2 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                  activeStudio === 'games'
+                    ? 'bg-signal text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <Gamepad2 className="w-4 h-4" />
+                <span>Games</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveStudio('website');
+                  const first = PROMPT_TEMPLATES.find(i => i.studio === 'website');
+                  if (first) handleSelectTemplate(first);
+                }}
+                className={`py-2 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                  activeStudio === 'website'
+                    ? 'bg-signal text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+                <span>Websites</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Model Selection Card */}
           <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Cpu className="w-4 h-4 text-signal" />
                 <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
-                  Model
+                  Model Engine
                 </span>
               </div>
 
-              {/* Cache status indicator & download button */}
+              {/* Cache status pill & Download action */}
               <div className="flex items-center gap-2">
                 {isCheckingCache ? (
-                  <span className="flex items-center gap-1 text-[11px] font-mono text-ink-muted">
-                    <Loader2 className="w-3 h-3 animate-spin text-signal" />
-                    <span>Checking...</span>
-                  </span>
+                  <span className="text-[10px] font-mono text-ink-muted animate-pulse">Checking cache...</span>
                 ) : isCurrentModelCached ? (
-                  <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[11px] font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Cached</span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-semibold flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>In Cache</span>
                   </span>
                 ) : (
                   <button
@@ -485,70 +602,13 @@ export const InBrowserCompanion: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: Templates & Category */}
+          {/* Section 2: Templates */}
           <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-signal" />
-                <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
-                  Templates
-                </span>
-              </div>
-            </div>
-
-            {/* Category Tabs */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-surface-2 border border-line">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveCategory('games');
-                  const first = PROMPT_TEMPLATES.find(i => i.category === 'games');
-                  if (first) handleSelectTemplate(first);
-                }}
-                className={`py-1.5 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  activeCategory === 'games'
-                    ? 'bg-signal text-white shadow-sm'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                <Gamepad2 className="w-3 h-3" />
-                <span>Games</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveCategory('svg');
-                  const first = PROMPT_TEMPLATES.find(i => i.category === 'svg');
-                  if (first) handleSelectTemplate(first);
-                }}
-                className={`py-1.5 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  activeCategory === 'svg'
-                    ? 'bg-signal text-white shadow-sm'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                <Palette className="w-3 h-3" />
-                <span>SVG Art</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveCategory('apps');
-                  const first = PROMPT_TEMPLATES.find(i => i.category === 'apps');
-                  if (first) handleSelectTemplate(first);
-                }}
-                className={`py-1.5 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  activeCategory === 'apps'
-                    ? 'bg-signal text-white shadow-sm'
-                    : 'text-ink-muted hover:text-ink'
-                }`}
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Apps</span>
-              </button>
-            </div>
+            <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
+              {activeStudio === 'svg' && '🎨 Vector Presets'}
+              {activeStudio === 'games' && '🕹️ Game Presets'}
+              {activeStudio === 'website' && '🌐 UI & Website Presets'}
+            </span>
 
             {/* Template Buttons */}
             <div className="grid grid-cols-2 gap-2">
@@ -581,9 +641,15 @@ export const InBrowserCompanion: React.FC = () => {
             <textarea
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
-              rows={6}
-              placeholder="Describe the application, game, or SVG you want the in-browser agent to synthesize..."
-              className="w-full p-3.5 rounded-2xl bg-surface-2 border border-line text-xs font-mono text-ink placeholder:text-ink-muted focus:outline-none focus:border-signal resize-none leading-relaxed min-h-[150px]"
+              rows={5}
+              placeholder={
+                activeStudio === 'svg'
+                  ? 'Describe the SVG emblem or icon to draw in 320x320 canvas...'
+                  : activeStudio === 'games'
+                  ? 'Describe the 2D arcade canvas game or interactive physics toy...'
+                  : 'Describe the responsive website section or modern UI component...'
+              }
+              className="w-full p-3.5 rounded-2xl bg-surface-2 border border-line text-xs font-mono text-ink placeholder:text-ink-muted focus:outline-none focus:border-signal resize-none leading-relaxed min-h-[130px]"
             />
 
             <div className="flex items-center gap-2">
@@ -604,17 +670,21 @@ export const InBrowserCompanion: React.FC = () => {
                   className="w-full py-3 rounded-2xl bg-signal hover:bg-signal-hover disabled:opacity-50 text-white font-mono font-bold text-xs flex items-center justify-center gap-2 shadow-sm transition-all hover:scale-[1.01] cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-white" />
-                  <span>Launch In-Browser Agent</span>
+                  <span>
+                    {activeStudio === 'svg' && 'Synthesize SVG Asset'}
+                    {activeStudio === 'games' && 'Launch Playable Game'}
+                    {activeStudio === 'website' && 'Build Website Component'}
+                  </span>
                 </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* RIGHT MAIN AREA: Clean Sandbox Viewport */}
+        {/* RIGHT MAIN AREA: Sandbox Viewport with Gate Telemetry & Viewport Switcher */}
         <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-3">
           {/* Sandbox Top Bar */}
-          <div className="p-3.5 rounded-2xl bg-surface border border-line flex items-center justify-between gap-3 font-mono text-xs">
+          <div className="p-3.5 rounded-2xl bg-surface border border-line flex flex-wrap items-center justify-between gap-3 font-mono text-xs">
             <div className="flex items-center gap-2.5">
               <div className={`w-2.5 h-2.5 rounded-full ${
                 generationPhase === 'generating'
@@ -628,24 +698,82 @@ export const InBrowserCompanion: React.FC = () => {
                   : 'bg-ink-muted'
               }`} />
               <span className="font-bold text-ink">
-                {generationPhase === 'generating' && 'Synthesizing in Sandbox...'}
+                {generationPhase === 'generating' && 'Synthesizing in WebGPU...'}
                 {generationPhase === 'downloading' && 'Loading Model Weights into Cache...'}
-                {generationPhase === 'completed' && (isSvg ? 'Vector Graphics Sandbox' : 'Sandbox Application')}
+                {generationPhase === 'completed' && (
+                  activeStudio === 'svg'
+                    ? 'SVG Studio Viewport (320x320)'
+                    : activeStudio === 'games'
+                    ? 'Toys & Games Interactive Sandbox'
+                    : 'Websites & UI Responsive Frame'
+                )}
                 {generationPhase === 'error' && 'Sandbox Error'}
-                {generationPhase === 'idle' && 'Sandbox Viewport'}
+                {generationPhase === 'idle' && (
+                  activeStudio === 'svg' ? 'SVG Studio Viewport' : activeStudio === 'games' ? 'Games Sandbox' : 'Website Frame'
+                )}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Responsive Viewport Switcher for Website Studio */}
+              {activeStudio === 'website' && (
+                <div className="flex rounded-xl bg-surface-2 p-0.5 border border-line mr-2">
+                  <button
+                    type="button"
+                    onClick={() => setViewportWidth('375px')}
+                    title="Mobile 375px"
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      viewportWidth === '375px' ? 'bg-signal text-white' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewportWidth('768px')}
+                    title="Tablet 768px"
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      viewportWidth === '768px' ? 'bg-signal text-white' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Tablet className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewportWidth('100%')}
+                    title="Desktop 100%"
+                    className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                      viewportWidth === '100%' ? 'bg-signal text-white' : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    <Monitor className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Telemetry info */}
               {generationPhase === 'completed' && (
-                <div className="hidden sm:flex items-center gap-2 text-[11px] text-ink-muted mr-2">
-                  <span className="text-emerald-400 font-bold">{streamedTokens} tokens</span>
+                <div className="hidden sm:flex items-center gap-2 text-[11px] text-ink-muted mr-1">
+                  <span className="text-emerald-400 font-bold">{streamedTokens} tok</span>
                   <span>•</span>
                   <span>{tokPerSec} t/s</span>
                   <span>•</span>
-                  <span>{generationLatencyMs} ms</span>
+                  <span>{generationLatencyMs}ms</span>
                 </div>
               )}
+
+              {/* Copy Code / Export Action */}
+              <button
+                type="button"
+                onClick={handleCopyCode}
+                title="Copy Source Code to Clipboard"
+                disabled={!renderedCode.trim()}
+                className="px-2.5 py-1.5 rounded-xl bg-surface-2 border border-line hover:border-line-hover disabled:opacity-30 text-ink-muted hover:text-ink transition-all flex items-center gap-1.5 cursor-pointer text-xs"
+              >
+                {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span className="hidden xs:inline">{isCopied ? 'Copied' : 'Export'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setRenderKey(k => k + 1)}
@@ -655,6 +783,7 @@ export const InBrowserCompanion: React.FC = () => {
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
+
               <button
                 type="button"
                 onClick={() => setFullScreen(!fullScreen)}
@@ -665,6 +794,55 @@ export const InBrowserCompanion: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {/* Adaptive In-Browser Verification Gate Bar */}
+          {gateResult && (
+            <div className={`p-3 rounded-2xl border flex flex-wrap items-center justify-between gap-3 font-mono text-xs transition-all ${
+              gateResult.allPassed
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+            }`}>
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-bold flex items-center gap-1">
+                  {gateResult.allPassed ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-amber-400" />
+                  )}
+                  <span>In-Browser Gate Suite ({gateResult.durationMs}ms):</span>
+                </span>
+
+                <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                  {gateResult.verdicts.map((v) => (
+                    <span
+                      key={v.gateNum}
+                      className={`px-2 py-0.5 rounded-lg border font-semibold flex items-center gap-1 ${
+                        v.passed
+                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+                          : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                      }`}
+                      title={v.summary}
+                    >
+                      <span>G{v.gateNum}: {v.name}</span>
+                      <span>{v.passed ? '✓' : '✗'}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Self-Healing Trigger */}
+              {gateResult.healingDirective && (
+                <button
+                  type="button"
+                  onClick={() => handleRefine(gateResult.healingDirective)}
+                  className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-neutral-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-all shadow-sm"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Adaptive Self-Healing</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Download Progress Card */}
           {generationPhase === 'downloading' && downloadProgress && (
@@ -721,7 +899,7 @@ export const InBrowserCompanion: React.FC = () => {
           )}
 
           {/* Sandbox Canvas Viewport */}
-          <div className={`w-full rounded-3xl border border-line bg-neutral-950 overflow-hidden relative shadow-md transition-all ${
+          <div className={`w-full rounded-3xl border border-line bg-neutral-950 overflow-hidden relative shadow-md transition-all flex items-center justify-center ${
             fullScreen ? 'fixed inset-4 z-50 h-[calc(100vh-2rem)]' : 'h-[580px]'
           }`}>
             {generationPhase === 'generating' ? (
@@ -734,7 +912,7 @@ export const InBrowserCompanion: React.FC = () => {
 
                 <div className="flex flex-col gap-1">
                   <h4 className="text-sm font-bold text-ink tracking-wide">
-                    Synthesizing in Browser Sandbox
+                    Synthesizing in {activeStudio === 'svg' ? 'SVG Studio' : activeStudio === 'games' ? 'Games Studio' : 'Website Studio'}
                   </h4>
                   <p className="text-xs text-ink-muted">
                     Executing on-device WebGPU compute shaders with {currentModel.name}
@@ -783,7 +961,7 @@ export const InBrowserCompanion: React.FC = () => {
                 </button>
               </div>
             ) : renderedCode.trim() ? (
-              // COMPLETED: CLEAN RENDERED SANDBOX
+              // COMPLETED: RENDERED SANDBOX
               isSvg ? (
                 <div
                   key={renderKey}
@@ -795,14 +973,19 @@ export const InBrowserCompanion: React.FC = () => {
                   />
                 </div>
               ) : (
-                <iframe
-                  key={renderKey}
-                  ref={iframeRef}
-                  srcDoc={prepareSandboxDocument(renderedCode)}
-                  title="In-Browser WebGPU Sandbox Application"
-                  sandbox="allow-scripts allow-modals"
-                  className="w-full h-full border-0 bg-neutral-950"
-                />
+                <div
+                  className="h-full flex items-center justify-center transition-all duration-300"
+                  style={{ width: activeStudio === 'website' ? viewportWidth : '100%' }}
+                >
+                  <iframe
+                    key={renderKey}
+                    ref={iframeRef}
+                    srcDoc={prepareSandboxDocument(renderedCode)}
+                    title="In-Browser WebGPU Sandbox Application"
+                    sandbox="allow-scripts allow-modals"
+                    className="w-full h-full border-0 bg-neutral-950 transition-all"
+                  />
+                </div>
               )
             ) : (
               // IDLE STATE
@@ -811,10 +994,12 @@ export const InBrowserCompanion: React.FC = () => {
                   <Sparkles className="w-6 h-6 text-signal" />
                 </div>
                 <span className="text-xs font-bold uppercase tracking-wider text-ink">
-                  Sandbox Viewport
+                  {activeStudio === 'svg' && 'SVG Studio Viewport'}
+                  {activeStudio === 'games' && 'Games & Toys Sandbox'}
+                  {activeStudio === 'website' && 'Websites & UI Frame'}
                 </span>
                 <p className="text-[11px] text-ink-muted leading-relaxed">
-                  Select a template or write a directive on the left, then click <b>Launch In-Browser Agent</b> to run 100% locally in your browser.
+                  Select a template on the left or write a prompt, then click <b>Launch</b> to synthesize live with WebGPU on-device.
                 </p>
               </div>
             )}
@@ -829,12 +1014,18 @@ export const InBrowserCompanion: React.FC = () => {
                 value={refinementPrompt}
                 onChange={(e) => setRefinementPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
-                placeholder="Iterate or refine app (e.g., 'Add high score counter', 'Change color theme to neon emerald')..."
+                placeholder={
+                  activeStudio === 'svg'
+                    ? "Refine vector asset (e.g., 'Make it more circular with gold border')..."
+                    : activeStudio === 'games'
+                    ? "Refine game (e.g., 'Add high score counter and faster movement')..."
+                    : "Refine UI (e.g., 'Add quarterly billing switch and testimonials')..."
+                }
                 className="flex-1 bg-transparent text-xs font-mono text-ink placeholder:text-ink-muted focus:outline-none"
               />
               <button
                 type="button"
-                onClick={handleRefine}
+                onClick={() => handleRefine()}
                 disabled={!refinementPrompt.trim()}
                 className="px-3 py-1.5 rounded-xl bg-signal text-white font-mono text-xs font-bold disabled:opacity-40 hover:bg-signal-hover transition-all cursor-pointer"
               >
@@ -847,4 +1038,3 @@ export const InBrowserCompanion: React.FC = () => {
     </div>
   );
 };
-

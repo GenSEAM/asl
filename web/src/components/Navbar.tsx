@@ -14,6 +14,7 @@ import { Link } from '../lib/router';
 
 const navItems = [
   { label: 'Home', href: '/', icon: Home },
+  { label: 'Studio', href: '/studio', icon: Sparkles },
   { label: 'Roadmap', href: '/roadmap', icon: Milestone },
   { label: 'Docs', href: '/docs', icon: BookOpen },
   { label: 'Blog', href: '/blog', icon: Newspaper },

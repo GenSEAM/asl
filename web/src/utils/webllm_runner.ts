@@ -28,15 +28,6 @@ export const IN_BROWSER_MODELS: InBrowserModelSpec[] = [
     description: 'Fastest download (~240MB). Low VRAM footprint (945MB). Instant streaming (~55 t/s).'
   },
   {
-    id: 'qwen-coder-0.5b-fp16',
-    name: 'Qwen 2.5 Coder 0.5B (q0f16 Unquantized FP16)',
-    mlcModelId: 'Qwen2.5-Coder-0.5B-Instruct-q0f16-MLC',
-    approxSizeMb: 980,
-    vramMb: 1624,
-    quantization: 'q0f16 (Unquantized FP16)',
-    description: 'Full unquantized FP16 weights (~980MB). 100% mathematical precision with zero quantization clipping.'
-  },
-  {
     id: 'qwen-coder-1.5b-q4',
     name: 'Qwen 2.5 Coder 1.5B (q4f16_1)',
     mlcModelId: 'Qwen2.5-Coder-1.5B-Instruct-q4f16_1-MLC',

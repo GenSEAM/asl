@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Section, SectionHeader } from './ui/primitives';
 import { Globe, Cpu, Zap, Eye, CheckCircle2, Sparkles } from 'lucide-react';
 
+import { Link } from '../lib/router';
+
 export const InBrowserAgent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'context' | 'action' | 'raw'>('context');
 
@@ -16,12 +18,19 @@ export const InBrowserAgent: React.FC = () => {
         align="center"
       />
 
-      {/* Prominent In-Development Status Badge */}
-      <div className="flex justify-center -mt-6 mb-12">
+      {/* Prominent Status Badge & Direct Creator Studio Link */}
+      <div className="flex flex-wrap items-center justify-center gap-3 -mt-6 mb-12">
         <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wider shadow-sm">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-          In Active Development // Research Preview (@genseam/asl-browser-plugin)
+          In Active Development // Research Preview
         </span>
+        <Link
+          to="/studio"
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-signal hover:bg-signal-hover text-white font-mono text-micro font-bold tracking-wide shadow-md transition-all hover:scale-105"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Launch Tri-Studio (SVG · Games · Websites) →</span>
+        </Link>
       </div>
 
       {/* Interactive Browser Cockpit Visualizer */}
