@@ -45,7 +45,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     shortTitle: 'Gem',
     icon: '💎',
     studio: 'svg',
-    prompt: 'Draw a compact glowing neon crystal gemstone badge in ASN notation with geometric facets, gradient shine, and centered 320x320 canvas.'
+    prompt: 'Draw a glowing neon crystal gemstone badge in ASN notation centered on 320x320 canvas. Compose faceted diamond geometry with colored polygons (:poly) and sharp highlight edges in cyan (#38bdf8) and violet (#a855f7).'
   },
   {
     id: 'rocket',
@@ -53,7 +53,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     shortTitle: 'Rocket',
     icon: '🚀',
     studio: 'svg',
-    prompt: 'Draw a compact stylized space rocket icon in ASN notation inside a dark circular 320x320 badge with fiery booster exhaust.'
+    prompt: 'Draw a stylized space rocket icon in ASN notation on a 320x320 canvas. Compose a sleek fuselage with cockpit window (:circ), delta wings (:poly), and fiery orange exhaust booster flames (:poly).'
   },
   {
     id: 'lightning',
@@ -61,7 +61,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     shortTitle: 'Shield',
     icon: '⚡',
     studio: 'svg',
-    prompt: 'Draw a sharp energetic golden lightning bolt emblem in ASN notation on a dark hexagonal badge with glowing cyan trim.'
+    prompt: 'Draw an energetic golden lightning bolt emblem in ASN notation on a 320x320 badge. Compose a sharp zig-zag lightning polygon (:poly) with glowing gold (#fbbf24) and cyan (#38bdf8) accents.'
   },
   {
     id: 'chameleon',
@@ -69,7 +69,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     shortTitle: 'Chameleon',
     icon: '🦎',
     studio: 'svg',
-    prompt: 'Draw a compact stylized chameleon profile in ASN notation coiled on a branch with vivid green and turquoise gradients.'
+    prompt: 'Draw a stylized neon chameleon badge in ASN notation on a 320x320 canvas. Compose its coiled spiral tail, arched back, large circular eye (:circ), and branch with vivid emerald (#34d399) contours.'
   },
   {
     id: 'hex-portal',
@@ -77,7 +77,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     shortTitle: 'Portal',
     icon: '🔮',
     studio: 'svg',
-    prompt: 'Draw a futuristic cyberpunk portal emblem in ASN notation with glowing purple and cyan concentric rings in a 320x320 viewport.'
+    prompt: 'Draw a futuristic cyberpunk portal emblem in ASN notation on a 320x320 canvas. Compose concentric hex rings (:poly), glowing energy vortex lines (:ln), and violet (#a855f7) and cyan (#38bdf8) nodes.'
   },
 
   // 2. TOYS & GAMES STUDIO (Playable Canvas Games & Physics)
@@ -365,14 +365,16 @@ export const InBrowserCompanion: React.FC = () => {
   :rules [
     (:rule :type "mandatory" :text "Output ONLY a single valid ASN vector expression: (:svg :w 320 :h 320 :v \\\"0 0 320 320\\\" ...)")
     (:rule :type "canvas" :text "Always format on 320x320 canvas: :w 320 :h 320 :v \\\"0 0 320 320\\\" starting with dark badge background: (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f \\\"#090d16\\\").")
-    (:rule :type "subject" :text "Faithfully compose unique visual geometry matching the user's requested subject. Construct appropriate shapes: rockets use conical fuselages and flame jets; animals use organic silhouettes and limbs; emblems use shields and stars; portals use vortex rings.")
-    (:rule :type "primitives" :text "Compose from ASN shapes: (:rc :x ... :y ... :w ... :h ... :rx ... :f ... :s ... :sw ...) for rectangles; (:circ :cx ... :cy ... :r ... :f ... :s ...) for circles; (:p :d \\\"...\\\" :f ... :s ...) for custom path contours; (:ln :x1 ... :y1 ... :x2 ... :y2 ...) for lines; (:g ... children) for groups.")
-    (:rule :type "palette" :text "Use vivid glowing colors matching the prompt: cyan (#38bdf8), violet (#a855f7), emerald (#34d399), gold (#fbbf24), rose (#f43f5e).")
+    (:rule :type "colors" :text "Every element MUST have explicit visible color: specify fill :f (e.g. '#38bdf8', '#a855f7', '#34d399', '#fbbf24') or stroke :s (e.g. '#38bdf8'). Never leave elements without fill or stroke.")
+    (:rule :type "geometry" :text "Compose the requested subject centered around (160, 160) using: polygons (:poly :points \\\"x1,y1 x2,y2 x3,y3 ...\\\" :f \\\"...\\\" :s \\\"...\\\") for geometric facets and crystals; circles (:circ :cx ... :cy ... :r ... :f ... :s ...) for rings/cores; paths (:p :d \\\"M x1 y1 L x2 y2 ... Z\\\" :f ... :s ...) for contours; lines (:ln :x1 ... :y1 ... :x2 ... :y2 ... :s ... :sw ...) for accents.")
+    (:rule :type "layers" :text "Layer cleanly: 1. Base card (:rc), 2. Outer decorative aura/ring (:circ or :poly), 3. Central subject geometry with distinct colored facets.")
   ]
   :syntax
   (:svg :w 320 :h 320 :v "0 0 320 320"
     (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f "#090d16")
-    (:circ :cx 160 :cy 160 :r 120 :f "none" :s "rgba(56, 189, 248, 0.2)" :sw 2)))`;
+    (:circ :cx 160 :cy 160 :r 120 :f "rgba(15, 23, 42, 0.6)" :s "rgba(56, 189, 248, 0.3)" :sw 2)
+    (:poly :points "160,70 230,125 200,215 120,215 90,125" :f "#1e293b" :s "#38bdf8" :sw 2)
+    (:circ :cx 160 :cy 155 :r 25 :f "#38bdf8" :s "#ffffff" :sw 2)))`;
       } else if (activeStudio === 'games') {
         systemPrompt = `(:skill :name "asl-arcade-game"
   :desc "Autonomous Playable Canvas 2D Game in a self-contained HTML document."

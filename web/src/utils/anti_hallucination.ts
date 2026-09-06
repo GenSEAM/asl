@@ -86,6 +86,8 @@ export class AntiHallucinationHarness {
       }
 
       let asnSvg = endIdx !== -1 ? text.slice(svgIdx, endIdx) : text.slice(svgIdx);
+      // Deduplicate degenerative loops (e.g. identical shapes repeating consecutively)
+      asnSvg = asnSvg.replace(/(\(:[a-zA-Z]+[^\)]+\))\s*(?:\1\s*){2,}/gi, '$1');
       if (depth > 0) {
         asnSvg += ')'.repeat(depth);
       }

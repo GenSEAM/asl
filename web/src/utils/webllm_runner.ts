@@ -168,6 +168,8 @@ class WebLlmRunner {
         stream: true,
         temperature: options?.temperature ?? 0.6,
         top_p: options?.top_p ?? 0.9,
+        frequency_penalty: 0.35,
+        presence_penalty: 0.15,
         max_tokens: 3500
       };
 

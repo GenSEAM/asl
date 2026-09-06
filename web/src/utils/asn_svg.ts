@@ -179,12 +179,16 @@ function renderNode(node: AsnNode): string {
     }
     case 'p':
     case 'path': {
-      return `<path d="${p.d || ''}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 2}" stroke-linecap="round" stroke-linejoin="round" ${opacity} />`;
+      const fill = p.f || (p.s ? 'none' : 'none');
+      const stroke = p.s || (p.f ? 'none' : '#38bdf8');
+      return `<path d="${p.d || ''}" fill="${fill}" stroke="${stroke}" stroke-width="${p.sw || 2}" stroke-linecap="round" stroke-linejoin="round" ${opacity} />`;
     }
     case 'poly':
     case 'polygon': {
       const pts = p.points || p.pts || '';
-      return `<polygon points="${pts}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${opacity} />`;
+      const fill = p.f || (p.s ? 'none' : 'rgba(56, 189, 248, 0.2)');
+      const stroke = p.s || (p.f ? 'none' : '#38bdf8');
+      return `<polygon points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${p.sw || 1}" ${opacity} />`;
     }
     case 'txt':
     case 'text': {
