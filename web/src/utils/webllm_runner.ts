@@ -146,7 +146,7 @@ class WebLlmRunner {
     onToken: (token: string, fullText: string, telemetry: StreamTelemetry) => void,
     onDone: (finalRepairedCode: string, telemetry: StreamTelemetry) => void,
     onError: (err: any) => void,
-    options?: { enableThinking?: boolean }
+    options?: { enableThinking?: boolean; temperature?: number; top_p?: number }
   ): Promise<void> {
     if (!this.engine) {
       onError(new Error('In-browser engine is not loaded.'));
@@ -166,7 +166,8 @@ class WebLlmRunner {
           { role: 'user', content: prompt }
         ],
         stream: true,
-        temperature: 0.15,
+        temperature: options?.temperature ?? 0.6,
+        top_p: options?.top_p ?? 0.9,
         max_tokens: 3500
       };
 

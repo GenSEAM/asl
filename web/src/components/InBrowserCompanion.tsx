@@ -364,18 +364,15 @@ export const InBrowserCompanion: React.FC = () => {
   :desc "Autonomous Vector Graphics Drawing in AgentScript ASN notation. Transpiles to crisp W3C SVG."
   :rules [
     (:rule :type "mandatory" :text "Output ONLY a single valid ASN vector expression: (:svg :w 320 :h 320 :v \\\"0 0 320 320\\\" ...)")
-    (:rule :type "mandatory" :text "Format strictly inside 320x320 square canvas: :w 320 :h 320 :v \\\"0 0 320 320\\\"")
-    (:rule :type "primitives" :text "Use ASN shapes: (:rc :x ... :y ... :w ... :h ... :rx ... :f ... :s ... :sw ...) for rects; (:circ :cx ... :cy ... :r ... :f ... :s ...) for circles; (:p :d \\\"...\\\" :f ... :s ...) for path outlines; (:g ... children) for groups.")
-    (:rule :type "palette" :text "Use glowing cyberpunk / cosmic gradients: deep dark background, neon cyan (#38bdf8), violet (#818cf8), emerald (#34d399), gold (#fbbf24).")
+    (:rule :type "canvas" :text "Always format on 320x320 canvas: :w 320 :h 320 :v \\\"0 0 320 320\\\" starting with dark badge background: (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f \\\"#090d16\\\").")
+    (:rule :type "subject" :text "Faithfully compose unique visual geometry matching the user's requested subject. Construct appropriate shapes: rockets use conical fuselages and flame jets; animals use organic silhouettes and limbs; emblems use shields and stars; portals use vortex rings.")
+    (:rule :type "primitives" :text "Compose from ASN shapes: (:rc :x ... :y ... :w ... :h ... :rx ... :f ... :s ... :sw ...) for rectangles; (:circ :cx ... :cy ... :r ... :f ... :s ...) for circles; (:p :d \\\"...\\\" :f ... :s ...) for custom path contours; (:ln :x1 ... :y1 ... :x2 ... :y2 ...) for lines; (:g ... children) for groups.")
+    (:rule :type "palette" :text "Use vivid glowing colors matching the prompt: cyan (#38bdf8), violet (#a855f7), emerald (#34d399), gold (#fbbf24), rose (#f43f5e).")
   ]
-  :example
+  :syntax
   (:svg :w 320 :h 320 :v "0 0 320 320"
     (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f "#090d16")
-    (:circ :cx 160 :cy 160 :r 110 :f "none" :s "#38bdf8" :sw 3)
-    (:circ :cx 160 :cy 160 :r 85 :f "#1e293b" :s "#818cf8" :sw 2)
-    (:p :d "M 160 85 L 210 135 L 180 235 L 140 235 L 110 135 Z" :f "#38bdf8" :s "#ffffff" :sw 2)
-    (:p :d "M 160 85 L 180 140 L 160 235 L 140 140 Z" :f "#0284c7")
-    (:circ :cx 160 :cy 160 :r 15 :f "#ffffff" :s "#38bdf8" :sw 2)))`;
+    (:circ :cx 160 :cy 160 :r 120 :f "none" :s "rgba(56, 189, 248, 0.2)" :sw 2)))`;
       } else if (activeStudio === 'games') {
         systemPrompt = `(:skill :name "asl-arcade-game"
   :desc "Autonomous Playable Canvas 2D Game in a self-contained HTML document."
@@ -408,6 +405,8 @@ export const InBrowserCompanion: React.FC = () => {
         systemPrompt = "First, perform an in-depth step-by-step reasoning analysis inside <think>...</think> covering layout, coordinate bounds, state management, and edge cases. Then output the pure code/ASN.\n\n" + systemPrompt;
       }
 
+      const temperature = activeStudio === 'svg' ? 0.65 : 0.45;
+
       await webLlmRunner.generateStreaming(
         targetPrompt,
         systemPrompt,
@@ -432,7 +431,7 @@ export const InBrowserCompanion: React.FC = () => {
           setGenerationError(err?.message || 'Error during in-browser inference');
           setGenerationPhase('error');
         },
-        { enableThinking: reasoningEnabled && isReasoningSupported }
+        { enableThinking: reasoningEnabled && isReasoningSupported, temperature }
       );
 
     } catch (err: any) {
