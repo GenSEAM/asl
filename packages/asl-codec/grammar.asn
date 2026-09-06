@@ -102,4 +102,32 @@
           :rationale "Verifies rejection of invalid or empty SVG inputs")
     (:sym :name "run-svg-tests" :kind :fn :tokens 3
           :rationale "Executes complete vector transpile test suite")
+
+    ;; Phase 24 CSS Cascade Engine Symbols
+    (:sym :name "CssSpecificity" :kind :type :tokens 1)
+    (:sym :name "CssProperty" :kind :type :tokens 1)
+    (:sym :name "CssRule" :kind :type :tokens 1)
+    (:sym :name "ComputedStyle" :kind :type :tokens 1)
+    (:sym :name "calc-specificity" :kind :fn :tokens 2)
+    (:sym :name "compare-specificity" :kind :fn :tokens 2)
+    (:sym :name "extract-css-variables" :kind :fn :tokens 3
+          :rationale "Extracts CSS custom properties from stylesheet content")
+    (:sym :name "parse-css-rules" :kind :fn :tokens 3
+          :rationale "Parses CSS text into structured CssRule records with calculated specificity")
+    (:sym :name "resolve-computed-style" :kind :fn :tokens 3
+          :rationale "Resolves cascade, specificity, !important, and inline overrides for a target element")
+    (:sym :name "format-computed-style" :kind :fn :tokens 3
+          :rationale "Formats resolved computed style as dense ASN S-expression")
+    (:sym :name "test-calc-specificity" :kind :fn :tokens 3
+          :rationale "Unit test verifying CSS specificity tuple calculation")
+    (:sym :name "test-extract-css-variables" :kind :fn :tokens 4
+          :rationale "Unit test verifying CSS custom property extraction")
+    (:sym :name "test-parse-css-rules" :kind :fn :tokens 4
+          :rationale "Unit test verifying parsing of CSS rules and !important declarations")
+    (:sym :name "test-resolve-computed-style" :kind :fn :tokens 4
+          :rationale "Unit test verifying cascade resolution and inline style override")
+    (:sym :name "test-format-computed-style" :kind :fn :tokens 4
+          :rationale "Unit test verifying serialization of computed style into dense ASN format")
+    (:sym :name "run-css-tests" :kind :fn :tokens 3
+          :rationale "Executes complete CSS cascade unit test suite")
   ])
