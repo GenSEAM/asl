@@ -89,6 +89,22 @@ class WebLlmRunner {
     }
   }
 
+  public async isModelInCache(modelSpec: InBrowserModelSpec): Promise<boolean> {
+    try {
+      const webllm = await import('@mlc-ai/web-llm');
+      return await webllm.hasModelInCache(modelSpec.mlcModelId);
+    } catch {
+      return false;
+    }
+  }
+
+  public async downloadModelOnly(
+    modelSpec: InBrowserModelSpec,
+    onProgress: (progress: WebLlmProgress) => void
+  ): Promise<void> {
+    await this.loadModel(modelSpec, onProgress);
+  }
+
   public async loadModel(
     modelSpec: InBrowserModelSpec,
     onProgress: (progress: WebLlmProgress) => void

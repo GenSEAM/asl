@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, X, ArrowRight, Code2, BookOpen, Terminal, Sparkles, Cpu, Database, Newspaper } from 'lucide-react';
+import { Search, X, ArrowRight, Code2, BookOpen, Terminal, Sparkles, Cpu, Newspaper } from 'lucide-react';
 import { useRouter } from '../lib/router';
 import { BLOG_POSTS } from '../lib/blog';
 
@@ -24,10 +24,10 @@ const ITEMS: SearchResult[] = [
   {
     id: '2',
     category: 'toolchain',
-    title: 'Interactive Playground (SQL Studio & Quality Doctor)',
-    desc: 'Live cross-dialect SQL queries and autonomous AST repair.',
+    title: 'Interactive Playground (In-Browser Agent Sandbox)',
+    desc: 'Pure client-side WebGPU agent executing in an isolated sandbox.',
     href: '/playground',
-    icon: Database,
+    icon: Sparkles,
   },
   {
     id: '3',

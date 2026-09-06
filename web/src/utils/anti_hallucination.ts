@@ -20,32 +20,55 @@ export interface FsmRepairReport {
 
 export class AntiHallucinationHarness {
   /**
+   * Cleans code blocks and extracts raw content from potential markdown wrappers
+   */
+  public stripMarkdownFences(raw: string): string {
+    let text = raw.trim();
+    // Strip leading code fence markers (e.g. ```asn, ```asl, ```html, ```svg, ```)
+    const fenceMatch = text.match(/^```[a-zA-Z0-9_\-]*\n?([\s\S]*?)(?:\n?```)?$/);
+    if (fenceMatch) {
+      text = fenceMatch[1].trim();
+    } else {
+      // Strip standalone fences if present
+      text = text.replace(/^```[a-zA-Z0-9_\-]*\n?/gm, '').replace(/\n?```$/gm, '').trim();
+    }
+    return text;
+  }
+
+  /**
    * Parses native ASL toolcalls and ASN S-expressions:
    * 1. Direct ASN Vector Graphics: (:svg :w 800 :h 500 (:rc ...) (:circ ...))
    * 2. ASL Toolcall: (:call :tool "write" :path "..." :content "...")
    * 3. Positional ASN: (:c :html "...") or (:c :svg "...")
    */
   public extractPositionalToolcall(raw: string): { code: string; toolKind: 'html' | 'svg' | 'direct' } {
-    const trimmed = raw.trim();
+    let text = this.stripMarkdownFences(raw);
 
     // 1. Native ASN Vector Graphics (:svg :w ... :h ... ...)
-    if (trimmed.startsWith('(:svg')) {
-      let balanced = trimmed;
-      const openCount = (balanced.match(/\(/g) || []).length;
-      const closeCount = (balanced.match(/\)/g) || []).length;
+    const svgIdx = text.indexOf('(:svg');
+    if (svgIdx !== -1) {
+      let asnSvg = text.slice(svgIdx).trim();
+      const openCount = (asnSvg.match(/\(/g) || []).length;
+      const closeCount = (asnSvg.match(/\)/g) || []).length;
       if (openCount > closeCount) {
-        balanced += ')'.repeat(openCount - closeCount);
+        asnSvg += ')'.repeat(openCount - closeCount);
       }
-      const transpiled = asnToSvg(balanced);
+      const transpiled = asnToSvg(asnSvg);
       if (transpiled.svg) {
         return { code: transpiled.svg, toolKind: 'svg' };
       }
     }
 
-    // 2. ASL Write Toolcall (:call :tool "write" ... :content "...")
-    const contentIdx = trimmed.indexOf(':content ');
-    if (contentIdx !== -1 && (trimmed.startsWith('(:call') || trimmed.startsWith('(:c '))) {
-      let inner = trimmed.slice(contentIdx + 9).trim();
+    // 2. Direct SVG XML (<svg ... </svg>)
+    const directSvgMatch = text.match(/<svg[\s\S]*?<\/svg>/i);
+    if (directSvgMatch) {
+      return { code: directSvgMatch[0], toolKind: 'svg' };
+    }
+
+    // 3. ASL Write Toolcall (:call :tool "write" ... :content "...")
+    const contentIdx = text.indexOf(':content ');
+    if (contentIdx !== -1 && (text.includes('(:call') || text.includes('(:c '))) {
+      let inner = text.slice(contentIdx + 9).trim();
       if (inner.startsWith('"')) inner = inner.slice(1);
       if (inner.endsWith('")')) inner = inner.slice(0, -2);
       else if (inner.endsWith('"')) inner = inner.slice(0, -1);
@@ -53,8 +76,8 @@ export class AntiHallucinationHarness {
       return { code: inner, toolKind: 'html' };
     }
 
-    // 3. Compact Positional ASL Toolcall (:call "write" "index.html" "...") or (:c :w "..." "...")
-    const posWriteMatch = trimmed.match(/^\(:c(?:all)?\s+(?::w|"write")\s+(?:"[^"]+"|[^\s]+)\s+([\s\S]*)\)$/i);
+    // 4. Compact Positional ASL Toolcall (:call "write" "index.html" "...") or (:c :w "..." "...")
+    const posWriteMatch = text.match(/^\(:c(?:all)?\s+(?::w|"write")\s+(?:"[^"]+"|[^\s]+)\s+([\s\S]*)\)$/i);
     if (posWriteMatch) {
       let inner = posWriteMatch[1].trim();
       if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith('`') && inner.endsWith('`'))) {
@@ -63,8 +86,8 @@ export class AntiHallucinationHarness {
       return { code: inner, toolKind: 'html' };
     }
 
-    // 4. Positional HTML (:c :html ...)
-    const htmlAsnMatch = trimmed.match(/^\(:c(?:all)?\s+:html\s+([\s\S]*)\)$/i);
+    // 5. Positional HTML (:c :html ...)
+    const htmlAsnMatch = text.match(/^\(:c(?:all)?\s+:html\s+([\s\S]*)\)$/i);
     if (htmlAsnMatch) {
       let inner = htmlAsnMatch[1].trim();
       if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith('`') && inner.endsWith('`'))) {
@@ -73,21 +96,12 @@ export class AntiHallucinationHarness {
       return { code: inner, toolKind: 'html' };
     }
 
-    // 5. Positional SVG (:c :svg ...)
-    const svgAsnMatch = trimmed.match(/^\(:c(?:all)?\s+:svg\s+([\s\S]*)\)$/i);
-    if (svgAsnMatch) {
-      let inner = svgAsnMatch[1].trim();
-      if (inner.startsWith('(:svg')) {
-        const transpiled = asnToSvg(inner);
-        if (transpiled.svg) return { code: transpiled.svg, toolKind: 'svg' };
-      }
-      if ((inner.startsWith('"') && inner.endsWith('"')) || (inner.startsWith('`') && inner.endsWith('`'))) {
-        inner = inner.slice(1, -1).replace(/\\"/g, '"');
-      }
-      return { code: inner, toolKind: 'svg' };
+    // 6. Direct HTML or DOCTYPE
+    if (text.includes('<!DOCTYPE') || text.includes('<html') || text.includes('<canvas') || text.includes('<div')) {
+      return { code: text, toolKind: 'html' };
     }
 
-    return { code: trimmed, toolKind: 'direct' };
+    return { code: text, toolKind: 'direct' };
   }
 
   /**
@@ -101,26 +115,21 @@ export class AntiHallucinationHarness {
     let syntaxRepaired = false;
     let sanitized = false;
 
-    // 1. Strip markdown code fence markers if model echoed them
-    if (code.startsWith('```asl') || code.startsWith('```asn') || code.startsWith('```lisp')) {
-      code = code.replace(/^```[a-z]*\n?/i, '');
-      syntaxRepaired = true;
-    } else if (code.startsWith('```html')) {
-      code = code.slice(7);
-      syntaxRepaired = true;
-    } else if (code.startsWith('```svg') || code.startsWith('```xml')) {
-      code = code.slice(6);
-      syntaxRepaired = true;
-    } else if (code.startsWith('```')) {
-      code = code.slice(3);
-      syntaxRepaired = true;
+    // Additional check: if code is still an unparsed (:svg ...), transpile it now
+    if (code.startsWith('(:svg')) {
+      const openCount = (code.match(/\(/g) || []).length;
+      const closeCount = (code.match(/\)/g) || []).length;
+      if (openCount > closeCount) {
+        code += ')'.repeat(openCount - closeCount);
+      }
+      const transpiled = asnToSvg(code);
+      if (transpiled.svg) {
+        code = transpiled.svg;
+        toolKind = 'svg';
+        syntaxRepaired = true;
+      }
     }
 
-    if (code.endsWith('```')) {
-      code = code.slice(0, -3);
-      syntaxRepaired = true;
-    }
-    code = code.trim();
 
     // 2. FSM Delimiter Check for ASL S-expression parens and brackets
     const parenStack: string[] = [];
