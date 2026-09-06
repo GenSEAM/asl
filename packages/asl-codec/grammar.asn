@@ -33,6 +33,15 @@
     (:sym :name "idem" :kind :type :tokens 1)
     (:sym :name "decoded-field" :kind :fn :tokens 2)
     (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "SkillTool" :kind :type :tokens 1)
+    (:sym :name "SkillRule" :kind :type :tokens 1)
+    (:sym :name "SkillManifest" :kind :type :tokens 1)
+    (:sym :name "make-tool" :kind :fn :tokens 2)
+    (:sym :name "make-rule" :kind :fn :tokens 2)
+    (:sym :name "make-skill" :kind :fn :tokens 2)
+    (:sym :name "emit-skill" :kind :fn :tokens 2)
+    (:sym :name "emit-stub" :kind :fn :tokens 2)
+    (:sym :name "calc-savings" :kind :fn :tokens 2)
 
     ;; Symbols with > 2 tokens (with verified :rationale)
     (:sym :name "render-json-array" :kind :fn :tokens 3

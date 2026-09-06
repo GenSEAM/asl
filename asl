@@ -279,6 +279,124 @@ case "$CMD" in
         ;;
     esac
     ;;
+  skill)
+    SUBCMD="${1:-help}"
+    shift || true
+    case "$SUBCMD" in
+      compile|build)
+        SPEC="$1"
+        OUT="$2"
+        if [ -z "$SPEC" ] || [ ! -f "$SPEC" ]; then
+          echo "Usage: asl skill compile <spec.asn> [dest_file]"
+          exit 1
+        fi
+        awk '
+        BEGIN { in_rules = 0; in_tools = 0; in_targets = 0; rc = 0; tc = 0; tgc = 0; name = ""; desc = ""; }
+        !name && /^[ \t]*:name[ \t]+"/ {
+          line = $0; sub(/^[ \t]*:name[ \t]+"/, "", line); sub(/"[ \t]*$/, "", line); name = line;
+        }
+        !desc && /^[ \t]*:desc[ \t]+"/ {
+          line = $0; sub(/^[ \t]*:desc[ \t]+"/, "", line); sub(/"[ \t]*$/, "", line); desc = line;
+        }
+        /^[ \t]*:rules[ \t]+\[/ { in_rules = 1; next; }
+        /^[ \t]*:tools[ \t]+\[/ { in_tools = 1; next; }
+        /^[ \t]*:targets[ \t]+\[/ { in_targets = 1; next; }
+
+        in_rules && /^[ \t]*\(:rule/ {
+          rtype = $0; sub(/.*:type[ \t]+"/, "", rtype); sub(/".*/, "", rtype);
+          rtext = $0; sub(/.*:text[ \t]+"/, "", rtext); sub(/"[ \t]*\)$/, "", rtext);
+          rules[rc++] = "- **[" rtype "]**: " rtext;
+        }
+        in_tools && /^[ \t]*\(:tool/ {
+          tcmd = $0; sub(/.*:command[ \t]+"/, "", tcmd); sub(/".*/, "", tcmd);
+          tpurp = $0; sub(/.*:purpose[ \t]+"/, "", tpurp); sub(/".*/, "", tpurp);
+          tsave = $0; sub(/.*:savings[ \t]+"/, "", tsave); sub(/".*/, "", tsave);
+          tools[tc++] = "| `" tcmd "` | " tpurp " | **" tsave "** |";
+        }
+        in_targets && /"[^"]+"/ {
+          line = $0;
+          while (match(line, /"[^"]+"/)) {
+            tgt = substr(line, RSTART + 1, RLENGTH - 2);
+            if (tgt != "targets") {
+              targets[tgc++] = "- `" tgt "`";
+            }
+            line = substr(line, RSTART + RLENGTH);
+          }
+        }
+
+        /^[ \t]*\]/ || /\]\)/ {
+          if (in_rules) in_rules = 0;
+          if (in_tools) in_tools = 0;
+          if (in_targets) in_targets = 0;
+        }
+
+        END {
+          print "---";
+          print "name: " name;
+          print "description: " desc;
+          print "---";
+          print "";
+          print "# " name ": Native Tooling & Verification Guide";
+          print "";
+          print "> [!IMPORTANT]";
+          print "> Deterministically compiled from canonical ASN specification (`" ARGV[1] "`).";
+          print "";
+          print "## Rules of Engagement & Invariants";
+          print "";
+          for (i = 0; i < rc; i++) print rules[i];
+          print "";
+          print "## Tool Suite Reference";
+          print "";
+          print "| Command | Purpose | Token Savings |";
+          print "| :--- | :--- | :--- |";
+          for (i = 0; i < tc; i++) print tools[i];
+          print "";
+          print "## Supported Agent Harnesses";
+          print "";
+          for (i = 0; i < tgc; i++) print targets[i];
+        }
+        ' "$SPEC" > "${OUT:-/dev/stdout}"
+        exit 0
+        ;;
+      stub)
+        SPEC="$1"
+        if [ -z "$SPEC" ] || [ ! -f "$SPEC" ]; then
+          echo "Usage: asl skill stub <spec.asn>"
+          exit 1
+        fi
+        awk '
+        /^[ \t]*:name[ \t]+"/ {
+          line = $0; sub(/^[ \t]*:name[ \t]+"/, "", line); sub(/"[ \t]*$/, "", line); name = line;
+        }
+        /^[ \t]*:desc[ \t]+"/ {
+          line = $0; sub(/^[ \t]*:desc[ \t]+"/, "", line); sub(/"[ \t]*$/, "", line); desc = line;
+        }
+        /^[ \t]*\(:rule/ { rules++; }
+        /^[ \t]*\(:tool/ { tools++; }
+        END {
+          print "(:skill-stub :name \"" name "\" :rules-count " rules " :tools-count " tools " :desc \"" desc "\")";
+        }
+        ' "$SPEC"
+        exit 0
+        ;;
+      sync)
+        SPEC="$1"
+        if [ -z "$SPEC" ] || [ ! -f "$SPEC" ]; then
+          echo "Usage: asl skill sync <spec.asn>"
+          exit 1
+        fi
+        SKILL_DIR="$(cd "$(dirname "$SPEC")" && pwd)"
+        DEST_MD="$SKILL_DIR/SKILL.md"
+        "$0" skill compile "$SPEC" "$DEST_MD"
+        echo "✓ Compiled $DEST_MD from $SPEC"
+        exit 0
+        ;;
+      *)
+        echo "Usage: asl skill <compile|stub|sync> <spec.asn> [args]"
+        exit 1
+        ;;
+    esac
+    ;;
   intel)
     SUBCMD="${1:-help}"
     shift || true
@@ -355,6 +473,7 @@ case "$CMD" in
     echo "  check <file>    Run semantic syntax and form verification"
     echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
     echo "  test [file]     Execute native ASL test suites"
+    echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
     echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact)"
     echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
     echo "  version         Display toolchain version"
