@@ -202,7 +202,7 @@ export const MODELS: ModelOption[] = [
 ];
 
 export const InBrowserCompanion: React.FC = () => {
-  const [selectedModelId, setSelectedModelId] = useState<string>('qwen-coder-0.5b-q4');
+  const [selectedModelId, setSelectedModelId] = useState<string>('qwen-coder-3b-q4');
   const [activeStudio, setActiveStudio] = useState<'svg' | 'games' | 'website'>('svg');
   const [customPrompt, setCustomPrompt] = useState<string>(PROMPT_TEMPLATES[0].prompt);
   const [refinementPrompt, setRefinementPrompt] = useState<string>('');
@@ -225,6 +225,7 @@ export const InBrowserCompanion: React.FC = () => {
 
   // Model Cache & Download States
   const [cachedModels, setCachedModels] = useState<Record<string, boolean>>({});
+  const [loadedModelId, setLoadedModelId] = useState<string | null>(() => webLlmRunner.getLoadedModelId());
   const [isCheckingCache, setIsCheckingCache] = useState<boolean>(false);
   const [isManualDownloading, setIsManualDownloading] = useState<boolean>(false);
 
@@ -321,6 +322,7 @@ export const InBrowserCompanion: React.FC = () => {
         setDownloadProgress(prog);
       });
       setCachedModels(prev => ({ ...prev, [currentModel.id]: true }));
+      setLoadedModelId(webLlmRunner.getLoadedModelId());
       setGenerationPhase(renderedCode.trim() ? 'completed' : 'idle');
     } catch (err: any) {
       console.error('Model download failed:', err);
@@ -360,6 +362,7 @@ export const InBrowserCompanion: React.FC = () => {
         setDownloadProgress(prog);
       });
       setCachedModels(prev => ({ ...prev, [currentModel.id]: true }));
+      setLoadedModelId(webLlmRunner.getLoadedModelId());
 
       setGenerationPhase('generating');
 
@@ -372,16 +375,25 @@ export const InBrowserCompanion: React.FC = () => {
     (:rule :type "mandatory" :text "Output ONLY a single valid ASN vector expression: (:svg :w 320 :h 320 :v \\\"0 0 320 320\\\" ...)")
     (:rule :type "contractions" :text "Use ONLY standard 1-token ASN contractions for maximum token compaction: :rc, :circ, :poly, :ln, :p, :pts (points), :f (fill), :s (stroke), :sw (stroke-width). Never use verbose words like :fill, :stroke, :stroke-width, or :points.")
     (:rule :type "canvas" :text "Always format on 320x320 canvas: :w 320 :h 320 :v \\\"0 0 320 320\\\" starting with dark badge background: (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f \\\"#090d16\\\").")
+    (:rule :type "pts" :text "For polygons, coordinates MUST be enclosed in quotes: :pts \\\"x1,y1 x2,y2 x3,y3 ...\\\".")
+    (:rule :type "quota" :text "Compose a rich, complete multi-layered emblem with 10 to 18 visual elements: card background, multiple aura rings (:circ), faceted crystal polygons (:poly), energetic lines (:ln), and glowing central core. NEVER stop after only 1 or 2 elements.")
     (:rule :type "colors" :text "Every element MUST have explicit visible color: specify fill :f (e.g. '#38bdf8', '#a855f7', '#34d399', '#fbbf24') or stroke :s (e.g. '#38bdf8'). Never omit :f or :s.")
-    (:rule :type "geometry" :text "Compose centered around (160, 160) using: polygons (:poly :pts \\\"x1,y1 x2,y2 x3,y3 ...\\\" :f \\\"...\\\" :s \\\"...\\\"); circles (:circ :cx ... :cy ... :r ... :f ... :s ...); paths (:p :d \\\"M x1 y1 L x2 y2 ... Z\\\" :f ... :s ...); lines (:ln :x1 ... :y1 ... :x2 ... :y2 ... :s ... :sw ...).")
-    (:rule :type "layers" :text "Layer cleanly: 1. Base card (:rc), 2. Outer decorative aura/ring (:circ or :poly), 3. Central subject geometry with distinct colored facets.")
+    (:rule :type "layers" :text "Layer cleanly: 1. Base card (:rc), 2. Outer aura rings (:circ), 3. Central faceted geometry (:poly), 4. Accent lines (:ln), 5. Core nodes (:circ).")
   ]
   :syntax
   (:svg :w 320 :h 320 :v "0 0 320 320"
     (:rc :x 0 :y 0 :w 320 :h 320 :rx 24 :f "#090d16")
-    (:circ :cx 160 :cy 160 :r 120 :f "rgba(15, 23, 42, 0.6)" :s "rgba(56, 189, 248, 0.3)" :sw 2)
-    (:poly :pts "160,70 230,125 200,215 120,215 90,125" :f "#1e293b" :s "#38bdf8" :sw 2)
-    (:circ :cx 160 :cy 155 :r 25 :f "#38bdf8" :s "#ffffff" :sw 2)))`;
+    (:circ :cx 160 :cy 160 :r 130 :f "none" :s "rgba(56, 189, 248, 0.15)" :sw 1)
+    (:circ :cx 160 :cy 160 :r 110 :f "rgba(15, 23, 42, 0.7)" :s "rgba(56, 189, 248, 0.35)" :sw 2)
+    (:poly :pts "160,50 235,115 205,225 115,225 85,115" :f "#1e293b" :s "#38bdf8" :sw 2)
+    (:poly :pts "160,75 210,125 190,200 130,200 110,125" :f "rgba(56, 189, 248, 0.2)" :s "#38bdf8" :sw 1.5)
+    (:poly :pts "160,75 160,200 190,200" :f "rgba(56, 189, 248, 0.3)" :s "none")
+    (:ln :x1 85 :y1 115 :x2 235 :y2 115 :s "rgba(56, 189, 248, 0.4)" :sw 1)
+    (:ln :x1 115 :y1 225 :x2 160 :y2 75 :s "rgba(168, 85, 247, 0.5)" :sw 1.5)
+    (:ln :x1 205 :y1 225 :x2 160 :y2 75 :s "rgba(168, 85, 247, 0.5)" :sw 1.5)
+    (:circ :cx 160 :cy 145 :r 28 :f "#0ea5e9" :s "#ffffff" :sw 2)
+    (:circ :cx 160 :cy 145 :r 14 :f "#ffffff" :s "none")
+    (:circ :cx 152 :cy 137 :r 5 :f "rgba(255, 255, 255, 0.9)" :s "none")))`;
       } else if (activeStudio === 'games') {
         systemPrompt = `(:skill :name "asl-arcade-game"
   :desc "Autonomous Playable Canvas 2D Game in a self-contained HTML document."
@@ -653,6 +665,30 @@ export const InBrowserCompanion: React.FC = () => {
                 </option>
               ))}
             </select>
+
+            {/* Real WebGPU VRAM Active Engine Badge */}
+            <div className="flex items-center justify-between text-[11px] font-mono px-2 py-1 rounded-xl bg-surface-2/70 border border-line/50">
+              <span className="text-ink-muted flex items-center gap-1.5">
+                <HardDrive className="w-3 h-3 text-signal" />
+                <span>VRAM Engine:</span>
+              </span>
+              {loadedModelId === currentModel.inBrowserSpec.mlcModelId ? (
+                <span className="text-emerald-400 font-bold flex items-center gap-1 text-[11px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Active: {currentModel.badge.split('·')[0].trim()}
+                </span>
+              ) : loadedModelId ? (
+                <span className="text-amber-400 font-semibold flex items-center gap-1 text-[11px]" title={`Current loaded model in WebGPU VRAM: ${loadedModelId}`}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Active: {MODELS.find(m => m.inBrowserSpec.mlcModelId === loadedModelId)?.badge.split('·')[0].trim() || 'Other'} (Switches on Run)
+                </span>
+              ) : (
+                <span className="text-ink-muted flex items-center gap-1 text-[11px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-neutral-600" />
+                  Not loaded in VRAM
+                </span>
+              )}
+            </div>
 
             {/* Reasoning Toggle (Да / Нет) - Rendered only for models that support reasoning */}
             {isReasoningSupported && (

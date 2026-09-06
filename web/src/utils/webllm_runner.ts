@@ -35,8 +35,8 @@ export const IN_BROWSER_MODELS: InBrowserModelSpec[] = [
     approxSizeMb: 850,
     vramMb: 1630,
     quantization: 'q4f16_1 (4-bit)',
-    description: '1.5B parameters (~850MB download, 1.6GB VRAM). Strong reasoning for multi-step logic.',
-    supportsThinking: true
+    description: '1.5B parameters (~850MB download, 1.6GB VRAM). Fast responsive coding assistant.',
+    supportsThinking: false
   },
   {
     id: 'qwen-coder-3b-q4',
@@ -46,7 +46,7 @@ export const IN_BROWSER_MODELS: InBrowserModelSpec[] = [
     vramMb: 2504,
     quantization: 'q4f16_1 (4-bit)',
     description: 'Flagship 3B coding model (~1.7GB download, ~2.5GB VRAM). Exceptional game engine loops and algorithmic depth.',
-    supportsThinking: true
+    supportsThinking: false
   }
 ];
 
@@ -85,6 +85,10 @@ class WebLlmRunner {
     }
   }
 
+  public getLoadedModelId(): string | null {
+    return this.engine ? this.currentModelId : null;
+  }
+
   public isModelLoaded(modelSpec: InBrowserModelSpec): boolean {
     return this.engine !== null && this.currentModelId === modelSpec.mlcModelId;
   }
@@ -113,29 +117,49 @@ class WebLlmRunner {
     onProgress: (progress: WebLlmProgress) => void
   ): Promise<void> {
     if (this.engine && this.currentModelId === modelSpec.mlcModelId) {
-      onProgress({ progress: 1.0, text: 'Model ready from cache', isDownloading: false });
+      onProgress({ progress: 1.0, text: 'Model ready in WebGPU VRAM', isDownloading: false });
       return;
     }
 
     this.isInitializing = true;
     try {
+      // Free VRAM from previously loaded model before allocating new one
+      if (this.engine) {
+        try {
+          if (typeof this.engine.unload === 'function') {
+            await this.engine.unload();
+          }
+        } catch (e) {
+          console.warn('Error unloading previous model from VRAM:', e);
+        }
+        this.engine = null;
+        this.currentModelId = null;
+      }
+
       const webllm = await import('@mlc-ai/web-llm');
       
-      this.engine = await webllm.CreateMLCEngine(modelSpec.mlcModelId, {
-        initProgressCallback: (report) => {
-          onProgress({
-            progress: report.progress,
-            text: report.text,
-            isDownloading: report.progress < 1.0
-          });
+      this.engine = await webllm.CreateMLCEngine(
+        modelSpec.mlcModelId,
+        {
+          initProgressCallback: (report) => {
+            onProgress({
+              progress: report.progress,
+              text: report.text,
+              isDownloading: report.progress < 1.0
+            });
+          }
+        },
+        {
+          repetition_penalty: 1.0
         }
-      });
+      );
 
       this.currentModelId = modelSpec.mlcModelId;
       this.isInitializing = false;
       onProgress({ progress: 1.0, text: 'Model loaded in WebGPU VRAM', isDownloading: false });
     } catch (err: any) {
       this.isInitializing = false;
+      this.currentModelId = null;
       throw new Error(`Failed to initialize in-browser WebGPU model: ${err?.message || err}`);
     }
   }
@@ -158,26 +182,18 @@ class WebLlmRunner {
       let accumulatedRaw = '';
       let tokenCount = 0;
 
-      const shouldEnableThinking = !!options?.enableThinking;
-
       const requestParams: any = {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt }
         ],
         stream: true,
-        temperature: options?.temperature ?? 0.6,
+        temperature: options?.temperature ?? 0.45,
         top_p: options?.top_p ?? 0.9,
-        frequency_penalty: 0.35,
-        presence_penalty: 0.15,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
         max_tokens: 3500
       };
-
-      if (shouldEnableThinking) {
-        requestParams.extra_body = {
-          enable_thinking: true
-        };
-      }
 
       const chunks = await this.engine.chat.completions.create(requestParams);
 
@@ -226,7 +242,7 @@ class WebLlmRunner {
     onToken: (token: string, fullText: string, telemetry: StreamTelemetry) => void,
     onDone: (finalRepairedCode: string, planText: string, telemetry: StreamTelemetry) => void,
     onError: (err: any) => void,
-    options?: { enableThinking?: boolean }
+    _options?: { enableThinking?: boolean }
   ): Promise<void> {
     if (!this.engine) {
       onError(new Error('In-browser engine is not loaded.'));
@@ -262,15 +278,12 @@ class WebLlmRunner {
           { role: 'user', content: `Formulate a concise architectural plan for: ${userPrompt}` }
         ],
         stream: true,
-        temperature: 0.7,
+        temperature: 0.6,
         top_p: 0.95,
-        frequency_penalty: 0.2,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
         max_tokens: 600
       };
-
-      if (options?.enableThinking) {
-        planParams.extra_body = { enable_thinking: true };
-      }
 
       let planRaw = '';
       const planChunks = await this.engine.chat.completions.create(planParams);
@@ -305,10 +318,10 @@ class WebLlmRunner {
           { role: 'user', content: synthesisUserPrompt }
         ],
         stream: true,
-        temperature: 0.15,
+        temperature: 0.2,
         top_p: 0.85,
-        frequency_penalty: 0.35,
-        presence_penalty: 0.1,
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
         max_tokens: 3200
       };
 

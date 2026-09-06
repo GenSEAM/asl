@@ -200,8 +200,27 @@ export function renderNode(node: AsnNode): string {
       const inner = (node.children || []).map(renderNode).join('\n    ');
       return `<g ${idAttr} ${tr} ${opacity}>\n    ${inner}\n  </g>`;
     }
-    default:
+    case 'el':
+    case 'ellipse': {
+      const fill = p.f || p.fill || 'none';
+      const stroke = p.s || p.stroke || 'none';
+      const sw = p.sw || p['stroke-width'] || 1;
+      return `<ellipse cx="${p.cx ?? 160}" cy="${p.cy ?? 160}" rx="${p.rx ?? 50}" ry="${p.ry ?? 30}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${opacity} />`;
+    }
+    case 'pline':
+    case 'polyline': {
+      const pts = p.pts || p.points || '';
+      const fill = p.f || p.fill || 'none';
+      const stroke = p.s || p.stroke || '#38bdf8';
+      const sw = p.sw || p['stroke-width'] || 1;
+      return `<polyline points="${pts}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${opacity} />`;
+    }
+    default: {
+      if (node.children && node.children.length > 0) {
+        return (node.children || []).map(renderNode).join('\n  ');
+      }
       return '';
+    }
   }
 }
 
