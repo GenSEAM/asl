@@ -47,13 +47,31 @@ export class AntiHallucinationHarness {
     // 1. Native ASN Vector Graphics (:svg :w ... :h ... ...)
     const svgIdx = text.indexOf('(:svg');
     if (svgIdx !== -1) {
-      let asnSvg = text.slice(svgIdx).trim();
-      const openCount = (asnSvg.match(/\(/g) || []).length;
-      const closeCount = (asnSvg.match(/\)/g) || []).length;
-      if (openCount > closeCount) {
-        asnSvg += ')'.repeat(openCount - closeCount);
+      let depth = 0;
+      let inStr = false;
+      let esc = false;
+      let endIdx = -1;
+      for (let i = svgIdx; i < text.length; i++) {
+        const c = text[i];
+        if (esc) { esc = false; continue; }
+        if (c === '\\') { esc = true; continue; }
+        if (c === '"') { inStr = !inStr; continue; }
+        if (inStr) continue;
+        if (c === '(') depth++;
+        else if (c === ')') {
+          depth--;
+          if (depth === 0) {
+            endIdx = i + 1;
+            break;
+          }
+        }
       }
-      const transpiled = asnToSvg(asnSvg);
+
+      let asnSvg = endIdx !== -1 ? text.slice(svgIdx, endIdx) : text.slice(svgIdx);
+      if (depth > 0) {
+        asnSvg += ')'.repeat(depth);
+      }
+      const transpiled = asnToSvg(asnSvg.trim());
       if (transpiled.svg) {
         return { code: transpiled.svg, toolKind: 'svg' };
       }
@@ -68,13 +86,34 @@ export class AntiHallucinationHarness {
     // 3. ASL Write Toolcall (:call :tool "write" ... :content "...")
     const contentIdx = text.indexOf(':content ');
     if (contentIdx !== -1 && (text.includes('(:call') || text.includes('(:c '))) {
-      let inner = text.slice(contentIdx + 9).trim();
-      if (inner.startsWith('"')) inner = inner.slice(1);
-      if (inner.endsWith('")')) inner = inner.slice(0, -2);
-      else if (inner.endsWith('"')) inner = inner.slice(0, -1);
-      inner = inner.replace(/\\"/g, '"').replace(/\\n/g, '\n');
-      return { code: inner, toolKind: 'html' };
+      let rest = text.slice(contentIdx + 9).trim();
+      if (rest.startsWith('"')) {
+        let extracted = '';
+        let esc = false;
+        for (let i = 1; i < rest.length; i++) {
+          const c = rest[i];
+          if (esc) {
+            if (c === 'n') extracted += '\n';
+            else if (c === '"') extracted += '"';
+            else if (c === '\\') extracted += '\\';
+            else extracted += '\\' + c;
+            esc = false;
+            continue;
+          }
+          if (c === '\\') {
+            esc = true;
+            continue;
+          }
+          if (c === '"') {
+            // End of string argument
+            return { code: extracted, toolKind: 'html' };
+          }
+          extracted += c;
+        }
+        return { code: extracted, toolKind: 'html' };
+      }
     }
+
 
     // 4. Compact Positional ASL Toolcall (:call "write" "index.html" "...") or (:c :w "..." "...")
     const posWriteMatch = text.match(/^\(:c(?:all)?\s+(?::w|"write")\s+(?:"[^"]+"|[^\s]+)\s+([\s\S]*)\)$/i);
