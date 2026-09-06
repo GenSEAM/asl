@@ -1,0 +1,386 @@
+#!/usr/bin/env node
+/**
+ * AgentScript (ASL) Multi-Agent Skills & Global Toolbelt Installer
+ * Generated/Transpiled runtime artifact from pure AgentScript module: agent-bus/src/wire.asl & pack/src/pack.asl
+ * 
+ * Capabilities:
+ * - Discovers all native ASL skills (asl-toolbelt, asl-mem, asl-intel, asl-codec, asl-native, etc.)
+ * - Detects installed agent harnesses (Claude Code, Cursor, Windsurf, Antigravity, Factory Droid)
+ * - Interactively prompts user with default "Yes" to install all skills and global directives
+ * - Injects idempotent ASL Toolbelt directives into global agent instruction files:
+ *   - Claude Code: ~/.claude/CLAUDE.md
+ *   - Cursor: ~/.cursorrules & ~/.cursor/rules/asl-toolbelt.mdc
+ *   - Windsurf: ~/.codeium/windsurf/memories/global_rules.md
+ *   - Antigravity CLI: ~/.gemini/config/rules/asl-toolbelt.md & ~/.gemini/config/skills/
+ *   - Factory Droid: ~/.factory/AGENTS.md
+ *   - Local Workspace: ./AGENTS.md & ./.cursorrules & ./.agents/skills/
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import readline from 'node:readline/promises';
+
+const WORKSPACE_ROOT = process.cwd();
+const HOME = os.homedir();
+
+const TOOLBELT_DIRECTIVE = `<!-- ASL_TOOLBELT_START -->
+# AgentScript (ASL) Universal Polyglot Toolbelt & In-Memory Directive
+
+Activate the \`asl-toolbelt\` skill and follow its instructions.
+
+The native AgentScript (\`asl\`) toolchain is a **universal, polyglot-native code intelligence and editing engine**. Apply it strictly across ALL supported languages:
+- **Activate Skill**: Always activate and consult the \`asl-toolbelt\` skill for code exploration, search, bulk reads, memory indexing, and verification.
+- **Mandatory Tool Routing & Batch RPC First**: For AST structure, symbols, callers, and code exploration, NEVER dump files with legacy tools. You MUST execute \`asl rpc '(:batch ...)'\`, \`asl intel outline <file>\`, or \`asl intel search <symbol>\` via your bash/command tool.
+- **Supported Languages**: AgentScript (\`.asl\`, \`.asn\`), TypeScript/JavaScript (\`.ts\`, \`.tsx\`, \`.js\`, \`.mjs\`), Python (\`.py\`), PHP (\`.php\`), Rust (\`.rs\`), Go (\`.go\`), Shell (\`.sh\`, \`.bash\`, \`.zsh\`), JSON/YAML (\`.json\`, \`.yaml\`), SVG/HTML (\`.svg\`, \`.html\`), SQL (\`.sql\`), C/C++ (\`.c\`, \`.cpp\`, \`.h\`).
+- **Batch RPC & Token Economy**: Execute heterogeneous batches via \`asl rpc '(:batch (:out "...") (:q "...") (:metrics))'\` for 72%–85% token savings over JSON.
+- **Code Intelligence**: Use \`asl intel outline <file>\` for AST skeletons across all supported languages. Use \`asl intel search <symbol>\` and \`asl intel callers <symbol>\` for sub-millisecond symbol lookups.
+- **In-Memory Workspace**: Ingest whole polyglot codebases into RAM with \`asl mem index .\` (<150ms). Use \`asl mem query "<query>"\` for semantic vector search, and \`asl mem doc section <file.md> <title>\` for instant document reading.
+- **In-Memory Polyglot Editing**: Stage edits in RAM via \`asl mem edit <file> <old> <new>\` or mass refactor across languages via \`asl mem replace --match="old" --replace="new" [--ext=.ts]\`. Review pending changes via \`asl mem diff\`, flush atomically to disk with \`asl mem flush\`, or discard with \`asl mem discard\`.
+- **Quality & Telemetry**: Verify with \`asl gate\` (configurable via \`--only=...\` / \`--skip=...\`), inspect coverage via \`asl coverage\`, and monitor performance via \`asl telemetry\`.
+- **Targeted Dependency Inspection (Airgap-Safe)**: Inspect installed packages without internet or context bloat via \`asl mem dep <pkg>\` (or \`asl intel dep <pkg>\`). Extracts version-pinned types and interfaces in <15ms from \`node_modules\` or \`.venv\`.
+- **Airgap & Benchmark Invariant**: For strict evaluations and benchmarks, set \`ASL_AIRGAP=1\` (or \`ASL_OFFLINE=1\`). All external web search is blocked at the gateway level.
+<!-- ASL_TOOLBELT_END -->`;
+
+const SOURCE_SKILLS_DIRS = [
+  path.join(WORKSPACE_ROOT, '.agents', 'skills'),
+  path.join(HOME, '.gemini', 'config', 'skills'),
+  path.join(WORKSPACE_ROOT, 'asl', 'skills')
+];
+
+function getSourceSkills() {
+  const skills = new Map();
+  for (const dir of SOURCE_SKILLS_DIRS) {
+    if (fs.existsSync(dir)) {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() || entry.isSymbolicLink()) {
+            const skillPath = path.join(dir, entry.name);
+            const mdPath = path.join(skillPath, 'SKILL.md');
+            if (fs.existsSync(mdPath)) {
+              skills.set(entry.name, skillPath);
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+  return skills;
+}
+
+function injectDirective(filePath, directive) {
+  let content = '';
+  if (fs.existsSync(filePath)) {
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch {
+      content = '';
+    }
+  }
+
+  const startMarker = '<!-- ASL_TOOLBELT_START -->';
+  const endMarker = '<!-- ASL_TOOLBELT_END -->';
+
+  if (content.includes(startMarker) && content.includes(endMarker)) {
+    const regex = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`, 'g');
+    content = content.replace(regex, directive);
+  } else {
+    content = content.trim() ? `${content}\n\n${directive}\n` : `${directive}\n`;
+  }
+
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
+function copyDirectory(src, dest) {
+  try {
+    const st = fs.lstatSync(dest);
+    if (st.isSymbolicLink()) {
+      fs.unlinkSync(dest);
+    }
+  } catch {}
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isSocket() || entry.isFIFO()) continue;
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectory(srcPath, destPath);
+    } else {
+      try {
+        try {
+          if (fs.lstatSync(destPath).isSymbolicLink()) {
+            fs.unlinkSync(destPath);
+          }
+        } catch {}
+        fs.copyFileSync(srcPath, destPath);
+      } catch {}
+    }
+  }
+}
+
+export function detectAgents() {
+  const agents = [
+    {
+      id: 'claude',
+      name: 'Claude Code',
+      skillsDirs: [path.join(HOME, '.claude', 'skills')],
+      rulesFiles: [path.join(HOME, '.claude', 'CLAUDE.md')],
+      detected: fs.existsSync(path.join(HOME, '.claude'))
+    },
+    {
+      id: 'cursor',
+      name: 'Cursor',
+      skillsDirs: [path.join(HOME, '.cursor', 'skills')],
+      rulesFiles: [
+        path.join(HOME, '.cursorrules'),
+        path.join(HOME, '.cursor', 'rules', 'asl-toolbelt.mdc')
+      ],
+      detected: fs.existsSync(path.join(HOME, '.cursor')) || fs.existsSync(path.join(HOME, '.cursorrules'))
+    },
+    {
+      id: 'windsurf',
+      name: 'Windsurf',
+      skillsDirs: [path.join(HOME, '.codeium', 'windsurf', 'skills')],
+      rulesFiles: [path.join(HOME, '.codeium', 'windsurf', 'memories', 'global_rules.md')],
+      detected: fs.existsSync(path.join(HOME, '.codeium', 'windsurf'))
+    },
+    {
+      id: 'antigravity',
+      name: 'Antigravity / Gemini',
+      skillsDirs: [
+        path.join(HOME, '.gemini', 'config', 'skills'),
+        path.join(HOME, '.gemini', 'skills')
+      ],
+      rulesFiles: [
+        path.join(HOME, '.gemini', 'config', 'AGENTS.md'),
+        path.join(HOME, '.gemini', 'config', 'rules', 'asl-toolbelt.md')
+      ],
+      detected: fs.existsSync(path.join(HOME, '.gemini'))
+    },
+    {
+      id: 'factory',
+      name: 'Factory Droid',
+      skillsDirs: [path.join(HOME, '.factory', 'skills')],
+      rulesFiles: [path.join(HOME, '.factory', 'AGENTS.md')],
+      detected: fs.existsSync(path.join(HOME, '.factory'))
+    },
+    {
+      id: 'agents',
+      name: 'Universal Agents Standard (~/.agents)',
+      skillsDirs: [path.join(HOME, '.agents', 'skills')],
+      rulesFiles: [path.join(HOME, '.agents', 'rules', 'asl-toolbelt.md')],
+      detected: fs.existsSync(path.join(HOME, '.agents'))
+    },
+    {
+      id: 'codex',
+      name: 'Codex / OpenAI',
+      skillsDirs: [path.join(HOME, '.codex', 'skills')],
+      rulesFiles: [path.join(HOME, '.codex', 'AGENTS.md')],
+      detected: fs.existsSync(path.join(HOME, '.codex'))
+    }
+  ];
+  return agents;
+}
+
+export function installSkills(options = {}) {
+  const isGlobal = options.global !== false;
+  const force = options.force || false;
+  const selectedAgents = options.agents || 'all';
+  const injectInstructions = options.injectInstructions !== false; // default true
+
+  const sourceSkills = getSourceSkills();
+  console.log(`--> Discovered ${sourceSkills.size} native skills: ${Array.from(sourceSkills.keys()).join(', ')}`);
+
+  const results = {
+    installedAgents: [],
+    updatedFiles: [],
+    skipped: []
+  };
+
+  // 1. Local Workspace Installation
+  const localSkillsDir = path.join(WORKSPACE_ROOT, '.agents', 'skills');
+  try {
+    if (!fs.existsSync(localSkillsDir)) {
+      fs.mkdirSync(localSkillsDir, { recursive: true });
+    }
+    for (const [name, srcPath] of sourceSkills.entries()) {
+      const dest = path.join(localSkillsDir, name);
+      if (!fs.existsSync(dest) || force) {
+        if (fs.existsSync(dest) && fs.lstatSync(dest).isSymbolicLink()) {
+          fs.unlinkSync(dest);
+        }
+        copyDirectory(srcPath, dest);
+      }
+    }
+  } catch (err) {
+    results.skipped.push(`${localSkillsDir}: ${err.message}`);
+  }
+
+  // Inject into local workspace rules if instructions enabled
+  if (injectInstructions) {
+    const localTargets = [
+      path.join(WORKSPACE_ROOT, 'AGENTS.md'),
+      path.join(WORKSPACE_ROOT, '.cursorrules')
+    ];
+
+    for (const t of localTargets) {
+      try {
+        injectDirective(t, TOOLBELT_DIRECTIVE);
+        results.updatedFiles.push(path.relative(WORKSPACE_ROOT, t));
+      } catch (err) {
+        results.skipped.push(`${t} (${err.message})`);
+      }
+    }
+  }
+
+  // 2. Global Agent Targets
+  if (isGlobal) {
+    const allAgents = detectAgents();
+
+    for (const agent of allAgents) {
+      if (selectedAgents !== 'all' && !selectedAgents.includes(agent.id)) {
+        continue;
+      }
+
+      let agentUpdated = false;
+
+      // Copy skills if agent supports skills folder(s)
+      const targetSkillDirs = agent.skillsDirs || (agent.skillsDir ? [agent.skillsDir] : []);
+      for (const sDir of targetSkillDirs) {
+        try {
+          if (!fs.existsSync(sDir)) fs.mkdirSync(sDir, { recursive: true });
+          for (const [name, srcPath] of sourceSkills.entries()) {
+            const dest = path.join(sDir, name);
+            if (!fs.existsSync(dest) || force) {
+              if (fs.existsSync(dest) && fs.lstatSync(dest).isSymbolicLink()) {
+                fs.unlinkSync(dest);
+              }
+              copyDirectory(srcPath, dest);
+            }
+          }
+          agentUpdated = true;
+        } catch (err) {
+          results.skipped.push(`${sDir}: ${err.message}`);
+        }
+      }
+
+      // Inject global instructions / rules
+      if (injectInstructions) {
+        const targetRuleFiles = agent.rulesFiles || (agent.rulesFile ? [agent.rulesFile] : []);
+        if (agent.rulesMdc && !targetRuleFiles.includes(agent.rulesMdc)) {
+          targetRuleFiles.push(agent.rulesMdc);
+        }
+
+        for (const rFile of targetRuleFiles) {
+          try {
+            injectDirective(rFile, TOOLBELT_DIRECTIVE);
+            results.updatedFiles.push(rFile.replace(HOME, '~'));
+            agentUpdated = true;
+          } catch (err) {
+            results.skipped.push(`${rFile.replace(HOME, '~')}: ${err.message}`);
+          }
+        }
+      }
+
+      if (agentUpdated) {
+        results.installedAgents.push(agent.name);
+      }
+    }
+  }
+
+  return results;
+}
+
+// --- CLI Execution ---
+async function main() {
+  const args = process.argv.slice(2);
+  const isNoGlobal = args.includes('--no-global') || args.includes('--local');
+  const isForce = args.includes('--force');
+  const isYes = args.includes('-y') || args.includes('--yes') || args.includes('--all');
+  let agentFilter = args.find(a => a.startsWith('--agents='))?.split('=')[1] || 'all';
+  let injectInstructions = true;
+
+  console.log("================================================================================");
+  console.log("          AgentScript (ASL) Multi-Agent Toolbelt & Skills Setup                 ");
+  console.log("================================================================================");
+
+  const detected = detectAgents();
+  const found = detected.filter(a => a.detected);
+  console.log(`Detected agent environments on this system:`);
+  for (const a of detected) {
+    console.log(`  [${a.detected ? '✓' : ' '}] ${a.name} (${a.id})`);
+  }
+
+  // Interactive prompts if running in interactive terminal and not passed --yes
+  if (process.stdin.isTTY && !isYes) {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    try {
+      const qAll = await rl.question(`\nInstall skills for all available agents by default? [Y/n]: `);
+      if (qAll.trim().toLowerCase() === 'n' || qAll.trim().toLowerCase() === 'no') {
+        const qSelect = await rl.question(`Enter comma-separated agent IDs [${detected.map(a => a.id).join(',')}]: `);
+        if (qSelect.trim()) {
+          agentFilter = qSelect.trim().split(',').map(s => s.trim());
+        }
+      }
+
+      const qInstr = await rl.question(`Inject ASL Toolbelt directives into global instructions (CLAUDE.md, .cursorrules, etc.)? [Y/n]: `);
+      if (qInstr.trim().toLowerCase() === 'n' || qInstr.trim().toLowerCase() === 'no') {
+        injectInstructions = false;
+      }
+    } finally {
+      rl.close();
+    }
+  } else {
+    console.log(`\nMode: Automatic setup (all available agents enabled, global instructions enabled).`);
+  }
+
+  const res = installSkills({
+    global: !isNoGlobal,
+    force: isForce,
+    agents: agentFilter,
+    injectInstructions: injectInstructions
+  });
+
+  if (res.updatedFiles.length > 0) {
+    console.log(`\n✓ Injected toolbelt directives into instructions:`);
+    for (const f of res.updatedFiles) {
+      console.log(`  - ${f}`);
+    }
+  }
+
+  if (res.installedAgents.length > 0) {
+    console.log(`\n✓ Configured global toolbelt for agents:`);
+    for (const a of res.installedAgents) {
+      console.log(`  - ${a}`);
+    }
+  }
+
+  if (res.skipped.length > 0) {
+    console.log(`\nNotice (restricted by sandbox or non-existent paths):`);
+    for (const s of res.skipped) {
+      console.log(`  • ${s}`);
+    }
+    console.log(`  To install globally with full user permissions outside sandbox, execute:\n    npx @genseam/asl-skills\n  or:\n    asl skill install --global`);
+  }
+
+  console.log("\n✓ [asl-skills] Setup complete. Native toolbelt is registered.");
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename || '')) {
+  main().catch(err => {
+    console.error('Installer error:', err);
+    process.exit(1);
+  });
+}

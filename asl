@@ -12,15 +12,39 @@ ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
 NODE_BIN="/usr/local/bin/node"
 [ ! -x "$NODE_BIN" ] && NODE_BIN="$(command -v node 2>/dev/null || echo "node")"
 
+find_mem_daemon() {
+  if [ -f "$ROOT/bridges/node/asl-mem-daemon.mjs" ]; then
+    echo "$ROOT/bridges/node/asl-mem-daemon.mjs"
+  elif [ -f "$ROOT/../asl/bridges/node/asl-mem-daemon.mjs" ]; then
+    echo "$ROOT/../asl/bridges/node/asl-mem-daemon.mjs"
+  elif [ -f "$ROOT/../tools/asl-mem-daemon.mjs" ]; then
+    echo "$ROOT/../tools/asl-mem-daemon.mjs"
+  else
+    echo "$ROOT/tools/asl-mem-daemon.mjs"
+  fi
+}
+
+find_skills_runner() {
+  if [ -f "$ROOT/bridges/node/skills-installer.mjs" ]; then
+    echo "$ROOT/bridges/node/skills-installer.mjs"
+  elif [ -f "$ROOT/../asl/bridges/node/skills-installer.mjs" ]; then
+    echo "$ROOT/../asl/bridges/node/skills-installer.mjs"
+  elif [ -f "$ROOT/../tools/skills-installer.mjs" ]; then
+    echo "$ROOT/../tools/skills-installer.mjs"
+  else
+    echo "$ROOT/tools/skills-installer.mjs"
+  fi
+}
+
 CMD="${1:-help}"
 shift || true
 
 case "$CMD" in
   gate)
-    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    MEM_DAEMON="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_DAEMON" gate "$@"
     ;;
+
   check)
     if [ -z "$1" ]; then
       echo "Usage: asl check <file.asl>"
@@ -153,8 +177,7 @@ case "$CMD" in
   test)
     if [ "$1" = "--coverage" ] || [ "$1" = "-c" ]; then
       shift
-      MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-      [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+      MEM_DAEMON="$(find_mem_daemon)"
       exec "$NODE_BIN" "$MEM_DAEMON" coverage "$@"
     fi
     if [ -n "$1" ]; then
@@ -199,18 +222,15 @@ case "$CMD" in
     exec "$0" gate "$@"
     ;;
   coverage|cov)
-    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    MEM_DAEMON="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_DAEMON" coverage "$@"
     ;;
   telemetry|metrics|bench)
-    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    MEM_DAEMON="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_DAEMON" telemetry "$@"
     ;;
   gen:slm|slm-preset|bundle-slm)
-    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    MEM_DAEMON="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_DAEMON" gen:slm "$@"
     ;;
   gen:web|gen-web)
@@ -417,8 +437,7 @@ case "$CMD" in
         exit 0
         ;;
       install|setup)
-        SKILLS_RUNNER="$ROOT/../tools/skills-installer.mjs"
-        [ ! -f "$SKILLS_RUNNER" ] && SKILLS_RUNNER="$ROOT/tools/skills-installer.mjs"
+        SKILLS_RUNNER="$(find_skills_runner)"
         exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
         ;;
       *)
@@ -439,8 +458,7 @@ case "$CMD" in
           echo "Usage: asl intel outline <file>"
           exit 1
         fi
-        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        MEM_DAEMON="$(find_mem_daemon)"
         if [ -f "$MEM_DAEMON" ]; then
           exec "$NODE_BIN" "$MEM_DAEMON" outline "$TARGET"
         fi
@@ -473,8 +491,7 @@ case "$CMD" in
           echo "Usage: asl intel search <symbol>"
           exit 1
         fi
-        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        MEM_DAEMON="$(find_mem_daemon)"
         if [ -f "$MEM_DAEMON" ]; then
           exec "$NODE_BIN" "$MEM_DAEMON" search "$SYM"
         fi
@@ -485,8 +502,7 @@ case "$CMD" in
       callers)
         SYM="$TARGET"
         if [ -z "$SYM" ]; then echo "Usage: asl intel callers <symbol>"; exit 1; fi
-        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        MEM_DAEMON="$(find_mem_daemon)"
         if [ -f "$MEM_DAEMON" ]; then
           exec "$NODE_BIN" "$MEM_DAEMON" callers "$SYM"
         fi
@@ -497,8 +513,7 @@ case "$CMD" in
       impact)
         SYM="$TARGET"
         if [ -z "$SYM" ]; then echo "Usage: asl intel impact <symbol>"; exit 1; fi
-        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
-        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        MEM_DAEMON="$(find_mem_daemon)"
         if [ -f "$MEM_DAEMON" ]; then
           exec "$NODE_BIN" "$MEM_DAEMON" impact "$SYM"
         fi
@@ -507,8 +522,7 @@ case "$CMD" in
         exit 0
         ;;
       preload)
-        MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
-        [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+        MEM_RUNNER="$(find_mem_daemon)"
         if [ -f "$MEM_RUNNER" ]; then
           exec "$NODE_BIN" "$MEM_RUNNER" preload "$TARGET" "$@"
         else
@@ -517,8 +531,7 @@ case "$CMD" in
         fi
         ;;
       index)
-        MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
-        [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+        MEM_RUNNER="$(find_mem_daemon)"
         exec "$NODE_BIN" "$MEM_RUNNER" index "$TARGET" "$@"
         ;;
       *)
@@ -528,8 +541,7 @@ case "$CMD" in
     esac
     ;;
   mem)
-    MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
-    [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+    MEM_RUNNER="$(find_mem_daemon)"
     if [ -f "$MEM_RUNNER" ]; then
       exec "$NODE_BIN" "$MEM_RUNNER" "$@"
     else
@@ -539,14 +551,12 @@ case "$CMD" in
 
     ;;
   rpc|batch|eval)
-    MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
-    [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+    MEM_RUNNER="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_RUNNER" rpc "$@"
     ;;
   setup)
 
-    SKILLS_RUNNER="$ROOT/../tools/skills-installer.mjs"
-    [ ! -f "$SKILLS_RUNNER" ] && SKILLS_RUNNER="$ROOT/tools/skills-installer.mjs"
+    SKILLS_RUNNER="$(find_skills_runner)"
     exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
     ;;
   upgrade|update)
