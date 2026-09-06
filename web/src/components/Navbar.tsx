@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Home,
-  Terminal,
   Milestone,
   BookOpen,
   Newspaper,
@@ -15,7 +14,6 @@ import { Link } from '../lib/router';
 
 const navItems = [
   { label: 'Home', href: '/', icon: Home },
-  { label: 'Playground', href: '/playground', icon: Terminal },
   { label: 'Roadmap', href: '/roadmap', icon: Milestone },
   { label: 'Docs', href: '/docs', icon: BookOpen },
   { label: 'Blog', href: '/blog', icon: Newspaper },

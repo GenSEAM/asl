@@ -54,16 +54,28 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
     prompt: 'Write a playable neon arcade Pong game in index.html with AI paddle, player paddle, ball deflection physics, and score.'
   },
   {
-    id: 'chameleon',
-    title: '🦎 Color-Shifting Chameleon',
+    id: 'gem',
+    title: '💎 Neon Crystal Gem',
     category: 'svg',
-    prompt: 'Draw a colorful stylized chameleon perched on a curved branch with coiled tail, big eyes, and jungle leaves.'
+    prompt: 'Draw a compact glowing neon crystal gemstone badge in ASN notation with geometric facets, gradient shine, and centered 320x320 canvas.'
   },
   {
-    id: 'robot',
-    title: '🤖 Robot Mascot',
+    id: 'rocket',
+    title: '🚀 Space Rocket Icon',
     category: 'svg',
-    prompt: 'Draw a futuristic cute robot companion mascot with glowing antenna, expressive screen eyes, and metallic chassis.'
+    prompt: 'Draw a compact stylized space rocket icon in ASN notation inside a dark circular 320x320 badge with fiery booster exhaust.'
+  },
+  {
+    id: 'lightning',
+    title: '⚡ Lightning Shield',
+    category: 'svg',
+    prompt: 'Draw a sharp energetic golden lightning bolt emblem in ASN notation on a dark hexagonal badge with glowing cyan trim.'
+  },
+  {
+    id: 'chameleon',
+    title: '🦎 Stylized Chameleon',
+    category: 'svg',
+    prompt: 'Draw a compact stylized chameleon profile in ASN notation coiled on a branch with vivid green and turquoise gradients.'
   },
   {
     id: 'calc',
@@ -128,6 +140,9 @@ export const InBrowserCompanion: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<'games' | 'svg' | 'apps'>('games');
   const [customPrompt, setCustomPrompt] = useState<string>(PROMPT_TEMPLATES[0].prompt);
   const [refinementPrompt, setRefinementPrompt] = useState<string>('');
+  const [reasoningLevel, setReasoningLevel] = useState<'off' | 'low' | 'high'>('off');
+  const [liveReasoning, setLiveReasoning] = useState<string>('');
+  const [isThinkingOpen, setIsThinkingOpen] = useState<boolean>(false);
 
   // WebGPU Hardware Support State
   const [hasWebGpu, setHasWebGpu] = useState<boolean | null>(null);
@@ -166,7 +181,7 @@ export const InBrowserCompanion: React.FC = () => {
   const checkModelCache = async (spec: InBrowserModelSpec) => {
     setIsCheckingCache(true);
     try {
-      const inCache = await webLlmRunner.isModelInCache(spec);
+      const inCache = await webLlmRunner.hasModelInCache(spec);
       setCachedModels(prev => ({ ...prev, [spec.id]: inCache }));
     } catch {
       // ignore
@@ -264,39 +279,32 @@ export const InBrowserCompanion: React.FC = () => {
   :desc "Autonomous Vector Graphics Drawing in AgentScript ASN notation. Transpiles to crisp W3C SVG."
   :rules [
     (:rule :type "mandatory" :text "Output ONLY a single valid (:svg ...) root expression. No markdown fences, no explanation prose.")
-    (:rule :type "mandatory" :text "Always specify :w 800 :h 500 on root (:svg :w 800 :h 500 ...).")
+    (:rule :type "mandatory" :text "Always specify compact square dimensions :w 320 :h 320 :v \\"0 0 320 320\\" on root (:svg ...).")
+    (:rule :type "content" :text "Draw strictly the subject requested by the user prompt. Never draw a robot or face unless specifically asked.")
     (:rule :type "primitives" :text "Use standard ASN shapes:
-      - Gradient defs: (:def (:grad :id \"bg\" :x1 \"0%\" :y1 \"0%\" :x2 \"100%\" :y2 \"100%\" (:stop :offset \"0%\" :col \"#0f172a\") (:stop :offset \"100%\" :col \"#020617\")) (:rgrad :id \"glow\" (:stop :offset \"0%\" :col \"#38bdf8\" :o 0.8) (:stop :offset \"100%\" :col \"#38bdf8\" :o 0)))
-      - Background: (:rc :x 0 :y 0 :w 800 :h 500 :f \"url(#bg)\" :rx 16)
-      - Radial aura/glow: (:circ :cx 400 :cy 230 :r 140 :f \"url(#glow)\" :o 0.4)
-      - Mascot / Subject: Compose layered geometric parts using (:circ ...), (:rc ...), and paths (:p :d \"...\" :f \"#...\" :s \"#...\" :sw 2)
-      - Highlights & Details: (:circ :cx 380 :cy 210 :r 15 :f \"#ffffff\" :o 0.9)
-      - Title text: (:txt :x 400 :y 440 :text \"CYBER COMPANION\" :f \"#f8fafc\" :sz 20 :weight \"bold\" :align \"middle\")")
+      - Gradient defs: (:def (:grad :id \\"g1\\" :x1 \\"0%\\" :y1 \\"0%\\" :x2 \\"100%\\" :y2 \\"100%\\" (:stop :offset \\"0%\\" :col \\"#06b6d4\\") (:stop :offset \\"100%\\" :col \\"#3b82f6\\")))
+      - Dark Card Background: (:rc :x 10 :y 10 :w 300 :h 300 :f \\"#090d16\\" :rx 24 :s \\"rgba(255,255,255,0.08)\\" :sw 1)
+      - Centered Subject: Keep all coordinates centered around (160, 160) inside the 320x320 box using (:circ ...), (:rc ...), and paths (:p :d \\"...\\" :f \\"...\\" :s \\"...\\")
+      - Clean Highlights: (:circ :cx 160 :cy 160 :r 8 :f \\"#ffffff\\" :o 0.9)
+      - Label text: (:txt :x 160 :y 280 :text \\"EMBLEM\\" :f \\"#94a3b8\\" :sz 11 :weight \\"bold\\" :align \\"middle\\")")
     (:rule :type "mandatory" :text "All parentheses must be strictly balanced.")
   ]
   :example
-  (:svg :w 800 :h 500
+  (:svg :w 320 :h 320 :v "0 0 320 320"
     (:def
-      (:grad :id "bgGrad" :x1 "0%" :y1 "0%" :x2 "0%" :y2 "100%"
-        (:stop :offset "0%" :col "#0f172a")
-        (:stop :offset "100%" :col "#020617"))
-      (:rgrad :id "aura"
-        (:stop :offset "0%" :col "#38bdf8" :o 0.7)
-        (:stop :offset "100%" :col "#0284c7" :o 0)))
-    (:rc :x 0 :y 0 :w 800 :h 500 :f "url(#bgGrad)" :rx 20)
-    (:circ :cx 400 :cy 230 :r 160 :f "url(#aura)" :o 0.5)
-    (:rc :x 300 :y 150 :w 200 :h 150 :f "#1e293b" :s "#38bdf8" :sw 4 :rx 30)
-    (:circ :cx 350 :cy 210 :r 22 :f "#38bdf8")
-    (:circ :cx 450 :cy 210 :r 22 :f "#38bdf8")
-    (:p :d "M 370 250 Q 400 270 430 250" :s "#38bdf8" :sw 4)
-    (:ln :x1 400 :y1 150 :x2 400 :y2 100 :s "#f59e0b" :sw 4)
-    (:circ :cx 400 :cy 90 :r 12 :f "#f59e0b")
-    (:txt :x 400 :y 430 :text "ASL COMPANION" :f "#e2e8f0" :sz 22 :weight "bold" :align "middle")))`;
+      (:grad :id "neonGlow" :x1 "0%" :y1 "0%" :x2 "100%" :y2 "100%"
+        (:stop :offset "0%" :col "#06b6d4")
+        (:stop :offset "100%" :col "#3b82f6")))
+    (:rc :x 10 :y 10 :w 300 :h 300 :f "#090d16" :rx 24 :s "rgba(255,255,255,0.08)" :sw 1)
+    (:circ :cx 160 :cy 160 :r 85 :f "none" :s "url(#neonGlow)" :sw 3)
+    (:p :d "M 160 95 L 215 160 L 160 225 L 105 160 Z" :f "url(#neonGlow)" :o 0.85)
+    (:circ :cx 160 :cy 160 :r 12 :f "#ffffff")
+    (:txt :x 160 :y 280 :text "CRYSTAL" :f "#94a3b8" :sz 11 :weight "bold" :align "middle")))`;
       } else if (isGameTask) {
         systemPrompt = `(:skill :name "asl-arcade-game"
   :desc "Autonomous Retro Arcade Canvas Game Engine synthesis in isolated browser sandbox."
   :rules [
-    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \"write\" :path \"index.html\" :content \"<!DOCTYPE html>...\")")
+    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \\"write\\" :path \\"index.html\\" :content \\"<!DOCTYPE html>...\\")")
     (:rule :type "mandatory" :text "Single self-contained file with HTML, CSS, and JS.")
     (:rule :type "apis" :text "The sandbox pre-injects window.Sound for retro sound effects: Sound.jump(), Sound.coin(), Sound.laser(), Sound.hit(), Sound.boom(), Sound.powerup(), Sound.gameover(). Trigger them!")
     (:rule :type "apis" :text "Tailwind CSS is pre-loaded. Keyboard arrow keys & spacebar scrolling are already prevented.")
@@ -308,16 +316,22 @@ export const InBrowserCompanion: React.FC = () => {
         systemPrompt = `(:skill :name "asl-sandbox-app"
   :desc "Autonomous Interactive Dark-Mode Single-Page Web Application."
   :rules [
-    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \"write\" :path \"index.html\" :content \"<!DOCTYPE html>...\")")
+    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \\"write\\" :path \\"index.html\\" :content \\"<!DOCTYPE html>...\\")")
     (:rule :type "mandatory" :text "Single self-contained file with HTML, CSS, and interactive JS.")
     (:rule :type "apis" :text "Tailwind CSS is pre-loaded. Use modern sleek styling: bg-slate-900 cards, border border-slate-800, text-sky-400 accents, smooth transitions.")
     (:rule :type "apis" :text "window.Sound is available: Sound.coin(), Sound.powerup(), Sound.hit().")
     (:rule :type "structure" :text "Include: 1) Title header with status badge, 2) Clean input controls, interactive cards, or dynamic counters, 3) Complete working event listeners and state management.")
   ]
   :example
-  (:call :tool "write" :path "index.html" :content "<div class='max-w-md w-full p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl flex flex-col gap-4 font-sans'><div class='flex items-center justify-between border-b border-slate-800 pb-3'><h2 class='text-lg font-bold text-white'>Interactive Utility</h2><span class='px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-xs font-mono font-bold'>READY</span></div><div id='display' class='w-full p-4 rounded-xl bg-slate-950 text-right font-mono text-2xl text-white font-bold tracking-wider'>0</div><div class='grid grid-cols-4 gap-2'><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\"1\")'>1</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\"2\")'>2</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\"+\")'>+</button><button class='p-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-mono font-bold transition-all' onclick='reset()'>C</button></div></div><script>let val='0';const d=document.getElementById('display');function add(c){val=val==='0'?c:val+c;d.innerText=val;Sound.coin();}function reset(){val='0';d.innerText=val;Sound.hit();}</script>"))`;
+  (:call :tool "write" :path "index.html" :content "<div class='max-w-md w-full p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl flex flex-col gap-4 font-sans'><div class='flex items-center justify-between border-b border-slate-800 pb-3'><h2 class='text-lg font-bold text-white'>Interactive Utility</h2><span class='px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-xs font-mono font-bold'>READY</span></div><div id='display' class='w-full p-4 rounded-xl bg-slate-950 text-right font-mono text-2xl text-white font-bold tracking-wider'>0</div><div class='grid grid-cols-4 gap-2'><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\\"1\\")'>1</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\\"2\\")'>2</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\\"+\\")'>+</button><button class='p-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-mono font-bold transition-all' onclick='reset()'>C</button></div></div><script>let val='0';const d=document.getElementById('display');function add(c){val=val==='0'?c:val+c;d.innerText=val;Sound.coin();}function reset(){val='0';d.innerText=val;Sound.hit();}</script>"))`;
       }
 
+      // Reasoning guidance injection
+      if (reasoningLevel === 'low') {
+        systemPrompt = "First, outline your architectural steps and geometry inside <think>...</think> (brief, 2-3 sentences). Then output the pure code/ASN.\n\n" + systemPrompt;
+      } else if (reasoningLevel === 'high') {
+        systemPrompt = "First, perform an in-depth step-by-step reasoning analysis inside <think>...</think> covering layout, coordinate bounds, state management, and edge cases. Then output the pure code/ASN.\n\n" + systemPrompt;
+      }
 
       await webLlmRunner.generateStreaming(
         targetPrompt,
@@ -325,9 +339,15 @@ export const InBrowserCompanion: React.FC = () => {
         (_delta, _accumulated, telemetry) => {
           setStreamedTokens(telemetry.tokensGenerated);
           setTokPerSec(telemetry.tokensPerSec);
+          if (telemetry.reasoningText) {
+            setLiveReasoning(telemetry.reasoningText);
+          }
         },
         (finalCode, telemetry) => {
           setRenderedCode(finalCode);
+          if (telemetry.reasoningText) {
+            setLiveReasoning(telemetry.reasoningText);
+          }
           setGenerationLatencyMs(Math.round(telemetry.elapsedMs));
           setGenerationPhase('completed');
           setRenderKey(k => k + 1);
@@ -336,7 +356,8 @@ export const InBrowserCompanion: React.FC = () => {
           console.error('In-browser model error:', err);
           setGenerationError(err?.message || 'Error during in-browser inference');
           setGenerationPhase('error');
-        }
+        },
+        { reasoningLevel }
       );
 
     } catch (err: any) {
@@ -350,10 +371,17 @@ export const InBrowserCompanion: React.FC = () => {
 
   const handleRefine = () => {
     if (!refinementPrompt.trim()) return;
-    const combined = `${customPrompt}\n\n[USER REFINEMENT]: ${refinementPrompt}`;
-    setCustomPrompt(combined);
+    const req = refinementPrompt.trim();
+    const prevCode = renderedCode.trim();
+    let iteratePrompt = '';
+    if (prevCode) {
+      iteratePrompt = `${customPrompt}\n\n[CURRENT CODE]:\n${prevCode}\n\n[USER REFINEMENT]:\n${req}\n\nApply the requested refinement to the code above while preserving all existing functionality. Output the updated complete code.`;
+    } else {
+      iteratePrompt = `${customPrompt}\n\n[USER REFINEMENT]:\n${req}`;
+    }
+    setCustomPrompt(prev => `${prev}\n\n[REFINEMENT]: ${req}`);
     setRefinementPrompt('');
-    executeGeneration(combined);
+    executeGeneration(iteratePrompt);
   };
 
   const filteredTemplates = PROMPT_TEMPLATES.filter(it => it.category === activeCategory);
@@ -431,6 +459,24 @@ export const InBrowserCompanion: React.FC = () => {
                 </option>
               ))}
             </select>
+
+            {/* Reasoning Level Selector */}
+            <div className="flex items-center justify-between p-2 rounded-xl bg-surface-2 border border-line text-xs font-mono">
+              <span className="text-ink-muted text-[11px] flex items-center gap-1.5 font-bold">
+                <Sparkles className="w-3.5 h-3.5 text-signal" />
+                <span>Reasoning:</span>
+              </span>
+              <select
+                value={reasoningLevel}
+                onChange={(e) => setReasoningLevel(e.target.value as 'off' | 'low' | 'high')}
+                disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
+                className="bg-transparent text-ink text-xs font-mono font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="off">⚡ Off (Instant)</option>
+                <option value="low">🎯 Low (Brief Plan)</option>
+                <option value="high">🧠 High (Deep CoT)</option>
+              </select>
+            </div>
 
             <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted px-1">
               <span>Speed: <b className="text-signal">{currentModel.speed}</b></span>
@@ -650,6 +696,30 @@ export const InBrowserCompanion: React.FC = () => {
             </div>
           )}
 
+          {/* Collapsible Reasoning Process Accordion */}
+          {liveReasoning.trim() && (
+            <div className="rounded-2xl bg-surface border border-line p-3 text-xs font-mono shadow-sm">
+              <button
+                type="button"
+                onClick={() => setIsThinkingOpen(prev => !prev)}
+                className="flex items-center justify-between w-full text-signal font-bold cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>🧠 Reasoning Chain ({liveReasoning.length} chars)</span>
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted">
+                  {isThinkingOpen ? '▲ Collapse' : '▼ Expand'}
+                </span>
+              </button>
+              {isThinkingOpen && (
+                <div className="mt-2.5 p-3 rounded-xl bg-surface-2 text-ink-muted text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed border border-line">
+                  {liveReasoning}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Sandbox Canvas Viewport */}
           <div className={`w-full rounded-3xl border border-line bg-neutral-950 overflow-hidden relative shadow-md transition-all ${
             fullScreen ? 'fixed inset-4 z-50 h-[calc(100vh-2rem)]' : 'h-[580px]'
@@ -717,9 +787,13 @@ export const InBrowserCompanion: React.FC = () => {
               isSvg ? (
                 <div
                   key={renderKey}
-                  className="w-full h-full flex items-center justify-center p-6 bg-gradient-to-br from-neutral-950 to-neutral-900 overflow-auto"
-                  dangerouslySetInnerHTML={{ __html: renderedCode.trim() }}
-                />
+                  className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-neutral-950 via-slate-950 to-neutral-900 overflow-hidden"
+                >
+                  <div
+                    className="max-w-[340px] max-h-[340px] w-full aspect-square flex items-center justify-center drop-shadow-2xl [&>svg]:w-full [&>svg]:h-full [&>svg]:max-w-full [&>svg]:max-h-full transition-all"
+                    dangerouslySetInnerHTML={{ __html: renderedCode.trim() }}
+                  />
+                </div>
               ) : (
                 <iframe
                   key={renderKey}

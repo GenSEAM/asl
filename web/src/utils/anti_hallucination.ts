@@ -20,10 +20,28 @@ export interface FsmRepairReport {
 
 export class AntiHallucinationHarness {
   /**
-   * Cleans code blocks and extracts raw content from potential markdown wrappers
+   * Extracts reasoning thoughts from <think>...</think> blocks
+   */
+  public extractThinking(raw: string): { thinking: string; code: string } {
+    const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+    if (thinkMatch) {
+      const thinking = thinkMatch[1].trim();
+      const code = raw.replace(/<think>[\s\S]*?<\/think>/i, '').trim();
+      return { thinking, code };
+    }
+    const unclosedMatch = raw.match(/<think>([\s\S]*)$/i);
+    if (unclosedMatch) {
+      return { thinking: unclosedMatch[1].trim(), code: '' };
+    }
+    return { thinking: '', code: raw };
+  }
+
+  /**
+   * Cleans code blocks and extracts raw content from potential markdown wrappers and thinking blocks
    */
   public stripMarkdownFences(raw: string): string {
-    let text = raw.trim();
+    const { code } = this.extractThinking(raw);
+    let text = code.trim();
     // Strip leading code fence markers (e.g. ```asn, ```asl, ```html, ```svg, ```)
     const fenceMatch = text.match(/^```[a-zA-Z0-9_\-]*\n?([\s\S]*?)(?:\n?```)?$/);
     if (fenceMatch) {

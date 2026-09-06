@@ -14,6 +14,7 @@ export interface InBrowserModelSpec {
   vramMb: number;
   quantization: string;
   description: string;
+  supportsThinking?: boolean;
 }
 
 export const IN_BROWSER_MODELS: InBrowserModelSpec[] = [
@@ -66,6 +67,7 @@ export interface StreamTelemetry {
   tokensPerSec: number;
   elapsedMs: number;
   repairReport: FsmRepairReport | null;
+  reasoningText?: string;
 }
 
 class WebLlmRunner {
@@ -89,10 +91,17 @@ class WebLlmRunner {
     }
   }
 
-  public async isModelInCache(modelSpec: InBrowserModelSpec): Promise<boolean> {
+  public isModelLoaded(modelSpec: InBrowserModelSpec): boolean {
+    return this.engine !== null && this.currentModelId === modelSpec.mlcModelId;
+  }
+
+  public async hasModelInCache(modelSpec: InBrowserModelSpec): Promise<boolean> {
     try {
       const webllm = await import('@mlc-ai/web-llm');
-      return await webllm.hasModelInCache(modelSpec.mlcModelId);
+      if (typeof webllm.hasModelInCache === 'function') {
+        return await webllm.hasModelInCache(modelSpec.mlcModelId);
+      }
+      return false;
     } catch {
       return false;
     }
@@ -142,7 +151,8 @@ class WebLlmRunner {
     systemPrompt: string,
     onToken: (token: string, fullText: string, telemetry: StreamTelemetry) => void,
     onDone: (finalRepairedCode: string, telemetry: StreamTelemetry) => void,
-    onError: (err: any) => void
+    onError: (err: any) => void,
+    options?: { reasoningLevel?: 'off' | 'low' | 'high'; enableThinking?: boolean }
   ): Promise<void> {
     if (!this.engine) {
       onError(new Error('In-browser engine is not loaded.'));
@@ -154,15 +164,25 @@ class WebLlmRunner {
       let accumulatedRaw = '';
       let tokenCount = 0;
 
-      const chunks = await this.engine.chat.completions.create({
+      const shouldEnableThinking = options?.enableThinking ?? (options?.reasoningLevel && options.reasoningLevel !== 'off');
+
+      const requestParams: any = {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt }
         ],
         stream: true,
         temperature: 0.15,
-        max_tokens: 3000
-      });
+        max_tokens: 3500
+      };
+
+      if (shouldEnableThinking !== undefined) {
+        requestParams.extra_body = {
+          enable_thinking: !!shouldEnableThinking
+        };
+      }
+
+      const chunks = await this.engine.chat.completions.create(requestParams);
 
       for await (const chunk of chunks) {
         const delta = chunk.choices[0]?.delta?.content || '';
@@ -171,17 +191,20 @@ class WebLlmRunner {
 
         const elapsed = Math.max(1, performance.now() - startTime);
         const tokPerSec = Math.round((tokenCount / (elapsed / 1000)) * 10) / 10;
+        const { thinking } = antiHallucinationHarness.extractThinking(accumulatedRaw);
 
         onToken(delta, accumulatedRaw, {
           tokensGenerated: tokenCount,
           tokensPerSec: tokPerSec,
           elapsedMs: elapsed,
-          repairReport: null
+          repairReport: null,
+          reasoningText: thinking
         });
       }
 
       const totalElapsed = Math.max(1, performance.now() - startTime);
       const finalTokPerSec = Math.round((tokenCount / (totalElapsed / 1000)) * 10) / 10;
+      const { thinking } = antiHallucinationHarness.extractThinking(accumulatedRaw);
 
       // Pass through the ASL Anti-Hallucination FSM balancer
       const repairReport = antiHallucinationHarness.repairAndNormalize(accumulatedRaw);
@@ -190,7 +213,8 @@ class WebLlmRunner {
         tokensGenerated: tokenCount,
         tokensPerSec: finalTokPerSec,
         elapsedMs: totalElapsed,
-        repairReport
+        repairReport,
+        reasoningText: thinking
       });
     } catch (err) {
       onError(err);

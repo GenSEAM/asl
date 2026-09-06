@@ -22,14 +22,6 @@ const ITEMS: SearchResult[] = [
     icon: BookOpen,
   },
   {
-    id: '2',
-    category: 'toolchain',
-    title: 'Interactive Playground (In-Browser Agent Sandbox)',
-    desc: 'Pure client-side WebGPU agent executing in an isolated sandbox.',
-    href: '/playground',
-    icon: Sparkles,
-  },
-  {
     id: '3',
     category: 'toolchain',
     title: 'Multi-Runtime Ecosystem',

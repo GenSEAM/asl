@@ -5,7 +5,6 @@ import { CosmicLandscapeBackground } from './components/CosmicLandscapeBackgroun
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
-import { PlaygroundView } from './views/PlaygroundView';
 import { RoadmapView } from './views/RoadmapView';
 import { DocsView } from './views/DocsView';
 import { BlogView } from './views/BlogView';
@@ -14,7 +13,6 @@ const AppContent: React.FC = () => {
   const { currentPath } = useRouter();
 
   const renderView = () => {
-    if (currentPath === '/playground' || currentPath === '/graph' || currentPath === '/graph-reactor') return <PlaygroundView />;
     if (currentPath === '/ecosystem') return <DocsView initialTab="ecosystem" />;
     if (currentPath === '/roadmap') return <RoadmapView />;
     if (currentPath === '/docs') return <DocsView />;
