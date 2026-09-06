@@ -1,1 +1,0 @@
-../../../packages/skills/visual-cognition-design/SKILL.md
