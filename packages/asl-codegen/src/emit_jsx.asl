@@ -7,6 +7,7 @@
       emit-tsx-module
       jsx-attr-key
       is-void-tag?
+      is-component-tag?
       indent-spaces])
 
 (dfe VNode
@@ -26,7 +27,17 @@
           (or (= tag "br")
               (or (= tag "hr")
                   (or (= tag "meta")
-                      (= tag "link")))))))
+                      (or (= tag "link")
+                          (or (= tag "source")
+                              (or (= tag "col")
+                                  (= tag "wbr"))))))))))
+
+(df is-component-tag? [(tag Str)] -> Bool
+  :d "Checks if a tag represents a React component (uppercase first character)"
+  (if (string-empty? tag)
+      false
+      (let [(first-ch (option-or (string-slice tag 0 1) ""))]
+        (and (>= first-ch "A") (<= first-ch "Z")))))
 
 (df jsx-attr-key [(k Str)] -> Str
   :d "Translates HTML attribute names to React JSX property names"
@@ -39,6 +50,13 @@
     ((= k "autofocus") "autoFocus")
     ((= k "maxlength") "maxLength")
     ((= k "minlength") "minLength")
+    ((= k "onclick") "onClick")
+    ((= k "onchange") "onChange")
+    ((= k "onsubmit") "onSubmit")
+    ((= k "onkeydown") "onKeyDown")
+    ((= k "onkeyup") "onKeyUp")
+    ((= k "onfocus") "onFocus")
+    ((= k "onblur") "onBlur")
     (:else k)))
 
 (df emit-jsx-attrs [(attrs (Map Str Str))] -> Str
@@ -47,21 +65,28 @@
     (if (= (list-length pairs) 0)
         ""
         (let [(rendered (map (fn [(p (Pair Str Str))] -> Str
-                               (str " " (jsx-attr-key (.-first p)) "=\"" (.-second p) "\""))
+                               (let [(k (jsx-attr-key (.-first p)))
+                                     (v (.-second p))]
+                                 (cond
+                                   ((= v "true") (str " " k))
+                                   ((= v "false") (str " " k "={false}"))
+                                   ((string-starts-with? v "{") (str " " k "=" v))
+                                   (:else (str " " k "=\"" v "\"")))))
                              pairs))]
           (string-join rendered "")))))
 
 (df emit-vnode-jsx [(node VNode) (indent I64)] -> Str
-  :d "Renders a VNode hierarchy into formatted JSX"
+  :d "Renders a VNode hierarchy into formatted JSX for native elements and components"
   (let [(pad (indent-spaces indent))]
     (mt node
       ((text-node content)
        (str pad content))
       ((element-node tag attrs children)
        (let [(attr-str (emit-jsx-attrs attrs))
-             (ch-len (list-length children))]
+             (ch-len (list-length children))
+             (is-comp (is-component-tag? tag))]
          (if (= ch-len 0)
-             (if (is-void-tag? tag)
+             (if (or (is-void-tag? tag) is-comp)
                  (str pad "<" tag attr-str " />")
                  (str pad "<" tag attr-str "></" tag ">"))
              (let [(ch-strs (map (fn [(ch VNode)] -> Str
