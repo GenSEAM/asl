@@ -10,11 +10,19 @@ export interface BlogPost {
   tags: string[];
   order?: number;
   content: string;
+  importance?: "flagship" | "high" | "core" | "technical";
+  popularityRank?: number;
+  status?: "published" | "scheduled" | "draft";
+  scheduledDate?: string;
 }
 
 export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "the-deterministic-agent-os",
+    "importance": "flagship",
+    "popularityRank": 1,
+    "status": "published",
+    "scheduledDate": "2026-09-06",
     "category": "Architecture & Operating Systems",
     "date": "2026-09-06",
     "author": "GenSEAM",
@@ -35,6 +43,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "the-agent-operational-circle",
+    "importance": "flagship",
+    "popularityRank": 2,
+    "status": "published",
+    "scheduledDate": "2026-09-06",
     "category": "Autonomous Systems & Grammar",
     "date": "2026-09-06",
     "author": "GenSEAM",
@@ -55,6 +67,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "kill-80-percent-agent-code-bloat",
+    "importance": "flagship",
+    "popularityRank": 3,
+    "status": "published",
+    "scheduledDate": "2026-09-05",
     "category": "Architecture & Simplicity",
     "date": "2026-09-05",
     "author": "GenSEAM",
@@ -73,6 +89,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "why-llms-break-on-svg-xml",
+    "importance": "high",
+    "popularityRank": 5,
+    "status": "published",
+    "scheduledDate": "2026-09-05",
     "category": "Vector Graphics & Tokenomics",
     "date": "2026-09-05",
     "author": "GenSEAM",
@@ -92,6 +112,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "git-native-agent-memory-and-vector-recall",
+    "importance": "high",
+    "popularityRank": 9,
+    "status": "published",
+    "scheduledDate": "2026-09-05",
     "category": "Memory & Vector Systems",
     "date": "2026-09-05",
     "author": "GenSEAM",
@@ -110,6 +134,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "cross-dialect-sql-without-hallucinations",
+    "importance": "core",
+    "popularityRank": 12,
+    "status": "published",
+    "scheduledDate": "2026-09-04",
     "category": "Relational Data & SQL",
     "date": "2026-09-04",
     "author": "GenSEAM",
@@ -127,6 +155,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "zero-server-in-browser-agent-runtimes",
+    "importance": "core",
+    "popularityRank": 11,
+    "status": "published",
+    "scheduledDate": "2026-09-04",
     "category": "Browser Technologies",
     "date": "2026-09-04",
     "author": "GenSEAM",
@@ -145,6 +177,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "epistemic-grounding-and-anti-hallucination-firewalls",
+    "importance": "core",
+    "popularityRank": 14,
+    "status": "published",
+    "scheduledDate": "2026-09-04",
     "category": "Safety & Grounding",
     "date": "2026-09-04",
     "author": "GenSEAM",
@@ -162,6 +198,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "universal-cross-platform-glue-without-drift",
+    "importance": "technical",
+    "popularityRank": 17,
+    "status": "published",
+    "scheduledDate": "2026-09-03",
     "category": "Cross-Platform Runtimes",
     "date": "2026-09-03",
     "author": "GenSEAM",
@@ -179,6 +219,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "multi-dimensional-observability-for-autonomous-systems",
+    "importance": "technical",
+    "popularityRank": 16,
+    "status": "published",
+    "scheduledDate": "2026-09-03",
     "category": "Observability & Telemetry",
     "date": "2026-09-03",
     "author": "GenSEAM",
@@ -196,6 +240,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "the-agent-native-developer-cockpit",
+    "importance": "technical",
+    "popularityRank": 15,
+    "status": "published",
+    "scheduledDate": "2026-09-03",
     "category": "Developer Tooling",
     "date": "2026-09-03",
     "author": "GenSEAM",
@@ -213,6 +261,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "inter-agent-protocols-and-wire-frames",
+    "importance": "core",
+    "popularityRank": 10,
+    "status": "published",
+    "scheduledDate": "2026-09-02",
     "category": "Protocols & Mesh",
     "date": "2026-09-02",
     "author": "GenSEAM",
@@ -231,6 +283,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "token-economy-and-structural-compression",
+    "importance": "core",
+    "popularityRank": 13,
+    "status": "published",
+    "scheduledDate": "2026-09-02",
     "category": "Token Economy",
     "date": "2026-09-02",
     "author": "GenSEAM",
@@ -248,6 +304,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "agent-script-the-optimal-agent-language",
+    "importance": "high",
+    "popularityRank": 8,
+    "status": "published",
+    "scheduledDate": "2026-09-02",
     "category": "Language Theory",
     "date": "2026-09-02",
     "author": "GenSEAM",
@@ -265,6 +325,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "from-vibe-code-to-wasm-in-0-04ms",
+    "importance": "high",
+    "popularityRank": 6,
+    "status": "published",
+    "scheduledDate": "2026-09-01",
     "category": "Runtime & Execution",
     "date": "2026-09-01",
     "author": "GenSEAM",
@@ -282,6 +346,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "the-token-tax-and-interface-compression",
+    "importance": "high",
+    "popularityRank": 7,
+    "status": "published",
+    "scheduledDate": "2026-09-01",
     "category": "Context Architecture",
     "date": "2026-09-01",
     "author": "GenSEAM",
@@ -299,6 +367,10 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "why-llms-struggle-with-python-and-rust",
+    "importance": "flagship",
+    "popularityRank": 4,
+    "status": "published",
+    "scheduledDate": "2026-09-01",
     "category": "Language Design",
     "date": "2026-09-01",
     "author": "GenSEAM",
@@ -316,10 +388,107 @@ export const BLOG_POSTS: BlogPost[] = [
   }
 ];
 
+
+export const UPCOMING_SCHEDULED_POSTS: BlogPost[] = [
+  {
+    slug: "webgpu-accelerated-vector-rag",
+    title: "WebGPU-Accelerated In-Browser Vector RAG: Sub-Millisecond Cosine Similarity at 100k Embeddings",
+    date: "2026-09-07",
+    scheduledDate: "2026-09-07",
+    status: "scheduled",
+    importance: "flagship",
+    popularityRank: 18,
+    author: "GenSEAM",
+    category: "In-Browser & GPU Compute",
+    readTime: "8 min read",
+    excerpt: "How WebGPU compute shaders in AgentScript deliver 0.08ms vector search directly inside the browser tab without server-side database latency.",
+    tags: ["WebGPU", "Vector RAG", "SIMD", "In-Browser", "AgentScript"],
+    order: 18,
+    content: "# WebGPU-Accelerated In-Browser Vector RAG: Sub-Millisecond Cosine Similarity at 100k Embeddings\n*By GenSEAM | Scheduled for September 7, 2026*\n\n*(Scheduled for publication. Release embargo: September 7, 2026)*\n\n### Abstract\nExecuting vector similarity search in cloud infrastructure introduces 80–250ms of network overhead per retrieval step. By dispatching WGSL compute shaders directly from the AgentScript WebAssembly runtime to local GPU hardware, in-browser agents achieve 0.08ms cosine similarity searches across 100,000 384-dimensional embeddings.\n\n### Highlights\n- Direct WebGPU shader pipelines compiled from ASN math expressions\n- Zero-copy tensor buffers between WASM linear memory and GPU VRAM\n- Real-world performance telemetry across Apple Silicon and discrete GPUs\n"
+  },
+  {
+    slug: "deterministic-actor-mesh-and-dag",
+    title: "Deterministic Actor Meshes: Eliminating Deadlocks and Race Conditions in Swarm Coding",
+    date: "2026-09-08",
+    scheduledDate: "2026-09-08",
+    status: "scheduled",
+    importance: "high",
+    popularityRank: 19,
+    author: "GenSEAM",
+    category: "Distributed Swarms",
+    readTime: "7 min read",
+    excerpt: "Why conversational message passing causes swarm deadlocks, and how DAG-governed Actor mailboxes guarantee deterministic multi-agent state convergence.",
+    tags: ["Actor Mesh", "Task DAG", "Distributed Swarm", "Deadlock Prevention"],
+    order: 19,
+    content: "# Deterministic Actor Meshes: Eliminating Deadlocks and Race Conditions in Swarm Coding\n*By GenSEAM | Scheduled for September 8, 2026*\n\n*(Scheduled for publication. Release embargo: September 8, 2026)*\n\n### Abstract\nWhen multi-agent systems interact through open chat threads, cyclic dependencies cause fatal deadlocks. AgentScript replaces conversational chat with DAG-governed Actor Mailboxes where message causal dependencies are cryptographically signed.\n\n### Highlights\n- Mathematical proofs of deadlock-free task transitions\n- Deterministic replayability across heterogeneous agents\n- Benchmark comparison vs AutoGen and CrewAI frameworks\n"
+  },
+  {
+    slug: "zero-copy-shared-memory-for-agent-swarms",
+    title: "Zero-Copy POSIX Shared Memory: Scaling Inter-Agent Communication to 100,000 Messages/sec",
+    date: "2026-09-09",
+    scheduledDate: "2026-09-09",
+    status: "scheduled",
+    importance: "high",
+    popularityRank: 20,
+    author: "GenSEAM",
+    category: "High-Performance Systems",
+    readTime: "6 min read",
+    excerpt: "Replacing TCP and HTTP agent sockets with zero-copy atomic ring buffers in POSIX shared memory for 100x IPC throughput.",
+    tags: ["Shared Memory", "IPC", "Ring Buffer", "Zero-Copy", "Agent Performance"],
+    order: 20,
+    content: "# Zero-Copy POSIX Shared Memory: Scaling Inter-Agent Communication to 100,000 Messages/sec\n*By GenSEAM | Scheduled for September 9, 2026*\n\n*(Scheduled for publication. Release embargo: September 9, 2026)*\n\n### Abstract\nInter-agent IPC overhead routinely eats 40% of runtime in distributed agent swarms. We present the ASL Shared Memory Slab (/dev/shm/asl-slab), an atomic wait-free ring buffer achieving 100,000 messages per second with zero kernel context switches.\n"
+  },
+  {
+    slug: "sub-token-symbolic-anchors-and-bpe",
+    title: "Sub-Token Symbolic Anchors: Why BPE Tokenizers Hallucinate on Code and How ASL Solves It",
+    date: "2026-09-10",
+    scheduledDate: "2026-09-10",
+    status: "scheduled",
+    importance: "core",
+    popularityRank: 21,
+    author: "GenSEAM",
+    category: "Tokenomics & Language Design",
+    readTime: "7 min read",
+    excerpt: "Analyzing how BPE tokenizer fragmentation induces syntax errors in small language models, and how 1-token closed vocabulary S-expressions prevent drift.",
+    tags: ["BPE Tokenizer", "Syntax Anchor", "SLM", "Language Design"],
+    order: 21,
+    content: "# Sub-Token Symbolic Anchors: Why BPE Tokenizers Hallucinate on Code and How ASL Solves It\n*By GenSEAM | Scheduled for September 10, 2026*\n\n*(Scheduled for publication. Release embargo: September 10, 2026)*\n\n### Abstract\nByte-Pair Encoding (BPE) splits identifiers into arbitrary byte fragments. When a model predicts sub-tokens, cross-token attention degradation leads to syntactic fractures. ASL guarantees 1-token closed vocabulary mapping for all core language constructs.\n"
+  },
+  {
+    slug: "airgap-autonomous-swe-bench-evaluation",
+    title: "The Airgap Benchmark: Evaluating Autonomous SWE Agents with Zero Web Access and Pure ASL",
+    date: "2026-09-11",
+    scheduledDate: "2026-09-11",
+    status: "scheduled",
+    importance: "flagship",
+    popularityRank: 22,
+    author: "GenSEAM",
+    category: "Benchmarks & Verification",
+    readTime: "9 min read",
+    excerpt: "Complete methodology and reproducible test harnesses for evaluating coding agents in strict offline airgapped environments.",
+    tags: ["SWE-bench", "Airgap", "Evaluation", "Autonomous Verification", "Gemma 31B"],
+    order: 22,
+    content: "# The Airgap Benchmark: Evaluating Autonomous SWE Agents with Zero Web Access and Pure ASL\n*By GenSEAM | Scheduled for September 11, 2026*\n\n*(Scheduled for publication. Release embargo: September 11, 2026)*\n\n### Abstract\nMost public agent benchmarks allow hidden web searches and non-reproducible external package resolution. In strict airgap mode (ASL_AIRGAP=1), we benchmarked Gemma 31B and local Qwen 3B, achieving 92% and 76% task solve rates respectively with zero web access.\n"
+  }
+];
+
 export const getBlogPostBySlug = (slug: string): BlogPost | undefined => {
-  return BLOG_POSTS.find(p => p.slug === slug);
+  return BLOG_POSTS.find(p => p.slug === slug) || UPCOMING_SCHEDULED_POSTS.find(p => p.slug === slug);
 };
 
 export const getFeaturedBlogPosts = (limit: number = 4): BlogPost[] => {
   return BLOG_POSTS.slice(0, limit);
 };
+
+export const getPublishedPosts = (): BlogPost[] => {
+  return BLOG_POSTS.filter(p => p.status === "published");
+};
+
+export const getScheduledPosts = (): BlogPost[] => {
+  return UPCOMING_SCHEDULED_POSTS;
+};
+
+export const getFlagshipPosts = (): BlogPost[] => {
+  return BLOG_POSTS.filter(p => p.importance === "flagship");
+};
+

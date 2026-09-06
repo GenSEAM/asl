@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from '../lib/router';
-import { BLOG_POSTS, getAllCategories, getRelatedPosts, getBlogPostBySlug } from '../lib/blog';
+import {
+  BLOG_POSTS,
+  UPCOMING_SCHEDULED_POSTS,
+  getRelatedPosts,
+  getBlogPostBySlug
+} from '../lib/blog';
 import { MarkdownRenderer } from '../lib/markdown';
 import { SectionHeader } from '../components/ui/primitives';
 import {
@@ -45,14 +50,28 @@ export const BlogView: React.FC = () => {
     }
   }, [activePost, activeSlug]);
 
+  const [viewTab, setViewTab] = useState<'published' | 'flagship' | 'scheduled'>('published');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
-  const categories = useMemo(() => [
-    { name: 'All', count: BLOG_POSTS.length },
-    ...getAllCategories()
-  ], []);
+  const activePostList = useMemo(() => {
+    if (viewTab === 'scheduled') return UPCOMING_SCHEDULED_POSTS;
+    if (viewTab === 'flagship') return BLOG_POSTS.filter((p) => p.importance === 'flagship');
+    return BLOG_POSTS;
+  }, [viewTab]);
+
+  const categories = useMemo(() => {
+    const list = activePostList;
+    const cats: Record<string, number> = {};
+    list.forEach((p) => {
+      cats[p.category] = (cats[p.category] || 0) + 1;
+    });
+    return [
+      { name: 'All', count: list.length },
+      ...Object.entries(cats).map(([name, count]) => ({ name, count }))
+    ];
+  }, [activePostList]);
 
   // Handle 404 for invalid essay slug
   if (activeSlug && !activePost) {
@@ -77,7 +96,7 @@ export const BlogView: React.FC = () => {
   }
 
   const filteredPosts = useMemo(() => {
-    return BLOG_POSTS.filter((post) => {
+    return activePostList.filter((post) => {
       const matchesCategory =
         selectedCategory === 'All' ||
         post.category.toLowerCase() === selectedCategory.toLowerCase();
@@ -91,7 +110,7 @@ export const BlogView: React.FC = () => {
 
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, searchQuery]);
+  }, [activePostList, selectedCategory, searchQuery]);
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -127,6 +146,18 @@ export const BlogView: React.FC = () => {
             <span>{copiedLink ? 'Link Copied' : 'Share'}</span>
           </button>
         </div>
+
+        {/* Scheduled embargo banner */}
+        {activePost.status === 'scheduled' && (
+          <div className="mb-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono flex items-center gap-3">
+            <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
+            <div>
+              <span className="font-bold uppercase tracking-wider">Editorial Roadmap & Embargoed Preview</span>
+              <span className="mx-2">•</span>
+              <span>Target publication release: <strong>{activePost.scheduledDate}</strong>. Not yet distributed externally.</span>
+            </div>
+          </div>
+        )}
 
         {/* Article Header Card */}
         <article className="border border-line rounded-xl bg-surface/80 p-6 sm:p-10 shadow-e2 relative overflow-hidden backdrop-blur-md">
@@ -274,6 +305,45 @@ export const BlogView: React.FC = () => {
         and structured for agentic RAG discovery.
       </p>
 
+      {/* View Mode Tabs */}
+      <div className="flex flex-wrap items-center gap-2 mb-8 p-1.5 bg-surface-2/60 border border-line rounded-2xl w-fit">
+        <button
+          onClick={() => { setViewTab('published'); setSelectedCategory('All'); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all ${
+            viewTab === 'published'
+              ? 'bg-signal text-ground font-semibold shadow-sm'
+              : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>All Published ({BLOG_POSTS.length})</span>
+        </button>
+
+        <button
+          onClick={() => { setViewTab('flagship'); setSelectedCategory('All'); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all ${
+            viewTab === 'flagship'
+              ? 'bg-signal text-ground font-semibold shadow-sm'
+              : 'text-ink-2 hover:text-ink'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Flagship Deep Dives ({BLOG_POSTS.filter((p) => p.importance === 'flagship').length})</span>
+        </button>
+
+        <button
+          onClick={() => { setViewTab('scheduled'); setSelectedCategory('All'); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all ${
+            viewTab === 'scheduled'
+              ? 'bg-amber-400 text-ground font-semibold shadow-sm'
+              : 'text-amber-300/80 hover:text-amber-300'
+          }`}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          <span>📅 Editorial Roadmap ({UPCOMING_SCHEDULED_POSTS.length})</span>
+        </button>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mb-8 pb-6 border-b border-line">
         {/* Category Pills */}
@@ -323,10 +393,22 @@ export const BlogView: React.FC = () => {
             >
               <div>
                 <div className="flex items-center justify-between text-micro font-mono text-ink-3 mb-3">
-                  <span className="px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium">
-                    {post.category}
-                  </span>
-                  <span>{post.readTime}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium">
+                      {post.category}
+                    </span>
+                    {post.importance === 'flagship' && (
+                      <span className="px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]">
+                        ★ Flagship
+                      </span>
+                    )}
+                    {post.popularityRank && (
+                      <span className="text-[10px] text-ink-3">
+                        #{post.popularityRank}
+                      </span>
+                    )}
+                  </div>
+                  <span>{post.status === 'scheduled' ? `📅 ${post.scheduledDate}` : post.readTime}</span>
                 </div>
 
                 <h2 className="text-lg sm:text-xl font-bold text-ink group-hover:text-signal transition-colors mb-3 leading-snug">
@@ -356,9 +438,9 @@ export const BlogView: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-3 border-t border-line/50 text-xs font-mono text-ink-3">
-                  <span>{post.date}</span>
+                  <span>{post.status === 'scheduled' ? `Release: ${post.scheduledDate}` : post.date}</span>
                   <span className="flex items-center gap-1 text-signal group-hover:translate-x-0.5 transition-transform font-medium">
-                    <span>Read Essay</span>
+                    <span>{post.status === 'scheduled' ? 'Preview Abstract' : 'Read Essay'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>

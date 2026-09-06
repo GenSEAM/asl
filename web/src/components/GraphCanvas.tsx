@@ -144,11 +144,23 @@ export const GraphCanvas: React.FC = () => {
           ))}
           <button
             onClick={() => {
+              if (engineRef.current && canvasRef.current) {
+                engineRef.current.triggerRootGrowth(canvasRef.current.width, canvasRef.current.height);
+              }
+            }}
+            className="ml-2 px-3 py-1 text-xs font-semibold rounded-lg border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 transition-all flex items-center gap-1.5"
+            title="Start from single root node and blossom/untangle outward"
+          >
+            <span>🌱 Grow from Root</span>
+          </button>
+          <button
+            onClick={() => {
               if (engineRef.current) engineRef.current.untangleImpulse();
             }}
-            className="ml-2 px-3 py-1 text-xs font-semibold rounded-lg border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all flex items-center gap-1.5"
+            className="ml-1 px-3 py-1 text-xs font-semibold rounded-lg border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all flex items-center gap-1.5"
+            title="Inject kinetic relaxation wave to untangle knots"
           >
-            <span>⚡ Untangle Knots</span>
+            <span>⚡ Untangle</span>
           </button>
           <button
             onClick={() => setIsPaused(!isPaused)}

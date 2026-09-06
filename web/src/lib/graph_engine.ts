@@ -43,8 +43,14 @@ export class GraphEngine {
   // WebGPU support flag
   public isWebGpuSupported: boolean = false;
 
+  public topologyType: 'mesh' | 'dom_tree' = 'dom_tree';
+  public nodeTags: string[] = [];
+  public visibleNodeCount: number = 1000;
+  public isGrowing: boolean = false;
+
   constructor(initialNodes: number = 10000) {
     this.nodeCount = initialNodes;
+    this.visibleNodeCount = Math.min(initialNodes, 1200);
     this.edgeCount = Math.floor(initialNodes * 2.5);
 
     // 4 floats per node (x, y, vx, vy)
@@ -73,6 +79,7 @@ export class GraphEngine {
 
   public setNodeCount(count: number) {
     this.nodeCount = count;
+    this.visibleNodeCount = count;
     this.edgeCount = Math.floor(count * 2.5);
     this.positions = new Float32Array(this.nodeCount * 2);
     this.velocities = new Float32Array(this.nodeCount * 2);
@@ -82,8 +89,17 @@ export class GraphEngine {
   }
 
   public initGraphTopology(width: number = 1200, height: number = 800) {
+    if (this.topologyType === 'dom_tree') {
+      this.initDomTreeTopology(width, height);
+    } else {
+      this.initMeshTopology(width, height);
+    }
+  }
+
+  public initMeshTopology(width: number = 1200, height: number = 800) {
     const cx = width / 2;
     const cy = height / 2;
+    this.nodeTags = [];
 
     for (let i = 0; i < this.nodeCount; i++) {
       const radius = 50 + Math.sqrt(Math.random()) * Math.min(width, height) * 0.42;
@@ -92,15 +108,79 @@ export class GraphEngine {
       this.positions[i * 2 + 1] = cy + Math.sin(angle) * radius;
       this.velocities[i * 2] = (Math.random() - 0.5) * 0.5;
       this.velocities[i * 2 + 1] = (Math.random() - 0.5) * 0.5;
+      this.nodeTags.push('NODE');
     }
 
-    // Cluster edges
     for (let e = 0; e < this.edgeCount; e++) {
       const from = Math.floor(Math.random() * this.nodeCount);
       const neighborOffset = Math.floor((Math.random() - 0.5) * 40);
       const to = Math.max(0, Math.min(this.nodeCount - 1, from + neighborOffset));
       this.edgesFrom[e] = from;
       this.edgesTo[e] = to;
+    }
+  }
+
+  public initDomTreeTopology(width: number = 1200, height: number = 800) {
+    const cx = width / 2;
+    const cy = height / 2;
+    this.nodeTags = [];
+
+    const tags = ['HTML', 'BODY', 'HEADER', 'MAIN', 'SECTION', 'DIV', 'BUTTON', 'IMG', 'SPAN', 'INPUT', 'P', 'CODE', 'A'];
+
+    // Root node 0: HTML
+    this.positions[0] = cx;
+    this.positions[1] = cy;
+    this.velocities[0] = 0;
+    this.velocities[1] = 0;
+    this.nodeTags.push('HTML');
+
+    for (let i = 1; i < this.nodeCount; i++) {
+      // Distributed radial cluster
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.sqrt(i / this.nodeCount) * Math.min(width, height) * 0.44;
+      this.positions[i * 2] = cx + Math.cos(angle) * dist;
+      this.positions[i * 2 + 1] = cy + Math.sin(angle) * dist;
+      this.velocities[i * 2] = (Math.random() - 0.5) * 0.2;
+      this.velocities[i * 2 + 1] = (Math.random() - 0.5) * 0.2;
+
+      // Assign hierarchical DOM tags
+      const tagIdx = Math.min(tags.length - 1, 1 + Math.floor(Math.sqrt(i) % (tags.length - 1)));
+      this.nodeTags.push(tags[tagIdx]);
+    }
+
+    // Connect as deep hierarchical tree with cross-links
+    let edgeIdx = 0;
+    for (let i = 1; i < this.nodeCount && edgeIdx < this.edgeCount; i++) {
+      const parent = Math.floor((i - 1) / 3); // 3-ary tree parent
+      this.edgesFrom[edgeIdx] = parent;
+      this.edgesTo[edgeIdx] = i;
+      edgeIdx++;
+    }
+
+    // Add cross-component references for rich untangling
+    while (edgeIdx < this.edgeCount) {
+      const from = Math.floor(Math.random() * this.nodeCount);
+      const to = Math.floor(Math.random() * this.nodeCount);
+      if (from !== to) {
+        this.edgesFrom[edgeIdx] = from;
+        this.edgesTo[edgeIdx] = to;
+        edgeIdx++;
+      }
+    }
+  }
+
+  public triggerRootGrowth(width: number = 1200, height: number = 800) {
+    const cx = width / 2;
+    const cy = height / 2;
+    this.isGrowing = true;
+    this.visibleNodeCount = 1;
+
+    // Collapse all nodes to single center point
+    for (let i = 0; i < this.nodeCount; i++) {
+      this.positions[i * 2] = cx + (Math.random() - 0.5) * 4;
+      this.positions[i * 2 + 1] = cy + (Math.random() - 0.5) * 4;
+      this.velocities[i * 2] = (Math.random() - 0.5) * 1.5;
+      this.velocities[i * 2 + 1] = (Math.random() - 0.5) * 1.5;
     }
   }
 
@@ -343,37 +423,96 @@ export class GraphEngine {
     const t0 = performance.now();
     ctx.clearRect(0, 0, width, height);
 
-    // 1. Draw sparse edges
-    const sampleEdges = Math.min(this.edgeCount, 2500); // Sample edges for high-fps clarity
+    if (this.isGrowing) {
+      this.visibleNodeCount = Math.min(this.nodeCount, this.visibleNodeCount + 8);
+      if (this.visibleNodeCount >= this.nodeCount) {
+        this.isGrowing = false;
+      }
+    }
+
+    const sampleEdges = Math.min(this.edgeCount, 2500);
+    const activeLimit = this.isGrowing ? this.visibleNodeCount : this.nodeCount;
     ctx.lineWidth = 0.6;
     ctx.strokeStyle = 'rgba(79, 140, 255, 0.15)';
     ctx.beginPath();
     for (let e = 0; e < sampleEdges; e++) {
-      const u = this.edgesFrom[e] * 2;
-      const v = this.edgesTo[e] * 2;
-      ctx.moveTo(this.positions[u], this.positions[u + 1]);
-      ctx.lineTo(this.positions[v], this.positions[v + 1]);
+      const u = this.edgesFrom[e];
+      const v = this.edgesTo[e];
+      if (u < activeLimit && v < activeLimit) {
+        ctx.moveTo(this.positions[u * 2], this.positions[u * 2 + 1]);
+        ctx.lineTo(this.positions[v * 2], this.positions[v * 2 + 1]);
+      }
     }
     ctx.stroke();
 
-    // 2. Batch particle nodes render
-    const nodeStride = this.nodeCount > 50000 ? 2 : 1;
-    const radius = this.nodeCount > 50000 ? 1.0 : this.nodeCount > 10000 ? 1.5 : 2.5;
+    const isDomView = this.topologyType === 'dom_tree' && this.nodeCount <= 3000;
 
-    ctx.fillStyle = this.mode === 'webgpu'
-      ? '#00f2fe'
-      : this.mode === 'webassembly'
-        ? '#38ef7d'
-        : '#ff6b6b';
+    if (isDomView) {
+      // Draw DOM Chip Badges with tag labels
+      for (let i = 0; i < activeLimit; i++) {
+        const x = this.positions[i * 2];
+        const y = this.positions[i * 2 + 1];
+        const tag = this.nodeTags[i] || 'DIV';
 
-    ctx.beginPath();
-    for (let i = 0; i < this.nodeCount; i += nodeStride) {
-      const x = this.positions[i * 2];
-      const y = this.positions[i * 2 + 1];
-      ctx.moveTo(x + radius, y);
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
+        let bg = 'rgba(59, 130, 246, 0.2)';
+        let stroke = '#3b82f6';
+        let textCol = '#93c5fd';
+
+        if (tag === 'HTML') {
+          bg = 'rgba(244, 63, 94, 0.35)'; stroke = '#f43f5e'; textCol = '#ffffff';
+        } else if (tag === 'BODY' || tag === 'MAIN' || tag === 'SECTION') {
+          bg = 'rgba(6, 182, 212, 0.25)'; stroke = '#06b6d4'; textCol = '#67e8f9';
+        } else if (tag === 'BUTTON') {
+          bg = 'rgba(16, 185, 129, 0.3)'; stroke = '#10b981'; textCol = '#6ee7b7';
+        } else if (tag === 'IMG') {
+          bg = 'rgba(168, 85, 247, 0.3)'; stroke = '#a855f7'; textCol = '#d8b4fe';
+        } else if (tag === 'INPUT' || tag === 'A') {
+          bg = 'rgba(236, 72, 153, 0.3)'; stroke = '#ec4899'; textCol = '#f472b6';
+        }
+
+        const chipW = i === 0 ? 44 : 32;
+        const chipH = i === 0 ? 19 : 14;
+        const rx = 4;
+
+        ctx.fillStyle = bg;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = i === 0 ? 2 : 1;
+
+        ctx.beginPath();
+        if (ctx.roundRect) {
+          ctx.roundRect(x - chipW / 2, y - chipH / 2, chipW, chipH, rx);
+        } else {
+          ctx.rect(x - chipW / 2, y - chipH / 2, chipW, chipH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = textCol;
+        ctx.font = i === 0 ? 'bold 9px monospace' : '8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tag, x, y);
+      }
+    } else {
+      // Batch particle nodes render for high scale
+      const nodeStride = this.nodeCount > 50000 ? 2 : 1;
+      const radius = this.nodeCount > 50000 ? 1.0 : this.nodeCount > 10000 ? 1.5 : 2.5;
+
+      ctx.fillStyle = this.mode === 'webgpu'
+        ? '#00f2fe'
+        : this.mode === 'webassembly'
+          ? '#38ef7d'
+          : '#ff6b6b';
+
+      ctx.beginPath();
+      for (let i = 0; i < activeLimit; i += nodeStride) {
+        const x = this.positions[i * 2];
+        const y = this.positions[i * 2 + 1];
+        ctx.moveTo(x + radius, y);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
-    ctx.fill();
 
     return performance.now() - t0;
   }

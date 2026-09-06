@@ -1,7 +1,24 @@
-import { BLOG_POSTS, BlogPost, getBlogPostBySlug, getFeaturedBlogPosts } from '../data/blog/posts';
+import {
+  BLOG_POSTS,
+  UPCOMING_SCHEDULED_POSTS,
+  BlogPost,
+  getBlogPostBySlug,
+  getFeaturedBlogPosts,
+  getPublishedPosts,
+  getScheduledPosts,
+  getFlagshipPosts
+} from '../data/blog/posts';
 
 export type { BlogPost };
-export { BLOG_POSTS, getBlogPostBySlug, getFeaturedBlogPosts };
+export {
+  BLOG_POSTS,
+  UPCOMING_SCHEDULED_POSTS,
+  getBlogPostBySlug,
+  getFeaturedBlogPosts,
+  getPublishedPosts,
+  getScheduledPosts,
+  getFlagshipPosts
+};
 
 export interface BlogCategory {
   name: string;

@@ -405,6 +405,23 @@ export const InBrowserCodingStudio: React.FC = () => {
         </div>
       </div>
 
+      {/* Eddie In-Browser Agent & ASL Toolkit Bar */}
+      <div className="bg-surface-2 border border-line p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span className="font-bold text-ink">Eddie In-Browser Companion</span>
+          <span className="text-white/30">|</span>
+          <span className="text-[11px] text-signal font-semibold">Config: .asl.config.asn (:pure-asl true :runtime :wasm)</span>
+        </div>
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-intel</span>
+          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-mem</span>
+          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-codec</span>
+          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-svg</span>
+          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">7/7 Gates Passed</span>
+        </div>
+      </div>
+
       {/* AI Assistant Quick Prompt Bar */}
       <div className="bg-surface-2 border border-line p-3 rounded-2xl flex items-center gap-3">
         <Sparkles className="w-4 h-4 text-signal shrink-0" />
@@ -412,7 +429,7 @@ export const InBrowserCodingStudio: React.FC = () => {
           type="text"
           value={aiPrompt}
           onChange={(e) => setAiPrompt(e.target.value)}
-          placeholder="Prompt in-browser model: e.g. 'Build a classic snake game', 'Add sound effects', 'Add dark neon glow'..."
+          placeholder="Prompt Eddie in-browser model: e.g. 'Build a classic snake game', 'Add sound effects', 'Add neon glow'..."
           className="flex-1 bg-surface border border-line rounded-xl px-3 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-signal font-mono"
           onKeyDown={(e) => e.key === 'Enter' && handleGenerateWithAi()}
         />
@@ -421,7 +438,7 @@ export const InBrowserCodingStudio: React.FC = () => {
           disabled={isGenerating || !aiPrompt.trim()}
           className="px-3 py-1.5 text-xs font-mono font-semibold rounded-xl border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all disabled:opacity-40"
         >
-          {isGenerating ? 'Synthesizing...' : 'Generate / Patch'}
+          {isGenerating ? 'Synthesizing...' : 'Eddie Auto-Code'}
         </button>
       </div>
 
