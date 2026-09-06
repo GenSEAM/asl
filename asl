@@ -348,14 +348,14 @@ case "$CMD" in
         /^[ \t]*:targets[ \t]+\[/ { in_targets = 1; }
 
         in_rules && /^[ \t]*\(:rule/ {
-          rtype = $0; sub(/.*:type[ \t]+"/, "", rtype); sub(/".*/, "", rtype);
+          rtype = $0; sub(/.*:type[ \t]+"/, "", rtype); sub(/"[ \t]*:text.*/, "", rtype);
           rtext = $0; sub(/.*:text[ \t]+"/, "", rtext); sub(/"[ \t]*\)$/, "", rtext);
           rules[rc++] = "- **[" rtype "]**: " rtext;
         }
         in_tools && /^[ \t]*\(:tool/ {
-          tcmd = $0; sub(/.*:command[ \t]+"/, "", tcmd); sub(/".*/, "", tcmd);
-          tpurp = $0; sub(/.*:purpose[ \t]+"/, "", tpurp); sub(/".*/, "", tpurp);
-          tsave = $0; sub(/.*:savings[ \t]+"/, "", tsave); sub(/".*/, "", tsave);
+          tcmd = $0; sub(/.*:command[ \t]+"/, "", tcmd); sub(/"[ \t]*:purpose.*/, "", tcmd);
+          tpurp = $0; sub(/.*:purpose[ \t]+"/, "", tpurp); sub(/"[ \t]*:savings.*/, "", tpurp);
+          tsave = $0; sub(/.*:savings[ \t]+"/, "", tsave); sub(/"[ \t]*\)$/, "", tsave);
           tools[tc++] = "| `" tcmd "` | " tpurp " | **" tsave "** |";
         }
         in_targets && /"[^"]+"/ {
