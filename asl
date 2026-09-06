@@ -354,7 +354,9 @@ case "$CMD" in
     echo "  audit <file>    Execute complete 3-tier audit (Micro AST, Meso keywords, Macro module)"
     echo "  check <file>    Run semantic syntax and form verification"
     echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
-    echo "  test            Execute native ASL test suites"
+    echo "  test [file]     Execute native ASL test suites"
+    echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact)"
+    echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
     echo "  version         Display toolchain version"
     echo "  help            Display this usage guide"
     exit 0
