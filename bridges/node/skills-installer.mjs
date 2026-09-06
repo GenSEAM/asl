@@ -123,35 +123,17 @@ function getSourceSkills() {
 }
 
 function injectDirective(filePath, directive) {
-  let content = '';
-  if (fs.existsSync(filePath)) {
-    try {
-      content = fs.readFileSync(filePath, 'utf8');
-    } catch {
-      content = '';
-    }
-  }
-
-  // Sanitize any legacy tokensave section
-  if (content.toLowerCase().includes('tokensave')) {
-    content = content.replace(/##\s+tokensave[\s\S]*?(?=\n##|\n<!--|$)/gi, '');
-  }
-
-  const startMarker = '<!-- ASL_TOOLBELT_START -->';
-  const endMarker = '<!-- ASL_TOOLBELT_END -->';
-
-  if (content.includes(startMarker) && content.includes(endMarker)) {
-    const regex = new RegExp(`${startMarker}[\\s\\S]*?${endMarker}`, 'g');
-    content = content.replace(regex, directive);
-  } else {
-    content = content.trim() ? `${content}\n\n${directive}\n` : `${directive}\n`;
-  }
-
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(filePath, content, 'utf8');
+  let targetPath = filePath;
+  try {
+    if (fs.lstatSync(targetPath).isSymbolicLink()) {
+      targetPath = fs.realpathSync(targetPath);
+    }
+  } catch {}
+  fs.writeFileSync(targetPath, `${directive}\n`, 'utf8');
 }
 
 function copyDirectory(src, dest) {
