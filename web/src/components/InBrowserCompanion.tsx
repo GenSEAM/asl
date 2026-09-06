@@ -209,6 +209,10 @@ export const InBrowserCompanion: React.FC = () => {
   const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(false);
   const [liveReasoning, setLiveReasoning] = useState<string>('');
   const [isThinkingOpen, setIsThinkingOpen] = useState<boolean>(false);
+  const [multiPassEnabled, setMultiPassEnabled] = useState<boolean>(true);
+  const [currentPassStep, setCurrentPassStep] = useState<string>('');
+  const [aslPlan, setAslPlan] = useState<string>('');
+  const [isPlanOpen, setIsPlanOpen] = useState<boolean>(false);
 
   // Viewport Switcher for Website Studio
   const [viewportWidth, setViewportWidth] = useState<'100%' | '768px' | '375px'>('100%');
@@ -337,6 +341,8 @@ export const InBrowserCompanion: React.FC = () => {
     abortControllerRef.current = abortController;
 
     setRenderedCode('');
+    setAslPlan('');
+    setCurrentPassStep('');
     setStreamedTokens(0);
     setGenerationError(null);
     setGateResult(null);
@@ -407,34 +413,68 @@ export const InBrowserCompanion: React.FC = () => {
         systemPrompt = "First, perform an in-depth step-by-step reasoning analysis inside <think>...</think> covering layout, coordinate bounds, state management, and edge cases. Then output the pure code/ASN.\n\n" + systemPrompt;
       }
 
-      const temperature = activeStudio === 'svg' ? 0.65 : 0.45;
+      if (multiPassEnabled) {
+        await webLlmRunner.generateMultiPassStreaming(
+          targetPrompt,
+          activeStudio,
+          systemPrompt,
+          (_step, label) => {
+            setCurrentPassStep(label);
+          },
+          (_delta, _accumulated, telemetry) => {
+            setStreamedTokens(telemetry.tokensGenerated);
+            setTokPerSec(telemetry.tokensPerSec);
+            if (telemetry.reasoningText) {
+              setLiveReasoning(telemetry.reasoningText);
+            }
+          },
+          (finalCode, planText, telemetry) => {
+            setRenderedCode(finalCode);
+            setAslPlan(planText);
+            if (telemetry.reasoningText) {
+              setLiveReasoning(telemetry.reasoningText);
+            }
+            setGenerationLatencyMs(Math.round(telemetry.elapsedMs));
+            setGenerationPhase('completed');
+            setRenderKey(k => k + 1);
+          },
+          (err) => {
+            console.error('In-browser model error:', err);
+            setGenerationError(err?.message || 'Error during in-browser inference');
+            setGenerationPhase('error');
+          },
+          { enableThinking: reasoningEnabled && isReasoningSupported }
+        );
+      } else {
+        const temperature = activeStudio === 'svg' ? 0.65 : 0.45;
+        await webLlmRunner.generateStreaming(
+          targetPrompt,
+          systemPrompt,
+          (_delta, _accumulated, telemetry) => {
+            setStreamedTokens(telemetry.tokensGenerated);
+            setTokPerSec(telemetry.tokensPerSec);
+            if (telemetry.reasoningText) {
+              setLiveReasoning(telemetry.reasoningText);
+            }
+          },
+          (finalCode, telemetry) => {
+            setRenderedCode(finalCode);
+            if (telemetry.reasoningText) {
+              setLiveReasoning(telemetry.reasoningText);
+            }
+            setGenerationLatencyMs(Math.round(telemetry.elapsedMs));
+            setGenerationPhase('completed');
+            setRenderKey(k => k + 1);
+          },
+          (err) => {
+            console.error('In-browser model error:', err);
+            setGenerationError(err?.message || 'Error during in-browser inference');
+            setGenerationPhase('error');
+          },
+          { enableThinking: reasoningEnabled && isReasoningSupported, temperature }
+        );
+      }
 
-      await webLlmRunner.generateStreaming(
-        targetPrompt,
-        systemPrompt,
-        (_delta, _accumulated, telemetry) => {
-          setStreamedTokens(telemetry.tokensGenerated);
-          setTokPerSec(telemetry.tokensPerSec);
-          if (telemetry.reasoningText) {
-            setLiveReasoning(telemetry.reasoningText);
-          }
-        },
-        (finalCode, telemetry) => {
-          setRenderedCode(finalCode);
-          if (telemetry.reasoningText) {
-            setLiveReasoning(telemetry.reasoningText);
-          }
-          setGenerationLatencyMs(Math.round(telemetry.elapsedMs));
-          setGenerationPhase('completed');
-          setRenderKey(k => k + 1);
-        },
-        (err) => {
-          console.error('In-browser model error:', err);
-          setGenerationError(err?.message || 'Error during in-browser inference');
-          setGenerationPhase('error');
-        },
-        { enableThinking: reasoningEnabled && isReasoningSupported, temperature }
-      );
 
     } catch (err: any) {
       console.error('In-browser execution failed:', err);
@@ -645,6 +685,42 @@ export const InBrowserCompanion: React.FC = () => {
               </div>
             )}
 
+            {/* Multi-Pass Agent Pipeline Toggle (Plan T=0.7 ➔ Emit T=0.15) */}
+            <div className="flex items-center justify-between p-2 rounded-xl bg-surface-2 border border-line text-xs font-mono">
+              <span className="text-ink-muted text-[11px] flex items-center gap-1.5 font-bold">
+                <Layers className="w-3.5 h-3.5 text-signal" />
+                <span>Dual-Pass Agent:</span>
+              </span>
+              <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-line">
+                <button
+                  type="button"
+                  onClick={() => setMultiPassEnabled(false)}
+                  disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
+                  title="Single-pass direct generation"
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
+                    !multiPassEnabled
+                      ? 'bg-inset text-ink border border-line/60 shadow-sm'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  Single
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMultiPassEnabled(true)}
+                  disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
+                  title="Two-pass: Pass 1 (Architectural Plan @ T=0.7) -> Pass 2 (Deterministic Code @ T=0.15)"
+                  className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
+                    multiPassEnabled
+                      ? 'bg-signal text-white shadow-sm'
+                      : 'text-ink-muted hover:text-ink'
+                  }`}
+                >
+                  Dual (Plan ➔ Emit)
+                </button>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted px-1">
               <span>Speed: <b className="text-signal">{currentModel.speed}</b></span>
               <span>VRAM: <b className="text-ink">{currentModel.inBrowserSpec.vramMb}MB</b></span>
@@ -746,7 +822,7 @@ export const InBrowserCompanion: React.FC = () => {
                   : 'bg-ink-muted'
               }`} />
               <span className="font-bold text-ink">
-                {generationPhase === 'generating' && 'Synthesizing in WebGPU...'}
+                {generationPhase === 'generating' && (currentPassStep || 'Synthesizing in WebGPU...')}
                 {generationPhase === 'downloading' && 'Loading Model Weights into Cache...'}
                 {generationPhase === 'completed' && (
                   activeStudio === 'svg'
@@ -919,6 +995,30 @@ export const InBrowserCompanion: React.FC = () => {
                   IndexedDB Cached
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* Collapsible ASL Architectural Blueprint Accordion (Pass 1) */}
+          {aslPlan.trim() && (
+            <div className="rounded-2xl bg-surface border border-line p-3 text-xs font-mono shadow-sm">
+              <button
+                type="button"
+                onClick={() => setIsPlanOpen(prev => !prev)}
+                className="flex items-center justify-between w-full text-signal font-bold cursor-pointer"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>📐 ASL Architectural Blueprint (Pass 1 @ T=0.7)</span>
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-2 text-ink-muted">
+                  {isPlanOpen ? '▲ Collapse' : '▼ Expand'}
+                </span>
+              </button>
+              {isPlanOpen && (
+                <div className="mt-2.5 p-3 rounded-xl bg-surface-2 text-ink-muted text-[11px] whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed border border-line font-mono">
+                  {aslPlan}
+                </div>
+              )}
             </div>
           )}
 

@@ -218,6 +218,130 @@ class WebLlmRunner {
     }
   }
 
+  public async generateMultiPassStreaming(
+    userPrompt: string,
+    activeStudio: 'svg' | 'games' | 'website',
+    systemPrompt: string,
+    onStepChange: (step: 'plan' | 'emit', label: string) => void,
+    onToken: (token: string, fullText: string, telemetry: StreamTelemetry) => void,
+    onDone: (finalRepairedCode: string, planText: string, telemetry: StreamTelemetry) => void,
+    onError: (err: any) => void,
+    options?: { enableThinking?: boolean }
+  ): Promise<void> {
+    if (!this.engine) {
+      onError(new Error('In-browser engine is not loaded.'));
+      return;
+    }
+
+    try {
+      const overallStart = performance.now();
+      let totalTokens = 0;
+
+      // -------------------------------------------------------------
+      // PASS 1: Architectural Intent & Planning (Creative: T=0.7)
+      // -------------------------------------------------------------
+      onStepChange('plan', 'Pass 1/2: Architectural Blueprint & Planning (T=0.7)...');
+
+      let planPrompt = `(:skill :name "asl-architect-planner"
+  :desc "Compact Architectural Blueprint in ASL notation for browser code emission."
+  :rules [
+    (:rule :type "mandatory" :text "Output ONLY an ASL plan: (:plan :type \\"${activeStudio}\\" :state [...] :layout [...] :components [...] :palette [...])")
+    (:rule :type "concise" :text "Be extremely concise, high density ASN notation. No markdown commentary.")
+  ])`;
+
+      const planParams: any = {
+        messages: [
+          { role: 'system', content: planPrompt },
+          { role: 'user', content: `Formulate a concise architectural plan for: ${userPrompt}` }
+        ],
+        stream: true,
+        temperature: 0.7,
+        top_p: 0.95,
+        frequency_penalty: 0.2,
+        max_tokens: 600
+      };
+
+      if (options?.enableThinking) {
+        planParams.extra_body = { enable_thinking: true };
+      }
+
+      let planRaw = '';
+      const planChunks = await this.engine.chat.completions.create(planParams);
+
+      for await (const chunk of planChunks) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        planRaw += delta;
+        totalTokens++;
+        const elapsed = Math.max(1, performance.now() - overallStart);
+        const tokPerSec = Math.round((totalTokens / (elapsed / 1000)) * 10) / 10;
+        onToken(delta, planRaw, {
+          tokensGenerated: totalTokens,
+          tokensPerSec: tokPerSec,
+          elapsedMs: elapsed,
+          repairReport: null,
+          reasoningText: planRaw
+        });
+      }
+
+      // -------------------------------------------------------------
+      // PASS 2: Deterministic Assembly & Code Emission (Strict: T=0.15)
+      // -------------------------------------------------------------
+      onStepChange('emit', 'Pass 2/2: Deterministic Code Synthesis (T=0.15)...');
+
+      const synthesisUserPrompt = `[ARCHITECTURAL BLUEPRINT]:\n${planRaw.trim()}\n\n[USER REQUEST]:\n${userPrompt}\n\nEmit the complete working code strictly following the blueprint.`;
+
+      const synthParams: any = {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: synthesisUserPrompt }
+        ],
+        stream: true,
+        temperature: 0.15,
+        top_p: 0.85,
+        frequency_penalty: 0.35,
+        presence_penalty: 0.1,
+        max_tokens: 3200
+      };
+
+      let synthRaw = '';
+      const synthChunks = await this.engine.chat.completions.create(synthParams);
+
+      for await (const chunk of synthChunks) {
+        const delta = chunk.choices[0]?.delta?.content || '';
+        synthRaw += delta;
+        totalTokens++;
+        const elapsed = Math.max(1, performance.now() - overallStart);
+        const tokPerSec = Math.round((totalTokens / (elapsed / 1000)) * 10) / 10;
+        const { thinking } = antiHallucinationHarness.extractThinking(synthRaw);
+
+        onToken(delta, synthRaw, {
+          tokensGenerated: totalTokens,
+          tokensPerSec: tokPerSec,
+          elapsedMs: elapsed,
+          repairReport: null,
+          reasoningText: thinking || planRaw
+        });
+      }
+
+      const totalElapsed = Math.max(1, performance.now() - overallStart);
+      const finalTokPerSec = Math.round((totalTokens / (totalElapsed / 1000)) * 10) / 10;
+      const { thinking } = antiHallucinationHarness.extractThinking(synthRaw);
+
+      // Pass through pure ASL FSM normalizer
+      const repairReport = antiHallucinationHarness.repairAndNormalize(synthRaw);
+
+      onDone(repairReport.cleanCode, planRaw, {
+        tokensGenerated: totalTokens,
+        tokensPerSec: finalTokPerSec,
+        elapsedMs: totalElapsed,
+        repairReport,
+        reasoningText: thinking || planRaw
+      });
+    } catch (err) {
+      onError(err);
+    }
+  }
+
   public unload(): void {
     if (this.engine) {
       this.engine = null;
