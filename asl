@@ -484,12 +484,24 @@ case "$CMD" in
         ;;
       callers)
         SYM="$TARGET"
+        if [ -z "$SYM" ]; then echo "Usage: asl intel callers <symbol>"; exit 1; fi
+        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        if [ -f "$MEM_DAEMON" ]; then
+          exec "$NODE_BIN" "$MEM_DAEMON" callers "$SYM"
+        fi
         (grep -rnE "\([a-zA-Z0-9_-]+/$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null || true) | awk -F: -v s="$SYM" '{print "(:caller :symbol \"" s "\" :file \"" $1 "\" :line " $2 ")"}'
         (grep -rnE "\\b$SYM\\(" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | head -n 25 | awk -F: -v s="$SYM" '{print "(:caller :symbol \"" s "\" :file \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
       impact)
         SYM="$TARGET"
+        if [ -z "$SYM" ]; then echo "Usage: asl intel impact <symbol>"; exit 1; fi
+        MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+        [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+        if [ -f "$MEM_DAEMON" ]; then
+          exec "$NODE_BIN" "$MEM_DAEMON" impact "$SYM"
+        fi
         echo "(:impact-analysis :target \"$SYM\" :scope \"workspace\")"
         (grep -rnE "\\b$SYM\\b" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | head -n 15 | awk -F: '{print "  (:affected :file \"" $1 "\" :line " $2 ")"}'
         exit 0
