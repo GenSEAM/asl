@@ -273,19 +273,27 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
 
 
 <!-- ASL_TOOLBELT_START -->
-# AgentScript (ASL) Universal Polyglot Toolbelt & In-Memory Directive
+# Mandatory Base Harness: Native Batch RPC (`asl rpc`)
 
-Activate the `asl-toolbelt` skill and follow its instructions.
+All code exploration, reading, search, editing, diffing, and verification MUST run exclusively through `asl rpc '(:batch ...)'`:
 
-The native AgentScript (`asl`) toolchain is a **universal, polyglot-native code intelligence and editing engine**. Apply it strictly across ALL supported languages:
-- **Activate Skill**: Always activate and consult the `asl-toolbelt` skill for code exploration, search, bulk reads, memory indexing, and verification.
-- **Mandatory Tool Routing & Batch RPC First**: For AST structure, symbols, callers, and code exploration, NEVER dump files with legacy tools. You MUST execute `asl rpc '(:batch ...)'`, `asl intel outline <file>`, or `asl intel search <symbol>` via your bash/command tool.
-- **Supported Languages**: AgentScript (`.asl`, `.asn`), TypeScript/JavaScript (`.ts`, `.tsx`, `.js`, `.mjs`), Python (`.py`), PHP (`.php`), Rust (`.rs`), Go (`.go`), Shell (`.sh`, `.bash`, `.zsh`), JSON/YAML (`.json`, `.yaml`), SVG/HTML (`.svg`, `.html`), SQL (`.sql`), C/C++ (`.c`, `.cpp`, `.h`).
-- **Batch RPC & Token Economy**: Execute heterogeneous batches via `asl rpc '(:batch (:out "...") (:q "...") (:metrics))'` for 72%–85% token savings over JSON.
-- **Code Intelligence**: Use `asl intel outline <file>` for AST skeletons across all supported languages. Use `asl intel search <symbol>` and `asl intel callers <symbol>` for sub-millisecond symbol lookups.
-- **In-Memory Workspace**: Ingest whole polyglot codebases into RAM with `asl mem index .` (<150ms). Use `asl mem query "<query>"` for semantic vector search, and `asl mem doc section <file.md> <title>` for instant document reading.
-- **In-Memory Polyglot Editing**: Stage edits in RAM via `asl mem edit <file> <old> <new>` or mass refactor across languages via `asl mem replace --match="old" --replace="new" [--ext=.ts]`. Review pending changes via `asl mem diff`, flush atomically to disk with `asl mem flush`, or discard with `asl mem discard`.
-- **Quality & Telemetry**: Verify with `asl gate` (configurable via `--only=...` / `--skip=...`), inspect coverage via `asl coverage`, and monitor performance via `asl telemetry`.
-- **Targeted Dependency Inspection (Airgap-Safe)**: Inspect installed packages without internet or context bloat via `asl mem dep <pkg>` (or `asl intel dep <pkg>`). Extracts version-pinned types and interfaces in <15ms from `node_modules` or `.venv`.
-- **Airgap & Benchmark Invariant**: For strict evaluations and benchmarks, set `ASL_AIRGAP=1` (or `ASL_OFFLINE=1`). All external web search is blocked at the gateway level.
+```bash
+asl rpc '(:batch
+  (:out "src/server.ts")              ; AST outline (classes, functions, types, lines)
+  (:sym "handleRequest")              ; Exact symbol definition & declaration line
+  (:callers "handleRequest")          ; Call graph: all callers across workspace
+  (:impact "handleRequest")           ; Blast-radius impact analysis before edits
+  (:q "semantic query")               ; In-memory vector search across codebase
+  (:find "exact pattern")             ; Fast in-memory grep
+  (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
+  (:sec "doc.md" "Section Title")     ; Read isolated markdown section
+  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
+  (:repl "old_pattern" "new_pattern") ; Mass in-memory refactor across files
+  (:diff)                             ; Review staged in-memory modifications
+  (:flush)                            ; Atomically persist staged edits to disk
+  (:chk)                              ; Run full 7-gate verification suite
+)'
+```
+
+*Rule:* Run heterogeneous operations in a single roundtrip via `asl rpc '(:batch ...)'`. Never use individual CLI commands or legacy whole-file dump tools.
 <!-- ASL_TOOLBELT_END -->

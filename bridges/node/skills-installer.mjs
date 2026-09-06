@@ -25,21 +25,29 @@ const WORKSPACE_ROOT = process.cwd();
 const HOME = os.homedir();
 
 const TOOLBELT_DIRECTIVE = `<!-- ASL_TOOLBELT_START -->
-# Mandatory Tool Routing Override (Recency Precedence)
+# Mandatory Base Harness: Native Batch RPC (\`asl rpc\`)
 
-Route all code exploration, inspection, and verification through \`asl\` via bash/command tool:
+All code exploration, reading, search, editing, diffing, and verification MUST run exclusively through \`asl rpc '(:batch ...)'\`:
 
-| Intent | Direct Command Syntax |
-| :--- | :--- |
-| **AST Outline** | \`asl intel outline <file>\` |
-| **Symbol Search** | \`asl intel search <symbol>\` |
-| **Callers / Blast Radius** | \`asl intel callers <symbol>\` · \`asl intel impact <symbol>\` |
-| **Batch Multi-Read RPC** | \`asl rpc '(:batch (:out "file1") (:out "file2") (:q "sym"))'\` |
-| **Doc Section Read** | \`asl doc section <file.md> "<Heading>"\` |
-| **In-Memory Query** | \`asl mem query "<semantic query>"\` |
-| **Workspace Audit & Gate** | \`asl gate\` (or \`asl rpc '(:chk)'\`) |
+\`\`\`bash
+asl rpc '(:batch
+  (:out "src/server.ts")              ; AST outline (classes, functions, types, lines)
+  (:sym "handleRequest")              ; Exact symbol definition & declaration line
+  (:callers "handleRequest")          ; Call graph: all callers across workspace
+  (:impact "handleRequest")           ; Blast-radius impact analysis before edits
+  (:q "semantic query")               ; In-memory vector search across codebase
+  (:find "exact pattern")             ; Fast in-memory grep
+  (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
+  (:sec "doc.md" "Section Title")     ; Read isolated markdown section
+  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
+  (:repl "old_pattern" "new_pattern") ; Mass in-memory refactor across files
+  (:diff)                             ; Review staged in-memory modifications
+  (:flush)                            ; Atomically persist staged edits to disk
+  (:chk)                              ; Run full 7-gate verification suite
+)'
+\`\`\`
 
-*Rule:* Emit \`asl\` commands immediately. Outlines and batch RPC replace raw whole-file inspection.
+*Rule:* Run heterogeneous operations in a single roundtrip via \`asl rpc '(:batch ...)'\`. Never use individual CLI commands or legacy whole-file dump tools.
 <!-- ASL_TOOLBELT_END -->`;
 
 const SOURCE_SKILLS_DIRS = [

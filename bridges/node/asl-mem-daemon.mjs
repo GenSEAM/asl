@@ -73,8 +73,9 @@ function saveDirtyMap(dirty) {
   fs.writeFileSync(DIRTY_BUFFERS_PATH, JSON.stringify(dirty, null, 2), 'utf8');
 }
 
-// --- Virtual Buffer Accessors ---
-export function getBufferContent(relPath) {
+export function getBufferContent(rawPath) {
+  if (!rawPath) return null;
+  const relPath = path.isAbsolute(rawPath) ? path.relative(WORKSPACE_ROOT, rawPath) : rawPath.replace(/^\.\//, '');
   const dirty = loadDirtyMap();
   if (dirty[relPath] !== undefined) {
     return dirty[relPath];
@@ -82,7 +83,7 @@ export function getBufferContent(relPath) {
   if (memoryIndex.fileBuffers.has(relPath)) {
     return memoryIndex.fileBuffers.get(relPath).content;
   }
-  const fullPath = path.join(WORKSPACE_ROOT, relPath);
+  const fullPath = path.resolve(WORKSPACE_ROOT, relPath);
   if (fs.existsSync(fullPath)) {
     const content = fs.readFileSync(fullPath, 'utf8');
     // Bound clean buffer cache to prevent memory creep in long-running daemon
@@ -187,7 +188,7 @@ function walkDir(dir, fileList = []) {
       }
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name);
-      if (['.asl', '.asn', '.md', '.json'].includes(ext)) {
+      if (['.asl', '.asn', '.md', '.json', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.rs', '.go', '.sh', '.yaml', '.yml'].includes(ext)) {
         fileList.push(path.join(dir, entry.name));
       }
     }
@@ -304,6 +305,61 @@ function parseMarkdownText(content, relPath) {
   return symbols;
 }
 
+function parsePolyglotText(content, relPath) {
+  const lines = content.split('\n');
+  const symbols = [];
+  const fnRe = /^[ \t]*(?:export[ \t]+)?(?:async[ \t]+)?function[ \t]+([a-zA-Z0-9_$]+)/;
+  const classRe = /^[ \t]*(?:export[ \t]+)?class[ \t]+([a-zA-Z0-9_$]+)/;
+  const typeRe = /^[ \t]*(?:export[ \t]+)?(?:interface|type)[ \t]+([a-zA-Z0-9_$]+)/;
+  const pyDefRe = /^[ \t]*(?:async[ \t]+)?def[ \t]+([a-zA-Z0-9_]+)/;
+  const pyClassRe = /^[ \t]*class[ \t]+([a-zA-Z0-9_]+)/;
+  const rsFnRe = /^[ \t]*(?:pub[ \t]+)?(?:async[ \t]+)?fn[ \t]+([a-zA-Z0-9_]+)/;
+  const goFnRe = /^[ \t]*func[ \t]+(?:(?:\([a-zA-Z0-9_ *]+\)[ \t]+)?)([a-zA-Z0-9_]+)/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let m = line.match(fnRe) || line.match(pyDefRe) || line.match(rsFnRe) || line.match(goFnRe);
+    if (m) {
+      symbols.push({
+        id: `${relPath}#${m[1]}`,
+        name: m[1],
+        kind: 'fn',
+        file: relPath,
+        line: i + 1,
+        signature: line.trim().slice(0, 100),
+        doc: ''
+      });
+      continue;
+    }
+    m = line.match(classRe) || line.match(pyClassRe);
+    if (m) {
+      symbols.push({
+        id: `${relPath}#${m[1]}`,
+        name: m[1],
+        kind: 'class',
+        file: relPath,
+        line: i + 1,
+        signature: line.trim().slice(0, 100),
+        doc: ''
+      });
+      continue;
+    }
+    m = line.match(typeRe);
+    if (m) {
+      symbols.push({
+        id: `${relPath}#${m[1]}`,
+        name: m[1],
+        kind: 'type',
+        file: relPath,
+        line: i + 1,
+        signature: line.trim().slice(0, 100),
+        doc: ''
+      });
+    }
+  }
+  return symbols;
+}
+
 // --- Indexing Pipeline ---
 export function buildIndex(rootDir = WORKSPACE_ROOT) {
   const startTime = Date.now();
@@ -334,6 +390,8 @@ export function buildIndex(rootDir = WORKSPACE_ROOT) {
       symbols = parseAslText(content, rel);
     } else if (ext === '.md') {
       symbols = parseMarkdownText(content, rel);
+    } else if (['.js', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.rs', '.go', '.sh'].includes(ext)) {
+      symbols = parsePolyglotText(content, rel);
     }
 
     fileSymbolsMap.set(rel, symbols);
@@ -1744,6 +1802,13 @@ async function executeStep(item, idx, options = {}) {
             stepBody += `  ])\n`;
           } else if (ext === '.md') {
             stepBody = `  (:step :id ${idx + 1} :op "outline" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :res ${inMemoryDocOutline(file)})\n`;
+          } else {
+            const syms = parsePolyglotText(content, file);
+            stepBody = `  (:step :id ${idx + 1} :op "outline" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :symbols [\n`;
+            for (const s of syms) {
+              stepBody += `    (:sym :name "${s.name}" :kind "${s.kind}" :line ${s.line} :sig "${(s.signature || '').replace(/"/g, '\\"')}")\n`;
+            }
+            stepBody += `  ])\n`;
           }
         }
         break;
@@ -1769,7 +1834,23 @@ async function executeStep(item, idx, options = {}) {
 
       case 'search': {
         const sym = getArg(['symbol', 'sym', 'name', 's'], 1);
-        const m = memoryIndex.symbols.get(sym);
+        let m = memoryIndex.symbols.get(sym);
+        if (!m) {
+          const grepMatches = inMemoryGrep(sym, { limit: 10 });
+          for (const gm of grepMatches) {
+            const c = gm.content;
+            if (c.includes(`function ${sym}`) || c.includes(`class ${sym}`) || c.includes(`def ${sym}`) || c.includes(`df ${sym}`) || c.includes(`dfs ${sym}`) || c.includes(`const ${sym} =`) || c.includes(`let ${sym} =`)) {
+              m = {
+                name: sym,
+                kind: c.includes('class') ? 'class' : (c.includes('dfs') ? 'struct' : 'fn'),
+                file: gm.file,
+                line: gm.line,
+                signature: c.trim().slice(0, 100)
+              };
+              break;
+            }
+          }
+        }
         if (m) {
           stepBody = `  (:step :id ${idx + 1} :op "search" :elapsed-ms ${Date.now() - stepStart} :res (:symbol :name "${m.name}" :kind "${m.kind}" :file "${m.file}" :line ${m.line} :sig "${(m.signature || '').replace(/"/g, '\\"')}"))\n`;
         } else {
