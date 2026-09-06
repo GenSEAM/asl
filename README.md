@@ -6,6 +6,7 @@
 ### *Stop forcing LLMs to write Python & parse bloated JSON.*
 
 [![Website](https://img.shields.io/badge/website-aslang.dev-9333ea.svg)](https://aslang.dev)
+[![Status](https://img.shields.io/badge/status-Beta%20(Feature--Complete)-blue.svg)](https://aslang.dev)
 [![Token Savings](https://img.shields.io/badge/wire%20frame-64.7%25%20smaller%20than%20JSON-4ade80.svg)](bench/token_frames.py)
 [![Syntax Errors](https://img.shields.io/badge/syntax%20retries-0-emerald.svg)](https://aslang.dev)
 [![LLM Context](https://img.shields.io/badge/LLM-llms.txt-blue.svg)](https://aslang.dev/llms.txt)
@@ -166,22 +167,22 @@ asl search src/main.asl 'defun'
 
 ## 📦 Modular GenSEAM Ecosystem
 
-### Production & Stable Core Toolchain
+### Production & Stable Core Toolchain (Beta)
 | Package | Role | Status | Description |
 | :--- | :--- | :---: | :--- |
-| **`packages/asl-sh`** | **[Shell & Pipelines]** | `Stable` | Structured subprocess pipelines, AST stream redirection, safe process supervision |
-| **`packages/asl-codec`** | **[Universal Codec]** | `Stable` | Compact ASN S-expressions, multi-target transpilation (JSON, YAML, HTML, Shell) |
-| **`packages/asl-vdom`** | **[UI & DOM Compactor]** | `Stable` | React/VDOM integration, compresses raw HTML/DOM into intent S-expressions (-78% tokens) |
-| **`packages/asl-mem`** | **[Memory & Pointers]** | `Stable` | Perceptual pointer offloading and git-native vector memory in Wasm |
-| **`packages/asl-gates`** | **[Quality & Gates]** | `Stable` | 7-tier verification gate runner and continuous architectural audit engine |
-| **`packages/asl-lint`** | **[Quality Doctor]** | `Stable` | AST linting, structural clone detection, and delimiter balance checker |
+| **`packages/asl-sh`** | **[Shell & Pipelines]** | `Beta` | Structured subprocess pipelines, AST stream redirection, safe process supervision |
+| **`packages/asl-codec`** | **[Universal Codec]** | `Beta` | Compact ASN S-expressions, multi-target transpilation (JSON, YAML, HTML, Shell) |
+| **`packages/asl-vdom`** | **[UI & DOM Compactor]** | `Beta` | React/VDOM integration, compresses raw HTML/DOM into intent S-expressions (-78% tokens) |
+| **`packages/asl-mem`** | **[Memory & Pointers]** | `Beta` | Perceptual pointer offloading and git-native vector memory in Wasm |
+| **`packages/asl-gates`** | **[Quality & Gates]** | `Beta` | 7-tier verification gate runner and continuous architectural audit engine |
+| **`packages/asl-lint`** | **[Quality Doctor]** | `Beta` | AST linting, structural clone detection, and delimiter balance checker |
 
-### In Active Development / Research Roadmap
+### In Active Development / Research Roadmap (Alpha)
 | Package | Domain | Status | Note |
 | :--- | :--- | :---: | :--- |
-| **`packages/asl-contracts`** | **[Smart Contracts]** | `In Dev` | Exploratory research for verifiable state transitions, SMT safety proofs & Stylus Wasm |
-| **`packages/asl-quantum`** | **[Quantum Circuit]** | `In Dev` | Exploratory circuit AST synthesis and OpenQASM 3.0 compiler prototype |
-| **`packages/voice`** | **[Voice Bridge]** | `In Dev` | Prototype 16kHz PCM audio bridge for real-time conversational agent streaming |
+| **`packages/asl-contracts`** | **[Smart Contracts]** | `Alpha (In Dev)` | Exploratory research for verifiable state transitions, SMT safety proofs & Stylus Wasm |
+| **`packages/asl-quantum`** | **[Quantum Circuit]** | `Alpha (In Dev)` | Exploratory circuit AST synthesis and OpenQASM 3.0 compiler prototype |
+| **`packages/voice`** | **[Voice Bridge]** | `Alpha (In Dev)` | Prototype 16kHz PCM audio bridge for real-time conversational agent streaming |
 
 ---
 
