@@ -4,8 +4,15 @@
   "description": "Pure AgentScript high-performance text extraction, HTML parsing, entity decoding, chunking, and ASN structuring engine",
   "entry": "src/text.asl",
   "targets": {
-    "wasm": {"output": "dist/text.wasm"},
-    "ts": {"output": "dist/text.ts"},
-    "py": {"output": "dist/text.py"}
-  }
+    "wasm": {
+      "output": "dist/text.wasm"
+    },
+    "ts": {
+      "output": "dist/text.ts"
+    },
+    "py": {
+      "output": "dist/text.py"
+    }
+  },
+  "asl-first": true
 }

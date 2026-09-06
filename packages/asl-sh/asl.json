@@ -5,5 +5,10 @@
   "entry": "src/sh.asl",
   "main": "src/sh.asl",
   "dependencies": {},
-  "targets": ["typescript", "wasm", "rust"]
+  "targets": [
+    "typescript",
+    "wasm",
+    "rust"
+  ],
+  "asl-first": true
 }

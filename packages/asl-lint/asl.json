@@ -10,5 +10,6 @@
     "wasm": {
       "output": "dist/core/lint.wasm"
     }
-  }
+  },
+  "asl-first": true
 }

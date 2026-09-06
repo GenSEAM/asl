@@ -2,5 +2,6 @@
   "name": "@genseam/asl-plugin",
   "version": "0.1.0",
   "description": "Modular Plugin Architecture & Foreign Capability Interface for AgentScript Core",
-  "dependencies": {}
+  "dependencies": {},
+  "asl-first": true
 }

@@ -25,21 +25,21 @@ const WORKSPACE_ROOT = process.cwd();
 const HOME = os.homedir();
 
 const TOOLBELT_DIRECTIVE = `<!-- ASL_TOOLBELT_START -->
-# AgentScript (ASL) Universal Polyglot Toolbelt & In-Memory Directive
+# Mandatory Tool Routing Override (Recency Precedence)
 
-Activate the \`asl-toolbelt\` skill and follow its instructions.
+Route all code exploration, inspection, and verification through \`asl\` via bash/command tool:
 
-The native AgentScript (\`asl\`) toolchain is a **universal, polyglot-native code intelligence and editing engine**. Apply it strictly across ALL supported languages:
-- **Activate Skill**: Always activate and consult the \`asl-toolbelt\` skill for code exploration, search, bulk reads, memory indexing, and verification.
-- **Mandatory Tool Routing & Batch RPC First**: For AST structure, symbols, callers, and code exploration, NEVER dump files with legacy tools. You MUST execute \`asl rpc '(:batch ...)'\`, \`asl intel outline <file>\`, or \`asl intel search <symbol>\` via your bash/command tool.
-- **Supported Languages**: AgentScript (\`.asl\`, \`.asn\`), TypeScript/JavaScript (\`.ts\`, \`.tsx\`, \`.js\`, \`.mjs\`), Python (\`.py\`), PHP (\`.php\`), Rust (\`.rs\`), Go (\`.go\`), Shell (\`.sh\`, \`.bash\`, \`.zsh\`), JSON/YAML (\`.json\`, \`.yaml\`), SVG/HTML (\`.svg\`, \`.html\`), SQL (\`.sql\`), C/C++ (\`.c\`, \`.cpp\`, \`.h\`).
-- **Batch RPC & Token Economy**: Execute heterogeneous batches via \`asl rpc '(:batch (:out "...") (:q "...") (:metrics))'\` for 72%–85% token savings over JSON.
-- **Code Intelligence**: Use \`asl intel outline <file>\` for AST skeletons across all supported languages. Use \`asl intel search <symbol>\` and \`asl intel callers <symbol>\` for sub-millisecond symbol lookups.
-- **In-Memory Workspace**: Ingest whole polyglot codebases into RAM with \`asl mem index .\` (<150ms). Use \`asl mem query "<query>"\` for semantic vector search, and \`asl mem doc section <file.md> <title>\` for instant document reading.
-- **In-Memory Polyglot Editing**: Stage edits in RAM via \`asl mem edit <file> <old> <new>\` or mass refactor across languages via \`asl mem replace --match="old" --replace="new" [--ext=.ts]\`. Review pending changes via \`asl mem diff\`, flush atomically to disk with \`asl mem flush\`, or discard with \`asl mem discard\`.
-- **Quality & Telemetry**: Verify with \`asl gate\` (configurable via \`--only=...\` / \`--skip=...\`), inspect coverage via \`asl coverage\`, and monitor performance via \`asl telemetry\`.
-- **Targeted Dependency Inspection (Airgap-Safe)**: Inspect installed packages without internet or context bloat via \`asl mem dep <pkg>\` (or \`asl intel dep <pkg>\`). Extracts version-pinned types and interfaces in <15ms from \`node_modules\` or \`.venv\`.
-- **Airgap & Benchmark Invariant**: For strict evaluations and benchmarks, set \`ASL_AIRGAP=1\` (or \`ASL_OFFLINE=1\`). All external web search is blocked at the gateway level.
+| Intent | Direct Command Syntax |
+| :--- | :--- |
+| **AST Outline** | \`asl intel outline <file>\` |
+| **Symbol Search** | \`asl intel search <symbol>\` |
+| **Callers / Blast Radius** | \`asl intel callers <symbol>\` · \`asl intel impact <symbol>\` |
+| **Batch Multi-Read RPC** | \`asl rpc '(:batch (:out "file1") (:out "file2") (:q "sym"))'\` |
+| **Doc Section Read** | \`asl doc section <file.md> "<Heading>"\` |
+| **In-Memory Query** | \`asl mem query "<semantic query>"\` |
+| **Workspace Audit & Gate** | \`asl gate\` (or \`asl rpc '(:chk)'\`) |
+
+*Rule:* Emit \`asl\` commands immediately. Outlines and batch RPC replace raw whole-file inspection.
 <!-- ASL_TOOLBELT_END -->`;
 
 const SOURCE_SKILLS_DIRS = [

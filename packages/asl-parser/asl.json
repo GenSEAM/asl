@@ -4,5 +4,6 @@
   "description": "100% Self-Hosted Pure AgentScript S-Expression Lexer, Reader & AST Parser",
   "entry": "src/lexer.asl",
   "main": "src/lexer.asl",
-  "dependencies": {}
+  "dependencies": {},
+  "asl-first": true
 }

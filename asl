@@ -554,6 +554,10 @@ case "$CMD" in
     MEM_RUNNER="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_RUNNER" rpc "$@"
     ;;
+  init)
+    MEM_RUNNER="$(find_mem_daemon)"
+    exec "$NODE_BIN" "$MEM_RUNNER" init "$@"
+    ;;
   setup)
 
     SKILLS_RUNNER="$(find_skills_runner)"

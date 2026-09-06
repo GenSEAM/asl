@@ -5,5 +5,9 @@
   "entry": "src/core/sql.asl",
   "main": "src/core/sql.asl",
   "dependencies": {},
-  "targets": ["typescript", "wasm"]
+  "targets": [
+    "typescript",
+    "wasm"
+  ],
+  "asl-first": true
 }

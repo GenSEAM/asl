@@ -8,5 +8,6 @@
     "@genseam/asl-parser": "^0.1.0",
     "@genseam/asl-checker": "^0.1.0",
     "@genseam/asl-codegen": "^0.1.0"
-  }
+  },
+  "asl-first": true
 }

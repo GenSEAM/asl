@@ -2165,6 +2165,29 @@ async function runCli() {
       break;
     }
 
+    case 'init': {
+      const targetDir = args[0] || process.cwd();
+      const targetPath = path.join(targetDir, '.asl.config.asn');
+      const wsName = path.basename(path.resolve(targetDir));
+      const template = `(:asl-config
+  :workspace "@genseam/${wsName}"
+  :version "1.0.0"
+  :pure-asl true
+  :asl-first true
+  :gates [1 2 3 4 5 6 7]
+  :token-baseline 2
+  :telemetry (:target-turn-ms 100 :max-token-ceiling 150)
+  :daemon (:resident true :memory-index true :max-files 2000))
+`;
+      if (!fs.existsSync(targetPath)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+        fs.writeFileSync(targetPath, template, 'utf8');
+        console.log(`✓ [asl init] Created ${targetPath} with :asl-first true`);
+      } else {
+        console.log(`[asl init] Configuration already exists at ${targetPath}`);
+      }
+      break;
+    }
 
     case 'index': {
       const dir = args[0] || WORKSPACE_ROOT;

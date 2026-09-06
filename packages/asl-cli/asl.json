@@ -11,5 +11,6 @@
     "@genseam/asl-compiler": "^0.1.0",
     "@genseam/asl-lint": "^0.1.0",
     "@genseam/asl-codec": "^0.1.0"
-  }
+  },
+  "asl-first": true
 }

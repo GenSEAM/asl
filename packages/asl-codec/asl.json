@@ -8,5 +8,6 @@
   },
   "dependencies": {
     "@genseam/asl-parser": "0.1.0"
-  }
+  },
+  "asl-first": true
 }
