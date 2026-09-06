@@ -345,7 +345,7 @@ case "$CMD" in
         }
         /^[ \t]*:rules[ \t]+\[/ { in_rules = 1; next; }
         /^[ \t]*:tools[ \t]+\[/ { in_tools = 1; next; }
-        /^[ \t]*:targets[ \t]+\[/ { in_targets = 1; next; }
+        /^[ \t]*:targets[ \t]+\[/ { in_targets = 1; }
 
         in_rules && /^[ \t]*\(:rule/ {
           rtype = $0; sub(/.*:type[ \t]+"/, "", rtype); sub(/".*/, "", rtype);
@@ -360,11 +360,10 @@ case "$CMD" in
         }
         in_targets && /"[^"]+"/ {
           line = $0;
+          sub(/^[ \t]*:targets[ \t]+\[/, "", line);
           while (match(line, /"[^"]+"/)) {
             tgt = substr(line, RSTART + 1, RLENGTH - 2);
-            if (tgt != "targets") {
-              targets[tgc++] = "- `" tgt "`";
-            }
+            targets[tgc++] = "- `" tgt "`";
             line = substr(line, RSTART + RLENGTH);
           }
         }
@@ -426,14 +425,26 @@ case "$CMD" in
         ;;
       sync)
         SPEC="$1"
-        if [ -z "$SPEC" ] || [ ! -f "$SPEC" ]; then
-          echo "Usage: asl skill sync <spec.asn>"
-          exit 1
+        if [ -n "$SPEC" ] && [ "$SPEC" != "all" ]; then
+          if [ ! -f "$SPEC" ]; then
+            echo "Error: Specification not found at $SPEC"
+            exit 1
+          fi
+          SKILL_DIR="$(cd "$(dirname "$SPEC")" && pwd)"
+          DEST_MD="$SKILL_DIR/SKILL.md"
+          "$0" skill compile "$SPEC" "$DEST_MD"
+          echo "✓ Compiled $DEST_MD from $SPEC"
+          exit 0
         fi
-        SKILL_DIR="$(cd "$(dirname "$SPEC")" && pwd)"
-        DEST_MD="$SKILL_DIR/SKILL.md"
-        "$0" skill compile "$SPEC" "$DEST_MD"
-        echo "✓ Compiled $DEST_MD from $SPEC"
+        COUNT=0
+        for SPEC in $(find . -name "skill.asn" 2>/dev/null); do
+          SKILL_DIR="$(cd "$(dirname "$SPEC")" && pwd)"
+          DEST_MD="$SKILL_DIR/SKILL.md"
+          "$0" skill compile "$SPEC" "$DEST_MD"
+          echo "✓ Compiled $DEST_MD from $SPEC"
+          COUNT=$((COUNT + 1))
+        done
+        echo "✓ Synced $COUNT skills from ASN specifications."
         exit 0
         ;;
       install|setup)

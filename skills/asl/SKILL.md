@@ -20,7 +20,7 @@ An S-expression language for autonomous AI agents: balanced delimiters, whitespa
 - `asl graph --node <sym>` — Code intelligence: symbol definition and location.
 - `asl registry <pkg>` — Universal package and dependency inspector across ecosystems.
 - `asl gate` — Pure native verification gate runner.
-- `asl mcp` — Model Context Protocol server for IDE agent pair programming.
+- `asl rpc '(:batch ...)'` — High-performance native batch RPC harness for agent tool calling & verification.
 
 ## Core Invariants
 

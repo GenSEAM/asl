@@ -84,7 +84,7 @@ AgentScript is engineered as the universal, lightweight, agent-native execution 
 
 | Agent Platform / Harness | Integration Mechanism | Cold-Start Launch | Memory Ceiling (RSS) | Code Intelligence & Search | Sandboxed Execution | Verification Suite |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Google Antigravity (AGY)** | Native Harness Skill (`skills/asl/SKILL.md`) | **< 0.04 ms** (Wasm) | **<= 24 MB** | Native TokenSave + AST Search | In-Memory Jailed WASI | `asl gate` (19 gates) |
+| **Google Antigravity (AGY)** | Native Harness Skill (`skills/asl/SKILL.md`) | **< 0.04 ms** (Wasm) | **<= 24 MB** | Native ASL-Intel + AST Search | In-Memory Jailed WASI | `asl gate` (19 gates) |
 | **Claude Code** | Custom Subcommands & Slash Tools | **< 100 ms** (Host CLI) | **<= 24 MB** | `asl context` Sub-Symbol Graph | Directory Traversal Guard | `asl test packages` |
 | **OpenAI / Codex Swarm** | Function Calling & System Prompts | **< 0.04 ms** (Wasm) | **<= 16 MB** | Deterministic S-Expr AST | Wasm preview1 isolated memory | Pure ASL self-checker |
 | **Factory Droid** | Shell Plugin & Autonomous Sandbox | **< 100 ms** (Host CLI) | **<= 24 MB** | `asl search` (AST-Grep) | Zero-prompt capability jail | `asl gate` |
@@ -101,7 +101,7 @@ To capture the architectural solutions developed across the ASL ecosystem, the t
 | :--- | :--- | :--- |
 | **Agent Platforms & Portability** | Lightweight, zero-server agent execution across heterogeneous harnesses (AGY, Claude Code, Codex, Factory Droid, OpenCode). Eliminating Python/Docker baggage in agent swarms. | *Universal Portability for Autonomous Agents: Running Pure ASL Across Modern Agent Runtimes* |
 | **Dual-Plane Code & Architecture Records** | Complete separation of executable source code from architectural intent, requirements, invariants, and technical debt. Deprecating in-code comment bloat in favor of unified `@adr:`, `@rule:`, `@debt:` records in `asl-mem`. | *The Death of In-Code Comments: Anchoring ADRs and Invariants in External Agent Memory* |
-| **Compiler-Native Code Intelligence** | Embedding AST-Grep structural queries (`asl search`) and TokenSave sub-symbol graphs (`asl context`) directly into the `asl` binary for sub-millisecond, token-efficient agent navigation. | *Compiler-Native Code Intelligence: Why Agent Languages Must Self-Host Their Semantic Graphs* |
+| **Compiler-Native Code Intelligence** | Embedding AST-Grep structural queries (`asl search`) and ASL-Intel sub-symbol graphs (`asl intel`) directly into the `asl` binary for sub-millisecond, token-efficient agent navigation. | *Compiler-Native Code Intelligence: Why Agent Languages Must Self-Host Their Semantic Graphs* |
 | **Memory & Vector Systems** | Sub-millisecond in-memory vector recall and Git-native memory matrices (`asl-mem`), eliminating cloud vector DB latency. | *Sub-Millisecond Vector Recall & Git-Native Memory Matrices for Autonomous Agents* (Essay 13) |
 | **Relational Data & SQL** | Eliminating SQL hallucinations and injection vulnerabilities via homoiconic relational S-expressions lowering to Postgres, SQLite, MySQL, and Oracle. | *Cross-Dialect SQL Without Hallucinations* (Essay 12) |
 | **Browser Technologies** | Zero-server in-browser development via WebAssembly, OPFS, and in-memory WASI with tiered local SLMs. | *Zero-Server In-Browser Agent Runtimes* (Essay 11) |
