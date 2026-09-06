@@ -25,7 +25,7 @@ export const IN_BROWSER_MODELS: InBrowserModelSpec[] = [
     approxSizeMb: 240,
     vramMb: 945,
     quantization: 'q4f16_1 (4-bit)',
-    description: 'Fastest download (~240MB). Low VRAM footprint (945MB). Instant streaming (~55 t/s).',
+    description: 'Fastest download (~240MB). Low VRAM footprint (945MB). Instant streaming (~28 t/s).',
     supportsThinking: false
   },
   {

@@ -13,7 +13,7 @@ import {
   Square,
   AlertTriangle,
   Layers,
-  ArrowRight,
+  Code2,
   HardDrive,
   Download,
   CheckCircle2,
@@ -31,6 +31,7 @@ import { runInBrowserGates, VerificationResult } from '../utils/browser_gate';
 export interface PromptTemplate {
   id: string;
   title: string;
+  shortTitle: string;
   studio: 'svg' | 'games' | 'website';
   prompt: string;
 }
@@ -40,30 +41,35 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'gem',
     title: '💎 Neon Crystal Gem',
+    shortTitle: '💎 Gem',
     studio: 'svg',
     prompt: 'Draw a compact glowing neon crystal gemstone badge in ASN notation with geometric facets, gradient shine, and centered 320x320 canvas.'
   },
   {
     id: 'rocket',
     title: '🚀 Space Rocket Icon',
+    shortTitle: '🚀 Rocket',
     studio: 'svg',
     prompt: 'Draw a compact stylized space rocket icon in ASN notation inside a dark circular 320x320 badge with fiery booster exhaust.'
   },
   {
     id: 'lightning',
     title: '⚡ Lightning Shield',
+    shortTitle: '⚡ Shield',
     studio: 'svg',
     prompt: 'Draw a sharp energetic golden lightning bolt emblem in ASN notation on a dark hexagonal badge with glowing cyan trim.'
   },
   {
     id: 'chameleon',
     title: '🦎 Stylized Chameleon',
+    shortTitle: '🦎 Chameleon',
     studio: 'svg',
     prompt: 'Draw a compact stylized chameleon profile in ASN notation coiled on a branch with vivid green and turquoise gradients.'
   },
   {
     id: 'hex-portal',
     title: '🔮 Cyberpunk Hex Portal',
+    shortTitle: '🔮 Portal',
     studio: 'svg',
     prompt: 'Draw a futuristic cyberpunk portal emblem in ASN notation with glowing purple and cyan concentric rings in a 320x320 viewport.'
   },
@@ -72,30 +78,35 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'tetris',
     title: '🕹️ Retro Arcade Tetris',
+    shortTitle: '🕹️ Tetris',
     studio: 'games',
     prompt: 'Write a retro arcade Tetris game in index.html with falling tetrominoes, canvas rendering, arrow controls, score counter, and game over state.'
   },
   {
     id: 'flappy',
     title: '🐤 Flappy Bird Playable',
+    shortTitle: '🐤 Flappy',
     studio: 'games',
     prompt: 'Write a playable Flappy Bird game in index.html with canvas physics, spacebar flap, pipe obstacles, and live score.'
   },
   {
     id: 'snake',
     title: '🐍 Cyber Snake Arcade',
+    shortTitle: '🐍 Snake',
     studio: 'games',
     prompt: 'Write a playable cyberpunk Snake game in index.html with canvas rendering, arrow movement, neon food, and score.'
   },
   {
     id: 'pong',
     title: '🏓 Neon Arcade Pong',
+    shortTitle: '🏓 Pong',
     studio: 'games',
     prompt: 'Write a playable neon arcade Pong game in index.html with AI paddle, player paddle, ball deflection physics, and score.'
   },
   {
     id: 'particles',
     title: '🌌 Gravity Particle Sandbox',
+    shortTitle: '🌌 Physics',
     studio: 'games',
     prompt: 'Write an interactive particle physics sandbox in index.html with 200 colorful gravity particles following mouse cursor and bouncing off screen borders.'
   },
@@ -104,30 +115,35 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     id: 'hero-saas',
     title: '🌐 Modern SaaS Hero Section',
+    shortTitle: '🌐 Hero',
     studio: 'website',
     prompt: 'Write a responsive dark-mode SaaS landing hero section with glowing gradient headline, subtitle, primary/secondary CTA buttons, and interactive feature badges.'
   },
   {
     id: 'metric-card',
     title: '📊 Live Metric Dashboard Card',
+    shortTitle: '📊 Metrics',
     studio: 'website',
     prompt: 'Write a sleek dark telemetry card with live ticking request counter, latency gauge, uptime badge, and interactive refresh button.'
   },
   {
     id: 'pricing-grid',
     title: '💳 Interactive Pricing Grid',
+    shortTitle: '💳 Pricing',
     studio: 'website',
     prompt: 'Write an interactive 3-tier pricing table (Starter, Pro, Enterprise) with monthly/annual billing toggle and highlight on the recommended tier.'
   },
   {
     id: 'portfolio',
     title: '💼 Dark Developer Portfolio',
+    shortTitle: '💼 Portfolio',
     studio: 'website',
     prompt: 'Write a personal developer portfolio section with avatar, skills tags (ASL, TypeScript, WebGPU), interactive project cards, and contact button.'
   },
   {
     id: 'calc',
     title: '🧮 Dark Scientific Calculator',
+    shortTitle: '🧮 Calc',
     studio: 'website',
     prompt: 'Write a sleek dark-mode scientific calculator in index.html with digital display, buttons, and clear arithmetic operations.'
   }
@@ -147,7 +163,7 @@ export const MODELS: ModelOption[] = [
     id: 'qwen-coder-0.5b-q4',
     name: 'Qwen 2.5 Coder 0.5B',
     badge: 'q4f16_1 · 240MB',
-    speed: '~55 t/s',
+    speed: '~28 t/s',
     desc: 'Quantization: q4f16_1 (4-bit). VRAM: 945MB. Fast download (~240MB). Instant client-side streaming.',
     inBrowserSpec: IN_BROWSER_MODELS[0]
   },
@@ -155,7 +171,7 @@ export const MODELS: ModelOption[] = [
     id: 'qwen-coder-1.5b-q4',
     name: 'Qwen 2.5 Coder 1.5B (Recommended)',
     badge: 'q4f16_1 · 850MB',
-    speed: '~38 t/s',
+    speed: '~18 t/s',
     desc: 'Quantization: q4f16_1 (4-bit). VRAM: 1.6GB. Strong multi-step reasoning for structured UI and game loops.',
     inBrowserSpec: IN_BROWSER_MODELS[1]
   },
@@ -163,7 +179,7 @@ export const MODELS: ModelOption[] = [
     id: 'qwen-coder-3b-q4',
     name: 'Qwen 2.5 Coder 3B (Pro)',
     badge: 'q4f16_1 · 1.7GB',
-    speed: '~25 t/s',
+    speed: '~12 t/s',
     desc: 'Quantization: q4f16_1 (4-bit). VRAM: 2.5GB (~2GB memory footprint). Top-tier coding engine for complex state machines.',
     inBrowserSpec: IN_BROWSER_MODELS[2]
   }
@@ -619,46 +635,41 @@ export const InBrowserCompanion: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: Templates */}
+          {/* Section 2: Unified Directive Prompt & Inline Presets */}
           <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
-            <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
-              {activeStudio === 'svg' && '🎨 Vector Presets'}
-              {activeStudio === 'games' && '🕹️ Game Presets'}
-              {activeStudio === 'website' && '🌐 UI & Website Presets'}
-            </span>
-
-            {/* Template Buttons */}
-            <div className="grid grid-cols-2 gap-2">
-              {filteredTemplates.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => handleSelectTemplate(tpl)}
-                  className={`p-2.5 rounded-xl border text-left text-xs font-mono transition-all flex items-center justify-between cursor-pointer ${
-                    customPrompt === tpl.prompt
-                      ? 'bg-signal/15 border-signal text-ink font-bold shadow-sm'
-                      : 'bg-surface-2 border-line hover:border-line-hover text-ink-muted hover:text-ink'
-                  }`}
-                >
-                  <span className="truncate">{tpl.title}</span>
-                  <ArrowRight className="w-3 h-3 opacity-50 flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Section 3: Directive Prompt Input */}
-          <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
-                Directive Prompt
+            {/* Header: Label + Compact Presets in One Line */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase flex items-center gap-1.5 shrink-0">
+                <Code2 className="w-3.5 h-3.5 text-signal" />
+                <span>Directive Prompt</span>
               </span>
+
+              {/* Compact Preset Chips in a Single Neat Row */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                <span className="text-[10px] font-mono text-ink-muted uppercase shrink-0 mr-0.5">Presets:</span>
+                {filteredTemplates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => handleSelectTemplate(tpl)}
+                    title={tpl.title}
+                    className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono transition-all shrink-0 cursor-pointer whitespace-nowrap ${
+                      customPrompt === tpl.prompt
+                        ? 'bg-signal text-white border-signal font-bold shadow-sm'
+                        : 'bg-surface-2 border-line hover:border-line-hover text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    {tpl.shortTitle}
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {/* Prompt Textarea: 1.5x larger, 8-10 lines tall (~200px) */}
             <textarea
               value={customPrompt}
               onChange={(e) => setCustomPrompt(e.target.value)}
-              rows={5}
+              rows={9}
               placeholder={
                 activeStudio === 'svg'
                   ? 'Describe the SVG emblem or icon to draw in 320x320 canvas...'
@@ -666,7 +677,7 @@ export const InBrowserCompanion: React.FC = () => {
                   ? 'Describe the 2D arcade canvas game or interactive physics toy...'
                   : 'Describe the responsive website section or modern UI component...'
               }
-              className="w-full p-3.5 rounded-2xl bg-surface-2 border border-line text-xs font-mono text-ink placeholder:text-ink-muted focus:outline-none focus:border-signal resize-none leading-relaxed min-h-[130px]"
+              className="w-full p-3.5 rounded-2xl bg-surface-2 border border-line text-xs font-mono text-ink placeholder:text-ink-muted focus:outline-none focus:border-signal resize-y leading-relaxed min-h-[190px]"
             />
 
             <div className="flex items-center gap-2">
