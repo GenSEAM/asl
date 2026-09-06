@@ -171,5 +171,37 @@
           :rationale "Verifies that agent ASN stubs achieve substantial token reduction")
     (:sym :name "run-doc-engine-tests" :kind :fn :tokens 3
           :rationale "Runs complete unit test suite for documentation schema and compiler")
+
+    ;; ASN Shell Command DSL & Transpiler Symbols
+    (:sym :name "ShTranspileResult" :kind :type :tokens 1)
+    (:sym :name "make-cmd" :kind :fn :tokens 2)
+    (:sym :name "make-pipe" :kind :fn :tokens 2)
+    (:sym :name "make-script" :kind :fn :tokens 2)
+    (:sym :name "escape-sh-arg" :kind :fn :tokens 3
+          :rationale "Safely escapes shell argument using single-quote wrapping")
+    (:sym :name "asn-to-sh" :kind :fn :tokens 3
+          :rationale "Transpiles ASN shell S-expressions to safe POSIX command strings")
+    (:sym :name "sh-to-asn" :kind :fn :tokens 3
+          :rationale "Converts simple shell command string to structured ASN command")
+    (:sym :name "measure-sh-savings" :kind :fn :tokens 3
+          :rationale "Measures token compaction achieved by converting shell command to ASN")
+    (:sym :name "test-escape-safe" :kind :fn :tokens 3
+          :rationale "Unit test verifying escaping of safe shell arguments")
+    (:sym :name "test-escape-special" :kind :fn :tokens 3
+          :rationale "Unit test verifying escaping of special shell characters")
+    (:sym :name "test-make-cmd" :kind :fn :tokens 3
+          :rationale "Unit test verifying construction of ASN command")
+    (:sym :name "test-make-pipe" :kind :fn :tokens 3
+          :rationale "Unit test verifying construction of ASN pipeline")
+    (:sym :name "test-make-script" :kind :fn :tokens 3
+          :rationale "Unit test verifying construction of ASN script")
+    (:sym :name "test-asn-to-sh" :kind :fn :tokens 4
+          :rationale "Unit test verifying transpilation from ASN to shell")
+    (:sym :name "test-sh-to-asn" :kind :fn :tokens 4
+          :rationale "Unit test verifying conversion from shell to ASN")
+    (:sym :name "test-sh-savings" :kind :fn :tokens 3
+          :rationale "Unit test verifying shell token savings calculation")
+    (:sym :name "run-sh-tests" :kind :fn :tokens 3
+          :rationale "Test runner executing all shell transpile test cases")
   ])
 
