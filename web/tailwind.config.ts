@@ -25,6 +25,7 @@ export default {
         ground: channel('ground'),
         sunken: channel('sunken'),
         surface: channel('surface'),
+        'surface-2': channel('inset'),
         inset: channel('inset'),
         line: channel('line'),
         'line-strong': channel('line-strong'),

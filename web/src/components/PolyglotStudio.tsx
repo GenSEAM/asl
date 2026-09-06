@@ -85,7 +85,7 @@ export const PolyglotStudio: React.FC = () => {
           <textarea
             value={aslCode}
             onChange={(e) => setAslCode(e.target.value)}
-            className="w-full h-80 bg-surface-2 border border-line rounded-xl p-4 font-mono text-xs text-ink leading-relaxed resize-none focus:outline-none focus:border-signal/50"
+            className="w-full h-80 bg-black/80 border border-line/80 rounded-xl p-4 font-mono text-xs text-purple-200 leading-relaxed resize-none focus:outline-none focus:border-signal/70 focus:ring-1 focus:ring-signal/30 selection:bg-signal/40 shadow-inner"
             spellCheck={false}
           />
         </div>
@@ -102,7 +102,7 @@ export const PolyglotStudio: React.FC = () => {
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          <pre className="w-full h-80 bg-black/60 border border-line rounded-xl p-4 font-mono text-xs text-emerald-400/90 leading-relaxed overflow-auto">
+          <pre className="w-full h-80 bg-black/80 border border-line/80 rounded-xl p-4 font-mono text-xs text-emerald-400/95 leading-relaxed overflow-auto shadow-inner">
             <code>{outputCode}</code>
           </pre>
         </div>

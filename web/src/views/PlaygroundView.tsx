@@ -5,10 +5,11 @@ import { AslQualityDoctor } from '../components/AslQualityDoctor';
 import { GraphCanvas } from '../components/GraphCanvas';
 import { SvgStudio } from '../components/SvgStudio';
 import { InBrowserCodingStudio } from '../components/InBrowserCodingStudio';
-import { Database, ShieldCheck, Share2, Sparkles, Terminal } from 'lucide-react';
+import { PolyglotStudio } from '../components/PolyglotStudio';
+import { Database, ShieldCheck, Share2, Sparkles, Terminal, Code2 } from 'lucide-react';
 
 export const PlaygroundView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'graph' | 'svg' | 'coder' | 'sql' | 'doctor'>('graph');
+  const [activeTab, setActiveTab] = useState<'graph' | 'svg' | 'coder' | 'polyglot' | 'sql' | 'doctor'>('graph');
 
   return (
     <div className="pt-28 pb-20">
@@ -64,6 +65,19 @@ export const PlaygroundView: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setActiveTab('polyglot')}
+            className={`flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
+              activeTab === 'polyglot'
+                ? 'bg-signal text-white shadow-sm'
+                : 'text-ink-2 hover:text-ink hover:bg-inset'
+            }`}
+          >
+            <Code2 className="w-3.5 h-3.5" />
+            <span>UI Transpiler</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('sql')}
             className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
               activeTab === 'sql'
@@ -94,6 +108,7 @@ export const PlaygroundView: React.FC = () => {
           {activeTab === 'graph' && <GraphCanvas />}
           {activeTab === 'svg' && <SvgStudio />}
           {activeTab === 'coder' && <InBrowserCodingStudio />}
+          {activeTab === 'polyglot' && <PolyglotStudio />}
           {activeTab === 'sql' && <SqlStudio />}
           {activeTab === 'doctor' && <AslQualityDoctor />}
         </div>

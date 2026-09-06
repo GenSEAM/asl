@@ -2,13 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
   Home,
   Terminal,
-  Layers,
   Milestone,
   BookOpen,
   Newspaper,
   Search,
   Sparkles,
-  Activity,
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { ChameleonALogo } from './ui/Logo';
@@ -18,8 +16,6 @@ import { Link } from '../lib/router';
 const navItems = [
   { label: 'Home', href: '/', icon: Home },
   { label: 'Playground', href: '/playground', icon: Terminal },
-  { label: 'Graph Reactor', href: '/graph-reactor', icon: Activity },
-  { label: 'Ecosystem', href: '/ecosystem', icon: Layers },
   { label: 'Roadmap', href: '/roadmap', icon: Milestone },
   { label: 'Docs', href: '/docs', icon: BookOpen },
   { label: 'Blog', href: '/blog', icon: Newspaper },

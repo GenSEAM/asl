@@ -13,14 +13,17 @@ import {
   Search,
   BookOpen,
   Database,
-  Braces
+  Braces,
+  Layers
 } from 'lucide-react';
 import { HighlightedCode } from '../lib/syntaxHighlight';
+import { Ecosystem } from '../components/Ecosystem';
+import { UnifiedPackageMatrix } from '../components/UnifiedPackageMatrix';
 
 type CodeTargetLang = 'python' | 'rust' | 'typescript' | 'go';
 type DataTargetFormat = 'json' | 'yaml';
 type SqlDialect = 'postgres' | 'mysql' | 'sqlite' | 'mssql' | 'oracle';
-type DocTab = 'cli' | 'mesh' | 'data' | 'sql' | 'syntax' | 'control' | 'stdlib';
+type DocTab = 'cli' | 'mesh' | 'data' | 'sql' | 'syntax' | 'control' | 'stdlib' | 'ecosystem';
 
 interface PolyglotCard {
   id: string;
@@ -392,8 +395,8 @@ const BUILTINS: BuiltinDoc[] = [
   { name: 'option-to-result', category: 'logic', signature: '(option-to-result opt err-msg)', summary: 'Converts (Some v) to (ok v) and (None) to (err err-msg).' }
 ];
 
-export const DocsView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<DocTab>('cli');
+export const DocsView: React.FC<{ initialTab?: DocTab }> = ({ initialTab = 'cli' }) => {
+  const [activeTab, setActiveTab] = useState<DocTab>(initialTab);
   const [targetLang, setTargetLang] = useState<CodeTargetLang>('python');
   const [dataTarget, setDataTarget] = useState<DataTargetFormat>('json');
   const [sqlDialect, setSqlDialect] = useState<SqlDialect>('postgres');
@@ -471,14 +474,13 @@ export const DocsView: React.FC = () => {
               { id: 'sql', label: '4. SQL & Query DSL', icon: Code2 },
               { id: 'syntax', label: '5. Syntax & Forms', icon: Braces },
               { id: 'control', label: '6. Control & Errors', icon: Workflow },
-              { id: 'stdlib', label: '7. Standard Library', icon: BookOpen }
-            ].map(({ id, label, icon: Icon }, idx) => (
+              { id: 'stdlib', label: '7. Standard Library', icon: BookOpen },
+              { id: 'ecosystem', label: '8. Package Ecosystem', icon: Layers }
+            ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id as DocTab)}
                 className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl font-mono text-meta font-medium transition-all text-left border ${
-                  idx === 6 ? 'sm:col-span-2' : ''
-                } ${
                   activeTab === id
                     ? 'bg-signal text-white border-signal shadow-sm'
                     : 'bg-surface hover:bg-surface-2 text-ink-2 hover:text-ink border-line'
@@ -503,6 +505,7 @@ export const DocsView: React.FC = () => {
                   {activeTab === 'syntax' && <Braces className="w-4 h-4 text-signal" />}
                   {activeTab === 'control' && <Workflow className="w-4 h-4 text-signal" />}
                   {activeTab === 'stdlib' && <BookOpen className="w-4 h-4 text-signal" />}
+                  {activeTab === 'ecosystem' && <Layers className="w-4 h-4 text-signal" />}
                   <h4 className="font-bold text-ink text-base">
                     {activeTab === 'cli' && 'Deterministic Toolchain'}
                     {activeTab === 'mesh' && 'SeamBus RPC Mesh Wire'}
@@ -511,6 +514,7 @@ export const DocsView: React.FC = () => {
                     {activeTab === 'syntax' && 'Polyglot Product Types'}
                     {activeTab === 'control' && 'Linearized Control & Result'}
                     {activeTab === 'stdlib' && '107 Pure Builtin Primitives'}
+                    {activeTab === 'ecosystem' && 'Unified Package Matrix'}
                   </h4>
                 </div>
                 <span className="text-micro font-mono uppercase px-2 py-0.5 rounded bg-ground border border-line text-ink-3">
@@ -521,6 +525,7 @@ export const DocsView: React.FC = () => {
                   {activeTab === 'syntax' && '4 Targets'}
                   {activeTab === 'control' && 'Algebraic Errors'}
                   {activeTab === 'stdlib' && 'Zero Host Escape'}
+                  {activeTab === 'ecosystem' && '9 Native Packages'}
                 </span>
               </div>
               <p className="text-meta text-ink-2 leading-relaxed">
@@ -531,6 +536,7 @@ export const DocsView: React.FC = () => {
                 {activeTab === 'syntax' && 'Declarative schemas and closed sum-types transpiled directly into idiomatic, typed code across languages.'}
                 {activeTab === 'control' && 'Guaranteed TCO recursion, early returns with try unwrapping, and strict Result error handling.'}
                 {activeTab === 'stdlib' && 'Immutable list algorithms, string builders, safe sandboxed file I/O, and mathematical primitives.'}
+                {activeTab === 'ecosystem' && 'Complete ecosystem architecture: foundational ASN codecs, process automation, A2A wire frames, and dual-perception VDOM.'}
               </p>
             </div>
 
@@ -1342,6 +1348,14 @@ WHEN NOT MATCHED THEN
                 No builtins match query "{searchQuery}".
               </div>
             )}
+          </div>
+        )}
+
+        {/* 8. Package Ecosystem */}
+        {activeTab === 'ecosystem' && (
+          <div className="space-y-12">
+            <UnifiedPackageMatrix />
+            <Ecosystem />
           </div>
         )}
       </Section>

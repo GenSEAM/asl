@@ -273,12 +273,19 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
 
 
 <!-- ASL_TOOLBELT_START -->
-# AgentScript (ASL) Native Toolbelt & In-Memory Workspace Directive
+# AgentScript (ASL) Universal Polyglot Toolbelt & In-Memory Directive
 
-Prioritize the native AgentScript (`asl`) CLI toolchain for code exploration, in-memory operations, and quality verification:
-- **Code Intelligence**: Prefer `asl intel outline <file>` for AST skeletons, `asl intel search <symbol>`, `asl intel callers <symbol>`, and `asl intel preload <symbol> [budget]` over reading full files.
-- **In-Memory Workspace**: Use `asl mem index .` to load all 900+ codebase files into RAM in <150ms. Use `asl mem query "<text>"` for cosine-similarity semantic search, `asl mem doc outline <file.md>` and `asl mem doc section <file.md> <title>` for instant documentation reading without hitting disk.
-- **In-Memory Editing & Mass Replace**: Use `asl mem edit <file> <old> <new>` and `asl mem replace --match="old" --replace="new" [--ext=.asl]` to stage edits in RAM. Review via `asl mem diff`, atomically persist to disk with `asl mem flush`, or discard with `asl mem discard`.
-- **Quality Verification**: Verify code via `asl check <file>`, `asl lint <file>`, `asl audit <file>`, and `asl test [file]`.
-- **Token Economy**: Use compact ASN S-expression format (`(:call :tool "..." ...)`) for ~72% token savings over JSON.
+Activate the `asl-toolbelt` skill and follow its instructions.
+
+The native AgentScript (`asl`) toolchain is a **universal, polyglot-native code intelligence and editing engine**. Apply it strictly across ALL supported languages:
+- **Activate Skill**: Always activate and consult the `asl-toolbelt` skill for code exploration, search, bulk reads, memory indexing, and verification.
+- **Mandatory Tool Routing & Batch RPC First**: For AST structure, symbols, callers, and code exploration, NEVER dump files with legacy tools. You MUST execute `asl rpc '(:batch ...)'`, `asl intel outline <file>`, or `asl intel search <symbol>` via your bash/command tool.
+- **Supported Languages**: AgentScript (`.asl`, `.asn`), TypeScript/JavaScript (`.ts`, `.tsx`, `.js`, `.mjs`), Python (`.py`), PHP (`.php`), Rust (`.rs`), Go (`.go`), Shell (`.sh`, `.bash`, `.zsh`), JSON/YAML (`.json`, `.yaml`), SVG/HTML (`.svg`, `.html`), SQL (`.sql`), C/C++ (`.c`, `.cpp`, `.h`).
+- **Batch RPC & Token Economy**: Execute heterogeneous batches via `asl rpc '(:batch (:out "...") (:q "...") (:metrics))'` for 72%–85% token savings over JSON.
+- **Code Intelligence**: Use `asl intel outline <file>` for AST skeletons across all supported languages. Use `asl intel search <symbol>` and `asl intel callers <symbol>` for sub-millisecond symbol lookups.
+- **In-Memory Workspace**: Ingest whole polyglot codebases into RAM with `asl mem index .` (<150ms). Use `asl mem query "<query>"` for semantic vector search, and `asl mem doc section <file.md> <title>` for instant document reading.
+- **In-Memory Polyglot Editing**: Stage edits in RAM via `asl mem edit <file> <old> <new>` or mass refactor across languages via `asl mem replace --match="old" --replace="new" [--ext=.ts]`. Review pending changes via `asl mem diff`, flush atomically to disk with `asl mem flush`, or discard with `asl mem discard`.
+- **Quality & Telemetry**: Verify with `asl gate` (configurable via `--only=...` / `--skip=...`), inspect coverage via `asl coverage`, and monitor performance via `asl telemetry`.
+- **Targeted Dependency Inspection (Airgap-Safe)**: Inspect installed packages without internet or context bloat via `asl mem dep <pkg>` (or `asl intel dep <pkg>`). Extracts version-pinned types and interfaces in <15ms from `node_modules` or `.venv`.
+- **Airgap & Benchmark Invariant**: For strict evaluations and benchmarks, set `ASL_AIRGAP=1` (or `ASL_OFFLINE=1`). All external web search is blocked at the gateway level.
 <!-- ASL_TOOLBELT_END -->
