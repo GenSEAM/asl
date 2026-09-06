@@ -1,0 +1,104 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-gates
+(:grammar
+  :package @genseam/asl-gates
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Symbols (Baseline)
+    (:sym :name "main" :kind :fn :tokens 1)
+    (:sym :name "ClaimRecord" :kind :type :tokens 1)
+    (:sym :name "AuditResult" :kind :type :tokens 1)
+    (:sym :name "GateReport" :kind :type :tokens 1)
+    (:sym :name "SymbolKind" :kind :type :tokens 1)
+    (:sym :name "SymbolEntry" :kind :type :tokens 1)
+    (:sym :name "GrammarRegistry" :kind :type :tokens 1)
+    (:sym :name "SkillRecord" :kind :type :tokens 1)
+    (:sym :name "ManifestRecord" :kind :type :tokens 1)
+    (:sym :name "GateVerdict" :kind :type :tokens 1)
+    (:sym :name "GateSummary" :kind :type :tokens 1)
+
+    ;; 2-Token Symbols (with :rationale)
+    (:sym :name "run-suite" :kind :fn :tokens 2
+          :rationale "Executes semantic verification across list of paths")
+    (:sym :name "audit-claim" :kind :fn :tokens 2
+          :rationale "Audits individual performance metric against published registry")
+    (:sym :name "standard-claims" :kind :fn :tokens 2
+          :rationale "Returns canonical grounded benchmark metric list")
+    (:sym :name "sym-fn" :kind :fn :tokens 2
+          :rationale "Constructor tag for function symbol kind")
+    (:sym :name "sym-type" :kind :fn :tokens 2
+          :rationale "Constructor tag for struct/enum type symbol kind")
+    (:sym :name "sym-val" :kind :fn :tokens 2
+          :rationale "Constructor tag for constant value symbol kind")
+    (:sym :name "sym-macro" :kind :fn :tokens 2
+          :rationale "Constructor tag for syntactic macro symbol kind")
+    (:sym :name "is-registered?" :kind :fn :tokens 2
+          :rationale "Predicate testing if symbol is present in grammar registry")
+    (:sym :name "run-tests" :kind :fn :tokens 2
+          :rationale "Standard test suite runner entrypoint")
+
+    ;; >2 Token Symbols (with :rationale)
+    (:sym :name "verify-source-syntax" :kind :fn :tokens 3
+          :rationale "Verifies pure ASL AST parse without errors")
+    (:sym :name "verify-file-semantic" :kind :fn :tokens 3
+          :rationale "Executes type and semantic checker on file AST")
+    (:sym :name "verify-foreign-ext" :kind :fn :tokens 3
+          :rationale "Enforces zero-foreign file policy (.py, .ts, .js, .rs, .c)")
+    (:sym :name "is-known-metric" :kind :fn :tokens 3
+          :rationale "Predicate testing if metric is in published lockfile")
+    (:sym :name "run-claims-audit" :kind :fn :tokens 3
+          :rationale "Runs full audit of published benchmark claims")
+    (:sym :name "verify-claims-grounding" :kind :fn :tokens 3
+          :rationale "Validates site claims grounding matrix")
+    (:sym :name "make-symbol-entry" :kind :fn :tokens 3
+          :rationale "Constructs SymbolEntry descriptor with token count and rationale")
+    (:sym :name "count-kebab-tokens" :kind :fn :tokens 3
+          :rationale "Calculates token density from hyphen segments")
+    (:sym :name "audit-symbol-density" :kind :fn :tokens 3
+          :rationale "Enforces 1-token baseline policy on symbol entry")
+    (:sym :name "get-registered-symbol" :kind :fn :tokens 3
+          :rationale "Retrieves symbol entry by name from grammar registry")
+    (:sym :name "make-skill-record" :kind :fn :tokens 3
+          :rationale "Constructs SkillRecord from parsed frontmatter")
+    (:sym :name "parse-frontmatter-field" :kind :fn :tokens 3
+          :rationale "Extracts scalar field value from YAML frontmatter header")
+    (:sym :name "verify-skill-record" :kind :fn :tokens 3
+          :rationale "Validates skill record frontmatter and description freshness")
+    (:sym :name "is-clean-of-legacy?" :kind :fn :tokens 4
+          :rationale "Enforces modern naming without unaliased legacy terms")
+    (:sym :name "is-valid-pkg-name?" :kind :fn :tokens 4
+          :rationale "Validates @genseam/* namespace format")
+    (:sym :name "make-manifest-record" :kind :fn :tokens 3
+          :rationale "Constructs ManifestRecord descriptor")
+    (:sym :name "parse-package-id" :kind :fn :tokens 3
+          :rationale "Extracts @genseam/* package identifier from manifest S-expression")
+    (:sym :name "verify-manifest-record" :kind :fn :tokens 3
+          :rationale "Validates manifest record compliance")
+    (:sym :name "run-all-seven-gates" :kind :fn :tokens 4
+          :rationale "Orchestrates execution across all 7 verification gates")
+    (:sym :name "format-gate-summary" :kind :fn :tokens 3
+          :rationale "Formats 7-gate summary into terminal verification report")
+    (:sym :name "test-syntax-valid" :kind :fn :tokens 3
+          :rationale "Verifies clean syntax passes gate parser check")
+    (:sym :name "test-syntax-invalid" :kind :fn :tokens 3
+          :rationale "Verifies invalid syntax is rejected by gate parser")
+    (:sym :name "test-foreign-ext" :kind :fn :tokens 3
+          :rationale "Verifies foreign extension rejection policy")
+    (:sym :name "test-grammar-gate" :kind :fn :tokens 3
+          :rationale "Verifies ASN grammar token density audit")
+    (:sym :name "test-skills-gate" :kind :fn :tokens 3
+          :rationale "Verifies skills frontmatter parser and validation")
+    (:sym :name "test-manifest-gate" :kind :fn :tokens 3
+          :rationale "Verifies package manifest structure verification")
+    (:sym :name "test-runner" :kind :fn :tokens 2
+          :rationale "Verifies 7-gate orchestration runner")
+    (:sym :name "test-known-claims" :kind :fn :tokens 3
+          :rationale "Verifies known benchmark claims recognition")
+    (:sym :name "test-unknown-claim" :kind :fn :tokens 3
+          :rationale "Verifies unknown claim rejection")
+    (:sym :name "test-claims-audit" :kind :fn :tokens 3
+          :rationale "Verifies claims audit reporting")
+    (:sym :name "test-full-grounding" :kind :fn :tokens 3
+          :rationale "Verifies full claims grounding matrix")
+  ])
