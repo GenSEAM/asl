@@ -184,11 +184,37 @@ fi
 
 ${symlinkCommands}
 
+# Also symlink to ~/.local/bin if directory exists and is writable
+if [ -d "\${HOME}/.local/bin" ] && [ -w "\${HOME}/.local/bin" ]; then
+  ln -sf "\${CLONE_DIR}/${installerConfig.binary_rel}" "\${HOME}/.local/bin/${installerConfig.cli_name}"
+  echo "✓ Symlinked to \${HOME}/.local/bin/${installerConfig.cli_name}"
+fi
+
+# Automatically add to user shell configuration files if not already present
+add_to_path() {
+  local target_dir="$1"
+  local config_file="$2"
+  if [ -f "$config_file" ]; then
+    if ! grep -qs "$target_dir" "$config_file"; then
+      echo "" >> "$config_file"
+      echo "# AgentScript (ASL) CLI" >> "$config_file"
+      echo "export PATH=\\\"\$target_dir:\\\$PATH\\\"" >> "$config_file"
+      echo "✓ Added \$target_dir to \$config_file"
+    fi
+  fi
+}
+
+if [ -f "\${HOME}/.zshrc" ]; then
+  add_to_path "${installerConfig.install_dir}" "\${HOME}/.zshrc"
+fi
+if [ -f "\${HOME}/.bashrc" ]; then
+  add_to_path "${installerConfig.install_dir}" "\${HOME}/.bashrc"
+fi
+if [ -f "\${HOME}/.profile" ]; then
+  add_to_path "${installerConfig.install_dir}" "\${HOME}/.profile"
+fi
+
 echo "✓ ASL successfully installed to \${INSTALL_DIR}/${installerConfig.cli_name}"
-echo ""
-echo "👉 Add ASL to your PATH:"
-echo '   export PATH="'${installerConfig.install_dir}':\${PATH}"'
-echo ""
 echo "⚡ Try running: ${installerConfig.cli_name} --version"
 `;
 fs.writeFileSync(path.join(webDir, 'public/install.sh'), installSh);

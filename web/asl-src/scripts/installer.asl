@@ -8,5 +8,5 @@
    :repo_url "https://github.com/GenSEAM/asl.git"
    :install_dir "${HOME}/.asl/bin"
    :clone_dir "${HOME}/.asl/repo"
-   :binary_rel "agentscript"
+   :binary_rel "asl"
    :bin_links ["asl" "agentscript"]))
