@@ -1,7 +1,7 @@
 # Master Engineering Specification: Autonomous Cognitive Agent EDDIE & Deterministic Execution Ecosystem
-**Document ID:** SPEC-2026-EDDIE-SYSTEM-v2.1  
+**Document ID:** SPEC-2026-EDDIE-SYSTEM-v3.0  
 **Codename:** EDDIE (*Engine for Dynamic Decomposition, Intent-routing & Execution*)  
-**Status:** Canonical Implementation Standard (Fully Reconciled)  
+**Status:** Canonical Implementation Standard (Fully Reconciled & Gap-Free)  
 **Workspace Base:** `/Users/purplelephant/projects/asex`  
 **Target Packages:** `packages/eddie`, `packages/harness`, `packages/agent-core`, `packages/intel`, `packages/mem`, `packages/asl-gateway`, `packages/asl-lens`
 
@@ -299,13 +299,15 @@ All tools execute natively within EDDIE's harness via in-memory WASI / Wasm3 or 
 
 ---
 
-## 11. Two-Pronged Distribution Strategy
+## 11. Two-Pronged Distribution Strategy & External Agent Steering Engine
 
-1. **Track A: Drop-in Tooling Accelerator (`@genseam/lens` via NPM / CLI / MCP):**
-   * Plugs into Claude Code, Gemini CLI, Cursor, Windsurf, OpenDevin.
-   * Delivers instant codebase impact radius, version-pinned lockfile RAG, and context compaction.
-   * Drives viral developer adoption without requiring users to switch away from their primary coding assistant.
-2. **Track B: Sovereign Standalone EDDIE Stack (Binary / Ink TUI):**
-   * Complete, standalone terminal client (`eddie`) with React 19 / Ink TUI.
-   * Full local privacy, running against local Gemma 31B, DeepSeek, or dedicated LLM Gateway.
-   * Complete process supervision, fleet matrix, and zero-disk in-memory AST editing.
+### 11.1. Track A: Drop-in Tooling Accelerator (`@genseam/lens` via NPM / CLI / MCP)
+* Plugs into Claude Code, Gemini CLI, Cursor, Windsurf, OpenDevin.
+* Enforces strict Negative Constraints (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`) that forbid `View`/`cat` on files >50 lines and mandate `asl intel outline` and `asl intel impact`.
+* **Prerequisite / Onboarding Hook:** If `asl` is not installed on `$PATH`, the agent detects this on turn 0, halts immediately, and prompts the user for a one-click install:
+  `curl -fsSL https://get.genseam.org | bash` (Documentation: `https://genseam.org/install`).
+
+### 11.2. Track B: Sovereign Standalone EDDIE Stack (Binary / React 19 Ink TUI)
+* Complete, standalone terminal client (`eddie`) with React 19 / Ink TUI.
+* Full local privacy, running against local Gemma 31B, DeepSeek, or dedicated LLM Gateway.
+* Integrated process supervision, fleet matrix, and zero-disk in-memory AST editing.
