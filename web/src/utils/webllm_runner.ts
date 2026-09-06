@@ -4,7 +4,7 @@
  * 100% Client-side, zero cloud calls, weights cached in IndexedDB.
  */
 
-import { antiHallucinationHarness, FsmRepairReport } from './anti_hallucination';
+import { antiHallucinationHarness, FsmRepairReport } from '../generated/anti_hallucination';
 
 export interface InBrowserModelSpec {
   id: string;

@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { webLlmRunner, IN_BROWSER_MODELS, InBrowserModelSpec, WebLlmProgress } from '../utils/webllm_runner';
 import { prepareSandboxDocument } from '../utils/sandbox_runtime';
-import { runInBrowserGates, VerificationResult } from '../utils/browser_gate';
+import { runInBrowserGates, VerificationResult } from '../generated/browser_gate';
 
 export interface PromptTemplate {
   id: string;

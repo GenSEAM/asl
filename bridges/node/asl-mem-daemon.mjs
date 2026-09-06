@@ -19,6 +19,7 @@ import path from 'node:path';
 import net from 'node:net';
 import crypto from 'node:crypto';
 import os from 'node:os';
+import { spawn } from 'node:child_process';
 
 let resolvedRoot = process.cwd();
 if (path.basename(resolvedRoot) === 'asl' && fs.existsSync(path.join(path.dirname(resolvedRoot), 'asl', 'packages'))) {
@@ -925,7 +926,14 @@ function tokenizeAsn(text) {
       i++;
       while (i < text.length) {
         if (text[i] === '\\') {
-          if (i + 1 < text.length) { str += text[i + 1]; i += 2; }
+          if (i + 1 < text.length) {
+            const next = text[i + 1];
+            if (next === 'n') str += '\n';
+            else if (next === 't') str += '\t';
+            else if (next === 'r') str += '\r';
+            else str += next;
+            i += 2;
+          }
           else { i++; }
         } else if (text[i] === '"') {
           i++;
@@ -1718,6 +1726,185 @@ export function generateSlmPreset() {
   return presetAsn;
 }
 
+// --- Supervised Command Runner with Sliding Watchdog & Deadlock Trapping ---
+export function executeSupervisedCommand({
+  cmd,
+  cwd = WORKSPACE_ROOT,
+  timeoutMs = 30000,
+  idleMs = 10000,
+  input = null,
+  autoConfirm = false,
+  autoReplies = [],
+  env = {}
+}) {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    let stdout = '';
+    let stderr = '';
+    let isDeadlock = false;
+    let promptDetected = null;
+    let status = 'running';
+    let killed = false;
+
+    const mergedEnv = {
+      ...process.env,
+      CI: 'true',
+      DEBIAN_FRONTEND: 'noninteractive',
+      PAGER: 'cat',
+      ...env
+    };
+
+    let child;
+    try {
+      child = spawn('bash', ['-c', cmd], {
+        cwd,
+        detached: true,
+        env: mergedEnv,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch (err) {
+      return resolve({
+        exitCode: 1,
+        stdout: '',
+        stderr: err.message,
+        durationMs: Date.now() - startTime,
+        status: 'spawn-failed',
+        isDeadlock: false,
+        promptDetected: null
+      });
+    }
+
+    const PROMPT_REGEX = /(?:\[[yY]\/[nN]\]|\([yY]\/[nN]\)|(?:password|username|email|confirm|choice|select):\s*$|\?\s+[^\n]+$)/i;
+
+    const killProcessTree = (signal = 'SIGTERM') => {
+      if (killed) return;
+      killed = true;
+      try {
+        if (child.pid) {
+          process.kill(-child.pid, signal);
+        }
+      } catch {
+        try { child.kill(signal); } catch {}
+      }
+    };
+
+    if (input) {
+      try {
+        const inputStr = Array.isArray(input) ? input.join('\n') + '\n' : String(input);
+        child.stdin.write(inputStr);
+        if (!inputStr.endsWith('\n')) child.stdin.write('\n');
+      } catch {}
+    } else if (autoConfirm) {
+      try {
+        child.stdin.write('y\n');
+      } catch {}
+    }
+
+    let idleTimer = null;
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        const combined = (stdout + '\n' + stderr).trim();
+        const lastLines = combined.split('\n').slice(-5).join('\n');
+        const match = lastLines.match(PROMPT_REGEX);
+
+        if (match) {
+          isDeadlock = true;
+          promptDetected = match[0].trim();
+          status = 'deadlock';
+        } else {
+          status = 'idle-timeout';
+        }
+
+        killProcessTree('SIGINT');
+        setTimeout(() => {
+          killProcessTree('SIGKILL');
+        }, 1500);
+      }, idleMs);
+    };
+
+    const hardTimer = setTimeout(() => {
+      if (status === 'running') {
+        status = 'timeout';
+      }
+      killProcessTree('SIGTERM');
+      setTimeout(() => {
+        killProcessTree('SIGKILL');
+      }, 1500);
+    }, timeoutMs);
+
+    resetIdleTimer();
+
+    const handleChunk = (data, isErr = false) => {
+      resetIdleTimer();
+      const chunkStr = data.toString('utf8');
+      if (isErr) stderr += chunkStr;
+      else stdout += chunkStr;
+
+      if (autoConfirm) {
+        if (/\[[yY]\/[nN]\]|\([yY]\/[nN]\)/i.test(chunkStr)) {
+          try { child.stdin.write('y\n'); } catch {}
+        }
+      }
+      if (autoReplies && autoReplies.length > 0) {
+        for (const [pattern, reply] of autoReplies) {
+          if (new RegExp(pattern, 'i').test(chunkStr)) {
+            try { child.stdin.write(reply.endsWith('\n') ? reply : reply + '\n'); } catch {}
+          }
+        }
+      }
+    };
+
+    child.stdout.on('data', (d) => handleChunk(d, false));
+    child.stderr.on('data', (d) => handleChunk(d, true));
+
+    child.on('close', (code, signal) => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (hardTimer) clearTimeout(hardTimer);
+      const durationMs = Date.now() - startTime;
+
+      if (status === 'running') {
+        status = code === 0 ? 'completed' : 'failed';
+      }
+
+      const MAX_OUTPUT_CHARS = 12000;
+      let trimmedStdout = stdout;
+      let trimmedStderr = stderr;
+      if (trimmedStdout.length > MAX_OUTPUT_CHARS) {
+        trimmedStdout = trimmedStdout.slice(0, 4000) + '\n... [output truncated for context economy] ...\n' + trimmedStdout.slice(-4000);
+      }
+      if (trimmedStderr.length > MAX_OUTPUT_CHARS) {
+        trimmedStderr = trimmedStderr.slice(0, 4000) + '\n... [stderr truncated for context economy] ...\n' + trimmedStderr.slice(-4000);
+      }
+
+      resolve({
+        exitCode: code !== null ? code : (signal ? 128 + 15 : (isDeadlock ? 124 : 1)),
+        stdout: trimmedStdout,
+        stderr: trimmedStderr,
+        durationMs,
+        status,
+        isDeadlock,
+        promptDetected,
+        lastLines: (stdout + '\n' + stderr).trim().split('\n').slice(-10).join('\n')
+      });
+    });
+
+    child.on('error', (err) => {
+      if (idleTimer) clearTimeout(idleTimer);
+      if (hardTimer) clearTimeout(hardTimer);
+      resolve({
+        exitCode: 1,
+        stdout,
+        stderr: err.message,
+        durationMs: Date.now() - startTime,
+        status: 'error',
+        isDeadlock: false,
+        promptDetected: null,
+        lastLines: ''
+      });
+    });
+  });
+}
 
 async function executeStep(item, idx, options = {}) {
   const stepStart = Date.now();
@@ -1768,7 +1955,11 @@ async function executeStep(item, idx, options = {}) {
     'tr': 'codec',
     'transpile': 'codec',
     'ptr': 'pointer',
-    'pointer': 'pointer'
+    'pointer': 'pointer',
+    'exec': 'exec',
+    'sh': 'exec',
+    'cmd': 'exec',
+    'run': 'exec'
   };
   const op = OP_ALIASES[rawOp] || rawOp;
 
@@ -2089,6 +2280,43 @@ async function executeStep(item, idx, options = {}) {
         const tokensEst = Math.max(1, Math.ceil(rawData.length / 4));
         const ptrId = `@ptr:{sha256:${hash}|summary:"${summary}"|tokens:${tokensEst}}`;
         stepBody = `  (:step :id ${idx + 1} :op "pointer" :action "${action}" :ptr "${ptrId}" :tokens ${tokensEst} :savings "95%")\n`;
+        break;
+      }
+
+      case 'exec': {
+        const cmdRaw = getArg(['cmd', 'c', 'command', 'run', 'sh']);
+        const cmd = cmdRaw || (item[1] && item[1].type !== 'keyword' ? (item[1].value || item[1]) : null);
+        if (!cmd) {
+          stepBody = `  (:step :id ${idx + 1} :op "exec" :error "Missing command string")\n`;
+          break;
+        }
+        const timeoutRaw = getArg(['timeout-ms', 'timeout', 't']);
+        const timeoutParsed = parseInt(timeoutRaw, 10);
+        const timeoutMs = !isNaN(timeoutParsed) && timeoutParsed > 0 ? timeoutParsed : 30000;
+
+        const idleRaw = getArg(['idle-ms', 'idle', 'i']);
+        const idleParsed = parseInt(idleRaw, 10);
+        const idleMs = !isNaN(idleParsed) && idleParsed > 0 ? idleParsed : 10000;
+
+        const inputData = getArg(['input', 'in', 'stdin']);
+        const autoConfirm = getArg(['auto-confirm', 'yes', 'y']) === 'true' || getArg(['auto-confirm', 'yes', 'y']) === true;
+        const cwd = getArg(['cwd', 'dir']) || WORKSPACE_ROOT;
+
+        const res = await executeSupervisedCommand({
+          cmd,
+          cwd,
+          timeoutMs,
+          idleMs,
+          input: inputData,
+          autoConfirm
+        });
+
+        const safeStdout = JSON.stringify(res.stdout);
+        const safeStderr = JSON.stringify(res.stderr);
+        const isDeadlockStr = res.isDeadlock ? 'true' : 'false';
+        const promptStr = res.promptDetected ? ` :prompt ${JSON.stringify(res.promptDetected)} :hint "Provide input via :input or use non-interactive flag"` : '';
+
+        stepBody = `  (:step :id ${idx + 1} :op "exec" :cmd ${JSON.stringify(cmd)} :exit-code ${res.exitCode} :status "${res.status}" :elapsed-ms ${res.durationMs} :deadlock ${isDeadlockStr}${promptStr} :stdout ${safeStdout} :stderr ${safeStderr})\n`;
         break;
       }
 
@@ -2536,6 +2764,72 @@ async function runCli() {
       loadSnapshot();
       console.log(`(:asl-mem-status :indexed-files ${memoryIndex.documents.length} :dirty-in-ram ${dirtyCount} :cache-dir "${CACHE_DIR}")`);
       break;
+    }
+
+    case 'exec':
+    case 'sh':
+    case 'run': {
+      let timeoutMs = 30000;
+      let idleMs = 10000;
+      let input = null;
+      let autoConfirm = false;
+      let isAsn = false;
+      const cmdArgs = [];
+
+      for (let i = 0; i < args.length; i++) {
+        const a = args[i];
+        if (a === '--asn') {
+          isAsn = true;
+        } else if (a === '-y' || a === '--yes') {
+          autoConfirm = true;
+        } else if (a.startsWith('--timeout=')) {
+          timeoutMs = parseInt(a.slice(10), 10);
+        } else if (a === '--timeout' && i + 1 < args.length) {
+          timeoutMs = parseInt(args[++i], 10);
+        } else if (a.startsWith('--idle=')) {
+          idleMs = parseInt(a.slice(7), 10);
+        } else if (a === '--idle' && i + 1 < args.length) {
+          idleMs = parseInt(args[++i], 10);
+        } else if (a.startsWith('--input=')) {
+          input = a.slice(8);
+        } else if (a === '--input' && i + 1 < args.length) {
+          input = args[++i];
+        } else {
+          cmdArgs.push(a);
+        }
+      }
+
+      const cmd = cmdArgs.join(' ');
+      if (!cmd) {
+        console.log('Usage: asl exec [--timeout=ms] [--idle=ms] [--input=str] [-y] [--asn] <command>');
+        process.exit(1);
+      }
+
+      const res = await executeSupervisedCommand({
+        cmd,
+        cwd: WORKSPACE_ROOT,
+        timeoutMs,
+        idleMs,
+        input,
+        autoConfirm
+      });
+
+      if (isAsn) {
+        console.log(`(:exec-receipt :cmd ${JSON.stringify(cmd)} :exit-code ${res.exitCode} :status "${res.status}" :elapsed-ms ${res.durationMs} :deadlock ${res.isDeadlock} :stdout ${JSON.stringify(res.stdout)} :stderr ${JSON.stringify(res.stderr)})`);
+      } else {
+        if (res.stdout) process.stdout.write(res.stdout);
+        if (res.stderr) process.stderr.write(res.stderr);
+        if (res.isDeadlock) {
+          console.error(`\n⚠️  [asl-exec] INTERACTIVE DEADLOCK DETECTED! Process stalled waiting for stdin.`);
+          if (res.promptDetected) console.error(`   Detected prompt: "${res.promptDetected}"`);
+          console.error(`   Hint: Provide input using --input="<text>\\n" or run with -y / non-interactive flags.`);
+        } else if (res.status === 'idle-timeout') {
+          console.error(`\n⚠️  [asl-exec] IDLE TIMEOUT: No output received for ${idleMs}ms. Process terminated.`);
+        } else if (res.status === 'timeout') {
+          console.error(`\n⚠️  [asl-exec] TIMEOUT: Maximum execution deadline of ${timeoutMs}ms exceeded.`);
+        }
+      }
+      process.exit(res.exitCode);
     }
 
     default:
