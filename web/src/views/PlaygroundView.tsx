@@ -1,24 +1,18 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Section, SectionHeader } from '../components/ui/primitives';
-import { SqlStudio } from '../components/SqlStudio';
-import { AslQualityDoctor } from '../components/AslQualityDoctor';
-import { GraphCanvas } from '../components/GraphCanvas';
-import { SvgStudio } from '../components/SvgStudio';
 import { InBrowserCompanion } from '../components/InBrowserCompanion';
-import { Database, ShieldCheck, Share2, Sparkles, Cpu, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Cpu, CheckCircle2 } from 'lucide-react';
 
 export const PlaygroundView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'graph' | 'svg' | 'companion' | 'sql' | 'doctor'>('graph');
-
   return (
     <div className="pt-28 pb-20">
       <Section id="playground" labelledBy="playground-title">
         <SectionHeader
           id="playground-title"
-          index="Interactive"
+          index="AI Companion"
           eyebrow="Developer Playground"
-          title="Interactive AgentScript Tooling & Live In-Browser Studio"
-          lead="Experience real-time graph untangling with GPU acceleration, ASN vector drawing, local client-side WebGPU agent companion, SQL transpilation, and AST quality audits."
+          title="On-Device AI Companion & Tri-Studio"
+          lead="Direct developer access to the sovereign in-browser companion: generate vector badges (SVG Studio), playable HTML5 arcade toys (Games Studio), and modern responsive components (Websites Studio) with client-side verification gates."
         />
 
         {/* Runtime Status Banner */}
@@ -48,84 +42,13 @@ export const PlaygroundView: React.FC = () => {
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex flex-wrap items-center gap-2 mb-8 p-1.5 rounded-2xl bg-surface border border-line max-w-3xl shadow-e1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('graph')}
-            className={`flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
-              activeTab === 'graph'
-                ? 'bg-signal text-white shadow-sm'
-                : 'text-ink-2 hover:text-ink hover:bg-inset'
-            }`}
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Untangle Graph</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('svg')}
-            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
-              activeTab === 'svg'
-                ? 'bg-signal text-white shadow-sm'
-                : 'text-ink-2 hover:text-ink hover:bg-inset'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>SVG Studio</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('companion')}
-            className={`flex-1 min-w-[130px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
-              activeTab === 'companion'
-                ? 'bg-signal text-white shadow-sm'
-                : 'text-ink-2 hover:text-ink hover:bg-inset'
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5" />
-            <span>AI Companion</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('sql')}
-            className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
-              activeTab === 'sql'
-                ? 'bg-signal text-white shadow-sm'
-                : 'text-ink-2 hover:text-ink hover:bg-inset'
-            }`}
-          >
-            <Database className="w-3.5 h-3.5" />
-            <span>SQL Studio</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('doctor')}
-            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
-              activeTab === 'doctor'
-                ? 'bg-signal text-white shadow-sm'
-                : 'text-ink-2 hover:text-ink hover:bg-inset'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Quality Doctor</span>
-          </button>
-        </div>
-
-        {/* Active Studio */}
-        <div className="rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-4 sm:p-6 shadow-e3">
-          {activeTab === 'graph' && <GraphCanvas />}
-          {activeTab === 'svg' && <SvgStudio />}
-          {activeTab === 'companion' && <InBrowserCompanion />}
-          {activeTab === 'sql' && <SqlStudio />}
-          {activeTab === 'doctor' && <AslQualityDoctor />}
+        <div className="mt-4">
+          <InBrowserCompanion />
         </div>
       </Section>
     </div>
   );
 };
+
+export default PlaygroundView;
 
