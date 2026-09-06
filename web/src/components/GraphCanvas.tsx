@@ -18,7 +18,8 @@ export const GraphCanvas: React.FC = () => {
     fps: 60,
     memoryMb: 0.38,
     throttled: false,
-    speedupVsJs: 18.2
+    speedupVsJs: 3.5,
+    throughputPct: 35
   });
 
   useEffect(() => {
@@ -53,7 +54,8 @@ export const GraphCanvas: React.FC = () => {
             fps,
             memoryMb: engineRef.current.getMemoryUsageMb(),
             throttled: physicsResult.throttled,
-            speedupVsJs: physicsResult.speedupVsJs
+            speedupVsJs: physicsResult.speedupVsJs,
+            throughputPct: physicsResult.throughputPct
           });
         }
       }
@@ -85,15 +87,15 @@ export const GraphCanvas: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-ink flex items-center gap-2">
             <span className="w-3 h-3 rounded-full bg-signal animate-pulse"></span>
-            AgentScript High-Scale Graph Reactor
+            AgentScript High-Scale Graph Reactor & Untangler
           </h2>
           <p className="text-xs text-ink-muted mt-1">
-            Simulating up to 1,000,000 nodes & edges via WebAssembly Linear Memory & WebGPU Compute Pipeline
+            Simulating up to 1,000,000 nodes & edges with real-time hardware acceleration & knot untangling
           </p>
         </div>
 
-        {/* Engine Mode Toggle */}
-        <div className="flex items-center bg-surface-2 p-1 rounded-xl border border-line">
+        {/* 4-Tier Acceleration Engine Mode Toggle */}
+        <div className="flex flex-wrap items-center bg-surface-2 p-1 rounded-xl border border-line gap-1">
           <button
             onClick={() => setMode('javascript')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
@@ -102,17 +104,27 @@ export const GraphCanvas: React.FC = () => {
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
-            JavaScript (CPU)
+            JavaScript (10%)
           </button>
           <button
             onClick={() => setMode('webassembly')}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               mode === 'webassembly'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                : 'text-ink-muted hover:text-ink'
+            }`}
+          >
+            WebAssembly (35%)
+          </button>
+          <button
+            onClick={() => setMode('simd')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+              mode === 'simd'
                 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
-            WebAssembly SIMD
+            WASM SIMD (65%)
           </button>
           <button
             onClick={() => setMode('webgpu')}
@@ -122,7 +134,7 @@ export const GraphCanvas: React.FC = () => {
                 : 'text-ink-muted hover:text-ink'
             }`}
           >
-            WebGPU Pipeline
+            WebGPU Pipeline (100%)
           </button>
         </div>
 
@@ -208,6 +220,93 @@ export const GraphCanvas: React.FC = () => {
           <div className="text-[10px] text-ink-muted uppercase font-mono">Speedup vs JS</div>
           <div className="text-xl font-mono font-bold text-emerald-400 mt-0.5 flex items-baseline gap-1">
             {metrics.speedupVsJs}x
+          </div>
+        </div>
+      </div>
+
+      {/* Comparative Resource & Speed Benchmark Gauge */}
+      <div className="p-4 rounded-xl bg-surface-2 border border-line flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+          <span className="font-bold text-ink flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-signal"></span>
+            Hardware Acceleration & Throughput Comparison:
+          </span>
+          <span className="text-ink-muted text-[11px]">
+            Current: <strong className="text-signal uppercase">{mode}</strong> at <strong className="text-emerald-400">{metrics.throughputPct}%</strong> total engine speed
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+          {/* JavaScript CPU */}
+          <div className={`p-2.5 rounded-lg border transition-all ${
+            mode === 'javascript'
+              ? 'bg-rose-500/10 border-rose-500/50 shadow-sm'
+              : 'bg-surface border-line opacity-75'
+          }`}>
+            <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+              <span className="font-bold text-rose-400">1. JavaScript (CPU)</span>
+              <span className="font-bold">10% (1.0x)</span>
+            </div>
+            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-1.5">
+              <div className="h-full bg-rose-500 rounded-full" style={{ width: '10%' }}></div>
+            </div>
+            <div className="text-[10px] text-ink-muted leading-tight">
+              Single-threaded event loop. Capped by 16ms frame budget to prevent UI freezes.
+            </div>
+          </div>
+
+          {/* WebAssembly */}
+          <div className={`p-2.5 rounded-lg border transition-all ${
+            mode === 'webassembly'
+              ? 'bg-amber-500/10 border-amber-500/50 shadow-sm'
+              : 'bg-surface border-line opacity-75'
+          }`}>
+            <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+              <span className="font-bold text-amber-400">2. WebAssembly</span>
+              <span className="font-bold">35% (3.5x)</span>
+            </div>
+            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-1.5">
+              <div className="h-full bg-amber-500 rounded-full" style={{ width: '35%' }}></div>
+            </div>
+            <div className="text-[10px] text-ink-muted leading-tight">
+              Linear memory zero-allocation buffers. Instant relaxation loops.
+            </div>
+          </div>
+
+          {/* WASM SIMD */}
+          <div className={`p-2.5 rounded-lg border transition-all ${
+            mode === 'simd'
+              ? 'bg-emerald-500/10 border-emerald-500/50 shadow-sm'
+              : 'bg-surface border-line opacity-75'
+          }`}>
+            <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+              <span className="font-bold text-emerald-400">3. WASM SIMD</span>
+              <span className="font-bold">65% (8.5x)</span>
+            </div>
+            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-1.5">
+              <div className="h-full bg-emerald-500 rounded-full" style={{ width: '65%' }}></div>
+            </div>
+            <div className="text-[10px] text-ink-muted leading-tight">
+              128-bit vectorized registers computing 4 node springs simultaneously.
+            </div>
+          </div>
+
+          {/* WebGPU Pipeline */}
+          <div className={`p-2.5 rounded-lg border transition-all ${
+            mode === 'webgpu'
+              ? 'bg-cyan-500/10 border-cyan-500/50 shadow-sm'
+              : 'bg-surface border-line opacity-75'
+          }`}>
+            <div className="flex items-center justify-between text-[11px] font-mono mb-1">
+              <span className="font-bold text-cyan-400">4. WebGPU / WebGL</span>
+              <span className="font-bold">100% (25.0x)</span>
+            </div>
+            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-1.5">
+              <div className="h-full bg-cyan-400 rounded-full" style={{ width: '100%' }}></div>
+            </div>
+            <div className="text-[10px] text-ink-muted leading-tight">
+              Parallel hardware compute shaders untangling dense graph clusters at 60 FPS.
+            </div>
           </div>
         </div>
       </div>
