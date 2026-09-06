@@ -460,7 +460,7 @@ case "$CMD" in
     esac
     ;;
   version|-v|--version)
-    echo "asl 0.3.0 (pure AgentScript self-hosted toolchain)"
+    echo "asl 0.1.0 (pure AgentScript self-hosted toolchain)"
     exit 0
     ;;
   help|-h|--help)

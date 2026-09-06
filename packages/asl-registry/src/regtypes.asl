@@ -89,6 +89,6 @@
   (:f name Str "AgentScript package name (e.g. @genseam/asl-mem)")
   (:f git-repo Str "Git repository HTTPS or SSH URI")
   (:f branch Str "Default branch (typically main)")
-  (:f latest-tag Str "Latest tagged release (e.g. v0.3.0)")
+  (:f latest-tag Str "Latest tagged release (e.g. v0.1.0)")
   (:f description Str "Package description")
   (:f capabilities (List Str) "Declared capabilities or tags"))

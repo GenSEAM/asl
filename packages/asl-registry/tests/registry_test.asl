@@ -20,7 +20,7 @@
 
 (df test-semver-comparison [] -> Bool
   :d "Tests semantic version ordering and comparison."
-  (and (= (ver/compare-semver "0.3.0" "0.2.0") 1)
+  (and (= (ver/compare-semver "0.1.0" "0.2.0") 1)
   (and (= (ver/compare-semver "1.2.3" "1.2.3") 0)
   (and (= (ver/compare-semver "1.0.0" "2.0.0") -1)
   (and (= (ver/compare-semver "v1.5.0" "1.4.9") 1)
@@ -31,7 +31,7 @@
   (let [(r1 (ver/evaluate-outdated "requests" "2.28.0" "2.31.0"))
         (r2 (ver/evaluate-outdated "next" "14.0.0" "15.0.0"))
         (r3 (ver/evaluate-outdated "tokio" "1.35.0" "1.35.1"))
-        (r4 (ver/evaluate-outdated "asl" "0.3.0" "0.3.0"))]
+        (r4 (ver/evaluate-outdated "asl" "0.1.0" "0.1.0"))]
     (and (.-outdated r1)
     (and (= (.-severity r1) "minor")
     (and (.-outdated r2)
@@ -51,7 +51,7 @@
                  :name "@genseam/asl-mem"
                  :git-repo "https://github.com/GenSEAM/asl-mem.git"
                  :branch "main"
-                 :latest-tag "v0.3.0"
+                 :latest-tag "v0.1.0"
                  :description "AgentScript Memory Matrix"
                  :capabilities (list "vector" "graph")))
         (tbl (reg/format-asl-registry-table (list entry)))]
@@ -59,7 +59,7 @@
     (and (string-contains? summary "v2.31.0")
     (and (string-contains? rep "minor update available")
     (and (string-contains? tbl "@genseam/asl-mem")
-         (string-contains? tbl "v0.3.0")))))))
+         (string-contains? tbl "v0.1.0")))))))
 
 (df ! main [(args (List Str))] -> (Result Unit IoError)
   :d "Main test runner entrypoint."

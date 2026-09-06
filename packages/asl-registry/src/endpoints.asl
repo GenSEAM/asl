@@ -43,7 +43,7 @@
 
 (df build-headers [(eco ty/EcosystemKind)] -> (List (Pair Str Str))
   :d "Constructs HTTP header list with user agents and registry-appropriate content negotiation."
-  (let [(std-ua (pair "User-Agent" "ASL-Registry/0.3.0 (+https://aslang.dev)"))]
+  (let [(std-ua (pair "User-Agent" "ASL-Registry/0.1.0 (+https://aslang.dev)"))]
     (mt eco
       ((ty/eco-npm)
        (list std-ua (pair "Accept" "application/vnd.npm.install-v1+json")))

@@ -2,7 +2,7 @@
 ;; Single Source of Truth for Core Syntax, Forms, and Primitive Token Budgets
 (:grammar
   :package @genseam/asl-core
-  :version "0.3.0"
+  :version "0.1.0"
   :tokens-baseline 2
   :symbols [
     ;; Core Declaration Forms (1 token)
