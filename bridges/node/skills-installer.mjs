@@ -220,6 +220,7 @@ export function detectAgents() {
       ],
       rulesFiles: [
         path.join(HOME, '.gemini', 'config', 'AGENTS.md'),
+        path.join(HOME, '.gemini', 'AGENTS.md'),
         path.join(HOME, '.gemini', 'config', 'rules', 'asl-toolbelt.md')
       ],
       detected: fs.existsSync(path.join(HOME, '.gemini'))
