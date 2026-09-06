@@ -4,11 +4,7 @@
  * high-DPI Retina canvas scaling, and focus management into the sandbox iframe.
  */
 
-export function prepareSandboxDocument(rawHtml: string): string {
-  const trimmed = rawHtml.trim();
-
-  // If already a full HTML document, inject runtime hooks into <head> or <body>
-  const runtimePreamble = `
+export const RUNTIME_PREAMBLE = `
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -207,9 +203,9 @@ export function prepareSandboxDocument(rawHtml: string): string {
   if (trimmed.includes('<html') || trimmed.includes('<!DOCTYPE')) {
     // Inject runtime into existing head
     if (trimmed.includes('<head>')) {
-      return trimmed.replace('<head>', `<head>${runtimePreamble}`);
+      return trimmed.replace('<head>', `<head>${RUNTIME_PREAMBLE}`);
     } else {
-      return trimmed.replace('<html>', `<html><head>${runtimePreamble}</head>`);
+      return trimmed.replace('<html>', `<html><head>${RUNTIME_PREAMBLE}</head>`);
     }
   }
 
@@ -217,11 +213,12 @@ export function prepareSandboxDocument(rawHtml: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-  ${runtimePreamble}
+  ${RUNTIME_PREAMBLE}
 </head>
 <body class="p-4 flex flex-col items-center justify-center min-h-screen">
   ${trimmed}
 </body>
 </html>`;
 }
+
 
