@@ -270,3 +270,15 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
   explicit `asl transcode`.
 - **Control-flow linearization (@pcp:c-adc8)**: keep control nesting at four levels or fewer. Prefer
   `try` early returns and local helpers over deep `match`/`if` trees.
+
+
+<!-- ASL_TOOLBELT_START -->
+# AgentScript (ASL) Native Toolbelt & In-Memory Workspace Directive
+
+Prioritize the native AgentScript (`asl`) CLI toolchain for code exploration, in-memory operations, and quality verification:
+- **Code Intelligence**: Prefer `asl intel outline <file>` for AST skeletons, `asl intel search <symbol>`, `asl intel callers <symbol>`, and `asl intel preload <symbol> [budget]` over reading full files.
+- **In-Memory Workspace**: Use `asl mem index .` to load all 900+ codebase files into RAM in <150ms. Use `asl mem query "<text>"` for cosine-similarity semantic search, `asl mem doc outline <file.md>` and `asl mem doc section <file.md> <title>` for instant documentation reading without hitting disk.
+- **In-Memory Editing & Mass Replace**: Use `asl mem edit <file> <old> <new>` and `asl mem replace --match="old" --replace="new" [--ext=.asl]` to stage edits in RAM. Review via `asl mem diff`, atomically persist to disk with `asl mem flush`, or discard with `asl mem discard`.
+- **Quality Verification**: Verify code via `asl check <file>`, `asl lint <file>`, `asl audit <file>`, and `asl test [file]`.
+- **Token Economy**: Use compact ASN S-expression format (`(:call :tool "..." ...)`) for ~72% token savings over JSON.
+<!-- ASL_TOOLBELT_END -->

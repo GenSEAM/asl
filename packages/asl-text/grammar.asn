@@ -1,0 +1,49 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-text
+(:grammar
+  :package @genseam/asl-text
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Symbols (Baseline)
+    (:sym :name "ExtractedDoc" :kind :type :tokens 1)
+    (:sym :name "ContextChunk" :kind :type :tokens 1)
+
+    ;; 2-Token Symbols (with :rationale)
+    (:sym :name "strip-enclosed" :kind :fn :tokens 2
+          :rationale "Removes substrings enclosed between opening and closing delimiters")
+    (:sym :name "clean-html" :kind :fn :tokens 2
+          :rationale "Strips script, style, nav, footer, comments, and boilerplate tags")
+    (:sym :name "extract-html" :kind :fn :tokens 2
+          :rationale "Extracts structured ExtractedDoc from raw HTML input")
+    (:sym :name "extract-markdown" :kind :fn :tokens 2
+          :rationale "Extracts structured ExtractedDoc from markdown text")
+    (:sym :name "extract-plaintext" :kind :fn :tokens 2
+          :rationale "Normalizes unstructured plain text into ExtractedDoc")
+    (:sym :name "extract-context" :kind :fn :tokens 2
+          :rationale "Polyglot context extractor routing across supported formats")
+    (:sym :name "chunk-text" :kind :fn :tokens 2
+          :rationale "Splits arbitrary text into sliding-window ContextChunks with overlap")
+    (:sym :name "chunk-doc" :kind :fn :tokens 2
+          :rationale "Chunks ExtractedDoc into indexed ContextChunks retaining source metadata")
+    (:sym :name "run-tests" :kind :fn :tokens 2
+          :rationale "Standard test runner entrypoint")
+
+    ;; >2 Token Symbols (with :rationale)
+    (:sym :name "decode-html-entities" :kind :fn :tokens 3
+          :rationale "Replaces standard HTML character entity references with UTF-8 characters")
+    (:sym :name "extract-json-kv" :kind :fn :tokens 3
+          :rationale "Extracts normalized key-value fields from JSON text payloads")
+    (:sym :name "extract-xml-atom" :kind :fn :tokens 3
+          :rationale "Extracts clean text content from XML or Atom feed entries")
+    (:sym :name "format-chunk-markdown" :kind :fn :tokens 3
+          :rationale "Formats single ContextChunk with citation index and origin header")
+    (:sym :name "format-context-rag" :kind :fn :tokens 3
+          :rationale "Compiles chunks into token-bounded indexed markdown context block")
+    (:sym :name "format-docs-rag" :kind :fn :tokens 3
+          :rationale "Compiles multiple extracted documents into indexed prompt context")
+    (:sym :name "doc-to-asn" :kind :fn :tokens 3
+          :rationale "Encodes ExtractedDoc into compact, canonical ASN S-expression")
+    (:sym :name "chunk-to-asn" :kind :fn :tokens 3
+          :rationale "Encodes ContextChunk into compact, canonical ASN S-expression")
+  ])

@@ -9,13 +9,17 @@ while [ -L "$SOURCE" ]; do
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+NODE_BIN="/usr/local/bin/node"
+[ ! -x "$NODE_BIN" ] && NODE_BIN="$(command -v node 2>/dev/null || echo "node")"
 
 CMD="${1:-help}"
 shift || true
 
 case "$CMD" in
   gate)
-    exec "$ROOT/packages/asl-gates/bin/gate.sh" "$@"
+    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    exec "$NODE_BIN" "$MEM_DAEMON" gate "$@"
     ;;
   check)
     if [ -z "$1" ]; then
@@ -147,6 +151,12 @@ case "$CMD" in
     fi
     ;;
   test)
+    if [ "$1" = "--coverage" ] || [ "$1" = "-c" ]; then
+      shift
+      MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+      [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+      exec "$NODE_BIN" "$MEM_DAEMON" coverage "$@"
+    fi
     if [ -n "$1" ]; then
       if [ -f "$1" ]; then
         echo "--> Auditing and verifying ASL test suite: $1"
@@ -186,7 +196,12 @@ case "$CMD" in
         exit 1
       fi
     fi
-    exec "$ROOT/packages/asl-gates/bin/gate.sh"
+    exec "$0" gate "$@"
+    ;;
+  coverage|cov)
+    MEM_DAEMON="$ROOT/../tools/asl-mem-daemon.mjs"
+    [ ! -f "$MEM_DAEMON" ] && MEM_DAEMON="$ROOT/tools/asl-mem-daemon.mjs"
+    exec "$NODE_BIN" "$MEM_DAEMON" coverage "$@"
     ;;
   gen:web|gen-web)
     WEB_DIR="$ROOT/web"
@@ -208,7 +223,7 @@ case "$CMD" in
     done
 
     # 2. Dynamically compile ASL models into web targets via gen-web.mjs
-    node "$WEB_DIR/scripts/gen-web.mjs" "$WEB_DIR"
+    "$NODE_BIN" "$WEB_DIR/scripts/gen-web.mjs" "$WEB_DIR"
     exit 0
     ;;
   doc)
@@ -391,11 +406,17 @@ case "$CMD" in
         echo "✓ Compiled $DEST_MD from $SPEC"
         exit 0
         ;;
+      install|setup)
+        SKILLS_RUNNER="$ROOT/../tools/skills-installer.mjs"
+        [ ! -f "$SKILLS_RUNNER" ] && SKILLS_RUNNER="$ROOT/tools/skills-installer.mjs"
+        exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
+        ;;
       *)
-        echo "Usage: asl skill <compile|stub|sync> <spec.asn> [args]"
+        echo "Usage: asl skill <compile|stub|sync|install> [args]"
         exit 1
         ;;
     esac
+
     ;;
   intel)
     SUBCMD="${1:-help}"
@@ -453,13 +474,51 @@ case "$CMD" in
         (grep -rnE "\\b$SYM\\b" --exclude-dir={node_modules,.git,dist,build,.next} . 2>/dev/null || true) | head -n 15 | awk -F: '{print "  (:affected :file \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
+      preload)
+        MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
+        [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+        if [ -f "$MEM_RUNNER" ]; then
+          exec "$NODE_BIN" "$MEM_RUNNER" preload "$TARGET" "$@"
+        else
+          echo "Usage: asl intel preload <symbol> [budget]"
+          exit 1
+        fi
+        ;;
+      index)
+        MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
+        [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+        exec "$NODE_BIN" "$MEM_RUNNER" index "$TARGET" "$@"
+        ;;
       *)
-        echo "Usage: asl intel <outline|search|callers|impact> [target]"
+        echo "Usage: asl intel <outline|search|callers|impact|preload|index> [target]"
         exit 1
         ;;
     esac
     ;;
+  mem)
+    MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
+    [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+    if [ -f "$MEM_RUNNER" ]; then
+      exec "$NODE_BIN" "$MEM_RUNNER" "$@"
+    else
+      echo "Error: asl-mem runner not found at $MEM_RUNNER"
+      exit 1
+    fi
+
+    ;;
+  rpc|batch|eval)
+    MEM_RUNNER="$ROOT/../tools/asl-mem-daemon.mjs"
+    [ ! -f "$MEM_RUNNER" ] && MEM_RUNNER="$ROOT/tools/asl-mem-daemon.mjs"
+    exec "$NODE_BIN" "$MEM_RUNNER" rpc "$@"
+    ;;
+  setup)
+
+    SKILLS_RUNNER="$ROOT/../tools/skills-installer.mjs"
+    [ ! -f "$SKILLS_RUNNER" ] && SKILLS_RUNNER="$ROOT/tools/skills-installer.mjs"
+    exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
+    ;;
   version|-v|--version)
+
     echo "asl 0.1.0 (pure AgentScript self-hosted toolchain)"
     exit 0
     ;;
@@ -474,7 +533,8 @@ case "$CMD" in
     echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
     echo "  test [file]     Execute native ASL test suites"
     echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
-    echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact)"
+    echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index)"
+    echo "  mem <subcmd>    In-memory vector memory engine (index, query, search, ptr)"
     echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
     echo "  version         Display toolchain version"
     echo "  help            Display this usage guide"
@@ -485,3 +545,4 @@ case "$CMD" in
     exit 1
     ;;
 esac
+

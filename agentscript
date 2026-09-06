@@ -9,7 +9,7 @@ shift || true
 
 case "$CMD" in
   gate)
-    exec "$ROOT/packages/asl-gates/bin/gate.sh" "$@"
+    exec "$ROOT/asl" gate "$@"
     ;;
   check)
     if [ -z "$1" ]; then
@@ -28,7 +28,7 @@ case "$CMD" in
     exit 0
     ;;
   test)
-    exec "$ROOT/packages/asl-gates/bin/gate.sh"
+    exec "$ROOT/asl" gate "$@"
     ;;
   version|-v|--version)
     echo "asl 0.1.0 (pure AgentScript self-hosted toolchain)"
