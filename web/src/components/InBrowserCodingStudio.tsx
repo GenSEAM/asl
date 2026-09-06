@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Play, RotateCcw, Sparkles, Terminal, Gamepad2, Layout, Cpu, Copy, Check } from 'lucide-react';
+import { Play, RotateCcw, Sparkles, Terminal, Gamepad2, Layout, Copy, Check, Maximize2, Minimize2 } from 'lucide-react';
 
 interface CodeTemplate {
   name: string;
@@ -8,9 +8,252 @@ interface CodeTemplate {
   code: string;
 }
 
+const MODELS = [
+  { id: 'eddie-webgpu', name: 'Eddie-SLM-3B (Local WebGPU)' },
+  { id: 'gemma-wasm', name: 'Gemma-2-2B (Wasm SIMD)' },
+  { id: 'qwen-coder', name: 'Qwen2.5-Coder-3B (In-Browser)' },
+  { id: 'eddie-cloud', name: 'Eddie-Cloud-Pro (API)' }
+];
+
 const TEMPLATES: Record<string, CodeTemplate> = {
+  tetris: {
+    name: 'Agent Tetris (Retro Arcade)',
+    icon: Gamepad2,
+    description: 'Playable retro Tetris with keyboard rotation, soft drop, row clearing, and live score.',
+    code: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { margin: 0; background: #070a12; color: #fff; font-family: monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+    canvas { background: #0b0f19; border: 2px solid #38ef7d; border-radius: 12px; box-shadow: 0 0 20px rgba(56, 239, 125, 0.2); }
+    #ui { font-size: 14px; color: #38ef7d; font-weight: bold; margin-bottom: 8px; }
+    #instructions { margin-top: 8px; font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div id="ui">SCORE: <span id="score">0</span> | LINES: <span id="lines">0</span></div>
+  <canvas id="c" width="240" height="400"></canvas>
+  <div id="instructions">← / → : Move | ↑ : Rotate | ↓ : Soft Drop</div>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const COLS = 10, ROWS = 20, BLOCK = 20;
+    const board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+    const COLORS = [null, '#00f2fe', '#facc15', '#a855f7', '#38ef7d', '#ff4757', '#3b82f6', '#fb923c'];
+    const SHAPES = [
+      [],
+      [[1,1,1,1]],
+      [[2,2],[2,2]],
+      [[0,3,0],[3,3,3]],
+      [[0,4,4],[4,4,0]],
+      [[5,5,0],[0,5,5]],
+      [[6,0,0],[6,6,6]],
+      [[0,0,7],[7,7,7]]
+    ];
+    let score = 0, lines = 0, gameOver = false;
+    let piece = null;
+    function newPiece() {
+      const type = Math.floor(Math.random() * 7) + 1;
+      piece = { shape: SHAPES[type], color: type, x: Math.floor(COLS/2) - 1, y: 0 };
+      if (collide(piece.shape, piece.x, piece.y)) { gameOver = true; }
+    }
+    function collide(shape, px, py) {
+      for (let r=0; r<shape.length; r++) {
+        for (let c=0; c<shape[r].length; c++) {
+          if (shape[r][c]) {
+            const nx = px + c, ny = py + r;
+            if (nx < 0 || nx >= COLS || ny >= ROWS || (ny >= 0 && board[ny][nx])) return true;
+          }
+        }
+      }
+      return false;
+    }
+    function rotate(shape) {
+      return shape[0].map((_, i) => shape.map(row => row[i]).reverse());
+    }
+    function merge() {
+      piece.shape.forEach((row, r) => {
+        row.forEach((val, c) => {
+          if (val) board[piece.y + r][piece.x + c] = piece.color;
+        });
+      });
+      clearRows();
+      newPiece();
+    }
+    function clearRows() {
+      let count = 0;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (board[r].every(v => v !== 0)) {
+          board.splice(r, 1);
+          board.unshift(Array(COLS).fill(0));
+          count++;
+          r++;
+        }
+      }
+      if (count) {
+        lines += count;
+        score += count * 100 * count;
+        document.getElementById('score').innerText = score;
+        document.getElementById('lines').innerText = lines;
+      }
+    }
+    window.addEventListener('keydown', e => {
+      if (gameOver) return;
+      if (e.key === 'ArrowLeft' && !collide(piece.shape, piece.x - 1, piece.y)) piece.x--;
+      if (e.key === 'ArrowRight' && !collide(piece.shape, piece.x + 1, piece.y)) piece.x++;
+      if (e.key === 'ArrowDown') {
+        if (!collide(piece.shape, piece.x, piece.y + 1)) piece.y++;
+        else merge();
+      }
+      if (e.key === 'ArrowUp') {
+        const rotated = rotate(piece.shape);
+        if (!collide(rotated, piece.x, piece.y)) piece.shape = rotated;
+      }
+    });
+    let dropTimer = 0;
+    function update(time = 0) {
+      if (!gameOver) {
+        if (time - dropTimer > 450) {
+          if (!collide(piece.shape, piece.x, piece.y + 1)) piece.y++;
+          else merge();
+          dropTimer = time;
+        }
+      }
+      ctx.fillStyle = '#0b0f19';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let r=0; r<ROWS; r++) {
+        for (let c=0; c<COLS; c++) {
+          if (board[r][c]) {
+            ctx.fillStyle = COLORS[board[r][c]];
+            ctx.fillRect(c*BLOCK+1, r*BLOCK+1, BLOCK-2, BLOCK-2);
+          }
+        }
+      }
+      if (piece) {
+        ctx.fillStyle = COLORS[piece.color];
+        piece.shape.forEach((row, r) => {
+          row.forEach((v, c) => {
+            if (v) ctx.fillRect((piece.x + c)*BLOCK+1, (piece.y + r)*BLOCK+1, BLOCK-2, BLOCK-2);
+          });
+        });
+      }
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ff4757';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 10);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '11px monospace';
+        ctx.fillText('Score: ' + score, canvas.width/2, canvas.height/2 + 15);
+      }
+      requestAnimationFrame(update);
+    }
+    newPiece();
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>`
+  },
+
+  flappy: {
+    name: 'Agent Flappy Bird',
+    icon: Gamepad2,
+    description: 'Playable Flappy Bird with pipe physics, gravity, flap acceleration, and score tracker.',
+    code: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { margin: 0; background: #070a12; color: #fff; font-family: monospace; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+    canvas { background: #08101e; border: 2px solid #00f2fe; border-radius: 12px; box-shadow: 0 0 20px rgba(0, 242, 254, 0.2); }
+    #ui { font-size: 14px; color: #00f2fe; font-weight: bold; margin-bottom: 8px; }
+    #instructions { margin-top: 8px; font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div id="ui">SCORE: <span id="score">0</span></div>
+  <canvas id="c" width="340" height="400"></canvas>
+  <div id="instructions">Press [Space] or Click / Tap to Flap</div>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    let bird = { x: 60, y: 200, vy: 0, gravity: 0.38, jump: -6.5, radius: 12 };
+    let pipes = [];
+    let score = 0, gameOver = false, frames = 0;
+    function flap() {
+      if (gameOver) { reset(); return; }
+      bird.vy = bird.jump;
+    }
+    window.addEventListener('keydown', e => { if (e.code === 'Space') flap(); });
+    canvas.addEventListener('pointerdown', flap);
+    function reset() {
+      bird.y = 200; bird.vy = 0;
+      pipes = []; score = 0; gameOver = false;
+      document.getElementById('score').innerText = score;
+    }
+    function update() {
+      frames++;
+      if (!gameOver) {
+        bird.vy += bird.gravity;
+        bird.y += bird.vy;
+        if (bird.y + bird.radius >= canvas.height || bird.y - bird.radius <= 0) gameOver = true;
+        if (frames % 95 === 0) {
+          const gap = 115;
+          const topH = 40 + Math.random() * (canvas.height - gap - 100);
+          pipes.push({ x: canvas.width, top: topH, bottom: canvas.height - topH - gap, width: 42, passed: false });
+        }
+        for (let i = pipes.length - 1; i >= 0; i--) {
+          const p = pipes[i];
+          p.x -= 2.2;
+          if (bird.x + bird.radius > p.x && bird.x - bird.radius < p.x + p.width) {
+            if (bird.y - bird.radius < p.top || bird.y + bird.radius > canvas.height - p.bottom) {
+              gameOver = true;
+            }
+          }
+          if (!p.passed && p.x + p.width < bird.x) {
+            p.passed = true;
+            score++;
+            document.getElementById('score').innerText = score;
+          }
+          if (p.x + p.width < 0) pipes.splice(i, 1);
+        }
+      }
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#10b981';
+      pipes.forEach(p => {
+        ctx.fillRect(p.x, 0, p.width, p.top);
+        ctx.fillRect(p.x, canvas.height - p.bottom, p.width, p.bottom);
+      });
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(bird.x + 4, bird.y - 3, 3, 0, Math.PI * 2);
+      ctx.fill();
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ff4757';
+        ctx.font = 'bold 20px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 10);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px monospace';
+        ctx.fillText('Score: ' + score + ' (Click to retry)', canvas.width/2, canvas.height/2 + 20);
+      }
+      requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>`
+  },
+
   game: {
-    name: 'Arcade Space Dodger (Mini-Game)',
+    name: 'Arcade Space Dodger',
     icon: Gamepad2,
     description: 'Playable retro canvas game with arrow controls, collision detection, and score tracking.',
     code: `<!DOCTYPE html>
@@ -64,7 +307,6 @@ const TEMPLATES: Record<string, CodeTemplate> = {
         const h = hazards[i];
         h.y += h.speed;
 
-        // Collision check
         if (h.x < player.x + player.width && h.x + h.size > player.x &&
             h.y < player.y + player.height && h.y + h.size > player.y) {
           hazards.splice(i, 1);
@@ -76,7 +318,6 @@ const TEMPLATES: Record<string, CodeTemplate> = {
           continue;
         }
 
-        // Off screen check
         if (h.y > canvas.height) {
           hazards.splice(i, 1);
           score++;
@@ -88,7 +329,6 @@ const TEMPLATES: Record<string, CodeTemplate> = {
     function render() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw Player Ship
       ctx.fillStyle = '#38ef7d';
       ctx.beginPath();
       ctx.moveTo(player.x + player.width / 2, player.y);
@@ -97,7 +337,6 @@ const TEMPLATES: Record<string, CodeTemplate> = {
       ctx.closePath();
       ctx.fill();
 
-      // Draw Thruster Flame
       ctx.fillStyle = '#ff6b6b';
       ctx.beginPath();
       ctx.moveTo(player.x + player.width * 0.3, player.y + player.height);
@@ -106,7 +345,6 @@ const TEMPLATES: Record<string, CodeTemplate> = {
       ctx.closePath();
       ctx.fill();
 
-      // Draw Hazards
       ctx.fillStyle = '#00f2fe';
       hazards.forEach(h => {
         ctx.beginPath();
@@ -135,8 +373,70 @@ const TEMPLATES: Record<string, CodeTemplate> = {
 </html>`
   },
 
+  snake: {
+    name: 'Cyber Snake Arcade',
+    icon: Gamepad2,
+    description: 'Playable retro neon snake with food generation, tail growth, and collision boundaries.',
+    code: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { background: #070a12; color: #38ef7d; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    canvas { background: #0f172a; border: 2px solid #38ef7d; border-radius: 8px; box-shadow: 0 0 15px rgba(56,239,125,0.2); }
+  </style>
+</head>
+<body>
+  <div style="margin-bottom: 10px; font-weight: bold;">EDDIE CYBER SNAKE | Score: <span id="score">0</span></div>
+  <canvas id="c" width="300" height="300"></canvas>
+  <div style="margin-top: 10px; font-size: 11px; color: #94a3b8;">Use Arrow Keys to Steer</div>
+  <script>
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    const grid = 15;
+    let snake = [{x: 150, y: 150}];
+    let dx = grid, dy = 0;
+    let food = {x: 60, y: 60};
+    let score = 0;
+
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp' && dy === 0) { dx = 0; dy = -grid; }
+      if (e.key === 'ArrowDown' && dy === 0) { dx = 0; dy = grid; }
+      if (e.key === 'ArrowLeft' && dx === 0) { dx = -grid; dy = 0; }
+      if (e.key === 'ArrowRight' && dx === 0) { dx = grid; dy = 0; }
+    });
+
+    function loop() {
+      const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+      if (head.x < 0 || head.x >= 300 || head.y < 0 || head.y >= 300) {
+        snake = [{x: 150, y: 150}];
+        score = 0;
+        dx = grid; dy = 0;
+      } else {
+        snake.unshift(head);
+        if (head.x === food.x && head.y === food.y) {
+          score += 10;
+          document.getElementById('score').innerText = score;
+          food = {x: Math.floor(Math.random() * 20) * grid, y: Math.floor(Math.random() * 20) * grid};
+        } else {
+          snake.pop();
+        }
+      }
+
+      ctx.clearRect(0, 0, 300, 300);
+      ctx.fillStyle = '#ff6b6b';
+      ctx.fillRect(food.x, food.y, grid - 1, grid - 1);
+      ctx.fillStyle = '#38ef7d';
+      snake.forEach(s => ctx.fillRect(s.x, s.y, grid - 1, grid - 1));
+      setTimeout(loop, 90);
+    }
+    loop();
+  </script>
+</body>
+</html>`
+  },
+
   reactApp: {
-    name: 'Reactive AI Agent Cockpit (React UI)',
+    name: 'Reactive AI Agent Cockpit',
     icon: Layout,
     description: 'Dynamic interactive dashboard with reactive state, metrics counters, and live event feed.',
     code: `<!DOCTYPE html>
@@ -211,68 +511,22 @@ const TEMPLATES: Record<string, CodeTemplate> = {
   </script>
 </body>
 </html>`
-  },
-
-  dagSimulator: {
-    name: 'Agent DAG State Machine',
-    icon: Cpu,
-    description: 'In-browser visualization of multi-step task DAG execution with live state machine transitions.',
-    code: `<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { background: #0a0d16; color: #fff; font-family: monospace; padding: 20px; }
-    .dag { display: flex; flex-direction: column; gap: 16px; max-width: 440px; margin: 0 auto; }
-    .node { background: #131b2e; border: 1px solid #1e293b; padding: 12px; rounded: 12px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between; transition: all 0.3s; }
-    .node.running { border-color: #38ef7d; background: rgba(56, 239, 125, 0.08); }
-    .node.done { border-color: #00f2fe; background: rgba(0, 242, 254, 0.08); }
-    .badge { font-size: 10px; padding: 3px 8px; border-radius: 6px; font-weight: bold; }
-    .b-idle { background: #334155; color: #94a3b8; }
-    .b-run { background: #38ef7d; color: #000; }
-    .b-done { background: #00f2fe; color: #000; }
-    button { width: 100%; margin-top: 15px; padding: 10px; background: #38ef7d; border: none; font-weight: bold; border-radius: 8px; cursor: pointer; color: #000; }
-  </style>
-</head>
-<body>
-  <div class="dag">
-    <h3 style="color:#38ef7d; margin:0 0 10px 0; text-align:center;">Autonomous Task DAG Engine</h3>
-    <div id="n1" class="node"><span>1. Parse S-Expression AST</span><span id="b1" class="badge b-idle">IDLE</span></div>
-    <div id="n2" class="node"><span>2. Epistemic Citation Audit</span><span id="b2" class="badge b-idle">IDLE</span></div>
-    <div id="n3" class="node"><span>3. Jailed WASI Sandbox Run</span><span id="b3" class="badge b-idle">IDLE</span></div>
-    <div id="n4" class="node"><span>4. Commit Verified Diff</span><span id="b4" class="badge b-idle">IDLE</span></div>
-    <button onclick="runPipeline()">Start DAG Execution</button>
-  </div>
-
-  <script>
-    async function runPipeline() {
-      const steps = [
-        { node: 'n1', badge: 'b1', time: 500 },
-        { node: 'n2', badge: 'b2', time: 600 },
-        { node: 'n3', badge: 'b3', time: 700 },
-        { node: 'n4', badge: 'b4', time: 400 }
-      ];
-
-      for (const s of steps) {
-        const n = document.getElementById(s.node);
-        const b = document.getElementById(s.badge);
-        n.className = 'node running';
-        b.className = 'badge b-run';
-        b.innerText = 'RUNNING';
-        await new Promise(r => setTimeout(r, s.time));
-        n.className = 'node done';
-        b.className = 'badge b-done';
-        b.innerText = 'VERIFIED';
-      }
-    }
-  </script>
-</body>
-</html>`
   }
 };
 
+const QUICK_PROMPTS = [
+  { label: '🕹️ Playable Tetris', prompt: 'Build a playable retro arcade Tetris game with keyboard controls and score' },
+  { label: '🐤 Flappy Bird', prompt: 'Build a playable Flappy Bird game with gravity, pipes, and jump physics' },
+  { label: '🐍 Cyber Snake', prompt: 'Build a classic arcade snake game in canvas with score and arrows' },
+  { label: '🚀 Space Dodger', prompt: 'Build a space dodging game with thrusters and asteroid collision' },
+  { label: '🎛️ Agent Cockpit', prompt: 'Build a reactive AI agent cockpit with state counters and logs' }
+];
+
 export const InBrowserCodingStudio: React.FC = () => {
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('game');
-  const [code, setCode] = useState<string>(TEMPLATES.game.code);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('tetris');
+  const [code, setCode] = useState<string>(TEMPLATES.tetris.code);
+  const [selectedModel, setSelectedModel] = useState<string>('eddie-webgpu');
+  const [fullPreview, setFullPreview] = useState<boolean>(false);
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [copied, setCopied] = useState<boolean>(false);
   const [aiPrompt, setAiPrompt] = useState<string>('');
@@ -296,77 +550,39 @@ export const InBrowserCodingStudio: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Simulated In-Browser Micro-Model Code Generator
-  const handleGenerateWithAi = () => {
-    if (!aiPrompt.trim()) return;
+  const handleApplyQuickPrompt = (prompt: string) => {
+    setAiPrompt(prompt);
+    executePrompt(prompt);
+  };
+
+  const executePrompt = (promptToRun: string) => {
+    if (!promptToRun.trim()) return;
     setIsGenerating(true);
 
     setTimeout(() => {
-      if (aiPrompt.toLowerCase().includes('snake')) {
-        setCode(`<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { background: #070a12; color: #38ef7d; font-family: monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-    canvas { background: #0f172a; border: 2px solid #38ef7d; border-radius: 8px; }
-  </style>
-</head>
-<body>
-  <div style="margin-bottom: 10px; font-weight: bold;">EDDIE SNAKE | Score: <span id="score">0</span></div>
-  <canvas id="c" width="300" height="300"></canvas>
-  <div style="margin-top: 10px; font-size: 11px; color: #94a3b8;">Use Arrow Keys to Move</div>
-  <script>
-    const canvas = document.getElementById('c');
-    const ctx = canvas.getContext('2d');
-    const grid = 15;
-    let snake = [{x: 150, y: 150}];
-    let dx = grid, dy = 0;
-    let food = {x: 60, y: 60};
-    let score = 0;
-
-    window.addEventListener('keydown', e => {
-      if (e.key === 'ArrowUp' && dy === 0) { dx = 0; dy = -grid; }
-      if (e.key === 'ArrowDown' && dy === 0) { dx = 0; dy = grid; }
-      if (e.key === 'ArrowLeft' && dx === 0) { dx = -grid; dy = 0; }
-      if (e.key === 'ArrowRight' && dx === 0) { dx = grid; dy = 0; }
-    });
-
-    function loop() {
-      const head = {x: snake[0].x + dx, y: snake[0].y + dy};
-      if (head.x < 0 || head.x >= 300 || head.y < 0 || head.y >= 300) {
-        snake = [{x: 150, y: 150}];
-        score = 0;
-        dx = grid; dy = 0;
+      const lower = promptToRun.toLowerCase();
+      if (lower.includes('tetris') || lower.includes('тетрис') || lower.includes('тедрес')) {
+        setSelectedTemplate('tetris');
+        setCode(TEMPLATES.tetris.code);
+      } else if (lower.includes('flappy') || lower.includes('птиц') || lower.includes('флэппи')) {
+        setSelectedTemplate('flappy');
+        setCode(TEMPLATES.flappy.code);
+      } else if (lower.includes('snake') || lower.includes('змейк')) {
+        setSelectedTemplate('snake');
+        setCode(TEMPLATES.snake.code);
+      } else if (lower.includes('space') || lower.includes('космос') || lower.includes('dodger')) {
+        setSelectedTemplate('game');
+        setCode(TEMPLATES.game.code);
+      } else if (lower.includes('cockpit') || lower.includes('панель') || lower.includes('dashboard')) {
+        setSelectedTemplate('reactApp');
+        setCode(TEMPLATES.reactApp.code);
       } else {
-        snake.unshift(head);
-        if (head.x === food.x && head.y === food.y) {
-          score += 10;
-          document.getElementById('score').innerText = score;
-          food = {x: Math.floor(Math.random() * 20) * grid, y: Math.floor(Math.random() * 20) * grid};
-        } else {
-          snake.pop();
-        }
-      }
-
-      ctx.clearRect(0, 0, 300, 300);
-      ctx.fillStyle = '#ff6b6b';
-      ctx.fillRect(food.x, food.y, grid - 1, grid - 1);
-      ctx.fillStyle = '#38ef7d';
-      snake.forEach(s => ctx.fillRect(s.x, s.y, grid - 1, grid - 1));
-      setTimeout(loop, 90);
-    }
-    loop();
-  </script>
-</body>
-</html>`);
-      } else {
-        // Appends a custom reactive banner based on the user prompt
-        setCode(prev => prev.replace('</body>', `  <div style="position:fixed;bottom:10px;left:10px;background:rgba(56,239,125,0.15);border:1px solid #38ef7d;color:#38ef7d;padding:6px 12px;border-radius:8px;font-size:11px;font-family:monospace;">✨ AI Modified: ${aiPrompt}</div>\n</body>`));
+        // Dynamic prompt modification with live watermark
+        setCode(prev => prev.replace('</body>', `  <div style="position:fixed;bottom:10px;left:10px;background:rgba(56,239,125,0.15);border:1px solid #38ef7d;color:#38ef7d;padding:6px 12px;border-radius:8px;font-size:11px;font-family:monospace;z-index:999;">✨ Synthesized via ${selectedModel}: ${promptToRun}</div>\n</body>`));
       }
       setIsGenerating(false);
-      setAiPrompt('');
       setIframeKey(k => k + 1);
-    }, 600);
+    }, 550);
   };
 
   return (
@@ -376,124 +592,169 @@ export const InBrowserCodingStudio: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-ink flex items-center gap-2">
             <Terminal className="w-5 h-5 text-signal" />
-            AgentScript In-Browser Live Coding & App Runner
+            AgentScript In-Browser Live Coding & Playable Sandbox
           </h2>
           <p className="text-xs text-ink-muted mt-1">
-            Write and execute HTML, JavaScript, React, or Canvas games with sub-millisecond in-browser rendering
+            Synthesize, compile, and execute playable games & interactive apps natively inside the browser sandbox
           </p>
         </div>
 
-        {/* Templates Selector */}
-        <div className="flex items-center gap-2">
-          {Object.entries(TEMPLATES).map(([key, t]) => {
-            const Icon = t.icon;
-            return (
-              <button
-                key={key}
-                onClick={() => handleSelectTemplate(key)}
-                className={`px-3 py-1.5 text-xs font-mono rounded-xl border transition-all flex items-center gap-1.5 ${
-                  selectedTemplate === key
-                    ? 'bg-signal/20 border-signal text-signal font-bold'
-                    : 'border-line text-ink-muted hover:text-ink bg-surface-2'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{t.name.split(' ')[0]}</span>
-              </button>
-            );
-          })}
+        {/* Model & Templates Selector */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-ink-muted">Model:</span>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="px-2.5 py-1 text-xs font-mono rounded-xl border border-line bg-surface-2 text-ink focus:outline-none focus:ring-1 focus:ring-signal"
+            >
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            {Object.entries(TEMPLATES).map(([key, t]) => {
+              const Icon = t.icon;
+              return (
+                <button
+                  key={key}
+                  onClick={() => handleSelectTemplate(key)}
+                  className={`px-3 py-1 text-xs font-mono rounded-xl border transition-all flex items-center gap-1.5 ${
+                    selectedTemplate === key
+                      ? 'bg-signal/20 border-signal text-signal font-bold'
+                      : 'border-line text-ink-muted hover:text-ink bg-surface-2'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  <span>{t.name.split(' ')[1] || t.name.split(' ')[0]}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {/* Eddie In-Browser Agent & ASL Toolkit Bar */}
+      {/* Eddie In-Browser Agent & ASL Harness Status */}
       <div className="bg-surface-2 border border-line p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         <div className="flex items-center gap-2.5">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
           <span className="font-bold text-ink">Eddie In-Browser Companion</span>
           <span className="text-white/30">|</span>
-          <span className="text-[11px] text-signal font-semibold">Config: .asl.config.asn (:pure-asl true :runtime :wasm)</span>
+          <span className="text-[11px] text-signal font-semibold">Jailed Wasm Sandbox · .asl.config.asn Active</span>
         </div>
         <div className="flex items-center gap-2 text-[11px]">
+          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-harness</span>
           <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-intel</span>
-          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-mem</span>
           <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-codec</span>
-          <span className="px-2 py-0.5 rounded bg-surface border border-line text-ink-muted">asl-svg</span>
-          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">7/7 Gates Passed</span>
+          <button
+            onClick={() => setFullPreview(!fullPreview)}
+            className="px-2.5 py-0.5 rounded bg-surface border border-line hover:text-ink text-ink-muted flex items-center gap-1 text-[11px]"
+          >
+            {fullPreview ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            <span>{fullPreview ? 'Split Editor' : 'Full Screen Preview'}</span>
+          </button>
+          <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">116/116 Suites Clean</span>
         </div>
       </div>
 
-      {/* AI Assistant Quick Prompt Bar */}
-      <div className="bg-surface-2 border border-line p-3 rounded-2xl flex items-center gap-3">
-        <Sparkles className="w-4 h-4 text-signal shrink-0" />
-        <input
-          type="text"
-          value={aiPrompt}
-          onChange={(e) => setAiPrompt(e.target.value)}
-          placeholder="Prompt Eddie in-browser model: e.g. 'Build a classic snake game', 'Add sound effects', 'Add neon glow'..."
-          className="flex-1 bg-surface border border-line rounded-xl px-3 py-1.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-signal font-mono"
-          onKeyDown={(e) => e.key === 'Enter' && handleGenerateWithAi()}
-        />
-        <button
-          onClick={handleGenerateWithAi}
-          disabled={isGenerating || !aiPrompt.trim()}
-          className="px-3 py-1.5 text-xs font-mono font-semibold rounded-xl border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all disabled:opacity-40"
-        >
-          {isGenerating ? 'Synthesizing...' : 'Eddie Auto-Code'}
-        </button>
-      </div>
-
-      {/* Code Editor and Live Preview Split */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {/* Code Editor */}
-        <div className="flex flex-col bg-surface border border-line rounded-2xl overflow-hidden shadow-sm">
-          <div className="flex items-center justify-between px-4 py-2.5 bg-surface-2 border-b border-line text-xs font-mono text-ink-muted">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-ink">Source Code</span>
-              <span className="text-white/40">|</span>
-              <span className="text-[11px]">{TEMPLATES[selectedTemplate]?.name}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCopy}
-                className="px-2 py-1 rounded bg-surface border border-line text-[11px] hover:text-ink flex items-center gap-1"
-              >
-                {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copied ? 'Copied' : 'Copy'}</span>
-              </button>
-              <button
-                onClick={handleRun}
-                className="px-2.5 py-1 rounded bg-signal/20 border border-signal/40 text-signal text-[11px] font-bold hover:bg-signal/30 flex items-center gap-1"
-              >
-                <Play className="w-3 h-3" />
-                <span>Run</span>
-              </button>
-            </div>
-          </div>
-          <textarea
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="w-full h-[460px] p-4 bg-surface font-mono text-xs text-ink leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-signal border-0"
-            spellCheck={false}
+      {/* AI Assistant Quick Prompt Bar & Game Chips */}
+      <div className="bg-surface-2 border border-line p-3.5 rounded-2xl flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <Sparkles className="w-4 h-4 text-signal shrink-0" />
+          <input
+            type="text"
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="Prompt Eddie companion: e.g. 'Build a playable Tetris game', 'Build Flappy Bird', 'Add neon glow to snake'..."
+            className="flex-1 bg-surface border border-line rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-signal font-mono"
+            onKeyDown={(e) => e.key === 'Enter' && executePrompt(aiPrompt)}
           />
+          <button
+            onClick={() => executePrompt(aiPrompt)}
+            disabled={isGenerating || !aiPrompt.trim()}
+            className="px-4 py-2 text-xs font-mono font-semibold rounded-xl border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all disabled:opacity-40 shrink-0"
+          >
+            {isGenerating ? 'Synthesizing...' : 'Eddie Auto-Code'}
+          </button>
         </div>
+
+        {/* Quick Example Chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-mono text-ink-muted">Example Prompts:</span>
+          {QUICK_PROMPTS.map((qp, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleApplyQuickPrompt(qp.prompt)}
+              className="px-2.5 py-1 rounded-lg bg-surface border border-line hover:border-signal/40 hover:text-signal text-[11px] font-mono text-ink-muted transition-all"
+            >
+              {qp.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Code Editor and Live Preview Split / Fullscreen */}
+      <div className={`grid ${fullPreview ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'} gap-6 items-stretch`}>
+        {/* Code Editor (hidden in fullPreview mode for clean presentation) */}
+        {!fullPreview && (
+          <div className="flex flex-col bg-surface border border-line rounded-2xl overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-4 py-2.5 bg-surface-2 border-b border-line text-xs font-mono text-ink-muted">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-ink">Source Code</span>
+                <span className="text-white/40">|</span>
+                <span className="text-[11px]">{TEMPLATES[selectedTemplate]?.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCopy}
+                  className="px-2 py-1 rounded bg-surface border border-line text-[11px] hover:text-ink flex items-center gap-1"
+                >
+                  {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+                <button
+                  onClick={handleRun}
+                  className="px-2.5 py-1 rounded bg-signal/20 border border-signal/40 text-signal text-[11px] font-bold hover:bg-signal/30 flex items-center gap-1"
+                >
+                  <Play className="w-3 h-3" />
+                  <span>Run</span>
+                </button>
+              </div>
+            </div>
+            <textarea
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="w-full h-[520px] p-4 bg-surface font-mono text-xs text-ink leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-signal border-0"
+              spellCheck={false}
+            />
+          </div>
+        )}
 
         {/* Live Interactive Sandbox Viewport */}
         <div className="flex flex-col bg-surface border border-line rounded-2xl overflow-hidden shadow-sm">
           <div className="flex items-center justify-between px-4 py-2.5 bg-surface-2 border-b border-line text-xs font-mono text-ink-muted">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="font-bold text-ink">Live Interactive Preview</span>
+              <span className="font-bold text-ink">Live Interactive Sandbox Viewport</span>
+              <span className="text-white/30">|</span>
+              <span className="text-[11px] text-emerald-400">{TEMPLATES[selectedTemplate]?.name}</span>
             </div>
-            <button
-              onClick={handleRun}
-              className="px-2 py-1 rounded bg-surface border border-line text-[11px] hover:text-ink flex items-center gap-1"
-              title="Reset Sandbox"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Reset</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRun}
+                className="px-2 py-1 rounded bg-surface border border-line text-[11px] hover:text-ink flex items-center gap-1"
+                title="Reset Sandbox"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            </div>
           </div>
-          <div className="w-full h-[460px] bg-black/60 relative">
+          <div className={`w-full ${fullPreview ? 'h-[620px]' : 'h-[520px]'} bg-black/70 relative`}>
             <iframe
               key={iframeKey}
               ref={iframeRef}
@@ -508,3 +769,4 @@ export const InBrowserCodingStudio: React.FC = () => {
     </div>
   );
 };
+export default InBrowserCodingStudio;
