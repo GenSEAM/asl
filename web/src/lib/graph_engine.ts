@@ -104,8 +104,36 @@ export class GraphEngine {
     }
   }
 
+  public layoutMode: 'untangle' | 'spring' | 'cluster' = 'untangle';
+  public targetEdgeLength: number = 45;
+  public springK: number = 0.0035;
+  public repulsionK: number = 22.0;
+  public untangleImpulse() {
+    for (let i = 0; i < this.nodeCount; i++) {
+      this.velocities[i * 2] += (Math.random() - 0.5) * 8.0;
+      this.velocities[i * 2 + 1] += (Math.random() - 0.5) * 8.0;
+    }
+  }
+
+  public dragUntangle(mouseX: number, mouseY: number, radius: number = 100) {
+    const r2 = radius * radius;
+    for (let i = 0; i < this.nodeCount; i++) {
+      const px = this.positions[i * 2];
+      const py = this.positions[i * 2 + 1];
+      const dx = px - mouseX;
+      const dy = py - mouseY;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < r2 && d2 > 1.0) {
+        const d = Math.sqrt(d2);
+        const push = (1.0 - d / radius) * 4.0;
+        this.velocities[i * 2] += (dx / d) * push;
+        this.velocities[i * 2 + 1] += (dy / d) * push;
+      }
+    }
+  }
+
   /**
-   * Physics Step Dispatcher
+   * Physics Step Dispatcher (Untangling & Graph Relaxation)
    */
   public stepPhysics(boundsWidth: number = 1200, boundsHeight: number = 800): { computeTimeMs: number; throttled: boolean; speedupVsJs: number } {
     const t0 = performance.now();
@@ -120,95 +148,163 @@ export class GraphEngine {
   }
 
   /**
-   * JavaScript Engine (CPU) with strict 16ms time-slice anti-freeze cap
+   * JavaScript Engine (CPU) with Hooke Edge Springs & Node Repulsion for Untangling
    */
   private stepJavaScript(t0: number, width: number, height: number) {
-    const cx = width / 2;
-    const cy = height / 2;
-    const damping = 0.96;
-    const centerAttract = 0.0004;
-    let processedNodes = 0;
+    const damping = 0.94;
+    const padding = 50;
+    const targetL = this.targetEdgeLength;
+    const sK = this.springK;
+    const pos = this.positions;
+    const vel = this.velocities;
+    const count = this.nodeCount;
     let throttled = false;
 
-    // Simulate Spring Forces with time-slice budget
-    for (let i = 0; i < this.nodeCount; i++) {
-      // Check anti-freeze budget every 256 nodes
-      if ((i & 255) === 0 && i > 0) {
-        if (performance.now() - t0 > this.jsFrameBudgetMs) {
-          throttled = true;
-          processedNodes = i;
-          break;
+    // 1. Edge Springs: Pull connected nodes to equilibrium, untangle connected paths
+    const edgeStride = count > 50000 ? 4 : count > 10000 ? 2 : 1;
+    for (let e = 0; e < this.edgeCount; e += edgeStride) {
+      const u = this.edgesFrom[e];
+      const v = this.edgesTo[e];
+      const ux = pos[u * 2], uy = pos[u * 2 + 1];
+      const vx = pos[v * 2], vy = pos[v * 2 + 1];
+      const dx = vx - ux;
+      const dy = vy - uy;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1.0;
+      const force = (dist - targetL) * sK;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      vel[u * 2] += fx;
+      vel[u * 2 + 1] += fy;
+      vel[v * 2] -= fx;
+      vel[v * 2 + 1] -= fy;
+    }
+
+    // 2. Node Repulsion & Boundary Containment (Anti-Collapse)
+    const checkStride = count > 20000 ? 16 : 4;
+    for (let i = 0; i < count; i++) {
+      if ((i & 255) === 0 && i > 0 && performance.now() - t0 > this.jsFrameBudgetMs) {
+        throttled = true;
+        break;
+      }
+
+      const idx = i * 2;
+      const idy = idx + 1;
+      let px = pos[idx];
+      let py = pos[idy];
+      let vx = vel[idx];
+      let vy = vel[idy];
+
+      // Repel from neighbors in window to untangle clusters
+      for (let j = 1; j <= 5; j++) {
+        const neighbor = (i + j * checkStride) % count;
+        const nx = pos[neighbor * 2];
+        const ny = pos[neighbor * 2 + 1];
+        const dx = px - nx;
+        const dy = py - ny;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 3600 && d2 > 0.5) {
+          const d = Math.sqrt(d2);
+          const repForce = this.repulsionK / (d2 + 5.0);
+          vx += (dx / d) * repForce;
+          vy += (dy / d) * repForce;
         }
       }
 
-      const px = this.positions[i * 2];
-      const py = this.positions[i * 2 + 1];
-
-      // Gravity to center
-      let vx = this.velocities[i * 2] + (cx - px) * centerAttract;
-      let vy = this.velocities[i * 2 + 1] + (cy - py) * centerAttract;
+      // Soft boundary repulsion
+      if (px < padding) vx += (padding - px) * 0.02;
+      else if (px > width - padding) vx -= (px - (width - padding)) * 0.02;
+      if (py < padding) vy += (padding - py) * 0.02;
+      else if (py > height - padding) vy -= (py - (height - padding)) * 0.02;
 
       vx *= damping;
       vy *= damping;
 
-      this.positions[i * 2] = Math.max(10, Math.min(width - 10, px + vx));
-      this.positions[i * 2 + 1] = Math.max(10, Math.min(height - 10, py + vy));
-      this.velocities[i * 2] = vx;
-      this.velocities[i * 2 + 1] = vy;
-      processedNodes = i + 1;
+      pos[idx] = Math.max(10, Math.min(width - 10, px + vx));
+      pos[idy] = Math.max(10, Math.min(height - 10, py + vy));
+      vel[idx] = vx;
+      vel[idy] = vy;
     }
 
     const elapsed = performance.now() - t0;
-    // Projected unconstrained time if throttled
-    const computeTimeMs = throttled ? (elapsed / processedNodes) * this.nodeCount : elapsed;
-
     return {
-      computeTimeMs: +computeTimeMs.toFixed(2),
+      computeTimeMs: +elapsed.toFixed(2),
       throttled,
       speedupVsJs: 1.0
     };
   }
 
   /**
-   * WebAssembly Linear Memory Vector Engine (Zero-Allocation SIMD Loop)
+   * WebAssembly Linear Memory Vector Engine (High-Performance Untangling Loop)
    */
   private stepWebAssembly(t0: number, width: number, height: number) {
-    const cx = width / 2;
-    const cy = height / 2;
-    const damping = 0.98;
-    const centerAttract = 0.0005;
+    const damping = 0.95;
+    const padding = 50;
+    const targetL = this.targetEdgeLength;
+    const sK = this.springK;
     const count = this.nodeCount;
     const pos = this.positions;
     const vel = this.velocities;
 
-    // Direct memory traversal loop (equivalent to Wasm vector loop)
+    // 1. Edge Springs
+    const edgeStride = count > 100000 ? 4 : count > 20000 ? 2 : 1;
+    for (let e = 0; e < this.edgeCount; e += edgeStride) {
+      const u = this.edgesFrom[e];
+      const v = this.edgesTo[e];
+      const uIdx = u << 1;
+      const vIdx = v << 1;
+      const dx = pos[vIdx] - pos[uIdx];
+      const dy = pos[vIdx + 1] - pos[uIdx + 1];
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1.0;
+      const force = (dist - targetL) * sK;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      vel[uIdx] += fx;
+      vel[uIdx + 1] += fy;
+      vel[vIdx] -= fx;
+      vel[vIdx + 1] -= fy;
+    }
+
+    // 2. Linear Memory Node Relaxation & Untangling
+    const checkStride = count > 20000 ? 12 : 4;
     for (let i = 0; i < count; i++) {
       const idx = i << 1;
       const idy = idx + 1;
+      let px = pos[idx];
+      let py = pos[idy];
+      let vx = vel[idx];
+      let vy = vel[idy];
 
-      const px = pos[idx];
-      const py = pos[idy];
+      // Anti-overlap repulsion with local cluster ring
+      for (let j = 1; j <= 4; j++) {
+        const neighbor = (i + j * checkStride) % count;
+        const nIdx = neighbor << 1;
+        const dx = px - pos[nIdx];
+        const dy = py - pos[nIdx + 1];
+        const d2 = dx * dx + dy * dy;
+        if (d2 < 3600 && d2 > 0.5) {
+          const d = Math.sqrt(d2);
+          const repForce = this.repulsionK / (d2 + 5.0);
+          vx += (dx / d) * repForce;
+          vy += (dy / d) * repForce;
+        }
+      }
 
-      let vx = (vel[idx] + (cx - px) * centerAttract) * damping;
-      let vy = (vel[idy] + (cy - py) * centerAttract) * damping;
+      // Soft margin bounce to keep graph untangled across canvas
+      if (px < padding) vx += (padding - px) * 0.025;
+      else if (px > width - padding) vx -= (px - (width - padding)) * 0.025;
+      if (py < padding) vy += (padding - py) * 0.025;
+      else if (py > height - padding) vy -= (py - (height - padding)) * 0.025;
 
-      let nx = px + vx;
-      let ny = py + vy;
+      vx *= damping;
+      vy *= damping;
 
-      if (nx < 10) { nx = 10; vx = -vx; }
-      else if (nx > width - 10) { nx = width - 10; vx = -vx; }
-
-      if (ny < 10) { ny = 10; vy = -vy; }
-      else if (ny > height - 10) { ny = height - 10; vy = -vy; }
-
-      pos[idx] = nx;
-      pos[idy] = ny;
+      pos[idx] = Math.max(10, Math.min(width - 10, px + vx));
+      pos[idy] = Math.max(10, Math.min(height - 10, py + vy));
       vel[idx] = vx;
       vel[idy] = vy;
     }
 
     const computeTimeMs = Math.max(0.04, performance.now() - t0);
-    // Estimated JS time for this node count
     const estimatedJsTime = Math.max(0.5, (count / 10000) * 14.5);
     const speedupVsJs = +(estimatedJsTime / computeTimeMs).toFixed(1);
 

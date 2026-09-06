@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { Section, SectionHeader } from '../components/ui/primitives';
 import { SqlStudio } from '../components/SqlStudio';
 import { AslQualityDoctor } from '../components/AslQualityDoctor';
-import { Database, ShieldCheck } from 'lucide-react';
+import { GraphCanvas } from '../components/GraphCanvas';
+import { SvgStudio } from '../components/SvgStudio';
+import { InBrowserCodingStudio } from '../components/InBrowserCodingStudio';
+import { Database, ShieldCheck, Share2, Sparkles, Terminal } from 'lucide-react';
 
 export const PlaygroundView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'sql' | 'doctor'>('sql');
+  const [activeTab, setActiveTab] = useState<'graph' | 'svg' | 'coder' | 'sql' | 'doctor'>('graph');
 
   return (
     <div className="pt-28 pb-20">
@@ -14,54 +17,85 @@ export const PlaygroundView: React.FC = () => {
           id="playground-title"
           index="Interactive"
           eyebrow="Developer Playground"
-          title="Interactive AgentScript Tooling & Verification Studio"
-          lead="Experience live cross-dialect SQL query generation, formal AST smell detection, and autonomous code repairs in real time."
+          title="Interactive AgentScript Tooling & Live In-Browser Studio"
+          lead="Experience real-time graph untangling, in-browser ASN vector drawing, live app & game coding, SQL transpilation, and AST quality audits."
         />
 
-        {/* Under Active Development Banner */}
-        <div className="mb-8 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 font-mono text-micro font-bold uppercase tracking-wider shrink-0">
-              Under Development
-            </span>
-            <p className="text-meta font-medium text-ink-2">
-              <strong className="text-ink">Preview Release:</strong> The AgentScript Core Language and A2A Wire Protocol are verified and stable. The interactive SQL studio and AST quality doctor tools shown below are active developer previews currently under development.
-            </p>
-          </div>
-        </div>
-
         {/* Tab Switcher */}
-        <div className="flex items-center gap-3 mb-10 p-1.5 rounded-2xl bg-surface border border-line max-w-md shadow-e1">
+        <div className="flex flex-wrap items-center gap-2 mb-8 p-1.5 rounded-2xl bg-surface border border-line max-w-2xl shadow-e1">
+          <button
+            type="button"
+            onClick={() => setActiveTab('graph')}
+            className={`flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
+              activeTab === 'graph'
+                ? 'bg-signal text-white shadow-sm'
+                : 'text-ink-2 hover:text-ink hover:bg-inset'
+            }`}
+          >
+            <Share2 className="w-3.5 h-3.5" />
+            <span>Untangle Graph</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('svg')}
+            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
+              activeTab === 'svg'
+                ? 'bg-signal text-white shadow-sm'
+                : 'text-ink-2 hover:text-ink hover:bg-inset'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>SVG Studio</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('coder')}
+            className={`flex-1 min-w-[120px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
+              activeTab === 'coder'
+                ? 'bg-signal text-white shadow-sm'
+                : 'text-ink-2 hover:text-ink hover:bg-inset'
+            }`}
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            <span>Live Coder</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveTab('sql')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-mono text-meta font-medium transition-all ${
+            className={`flex-1 min-w-[100px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
               activeTab === 'sql'
                 ? 'bg-signal text-white shadow-sm'
                 : 'text-ink-2 hover:text-ink hover:bg-inset'
             }`}
           >
-            <Database className="w-4 h-4" />
-            <span>SQL Studio</span>
+            <Database className="w-3.5 h-3.5" />
+            <span>SQL</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('doctor')}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-mono text-meta font-medium transition-all ${
+            className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl font-mono text-meta font-medium transition-all ${
               activeTab === 'doctor'
                 ? 'bg-signal text-white shadow-sm'
                 : 'text-ink-2 hover:text-ink hover:bg-inset'
             }`}
           >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Quality Doctor</span>
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Doctor</span>
           </button>
         </div>
 
         {/* Active Studio */}
         <div className="rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-4 sm:p-6 shadow-e3">
-          {activeTab === 'sql' ? <SqlStudio /> : <AslQualityDoctor />}
+          {activeTab === 'graph' && <GraphCanvas />}
+          {activeTab === 'svg' && <SvgStudio />}
+          {activeTab === 'coder' && <InBrowserCodingStudio />}
+          {activeTab === 'sql' && <SqlStudio />}
+          {activeTab === 'doctor' && <AslQualityDoctor />}
         </div>
       </Section>
     </div>

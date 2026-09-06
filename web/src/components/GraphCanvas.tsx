@@ -143,8 +143,16 @@ export const GraphCanvas: React.FC = () => {
             </button>
           ))}
           <button
+            onClick={() => {
+              if (engineRef.current) engineRef.current.untangleImpulse();
+            }}
+            className="ml-2 px-3 py-1 text-xs font-semibold rounded-lg border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all flex items-center gap-1.5"
+          >
+            <span>⚡ Untangle Knots</span>
+          </button>
+          <button
             onClick={() => setIsPaused(!isPaused)}
-            className="ml-2 px-3 py-1 text-xs font-semibold rounded-lg border border-line bg-surface-2 hover:bg-surface text-ink"
+            className="ml-1 px-3 py-1 text-xs font-semibold rounded-lg border border-line bg-surface-2 hover:bg-surface text-ink"
           >
             {isPaused ? 'Resume' : 'Pause'}
           </button>
@@ -192,14 +200,39 @@ export const GraphCanvas: React.FC = () => {
         </div>
       </div>
 
-      {/* Canvas Viewport */}
-      <div className="relative w-full h-[520px] bg-black/40 rounded-xl border border-line overflow-hidden">
+      {/* Canvas Viewport with Interactive Mouse Drag Untangling */}
+      <div className="relative w-full h-[520px] bg-black/40 rounded-xl border border-line overflow-hidden group">
         <canvas
           ref={canvasRef}
           width={1200}
           height={600}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover cursor-grab active:cursor-grabbing"
+          onMouseMove={(e) => {
+            if (e.buttons === 1 && engineRef.current && canvasRef.current) {
+              const rect = canvasRef.current.getBoundingClientRect();
+              const scaleX = canvasRef.current.width / rect.width;
+              const scaleY = canvasRef.current.height / rect.height;
+              const x = (e.clientX - rect.left) * scaleX;
+              const y = (e.clientY - rect.top) * scaleY;
+              engineRef.current.dragUntangle(x, y, 120);
+            }
+          }}
+          onMouseDown={(e) => {
+            if (engineRef.current && canvasRef.current) {
+              const rect = canvasRef.current.getBoundingClientRect();
+              const scaleX = canvasRef.current.width / rect.width;
+              const scaleY = canvasRef.current.height / rect.height;
+              const x = (e.clientX - rect.left) * scaleX;
+              const y = (e.clientY - rect.top) * scaleY;
+              engineRef.current.dragUntangle(x, y, 140);
+            }
+          }}
         />
+
+        {/* Interactive Helper Hint */}
+        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg border border-white/10 text-[11px] font-mono text-white/60 pointer-events-none">
+          Click & Drag to tease knots apart · ⚡ Untangle Knots
+        </div>
 
         {/* Live overlay watermark */}
         <div className="absolute bottom-3 left-3 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10 text-xs font-mono text-white/80 flex items-center gap-2">
@@ -210,7 +243,7 @@ export const GraphCanvas: React.FC = () => {
           <span className="text-white/40">|</span>
           <span>{metrics.nodeCount.toLocaleString()} Nodes</span>
           <span className="text-white/40">|</span>
-          <span>{metrics.edgeCount.toLocaleString()} Edges</span>
+          <span>{metrics.edgeCount.toLocaleString()} Edges (Relaxed)</span>
         </div>
       </div>
     </div>
