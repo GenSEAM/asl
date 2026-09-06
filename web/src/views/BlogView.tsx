@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from '../lib/router';
 import {
   BLOG_POSTS,
-  UPCOMING_SCHEDULED_POSTS,
   getRelatedPosts,
   getBlogPostBySlug
 } from '../lib/blog';
@@ -50,13 +49,12 @@ export const BlogView: React.FC = () => {
     }
   }, [activePost, activeSlug]);
 
-  const [viewTab, setViewTab] = useState<'published' | 'flagship' | 'scheduled'>('published');
+  const [viewTab, setViewTab] = useState<'published' | 'flagship'>('published');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState<boolean>(false);
 
   const activePostList = useMemo(() => {
-    if (viewTab === 'scheduled') return UPCOMING_SCHEDULED_POSTS;
     if (viewTab === 'flagship') return BLOG_POSTS.filter((p) => p.importance === 'flagship');
     return BLOG_POSTS;
   }, [viewTab]);
@@ -146,18 +144,6 @@ export const BlogView: React.FC = () => {
             <span>{copiedLink ? 'Link Copied' : 'Share'}</span>
           </button>
         </div>
-
-        {/* Scheduled embargo banner */}
-        {activePost.status === 'scheduled' && (
-          <div className="mb-6 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-mono flex items-center gap-3">
-            <Calendar className="w-4 h-4 text-amber-400 shrink-0" />
-            <div>
-              <span className="font-bold uppercase tracking-wider">Editorial Roadmap & Embargoed Preview</span>
-              <span className="mx-2">•</span>
-              <span>Target publication release: <strong>{activePost.scheduledDate}</strong>. Not yet distributed externally.</span>
-            </div>
-          </div>
-        )}
 
         {/* Article Header Card */}
         <article className="border border-line rounded-xl bg-surface/80 p-6 sm:p-10 shadow-e2 relative overflow-hidden backdrop-blur-md">
@@ -329,18 +315,6 @@ export const BlogView: React.FC = () => {
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Flagship Deep Dives ({BLOG_POSTS.filter((p) => p.importance === 'flagship').length})</span>
-        </button>
-
-        <button
-          onClick={() => { setViewTab('scheduled'); setSelectedCategory('All'); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all ${
-            viewTab === 'scheduled'
-              ? 'bg-amber-400 text-ground font-semibold shadow-sm'
-              : 'text-amber-300/80 hover:text-amber-300'
-          }`}
-        >
-          <Calendar className="w-3.5 h-3.5" />
-          <span>📅 Editorial Roadmap ({UPCOMING_SCHEDULED_POSTS.length})</span>
         </button>
       </div>
 
