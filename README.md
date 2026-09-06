@@ -196,5 +196,4 @@ If you are an AI coding assistant (Cursor, Claude Code, Antigravity, Cline, Wind
 
 ## 📜 License
 
-AgentScript is dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
-option. Built by the **GenSEAM** team.
+AgentScript is open-source software dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE). Maintained as an open-source project under the **GenSEAM** GitHub namespace.
