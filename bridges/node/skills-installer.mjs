@@ -25,18 +25,22 @@ const WORKSPACE_ROOT = process.cwd();
 const HOME = os.homedir();
 
 const TOOLBELT_DIRECTIVE = `<!-- ASL_TOOLBELT_START -->
-# Mandatory Base Harness: Native Batch RPC (\`asl rpc\`)
+# Mandatory Base Harness: Native ASL Toolbelt & Toolchain (/asl build)
 
-All code exploration, reading, search, editing, diffing, and verification MUST run exclusively through \`asl rpc '(:batch ...)'\`:
+**Activation & Operating Mode**: Active across all agent turns, or activated via slash command \`/asl build\` or \`/asl\`.
+All code operations, polyglot AST navigation, text search, file reading, editing, building, and verification MUST execute through the native AgentScript (\`asl\`) toolchain.
+
+## 1. Single-Roundtrip Batch Tool Calling (\`asl rpc\`)
+All operations MUST execute in a single roundtrip via \`asl rpc '(:batch ...)'\`:
 
 \`\`\`bash
 asl rpc '(:batch
-  (:out "src/server.ts")              ; AST outline (classes, functions, types, lines)
+  (:out "src/server.ts")              ; AST outline (ASL, TS, JS, Python, Go, Rust, PHP)
   (:sym "handleRequest")              ; Exact symbol definition & declaration line
   (:callers "handleRequest")          ; Call graph: all callers across workspace
   (:impact "handleRequest")           ; Blast-radius impact analysis before edits
-  (:q "semantic query")               ; In-memory vector search across codebase
-  (:find "exact pattern")             ; Fast in-memory grep
+  (:find "authHeader")                ; Fast in-memory text grep across codebase
+  (:q "session token validation")     ; In-memory vector semantic query
   (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
   (:sec "doc.md" "Section Title")     ; Read isolated markdown section
   (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
@@ -47,8 +51,99 @@ asl rpc '(:batch
 )'
 \`\`\`
 
-*Rule:* Run heterogeneous operations in a single roundtrip via \`asl rpc '(:batch ...)'\`. Never use individual CLI commands or legacy whole-file dump tools.
+## 2. Polyglot Language Support & AST Intelligence
+Native AST extraction, symbol lookups, and call graph analysis are supported for:
+- **AgentScript**: \`.asl\`, \`.asn\`
+- **TypeScript & JavaScript**: \`.ts\`, \`.tsx\`, \`.js\`, \`.jsx\`
+- **Python**: \`.py\`
+- **Go**: \`.go\`
+- **Rust**: \`.rs\`
+- **PHP**: \`.php\`
+- **Markdown**: \`.md\`
+
+*Rule:* Never dump whole files into context (no \`cat\` or \`view_file\` on files >50 lines). Always retrieve AST outlines (\`:out\`) and narrow symbol definitions (\`:sym\`) first.
+
+## 3. Fast In-Memory Text & Semantic Search
+- **Exact Text Grep**: \`(:find "exact pattern")\` searches across all workspace files in RAM (<50ms) without spawning subprocess greps or polluting context.
+- **Vector Semantic Query**: \`(:q "semantic query")\` searches embeddings of docstrings, functions, and symbols via cosine similarity.
+
+## 4. Build, Compilation & Verification Suite
+- **Build / Compile**: \`asl build <file.asl> --target <wasm|rust|ts|py>\` (Ahead-of-Time compilation).
+- **Syntax Check**: \`asl check <file>\` (instant LL(1) syntax and delimiter balance check).
+- **AST Quality Lint**: \`asl lint <file>\` (detects anti-patterns, token bloat, and hallucinated syntax).
+- **3-Tier Audit**: \`asl audit <file>\` (Micro AST, Meso keywords, Macro module invariants).
+- **Native Test Runner**: \`asl test [file]\` (executes pure ASL test suites).
+- **Full 7 Gates**: \`(:chk)\` or \`asl gate\` (validates manifests, AST balance, site claims, zero-foreign-code, test suites, token density, and modular skills).
+
+*Single Roundtrip Rule:* Batch independent read, search, and outline operations in one call. Stage edits via \`(:edit ...)\` or \`(:repl ...)\`, inspect via \`(:diff)\`, persist via \`(:flush)\`, and verify via \`(:chk)\`.
 <!-- ASL_TOOLBELT_END -->`;
+
+const SLASH_COMMANDS = [
+  {
+    name: 'asl.md',
+    content: `---
+description: Activate AgentScript (ASL) and GenSEAM toolchain
+---
+
+# /asl: Activate Native ASL Toolchain
+
+Use the native AgentScript (\`asl\`) toolchain for all code exploration, text search, editing, and verification:
+- **Batch RPC**: Execute through \`asl rpc '(:batch ...)'\` in a single roundtrip.
+- **Polyglot Languages**: Use AST outlines \`(:out "file")\`, symbol search \`(:sym "sym")\`, callers \`(:callers "sym")\`, and impact \`(:impact "sym")\` across AgentScript (.asl), TypeScript/JS (.ts, .js), Python (.py), Go (.go), Rust (.rs), PHP (.php).
+- **Text & Semantic Search**: Use \`(:find "pattern")\` for fast in-memory grep and \`(:q "query")\` for vector semantic search.
+- **In-Memory Modifications**: Use \`(:edit "file" "old" "new")\`, \`(:repl ...)\`, review with \`(:diff)\`, commit with \`(:flush)\`.
+- **Verification**: Run \`(:chk)\` or \`asl gate\` (all 7 gates), \`asl check\`, \`asl lint\`, \`asl audit\`, \`asl test\`.
+`
+  },
+  {
+    name: 'asl-build.md',
+    content: `---
+description: Activate ASL build, polyglot tooling, and verification mode (/asl build)
+---
+
+# /asl build: Activate ASL Native Build & Toolbelt Mode
+
+Full activation of the native AgentScript (ASL) and GenSEAM toolchain:
+
+## 1. Mandatory Batch RPC (\`asl rpc\`)
+All code exploration, reading, text search, editing, diffing, and verification MUST run through \`asl rpc '(:batch ...)'\`:
+\`\`\`bash
+asl rpc '(:batch
+  (:out "src/server.ts")              ; AST outline (ASL, TS, JS, Python, Go, Rust, PHP)
+  (:sym "handleRequest")              ; Exact symbol definition & declaration line
+  (:callers "handleRequest")          ; Call graph: all callers across workspace
+  (:impact "handleRequest")           ; Blast-radius impact analysis before edits
+  (:find "authHeader")                ; Fast in-memory text grep across codebase
+  (:q "token validation")             ; In-memory vector semantic query
+  (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
+  (:sec "doc.md" "Section Title")     ; Read isolated markdown section
+  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
+  (:repl "old_pat" "new_pat")         ; Mass in-memory refactor across files
+  (:diff)                             ; Review staged in-memory modifications
+  (:flush)                            ; Atomically persist staged edits to disk
+  (:chk)                              ; Run full 7-gate verification suite
+)'
+\`\`\`
+
+## 2. Polyglot Language Support
+Supported source extensions: \`.asl\`, \`.asn\`, \`.ts\`, \`.tsx\`, \`.js\`, \`.jsx\`, \`.py\`, \`.go\`, \`.rs\`, \`.php\`, \`.md\`.
+- Never call whole-file View/cat on files exceeding 50 lines. Use \`(:out ...)\` or \`asl intel outline <file>\` first.
+- Always check callers and impact radius before changing functions or interfaces.
+
+## 3. Fast Text & Vector Search
+- Exact pattern grep: \`(:find "pattern")\` (in-memory, <50ms, zero disk thrashing).
+- Semantic vector query: \`(:q "semantic query")\` or \`asl mem query "<query>"\`.
+
+## 4. Build, Compilation & Verification
+- Compile: \`asl build <file.asl> --target <wasm|rust|ts|py>\`
+- Verify syntax & balance: \`asl check <file>\`
+- AST quality & token lint: \`asl lint <file>\`
+- 3-tier audit: \`asl audit <file>\` (Micro AST, Meso keywords, Macro module)
+- Native tests: \`asl test [file]\`
+- Full 7 gates: \`asl gate\` or \`asl rpc '(:batch (:chk))'\`
+`
+  }
+];
 
 const SOURCE_SKILLS_DIRS = [
   path.join(WORKSPACE_ROOT, '.agents', 'skills'),
@@ -85,6 +180,11 @@ function injectDirective(filePath, directive) {
     } catch {
       content = '';
     }
+  }
+
+  // Sanitize any legacy tokensave section
+  if (content.toLowerCase().includes('tokensave')) {
+    content = content.replace(/##\s+tokensave[\s\S]*?(?=\n##|\n<!--|$)/gi, '');
   }
 
   const startMarker = '<!-- ASL_TOOLBELT_START -->';
@@ -141,6 +241,7 @@ export function detectAgents() {
       name: 'Claude Code',
       skillsDirs: [path.join(HOME, '.claude', 'skills')],
       rulesFiles: [path.join(HOME, '.claude', 'CLAUDE.md')],
+      commandsDirs: [path.join(HOME, '.claude', 'commands')],
       detected: fs.existsSync(path.join(HOME, '.claude'))
     },
     {
@@ -294,6 +395,23 @@ export function installSkills(options = {}) {
             agentUpdated = true;
           } catch (err) {
             results.skipped.push(`${rFile.replace(HOME, '~')}: ${err.message}`);
+          }
+        }
+      }
+
+      // Install slash commands if agent supports custom commands
+      if (agent.commandsDirs) {
+        for (const cDir of agent.commandsDirs) {
+          try {
+            if (!fs.existsSync(cDir)) fs.mkdirSync(cDir, { recursive: true });
+            for (const cmd of SLASH_COMMANDS) {
+              const cmdFile = path.join(cDir, cmd.name);
+              fs.writeFileSync(cmdFile, cmd.content, 'utf8');
+              results.updatedFiles.push(cmdFile.replace(HOME, '~'));
+            }
+            agentUpdated = true;
+          } catch (err) {
+            results.skipped.push(`${cDir}: ${err.message}`);
           }
         }
       }
