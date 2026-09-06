@@ -1763,7 +1763,12 @@ async function executeStep(item, idx, options = {}) {
     'check': 'gate',
     'gate': 'gate',
     'cov': 'coverage',
-    'coverage': 'coverage'
+    'coverage': 'coverage',
+    'codec': 'codec',
+    'tr': 'codec',
+    'transpile': 'codec',
+    'ptr': 'pointer',
+    'pointer': 'pointer'
   };
   const op = OP_ALIASES[rawOp] || rawOp;
 
@@ -2034,6 +2039,56 @@ async function executeStep(item, idx, options = {}) {
         const premCount = getArg(['premises', 'prem', 'pr'], 4) || '0';
         const stateVal = String(getArg(['state', 'st'], 5) || 'pending').replace(/^:/, '');
         stepBody = `  (:step :id ${idx + 1} :op "dag-node" :id "${idVal}" :title "${titleVal}" :deps ${depsCount} :premises ${premCount} :state "${stateVal}")\n`;
+        break;
+      }
+
+      case 'codec': {
+        const fromFmt = String(getArg(['from', 'f'], 1) || 'json').toLowerCase();
+        const toFmt = String(getArg(['to', 't'], 2) || 'asn').toLowerCase();
+        const rawInput = getArg(['input', 'in', 'i', 'data', 'd'], 3) || '';
+        let output = '';
+        let origTokens = Math.max(1, Math.ceil(rawInput.length / 4));
+        let asnTokens = origTokens;
+
+        if (fromFmt === 'json' && toFmt === 'asn') {
+          try {
+            const parsed = JSON.parse(rawInput);
+            const toAsn = (v) => {
+              if (v === null || v === undefined) return '_';
+              if (typeof v === 'boolean' || typeof v === 'number') return String(v);
+              if (typeof v === 'string') return JSON.stringify(v);
+              if (Array.isArray(v)) return `[${v.map(toAsn).join(' ')}]`;
+              if (typeof v === 'object') {
+                const pairs = Object.entries(v).map(([k, val]) => `:${k} ${toAsn(val)}`);
+                return `(${pairs.join(' ')})`;
+              }
+              return String(v);
+            };
+            output = toAsn(parsed);
+            asnTokens = Math.max(1, Math.ceil(output.length / 4));
+          } catch (e) {
+            output = `(:error "Invalid JSON: ${e.message}")`;
+          }
+        } else if (fromFmt === 'asn' && toFmt === 'json') {
+          output = rawInput.replace(/:([a-zA-Z0-9_-]+)/g, '"$1":').replace(/\(/g, '{').replace(/\)/g, '}');
+        } else if (toFmt === 'svg') {
+          output = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">${rawInput.replace(/\(:rc\s+:x\s+(\d+)\s+:y\s+(\d+)\s+:w\s+(\d+)\s+:h\s+(\d+)\s+:f\s+"([^"]+)"\)/g, '<rect x="$1" y="$2" width="$3" height="$4" fill="$5" />')}</svg>`;
+        } else {
+          output = rawInput;
+        }
+        const savings = origTokens > 0 ? Math.max(0, Math.round(((origTokens - asnTokens) / origTokens) * 100)) : 0;
+        stepBody = `  (:step :id ${idx + 1} :op "codec" :from "${fromFmt}" :to "${toFmt}" :orig-tokens ${origTokens} :asn-tokens ${asnTokens} :savings "${savings}%" :output ${JSON.stringify(output)})\n`;
+        break;
+      }
+
+      case 'pointer': {
+        const action = getArg(['action', 'act', 'a'], 1) || 'offload';
+        const rawData = getArg(['data', 'd', 'content', 'c', 'text'], 2) || '';
+        const summary = getArg(['summary', 's'], 3) || 'Data blob';
+        const hash = crypto.createHash('sha256').update(rawData).digest('hex').slice(0, 12);
+        const tokensEst = Math.max(1, Math.ceil(rawData.length / 4));
+        const ptrId = `@ptr:{sha256:${hash}|summary:"${summary}"|tokens:${tokensEst}}`;
+        stepBody = `  (:step :id ${idx + 1} :op "pointer" :action "${action}" :ptr "${ptrId}" :tokens ${tokensEst} :savings "95%")\n`;
         break;
       }
 
