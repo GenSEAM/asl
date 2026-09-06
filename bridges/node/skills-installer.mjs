@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * AgentScript (ASL) Multi-Agent Skills & Global Toolbelt Installer
- * Generated/Transpiled runtime artifact from pure AgentScript module: agent-bus/src/wire.asl & pack/src/pack.asl
+ * Generated/Transpiled runtime artifact from pure AgentScript module: pack/src/installer.asl
  * 
  * Capabilities:
  * - Discovers all native ASL skills (asl-toolbelt, asl-mem, asl-intel, asl-codec, asl-native, etc.)
