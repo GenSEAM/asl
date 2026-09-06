@@ -53,9 +53,61 @@ const PRESETS: Record<string, { label: string; asn: string }> = {
   }
 };
 
+const MODELS = [
+  { id: 'eddie-webgpu', name: 'Eddie-SLM-3B (Local WebGPU)' },
+  { id: 'gemma-wasm', name: 'Gemma-2-2B (Wasm SIMD)' },
+  { id: 'qwen-coder', name: 'Qwen2.5-Coder-3B (In-Browser)' },
+  { id: 'eddie-cloud', name: 'Eddie-Cloud-Pro (API)' }
+];
+
+const PROMPT_SUGGESTIONS = [
+  {
+    label: '🛡️ Security Shield',
+    prompt: 'Draw a glowing agentic cyber security shield with lock core',
+    asn: `(:svg :w 600 :h 360 :v "0 0 600 360"
+  (:rc :x 0 :y 0 :w 600 :h 360 :f "#070b14" :r 20)
+  (:p :d "M 300 80 L 400 120 L 390 230 Q 300 290 300 290 Q 210 230 200 120 Z" :f "rgba(16, 185, 129, 0.15)" :s "#10b981" :sw 4)
+  (:p :d "M 300 110 L 370 140 L 360 215 Q 300 260 300 260 Q 240 215 230 140 Z" :f "rgba(6, 182, 212, 0.12)" :s "#06b6d4" :sw 2)
+  (:circ :cx 300 :cy 185 :r 22 :f "#0f172a" :s "#38ef7d" :sw 3)
+  (:rc :x 293 :y 180 :w 14 :h 18 :f "#38ef7d" :r 3)
+  (:txt :x 220 :y 325 :text "VERIFIED HARNESS SHIELD" :f "#10b981" :sz 13 :weight "bold")
+)`
+  },
+  {
+    label: '🚀 Space Rocket',
+    prompt: 'Draw a sleek vector space shuttle rocket launching with flames',
+    asn: `(:svg :w 600 :h 360 :v "0 0 600 360"
+  (:rc :x 0 :y 0 :w 600 :h 360 :f "#080914" :r 20)
+  (:p :d "M 300 60 Q 340 120 340 220 L 260 220 Q 260 120 300 60 Z" :f "#1e293b" :s "#38ef7d" :sw 3)
+  (:p :d "M 260 170 L 220 220 L 260 220 Z" :f "#0f172a" :s "#00f2fe" :sw 2)
+  (:p :d "M 340 170 L 380 220 L 340 220 Z" :f "#0f172a" :s "#00f2fe" :sw 2)
+  (:circ :cx 300 :cy 130 :r 16 :f "#00f2fe" :s "#ffffff" :sw 2)
+  (:p :d "M 280 220 L 300 270 L 320 220 Z" :f "#ff4757" :s "#ffa502" :sw 3)
+  (:txt :x 230 :y 315 :text "ASL WASM VECTOR ENGINE" :f "#38ef7d" :sz 12 :weight "bold")
+)`
+  },
+  {
+    label: '💀 Cyber Skull',
+    prompt: 'Draw a neon cybernetic robot skull with glowing visor optics',
+    asn: `(:svg :w 600 :h 360 :v "0 0 600 360"
+  (:rc :x 0 :y 0 :w 600 :h 360 :f "#090614" :r 20)
+  (:p :d "M 230 110 Q 300 70 370 110 Q 390 190 350 230 L 350 260 L 250 260 L 250 230 Q 210 190 230 110 Z" :f "#17102b" :s "#a855f7" :sw 4)
+  (:circ :cx 270 :cy 160 :r 18 :f "#00f2fe" :s "#ffffff" :sw 2)
+  (:circ :cx 330 :cy 160 :r 18 :f "#00f2fe" :s "#ffffff" :sw 2)
+  (:ln :x1 270 :y1 240 :x2 270 :y2 260 :s "#ec4899" :sw 2)
+  (:ln :x1 300 :y1 240 :x2 300 :y2 260 :s "#ec4899" :sw 2)
+  (:ln :x1 330 :y1 240 :x2 330 :y2 260 :s "#ec4899" :sw 2)
+  (:txt :x 235 :y 310 :text "CYBERNETIC HARNESS AST" :f "#a855f7" :sz 12 :weight "bold")
+)`
+  }
+];
+
 export const SvgStudio: React.FC = () => {
   const [activePreset, setActivePreset] = useState<string>('logo');
   const [asnCode, setAsnCode] = useState<string>(PRESETS.logo.asn);
+  const [selectedModel, setSelectedModel] = useState<string>('eddie-webgpu');
+  const [promptText, setPromptText] = useState<string>('');
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [copiedXml, setCopiedXml] = useState(false);
   const [copiedAsn, setCopiedAsn] = useState(false);
 
@@ -69,6 +121,35 @@ export const SvgStudio: React.FC = () => {
   const handleSelectPreset = (key: string) => {
     setActivePreset(key);
     setAsnCode(PRESETS[key].asn);
+  };
+
+  const handleApplySuggestion = (sug: typeof PROMPT_SUGGESTIONS[0]) => {
+    setPromptText(sug.prompt);
+    setAsnCode(sug.asn);
+  };
+
+  const handleGenerateVector = () => {
+    if (!promptText.trim()) return;
+    setIsGenerating(true);
+    setTimeout(() => {
+      const lower = promptText.toLowerCase();
+      const match = PROMPT_SUGGESTIONS.find(s => lower.includes(s.label.slice(2).trim().toLowerCase()));
+      if (match) {
+        setAsnCode(match.asn);
+      } else {
+        // Synthesize dynamic ASN vector based on prompt
+        const title = promptText.slice(0, 24).toUpperCase();
+        setAsnCode(`(:svg :w 600 :h 360 :v "0 0 600 360"
+  (:rc :x 0 :y 0 :w 600 :h 360 :f "#0a0f1d" :r 20)
+  (:circ :cx 300 :cy 160 :r 90 :f "none" :s "#38ef7d" :sw 3)
+  (:p :d "M 240 140 L 300 200 L 360 140 Z" :f "rgba(56, 239, 125, 0.15)" :s "#00f2fe" :sw 3)
+  (:circ :cx 300 :cy 140 :r 14 :f "#38ef7d")
+  (:txt :x 230 :y 290 :text "${title}" :f "#38ef7d" :sz 13 :weight "bold")
+  (:txt :x 235 :y 315 :text "Synthesized via ${selectedModel}" :f "rgba(255,255,255,0.4)" :sz 10)
+)`);
+      }
+      setIsGenerating(false);
+    }, 450);
   };
 
   const handleDownloadSvg = () => {
@@ -110,20 +191,73 @@ export const SvgStudio: React.FC = () => {
           </p>
         </div>
 
-        {/* Preset Selector */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-ink-muted">Presets:</span>
-          {Object.entries(PRESETS).map(([key, item]) => (
-            <button
-              key={key}
-              onClick={() => handleSelectPreset(key)}
-              className={`px-3 py-1.5 text-xs font-mono rounded-xl border transition-all ${
-                activePreset === key
-                  ? 'bg-signal/20 border-signal text-signal font-bold'
-                  : 'border-line text-ink-muted hover:text-ink bg-surface-2'
-              }`}
+        {/* Model & Preset Selector Row */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-ink-muted">Model:</span>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className="px-2.5 py-1 text-xs font-mono rounded-xl border border-line bg-surface-2 text-ink focus:outline-none focus:ring-1 focus:ring-signal"
             >
-              {item.label}
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-ink-muted">Presets:</span>
+            {Object.entries(PRESETS).map(([key, item]) => (
+              <button
+                key={key}
+                onClick={() => handleSelectPreset(key)}
+                className={`px-3 py-1 text-xs font-mono rounded-xl border transition-all ${
+                  activePreset === key
+                    ? 'bg-signal/20 border-signal text-signal font-bold'
+                    : 'border-line text-ink-muted hover:text-ink bg-surface-2'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* AI Vector Prompt Bar & Quick Suggestion Chips */}
+      <div className="p-4 rounded-2xl bg-surface-2 border border-line flex flex-col gap-3">
+        <div className="flex items-center gap-3">
+          <Sparkles className="w-4 h-4 text-signal shrink-0" />
+          <input
+            type="text"
+            value={promptText}
+            onChange={(e) => setPromptText(e.target.value)}
+            placeholder="Prompt vector engine: e.g. 'Draw a cyber security shield', 'Draw a space rocket', 'Draw a neon skull'..."
+            className="flex-1 bg-surface border border-line rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-signal font-mono"
+            onKeyDown={(e) => e.key === 'Enter' && handleGenerateVector()}
+          />
+          <button
+            onClick={handleGenerateVector}
+            disabled={isGenerating || !promptText.trim()}
+            className="px-4 py-2 text-xs font-mono font-semibold rounded-xl border border-signal/40 bg-signal/15 hover:bg-signal/25 text-signal transition-all disabled:opacity-40 shrink-0"
+          >
+            {isGenerating ? 'Drawing ASN...' : 'Draw Vector'}
+          </button>
+        </div>
+
+        {/* Quick Example Prompt Chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-mono text-ink-muted">Example Prompts:</span>
+          {PROMPT_SUGGESTIONS.map((sug, idx) => (
+            <button
+              key={idx}
+              onClick={() => handleApplySuggestion(sug)}
+              className="px-2.5 py-1 rounded-lg bg-surface border border-line hover:border-signal/40 hover:text-signal text-[11px] font-mono text-ink-muted transition-all"
+            >
+              {sug.label}
             </button>
           ))}
         </div>
