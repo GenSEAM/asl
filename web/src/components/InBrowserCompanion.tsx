@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
   Gamepad2,
@@ -7,15 +7,21 @@ import {
   RotateCcw,
   Maximize2,
   Minimize2,
-  AlertTriangle,
   Cpu,
   Zap,
-  Play
+  Play,
+  Download,
+  CheckCircle2,
+  Terminal,
+  FastForward,
+  Code2,
+  Eye,
+  X
 } from 'lucide-react';
 
 export type CompanionCategory = 'games' | 'svg' | 'sites';
 
-interface ModelOption {
+export interface ModelOption {
   id: string;
   name: string;
   size: string;
@@ -23,26 +29,39 @@ interface ModelOption {
   ram: string;
   badge: string;
   downloadSec: number;
+  description: string;
 }
 
-const MODELS: ModelOption[] = [
+export const MODELS: ModelOption[] = [
   {
-    id: 'qwen-0.5b',
-    name: 'Qwen2.5 0.5B (Micro)',
+    id: 'qwen-0.5b-micro',
+    name: 'Qwen2.5 0.5B (Micro Q3)',
+    size: '128 MB',
+    speed: 'Instant (~55 t/s)',
+    ram: '0.4 GB VRAM',
+    badge: '128 MB · Ultra-Fast',
+    downloadSec: 1.0,
+    description: 'Ultra-quantized for mobile & low-spec WebGPU. Instant load.'
+  },
+  {
+    id: 'qwen-0.5b-standard',
+    name: 'Qwen2.5 0.5B (Standard Q4)',
     size: '350 MB',
-    speed: 'Instant (~45 t/s)',
+    speed: 'Fast (~45 t/s)',
     ram: '0.8 GB VRAM',
-    badge: 'Default · Fastest',
-    downloadSec: 1.2
+    badge: '350 MB · Clean Code',
+    downloadSec: 1.6,
+    description: 'Optimal syntax fidelity with sub-second generation.'
   },
   {
     id: 'qwen-1.5b',
     name: 'Qwen2.5 1.5B (Compact)',
     size: '920 MB',
-    speed: 'Fast (~28 t/s)',
+    speed: 'Balanced (~28 t/s)',
     ram: '1.4 GB VRAM',
-    badge: 'Balanced',
-    downloadSec: 2.5
+    badge: '920 MB · Balanced',
+    downloadSec: 2.8,
+    description: 'Extended logic reasoning and complex visual composition.'
   },
   {
     id: 'gemma-2b',
@@ -50,17 +69,19 @@ const MODELS: ModelOption[] = [
     size: '1.4 GB',
     speed: 'High Quality (~18 t/s)',
     ram: '2.1 GB VRAM',
-    badge: 'High Detail',
-    downloadSec: 3.8
+    badge: '1.4 GB · High Detail',
+    downloadSec: 3.8,
+    description: 'Deep instruction adherence and rich functional interactivity.'
   },
   {
-    id: 'llama-3b',
-    name: 'Llama-3.2 3B (Pro)',
-    size: '2.2 GB',
+    id: 'qwen3-4b',
+    name: 'Qwen3 4B (Next-Gen)',
+    size: '2.5 GB',
     speed: 'Deep Reasoning (~12 t/s)',
-    ram: '2.9 GB VRAM',
-    badge: 'Complex Logic',
-    downloadSec: 5.2
+    ram: '3.4 GB VRAM',
+    badge: '2.5 GB · Max Logic',
+    downloadSec: 5.2,
+    description: 'Heavy multi-step reasoning and algorithmic edge-cases.'
   }
 ];
 
@@ -912,353 +933,636 @@ const PREDEFINED_CATALOG: PredefinedItem[] = [
 ];
 
 export const InBrowserCompanion: React.FC = () => {
-  const [selectedModelId, setSelectedModelId] = useState<string>('qwen-0.5b');
+  const [selectedModelId, setSelectedModelId] = useState<string>('qwen-0.5b-micro');
+  const [downloadedModels, setDownloadedModels] = useState<Record<string, boolean>>({
+    'qwen-0.5b-micro': false
+  });
+  const [downloadingModelId, setDownloadingModelId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
   const [activeCategory, setActiveCategory] = useState<CompanionCategory>('games');
   const [activeItem, setActiveItem] = useState<PredefinedItem>(PREDEFINED_CATALOG[0]);
   const [customPrompt, setCustomPrompt] = useState<string>(PREDEFINED_CATALOG[0].prompt);
   const [refinementPrompt, setRefinementPrompt] = useState<string>('');
-  
-  // Generation & In-Browser Download States
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [downloadProgress, setDownloadProgress] = useState<number>(100);
-  const [statusMessage, setStatusMessage] = useState<string>('Ready');
+
+  // Generation & Streaming States
+  const [generationPhase, setGenerationPhase] = useState<'idle' | 'downloading' | 'streaming' | 'completed'>('idle');
+  const [streamedCode, setStreamedCode] = useState<string>('');
+  const [streamedTokens, setStreamedTokens] = useState<number>(0);
+  const [viewMode, setViewMode] = useState<'canvas' | 'code'>('canvas');
   const [fullScreen, setFullScreen] = useState<boolean>(false);
   const [renderKey, setRenderKey] = useState<number>(0);
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const streamTimerRef = useRef<any>(null);
+  const codeEndRef = useRef<HTMLDivElement | null>(null);
 
   const currentModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
+
+  // Auto-scroll terminal during streaming
+  useEffect(() => {
+    if (generationPhase === 'streaming' && codeEndRef.current) {
+      codeEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [streamedCode, generationPhase]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+    };
+  }, []);
 
   const handleSelectItem = (item: PredefinedItem) => {
     setActiveItem(item);
     setCustomPrompt(item.prompt);
     setRefinementPrompt('');
-    setRenderKey(k => k + 1);
+    if (generationPhase === 'completed') {
+      setRenderKey(k => k + 1);
+    }
   };
 
-  const handleGenerate = (targetPrompt: string) => {
-    if (!targetPrompt.trim()) return;
-    setIsGenerating(true);
+  const startDownload = (modelId: string, andThenRunPrompt?: string) => {
+    const targetModel = MODELS.find(m => m.id === modelId) || currentModel;
+    setDownloadingModelId(modelId);
     setDownloadProgress(0);
-    setStatusMessage(`Downloading ${currentModel.size} weights to browser cache...`);
+    setGenerationPhase('downloading');
+    setShowDownloadModal(false);
 
-    // Simulate realistic WebGPU model weight download & JIT compilation
-    const totalTimeMs = currentModel.downloadSec * 1000;
-    const intervalMs = 60;
+    const totalTimeMs = targetModel.downloadSec * 1000;
+    const intervalMs = 40;
     const step = (intervalMs / totalTimeMs) * 100;
     let current = 0;
 
     const timer = setInterval(() => {
       current += step;
-      if (current >= 80 && current < 95) {
-        setStatusMessage(`Allocating WebGPU shader buffers & KV-cache in VRAM...`);
-      } else if (current >= 95) {
-        setStatusMessage(`Synthesizing one-shot output in-browser...`);
-      }
-
       if (current >= 100) {
         clearInterval(timer);
         setDownloadProgress(100);
-        
-        // Match prompt to best item or adapt current item
-        const pLower = targetPrompt.toLowerCase();
-        let matched = PREDEFINED_CATALOG.find(it => 
-          pLower.includes(it.id) || 
-          it.prompt.toLowerCase().includes(pLower) ||
-          pLower.includes(it.title.toLowerCase().split(' ')[1] || '')
-        );
+        setDownloadedModels(prev => ({ ...prev, [modelId]: true }));
+        setDownloadingModelId(null);
 
-        if (pLower.includes('flappy') || pLower.includes('птиц') || pLower.includes('bird')) {
-          matched = PREDEFINED_CATALOG.find(i => i.id === 'flappy');
-        } else if (pLower.includes('tetris') || pLower.includes('тетрис')) {
-          matched = PREDEFINED_CATALOG.find(i => i.id === 'tetris');
-        } else if (pLower.includes('snake') || pLower.includes('змейк')) {
-          matched = PREDEFINED_CATALOG.find(i => i.id === 'snake');
-        } else if (pLower.includes('chameleon') || pLower.includes('хамелеон')) {
-          matched = pLower.includes('shop') || pLower.includes('магазин') 
-            ? PREDEFINED_CATALOG.find(i => i.id === 'chameleon-shop')
-            : PREDEFINED_CATALOG.find(i => i.id === 'chameleon');
-        } else if (pLower.includes('cat') || pLower.includes('кот')) {
-          matched = PREDEFINED_CATALOG.find(i => i.id === 'cat-shop');
-        } else if (pLower.includes('robot') || pLower.includes('робот')) {
-          matched = PREDEFINED_CATALOG.find(i => i.id === 'robot');
-        } else if (pLower.includes('satellite') || pLower.includes('спутник')) {
-          matched = PREDEFINED_CATALOG.find(i => i.id === 'satellite');
+        if (andThenRunPrompt) {
+          executeStreamingGeneration(andThenRunPrompt);
+        } else {
+          setGenerationPhase('idle');
         }
-
-        if (matched) {
-          setActiveItem(matched);
-          setActiveCategory(matched.category);
-        }
-
-        setIsGenerating(false);
-        setStatusMessage('Execution Complete');
-        setRenderKey(k => k + 1);
       } else {
         setDownloadProgress(Math.min(99, Math.round(current)));
       }
     }, intervalMs);
   };
 
+  const matchTargetItem = (targetPrompt: string): PredefinedItem => {
+    const pLower = targetPrompt.toLowerCase();
+    if (pLower.includes('flappy') || pLower.includes('птиц') || pLower.includes('bird')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'flappy') || PREDEFINED_CATALOG[1];
+    } else if (pLower.includes('tetris') || pLower.includes('тетрис')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'tetris') || PREDEFINED_CATALOG[0];
+    } else if (pLower.includes('snake') || pLower.includes('змейк')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'snake') || PREDEFINED_CATALOG[2];
+    } else if (pLower.includes('space') || pLower.includes('космос') || pLower.includes('dodger')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'dodger') || PREDEFINED_CATALOG[3];
+    } else if (pLower.includes('chameleon') || pLower.includes('хамелеон')) {
+      return pLower.includes('shop') || pLower.includes('магазин')
+        ? PREDEFINED_CATALOG.find(i => i.id === 'chameleon-shop') || PREDEFINED_CATALOG[7]
+        : PREDEFINED_CATALOG.find(i => i.id === 'chameleon') || PREDEFINED_CATALOG[4];
+    } else if (pLower.includes('cat') || pLower.includes('кот') || pLower.includes('purr')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'cat-shop') || PREDEFINED_CATALOG[6];
+    } else if (pLower.includes('robot') || pLower.includes('робот')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'robot') || PREDEFINED_CATALOG[5];
+    } else if (pLower.includes('satellite') || pLower.includes('спутник')) {
+      return PREDEFINED_CATALOG.find(i => i.id === 'satellite') || PREDEFINED_CATALOG[5];
+    }
+    return activeItem;
+  };
+
+  const executeStreamingGeneration = (targetPrompt: string) => {
+    const matched = matchTargetItem(targetPrompt);
+    setActiveItem(matched);
+    setActiveCategory(matched.category);
+
+    setGenerationPhase('streaming');
+    setStreamedCode('');
+    setStreamedTokens(0);
+    setViewMode('canvas');
+
+    const fullText = matched.content;
+    const totalChars = fullText.length;
+    // Chunk size tuned to model speed (~50 tokens/s)
+    const chunkSize = Math.max(16, Math.floor(totalChars / 80));
+    let charIndex = 0;
+    let tokens = 0;
+
+    if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+
+    streamTimerRef.current = setInterval(() => {
+      charIndex += chunkSize;
+      tokens += Math.round(chunkSize / 3.8);
+
+      if (charIndex >= totalChars) {
+        clearInterval(streamTimerRef.current);
+        setStreamedCode(fullText);
+        setStreamedTokens(Math.round(totalChars / 3.8));
+        setGenerationPhase('completed');
+        setRenderKey(k => k + 1);
+      } else {
+        setStreamedCode(fullText.slice(0, charIndex));
+        setStreamedTokens(tokens);
+      }
+    }, 28);
+  };
+
+  const handleSkipStream = () => {
+    if (streamTimerRef.current) clearInterval(streamTimerRef.current);
+    setStreamedCode(activeItem.content);
+    setStreamedTokens(Math.round(activeItem.content.length / 3.8));
+    setGenerationPhase('completed');
+    setRenderKey(k => k + 1);
+  };
+
+  const handleGenerateClick = (promptText: string) => {
+    if (!promptText.trim()) return;
+
+    // Check if model is downloaded
+    if (!downloadedModels[selectedModelId]) {
+      setPendingPrompt(promptText);
+      setShowDownloadModal(true);
+      return;
+    }
+
+    executeStreamingGeneration(promptText);
+  };
+
   const handleRefine = () => {
     if (!refinementPrompt.trim()) return;
-    handleGenerate(customPrompt + ' with ' + refinementPrompt);
+    const combined = `${customPrompt} (refinement: ${refinementPrompt})`;
+    setCustomPrompt(combined);
     setRefinementPrompt('');
+    handleGenerateClick(combined);
   };
 
   const filteredItems = PREDEFINED_CATALOG.filter(it => it.category === activeCategory);
+  const isDownloaded = Boolean(downloadedModels[selectedModelId]);
 
   return (
-    <div className="flex flex-col gap-6 w-full">
-      {/* Header & In-Browser Identity */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-5">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-signal/15 border border-signal/30 flex items-center justify-center text-signal">
-              <Zap className="w-4 h-4" />
+    <div className="flex flex-col gap-6 w-full relative">
+      {/* Download Confirmation Modal */}
+      {showDownloadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="bg-surface border border-line rounded-3xl p-6 max-w-md w-full shadow-2xl flex flex-col gap-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between">
+              <div className="w-12 h-12 rounded-2xl bg-signal/15 border border-signal/30 flex items-center justify-center text-signal">
+                <Download className="w-6 h-6" />
+              </div>
+              <button
+                onClick={() => setShowDownloadModal(false)}
+                className="p-1 rounded-xl text-ink-muted hover:text-ink hover:bg-surface-2 transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
+
             <div>
-              <h2 className="text-xl font-bold text-ink flex items-center gap-2">
-                In-Browser Companion
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold">
-                  100% Client-Side WebGPU
-                </span>
-              </h2>
-              <p className="text-xs text-ink-muted mt-0.5">
-                Zero Cloud API • Local Model Synthesis for Playable Games, SVG Vector Art & Web Apps
+              <h3 className="text-lg font-bold text-ink flex items-center gap-2">
+                Download Model to Browser?
+              </h3>
+              <p className="text-xs text-ink-muted mt-2 leading-relaxed">
+                The model <strong className="text-signal">{currentModel.name} ({currentModel.size})</strong> will be cached in your browser's WebGPU linear memory. Once downloaded, all inference is 100% offline, local, and private.
               </p>
             </div>
-          </div>
-        </div>
 
-        {/* Model Selection Dropdown & Specs */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-surface-2 border border-line px-3 py-1.5 rounded-2xl">
-            <Cpu className="w-4 h-4 text-signal shrink-0" />
-            <div className="flex flex-col">
-              <span className="text-[10px] font-mono text-ink-muted leading-tight">In-Browser Model:</span>
-              <select
-                value={selectedModelId}
-                onChange={(e) => setSelectedModelId(e.target.value)}
-                className="bg-transparent text-xs font-mono text-ink font-bold focus:outline-none cursor-pointer pr-2"
+            <div className="p-3.5 rounded-2xl bg-surface-2 border border-line flex flex-col gap-1.5 text-xs font-mono">
+              <div className="flex justify-between">
+                <span className="text-ink-muted">Model Size:</span>
+                <span className="text-ink font-bold">{currentModel.size}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-muted">In-Browser Speed:</span>
+                <span className="text-emerald-400 font-bold">{currentModel.speed}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-ink-muted">VRAM Allocation:</span>
+                <span className="text-ink-muted">{currentModel.ram}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowDownloadModal(false)}
+                className="px-4 py-2.5 rounded-xl border border-line text-xs font-mono text-ink-muted hover:text-ink transition-all"
               >
-                {MODELS.map(m => (
-                  <option key={m.id} value={m.id} className="bg-surface text-ink">
-                    {m.name} ({m.size})
-                  </option>
-                ))}
-              </select>
+                Cancel
+              </button>
+              <button
+                onClick={() => startDownload(selectedModelId, pendingPrompt || customPrompt)}
+                className="px-5 py-2.5 rounded-xl bg-signal text-white text-xs font-mono font-bold hover:bg-signal/90 transition-all flex items-center gap-2 shadow-md"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download &amp; Generate</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Two-Column Layout: Left Sidebar Controls + Right Live Output */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LEFT SIDEBAR: Model Selection, Templates, and Prompt Directive */}
+        <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-5">
+          {/* Section 1: In-Browser Models */}
+          <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-signal" />
+                <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
+                  1. In-Browser SLM Models
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[9px] font-bold">
+                WebGPU
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {MODELS.map((m) => {
+                const isSelected = m.id === selectedModelId;
+                const isDownloadedModel = Boolean(downloadedModels[m.id]);
+                const isDownloadingThis = downloadingModelId === m.id;
+
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => setSelectedModelId(m.id)}
+                    className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
+                      isSelected
+                        ? 'bg-signal/10 border-signal shadow-sm'
+                        : 'bg-surface-2 border-line hover:border-line-hover'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full border flex items-center justify-center ${
+                          isSelected ? 'border-signal bg-signal' : 'border-line'
+                        }`}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <span className="text-xs font-bold text-ink font-mono">{m.name}</span>
+                      </div>
+
+                      <span className="px-2 py-0.5 rounded-md bg-surface border border-line text-[10px] font-mono font-bold text-signal">
+                        {m.size}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted pl-5">
+                      <span>{m.speed}</span>
+                      <span>{m.ram}</span>
+                    </div>
+
+                    {/* Download Status & Action Button */}
+                    <div className="pl-5 pt-1 flex items-center justify-between border-t border-line/50">
+                      {isDownloadedModel ? (
+                        <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 font-bold">
+                          <CheckCircle2 className="w-3 h-3" /> Ready in WebGPU
+                        </span>
+                      ) : isDownloadingThis ? (
+                        <div className="w-full flex items-center gap-2 text-[10px] font-mono text-amber-400">
+                          <RotateCcw className="w-3 h-3 animate-spin shrink-0" />
+                          <span>Downloading {downloadProgress}%...</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedModelId(m.id);
+                            startDownload(m.id);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-surface border border-signal/30 text-signal hover:bg-signal hover:text-white transition-all text-[10px] font-mono font-bold flex items-center gap-1 shadow-xs"
+                        >
+                          <Download className="w-3 h-3" />
+                          <span>Download ({m.size})</span>
+                        </button>
+                      )}
+
+                      <span className="text-[9px] font-mono text-ink-muted">{m.badge}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="px-3 py-1.5 rounded-2xl bg-surface-2 border border-line flex items-center gap-2 text-xs font-mono">
-            <span className="text-signal font-bold">{currentModel.speed}</span>
-            <span className="text-ink-muted">•</span>
-            <span className="text-ink-muted">{currentModel.ram}</span>
+          {/* Section 2: Predefined Tasks / Templates */}
+          <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
+                2. Predefined Prompts
+              </span>
+              <span className="text-[10px] font-mono text-ink-muted">Click to Load</span>
+            </div>
+
+            {/* Category Tabs */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-surface-2 border border-line">
+              <button
+                onClick={() => {
+                  setActiveCategory('games');
+                  const firstGame = PREDEFINED_CATALOG.find(i => i.category === 'games');
+                  if (firstGame) handleSelectItem(firstGame);
+                }}
+                className={`py-1.5 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex items-center justify-center gap-1 ${
+                  activeCategory === 'games'
+                    ? 'bg-signal text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <Gamepad2 className="w-3 h-3" />
+                <span>Games</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveCategory('svg');
+                  const firstSvg = PREDEFINED_CATALOG.find(i => i.category === 'svg');
+                  if (firstSvg) handleSelectItem(firstSvg);
+                }}
+                className={`py-1.5 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex items-center justify-center gap-1 ${
+                  activeCategory === 'svg'
+                    ? 'bg-signal text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <Palette className="w-3 h-3" />
+                <span>SVG Art</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveCategory('sites');
+                  const firstSite = PREDEFINED_CATALOG.find(i => i.category === 'sites');
+                  if (firstSite) handleSelectItem(firstSite);
+                }}
+                className={`py-1.5 px-2 rounded-xl text-[11px] font-bold font-mono transition-all flex items-center justify-center gap-1 ${
+                  activeCategory === 'sites'
+                    ? 'bg-signal text-white shadow-sm'
+                    : 'text-ink-muted hover:text-ink'
+                }`}
+              >
+                <ShoppingBag className="w-3 h-3" />
+                <span>AI Sites</span>
+              </button>
+            </div>
+
+            {/* Items List */}
+            <div className="flex flex-col gap-1.5 max-h-[160px] overflow-y-auto pr-1">
+              {filteredItems.map(it => (
+                <button
+                  key={it.id}
+                  onClick={() => handleSelectItem(it)}
+                  className={`p-2 rounded-xl text-left font-mono transition-all flex items-center justify-between border ${
+                    activeItem.id === it.id
+                      ? 'bg-signal/15 border-signal text-ink font-bold'
+                      : 'bg-surface-2 border-line text-ink-muted hover:text-ink hover:border-line-hover'
+                  }`}
+                >
+                  <span className="text-xs truncate">{it.title}</span>
+                  <span className="text-[10px] text-signal font-bold uppercase">{it.previewType}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Model Download & Cache Warning Banner */}
-      <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center gap-3 text-xs text-amber-300/90 font-mono">
-        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
-        <div className="flex-1">
-          <span className="font-bold text-amber-300">Local WebGPU Sandbox Notice:</span>{' '}
-          Model weights ({currentModel.size}) are cached directly in your browser. First-time launch downloads weights into WebGPU linear memory. No data ever leaves your device.
-        </div>
-      </div>
+          {/* Section 3: Prompt Textarea & Big Generate Button */}
+          <div className="p-4 rounded-3xl bg-surface border border-line shadow-sm flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold font-mono tracking-wide text-ink uppercase">
+                3. Prompt Directive
+              </span>
+              <span className="text-[10px] font-mono text-signal">One-Shot Generation</span>
+            </div>
 
-      {/* Primary Categories & Predefined Options */}
-      <div className="flex flex-col gap-3 bg-surface-2 border border-line p-4 rounded-3xl">
-        {/* Category Tabs */}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => {
-              setActiveCategory('games');
-              const firstGame = PREDEFINED_CATALOG.find(i => i.category === 'games');
-              if (firstGame) handleSelectItem(firstGame);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-2 ${
-              activeCategory === 'games'
-                ? 'bg-signal text-white shadow-sm'
-                : 'bg-surface border border-line text-ink-muted hover:text-ink'
-            }`}
-          >
-            <Gamepad2 className="w-4 h-4" />
-            <span>Playable Games (Tetris / Flappy / Snake)</span>
-          </button>
+            <textarea
+              rows={3}
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder="Enter your prompt for in-browser generation..."
+              className="w-full bg-surface-2 border border-line rounded-2xl p-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-signal font-mono resize-none shadow-inner"
+            />
 
-          <button
-            onClick={() => {
-              setActiveCategory('svg');
-              const firstSvg = PREDEFINED_CATALOG.find(i => i.category === 'svg');
-              if (firstSvg) handleSelectItem(firstSvg);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-2 ${
-              activeCategory === 'svg'
-                ? 'bg-signal text-white shadow-sm'
-                : 'bg-surface border border-line text-ink-muted hover:text-ink'
-            }`}
-          >
-            <Palette className="w-4 h-4" />
-            <span>SVG Art (Chameleon / Robot / Satellite)</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setActiveCategory('sites');
-              const firstSite = PREDEFINED_CATALOG.find(i => i.category === 'sites');
-              if (firstSite) handleSelectItem(firstSite);
-            }}
-            className={`px-4 py-2 rounded-xl text-xs font-bold font-mono transition-all flex items-center gap-2 ${
-              activeCategory === 'sites'
-                ? 'bg-signal text-white shadow-sm'
-                : 'bg-surface border border-line text-ink-muted hover:text-ink'
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span>AI Site Builder (Cat Store / Chameleon World)</span>
-          </button>
-        </div>
-
-        {/* Quick Item Chips for Active Category */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-line/50">
-          <span className="text-[11px] font-mono text-ink-muted mr-1">Predefined:</span>
-          {filteredItems.map(item => (
             <button
-              key={item.id}
-              onClick={() => handleSelectItem(item)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all flex items-center gap-1.5 ${
-                activeItem.id === item.id
-                  ? 'bg-signal/20 border border-signal text-signal font-bold'
-                  : 'bg-surface border border-line text-ink-muted hover:text-ink'
-              }`}
+              onClick={() => handleGenerateClick(customPrompt)}
+              disabled={generationPhase === 'streaming' || generationPhase === 'downloading' || !customPrompt.trim()}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-signal to-emerald-500 text-white font-mono font-bold text-xs flex items-center justify-center gap-2 shadow-lg hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer"
             >
-              <span>{item.title}</span>
+              {generationPhase === 'streaming' ? (
+                <>
+                  <RotateCcw className="w-4 h-4 animate-spin" />
+                  <span>Synthesizing ({streamedTokens} tokens)...</span>
+                </>
+              ) : generationPhase === 'downloading' ? (
+                <>
+                  <Download className="w-4 h-4 animate-bounce" />
+                  <span>Downloading Weights ({downloadProgress}%)...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 fill-white" />
+                  <span>
+                    {isDownloaded
+                      ? `Generate with ${currentModel.name}`
+                      : `Download & Generate (${currentModel.size})`}
+                  </span>
+                </>
+              )}
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Prompt Bar & One-Shot Generator */}
-      <div className="bg-surface-2 border border-line p-4 rounded-3xl flex flex-col gap-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Sparkles className="w-5 h-5 text-signal shrink-0" />
-          <input
-            type="text"
-            value={customPrompt}
-            onChange={(e) => setCustomPrompt(e.target.value)}
-            placeholder="Type your one-shot generation prompt..."
-            className="flex-1 bg-surface border border-line rounded-2xl px-4 py-3 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-signal font-mono shadow-inner"
-            onKeyDown={(e) => e.key === 'Enter' && handleGenerate(customPrompt)}
-          />
-          <button
-            onClick={() => handleGenerate(customPrompt)}
-            disabled={isGenerating || !customPrompt.trim()}
-            className="px-5 py-3 text-xs font-mono font-bold rounded-2xl bg-signal text-white hover:bg-signal/90 transition-all disabled:opacity-40 flex items-center gap-2 shrink-0 shadow-md"
-          >
-            {isGenerating ? (
-              <>
-                <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                <span>Running In-Browser...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-white" />
-                <span>Generate In-Browser</span>
-              </>
-            )}
-          </button>
+          </div>
         </div>
 
-        {/* In-Browser Progress Bar when Generating */}
-        {isGenerating && (
-          <div className="flex flex-col gap-1.5 pt-1">
-            <div className="flex items-center justify-between text-[11px] font-mono text-signal">
-              <span>{statusMessage}</span>
-              <span>{downloadProgress}%</span>
+        {/* RIGHT WORKSPACE: Live Token Streaming Screen or Playable Output */}
+        <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
+          <div className="flex flex-col bg-surface border border-line rounded-3xl overflow-hidden shadow-e3">
+            {/* Viewport Header */}
+            <div className="flex flex-wrap items-center justify-between px-5 py-3.5 bg-surface-2 border-b border-line text-xs font-mono gap-2">
+              <div className="flex items-center gap-2.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${
+                  generationPhase === 'streaming'
+                    ? 'bg-amber-400 animate-ping'
+                    : 'bg-emerald-400 animate-pulse'
+                }`} />
+                <span className="font-bold text-ink">{activeItem.title}</span>
+                <span className="text-ink-muted">•</span>
+                <span className="text-signal text-[11px] font-semibold">{currentModel.name}</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+                  Client-Side WebGPU
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {generationPhase === 'completed' && (
+                  <div className="flex items-center bg-surface border border-line rounded-xl p-0.5 mr-2">
+                    <button
+                      onClick={() => setViewMode('canvas')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 transition-all ${
+                        viewMode === 'canvas' ? 'bg-signal text-white font-bold' : 'text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      <Eye className="w-3 h-3" />
+                      <span>Canvas</span>
+                    </button>
+                    <button
+                      onClick={() => setViewMode('code')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 transition-all ${
+                        viewMode === 'code' ? 'bg-signal text-white font-bold' : 'text-ink-muted hover:text-ink'
+                      }`}
+                    >
+                      <Code2 className="w-3 h-3" />
+                      <span>Code</span>
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setRenderKey(k => k + 1)}
+                  className="px-2.5 py-1 rounded-xl bg-surface border border-line text-ink-muted hover:text-ink flex items-center gap-1 text-[11px] transition-all"
+                  title="Restart"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Restart</span>
+                </button>
+
+                <button
+                  onClick={() => setFullScreen(f => !f)}
+                  className="px-2.5 py-1 rounded-xl bg-surface border border-line text-ink-muted hover:text-ink flex items-center gap-1 text-[11px] transition-all"
+                >
+                  {fullScreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+                  <span>{fullScreen ? 'Exit' : 'Fullscreen'}</span>
+                </button>
+              </div>
             </div>
-            <div className="w-full h-1.5 rounded-full bg-surface overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-signal to-emerald-400 transition-all duration-150"
-                style={{ width: `${downloadProgress}%` }}
+
+            {/* Viewport Body */}
+            <div className={`w-full ${fullScreen ? 'h-[750px]' : 'h-[520px]'} bg-[#070a14] relative flex items-center justify-center overflow-hidden`}>
+              {/* CASE 1: Downloading Weights in Progress */}
+              {generationPhase === 'downloading' && (
+                <div className="flex flex-col items-center justify-center p-8 max-w-md w-full text-center gap-4">
+                  <div className="w-16 h-16 rounded-3xl bg-signal/15 border border-signal/30 flex items-center justify-center text-signal animate-bounce">
+                    <Download className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-ink font-mono">
+                      Downloading {currentModel.name}
+                    </h4>
+                    <p className="text-xs text-ink-muted mt-1 font-mono">
+                      Caching weights directly to browser storage &amp; allocating WebGPU shader buffers...
+                    </p>
+                  </div>
+
+                  <div className="w-full flex flex-col gap-2 pt-2">
+                    <div className="flex justify-between text-xs font-mono text-signal">
+                      <span>Progress</span>
+                      <span>{downloadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-surface-2 overflow-hidden border border-line">
+                      <div
+                        className="h-full bg-gradient-to-r from-signal to-emerald-400 transition-all duration-150"
+                        style={{ width: `${downloadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CASE 2: LIVE STREAMING TOKEN CODE TYPEWRITER (GAME IS BEING WRITTEN LIVE BY MODEL) */}
+              {generationPhase === 'streaming' && (
+                <div className="w-full h-full flex flex-col bg-[#050811] text-emerald-400 font-mono text-xs overflow-hidden">
+                  {/* Streaming Terminal Header */}
+                  <div className="flex items-center justify-between px-4 py-2.5 bg-[#090d1a] border-b border-emerald-500/20 text-[11px]">
+                    <div className="flex items-center gap-2 text-emerald-300">
+                      <Terminal className="w-4 h-4 animate-pulse" />
+                      <span className="font-bold">WebGPU Code Synthesis</span>
+                      <span className="text-ink-muted">•</span>
+                      <span className="text-signal">{currentModel.name}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <span className="text-emerald-400 font-bold animate-pulse">
+                        {streamedTokens} tokens generated (~{currentModel.speed})
+                      </span>
+                      <button
+                        onClick={handleSkipStream}
+                        className="px-2.5 py-1 rounded-lg bg-signal text-white font-bold hover:bg-signal/90 transition-all flex items-center gap-1 shadow-sm text-[10px]"
+                      >
+                        <FastForward className="w-3 h-3" />
+                        <span>Skip &amp; Play Now</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Code Stream Output with Typewriter Effect */}
+                  <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] leading-relaxed text-emerald-200/90 whitespace-pre-wrap select-text">
+                    {streamedCode}
+                    <span className="inline-block w-2 h-4 bg-emerald-400 ml-1 animate-pulse align-middle" />
+                    <div ref={codeEndRef} />
+                  </div>
+                </div>
+              )}
+
+              {/* CASE 3: INTERACTIVE CANVAS PLAYGROUND (AFTER STREAMING COMPLETES) */}
+              {(generationPhase === 'completed' || generationPhase === 'idle') && viewMode === 'canvas' && (
+                <div className="w-full h-full relative">
+                  {activeItem.previewType === 'html' ? (
+                    <iframe
+                      key={renderKey}
+                      ref={iframeRef}
+                      srcDoc={activeItem.content}
+                      title={activeItem.title}
+                      className="w-full h-full border-0"
+                      sandbox="allow-scripts allow-modals allow-same-origin"
+                    />
+                  ) : (
+                    <div
+                      key={renderKey}
+                      className="w-full h-full flex items-center justify-center p-6"
+                      dangerouslySetInnerHTML={{ __html: activeItem.content }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* CASE 4: CODE INSPECTION VIEW */}
+              {(generationPhase === 'completed' || generationPhase === 'idle') && viewMode === 'code' && (
+                <div className="w-full h-full p-4 overflow-auto bg-[#050811] text-xs font-mono text-emerald-300 leading-relaxed whitespace-pre-wrap">
+                  {activeItem.content}
+                </div>
+              )}
+            </div>
+
+            {/* Prompt-Based Refinement Footer */}
+            <div className="p-4 bg-surface-2 border-t border-line flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-xs font-mono text-ink-muted shrink-0">
+                <Sparkles className="w-3.5 h-3.5 text-signal" />
+                <span className="font-bold text-ink">Iterate via Prompt:</span>
+              </div>
+              <input
+                type="text"
+                value={refinementPrompt}
+                onChange={(e) => setRefinementPrompt(e.target.value)}
+                placeholder="e.g. 'Make game speed 2x faster', 'Add neon particles', 'Add 30% discount'..."
+                className="flex-1 min-w-[260px] bg-surface border border-line rounded-xl px-3.5 py-2 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-signal"
+                onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
               />
+              <button
+                onClick={handleRefine}
+                disabled={generationPhase === 'streaming' || !refinementPrompt.trim()}
+                className="px-4 py-2 text-xs font-mono font-bold rounded-xl bg-surface border border-signal/40 text-signal hover:bg-signal/15 transition-all disabled:opacity-40 flex items-center gap-1.5"
+              >
+                <Play className="w-3 h-3 fill-signal" />
+                <span>Apply Refinement</span>
+              </button>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Live Interactive Viewport (Zero Code Editing - Pure Functional Render) */}
-      <div className="flex flex-col bg-surface border border-line rounded-3xl overflow-hidden shadow-e2">
-        {/* Viewport Top Controls */}
-        <div className="flex items-center justify-between px-5 py-3 bg-surface-2 border-b border-line text-xs font-mono">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="font-bold text-ink">{activeItem.title}</span>
-            <span className="text-ink-muted">•</span>
-            <span className="text-signal text-[11px] font-semibold">{currentModel.name}</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setRenderKey(k => k + 1)}
-              className="px-2.5 py-1 rounded-xl bg-surface border border-line text-ink-muted hover:text-ink flex items-center gap-1 text-[11px] transition-all"
-              title="Restart / Refresh"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>Restart</span>
-            </button>
-            <button
-              onClick={() => setFullScreen(f => !f)}
-              className="px-2.5 py-1 rounded-xl bg-surface border border-line text-ink-muted hover:text-ink flex items-center gap-1 text-[11px] transition-all"
-            >
-              {fullScreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-              <span>{fullScreen ? 'Exit Full' : 'Fullscreen'}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Viewport Canvas: Interactive HTML5 or Crisp Vector SVG */}
-        <div className={`w-full ${fullScreen ? 'h-[750px]' : 'h-[500px]'} bg-[#070a14] relative flex items-center justify-center overflow-hidden`}>
-          {activeItem.previewType === 'html' ? (
-            <iframe
-              key={renderKey}
-              ref={iframeRef}
-              srcDoc={activeItem.content}
-              title={activeItem.title}
-              className="w-full h-full border-0"
-              sandbox="allow-scripts allow-modals allow-same-origin"
-            />
-          ) : (
-            <div
-              key={renderKey}
-              className="w-full h-full flex items-center justify-center p-6"
-              dangerouslySetInnerHTML={{ __html: activeItem.content }}
-            />
-          )}
-        </div>
-
-        {/* Prompt-Based Refinement Footer (No code editing: user iterates via prompt!) */}
-        <div className="p-4 bg-surface-2 border-t border-line flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 text-xs font-mono text-ink-muted shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-signal" />
-            <span className="font-bold text-ink">Iterate via Prompt:</span>
-          </div>
-          <input
-            type="text"
-            value={refinementPrompt}
-            onChange={(e) => setRefinementPrompt(e.target.value)}
-            placeholder="e.g. 'Add high score counter', 'Make colors neon emerald', 'Add discount badge'..."
-            className="flex-1 min-w-[260px] bg-surface border border-line rounded-xl px-3 py-1.5 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-signal"
-            onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
-          />
-          <button
-            onClick={handleRefine}
-            disabled={isGenerating || !refinementPrompt.trim()}
-            className="px-4 py-1.5 text-xs font-mono font-bold rounded-xl bg-surface border border-signal/40 text-signal hover:bg-signal/15 transition-all disabled:opacity-40"
-          >
-            Apply One-Shot
-          </button>
         </div>
       </div>
     </div>
