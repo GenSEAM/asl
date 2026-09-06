@@ -1,5 +1,0 @@
-(:package @genseam/asl-quantum
- :version "0.1.0"
- :entry "src/quantum.asl"
- :description "Quantum circuit synthesis, gate operations, and OpenQASM 3.0 compiler in pure AgentScript"
- :dependencies [])

@@ -1,5 +1,0 @@
-(:package @genseam/asl-contracts
- :version "0.1.0"
- :entry "src/spec.asl"
- :description "AgentScript Verifiable Smart Contracts Engine: pure state transitions, SMT formal safety proofs, and Wasm Stylus ABI"
- :dependencies [])

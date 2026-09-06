@@ -1,6 +1,6 @@
-(module asl-context/context
-  :d "Pure AgentScript context engine: HTML/DOM boilerplate stripping, multi-format text extraction, chunking, and RAG context compression."
-  :x [ExtractedDoc ContextChunk decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag])
+(module asl-text/text
+  :d "Pure AgentScript text engine: HTML parsing, entity decoding, multi-format text extraction, chunking, and ASN structuring."
+  :x [ExtractedDoc ContextChunk decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag doc-to-asn chunk-to-asn])
 
 (dfs ExtractedDoc
   (:f title Str "Document title or headline")
@@ -269,3 +269,19 @@
                                    indexed)
                               "\n"))]
     (str header docs-md)))
+ 
+(df doc-to-asn [(doc ExtractedDoc)] -> Str
+  :d "Encodes an ExtractedDoc into a compact, canonical ASN S-expression."
+  (str "(:doc :title \"" (.-title doc)
+       "\" :format \"" (.-format doc)
+       "\" :source \"" (.-source doc)
+       "\" :chars " (string-from-int64 (.-char-count doc))
+       " :content \"" (string-replace (.-content doc) "\"" "\\\"") "\")"))
+
+(df chunk-to-asn [(chunk ContextChunk)] -> Str
+  :d "Encodes a ContextChunk into a compact, canonical ASN S-expression."
+  (str "(:chunk :id \"" (.-id chunk)
+       "\" :index " (string-from-int64 (.-index chunk))
+       " :source \"" (.-source chunk)
+       "\" :chars " (string-from-int64 (.-char-count chunk))
+       " :payload \"" (string-replace (.-content chunk) "\"" "\\\"") "\")"))

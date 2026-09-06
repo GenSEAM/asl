@@ -1,6 +1,0 @@
-(:package @genseam/asl-arduino
-  :version "0.1.0"
-  :entry "src/gpio.asl"
-  :desc "AgentScript Embedded Hardware & Arduino driver package"
-  :deps []
-)
