@@ -95,6 +95,8 @@
           :rationale "Generates responsive UI card vector graphic with rounded gradient rect and typography")
     (:sym :name "make-vector-flowchart" :kind :fn :tokens 3
           :rationale "Generates sequential node-and-arrow flowchart vector graphic")
+    (:sym :name "make-vector-icon" :kind :fn :tokens 3
+          :rationale "Generates standalone 24x24 vector icon graphic from path and color")
     (:sym :name "measure-svg-compaction" :kind :fn :tokens 3
           :rationale "Computes token delta between raw SVG XML and compact ASN vector representation")
     (:sym :name "test-asn-svg" :kind :fn :tokens 3
@@ -105,6 +107,10 @@
           :rationale "Verifies UI vector card generation")
     (:sym :name "test-vector-flow" :kind :fn :tokens 3
           :rationale "Verifies vector flowchart generation")
+    (:sym :name "test-vector-icon" :kind :fn :tokens 3
+          :rationale "Verifies vector icon generation")
+    (:sym :name "test-vector-compact" :kind :fn :tokens 3
+          :rationale "Verifies single-token ultra-compact vector ASN transpile")
     (:sym :name "test-svg-compaction" :kind :fn :tokens 3
           :rationale "Verifies token savings measurement between SVG and ASN")
     (:sym :name "test-svg-malformed" :kind :fn :tokens 3

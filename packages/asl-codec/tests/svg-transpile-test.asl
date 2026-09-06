@@ -4,6 +4,8 @@
       test-svg-asn
       test-vector-card
       test-vector-flow
+      test-vector-icon
+      test-vector-compact
       test-svg-compaction
       test-svg-malformed
       run-svg-tests]
@@ -41,6 +43,31 @@
               (and (string-contains? (.-output res) "ASL Transpile")
                    (string-contains? (.-output res) "Output"))))))
 
+(df test-vector-icon [] -> Bool
+  :d "Tests standalone 24x24 vector icon generation and primitive lines/polygons"
+  (let [(res (svg/make-vector-icon "check" "M 5 12 L 10 17 L 20 6" "#22c55e"))
+        (poly-asn "(:svg :w \"100\" :h \"100\" (:group (:line :x1 \"0\" :y1 \"0\" :x2 \"100\" :y2 \"100\" :sw \"2\") (:poly :points \"10,10 50,50 10,90\" :fill \"#38bdf8\")))")
+        (poly-res (svg/asn-to-svg poly-asn))]
+    (and (and (.-success res)
+              (string-contains? (.-output res) "M 5 12 L 10 17 L 20 6"))
+         (and (.-success poly-res)
+              (and (string-contains? (.-output poly-res) "<polygon")
+                   (string-contains? (.-output poly-res) "<line"))))))
+
+(df test-vector-compact [] -> Bool
+  :d "Tests 1-token ultra-compact aliases: :rc, :circ, :p, :ln, :g, :txt, :f, :s, :sw, :sz, :v"
+  (let [(compact-asn "(:svg :w \"100\" :h \"100\" :v \"0 0 100 100\" (:g (:rc :x \"5\" :y \"5\" :w \"90\" :h \"90\" :f \"#000\" :s \"#fff\" :sw \"1\") (:circ :cx \"50\" :cy \"50\" :r \"20\" :f \"#f00\") (:ln :x1 \"0\" :y1 \"0\" :x2 \"100\" :y2 \"100\" :s \"#0f0\") (:p :d \"M 10 10 L 90 90\" :s \"#00f\") (:txt :x \"50\" :y \"50\" :sz \"12\" :f \"#fff\" \"Eddie\")))")
+        (res (svg/asn-to-svg compact-asn))]
+    (and (.-success res)
+         (and (string-contains? (.-output res) "<rect")
+              (and (string-contains? (.-output res) "<circle")
+                   (and (string-contains? (.-output res) "<line")
+                        (and (string-contains? (.-output res) "<path")
+                             (and (string-contains? (.-output res) "<text")
+                                  (and (string-contains? (.-output res) "font-size=\"12\"")
+                                       (and (string-contains? (.-output res) "viewBox=\"0 0 100 100\"")
+                                            (string-contains? (.-output res) "stroke-width=\"1\"")))))))))))
+
 (df test-svg-compaction [] -> Bool
   :d "Verifies >= 30% token savings between raw verbose SVG XML and compact ASN"
   (let [(verbose-svg "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"600\" height=\"400\" viewBox=\"0 0 600 400\"><defs><linearGradient id=\"bg\"/></defs><rect x=\"0\" y=\"0\" width=\"600\" height=\"400\" rx=\"8\" fill=\"#1e293b\" stroke=\"#38bdf8\"/><text x=\"50\" y=\"50\">Header</text></svg>")
@@ -65,5 +92,7 @@
        (and (test-svg-asn)
             (and (test-vector-card)
                  (and (test-vector-flow)
-                      (and (test-svg-compaction)
-                           (test-svg-malformed)))))))
+                      (and (test-vector-icon)
+                           (and (test-vector-compact)
+                                (and (test-svg-compaction)
+                                     (test-svg-malformed)))))))))
