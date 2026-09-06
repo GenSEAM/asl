@@ -306,12 +306,12 @@ case "$CMD" in
           echo "Usage: asl intel search <symbol>"
           exit 1
         fi
-        grep -rnE "\((df|dfs|dfe)[ \t]+$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: '{print "(:symbol :name \"" ARGV[2] "\" :path \"" $1 "\" :line " $2 ")"}' "dummy" "$SYM"
+        grep -rnE "\((df|dfs|dfe)[ \t]+$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: -v s="$SYM" '{print "(:symbol :name \"" s "\" :path \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
       callers)
         SYM="$TARGET"
-        grep -rnE "\([a-zA-Z0-9_-]+/$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: '{print "(:caller :symbol \"" ARGV[2] "\" :file \"" $1 "\" :line " $2 ")"}' "dummy" "$SYM"
+        grep -rnE "\([a-zA-Z0-9_-]+/$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: -v s="$SYM" '{print "(:caller :symbol \"" s "\" :file \"" $1 "\" :line " $2 ")"}'
         exit 0
         ;;
       impact)
