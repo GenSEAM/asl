@@ -174,7 +174,7 @@ export const InBrowserCompanion: React.FC = () => {
   const [activeStudio, setActiveStudio] = useState<'svg' | 'games' | 'website'>('svg');
   const [customPrompt, setCustomPrompt] = useState<string>(PROMPT_TEMPLATES[0].prompt);
   const [refinementPrompt, setRefinementPrompt] = useState<string>('');
-  const [reasoningLevel, setReasoningLevel] = useState<'off' | 'low' | 'high'>('off');
+  const [reasoningEnabled, setReasoningEnabled] = useState<boolean>(false);
   const [liveReasoning, setLiveReasoning] = useState<string>('');
   const [isThinkingOpen, setIsThinkingOpen] = useState<boolean>(false);
 
@@ -212,6 +212,7 @@ export const InBrowserCompanion: React.FC = () => {
 
   const currentModel = MODELS.find(m => m.id === selectedModelId) || MODELS[0];
   const isCurrentModelCached = !!cachedModels[currentModel.id];
+  const isReasoningSupported = !!currentModel.inBrowserSpec.supportsThinking;
 
   // Detect WebGPU on mount
   useEffect(() => {
@@ -370,10 +371,8 @@ export const InBrowserCompanion: React.FC = () => {
   (:call :tool "write" :path "index.html" :content "<div class='w-full max-w-4xl mx-auto p-6 flex flex-col gap-6 font-sans text-slate-100'><div class='flex items-center justify-between border-b border-slate-800 pb-4'><div class='flex items-center gap-3'><div class='w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 font-mono font-bold'>⚡</div><div><h2 class='text-base font-bold'>Cloud Analytics</h2><p class='text-xs text-slate-400'>Real-time edge telemetry</p></div></div><span class='px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold flex items-center gap-1.5'><span class='w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse'></span>ONLINE</span></div><div class='grid grid-cols-1 md:grid-cols-3 gap-4'><div class='p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1'><span class='text-xs text-slate-400 font-mono'>REQUESTS</span><span class='text-2xl font-bold font-mono text-sky-400' id='req'>14,820</span><span class='text-[10px] text-emerald-400 font-mono'>+18.4% this hour</span></div><div class='p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1'><span class='text-xs text-slate-400 font-mono'>P99 LATENCY</span><span class='text-2xl font-bold font-mono text-white'>4.2ms</span><span class='text-[10px] text-slate-400 font-mono'>Client-side WebGPU</span></div><div class='p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex flex-col gap-1'><span class='text-xs text-slate-400 font-mono'>TOKEN SAVINGS</span><span class='text-2xl font-bold font-mono text-emerald-400'>83.8%</span><span class='text-[10px] text-slate-400 font-mono'>Dense ASN protocol</span></div></div></div><script>let count=14820;setInterval(()=>{count+=Math.floor(Math.random()*15);document.getElementById('req').innerText=count.toLocaleString();},2000);</script>"))`;
       }
 
-      // Reasoning guidance injection
-      if (reasoningLevel === 'low') {
-        systemPrompt = "First, outline your architectural steps inside <think>...</think> (brief, 2-3 sentences). Then output the pure code/ASN.\n\n" + systemPrompt;
-      } else if (reasoningLevel === 'high') {
+      // Reasoning guidance injection (only when supported by model and toggled on)
+      if (reasoningEnabled && isReasoningSupported) {
         systemPrompt = "First, perform an in-depth step-by-step reasoning analysis inside <think>...</think> covering layout, coordinate bounds, state management, and edge cases. Then output the pure code/ASN.\n\n" + systemPrompt;
       }
 
@@ -401,7 +400,7 @@ export const InBrowserCompanion: React.FC = () => {
           setGenerationError(err?.message || 'Error during in-browser inference');
           setGenerationPhase('error');
         },
-        { reasoningLevel }
+        { enableThinking: reasoningEnabled && isReasoningSupported }
       );
 
     } catch (err: any) {
@@ -577,23 +576,41 @@ export const InBrowserCompanion: React.FC = () => {
               ))}
             </select>
 
-            {/* Reasoning Level Selector */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-surface-2 border border-line text-xs font-mono">
-              <span className="text-ink-muted text-[11px] flex items-center gap-1.5 font-bold">
-                <Sparkles className="w-3.5 h-3.5 text-signal" />
-                <span>Reasoning:</span>
-              </span>
-              <select
-                value={reasoningLevel}
-                onChange={(e) => setReasoningLevel(e.target.value as 'off' | 'low' | 'high')}
-                disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
-                className="bg-transparent text-ink text-xs font-mono font-bold focus:outline-none cursor-pointer"
-              >
-                <option value="off">⚡ Off (Instant)</option>
-                <option value="low">🎯 Low (Brief Plan)</option>
-                <option value="high">🧠 High (Deep CoT)</option>
-              </select>
-            </div>
+            {/* Reasoning Toggle (Да / Нет) - Rendered only for models that support reasoning */}
+            {isReasoningSupported && (
+              <div className="flex items-center justify-between p-2 rounded-xl bg-surface-2 border border-line text-xs font-mono">
+                <span className="text-ink-muted text-[11px] flex items-center gap-1.5 font-bold">
+                  <Sparkles className="w-3.5 h-3.5 text-signal" />
+                  <span>Reasoning (CoT):</span>
+                </span>
+                <div className="flex items-center gap-1 bg-surface p-0.5 rounded-lg border border-line">
+                  <button
+                    type="button"
+                    onClick={() => setReasoningEnabled(false)}
+                    disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
+                    className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      !reasoningEnabled
+                        ? 'bg-inset text-ink border border-line/60 shadow-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    Нет
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReasoningEnabled(true)}
+                    disabled={generationPhase === 'generating' || generationPhase === 'downloading'}
+                    className={`px-3 py-1 rounded-md text-[11px] font-bold transition-all ${
+                      reasoningEnabled
+                        ? 'bg-signal text-white shadow-sm'
+                        : 'text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    Да
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between text-[11px] font-mono text-ink-muted px-1">
               <span>Speed: <b className="text-signal">{currentModel.speed}</b></span>
