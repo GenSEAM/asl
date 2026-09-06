@@ -30,14 +30,17 @@ export const PlaygroundView: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-ink tracking-wide">AGENTSCRIPT WEB RUNTIME</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-mono text-[10px] font-bold flex items-center gap-1">
+                  <Sparkles className="w-2.5 h-2.5" /> IN ACTIVE DEVELOPMENT
+                </span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold flex items-center gap-1">
                   <CheckCircle2 className="w-2.5 h-2.5" /> CLIENT-SIDE READY
                 </span>
               </div>
               <div className="text-xs font-mono text-ink-muted mt-0.5 flex flex-wrap items-center gap-2">
-                <span className="text-signal">@asl:web-runtime-0.1.0</span>
+                <span className="text-signal">@asl:playground-preview</span>
                 <span>•</span>
-                <span>Wasm + WebGPU + WebGL</span>
+                <span>Direct Access Route (/playground)</span>
                 <span>•</span>
                 <span className="text-emerald-400">Zero Cloud Dependencies</span>
               </div>

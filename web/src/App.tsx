@@ -9,12 +9,14 @@ import { RoadmapView } from './views/RoadmapView';
 import { DocsView } from './views/DocsView';
 import { BlogView } from './views/BlogView';
 import { StudioView } from './views/StudioView';
+import { PlaygroundView } from './views/PlaygroundView';
 
 const AppContent: React.FC = () => {
   const { currentPath } = useRouter();
 
   const renderView = () => {
     if (currentPath === '/studio') return <StudioView />;
+    if (currentPath === '/playground') return <PlaygroundView />;
     if (currentPath === '/ecosystem') return <DocsView initialTab="ecosystem" />;
     if (currentPath === '/roadmap') return <RoadmapView />;
     if (currentPath === '/docs') return <DocsView />;
