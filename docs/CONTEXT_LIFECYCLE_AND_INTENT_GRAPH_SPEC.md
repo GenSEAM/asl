@@ -1,7 +1,7 @@
 # Architectural Specification: Context Lifecycle Management, Prompt VMM & Relational Intent Hypergraph
 **Document ID:** SPEC-2026-CONTEXT-INTENT-v1.0  
 **Classification:** Engineering Standard & Knowledge Substrate Specification  
-**Applies to:** `packages/intel`, `packages/mem`, `packages/harness`, `packages/asl-gateway`, `pcp`
+**Applies to:** `packages/intel`, `packages/mem`, `packages/harness`, `packages/gateway`
 
 ---
 

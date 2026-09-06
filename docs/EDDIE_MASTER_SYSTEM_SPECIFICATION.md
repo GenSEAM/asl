@@ -1,9 +1,11 @@
 # Master Engineering Specification: Autonomous Cognitive Agent EDDIE & Deterministic Execution Ecosystem
-**Document ID:** SPEC-2026-EDDIE-SYSTEM-v3.0  
+**Document ID:** SPEC-2026-EDDIE-SYSTEM-v3.1  
 **Codename:** EDDIE (*Engine for Dynamic Decomposition, Intent-routing & Execution*)  
+**Language:** Aslang (CLI: `asl`)  
 **Status:** Canonical Implementation Standard (Fully Reconciled & Gap-Free)  
 **Workspace Base:** `/Users/purplelephant/projects/asex`  
-**Target Packages:** `packages/eddie`, `packages/harness`, `packages/agent-core`, `packages/intel`, `packages/mem`, `packages/asl-gateway`, `packages/asl-lens`
+**Target Packages:** `packages/eddie`, `packages/harness`, `packages/agent-core`, `packages/intel`, `packages/mem`, `packages/gateway`, `packages/lens`  
+**Target Skills:** `skills/asl-harness`, `skills/asl-intel`, `skills/asl-lens`, `skills/asl-skills`
 
 ---
 
@@ -305,7 +307,7 @@ All tools execute natively within EDDIE's harness via in-memory WASI / Wasm3 or 
 * Plugs into Claude Code, Gemini CLI, Cursor, Windsurf, OpenDevin.
 * Enforces strict Negative Constraints (`CLAUDE.md`, `AGENTS.md`, `.cursorrules`) that forbid `View`/`cat` on files >50 lines and mandate `asl intel outline` and `asl intel impact`.
 * **Prerequisite / Onboarding Hook:** If `asl` is not installed on `$PATH`, the agent detects this on turn 0, halts immediately, and prompts the user for a one-click install:
-  `curl -fsSL https://get.genseam.org | bash` (Documentation: `https://genseam.org/install`).
+  `curl -fsSL https://aslang.dev/install.sh | bash` (Website: `https://aslang.dev`).
 
 ### 11.2. Track B: Sovereign Standalone EDDIE Stack (Binary / React 19 Ink TUI)
 * Complete, standalone terminal client (`eddie`) with React 19 / Ink TUI.

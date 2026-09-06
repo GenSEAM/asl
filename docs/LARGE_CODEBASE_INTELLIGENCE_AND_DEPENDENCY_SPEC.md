@@ -1,7 +1,7 @@
 # Large-Scale Codebase Intelligence, Adaptive Graph Memory & Dependency RAG Specification
 **Document ID:** SPEC-2026-CODEBASE-INTEL-v1.0  
 **Classification:** Engineering Specification & Implementation Standard  
-**Applies to:** `packages/intel`, `packages/mem`, `packages/harness`, `packages/asl-lens`
+**Applies to:** `packages/intel`, `packages/mem`, `packages/harness`, `packages/lens`
 
 ---
 

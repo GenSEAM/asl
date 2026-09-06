@@ -1,7 +1,7 @@
 # Architectural Specification: Deterministic L7 Cognitive Gateway & Execution Harness (GenSEAM / ASL)
 **Document ID:** SPEC-2026-GATEWAY-HARNESS-v1.0  
 **Classification:** Technical Architecture Standard & Implementation Contract  
-**Applies to:** `packages/asl-gateway`, `packages/harness`, `packages/agent-core`, `packages/asl-lens`
+**Applies to:** `packages/gateway`, `packages/harness`, `packages/agent-core`, `packages/lens`
 
 ---
 
@@ -194,9 +194,9 @@ The architecture incorporates 12 cross-cutting protocols resolving inter-system 
 
 ---
 
-## 8. Multi-Dimensional Observability & Cartography (`@genseam/asl-lens`)
+## 8. Multi-Dimensional Observability & Cartography (`@genseam/lens`)
 
-To provide immediate topological comprehension for both autonomous agents and human operators via a web dashboard, the system defines the `asl-lens` inspection interface.
+To provide immediate topological comprehension for both autonomous agents and human operators via a web dashboard, the system defines the `lens` inspection interface.
 
 ### 8.1. Agent Topological Query (`lens:inspect-topology`)
 Emits a compact ASN-encoded structural snapshot:
@@ -204,20 +204,20 @@ Emits a compact ASN-encoded structural snapshot:
 (:lens-summary
   :workspace "@genseam/workspace"
   :modules [
-    (:m "asl-mem" :exports ["VectorStore" "MemoryEngine"] :imports ["core"] :status :green)
-    (:m "asl-bus" :exports ["SeamBus" "Mesh"] :imports ["asl-skyloom" "asl-mem"] :status :green)
-    (:m "asl-gateway" :exports ["L7Gateway" "TrieFilter"] :imports ["harness"] :status :green)
+    (:m "mem" :exports ["VectorStore" "MemoryEngine"] :imports ["core"] :status :green)
+    (:m "agent-bus" :exports ["SeamBus" "Mesh"] :imports ["skyloom" "mem"] :status :green)
+    (:m "gateway" :exports ["L7Gateway" "TrieFilter"] :imports ["harness"] :status :green)
   ]
   :dependency-drift [
     (:pkg "wasmtime" :installed "18.0.0" :latest "24.0.0" :breaking-risk :medium)
   ]
   :circular-dependencies []
-  :unreferenced-exports ["asl-mem/paged:slab-debug-dump"]
+  :unreferenced-exports ["mem/paged:slab-debug-dump"]
 )
 ```
 
 ### 8.2. Web Cockpit Stream Protocol
-`asl-gateway` exposes an SSE/WebSocket endpoint emitting the live telemetry graph:
+`gateway` exposes an SSE/WebSocket endpoint emitting the live telemetry graph:
 * **Node Attributes:** Module identity, cyclomatic complexity, token consumption, health state (`green`, `amber`, `red`).
 * **Edge Attributes:** Real-time AgP frame throughput, message latencies, active capability locks.
 * **Gatekeeper HUD:** Live counts of suppressed hallucinations (TSH, TCH, AST, LCS).
@@ -228,11 +228,11 @@ Emits a compact ASN-encoded structural snapshot:
 
 | Package | Path | Responsibility | Core New Deliverables |
 |---|---|---|---|
-| `@genseam/asl-gateway` | `packages/asl-gateway` | L7 Boundary Gateway | Trie token masker, RFC 8785 normalizer, Stream bifurcator, CoT quarantine |
-| `@genseam/asl-harness` | `packages/harness` | Execution Harness | Tier-1 Wasm JIT runner, AST Diffing Gate, Trace Sanitizer, Saga rollback |
-| `@genseam/asl-core` | `packages/agent-core` | Blackboard Engine | Task-Premise DAG $G=(V,E,P)$, OCC structural sharing, Falsified Premise log |
-| `@genseam/asl-lens` | `packages/asl-lens` | Architecture Cartography | Static AST dependency analyzer, dependency drift radar, Web Cockpit API |
-| `@genseam/asl-cockpit` | `apps/asl-cockpit` | Operator Dashboard | Interactive Cytoscape/React Flow DAG visualizer, Time-travel debugger UI |
+| `@genseam/gateway` | `packages/gateway` | L7 Boundary Gateway | Trie token masker, RFC 8785 normalizer, Stream bifurcator, CoT quarantine |
+| `@genseam/harness` | `packages/harness` | Execution Harness | Tier-1 Wasm JIT runner, AST Diffing Gate, Trace Sanitizer, Saga rollback |
+| `@genseam/agent-core` | `packages/agent-core` | Blackboard Engine | Task-Premise DAG $G=(V,E,P)$, OCC structural sharing, Falsified Premise log |
+| `@genseam/lens` | `packages/lens` | Architecture Cartography | Static AST dependency analyzer, dependency drift radar, Web Cockpit API |
+| `@genseam/cockpit` | `apps/cockpit` | Operator Dashboard | Interactive Cytoscape/React Flow DAG visualizer, Time-travel debugger UI |
 
 ---
 
