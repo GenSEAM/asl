@@ -73,7 +73,10 @@
                 ((some idx)
                  (let [(name (string-trim (option-or (string-slice trimmed 0 idx) "")))
                        (raw-val (option-or (string-slice trimmed (+ idx 1) (string-length trimmed)) ""))
-                       (val (string-trim (string-replace raw-val ";" "")))]
+                       (trimmed-val (string-trim raw-val))
+                       (val (if (string-ends-with? trimmed-val ";")
+                                (string-trim (option-or (string-slice trimmed-val 0 (- (string-length trimmed-val) 1)) trimmed-val))
+                                trimmed-val))]
                    (if (string-starts-with? name "--")
                        (list-append acc (list (pair name val)))
                        acc))))))

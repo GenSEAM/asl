@@ -19,11 +19,13 @@
                    (= (.-inline s3) 1))))))
 
 (df test-extract-css-variables [] -> Bool
-  :d "Tests extraction of CSS custom properties"
-  (let [(css-code ":root {\n  --primary: #38bdf8;\n  --bg-dark: #0f172a;\n  font-size: 16px;\n}")
-        (vars (css/extract-css-variables css-code))]
-    (and (= (list-length vars) 2)
-         (= (pair-first (option-or (list-head vars) (pair "" ""))) "--primary"))))
+  :d "Tests extraction of CSS custom properties and internal semicolon preservation"
+  (let [(css-code ":root {\n  --primary: #38bdf8;\n  --bg-dark: #0f172a;\n  --bg-svg: url(\"data:image/svg+xml;charset=utf-8,<svg></svg>\");\n  font-size: 16px;\n}")
+        (vars (css/extract-css-variables css-code))
+        (svg-var (filter (fn [(p (Pair Str Str))] -> Bool (= (pair-first p) "--bg-svg")) vars))]
+    (and (= (list-length vars) 3)
+         (= (pair-first (option-or (list-head vars) (pair "" ""))) "--primary")
+         (string-contains? (pair-second (option-or (list-head svg-var) (pair "" ""))) "charset=utf-8"))))
 
 (df test-parse-css-rules [] -> Bool
   :d "Tests parsing of CSS rules and !important properties"
