@@ -166,14 +166,22 @@ asl search src/main.asl 'defun'
 
 ## 📦 Modular GenSEAM Ecosystem
 
-| Package | Role | Description |
-| :--- | :--- | :--- |
-| **`packages/asl-sh`** | **[Admin Toolkit]** | Structured subprocess pipelines, stream redirection, and process supervision |
-| **`packages/asl-skyloom`** | **[A2A Swarm Protocol]** | Sub-millisecond in-memory mesh coordination & context snapshots |
-| **`packages/asl-vdom`** | **[UI & DOM Compactor]** | Compresses raw HTML/DOM into intent-first S-expressions (-78% tokens) |
-| **`packages/asl-mem`** | **[Vector Memory Matrix]** | Zero-server in-memory vector store running in 64KB Wasm (0.038ms recall) |
-| **`packages/asl-codec`** | **[Universal Codec]** | Multi-target serialization SDKs across TS, Python, Rust, and Wasm |
-| **`packages/asl-lint`** | **[Quality Doctor]** | Architectural AST linting, structural clone detection, and autonomous `$ asl heal` |
+### Production & Stable Core Toolchain
+| Package | Role | Status | Description |
+| :--- | :--- | :---: | :--- |
+| **`packages/asl-sh`** | **[Shell & Pipelines]** | `Stable` | Structured subprocess pipelines, AST stream redirection, safe process supervision |
+| **`packages/asl-codec`** | **[Universal Codec]** | `Stable` | Compact ASN S-expressions, multi-target transpilation (JSON, YAML, HTML, Shell) |
+| **`packages/asl-vdom`** | **[UI & DOM Compactor]** | `Stable` | React/VDOM integration, compresses raw HTML/DOM into intent S-expressions (-78% tokens) |
+| **`packages/asl-mem`** | **[Memory & Pointers]** | `Stable` | Perceptual pointer offloading and git-native vector memory in Wasm |
+| **`packages/asl-gates`** | **[Quality & Gates]** | `Stable` | 7-tier verification gate runner and continuous architectural audit engine |
+| **`packages/asl-lint`** | **[Quality Doctor]** | `Stable` | AST linting, structural clone detection, and delimiter balance checker |
+
+### In Active Development / Research Roadmap
+| Package | Domain | Status | Note |
+| :--- | :--- | :---: | :--- |
+| **`packages/asl-contracts`** | **[Smart Contracts]** | `In Dev` | Exploratory research for verifiable state transitions, SMT safety proofs & Stylus Wasm |
+| **`packages/asl-quantum`** | **[Quantum Circuit]** | `In Dev` | Exploratory circuit AST synthesis and OpenQASM 3.0 compiler prototype |
+| **`packages/voice`** | **[Voice Bridge]** | `In Dev` | Prototype 16kHz PCM audio bridge for real-time conversational agent streaming |
 
 ---
 
