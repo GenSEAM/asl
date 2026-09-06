@@ -1,28 +1,51 @@
 #!/bin/bash
-# GENERATED FROM AGENTSCRIPT (ASL). DO NOT EDIT MANUALLY.
-set -e
+# AgentScript Universal Installer (Pre-built Binaries + Source Fallback)
+# Auto-generated from pure AgentScript module: pack/src/dist.asl
+set -eo pipefail
 
-echo "🚀 Installing ASL (AgentScript Language) CLI..."
+VERSION="0.1.0"
+REPO_URL="https://github.com/GenSEAM/asl.git"
+BINARY_BASE_URL="https://github.com/GenSEAM/asl/releases/download/v0.1.0"
 INSTALL_DIR="${HOME}/.asl/bin"
 mkdir -p "${INSTALL_DIR}"
 
-REPO_URL="https://github.com/GenSEAM/asl.git"
-CLONE_DIR="${HOME}/.asl/repo"
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
 
-if [ -d "${CLONE_DIR}" ]; then
-  echo "📦 Updating existing ASL repository..."
-  git -C "${CLONE_DIR}" pull --ff-only
-else
-  echo "📦 Cloning ASL repository..."
-  git clone "${REPO_URL}" "${CLONE_DIR}"
+case "$ARCH" in
+  x86_64|amd64) ARCH_TAG="x64" ;;
+  arm64|aarch64) ARCH_TAG="arm64" ;;
+  *) ARCH_TAG="unknown" ;;
+esac
+
+BINARY_INSTALLED=0
+if [ "$ARCH_TAG" != "unknown" ] && [ "$1" != "--source" ]; then
+  TAR_NAME="asl-${VERSION}-${OS}-${ARCH_TAG}.tar.gz"
+  DL_URL="${BINARY_BASE_URL}/${TAR_NAME}"
+  echo "🚀 Downloading pre-built ASL binary for ${OS}-${ARCH_TAG}...";
+  if curl -fsSL "${DL_URL}" -o "/tmp/${TAR_NAME}" 2>/dev/null; then
+    tar -xzf "/tmp/${TAR_NAME}" -C "${INSTALL_DIR}"
+    rm -f "/tmp/${TAR_NAME}"
+    chmod +x "${INSTALL_DIR}/asl" 2>/dev/null || true
+    BINARY_INSTALLED=1
+    echo "✓ Pre-built binary installed cleanly.";
+  fi
 fi
 
-ln -sf "${CLONE_DIR}/asl" "${INSTALL_DIR}/asl"
-ln -sf "${CLONE_DIR}/asl" "${INSTALL_DIR}/agentscript"
+if [ "$BINARY_INSTALLED" -eq 0 ]; then
+  echo "📦 Installing ASL from git source repository...";
+  CLONE_DIR="${HOME}/.asl/repo"
+  if [ -d "${CLONE_DIR}" ]; then
+    git -C "${CLONE_DIR}" pull --ff-only 2>/dev/null || true
+  else
+    git clone "${REPO_URL}" "${CLONE_DIR}"
+  fi
+  ln -sf "${CLONE_DIR}/asl" "${INSTALL_DIR}/asl"
+  ln -sf "${CLONE_DIR}/asl" "${INSTALL_DIR}/agentscript"
+fi
 
-# Also symlink to ~/.local/bin if directory exists and is writable
 if [ -d "${HOME}/.local/bin" ] && [ -w "${HOME}/.local/bin" ]; then
-  ln -sf "${CLONE_DIR}/asl" "${HOME}/.local/bin/asl"
+  ln -sf "${INSTALL_DIR}/asl" "${HOME}/.local/bin/asl"
   echo "✓ Symlinked to ${HOME}/.local/bin/asl"
 fi
 
@@ -41,14 +64,14 @@ add_to_path() {
 }
 
 if [ -f "${HOME}/.zshrc" ]; then
-  add_to_path "${HOME}/.asl/bin" "${HOME}/.zshrc"
+  add_to_path "${INSTALL_DIR}" "${HOME}/.zshrc"
 fi
 if [ -f "${HOME}/.bashrc" ]; then
-  add_to_path "${HOME}/.asl/bin" "${HOME}/.bashrc"
+  add_to_path "${INSTALL_DIR}" "${HOME}/.bashrc"
 fi
 if [ -f "${HOME}/.profile" ]; then
-  add_to_path "${HOME}/.asl/bin" "${HOME}/.profile"
+  add_to_path "${INSTALL_DIR}" "${HOME}/.profile"
 fi
 
-echo "✓ ASL successfully installed to ${INSTALL_DIR}/asl"
-echo "⚡ Try running: asl --version"
+echo "✓ ASL successfully installed: ${INSTALL_DIR}/asl"
+echo "⚡ Run: asl --version"
