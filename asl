@@ -211,6 +211,121 @@ case "$CMD" in
     node "$WEB_DIR/scripts/gen-web.mjs" "$WEB_DIR"
     exit 0
     ;;
+  doc)
+    SUBCMD="${1:-help}"
+    shift || true
+    TARGET="$1"
+    shift || true
+    case "$SUBCMD" in
+      outline)
+        if [ -z "$TARGET" ] || [ ! -f "$TARGET" ]; then
+          echo "Usage: asl doc outline <file.md>"
+          exit 1
+        fi
+        awk '
+        BEGIN {
+          print "(:doc-outline :path \"" ARGV[1] "\" :sections [";
+        }
+        /^# / { print "  (:h1 :title \"" substr($0, 3) "\" :line " NR ")" }
+        /^## / { print "  (:h2 :title \"" substr($0, 4) "\" :line " NR ")" }
+        /^### / { print "  (:h3 :title \"" substr($0, 5) "\" :line " NR ")" }
+        /^#### / { print "  (:h4 :title \"" substr($0, 6) "\" :line " NR ")" }
+        END {
+          print "])";
+        }
+        ' "$TARGET"
+        exit 0
+        ;;
+      section)
+        SEC_NAME="$1"
+        if [ -z "$TARGET" ] || [ -z "$SEC_NAME" ] || [ ! -f "$TARGET" ]; then
+          echo "Usage: asl doc section <file.md> <section-name>"
+          exit 1
+        fi
+        awk -v target="$SEC_NAME" '
+        BEGIN { in_sec = 0; }
+        /^#[#]? / {
+          header = substr($0, match($0, /[a-zA-Z0-9]/));
+          if (tolower(header) ~ tolower(target)) {
+            in_sec = 1;
+            print $0;
+            next;
+          } else if (in_sec) {
+            exit 0;
+          }
+        }
+        {
+          if (in_sec) print $0;
+        }
+        ' "$TARGET"
+        exit 0
+        ;;
+      search)
+        QUERY="$1"
+        if [ -z "$TARGET" ] || [ -z "$QUERY" ] || [ ! -f "$TARGET" ]; then
+          echo "Usage: asl doc search <file.md> <query>"
+          exit 1
+        fi
+        awk -v q="$QUERY" '
+        tolower($0) ~ tolower(q) {
+          print "(:match :line " NR " :preview \"" $0 "\")";
+        }
+        ' "$TARGET"
+        exit 0
+        ;;
+      *)
+        echo "Usage: asl doc <outline|section|search> <file.md> [args]"
+        exit 1
+        ;;
+    esac
+    ;;
+  intel)
+    SUBCMD="${1:-help}"
+    shift || true
+    TARGET="$1"
+    shift || true
+    case "$SUBCMD" in
+      outline)
+        if [ -z "$TARGET" ] || [ ! -f "$TARGET" ]; then
+          echo "Usage: asl intel outline <file.asl>"
+          exit 1
+        fi
+        awk '
+        BEGIN { print "(:module-outline :file \"" ARGV[1] "\" :symbols ["; }
+        /^\(module[ \t]+/ { print "  (:module :name \"" $2 "\")" }
+        /^\(df[ \t]+/ { print "  (:fn :name \"" $2 "\" :line " NR ")" }
+        /^\(dfs[ \t]+/ { print "  (:struct :name \"" $2 "\" :line " NR ")" }
+        /^\(dfe[ \t]+/ { print "  (:enum :name \"" $2 "\" :line " NR ")" }
+        END { print "])"; }
+        ' "$TARGET"
+        exit 0
+        ;;
+      search)
+        SYM="$TARGET"
+        if [ -z "$SYM" ]; then
+          echo "Usage: asl intel search <symbol>"
+          exit 1
+        fi
+        grep -rnE "\((df|dfs|dfe)[ \t]+$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: '{print "(:symbol :name \"" ARGV[2] "\" :path \"" $1 "\" :line " $2 ")"}' "dummy" "$SYM"
+        exit 0
+        ;;
+      callers)
+        SYM="$TARGET"
+        grep -rnE "\([a-zA-Z0-9_-]+/$SYM([ \t]|\))" --include="*.asl" . 2>/dev/null | awk -F: '{print "(:caller :symbol \"" ARGV[2] "\" :file \"" $1 "\" :line " $2 ")"}' "dummy" "$SYM"
+        exit 0
+        ;;
+      impact)
+        SYM="$TARGET"
+        echo "(:impact-analysis :target \"$SYM\" :scope \"workspace\")"
+        grep -rnE "$SYM" --include="*.asl" . 2>/dev/null | head -n 10 | awk -F: '{print "  (:affected :file \"" $1 "\" :line " $2 ")"}'
+        exit 0
+        ;;
+      *)
+        echo "Usage: asl intel <outline|search|callers|impact> [target]"
+        exit 1
+        ;;
+    esac
+    ;;
   version|-v|--version)
     echo "asl 0.3.0 (pure AgentScript self-hosted toolchain)"
     exit 0
