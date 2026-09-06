@@ -273,27 +273,5 @@ The GenSEAM ecosystem is distributed across focused modular repositories:
 
 
 <!-- ASL_TOOLBELT_START -->
-# Mandatory Base Harness: Native Batch RPC (`asl rpc`)
-
-All code exploration, reading, search, editing, diffing, and verification MUST run exclusively through `asl rpc '(:batch ...)'`:
-
-```bash
-asl rpc '(:batch
-  (:out "src/server.ts")              ; AST outline (classes, functions, types, lines)
-  (:sym "handleRequest")              ; Exact symbol definition & declaration line
-  (:callers "handleRequest")          ; Call graph: all callers across workspace
-  (:impact "handleRequest")           ; Blast-radius impact analysis before edits
-  (:q "semantic query")               ; In-memory vector search across codebase
-  (:find "exact pattern")             ; Fast in-memory grep
-  (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
-  (:sec "doc.md" "Section Title")     ; Read isolated markdown section
-  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
-  (:repl "old_pattern" "new_pattern") ; Mass in-memory refactor across files
-  (:diff)                             ; Review staged in-memory modifications
-  (:flush)                            ; Atomically persist staged edits to disk
-  (:chk)                              ; Run full 7-gate verification suite
-)'
-```
-
-*Rule:* Run heterogeneous operations in a single roundtrip via `asl rpc '(:batch ...)'`. Never use individual CLI commands or legacy whole-file dump tools.
+/asl-toolbelt
 <!-- ASL_TOOLBELT_END -->

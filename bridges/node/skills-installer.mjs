@@ -25,57 +25,7 @@ const WORKSPACE_ROOT = process.cwd();
 const HOME = os.homedir();
 
 const TOOLBELT_DIRECTIVE = `<!-- ASL_TOOLBELT_START -->
-# Mandatory Base Harness: Native ASL Toolbelt & Toolchain (/asl build)
-
-**Activation & Operating Mode**: Active across all agent turns, or activated via slash command \`/asl build\` or \`/asl\`.
-All code operations, polyglot AST navigation, text search, file reading, editing, building, and verification MUST execute through the native AgentScript (\`asl\`) toolchain.
-
-## 1. Single-Roundtrip Batch Tool Calling (\`asl rpc\`)
-All operations MUST execute in a single roundtrip via \`asl rpc '(:batch ...)'\`:
-
-\`\`\`bash
-asl rpc '(:batch
-  (:out "src/server.ts")              ; AST outline (ASL, TS, JS, Python, Go, Rust, PHP)
-  (:sym "handleRequest")              ; Exact symbol definition & declaration line
-  (:callers "handleRequest")          ; Call graph: all callers across workspace
-  (:impact "handleRequest")           ; Blast-radius impact analysis before edits
-  (:find "authHeader")                ; Fast in-memory text grep across codebase
-  (:q "session token validation")     ; In-memory vector semantic query
-  (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
-  (:sec "doc.md" "Section Title")     ; Read isolated markdown section
-  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
-  (:repl "old_pattern" "new_pattern") ; Mass in-memory refactor across files
-  (:diff)                             ; Review staged in-memory modifications
-  (:flush)                            ; Atomically persist staged edits to disk
-  (:chk)                              ; Run full 7-gate verification suite
-)'
-\`\`\`
-
-## 2. Polyglot Language Support & AST Intelligence
-Native AST extraction, symbol lookups, and call graph analysis are supported for:
-- **AgentScript**: \`.asl\`, \`.asn\`
-- **TypeScript & JavaScript**: \`.ts\`, \`.tsx\`, \`.js\`, \`.jsx\`
-- **Python**: \`.py\`
-- **Go**: \`.go\`
-- **Rust**: \`.rs\`
-- **PHP**: \`.php\`
-- **Markdown**: \`.md\`
-
-*Rule:* Never dump whole files into context (no \`cat\` or \`view_file\` on files >50 lines). Always retrieve AST outlines (\`:out\`) and narrow symbol definitions (\`:sym\`) first.
-
-## 3. Fast In-Memory Text & Semantic Search
-- **Exact Text Grep**: \`(:find "exact pattern")\` searches across all workspace files in RAM (<50ms) without spawning subprocess greps or polluting context.
-- **Vector Semantic Query**: \`(:q "semantic query")\` searches embeddings of docstrings, functions, and symbols via cosine similarity.
-
-## 4. Build, Compilation & Verification Suite
-- **Build / Compile**: \`asl build <file.asl> --target <wasm|rust|ts|py>\` (Ahead-of-Time compilation).
-- **Syntax Check**: \`asl check <file>\` (instant LL(1) syntax and delimiter balance check).
-- **AST Quality Lint**: \`asl lint <file>\` (detects anti-patterns, token bloat, and hallucinated syntax).
-- **3-Tier Audit**: \`asl audit <file>\` (Micro AST, Meso keywords, Macro module invariants).
-- **Native Test Runner**: \`asl test [file]\` (executes pure ASL test suites).
-- **Full 7 Gates**: \`(:chk)\` or \`asl gate\` (validates manifests, AST balance, site claims, zero-foreign-code, test suites, token density, and modular skills).
-
-*Single Roundtrip Rule:* Batch independent read, search, and outline operations in one call. Stage edits via \`(:edit ...)\` or \`(:repl ...)\`, inspect via \`(:diff)\`, persist via \`(:flush)\`, and verify via \`(:chk)\`.
+/asl-toolbelt
 <!-- ASL_TOOLBELT_END -->`;
 
 const SLASH_COMMANDS = [
