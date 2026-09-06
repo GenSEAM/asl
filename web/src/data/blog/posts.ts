@@ -56,7 +56,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "kill-80-percent-agent-code-bloat",
     "category": "Architecture & Simplicity",
-    "date": "2026-09-06",
+    "date": "2026-09-05",
     "author": "GenSEAM",
     "readTime": "5 min read",
     "excerpt": "Why multi-megabyte orchestration frameworks collapse after turn 4, and how the Ladder of Restraint and pure AgentScript S-expressions cut 80% of agent code bloat.",
@@ -74,7 +74,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "why-llms-break-on-svg-xml",
     "category": "Vector Graphics & Tokenomics",
-    "date": "2026-09-06",
+    "date": "2026-09-05",
     "author": "GenSEAM",
     "readTime": "6 min read",
     "excerpt": "Why autoregressive LLMs blow through token context on raw SVG markup, and how native single-token ASN vector primitives cut token usage by 50.7% with zero XML delimiter hallucinations.",
@@ -93,7 +93,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "git-native-agent-memory-and-vector-recall",
     "category": "Memory & Vector Systems",
-    "date": "2026-09-04",
+    "date": "2026-09-05",
     "author": "GenSEAM",
     "readTime": "7 min read",
     "excerpt": "Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits.",
@@ -163,7 +163,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "universal-cross-platform-glue-without-drift",
     "category": "Cross-Platform Runtimes",
-    "date": "2026-09-04",
+    "date": "2026-09-03",
     "author": "GenSEAM",
     "readTime": "8 min read",
     "excerpt": "Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python.",
@@ -180,7 +180,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "multi-dimensional-observability-for-autonomous-systems",
     "category": "Observability & Telemetry",
-    "date": "2026-09-04",
+    "date": "2026-09-03",
     "author": "GenSEAM",
     "readTime": "7 min read",
     "excerpt": "How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and jailed capability traces.",
@@ -197,7 +197,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "the-agent-native-developer-cockpit",
     "category": "Developer Tooling",
-    "date": "2026-09-04",
+    "date": "2026-09-03",
     "author": "GenSEAM",
     "readTime": "9 min read",
     "excerpt": "The complete agent-native developer cockpit: sub-0.05ms LSP, AST structural clone linters, autonomous auto-fixers, and live visual observability.",
@@ -214,7 +214,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "inter-agent-protocols-and-wire-frames",
     "category": "Protocols & Mesh",
-    "date": "2026-09-04",
+    "date": "2026-09-02",
     "author": "GenSEAM",
     "readTime": "7 min read",
     "excerpt": "Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and zero-drift delegations.",
@@ -231,8 +231,8 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     "slug": "token-economy-and-structural-compression",
-    "category": "Token Optimization",
-    "date": "2026-09-03",
+    "category": "Token Economy",
+    "date": "2026-09-02",
     "author": "GenSEAM",
     "readTime": "8 min read",
     "excerpt": "The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how structural compaction cuts prompt overhead by 65%.",
@@ -249,7 +249,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "agent-script-the-optimal-agent-language",
     "category": "Language Theory",
-    "date": "2026-09-03",
+    "date": "2026-09-02",
     "author": "GenSEAM",
     "readTime": "8 min read",
     "excerpt": "Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs.",
@@ -266,7 +266,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "from-vibe-code-to-wasm-in-0-04ms",
     "category": "Runtime & Execution",
-    "date": "2026-09-02",
+    "date": "2026-09-01",
     "author": "GenSEAM",
     "readTime": "5 min read",
     "excerpt": "Replacing heavy Docker containers and microVMs with zero-overhead in-memory WebAssembly sandboxes running test suites in 0.038ms.",
@@ -283,7 +283,7 @@ export const BLOG_POSTS: BlogPost[] = [
   {
     "slug": "the-token-tax-and-interface-compression",
     "category": "Context Architecture",
-    "date": "2026-09-02",
+    "date": "2026-09-01",
     "author": "GenSEAM",
     "readTime": "5 min read",
     "excerpt": "How AST interface extraction slashes multi-agent token consumption by 78.2% and eliminates context rot across distributed agent handoffs.",
