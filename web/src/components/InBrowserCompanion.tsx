@@ -19,6 +19,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { webLlmRunner, IN_BROWSER_MODELS, InBrowserModelSpec, WebLlmProgress } from '../utils/webllm_runner';
+import { prepareSandboxDocument } from '../utils/sandbox_runtime';
 
 export interface PromptTemplate {
   id: string;
@@ -254,41 +255,69 @@ export const InBrowserCompanion: React.FC = () => {
 
       setGenerationPhase('generating');
       const isSvgTask = activeCategory === 'svg' || targetPrompt.toLowerCase().includes('svg') || targetPrompt.toLowerCase().includes('draw') || targetPrompt.toLowerCase().includes('vector');
+      const isGameTask = activeCategory === 'games' || targetPrompt.toLowerCase().includes('game') || targetPrompt.toLowerCase().includes('arcade') || targetPrompt.toLowerCase().includes('play');
 
-      // Pure affirmative skill prompts (stealth ASN vector graphics vs self-contained HTML5 sandbox apps)
-      const systemPrompt = isSvgTask
-        ? `(:skill :name "asl-svg"
+      // Tailored affirmative skill prompts with pre-injected runtime APIs
+      let systemPrompt = '';
+      if (isSvgTask) {
+        systemPrompt = `(:skill :name "asl-svg"
   :desc "Autonomous Vector Graphics Drawing in AgentScript ASN notation. Transpiles to crisp W3C SVG."
   :rules [
-    (:rule :type "mandatory" :text "Output ONLY a single valid (:svg ...) root expression. No explanations, no markdown fences.")
-    (:rule :type "mandatory" :text "Always include :w and :h on root (:svg :w 800 :h 500 ...).")
-    (:rule :type "mandatory" :text "All parentheses MUST be strictly balanced.")
+    (:rule :type "mandatory" :text "Output ONLY a single valid (:svg ...) root expression. No markdown fences, no explanation prose.")
+    (:rule :type "mandatory" :text "Always specify :w 800 :h 500 on root (:svg :w 800 :h 500 ...).")
     (:rule :type "primitives" :text "Use standard ASN shapes:
-      - Rectangle: (:rc :x 0 :y 0 :w 800 :h 500 :f \"#090d16\" :rx 16)
-      - Circle: (:circ :cx 400 :cy 250 :r 80 :f \"#38bdf8\" :s \"#0284c7\" :sw 3)
-      - Path: (:p :d \"M 150 200 C 250 100, 350 300, 450 200 Z\" :f \"#10b981\")
-      - Line: (:ln :x1 50 :y1 50 :x2 200 :y2 200 :s \"#f59e0b\" :sw 2)
-      - Text: (:txt :x 400 :y 450 :text \"LABEL\" :f \"#ffffff\" :sz 18 :weight \"bold\" :align \"middle\")
-      - Group: (:g :id \"element\" ...)
-      - Gradients: (:def (:grad :id \"g1\" :x1 \"0%\" :y1 \"0%\" :x2 \"100%\" :y2 \"100%\" (:stop :offset \"0%\" :col \"#3b82f6\") (:stop :offset \"100%\" :col \"#ec4899\")))")
+      - Gradient defs: (:def (:grad :id \"bg\" :x1 \"0%\" :y1 \"0%\" :x2 \"100%\" :y2 \"100%\" (:stop :offset \"0%\" :col \"#0f172a\") (:stop :offset \"100%\" :col \"#020617\")) (:rgrad :id \"glow\" (:stop :offset \"0%\" :col \"#38bdf8\" :o 0.8) (:stop :offset \"100%\" :col \"#38bdf8\" :o 0)))
+      - Background: (:rc :x 0 :y 0 :w 800 :h 500 :f \"url(#bg)\" :rx 16)
+      - Radial aura/glow: (:circ :cx 400 :cy 230 :r 140 :f \"url(#glow)\" :o 0.4)
+      - Mascot / Subject: Compose layered geometric parts using (:circ ...), (:rc ...), and paths (:p :d \"...\" :f \"#...\" :s \"#...\" :sw 2)
+      - Highlights & Details: (:circ :cx 380 :cy 210 :r 15 :f \"#ffffff\" :o 0.9)
+      - Title text: (:txt :x 400 :y 440 :text \"CYBER COMPANION\" :f \"#f8fafc\" :sz 20 :weight \"bold\" :align \"middle\")")
+    (:rule :type "mandatory" :text "All parentheses must be strictly balanced.")
   ]
   :example
   (:svg :w 800 :h 500
-    (:rc :x 0 :y 0 :w 800 :h 500 :f "#090d16")
-    (:circ :cx 400 :cy 250 :r 100 :f "#6366f1" :s "#818cf8" :sw 4)
-    (:p :d "M 320 280 L 400 180 L 480 280 Z" :f "#10b981")
-    (:txt :x 400 :y 420 :text "VECTOR CANVAS" :f "#e2e8f0" :sz 20 :weight "bold" :align "middle")))`
-        : `(:skill :name "asl-sandbox-app"
-  :desc "Autonomous Single-File HTML5 Sandbox Web Application and Game synthesis."
+    (:def
+      (:grad :id "bgGrad" :x1 "0%" :y1 "0%" :x2 "0%" :y2 "100%"
+        (:stop :offset "0%" :col "#0f172a")
+        (:stop :offset "100%" :col "#020617"))
+      (:rgrad :id "aura"
+        (:stop :offset "0%" :col "#38bdf8" :o 0.7)
+        (:stop :offset "100%" :col "#0284c7" :o 0)))
+    (:rc :x 0 :y 0 :w 800 :h 500 :f "url(#bgGrad)" :rx 20)
+    (:circ :cx 400 :cy 230 :r 160 :f "url(#aura)" :o 0.5)
+    (:rc :x 300 :y 150 :w 200 :h 150 :f "#1e293b" :s "#38bdf8" :sw 4 :rx 30)
+    (:circ :cx 350 :cy 210 :r 22 :f "#38bdf8")
+    (:circ :cx 450 :cy 210 :r 22 :f "#38bdf8")
+    (:p :d "M 370 250 Q 400 270 430 250" :s "#38bdf8" :sw 4)
+    (:ln :x1 400 :y1 150 :x2 400 :y2 100 :s "#f59e0b" :sw 4)
+    (:circ :cx 400 :cy 90 :r 12 :f "#f59e0b")
+    (:txt :x 400 :y 430 :text "ASL COMPANION" :f "#e2e8f0" :sz 22 :weight "bold" :align "middle")))`;
+      } else if (isGameTask) {
+        systemPrompt = `(:skill :name "asl-arcade-game"
+  :desc "Autonomous Retro Arcade Canvas Game Engine synthesis in isolated browser sandbox."
   :rules [
     (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \"write\" :path \"index.html\" :content \"<!DOCTYPE html>...\")")
-    (:rule :type "mandatory" :text "Must be a 100% self-contained, working single HTML file with embedded <style> and <script>.")
-    (:rule :type "mandatory" :text "Zero external CDN scripts or stylesheet dependencies. Runs entirely client-side in browser sandbox.")
-    (:rule :type "design" :text "Use modern sleek dark UI styling (#090d16 background, clean typography, responsive canvas or flex layout).")
-    (:rule :type "logic" :text "Include complete playable game loop (canvas 60fps, requestAnimationFrame, keyboard/touch controls, scoring) or complete interactive app state.")
+    (:rule :type "mandatory" :text "Single self-contained file with HTML, CSS, and JS.")
+    (:rule :type "apis" :text "The sandbox pre-injects window.Sound for retro sound effects: Sound.jump(), Sound.coin(), Sound.laser(), Sound.hit(), Sound.boom(), Sound.powerup(), Sound.gameover(). Trigger them!")
+    (:rule :type "apis" :text "Tailwind CSS is pre-loaded. Keyboard arrow keys & spacebar scrolling are already prevented.")
+    (:rule :type "structure" :text "Include: 1) Top Glass HUD with Title and Score counter, 2) Centered 600x400 <canvas id='game'> with sleek border, 3) Complete requestAnimationFrame loop with player movement, score increase, collision, game over, and restart on click or space.")
   ]
   :example
-  (:call :tool "write" :path "index.html" :content "<!DOCTYPE html><html><head><meta charset='utf-8'><style>*{margin:0;padding:0;box-sizing:border-box;}body{background:#090d16;color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;}canvas{background:#040711;border:1px solid #1e293b;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,0.6);}</style></head><body><canvas id='c' width='600' height='400'></canvas><script>const c=document.getElementById('c'),ctx=c.getContext('2d');ctx.fillStyle='#38bdf8';ctx.fillRect(50,50,100,100);</script></body></html>"))`;
+  (:call :tool "write" :path "index.html" :content "<div class='flex flex-col items-center gap-3'><div class='flex justify-between w-[600px] px-4 py-2 rounded-xl bg-slate-900/80 border border-slate-700/50'><span class='font-mono font-bold text-sky-400'>ARCADE</span><span id='score' class='font-mono font-bold text-white'>SCORE: 0</span></div><canvas id='game' width='600' height='400' class='rounded-xl border border-sky-500/30 bg-slate-950 shadow-2xl'></canvas><div class='text-xs font-mono text-slate-400'>[← →] Move · [Space] Action</div></div><script>const c=document.getElementById('game'),ctx=c.getContext('2d'),sc=document.getElementById('score');let p={x:280,y:340,w:40,h:20,vx:0},score=0,over=false;window.addEventListener('keydown',e=>{if(e.code==='ArrowLeft')p.vx=-5;if(e.code==='ArrowRight')p.vx=5;if(e.code==='Space'&&over){score=0;over=false;Sound.powerup();}});window.addEventListener('keyup',e=>{if(e.code==='ArrowLeft'||e.code==='ArrowRight')p.vx=0;});function loop(){p.x=Math.max(0,Math.min(560,p.x+p.vx));ctx.fillStyle='#090d16';ctx.fillRect(0,0,600,400);ctx.fillStyle='#38bdf8';ctx.fillRect(p.x,p.y,p.w,p.h);if(!over){score++;sc.innerText='SCORE: '+score;}requestAnimationFrame(loop);}loop();</script>"))`;
+      } else {
+        systemPrompt = `(:skill :name "asl-sandbox-app"
+  :desc "Autonomous Interactive Dark-Mode Single-Page Web Application."
+  :rules [
+    (:rule :type "mandatory" :text "Output ONLY a single ASL write toolcall: (:call :tool \"write\" :path \"index.html\" :content \"<!DOCTYPE html>...\")")
+    (:rule :type "mandatory" :text "Single self-contained file with HTML, CSS, and interactive JS.")
+    (:rule :type "apis" :text "Tailwind CSS is pre-loaded. Use modern sleek styling: bg-slate-900 cards, border border-slate-800, text-sky-400 accents, smooth transitions.")
+    (:rule :type "apis" :text "window.Sound is available: Sound.coin(), Sound.powerup(), Sound.hit().")
+    (:rule :type "structure" :text "Include: 1) Title header with status badge, 2) Clean input controls, interactive cards, or dynamic counters, 3) Complete working event listeners and state management.")
+  ]
+  :example
+  (:call :tool "write" :path "index.html" :content "<div class='max-w-md w-full p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-2xl flex flex-col gap-4 font-sans'><div class='flex items-center justify-between border-b border-slate-800 pb-3'><h2 class='text-lg font-bold text-white'>Interactive Utility</h2><span class='px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-400 text-xs font-mono font-bold'>READY</span></div><div id='display' class='w-full p-4 rounded-xl bg-slate-950 text-right font-mono text-2xl text-white font-bold tracking-wider'>0</div><div class='grid grid-cols-4 gap-2'><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\"1\")'>1</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\"2\")'>2</button><button class='p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-mono font-bold transition-all' onclick='add(\"+\")'>+</button><button class='p-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-mono font-bold transition-all' onclick='reset()'>C</button></div></div><script>let val='0';const d=document.getElementById('display');function add(c){val=val==='0'?c:val+c;d.innerText=val;Sound.coin();}function reset(){val='0';d.innerText=val;Sound.hit();}</script>"))`;
+      }
+
 
       await webLlmRunner.generateStreaming(
         targetPrompt,
@@ -695,7 +724,7 @@ export const InBrowserCompanion: React.FC = () => {
                 <iframe
                   key={renderKey}
                   ref={iframeRef}
-                  srcDoc={renderedCode.trim()}
+                  srcDoc={prepareSandboxDocument(renderedCode)}
                   title="In-Browser WebGPU Sandbox Application"
                   sandbox="allow-scripts allow-modals"
                   className="w-full h-full border-0 bg-neutral-950"

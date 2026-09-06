@@ -122,42 +122,84 @@ function parseTokens(tokens: string[]): AsnNode {
 
 function renderNode(node: AsnNode): string {
   const p = node.props;
+  const opacity = p.o !== undefined ? `opacity="${p.o}"` : '';
+
   switch (node.type) {
     case 'svg': {
-      const w = p.w || 600;
-      const h = p.h || 400;
+      const w = p.w || 800;
+      const h = p.h || 500;
       const v = p.v || `0 0 ${w} ${h}`;
       const inner = (node.children || []).map(renderNode).join('\n  ');
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${v}" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">\n  ${inner}\n</svg>`;
     }
+    case 'def':
+    case 'defs': {
+      const inner = (node.children || []).map(renderNode).join('\n    ');
+      return `<defs>\n    ${inner}\n  </defs>`;
+    }
+    case 'grad':
+    case 'linearGradient': {
+      const id = p.id || 'g';
+      const x1 = p.x1 ?? '0%';
+      const y1 = p.y1 ?? '0%';
+      const x2 = p.x2 ?? '100%';
+      const y2 = p.y2 ?? '100%';
+      const inner = (node.children || []).map(renderNode).join('\n      ');
+      return `<linearGradient id="${id}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">\n      ${inner}\n    </linearGradient>`;
+    }
+    case 'rgrad':
+    case 'radialGradient': {
+      const id = p.id || 'rg';
+      const cx = p.cx ?? '50%';
+      const cy = p.cy ?? '50%';
+      const r = p.r ?? '50%';
+      const inner = (node.children || []).map(renderNode).join('\n      ');
+      return `<radialGradient id="${id}" cx="${cx}" cy="${cy}" r="${r}">\n      ${inner}\n    </radialGradient>`;
+    }
+    case 'stop': {
+      const offset = p.offset || p.off || '0%';
+      const col = p.col || p.c || '#ffffff';
+      const stopOp = p.o !== undefined ? `stop-opacity="${p.o}"` : '';
+      return `<stop offset="${offset}" stop-color="${col}" ${stopOp} />`;
+    }
     case 'rc':
     case 'rect': {
-      const rx = p.r ? `rx="${p.r}" ry="${p.r}"` : '';
-      return `<rect x="${p.x ?? 0}" y="${p.y ?? 0}" width="${p.w ?? 100}" height="${p.h ?? 100}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${rx} />`;
+      const rx = p.rx ?? p.r ?? 0;
+      const ry = p.ry ?? p.r ?? rx;
+      const rAttr = rx ? `rx="${rx}" ry="${ry}"` : '';
+      return `<rect x="${p.x ?? 0}" y="${p.y ?? 0}" width="${p.w ?? 100}" height="${p.h ?? 100}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${rAttr} ${opacity} />`;
     }
     case 'circ':
     case 'circle': {
-      return `<circle cx="${p.cx ?? 50}" cy="${p.cy ?? 50}" r="${p.r ?? 20}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" />`;
+      return `<circle cx="${p.cx ?? 50}" cy="${p.cy ?? 50}" r="${p.r ?? 20}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${opacity} />`;
     }
     case 'ln':
     case 'line': {
-      return `<line x1="${p.x1 ?? 0}" y1="${p.y1 ?? 0}" x2="${p.x2 ?? 100}" y2="${p.y2 ?? 100}" stroke="${p.s || '#38ef7d'}" stroke-width="${p.sw || 2}" stroke-linecap="round" />`;
+      return `<line x1="${p.x1 ?? 0}" y1="${p.y1 ?? 0}" x2="${p.x2 ?? 100}" y2="${p.y2 ?? 100}" stroke="${p.s || '#38bdf8'}" stroke-width="${p.sw || 2}" stroke-linecap="round" ${opacity} />`;
     }
     case 'p':
     case 'path': {
-      return `<path d="${p.d || ''}" fill="${p.f || 'none'}" stroke="${p.s || '#38ef7d'}" stroke-width="${p.sw || 2}" stroke-linecap="round" stroke-linejoin="round" />`;
+      return `<path d="${p.d || ''}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 2}" stroke-linecap="round" stroke-linejoin="round" ${opacity} />`;
+    }
+    case 'poly':
+    case 'polygon': {
+      const pts = p.points || p.pts || '';
+      return `<polygon points="${pts}" fill="${p.f || 'none'}" stroke="${p.s || 'none'}" stroke-width="${p.sw || 1}" ${opacity} />`;
     }
     case 'txt':
     case 'text': {
       const text = p.text || p.t || '';
-      return `<text x="${p.x ?? 20}" y="${p.y ?? 30}" fill="${p.f || '#ffffff'}" font-size="${p.sz || 14}" font-family="${p.family || 'ui-monospace, monospace'}" font-weight="${p.weight || 'normal'}">${text}</text>`;
+      const anchor = p.align === 'center' || p.align === 'middle' ? 'middle' : p.align === 'right' || p.align === 'end' ? 'end' : (p.align || 'start');
+      return `<text x="${p.x ?? 20}" y="${p.y ?? 30}" fill="${p.f || '#ffffff'}" font-size="${p.sz || 14}" font-family="${p.family || 'system-ui, -apple-system, sans-serif'}" font-weight="${p.weight || 'normal'}" text-anchor="${anchor}" ${opacity}>${text}</text>`;
     }
     case 'g': {
-      const tr = p.transform ? `transform="${p.transform}"` : '';
+      const tr = p.tr || p.transform ? `transform="${p.tr || p.transform}"` : '';
+      const idAttr = p.id ? `id="${p.id}"` : '';
       const inner = (node.children || []).map(renderNode).join('\n    ');
-      return `<g ${tr}>\n    ${inner}\n  </g>`;
+      return `<g ${idAttr} ${tr} ${opacity}>\n    ${inner}\n  </g>`;
     }
     default:
       return '';
   }
 }
+
