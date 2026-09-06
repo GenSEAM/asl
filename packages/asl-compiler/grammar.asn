@@ -1,0 +1,33 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-compiler
+(:grammar
+  :package @genseam/asl-compiler
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "CompileResult" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "compile-source" :kind :fn :tokens 2)
+    (:sym :name "format-diagnostic" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "compile-source-target" :kind :fn :tokens 3
+          :rationale "Domain utility implementing compile source target")
+    (:sym :name "compile-standalone-source" :kind :fn :tokens 3
+          :rationale "Domain utility implementing compile standalone source")
+    (:sym :name "compile-standalone-target" :kind :fn :tokens 3
+          :rationale "Domain utility implementing compile standalone target")
+    (:sym :name "test-compile-clean-function" :kind :fn :tokens 4
+          :rationale "Test case verifying compile clean function")
+    (:sym :name "test-compile-clean-schema" :kind :fn :tokens 4
+          :rationale "Test case verifying compile clean schema")
+    (:sym :name "test-compile-embedded-target" :kind :fn :tokens 4
+          :rationale "Test case verifying compile embedded target")
+    (:sym :name "test-compile-parse-error" :kind :fn :tokens 4
+          :rationale "Test case verifying compile parse error")
+    (:sym :name "test-compile-type-error" :kind :fn :tokens 4
+          :rationale "Test case verifying compile type error")
+  ])

@@ -1,0 +1,85 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-bridge
+(:grammar
+  :package @genseam/asl-bridge
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "DbColumn" :kind :type :tokens 1)
+    (:sym :name "DbResult" :kind :type :tokens 1)
+    (:sym :name "DriverKind" :kind :type :tokens 1)
+    (:sym :name "QueryPlan" :kind :type :tokens 1)
+    (:sym :name "TableDef" :kind :type :tokens 1)
+    (:sym :name "TierKind" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "col-category" :kind :fn :tokens 2)
+    (:sym :name "driver-tier" :kind :fn :tokens 2)
+    (:sym :name "kysely-type" :kind :fn :tokens 2)
+    (:sym :name "plan-custom" :kind :fn :tokens 2)
+    (:sym :name "plan-query" :kind :fn :tokens 2)
+    (:sym :name "route-workload" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "sample-table" :kind :fn :tokens 2)
+    (:sym :name "seaorm-type" :kind :fn :tokens 2)
+    (:sym :name "sqlalchemy-type" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "driver-kind-to-str" :kind :fn :tokens 4
+          :rationale "Domain utility implementing driver kind to str")
+    (:sym :name "drizzle-col-builder" :kind :fn :tokens 3
+          :rationale "Domain utility implementing drizzle col builder")
+    (:sym :name "drizzle-type-fn" :kind :fn :tokens 3
+          :rationale "Domain utility implementing drizzle type fn")
+    (:sym :name "is-host-tier?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is host tier")
+    (:sym :name "is-microvm-tier?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is microvm tier")
+    (:sym :name "is-wasm-tier?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is wasm tier")
+    (:sym :name "make-db-column" :kind :fn :tokens 3
+          :rationale "Constructor for db column")
+    (:sym :name "make-db-result" :kind :fn :tokens 3
+          :rationale "Constructor for db result")
+    (:sym :name "make-query-plan" :kind :fn :tokens 3
+          :rationale "Constructor for query plan")
+    (:sym :name "make-table-def" :kind :fn :tokens 3
+          :rationale "Constructor for table def")
+    (:sym :name "render-kysely-col" :kind :fn :tokens 3
+          :rationale "Renderer outputting kysely col")
+    (:sym :name "render-seaorm-col" :kind :fn :tokens 3
+          :rationale "Renderer outputting seaorm col")
+    (:sym :name "render-sqlalchemy-col" :kind :fn :tokens 3
+          :rationale "Renderer outputting sqlalchemy col")
+    (:sym :name "str-to-driver-kind" :kind :fn :tokens 4
+          :rationale "Domain utility implementing str to driver kind")
+    (:sym :name "str-to-tier-kind" :kind :fn :tokens 4
+          :rationale "Domain utility implementing str to tier kind")
+    (:sym :name "table-to-drizzle" :kind :fn :tokens 3
+          :rationale "Domain utility implementing table to drizzle")
+    (:sym :name "table-to-kysely" :kind :fn :tokens 3
+          :rationale "Domain utility implementing table to kysely")
+    (:sym :name "table-to-seaorm" :kind :fn :tokens 3
+          :rationale "Domain utility implementing table to seaorm")
+    (:sym :name "table-to-sqlalchemy" :kind :fn :tokens 3
+          :rationale "Domain utility implementing table to sqlalchemy")
+    (:sym :name "test-ports-and-types" :kind :fn :tokens 4
+          :rationale "Test case verifying ports and types")
+    (:sym :name "test-router-planning" :kind :fn :tokens 3
+          :rationale "Test case verifying router planning")
+    (:sym :name "test-router-workload" :kind :fn :tokens 3
+          :rationale "Test case verifying router workload")
+    (:sym :name "test-schema-drizzle" :kind :fn :tokens 3
+          :rationale "Test case verifying schema drizzle")
+    (:sym :name "test-schema-kysely" :kind :fn :tokens 3
+          :rationale "Test case verifying schema kysely")
+    (:sym :name "test-schema-seaorm" :kind :fn :tokens 3
+          :rationale "Test case verifying schema seaorm")
+    (:sym :name "test-schema-sqlalchemy" :kind :fn :tokens 3
+          :rationale "Test case verifying schema sqlalchemy")
+    (:sym :name "tier-kind-to-str" :kind :fn :tokens 4
+          :rationale "Domain utility implementing tier kind to str")
+    (:sym :name "to-pascal-case" :kind :fn :tokens 3
+          :rationale "Domain utility implementing to pascal case")
+  ])

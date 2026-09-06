@@ -1,0 +1,89 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-registry
+(:grammar
+  :package @genseam/asl-registry
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "AslRegistryEntry" :kind :type :tokens 1)
+    (:sym :name "EcosystemKind" :kind :type :tokens 1)
+    (:sym :name "OutdatedReport" :kind :type :tokens 1)
+    (:sym :name "PackageIndex" :kind :type :tokens 1)
+    (:sym :name "PackageMeta" :kind :type :tokens 1)
+    (:sym :name "PackageSpec" :kind :type :tokens 1)
+    (:sym :name "PublishSpec" :kind :type :tokens 1)
+    (:sym :name "ReleaseArtifact" :kind :type :tokens 1)
+    (:sym :name "ReleaseItem" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "build-headers" :kind :fn :tokens 2)
+    (:sym :name "clean-version" :kind :fn :tokens 2)
+    (:sym :name "compare-semver" :kind :fn :tokens 2)
+    (:sym :name "evaluate-outdated" :kind :fn :tokens 2)
+    (:sym :name "main" :kind :fn :tokens 1)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "test-formatting" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "build-package-url" :kind :fn :tokens 3
+          :rationale "Domain utility implementing build package url")
+    (:sym :name "build-search-url" :kind :fn :tokens 3
+          :rationale "Domain utility implementing build search url")
+    (:sym :name "check-package-outdated" :kind :fn :tokens 3
+          :rationale "Domain utility implementing check package outdated")
+    (:sym :name "create-publish-spec" :kind :fn :tokens 3
+          :rationale "Domain utility implementing create publish spec")
+    (:sym :name "create-release-artifact" :kind :fn :tokens 3
+          :rationale "Domain utility implementing create release artifact")
+    (:sym :name "default-asl-catalog-url" :kind :fn :tokens 4
+          :rationale "Domain utility implementing default asl catalog url")
+    (:sym :name "eco-to-string" :kind :fn :tokens 3
+          :rationale "Domain utility implementing eco to string")
+    (:sym :name "format-asl-registry-table" :kind :fn :tokens 4
+          :rationale "Formatter converting asl registry table to string")
+    (:sym :name "format-outdated-report" :kind :fn :tokens 3
+          :rationale "Formatter converting outdated report to string")
+    (:sym :name "format-package-summary" :kind :fn :tokens 3
+          :rationale "Formatter converting package summary to string")
+    (:sym :name "format-release-manifest" :kind :fn :tokens 3
+          :rationale "Formatter converting release manifest to string")
+    (:sym :name "index-package-release" :kind :fn :tokens 3
+          :rationale "Domain utility implementing index package release")
+    (:sym :name "make-eco-asl" :kind :fn :tokens 3
+          :rationale "Constructor for eco asl")
+    (:sym :name "make-eco-crates" :kind :fn :tokens 3
+          :rationale "Constructor for eco crates")
+    (:sym :name "make-eco-github" :kind :fn :tokens 3
+          :rationale "Constructor for eco github")
+    (:sym :name "make-eco-go" :kind :fn :tokens 3
+          :rationale "Constructor for eco go")
+    (:sym :name "make-eco-npm" :kind :fn :tokens 3
+          :rationale "Constructor for eco npm")
+    (:sym :name "make-eco-pypi" :kind :fn :tokens 3
+          :rationale "Constructor for eco pypi")
+    (:sym :name "make-package-info" :kind :fn :tokens 3
+          :rationale "Constructor for package info")
+    (:sym :name "parse-package-specifier" :kind :fn :tokens 3
+          :rationale "Parser extracting package specifier")
+    (:sym :name "parse-semver-triplet" :kind :fn :tokens 3
+          :rationale "Parser extracting semver triplet")
+    (:sym :name "resolve-git-clone-cmd" :kind :fn :tokens 4
+          :rationale "Domain utility implementing resolve git clone cmd")
+    (:sym :name "string-to-eco" :kind :fn :tokens 3
+          :rationale "Domain utility implementing string to eco")
+    (:sym :name "test-create-artifact" :kind :fn :tokens 3
+          :rationale "Test case verifying create artifact")
+    (:sym :name "test-create-spec" :kind :fn :tokens 3
+          :rationale "Test case verifying create spec")
+    (:sym :name "test-format-manifest" :kind :fn :tokens 3
+          :rationale "Test case verifying format manifest")
+    (:sym :name "test-index-release" :kind :fn :tokens 3
+          :rationale "Test case verifying index release")
+    (:sym :name "test-outdated-evaluation" :kind :fn :tokens 3
+          :rationale "Test case verifying outdated evaluation")
+    (:sym :name "test-parse-specifier" :kind :fn :tokens 3
+          :rationale "Test case verifying parse specifier")
+    (:sym :name "test-semver-comparison" :kind :fn :tokens 3
+          :rationale "Test case verifying semver comparison")
+  ])

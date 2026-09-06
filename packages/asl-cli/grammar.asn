@@ -1,0 +1,39 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-cli
+(:grammar
+  :package @genseam/asl-cli
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "dispatch-asn" :kind :fn :tokens 2)
+    (:sym :name "dispatch-cmd" :kind :fn :tokens 2)
+    (:sym :name "execute-cli" :kind :fn :tokens 2)
+    (:sym :name "format-help" :kind :fn :tokens 2)
+    (:sym :name "format-version" :kind :fn :tokens 2)
+    (:sym :name "main" :kind :fn :tokens 1)
+    (:sym :name "run-check" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "test-help" :kind :fn :tokens 2)
+    (:sym :name "test-version" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "asn-to-json-value" :kind :fn :tokens 4
+          :rationale "Domain utility implementing asn to json value")
+    (:sym :name "format-asn-help" :kind :fn :tokens 3
+          :rationale "Formatter converting asn help to string")
+    (:sym :name "run-from-json" :kind :fn :tokens 3
+          :rationale "Domain utility implementing run from json")
+    (:sym :name "run-to-json" :kind :fn :tokens 3
+          :rationale "Domain utility implementing run to json")
+    (:sym :name "test-dispatch-gate" :kind :fn :tokens 3
+          :rationale "Test case verifying dispatch gate")
+    (:sym :name "test-dispatch-missing" :kind :fn :tokens 3
+          :rationale "Test case verifying dispatch missing")
+    (:sym :name "test-dispatch-unknown" :kind :fn :tokens 3
+          :rationale "Test case verifying dispatch unknown")
+    (:sym :name "test-dispatch-version" :kind :fn :tokens 3
+          :rationale "Test case verifying dispatch version")
+  ])

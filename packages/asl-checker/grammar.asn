@@ -1,0 +1,86 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-checker
+(:grammar
+  :package @genseam/asl-checker
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "CaseSummary" :kind :type :tokens 1)
+    (:sym :name "Diagnostic" :kind :type :tokens 1)
+    (:sym :name "EnumSummary" :kind :type :tokens 1)
+    (:sym :name "FieldSummary" :kind :type :tokens 1)
+    (:sym :name "FunSummary" :kind :type :tokens 1)
+    (:sym :name "InferState" :kind :type :tokens 1)
+    (:sym :name "ModuleSummary" :kind :type :tokens 1)
+    (:sym :name "SchemaSummary" :kind :type :tokens 1)
+    (:sym :name "Type" :kind :type :tokens 1)
+    (:sym :name "UnifyOutcome" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "apply-subst" :kind :fn :tokens 2)
+    (:sym :name "builtin-sig" :kind :fn :tokens 2)
+    (:sym :name "check-file!" :kind :fn :tokens 2)
+    (:sym :name "check-module" :kind :fn :tokens 2)
+    (:sym :name "check-source" :kind :fn :tokens 2)
+    (:sym :name "collect-summary" :kind :fn :tokens 2)
+    (:sym :name "kind-narrow" :kind :fn :tokens 2)
+    (:sym :name "mod-enum" :kind :fn :tokens 2)
+    (:sym :name "mod-fun" :kind :fn :tokens 2)
+    (:sym :name "mod-import" :kind :fn :tokens 2)
+    (:sym :name "mod-schema" :kind :fn :tokens 2)
+    (:sym :name "occurs-in?" :kind :fn :tokens 2)
+    (:sym :name "resolve-module" :kind :fn :tokens 2)
+    (:sym :name "safe-tail" :kind :fn :tokens 2)
+    (:sym :name "show-type" :kind :fn :tokens 2)
+    (:sym :name "show-types" :kind :fn :tokens 2)
+    (:sym :name "slice-from" :kind :fn :tokens 2)
+    (:sym :name "test-resolve" :kind :fn :tokens 2)
+    (:sym :name "test-types" :kind :fn :tokens 2)
+    (:sym :name "test-unify" :kind :fn :tokens 2)
+    (:sym :name "type-equal?" :kind :fn :tokens 2)
+    (:sym :name "unify" :kind :fn :tokens 1)
+    (:sym :name "unordered-type?" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "clean-num-sign" :kind :fn :tokens 3
+          :rationale "Domain utility implementing clean num sign")
+    (:sym :name "first-char-str" :kind :fn :tokens 3
+          :rationale "Domain utility implementing first char str")
+    (:sym :name "first-expr-empty" :kind :fn :tokens 3
+          :rationale "Domain utility implementing first expr empty")
+    (:sym :name "first-expr-unit" :kind :fn :tokens 3
+          :rationale "Domain utility implementing first expr unit")
+    (:sym :name "first-expr-vect" :kind :fn :tokens 3
+          :rationale "Domain utility implementing first expr vect")
+    (:sym :name "first-head-ident" :kind :fn :tokens 3
+          :rationale "Domain utility implementing first head ident")
+    (:sym :name "first-vect-items" :kind :fn :tokens 3
+          :rationale "Domain utility implementing first vect items")
+    (:sym :name "int-range-bounds" :kind :fn :tokens 3
+          :rationale "Domain utility implementing int range bounds")
+    (:sym :name "is-integral-type?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is integral type")
+    (:sym :name "is-literal-atom?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is literal atom")
+    (:sym :name "is-numeric-type?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is numeric type")
+    (:sym :name "list-append-one" :kind :fn :tokens 3
+          :rationale "Domain utility implementing list append one")
+    (:sym :name "load-module-deps!" :kind :fn :tokens 3
+          :rationale "Domain utility implementing load module deps!")
+    (:sym :name "map-values-list" :kind :fn :tokens 3
+          :rationale "Domain utility implementing map values list")
+    (:sym :name "parse-type-str" :kind :fn :tokens 3
+          :rationale "Parser extracting type str")
+    (:sym :name "prelude-union-cases" :kind :fn :tokens 3
+          :rationale "Domain utility implementing prelude union cases")
+    (:sym :name "resolve-type-alias" :kind :fn :tokens 3
+          :rationale "Domain utility implementing resolve type alias")
+    (:sym :name "second-expr-empty" :kind :fn :tokens 3
+          :rationale "Domain utility implementing second expr empty")
+    (:sym :name "sexpr-to-list" :kind :fn :tokens 3
+          :rationale "Domain utility implementing sexpr to list")
+    (:sym :name "test-corpus-smoke" :kind :fn :tokens 3
+          :rationale "Test case verifying corpus smoke")
+  ])

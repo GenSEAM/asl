@@ -1,0 +1,81 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-sql
+(:grammar
+  :package @genseam/asl-sql
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "BinaryOp" :kind :type :tokens 1)
+    (:sym :name "ColumnDef" :kind :type :tokens 1)
+    (:sym :name "InsertQuery" :kind :type :tokens 1)
+    (:sym :name "JoinType" :kind :type :tokens 1)
+    (:sym :name "OrderDir" :kind :type :tokens 1)
+    (:sym :name "RenderedQuery" :kind :type :tokens 1)
+    (:sym :name "SelectQuery" :kind :type :tokens 1)
+    (:sym :name "SqlColumnType" :kind :type :tokens 1)
+    (:sym :name "SqlDialect" :kind :type :tokens 1)
+    (:sym :name "SqlExpr" :kind :type :tokens 1)
+    (:sym :name "SqlJoin" :kind :type :tokens 1)
+    (:sym :name "TableDef" :kind :type :tokens 1)
+    (:sym :name "UpdateQuery" :kind :type :tokens 1)
+    (:sym :name "UpsertQuery" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "bool-expr" :kind :fn :tokens 2)
+    (:sym :name "col-expr" :kind :fn :tokens 2)
+    (:sym :name "count-params" :kind :fn :tokens 2)
+    (:sym :name "default-dialect" :kind :fn :tokens 2)
+    (:sym :name "int-expr" :kind :fn :tokens 2)
+    (:sym :name "is-parameterized" :kind :fn :tokens 2)
+    (:sym :name "make-column" :kind :fn :tokens 2)
+    (:sym :name "make-insert" :kind :fn :tokens 2)
+    (:sym :name "make-join" :kind :fn :tokens 2)
+    (:sym :name "make-select" :kind :fn :tokens 2)
+    (:sym :name "make-table" :kind :fn :tokens 2)
+    (:sym :name "make-update" :kind :fn :tokens 2)
+    (:sym :name "make-upsert" :kind :fn :tokens 2)
+    (:sym :name "raw-expr" :kind :fn :tokens 2)
+    (:sym :name "render-delete" :kind :fn :tokens 2)
+    (:sym :name "render-insert" :kind :fn :tokens 2)
+    (:sym :name "render-placeholder" :kind :fn :tokens 2)
+    (:sym :name "render-select" :kind :fn :tokens 2)
+    (:sym :name "render-update" :kind :fn :tokens 2)
+    (:sym :name "render-upsert" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "str-expr" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "count-pair-params" :kind :fn :tokens 3
+          :rationale "Domain utility implementing count pair params")
+    (:sym :name "dialect-param-prefix" :kind :fn :tokens 3
+          :rationale "Domain utility implementing dialect param prefix")
+    (:sym :name "dialect-quote-char" :kind :fn :tokens 3
+          :rationale "Domain utility implementing dialect quote char")
+    (:sym :name "is-literal-param" :kind :fn :tokens 3
+          :rationale "Predicate checking condition for literal param")
+    (:sym :name "json-get-expr" :kind :fn :tokens 3
+          :rationale "Domain utility implementing json get expr")
+    (:sym :name "make-column-custom" :kind :fn :tokens 3
+          :rationale "Constructor for column custom")
+    (:sym :name "render-binary-op" :kind :fn :tokens 3
+          :rationale "Renderer outputting binary op")
+    (:sym :name "render-column-def" :kind :fn :tokens 3
+          :rationale "Renderer outputting column def")
+    (:sym :name "render-create-table" :kind :fn :tokens 3
+          :rationale "Renderer outputting create table")
+    (:sym :name "render-expr-str" :kind :fn :tokens 3
+          :rationale "Renderer outputting expr str")
+    (:sym :name "render-json-path" :kind :fn :tokens 3
+          :rationale "Renderer outputting json path")
+    (:sym :name "render-logical-op" :kind :fn :tokens 3
+          :rationale "Renderer outputting logical op")
+    (:sym :name "test-sql-ddl" :kind :fn :tokens 3
+          :rationale "Test case verifying sql ddl")
+    (:sym :name "test-sql-dialects" :kind :fn :tokens 3
+          :rationale "Test case verifying sql dialects")
+    (:sym :name "test-sql-select" :kind :fn :tokens 3
+          :rationale "Test case verifying sql select")
+    (:sym :name "type-to-sql-string" :kind :fn :tokens 4
+          :rationale "Domain utility implementing type to sql string")
+  ])

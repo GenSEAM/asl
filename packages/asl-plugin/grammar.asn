@@ -1,0 +1,30 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-plugin
+(:grammar
+  :package @genseam/asl-plugin
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "PluginCall" :kind :type :tokens 1)
+    (:sym :name "PluginCapability" :kind :type :tokens 1)
+    (:sym :name "PluginExport" :kind :type :tokens 1)
+    (:sym :name "PluginKind" :kind :type :tokens 1)
+    (:sym :name "PluginManifest" :kind :type :tokens 1)
+    (:sym :name "PluginRegistry" :kind :type :tokens 1)
+    (:sym :name "PluginResult" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "dispatch-call" :kind :fn :tokens 2)
+    (:sym :name "empty-registry" :kind :fn :tokens 2)
+    (:sym :name "format-manifest" :kind :fn :tokens 2)
+    (:sym :name "has-capability?" :kind :fn :tokens 2)
+    (:sym :name "lookup-plugin" :kind :fn :tokens 2)
+    (:sym :name "register-plugin" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "validate-manifest" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "find-plugins-by-capability" :kind :fn :tokens 4
+          :rationale "Domain utility implementing find plugins by capability")
+  ])

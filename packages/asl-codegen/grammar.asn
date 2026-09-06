@@ -1,0 +1,104 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-codegen
+(:grammar
+  :package @genseam/asl-codegen
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "VNode" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "any-true?" :kind :fn :tokens 2)
+    (:sym :name "builtin-template" :kind :fn :tokens 2)
+    (:sym :name "capitalize-seg" :kind :fn :tokens 2)
+    (:sym :name "emit-atom" :kind :fn :tokens 2)
+    (:sym :name "emit-component" :kind :fn :tokens 2)
+    (:sym :name "emit-defenum" :kind :fn :tokens 2)
+    (:sym :name "emit-defschema" :kind :fn :tokens 2)
+    (:sym :name "emit-defun" :kind :fn :tokens 2)
+    (:sym :name "emit-derives" :kind :fn :tokens 2)
+    (:sym :name "emit-expr" :kind :fn :tokens 2)
+    (:sym :name "emit-pattern" :kind :fn :tokens 2)
+    (:sym :name "emit-type" :kind :fn :tokens 2)
+    (:sym :name "indent-spaces" :kind :fn :tokens 2)
+    (:sym :name "is-ident?" :kind :fn :tokens 2)
+    (:sym :name "mangle-ident" :kind :fn :tokens 2)
+    (:sym :name "merge-maps" :kind :fn :tokens 2)
+    (:sym :name "pascal-ident" :kind :fn :tokens 2)
+    (:sym :name "render-builtin" :kind :fn :tokens 2)
+    (:sym :name "render-template" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "slice-or" :kind :fn :tokens 2)
+    (:sym :name "test-builtins" :kind :fn :tokens 2)
+    (:sym :name "test-codegen" :kind :fn :tokens 2)
+    (:sym :name "test-expr" :kind :fn :tokens 2)
+    (:sym :name "test-mangle" :kind :fn :tokens 2)
+    (:sym :name "test-rtypes" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "boxed-type-if-recursive" :kind :fn :tokens 4
+          :rationale "Domain utility implementing boxed type if recursive")
+    (:sym :name "clone-if-ident" :kind :fn :tokens 3
+          :rationale "Domain utility implementing clone if ident")
+    (:sym :name "emit-arduino-header" :kind :fn :tokens 3
+          :rationale "Code generator emitting arduino header")
+    (:sym :name "emit-arduino-sketch" :kind :fn :tokens 3
+          :rationale "Code generator emitting arduino sketch")
+    (:sym :name "emit-body-seq" :kind :fn :tokens 3
+          :rationale "Code generator emitting body seq")
+    (:sym :name "emit-c-fn" :kind :fn :tokens 3
+          :rationale "Code generator emitting c fn")
+    (:sym :name "emit-c-header" :kind :fn :tokens 3
+          :rationale "Code generator emitting c header")
+    (:sym :name "emit-c-type" :kind :fn :tokens 3
+          :rationale "Code generator emitting c type")
+    (:sym :name "emit-jsx-attrs" :kind :fn :tokens 3
+          :rationale "Code generator emitting jsx attrs")
+    (:sym :name "emit-rust-program" :kind :fn :tokens 3
+          :rationale "Code generator emitting rust program")
+    (:sym :name "emit-top-forms" :kind :fn :tokens 3
+          :rationale "Code generator emitting top forms")
+    (:sym :name "emit-tsx-module" :kind :fn :tokens 3
+          :rationale "Code generator emitting tsx module")
+    (:sym :name "emit-type-str" :kind :fn :tokens 3
+          :rationale "Code generator emitting type str")
+    (:sym :name "emit-vnode-jsx" :kind :fn :tokens 3
+          :rationale "Code generator emitting vnode jsx")
+    (:sym :name "format-delay-call" :kind :fn :tokens 3
+          :rationale "Formatter converting delay call to string")
+    (:sym :name "format-gpio-call" :kind :fn :tokens 3
+          :rationale "Formatter converting gpio call to string")
+    (:sym :name "has-main-fn?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether has main fn")
+    (:sym :name "is-component-tag?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is component tag")
+    (:sym :name "is-rust-keyword?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is rust keyword")
+    (:sym :name "is-void-tag?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is void tag")
+    (:sym :name "jsx-attr-key" :kind :fn :tokens 3
+          :rationale "Domain utility implementing jsx attr key")
+    (:sym :name "primitive-rust-type" :kind :fn :tokens 3
+          :rationale "Domain utility implementing primitive rust type")
+    (:sym :name "resolve-qualified-case" :kind :fn :tokens 3
+          :rationale "Domain utility implementing resolve qualified case")
+    (:sym :name "rust-mod-name" :kind :fn :tokens 3
+          :rationale "Domain utility implementing rust mod name")
+    (:sym :name "short-mod-name" :kind :fn :tokens 3
+          :rationale "Domain utility implementing short mod name")
+    (:sym :name "slice-str-or" :kind :fn :tokens 3
+          :rationale "Domain utility implementing slice str or")
+    (:sym :name "test-arduino-sketch" :kind :fn :tokens 3
+          :rationale "Test case verifying arduino sketch")
+    (:sym :name "test-c-header" :kind :fn :tokens 3
+          :rationale "Test case verifying c header")
+    (:sym :name "test-c-type" :kind :fn :tokens 3
+          :rationale "Test case verifying c type")
+    (:sym :name "test-gpio-calls" :kind :fn :tokens 3
+          :rationale "Test case verifying gpio calls")
+    (:sym :name "type-mentions-float?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether type mentions float")
+    (:sym :name "type-mentions-io-error?" :kind :fn :tokens 4
+          :rationale "Predicate testing whether type mentions io error")
+  ])

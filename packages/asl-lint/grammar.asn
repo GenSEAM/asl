@@ -1,0 +1,59 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-lint
+(:grammar
+  :package @genseam/asl-lint
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "CloneGroup" :kind :type :tokens 1)
+    (:sym :name "CloneType" :kind :type :tokens 1)
+    (:sym :name "CloneVerdict" :kind :type :tokens 1)
+    (:sym :name "FixResult" :kind :type :tokens 1)
+    (:sym :name "FixType" :kind :type :tokens 1)
+    (:sym :name "PatchAction" :kind :type :tokens 1)
+    (:sym :name "QualityMetrics" :kind :type :tokens 1)
+    (:sym :name "Smell" :kind :type :tokens 1)
+    (:sym :name "SmellCode" :kind :type :tokens 1)
+    (:sym :name "SmellSeverity" :kind :type :tokens 1)
+    (:sym :name "TokenCategory" :kind :type :tokens 1)
+    (:sym :name "TokenMetrics" :kind :type :tokens 1)
+    (:sym :name "TokenSmell" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "can-autofix" :kind :fn :tokens 2)
+    (:sym :name "is-error" :kind :fn :tokens 2)
+    (:sym :name "main" :kind :fn :tokens 1)
+    (:sym :name "severity-penalty" :kind :fn :tokens 2)
+    (:sym :name "token-ceiling" :kind :fn :tokens 2)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "calculate-quality-score" :kind :fn :tokens 3
+          :rationale "Domain utility implementing calculate quality score")
+    (:sym :name "can-auto-repair" :kind :fn :tokens 3
+          :rationale "Domain utility implementing can auto repair")
+    (:sym :name "compute-density-score" :kind :fn :tokens 3
+          :rationale "Domain utility implementing compute density score")
+    (:sym :name "compute-duplication-ratio" :kind :fn :tokens 3
+          :rationale "Domain utility implementing compute duplication ratio")
+    (:sym :name "estimate-identifier-tokens" :kind :fn :tokens 3
+          :rationale "Domain utility implementing estimate identifier tokens")
+    (:sym :name "format-fix-description" :kind :fn :tokens 3
+          :rationale "Formatter converting fix description to string")
+    (:sym :name "format-token-smell" :kind :fn :tokens 3
+          :rationale "Formatter converting token smell to string")
+    (:sym :name "is-clone-excessive" :kind :fn :tokens 3
+          :rationale "Predicate checking condition for clone excessive")
+    (:sym :name "is-fix-successful" :kind :fn :tokens 3
+          :rationale "Predicate checking condition for fix successful")
+    (:sym :name "is-nesting-excessive" :kind :fn :tokens 3
+          :rationale "Predicate checking condition for nesting excessive")
+    (:sym :name "is-token-smell" :kind :fn :tokens 3
+          :rationale "Predicate checking condition for token smell")
+    (:sym :name "min-clone-node-threshold" :kind :fn :tokens 4
+          :rationale "Domain utility implementing min clone node threshold")
+    (:sym :name "should-block-gate" :kind :fn :tokens 3
+          :rationale "Domain utility implementing should block gate")
+    (:sym :name "should-block-token-gate" :kind :fn :tokens 4
+          :rationale "Domain utility implementing should block token gate")
+  ])

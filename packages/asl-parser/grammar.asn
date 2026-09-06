@@ -1,0 +1,59 @@
+;; Package Grammar & Exported Symbol Registry (ASN)
+;; @genseam/asl-parser
+(:grammar
+  :package @genseam/asl-parser
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    ;; 1-Token Baseline Types
+    (:sym :name "AstField" :kind :type :tokens 1)
+    (:sym :name "ClosureHeads" :kind :type :tokens 1)
+    (:sym :name "DefunNode" :kind :type :tokens 1)
+    (:sym :name "EnumCase" :kind :type :tokens 1)
+    (:sym :name "EnumNode" :kind :type :tokens 1)
+    (:sym :name "ModuleNode" :kind :type :tokens 1)
+    (:sym :name "Param" :kind :type :tokens 1)
+    (:sym :name "ParseError" :kind :type :tokens 1)
+    (:sym :name "SExpr" :kind :type :tokens 1)
+    (:sym :name "SchemaNode" :kind :type :tokens 1)
+    (:sym :name "Token" :kind :type :tokens 1)
+    (:sym :name "TokenType" :kind :type :tokens 1)
+    (:sym :name "TopForm" :kind :type :tokens 1)
+
+    ;; <= 2-Token Primary API Symbols
+    (:sym :name "closure-heads" :kind :fn :tokens 2)
+    (:sym :name "dump" :kind :fn :tokens 1)
+    (:sym :name "is-atom?" :kind :fn :tokens 2)
+    (:sym :name "is-delimiter" :kind :fn :tokens 2)
+    (:sym :name "is-list?" :kind :fn :tokens 2)
+    (:sym :name "is-vect?" :kind :fn :tokens 2)
+    (:sym :name "is-whitespace" :kind :fn :tokens 2)
+    (:sym :name "len-list" :kind :fn :tokens 2)
+    (:sym :name "make-atom" :kind :fn :tokens 2)
+    (:sym :name "make-list" :kind :fn :tokens 2)
+    (:sym :name "make-token" :kind :fn :tokens 2)
+    (:sym :name "make-vect" :kind :fn :tokens 2)
+    (:sym :name "parse" :kind :fn :tokens 1)
+    (:sym :name "proj-defun" :kind :fn :tokens 2)
+    (:sym :name "proj-enum" :kind :fn :tokens 2)
+    (:sym :name "proj-heads" :kind :fn :tokens 2)
+    (:sym :name "proj-module" :kind :fn :tokens 2)
+    (:sym :name "proj-parse" :kind :fn :tokens 2)
+    (:sym :name "proj-schema" :kind :fn :tokens 2)
+    (:sym :name "proj-topform" :kind :fn :tokens 2)
+    (:sym :name "render-all" :kind :fn :tokens 2)
+    (:sym :name "render-compound" :kind :fn :tokens 2)
+    (:sym :name "render-node" :kind :fn :tokens 2)
+    (:sym :name "render-sexpr" :kind :fn :tokens 2)
+    (:sym :name "run-smoke" :kind :fn :tokens 2)
+    (:sym :name "run-tokenize" :kind :fn :tokens 2)
+    (:sym :name "sexpr-head" :kind :fn :tokens 2)
+    (:sym :name "token-kind" :kind :fn :tokens 2)
+    (:sym :name "tokenize" :kind :fn :tokens 1)
+
+    ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "is-head-match?" :kind :fn :tokens 3
+          :rationale "Predicate testing whether is head match")
+    (:sym :name "token-type-name" :kind :fn :tokens 3
+          :rationale "Domain utility implementing token type name")
+  ])
