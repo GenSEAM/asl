@@ -907,23 +907,84 @@ case "$CMD" in
     exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
     ;;
   upgrade|update)
-    VERSION_URL="https://asl-lang.dev/version.asn"
+    VERSION_URL="https://aslang.dev/version.json"
     echo "🔍 Checking for AgentScript updates from ${VERSION_URL}..."
-    REMOTE_ASN="$(curl -fsSL "${VERSION_URL}" 2>/dev/null || true)"
-    if [ -z "$REMOTE_ASN" ]; then
+    VERSION_MANIFEST="$(curl -fsSL "${VERSION_URL}" 2>/dev/null || true)"
+    if [ -z "$VERSION_MANIFEST" ]; then
+      VERSION_MANIFEST="$(curl -fsSL "https://aslang.dev/version.asn" 2>/dev/null || true)"
+    fi
+    if [ -z "$VERSION_MANIFEST" ]; then
       echo "✗ Could not check for updates (offline or network error)."
       exit 1
     fi
-    REMOTE_VER="$(echo "$REMOTE_ASN" | grep ':version' | head -1 | awk -F'"' '{print $2}')"
+    REMOTE_VER="$(echo "$VERSION_MANIFEST" | grep -o '"version": "[^"]*"' | head -1 | cut -d'"' -f4 || true)"
+    [ -z "$REMOTE_VER" ] && REMOTE_VER="$(echo "$VERSION_MANIFEST" | grep ':version' | head -1 | awk -F'"' '{print $2}')"
     LOCAL_VER="0.1.0"
-    if [ "$REMOTE_VER" = "$LOCAL_VER" ]; then
+    if [ "$REMOTE_VER" = "$LOCAL_VER" ] && [ "$1" != "--force" ]; then
       echo "✓ AgentScript is already up to date (v${LOCAL_VER})."
       exit 0
     fi
     echo "🚀 Upgrading AgentScript: v${LOCAL_VER} ➔ v${REMOTE_VER}..."
-    curl -fsSL https://asl-lang.dev/install.sh | bash
-    echo "✓ Successfully updated to v${REMOTE_VER}!"
-    exit 0
+
+    OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+    ARCH="$(uname -m)"
+    case "$ARCH" in
+      x86_64|amd64) ARCH_TAG="x64" ;;
+      arm64|aarch64) ARCH_TAG="arm64" ;;
+      *) ARCH_TAG="unknown" ;;
+    esac
+
+    case "$OS" in
+      mingw*|msys*|cygwin*)
+        if command -v powershell >/dev/null 2>&1; then
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://aslang.dev/install.ps1 | iex"
+          echo "✓ Successfully updated AgentScript on Windows to v${REMOTE_VER}!"
+          exit 0
+        fi
+        ;;
+      darwin|linux)
+        CURRENT_BIN="${BASH_SOURCE[0]}"
+        INSTALL_DIR="$(cd -P "$(dirname "$CURRENT_BIN")" && pwd)"
+        TAR_NAME="asl-${REMOTE_VER}-${OS}-${ARCH_TAG}.tar.gz"
+        DL_URL="https://github.com/GenSEAM/asl/releases/download/v${REMOTE_VER}/${TAR_NAME}"
+        TMP_DIR="$(mktemp -d 2>/dev/null || echo "/tmp/asl-upgrade-$$")"
+        mkdir -p "$TMP_DIR"
+
+        UPGRADED=0
+        if [ "$ARCH_TAG" != "unknown" ]; then
+          echo "--> Fetching pre-built binary: ${DL_URL}..."
+          if curl -fsSL "${DL_URL}" -o "${TMP_DIR}/${TAR_NAME}" 2>/dev/null; then
+            tar -xzf "${TMP_DIR}/${TAR_NAME}" -C "${TMP_DIR}" 2>/dev/null || true
+            if [ -f "${TMP_DIR}/asl/asl" ]; then
+              cp "${TMP_DIR}/asl/asl" "${INSTALL_DIR}/asl.new" 2>/dev/null || cp "${TMP_DIR}/asl/asl" "${CURRENT_BIN}.new" 2>/dev/null || true
+            elif [ -f "${TMP_DIR}/asl" ]; then
+              cp "${TMP_DIR}/asl" "${INSTALL_DIR}/asl.new" 2>/dev/null || cp "${TMP_DIR}/asl" "${CURRENT_BIN}.new" 2>/dev/null || true
+            fi
+            if [ -f "${CURRENT_BIN}.new" ] || [ -f "${INSTALL_DIR}/asl.new" ]; then
+              TARGET_NEW="${INSTALL_DIR}/asl.new"
+              [ ! -f "$TARGET_NEW" ] && TARGET_NEW="${CURRENT_BIN}.new"
+              chmod +x "$TARGET_NEW"
+              mv -f "$TARGET_NEW" "$CURRENT_BIN" 2>/dev/null || mv -f "$TARGET_NEW" "${INSTALL_DIR}/asl"
+              UPGRADED=1
+              echo "✓ Binary atomically upgraded to v${REMOTE_VER}."
+            fi
+          fi
+        fi
+        rm -rf "$TMP_DIR" 2>/dev/null || true
+
+        if [ "$UPGRADED" -eq 0 ]; then
+          echo "--> Falling back to universal installer..."
+          curl -fsSL https://aslang.dev/install.sh | bash
+        fi
+        echo "✓ Successfully updated to v${REMOTE_VER}!"
+        exit 0
+        ;;
+      *)
+        curl -fsSL https://aslang.dev/install.sh | bash
+        echo "✓ Successfully updated to v${REMOTE_VER}!"
+        exit 0
+        ;;
+    esac
     ;;
   task|tasks|run-task)
     CONFIG_FILE="$(find_config_file || true)"
