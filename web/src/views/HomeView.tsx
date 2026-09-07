@@ -5,7 +5,7 @@ import { KeyCapabilities } from '../components/KeyCapabilities';
 import { TheAgentWay } from '../components/TheAgentWay';
 import { InBrowserAgent } from '../components/InBrowserAgent';
 import { AgentWireProtocol } from '../components/AgentWireProtocol';
-import HarnessToolkit from '../../asl-src/components/HarnessToolkit.asl';
+import { HarnessToolkit } from '../components/HarnessToolkit';
 import { ModuleGraphVisualizer } from '../components/ModuleGraphVisualizer';
 import { EngineeringBlog } from '../components/EngineeringBlog';
 
