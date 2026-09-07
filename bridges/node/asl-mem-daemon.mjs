@@ -1568,6 +1568,20 @@ export function buildAslEnv(forms, baseDir = WORKSPACE_ROOT, fnRegistry = new Ma
                 );
               }
             }
+            if (modName.includes('/')) {
+              const parts = modName.split('/');
+              const pkgPart = parts[0];
+              const filePart = parts.slice(1).join('/');
+              const fNames = [filePart, filePart.replace(/-/g, '_'), filePart.replace(/_/g, '-')];
+              for (const fn of fNames) {
+                candidates.unshift(
+                  path.join(WORKSPACE_ROOT, pkgPart, 'src', `${fn}.asl`),
+                  path.join(WORKSPACE_ROOT, 'asl', 'packages', pkgPart, 'src', `${fn}.asl`),
+                  path.join(WORKSPACE_ROOT, 'packages', pkgPart, 'src', `${fn}.asl`),
+                  path.join(WORKSPACE_ROOT, pkgPart, `${fn}.asl`)
+                );
+              }
+            }
             for (const cand of candidates) {
               if (fs.existsSync(cand)) {
                 if (!visited.has(cand)) {
@@ -1788,7 +1802,7 @@ export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) 
     return { _type: baseHead, _args: rawArgs.map(a => evaluateAslSExpr(a, env, fnRegistry)) };
   }
 
-  if (head === 'map') {
+  if (head === 'map' || head === 'list-map') {
     const fnVal = rawArgs[0];
     const listVal = evaluateAslSExpr(rawArgs[1], env, fnRegistry);
     if (!Array.isArray(listVal)) return [];
@@ -2410,6 +2424,101 @@ export function loadHierarchicalConfig(targetDir = process.cwd(), effectiveRoot 
   }
 
   return { merged, loadedFiles, configs };
+}
+
+export function normalizeToolTokenForm(rawTool) {
+  if (!rawTool) return null;
+  if (typeof rawTool === 'object' && !Array.isArray(rawTool) && rawTool.id) {
+    return rawTool;
+  }
+  if (Array.isArray(rawTool)) {
+    const res = {
+      id: '',
+      name: '',
+      scope: ['*'],
+      agents: ['*'],
+      safety: 'safe',
+      doc: '',
+      guidance: '',
+      cmd: '',
+      args: [],
+      env: {},
+      secrets: [],
+      redacted: false
+    };
+    const items = (rawTool[0]?.value === ':tool' || rawTool[0] === ':tool') ? rawTool.slice(1) : rawTool;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const k = (item?.value || String(item)).replace(/^:/, '');
+      if (i + 1 < items.length) {
+        const val = items[++i];
+        if (k === 'id') res.id = val?.value !== undefined ? String(val.value) : String(val);
+        else if (k === 'name') res.name = val?.value !== undefined ? String(val.value) : String(val);
+        else if (k === 'doc') res.doc = val?.value !== undefined ? String(val.value) : String(val);
+        else if (k === 'guidance') res.guidance = val?.value !== undefined ? String(val.value) : String(val);
+        else if (k === 'cmd') res.cmd = val?.value !== undefined ? String(val.value) : String(val);
+        else if (k === 'safety') res.safety = (val?.value !== undefined ? String(val.value) : String(val)).replace(/^:/, '');
+        else if (k === 'scope' && Array.isArray(val)) {
+          res.scope = val.map(v => (v?.value !== undefined ? v.value : v));
+        } else if (k === 'agents' && Array.isArray(val)) {
+          res.agents = val.map(v => (v?.value !== undefined ? v.value : v));
+        } else if (k === 'args' && Array.isArray(val)) {
+          res.args = val.map(v => (v?.value !== undefined ? v.value : v));
+        } else if (k === 'env' && Array.isArray(val)) {
+          for (const b of val) {
+            if (Array.isArray(b) && b.length >= 3) {
+              const bKey = b[1]?.value !== undefined ? b[1].value : b[1];
+              const bVal = b[2]?.value !== undefined ? b[2].value : b[2];
+              res.env[bKey] = bVal;
+            }
+          }
+        } else if (k === 'secrets' && Array.isArray(val)) {
+          for (const s of val) {
+            if (Array.isArray(s)) {
+              const sec = { key: '', source: 'env', ref: '', default: '' };
+              for (let j = 0; j < s.length; j++) {
+                const sk = (s[j]?.value || String(s[j])).replace(/^:/, '');
+                if (j + 1 < s.length) {
+                  const sv = s[++j]?.value !== undefined ? s[j].value : s[j];
+                  if (sk === 'key') sec.key = sv;
+                  else if (sk === 'source') sec.source = sv;
+                  else if (sk === 'ref') sec.ref = sv;
+                  else if (sk === 'default') sec.default = sv;
+                }
+              }
+              if (sec.key) res.secrets.push(sec);
+            }
+          }
+        }
+      }
+    }
+    return res;
+  }
+  return null;
+}
+
+export function getRegisteredTools(options = {}) {
+  const { merged } = loadHierarchicalConfig(options.workspace || process.cwd(), WORKSPACE_ROOT);
+  const toolPlane = merged.tool_plane || merged['tool-plane'] || {};
+  let toolsList = [];
+  if (Array.isArray(toolPlane)) {
+    for (let i = 0; i < toolPlane.length; i++) {
+      const k = toolPlane[i];
+      const kStr = typeof k === 'string' ? k : (k?.value || '');
+      if (kStr === ':tools' && i + 1 < toolPlane.length) {
+        toolsList = toolPlane[i + 1];
+        break;
+      }
+    }
+  } else if (toolPlane.tools && Array.isArray(toolPlane.tools)) {
+    toolsList = toolPlane.tools;
+  }
+  const descriptors = [];
+  for (const rawTool of toolsList) {
+    const t = normalizeToolTokenForm(rawTool);
+    if (t && t.id) descriptors.push(t);
+  }
+  return descriptors;
 }
 
 export async function runAllSevenGates(options = {}) {
@@ -3312,7 +3421,9 @@ async function executeStep(item, idx, options = {}) {
     'syntax': 'syntax',
     'ls': 'ls',
     'dir': 'ls',
-    'glob': 'ls'
+    'glob': 'ls',
+    'tool': 'tool',
+    'tools': 'tool'
   };
   const op = OP_ALIASES[rawOp] || rawOp;
 
@@ -3914,6 +4025,92 @@ async function executeStep(item, idx, options = {}) {
         break;
       }
 
+      case 'tool': {
+        const actionArg = getArg(['action', 'act', 'cmd', 'sub'], 1);
+        let action = 'list';
+        if (actionArg && typeof actionArg === 'string') {
+          action = actionArg.replace(/^:/, '');
+        } else if (getArg(['list']) === true) {
+          action = 'list';
+        } else if (getArg(['get']) !== null && getArg(['get']) !== undefined) {
+          action = 'get';
+        } else if (getArg(['guidance']) !== null && getArg(['guidance']) !== undefined) {
+          action = 'guidance';
+        } else if (getArg(['runbook']) !== null && getArg(['runbook']) !== undefined) {
+          action = 'runbook';
+        } else if (getArg(['run']) !== null && getArg(['run']) !== undefined) {
+          action = 'run';
+        }
+
+        const repoFilter = getArg(['repo', 'scope', 'r'], 2) || '';
+        const roleFilter = getArg(['role', 'agent', 'a'], 3) || '';
+        const ceilingFilter = (getArg(['ceiling', 'safety', 'c'], 4) || '').replace(/^:/, '');
+        const targetId = getArg(['id', 'tool', 't'], 2) || '';
+
+        const allTools = getRegisteredTools();
+        const safetyOrder = { 'safe': 1, 'guarded': 2, 'dangerous': 3 };
+        const maxLevel = safetyOrder[ceilingFilter] || 3;
+
+        const filtered = allTools.filter(t => {
+          if (repoFilter && repoFilter !== '*' && repoFilter !== 'all') {
+            const inScope = t.scope.includes('*') || t.scope.includes('all') || t.scope.includes(repoFilter);
+            if (!inScope) return false;
+          }
+          if (roleFilter && roleFilter !== '*' && roleFilter !== 'all') {
+            const auth = t.agents.includes('*') || t.agents.includes('all') || t.agents.includes(roleFilter);
+            if (!auth) return false;
+          }
+          if (ceilingFilter) {
+            const toolLevel = safetyOrder[t.safety] || 1;
+            if (toolLevel > maxLevel) return false;
+          }
+          return true;
+        });
+
+        if (action === 'get' || action === 'info') {
+          const found = allTools.find(t => t.id === targetId || t.name === targetId);
+          if (!found) {
+            result = makeStepFailure(stepId, 'tool', 'ERR_TOOL_NOT_FOUND', `Tool '${targetId}' not found`);
+            break;
+          }
+          const scopesStr = `[${found.scope.map(s => `"${s}"`).join(' ')}]`;
+          const agentsStr = `[${found.agents.map(a => `"${a}"`).join(' ')}]`;
+          result = makeStepSuccess(stepId, 'tool', `:action "get" :id "${found.id}" :name "${found.name}" :safety :${found.safety} :scope ${scopesStr} :agents ${agentsStr} :doc "${(found.doc || '').replace(/"/g, '\\"')}" :guidance "${(found.guidance || '').replace(/"/g, '\\"')}" :cmd "${found.cmd}" :redacted true`, Date.now() - stepStart);
+          break;
+        }
+
+        if (action === 'guidance') {
+          const found = allTools.find(t => t.id === targetId || t.name === targetId);
+          if (!found) {
+            result = makeStepFailure(stepId, 'tool', 'ERR_TOOL_NOT_FOUND', `Tool '${targetId}' not found`);
+            break;
+          }
+          result = makeStepSuccess(stepId, 'tool', `:action "guidance" :id "${found.id}" :guidance "${(found.guidance || '').replace(/"/g, '\\"')}"`, Date.now() - stepStart);
+          break;
+        }
+
+        if (action === 'runbook') {
+          const found = allTools.find(t => t.id === targetId || t.name === targetId);
+          if (!found) {
+            result = makeStepFailure(stepId, 'tool', 'ERR_TOOL_NOT_FOUND', `Tool '${targetId}' not found`);
+            break;
+          }
+          result = makeStepSuccess(stepId, 'tool', `:action "runbook" :id "${found.id}" :title "${found.name} Operational Runbook" :steps ["verify prerequisites" "execute command" "audit exit code"]`, Date.now() - stepStart);
+          break;
+        }
+
+        // Default: list
+        let resListStr = '[\n';
+        for (const t of filtered) {
+          const scopesStr = `[${t.scope.map(s => `"${s}"`).join(' ')}]`;
+          const agentsStr = `[${t.agents.map(a => `"${a}"`).join(' ')}]`;
+          resListStr += `    (:tool :id "${t.id}" :name "${t.name}" :safety :${t.safety} :scope ${scopesStr} :agents ${agentsStr} :doc "${(t.doc || '').replace(/"/g, '\\"')}" :guidance "${(t.guidance || '').replace(/"/g, '\\"')}" :cmd "${t.cmd}" :redacted true)\n`;
+        }
+        resListStr += '  ]';
+        result = makeStepSuccess(stepId, 'tool', `:action "list" :total ${filtered.length} :res ${resListStr}`, Date.now() - stepStart);
+        break;
+      }
+
       default:
         result = makeStepFailure(stepId, op, 'ERR_UNKNOWN_OP', `Unknown batch operation: ${op}`);
         break;
@@ -4339,6 +4536,33 @@ async function runCli() {
         }
       } else {
         console.log('Usage: asl asn [--to-json <file.asn|content>] [--from-json <file.json|content>]');
+      }
+      break;
+    }
+
+    case 'tool':
+    case 'tools': {
+      const sub = args[0] || 'list';
+      const tools = getRegisteredTools();
+      if (sub === 'list') {
+        console.log(`Configured Control Plane Tools (${tools.length}):`);
+        for (const t of tools) {
+          console.log(`  - ${t.id} [${t.safety}]: ${t.name} (cmd: ${t.cmd})`);
+          if (t.guidance) console.log(`    Guidance: ${t.guidance}`);
+        }
+        process.exit(0);
+      } else if (sub === 'get' || sub === 'info') {
+        const id = args[1];
+        const t = tools.find(x => x.id === id);
+        if (!t) {
+          console.error(`Error: tool '${id}' not found`);
+          process.exit(1);
+        }
+        console.log(JSON.stringify(t, null, 2));
+        process.exit(0);
+      } else {
+        console.log('Usage: asl tool [list|info <id>]');
+        process.exit(0);
       }
       break;
     }

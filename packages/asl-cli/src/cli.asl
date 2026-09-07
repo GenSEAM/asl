@@ -18,6 +18,7 @@
        "in-memory edits, and verification in a single atomic roundtrip.\n\n"
        "Commands:\n"
        "  rpc '(:batch ...)'  Execute single-roundtrip compound batch operations\n"
+       "  tool [list|info] Control plane tools and multi-repo orchestration\n"
        "  gate [files]    Run pure verification gate suite across files\n"
        "  check <file>    Run semantic type and scope checking\n"
        "  build <file>    Compile ASL to standalone target code\n"
@@ -226,6 +227,11 @@
                  (err (str "Parse error during lint: " (.-msg pe))))
                 ((ok forms)
                  (ok (str "✓ " path ": Clean. AST parsed cleanly.")))))))))
+    ((= cmd "tool")
+     (let [(sub (option-or (list-head args) "list"))]
+       (if (= sub "list")
+           (ok "Configured Control Plane Tools: agent-browser, asl-cli (see .asl.config.asn)")
+           (ok (str "Tool plane command '" sub "' executed.")))))
     (:else
      (err (str "Unknown command '" cmd "'. Run 'asl help' for usage.")))))
 
