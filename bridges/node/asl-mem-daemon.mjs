@@ -501,6 +501,16 @@ export function buildIndex(rootDir = WORKSPACE_ROOT) {
     idfMap.set(term, Math.log((totalDocs + 1) / (freq + 1)) + 1.0);
   }
 
+  for (const rel of Object.keys(dirty)) {
+    if (!fileBuffers.has(rel)) {
+      fileBuffers.set(rel, {
+        content: dirty[rel],
+        initialContent: getInitialDiskContent(rel),
+        isDirty: true
+      });
+    }
+  }
+
   memoryIndex = {
     version: "0.2.0",
     workspace: rootDir,
@@ -516,7 +526,8 @@ export function buildIndex(rootDir = WORKSPACE_ROOT) {
     reverseCallGraph: new Map(),
     idf: idfMap,
     documents: docs,
-    dirtyMap: dirty
+    dirtyMap: dirty,
+    tombstones: memoryIndex.tombstones || new Set()
   };
 
   saveSnapshot();
@@ -589,6 +600,10 @@ export function loadSnapshot() {
     idfMap.set(term, Math.log((totalDocs + 1) / (freq + 1)) + 1.0);
   }
 
+  const existingDirty = memoryIndex.dirtyMap || {};
+  const existingBuffers = memoryIndex.fileBuffers || new Map();
+  const existingTombstones = memoryIndex.tombstones || new Set();
+
   memoryIndex = {
     version: "0.2.0",
     workspace: WORKSPACE_ROOT,
@@ -598,12 +613,13 @@ export function loadSnapshot() {
     edgesCount: 0,
     symbols: symbolsMap,
     fileSymbols: new Map(),
-    fileBuffers: new Map(),
+    fileBuffers: existingBuffers,
     callGraph: new Map(),
     reverseCallGraph: new Map(),
     idf: idfMap,
     documents: docs,
-    dirtyMap: loadDirtyMap()
+    dirtyMap: { ...loadDirtyMap(), ...existingDirty },
+    tombstones: existingTombstones
   };
 
   return memoryIndex;
