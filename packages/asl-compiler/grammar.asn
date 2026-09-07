@@ -7,11 +7,19 @@
   :symbols [
     ;; 1-Token Baseline Types
     (:sym :name "CompileResult" :kind :type :tokens 1)
+    (:sym :name "EvalValue" :kind :type :tokens 1)
+    (:sym :name "EvalEnv" :kind :type :tokens 1)
 
     ;; <= 2-Token Primary API Symbols
     (:sym :name "compile-source" :kind :fn :tokens 2)
     (:sym :name "format-diagnostic" :kind :fn :tokens 2)
     (:sym :name "run-tests" :kind :fn :tokens 2)
+    (:sym :name "env-lookup" :kind :fn :tokens 2)
+    (:sym :name "env-bind" :kind :fn :tokens 2)
+    (:sym :name "eval-atom" :kind :fn :tokens 2)
+    (:sym :name "eval-sexpr" :kind :fn :tokens 2)
+    (:sym :name "eval-assert" :kind :fn :tokens 2)
+    (:sym :name "is-truthy?" :kind :fn :tokens 2)
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "compile-source-target" :kind :fn :tokens 3
@@ -20,6 +28,24 @@
           :rationale "Cannot be reduced to 'compile-source': 'standalone' qualifier indicates an isolated compilation pipeline without workspace dependency resolution")
     (:sym :name "compile-standalone-target" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compile-target': 'standalone' qualifier indicates isolated target backend emission without global project manifests")
+    (:sym :name "make-root-env" :kind :fn :tokens 3
+          :rationale "Distinguishes root evaluation environment with empty frames from nested child scopes")
+    (:sym :name "make-child-env" :kind :fn :tokens 3
+          :rationale "Distinguishes child nested evaluation frame creation from unparented root scope initialization")
+    (:sym :name "eval-builtin-arithmetic" :kind :fn :tokens 3
+          :rationale "Isolates binary arithmetic evaluation dispatcher from logic, string, and comparison evaluators")
+    (:sym :name "eval-builtin-comparison" :kind :fn :tokens 3
+          :rationale "Isolates structural and relational comparison evaluator from arithmetic and logic operations")
+    (:sym :name "eval-builtin-logic" :kind :fn :tokens 3
+          :rationale "Isolates boolean logic evaluator from arithmetic, comparison, and string operation dispatchers")
+    (:sym :name "eval-builtin-string" :kind :fn :tokens 3
+          :rationale "Isolates string operations (concatenation, length, containment) from list and arithmetic operations")
+    (:sym :name "eval-builtin-list" :kind :fn :tokens 3
+          :rationale "Isolates list operations (cons, head, tail, emptiness) from string and arithmetic dispatchers")
+    (:sym :name "eval-special-form" :kind :fn :tokens 3
+          :rationale "Distinguishes non-strict special form evaluation (if, assert, do) from standard eager argument evaluation")
+    (:sym :name "eval-result-is-ok?" :kind :fn :tokens 4
+          :rationale "Verifies whether an EvalValue is a successful evaluated outcome versus an explicit val-error")
     (:sym :name "test-compile-clean-function" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-clean-fn': scopes end-to-end compiler test specifically to valid function ASTs, preventing collision with parser tests")
     (:sym :name "test-compile-clean-schema" :kind :fn :tokens 4
@@ -30,4 +56,20 @@
           :rationale "Cannot be reduced to 'test-parse-error': distinguishes compiler-level diagnostic reporting from raw lexer/parser error generation")
     (:sym :name "test-compile-type-error" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-type-error': distinguishes full compilation failure reporting from isolated typechecker tests")
+    (:sym :name "test-eval-literals" :kind :fn :tokens 3
+          :rationale "Scopes unit test suite specifically to evaluator primitive literal decoding, avoiding parser overlap")
+    (:sym :name "test-eval-arithmetic" :kind :fn :tokens 3
+          :rationale "Scopes unit test suite specifically to evaluator arithmetic operators (+, -, *, /, mod)")
+    (:sym :name "test-eval-comparison" :kind :fn :tokens 3
+          :rationale "Scopes unit test suite specifically to evaluator comparison operators (=, !=, <, >=)")
+    (:sym :name "test-eval-logic" :kind :fn :tokens 3
+          :rationale "Scopes unit test suite specifically to evaluator boolean logic operators (and, or)")
+    (:sym :name "test-eval-strings" :kind :fn :tokens 3
+          :rationale "Scopes unit test suite specifically to evaluator string builtins (str-concat, str-len, str-contains?)")
+    (:sym :name "test-eval-env-binding" :kind :fn :tokens 4
+          :rationale "Scopes unit test suite specifically to lexical environment binding and parent frame resolution")
+    (:sym :name "test-eval-assert" :kind :fn :tokens 3
+          :rationale "Scopes unit test suite specifically to falsifiable assertion execution and error propagation")
+    (:sym :name "test-eval-if-branch" :kind :fn :tokens 4
+          :rationale "Scopes unit test suite specifically to evaluator conditional if-branch execution")
   ])
