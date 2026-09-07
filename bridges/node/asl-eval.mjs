@@ -360,11 +360,12 @@ const knownBuiltins = new Set([
   'string-from-int64', 'string-from-float64',
   'string-contains?', 'string-starts-with?', 'string-ends-with?',
   'string-split', 'string-join', 'string-trim', 'string-empty?',
-  'string-length', 'string-slice', 'string-replace',
   'list', 'list-cons', 'list-head', 'list-tail', 'list-empty?', 'list-length', 'list-drop',
+  'list-sort', 'list-sort-by', 'list-sum', 'list-min', 'list-max', 'list-index-of',
   'cons', 'first', 'rest',
-  'map-empty', 'map-set', 'map-get', 'map-size',
-  'ok', 'err', 'some', 'none', 'is-ok?', 'is-err?', 'is-some?', 'is-none?'
+  'map-empty', 'map-set', 'map-get', 'map-size', 'map-keys', 'map-values', 'map-pairs', 'map-from-pairs', 'map-remove',
+  'ok', 'err', 'some', 'none', 'is-ok?', 'is-err?', 'is-some?', 'is-none?',
+  'option-map', 'result-or', 'option-to-result'
 ]);
 
 // 1. Division by zero check (fast path)
@@ -482,6 +483,17 @@ function evalNode(node) {
   if (node.type === 'list') {
     if (node.items.length === 0) return [];
     const headNode = node.items[0];
+    if (headNode.type === 'kw') {
+      const obj = {};
+      for (let j = 0; j < node.items.length; j += 2) {
+        const kNode = node.items[j];
+        const vNode = j + 1 < node.items.length ? node.items[j + 1] : null;
+        if (kNode?.type === 'kw') {
+          obj[kNode.value] = evalNode(vNode);
+        }
+      }
+      return obj;
+    }
     if (headNode.type !== 'sym') {
       console.error("ERR_UNSUPPORTED_APPLICATION_HEAD");
       process.exit(1);
@@ -577,6 +589,55 @@ function evalNode(node) {
     if (head === 'none') return { _tag: 'none', value: null };
     if (head === 'is-some?') return evalArgs[0]?._tag === 'some';
     if (head === 'is-none?') return evalArgs[0]?._tag === 'none';
+    if (head === 'option-map') {
+      if (evalArgs[0]?._tag === 'some') return { _tag: 'some', value: evalArgs[1] !== undefined ? evalArgs[1] : evalArgs[0].value };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'result-or') {
+      return evalArgs[0]?._tag === 'ok' ? evalArgs[0].value : evalArgs[1];
+    }
+    if (head === 'option-to-result') {
+      return evalArgs[0]?._tag === 'some' ? { _tag: 'ok', value: evalArgs[0].value } : { _tag: 'err', value: evalArgs[1] };
+    }
+
+    // List and Map builtins
+    if (head === 'list-sort') {
+      const arr = Array.isArray(evalArgs[0]) ? [...evalArgs[0]] : [];
+      return arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    }
+    if (head === 'list-sum') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.reduce((a, b) => Number(a) + Number(b), 0);
+    }
+    if (head === 'list-min') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.length ? arr.reduce((a, b) => (a < b ? a : b)) : null;
+    }
+    if (head === 'list-max') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.length ? arr.reduce((a, b) => (a > b ? a : b)) : null;
+    }
+    if (head === 'list-index-of') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.indexOf(evalArgs[1]);
+    }
+    if (head === 'map-keys') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
+      return Object.keys(obj);
+    }
+    if (head === 'map-values') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
+      return Object.values(obj);
+    }
+    if (head === 'map-size') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
+      return Object.keys(obj).length;
+    }
+    if (head === 'map-remove') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? { ...evalArgs[0] } : {};
+      delete obj[String(evalArgs[1])];
+      return obj;
+    }
 
     // Comparison builtins
     if (head === '=') return evalArgs[0] === evalArgs[1];
@@ -616,6 +677,12 @@ function formatOutput(val) {
   }
   if (Array.isArray(val)) {
     return '(' + val.map(formatOutput).join(' ') + ')';
+  }
+  if (val && typeof val === 'object') {
+    const keys = Object.keys(val);
+    if (keys.length === 0) return '(:m)';
+    const pairs = keys.map(k => `:${k} ${formatOutput(val[k])}`).join(' ');
+    return `(${pairs})`;
   }
   return String(val);
 }
