@@ -34,11 +34,14 @@ The verification suite evaluates seven gates:
 6. **ASN Grammar & Symbol Density**: Verifies symbol registries, token budget limits (<= 2 tokens under BPE), and unambiguous canonical naming.
 7. **Modular Skills Freshness**: Confirms skill frontmatters, trigger descriptions, and protocol names are synchronized.
 
-Individual module checks and tests can be run targeted:
+Individual module checks, dynamic execution, and tests can be run targeted:
 ```bash
-asl check <path-to-file.asl>
-asl test [path-to-test.asl]
-asl audit <path-to-file.asl>
+asl lint <path-to-file.asl>           # AST delimiter balance & anti-pattern linter (asl check aliases to lint)
+asl run <path-to-file.asl>            # In-memory AST tree-walking interpreter
+asl run <path-to-file.asl> --wasm     # In-memory WebAssembly bytecode compilation & MicroVM execution
+asl run <path-to-file.asl> --wat      # WebAssembly Text format emission
+asl test [path-to-test.asl]          # Run native test suites
+asl audit <path-to-file.asl>         # Run lint, test, and blast-radius impact analysis
 ```
 
 ## 3. Standard & Verbose Projection Protocol
