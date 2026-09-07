@@ -203,5 +203,29 @@
           :rationale "Unit test verifying shell token savings calculation")
     (:sym :name "run-sh-tests" :kind :fn :tokens 3
           :rationale "Test runner executing all shell transpile test cases")
+
+    ;; Phase 266 Data Placement Optimizer Symbols
+    (:sym :name "PlacementKind" :kind :type :tokens 2)
+    (:sym :name "placement-aos" :kind :val :tokens 2)
+    (:sym :name "placement-columnar" :kind :val :tokens 2)
+    (:sym :name "placement-table" :kind :val :tokens 2)
+    (:sym :name "placement-rows" :kind :val :tokens 2)
+    (:sym :name "LayoutMetrics" :kind :type :tokens 2)
+    (:sym :name "PlacementResult" :kind :type :tokens 2)
+    (:sym :name "analyze-records" :kind :fn :tokens 2)
+    (:sym :name "recommend-placement" :kind :fn :tokens 2)
+    (:sym :name "aos-to-columnar" :kind :fn :tokens 3
+          :rationale "Transforms Array-of-Structs records to Columnar ASN representation")
+    (:sym :name "columnar-to-aos" :kind :fn :tokens 3
+          :rationale "Transforms Columnar ASN representation back to Array-of-Structs records")
+    (:sym :name "aos-to-table" :kind :fn :tokens 3
+          :rationale "Transforms Array-of-Structs records to Table ASN representation")
+    (:sym :name "table-to-aos" :kind :fn :tokens 3
+          :rationale "Transforms Table ASN representation back to Array-of-Structs records")
+    (:sym :name "optimize-placement-string" :kind :fn :tokens 3
+          :rationale "Parses ASN S-expression, evaluates layout, and emits token-compacted output")
+    (:sym :name "measure-placement-savings" :kind :fn :tokens 3
+          :rationale "Calculates percentage token compaction delta relative to baseline AoS layout")
   ])
+
 
