@@ -207,19 +207,37 @@
          :success false))
       (:else
        (let [(orig-tok (estimate-tokens trimmed))
-             ;; Handle void/self-closing elements: <img src="pic.png"> -> (img (:src "pic.png"))
-             (s1 (string-replace (string-replace trimmed "<img " "(img (:") ">" "))"))
-             (s2 (string-replace (string-replace s1 "<input " "(input (:") ">" "))"))
-             ;; Handle container tags: <div class="btn">...</div>
-             (s3 (string-replace (string-replace s2 "<div" "(div") "</div>" ")"))
-             (s4 (string-replace (string-replace s3 "<span" "(span") "</span>" ")"))
-             (s5 (string-replace (string-replace s4 "<p" "(p") "</p>" ")"))
-             (s6 (string-replace (string-replace s5 "<h1" "(h1") "</h1>" ")"))
-             (s7 (string-replace s6 " class=\"" " (:class \""))
-             (s8 (string-replace s7 " id=\"" " :id \""))
-             (s9 (string-replace s8 "\">" "\") "))
-             (s10 (string-replace s9 ">" " "))
-             (compact (string-replace s10 "  " " "))
+              ;; Handle void/self-closing elements: <img src="pic.png"> -> (img (:src "pic.png"))
+              (s_img (if (string-contains? trimmed "<img ")
+                         (let [(parts (string-split trimmed "<img "))
+                               (head-part (option-or (list-head parts) ""))
+                               (tail-part (option-or (list-head (list-drop parts 1)) ""))
+                               (sub-parts (string-split tail-part ">"))
+                               (attr-part (option-or (list-head sub-parts) ""))
+                               (rest-part (string-join (list-drop sub-parts 1) ">"))
+                               (vdom-img (str "(img (:" (string-replace (string-replace attr-part "=\"" " \"") "/>" "") "))"))]
+                           (str head-part vdom-img rest-part))
+                         trimmed))
+              (s_inp (if (string-contains? s_img "<input ")
+                         (let [(parts (string-split s_img "<input "))
+                               (head-part (option-or (list-head parts) ""))
+                               (tail-part (option-or (list-head (list-drop parts 1)) ""))
+                               (sub-parts (string-split tail-part ">"))
+                               (attr-part (option-or (list-head sub-parts) ""))
+                               (rest-part (string-join (list-drop sub-parts 1) ">"))
+                               (vdom-inp (str "(input (:" (string-replace (string-replace attr-part "=\"" " \"") "/>" "") "))"))]
+                           (str head-part vdom-inp rest-part))
+                         s_img))
+              ;; Handle container tags: <div class="btn">...</div>
+              (s1 (string-replace (string-replace s_inp "<div" "(div") "</div>" ")"))
+              (s2 (string-replace (string-replace s1 "<span" "(span") "</span>" ")"))
+              (s3 (string-replace (string-replace s2 "<p" "(p") "</p>" ")"))
+              (s4 (string-replace (string-replace s3 "<h1" "(h1") "</h1>" ")"))
+              (s5 (string-replace s4 " class=\"" " (:class \""))
+              (s6 (string-replace s5 " id=\"" " :id \""))
+              (s7 (string-replace s6 "\">" "\") "))
+              (s8 (string-replace s7 ">" " "))
+              (compact (string-replace s8 "  " " "))
              (asn-tok (estimate-tokens compact))
              (savings (calc-savings orig-tok asn-tok))]
          (TranspileResult
@@ -249,16 +267,27 @@
          :success false))
       (:else
        (let [(orig-tok (estimate-tokens trimmed))
-             ;; Convert void tags
-             (s1 (string-replace (string-replace trimmed "(img (:" "<img ") "))" "/>"))
-             (s2 (string-replace (string-replace s1 "(input (:" "<input ") "))" "/>"))
-             ;; Convert standard container tags
-             (s3 (string-replace (string-replace s2 "(div" "<div") ")" "</div>"))
-             (s4 (string-replace (string-replace s3 "(span" "<span") ")" "</span>"))
-             (s5 (string-replace (string-replace s4 "(p" "<p") ")" "</p>"))
-             (s6 (string-replace s5 " (:class \"" " class=\""))
-             (s7 (string-replace s6 " :id \"" " id=\""))
-             (html-out (string-replace s7 "\") " "\">"))]
+             ;; Attributes
+             (s1 (string-replace trimmed " (:class \"" " class=\""))
+             (s2 (string-replace s1 " :id \"" " id=\""))
+             (s3 (string-replace s2 " (:src \"" " src=\""))
+             (s4 (string-replace s3 " (:value \"" " value=\""))
+             ;; Close attributes
+             (s5 (string-replace s4 "\") (" "\">("))
+             (s6 (string-replace s5 "\") " "\">"))
+             ;; Container tags
+             (s7 (string-replace (string-replace s6 "(div " "<div ") "(div>" "<div >"))
+             (s8 (string-replace (string-replace s7 "(span \"" "<span>") "(span " "<span "))
+             (s9 (string-replace (string-replace s8 "(p \"" "<p>") "(p " "<p "))
+             (s10 (string-replace (string-replace s9 "(h1 \"" "<h1>") "(h1 " "<h1 "))
+             ;; Close text container and parent
+             (s11 (string-replace (string-replace s10 "\"))" "</span></div>") "\")" "</span>"))
+             ;; Void tags
+             (s12 (string-replace (string-replace s11 "(img " "<img ") "(input " "<input "))
+             (s13 (string-replace (string-replace s12 "\"/>" "/>") "\">" "\">"))
+             (s14 (string-replace s13 "\">(" "\"><"))
+             (s15 (string-replace s14 "\"> <" "\"><"))
+             (html-out (string-replace s15 "  " " "))]
          (TranspileResult
            :output html-out
            :original-tokens orig-tok

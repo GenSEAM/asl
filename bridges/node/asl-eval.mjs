@@ -348,7 +348,7 @@ if (rawArgs[0] === 'asn' || rawArgs[0] === '--from-json' || rawArgs[0] === '--to
 
 const knownBuiltins = new Set([
   '+', '-', '*', '/', 'mod',
-  '=', '!=', '<', '>', '<=', '>=',
+  '=', '==', '!=', '<', '>', '<=', '>=',
   'not', 'and', 'or',
   'if', 'assert', 'let', 'do', 'cond', 'when', 'unless', 'mt',
   'df', 'fn', 'module', 'dfe', 'dfs',
@@ -357,7 +357,7 @@ const knownBuiltins = new Set([
   'string-length', 'string-from-int64', 'string-from-int', 'string-from-float64', 'string-from-float',
   'string-contains?', 'string-starts-with?', 'string-ends-with?',
   'string-split', 'string-join', 'string-trim', 'string-empty?',
-  'list', 'list-cons', 'list-head', 'list-tail', 'list-empty?', 'list-length', 'list-len', 'list-drop',
+  'list', 'list-cons', 'list-head', 'list-tail', 'list-empty?', 'list-length', 'list-len', 'len', 'list-drop',
   'list-sort', 'list-sort-by', 'list-sum', 'list-min', 'list-max', 'list-index-of',
   'cons', 'first', 'rest',
   'map-empty', 'map-set', 'map-get', 'map-size', 'map-keys', 'map-values', 'map-pairs', 'map-from-pairs', 'map-remove',
@@ -420,8 +420,21 @@ function parseAllSExprs(input) {
     const ch = input[i];
     if (ch === "(") return parseList();
     if (ch === "[") return parseVector();
+    if (ch === "{") return parseMap();
     if (ch === "\"") return parseStr();
     return parseAtom();
+  }
+  function parseMap() {
+    i++;
+    const items = [];
+    skipWhitespace();
+    while (i < input.length && input[i] !== "}") {
+      const val = parseVal();
+      if (val !== null) items.push(val);
+      skipWhitespace();
+    }
+    if (i < input.length && input[i] === "}") i++;
+    return { type: "map", items };
   }
   function parseStr() {
     i++;
@@ -510,11 +523,26 @@ function evalNode(node, env = new Map()) {
     if (node.value === 'true') return true;
     if (node.value === 'false') return false;
     if (node.value === 'null' || node.value === 'nil' || node.value === '_') return null;
-    console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${node.value}'`);
-    process.exit(1);
+    throw new Error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${node.value}'`);
   }
   if (node.type === 'vec') {
     return node.items.map(it => evalNode(it, env));
+  }
+  if (node.type === 'map') {
+    const obj = {};
+    for (let j = 0; j < node.items.length; j += 2) {
+      const kNode = node.items[j];
+      const vNode = j + 1 < node.items.length ? node.items[j + 1] : null;
+      let key;
+      if (kNode?.type === 'kw' || kNode?.type === 'str' || kNode?.type === 'sym') {
+        key = kNode.value;
+      } else {
+        const evaluatedKey = evalNode(kNode, env);
+        key = (evaluatedKey && typeof evaluatedKey === 'object' && evaluatedKey.value !== undefined) ? evaluatedKey.value : evaluatedKey;
+      }
+      obj[String(key)] = evalNode(vNode, env);
+    }
+    return obj;
   }
   if (node.type === 'list') {
     if (node.items.length === 0) return [];
@@ -579,8 +607,7 @@ function evalNode(node, env = new Map()) {
     }
 
     if (!knownBuiltins.has(head)) {
-      console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
-      process.exit(1);
+      throw new Error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
     }
 
     // Special forms: module
@@ -686,9 +713,8 @@ function evalNode(node, env = new Map()) {
       const condVal = evalNode(node.items[1], env);
       const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
       if (!isTruthy) {
-        const fnName = node.items[1]?.items?.[0]?.value || node.items[1]?.value || '';
         const msg = node.items[2] ? evalNode(node.items[2], env) : 'assertion evaluated to false';
-        console.error(`ERR_ASSERTION_FAILED: ${fnName} ${msg}`);
+        console.error(`[ASL_ASSERTION_FAILURE]: ${msg}`);
         process.exit(1);
       }
       return true;
@@ -1046,7 +1072,7 @@ function evalNode(node, env = new Map()) {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       return arr.length === 0;
     }
-    if (head === 'list-length' || head === 'length' || head === 'list-len') {
+    if (head === 'list-length' || head === 'length' || head === 'list-len' || head === 'len') {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       return BigInt(arr.length);
     }
@@ -1158,11 +1184,12 @@ function evalNode(node, env = new Map()) {
     }
     if (head === 'map-size') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
-      return Object.keys(obj).length;
+      return BigInt(Object.keys(obj).length);
     }
     if (head === 'map-remove') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? { ...evalArgs[0] } : {};
-      delete obj[String(evalArgs[1])];
+      const key = String(evalArgs[1]);
+      delete obj[key];
       return obj;
     }
     if (head === 'map-empty') {
@@ -1183,10 +1210,13 @@ function evalNode(node, env = new Map()) {
     }
 
     // Comparison builtins
-    if (head === '=') {
+    if (head === '=' || head === '==') {
       const a = evalArgs[0];
       const b = evalArgs[1];
       if (a === b) return true;
+      if ((typeof a === 'bigint' && typeof b === 'number') || (typeof a === 'number' && typeof b === 'bigint')) {
+        return a == b;
+      }
       if (a && b && typeof a === 'object' && typeof b === 'object') {
         if (a._type === 'variant' && b._type === 'variant') {
           return a._variant === b._variant;
@@ -1199,6 +1229,9 @@ function evalNode(node, env = new Map()) {
       const a = evalArgs[0];
       const b = evalArgs[1];
       if (a === b) return false;
+      if ((typeof a === 'bigint' && typeof b === 'number') || (typeof a === 'number' && typeof b === 'bigint')) {
+        return a != b;
+      }
       if (a && b && typeof a === 'object' && typeof b === 'object') {
         if (a._type === 'variant' && b._type === 'variant') {
           return a._variant !== b._variant;
@@ -1431,8 +1464,10 @@ function resolveModulePath(currentFile, modName) {
       path.join(dir, '..', 'src', v + '.asl'),
       path.join(dir, '..', 'src', 'core', v + '.asl'),
       path.join(dir, '..', 'src', 'core', 'sql.asl'),
+      path.join(dir, '..', 'src', 'data', 'blog', v + '.asl'),
       path.join(dir, 'src', v + '.asl'),
       path.join(dir, 'src', 'core', v + '.asl'),
+      path.join(wsRoot, 'asl', 'web', 'src', 'data', 'blog', v + '.asl'),
       path.join(wsRoot, v + '.asl'),
       path.join(wsRoot, 'harness', 'src', v + '.asl'),
       path.join(wsRoot, 'gsa', 'src', v + '.asl'),
@@ -1562,7 +1597,7 @@ if (/\(\s*\/\s+[-0-9.]+\s+0(\.0+)?\s*\)/.test(expr)) {
 const headMatch = expr.match(/^\(\s*([^\s()]+)/);
 if (headMatch) {
   const head = headMatch[1];
-  if (!knownBuiltins.has(head)) {
+  if (!head.startsWith('.-') && !knownBuiltins.has(head)) {
     console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
     process.exit(1);
   }

@@ -603,14 +603,34 @@ case "$CMD" in
         echo "=== [ASL Strict Falsifiable Verification] Auditing test assertions against vacuous passes ==="
         TOTAL_ASSERTS=0
         SUITES=0
+        FAIL=0
+        EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
         for tf in $(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
           c=$(grep -cE '\(assert[ \t]+' "$tf" 2>/dev/null || true)
           if [ "$c" -gt 0 ]; then
+            if ! check_syntax_and_delimiters "$tf" "check" > /dev/null 2>&1; then
+              echo "    ✗ $tf: Delimiter balance or syntax failure"
+              FAIL=1
+              continue
+            fi
+            if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+              TEST_EXIT=0
+              TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$tf" 2>&1)" || TEST_EXIT=$?
+              if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
+                echo "    ✗ $tf: Assertion failure during test execution"
+                echo "      $TEST_OUT"
+                FAIL=1
+                continue
+              fi
+            fi
             SUITES=$((SUITES + 1))
             TOTAL_ASSERTS=$((TOTAL_ASSERTS + c))
             echo "    ✓ $tf: $c evaluated assertion(s) recorded cleanly."
           fi
         done
+        if [ "$FAIL" -ne 0 ]; then
+          exit 1
+        fi
         echo "    ✓ All $SUITES native test suite(s) with assertions audited ($TOTAL_ASSERTS evaluated assertions recorded cleanly)."
         exit 0
       fi
@@ -644,7 +664,7 @@ case "$CMD" in
         if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
           TEST_EXIT=0
           TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$TARGET" 2>&1)" || TEST_EXIT=$?
-          if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -q "ERR_ASSERTION_FAILED"; then
+          if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
             echo "    ✗ $f: Assertion failure during test execution"
             echo "      $TEST_OUT"
             FAIL=1
