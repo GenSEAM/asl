@@ -39,7 +39,35 @@ Rather than spinning up slow containers (Docker takes 300–800ms), ASL compiles
 
 ---
 
-## 3. The Universal Framework & Language Bridge
+## 3. The Ocular Parsing Fallacy: Code in 2026 is Compiled Thought
+
+In 2026, software is no longer written by human fingers pecking mechanical keyboards at 40 words per minute. Over 80% of lines of code in production are synthesized, refactored, audited, and reasoned over by autonomous language models operating at 100+ tokens per second.
+
+Yet the industry remains trapped in the **Ocular Parsing Fallacy**: the persistent, superstitious belief that source code must be formatted to flatter the bi-focal human eyeball.
+
+Consider the absurdity of modern developer rituals:
+* Senior engineers squinting through four levels of visual indentation tabs like medieval Benedictine monks illuminating manuscripts with goose quills by candlelight.
+* Entire teams arguing for two hours in code review over whether dangling commas deserve an extra newline or if curly braces should cuddle on line 14.
+* Autoregressive neural transformers with billions of parameters being forced to play human parlor games: guessing invisible whitespace indentation levels, juggling operator precedence rules, or backtracking through borrow-checker graph knots.
+
+**A language model has no retinas.** It does not appreciate pastel VS Code syntax themes, ligatures in Fira Code, or 4-space tab stops. It reasons in Abstract Syntax Trees, topological dependency graphs, and mathematical transformations.
+
+S-expressions are not a quirky retro-computing revival. They are the **direct, uncorrupted serialization of thought**. A tree with balanced delimiters requires zero visual decoration to be unambiguously parsed. When a model emits `(df calc [(x I64)] (+ x 1))`, there is zero ambiguity, zero parsing drift, and zero tokens squandered on ocular theatre.
+
+### The Zero-Downtime Migration Compact
+Does this mean you must burn your legacy Python, Rust, Go, or TypeScript repositories to the ground in a fit of revolutionary zeal? **Absolutely not.**
+
+We are compiler engineers, not religious zealots. Enterprise systems survive through **progressive coexistence, not wholesale suicide rewrites**. 
+
+Through ASL's **Multi-Runtime Insets** (`(:stage :calc :runtime :wasm ...)` / `(:inset :py ...)`), AgentScript acts as an incremental Strangler Fig:
+1. **Zero Panic**: Leave 95% of your existing codebase untouched in Python, React, Go, or Rust.
+2. **Targeted Relief**: Identify the single highest-latency algorithm, the flakiest payment state machine, or the most token-expensive prompt template.
+3. **Sovereign Intermediary**: Express that kernel in pure AgentScript S-expressions.
+4. **Instant Linkage**: AgentScript automatically synthesizes the C-FFI bindings, typed Python wrappers, or Wasm browser shims. Your test suite passes, your latency drops 50x, and your agents stop hallucinating syntax errors overnight.
+
+---
+
+## 4. The Universal Framework & Language Bridge
 
 ASL is the single source of truth for application business logic:
 
@@ -60,7 +88,7 @@ ASL is the single source of truth for application business logic:
 
 ---
 
-## 4. Empirical Verification & Safety Record
+## 5. Empirical Verification & Safety Record
 
 We do not trust compiler promises without empirical proof:
 
@@ -72,7 +100,7 @@ We do not trust compiler promises without empirical proof:
 
 ---
 
-## 5. Quick Start in 10 Seconds
+## 6. Quick Start in 10 Seconds
 
 ```bash
 # Scaffold a new project

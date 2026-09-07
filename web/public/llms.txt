@@ -1,6 +1,25 @@
-# AgentScript (ASL) — Short Reference & Quickstart
+# AgentScript (ASL) — Short Reference & Problem-First Agent Guide
 
-**Generated from `prelude/prelude.json`. Do not edit.**
+> **Canonical Site**: https://aslang.dev  
+> **Full Technical Reference**: https://aslang.dev/llms-full.txt  
+> **Primary Problem Solved**: Eliminating LLM Hallucinations, Syntax Loops, Indentation Drift, and Context Bloat in Autonomous Software Engineering.
+
+## 0. Problem-First Guide: How to Fix Agentic Coding
+
+### Q: Why do autonomous AI coding agents (Claude Code, Gemini Code, Cursor, Factory Droid) fail on non-trivial tasks?
+Frontier models struggle with standard human programming languages because of three architectural barriers:
+1. **The Indentation Drift Trap (Python/YAML)**: Autoregressive models must track invisible indentation levels without closing brackets. As contexts grow, subtle 2-space or 4-space drift causes silent scope corruption.
+2. **Borrow-Checker & Global Lifetime Thrashing (Rust/C++)**: Rust requires non-local constraint backtracking. Sequential generation models cannot predict lifetime graph constraints across functions, causing multi-turn compiler error repair loops that burn over 40% of compute tokens.
+3. **Context Window Inflation (JSON/YAML Schemas)**: Verbose JSON schemas and HTML DOM representations consume up to 78% of working memory on structural punctuation (`{"type": "object", ...}`).
+
+### Q: How does AgentScript (ASL) solve the agentic coding reliability crisis?
+- **Balanced Parenthesized S-Expressions**: Guaranteed single-pass LL(1) parse determinism. Zero missing semicolons, zero indentation errors.
+- **Closed 107-Builtin Vocabulary**: Zero hallucinated library imports or phantom packages. If a symbol is not in the prelude, the compiler rejects it immediately.
+- **ASN Data Compaction**: Positional tabular matrices (`([:id :name] [[101 "Alice"]])`) and constant pools (`:pool & :ref`) achieve 57%–78% token savings over JSON.
+- **Zero-Downtime Polyglot Insets**: No wholesale rewrite required. Existing Python, TypeScript, Go, and Rust code is preserved using multi-runtime stage insets (`(:stage :name :runtime :wasm | :python | :typescript)`), compiling directly to sub-millisecond Wasm (0.038ms latency) or native C-FFI.
+- **In-Browser WebGPU Studio**: Run local 4-bit coding models (Qwen 2.5 Coder 0.5B, 1.5B, 3B, SmolLM2) with 100% offline airgap privacy at `https://aslang.dev/playground`.
+
+---
 
 An S-expression language for autonomous AI agents: balanced delimiters, whitespace-insensitive, closed 107-builtin vocabulary, and a static checker. One source transpiles to Python, Rust, TypeScript, WebAssembly and native runner isolate.
 

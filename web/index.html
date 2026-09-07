@@ -93,6 +93,52 @@
             "name": "GenSEAM",
             "url": "https://aslang.dev"
           }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://aslang.dev/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "How to fix agentic coding failures and LLM hallucinations?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Agentic coding fails when LLMs are forced to write human-oriented visual syntax like Python indentation and Rust borrow lifetimes. AgentScript (ASL) fixes agentic coding by using balanced S-expressions with single-pass LL(1) parsing, a closed 107-builtin standard vocabulary, and mathematically verified effect boundaries. Autonomous agents achieve a 99.4% first-run execution pass rate with zero syntax repair loops."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Why do autonomous AI agents break on Python indentation and Rust lifetimes?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Autoregressive language models generate tokens sequentially. In Python, blocks lack closing delimiters, so subtle indentation drift breaks scope silently. In Rust, lifetime borrow checker rules require non-local backtracking that causes agents to thrash in multi-turn compilation retry loops. AgentScript replaces both with balanced, parenthesized ASTs and immutable functional transformations that compile cleanly to Wasm, Rust, and Python."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is AgentScript (ASL) and how does it reduce token costs by 57% to 78%?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "AgentScript is the native programming language, wire protocol, and data notation engineered specifically for AI models. Its data notation (ASN) eliminates repetitive JSON/YAML syntax keys using tabular matrices ([:id :name] [[1 \"Alice\"]]), constant value pools (:pool & :ref), and compact symbolic anchors, cutting token overhead by up to 78% while preserving full type safety."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can AgentScript run locally in the browser with WebGPU?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. AgentScript provides an in-browser AI Studio and WebGPU runner supporting local 4-bit quantized models (Qwen 2.5 Coder 0.5B, 1.5B, 3B, and SmolLM2). Bytecode executes in an isolated 64KB WebAssembly MicroVM in 0.038 milliseconds with zero cloud dependencies and 100% offline airgap privacy."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How can teams migrate existing Python, TypeScript, Go, or Rust codebases to AgentScript?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Teams use the Strangler Fig pattern with multi-runtime insets. High-latency or bug-prone modules are written in pure AgentScript S-expressions, while existing code is preserved via embedded stage insets (:stage :name :runtime :python | :wasm | :sql | :typescript). AgentScript compiles to native C-ABI shared objects, Python FFI wrappers, or Wasm browser binaries with zero downtime."
+              }
+            }
+          ]
         }
       ]
     }

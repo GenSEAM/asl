@@ -345,16 +345,12 @@ if (rawArgs[0] === 'asn' || rawArgs[0] === '--from-json' || rawArgs[0] === '--to
 // Evaluator Mode: Strict Typing, Hard Errors, Builtins
 // ---------------------------------------------------------------------------
 
-const expr = rawArgs.join(' ').trim();
-if (!expr) {
-  process.exit(0);
-}
-
 const knownBuiltins = new Set([
   '+', '-', '*', '/', 'mod',
   '=', '!=', '<', '>', '<=', '>=',
   'not', 'and', 'or',
   'if', 'assert', 'let', 'do', 'cond', 'mt',
+  'df', 'fn', 'module',
   'println', 'eprintln', 'print', 'str',
   'str-concat', 'str-len', 'str-contains?',
   'string-from-int64', 'string-from-float64',
@@ -365,26 +361,48 @@ const knownBuiltins = new Set([
   'cons', 'first', 'rest',
   'map-empty', 'map-set', 'map-get', 'map-size', 'map-keys', 'map-values', 'map-pairs', 'map-from-pairs', 'map-remove',
   'ok', 'err', 'some', 'none', 'is-ok?', 'is-err?', 'is-some?', 'is-none?',
-  'option-map', 'result-or', 'option-to-result'
+  'option-map', 'result-or', 'option-to-result',
+  'abs', 'neg', 'min', 'max', 'checked-div', 'checked-mod',
+  'option-or', 'result-map', 'result-map-err', 'result-to-option',
+  'already-exists', 'interrupted', 'invalid-path', 'not-found', 'other', 'permission-denied',
+  'list-append', 'list-contains?', 'list-get', 'list-slice', 'list-reverse', 'filter', 'fold', 'map', 'range', 'zip',
+  'map-has?', 'pair',
+  'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
+  'string-chars', 'string-lower', 'string-upper', 'string-replace', 'string-reverse', 'string-index-of', 'string-slice'
 ]);
 
-// 1. Division by zero check (fast path)
-if (/\(\s*\/\s+[-0-9.]+\s+0(\.0+)?\s*\)/.test(expr)) {
-  console.error("ERR_DIVISION_BY_ZERO: division by zero");
-  process.exit(1);
-}
-
-// 2. Unbound function / unknown builtin check (root head)
-const headMatch = expr.match(/^\(\s*([^\s()]+)/);
-if (headMatch) {
-  const head = headMatch[1];
-  if (!knownBuiltins.has(head)) {
-    console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
-    process.exit(1);
+function extractParamNames(paramsNode) {
+  const params = [];
+  if (!paramsNode || !Array.isArray(paramsNode.items)) return params;
+  for (const p of paramsNode.items) {
+    if (!p) continue;
+    if (p.type === 'sym') {
+      params.push(p.value);
+    } else if ((p.type === 'list' || p.type === 'vec') && p.items && p.items[0]?.type === 'sym') {
+      params.push(p.items[0].value);
+    }
   }
+  return params;
 }
 
-function parseSExpr(input) {
+function invokeClosure(closure, evalArgs) {
+  const childEnv = new Map(closure.env);
+  if (closure.name) {
+    childEnv.set(closure.name, closure);
+  }
+  for (let idx = 0; idx < closure.params.length; idx++) {
+    const pName = closure.params[idx];
+    const pVal = idx < evalArgs.length ? evalArgs[idx] : null;
+    childEnv.set(pName, pVal);
+  }
+  let lastVal = null;
+  for (const expr of closure.body) {
+    lastVal = evalNode(expr, childEnv);
+  }
+  return lastVal;
+}
+
+function parseAllSExprs(input) {
   let i = 0;
   function skipWhitespace() {
     while (i < input.length && (/\s/.test(input[i]) || input[i] === ";")) {
@@ -442,7 +460,8 @@ function parseSExpr(input) {
     const arr = [];
     skipWhitespace();
     while (i < input.length && input[i] !== "]") {
-      arr.push(parseVal());
+      const val = parseVal();
+      if (val !== null) arr.push(val);
       skipWhitespace();
     }
     if (i < input.length && input[i] === "]") i++;
@@ -453,13 +472,28 @@ function parseSExpr(input) {
     const items = [];
     skipWhitespace();
     while (i < input.length && input[i] !== ")") {
-      items.push(parseVal());
+      const val = parseVal();
+      if (val !== null) items.push(val);
       skipWhitespace();
     }
     if (i < input.length && input[i] === ")") i++;
     return { type: "list", items };
   }
-  return parseVal();
+
+  const forms = [];
+  while (true) {
+    skipWhitespace();
+    if (i >= input.length) break;
+    const form = parseVal();
+    if (form === null) break;
+    forms.push(form);
+  }
+  return forms;
+}
+
+function parseSExpr(input) {
+  const forms = parseAllSExprs(input);
+  return forms.length > 0 ? forms[0] : null;
 }
 
 function evalNode(node, env = new Map()) {
@@ -496,6 +530,11 @@ function evalNode(node, env = new Map()) {
       return obj;
     }
     if (headNode.type !== 'sym') {
+      const callee = evalNode(headNode, env);
+      if (callee && callee._type === 'closure') {
+        const evalArgs = node.items.slice(1).map(it => evalNode(it, env));
+        return invokeClosure(callee, evalArgs);
+      }
       console.error("ERR_UNSUPPORTED_APPLICATION_HEAD");
       process.exit(1);
     }
@@ -511,9 +550,62 @@ function evalNode(node, env = new Map()) {
       return null;
     }
 
+    // Check user-defined function / binding in env
+    if (env.has(head)) {
+      const callee = env.get(head);
+      if (callee && callee._type === 'closure') {
+        const evalArgs = node.items.slice(1).map(it => evalNode(it, env));
+        return invokeClosure(callee, evalArgs);
+      }
+    }
+
     if (!knownBuiltins.has(head)) {
       console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
       process.exit(1);
+    }
+
+    // Special forms: module
+    if (head === 'module') {
+      return null;
+    }
+
+    // Special forms: df
+    if (head === 'df') {
+      let nameIdx = 1;
+      if (node.items[nameIdx]?.type === 'sym' && node.items[nameIdx].value === '!') {
+        nameIdx++;
+      }
+      const fnName = node.items[nameIdx]?.type === 'sym' ? node.items[nameIdx].value : null;
+      const paramsNode = node.items[nameIdx + 1];
+      let bodyIdx = nameIdx + 2;
+      if (bodyIdx < node.items.length && node.items[bodyIdx]?.type === 'sym' && node.items[bodyIdx].value === '->') {
+        bodyIdx += 2;
+      }
+      if (bodyIdx < node.items.length && node.items[bodyIdx]?.type === 'kw' && node.items[bodyIdx].value === 'd') {
+        bodyIdx += 2;
+      }
+      const body = node.items.slice(bodyIdx);
+      const params = extractParamNames(paramsNode);
+      const closure = { _type: 'closure', name: fnName, params, body, env };
+      if (fnName) {
+        env.set(fnName, closure);
+      }
+      return closure;
+    }
+
+    // Special forms: fn
+    if (head === 'fn') {
+      const paramsNode = node.items[1];
+      let bodyIdx = 2;
+      if (bodyIdx < node.items.length && node.items[bodyIdx]?.type === 'sym' && node.items[bodyIdx].value === '->') {
+        bodyIdx += 2;
+      }
+      if (bodyIdx < node.items.length && node.items[bodyIdx]?.type === 'kw' && node.items[bodyIdx].value === 'd') {
+        bodyIdx += 2;
+      }
+      const body = node.items.slice(bodyIdx);
+      const params = extractParamNames(paramsNode);
+      return { _type: 'closure', name: null, params, body, env };
     }
 
     // Special forms: assert
@@ -540,13 +632,27 @@ function evalNode(node, env = new Map()) {
     if (head === 'let') {
       const bindingsNode = node.items[1];
       const childEnv = new Map(env);
-      const pairs = bindingsNode?.items || [];
-      for (const pair of pairs) {
-        if (pair?.items && pair.items.length >= 2) {
-          const varSym = pair.items[0];
-          const valExpr = pair.items[1];
-          if (varSym?.type === 'sym') {
-            childEnv.set(varSym.value, evalNode(valExpr, childEnv));
+      const items = bindingsNode?.items || [];
+      if (items.length > 0 && (items[0]?.type === 'vec' || items[0]?.type === 'list')) {
+        for (const pair of items) {
+          if (pair?.items && pair.items.length >= 2) {
+            const varSym = pair.items[0];
+            const valExpr = pair.items[1];
+            const varName = varSym.type === 'sym' ? varSym.value :
+              ((varSym.type === 'list' || varSym.type === 'vec') && varSym.items[0]?.type === 'sym') ? varSym.items[0].value : null;
+            if (varName) {
+              childEnv.set(varName, evalNode(valExpr, childEnv));
+            }
+          }
+        }
+      } else {
+        for (let j = 0; j < items.length; j += 2) {
+          const varSym = items[j];
+          const valExpr = j + 1 < items.length ? items[j + 1] : null;
+          const varName = varSym?.type === 'sym' ? varSym.value :
+            ((varSym?.type === 'list' || varSym?.type === 'vec') && varSym.items[0]?.type === 'sym') ? varSym.items[0].value : null;
+          if (varName) {
+            childEnv.set(varName, evalNode(valExpr, childEnv));
           }
         }
       }
@@ -619,18 +725,52 @@ function evalNode(node, env = new Map()) {
       }
     }
 
+    // Math builtins
+    if (head === 'abs') {
+      const a = evalArgs[0];
+      return typeof a === 'bigint' ? (a < 0n ? -a : a) : Math.abs(Number(a));
+    }
+    if (head === 'neg') {
+      const a = evalArgs[0];
+      return typeof a === 'bigint' ? -a : -Number(a);
+    }
+    if (head === 'min') {
+      const isBig = evalArgs.every(a => typeof a === 'bigint');
+      return isBig ? evalArgs.reduce((a, b) => a < b ? a : b) : Math.min(...evalArgs.map(Number));
+    }
+    if (head === 'max') {
+      const isBig = evalArgs.every(a => typeof a === 'bigint');
+      return isBig ? evalArgs.reduce((a, b) => a > b ? a : b) : Math.max(...evalArgs.map(Number));
+    }
+    if (head === 'checked-div') {
+      const a = evalArgs[0];
+      const b = evalArgs[1];
+      if ((typeof b === 'bigint' && b === 0n) || (typeof b === 'number' && b === 0)) {
+        return { _tag: 'none', value: null };
+      }
+      return { _tag: 'some', value: (typeof a === 'bigint' && typeof b === 'bigint') ? a / b : Math.floor(Number(a) / Number(b)) };
+    }
+    if (head === 'checked-mod') {
+      const a = evalArgs[0];
+      const b = evalArgs[1];
+      if ((typeof b === 'bigint' && b === 0n) || (typeof b === 'number' && b === 0)) {
+        return { _tag: 'none', value: null };
+      }
+      return { _tag: 'some', value: (typeof a === 'bigint' && typeof b === 'bigint') ? a % b : Number(a) % Number(b) };
+    }
+
     // I/O builtins
     if (head === 'println') {
       console.log(evalArgs.map(formatOutput).join(' '));
-      process.exit(0);
+      return { _tag: 'ok', value: null, _silent: true };
     }
     if (head === 'eprintln') {
       console.error(evalArgs.map(formatOutput).join(' '));
-      process.exit(0);
+      return { _tag: 'ok', value: null, _silent: true };
     }
     if (head === 'print') {
       process.stdout.write(evalArgs.map(formatOutput).join(' '));
-      process.exit(0);
+      return { _tag: 'ok', value: null, _silent: true };
     }
 
     // Ok / Err / Option builtins
@@ -646,14 +786,106 @@ function evalNode(node, env = new Map()) {
       if (evalArgs[0]?._tag === 'some') return { _tag: 'some', value: evalArgs[1] !== undefined ? evalArgs[1] : evalArgs[0].value };
       return { _tag: 'none', value: null };
     }
+    if (head === 'option-or') {
+      return evalArgs[0]?._tag === 'some' ? evalArgs[0].value : evalArgs[1];
+    }
     if (head === 'result-or') {
       return evalArgs[0]?._tag === 'ok' ? evalArgs[0].value : evalArgs[1];
+    }
+    if (head === 'result-map') {
+      if (evalArgs[1]?._tag === 'ok') {
+        const fn = evalArgs[0];
+        const val = evalArgs[1].value;
+        const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [val]) : (typeof fn === 'function' ? fn(val) : val);
+        return { _tag: 'ok', value: res };
+      }
+      return evalArgs[1];
+    }
+    if (head === 'result-map-err') {
+      if (evalArgs[1]?._tag === 'err') {
+        const fn = evalArgs[0];
+        const val = evalArgs[1].value;
+        const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [val]) : (typeof fn === 'function' ? fn(val) : val);
+        return { _tag: 'err', value: res };
+      }
+      return evalArgs[1];
+    }
+    if (head === 'result-to-option') {
+      return evalArgs[0]?._tag === 'ok' ? { _tag: 'some', value: evalArgs[0].value } : { _tag: 'none', value: null };
     }
     if (head === 'option-to-result') {
       return evalArgs[0]?._tag === 'some' ? { _tag: 'ok', value: evalArgs[0].value } : { _tag: 'err', value: evalArgs[1] };
     }
 
+    // IoError union constructors
+    if (head === 'already-exists' || head === 'interrupted' || head === 'invalid-path' || head === 'not-found' || head === 'other' || head === 'permission-denied') {
+      return { _tag: 'io-error', kind: head };
+    }
+
     // List and Map builtins
+    if (head === 'list-append') {
+      const a = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      const b = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return [...a, ...b];
+    }
+    if (head === 'list-contains?') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.includes(evalArgs[1]);
+    }
+    if (head === 'list-get') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      const idx = Number(evalArgs[1]);
+      if (idx >= 0 && idx < arr.length) return { _tag: 'some', value: arr[idx] };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'list-slice') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      const start = Number(evalArgs[1]);
+      const end = Number(evalArgs[2]);
+      if (start < 0 || end < start || start > arr.length) return { _tag: 'none', value: null };
+      return { _tag: 'some', value: arr.slice(start, end) };
+    }
+    if (head === 'list-reverse') {
+      const arr = Array.isArray(evalArgs[0]) ? [...evalArgs[0]] : [];
+      return arr.reverse();
+    }
+    if (head === 'map') {
+      const fn = evalArgs[0];
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return arr.map(it => (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it));
+    }
+    if (head === 'filter') {
+      const fn = evalArgs[0];
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return arr.filter(it => {
+        const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it);
+        return res !== false && res !== null && res !== undefined;
+      });
+    }
+    if (head === 'fold') {
+      const fn = evalArgs[0];
+      let acc = evalArgs[1];
+      const arr = Array.isArray(evalArgs[2]) ? evalArgs[2] : [];
+      for (const it of arr) {
+        acc = (fn && fn._type === 'closure') ? invokeClosure(fn, [acc, it]) : (typeof fn === 'function' ? fn(acc, it) : acc);
+      }
+      return acc;
+    }
+    if (head === 'range') {
+      const s = BigInt(evalArgs[0]);
+      const e = BigInt(evalArgs[1]);
+      const res = [];
+      for (let v = s; v < e; v++) res.push(v);
+      return res;
+    }
+    if (head === 'zip') {
+      const a = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      const b = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      const len = Math.min(a.length, b.length);
+      const res = [];
+      for (let j = 0; j < len; j++) res.push([a[j], b[j]]);
+      return res;
+    }
     if (head === 'list-sort') {
       const arr = Array.isArray(evalArgs[0]) ? [...evalArgs[0]] : [];
       return arr.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -673,6 +905,13 @@ function evalNode(node, env = new Map()) {
     if (head === 'list-index-of') {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       return arr.indexOf(evalArgs[1]);
+    }
+    if (head === 'map-has?') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
+      return Object.prototype.hasOwnProperty.call(obj, String(evalArgs[1]));
+    }
+    if (head === 'pair') {
+      return [evalArgs[0], evalArgs[1]];
     }
     if (head === 'map-keys') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
@@ -705,11 +944,64 @@ function evalNode(node, env = new Map()) {
     if (head === 'and') return evalArgs.every(Boolean);
     if (head === 'or') return evalArgs.some(Boolean);
 
-    // String builtins
+    // String & Conversion builtins
     if (head === 'str') return evalArgs.map(formatOutput).join('');
     if (head === 'str-concat') return evalArgs.join('');
     if (head === 'str-len' || head === 'string-length') return String(evalArgs[0] || '').length;
     if (head === 'str-contains?' || head === 'string-contains?') return String(evalArgs[0] || '').includes(String(evalArgs[1] || ''));
+    if (head === 'string-to-int64') {
+      const s = String(evalArgs[0] || '').trim();
+      if (/^-?[0-9]+$/.test(s)) return { _tag: 'some', value: BigInt(s) };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'string-to-float64') {
+      const s = String(evalArgs[0] || '').trim();
+      const num = Number(s);
+      if (!isNaN(num) && s.length > 0) return { _tag: 'some', value: num };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'int64-to-float64') {
+      return Number(evalArgs[0]);
+    }
+    if (head === 'float64-to-int64') {
+      const n = Number(evalArgs[0]);
+      if (isNaN(n) || !isFinite(n)) return { _tag: 'none', value: null };
+      return { _tag: 'some', value: BigInt(Math.trunc(n)) };
+    }
+    if (head === 'int32-to-int64') {
+      return BigInt(evalArgs[0]);
+    }
+    if (head === 'int64-to-int32') {
+      const n = BigInt(evalArgs[0]);
+      if (n >= -2147483648n && n <= 2147483647n) return { _tag: 'some', value: Number(n) };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'string-chars') {
+      return Array.from(String(evalArgs[0] || ''));
+    }
+    if (head === 'string-lower') {
+      return String(evalArgs[0] || '').toLowerCase();
+    }
+    if (head === 'string-upper') {
+      return String(evalArgs[0] || '').toUpperCase();
+    }
+    if (head === 'string-replace') {
+      return String(evalArgs[0] || '').replaceAll(String(evalArgs[1]), String(evalArgs[2]));
+    }
+    if (head === 'string-reverse') {
+      return Array.from(String(evalArgs[0] || '')).reverse().join('');
+    }
+    if (head === 'string-index-of') {
+      const idx = String(evalArgs[0] || '').indexOf(String(evalArgs[1] || ''));
+      return idx >= 0 ? { _tag: 'some', value: BigInt(idx) } : { _tag: 'none', value: null };
+    }
+    if (head === 'string-slice') {
+      const s = String(evalArgs[0] || '');
+      const start = Number(evalArgs[1]);
+      const end = Number(evalArgs[2]);
+      if (start < 0 || end < start || start > s.length) return { _tag: 'none', value: null };
+      return { _tag: 'some', value: s.slice(start, end) };
+    }
 
     return null;
   }
@@ -722,11 +1014,23 @@ function formatOutput(val) {
   if (typeof val === 'number') return String(val);
   if (typeof val === 'boolean') return val ? 'true' : 'false';
   if (typeof val === 'string') return val;
+  if (val && typeof val === 'object' && val._type === 'closure') {
+    return val.name ? `(closure ${val.name})` : '(closure)';
+  }
+  if (val && typeof val === 'object' && val._tag === 'io-error') {
+    return val.kind !== undefined ? `(:io-error :kind "${val.kind}")` : '(:io-error)';
+  }
   if (val && typeof val === 'object' && val._tag === 'ok') {
-    return val.value !== undefined ? `(:ok ${formatOutput(val.value)})` : '(:ok)';
+    return val.value !== undefined && val.value !== null ? `(:ok ${formatOutput(val.value)})` : '(:ok)';
   }
   if (val && typeof val === 'object' && val._tag === 'err') {
-    return val.value !== undefined ? `(:err ${formatOutput(val.value)})` : '(:err)';
+    return val.value !== undefined && val.value !== null ? `(:err ${formatOutput(val.value)})` : '(:err)';
+  }
+  if (val && typeof val === 'object' && val._tag === 'some') {
+    return val.value !== undefined && val.value !== null ? `(:some ${formatOutput(val.value)})` : '(:some)';
+  }
+  if (val && typeof val === 'object' && val._tag === 'none') {
+    return '(:none)';
   }
   if (Array.isArray(val)) {
     return '(' + val.map(formatOutput).join(' ') + ')';
@@ -740,10 +1044,71 @@ function formatOutput(val) {
   return String(val);
 }
 
+// ---------------------------------------------------------------------------
+// CLI Execution Dispatch: File Mode or Expression Mode
+// ---------------------------------------------------------------------------
+
+if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('(')) {
+  const filePath = rawArgs[0];
+  const code = fs.readFileSync(filePath, 'utf8');
+  try {
+    const forms = parseAllSExprs(code);
+    const rootEnv = new Map();
+    let lastResult = null;
+    for (const form of forms) {
+      lastResult = evalNode(form, rootEnv);
+    }
+    if (rootEnv.has('main')) {
+      const mainFn = rootEnv.get('main');
+      if (mainFn && mainFn._type === 'closure') {
+        lastResult = invokeClosure(mainFn, []);
+      }
+    }
+    if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {
+      console.log(formatOutput(lastResult));
+    }
+    process.exit(0);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+}
+
+const expr = rawArgs.join(' ').trim();
+if (!expr) {
+  process.exit(0);
+}
+
+// 1. Division by zero check (fast path)
+if (/\(\s*\/\s+[-0-9.]+\s+0(\.0+)?\s*\)/.test(expr)) {
+  console.error("ERR_DIVISION_BY_ZERO: division by zero");
+  process.exit(1);
+}
+
+// 2. Unbound function / unknown builtin check (root head)
+const headMatch = expr.match(/^\(\s*([^\s()]+)/);
+if (headMatch) {
+  const head = headMatch[1];
+  if (!knownBuiltins.has(head)) {
+    console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
+    process.exit(1);
+  }
+}
+
 try {
-  const ast = parseSExpr(expr);
-  const result = evalNode(ast);
-  console.log(formatOutput(result));
+  const forms = parseAllSExprs(expr);
+  const rootEnv = new Map();
+  let lastResult = null;
+  for (const form of forms) {
+    lastResult = evalNode(form, rootEnv);
+  }
+  if (rootEnv.has('main') && lastResult && lastResult._type === 'closure' && lastResult.name === 'main') {
+    const mainFn = rootEnv.get('main');
+    lastResult = invokeClosure(mainFn, []);
+  }
+  if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {
+    console.log(formatOutput(lastResult));
+  }
   process.exit(0);
 } catch (e) {
   console.error(e.message);
