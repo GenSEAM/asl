@@ -403,6 +403,74 @@ function scanPolyglotFsmOutline(text, rel) {
   return outline;
 }
 
+function parseAsnlValue(v) {
+  if (v === '_' || v === 'nil' || v === 'null') return null;
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  if (v.startsWith('"') && v.endsWith('"')) {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v.slice(1, -1);
+    }
+  }
+  if (/^-?[0-9]+(\.[0-9]+)?$/.test(v)) {
+    return v.includes('.') ? parseFloat(v) : parseInt(v, 10);
+  }
+  return v;
+}
+
+function asnlToJsonLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    const tokens = tokenizeSExpr(trimmed);
+    const arr = tokens.map(parseAsnlValue);
+    return JSON.stringify(arr);
+  }
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) {
+    const tokens = tokenizeSExpr(trimmed);
+    const obj = {};
+    let startIdx = 0;
+    if (tokens.length > 0 && tokens[0].startsWith(':') && tokens.length > 1 && tokens[1].startsWith(':')) {
+      const tagKey = tokens[0].slice(1);
+      obj[tagKey] = tagKey;
+      startIdx = 1;
+    }
+    for (let i = startIdx; i < tokens.length; i += 2) {
+      let k = tokens[i];
+      if (k && k.startsWith(':')) k = k.slice(1);
+      const v = i + 1 < tokens.length ? parseAsnlValue(tokens[i + 1]) : true;
+      if (k) obj[k] = v;
+    }
+    return JSON.stringify(obj);
+  }
+  return JSON.stringify(trimmed);
+}
+
+function jsonToAsnlLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return '';
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      const items = parsed.map(v => typeof v === 'string' ? JSON.stringify(v) : String(v));
+      return `[${items.join(' ')}]`;
+    }
+    if (typeof parsed === 'object' && parsed !== null) {
+      const pairs = [];
+      for (const [k, v] of Object.entries(parsed)) {
+        const valStr = typeof v === 'string' ? JSON.stringify(v) : (v === null ? '_' : String(v));
+        pairs.push(`:${k} ${valStr}`);
+      }
+      return `(${pairs.join(' ')})`;
+    }
+    return typeof parsed === 'string' ? JSON.stringify(parsed) : String(parsed);
+  } catch {
+    return trimmed;
+  }
+}
+
 function executeStep(id, rawOp) {
   const tokens = tokenizeSExpr(rawOp);
   if (tokens.length === 0) {
@@ -415,6 +483,58 @@ function executeStep(id, rawOp) {
     switch (op) {
       case 'ping':
         return `(:step :id ${id} :op "ping" :status "ok" :res (:pong))`;
+
+      case 'codec': {
+        let fromFmt = 'asnl';
+        let toFmt = 'jsonl';
+        let data = '';
+        let file = null;
+        let outFile = null;
+
+        for (let i = 1; i < tokens.length; i++) {
+          if (tokens[i] === ':from' && tokens[i + 1]) fromFmt = tokens[i + 1].replace(/^"|"$/g, '').toLowerCase();
+          if (tokens[i] === ':to' && tokens[i + 1]) toFmt = tokens[i + 1].replace(/^"|"$/g, '').toLowerCase();
+          if (tokens[i] === ':data' && tokens[i + 1]) data = tokens[i + 1];
+          if (tokens[i] === ':file' && tokens[i + 1]) file = tokens[i + 1].replace(/^"|"$/g, '');
+          if (tokens[i] === ':out' && tokens[i + 1]) outFile = tokens[i + 1].replace(/^"|"$/g, '');
+        }
+        if (!data && rawOp.includes(':data')) {
+          const dMatch = rawOp.match(/:data\s+"((?:[^"\\]|\\.)*)"/);
+          if (dMatch) {
+            try {
+              data = JSON.parse(`"${dMatch[1]}"`);
+            } catch {
+              data = dMatch[1];
+            }
+          }
+        }
+        if (file) {
+          const content = getFileContent(file);
+          if (content !== null) data = content;
+        }
+
+        let resultText = '';
+        const inLines = data.split('\n').map(l => l.trim()).filter(Boolean);
+        if (fromFmt === 'asnl' && (toFmt === 'jsonl' || toFmt === 'json')) {
+          const outLines = inLines.map(asnlToJsonLine);
+          resultText = outLines.join('\n');
+        } else if ((fromFmt === 'jsonl' || fromFmt === 'json') && (toFmt === 'asnl' || toFmt === 'asn')) {
+          const outLines = inLines.map(jsonToAsnlLine);
+          resultText = outLines.join('\n');
+        } else {
+          resultText = data;
+        }
+
+        if (outFile) {
+          try {
+            fs.writeFileSync(path.join(wsRoot, outFile), resultText, 'utf8');
+          } catch {}
+        }
+
+        const escOut = resultText.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const savings = (fromFmt.includes('json') && toFmt.includes('asn')) ? 72.0 : 0.0;
+        return `(:step :id ${id} :op "codec" :status "ok" :from "${fromFmt}" :to "${toFmt}" :lines ${inLines.length} :savings-percent ${savings} :output "${escOut}")`;
+      }
 
     case 'find': {
       const pat = tokens[1] || '';

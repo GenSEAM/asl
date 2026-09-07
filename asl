@@ -499,6 +499,155 @@ case "$CMD" in
     exit 1
     ;;
 
+  asnl)
+    if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ $# -eq 0 ]; then
+      echo "Usage: asl asnl [--to-jsonl <asnl-input> | --from-jsonl <jsonl-input>]"
+      echo "  AgentScript Notation Lines (ASNL) Streaming Codec CLI"
+      echo "  Options:"
+      echo "    --to-jsonl <input>    Transpile ASNL streaming records to RFC 8259 JSON Lines"
+      echo "    --from-jsonl <input>  Transpile JSON Lines streaming records to compact ASNL"
+      echo "    --help, -h            Show this help message"
+      exit 0
+    fi
+    FLAG="$1"
+    shift
+    INPUT="$*"
+    if [ -z "$INPUT" ]; then
+      echo "Error: missing input for asl asnl $FLAG"
+      echo "Usage: asl asnl [--to-jsonl <input> | --from-jsonl <input>]"
+      exit 1
+    fi
+    if [ -f "$INPUT" ]; then
+      PAYLOAD="$(cat "$INPUT")"
+    else
+      PAYLOAD="$INPUT"
+    fi
+
+    case "$FLAG" in
+      --to-jsonl)
+        ensure_daemon_running
+        SOCK="$(get_socket_path)"
+        if [ -S "$SOCK" ]; then
+          ESC_PAYLOAD="$(echo "$PAYLOAD" | tr '\n' ' ' | sed 's/"/\\"/g')"
+          RES="$("$NODE_BIN" -e "
+            import net from 'node:net';
+            const client = net.createConnection({ path: '$SOCK' }, () => {
+              client.write('(:batch (:codec :from \"asnl\" :to \"jsonl\" :data \"' + process.argv[1] + '\"))\n');
+            });
+            let data = '';
+            client.on('data', chunk => { data += chunk; });
+            client.on('end', () => {
+              const m = data.match(/:output\s+\"((?:[^\"\\\\]|\\\\.)*)\"/);
+              if (m) {
+                try {
+                  console.log(JSON.parse('\"' + m[1] + '\"'));
+                } catch {
+                  console.log(m[1].replace(/\\\\n/g, '\n').replace(/\\\\\"/g, '\"'));
+                }
+              } else {
+                console.log(data);
+              }
+              process.exit(0);
+            });
+          " "$ESC_PAYLOAD" 2>/dev/null || true)"
+          if [ -n "$RES" ]; then
+            echo "$RES"
+            exit 0
+          fi
+        fi
+        "$NODE_BIN" -e "
+          const input = process.argv[1];
+          const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
+          for (const line of lines) {
+            let s = line;
+            if (s.startsWith('(:') && s.endsWith(')')) {
+              s = s.slice(1, -1).trim();
+              const tokens = s.match(/\"[^\"]*\"|:[a-zA-Z0-9_-]+|[^\s]+/g) || [];
+              const obj = {};
+              let startIdx = 0;
+              if (tokens.length > 1 && tokens[0].startsWith(':') && tokens[1].startsWith(':')) {
+                const tag = tokens[0].slice(1);
+                obj[tag] = tag;
+                startIdx = 1;
+              }
+              for (let i = startIdx; i < tokens.length; i += 2) {
+                let k = tokens[i];
+                if (k.startsWith(':')) k = k.slice(1);
+                let v = tokens[i + 1];
+                if (v && v.startsWith('\"') && v.endsWith('\"')) v = v.slice(1, -1);
+                else if (v === 'true') v = true;
+                else if (v === 'false') v = false;
+                else if (v === '_' || v === 'null') v = null;
+                else if (/^-?[0-9]+$/.test(v)) v = parseInt(v, 10);
+                obj[k] = v;
+              }
+              console.log(JSON.stringify(obj));
+            } else {
+              console.log(line);
+            }
+          }
+        " "$PAYLOAD"
+        exit 0
+        ;;
+      --from-jsonl)
+        ensure_daemon_running
+        SOCK="$(get_socket_path)"
+        if [ -S "$SOCK" ]; then
+          ESC_PAYLOAD="$(echo "$PAYLOAD" | tr '\n' ' ' | sed 's/"/\\"/g')"
+          RES="$("$NODE_BIN" -e "
+            import net from 'node:net';
+            const client = net.createConnection({ path: '$SOCK' }, () => {
+              client.write('(:batch (:codec :from \"jsonl\" :to \"asnl\" :data \"' + process.argv[1] + '\"))\n');
+            });
+            let data = '';
+            client.on('data', chunk => { data += chunk; });
+            client.on('end', () => {
+              const m = data.match(/:output\s+\"((?:[^\"\\\\]|\\\\.)*)\"/);
+              if (m) {
+                try {
+                  console.log(JSON.parse('\"' + m[1] + '\"'));
+                } catch {
+                  console.log(m[1].replace(/\\\\n/g, '\n').replace(/\\\\\"/g, '\"'));
+                }
+              } else {
+                console.log(data);
+              }
+              process.exit(0);
+            });
+          " "$ESC_PAYLOAD" 2>/dev/null || true)"
+          if [ -n "$RES" ]; then
+            echo "$RES"
+            exit 0
+          fi
+        fi
+        "$NODE_BIN" -e "
+          const input = process.argv[1];
+          const lines = input.split('\n').map(l => l.trim()).filter(Boolean);
+          for (const line of lines) {
+            try {
+              const obj = JSON.parse(line);
+              if (Array.isArray(obj)) {
+                console.log('[' + obj.map(v => typeof v === 'string' ? JSON.stringify(v) : String(v)).join(' ') + ']');
+              } else if (typeof obj === 'object' && obj !== null) {
+                const pairs = Object.entries(obj).map(([k, v]) => ':' + k + ' ' + (typeof v === 'string' ? JSON.stringify(v) : (v === null ? '_' : String(v))));
+                console.log('(' + pairs.join(' ') + ')');
+              } else {
+                console.log(line);
+              }
+            } catch {
+              console.log(line);
+            }
+          }
+        " "$PAYLOAD"
+        exit 0
+        ;;
+      *)
+        echo "Unknown asnl flag: $FLAG. Run 'asl asnl --help' for usage."
+        exit 1
+        ;;
+    esac
+    ;;
+
   gate)
     run_all_seven_gates "$@"
     ;;
@@ -1821,6 +1970,7 @@ console.log(emitWat(forms));
     echo "  check <file>    Run semantic syntax and form verification"
     echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
     echo "  audit <target>  Execute complete 3-tier audit (Micro AST, Meso keywords, Macro module)"
+    echo "  asnl            AgentScript Notation Lines streaming codec (--to-jsonl, --from-jsonl)"
     echo "  version         Display toolchain version"
     echo "  help --full     Display full human-developer legacy commands (intel, mem, doc...)"
     exit 0

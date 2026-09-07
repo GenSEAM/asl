@@ -226,6 +226,20 @@
           :rationale "Parses ASN S-expression, evaluates layout, and emits token-compacted output")
     (:sym :name "measure-placement-savings" :kind :fn :tokens 3
           :rationale "Calculates percentage token compaction delta relative to baseline AoS layout")
+
+    ;; Phase 290 ASNL Streaming Protocol Symbols
+    (:sym :name "asnl-validate-line" :kind :fn :tokens 3
+          :rationale "Validates single ASNL line delimiter balance and escaping")
+    (:sym :name "asnl-encode-line" :kind :fn :tokens 3
+          :rationale "Encodes S-expression form into a single-line ASNL string")
+    (:sym :name "asnl-decode-line" :kind :fn :tokens 3
+          :rationale "Decodes single ASNL line into verified S-expression form")
+    (:sym :name "asnl-decode-stream" :kind :fn :tokens 3
+          :rationale "Parses streaming multi-line ASNL text into list of forms")
+    (:sym :name "jsonl-to-asnl" :kind :fn :tokens 3
+          :rationale "Transpiles JSON Lines streaming document into ASNL S-expressions")
+    (:sym :name "asnl-to-jsonl" :kind :fn :tokens 3
+          :rationale "Transpiles ASNL S-expression lines into RFC 8259 JSON Lines")
   ])
 
 

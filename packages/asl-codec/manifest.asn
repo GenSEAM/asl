@@ -3,5 +3,5 @@
  :entry "src/core/codec.asl"
  :description "AgentScript Native Schema Codec & Structural Compact Serializer"
  :asl-first true
- :modules ["asl-codec/core" "asl-codec/placement"]
+ :modules ["asl-codec/core" "asl-codec/placement" "asl-codec/asnl"]
  :dependencies ["@genseam/asl-parser"])
