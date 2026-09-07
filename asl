@@ -247,7 +247,7 @@ case "$CMD" in
     fi
 
     # 1. Verify source models
-    for m in "$WEB_DIR/asl-src/api/packages.asl" "$WEB_DIR/asl-src/api/plugins.asl" "$WEB_DIR/asl-src/api/skills.asl" "$WEB_DIR/asl-src/api/version.asl" "$WEB_DIR/asl-src/scripts/installer.asl"; do
+    for m in "$WEB_DIR/src/api/packages.asl" "$WEB_DIR/src/api/plugins.asl" "$WEB_DIR/src/api/skills.asl" "$WEB_DIR/src/api/version.asl" "$WEB_DIR/src/scripts/installer.asl"; do
       if [ ! -f "$m" ]; then
         echo "Error: missing source model: $m"
         exit 1

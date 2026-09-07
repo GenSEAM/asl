@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "gen:web": "asl gen:web",
-    "build": "tsc && vite build",
+    "build": "asl test tests/web_test.asl",
     "preview": "vite preview"
   },
   "dependencies": {
