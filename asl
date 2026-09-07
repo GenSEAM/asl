@@ -1805,6 +1805,79 @@ console.log(emitWat(forms));
         done
         exit 0
         ;;
+      list)
+        ensure_daemon_running
+        mkdir -p "$ROOT/.asl/mesh" 2>/dev/null || true
+        echo "DAEMON ID  WORKSPACE  ROLE        STATUS   HEARTBEAT  PID     SOCKET"
+        echo "---------  ---------  ----------  -------  ---------  ------  ------"
+        FOUND_ANY=0
+        COLLISIONS=0
+        TOTAL_DAEMONS=0
+        SEEN_WS=""
+        PEER_ENTRIES=""
+        NOW_EPOCH="$(date +%s 2>/dev/null || echo "0")"
+
+        for PF in /tmp/asl_mem_*.pid; do
+          [ -f "$PF" ] || continue
+          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+          D_PID="$(cat "$PF" 2>/dev/null || true)"
+          [ -n "$D_PID" ] || continue
+          if kill -0 "$D_PID" 2>/dev/null; then
+            FOUND_ANY=1
+            TOTAL_DAEMONS=$((TOTAL_DAEMONS + 1))
+            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+            D_STATUS="active"
+            D_ROLE=":master"
+            if echo "$SEEN_WS" | grep -q "(ws:$D_HASH)"; then
+              D_ROLE=":secondary"
+              D_STATUS="collision"
+              COLLISIONS=$((COLLISIONS + 1))
+            else
+              SEEN_WS="${SEEN_WS} (ws:$D_HASH)"
+            fi
+
+            HB_SEC=0
+            if [ -S "$D_SOCK" ]; then
+              SOCK_MTIME="$(stat -f %m "$D_SOCK" 2>/dev/null || stat -c %Y "$D_SOCK" 2>/dev/null || echo "$NOW_EPOCH")"
+              HB_SEC=$((NOW_EPOCH - SOCK_MTIME))
+              [ "$HB_SEC" -lt 0 ] && HB_SEC=0
+            fi
+            D_HB="${HB_SEC}s ago"
+            if [ "$HB_SEC" -eq 0 ]; then
+              D_HB="<1s ago"
+            fi
+
+            printf "%-9s  %-9s  %-10s  %-7s  %-9s  %-6s  %s\n" "$D_HASH" "$D_HASH" "$D_ROLE" "$D_STATUS" "$D_HB" "$D_PID" "$D_SOCK"
+            PEER_ENTRIES="${PEER_ENTRIES}    (:peer :daemon-id \"$D_HASH\" :workspace-hash \"$D_HASH\" :pid $D_PID :socket \"$D_SOCK\" :port 0 :role $D_ROLE :heartbeat-epoch $NOW_EPOCH :status \"$D_STATUS\")\n"
+          else
+            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
+          fi
+        done
+
+        if [ "$FOUND_ANY" -eq 0 ]; then
+          echo "No active daemons detected."
+        else
+          echo ""
+          if [ "$COLLISIONS" -gt 0 ]; then
+            echo "[COLLISION DETECTED] $COLLISIONS daemon collision(s) detected across shared workspace hashes."
+          else
+            UNIQUE_WS=$(echo "$SEEN_WS" | tr ' ' '\n' | grep -c '(ws:' || echo "1")
+            echo "[DISJOINT WORKSPACES] $TOTAL_DAEMONS active daemon(s) across $UNIQUE_WS isolated workspace(s). Zero collisions."
+          fi
+          PEERS_FILE=""
+          if [ -d "$ROOT/.asl/mesh" ]; then
+            PEERS_FILE="$ROOT/.asl/mesh/peers.asn"
+          elif [ -d "$ROOT/../.asl/mesh" ]; then
+            PEERS_FILE="$ROOT/../.asl/mesh/peers.asn"
+          elif [ -d ".asl/mesh" ]; then
+            PEERS_FILE=".asl/mesh/peers.asn"
+          fi
+          if [ -n "$PEERS_FILE" ]; then
+            (printf ";; Mesh Peer Registry Schema & Active Daemon Manifest\n(:mesh-peers\n  :version 1\n  :peers [\n%b  ])\n" "$PEER_ENTRIES" > "$PEERS_FILE") 2>/dev/null || true
+          fi
+        fi
+        exit 0
+        ;;
       inspect)
         TARGET="$1"
         if [ -z "$TARGET" ]; then
@@ -1852,7 +1925,7 @@ console.log(emitWat(forms));
         exit 0
         ;;
       *)
-        echo "Usage: asl daemon [top|inspect <pid>]"
+        echo "Usage: asl daemon [top|list|inspect <pid>]"
         exit 1
         ;;
     esac
