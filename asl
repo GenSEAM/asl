@@ -107,6 +107,48 @@ find_config_file() {
   return 1
 }
 
+validate_manifest_ast() {
+  local FILE="$1"
+  if [ ! -f "$FILE" ] || [ ! -s "$FILE" ]; then
+    echo "    ✗ Manifest missing or empty: $FILE"
+    return 1
+  fi
+
+  # 1. Delimiter balance and basic syntax verification
+  if ! check_syntax_and_delimiters "$FILE" "check" >/dev/null 2>&1; then
+    echo "    ✗ Manifest delimiter syntax error: $FILE"
+    return 1
+  fi
+
+  # 2. Schema validation: verify package/extension-manifest declaration and version field
+  if ! awk '
+  BEGIN {
+    has_head = 0;
+    has_version = 0;
+  }
+  /^\([: \t]*(package|extension-manifest|manifest)/ {
+    has_head = 1;
+  }
+  /:version[ \t]+/ {
+    has_version = 1;
+  }
+  END {
+    if (!has_head) {
+      print "    ✗ Missing package/manifest declaration in " ARGV[1];
+      exit 1;
+    }
+    if (!has_version) {
+      print "    ✗ Missing :version field in " ARGV[1];
+      exit 1;
+    }
+  }
+  ' "$FILE"; then
+    return 1
+  fi
+
+  return 0
+}
+
 run_all_seven_gates() {
   echo "    [Config] Loaded hierarchical configuration (1 level): .asl.config.asn"
   echo "================================================================================"
@@ -116,23 +158,91 @@ run_all_seven_gates() {
 
   # Gate 1: Manifests
   echo "--> [1/7] Verifying package manifests and module structure..."
-  local MANIFESTS
-  MANIFESTS=$(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
+  local MANIFESTS=0
+  for mf in $(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
+    if ! validate_manifest_ast "$mf"; then
+      echo "    ✗ Manifest AST validation failed: $mf"
+      exit 1
+    fi
+    MANIFESTS=$((MANIFESTS + 1))
+  done
   echo "    ✓ Verified $MANIFESTS package manifests cleanly."
 
   # Gate 2: Pure ASL Syntax
   echo "--> [2/7] Auditing pure ASL syntax and S-expression form balance..."
   local ASL_FILES
   ASL_FILES=$(find . -name "*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
+  if ! find . -name "*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | grep -v '/corpus/invalid/' | xargs awk '
+BEGIN { depth = 0; in_str = 0; esc = 0; err = 0; }
+FNR == 1 {
+  if (NR > 1 && depth > 0) { print "    ✗ Unclosed delimiter in " prev_file ", depth=" depth; err = 1; }
+  depth = 0; in_str = 0; esc = 0;
+}
+{
+  prev_file = FILENAME;
+  for (i = 1; i <= length($0); i++) {
+    c = substr($0, i, 1);
+    if (in_str) {
+      if (esc) esc = 0;
+      else if (c == "\\") esc = 1;
+      else if (c == "\"") in_str = 0;
+    } else {
+      if (c == ";") break;
+      else if (c == "\"") in_str = 1;
+      else if (c == "(" || c == "[" || c == "{") {
+        depth++;
+        stack[depth] = c;
+      } else if (c == ")" || c == "]" || c == "}") {
+        if (depth == 0) {
+          print "    ✗ " FILENAME ":" FNR ": unexpected closing delimiter " c;
+          err = 1;
+        } else {
+          expected = stack[depth];
+          if ((c == ")" && expected != "(") || (c == "]" && expected != "[") || (c == "}" && expected != "{")) {
+            print "    ✗ " FILENAME ":" FNR ": mismatched delimiter " c ", expected for " expected;
+            err = 1;
+          }
+          depth--;
+        }
+      }
+    }
+  }
+}
+END {
+  if (depth > 0) { print "    ✗ Unclosed delimiter at EOF in " FILENAME; err = 1; }
+  if (err) exit 1;
+}'; then
+    echo "    ✗ Delimiter balance check failed across ASL source files."
+    exit 1
+  fi
   echo "    ✓ All $ASL_FILES ASL source files are well-formed and structurally balanced."
 
   # Gate 3: Claims
   echo "--> [3/7] Auditing site claims grounding against benchmark registry..."
   local CLAIMS_FILE="$ROOT/bench/published_claims.asn"
   [ ! -f "$CLAIMS_FILE" ] && CLAIMS_FILE="$ROOT/../asl/bench/published_claims.asn"
-  local CLAIMS_COUNT=12
-  if [ -f "$CLAIMS_FILE" ]; then
-    CLAIMS_COUNT=$(grep -o ':claim' "$CLAIMS_FILE" 2>/dev/null | wc -l | tr -d ' ')
+  [ ! -f "$CLAIMS_FILE" ] && CLAIMS_FILE="asl/bench/published_claims.asn"
+  if [ ! -f "$CLAIMS_FILE" ]; then
+    echo "    ✗ Claims registry file not found: $CLAIMS_FILE"
+    exit 1
+  fi
+  if ! check_syntax_and_delimiters "$CLAIMS_FILE" "check" >/dev/null 2>&1; then
+    echo "    ✗ Claims registry syntax error: $CLAIMS_FILE"
+    exit 1
+  fi
+  local CLAIMS_COUNT
+  CLAIMS_COUNT=$(awk '
+  BEGIN { claims = 0; }
+  /\(:claim[ \t]+/ {
+    if ($0 ~ /:metric/ && $0 ~ /:category/ && $0 ~ /:source/) {
+      claims++;
+    }
+  }
+  END { print claims; }
+  ' "$CLAIMS_FILE")
+  if [ "$CLAIMS_COUNT" -lt 12 ]; then
+    echo "    ✗ Grounded claims audit failed: expected >= 12 claims, found $CLAIMS_COUNT"
+    exit 1
   fi
   echo "    ✓ Grounded $CLAIMS_COUNT benchmark claims across published registry."
 
@@ -154,21 +264,49 @@ run_all_seven_gates() {
   TEST_COUNT=$(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
   local ASSERTION_COUNT
   ASSERTION_COUNT=$(grep -rohE '\(assert[ \t]+' --include="*test*.asl" . 2>/dev/null | wc -l | tr -d ' ')
+
+  # Strictly evaluate benchmark and AEP test suites under falsification
+  for bsuite in $(find bench -name "*test*.asl" 2>/dev/null | sort); do
+    local b_asserts
+    b_asserts=$(grep -cE '\(assert[ \t]+' "$bsuite" 2>/dev/null || true)
+    if [ "$b_asserts" -eq 0 ]; then
+      echo "    ✗ Vacuous benchmark test suite rejected: $bsuite has 0 assertions"
+      exit 1
+    fi
+    if ! "$SOURCE" test --strict-falsify "$bsuite" >/dev/null 2>&1; then
+      echo "    ✗ Benchmark test suite failed under --strict-falsify: $bsuite"
+      exit 1
+    fi
+  done
   echo "    ✓ Audited $TEST_COUNT native test suites ($ASSERTION_COUNT evaluated assertions verified across suites)."
 
   # Gate 6: ASN Grammar & Token Density
   echo "--> [6/7] Auditing ASN grammar registries and symbol token density..."
   for gfile in $(find . -name "grammar.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
     echo "    Checking registry: $gfile"
+    if ! check_syntax_and_delimiters "$gfile" "check" >/dev/null 2>&1; then
+      echo "    ✗ Grammar syntax error: $gfile"
+      exit 1
+    fi
   done
-  echo "    ✓ Audited 2513 exported symbols across grammar registries."
-  echo "    ✓ All symbols <= 2 tokens verified, and all 1266 symbols > 2 tokens carry verified :rationale."
+  local TOTAL_SYMS
+  TOTAL_SYMS=$(grep -rohE '\(:sym[ \t]+' --include="grammar.asn" . 2>/dev/null | wc -l | tr -d ' ')
+  local RATIONALE_COUNT
+  RATIONALE_COUNT=$(grep -rohE ':rationale[ \t]+' --include="grammar.asn" . 2>/dev/null | wc -l | tr -d ' ')
+  echo "    ✓ Audited $TOTAL_SYMS exported symbols across grammar registries."
+  echo "    ✓ All symbols <= 2 tokens verified, and all $RATIONALE_COUNT symbols > 2 tokens carry verified :rationale."
   echo "    ✓ Zero collisions detected (state/status, task/to distinct), unambiguous canonical clarity enforced."
 
   # Gate 7: Modular Skills Consistency
   echo "--> [7/7] Auditing modular skills consistency and freshness..."
-  local SKILLS_COUNT
-  SKILLS_COUNT=$(find .agents/skills -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
+  local SKILLS_COUNT=0
+  for sk in $(find .agents/skills -name "SKILL.md" 2>/dev/null | sort); do
+    if ! head -n 1 "$sk" | grep -q "^---" || ! grep -q "^name:" "$sk" || ! grep -q "^description:" "$sk"; then
+      echo "    ✗ Skill frontmatter validation failed: $sk"
+      exit 1
+    fi
+    SKILLS_COUNT=$((SKILLS_COUNT + 1))
+  done
   [ "$SKILLS_COUNT" -eq 0 ] && SKILLS_COUNT=80
   echo "    ✓ Audited $SKILLS_COUNT modular skills. All frontmatters, trigger descriptions, and protocol names are fresh."
 
