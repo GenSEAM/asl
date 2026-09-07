@@ -349,6 +349,53 @@ export default function HomeView() {
         };
       }
 
+function parseConcat(fnCode: string): Array<{ type: 'str' | 'call'; val?: string; name?: string }> | null {
+  const withoutDoc = fnCode.replace(/:d\s+"(?:[^"\\]|\\.)*"/, '');
+  const concatIdx = withoutDoc.indexOf('(s/concat');
+  if (concatIdx === -1) return null;
+
+  let p = concatIdx + 9;
+  const parts: Array<{ type: 'str' | 'call'; val?: string; name?: string }> = [];
+  while (p < withoutDoc.length) {
+    while (p < withoutDoc.length && /\s/.test(withoutDoc[p])) p++;
+    if (withoutDoc[p] === ')') break;
+
+    if (withoutDoc[p] === '"') {
+      p++;
+      let s = '';
+      while (p < withoutDoc.length) {
+        if (withoutDoc[p] === '\\' && p + 1 < withoutDoc.length) {
+          s += withoutDoc[p + 1];
+          p += 2;
+        } else if (withoutDoc[p] === '"') {
+          p++;
+          break;
+        } else {
+          s += withoutDoc[p++];
+        }
+      }
+      parts.push({ type: 'str', val: s });
+    } else if (withoutDoc[p] === '(') {
+      let depth = 1;
+      let start = p;
+      p++;
+      while (p < withoutDoc.length && depth > 0) {
+        if (withoutDoc[p] === '(') depth++;
+        else if (withoutDoc[p] === ')') depth--;
+        p++;
+      }
+      const expr = withoutDoc.slice(start, p);
+      const callMatch = expr.match(/^\(([a-zA-Z0-9_-]+)\)/);
+      if (callMatch) {
+        parts.push({ type: 'call', name: callMatch[1] });
+      }
+    } else {
+      p++;
+    }
+  }
+  return parts;
+}
+
 function parseFunctions(str: string) {
   const fns: Array<{ name: string; code: string }> = [];
   let pos = 0;
@@ -420,18 +467,32 @@ function extractStrings(str: string) {
         const fnNameCamel = fnNameKebab.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
         const fnNamePascal = fnNameCamel.charAt(0).toUpperCase() + fnNameCamel.slice(1);
         const codeWithoutDoc = fn.code.replace(/:d\s+"(?:[^"\\]|\\.)*"/, '');
-        let strs = extractStrings(codeWithoutDoc);
-        let resolvedStr = strs.map(parseSExpToHtml).join('');
-        if (!resolvedStr) {
-          const aliasMatch = codeWithoutDoc.match(/\(([a-zA-Z0-9_-]+)\)/);
-          if (aliasMatch) {
-            const calleeCamel = aliasMatch[1].replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
-            exportedFns.push(`export function ${fnNameCamel}() {\n  return typeof ${calleeCamel} === 'function' ? ${calleeCamel}() : '';\n}`);
+        if (codeWithoutDoc.includes('(s/concat')) {
+          const concatParts = parseConcat(codeWithoutDoc);
+          if (concatParts && concatParts.length > 0) {
+            const codeExpr = concatParts.map(p => {
+              if (p.type === 'str') return JSON.stringify(parseSExpToHtml(p.val));
+              const camel = p.name.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+              return `(typeof ${camel} === 'function' ? ${camel}() : '')`;
+            }).join(' + ');
+            exportedFns.push(`export function ${fnNameCamel}() {\n  return ${codeExpr || '""'};\n}`);
           } else {
             exportedFns.push(`export function ${fnNameCamel}() {\n  return "";\n}`);
           }
         } else {
-          exportedFns.push(`export function ${fnNameCamel}() {\n  return ${JSON.stringify(resolvedStr)};\n}`);
+          let strs = extractStrings(codeWithoutDoc);
+          let resolvedStr = strs.map(parseSExpToHtml).join('');
+          if (!resolvedStr) {
+            const aliasMatch = codeWithoutDoc.match(/\(([a-zA-Z0-9_-]+)\)/);
+            if (aliasMatch) {
+              const calleeCamel = aliasMatch[1].replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+              exportedFns.push(`export function ${fnNameCamel}() {\n  return typeof ${calleeCamel} === 'function' ? ${calleeCamel}() : '';\n}`);
+            } else {
+              exportedFns.push(`export function ${fnNameCamel}() {\n  return "";\n}`);
+            }
+          } else {
+            exportedFns.push(`export function ${fnNameCamel}() {\n  return ${JSON.stringify(resolvedStr)};\n}`);
+          }
         }
 
         exportedComponents.push(`export function ${fnNamePascal}({ className = '', title = '', strokeWidth, ...props } = {}) {
