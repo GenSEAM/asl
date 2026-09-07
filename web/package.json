@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "vite",
     "gen:web": "asl gen:web",
-    "build": "asl test tests/web_test.asl",
+    "build": "asl test tests/web_test.asl && vite build",
     "preview": "vite preview"
+
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.84",

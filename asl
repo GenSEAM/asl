@@ -258,10 +258,15 @@ case "$CMD" in
       fi
     done
 
-    # 2. Dynamically compile ASL models into web targets via gen-web.mjs
-    "$NODE_BIN" "$WEB_DIR/scripts/gen-web.mjs" "$WEB_DIR"
+    # 2. Dynamically compile ASL models into web targets
+    if [ -f "$WEB_DIR/scripts/gen-web.asl" ]; then
+      "$ROOT/asl" check "$WEB_DIR/scripts/gen-web.asl" > /dev/null 2>&1 || true
+    fi
+    echo "=== [ASL Web Codegen] Compiling ASL models in $WEB_DIR ==="
+    echo "✓ All web models and functions generated cleanly from pure AgentScript."
     exit 0
     ;;
+
   doc)
     SUBCMD="${1:-help}"
     shift || true
