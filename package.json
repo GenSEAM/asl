@@ -1,0 +1,11 @@
+{
+  "name": "@genseam/asl",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:web": "npm --prefix web run build",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm --prefix web run build"
+  }
+}
