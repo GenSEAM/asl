@@ -6,17 +6,23 @@
   :tokens-baseline 1
   :symbols [
     ;; 1-Token Baseline Types
+    (:sym :name "DeadlockVerdict" :kind :type :tokens 1)
     (:sym :name "Diagnostic" :kind :type :tokens 1)
     (:sym :name "DiagnosticSummary" :kind :type :tokens 1)
+    (:sym :name "DiskSpool" :kind :type :tokens 1)
     (:sym :name "LogEntry" :kind :type :tokens 1)
     (:sym :name "LogLevel" :kind :type :tokens 1)
     (:sym :name "Pipeline" :kind :type :tokens 1)
+    (:sym :name "PortVerdict" :kind :type :tokens 1)
     (:sym :name "ProcessCmd" :kind :type :tokens 1)
     (:sym :name "ProcessError" :kind :type :tokens 1)
     (:sym :name "ProcessOutput" :kind :type :tokens 1)
     (:sym :name "ProcessReceipt" :kind :type :tokens 1)
     (:sym :name "ReducedStream" :kind :type :tokens 1)
     (:sym :name "ReductionConfig" :kind :type :tokens 1)
+    (:sym :name "RingBuffer" :kind :type :tokens 1)
+    (:sym :name "RssVerdict" :kind :type :tokens 1)
+    (:sym :name "TwoTierSpool" :kind :type :tokens 1)
 
     ;; <= 2-Token Primary API Symbols
     (:sym :name "cmd" :kind :fn :tokens 1)
@@ -24,6 +30,7 @@
     (:sym :name "dedup-lines" :kind :fn :tokens 2)
     (:sym :name "default-config" :kind :fn :tokens 2)
     (:sym :name "demux-stream" :kind :fn :tokens 2)
+    (:sym :name "detect-deadlock" :kind :fn :tokens 2)
     (:sym :name "err!" :kind :fn :tokens 1)
     (:sym :name "estimate-tokens" :kind :fn :tokens 2)
     (:sym :name "exec!" :kind :fn :tokens 1)
@@ -41,11 +48,17 @@
     (:sym :name "reduce-stream" :kind :fn :tokens 2)
     (:sym :name "reduce-text" :kind :fn :tokens 2)
     (:sym :name "render-receipt" :kind :fn :tokens 2)
+    (:sym :name "ring-push" :kind :fn :tokens 2)
+    (:sym :name "ring-size" :kind :fn :tokens 2)
+    (:sym :name "ring-tail" :kind :fn :tokens 2)
     (:sym :name "run-cmd!" :kind :fn :tokens 2)
     (:sym :name "run-pipeline!" :kind :fn :tokens 2)
     (:sym :name "run-simple!" :kind :fn :tokens 2)
     (:sym :name "run-tests" :kind :fn :tokens 2)
     (:sym :name "run-tests!" :kind :fn :tokens 2)
+    (:sym :name "spool-truncate" :kind :fn :tokens 2)
+    (:sym :name "spool-unlink" :kind :fn :tokens 2)
+    (:sym :name "spool-write" :kind :fn :tokens 2)
     (:sym :name "strip-ansi" :kind :fn :tokens 2)
     (:sym :name "summarize-diagnostics" :kind :fn :tokens 2)
     (:sym :name "truncate-summary" :kind :fn :tokens 2)
@@ -56,38 +69,80 @@
     (:sym :name "with-timeout" :kind :fn :tokens 2)
 
     ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "check-rss-ceiling" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'check-rss': scopes check specifically against configured memory ceiling threshold")
     (:sym :name "clean-terminal-text" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'clean-text': preserves terminal ANSI and CR sanitization domain, preventing collision with general string trimming")
     (:sym :name "collapse-cr-line" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes terminal carriage-return overwrite emulation across an entire line from segment-level processing")
     (:sym :name "collapse-cr-segment" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes progress-bar segment overwrite processing from line-level collapsing")
+    (:sym :name "detect-bound-port" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'detect-port': distinguishes network listening port detection from device port queries")
     (:sym :name "extract-error-summary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-summary': scopes extraction specifically to diagnostic errors and failure frames")
     (:sym :name "extract-python-frame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-frame': explicitly scopes stack frame extraction to Python traceback syntax")
     (:sym :name "generate-spool-path" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
+    (:sym :name "make-deadlock-verdict" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to pipe deadlock evaluation")
+    (:sym :name "make-disk-spool" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to disk storage allocation with byte capping")
+    (:sym :name "make-port-verdict" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to bound network port evaluation")
     (:sym :name "make-process-receipt" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-receipt': scopes constructor unambiguously to APM process receipting")
+    (:sym :name "make-ring-buffer" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-buffer': unambiguously scopes constructor to FIFO ring buffer semantics")
+    (:sym :name "make-rss-verdict" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to memory RSS watchdog evaluation")
+    (:sym :name "make-two-tier-spool" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to RAM ring plus disk spool coordination")
     (:sym :name "parse-file-loc" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-loc': distinguishes compiler diagnostic file:line:col parsing from memory or URL location strings")
+    (:sym :name "parse-port-number" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'parse-port': distinguishes integer network port parsing from hardware port strings")
     (:sym :name "parse-pytest-diagnostic" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to pytest assertion failures and summary blocks")
     (:sym :name "parse-tsc-diagnostic" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to TypeScript tsc compiler diagnostic outputs")
+    (:sym :name "ring-to-string" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'ring-string': distinguishes string rendering from ring buffer identifier")
     (:sym :name "scan-stream-diagnostics" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'scan-stream': distinguishes diagnostic scanning from general stream reading or byte windowing")
+    (:sym :name "spool-is-unlinked?" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'is-unlinked?': disambiguates disk spool auto-unlink predicate from general file unlinking")
     (:sym :name "test-ansi-stripping" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-stripping': isolates ANSI sequence removal assertions from general string trimming tests")
     (:sym :name "test-cr-collapsing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-collapsing': isolates terminal carriage return overwrite tests from whitespace collapsing")
     (:sym :name "test-diagnostic-extraction" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-extraction': scopes test specifically to multi-compiler diagnostic parsing")
+    (:sym :name "test-disk-spool-auto-unlink" :kind :fn :tokens 5
+          :rationale "Cannot be reduced to 'test-unlink': isolates auto-unlink file descriptor lifecycle guarantee")
+    (:sym :name "test-disk-spool-circular-cap" :kind :fn :tokens 5
+          :rationale "Cannot be reduced to 'test-spool': isolates 10MB circular truncation boundary verification")
     (:sym :name "test-line-dedup" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-dedup': scopes test specifically to stream log line deduplication algorithms")
     (:sym :name "test-reduce-stream-integration" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-reduce': scopes test to the integrated ANSI stripping, windowing, and parsing pipeline")
     (:sym :name "test-retention-windowing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-windowing': scopes test specifically to head/tail line retention during stream truncation")
+    (:sym :name "test-ring-buffer-capacity" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'test-ring': isolates 200-line capacity wrap verification")
+    (:sym :name "test-sh-lifecycle-wiring" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'test-sh': isolates command lifecycle spooling and watchdog wiring")
+    (:sym :name "test-two-tier-spool-integration" :kind :fn :tokens 5
+          :rationale "Cannot be reduced to 'test-spool': tests integrated RAM ring and disk spool execution")
+    (:sym :name "test-watchdog-deadlock" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'test-deadlock': isolates 10s idle stdin deadlock watchdog assertions")
+    (:sym :name "test-watchdog-port-detection" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'test-port': isolates automated port binding regex and string parsing assertions")
+    (:sym :name "test-watchdog-rss-ceiling" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'test-rss': isolates memory limit and SIGKILL event assertions")
+    (:sym :name "two-tier-close" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'spool-close': indicates two-tier cleanup guaranteeing disk spool auto-unlink")
+    (:sym :name "two-tier-push" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'spool-push': indicates dual write to RAM ring buffer and disk spool simultaneously")
   ])
