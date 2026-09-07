@@ -209,43 +209,8 @@ case "$CMD" in
       exec "$NODE_BIN" "$MEM_DAEMON" coverage "$@"
     fi
     if [ -n "$1" ]; then
-      if [ -f "$1" ]; then
-        echo "--> Auditing and verifying ASL test suite: $1"
-        awk '
-        function check_file(file,    c, in_str, esc, open_p, close_p, line, i) {
-          open_p = 0; close_p = 0; in_str = 0; esc = 0;
-          while ((getline line < file) > 0) {
-            for (i = 1; i <= length(line); i++) {
-              c = substr(line, i, 1);
-              if (in_str) {
-                if (esc) esc = 0;
-                else if (c == "\\") esc = 1;
-                else if (c == "\"") in_str = 0;
-              } else {
-                if (c == ";") break;
-                else if (c == "\"") in_str = 1;
-                else if (c == "(" || c == "[" || c == "{") open_p++;
-                else if (c == ")" || c == "]" || c == "}") close_p++;
-              }
-            }
-          }
-          close(file);
-          if (open_p != close_p) {
-            print "    ✗ " file ": unbalanced delimiters (open: " open_p ", close: " close_p ")";
-            return 1;
-          }
-          return 0;
-        }
-        BEGIN {
-          if (check_file(ARGV[1])) exit 1;
-          print "    ✓ " ARGV[1] ": structurally balanced, AST verified, test suite passing.";
-        }
-        ' "$1"
-        exit 0
-      else
-        echo "Error: test file not found: $1"
-        exit 1
-      fi
+      MEM_DAEMON="$(find_mem_daemon)"
+      exec "$NODE_BIN" "$MEM_DAEMON" test "$@"
     fi
     exec "$0" gate "$@"
     ;;

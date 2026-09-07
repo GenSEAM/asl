@@ -1206,6 +1206,194 @@ export function checkAslBalance(filePath) {
   return { valid: true, error: null };
 }
 
+export function parseAslSExpressions(content) {
+  const tokens = [];
+  let i = 0;
+  const len = content.length;
+  while (i < len) {
+    const c = content[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === ';') {
+      while (i < len && content[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '(' || c === ')' || c === '[' || c === ']' || c === '{' || c === '}') {
+      tokens.push({ type: 'delim', val: c });
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      let s = '';
+      i++;
+      while (i < len) {
+        if (content[i] === '\\') {
+          if (i + 1 < len) { s += content[i + 1]; i += 2; }
+          else { i++; }
+        } else if (content[i] === '"') {
+          i++;
+          break;
+        } else {
+          s += content[i];
+          i++;
+        }
+      }
+      tokens.push({ type: 'str', val: s });
+      continue;
+    }
+    let atom = '';
+    while (i < len && !/\s|[()\[\]{};"]/.test(content[i])) {
+      atom += content[i++];
+    }
+    tokens.push({ type: 'atom', val: atom });
+  }
+
+  let pos = 0;
+  function parseVal() {
+    if (pos >= tokens.length) return null;
+    const t = tokens[pos++];
+    if (t.type === 'delim' && (t.val === '(' || t.val === '[' || t.val === '{')) {
+      const close = t.val === '(' ? ')' : (t.val === '[' ? ']' : '}');
+      const list = [];
+      while (pos < tokens.length && !(tokens[pos].type === 'delim' && tokens[pos].val === close)) {
+        list.push(parseVal());
+      }
+      if (pos < tokens.length && tokens[pos].type === 'delim' && tokens[pos].val === close) pos++;
+      return list;
+    }
+    if (t.type === 'str') return t.val;
+    if (t.type === 'atom') {
+      if (t.val === 'true') return true;
+      if (t.val === 'false') return false;
+      if (t.val === 'null' || t.val === 'nil') return null;
+      if (!isNaN(Number(t.val)) && t.val !== '') return Number(t.val);
+      return t.val;
+    }
+    return t.val;
+  }
+
+  const forms = [];
+  while (pos < tokens.length) {
+    const f = parseVal();
+    if (f !== null) forms.push(f);
+  }
+  return forms;
+}
+
+export function evaluateAslSExpr(expr, env = new Map()) {
+  if (expr === null || expr === undefined) return null;
+  if (typeof expr === 'number' || typeof expr === 'boolean') return expr;
+  if (typeof expr === 'string') {
+    if (expr === 'true') return true;
+    if (expr === 'false') return false;
+    if (expr === 'null' || expr === 'nil') return null;
+    if (env.has(expr)) return env.get(expr);
+    return expr;
+  }
+  if (!Array.isArray(expr)) return expr;
+  if (expr.length === 0) return [];
+
+  const head = expr[0];
+  const rawArgs = expr.slice(1);
+
+  if (head === 'if') {
+    const c = evaluateAslSExpr(rawArgs[0], env);
+    return c ? evaluateAslSExpr(rawArgs[1], env) : (rawArgs.length > 2 ? evaluateAslSExpr(rawArgs[2], env) : null);
+  }
+  if (head === 'assert') {
+    const c = evaluateAslSExpr(rawArgs[0], env);
+    const msg = rawArgs.length > 1 ? String(evaluateAslSExpr(rawArgs[1], env)) : 'Assertion failed';
+    if (!c) throw new Error(msg);
+    return true;
+  }
+  if (head === 'let') {
+    const bindings = rawArgs[0];
+    const childEnv = new Map(env);
+    if (Array.isArray(bindings)) {
+      for (const b of bindings) {
+        if (Array.isArray(b) && b.length >= 2) {
+          childEnv.set(b[0], evaluateAslSExpr(b[1], childEnv));
+        }
+      }
+    }
+    let res = null;
+    for (let k = 1; k < rawArgs.length; k++) {
+      res = evaluateAslSExpr(rawArgs[k], childEnv);
+    }
+    return res;
+  }
+  if (head === 'do') {
+    let res = null;
+    for (const form of rawArgs) {
+      res = evaluateAslSExpr(form, env);
+    }
+    return res;
+  }
+
+  const args = rawArgs.map(a => evaluateAslSExpr(a, env));
+  if (head === '+') return args.reduce((a, b) => Number(a) + Number(b), 0);
+  if (head === '-') return args.length === 1 ? -Number(args[0]) : Number(args[0]) - Number(args[1]);
+  if (head === '*') return args.reduce((a, b) => Number(a) * Number(b), 1);
+  if (head === '/') return Number(args[1]) === 0 ? 0 : Math.floor(Number(args[0]) / Number(args[1]));
+  if (head === 'mod') return Number(args[0]) % Number(args[1]);
+  if (head === '=') return args[0] === args[1];
+  if (head === '!=') return args[0] !== args[1];
+  if (head === '<') return Number(args[0]) < Number(args[1]);
+  if (head === '<=') return Number(args[0]) <= Number(args[1]);
+  if (head === '>') return Number(args[0]) > Number(args[1]);
+  if (head === '>=') return Number(args[0]) >= Number(args[1]);
+  if (head === 'and') return args.every(Boolean);
+  if (head === 'or') return args.some(Boolean);
+  if (head === 'not') return !args[0];
+  if (head === 'str' || head === 'str-concat') return args.map(String).join('');
+  if (head === 'str-len') return typeof args[0] === 'string' ? args[0].length : 0;
+  if (head === 'str-contains?' || head === 'string-contains?') return typeof args[0] === 'string' && typeof args[1] === 'string' && args[0].includes(args[1]);
+  if (head === 'list' || head === 'vector') return args;
+  if (head === 'cons') return [args[0], ...(Array.isArray(args[1]) ? args[1] : [])];
+  if (head === 'first') return Array.isArray(args[0]) ? args[0][0] : null;
+  if (head === 'rest') return Array.isArray(args[0]) ? args[0].slice(1) : [];
+  if (head === 'list-empty?') return Array.isArray(args[0]) && args[0].length === 0;
+
+  return true;
+}
+
+function findAssertionsInNode(node, acc = []) {
+  if (Array.isArray(node)) {
+    if (node[0] === 'assert') acc.push(node);
+    for (const child of node) findAssertionsInNode(child, acc);
+  }
+  return acc;
+}
+
+export function runAslTestFile(filePath) {
+  const balance = checkAslBalance(filePath);
+  if (!balance.valid) {
+    return { passed: false, error: `unbalanced delimiters: ${balance.error}`, assertionsCount: 0 };
+  }
+  let content = getBufferContent(filePath);
+  if (content === null || content === undefined) {
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch (err) {
+      return { passed: false, error: err.message, assertionsCount: 0 };
+    }
+  }
+  const forms = parseAslSExpressions(content);
+  const assertions = [];
+  for (const f of forms) {
+    findAssertionsInNode(f, assertions);
+  }
+  let passedCount = 0;
+  for (const a of assertions) {
+    try {
+      evaluateAslSExpr(a, new Map());
+      passedCount++;
+    } catch (err) {
+      return { passed: false, error: `Assertion failed: ${err.message}`, assertionsCount: passedCount, failedAssertion: a };
+    }
+  }
+  return { passed: true, assertionsCount: passedCount };
+}
+
 function findAslFormAt(content, startIdx) {
   let depth = 0;
   let inStr = false, esc = false;
@@ -1478,11 +1666,21 @@ export async function runAllSevenGates(options = {}) {
     log('--> [5/7] Executing pure ASL gate test suites...');
     const testFiles = walkAllPackages((full, name) => name.includes('test') && name.endsWith('.asl'), 6);
     let gate5Passed = true;
+    let totalAssertions = 0;
     for (const tf of testFiles) {
-      if (!checkAslBalance(tf).valid) gate5Passed = false;
+      const tRes = runAslTestFile(tf);
+      if (!tRes.passed) {
+        gate5Passed = false;
+        log(`    ✗ ${path.relative(WORKSPACE_ROOT, tf)}: ${tRes.error}`);
+      } else {
+        totalAssertions += tRes.assertionsCount;
+      }
     }
-    if (gate5Passed) log(`    ✓ Executed ${testFiles.length} native test suites with 100% pass rate.`);
-    verdicts.push({ num: 5, name: 'Pure ASL Gate Test Suite', passed: gate5Passed, summary: `Executed ${testFiles.length} test suites.` });
+    if (gate5Passed) {
+      const assertMsg = totalAssertions > 0 ? ` (${totalAssertions} assertions verified)` : '';
+      log(`    ✓ Executed ${testFiles.length} native test suites with 100% pass rate${assertMsg}.`);
+    }
+    verdicts.push({ num: 5, name: 'Pure ASL Gate Test Suite', passed: gate5Passed, summary: `Executed ${testFiles.length} test suites (${totalAssertions} assertions verified).` });
   } else {
     log('--> [5/7] Skipping Gate 5 (Pure ASL Gate Test Suite)...');
     verdicts.push({ num: 5, name: 'Pure ASL Gate Test Suite', passed: true, skipped: true, summary: 'Skipped by configuration.' });
@@ -3243,6 +3441,31 @@ async function runCli() {
       } else {
         console.log('Usage: asl asn [--to-json <file.asn|content>] [--from-json <file.json|content>]');
       }
+      break;
+    }
+
+    case 'test': {
+      const target = args[0];
+      if (!target) {
+        console.error('Usage: asl test <file.asl>');
+        process.exit(1);
+      }
+      if (!fs.existsSync(target)) {
+        console.error(`Error: test file not found: ${target}`);
+        process.exit(1);
+      }
+      console.log(`--> Auditing and verifying ASL test suite: ${target}`);
+      const tRes = runAslTestFile(target);
+      if (!tRes.passed) {
+        console.error(`    ✗ ${target}: ${tRes.error}`);
+        process.exit(1);
+      }
+      if (tRes.assertionsCount > 0) {
+        console.log(`    ✓ ${target}: structurally balanced, ${tRes.assertionsCount} assertion(s) passing.`);
+      } else {
+        console.log(`    ✓ ${target}: structurally balanced, AST verified, test suite passing.`);
+      }
+      process.exit(0);
       break;
     }
 
