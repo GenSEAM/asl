@@ -101,6 +101,30 @@ const SOURCE_SKILLS_DIRS = [
   path.join(WORKSPACE_ROOT, 'asl', 'skills')
 ];
 
+function validateSkillFrontmatter(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    if (!raw.startsWith('---')) return false;
+    const parts = raw.split('---');
+    if (parts.length < 3) return false;
+    const fm = parts[1];
+    const lines = fm.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('description:')) {
+        const rest = trimmed.slice('description:'.length).trim();
+        if (!rest.startsWith('>-') && !rest.startsWith('"') && !rest.startsWith("'") && rest.includes(': ')) {
+          console.warn(`[WARN] Skill at ${filePath} has invalid YAML description with unquoted colon. Format with 'description: >-' to ensure discovery.`);
+          return false;
+        }
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function getSourceSkills() {
   const skills = new Map();
   for (const dir of SOURCE_SKILLS_DIRS) {
@@ -111,7 +135,7 @@ function getSourceSkills() {
           if (entry.isDirectory() || entry.isSymbolicLink()) {
             const skillPath = path.join(dir, entry.name);
             const mdPath = path.join(skillPath, 'SKILL.md');
-            if (fs.existsSync(mdPath)) {
+            if (fs.existsSync(mdPath) && validateSkillFrontmatter(mdPath)) {
               skills.set(entry.name, skillPath);
             }
           }

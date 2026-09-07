@@ -67,6 +67,8 @@
           :rationale "Validates skill record frontmatter and description freshness")
     (:sym :name "is-clean-of-legacy?" :kind :fn :tokens 4
           :rationale "Enforces modern naming without unaliased legacy terms")
+    (:sym :name "is-valid-yaml-description?" :kind :fn :tokens 4
+          :rationale "Enforces valid YAML syntax on skill descriptions")
     (:sym :name "is-valid-pkg-name?" :kind :fn :tokens 4
           :rationale "Validates @genseam/* namespace format")
     (:sym :name "make-manifest-record" :kind :fn :tokens 3

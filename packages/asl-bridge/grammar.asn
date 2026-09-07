@@ -37,6 +37,8 @@
           :rationale "Predicate testing whether target workload requires host IPC execution tier")
     (:sym :name "is-microvm-tier?" :kind :fn :tokens 3
           :rationale "Predicate testing whether target workload requires isolated microVM execution tier")
+    (:sym :name "is-valid-frontmatter-desc?" :kind :fn :tokens 4
+          :rationale "Ensures description in skill frontmatter conforms to valid YAML syntax")
     (:sym :name "is-wasm-tier?" :kind :fn :tokens 3
           :rationale "Predicate testing whether target workload executes in sandboxed WebAssembly tier")
     (:sym :name "make-db-column" :kind :fn :tokens 3

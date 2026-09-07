@@ -640,7 +640,8 @@ case "$CMD" in
         END {
           print "---";
           print "name: " name;
-          print "description: " desc;
+          print "description: >-";
+          print "  " desc;
           print "---";
           print "";
           print "# " name ": Native Tooling & Verification Guide";

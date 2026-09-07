@@ -14,6 +14,22 @@
                        "description: Core ASL toolchain\n"
                        "---\n"
                        "# ASL Toolbelt\n"))
+        (valid-folded (str "---\n"
+                          "name: asl-toolbelt\n"
+                          "description: >-\n"
+                          "  Universal ASL: Triggers: \"where is X\"\n"
+                          "---\n"
+                          "# ASL Toolbelt\n"))
+        (valid-quoted (str "---\n"
+                          "name: asl-toolbelt\n"
+                          "description: \"Universal ASL: Triggers: test\"\n"
+                          "---\n"
+                          "# ASL Toolbelt\n"))
+        (invalid-unquoted-colon (str "---\n"
+                                     "name: asl-toolbelt\n"
+                                     "description: Triggers: unquoted colon fails\n"
+                                     "---\n"
+                                     "# ASL Toolbelt\n"))
         (valid-no-name (str "---\n"
                             "description: Anonymous skill\n"
                             "---\n"
@@ -25,10 +41,13 @@
                       "---\n"))
         (empty-text "")]
     (and (si/validate-skill-frontmatter valid-md)
-         (and (si/validate-skill-frontmatter valid-no-name)
-              (and (not (si/validate-skill-frontmatter missing-delim))
-                   (and (not (si/validate-skill-frontmatter no-desc))
-                        (not (si/validate-skill-frontmatter empty-text))))))))
+         (and (si/validate-skill-frontmatter valid-folded)
+              (and (si/validate-skill-frontmatter valid-quoted)
+                   (and (not (si/validate-skill-frontmatter invalid-unquoted-colon))
+                        (and (si/validate-skill-frontmatter valid-no-name)
+                             (and (not (si/validate-skill-frontmatter missing-delim))
+                                  (and (not (si/validate-skill-frontmatter no-desc))
+                                       (not (si/validate-skill-frontmatter empty-text)))))))))))
 
 (df test-resolve-manifest [] -> Bool
   :d "Verifies resolve-skill-manifest correctly constructs SkillManifest records."

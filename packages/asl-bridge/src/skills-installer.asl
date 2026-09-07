@@ -3,7 +3,8 @@
   :x [SkillManifest
       make-skill-manifest
       validate-skill-frontmatter
-      resolve-skill-manifest]
+      resolve-skill-manifest
+      is-valid-frontmatter-desc?]
   :i [])
 
 (dfs SkillManifest
@@ -20,12 +21,29 @@
     :path path
     :verified verified))
 
+(df is-valid-frontmatter-desc? [(raw-text Str)] -> Bool
+  :d "Ensures description in frontmatter doesn't use invalid unquoted colons."
+  (if (string-contains? raw-text "description: >-")
+      true
+      (if (string-contains? raw-text "description: \"")
+          true
+          (if (string-contains? raw-text "description: '")
+              true
+              (let [(lines (string-split raw-text "\n"))
+                    (desc-lines (filter (fn [(l Str)] -> Bool (string-starts-with? (string-trim l) "description:")) lines))]
+                (mt (list-head desc-lines)
+                  ((none) true)
+                  ((some dl)
+                   (let [(after-prefix (string-slice dl 12 (string-length dl)))]
+                     (not (string-contains? after-prefix ": "))))))))))
+
 (df validate-skill-frontmatter [(raw-text Str)] -> Bool
   :d "Validates that skill markdown content contains valid YAML frontmatter delimiters and required metadata."
   (and (string-starts-with? raw-text "---")
        (and (string-contains? raw-text "\n---")
-            (or (string-contains? raw-text "description:")
-                (string-contains? raw-text "name:")))))
+            (and (or (string-contains? raw-text "description:")
+                     (string-contains? raw-text "name:"))
+                 (is-valid-frontmatter-desc? raw-text)))))
 
 (df resolve-skill-manifest [(skill-name Str) (path Str)] -> SkillManifest
   :d "Resolves and constructs a SkillManifest record given a skill name identifier and directory path."

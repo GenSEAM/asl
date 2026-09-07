@@ -1,6 +1,6 @@
 (module asl-gates/skills-gate
   :d "Pure AgentScript modular skills consistency and freshness verification gate."
-  :x [SkillRecord make-skill-record parse-frontmatter-field verify-skill-record is-clean-of-legacy?]
+  :x [SkillRecord make-skill-record parse-frontmatter-field verify-skill-record is-clean-of-legacy? is-valid-yaml-description?]
   :i [])
 
 (dfs SkillRecord
@@ -37,8 +37,17 @@
         (string-contains? lower "alias")
         true)))
 
+(df is-valid-yaml-description? [(desc Str)] -> Bool
+  :d "Enforces valid YAML syntax: plain scalars containing colons are rejected unless quoted or folded."
+  (if (or (string-starts-with? desc ">-")
+          (or (string-starts-with? desc "\"")
+              (string-starts-with? desc "'")))
+      true
+      (not (string-contains? desc ": "))))
+
 (df verify-skill-record [(record SkillRecord)] -> Bool
   :d "Validates skill record integrity."
   (and (.-has-frontmatter record)
        (and (.-is-valid record)
-            (is-clean-of-legacy? (.-description record)))))
+            (and (is-clean-of-legacy? (.-description record))
+                 (is-valid-yaml-description? (.-description record))))))

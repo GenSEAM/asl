@@ -34,9 +34,15 @@
 (df test-skills-gate [] -> Bool
   :d "Verifies skills frontmatter parser and validation."
   (let [(valid-rec (sg/make-skill-record "skills/test/SKILL.md" "test-skill" "A test skill" true))
+        (valid-folded (sg/make-skill-record "skills/test/SKILL.md" "test-skill" ">-" true))
+        (valid-quoted (sg/make-skill-record "skills/test/SKILL.md" "test-skill" "\"Triggers: test\"" true))
+        (invalid-unquoted-colon (sg/make-skill-record "skills/test/SKILL.md" "test-skill" "Triggers: unquoted colon fails" true))
         (invalid-rec (sg/make-skill-record "skills/test/SKILL.md" "" "No name" true))]
     (and (sg/verify-skill-record valid-rec)
-         (not (sg/verify-skill-record invalid-rec)))))
+         (and (sg/verify-skill-record valid-folded)
+              (and (sg/verify-skill-record valid-quoted)
+                   (and (not (sg/verify-skill-record invalid-unquoted-colon))
+                        (not (sg/verify-skill-record invalid-rec))))))))
 
 (df test-manifest-gate [] -> Bool
   :d "Verifies package manifest structure verification."
