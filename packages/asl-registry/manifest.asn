@@ -1,0 +1,6 @@
+(:package @genseam/asl-registry
+ :version "0.1.0"
+ :entry "src/registry.asl"
+ :description "Universal Multi-Ecosystem Package Registry & Git-Native Dependency Inspector for ASL, npm, PyPI, Crates.io, Go, and GitHub"
+ :asl-first true
+ :dependencies ["@genseam/asl-codec"])

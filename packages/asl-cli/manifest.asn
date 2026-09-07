@@ -1,0 +1,11 @@
+(:package @genseam/asl-cli
+ :version "0.1.0"
+ :entry "src/cli.asl"
+ :description "Pure AgentScript Native CLI Toolchain"
+ :asl-first true
+ :dependencies ["@genseam/asl-parser"
+                "@genseam/asl-checker"
+                "@genseam/asl-codegen"
+                "@genseam/asl-compiler"
+                "@genseam/asl-lint"
+                "@genseam/asl-codec"])

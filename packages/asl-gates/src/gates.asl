@@ -33,7 +33,8 @@
                            (or (= ext ".rs")
                                (or (= ext ".c")
                                    (or (= ext ".cpp")
-                                       (= ext ".h")))))))))))
+                                       (or (= ext ".h")
+                                           (= ext ".json"))))))))))))
 
 (df ! run-suite [(paths (List Str))] -> (Result I64 Str)
   :d "Executes semantic verification gate across a collection of ASL source paths."

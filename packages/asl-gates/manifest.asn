@@ -1,10 +1,8 @@
-(package
-  :name "@genseam/asl-gates"
-  :version "0.1.0"
-  :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
-  :entry "src/gates.asl"
-  :deps [
-    "@genseam/asl-parser"
-    "@genseam/asl-checker"
-    "@genseam/asl-compiler"
-  ])
+(:package @genseam/asl-gates
+ :version "0.1.0"
+ :entry "src/gates.asl"
+ :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
+ :asl-first true
+ :dependencies ["@genseam/asl-parser"
+                "@genseam/asl-checker"
+                "@genseam/asl-compiler"])

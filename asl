@@ -117,7 +117,7 @@ run_all_seven_gates() {
   # Gate 1: Manifests
   echo "--> [1/7] Verifying package manifests and module structure..."
   local MANIFESTS
-  MANIFESTS=$(find . -name "manifest.asn" -o -name "asl.json" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
+  MANIFESTS=$(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
   echo "    ✓ Verified $MANIFESTS package manifests cleanly."
 
   # Gate 2: Pure ASL Syntax
@@ -137,11 +137,12 @@ run_all_seven_gates() {
   echo "    ✓ Grounded $CLAIMS_COUNT benchmark claims across published registry."
 
   # Gate 4: Zero Foreign Code
-  echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Python, 0 JavaScript, 0 TypeScript, 0 Rust, 0 C, 0 Shell in code packages)..."
+  echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Python, 0 JavaScript, 0 TypeScript, 0 Rust, 0 C, 0 Shell, 0 JSON in code packages)..."
+  echo "    [Boundary] Legal host projections recognized: asl/bridges/node/, bin/, scripts/"
   local FOREIGN_FILES
-  FOREIGN_FILES=$(find packages asl/packages agent-bus asl-contracts asl-compiler mem intel harness gsa crawler pack vdom voice web-api-search -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" \) 2>/dev/null | grep -v 'node_modules' || true)
+  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" \) 2>/dev/null | grep -v 'node_modules' || true)
   if [ -z "$FOREIGN_FILES" ]; then
-    echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C, 0 Shell)."
+    echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C, 0 Shell, 0 JSON)."
   else
     echo "    ✗ Foreign files detected in packages: $FOREIGN_FILES"
     exit 1

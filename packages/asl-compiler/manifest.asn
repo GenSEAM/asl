@@ -1,0 +1,8 @@
+(:package @genseam/asl-compiler
+ :version "0.1.0"
+ :entry "src/compiler.asl"
+ :description "Pure AgentScript 100% Self-Hosted Compiler Toolchain"
+ :asl-first true
+ :dependencies ["@genseam/asl-parser"
+                "@genseam/asl-checker"
+                "@genseam/asl-codegen"])

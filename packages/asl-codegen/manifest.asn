@@ -1,0 +1,7 @@
+(:package @genseam/asl-codegen
+ :version "0.1.0"
+ :entry "src/emit.asl"
+ :description "Pure AgentScript Native Rust Codegen Pipeline"
+ :asl-first true
+ :dependencies ["@genseam/asl-parser"
+                "@genseam/asl-checker"])

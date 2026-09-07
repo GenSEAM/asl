@@ -20,7 +20,8 @@
   (and (not (g/verify-foreign-ext ".py"))
        (and (not (g/verify-foreign-ext ".ts"))
             (and (not (g/verify-foreign-ext ".js"))
-                 (g/verify-foreign-ext ".asl")))))
+                 (and (not (g/verify-foreign-ext ".json"))
+                      (g/verify-foreign-ext ".asl"))))))
 
 (df test-grammar-gate [] -> Bool
   :d "Verifies ASN grammar token density audit."
