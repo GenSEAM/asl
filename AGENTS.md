@@ -50,11 +50,43 @@ AgentScript supports two projection formats derived from `prelude/prelude.json`:
   - Keep nesting depth within 4 levels. Use early returns and concise local helper functions to maintain linear flow.
 
 ## 4. Code Intelligence & Polyglot Operations
-Leverage the native ASL engine for fast AST queries and workspace navigation:
-- **AST Outline**: Run `asl intel outline <file>` to inspect structure without loading entire files into context.
-- **Symbol Lookup**: Run `asl intel search <symbol>` and `asl intel callers <symbol>` for sub-millisecond symbol reference queries.
-- **In-Memory Workspace Search**: Ingest project trees using `asl mem index .` and query semantics with `asl mem query "<query>"`.
-- **Batch RPC Operations**: Execute compound operations using `asl rpc '(:batch ...)'` to combine outline, query, and metrics in a single round-trip.
+All code exploration, reading, text search, editing, diffing, and verification MUST execute through exclusive `asl rpc '(:batch ...)'` compound operations in a single roundtrip. Avoid multiple individual tool calls or standalone commands when a compound batch can accomplish the objective atomically.
+
+### 4.1 Compound Batch RPC Execution
+Execute combined exploration, reading, editing, diffing, and validation in a single batch round-trip:
+
+```bash
+asl rpc '(:batch
+  (:out "src/server.ts")              ; AST outline (ASL, TS, JS, Python, Go, Rust, PHP)
+  (:sym "handleRequest")              ; Exact symbol definition & declaration line
+  (:callers "handleRequest")          ; Call graph: all callers across workspace
+  (:impact "handleRequest")           ; Blast-radius impact analysis before edits
+  (:find "authHeader")                ; Fast in-memory text grep across codebase
+  (:q "token validation")             ; In-memory vector semantic query
+  (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
+  (:sec "doc.md" "Section Title")     ; Read isolated markdown section
+  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
+  (:repl "old_pat" "new_pat")         ; Mass in-memory refactor across files
+  (:diff)                             ; Review staged in-memory modifications
+  (:flush)                            ; Atomically persist staged edits to disk
+  (:chk)                              ; Run full 7-gate verification suite
+)'
+```
+
+Supported capabilities across ASL, TypeScript, JavaScript, Python, Go, Rust, and PHP:
+- **AST Outline**: `(:out "<file>")` to inspect structure without loading entire files into context.
+- **Symbol Lookup & Callers**: `(:sym "<name>")`, `(:callers "<name>")`, and `(:impact "<name>")` for sub-millisecond symbol reference queries.
+- **In-Memory Search**: `(:find "<pattern>")` for fast in-memory grep and `(:q "<query>")` for vector semantic search.
+- **In-Memory Modifications**: `(:edit "<file>" "<old>" "<new>")`, `(:repl "<old>" "<new>")`, review with `(:diff)`, commit with `(:flush)`.
+- **Continuous Verification**: `(:chk)` or `asl gate` to evaluate all 7 verification gates.
+
+### 4.2 Failure Protocol & Error Recovery
+Adhere strictly to deterministic error recovery when executing batch RPC operations:
+- **Step Status Inspection**: Check `:status` across each step result (`"ok"`, `"rejected"`, `"failed"`, or `"aborted"`). In atomic batches, a single step failure aborts subsequent pending steps. Inspect `:error-code` and `:reason` for diagnostic root causes.
+- **Edit Failure Recovery**: If `:edit` fails with `ERR_STRING_NOT_FOUND`, **NEVER** blind-retry the same string replacement. Call `(:read "<file>" <start> <end>)` to inspect actual line content, indentation, and trailing whitespace, then issue the corrected replacement.
+- **Dirty Buffer Resolution**: Review staged modifications with `(:diff)`. If in-memory edits are erroneous or corrupt, discard them immediately with `(:discard)` before proceeding. Never `:flush` dirty buffers after a failed step.
+- **Search Fallback**: If `(:sym "<name>")` or `(:q "<query>")` returns `:not-found`, fall back to exact literal grep with `(:find "<pattern>")` or structure outlines via `(:out "<file>")`.
+- **Gate Failure Isolation**: If `(:chk)` fails, identify the specific failing gate and test output. Resolve the underlying defect directly without weakening gates or skipping test suites.
 
 ## 5. Ecosystem & Multi-Package Architecture
 - Code packages reside under `packages/` and are organized as self-contained ASL modules with a `manifest.asn` declaration.
