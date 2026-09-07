@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import BlogViewAsl from './BlogView.asl';
 import { useRouter } from '../lib/router';
 import {
   BLOG_POSTS,
@@ -275,6 +276,8 @@ export const BlogView: React.FC = () => {
   }
 
   // Article Listing View: /blog
+  return <BlogViewAsl />;
+
   return (
     <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full">
       <SectionHeader
