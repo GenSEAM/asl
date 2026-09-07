@@ -74,46 +74,10 @@ case "$CMD" in
 
 
   check)
-    if [ -z "$1" ]; then
-      echo "Usage: asl check <file.asl>"
-      exit 1
-    fi
-    if [ ! -f "$1" ]; then
-      echo "Error: file not found: $1"
-      exit 1
-    fi
-    awk '
-    function check_file(file,    c, in_str, esc, open_p, close_p, line, i) {
-      open_p = 0; close_p = 0; in_str = 0; esc = 0;
-      while ((getline line < file) > 0) {
-        for (i = 1; i <= length(line); i++) {
-          c = substr(line, i, 1);
-          if (in_str) {
-            if (esc) esc = 0;
-            else if (c == "\\") esc = 1;
-            else if (c == "\"") in_str = 0;
-          } else {
-            if (c == ";") break;
-            else if (c == "\"") in_str = 1;
-            else if (c == "(" || c == "[" || c == "{") open_p++;
-            else if (c == ")" || c == "]" || c == "}") close_p++;
-          }
-        }
-      }
-      close(file);
-      if (open_p != close_p) {
-        print "    ✗ " file ": unbalanced delimiters (open: " open_p ", close: " close_p ")";
-        return 1;
-      }
-      return 0;
-    }
-    BEGIN {
-      if (check_file(ARGV[1])) exit 1;
-      print "    ✓ " ARGV[1] ": structurally balanced, AST verified cleanly.";
-    }
-    ' "$1"
-    exit 0
+    # Forward deprecated 'check' to unified 'lint'
+    exec "$0" lint "$@"
     ;;
+
   lint)
     if [ -z "$1" ]; then
       echo "Usage: asl lint <file.asl>"
@@ -123,10 +87,15 @@ case "$CMD" in
       echo "Error: file not found: $1"
       exit 1
     fi
-    # Check for hallucinated keywords outside string literals
-    BAD_KEYWORDS=$(awk '
-      function check_line(line,   c, in_str, esc, i, token) {
-        in_str = 0; esc = 0; token = "";
+    MEM_DAEMON="$(find_mem_daemon)"
+    if [ -f "$MEM_DAEMON" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+      exec "$NODE_BIN" "$MEM_DAEMON" lint "$@"
+    fi
+    awk '
+    function check_file(file,    c, in_str, esc, open_p, close_p, line, i, bad_kw, token) {
+      open_p = 0; close_p = 0; in_str = 0; esc = 0; bad_kw = "";
+      while ((getline line < file) > 0) {
+        token = "";
         for (i = 1; i <= length(line); i++) {
           c = substr(line, i, 1);
           if (in_str) {
@@ -136,24 +105,33 @@ case "$CMD" in
           } else {
             if (c == ";") break;
             else if (c == "\"") in_str = 1;
-            else token = token c;
+            else {
+              token = token c;
+              if (c == "(" || c == "[" || c == "{") open_p++;
+              else if (c == ")" || c == "]" || c == "}") close_p++;
+            }
           }
         }
-        if (token ~ /\(defun[ \t]/ || token ~ /\(defn[ \t]/ || token ~ /\(lambda[ \t]/) return 1;
-        return 0;
-      }
-      {
-        if (check_line($0)) {
-          print NR ": " $0;
+        if (token ~ /\(defun[ \t]/ || token ~ /\(defn[ \t]/ || token ~ /\(lambda[ \t]/) {
+          bad_kw = bad_kw line "\n";
         }
       }
-    ' "$1")
-    if [ -n "$BAD_KEYWORDS" ]; then
-      echo "    ✗ Lint warning in $1: hallucinated Lisp keywords detected (use 'df' or 'fn'):"
-      echo "$BAD_KEYWORDS"
-      exit 1
-    fi
-    echo "    ✓ $1: Lint passed cleanly. Zero anti-patterns detected."
+      close(file);
+      if (open_p != close_p) {
+        print "    ✗ " file ": unbalanced delimiters (open: " open_p ", close: " close_p ")";
+        return 1;
+      }
+      if (bad_kw != "") {
+        print "    ✗ " file ": hallucinated Lisp keywords detected (use \x27df\x27 or \x27fn\x27):\n" bad_kw;
+        return 1;
+      }
+      return 0;
+    }
+    BEGIN {
+      if (check_file(ARGV[1])) exit 1;
+      print "    ✓ " ARGV[1] ": Lint passed cleanly. Balanced AST, zero anti-patterns detected.";
+    }
+    ' "$1"
     exit 0
     ;;
   audit)
@@ -164,12 +142,8 @@ case "$CMD" in
       COUNT=0
       for f in $(find "$TARGET" -name "*.asl" -not -path "*/.*/*" -not -path "*/node_modules/*"); do
         COUNT=$((COUNT + 1))
-        if ! "$ROOT/asl" check "$f" > /dev/null 2>&1; then
-          echo "    ✗ Micro-Tier FAIL: $f delimiter/AST balance error"
-          FAIL=1
-        fi
         if ! "$ROOT/asl" lint "$f" > /dev/null 2>&1; then
-          echo "    ✗ Meso-Tier FAIL: $f keyword idiom violation"
+          echo "    ✗ Lint FAIL: $f delimiter balance or keyword idiom violation"
           FAIL=1
         fi
         if ! grep -qE '^\(module[ \t]+' "$f"; then
@@ -181,21 +155,19 @@ case "$CMD" in
         echo "=== [ASL Multi-Level Audit] Audit FAILED with errors ==="
         exit 1
       fi
-      echo "=== [ASL Multi-Level Audit] All $COUNT .asl files in $TARGET passed Micro, Meso, and Macro tiers cleanly! ==="
+      echo "=== [ASL Multi-Level Audit] All $COUNT .asl files in $TARGET passed lint and module tiers cleanly! ==="
       exit 0
     elif [ -f "$TARGET" ]; then
-      echo "--> [1/3] Micro-Tier: Auditing AST form and delimiter balance..."
-      "$ROOT/asl" check "$TARGET"
-      echo "--> [2/3] Meso-Tier: Auditing keyword idioms and export signatures..."
+      echo "--> [1/2] Micro & Meso Tier: Auditing AST form balance and keyword idioms..."
       "$ROOT/asl" lint "$TARGET"
-      echo "--> [3/3] Macro-Tier: Auditing module declaration and structure..."
+      echo "--> [2/2] Macro-Tier: Auditing module declaration and structure..."
       HAS_MOD=$(grep -E '^\(module[ \t]+' "$TARGET" || true)
       if [ -z "$HAS_MOD" ]; then
         echo "    ✗ Missing standard '(module ...)' declaration in $TARGET"
         exit 1
       fi
       echo "    ✓ Module header verified cleanly: $HAS_MOD"
-      echo "=== [ASL Multi-Level Audit] All 3 Tiers (Micro, Meso, Macro) PASSED cleanly for $TARGET ==="
+      echo "=== [ASL Multi-Level Audit] All tiers PASSED cleanly for $TARGET ==="
       exit 0
     else
       echo "Error: target not found: $TARGET"
@@ -239,7 +211,7 @@ case "$CMD" in
         echo "Error: missing source model: $m"
         exit 1
       fi
-      if ! "$ROOT/asl" check "$m" > /dev/null 2>&1; then
+      if ! "$ROOT/asl" lint "$m" > /dev/null 2>&1; then
         echo "Error: invalid ASL syntax in: $m"
         exit 1
       fi
@@ -247,7 +219,7 @@ case "$CMD" in
 
     # 2. Dynamically compile ASL models into web targets
     if [ -f "$WEB_DIR/scripts/gen-web.asl" ]; then
-      "$ROOT/asl" check "$WEB_DIR/scripts/gen-web.asl" > /dev/null 2>&1 || true
+      "$ROOT/asl" lint "$WEB_DIR/scripts/gen-web.asl" > /dev/null 2>&1 || true
     fi
     echo "=== [ASL Web Codegen] Compiling ASL models in $WEB_DIR ==="
     echo "✓ All web models and functions generated cleanly from pure AgentScript."

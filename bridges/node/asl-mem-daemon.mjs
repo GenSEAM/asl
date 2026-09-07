@@ -1206,6 +1206,51 @@ export function checkAslBalance(filePath) {
   return { valid: true, error: null };
 }
 
+export function lintAsl(filePath) {
+  const bal = checkAslBalance(filePath);
+  if (!bal.valid) return bal;
+  let content = getBufferContent(filePath);
+  if (content === null || content === undefined) {
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch (err) {
+      return { valid: false, error: err.message };
+    }
+  }
+  const badPatterns = [
+    { pattern: /\(defun[ \t]/, name: 'defun' },
+    { pattern: /\(defn[ \t]/, name: 'defn' },
+    { pattern: /\(lambda[ \t]/, name: 'lambda' }
+  ];
+  const lines = content.split('\n');
+  for (let lIdx = 0; lIdx < lines.length; lIdx++) {
+    const line = lines[lIdx];
+    let stripped = '';
+    let inStr = false, esc = false;
+    for (let cIdx = 0; cIdx < line.length; cIdx++) {
+      const c = line[cIdx];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (c === '\\') esc = true;
+        else if (c === '"') inStr = false;
+      } else {
+        if (c === ';') break;
+        if (c === '"') inStr = true;
+        else stripped += c;
+      }
+    }
+    for (const bp of badPatterns) {
+      if (bp.pattern.test(stripped)) {
+        return {
+          valid: false,
+          error: `line ${lIdx + 1}: hallucinated Lisp keyword '(${bp.name}' detected (use 'df' or 'fn')`
+        };
+      }
+    }
+  }
+  return { valid: true, error: null };
+}
+
 export function parseAslSExpressions(content) {
   const tokens = [];
   let i = 0;
@@ -4136,6 +4181,27 @@ async function runCli() {
       } else {
         console.log('Usage: asl asn [--to-json <file.asn|content>] [--from-json <file.json|content>]');
       }
+      break;
+    }
+
+    case 'check':
+    case 'lint': {
+      const target = args[0];
+      if (!target) {
+        console.error('Usage: asl lint <file.asl>');
+        process.exit(1);
+      }
+      if (!fs.existsSync(target)) {
+        console.error(`Error: file not found: ${target}`);
+        process.exit(1);
+      }
+      const lRes = lintAsl(target);
+      if (!lRes.valid) {
+        console.error(`    ✗ ${target}: ${lRes.error}`);
+        process.exit(1);
+      }
+      console.log(`    ✓ ${target}: Lint passed cleanly. Balanced AST, zero anti-patterns detected.`);
+      process.exit(0);
       break;
     }
 
