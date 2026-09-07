@@ -1,7 +1,7 @@
 (module asl-cli/cli
   :d "Pure AgentScript native command-line interface toolchain."
   :x [format-version format-help dispatch-cmd execute-cli main]
-  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk)])
+  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk) (evaluator :a ev) (reader :a rd)])
 
 (df format-version [] -> Str
   :d "Returns AgentScript native CLI version string."
@@ -15,10 +15,82 @@
        "  check <file>    Run semantic type and scope checking\n"
        "  gate [files]    Run pure verification gate suite across files\n"
        "  build <file>    Compile ASL to standalone target code\n"
+       "  eval <expr>     Evaluate S-expression in pure ASL runtime\n"
+       "  test <file>     Execute falsifiable test suite via pure evaluator\n"
        "  parse <file>    Parse S-expression AST and print node count\n"
        "  lint <file>     Inspect AST for basic validity\n"
        "  version         Display toolchain version\n"
        "  help            Display this usage guide\n"))
+
+(df find-defun [(forms (List a/TopForm))] -> (Option a/DefunNode)
+  :d "Finds the first DefunNode in a list of TopForms."
+  (mt (list-head forms)
+    ((some form)
+     (mt form
+       ((a/top-defun d) (some d))
+       (_ (mt (list-tail forms)
+            ((some rest) (find-defun rest))
+            ((none) (none))))))
+    ((none) (none))))
+
+(df eval-seq [(body (List rd/SExpr)) (env ev/EvalEnv)] -> ev/EvalValue
+  :d "Evaluates a sequence of S-expressions, returning the value of the last form."
+  (mt (list-head body)
+    ((some first-expr)
+     (let [(val (ev/eval-sexpr first-expr env))]
+       (mt val
+         ((ev/val-error _) val)
+         (_ (mt (list-tail body)
+              ((some rest)
+               (if (list-empty? rest)
+                   val
+                   (eval-seq rest env)))
+              ((none) val))))))
+    ((none) (ev/val-null))))
+
+(df find-asserts [(expr rd/SExpr)] -> (List rd/SExpr)
+  :d "Recursively walks an SExpr to collect all (assert ...) forms."
+  (mt expr
+    ((rd/sexpr-atom _) (list))
+    ((rd/sexpr-vect items)
+     (fold (fn [(acc (List rd/SExpr)) (it rd/SExpr)] -> (List rd/SExpr)
+             (list-concat acc (find-asserts it)))
+           (list)
+           items))
+    ((rd/sexpr-list items)
+     (if (= (rd/sexpr-head expr) "assert")
+         (list expr)
+         (fold (fn [(acc (List rd/SExpr)) (it rd/SExpr)] -> (List rd/SExpr)
+                 (list-concat acc (find-asserts it)))
+               (list)
+               items)))))
+
+(df form-asserts [(forms (List a/TopForm))] -> (List rd/SExpr)
+  :d "Collects all assertion expressions across all top-level defun bodies."
+  (fold (fn [(acc (List rd/SExpr)) (form a/TopForm)] -> (List rd/SExpr)
+          (mt form
+            ((a/top-defun d)
+             (fold (fn [(d-acc (List rd/SExpr)) (body-expr rd/SExpr)] -> (List rd/SExpr)
+                     (list-concat d-acc (find-asserts body-expr)))
+                   acc
+                   (.-body d)))
+            (_ acc)))
+        (list)
+        forms))
+
+(df run-asserts [(asserts (List rd/SExpr))] -> (Result Int64 String)
+  :d "Evaluates all assertion forms using pure ASL evaluator, stopping at first failure."
+  (let [(env (ev/make-root-env))]
+    (fold (fn [(acc (Result Int64 String)) (a-expr rd/SExpr)] -> (Result Int64 String)
+            (mt acc
+              ((err e) (err e))
+              ((ok count)
+               (let [(res (ev/eval-sexpr a-expr env))]
+                 (mt res
+                   ((ev/val-error msg) (err (str "Assertion failed: " msg)))
+                   (_ (ok (+ count 1))))))))
+          (ok 0)
+          asserts)))
 
 (df ! dispatch-cmd [(cmd Str) (args (List Str))] -> (Result Str Str)
   :d "Dispatches a CLI command to the corresponding pure ASL compiler or checker package."
@@ -60,6 +132,51 @@
                 (if (.-ok cres)
                     (ok (.-code cres))
                     (err (str "Build failed: " (string-join (.-diagnostics cres) "\n"))))))))))
+    ((= cmd "eval")
+     (if (list-empty? args)
+         (err "Usage: asl eval <expr>")
+         (let [(expr-str (string-join args " "))
+               (wrapped (str "(df __eval_temp [] -> Any\n  " expr-str ")"))]
+           (mt (a/parse wrapped)
+             ((err pe)
+              (err (str "Parse error: " (.-msg pe))))
+             ((ok forms)
+              (let [(defun-opt (find-defun forms))]
+                (mt defun-opt
+                  ((none) (err "Evaluation failed: no expression body found"))
+                  ((some df-node)
+                   (let [(body (.-body df-node))]
+                     (if (list-empty? body)
+                         (ok "null")
+                         (let [(env (ev/make-root-env))
+                               (last-val (eval-seq body env))]
+                           (mt last-val
+                             ((ev/val-error emsg) (err (str "Evaluation error: " emsg)))
+                             (_ (ok (ev/format-val last-val)))))))))))))))
+    ((= cmd "test")
+     (if (list-empty? args)
+         (err "Usage: asl test <file.asl>")
+         (let [(path (option-or (list-head args) ""))
+               (src-res (file-read path))]
+           (mt src-res
+             ((err io-err) (err (str "Failed to read test file: " path)))
+             ((ok src)
+              (mt (a/parse src)
+                ((err pe)
+                 (err (str path ":" (string-from-int64 (.-line pe)) ":" (string-from-int64 (.-col pe)) ": [parse-error] " (.-msg pe))))
+                ((ok forms)
+                 (let [(diags (chk/check-module forms (map-empty) path))]
+                   (if (not (list-empty? diags))
+                       (err (str "Check failed with " (string-from-int64 (list-length diags)) " diagnostic(s)"))
+                       (let [(asserts (form-asserts forms))]
+                         (if (list-empty? asserts)
+                             (ok (str "✓ " path ": structurally balanced, AST verified, test suite passing."))
+                             (let [(res (run-asserts asserts))]
+                               (mt res
+                                 ((ok count)
+                                  (ok (str "✓ " path ": " (string-from-int64 count) " assertion(s) passed cleanly.")))
+                                 ((err failure-msg)
+                                  (err (str "✗ " path ": " failure-msg))))))))))))))))
     ((= cmd "parse")
      (if (list-empty? args)
          (err "Usage: asl parse <file.asl>")

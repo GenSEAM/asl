@@ -28,10 +28,14 @@
           :rationale "Cannot be reduced to 'run-json': distinguishes consuming stdin JSON payloads from executing JSON-formatted ASL source files")
     (:sym :name "run-to-json" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'run-json': distinguishes emitting JSON output from accepting JSON input")
+    (:sym :name "test-dispatch-eval" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'test-eval': scopes test to CLI dispatcher handling of inline expression evaluation")
     (:sym :name "test-dispatch-gate" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-gate': tests the CLI command-line dispatcher specifically rather than running the verification gates themselves")
     (:sym :name "test-dispatch-missing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-missing': scopes test to CLI dispatcher argument validation rather than missing file lookups")
+    (:sym :name "test-dispatch-test" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'test-test': scopes test to CLI dispatcher test suite execution rather than recursive test runner")
     (:sym :name "test-dispatch-unknown" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-unknown': scopes test to CLI subcommand dispatch fallback for invalid flags")
     (:sym :name "test-dispatch-version" :kind :fn :tokens 3

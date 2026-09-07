@@ -3,7 +3,7 @@
   :x [EvalValue EvalEnv make-root-env make-child-env env-lookup env-bind
            eval-atom eval-builtin-arithmetic eval-builtin-comparison eval-builtin-logic
            eval-builtin-string eval-builtin-list eval-special-form eval-sexpr
-           eval-assert is-truthy? eval-result-is-ok?]
+           eval-assert is-truthy? eval-result-is-ok? format-val]
   :i [(reader :a rd)])
 
 (dfe EvalValue
@@ -479,3 +479,15 @@
           ((rd/sexpr-list _) (val-error "ERR_UNSUPPORTED_APPLICATION_HEAD"))
           ((rd/sexpr-vect _) (val-error "ERR_UNSUPPORTED_APPLICATION_HEAD"))))
        ((none) (val-null))))))
+
+(df format-val [(v EvalValue)] -> String
+  :d "Formats an EvalValue into readable S-expression literal representation."
+  (mt v
+    ((val-int i) (string-from-int64 i))
+    ((val-float f) (string-from-float64 f))
+    ((val-str s) (str "\"" s "\""))
+    ((val-bool b) (if b "true" "false"))
+    ((val-null) "null")
+    ((val-error msg) (str "(error \"" msg "\")"))
+    ((val-list items) (str "(" (string-join (map (fn [(it EvalValue)] -> String (format-val it)) items) " ") ")"))
+    ((val-vect items) (str "[" (string-join (map (fn [(it EvalValue)] -> String (format-val it)) items) " ") "]"))))

@@ -20,6 +20,7 @@
     (:sym :name "eval-sexpr" :kind :fn :tokens 2)
     (:sym :name "eval-assert" :kind :fn :tokens 2)
     (:sym :name "is-truthy?" :kind :fn :tokens 2)
+    (:sym :name "format-val" :kind :fn :tokens 2)
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "compile-source-target" :kind :fn :tokens 3
