@@ -17,6 +17,8 @@
     (:sym :name "ManifestRecord" :kind :type :tokens 1)
     (:sym :name "GateVerdict" :kind :type :tokens 1)
     (:sym :name "GateSummary" :kind :type :tokens 1)
+    (:sym :name "LayerTier" :kind :type :tokens 1)
+    (:sym :name "StratificationReport" :kind :type :tokens 1)
 
     ;; 2-Token Symbols (with :rationale)
     (:sym :name "run-suite" :kind :fn :tokens 2
@@ -37,6 +39,12 @@
           :rationale "Predicate testing if symbol is present in grammar registry")
     (:sym :name "run-tests" :kind :fn :tokens 2
           :rationale "Standard test suite runner entrypoint")
+    (:sym :name "module-layer" :kind :fn :tokens 2
+          :rationale "Maps package or module identifier to architectural layer tier")
+    (:sym :name "audit-stratification" :kind :fn :tokens 2
+          :rationale "Evaluates dependency edge between two modules and produces a StratificationReport")
+    (:sym :name "test-stratification" :kind :fn :tokens 2
+          :rationale "Asserts correct 4-tier layer mappings, boundary enforcement, and kernel hygiene")
 
     ;; >2 Token Symbols (with :rationale)
     (:sym :name "verify-source-syntax" :kind :fn :tokens 3
@@ -103,4 +111,10 @@
           :rationale "Verifies claims audit reporting")
     (:sym :name "test-full-grounding" :kind :fn :tokens 3
           :rationale "Verifies full claims grounding matrix")
+    (:sym :name "verify-layer-boundary" :kind :fn :tokens 3
+          :rationale "Enforces downward-only dependency invariant Layer(u) >= Layer(v)")
+    (:sym :name "is-kernel-clean?" :kind :fn :tokens 3
+          :rationale "Audits Layer 0 source code to guarantee zero agent identity or bridge leakage")
+    (:sym :name "test-vacuity-rejection" :kind :fn :tokens 3
+          :rationale "Asserts non-vacuous assertion execution under Gate 5 falsification")
   ])

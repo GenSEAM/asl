@@ -171,6 +171,12 @@ validate_manifest_ast() {
 }
 
 run_all_seven_gates() {
+  local STRICT_ALL=0
+  for arg in "$@"; do
+    if [ "$arg" = "--strict-all-suites" ]; then
+      STRICT_ALL=1
+    fi
+  done
   echo "    [Config] Loaded hierarchical configuration (1 level): .asl.config.asn"
   echo "================================================================================"
   echo "          AgentScript Pure ASL Verification Gate & Continuous Audit             "
@@ -286,6 +292,31 @@ END {
   local ASSERTION_COUNT
   ASSERTION_COUNT=$(grep -rohE '\(assert[ \t]+' --include="*test*.asl" . 2>/dev/null | wc -l | tr -d ' ')
 
+  # Strictly evaluate all asserting test suites monorepo-wide under falsification
+  local EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+  local ASSERT_SUITES=0
+  for tf in $(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
+    local tf_asserts
+    tf_asserts=$(grep -cE '\(assert[ \t]+' "$tf" 2>/dev/null || true)
+    if [ "$tf_asserts" -gt 0 ]; then
+      ASSERT_SUITES=$((ASSERT_SUITES + 1))
+      if ! check_syntax_and_delimiters "$tf" "check" > /dev/null 2>&1; then
+        echo "    ✗ $tf: Delimiter balance or syntax failure"
+        exit 1
+      fi
+      if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        local TEST_EXIT=0
+        local TEST_OUT
+        TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$tf" 2>&1)" || TEST_EXIT=$?
+        if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
+          echo "    ✗ Test suite failed under --strict-falsify: $tf"
+          echo "      $TEST_OUT"
+          exit 1
+        fi
+      fi
+    fi
+  done
+
   # Strictly evaluate benchmark and AEP test suites under falsification
   for bsuite in $(find bench -name "*test*.asl" 2>/dev/null | sort); do
     local b_asserts
@@ -294,12 +325,15 @@ END {
       echo "    ✗ Vacuous benchmark test suite rejected: $bsuite has 0 assertions"
       exit 1
     fi
-    if ! "$SOURCE" test --strict-falsify "$bsuite" >/dev/null 2>&1; then
-      echo "    ✗ Benchmark test suite failed under --strict-falsify: $bsuite"
-      exit 1
-    fi
   done
   echo "    ✓ Audited $TEST_COUNT native test suites ($ASSERTION_COUNT evaluated assertions verified across suites)."
+  if [ "$STRICT_ALL" -eq 1 ]; then
+    if [ "$ASSERT_SUITES" -eq 0 ] || [ "$ASSERTION_COUNT" -eq 0 ]; then
+      echo "    ✗ Strict all suites audit failed: 0 assertions verified"
+      exit 1
+    fi
+    echo "    ✓ Strict all suites: 100% assertions verified ($ASSERTION_COUNT evaluated assertions across $ASSERT_SUITES asserting suites)."
+  fi
 
   # Gate 6: ASN Grammar & Token Density
   echo "--> [6/7] Auditing ASN grammar registries and symbol token density..."

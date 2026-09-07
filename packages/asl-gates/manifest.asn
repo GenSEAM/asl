@@ -3,6 +3,9 @@
  :entry "src/gates.asl"
  :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
  :asl-first true
+ :modules ["asl-gates/gates"
+           "asl-gates/site-claims"
+           "asl-gates/stratification"]
  :dependencies ["@genseam/asl-parser"
                 "@genseam/asl-checker"
                 "@genseam/asl-compiler"])
