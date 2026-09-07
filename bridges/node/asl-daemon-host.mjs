@@ -145,6 +145,261 @@ function tokenizeSExpr(s) {
   return tokens;
 }
 
+function scanPolyglotFsmOutline(text, rel) {
+  const ext = path.extname(rel);
+  let lang = 'asl';
+  if (['.asl', '.asn'].includes(ext)) lang = 'asl';
+  else if (ext === '.py') lang = 'py';
+  else if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'].includes(ext)) lang = 'ts';
+  else if (ext === '.go') lang = 'go';
+  else if (ext === '.rs') lang = 'rs';
+
+  const lines = text.split('\n');
+  const outline = [];
+  let inComment = false;
+  let inQuote = '';
+  let braceDepth = 0;
+  let parenDepth = 0;
+
+  function isIdentChar(ch, isAsl) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch === '_') return true;
+    if (isAsl && (ch === '-' || ch === '/' || ch === '@' || ch === ':')) return true;
+    return false;
+  }
+
+  function extractWord(s, start, isAsl = false) {
+    let p = start;
+    while (p < s.length && (s[p] === ' ' || s[p] === '\t')) p++;
+    const sStart = p;
+    while (p < s.length && isIdentChar(s[p], isAsl)) p++;
+    return s.slice(sStart, p);
+  }
+
+  for (let lIdx = 0; lIdx < lines.length; lIdx++) {
+    const line = lines[lIdx];
+    const lineNum = lIdx + 1;
+    const trimmed = line.trim();
+
+    if (!inComment && !inQuote) {
+      if (lang === 'asl') {
+        if (parenDepth === 0 && trimmed.startsWith('(')) {
+          let p = 1;
+          while (p < trimmed.length && (trimmed[p] === ' ' || trimmed[p] === '\t')) p++;
+          const head = extractWord(trimmed, p, true);
+          if (['module', 'df', 'dfs', 'dfe', 'defun', 'struct', 'enum'].includes(head)) {
+            const name = extractWord(trimmed, p + head.length, true);
+            if (name) outline.push(`(:item :kind "${head}" :name "${name}" :line ${lineNum})`);
+          } else if (head === ':grammar') {
+            const pkgIdx = trimmed.indexOf(':package');
+            if (pkgIdx !== -1) {
+              const name = extractWord(trimmed, pkgIdx + 8, true);
+              if (name) outline.push(`(:item :kind "grammar" :name "${name}" :line ${lineNum})`);
+            }
+          }
+        }
+      } else if (lang === 'py') {
+        if (trimmed.startsWith('def ')) {
+          const name = extractWord(trimmed, 4);
+          if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+        } else if (trimmed.startsWith('async def ')) {
+          const name = extractWord(trimmed, 10);
+          if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+        } else if (trimmed.startsWith('class ')) {
+          const name = extractWord(trimmed, 6);
+          if (name) outline.push(`(:item :kind "class" :name "${name}" :line ${lineNum})`);
+        }
+      } else if (lang === 'ts') {
+        if (braceDepth === 0) {
+          let s = trimmed;
+          while (true) {
+            if (s.startsWith('export default ')) s = s.slice(15).trim();
+            else if (s.startsWith('export ')) s = s.slice(7).trim();
+            else if (s.startsWith('async ')) s = s.slice(6).trim();
+            else if (s.startsWith('declare ')) s = s.slice(8).trim();
+            else break;
+          }
+          if (s.startsWith('function* ')) {
+            const name = extractWord(s, 10);
+            if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('function ')) {
+            const name = extractWord(s, 9);
+            if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('class ')) {
+            const name = extractWord(s, 6);
+            if (name) outline.push(`(:item :kind "class" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('interface ')) {
+            const name = extractWord(s, 10);
+            if (name) outline.push(`(:item :kind "interface" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('type ')) {
+            const name = extractWord(s, 5);
+            if (name) outline.push(`(:item :kind "type" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('enum ')) {
+            const name = extractWord(s, 5);
+            if (name) outline.push(`(:item :kind "enum" :name "${name}" :line ${lineNum})`);
+          }
+        }
+      } else if (lang === 'go') {
+        if (braceDepth === 0) {
+          if (trimmed.startsWith('package ')) {
+            const name = extractWord(trimmed, 8);
+            if (name) outline.push(`(:item :kind "module" :name "${name}" :line ${lineNum})`);
+          } else if (trimmed.startsWith('func ')) {
+            let p = 5;
+            while (p < trimmed.length && (trimmed[p] === ' ' || trimmed[p] === '\t')) p++;
+            if (trimmed[p] === '(') {
+              const closeP = trimmed.indexOf(')', p + 1);
+              if (closeP !== -1) {
+                const name = extractWord(trimmed, closeP + 1);
+                if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+              }
+            } else {
+              const name = extractWord(trimmed, p);
+              if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+            }
+          } else if (trimmed.startsWith('type ')) {
+            const name = extractWord(trimmed, 5);
+            if (name) {
+              const kind = trimmed.includes('struct') ? 'struct' : (trimmed.includes('interface') ? 'interface' : 'type');
+              outline.push(`(:item :kind "${kind}" :name "${name}" :line ${lineNum})`);
+            }
+          }
+        }
+      } else if (lang === 'rs') {
+        if (braceDepth === 0) {
+          let s = trimmed;
+          while (true) {
+            if (s.startsWith('pub(crate) ')) s = s.slice(11).trim();
+            else if (s.startsWith('pub(super) ')) s = s.slice(11).trim();
+            else if (s.startsWith('pub ')) s = s.slice(4).trim();
+            else if (s.startsWith('async ')) s = s.slice(6).trim();
+            else if (s.startsWith('unsafe ')) s = s.slice(7).trim();
+            else if (s.startsWith('extern "C" ')) s = s.slice(11).trim();
+            else if (s.startsWith('extern ')) s = s.slice(7).trim();
+            else break;
+          }
+          if (s.startsWith('fn ')) {
+            const name = extractWord(s, 3);
+            if (name) outline.push(`(:item :kind "fn" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('struct ')) {
+            const name = extractWord(s, 7);
+            if (name) outline.push(`(:item :kind "struct" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('enum ')) {
+            const name = extractWord(s, 5);
+            if (name) outline.push(`(:item :kind "enum" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('trait ')) {
+            const name = extractWord(s, 6);
+            if (name) outline.push(`(:item :kind "interface" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('type ')) {
+            const name = extractWord(s, 5);
+            if (name) outline.push(`(:item :kind "type" :name "${name}" :line ${lineNum})`);
+          } else if (s.startsWith('mod ')) {
+            const name = extractWord(s, 4);
+            if (name) outline.push(`(:item :kind "module" :name "${name}" :line ${lineNum})`);
+          }
+        }
+      }
+    }
+
+    let i = 0;
+    while (i < line.length) {
+      const c1 = line[i];
+      const c2 = i + 1 < line.length ? line[i + 1] : '';
+      const c3 = i + 2 < line.length ? line[i + 2] : '';
+
+      if (inComment) {
+        if (c1 === '*' && c2 === '/') {
+          inComment = false;
+          i += 2;
+        } else {
+          i++;
+        }
+        continue;
+      }
+
+      if (inQuote) {
+        if (inQuote === '"""') {
+          if (c1 === '"' && c2 === '"' && c3 === '"') {
+            inQuote = '';
+            i += 3;
+          } else {
+            i++;
+          }
+        } else if (inQuote === "'''") {
+          if (c1 === "'" && c2 === "'" && c3 === "'") {
+            inQuote = '';
+            i += 3;
+          } else {
+            i++;
+          }
+        } else if (inQuote === '`') {
+          if (c1 === '`') {
+            inQuote = '';
+            i++;
+          } else {
+            i++;
+          }
+        } else {
+          i++;
+        }
+        continue;
+      }
+
+      if (lang === 'asl' && c1 === ';') break;
+      if (lang === 'py' && c1 === '#') break;
+      if (lang !== 'asl' && lang !== 'py' && c1 === '/' && c2 === '/') break;
+      if (lang !== 'asl' && lang !== 'py' && c1 === '/' && c2 === '*') {
+        inComment = true;
+        i += 2;
+        continue;
+      }
+
+      if (lang === 'py' && c1 === '"' && c2 === '"' && c3 === '"') {
+        inQuote = '"""';
+        i += 3;
+        continue;
+      }
+      if (lang === 'py' && c1 === "'" && c2 === "'" && c3 === "'") {
+        inQuote = "'''";
+        i += 3;
+        continue;
+      }
+      if ((lang === 'ts' || lang === 'go') && c1 === '`') {
+        inQuote = '`';
+        i++;
+        continue;
+      }
+
+      if (c1 === '"') {
+        i++;
+        while (i < line.length) {
+          if (line[i] === '\\') i += 2;
+          else if (line[i] === '"') { i++; break; }
+          else i++;
+        }
+        continue;
+      }
+      if (lang !== 'asl' && c1 === "'") {
+        i++;
+        while (i < line.length) {
+          if (line[i] === '\\') i += 2;
+          else if (line[i] === "'") { i++; break; }
+          else i++;
+        }
+        continue;
+      }
+
+      if (c1 === '{') braceDepth++;
+      else if (c1 === '}') braceDepth = Math.max(0, braceDepth - 1);
+      else if (c1 === '(') parenDepth++;
+      else if (c1 === ')') parenDepth = Math.max(0, parenDepth - 1);
+
+      i++;
+    }
+  }
+
+  return outline;
+}
+
 function executeStep(id, rawOp) {
   const tokens = tokenizeSExpr(rawOp);
   if (tokens.length === 0) {
@@ -251,15 +506,7 @@ function executeStep(id, rawOp) {
       if (!text) {
         return `(:step :id ${id} :op "out" :status "failed" :file "${rel}" :error "file not found")`;
       }
-      const lines = text.split('\n');
-      const outline = [];
-      for (let lIdx = 0; lIdx < lines.length; lIdx++) {
-        const line = lines[lIdx];
-        const m = line.match(/^\s*\((module|df|dfs|dfe)\s+([a-zA-Z0-9_\-\/]+)/);
-        if (m) {
-          outline.push(`(:item :kind "${m[1]}" :name "${m[2]}" :line ${lIdx + 1})`);
-        }
-      }
+      const outline = scanPolyglotFsmOutline(text, rel);
       return `(:step :id ${id} :op "out" :status "ok" :file "${rel}" :outline [\n    ${outline.join('\n    ')}\n  ])`;
     }
 

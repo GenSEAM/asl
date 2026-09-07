@@ -12,6 +12,7 @@
     (:sym :name "EnumCase" :kind :type :tokens 1)
     (:sym :name "EnumNode" :kind :type :tokens 1)
     (:sym :name "ModuleNode" :kind :type :tokens 1)
+    (:sym :name "OutlineItem" :kind :type :tokens 1)
     (:sym :name "Param" :kind :type :tokens 1)
     (:sym :name "ParseError" :kind :type :tokens 1)
     (:sym :name "SExpr" :kind :type :tokens 1)
@@ -22,7 +23,9 @@
 
     ;; <= 2-Token Primary API Symbols
     (:sym :name "closure-heads" :kind :fn :tokens 2)
+    (:sym :name "detect-lang" :kind :fn :tokens 2)
     (:sym :name "dump" :kind :fn :tokens 1)
+    (:sym :name "format-outline" :kind :fn :tokens 2)
     (:sym :name "is-atom?" :kind :fn :tokens 2)
     (:sym :name "is-delimiter" :kind :fn :tokens 2)
     (:sym :name "is-list?" :kind :fn :tokens 2)
@@ -47,6 +50,7 @@
     (:sym :name "render-sexpr" :kind :fn :tokens 2)
     (:sym :name "run-smoke" :kind :fn :tokens 2)
     (:sym :name "run-tokenize" :kind :fn :tokens 2)
+    (:sym :name "scan-outline" :kind :fn :tokens 2)
     (:sym :name "sexpr-head" :kind :fn :tokens 2)
     (:sym :name "token-kind" :kind :fn :tokens 2)
     (:sym :name "tokenize" :kind :fn :tokens 1)
