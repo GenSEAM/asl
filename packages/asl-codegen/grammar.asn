@@ -35,6 +35,8 @@
     (:sym :name "test-expr" :kind :fn :tokens 2)
     (:sym :name "test-mangle" :kind :fn :tokens 2)
     (:sym :name "test-rtypes" :kind :fn :tokens 2)
+    (:sym :name "test-wat-op" :kind :fn :tokens 2)
+    (:sym :name "test-wat-type" :kind :fn :tokens 2)
     (:sym :name "wat-call" :kind :fn :tokens 2)
     (:sym :name "wat-const" :kind :fn :tokens 2)
     (:sym :name "wat-emit" :kind :fn :tokens 2)
@@ -107,6 +109,14 @@
           :rationale "Cannot be reduced to 'test-type': isolates ANSI C struct and enum type mapping tests from Rust and TSX")
     (:sym :name "test-gpio-calls" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-gpio': isolates pin read/write codegen assertions from hardware simulator logic")
+    (:sym :name "test-wat-const" :kind :fn :tokens 3
+          :rationale "Unit test verifying WebAssembly linear constant instruction formatting")
+    (:sym :name "test-wat-emit" :kind :fn :tokens 3
+          :rationale "Unit test verifying complete binary arithmetic WebAssembly module emission")
+    (:sym :name "test-wat-fn" :kind :fn :tokens 3
+          :rationale "Unit test verifying WebAssembly function declaration and signature emission")
+    (:sym :name "test-wat-mod" :kind :fn :tokens 3
+          :rationale "Unit test verifying WebAssembly module envelope and memory export emission")
     (:sym :name "type-mentions-float?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'mentions-float?': scopes AST type inspection to numeric float descriptors")
     (:sym :name "type-mentions-io-error?" :kind :fn :tokens 4
