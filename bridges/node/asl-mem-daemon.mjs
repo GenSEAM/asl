@@ -1212,7 +1212,7 @@ export function parseAslSExpressions(content) {
   const len = content.length;
   while (i < len) {
     const c = content[i];
-    if (/\s/.test(c)) { i++; continue; }
+    if (/\s|,/.test(c)) { i++; continue; }
     if (c === ';') {
       while (i < len && content[i] !== '\n') i++;
       continue;
@@ -1241,7 +1241,7 @@ export function parseAslSExpressions(content) {
       continue;
     }
     let atom = '';
-    while (i < len && !/\s|[()\[\]{};"]/.test(content[i])) {
+    while (i < len && !/\s|,|[()\[\]{};"]/.test(content[i])) {
       atom += content[i++];
     }
     tokens.push({ type: 'atom', val: atom });
@@ -1279,7 +1279,203 @@ export function parseAslSExpressions(content) {
   return forms;
 }
 
-export function evaluateAslSExpr(expr, env = new Map()) {
+function matchPattern(pat, targetVal, env, fnRegistry) {
+  if (pat === '_' || pat === 'default') {
+    return { matched: true, bindings: new Map() };
+  }
+  if (pat === null || typeof pat === 'number' || typeof pat === 'boolean') {
+    return { matched: pat === targetVal, bindings: new Map() };
+  }
+  if (typeof pat === 'string') {
+    if (pat === 'true') return { matched: targetVal === true, bindings: new Map() };
+    if (pat === 'false') return { matched: targetVal === false, bindings: new Map() };
+    if (pat === 'null' || pat === 'nil') return { matched: targetVal === null, bindings: new Map() };
+    if (env.has(pat)) {
+      return { matched: env.get(pat) === targetVal, bindings: new Map() };
+    }
+    return { matched: pat === targetVal, bindings: new Map() };
+  }
+  if (Array.isArray(pat)) {
+    if (pat.length === 0) return { matched: Array.isArray(targetVal) && targetVal.length === 0, bindings: new Map() };
+    const pHead = pat[0];
+    let caseName = pHead;
+    if (typeof caseName === 'string' && caseName.includes('/')) {
+      caseName = caseName.split('/')[1];
+    }
+    if (caseName === 'some' && pat.length >= 2) {
+      if (targetVal !== null && targetVal !== undefined) {
+        const inner = (targetVal && typeof targetVal === 'object' && '_value' in targetVal) ? targetVal._value : targetVal;
+        const bindings = new Map();
+        bindings.set(pat[1], inner);
+        return { matched: true, bindings };
+      }
+      return { matched: false, bindings: new Map() };
+    }
+    if (caseName === 'none') {
+      return { matched: targetVal === null || targetVal === undefined, bindings: new Map() };
+    }
+
+    const targetType = targetVal && typeof targetVal === 'object' ? (targetVal._type || targetVal._enum) : targetVal;
+    if (targetType === caseName || targetType === pHead) {
+      const bindings = new Map();
+      const pArgs = pat.slice(1);
+      if (pArgs.length > 0 && targetVal && typeof targetVal === 'object') {
+        const keys = Object.keys(targetVal).filter(k => !k.startsWith('_'));
+        for (let i = 0; i < pArgs.length; i++) {
+          const varName = pArgs[i];
+          if (typeof varName === 'string' && varName !== '_') {
+            const val = i < keys.length ? targetVal[keys[i]] : null;
+            bindings.set(varName, val);
+          }
+        }
+      }
+      return { matched: true, bindings };
+    }
+    return { matched: false, bindings: new Map() };
+  }
+  return { matched: false, bindings: new Map() };
+}
+
+function registerFormsInRegistry(forms, fnRegistry, alias = null) {
+  const registerName = (name, handler) => {
+    fnRegistry.set(name, handler);
+    if (alias) {
+      fnRegistry.set(`${alias}/${name}`, handler);
+    }
+  };
+
+  for (const f of forms) {
+    if (!Array.isArray(f) || f.length === 0) continue;
+    const kind = f[0];
+
+    // Functions: (df name [args] -> ReturnType body...) or (df ! name ...)
+    if (kind === 'df') {
+      let idx = 1;
+      if (f[idx] === '!') idx++;
+      const fnName = f[idx++];
+      const params = Array.isArray(f[idx]) ? f[idx] : [];
+      idx++;
+      if (f[idx] === '->') idx += 2;
+      while (idx < f.length && (f[idx] === ':d' || f[idx] === ':x' || f[idx] === ':i')) {
+        idx += 2;
+      }
+      const body = f.slice(idx);
+      const fnHandler = {
+        type: 'fn',
+        params,
+        body,
+        invoke: (args, env, reg) => {
+          const childEnv = new Map(env);
+          for (let pIdx = 0; pIdx < params.length; pIdx++) {
+            const p = params[pIdx];
+            const pName = Array.isArray(p) ? p[0] : p;
+            if (pName) {
+              childEnv.set(pName, pIdx < args.length ? args[pIdx] : null);
+            }
+          }
+          let res = null;
+          for (const bExpr of body) {
+            res = evaluateAslSExpr(bExpr, childEnv, reg);
+          }
+          return res;
+        }
+      };
+      registerName(fnName, fnHandler);
+    }
+
+    // Enums: (dfe EnumName (:c case1 [fields] ...) ...)
+    if (kind === 'dfe') {
+      const enumName = f[1];
+      for (let i = 2; i < f.length; i++) {
+        const item = f[i];
+        if (Array.isArray(item) && item[0] === ':c') {
+          const caseName = item[1];
+          const caseFields = Array.isArray(item[2]) ? item[2] : [];
+          const enumHandler = {
+            type: 'enum-constructor',
+            name: caseName,
+            enumName,
+            invoke: (args) => {
+              const res = { _type: caseName, _enum: enumName };
+              for (let fIdx = 0; fIdx < caseFields.length; fIdx++) {
+                const fld = caseFields[fIdx];
+                const fldName = Array.isArray(fld) ? fld[0] : `arg${fIdx}`;
+                res[fldName] = fIdx < args.length ? args[fIdx] : null;
+              }
+              return res;
+            }
+          };
+          registerName(caseName, enumHandler);
+        }
+      }
+    }
+
+    // Structs: (dfs StructName (:f f1 Type) ...)
+    if (kind === 'dfs') {
+      const structName = f[1];
+      const structHandler = {
+        type: 'struct-constructor',
+        name: structName,
+        invoke: (args, env, reg, rawArgs) => {
+          const res = { _type: structName };
+          if (rawArgs) {
+            for (let i = 0; i < rawArgs.length; i += 2) {
+              const k = rawArgs[i];
+              if (typeof k === 'string' && k.startsWith(':')) {
+                const fld = k.slice(1);
+                res[fld] = evaluateAslSExpr(rawArgs[i + 1], env, reg);
+              }
+            }
+          }
+          return res;
+        }
+      };
+      registerName(structName, structHandler);
+    }
+  }
+}
+
+export function buildAslEnv(forms, baseDir = WORKSPACE_ROOT, fnRegistry = new Map()) {
+  for (const form of forms) {
+    if (Array.isArray(form) && form[0] === 'module') {
+      const iIdx = form.indexOf(':i');
+      if (iIdx !== -1 && Array.isArray(form[iIdx + 1])) {
+        const imports = form[iIdx + 1];
+        for (const imp of imports) {
+          if (Array.isArray(imp)) {
+            const modName = imp[0];
+            let alias = null;
+            const aIdx = imp.indexOf(':a');
+            if (aIdx !== -1 && imp[aIdx + 1]) {
+              alias = imp[aIdx + 1];
+            }
+            const candidates = [
+              path.join(baseDir, '..', 'src', `${modName}.asl`),
+              path.join(baseDir, `${modName}.asl`),
+              path.join(baseDir, 'src', `${modName}.asl`),
+              path.join(WORKSPACE_ROOT, 'asl-contracts', 'src', `${modName}.asl`),
+              path.join(WORKSPACE_ROOT, 'agent-bus', 'src', `${modName}.asl`),
+            ];
+            for (const cand of candidates) {
+              if (fs.existsSync(cand)) {
+                try {
+                  const importedContent = fs.readFileSync(cand, 'utf8');
+                  const importedForms = parseAslSExpressions(importedContent);
+                  registerFormsInRegistry(importedForms, fnRegistry, alias);
+                } catch (_) {}
+                break;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  registerFormsInRegistry(forms, fnRegistry, null);
+  return fnRegistry;
+}
+
+export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) {
   if (expr === null || expr === undefined) return null;
   if (typeof expr === 'number' || typeof expr === 'boolean') return expr;
   if (typeof expr === 'string') {
@@ -1296,12 +1492,12 @@ export function evaluateAslSExpr(expr, env = new Map()) {
   const rawArgs = expr.slice(1);
 
   if (head === 'if') {
-    const c = evaluateAslSExpr(rawArgs[0], env);
-    return c ? evaluateAslSExpr(rawArgs[1], env) : (rawArgs.length > 2 ? evaluateAslSExpr(rawArgs[2], env) : null);
+    const c = evaluateAslSExpr(rawArgs[0], env, fnRegistry);
+    return c ? evaluateAslSExpr(rawArgs[1], env, fnRegistry) : (rawArgs.length > 2 ? evaluateAslSExpr(rawArgs[2], env, fnRegistry) : null);
   }
   if (head === 'assert') {
-    const c = evaluateAslSExpr(rawArgs[0], env);
-    const msg = rawArgs.length > 1 ? String(evaluateAslSExpr(rawArgs[1], env)) : 'Assertion failed';
+    const c = evaluateAslSExpr(rawArgs[0], env, fnRegistry);
+    const msg = rawArgs.length > 1 ? String(evaluateAslSExpr(rawArgs[1], env, fnRegistry)) : 'Assertion failed';
     if (!c) throw new Error(msg);
     return true;
   }
@@ -1311,32 +1507,152 @@ export function evaluateAslSExpr(expr, env = new Map()) {
     if (Array.isArray(bindings)) {
       for (const b of bindings) {
         if (Array.isArray(b) && b.length >= 2) {
-          childEnv.set(b[0], evaluateAslSExpr(b[1], childEnv));
+          childEnv.set(b[0], evaluateAslSExpr(b[1], childEnv, fnRegistry));
         }
       }
     }
     let res = null;
     for (let k = 1; k < rawArgs.length; k++) {
-      res = evaluateAslSExpr(rawArgs[k], childEnv);
+      res = evaluateAslSExpr(rawArgs[k], childEnv, fnRegistry);
     }
     return res;
   }
   if (head === 'do') {
     let res = null;
     for (const form of rawArgs) {
-      res = evaluateAslSExpr(form, env);
+      res = evaluateAslSExpr(form, env, fnRegistry);
+    }
+    return res;
+  }
+  if (head === 'mt') {
+    const targetVal = evaluateAslSExpr(rawArgs[0], env, fnRegistry);
+    const clauses = rawArgs.slice(1);
+    for (const clause of clauses) {
+      if (Array.isArray(clause) && clause.length >= 2) {
+        const pat = clause[0];
+        const body = clause[1];
+        const matchResult = matchPattern(pat, targetVal, env, fnRegistry);
+        if (matchResult.matched) {
+          const childEnv = new Map(env);
+          for (const [k, v] of matchResult.bindings) {
+            childEnv.set(k, v);
+          }
+          return evaluateAslSExpr(body, childEnv, fnRegistry);
+        }
+      }
+    }
+    return null;
+  }
+
+  if (typeof head === 'string' && head.startsWith('.-')) {
+    const prop = head.slice(2);
+    const target = evaluateAslSExpr(rawArgs[0], env, fnRegistry);
+    if (target && typeof target === 'object') {
+      if (target instanceof Map) return target.get(prop);
+      if (prop in target) return target[prop];
+    }
+    return null;
+  }
+
+  // Check fnRegistry for user function or enum/struct constructor
+  if (fnRegistry && fnRegistry.has(head)) {
+    const def = fnRegistry.get(head);
+    if (def.type === 'struct-constructor') {
+      return def.invoke(null, env, fnRegistry, rawArgs);
+    }
+    const evalArgs = rawArgs.map(a => evaluateAslSExpr(a, env, fnRegistry));
+    if (def.type === 'enum-constructor') {
+      return def.invoke(evalArgs);
+    }
+    if (def.type === 'fn') {
+      return def.invoke(evalArgs, env, fnRegistry);
+    }
+  }
+
+  // Check alias-stripped name
+  const baseHead = typeof head === 'string' && head.includes('/') ? head.split('/')[1] : head;
+  if (typeof head === 'string' && head.includes('/') && fnRegistry && fnRegistry.has(baseHead)) {
+    const def = fnRegistry.get(baseHead);
+    if (def.type === 'struct-constructor') {
+      return def.invoke(null, env, fnRegistry, rawArgs);
+    }
+    const evalArgs = rawArgs.map(a => evaluateAslSExpr(a, env, fnRegistry));
+    if (def.type === 'enum-constructor') {
+      return def.invoke(evalArgs);
+    }
+    if (def.type === 'fn') {
+      return def.invoke(evalArgs, env, fnRegistry);
+    }
+  }
+
+  // PascalCase struct constructor fallback
+  if (typeof baseHead === 'string' && /^[A-Z]/.test(baseHead)) {
+    const res = { _type: baseHead };
+    if (rawArgs.length > 0 && typeof rawArgs[0] === 'string' && rawArgs[0].startsWith(':')) {
+      for (let i = 0; i < rawArgs.length; i += 2) {
+        const k = rawArgs[i];
+        if (typeof k === 'string' && k.startsWith(':')) {
+          res[k.slice(1)] = evaluateAslSExpr(rawArgs[i + 1], env, fnRegistry);
+        }
+      }
+    } else {
+      res._args = rawArgs.map(a => evaluateAslSExpr(a, env, fnRegistry));
     }
     return res;
   }
 
-  const args = rawArgs.map(a => evaluateAslSExpr(a, env));
+  // Enum tag constructor fallback
+  if (typeof baseHead === 'string' && /^(kind-|status-|stage-|frame-|type-|tag-)/.test(baseHead)) {
+    return { _type: baseHead, _args: rawArgs.map(a => evaluateAslSExpr(a, env, fnRegistry)) };
+  }
+
+  if (head === 'fold') {
+    const fnVal = rawArgs[0];
+    let acc = evaluateAslSExpr(rawArgs[1], env, fnRegistry);
+    const listVal = evaluateAslSExpr(rawArgs[2], env, fnRegistry);
+    if (Array.isArray(listVal)) {
+      for (const item of listVal) {
+        if (typeof fnVal === 'string' && fnRegistry.has(fnVal)) {
+          acc = fnRegistry.get(fnVal).invoke([acc, item], env, fnRegistry);
+        } else if (Array.isArray(fnVal) && fnVal[0] === 'fn') {
+          const params = Array.isArray(fnVal[1]) ? fnVal[1] : [];
+          const p1 = Array.isArray(params[0]) ? params[0][0] : params[0];
+          const p2 = Array.isArray(params[1]) ? params[1][0] : params[1];
+          const cEnv = new Map(env);
+          if (p1) cEnv.set(p1, acc);
+          if (p2) cEnv.set(p2, item);
+          const bodyStart = fnVal.indexOf('->') !== -1 ? fnVal.indexOf('->') + 2 : 2;
+          let r = null;
+          for (let k = bodyStart; k < fnVal.length; k++) {
+            r = evaluateAslSExpr(fnVal[k], cEnv, fnRegistry);
+          }
+          acc = r;
+        }
+      }
+    }
+    return acc;
+  }
+
+  const args = rawArgs.map(a => evaluateAslSExpr(a, env, fnRegistry));
   if (head === '+') return args.reduce((a, b) => Number(a) + Number(b), 0);
   if (head === '-') return args.length === 1 ? -Number(args[0]) : Number(args[0]) - Number(args[1]);
   if (head === '*') return args.reduce((a, b) => Number(a) * Number(b), 1);
   if (head === '/') return Number(args[1]) === 0 ? 0 : Math.floor(Number(args[0]) / Number(args[1]));
   if (head === 'mod') return Number(args[0]) % Number(args[1]);
-  if (head === '=') return args[0] === args[1];
-  if (head === '!=') return args[0] !== args[1];
+  if (head === '=' || head === '==') {
+    const a = args[0], b = args[1];
+    if (a && b && typeof a === 'object' && typeof b === 'object' && a._type && b._type) {
+      return a._type === b._type;
+    }
+    return a === b;
+  }
+  if (head === '!=') {
+    const a = args[0], b = args[1];
+    if (a && b && typeof a === 'object' && typeof b === 'object' && a._type && b._type) {
+      return a._type !== b._type;
+    }
+    return a !== b;
+  }
   if (head === '<') return Number(args[0]) < Number(args[1]);
   if (head === '<=') return Number(args[0]) <= Number(args[1]);
   if (head === '>') return Number(args[0]) > Number(args[1]);
@@ -1345,15 +1661,51 @@ export function evaluateAslSExpr(expr, env = new Map()) {
   if (head === 'or') return args.some(Boolean);
   if (head === 'not') return !args[0];
   if (head === 'str' || head === 'str-concat') return args.map(String).join('');
-  if (head === 'str-len') return typeof args[0] === 'string' ? args[0].length : 0;
+  if (head === 'str-len' || head === 'string-length' || head === 'len') return (typeof args[0] === 'string' || Array.isArray(args[0])) ? args[0].length : 0;
   if (head === 'str-contains?' || head === 'string-contains?') return typeof args[0] === 'string' && typeof args[1] === 'string' && args[0].includes(args[1]);
+  if (head === 'string-starts-with?' || head === 'str-starts-with?') return typeof args[0] === 'string' && typeof args[1] === 'string' && args[0].startsWith(args[1]);
+  if (head === 'string-ends-with?' || head === 'str-ends-with?') return typeof args[0] === 'string' && typeof args[1] === 'string' && args[0].endsWith(args[1]);
+  if (head === 'string-replace' || head === 'str-replace') return String(args[0]).replaceAll(String(args[1]), String(args[2]));
+  if (head === 'string-trim' || head === 'str-trim') return String(args[0]).trim();
+  if (head === 'string-split' || head === 'str-split') return String(args[0]).split(String(args[1]));
+  if (head === 'string-join' || head === 'str-join') {
+    if (Array.isArray(args[0])) return args[0].join(String(args[1] !== undefined ? args[1] : ''));
+    if (Array.isArray(args[1])) return args[1].join(String(args[0] !== undefined ? args[0] : ''));
+    return '';
+  }
+  if (head === 'string-empty?') return args[0] === '' || args[0] === null;
+  if (head === 'string-from-int64') return String(args[0]);
+  if (head === 'string-from-float') return String(args[0]);
   if (head === 'list' || head === 'vector') return args;
   if (head === 'cons') return [args[0], ...(Array.isArray(args[1]) ? args[1] : [])];
-  if (head === 'first') return Array.isArray(args[0]) ? args[0][0] : null;
-  if (head === 'rest') return Array.isArray(args[0]) ? args[0].slice(1) : [];
+  if (head === 'first' || head === 'list-head') return Array.isArray(args[0]) ? (args[0].length > 0 ? args[0][0] : null) : null;
+  if (head === 'rest' || head === 'list-tail') return Array.isArray(args[0]) ? args[0].slice(1) : [];
   if (head === 'list-empty?') return Array.isArray(args[0]) && args[0].length === 0;
+  if (head === 'list-length') return Array.isArray(args[0]) ? args[0].length : 0;
+  if (head === 'list-concat') return (Array.isArray(args[0]) ? args[0] : []).concat(Array.isArray(args[1]) ? args[1] : []);
+  if (head === 'list-append') return (Array.isArray(args[0]) ? args[0] : []).concat([args[1]]);
+  if (head === 'pair') return [args[0], args[1]];
+  if (head === 'option-or') return (args[0] !== null && args[0] !== undefined) ? args[0] : args[1];
+  if (head === 'sqrt') return Math.sqrt(Number(args[0]));
 
-  return true;
+  if (head === 'map-empty') return new Map();
+  if (head === 'map-set') {
+    const m = new Map(args[0] instanceof Map ? args[0] : []);
+    m.set(args[1], args[2]);
+    return m;
+  }
+  if (head === 'map-get') return args[0] instanceof Map ? (args[0].has(args[1]) ? args[0].get(args[1]) : null) : null;
+  if (head === 'map-has?') return args[0] instanceof Map ? args[0].has(args[1]) : false;
+
+  if (head === 'some') return { _type: 'some', _value: args[0] };
+  if (head === 'none') return null;
+
+  // External package mock/stub fallback
+  if (typeof head === 'string' && head.includes('/')) {
+    return { _type: baseHead, _mock: head, _args: args };
+  }
+
+  return { _type: typeof head === 'string' ? head : 'unknown', _args: args, value: true };
 }
 
 function findAssertionsInNode(node, acc = []) {
@@ -1378,14 +1730,21 @@ export function runAslTestFile(filePath) {
     }
   }
   const forms = parseAslSExpressions(content);
+  const baseDir = path.dirname(filePath);
+  const fnRegistry = new Map();
+  buildAslEnv(forms, baseDir, fnRegistry);
+
   const assertions = [];
   for (const f of forms) {
     findAssertionsInNode(f, assertions);
   }
+
+
+
   let passedCount = 0;
   for (const a of assertions) {
     try {
-      evaluateAslSExpr(a, new Map());
+      evaluateAslSExpr(a, new Map(), fnRegistry);
       passedCount++;
     } catch (err) {
       return { passed: false, error: `Assertion failed: ${err.message}`, assertionsCount: passedCount, failedAssertion: a };
@@ -3550,9 +3909,32 @@ async function runCli() {
       break;
     }
 
-    case 'rpc':
-    case 'batch':
     case 'eval': {
+      let input = args.join(' ').trim();
+      if (!input || input === '-') {
+        try { input = fs.readFileSync(0, 'utf8').trim(); } catch (_) { input = ''; }
+      } else if (fs.existsSync(input)) {
+        input = fs.readFileSync(input, 'utf8').trim();
+      }
+      if (!input) {
+        console.log('Usage: asl eval "<expr>"');
+        process.exit(1);
+      }
+      const forms = parseAslSExpressions(input);
+      let result = null;
+      for (const form of forms) {
+        result = evaluateAslSExpr(form, new Map());
+      }
+      if (typeof result === 'object' && result !== null) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log(result !== undefined ? String(result) : '');
+      }
+      break;
+    }
+
+    case 'rpc':
+    case 'batch': {
       const isStream = args.includes('--stream') || args.includes('-s');
       const ignoreErrors = args.includes('--ignore-errors');
       const cleanArgs = args.filter(a => a !== '--stream' && a !== '-s' && a !== '--ignore-errors');

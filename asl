@@ -571,7 +571,11 @@ case "$CMD" in
     fi
 
     ;;
-  rpc|batch|eval)
+  eval)
+    MEM_RUNNER="$(find_mem_daemon)"
+    exec "$NODE_BIN" "$MEM_RUNNER" eval "$@"
+    ;;
+  rpc|batch)
     MEM_RUNNER="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_RUNNER" rpc "$@"
     ;;
