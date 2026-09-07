@@ -11,6 +11,7 @@ const pidFile = path.join('/tmp', `asl_mem_${hash}.pid`);
 
 const dirtyBuffers = new Map(); // relPath -> string
 const originalBuffers = new Map(); // relPath -> string
+const residentCache = new Map(); // relPath -> string (in-memory clean buffer cache)
 const EXCLUDE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.asl-cache']);
 
 function walkWorkspaceFiles(dir = wsRoot, fileList = []) {
@@ -34,9 +35,12 @@ function walkWorkspaceFiles(dir = wsRoot, fileList = []) {
 
 function getFileContent(relPath) {
   if (dirtyBuffers.has(relPath)) return dirtyBuffers.get(relPath);
+  if (residentCache.has(relPath)) return residentCache.get(relPath);
   const full = path.join(wsRoot, relPath);
   try {
-    return fs.readFileSync(full, 'utf8');
+    const content = fs.readFileSync(full, 'utf8');
+    residentCache.set(relPath, content);
+    return content;
   } catch {
     return null;
   }
@@ -284,6 +288,7 @@ function executeStep(id, rawOp) {
       if (!originalBuffers.has(rel)) originalBuffers.set(rel, current);
       const updated = current.replace(oldStr, newStr);
       dirtyBuffers.set(rel, updated);
+      residentCache.delete(rel);
       return `(:step :id ${id} :op "edit" :status "ok" :staged true :file "${rel}")`;
     }
 
@@ -300,7 +305,9 @@ function executeStep(id, rawOp) {
       let count = 0;
       for (const [rel, content] of dirtyBuffers.entries()) {
         const full = path.join(wsRoot, rel);
+        fs.mkdirSync(path.dirname(full), { recursive: true });
         fs.writeFileSync(full, content, 'utf8');
+        residentCache.set(rel, content);
         count++;
       }
       dirtyBuffers.clear();
@@ -309,6 +316,9 @@ function executeStep(id, rawOp) {
     }
 
     case 'discard':
+      for (const [rel, orig] of originalBuffers.entries()) {
+        residentCache.set(rel, orig);
+      }
       dirtyBuffers.clear();
       originalBuffers.clear();
       return `(:step :id ${id} :op "discard" :status "ok" :status "discarded")`;
