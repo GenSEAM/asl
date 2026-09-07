@@ -1,6 +1,6 @@
 {
   "id": "nano-widen",
-  "src": "grammar/corpus/valid/30-nano-projection.agentscript",
+  "src": "grammar/corpus/valid/30-nano-projection.asl",
   "entry": "widen",
   "cases": [
     [[7], 7, "an ordinary value at the narrow alias"],

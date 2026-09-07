@@ -1,4 +1,4 @@
-# The Token-Density Fallacy: Why Disemvoweling Breaks BPE and How AgentScript Solves Identifier Economics
+# Why Disemvoweling Breaks BPE: How Naive Token Optimization Destroys Agent Intelligence
 *By GenSEAM | September 2026*
 
 When designing domain languages and interfaces for autonomous AI coding agents, the natural instinct of engineers is to optimize for raw string brevity.

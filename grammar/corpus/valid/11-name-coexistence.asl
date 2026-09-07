@@ -1,0 +1,31 @@
+"A local Shape and an imported one coexist: distinct types, distinct spellings."
+"core/shapes is imported under two aliases, and a value reached through one is"
+"handed to a function typed by the other — they must be the same type."
+
+(module text/coexist
+  :doc "A locally declared Shape beside an imported one."
+  :export [Shape local-name imported-name relay identity-of]
+  :import [(core/shapes :as s)
+           (core/shapes :as sh)])
+
+(defenum Shape
+  (:case blob [] "The only case of the local union"))
+
+(df local-name [(x Shape)] -> String
+  :doc "Name the local union's case."
+  (match x
+    ((blob) "blob")))
+
+(df imported-name [(x sh/Shape)] -> String
+  :doc "Name an imported shape reached through the second alias."
+  (match x
+    ((sh/circle r)      "circle")
+    ((sh/rectangle w h) "rectangle")))
+
+(df relay [(x s/Shape)] -> String
+  :doc "Hand a value reached through one alias to a function typed by the other."
+  (imported-name x))
+
+(df {Shape} identity-of [(x Shape)] -> Shape
+  :doc "A binder may reuse an imported type's spelling: the import is only ever s/Shape."
+  x)

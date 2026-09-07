@@ -1,6 +1,6 @@
 {
   "id": "alias-keys",
-  "src": "grammar/corpus/valid/31-alias-keys.agentscript",
+  "src": "grammar/corpus/valid/31-alias-keys.asl",
   "entry": "probe",
   "cases": [
     [[], "1|2|3|4|5|6",

@@ -1,4 +1,4 @@
-# Multi-Dimensional Observability: How to Govern Autonomous Swarms Without Reading Raw Logs
+# Debugging Autonomous Swarms: Time-Travel Execution Replay Without Reading 50,000-Token Logs
 *By GenSEAM | September 2026*
 
 The standard failure mode of scaling autonomous coding swarms is the **Observability Inversion Trap**.

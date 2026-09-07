@@ -1,4 +1,4 @@
-# Why LLMs Break on Raw SVG XML: Slashing 50% of Vector Tokens with Native S-Expressions
+# Why LLMs Choke on SVG XML: Slashing 50.7% of Vector Graphic Tokens with Native S-Expressions
 *By GenSEAM | September 2026*
 
 When autonomous coding agents generate user interfaces, icons, architecture diagrams, or vector illustrations, the industry default is prompting the LLM to emit raw SVG XML:

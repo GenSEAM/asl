@@ -1,6 +1,6 @@
 {
   "id": "numeric-conversions",
-  "src": "grammar/corpus/valid/23-numeric.agentscript",
+  "src": "grammar/corpus/valid/23-numeric.asl",
   "entry": "narrow",
   "cases": [
     [[2147483647], "some 2147483647|2147483647.0|some 2147483647",

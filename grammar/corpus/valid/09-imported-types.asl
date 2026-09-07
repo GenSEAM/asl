@@ -1,0 +1,18 @@
+"A type crossing a module boundary: named in a signature, matched through its"
+"imported cases, and constructed. This is also the fixture that names an"
+"imported type and therefore has to import its module (§4.0)."
+
+(module text/labels
+  :doc "Short labels for imported shapes."
+  :export [label unit]
+  :import [(core/shapes :as s)])
+
+(df label [(sh s/Shape)] -> String
+  :doc "Name the case an imported shape belongs to."
+  (match sh
+    ((s/circle r)      "circle")
+    ((s/rectangle w h) "rectangle")))
+
+(df unit [] -> s/Shape
+  :doc "A one-by-one rectangle, built from an imported constructor."
+  (s/rectangle 1.0 1.0))

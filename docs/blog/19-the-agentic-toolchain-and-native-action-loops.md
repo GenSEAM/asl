@@ -1,4 +1,4 @@
-# The Agentic Toolchain: Continuous Action Loops, Native Verification Gates, and Pure ASL Architecture
+# Why Bash Wrappers Fail Coding Agents: Persistent Action Loops and 7 In-Memory Verification Gates
 *By GenSEAM | September 2026*
 
 When building developer tools, compilers, and harnesses for autonomous software engineering agents, the prevailing industry approach is wrapping standard command-line tools in raw bash subprocesses.

@@ -1,4 +1,4 @@
-# The Deterministic Agent OS: Why Autonomous Systems Need an ALU/OS Split and Git-Native Textual Memory
+# Stop Making LLMs Do OS Work: Why Autonomous Coding Requires an ALU / Kernel Split
 *By GenSEAM | September 2026*
 
 When building autonomous software engineering agents, the prevailing industry pattern is asking the language model to act as a complete, sovereign computer.

@@ -1,4 +1,4 @@
-# Kill 80% of Agent Code Bloat: How Radical Simplicity Solves Autonomous Reliability
+# Kill 80% of Agent Framework Bloat: Why Radical Simplicity Outperforms 10,000-Line Orchestrators
 *By GenSEAM | September 2026*
 
 Over the past three years, AI engineering teams have attempted to make LLMs write software by piling layers of speculative abstractions on top of standard programming environments:

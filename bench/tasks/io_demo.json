@@ -1,7 +1,7 @@
 {
   "id": "io_demo",
-  "source": "grammar/corpus/valid/08-io.agentscript",
-  "src": "grammar/corpus/valid/08-io.agentscript",
+  "source": "grammar/corpus/valid/08-io.asl",
+  "src": "grammar/corpus/valid/08-io.asl",
   "signature": "(defun ! main [(args (List String))] -> (Result Unit IoError))",
   "prompt": "Write a module `io-demo` exporting `main`. It copies a source file to a destination file and echoes the content to stdout, or describes the source file when given one path. When given no arguments, print usage instructions to stderr. If writing fails, return the IoError.",
   "cases": [

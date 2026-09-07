@@ -1,6 +1,6 @@
 {
   "id": "nano-projection",
-  "src": "grammar/corpus/valid/30-nano-projection.agentscript",
+  "src": "grammar/corpus/valid/30-nano-projection.asl",
   "entry": "summarise",
   "cases": [
     [["s1", "1,2,3"], "S1|3|2.0|drifting:2.0|rising",

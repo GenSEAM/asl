@@ -1,6 +1,6 @@
 {
   "id": "literal-floats",
-  "src": "grammar/corpus/valid/29-literals.agentscript",
+  "src": "grammar/corpus/valid/29-literals.asl",
   "entry": "floats",
   "cases": [
     [[2.5], "1.0|-0.0|-2.5|-1.5",

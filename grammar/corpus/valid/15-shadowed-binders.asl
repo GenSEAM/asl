@@ -1,0 +1,22 @@
+"A binder inside an imported module must win over a top-level name it collides"
+"with. The higher-order case is the sharp one: passing the shadowed name to"
+"`map` compiles, type-checks and runs on both targets while calling the wrong"
+"function, so only a written-down expected output catches it."
+
+(module shadow-demo
+  :doc "Reads names an imported module both defines and rebinds."
+  :export [main string-from-shadow]
+  :import [(core/shadow :as sh)])
+
+(df string-from-shadow [] -> String
+  :doc "Every reading in one string, so the fixture asserts a value too."
+  (string-join
+    (list (string-from-int64 (sh/g 7))
+          (string-from-int64 (sh/tripled 2))
+          (string-join (map (fn [(n Int64)] -> String (string-from-int64 n))
+                            (sh/scaled (list 1 2))) " "))
+    " "))
+
+(df ! main [(args (List String))] -> (Result Unit IoError)
+  :doc "Print it, so the differential gate compares an output and not a return."
+  (println (string-from-shadow)))

@@ -1,4 +1,4 @@
-# Why LLMs Struggle with Python & Rust: The Case for Single-Pass S-Expressions
+# How to Fix Agentic Coding: Why Autonomous LLMs Break on Human Languages (and What Replaces Them)
 *By GenSEAM | September 2026*
 
 Modern autonomous coding agents (Devin, Claude Code, Cursor, Codex derivatives) spend between **32% and 41% of their inference compute and context budgets** trapped in a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. 

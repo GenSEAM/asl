@@ -1,4 +1,4 @@
-# Inter-Agent Protocols & Wire Frames: Beyond Conversational Mesh Chaos
+# Inter-Agent Protocol (AgP): Eradicating Natural Language Chatter with Typed S-Expression Frames
 *By GenSEAM | September 2026*
 
 The dominant failure mode of modern multi-agent systems (AutoGPT, CrewAI, ChatDev, LangGraph swarms) is **Conversational Mesh Chaos**.

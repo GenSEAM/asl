@@ -1,0 +1,10 @@
+"expect: rule-11"
+"The other half; see a.agentscript."
+(module b
+  :doc "Imports a, which imports b."
+  :export [from-b]
+  :import [(a :as a)])
+
+(df from-b [] -> Int64
+  :doc "Exists so the module has a surface."
+  2)

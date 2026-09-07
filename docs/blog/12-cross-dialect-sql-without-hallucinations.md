@@ -1,4 +1,4 @@
-# Cross-Dialect SQL Without Hallucinations: Compiling S-Expressions to Relational Engines
+# Zero-Injection SQL by Construction: Compiling Relational S-Expressions to Postgres, SQLite & ClickHouse
 *By GenSEAM | September 2026*
 
 When autonomous coding agents are tasked with database operations—schema migrations, analytical queries, data filtering—the default industry pattern is to prompt the LLM to emit raw SQL strings:

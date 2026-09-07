@@ -1,4 +1,4 @@
-# The Epistemic Grounding Firewall: Halting Agent Hallucinations at the AST Boundary
+# Stop Your Agent from Faking Green Tests: AST Mutation Gates and Anti-Hallucination Firewalls
 *By GenSEAM | September 2026*
 
 Prompt engineering is an inadequate defense against autonomous agent failure.

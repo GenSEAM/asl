@@ -1,4 +1,4 @@
-# The 78% Token Tax: How Interface Compression Solves Agent Context Rot
+# The 78% Context Tax: How AST Interface Extraction Stops Agent Working Memory Rot
 *By GenSEAM | September 2026*
 
 In multi-agent software engineering swarms, the limiting factor is rarely model intelligence. Frontier LLMs can reason through complex algorithms, synthesize tricky data structures, and resolve subtle edge cases. 

@@ -1,4 +1,4 @@
-# From Vibe-Code to WebAssembly in 0.04ms: The Architecture of Instant Agentic Sandboxing
+# Killing Docker Spin-Up Latency: How We Run Agent Test Sandboxes in 0.038ms
 *By GenSEAM | September 2026*
 
 Autonomous software engineering ("vibe-coding") relies on rapid feedback loops: an agent synthesizes an implementation, executes a test suite, inspects failures, and refines the code.

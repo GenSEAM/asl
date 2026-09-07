@@ -1,0 +1,27 @@
+"A self-referential record. The field naming its own declaration has no"
+"statically known size on the Rust target, so it is boxed — and the box has to"
+"be put on at construction and taken off at every read, or the declaration is"
+"the only place the three agree."
+
+(defschema Node
+  (:field value Int64         "The payload")
+  (:field next  (Option Node) "The rest of the chain, absent at the end"))
+
+(df leaf [(v Int64)] -> Node
+  (Node :value v :next (none)))
+
+(df link [(v Int64) (rest Node)] -> Node
+  (Node :value v :next (some rest)))
+
+(df chain [] -> Node
+  (link 1 (link 2 (leaf 3))))
+
+(df depth [(n Node)] -> Int64
+  (match (.-next n)
+    ((none)   1)
+    ((some m) (+ 1 (depth m)))))
+
+(df total [(n Node)] -> Int64
+  (match (.-next n)
+    ((none)   (.-value n))
+    ((some m) (+ (.-value n) (total m)))))

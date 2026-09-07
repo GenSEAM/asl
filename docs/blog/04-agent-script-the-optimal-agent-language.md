@@ -1,4 +1,4 @@
-# AgentScript: Why S-Expressions and Algebraic Types are Mathematically Optimal for LLMs
+# The Mathematical Optimum: Why S-Expressions and Algebraic Types Beat Human Syntax for LLMs
 *By GenSEAM | September 2026*
 
 Programming languages designed between 1970 and 2015 share a common design premise: **syntax must optimize for human visual cognition**.

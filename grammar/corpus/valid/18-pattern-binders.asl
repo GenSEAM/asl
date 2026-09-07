@@ -1,0 +1,11 @@
+"A bare identifier in a pattern is a binder; a parenthesised one names a case."
+"Both readings of one name appear here: the prelude seeds `not-found` as an"
+"IoError case, so the collision is live without anything being declared."
+
+(df outcome [(r (Result String IoError))] -> String
+  :doc "`not-found` binds the payload in the first arm and names a case in the
+        second; reading either as the other compiles and is wrong."
+  (match r
+    ((ok not-found)    not-found)
+    ((err (not-found)) "missing")
+    ((err e)           "other")))

@@ -1,4 +1,4 @@
-# Zero-Server In-Browser Agent Runtimes: Developing in WebAssembly and OPFS
+# The Zero-Server IDE: Running Full Autonomous Agent Sandboxes Inside a Chrome Tab
 *By GenSEAM | September 2026*
 
 The dominant architecture for AI developer tools today relies on a centralized, server-heavy paradigm:
