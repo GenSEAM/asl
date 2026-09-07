@@ -77,6 +77,10 @@
           :rationale "Cannot be reduced to 'emit-type': specifies stringification of AST type descriptors, avoiding collision with emit-c-type")
     (:sym :name "emit-vnode-jsx" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-vnode': target format 'jsx' is mandatory to distinguish JSX syntax from direct VNode tree emission")
+    (:sym :name "emit-wat-expr" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'emit-expr': language qualifier 'wat' is required to isolate WebAssembly Text expression lowering from Rust and JSX expression generators")
+    (:sym :name "emit-wat-module" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'emit-wat': language and envelope qualifier 'module' is required to distinguish whole-module WAT emission from individual WAT expression or function helpers")
     (:sym :name "format-delay-call" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-delay': specifies codegen lowering into target-specific delay timer API syntax")
     (:sym :name "format-gpio-call" :kind :fn :tokens 3

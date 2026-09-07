@@ -9,7 +9,9 @@
       wat-if
       wat-fn
       wat-mod
-      wat-emit]
+      wat-emit
+      emit-wat-expr
+      emit-wat-module]
   :i [])
 
 (df wat-type [(ty Str)] -> Str
@@ -84,6 +86,27 @@
   (let [(mem-decl (if use-mem "  (memory (export \"memory\") 1)\n" ""))]
     (str "(module\n" mem-decl funcs-wat "\n)")))
 
+(df wat-operand [(operand Str) (ty Str)] -> Str
+  :d "Formats an expression operand as subexpression, constant, or local variable."
+  (cond
+    ((string-starts-with? operand "(") operand)
+    ((or (string-starts-with? operand "-")
+         (and (>= (option-or (string-slice operand 0 1) "") "0")
+              (<= (option-or (string-slice operand 0 1) "") "9")))
+     (wat-const operand ty))
+    (:else (wat-get operand))))
+
+(df emit-wat-expr [(op Str) (lhs Str) (rhs Str) (ty Str)] -> Str
+  :d "Lowers a binary arithmetic, relational, or logical expression into WebAssembly Text format."
+  (let [(instr (wat-op op ty))
+        (left (wat-operand lhs ty))
+        (right (wat-operand rhs ty))]
+    (str "(" instr " " left " " right ")")))
+
+(df emit-wat-module [(funcs-wat Str) (use-mem Bool)] -> Str
+  :d "Lowers WebAssembly function definitions into a complete module envelope."
+  (wat-mod funcs-wat use-mem))
+
 (df wat-emit [(fn-name Str) (arg-a Str) (arg-b Str) (op Str) (ret-ty Str)] -> Str
   :d "Helper to emit a two-argument binary arithmetic function in WAT."
   (let [(w-ty (wat-type ret-ty))
@@ -91,4 +114,4 @@
         (instr (wat-op op ret-ty))
         (body (str instr " " (wat-get arg-a) " " (wat-get arg-b)))
         (fn-def (wat-fn fn-name params ret-ty body true))]
-    (wat-mod (str "  " fn-def) false)))
+    (emit-wat-module (str "  " fn-def) false)))

@@ -957,26 +957,27 @@ case "$CMD" in
           exit 1
         fi
         EXT="${TARGET##*.}"
-        if [ "$EXT" = "asl" ]; then
-          awk '
-          BEGIN { print "(:module-outline :file \"" ARGV[1] "\" :symbols ["; }
-          /^\(module[ \t]+/ { print "  (:module :name \"" $2 "\")" }
-          /^\(df[ \t]+/ { print "  (:fn :name \"" $2 "\" :line " NR ")" }
-          /^\(dfs[ \t]+/ { print "  (:struct :name \"" $2 "\" :line " NR ")" }
-          /^\(dfe[ \t]+/ { print "  (:enum :name \"" $2 "\" :line " NR ")" }
-          END { print "])"; }
-          ' "$TARGET"
-        elif [ "$EXT" = "md" ]; then
+        if [ "$EXT" = "md" ]; then
           exec "$ROOT/asl" doc outline "$TARGET"
-        else
-          awk '
-          BEGIN { print "(:file-outline :file \"" ARGV[1] "\" :symbols ["; }
-          /^[ \t]*(export[ \t]+)?(async[ \t]+)?function[ \t]+([a-zA-Z0-9_$]+)/ { print "  (:fn :line " NR " :name \"" $0 "\")" }
-          /^[ \t]*(export[ \t]+)?(class|interface|type)[ \t]+([a-zA-Z0-9_$]+)/ { print "  (:type :line " NR " :name \"" $0 "\")" }
-          /^[ \t]*(def|class)[ \t]+([a-zA-Z0-9_]+)/ { print "  (:def :line " NR " :name \"" $0 "\")" }
-          END { print "])"; }
-          ' "$TARGET"
         fi
+        ensure_daemon_running
+        HOST_MJS="$(find_daemon_host)"
+        if [ -f "$HOST_MJS" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+          RES="$("$NODE_BIN" "$HOST_MJS" "(:batch (:out \"$TARGET\"))" 2>/dev/null || true)"
+          if [ -n "$RES" ]; then
+            echo "$RES"
+            exit 0
+          fi
+        fi
+        awk '
+        BEGIN { print "(:file-outline :file \"" ARGV[1] "\" :symbols ["; }
+        /^\(module[ \t]+/ { print "  (:module :name \"" $2 "\")" }
+        /^\(df[ \t]+/ { print "  (:fn :name \"" $2 "\" :line " NR ")" }
+        /^\(dfs[ \t]+/ { print "  (:struct :name \"" $2 "\" :line " NR ")" }
+        /^\(dfe[ \t]+/ { print "  (:enum :name \"" $2 "\" :line " NR ")" }
+        /^[ \t]*(def|class|function|interface|type)[ \t]+([a-zA-Z0-9_$]+)/ { print "  (:sym :line " NR " :name \"" $0 "\")" }
+        END { print "])"; }
+        ' "$TARGET"
         exit 0
         ;;
       search)
@@ -1221,11 +1222,24 @@ case "$CMD" in
     echo "])"
     exit 0
     ;;
-  run)
-    TARGET="$1"
-    shift || true
+  run|build)
+    IS_WASM=0
+    IS_WAT=0
+    TARGET=""
+    OTHER_ARGS=()
+    for arg in "$@"; do
+      if [ "$arg" = "--wasm" ]; then
+        IS_WASM=1
+      elif [ "$arg" = "--wat" ]; then
+        IS_WAT=1
+      elif [ -z "$TARGET" ]; then
+        TARGET="$arg"
+      else
+        OTHER_ARGS+=("$arg")
+      fi
+    done
     if [ -z "$TARGET" ]; then
-      echo "Usage: asl run <file.asl> [--wasm|--wat]"
+      echo "Usage: asl $CMD <file.asl> [--wasm|--wat]"
       exit 1
     fi
     RESOLVED="$(resolve_target_file "$TARGET")" || true
@@ -1234,33 +1248,168 @@ case "$CMD" in
       exit 1
     fi
     TARGET="$RESOLVED"
-    IS_WASM=0
-    IS_WAT=0
-    for arg in "$@"; do
-      if [ "$arg" = "--wasm" ]; then IS_WASM=1; fi
-      if [ "$arg" = "--wat" ]; then IS_WAT=1; fi
-    done
     if [ "$IS_WAT" -eq 1 ]; then
-      echo "(module"
-      echo "  (func \$fib (param \$n i64) (result i64)"
-      echo "    (local.get \$n)"
-      echo "    (i64.const 1)"
-      echo "    (i64.le_s)"
-      echo "    (if (result i64)"
-      echo "      (then (local.get \$n))"
-      echo "      (else"
-      echo "        (call \$fib (i64.sub (local.get \$n) (i64.const 1)))"
-      echo "        (call \$fib (i64.sub (local.get \$n) (i64.const 2)))"
-      echo "        (i64.add))))"
-      echo "  (func \$main (result i64)"
-      echo "    (i64.const 42))"
-      echo "  (export \"fib\" (func \$fib))"
-      echo "  (export \"main\" (func \$main)))"
-      exit 0
+      if command -v "$NODE_BIN" >/dev/null 2>&1; then
+        "$NODE_BIN" -e '
+const fs = require("fs");
+function parseSExpr(text) {
+  let i = 0;
+  function skipWs() {
+    while (i < text.length) {
+      if (/\s/.test(text[i])) i++;
+      else if (text[i] === ";") { while (i < text.length && text[i] !== "\n") i++; }
+      else break;
+    }
+  }
+  function parseAtom() {
+    let atom = "";
+    while (i < text.length && !/[\s()[\]{}]/.test(text[i])) atom += text[i++];
+    return atom;
+  }
+  function parseList(closeCh) {
+    i++;
+    const items = [];
+    skipWs();
+    while (i < text.length && text[i] !== closeCh) {
+      items.push(parseForm());
+      skipWs();
+    }
+    if (i < text.length && text[i] === closeCh) i++;
+    return items;
+  }
+  function parseForm() {
+    skipWs();
+    if (i >= text.length) return null;
+    const c = text[i];
+    if (c === "(") return parseList(")");
+    if (c === "[") return parseList("]");
+    if (c === "\"") {
+      i++;
+      let s = "";
+      while (i < text.length && text[i] !== "\"") {
+        if (text[i] === "\\") i++;
+        s += text[i++];
+      }
+      if (i < text.length) i++;
+      return { type: "str", val: s };
+    }
+    return parseAtom();
+  }
+  const forms = [];
+  while (true) {
+    skipWs();
+    if (i >= text.length) break;
+    const f = parseForm();
+    if (f !== null) forms.push(f);
+  }
+  return forms;
+}
+function watType(ty) {
+  if (ty === "I64" || ty === "Int") return "i64";
+  if (ty === "I32") return "i32";
+  if (ty === "F64" || ty === "Float") return "f64";
+  if (ty === "Bool") return "i32";
+  if (ty === "Str") return "i32";
+  if (ty === "Unit") return "void";
+  return "i64";
+}
+function watOp(op, ty) {
+  const p = watType(ty);
+  if (op === "+") return p + ".add";
+  if (op === "-") return p + ".sub";
+  if (op === "*") return p + ".mul";
+  if (op === "/") return p === "f64" ? "f64.div" : p + ".div_s";
+  if (op === "mod") return p + ".rem_s";
+  if (op === "=" || op === "==") return p + ".eq";
+  if (op === "!=") return p + ".ne";
+  if (op === "<") return p === "f64" ? "f64.lt" : p + ".lt_s";
+  if (op === "<=") return p === "f64" ? "f64.le" : p + ".le_s";
+  if (op === ">") return p === "f64" ? "f64.gt" : p + ".gt_s";
+  if (op === ">=") return p === "f64" ? "f64.ge" : p + ".ge_s";
+  if (op === "and") return "i32.and";
+  if (op === "or") return "i32.or";
+  return p + ".add";
+}
+function lowerExpr(expr, defTy, paramNames) {
+  if (typeof expr === "string") {
+    if (/^-?[0-9]+$/.test(expr)) return "(" + watType(defTy) + ".const " + expr + ")";
+    return "(local.get $" + expr + ")";
+  }
+  if (!Array.isArray(expr) || expr.length === 0) return "";
+  const head = expr[0];
+  if (["+", "-", "*", "/", "mod", "=", "==", "!=", "<", "<=", ">", ">=", "and", "or"].includes(head)) {
+    const l = lowerExpr(expr[1], defTy, paramNames);
+    const r = lowerExpr(expr[2], defTy, paramNames);
+    return watOp(head, defTy) + " " + l + " " + r;
+  }
+  if (head === "if") {
+    const cond = lowerExpr(expr[1], "Bool", paramNames);
+    const th = lowerExpr(expr[2], defTy, paramNames);
+    const el = lowerExpr(expr[3], defTy, paramNames);
+    return "(if (result " + watType(defTy) + ") " + cond + " (then " + th + ") (else " + el + "))";
+  }
+  const fnName = head === "call" ? expr[1] : head;
+  const rawArgs = head === "call" ? expr.slice(2) : expr.slice(1);
+  const args = rawArgs.map(a => lowerExpr(a, defTy, paramNames)).join(" ");
+  return "(call $" + fnName + (args ? " " + args : "") + ")";
+}
+function emitWat(forms) {
+  let exported = [];
+  const funcs = [];
+  for (const form of forms) {
+    if (!Array.isArray(form) || form.length === 0) continue;
+    if (form[0] === "module") {
+      for (let j = 1; j < form.length; j++) {
+        if (form[j] === ":x" && Array.isArray(form[j + 1])) {
+          exported = form[j + 1];
+        }
+      }
+    }
+    if (form[0] === "df") {
+      const name = form[1];
+      const rawParams = Array.isArray(form[2]) ? form[2] : [];
+      let retTy = "I64";
+      let bodyIdx = 3;
+      if (form[3] === "->") {
+        retTy = form[4];
+        bodyIdx = 5;
+      }
+      if (form[bodyIdx] === ":d") {
+        bodyIdx += 2;
+      }
+      const bodyExpr = form[bodyIdx];
+      const paramWat = [];
+      const paramNames = [];
+      for (const p of rawParams) {
+        if (Array.isArray(p)) {
+          const pName = p[0];
+          const pTy = watType(p[1] || "I64");
+          paramWat.push("(param $" + pName + " " + pTy + ")");
+          paramNames.push(pName);
+        }
+      }
+      const isExported = exported.length === 0 || exported.includes(name);
+      const exportAttr = isExported ? " (export \"" + name + "\")" : "";
+      const paramsClause = paramWat.length > 0 ? " " + paramWat.join(" ") : "";
+      const wRet = watType(retTy);
+      const resClause = wRet === "void" ? "" : " (result " + wRet + ")";
+      const bodyWat = lowerExpr(bodyExpr, retTy, paramNames);
+      funcs.push("  (func $" + name + exportAttr + paramsClause + resClause + "\n    " + bodyWat + ")");
+    }
+  }
+  return "(module\n" + funcs.join("\n") + "\n)";
+}
+const forms = parseSExpr(fs.readFileSync(process.argv[1], "utf8"));
+console.log(emitWat(forms));
+' "$TARGET"
+        exit 0
+      fi
+      echo "Error: Node runtime required for WAT compilation."
+      exit 1
     fi
     EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
     if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
-      exec "$NODE_BIN" "$EVAL_RUNNER" "$TARGET" "$@"
+      exec "$NODE_BIN" "$EVAL_RUNNER" "$TARGET" "${OTHER_ARGS[@]}"
     fi
     echo "Error: Node runtime or evaluator bridge not found."
     exit 1
