@@ -123,6 +123,54 @@
     <priority>0.9</priority>
   </url>
 
+  <!-- Technical Essay 14: Why LLMs Break on SVG XML -->
+  <url>
+    <loc>https://aslang.dev/blog/why-llms-break-on-svg-xml</loc>
+    <lastmod>2026-09-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 15: Kill 80% Agent Code Bloat -->
+  <url>
+    <loc>https://aslang.dev/blog/kill-80-percent-agent-code-bloat</loc>
+    <lastmod>2026-09-05</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Technical Essay 16: The Agent Operational Circle -->
+  <url>
+    <loc>https://aslang.dev/blog/the-agent-operational-circle</loc>
+    <lastmod>2026-09-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <!-- Technical Essay 17: The Deterministic Agent OS -->
+  <url>
+    <loc>https://aslang.dev/blog/the-deterministic-agent-os</loc>
+    <lastmod>2026-09-06</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <!-- Technical Essay 18: The Token-Density Fallacy & Machine Understandability -->
+  <url>
+    <loc>https://aslang.dev/blog/the-token-density-fallacy-and-machine-understandability</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.95</priority>
+  </url>
+
+  <!-- Technical Essay 19: The Agentic Toolchain & Native Action Loops -->
+  <url>
+    <loc>https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</loc>
+    <lastmod>2026-09-07</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
   <!-- Multi-Runtime Ecosystem -->
   <url>
     <loc>https://aslang.dev/ecosystem</loc>

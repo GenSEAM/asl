@@ -125,4 +125,4 @@ By unifying data, markup, visuals, and execution into a single coherent S-expres
 
 - View the [Shell Transpiler Codec Reference](https://aslang.dev/docs/codec).
 - Read [Why LLMs Break on Raw SVG XML](/blog/why-llms-break-on-svg-xml).
-- Explore [The Ladder of Restraint & Radical Simplicity](/blog/radical-simplicity-coding-agents).
+- Explore [Kill 80% of Agent Code Bloat: Radical Simplicity for Autonomous Systems](/blog/kill-80-percent-agent-code-bloat).

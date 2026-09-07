@@ -74,9 +74,18 @@ function saveDirtyMap(dirty) {
   fs.writeFileSync(DIRTY_BUFFERS_PATH, JSON.stringify(dirty, null, 2), 'utf8');
 }
 
+export function normalizeBufferKey(rawPath) {
+  if (!rawPath) return '';
+  if (path.isAbsolute(rawPath)) {
+    const rel = path.relative(WORKSPACE_ROOT, rawPath);
+    return rel.startsWith('..') ? path.resolve(rawPath) : rel;
+  }
+  return rawPath.replace(/^\.\//, '');
+}
+
 export function getBufferContent(rawPath) {
   if (!rawPath) return null;
-  const relPath = path.isAbsolute(rawPath) ? path.relative(WORKSPACE_ROOT, rawPath) : rawPath.replace(/^\.\//, '');
+  const relPath = normalizeBufferKey(rawPath);
   const dirty = loadDirtyMap();
   if (dirty[relPath] !== undefined) {
     return dirty[relPath];
@@ -84,7 +93,7 @@ export function getBufferContent(rawPath) {
   if (memoryIndex.fileBuffers.has(relPath)) {
     return memoryIndex.fileBuffers.get(relPath).content;
   }
-  const fullPath = path.resolve(WORKSPACE_ROOT, relPath);
+  const fullPath = path.isAbsolute(relPath) ? relPath : path.resolve(WORKSPACE_ROOT, relPath);
   if (fs.existsSync(fullPath)) {
     const content = fs.readFileSync(fullPath, 'utf8');
     // Bound clean buffer cache to prevent memory creep in long-running daemon
@@ -107,7 +116,8 @@ export function getBufferContent(rawPath) {
   return null;
 }
 
-export function setBufferContent(relPath, newContent) {
+export function setBufferContent(rawPath, newContent) {
+  const relPath = normalizeBufferKey(rawPath);
   const dirty = loadDirtyMap();
   dirty[relPath] = newContent;
   saveDirtyMap(dirty);
@@ -120,7 +130,7 @@ export function setBufferContent(relPath, newContent) {
 }
 
 function getInitialDiskContent(relPath) {
-  const full = path.join(WORKSPACE_ROOT, relPath);
+  const full = path.isAbsolute(relPath) ? relPath : path.resolve(WORKSPACE_ROOT, relPath);
   if (fs.existsSync(full)) {
     return fs.readFileSync(full, 'utf8');
   }
@@ -715,7 +725,7 @@ export function inMemoryFlush() {
   }
 
   for (const rel of dirtyKeys) {
-    const fullPath = path.join(WORKSPACE_ROOT, rel);
+    const fullPath = path.isAbsolute(rel) ? rel : path.resolve(WORKSPACE_ROOT, rel);
     fs.writeFileSync(fullPath, dirty[rel], 'utf8');
   }
 
@@ -2261,12 +2271,14 @@ async function executeStep(item, idx, options = {}) {
             output = `(:error "Invalid JSON: ${e.message}")`;
           }
         } else if (fromFmt === 'asn' && toFmt === 'json') {
-          output = rawInput.replace(/:([a-zA-Z0-9_-]+)/g, '"$1":').replace(/\(/g, '{').replace(/\)/g, '}');
+          output = asnToJson(rawInput);
+
         } else if (toFmt === 'svg') {
           output = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">${rawInput.replace(/\(:rc\s+:x\s+(\d+)\s+:y\s+(\d+)\s+:w\s+(\d+)\s+:h\s+(\d+)\s+:f\s+"([^"]+)"\)/g, '<rect x="$1" y="$2" width="$3" height="$4" fill="$5" />')}</svg>`;
         } else {
           output = rawInput;
         }
+
         const savings = origTokens > 0 ? Math.max(0, Math.round(((origTokens - asnTokens) / origTokens) * 100)) : 0;
         stepBody = `  (:step :id ${idx + 1} :op "codec" :from "${fromFmt}" :to "${toFmt}" :orig-tokens ${origTokens} :asn-tokens ${asnTokens} :savings "${savings}%" :output ${JSON.stringify(output)})\n`;
         break;
@@ -2334,7 +2346,136 @@ async function executeStep(item, idx, options = {}) {
   return stepBody;
 }
 
+export function asnToJson(rawInput) {
+
+  if (!rawInput || typeof rawInput !== 'string') return '{}';
+  const trimmed = rawInput.trim();
+  if (!trimmed) return '{}';
+
+  const tokens = [];
+  let i = 0;
+  const len = trimmed.length;
+  while (i < len) {
+    const c = trimmed[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === ';') {
+      while (i < len && trimmed[i] !== '\n') i++;
+      continue;
+    }
+    if (c === '(' || c === ')' || c === '[' || c === ']' || c === '{' || c === '}') {
+      tokens.push({ type: 'delimiter', value: c });
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      let str = '';
+      i++;
+      while (i < len) {
+        if (trimmed[i] === '\\') {
+          if (i + 1 < len) {
+            const next = trimmed[i + 1];
+            if (next === 'n') str += '\n';
+            else if (next === 't') str += '\t';
+            else if (next === 'r') str += '\r';
+            else if (next === '"') str += '"';
+            else if (next === '\\') str += '\\';
+            else str += next;
+            i += 2;
+          } else { i++; }
+        } else if (trimmed[i] === '"') {
+          i++;
+          break;
+        } else {
+          str += trimmed[i];
+          i++;
+        }
+      }
+      tokens.push({ type: 'string', value: str });
+      continue;
+    }
+    let atom = '';
+    while (i < len && !/\s|[()\[\]{};"]/.test(trimmed[i])) {
+      atom += trimmed[i];
+      i++;
+    }
+    if (atom.startsWith(':')) {
+      tokens.push({ type: 'keyword', value: atom.slice(1) });
+    } else if (atom === 'true') {
+      tokens.push({ type: 'boolean', value: true });
+    } else if (atom === 'false') {
+      tokens.push({ type: 'boolean', value: false });
+    } else if (atom === '_' || atom === 'nil' || atom === 'null') {
+      tokens.push({ type: 'null', value: null });
+    } else if (!isNaN(Number(atom)) && atom !== '') {
+      tokens.push({ type: 'number', value: Number(atom) });
+    } else {
+      tokens.push({ type: 'symbol', value: atom });
+    }
+  }
+
+  let pos = 0;
+  function parseVal() {
+    if (pos >= tokens.length) return null;
+    const t = tokens[pos++];
+    if (t.type === 'delimiter') {
+      if (t.value === '(' || t.value === '{') {
+        const close = t.value === '(' ? ')' : '}';
+        const items = [];
+        while (pos < tokens.length && !(tokens[pos].type === 'delimiter' && tokens[pos].value === close)) {
+          items.push(parseVal());
+        }
+        if (pos < tokens.length && tokens[pos].type === 'delimiter' && tokens[pos].value === close) {
+          pos++;
+        }
+        const hasKw = items.some(it => it && it.__is_kw);
+        if (hasKw) {
+          const obj = {};
+          let j = 0;
+          if (items.length % 2 === 1) {
+            const head = items[0];
+            const tag = (head && head.__is_kw) ? head.key : (typeof head === 'string' ? head : (head?.value || 'record'));
+            obj['_type'] = tag;
+            j = 1;
+          }
+          while (j < items.length) {
+            const cur = items[j];
+            const k = (cur && cur.__is_kw) ? cur.key : String(cur);
+            let v = (j + 1 < items.length) ? items[j + 1] : true;
+            if (v && v.__is_kw) {
+              v = v.key;
+            }
+            obj[k] = v;
+            j += 2;
+          }
+          return obj;
+        } else {
+          return items.map(it => (it && it.__is_kw ? it.key : it));
+        }
+      } else if (t.value === '[') {
+        const items = [];
+        while (pos < tokens.length && !(tokens[pos].type === 'delimiter' && tokens[pos].value === ']')) {
+          items.push(parseVal());
+        }
+        if (pos < tokens.length && tokens[pos].type === 'delimiter' && tokens[pos].value === ']') {
+          pos++;
+        }
+        return items.map(it => (it && it.__is_kw ? it.key : it));
+      }
+    }
+    if (t.type === 'keyword') {
+      return { __is_kw: true, key: t.value };
+    }
+    return t.value;
+  }
+
+  let res = parseVal();
+  if (res && res.__is_kw) res = res.key;
+  return JSON.stringify(res, null, 2);
+}
+
+
 export async function runAsnBatch(rawAsn, options = {}) {
+
   const batchStart = Date.now();
   loadSnapshot();
   const tokens = tokenizeAsn(rawAsn);
@@ -2429,7 +2570,58 @@ async function runCli() {
       process.exit(res.allPassed ? 0 : 1);
     }
 
+    case 'asn':
+    case 'codec':
+    case 'transpile': {
+      const sub = args[0];
+      if (sub === '--to-json' || sub === 'to-json' || sub === 'json') {
+        const fileOrStr = args.slice(1).join(' ').trim();
+        let content = fileOrStr;
+        if (!content || content === '-') {
+          try { content = fs.readFileSync(0, 'utf8').trim(); } catch (_) { content = ''; }
+        } else if (fs.existsSync(fileOrStr)) {
+          content = fs.readFileSync(fileOrStr, 'utf8');
+        }
+        console.log(asnToJson(content));
+      } else if (sub === '--from-json' || sub === 'from-json' || sub === 'asn') {
+        const fileOrStr = args.slice(1).join(' ').trim();
+        let content = fileOrStr;
+        if (!content || content === '-') {
+          try { content = fs.readFileSync(0, 'utf8').trim(); } catch (_) { content = ''; }
+        } else if (fs.existsSync(fileOrStr)) {
+          content = fs.readFileSync(fileOrStr, 'utf8');
+        }
+        try {
+          const parsed = JSON.parse(content);
+          const toAsn = (v) => {
+            if (v === null || v === undefined) return '_';
+            if (typeof v === 'boolean' || typeof v === 'number') return String(v);
+            if (typeof v === 'string') return JSON.stringify(v);
+            if (Array.isArray(v)) return `[${v.map(toAsn).join(' ')}]`;
+            if (typeof v === 'object') {
+              if (v._type) {
+                const { _type, ...rest } = v;
+                const pairs = Object.entries(rest).map(([k, val]) => `:${k} ${toAsn(val)}`);
+                return `(:${_type}${pairs.length ? ' ' + pairs.join(' ') : ''})`;
+              }
+              const pairs = Object.entries(v).map(([k, val]) => `:${k} ${toAsn(val)}`);
+              return `(${pairs.join(' ')})`;
+            }
+            return String(v);
+          };
+          console.log(toAsn(parsed));
+        } catch (e) {
+          console.error(`Invalid JSON: ${e.message}`);
+          process.exit(1);
+        }
+      } else {
+        console.log('Usage: asl asn [--to-json <file.asn|content>] [--from-json <file.json|content>]');
+      }
+      break;
+    }
+
     case 'coverage':
+
     case 'cov': {
       const isAsn = args.includes('--asn');
       const res = computeAslCoverage();

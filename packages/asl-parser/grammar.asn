@@ -53,7 +53,7 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "is-head-match?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is head match")
+          :rationale "Cannot be reduced to 'head-match?': question mark predicate form requires full verb phrase to avoid collision with pattern matching macros")
     (:sym :name "token-type-name" :kind :fn :tokens 3
-          :rationale "Domain utility implementing token type name")
+          :rationale "Cannot be reduced to 'token-name': disambiguates lexer token category names from identifier token literal strings")
   ])

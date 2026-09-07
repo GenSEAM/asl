@@ -5,8 +5,26 @@
     <link>https://aslang.dev/blog</link>
     <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 05 Sep 2026 16:49:30 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 07 Sep 2026 08:15:00 GMT</lastBuildDate>
     <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>The Agentic Toolchain: Continuous Action Loops, Native Verification Gates, and Pure ASL Architecture</title>
+      <link>https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</guid>
+      <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Tools &amp; Compiler Architecture</category>
+      <description>Why standard bash wrappers fail autonomous agents, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for AI code generation.</description>
+    </item>
+    <item>
+      <title>The Token-Density Fallacy: Why Disemvoweling Breaks BPE and How AgentScript Solves Identifier Economics</title>
+      <link>https://aslang.dev/blog/the-token-density-fallacy-and-machine-understandability</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-token-density-fallacy-and-machine-understandability</guid>
+      <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Architecture &amp; Language Theory</category>
+      <description>Why naive identifier compression like ctermtxt breaks BPE subtokenization, how synonym collisions cost thousands of repair tokens, and the findings of our 2-round adversarial consultation with Claude Fable 5.</description>
+    </item>
     <item>
       <title>Sub-Millisecond Vector Recall &amp; Git-Native Memory Matrices for Autonomous Agents</title>
       <link>https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</link>

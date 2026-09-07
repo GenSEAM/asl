@@ -26,5 +26,5 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "find-plugins-by-capability" :kind :fn :tokens 4
-          :rationale "Domain utility implementing find plugins by capability")
+          :rationale "Cannot be reduced to 'find-plugins': explicitly scopes query filtering by advertised capability keyword rather than name or version")
   ])

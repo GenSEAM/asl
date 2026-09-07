@@ -15,19 +15,19 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "compile-source-target" :kind :fn :tokens 3
-          :rationale "Domain utility implementing compile source target")
+          :rationale "Cannot be reduced to 'compile-target': 'source' component is mandatory to distinguish in-memory string compilation from disk file compilation")
     (:sym :name "compile-standalone-source" :kind :fn :tokens 3
-          :rationale "Domain utility implementing compile standalone source")
+          :rationale "Cannot be reduced to 'compile-source': 'standalone' qualifier indicates an isolated compilation pipeline without workspace dependency resolution")
     (:sym :name "compile-standalone-target" :kind :fn :tokens 3
-          :rationale "Domain utility implementing compile standalone target")
+          :rationale "Cannot be reduced to 'compile-target': 'standalone' qualifier indicates isolated target backend emission without global project manifests")
     (:sym :name "test-compile-clean-function" :kind :fn :tokens 4
-          :rationale "Test case verifying compile clean function")
+          :rationale "Cannot be reduced to 'test-clean-fn': scopes end-to-end compiler test specifically to valid function ASTs, preventing collision with parser tests")
     (:sym :name "test-compile-clean-schema" :kind :fn :tokens 4
-          :rationale "Test case verifying compile clean schema")
+          :rationale "Cannot be reduced to 'test-clean-schema': scopes compiler verification to struct/union schema lowering, avoiding parser test overlap")
     (:sym :name "test-compile-embedded-target" :kind :fn :tokens 4
-          :rationale "Test case verifying compile embedded target")
+          :rationale "Cannot be reduced to 'test-embedded': scopes compiler test specifically to embedded C/Arduino backend generation")
     (:sym :name "test-compile-parse-error" :kind :fn :tokens 4
-          :rationale "Test case verifying compile parse error")
+          :rationale "Cannot be reduced to 'test-parse-error': distinguishes compiler-level diagnostic reporting from raw lexer/parser error generation")
     (:sym :name "test-compile-type-error" :kind :fn :tokens 4
-          :rationale "Test case verifying compile type error")
+          :rationale "Cannot be reduced to 'test-type-error': distinguishes full compilation failure reporting from isolated typechecker tests")
   ])

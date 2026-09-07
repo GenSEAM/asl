@@ -25,7 +25,7 @@ const WORKSPACE_ROOT = process.cwd();
 const HOME = os.homedir();
 
 const TOOLBELT_DIRECTIVE = `<!-- ASL_TOOLBELT_START -->
-/asl-toolbelt
+Always activate and follow the asl-toolbelt skill; asl is available in PATH.
 <!-- ASL_TOOLBELT_END -->`;
 
 const SLASH_COMMANDS = [

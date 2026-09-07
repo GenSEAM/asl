@@ -94,26 +94,49 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
-             ;; Step 1: replace root delimiters ( -> { and ) -> }
-             (s1 (string-replace (string-replace trimmed "(" "{") ")" "}"))
-             ;; Step 2: replace nil sentinel _ -> null
-             (s2 (string-replace s1 " _" " null"))
-             ;; Step 3: replace (:key val) -> {"key": val}
-             (s3 (string-replace s2 "{:" "{\""))
-             (s4 (string-replace s3 " :" ", \""))
-             (s5 (string-replace s4 " \"" "\": \""))
-             (s6 (string-replace s5 " true" "\": true"))
-             (s7 (string-replace s6 " false" "\": false"))
-             (s8 (string-replace s7 " null" "\": null"))
-             (json-out (string-replace s8 " 1" "\": 1"))
-             (json-tok (estimate-tokens json-out))]
-         (TranspileResult
-           :output json-out
-           :original-tokens orig-tok
-           :asn-tokens json-tok
-           :savings-percent 0.0
-           :success true))))))
+       (let [(orig-tok (estimate-tokens trimmed))]
+         (if (string-starts-with? trimmed "[")
+           (let [(inner (string-slice trimmed 1 (- (string-length trimmed) 1)))
+                 (clean-inner (string-trim (option-or inner "")))
+                 (s1 (string-replace clean-inner " _" " null"))
+                 (s2 (string-replace s1 "\" \"" "\", \""))
+                 (s3 (string-replace s2 " " ", "))
+                 (out-arr (str "[" s3 "]"))
+                 (json-tok (estimate-tokens out-arr))]
+             (TranspileResult
+               :output out-arr
+               :original-tokens orig-tok
+               :asn-tokens json-tok
+               :savings-percent 0.0
+               :success true))
+           (let [(s1 (string-replace (string-replace trimmed "(" "{") ")" "}"))
+                 (s2 (string-replace s1 " _" " null"))
+                 (s3 (string-replace s2 "{:" "{\""))
+                 (s4 (string-replace s3 " :" ", \""))
+                 (s5 (string-replace s4 " \"" "\": \""))
+                 (s6 (string-replace s5 " true" "\": true"))
+                 (s7 (string-replace s6 " false" "\": false"))
+                 (s8 (string-replace s7 " null" "\": null"))
+                 (s9 (string-replace s8 " 0" "\": 0"))
+                 (s10 (string-replace s9 " 1" "\": 1"))
+                 (s11 (string-replace s10 " 2" "\": 2"))
+                 (s12 (string-replace s11 " 3" "\": 3"))
+                 (s13 (string-replace s12 " 4" "\": 4"))
+                 (s14 (string-replace s13 " 5" "\": 5"))
+                 (s15 (string-replace s14 " 6" "\": 6"))
+                 (s16 (string-replace s15 " 7" "\": 7"))
+                 (s17 (string-replace s16 " 8" "\": 8"))
+                 (s18 (string-replace s17 " 9" "\": 9"))
+                 (s19 (string-replace s18 " [" "\": ["))
+                 (json-out (string-replace s19 " {" "\": {"))
+                 (json-tok (estimate-tokens json-out))]
+             (TranspileResult
+               :output json-out
+               :original-tokens orig-tok
+               :asn-tokens json-tok
+               :savings-percent 0.0
+               :success true))))))))
+
 
 (df yaml-to-asn [(yaml-str Str)] -> TranspileResult
   :d "Transpiles YAML key-value hierarchies into compact ASN S-expressions."

@@ -50,31 +50,31 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "clean-terminal-text" :kind :fn :tokens 3
-          :rationale "Domain utility implementing clean terminal text")
+          :rationale "Cannot be reduced to 'clean-text': preserves terminal ANSI and CR sanitization domain, preventing collision with general string trimming")
     (:sym :name "collapse-cr-line" :kind :fn :tokens 3
-          :rationale "Domain utility implementing collapse cr line")
+          :rationale "Cannot be reduced to 'collapse-cr': distinguishes terminal carriage-return overwrite emulation across an entire line from segment-level processing")
     (:sym :name "collapse-cr-segment" :kind :fn :tokens 3
-          :rationale "Domain utility implementing collapse cr segment")
+          :rationale "Cannot be reduced to 'collapse-cr': distinguishes progress-bar segment overwrite processing from line-level collapsing")
     (:sym :name "extract-python-frame" :kind :fn :tokens 3
-          :rationale "Domain utility implementing extract python frame")
+          :rationale "Cannot be reduced to 'extract-frame': explicitly scopes stack frame extraction to Python traceback syntax")
     (:sym :name "parse-file-loc" :kind :fn :tokens 3
-          :rationale "Parser extracting file loc")
+          :rationale "Cannot be reduced to 'parse-loc': distinguishes compiler diagnostic file:line:col parsing from memory or URL location strings")
     (:sym :name "parse-pytest-diagnostic" :kind :fn :tokens 3
-          :rationale "Parser extracting pytest diagnostic")
+          :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to pytest assertion failures and summary blocks")
     (:sym :name "parse-tsc-diagnostic" :kind :fn :tokens 3
-          :rationale "Parser extracting tsc diagnostic")
+          :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to TypeScript tsc compiler diagnostic outputs")
     (:sym :name "scan-stream-diagnostics" :kind :fn :tokens 3
-          :rationale "Domain utility implementing scan stream diagnostics")
+          :rationale "Cannot be reduced to 'scan-stream': distinguishes diagnostic scanning from general stream reading or byte windowing")
     (:sym :name "test-ansi-stripping" :kind :fn :tokens 3
-          :rationale "Test case verifying ansi stripping")
+          :rationale "Cannot be reduced to 'test-stripping': isolates ANSI sequence removal assertions from general string trimming tests")
     (:sym :name "test-cr-collapsing" :kind :fn :tokens 3
-          :rationale "Test case verifying cr collapsing")
+          :rationale "Cannot be reduced to 'test-collapsing': isolates terminal carriage return overwrite tests from whitespace collapsing")
     (:sym :name "test-diagnostic-extraction" :kind :fn :tokens 3
-          :rationale "Test case verifying diagnostic extraction")
+          :rationale "Cannot be reduced to 'test-extraction': scopes test specifically to multi-compiler diagnostic parsing")
     (:sym :name "test-line-dedup" :kind :fn :tokens 3
-          :rationale "Test case verifying line dedup")
+          :rationale "Cannot be reduced to 'test-dedup': scopes test specifically to stream log line deduplication algorithms")
     (:sym :name "test-reduce-stream-integration" :kind :fn :tokens 4
-          :rationale "Test case verifying reduce stream integration")
+          :rationale "Cannot be reduced to 'test-reduce': scopes test to the integrated ANSI stripping, windowing, and parsing pipeline")
     (:sym :name "test-retention-windowing" :kind :fn :tokens 3
-          :rationale "Test case verifying retention windowing")
+          :rationale "Cannot be reduced to 'test-windowing': scopes test specifically to head/tail line retention during stream truncation")
   ])

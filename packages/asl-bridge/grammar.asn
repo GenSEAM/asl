@@ -25,61 +25,61 @@
     (:sym :name "seaorm-type" :kind :fn :tokens 2)
     (:sym :name "sqlalchemy-type" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
+    ;; Multi-Token Symbols (with verified architectural :rationale)
     (:sym :name "driver-kind-to-str" :kind :fn :tokens 4
-          :rationale "Domain utility implementing driver kind to str")
+          :rationale "Converts DriverKind enum variant into canonical driver string identifier")
     (:sym :name "drizzle-col-builder" :kind :fn :tokens 3
-          :rationale "Domain utility implementing drizzle col builder")
+          :rationale "Builds TypeScript Drizzle ORM column builder expression with dialect-specific constraints")
     (:sym :name "drizzle-type-fn" :kind :fn :tokens 3
-          :rationale "Domain utility implementing drizzle type fn")
+          :rationale "Maps ASL primitive column type to corresponding Drizzle column builder function")
     (:sym :name "is-host-tier?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is host tier")
+          :rationale "Predicate testing whether target workload requires host IPC execution tier")
     (:sym :name "is-microvm-tier?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is microvm tier")
+          :rationale "Predicate testing whether target workload requires isolated microVM execution tier")
     (:sym :name "is-wasm-tier?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is wasm tier")
+          :rationale "Predicate testing whether target workload executes in sandboxed WebAssembly tier")
     (:sym :name "make-db-column" :kind :fn :tokens 3
-          :rationale "Constructor for db column")
+          :rationale "Constructs DbColumn record specifying name, type, nullability, and primary key status")
     (:sym :name "make-db-result" :kind :fn :tokens 3
-          :rationale "Constructor for db result")
+          :rationale "Encapsulates database execution output containing returned row maps and affected row count")
     (:sym :name "make-query-plan" :kind :fn :tokens 3
-          :rationale "Constructor for query plan")
+          :rationale "Builds execution plan binding SQL statement, target execution tier, and query parameters")
     (:sym :name "make-table-def" :kind :fn :tokens 3
-          :rationale "Constructor for table def")
+          :rationale "Constructs entity table schema definition binding table name with typed column schema list")
     (:sym :name "render-kysely-col" :kind :fn :tokens 3
-          :rationale "Renderer outputting kysely col")
+          :rationale "Transpiles DbColumn schema definition into TypeScript Kysely interface field declaration")
     (:sym :name "render-seaorm-col" :kind :fn :tokens 3
-          :rationale "Renderer outputting seaorm col")
+          :rationale "Transpiles DbColumn schema definition into Rust SeaORM entity struct field with derive annotations")
     (:sym :name "render-sqlalchemy-col" :kind :fn :tokens 3
-          :rationale "Renderer outputting sqlalchemy col")
+          :rationale "Transpiles DbColumn schema definition into Python SQLAlchemy Column attribute assignment")
     (:sym :name "str-to-driver-kind" :kind :fn :tokens 4
-          :rationale "Domain utility implementing str to driver kind")
+          :rationale "Parses canonical driver string identifier into typed DriverKind enum variant")
     (:sym :name "str-to-tier-kind" :kind :fn :tokens 4
-          :rationale "Domain utility implementing str to tier kind")
+          :rationale "Parses execution tier name string into typed TierKind enum variant")
     (:sym :name "table-to-drizzle" :kind :fn :tokens 3
-          :rationale "Domain utility implementing table to drizzle")
+          :rationale "Generates complete TypeScript Drizzle ORM schema table definition from TableDef record")
     (:sym :name "table-to-kysely" :kind :fn :tokens 3
-          :rationale "Domain utility implementing table to kysely")
+          :rationale "Generates complete TypeScript Kysely database interface definition from TableDef record")
     (:sym :name "table-to-seaorm" :kind :fn :tokens 3
-          :rationale "Domain utility implementing table to seaorm")
+          :rationale "Generates complete Rust SeaORM entity struct and Model/ActiveModel definitions from TableDef")
     (:sym :name "table-to-sqlalchemy" :kind :fn :tokens 3
-          :rationale "Domain utility implementing table to sqlalchemy")
+          :rationale "Generates complete Python SQLAlchemy declarative base model class from TableDef record")
     (:sym :name "test-ports-and-types" :kind :fn :tokens 4
-          :rationale "Test case verifying ports and types")
+          :rationale "Test suite verifying DbColumn, TableDef, QueryPlan, and DriverKind/TierKind conversions")
     (:sym :name "test-router-planning" :kind :fn :tokens 3
-          :rationale "Test case verifying router planning")
+          :rationale "Test suite validating query planning defaults and tier selection per driver kind")
     (:sym :name "test-router-workload" :kind :fn :tokens 3
-          :rationale "Test case verifying router workload")
+          :rationale "Test suite validating workload tier routing based on socket and GPU requirements")
     (:sym :name "test-schema-drizzle" :kind :fn :tokens 3
-          :rationale "Test case verifying schema drizzle")
+          :rationale "Test suite validating TypeScript Drizzle ORM schema transpilation")
     (:sym :name "test-schema-kysely" :kind :fn :tokens 3
-          :rationale "Test case verifying schema kysely")
+          :rationale "Test suite validating TypeScript Kysely interface transpilation")
     (:sym :name "test-schema-seaorm" :kind :fn :tokens 3
-          :rationale "Test case verifying schema seaorm")
+          :rationale "Test suite validating Rust SeaORM entity struct transpilation")
     (:sym :name "test-schema-sqlalchemy" :kind :fn :tokens 3
-          :rationale "Test case verifying schema sqlalchemy")
+          :rationale "Test suite validating Python SQLAlchemy declarative model transpilation")
     (:sym :name "tier-kind-to-str" :kind :fn :tokens 4
-          :rationale "Domain utility implementing tier kind to str")
+          :rationale "Converts TierKind enum variant into canonical execution tier name string")
     (:sym :name "to-pascal-case" :kind :fn :tokens 3
-          :rationale "Domain utility implementing to pascal case")
+          :rationale "Converts snake_case and kebab-case identifiers to PascalCase for type and struct names")
   ])

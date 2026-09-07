@@ -21,9 +21,15 @@
 
 (df test-asn-to-json [] -> Bool
   :d "Tests round-trip ASN to JSON conversion"
-  (let [(res (tr/asn-to-json "(:model \"qwen\" :active true)"))]
-    (and (.-success res)
-         (string-contains? (.-output res) "\"model\": \"qwen\""))))
+  (let [(res1 (tr/asn-to-json "(:model \"qwen\" :tokens 2048 :active true)"))
+        (res2 (tr/asn-to-json "[1 2 3]"))]
+    (and (and (.-success res1)
+              (and (string-contains? (.-output res1) "\"model\": \"qwen\"")
+                   (and (string-contains? (.-output res1) "\"tokens\": 2048")
+                        (string-contains? (.-output res1) "\"active\": true"))))
+         (and (.-success res2)
+              (string-contains? (.-output res2) "[1, 2, 3]")))))
+
 
 (df test-yaml-to-asn [] -> Bool
   :d "Tests YAML key-value hierarchy conversion"

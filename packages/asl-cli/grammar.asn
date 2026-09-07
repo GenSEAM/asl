@@ -21,19 +21,19 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "asn-to-json-value" :kind :fn :tokens 4
-          :rationale "Domain utility implementing asn to json value")
+          :rationale "Cannot be reduced to 'to-json': explicitly bounds transformation from ASN AST to JSON value types without string serialization")
     (:sym :name "format-asn-help" :kind :fn :tokens 3
-          :rationale "Formatter converting asn help to string")
+          :rationale "Cannot be reduced to 'format-help': disambiguates ASN grammar-aware CLI usage help from standard UNIX man-style formatting")
     (:sym :name "run-from-json" :kind :fn :tokens 3
-          :rationale "Domain utility implementing run from json")
+          :rationale "Cannot be reduced to 'run-json': distinguishes consuming stdin JSON payloads from executing JSON-formatted ASL source files")
     (:sym :name "run-to-json" :kind :fn :tokens 3
-          :rationale "Domain utility implementing run to json")
+          :rationale "Cannot be reduced to 'run-json': distinguishes emitting JSON output from accepting JSON input")
     (:sym :name "test-dispatch-gate" :kind :fn :tokens 3
-          :rationale "Test case verifying dispatch gate")
+          :rationale "Cannot be reduced to 'test-gate': tests the CLI command-line dispatcher specifically rather than running the verification gates themselves")
     (:sym :name "test-dispatch-missing" :kind :fn :tokens 3
-          :rationale "Test case verifying dispatch missing")
+          :rationale "Cannot be reduced to 'test-missing': scopes test to CLI dispatcher argument validation rather than missing file lookups")
     (:sym :name "test-dispatch-unknown" :kind :fn :tokens 3
-          :rationale "Test case verifying dispatch unknown")
+          :rationale "Cannot be reduced to 'test-unknown': scopes test to CLI subcommand dispatch fallback for invalid flags")
     (:sym :name "test-dispatch-version" :kind :fn :tokens 3
-          :rationale "Test case verifying dispatch version")
+          :rationale "Cannot be reduced to 'test-version': scopes test to CLI version command dispatch rather than package semver parsing")
   ])

@@ -44,43 +44,43 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "clean-num-sign" :kind :fn :tokens 3
-          :rationale "Domain utility implementing clean num sign")
+          :rationale "Cannot be reduced to 'clean-sign': explicitly bounds stripping to numeric literals, preventing collision with operator symbols")
     (:sym :name "first-char-str" :kind :fn :tokens 3
-          :rationale "Domain utility implementing first char str")
+          :rationale "Cannot be reduced to 'first-char': disambiguates safe string-slice character extraction from list/sequence indexing")
     (:sym :name "first-expr-empty" :kind :fn :tokens 3
-          :rationale "Domain utility implementing first expr empty")
+          :rationale "Cannot be reduced to 'expr-empty': positional distinction (first vs second) is essential for lowering conditional branches")
     (:sym :name "first-expr-unit" :kind :fn :tokens 3
-          :rationale "Domain utility implementing first expr unit")
+          :rationale "Cannot be reduced to 'expr-unit': specifies initial branch synthesis to distinguish from secondary void expressions")
     (:sym :name "first-expr-vect" :kind :fn :tokens 3
-          :rationale "Domain utility implementing first expr vect")
+          :rationale "Cannot be reduced to 'expr-vect': positional prefix is mandatory to separate initial vector lowering from body expressions")
     (:sym :name "first-head-ident" :kind :fn :tokens 3
-          :rationale "Domain utility implementing first head ident")
+          :rationale "Cannot be reduced to 'head-ident': disambiguates primary operator extraction from nested sub-form heads")
     (:sym :name "first-vect-items" :kind :fn :tokens 3
-          :rationale "Domain utility implementing first vect items")
+          :rationale "Cannot be reduced to 'vect-items': specifies primary slice extraction during tuple and vector pattern matching")
     (:sym :name "int-range-bounds" :kind :fn :tokens 3
-          :rationale "Domain utility implementing int range bounds")
+          :rationale "Cannot be reduced to 'range-bounds': explicitly scopes scalar boundary calculation to integer type constraints")
     (:sym :name "is-integral-type?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is integral type")
+          :rationale "Cannot be reduced to 'integral?': distinguishes static AST type descriptors from runtime numeric values")
     (:sym :name "is-literal-atom?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is literal atom")
+          :rationale "Cannot be reduced to 'atom?': scopes check specifically to literal AST tokens (bool/num/str), excluding symbols")
     (:sym :name "is-numeric-type?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is numeric type")
+          :rationale "Cannot be reduced to 'numeric?': distinguishes static type AST nodes from runtime numeric evaluations")
     (:sym :name "list-append-one" :kind :fn :tokens 3
-          :rationale "Domain utility implementing list append one")
+          :rationale "Cannot be reduced to 'append-one': preserves list container type qualification, avoiding collision with vector appends")
     (:sym :name "load-module-deps!" :kind :fn :tokens 3
-          :rationale "Domain utility implementing load module deps!")
+          :rationale "Cannot be reduced to 'load-deps!': distinguishes module-level type dependency loading from general package resolution")
     (:sym :name "map-values-list" :kind :fn :tokens 3
-          :rationale "Domain utility implementing map values list")
+          :rationale "Cannot be reduced to 'map-values': explicitly denotes conversion of AST map expressions to an evaluation list")
     (:sym :name "parse-type-str" :kind :fn :tokens 3
-          :rationale "Parser extracting type str")
+          :rationale "Cannot be reduced to 'parse-type': specifies string-to-AST parsing, distinguishing from S-expression type extraction")
     (:sym :name "prelude-union-cases" :kind :fn :tokens 3
-          :rationale "Domain utility implementing prelude union cases")
+          :rationale "Cannot be reduced to 'union-cases': explicitly scopes retrieval to built-in ASL prelude sum types")
     (:sym :name "resolve-type-alias" :kind :fn :tokens 3
-          :rationale "Domain utility implementing resolve type alias")
+          :rationale "Cannot be reduced to 'resolve-alias': explicitly bounds alias resolution to type definitions, avoiding import alias collisions")
     (:sym :name "second-expr-empty" :kind :fn :tokens 3
-          :rationale "Domain utility implementing second expr empty")
+          :rationale "Cannot be reduced to 'expr-empty': positional distinction is essential to separate else-branch from then-branch")
     (:sym :name "sexpr-to-list" :kind :fn :tokens 3
-          :rationale "Domain utility implementing sexpr to list")
+          :rationale "Cannot be reduced to 'to-list': explicitly qualifies the conversion from linked S-expression AST to iterable list")
     (:sym :name "test-corpus-smoke" :kind :fn :tokens 3
-          :rationale "Test case verifying corpus smoke")
+          :rationale "Cannot be reduced to 'test-smoke': disambiguates full language corpus smoke verification from unit test runners")
   ])

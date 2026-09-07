@@ -38,67 +38,67 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "boxed-type-if-recursive" :kind :fn :tokens 4
-          :rationale "Domain utility implementing boxed type if recursive")
+          :rationale "Cannot be reduced to 'boxed-type': the 'if-recursive' condition is mandatory to prevent unconditional heap allocation of non-recursive types in Rust")
     (:sym :name "clone-if-ident" :kind :fn :tokens 3
-          :rationale "Domain utility implementing clone if ident")
+          :rationale "Cannot be reduced to 'clone-ident': conditional qualifier 'if-ident' is critical to avoid emitting superfluous .clone() on literal values or borrowing contexts")
     (:sym :name "emit-arduino-header" :kind :fn :tokens 3
-          :rationale "Code generator emitting arduino header")
+          :rationale "Cannot be reduced to 'emit-header': targets microcontroller C/C++ hardware headers, distinguishing from ANSI C emit-c-header")
     (:sym :name "emit-arduino-sketch" :kind :fn :tokens 3
-          :rationale "Code generator emitting arduino sketch")
+          :rationale "Cannot be reduced to 'emit-sketch': explicitly specifies Arduino target platform emission with setup() and loop() bindings")
     (:sym :name "emit-body-seq" :kind :fn :tokens 3
-          :rationale "Code generator emitting body seq")
+          :rationale "Cannot be reduced to 'emit-seq': disambiguates statement-block body lowering from top-level declaration sequences")
     (:sym :name "emit-c-fn" :kind :fn :tokens 3
-          :rationale "Code generator emitting c fn")
+          :rationale "Cannot be reduced to 'emit-fn': language qualifier 'c' is mandatory to separate ANSI C function transpilation from Rust/TSX emission")
     (:sym :name "emit-c-header" :kind :fn :tokens 3
-          :rationale "Code generator emitting c header")
+          :rationale "Cannot be reduced to 'emit-header': distinguishes ANSI C header guards and prototypes from Arduino and C++ headers")
     (:sym :name "emit-c-type" :kind :fn :tokens 3
-          :rationale "Code generator emitting c type")
+          :rationale "Cannot be reduced to 'emit-type': language qualifier 'c' is mandatory to separate ANSI C type formatting from Rust/TSX")
     (:sym :name "emit-jsx-attrs" :kind :fn :tokens 3
-          :rationale "Code generator emitting jsx attrs")
+          :rationale "Cannot be reduced to 'emit-attrs': distinguishes React JSX key={val} prop formatting from HTML string attribute rendering")
     (:sym :name "emit-rust-program" :kind :fn :tokens 3
-          :rationale "Code generator emitting rust program")
+          :rationale "Cannot be reduced to 'emit-program': language qualifier 'rust' is required to isolate Rust crate compilation output")
     (:sym :name "emit-top-forms" :kind :fn :tokens 3
-          :rationale "Code generator emitting top forms")
+          :rationale "Cannot be reduced to 'emit-forms': disambiguates top-level module declarations from scoped inner expressions")
     (:sym :name "emit-tsx-module" :kind :fn :tokens 3
-          :rationale "Code generator emitting tsx module")
+          :rationale "Cannot be reduced to 'emit-module': language qualifier 'tsx' is required to distinguish React TypeScript modules from ASL manifests")
     (:sym :name "emit-type-str" :kind :fn :tokens 3
-          :rationale "Code generator emitting type str")
+          :rationale "Cannot be reduced to 'emit-type': specifies stringification of AST type descriptors, avoiding collision with emit-c-type")
     (:sym :name "emit-vnode-jsx" :kind :fn :tokens 3
-          :rationale "Code generator emitting vnode jsx")
+          :rationale "Cannot be reduced to 'emit-vnode': target format 'jsx' is mandatory to distinguish JSX syntax from direct VNode tree emission")
     (:sym :name "format-delay-call" :kind :fn :tokens 3
-          :rationale "Formatter converting delay call to string")
+          :rationale "Cannot be reduced to 'format-delay': specifies codegen lowering into target-specific delay timer API syntax")
     (:sym :name "format-gpio-call" :kind :fn :tokens 3
-          :rationale "Formatter converting gpio call to string")
+          :rationale "Cannot be reduced to 'format-gpio': specifies codegen lowering into microcontroller pin manipulation statements")
     (:sym :name "has-main-fn?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether has main fn")
+          :rationale "Cannot be reduced to 'has-main?': explicitly checks for an executable function definition rather than module configuration")
     (:sym :name "is-component-tag?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is component tag")
+          :rationale "Cannot be reduced to 'is-component?': restricts predicate check to string tag names, preventing collision with VNode checks")
     (:sym :name "is-rust-keyword?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is rust keyword")
+          :rationale "Cannot be reduced to 'is-keyword?': scopes reservation check to Rust grammar keywords to drive identifier mangling")
     (:sym :name "is-void-tag?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether is void tag")
+          :rationale "Cannot be reduced to 'is-void?': restricts check to self-closing HTML void elements without children")
     (:sym :name "jsx-attr-key" :kind :fn :tokens 3
-          :rationale "Domain utility implementing jsx attr key")
+          :rationale "Cannot be reduced to 'attr-key': distinguishes React JSX prop name mapping (className, htmlFor) from raw HTML attributes")
     (:sym :name "primitive-rust-type" :kind :fn :tokens 3
-          :rationale "Domain utility implementing primitive rust type")
+          :rationale "Cannot be reduced to 'rust-type': scopes mapping strictly to Rust primitive scalar types (i64, f64, bool, String)")
     (:sym :name "resolve-qualified-case" :kind :fn :tokens 3
-          :rationale "Domain utility implementing resolve qualified case")
+          :rationale "Cannot be reduced to 'resolve-case': distinguishes module-namespaced enum variants from simple pattern-match arms")
     (:sym :name "rust-mod-name" :kind :fn :tokens 3
-          :rationale "Domain utility implementing rust mod name")
+          :rationale "Cannot be reduced to 'mod-name': scopes identifier sanitization strictly to snake_case Rust crate module paths")
     (:sym :name "short-mod-name" :kind :fn :tokens 3
-          :rationale "Domain utility implementing short mod name")
+          :rationale "Cannot be reduced to 'mod-name': specifies terminal path component extraction, distinguishing from full module identifiers")
     (:sym :name "slice-str-or" :kind :fn :tokens 3
-          :rationale "Domain utility implementing slice str or")
+          :rationale "Cannot be reduced to 'slice-str': 'or' suffix is essential to indicate safe fallback return on out-of-bounds indices")
     (:sym :name "test-arduino-sketch" :kind :fn :tokens 3
-          :rationale "Test case verifying arduino sketch")
+          :rationale "Cannot be reduced to 'test-sketch': disambiguates Arduino codegen unit tests from generic compiler sketches")
     (:sym :name "test-c-header" :kind :fn :tokens 3
-          :rationale "Test case verifying c header")
+          :rationale "Cannot be reduced to 'test-header': isolates ANSI C header emission tests from Arduino headers")
     (:sym :name "test-c-type" :kind :fn :tokens 3
-          :rationale "Test case verifying c type")
+          :rationale "Cannot be reduced to 'test-type': isolates ANSI C struct and enum type mapping tests from Rust and TSX")
     (:sym :name "test-gpio-calls" :kind :fn :tokens 3
-          :rationale "Test case verifying gpio calls")
+          :rationale "Cannot be reduced to 'test-gpio': isolates pin read/write codegen assertions from hardware simulator logic")
     (:sym :name "type-mentions-float?" :kind :fn :tokens 3
-          :rationale "Predicate testing whether type mentions float")
+          :rationale "Cannot be reduced to 'mentions-float?': scopes AST type inspection to numeric float descriptors")
     (:sym :name "type-mentions-io-error?" :kind :fn :tokens 4
-          :rationale "Predicate testing whether type mentions io error")
+          :rationale "Cannot be reduced to 'mentions-error?': explicitly scopes search to I/O error sum variants, preventing false positives on generic errors")
   ])

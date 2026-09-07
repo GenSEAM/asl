@@ -47,35 +47,35 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "count-pair-params" :kind :fn :tokens 3
-          :rationale "Domain utility implementing count pair params")
+          :rationale "Cannot be reduced to 'count-params': specifically counts key-value insertion/update pairs rather than flat positional parameters")
     (:sym :name "dialect-param-prefix" :kind :fn :tokens 3
-          :rationale "Domain utility implementing dialect param prefix")
+          :rationale "Cannot be reduced to 'param-prefix': requires explicit dialect qualification to avoid collision with generic query parameter placeholders")
     (:sym :name "dialect-quote-char" :kind :fn :tokens 3
-          :rationale "Domain utility implementing dialect quote char")
+          :rationale "Cannot be reduced to 'quote-char': disambiguates SQL dialect identifier escaping delimiters from string literal quotes")
     (:sym :name "is-literal-param" :kind :fn :tokens 3
-          :rationale "Predicate checking condition for literal param")
+          :rationale "Cannot be reduced to 'is-literal': distinguishes inlined SQL literal values from external bound parameters")
     (:sym :name "json-get-expr" :kind :fn :tokens 3
-          :rationale "Domain utility implementing json get expr")
+          :rationale "Cannot be reduced to 'json-get': specifies AST expression node construction for dialect-aware JSON property access")
     (:sym :name "make-column-custom" :kind :fn :tokens 3
-          :rationale "Constructor for column custom")
+          :rationale "Cannot be reduced to 'make-column': distinguishes user-defined custom DDL column definitions from standard typed column helpers")
     (:sym :name "render-binary-op" :kind :fn :tokens 3
-          :rationale "Renderer outputting binary op")
+          :rationale "Cannot be reduced to 'render-op': distinguishes infix binary operations (comparison/arithmetic) from unary/logical operators")
     (:sym :name "render-column-def" :kind :fn :tokens 3
-          :rationale "Renderer outputting column def")
+          :rationale "Cannot be reduced to 'render-column': specifies complete DDL column definition rendering (types, constraints, defaults)")
     (:sym :name "render-create-table" :kind :fn :tokens 3
-          :rationale "Renderer outputting create table")
+          :rationale "Cannot be reduced to 'create-table': separates DDL string rendering from in-memory schema table definitions")
     (:sym :name "render-expr-str" :kind :fn :tokens 3
-          :rationale "Renderer outputting expr str")
+          :rationale "Cannot be reduced to 'render-expr': explicitly denotes rendering to raw SQL string fragment rather than AST node")
     (:sym :name "render-json-path" :kind :fn :tokens 3
-          :rationale "Renderer outputting json path")
+          :rationale "Cannot be reduced to 'json-path': separates dialect-aware JSON path expression rendering from path string representations")
     (:sym :name "render-logical-op" :kind :fn :tokens 3
-          :rationale "Renderer outputting logical op")
+          :rationale "Cannot be reduced to 'render-op': isolates WHERE/HAVING boolean combinator rendering (AND, OR, NOT) from binary expressions")
     (:sym :name "test-sql-ddl" :kind :fn :tokens 3
-          :rationale "Test case verifying sql ddl")
+          :rationale "Cannot be reduced to 'test-ddl': isolates SQL dialect DDL generation assertions from general schema compiler tests")
     (:sym :name "test-sql-dialects" :kind :fn :tokens 3
-          :rationale "Test case verifying sql dialects")
+          :rationale "Cannot be reduced to 'test-dialects': scopes test specifically to multi-engine SQL dialect differences")
     (:sym :name "test-sql-select" :kind :fn :tokens 3
-          :rationale "Test case verifying sql select")
+          :rationale "Cannot be reduced to 'test-select': isolates SQL query generation tests from DDL and mutation statements")
     (:sym :name "type-to-sql-string" :kind :fn :tokens 4
-          :rationale "Domain utility implementing type to sql string")
+          :rationale "Cannot be reduced to 'type-to-sql': distinguishes DDL type declaration string rendering from query expression lowering")
   ])

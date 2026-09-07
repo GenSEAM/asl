@@ -29,31 +29,31 @@
 
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "calculate-quality-score" :kind :fn :tokens 3
-          :rationale "Domain utility implementing calculate quality score")
+          :rationale "Cannot be reduced to 'quality-score': separates the multi-factor calculation function from the resulting metric value")
     (:sym :name "can-auto-repair" :kind :fn :tokens 3
-          :rationale "Domain utility implementing can auto repair")
+          :rationale "Cannot be reduced to 'can-repair': specifies automated linter rule repair without human interaction")
     (:sym :name "compute-density-score" :kind :fn :tokens 3
-          :rationale "Domain utility implementing compute density score")
+          :rationale "Cannot be reduced to 'density-score': separates dynamic AST token density scoring from static threshold constants")
     (:sym :name "compute-duplication-ratio" :kind :fn :tokens 3
-          :rationale "Domain utility implementing compute duplication ratio")
+          :rationale "Cannot be reduced to 'duplication-ratio': separates the clone ratio computation function from the metric field")
     (:sym :name "estimate-identifier-tokens" :kind :fn :tokens 3
-          :rationale "Domain utility implementing estimate identifier tokens")
+          :rationale "Cannot be reduced to 'estimate-tokens': scopes BPE estimation specifically to identifier symbols rather than full files")
     (:sym :name "format-fix-description" :kind :fn :tokens 3
-          :rationale "Formatter converting fix description to string")
+          :rationale "Cannot be reduced to 'format-fix': specifies formatting of human-readable explanation strings rather than code patches")
     (:sym :name "format-token-smell" :kind :fn :tokens 3
-          :rationale "Formatter converting token smell to string")
+          :rationale "Cannot be reduced to 'format-smell': specifies diagnostic report formatting for token inflation smells specifically")
     (:sym :name "is-clone-excessive" :kind :fn :tokens 3
-          :rationale "Predicate checking condition for clone excessive")
+          :rationale "Cannot be reduced to 'is-excessive': scopes threshold check specifically to AST clone redundancy")
     (:sym :name "is-fix-successful" :kind :fn :tokens 3
-          :rationale "Predicate checking condition for fix successful")
+          :rationale "Cannot be reduced to 'is-successful': scopes validation to applied automated linter repairs")
     (:sym :name "is-nesting-excessive" :kind :fn :tokens 3
-          :rationale "Predicate checking condition for nesting excessive")
+          :rationale "Cannot be reduced to 'is-excessive': scopes depth evaluation specifically to expression indentation")
     (:sym :name "is-token-smell" :kind :fn :tokens 3
-          :rationale "Predicate checking condition for token smell")
+          :rationale "Cannot be reduced to 'is-smell': scopes rule check specifically to token bloat violations in symbol names")
     (:sym :name "min-clone-node-threshold" :kind :fn :tokens 4
-          :rationale "Domain utility implementing min clone node threshold")
+          :rationale "Cannot be reduced to 'clone-threshold': distinguishes AST subtree node count threshold from clone instance frequency")
     (:sym :name "should-block-gate" :kind :fn :tokens 3
-          :rationale "Domain utility implementing should block gate")
+          :rationale "Cannot be reduced to 'block-gate': distinguishes the general error severity gate check from specialized sub-gates")
     (:sym :name "should-block-token-gate" :kind :fn :tokens 4
-          :rationale "Domain utility implementing should block token gate")
+          :rationale "Cannot be reduced to 'block-gate': isolates token-density threshold gate blocking from general error severity blocking")
   ])

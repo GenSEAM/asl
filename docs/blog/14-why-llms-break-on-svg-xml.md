@@ -96,5 +96,5 @@ asl skill sync
 Do not let models drown in syntax boilerplate. S-expressions represent the natural computational geometry for autoregressive models—whether generating code, API frames, or vector graphics.
 
 - Explore the [ASL Vector Transpiler Documentation](https://aslang.dev/docs/codec).
-- View the [Gemma 31B SVG Benchmark Artifacts](https://aslang.dev/blog/svg-benchmark-results).
-- Next Article: [Kill 80% of Agent Code Bloat: Radical Simplicity for Autonomous Systems](/blog/radical-simplicity-coding-agents).
+- Explore [The Agent Operational Circle](/blog/the-agent-operational-circle).
+- Next Article: [Kill 80% of Agent Code Bloat: Radical Simplicity for Autonomous Systems](/blog/kill-80-percent-agent-code-bloat).
