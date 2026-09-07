@@ -4,6 +4,15 @@ Always activate and follow the asl-toolbelt skill; asl is available in PATH.
 
 # AgentScript (ASL) — Autonomous Agent Operational Instructions
 
+> **Foundational Philosophy & Invariants**: All AI agents operating in this workspace MUST adhere strictly to [**`MANIFESTO.md`**](../MANIFESTO.md) and its 7 core pillars:
+> 1. **LLM-Native Code Generation**: Homogeneous S-expression geometry, closed AST vocabulary, and balanced form semantics.
+> 2. **Mathematical Optimality & Token Density**: Extreme BPE subtoken efficiency (<= 2 tokens per primitive) without lossy disemvoweling.
+> 3. **Zero-Foreign-Code Invariant**: 100% pure AgentScript (.asl/.asn) in code packages. Zero Python/JS/TS/Rust/C in core logic.
+> 4. **Dual-Projection Architecture**: Code is machine-native; human engineering operates via architecture DAGs, contracts, and falsifiable proofs.
+> 5. **Atomic In-Memory Compound Tooling**: Mandatory `asl rpc '(:batch ...)'` execution in a single roundtrip.
+> 6. **Multi-Runtime Orchestration**: AgentScript acts as the universal control plane coordinating Python AI/ML, Node.js/V8, Rust, C, WASM, and WebGPU via strict ASN stage contracts.
+> 7. **Falsifiable Verification**: Zero vacuous passes, strict exit code validation, and separation of duties between authors and reviewers.
+
 ## 1. Core Technical Specifications
 - Consult `AGENT_SPEC_CORE.md` as the normative language specification.
 - Consult `ROADMAP.md` for current milestone status and active implementation goals.
