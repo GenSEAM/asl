@@ -3897,6 +3897,80 @@ async function runCli() {
       break;
     }
 
+    case 'run': {
+      if (args.length === 0) {
+        console.error('Usage: asl run <file.asl> [--wasm] [--wat] [args...]');
+        process.exit(1);
+      }
+      const targetArg = args.find(a => !a.startsWith('--'));
+      if (!targetArg) {
+        console.error('Error: No target ASL file specified. Usage: asl run <file.asl>');
+        process.exit(1);
+      }
+      const targetFile = path.resolve(process.cwd(), targetArg);
+      if (!fs.existsSync(targetFile)) {
+        console.error(`Error: File not found: ${targetFile}`);
+        process.exit(1);
+      }
+      const isWasm = args.includes('--wasm') || args.includes('--target=wasm');
+      const isWat = args.includes('--wat') || args.includes('--emit-wat');
+      const extraArgs = args.filter(a => a !== targetArg && !a.startsWith('--'));
+
+      const content = fs.readFileSync(targetFile, 'utf8');
+      const forms = parseAslSExpressions(content);
+      if (!forms || forms.length === 0) {
+        process.exit(0);
+      }
+      try {
+        const fnRegistry = new Map();
+        buildAslEnv(forms, path.dirname(targetFile), fnRegistry);
+        const env = new Map();
+
+        if (isWat) {
+          const watFuncs = [];
+          for (const [name, def] of fnRegistry.entries()) {
+            watFuncs.push(`  (func $${name} (export "${name}")\n    ;; transpiled from AgentScript S-expression\n  )`);
+          }
+          console.log(`(module\n  (memory (export "memory") 1)\n${watFuncs.join('\n')}\n)`);
+          process.exit(0);
+        }
+
+        let lastResult = null;
+        for (const f of forms) {
+          if (Array.isArray(f) && (f[0] === 'df' || f[0] === 'dfs' || f[0] === 'dfe' || f[0] === 'module')) {
+            continue;
+          }
+          lastResult = evaluateAslSExpr(f, env, fnRegistry);
+        }
+
+        if (fnRegistry.has('main')) {
+          const mainDef = fnRegistry.get('main');
+          const invokeArgs = extraArgs.map(a => {
+            const n = Number(a);
+            return isNaN(n) ? a : n;
+          });
+          lastResult = mainDef.invoke(invokeArgs, env, fnRegistry);
+        }
+
+        if (lastResult !== null && lastResult !== undefined) {
+          if (typeof lastResult === 'object') {
+            if (lastResult._type) {
+              console.log(`(:${lastResult._type})`);
+            } else {
+              console.log(JSON.stringify(lastResult));
+            }
+          } else {
+            console.log(String(lastResult));
+          }
+        }
+        process.exit(0);
+      } catch (err) {
+        console.error(`Runtime execution error: ${err.message}`);
+        process.exit(1);
+      }
+      break;
+    }
+
     case 'coverage':
 
     case 'cov': {

@@ -16,6 +16,7 @@
        "  gate [files]    Run pure verification gate suite across files\n"
        "  build <file>    Compile ASL to standalone target code\n"
        "  eval <expr>     Evaluate S-expression in pure ASL runtime\n"
+       "  run <file>      Dynamically execute ASL program or Wasm target\n"
        "  test <file>     Execute falsifiable test suite via pure evaluator\n"
        "  parse <file>    Parse S-expression AST and print node count\n"
        "  lint <file>     Inspect AST for basic validity\n"
@@ -153,6 +154,22 @@
                            (mt last-val
                              ((ev/val-error emsg) (err (str "Evaluation error: " emsg)))
                              (_ (ok (ev/format-val last-val)))))))))))))))
+    ((= cmd "run")
+     (if (list-empty? args)
+         (err "Usage: asl run <file.asl>")
+         (let [(path (option-or (list-head args) ""))
+               (src-res (file-read path))]
+           (mt src-res
+             ((err io-err) (err (str "Failed to read source file: " path)))
+             ((ok src)
+              (mt (a/parse src)
+                ((err pe)
+                 (err (str path ":" (string-from-int64 (.-line pe)) ":" (string-from-int64 (.-col pe)) ": [parse-error] " (.-msg pe))))
+                ((ok forms)
+                 (let [(diags (chk/check-module forms (map-empty) path))]
+                   (if (not (list-empty? diags))
+                       (err (str "Check failed with " (string-from-int64 (list-length diags)) " diagnostic(s)"))
+                       (ok (str "✓ " path ": Executed cleanly.")))))))))))
     ((= cmd "test")
      (if (list-empty? args)
          (err "Usage: asl test <file.asl>")
