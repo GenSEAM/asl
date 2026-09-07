@@ -2,7 +2,8 @@
   :d "Test driver for asl-checker/check"
   :x [check-source
       check-file!
-      test-corpus-smoke]
+      test-corpus-smoke
+      run-tests]
   :i [(types :a ty) (resolve :a r) (check :a c)])
 
 (df check-source [(src String) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
@@ -19,3 +20,7 @@
     (if (list-empty? res)
       "ok"
       "fail smoke")))
+
+(df run-tests [] -> Bool
+  :d "Verifies checker smoke test"
+  (= (test-corpus-smoke) "ok"))

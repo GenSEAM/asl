@@ -1383,14 +1383,25 @@ function registerFormsInRegistry(forms, fnRegistry, alias = null) {
       const fnName = f[idx++];
       const params = Array.isArray(f[idx]) ? f[idx] : [];
       idx++;
-      if (f[idx] === '->') idx += 2;
+      let retType = 'I64';
+      if (f[idx] === '->') {
+        retType = f[idx + 1] || 'I64';
+        idx += 2;
+      }
       while (idx < f.length && (f[idx] === ':d' || f[idx] === ':x' || f[idx] === ':i')) {
         idx += 2;
       }
       const body = f.slice(idx);
+      const parsedParams = params.map(p => {
+        if (Array.isArray(p)) return { name: p[0], type: p[1] || 'I64' };
+        return { name: p, type: 'I64' };
+      });
       const fnHandler = {
         type: 'fn',
+        name: fnName,
         params,
+        parsedParams,
+        retType,
         body,
         invoke: (args, env, reg) => {
           const childEnv = new Map(env);
@@ -4190,6 +4201,282 @@ async function runCli() {
       break;
     }
 
+function compileAslToWat(functions) {
+  function toWatType(t) {
+    if (t === 'I64' || t === 'Int') return 'i64';
+    if (t === 'I32' || t === 'Bool') return 'i32';
+    if (t === 'F64' || t === 'Float') return 'f64';
+    return 'i64';
+  }
+
+  function exprToWat(e, indent = '    ') {
+    if (typeof e === 'number') return `${indent}(i64.const ${e})`;
+    if (typeof e === 'boolean') return `${indent}(i32.const ${e ? 1 : 0})`;
+    if (typeof e === 'string') {
+      if (/^-?\d+$/.test(e)) return `${indent}(i64.const ${e})`;
+      return `${indent}(local.get $${e})`;
+    }
+    if (Array.isArray(e)) {
+      if (e.length === 0) return '';
+      const op = e[0];
+      if (op === '+' || op === '-' || op === '*' || op === '/' || op === 'mod') {
+        const watOp = op === '+' ? 'i64.add' : op === '-' ? 'i64.sub' : op === '*' ? 'i64.mul' : op === '/' ? 'i64.div_s' : 'i64.rem_s';
+        if (e.length === 2 && op === '-') {
+          return `${indent}(${watOp}\n${indent}  (i64.const 0)\n${exprToWat(e[1], indent + '  ')}\n${indent})`;
+        }
+        let res = exprToWat(e[1], indent + '  ');
+        for (let i = 2; i < e.length; i++) {
+          res = `${indent}(${watOp}\n${res}\n${exprToWat(e[i], indent + '  ')}\n${indent})`;
+        }
+        return res;
+      }
+      if (op === '=' || op === '==' || op === '!=' || op === '<' || op === '<=' || op === '>' || op === '>=') {
+        const cmpOp = (op === '=' || op === '==') ? 'i64.eq' : op === '!=' ? 'i64.ne' : op === '<' ? 'i64.lt_s' : op === '<=' ? 'i64.le_s' : op === '>' ? 'i64.gt_s' : 'i64.ge_s';
+        return `${indent}(${cmpOp}\n${exprToWat(e[1], indent + '  ')}\n${exprToWat(e[2], indent + '  ')}\n${indent})`;
+      }
+      if (op === 'if') {
+        return `${indent}(if (result i64)\n${exprToWat(e[1], indent + '  ')}\n${indent}  (then\n${exprToWat(e[2], indent + '    ')}\n${indent}  )\n${indent}  (else\n${exprToWat(e[3], indent + '    ')}\n${indent}  )\n${indent})`;
+      }
+      const argsWat = e.slice(1).map(a => exprToWat(a, indent + '  ')).join('\n');
+      return `${indent}(call $${op}${argsWat ? '\n' + argsWat : ''}\n${indent})`;
+    }
+    return '';
+  }
+
+  const funcDefs = [];
+  for (const fn of functions) {
+    const paramsWat = (fn.params || []).map(p => `(param $${p.name} ${toWatType(p.type)})`).join(' ');
+    const retWat = fn.retType && fn.retType !== 'Unit' ? `(result ${toWatType(fn.retType)})` : '';
+    const bodyWat = (fn.body || []).map(b => exprToWat(b, '    ')).join('\n');
+    funcDefs.push(`  (func $${fn.name} (export "${fn.name}")${paramsWat ? ' ' + paramsWat : ''}${retWat ? ' ' + retWat : ''}\n${bodyWat}\n  )`);
+  }
+
+  return `(module\n  (memory (export "memory") 1)\n${funcDefs.join('\n')}\n)`;
+}
+
+function compileAslToWasm(functions) {
+  function encodeU32(v) {
+    const b = [];
+    do { let byte = v & 0x7f; v >>>= 7; if (v !== 0) byte |= 0x80; b.push(byte); } while (v !== 0);
+    return b;
+  }
+  function encodeI64(val) {
+    let v = BigInt(val); const b = []; let more = true;
+    while (more) {
+      let byte = Number(v & 0x7fn); v >>= 7n;
+      if ((v === 0n && (byte & 0x40) === 0) || (v === -1n && (byte & 0x40) !== 0)) more = false;
+      else byte |= 0x80;
+      b.push(byte);
+    }
+    return b;
+  }
+  function encodeI32(val) {
+    let v = Math.floor(val); const b = []; let more = true;
+    while (more) {
+      let byte = v & 0x7f; v >>= 7;
+      if ((v === 0 && (byte & 0x40) === 0) || (v === -1 && (byte & 0x40) !== 0)) more = false;
+      else byte |= 0x80;
+      b.push(byte);
+    }
+    return b;
+  }
+  function section(id, payload) { return [id, ...encodeU32(payload.length), ...payload]; }
+  function encodeStr(s) { const b = Buffer.from(s, 'utf8'); return [...encodeU32(b.length), ...b]; }
+
+  const typeMap = { 'I64': 0x7e, 'Int': 0x7e, 'I32': 0x7f, 'Bool': 0x7f, 'F64': 0x7c, 'Float': 0x7c };
+  function toWasmType(t) { return typeMap[t] || 0x7e; }
+
+  const fnIndexMap = new Map();
+  functions.forEach((f, idx) => fnIndexMap.set(f.name, idx));
+
+  const signatures = [];
+  const typeIndexMap = new Map();
+  function getSigKey(p, r) { return `${p.join(',')}=>${r || 'void'}`; }
+  const fnTypeIndices = [];
+  for (const fn of functions) {
+    const pt = (fn.params || []).map(p => toWasmType(p.type));
+    const rt = fn.retType && fn.retType !== 'Unit' ? toWasmType(fn.retType) : null;
+    const key = getSigKey(pt, rt);
+    if (!typeIndexMap.has(key)) {
+      typeIndexMap.set(key, signatures.length);
+      signatures.push({ params: pt, ret: rt });
+    }
+    fnTypeIndices.push(typeIndexMap.get(key));
+  }
+
+  const typePayload = [...encodeU32(signatures.length)];
+  for (const sig of signatures) {
+    typePayload.push(0x60, ...encodeU32(sig.params.length), ...sig.params);
+    if (sig.ret !== null) typePayload.push(1, sig.ret); else typePayload.push(0);
+  }
+  const typeSec = section(1, typePayload);
+
+  const funcPayload = [...encodeU32(fnTypeIndices.length)];
+  for (const ti of fnTypeIndices) funcPayload.push(...encodeU32(ti));
+  const funcSec = section(3, funcPayload);
+
+  const exportPayload = [...encodeU32(functions.length)];
+  for (let i = 0; i < functions.length; i++) {
+    exportPayload.push(...encodeStr(functions[i].name), 0x00, ...encodeU32(i));
+  }
+  const exportSec = section(7, exportPayload);
+
+  const codePayload = [...encodeU32(functions.length)];
+  for (const fn of functions) {
+    const locals = [];
+    const localIndexMap = new Map();
+    (fn.params || []).forEach((p, idx) => localIndexMap.set(p.name, idx));
+
+    function allocLocal(name, type = 0x7e) {
+      const idx = (fn.params || []).length + locals.length;
+      locals.push(type);
+      localIndexMap.set(name, idx);
+      return idx;
+    }
+
+    function compileExpr(e, targetType = 0x7e) {
+      if (typeof e === 'number') {
+        if (targetType === 0x7f) return [0x41, ...encodeI32(e)];
+        return [0x42, ...encodeI64(e)];
+      }
+      if (typeof e === 'boolean') return [0x41, e ? 1 : 0];
+      if (typeof e === 'string') {
+        if (localIndexMap.has(e)) {
+          const lIdx = localIndexMap.get(e);
+          return [0x20, ...encodeU32(lIdx)];
+        }
+        if (e === 'true') return [0x41, 1];
+        if (e === 'false') return [0x41, 0];
+        if (/^-?\d+$/.test(e)) {
+          if (targetType === 0x7f) return [0x41, ...encodeI32(parseInt(e, 10))];
+          return [0x42, ...encodeI64(e)];
+        }
+        throw new Error(`Unresolved symbol in Wasm compilation: ${e}`);
+      }
+      if (Array.isArray(e)) {
+        if (e.length === 0) return [];
+        const op = e[0];
+        if (op === '+' || op === '-' || op === '*' || op === '/' || op === 'mod') {
+          const wType = targetType;
+          let bytes = [];
+          if (e.length === 2 && op === '-') {
+            bytes.push(...(wType === 0x7f ? [0x41, 0] : [0x42, ...encodeI64(0)]));
+            bytes.push(...compileExpr(e[1], wType));
+            bytes.push(wType === 0x7f ? 0x6b : 0x7d);
+            return bytes;
+          }
+          bytes.push(...compileExpr(e[1], wType));
+          for (let i = 2; i < e.length; i++) {
+            bytes.push(...compileExpr(e[i], wType));
+            if (op === '+') bytes.push(wType === 0x7f ? 0x6a : 0x7c);
+            else if (op === '-') bytes.push(wType === 0x7f ? 0x6b : 0x7d);
+            else if (op === '*') bytes.push(wType === 0x7f ? 0x6c : 0x7e);
+            else if (op === '/') bytes.push(wType === 0x7f ? 0x6d : 0x7f);
+            else if (op === 'mod') bytes.push(wType === 0x7f ? 0x6f : 0x81);
+          }
+          return bytes;
+        }
+        if (op === '=' || op === '==' || op === '!=' || op === '<' || op === '<=' || op === '>' || op === '>=') {
+          const operandType = 0x7e;
+          const bytes = [];
+          bytes.push(...compileExpr(e[1], operandType));
+          bytes.push(...compileExpr(e[2], operandType));
+          if (op === '=' || op === '==') bytes.push(0x51);
+          else if (op === '!=') bytes.push(0x52);
+          else if (op === '<') bytes.push(0x53);
+          else if (op === '<=') bytes.push(0x57);
+          else if (op === '>') bytes.push(0x55);
+          else if (op === '>=') bytes.push(0x59);
+          return bytes;
+        }
+        if (op === 'if') {
+          const condBytes = compileExpr(e[1], 0x7f);
+          const thenBytes = compileExpr(e[2], targetType);
+          const elseBytes = compileExpr(e[3], targetType);
+          return [
+            ...condBytes,
+            0x04, targetType,
+            ...thenBytes,
+            0x05,
+            ...elseBytes,
+            0x0b
+          ];
+        }
+        if (op === 'let') {
+          const bindings = e[1];
+          const subExprs = e.slice(2);
+          const bytes = [];
+          for (const b of bindings) {
+            const bName = b[0];
+            const bVal = b[1];
+            const lIdx = allocLocal(bName, 0x7e);
+            bytes.push(...compileExpr(bVal, 0x7e));
+            bytes.push(0x21, ...encodeU32(lIdx));
+          }
+          for (let i = 0; i < subExprs.length; i++) {
+            const isLast = (i === subExprs.length - 1);
+            const seBytes = compileExpr(subExprs[i], targetType);
+            bytes.push(...seBytes);
+            if (!isLast && seBytes.length > 0) bytes.push(0x1a);
+          }
+          return bytes;
+        }
+        if (fnIndexMap.has(op)) {
+          const calleeIdx = fnIndexMap.get(op);
+          const callee = functions[calleeIdx];
+          const bytes = [];
+          for (let i = 0; i < (callee.params || []).length; i++) {
+            const argExpr = e[i + 1];
+            bytes.push(...compileExpr(argExpr, toWasmType(callee.params[i].type)));
+          }
+          bytes.push(0x10, ...encodeU32(calleeIdx));
+          return bytes;
+        }
+        throw new Error(`Unsupported ASL form in Wasm compiler: ${op}`);
+      }
+      return [];
+    }
+
+    let bodyBytes = [];
+    for (let i = 0; i < (fn.body || []).length; i++) {
+      const isLast = (i === fn.body.length - 1);
+      const exprBytes = compileExpr(fn.body[i], toWasmType(fn.retType));
+      bodyBytes.push(...exprBytes);
+      if (!isLast && exprBytes.length > 0) {
+        bodyBytes.push(0x1a); // drop intermediate expression results
+      }
+    }
+    bodyBytes.push(0x0b);
+
+    const localDecls = [];
+    if (locals.length > 0) {
+      let currentType = locals[0];
+      let count = 0;
+      for (const t of locals) {
+        if (t === currentType) count++;
+        else {
+          localDecls.push(...encodeU32(count), currentType);
+          currentType = t; count = 1;
+        }
+      }
+      localDecls.push(...encodeU32(count), currentType);
+    }
+    const numEntries = locals.length > 0 ? (localDecls.length / 2) : 0;
+    const fullFn = [...encodeU32(numEntries), ...localDecls, ...bodyBytes];
+    codePayload.push(...encodeU32(fullFn.length), ...fullFn);
+  }
+  const codeSec = section(10, codePayload);
+
+  return new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d,
+    0x01, 0x00, 0x00, 0x00,
+    ...typeSec,
+    ...funcSec,
+    ...exportSec,
+    ...codeSec
+  ]);
+}
+
     case 'run': {
       if (args.length === 0) {
         console.error('Usage: asl run <file.asl> [--wasm] [--wat] [args...]');
@@ -4219,12 +4506,54 @@ async function runCli() {
         buildAslEnv(forms, path.dirname(targetFile), fnRegistry);
         const env = new Map();
 
-        if (isWat) {
-          const watFuncs = [];
-          for (const [name, def] of fnRegistry.entries()) {
-            watFuncs.push(`  (func $${name} (export "${name}")\n    ;; transpiled from AgentScript S-expression\n  )`);
+        const uniqueFns = new Map();
+        for (const [name, def] of fnRegistry.entries()) {
+          if (def && def.type === 'fn' && def.name && !uniqueFns.has(def.name)) {
+            uniqueFns.set(def.name, {
+              name: def.name,
+              params: def.parsedParams || [],
+              retType: def.retType || 'I64',
+              body: def.body || []
+            });
           }
-          console.log(`(module\n  (memory (export "memory") 1)\n${watFuncs.join('\n')}\n)`);
+        }
+        if (!uniqueFns.has('main')) {
+          const topLevelExprs = forms.filter(f => !Array.isArray(f) || (f[0] !== 'module' && f[0] !== 'df' && f[0] !== 'dfs' && f[0] !== 'dfe'));
+          if (topLevelExprs.length > 0) {
+            uniqueFns.set('main', {
+              name: 'main',
+              params: [],
+              retType: 'I64',
+              body: topLevelExprs
+            });
+          }
+        }
+        const functionsList = Array.from(uniqueFns.values());
+
+        if (isWat) {
+          console.log(compileAslToWat(functionsList));
+          process.exit(0);
+        }
+
+        if (isWasm) {
+          const wasmBytes = compileAslToWasm(functionsList);
+          const wasmModule = new WebAssembly.Module(wasmBytes);
+          const wasmInstance = new WebAssembly.Instance(wasmModule, {
+            env: {
+              memory: new WebAssembly.Memory({ initial: 1 })
+            }
+          });
+          let lastResult = null;
+          if (typeof wasmInstance.exports.main === 'function') {
+            const invokeArgs = extraArgs.map(a => {
+              const n = Number(a);
+              return isNaN(n) ? BigInt(a) : BigInt(n);
+            });
+            lastResult = wasmInstance.exports.main(...invokeArgs);
+          }
+          if (lastResult !== null && lastResult !== undefined) {
+            console.log(String(lastResult));
+          }
           process.exit(0);
         }
 

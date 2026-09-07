@@ -31,6 +31,7 @@
     (:sym :name "mod-schema" :kind :fn :tokens 2)
     (:sym :name "occurs-in?" :kind :fn :tokens 2)
     (:sym :name "resolve-module" :kind :fn :tokens 2)
+    (:sym :name "run-tests" :kind :fn :tokens 2)
     (:sym :name "safe-tail" :kind :fn :tokens 2)
     (:sym :name "show-type" :kind :fn :tokens 2)
     (:sym :name "show-types" :kind :fn :tokens 2)
