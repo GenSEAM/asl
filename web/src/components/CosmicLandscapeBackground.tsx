@@ -1,4 +1,5 @@
 import React from 'react';
+import { RenderBlueprintGrid, RenderChameleonPerch } from './CosmicLandscapeBackground.asl';
 
 /**
  * CosmicLandscapeBackground
@@ -466,144 +467,11 @@ export const CosmicLandscapeBackground: React.FC = () => {
         <div className="absolute top-1/3 right-8 w-[650px] h-[650px] bg-indigo-600/10 dark:bg-indigo-950/15 blur-[160px] rounded-full" />
         <div className="absolute bottom-16 left-1/4 w-[700px] h-[550px] bg-purple-900/12 blur-[160px] rounded-full" />
 
-        {/* Blueprint Base Grid Pattern */}
-        <svg className="w-full h-full opacity-25 dark:opacity-20 text-purple-400 dark:text-purple-300" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="fixedBlueprintGrid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="0.5" opacity="0.4" />
-              <path d="M 200 0 L 0 0 0 200" fill="none" stroke="currentColor" strokeWidth="1.0" opacity="0.6" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#fixedBlueprintGrid)" />
-        </svg>
+        {/* Blueprint Base Grid Pattern from pure ASL */}
+        <RenderBlueprintGrid />
 
-        {/* Chameleon Perch (Top-Left) */}
-        <div className="fixed top-12 sm:top-14 left-2 sm:left-6 lg:left-10 w-72 sm:w-84 lg:w-[440px] h-auto opacity-40 dark:opacity-45 transition-all z-10">
-          <svg
-            viewBox="0 0 260 160"
-            className="w-full h-auto text-signal overflow-visible"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="vineBranchGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#7e22ce" />
-                <stop offset="45%" stopColor="#a855f7" />
-                <stop offset="100%" stopColor="#c084fc" />
-              </linearGradient>
-              <linearGradient id="chameleonGradFixed" x1="20%" y1="0%" x2="80%" y2="100%">
-                <stop offset="0%" stopColor="rgb(var(--signal-soft))" />
-                <stop offset="70%" stopColor="rgb(var(--signal))" />
-                <stop offset="100%" stopColor="#9333ea" />
-              </linearGradient>
-              <filter id="fixedAmbientGlow" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="3" result="glow" />
-                <feComposite in="SourceGraphic" in2="glow" operator="over" />
-              </filter>
-            </defs>
-
-            <g filter="url(#fixedAmbientGlow)">
-              {/* 
-                THE CYBER-VINE:
-                Starts low on left edge at (-30, 160), passes directly through the tail's circular spiral eye at (52, 95),
-                cradles under the belly at (95, 74), and sweeps UPWARDS to the top header (-50)!
-              */}
-              <path
-                d="M -30,160 C 2,142 24,118 52,95 C 78,74 104,72 134,54 C 168,34 202,0 234,-48"
-                stroke="url(#vineBranchGrad)"
-                strokeWidth="3.4"
-                strokeLinecap="round"
-              />
-              <path
-                d="M -30,165 C 2,147 24,123 52,100 C 78,79 104,77 134,59 C 168,39 202,5 234,-43"
-                stroke="url(#vineBranchGrad)"
-                strokeWidth="1.2"
-                strokeDasharray="3 3"
-                opacity="0.55"
-              />
-
-              {/* Sprouting cyber-leaves climbing up to header */}
-              <g transform="translate(138, 72) rotate(-42)">
-                <path d="M 0,0 Q 14,-9 28,0 Q 14,9 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
-                <line x1="0" y1="0" x2="28" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
-              </g>
-              <g transform="translate(178, 36) rotate(-60)">
-                <path d="M 0,0 Q 12,-8 24,0 Q 12,8 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
-                <line x1="0" y1="0" x2="24" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
-              </g>
-              <g transform="translate(216, -8) rotate(-75)">
-                <path d="M 0,0 Q 10,-7 20,0 Q 10,7 0,0" fill="#a855f7" fillOpacity="0.2" stroke="url(#vineBranchGrad)" strokeWidth="1.2" />
-                <line x1="0" y1="0" x2="20" y2="0" stroke="url(#vineBranchGrad)" strokeWidth="0.8" />
-              </g>
-
-              {/* Spiral tendril curling near header */}
-              <path
-                d="M 232,-35 Q 244,-47 240,-56 Q 234,-62 225,-58 Q 220,-52 225,-47"
-                stroke="url(#vineBranchGrad)"
-                strokeWidth="1.4"
-              />
-
-              {/* 
-                THE SCHEMATIC CHAMELEON:
-                Perched securely on the horizontal section of the branch.
-              */}
-              <g transform="translate(5, 0)">
-                {/* Spine and inward-spiraling tail */}
-                <path
-                  d="M 68 20 
-                     C 62 13, 56 12, 53 14 
-                     C 49 16, 49 22, 53 25
-                     C 35 28, 16 46, 12 70 
-                     C 8 95, 18 116, 38 122 
-                     C 56 127, 72 116, 70 96 
-                     C 68 81, 52 76, 44 86 
-                     C 37 94, 44 104, 53 102 
-                     C 59 100, 59 93, 54 91"
-                  stroke="url(#chameleonGradFixed)"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Snout & Head Arc */}
-                <path
-                  d="M 68 20 
-                     C 85 24, 102 36, 98 52 
-                     C 94 62, 80 65, 68 64"
-                  stroke="url(#chameleonGradFixed)"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {/* Eye circular aperture */}
-                <circle cx="82" cy="40" r="9" stroke="url(#chameleonGradFixed)" strokeWidth="2.2" />
-                <circle cx="82" cy="40" r="3" fill="rgb(var(--signal-soft))" opacity="0.9" />
-
-                {/* Underside / Belly Line */}
-                <path
-                  d="M 68 64 
-                     C 52 64, 40 68, 32 78 
-                     C 25 87, 26 96, 30 102"
-                  stroke="url(#chameleonGradFixed)"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-
-                {/* Coordinate reference nodes */}
-                <circle cx="53" cy="14" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
-                <circle cx="98" cy="52" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
-                <circle cx="38" cy="122" r="1.5" fill="rgb(var(--signal-soft))" opacity="0.7" />
-
-                {/* Front tail curl stroke: physically wraps in front of the branch */}
-                <path
-                  d="M 44 86 C 37 94, 44 104, 53 102 C 59 100, 59 93, 54 91"
-                  stroke="url(#chameleonGradFixed)"
-                  strokeWidth="2.6"
-                  strokeLinecap="round"
-                />
-              </g>
-            </g>
-          </svg>
-        </div>
+        {/* Chameleon Perch (Top-Left) from pure ASL */}
+        <RenderChameleonPerch />
       </div>
 
       {/* 2. DEDICATED LEFT DEFLECTING GUTTER STREAM (Smoothly veers left before chameleon) */}
