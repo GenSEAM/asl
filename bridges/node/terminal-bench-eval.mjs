@@ -33,7 +33,8 @@ try {
   }
 } catch (e) {}
 
-const SYSTEM_PROMPT = `Output executable bash script code inside a single \`\`\`bash ... \`\`\` code fence. Provide the raw script body directly with zero conversational text.`;
+const SYSTEM_PROMPT = `Direct bash execution environment. Output the necessary script body inside a single \`\`\`bash ... \`\`\` code fence to satisfy the directive.`;
+
 
 
 // Canonical 60 Astra-Hard tasks from harness/src/terminal-bench.asl
