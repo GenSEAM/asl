@@ -14,6 +14,7 @@
     (:sym :name "ProcessCmd" :kind :type :tokens 1)
     (:sym :name "ProcessError" :kind :type :tokens 1)
     (:sym :name "ProcessOutput" :kind :type :tokens 1)
+    (:sym :name "ProcessReceipt" :kind :type :tokens 1)
     (:sym :name "ReducedStream" :kind :type :tokens 1)
     (:sym :name "ReductionConfig" :kind :type :tokens 1)
 
@@ -22,8 +23,11 @@
     (:sym :name "collapse-cr" :kind :fn :tokens 2)
     (:sym :name "dedup-lines" :kind :fn :tokens 2)
     (:sym :name "default-config" :kind :fn :tokens 2)
+    (:sym :name "demux-stream" :kind :fn :tokens 2)
     (:sym :name "err!" :kind :fn :tokens 1)
+    (:sym :name "estimate-tokens" :kind :fn :tokens 2)
     (:sym :name "exec!" :kind :fn :tokens 1)
+    (:sym :name "exec-receipt!" :kind :fn :tokens 2)
     (:sym :name "extract-diagnostics" :kind :fn :tokens 2)
     (:sym :name "format-entry" :kind :fn :tokens 2)
     (:sym :name "info!" :kind :fn :tokens 1)
@@ -32,9 +36,11 @@
     (:sym :name "log-warn!" :kind :fn :tokens 2)
     (:sym :name "make-pipeline" :kind :fn :tokens 2)
     (:sym :name "pipe!" :kind :fn :tokens 1)
+    (:sym :name "receipt-tokens" :kind :fn :tokens 2)
     (:sym :name "reduce-lines" :kind :fn :tokens 2)
     (:sym :name "reduce-stream" :kind :fn :tokens 2)
     (:sym :name "reduce-text" :kind :fn :tokens 2)
+    (:sym :name "render-receipt" :kind :fn :tokens 2)
     (:sym :name "run-cmd!" :kind :fn :tokens 2)
     (:sym :name "run-pipeline!" :kind :fn :tokens 2)
     (:sym :name "run-simple!" :kind :fn :tokens 2)
@@ -42,6 +48,7 @@
     (:sym :name "run-tests!" :kind :fn :tokens 2)
     (:sym :name "strip-ansi" :kind :fn :tokens 2)
     (:sym :name "summarize-diagnostics" :kind :fn :tokens 2)
+    (:sym :name "truncate-summary" :kind :fn :tokens 2)
     (:sym :name "warn!" :kind :fn :tokens 1)
     (:sym :name "window-lines" :kind :fn :tokens 2)
     (:sym :name "with-cwd" :kind :fn :tokens 2)
@@ -55,8 +62,14 @@
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes terminal carriage-return overwrite emulation across an entire line from segment-level processing")
     (:sym :name "collapse-cr-segment" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes progress-bar segment overwrite processing from line-level collapsing")
+    (:sym :name "extract-error-summary" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'extract-summary': scopes extraction specifically to diagnostic errors and failure frames")
     (:sym :name "extract-python-frame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-frame': explicitly scopes stack frame extraction to Python traceback syntax")
+    (:sym :name "generate-spool-path" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
+    (:sym :name "make-process-receipt" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-receipt': scopes constructor unambiguously to APM process receipting")
     (:sym :name "parse-file-loc" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-loc': distinguishes compiler diagnostic file:line:col parsing from memory or URL location strings")
     (:sym :name "parse-pytest-diagnostic" :kind :fn :tokens 3

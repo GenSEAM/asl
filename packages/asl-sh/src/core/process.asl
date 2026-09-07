@@ -1,6 +1,6 @@
 (module asl-sh/process
   :d "Native AgentScript Process Execution and Typed Command Builder (@pcp:d-446d)."
-  :x [ProcessCmd ProcessOutput ProcessError cmd with-cwd with-timeout with-stdin exec! run-simple!])
+  :x [ProcessCmd ProcessOutput ProcessError ProcessReceipt cmd with-cwd with-timeout with-stdin exec! run-simple! make-process-receipt render-receipt estimate-tokens receipt-tokens])
 
 (dfs ProcessCmd
   (:f bin        String              "Executable binary path or system command")
@@ -15,6 +15,13 @@
   (:f stdout      String "Captured standard output stream")
   (:f stderr      String "Captured standard error stream")
   (:f duration-ms Int64  "Execution elapsed time in milliseconds"))
+
+(dfs ProcessReceipt
+  (:f exit-code   Int64  "Process return code (0 = success)")
+  (:f duration-ms Int64  "Execution duration in milliseconds")
+  (:f peak-rss-mb Int64  "Peak memory resident set size in megabytes")
+  (:f spool-path  String "Filesystem path to ephemeral disk spool")
+  (:f summary     String "Compact diagnostic string (<100 tokens, errors only)"))
 
 (dfe ProcessError
   (:c not-found         [(bin String)]              "Command binary was not found")
@@ -78,3 +85,33 @@
          (ok (.-stdout out))
          (err (execution-failed (.-exit-code out) (.-stderr out)))))
     ((err e) (err e))))
+
+(df make-process-receipt [(exit-code Int64) (duration-ms Int64) (peak-rss-mb Int64) (spool-path String) (summary String)] -> ProcessReceipt
+  :d "Constructs a compact ProcessReceipt."
+  (ProcessReceipt
+    :exit-code exit-code
+    :duration-ms duration-ms
+    :peak-rss-mb peak-rss-mb
+    :spool-path spool-path
+    :summary summary))
+
+(df render-receipt [(r ProcessReceipt)] -> String
+  :d "Renders a ProcessReceipt as a compact S-expression string."
+  (str "(:proc-receipt :exit " (string-from-int64 (.-exit-code r))
+       " :duration-ms " (string-from-int64 (.-duration-ms r))
+       " :peak-rss-mb " (string-from-int64 (.-peak-rss-mb r))
+       " :spool-path \"" (.-spool-path r) "\""
+       " :summary \"" (.-summary r) "\")"))
+
+(df estimate-tokens [(text String)] -> Int64
+  :d "Deterministic BPE proxy token count estimation based on character length."
+  (let [(len (string-length text))]
+    (cond
+      ((<= len 0) 0)
+      ((<= len 4) 1)
+      (:else (/ (+ len 3) 4)))))
+
+(df receipt-tokens [(r ProcessReceipt)] -> Int64
+  :d "Estimates total BPE tokens for a rendered ProcessReceipt."
+  (estimate-tokens (render-receipt r)))
+

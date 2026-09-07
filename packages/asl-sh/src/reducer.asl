@@ -7,9 +7,14 @@
       dedup-lines
       reduce-lines
       reduce-stream
-      reduce-text]
+      reduce-text
+      truncate-summary
+      generate-spool-path
+      extract-error-summary
+      demux-stream]
   :i [(ansi :a ansi)
-      (diagnostics :a diag)])
+      (diagnostics :a diag)
+      (core/process :a proc)])
 
 (dfs ReductionConfig
   (:f head-limit Int64 "Maximum lines retained at stream head (default 500)")
@@ -121,3 +126,50 @@
 (df reduce-text [(raw-text String)] -> ReducedStream
   :d "Reduces a raw text stream using default reduction configuration."
   (reduce-stream raw-text (default-config)))
+
+(df truncate-summary [(text String) (max-tokens Int64)] -> String
+  :d "Truncates summary text to keep it strictly under max-tokens budget."
+  (let [(max-chars (* max-tokens 4))
+        (len (string-length text))]
+    (if (<= len max-chars)
+        text
+        (let [(slice-len (if (> max-chars 3) (- max-chars 3) max-chars))
+              (prefix (option-or (string-slice text 0 slice-len) text))]
+          (str prefix "...")))))
+
+(df generate-spool-path [(bin String) (nonce Int64)] -> String
+  :d "Generates canonical ephemeral spool filesystem path with sanitized binary name."
+  (let [(safe-bin (string-replace bin "/" "_"))]
+    (str "/tmp/asl-proc-" safe-bin "-" (string-from-int64 nonce) ".spool")))
+
+(df extract-error-summary [(stdout-text String) (stderr-text String) (exit-code Int64)] -> String
+  :d "Extracts compact semantic diagnostic string (<50 tokens) from stdout and stderr."
+  (if (= exit-code 0)
+      "Command succeeded"
+      (let [(err-cleaned (ansi/clean-terminal-text stderr-text))
+            (out-cleaned (ansi/clean-terminal-text stdout-text))
+            (err-lines (if (string-empty? err-cleaned) (list) (string-split err-cleaned "\n")))
+            (out-lines (if (string-empty? out-cleaned) (list) (string-split out-cleaned "\n")))
+            (diags (diag/extract-diagnostics (list-append err-lines out-lines)))]
+        (if (> (list-length diags) 0)
+            (let [(first-diag (option-or (list-head diags) (diag/Diagnostic :kind "error" :severity "error" :message "Process failed" :file "" :line 0 :col 0 :raw (list))))
+                  (msg (.-message first-diag))
+                  (loc (if (not (string-empty? (.-file first-diag)))
+                           (str (.-file first-diag) ":" (string-from-int64 (.-line first-diag)) ": ")
+                           ""))
+                  (diag-str (str loc msg))]
+              (truncate-summary diag-str 50))
+            (let [(combined (if (not (string-empty? (string-trim err-cleaned))) err-cleaned out-cleaned))]
+              (if (string-empty? (string-trim combined))
+                  (str "Process failed with exit code " (string-from-int64 exit-code))
+                  (let [(first-line (option-or (list-head (string-split combined "\n")) "Process failed"))
+                        (trimmed-line (string-trim first-line))]
+                    (if (string-empty? trimmed-line)
+                        (str "Process failed with exit code " (string-from-int64 exit-code))
+                        (truncate-summary trimmed-line 50)))))))))
+
+(df demux-stream [(stdout-text String) (stderr-text String) (exit-code Int64) (duration-ms Int64) (spool-path String)] -> proc/ProcessReceipt
+  :d "Demultiplexes raw process output into an ephemeral spool reference and a compact ProcessReceipt."
+  (let [(summary (extract-error-summary stdout-text stderr-text exit-code))]
+    (proc/make-process-receipt exit-code duration-ms 0 spool-path summary)))
+
