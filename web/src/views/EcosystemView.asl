@@ -127,11 +127,10 @@
               Every tool an autonomous agent needs to parse, sandbox, coordinate, recall, and interact with the physical and visual world &mdash; compiled with mathematical equivalence.
             </p>
           </header>"
-    (s/concat
-      (unified-package-matrix)
-      "</div></section>"
-      (ecosystem)
-      "</div>"))))
+    (unified-package-matrix)
+    "</div></section>"
+    (ecosystem)
+    "</div>"))
 
 (df ecosystem-view [] -> Str
   :d "Alias for render-ecosystem-view."

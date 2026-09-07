@@ -262,10 +262,9 @@
 
           <!-- 8. Ecosystem Pane -->
           <div class=\"dv-pane hidden space-y-12\" id=\"dv-pane-ecosystem\">"
-    (s/concat
-      (unified-package-matrix)
-      (ecosystem)
-      "</div>
+    (unified-package-matrix)
+    (ecosystem)
+    "</div>
         </div>
       </section>
     </div>
@@ -320,7 +319,7 @@
           init();
         }
       })();
-    </script>"))))
+    </script>"))
 
 (df docs-view [] -> Str
   :d "Alias for render-docs-view."
