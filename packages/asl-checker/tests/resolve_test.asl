@@ -18,31 +18,31 @@
        (check-has-code diags want-code)))))
 
 (df test-unbound-probe [] -> Bool
-  (test-probe "(defun f [] -> Int64 (+ x 1))" "rule-2"))
+  (test-probe "(df f [] -> Int64 (+ x 1))" "rule-2"))
 
 (df test-missing-doc-probe [] -> Bool
-  (test-probe "(module m :export [f]) (defun f [] -> Int64 1)" "rule-8"))
+  (test-probe "(module m :export [f]) (df f [] -> Int64 1)" "rule-8"))
 
 (df test-reserved-probe [] -> Bool
-  (test-probe "(defun agentscript-foo [] -> Int64 1)" "rule-7"))
+  (test-probe "(df agentscript-foo [] -> Int64 1)" "rule-7"))
 
 (df test-unbound-typevar-probe [] -> Bool
-  (test-probe "(defun f [] -> UnknownType 1)" "rule-10"))
+  (test-probe "(df f [] -> UnknownType 1)" "rule-10"))
 
 (df test-effect-probe [] -> Bool
-  (test-probe "(defun f [] -> (Result Unit IoError) (println \"hi\"))" "rule-12"))
+  (test-probe "(df f [] -> (Result Unit IoError) (println \"hi\"))" "rule-12"))
 
 (df test-arity-probe [] -> Bool
-  (test-probe "(defun f [(x Int64)] -> Int64 (+ x 1)) (defun g [] -> Int64 (f 1 2))" "arity"))
+  (test-probe "(df f [(x Int64)] -> Int64 (+ x 1)) (df g [] -> Int64 (f 1 2))" "arity"))
 
 (df test-ctor-probe [] -> Bool
-  (test-probe "(defschema Pt (:field x Int64 \"x\") (:field y Int64 \"y\")) (defun f [] -> Pt (Pt :x 1))" "ctor"))
+  (test-probe "(defschema Pt (:field x Int64 \"x\") (:field y Int64 \"y\")) (df f [] -> Pt (Pt :x 1))" "ctor"))
 
 (df test-not-callable-probe [] -> Bool
-  (test-probe "(defun f [] -> Int64 (-1 2))" "not-callable"))
+  (test-probe "(df f [] -> Int64 (-1 2))" "not-callable"))
 
 (df test-builtin-ref-probe [] -> Bool
-  (test-probe "(defun shout [(xs (List String))] -> (List String) (map string-upper xs))" "builtin-reference"))
+  (test-probe "(df shout [(xs (List String))] -> (List String) (map string-upper xs))" "builtin-reference"))
 
 (df test-resolve [] -> String
   :d "Unit tests for resolve"

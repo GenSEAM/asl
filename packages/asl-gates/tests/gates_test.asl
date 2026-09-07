@@ -9,7 +9,7 @@
 
 (df test-syntax-valid [] -> Bool
   :d "Verifies clean syntax passes gate parser check."
-  (g/verify-source-syntax "(module test/m :doc \"d\" :export [f]) (defun f [(x Int64)] -> Int64 :doc \"f\" (+ x 1))"))
+  (g/verify-source-syntax "(module test/m :doc \"d\" :export [f]) (df f [(x Int64)] -> Int64 :doc \"f\" (+ x 1))"))
 
 (df test-syntax-invalid [] -> Bool
   :d "Verifies invalid syntax is rejected by gate parser."

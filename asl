@@ -474,6 +474,17 @@ case "$CMD" in
           echo "    ✓ $f: structurally balanced, 0 assertions found."
         fi
       else
+        EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+        if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+          TEST_EXIT=0
+          TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$TARGET" 2>&1)" || TEST_EXIT=$?
+          if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -q "ERR_ASSERTION_FAILED"; then
+            echo "    ✗ $f: Assertion failure during test execution"
+            echo "      $TEST_OUT"
+            FAIL=1
+            continue
+          fi
+        fi
         echo "    ✓ $f: $ASSERT_COUNT assertion(s) executed and recorded cleanly."
       fi
     done
