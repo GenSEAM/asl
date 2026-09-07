@@ -366,7 +366,7 @@ function extractStrings(str: string) {
           exportedFns.push(`export function ${fnNameCamel}() {\n  return ${JSON.stringify(resolvedStr)};\n}`);
         }
 
-        exportedComponents.push(`export const ${fnNamePascal} = ({ className = '', title = '', strokeWidth, ...props } = {}) => {
+        exportedComponents.push(`export function ${fnNamePascal}({ className = '', title = '', strokeWidth, ...props } = {}) {
   let html = typeof ${fnNameCamel} === 'function' ? ${fnNameCamel}() : '';
   if (className) {
     if (html.startsWith('<svg')) {
@@ -396,7 +396,7 @@ function extractStrings(str: string) {
     style: { display: 'contents' },
     dangerouslySetInnerHTML: { __html: html }
   });
-};`);
+}`);
       }
 
       const componentName = rawFilename
@@ -406,23 +406,22 @@ function extractStrings(str: string) {
       const primaryRenderFn = exportedFns.find(fn => fn.includes('render') || fn.includes('View'));
       const renderFnName = primaryRenderFn ? primaryRenderFn.split(' ')[2].split('(')[0] : null;
 
-      const alreadyDeclared = exportedComponents.some(c => c.startsWith(`export const ${componentName} =`));
+      const alreadyDeclared = exportedComponents.some(c => c.startsWith(`export function ${componentName}(`));
       const defaultComponentDecl = alreadyDeclared
-        ? ''
-        : `export const ${componentName} = ({ className = '', ...props } = {}) => {\n` +
+        ? `export { ${componentName} as default };\n`
+        : `export function ${componentName}({ className = '', ...props } = {}) {\n` +
           `  const html = typeof ${renderFnName} === 'function' ? ${renderFnName}(props) : '';\n` +
           `  return React.createElement('div', {\n` +
           `    className: 'asl-${rawFilename.toLowerCase()} ' + (className || ''),\n` +
           `    dangerouslySetInnerHTML: html ? { __html: html } : undefined\n` +
           `  }, (!html && props && props.children) || null);\n` +
-          `};\n\n`;
+          `}\nexport { ${componentName} as default };\n`;
 
       return {
         code: `import React from 'react';\n\n` +
           exportedFns.join('\n\n') + '\n\n' +
           exportedComponents.join('\n\n') + '\n\n' +
-          defaultComponentDecl +
-          `export default ${componentName};\n`,
+          defaultComponentDecl,
         map: null
       };
     }
