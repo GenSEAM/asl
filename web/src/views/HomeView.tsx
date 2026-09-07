@@ -2,7 +2,7 @@ import React from 'react';
 import { Hero } from '../components/Hero';
 import { Ecosystem } from '../components/Ecosystem';
 import { KeyCapabilities } from '../components/KeyCapabilities';
-import TheAgentWay from '../../asl-src/components/TheAgentWay.asl';
+import { TheAgentWay } from '../components/TheAgentWay';
 import { InBrowserAgent } from '../components/InBrowserAgent';
 import { AgentWireProtocol } from '../components/AgentWireProtocol';
 import HarnessToolkit from '../../asl-src/components/HarnessToolkit.asl';
