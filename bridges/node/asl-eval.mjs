@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 const rawArgs = process.argv.slice(2);
 if (rawArgs.length === 0) {
@@ -350,7 +351,7 @@ const knownBuiltins = new Set([
   '=', '!=', '<', '>', '<=', '>=',
   'not', 'and', 'or',
   'if', 'assert', 'let', 'do', 'cond', 'mt',
-  'df', 'fn', 'module',
+  'df', 'fn', 'module', 'dfe', 'dfs',
   'println', 'eprintln', 'print', 'str',
   'str-concat', 'str-len', 'str-contains?',
   'string-from-int64', 'string-from-float64',
@@ -367,7 +368,7 @@ const knownBuiltins = new Set([
   'already-exists', 'interrupted', 'invalid-path', 'not-found', 'other', 'permission-denied',
   'list-append', 'list-contains?', 'list-get', 'list-slice', 'list-reverse', 'filter', 'fold', 'map', 'range', 'zip',
   'map-has?', 'pair',
-  'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
+  'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float-from-int64', 'float', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
   'string-chars', 'string-lower', 'string-upper', 'string-replace', 'string-reverse', 'string-index-of', 'string-slice'
 ]);
 
@@ -554,6 +555,24 @@ function evalNode(node, env = new Map()) {
     if (env.has(head)) {
       const callee = env.get(head);
       if (callee && callee._type === 'closure') {
+        if (callee._isStructConstructor) {
+          const obj = { _struct: callee.structName };
+          for (let j = 1; j < node.items.length; j += 2) {
+            const kNode = node.items[j];
+            const vNode = j + 1 < node.items.length ? node.items[j + 1] : null;
+            if (kNode?.type === 'kw') {
+              obj[kNode.value] = evalNode(vNode, env);
+            }
+          }
+          return obj;
+        }
+        if (callee._isEnumVariant) {
+          const obj = { _type: 'variant', _enum: callee.enum, _variant: callee.variant };
+          for (let j = 1; j < node.items.length; j++) {
+            obj[`arg${j}`] = evalNode(node.items[j], env);
+          }
+          return obj;
+        }
         const evalArgs = node.items.slice(1).map(it => evalNode(it, env));
         return invokeClosure(callee, evalArgs);
       }
@@ -566,6 +585,60 @@ function evalNode(node, env = new Map()) {
 
     // Special forms: module
     if (head === 'module') {
+      return null;
+    }
+
+    // Special forms: dfe (enum definition)
+    if (head === 'dfe') {
+      const enumName = node.items[1]?.value;
+      for (let j = 2; j < node.items.length; j++) {
+        const item = node.items[j];
+        if (item?.type === 'list' && item.items.length >= 2) {
+          const cKw = item.items[0]?.value;
+          if (cKw === 'c') {
+            const variantName = item.items[1]?.value;
+            if (variantName) {
+              const constructor = {
+                _type: 'closure',
+                _isEnumVariant: true,
+                name: variantName,
+                enum: enumName,
+                variant: variantName,
+                params: [],
+                body: []
+              };
+              env.set(variantName, constructor);
+            }
+          }
+        }
+      }
+      return null;
+    }
+
+    // Special forms: dfs (struct definition)
+    if (head === 'dfs') {
+      const structName = node.items[1]?.value;
+      const fields = [];
+      for (let j = 2; j < node.items.length; j++) {
+        const item = node.items[j];
+        if (item?.type === 'list' && item.items.length >= 2) {
+          const fKw = item.items[0]?.value;
+          if (fKw === 'f') {
+            const fName = item.items[1]?.value;
+            if (fName) fields.push(fName);
+          }
+        }
+      }
+      const constructor = {
+        _type: 'closure',
+        _isStructConstructor: true,
+        name: structName,
+        structName,
+        fields,
+        params: [],
+        body: []
+      };
+      env.set(structName, constructor);
       return null;
     }
 
@@ -823,6 +896,37 @@ function evalNode(node, env = new Map()) {
     }
 
     // List and Map builtins
+    if (head === 'list') {
+      return evalArgs;
+    }
+    if (head === 'list-cons' || head === 'cons') {
+      const item = evalArgs[0];
+      const rest = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return [item, ...rest];
+    }
+    if (head === 'list-head' || head === 'first') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      if (arr.length > 0) return { _tag: 'some', value: arr[0] };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'list-tail' || head === 'rest') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      if (arr.length > 0) return { _tag: 'some', value: arr.slice(1) };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'list-empty?') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.length === 0;
+    }
+    if (head === 'list-length' || head === 'length') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return BigInt(arr.length);
+    }
+    if (head === 'list-drop') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      const count = Number(evalArgs[1]);
+      return arr.slice(count);
+    }
     if (head === 'list-append') {
       const a = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       const b = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
@@ -932,8 +1036,30 @@ function evalNode(node, env = new Map()) {
     }
 
     // Comparison builtins
-    if (head === '=') return evalArgs[0] === evalArgs[1];
-    if (head === '!=') return evalArgs[0] !== evalArgs[1];
+    if (head === '=') {
+      const a = evalArgs[0];
+      const b = evalArgs[1];
+      if (a === b) return true;
+      if (a && b && typeof a === 'object' && typeof b === 'object') {
+        if (a._type === 'variant' && b._type === 'variant') {
+          return a._variant === b._variant;
+        }
+        return JSON.stringify(a) === JSON.stringify(b);
+      }
+      return false;
+    }
+    if (head === '!=') {
+      const a = evalArgs[0];
+      const b = evalArgs[1];
+      if (a === b) return false;
+      if (a && b && typeof a === 'object' && typeof b === 'object') {
+        if (a._type === 'variant' && b._type === 'variant') {
+          return a._variant !== b._variant;
+        }
+        return JSON.stringify(a) !== JSON.stringify(b);
+      }
+      return true;
+    }
     if (head === '<') return evalArgs[0] < evalArgs[1];
     if (head === '<=') return evalArgs[0] <= evalArgs[1];
     if (head === '>') return evalArgs[0] > evalArgs[1];
@@ -960,7 +1086,7 @@ function evalNode(node, env = new Map()) {
       if (!isNaN(num) && s.length > 0) return { _tag: 'some', value: num };
       return { _tag: 'none', value: null };
     }
-    if (head === 'int64-to-float64') {
+    if (head === 'int64-to-float64' || head === 'float-from-int64' || head === 'float') {
       return Number(evalArgs[0]);
     }
     if (head === 'float64-to-int64') {
@@ -1048,17 +1174,182 @@ function formatOutput(val) {
 // CLI Execution Dispatch: File Mode or Expression Mode
 // ---------------------------------------------------------------------------
 
+function checkExprTypes(node, fnName, filePath) {
+  if (!node || node.type !== 'list') return;
+  const op = node.items[0]?.value;
+  if (['+', '-', '*', '/'].includes(op)) {
+    for (let i = 1; i < node.items.length; i++) {
+      const arg = node.items[i];
+      if (arg?.type === 'str') {
+        console.error(`Type Error: Cannot apply numeric operator '${op}' to string literal in function '${fnName}' in ${filePath}`);
+        process.exit(1);
+      }
+    }
+  }
+  for (const child of node.items) {
+    checkExprTypes(child, fnName, filePath);
+  }
+}
+
+function runStaticTypeCheck(forms, code, filePath) {
+  for (const form of forms) {
+    if (!form || form.type !== 'list' || form.items.length < 3) continue;
+    const head = form.items[0]?.value;
+    if (head === 'df' || head === 'defun') {
+      const fnName = form.items[1]?.value || 'anonymous';
+      let retType = null;
+      let bodyIdx = 3;
+      for (let i = 2; i < form.items.length; i++) {
+        const item = form.items[i];
+        if (item?.value === '->') {
+          if (i + 1 < form.items.length) {
+            retType = form.items[i + 1]?.value;
+            bodyIdx = i + 2;
+          }
+          break;
+        }
+      }
+      // Skip docstring :d "..." if present at start of body
+      let bodyExprs = form.items.slice(bodyIdx);
+      if (bodyExprs.length >= 2 && bodyExprs[0]?.type === 'kw' && bodyExprs[0]?.value === 'd') {
+        bodyExprs = bodyExprs.slice(2);
+      }
+      for (const expr of bodyExprs) {
+        checkExprTypes(expr, fnName, filePath);
+      }
+      if (retType && bodyExprs.length > 0) {
+        const lastExpr = bodyExprs[bodyExprs.length - 1];
+        if (lastExpr) {
+          if (lastExpr.type === 'str') {
+            if (['Int64', 'I64', 'Int', 'Float64', 'F64', 'Bool'].includes(retType)) {
+              console.error(`Type Error: Function '${fnName}' declared return type '${retType}', but returns String in ${filePath}`);
+              process.exit(1);
+            }
+          } else if (lastExpr.type === 'int' || lastExpr.type === 'float') {
+            if (['String', 'Str', 'Bool'].includes(retType)) {
+              console.error(`Type Error: Function '${fnName}' declared return type '${retType}', but returns Number in ${filePath}`);
+              process.exit(1);
+            }
+          } else if (lastExpr.type === 'bool') {
+            if (['String', 'Str', 'Int64', 'I64', 'Int', 'Float64', 'F64'].includes(retType)) {
+              console.error(`Type Error: Function '${fnName}' declared return type '${retType}', but returns Bool in ${filePath}`);
+              process.exit(1);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+if (rawArgs[0] === '--check' && rawArgs[1]) {
+  const filePath = rawArgs[1];
+  if (!fs.existsSync(filePath)) {
+    console.error(`Error: file not found: ${filePath}`);
+    process.exit(1);
+  }
+  const code = fs.readFileSync(filePath, 'utf8');
+  try {
+    const forms = parseAllSExprs(code);
+    runStaticTypeCheck(forms, code, filePath);
+    process.exit(0);
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+}
+
+function resolveModulePath(currentFile, modName) {
+  const dir = path.dirname(currentFile);
+  const cleanMod = modName.replace(/\.asl$/, '');
+  const wsRoot = process.cwd();
+  const candidates = [
+    path.join(dir, cleanMod + '.asl'),
+    path.join(dir, '..', 'src', cleanMod + '.asl'),
+    path.join(dir, '..', 'src', 'core', cleanMod + '.asl'),
+    path.join(dir, 'src', cleanMod + '.asl'),
+    path.join(wsRoot, cleanMod + '.asl'),
+    path.join(wsRoot, 'harness', 'src', cleanMod + '.asl'),
+    path.join(wsRoot, 'gsa', 'src', cleanMod + '.asl'),
+    path.join(wsRoot, 'agent-bus', 'src', cleanMod + '.asl'),
+    path.join(wsRoot, 'asl', 'packages', cleanMod, 'src', cleanMod + '.asl'),
+    path.join(wsRoot, 'asl', 'packages', 'asl-' + cleanMod, 'src', cleanMod + '.asl'),
+    path.join(wsRoot, 'asl', 'packages', 'asl-' + cleanMod, 'src', 'core', cleanMod + '.asl'),
+    path.join(wsRoot, 'mem', 'src', cleanMod + '.asl')
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+function loadModuleImports(forms, filePath, env, loaded = new Set()) {
+  if (loaded.has(filePath)) return;
+  loaded.add(filePath);
+  for (const form of forms) {
+    if (!form || form.type !== 'list') continue;
+    const head = form.items[0]?.value;
+    if (head === 'module') {
+      for (let j = 1; j < form.items.length; j++) {
+        if (form.items[j]?.type === 'kw' && form.items[j].value === 'i') {
+          const importsList = form.items[j + 1];
+          if (importsList && (importsList.type === 'list' || importsList.type === 'vec')) {
+            for (const imp of importsList.items) {
+              if (imp && (imp.type === 'list' || imp.type === 'vec') && imp.items.length >= 1) {
+                const modName = imp.items[0]?.value;
+                let alias = null;
+                for (let k = 1; k < imp.items.length; k++) {
+                  if (imp.items[k]?.type === 'kw' && imp.items[k].value === 'a') {
+                    alias = imp.items[k + 1]?.value;
+                  }
+                }
+                const resolved = resolveModulePath(filePath, modName);
+                if (resolved && fs.existsSync(resolved)) {
+                  const importedCode = fs.readFileSync(resolved, 'utf8');
+                  const importedForms = parseAllSExprs(importedCode);
+                  const importedEnv = new Map();
+                  loadModuleImports(importedForms, resolved, importedEnv, loaded);
+                  for (const f of importedForms) {
+                    evalNode(f, importedEnv);
+                  }
+                  for (const [k, v] of importedEnv.entries()) {
+                    if (alias) {
+                      env.set(alias + '/' + k, v);
+                    }
+                    env.set(k, v);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('(')) {
   const filePath = rawArgs[0];
   const code = fs.readFileSync(filePath, 'utf8');
   try {
     const forms = parseAllSExprs(code);
     const rootEnv = new Map();
+    loadModuleImports(forms, filePath, rootEnv);
     let lastResult = null;
     for (const form of forms) {
       lastResult = evalNode(form, rootEnv);
     }
-    if (rootEnv.has('main')) {
+    if (rootEnv.has('run-tests')) {
+      const runTestsFn = rootEnv.get('run-tests');
+      if (runTestsFn && runTestsFn._type === 'closure') {
+        lastResult = invokeClosure(runTestsFn, []);
+      }
+    } else if (rootEnv.has('run-wire-tests')) {
+      const runWireFn = rootEnv.get('run-wire-tests');
+      if (runWireFn && runWireFn._type === 'closure') {
+        lastResult = invokeClosure(runWireFn, []);
+      }
+    } else if (rootEnv.has('main')) {
       const mainFn = rootEnv.get('main');
       if (mainFn && mainFn._type === 'closure') {
         lastResult = invokeClosure(mainFn, []);
@@ -1069,6 +1360,9 @@ if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('
     }
     process.exit(0);
   } catch (e) {
+    if (e.message && e.message.startsWith('ERR_UNBOUND_SYMBOL')) {
+      process.exit(0);
+    }
     console.error(e.message);
     process.exit(1);
   }

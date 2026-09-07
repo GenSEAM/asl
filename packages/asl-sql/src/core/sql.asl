@@ -5,7 +5,7 @@
            is-parameterized is-literal-param col-expr str-expr int-expr bool-expr raw-expr json-get-expr
            make-join make-select render-binary-op render-placeholder render-json-path
            render-expr-str count-params render-select count-pair-params render-logical-op
-           collect-params]
+           collect-params collect-joins-params render-joins-indexed render-where-clause-indexed]
   :i [(core/strings :a s)])
 
 (dfe SqlDialect
@@ -180,6 +180,16 @@
       ((not-expr inner) (collect-params inner))
       (_                (list)))))
 
+(df collect-joins-params [(joins (List SqlJoin))] -> (List SqlExpr)
+  :d "Walks all joins and extracts literal parameters across ON clauses."
+  (if (list-empty? joins)
+    (list)
+    (mt (list-head joins)
+      ((some j)
+       (let [(rest-joins (mt (list-tail joins) ((some r) r) ((none) (list))))]
+         (list-concat (collect-params (.-on-clause j)) (collect-joins-params rest-joins))))
+      ((none) (list)))))
+
 (df is-parameterized [(expr SqlExpr)] -> Bool
   :d "Returns true if expression contains literal parameters that need binding."
   (> (count-params expr) 0))
@@ -232,15 +242,29 @@
     ((right-join) "RIGHT JOIN")
     ((full-join)  "FULL JOIN")))
 
-(df render-join-clause [(j SqlJoin) (dialect SqlDialect)] -> String
-  :d "Renders a single JOIN clause fragment."
-  (str (render-join-type (.-join-type j)) " " (.-table j) " ON " (render-expr-str (.-on-clause j) dialect 1)))
+(df render-join-clause [(j SqlJoin) (dialect SqlDialect) (param-idx Int64)] -> String
+  :d "Renders a single JOIN clause fragment with starting parameter index."
+  (str (render-join-type (.-join-type j)) " " (.-table j) " ON " (render-expr-str (.-on-clause j) dialect param-idx)))
+
+(df render-joins-indexed [(joins (List SqlJoin)) (dialect SqlDialect) (param-idx Int64)] -> String
+  :d "Renders all JOIN clauses sequentially with threaded parameter indices."
+  (if (list-empty? joins)
+    ""
+    (mt (list-head joins)
+      ((some j)
+       (let [(clause-sql (render-join-clause j dialect param-idx))
+             (j-params-count (count-params (.-on-clause j)))
+             (next-idx (+ param-idx j-params-count))
+             (rest-joins (mt (list-tail joins) ((some r) r) ((none) (list))))
+             (rest-sql (render-joins-indexed rest-joins dialect next-idx))]
+         (if (> (string-length rest-sql) 0)
+           (str " " clause-sql rest-sql)
+           (str " " clause-sql))))
+      ((none) ""))))
 
 (df render-joins [(joins (List SqlJoin)) (dialect SqlDialect)] -> String
   :d "Renders all JOIN clauses sequentially."
-  (if (list-empty? joins)
-    ""
-    (str " " (string-join (map (fn [j] (render-join-clause j dialect)) joins) " "))))
+  (render-joins-indexed joins dialect 1))
 
 (df render-order-dir [(dir OrderDir)] -> String
   :d "Renders ORDER BY direction token."
@@ -278,11 +302,15 @@
     ""
     (str " RETURNING " (string-join cols ", "))))
 
-(df render-where-clause [(where-opt (Option SqlExpr)) (dialect SqlDialect)] -> String
-  :d "Renders WHERE clause SQL string if present."
+(df render-where-clause-indexed [(where-opt (Option SqlExpr)) (dialect SqlDialect) (param-idx Int64)] -> String
+  :d "Renders WHERE clause SQL string if present with custom parameter offset."
   (mt where-opt
     ((none) "")
-    ((some w-expr) (str " WHERE " (render-expr-str w-expr dialect 1)))))
+    ((some w-expr) (str " WHERE " (render-expr-str w-expr dialect param-idx)))))
+
+(df render-where-clause [(where-opt (Option SqlExpr)) (dialect SqlDialect)] -> String
+  :d "Renders WHERE clause SQL string if present."
+  (render-where-clause-indexed where-opt dialect 1))
 
 (df extract-where-params [(where-opt (Option SqlExpr))] -> (List SqlExpr)
   :d "Extracts literal parameter list from optional WHERE clause."
@@ -293,17 +321,21 @@
 (df render-select [(q SelectQuery) (dialect SqlDialect)] -> RenderedQuery
   :d "Renders a complete SelectQuery into parameterized SQL string."
   (let [(base-sql (str "SELECT " (string-join (.-columns q) ", ") " FROM " (.-from-table q)))
-        (joins-sql (render-joins (.-joins q) dialect))
-        (where-sql (render-where-clause (.-where-clause q) dialect))
+        (join-params (collect-joins-params (.-joins q)))
+        (join-params-count (list-length join-params))
+        (joins-sql (render-joins-indexed (.-joins q) dialect 1))
+        (where-start-idx (+ 1 join-params-count))
+        (where-sql (render-where-clause-indexed (.-where-clause q) dialect where-start-idx))
         (order-sql (render-order-by (.-order-column q) (.-order-dir q)))
         (limit-sql (render-limit (.-limit-count q)))
         (offset-sql (render-offset (.-offset-count q)))
         (lock-sql (render-for-update (.-for-update-skip-locked q)))
         (return-sql (render-returning (.-returning-columns q)))
         (full-sql (str base-sql joins-sql where-sql order-sql limit-sql offset-sql lock-sql return-sql))
-        (params (extract-where-params (.-where-clause q)))
-        (p-count (list-length params))]
+        (where-params (extract-where-params (.-where-clause q)))
+        (all-params (list-concat join-params where-params))
+        (p-count (list-length all-params))]
     (RenderedQuery :sql full-sql
                    :query-sql full-sql
                    :param-count p-count
-                   :params params)))
+                   :params all-params)))

@@ -14,7 +14,8 @@
   (:c val-null [] "Unit / Null value")
   (:c val-list [(items (List EvalValue))] "List of values")
   (:c val-vect [(items (List EvalValue))] "Vector of values")
-  (:c val-error [(msg String)] "Error value"))
+  (:c val-error [(msg String)] "Error value")
+  (:c val-closure [(name String) (params (List String)) (body rd/SExpr) (env EvalEnv)] "Lexical closure function value"))
 
 (dfs EvalEnv
   (:f bindings (Map String EvalValue) "Current scope frame bindings")
@@ -62,7 +63,8 @@
     ((val-float f) (!= f 0.0))
     ((val-str s) (not (string-empty? s)))
     ((val-list items) (not (list-empty? items)))
-    ((val-vect items) (not (list-empty? items)))))
+    ((val-vect items) (not (list-empty? items)))
+    ((val-closure _ _ _ _) true)))
 
 (df eval-result-is-ok? [(v EvalValue)] -> Bool
   :d "Returns true if the evaluation produced a valid non-error result."
@@ -74,7 +76,8 @@
     ((val-bool _) true)
     ((val-null) true)
     ((val-list _) true)
-    ((val-vect _) true)))
+    ((val-vect _) true)
+    ((val-closure _ _ _ _) true)))
 
 (df eval-assert [(cond-val EvalValue) (msg-str String)] -> EvalValue
   :d "Falsifiable assertion returning val-bool true on success or val-error on failure."
@@ -134,7 +137,8 @@
        ((val-null) false)
        ((val-list _) false)
        ((val-vect _) false)
-       ((val-error _) false)))
+       ((val-error _) false)
+       ((val-closure _ _ _ _) false)))
     ((val-float af)
      (mt b
        ((val-float bf) (= af bf))
@@ -144,7 +148,8 @@
        ((val-null) false)
        ((val-list _) false)
        ((val-vect _) false)
-       ((val-error _) false)))
+       ((val-error _) false)
+       ((val-closure _ _ _ _) false)))
     ((val-str as)
      (mt b
        ((val-str bs) (= as bs))
@@ -154,7 +159,8 @@
        ((val-null) false)
        ((val-list _) false)
        ((val-vect _) false)
-       ((val-error _) false)))
+       ((val-error _) false)
+       ((val-closure _ _ _ _) false)))
     ((val-bool ab)
      (mt b
        ((val-bool bb) (= ab bb))
@@ -164,7 +170,8 @@
        ((val-null) false)
        ((val-list _) false)
        ((val-vect _) false)
-       ((val-error _) false)))
+       ((val-error _) false)
+       ((val-closure _ _ _ _) false)))
     ((val-null)
      (mt b
        ((val-null) true)
@@ -174,10 +181,12 @@
        ((val-bool _) false)
        ((val-list _) false)
        ((val-vect _) false)
-       ((val-error _) false)))
+       ((val-error _) false)
+       ((val-closure _ _ _ _) false)))
     ((val-list _) false)
     ((val-vect _) false)
-    ((val-error _) false)))
+    ((val-error _) false)
+    ((val-closure _ _ _ _) false)))
 
 (df eval-builtin-comparison [(op String) (a EvalValue) (b EvalValue)] -> EvalValue
   :d "Evaluates binary comparison operations between EvalValues."
@@ -195,14 +204,16 @@
           ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+          ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
        ((val-float _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-str _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-bool _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+       ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
     ((= op "<=")
      (mt a
        ((val-int ai)
@@ -214,14 +225,16 @@
           ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+          ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
        ((val-float _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-str _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-bool _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+       ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
     ((= op ">")
      (mt a
        ((val-int ai)
@@ -233,14 +246,16 @@
           ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+          ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
        ((val-float _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-str _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-bool _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+       ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
     ((= op ">=")
      (mt a
        ((val-int ai)
@@ -252,14 +267,16 @@
           ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
           ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+          ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+          ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
        ((val-float _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-str _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-bool _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-null) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-list _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
        ((val-vect _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
-       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
+       ((val-error _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))
+       ((val-closure _ _ _ _) (val-error "ERR_TYPE_MISMATCH_COMPARISON"))))
     (:else (val-error (str "ERR_UNKNOWN_COMPARISON_OP: " op)))))
 
 (df eval-builtin-logic [(op String) (a Bool) (b Bool)] -> EvalValue
@@ -340,8 +357,160 @@
        ((none) (val-error "ERR_MISSING_ARGUMENT"))))
     (:else (val-error (str "ERR_UNKNOWN_LIST_OP: " op)))))
 
+(df extract-param-name [(p rd/SExpr)] -> String
+  :d "Extracts parameter identifier string from symbol atom or typed pair."
+  (mt p
+    ((rd/sexpr-atom name) name)
+    ((rd/sexpr-list items)
+     (mt (list-head items)
+       ((some (rd/sexpr-atom name)) name)
+       ((some _) "")
+       ((none) "")))
+    ((rd/sexpr-vect items)
+     (mt (list-head items)
+       ((some (rd/sexpr-atom name)) name)
+       ((some _) "")
+       ((none) "")))))
+
+(df extract-param-names-list [(items (List rd/SExpr))] -> (List String)
+  :d "Extracts list of parameter names from a list of SExpr parameters."
+  (mt (list-head items)
+    ((some h)
+     (list-cons (extract-param-name h)
+                (mt (list-tail items)
+                  ((some rest) (extract-param-names-list rest))
+                  ((none) (list)))))
+    ((none) (list))))
+
+(df skip-type-and-doc [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Skips optional return type and docstring annotations in function declarations."
+  (mt (list-head items)
+    ((some (rd/sexpr-atom a))
+     (if (= a "->")
+         (mt (list-tail items)
+           ((some rest1)
+            (mt (list-tail rest1)
+              ((some rest2) (skip-type-and-doc rest2))
+              ((none) (list))))
+           ((none) (list)))
+         (if (or (= a ":d") (= a "d"))
+             (mt (list-tail items)
+               ((some rest1)
+                (mt (list-tail rest1)
+                  ((some rest2) (skip-type-and-doc rest2))
+                  ((none) (list))))
+               ((none) (list)))
+             items)))
+    ((some _) items)
+    ((none) (list))))
+
+(df extract-fn-body [(rest (List rd/SExpr))] -> rd/SExpr
+  :d "Extracts and wraps function body SExpr from declaration tail."
+  (let [(body-items (skip-type-and-doc rest))]
+    (mt (list-head body-items)
+      ((some first-expr)
+       (mt (list-tail body-items)
+         ((some tail-exprs)
+          (if (list-empty? tail-exprs)
+              first-expr
+              (rd/make-list (list-cons (rd/make-atom "do") body-items))))
+         ((none) first-expr)))
+      ((none) (rd/make-atom "null")))))
+
+(df bind-params [(env EvalEnv) (params (List String)) (args (List EvalValue))] -> EvalEnv
+  :d "Binds formal parameters to evaluated arguments in environment."
+  (mt (list-head params)
+    ((some p)
+     (mt (list-head args)
+       ((some a)
+        (let [(next-env (env-bind env p a))]
+          (mt (list-tail params)
+            ((some p-rest)
+             (mt (list-tail args)
+               ((some a-rest) (bind-params next-env p-rest a-rest))
+               ((none) next-env)))
+            ((none) next-env))))
+       ((none) env)))
+    ((none) env)))
+
+(df apply-closure [(closure EvalValue) (arg-vals (List EvalValue))] -> EvalValue
+  :d "Invokes a closure with evaluated arguments in its captured lexical environment."
+  (mt closure
+    ((val-closure name params body captured-env)
+     (let [(base-env (make-child-env captured-env))]
+       (let [(env-with-self (if (= name "")
+                               base-env
+                               (env-bind base-env name closure)))]
+         (let [(call-env (bind-params env-with-self params arg-vals))]
+           (eval-sexpr body call-env)))))
+    ((val-error msg) (val-error msg))
+    ((val-int _) (val-error "ERR_NOT_A_FUNCTION"))
+    ((val-float _) (val-error "ERR_NOT_A_FUNCTION"))
+    ((val-str _) (val-error "ERR_NOT_A_FUNCTION"))
+    ((val-bool _) (val-error "ERR_NOT_A_FUNCTION"))
+    ((val-null) (val-error "ERR_NOT_A_FUNCTION"))
+    ((val-list _) (val-error "ERR_NOT_A_FUNCTION"))
+    ((val-vect _) (val-error "ERR_NOT_A_FUNCTION"))))
+
+(df bind-let-flat [(items (List rd/SExpr)) (env EvalEnv)] -> EvalEnv
+  :d "Sequentially evaluates and binds flat let binding pairs."
+  (mt (list-head items)
+    ((some name-expr)
+     (let [(var-name (extract-param-name name-expr))]
+       (mt (list-tail items)
+         ((some rest1)
+          (mt (list-head rest1)
+            ((some val-expr)
+             (let [(val (eval-sexpr val-expr env))]
+               (let [(next-env (env-bind env var-name val))]
+                 (mt (list-tail rest1)
+                   ((some rest2) (bind-let-flat rest2 next-env))
+                   ((none) next-env)))))
+            ((none) env)))
+         ((none) env))))
+    ((none) env)))
+
+(df bind-let-nested [(items (List rd/SExpr)) (env EvalEnv)] -> EvalEnv
+  :d "Sequentially evaluates and binds nested let binding pairs."
+  (mt (list-head items)
+    ((some pair-expr)
+     (let [(pair-items (mt pair-expr
+                         ((rd/sexpr-list pi) pi)
+                         ((rd/sexpr-vect pi) pi)
+                         ((rd/sexpr-atom _) (list))))]
+       (mt (list-head pair-items)
+         ((some name-expr)
+          (let [(var-name (extract-param-name name-expr))]
+            (mt (list-tail pair-items)
+              ((some val-rest)
+               (mt (list-head val-rest)
+                 ((some val-expr)
+                  (let [(val (eval-sexpr val-expr env))]
+                    (let [(next-env (env-bind env var-name val))]
+                      (mt (list-tail items)
+                        ((some rest) (bind-let-nested rest next-env))
+                        ((none) next-env)))))
+                 ((none) env)))
+              ((none) env))))
+         ((none) env))))
+    ((none) env)))
+
+(df bind-let-bindings [(bindings-expr rd/SExpr) (env EvalEnv)] -> EvalEnv
+  :d "Dispatches flat vs nested let binding vectors."
+  (let [(items (mt bindings-expr
+                 ((rd/sexpr-vect it) it)
+                 ((rd/sexpr-list it) it)
+                 ((rd/sexpr-atom _) (list))))]
+    (mt (list-head items)
+      ((some first-item)
+       (mt first-item
+         ((rd/sexpr-atom _) (bind-let-flat items env))
+         ((rd/sexpr-list _) (bind-let-nested items env))
+         ((rd/sexpr-vect _) (bind-let-nested items env))))
+      ((none) env))))
+
 (df eval-special-form [(op String) (args (List rd/SExpr)) (env EvalEnv)] -> EvalValue
-  :d "Evaluates special forms including if, assert, let, and do."
+  :d "Evaluates special forms including if, assert, let, do, df, fn, and module."
   (cond
     ((= op "if")
      (mt (list-head args)
@@ -378,7 +547,8 @@
                              ((val-null) "Assertion failed")
                              ((val-list _) "Assertion failed")
                              ((val-vect _) "Assertion failed")
-                             ((val-error _) "Assertion failed")))
+                             ((val-error _) "Assertion failed")
+                             ((val-closure _ _ _ _) "Assertion failed")))
                           ((none) "Assertion failed")))
                        ((none) "Assertion failed")))]
             (eval-assert c-val msg))))
@@ -391,9 +561,66 @@
             ((some rest)
              (if (list-empty? rest)
                  first-res
-                 (eval-special-form "do" rest env)))
+                 (let [(next-env (mt first-res
+                                   ((val-closure name _ _ _)
+                                    (if (= name "") env (env-bind env name first-res)))
+                                   ((val-int _) env)
+                                   ((val-float _) env)
+                                   ((val-str _) env)
+                                   ((val-bool _) env)
+                                   ((val-null) env)
+                                   ((val-list _) env)
+                                   ((val-vect _) env)
+                                   ((val-error _) env)))]
+                   (eval-special-form "do" rest next-env))))
             ((none) first-res))))
        ((none) (val-null))))
+    ((= op "let")
+     (mt (list-head args)
+       ((some bindings-expr)
+        (let [(child-env (make-child-env env))]
+          (let [(bound-env (bind-let-bindings bindings-expr child-env))]
+            (mt (list-tail args)
+              ((some body-exprs)
+               (eval-special-form "do" body-exprs bound-env))
+              ((none) (val-null))))))
+       ((none) (val-error "ERR_MALFORMED_LET"))))
+    ((= op "module") (val-null))
+    ((= op "df")
+     (mt (list-head args)
+       ((some name-expr)
+        (let [(name (extract-param-name name-expr))]
+          (mt (list-tail args)
+            ((some after-name)
+             (mt (list-head after-name)
+               ((some params-expr)
+                (let [(params (extract-param-names-list
+                               (mt params-expr
+                                 ((rd/sexpr-vect pi) pi)
+                                 ((rd/sexpr-list pi) pi)
+                                 ((rd/sexpr-atom _) (list)))))]
+                  (mt (list-tail after-name)
+                    ((some body-rest)
+                     (let [(body (extract-fn-body body-rest))]
+                       (val-closure name params body env)))
+                    ((none) (val-closure name params (rd/make-atom "null") env)))))
+               ((none) (val-error "ERR_MALFORMED_DF"))))
+            ((none) (val-error "ERR_MALFORMED_DF")))))
+       ((none) (val-error "ERR_MALFORMED_DF"))))
+    ((= op "fn")
+     (mt (list-head args)
+       ((some params-expr)
+        (let [(params (extract-param-names-list
+                       (mt params-expr
+                         ((rd/sexpr-vect pi) pi)
+                         ((rd/sexpr-list pi) pi)
+                         ((rd/sexpr-atom _) (list)))))]
+          (mt (list-tail args)
+            ((some body-rest)
+             (let [(body (extract-fn-body body-rest))]
+               (val-closure "" params body env)))
+            ((none) (val-closure "" params (rd/make-atom "null") env)))))
+       ((none) (val-error "ERR_MALFORMED_FN"))))
     (:else (val-error (str "ERR_UNKNOWN_SPECIAL_FORM: " op)))))
 
 (df eval-sexpr-list [(items (List rd/SExpr)) (env EvalEnv)] -> (List EvalValue)
@@ -417,7 +644,7 @@
         (mt h
           ((rd/sexpr-atom op)
            (cond
-             ((or (= op "if") (or (= op "assert") (= op "do")))
+             ((or (= op "if") (or (= op "assert") (or (= op "do") (or (= op "let") (or (= op "df") (or (= op "fn") (= op "module")))))))
               (mt (list-tail items)
                 ((some args) (eval-special-form op args env))
                 ((none) (eval-special-form op (list) env))))
@@ -475,8 +702,22 @@
               (mt (list-tail items)
                 ((some args) (eval-builtin-list op (eval-sexpr-list args env)))
                 ((none) (eval-builtin-list op (list)))))
-             (:else (val-error (str "ERR_UNKNOWN_PROCEDURE: " op)))))
-          ((rd/sexpr-list _) (val-error "ERR_UNSUPPORTED_APPLICATION_HEAD"))
+             (:else
+              (mt (env-lookup env op)
+                ((some func-val)
+                 (mt (list-tail items)
+                   ((some arg-exprs)
+                    (let [(arg-vals (eval-sexpr-list arg-exprs env))]
+                      (apply-closure func-val arg-vals)))
+                   ((none) (apply-closure func-val (list)))))
+                ((none) (val-error (str "ERR_UNKNOWN_PROCEDURE: " op)))))))
+          ((rd/sexpr-list _)
+           (let [(callee (eval-sexpr h env))]
+             (mt (list-tail items)
+               ((some arg-exprs)
+                (let [(arg-vals (eval-sexpr-list arg-exprs env))]
+                  (apply-closure callee arg-vals)))
+               ((none) (apply-closure callee (list))))))
           ((rd/sexpr-vect _) (val-error "ERR_UNSUPPORTED_APPLICATION_HEAD"))))
        ((none) (val-null))))))
 
@@ -490,4 +731,5 @@
     ((val-null) "null")
     ((val-error msg) (str "(error \"" msg "\")"))
     ((val-list items) (str "(" (string-join (map (fn [(it EvalValue)] -> String (format-val it)) items) " ") ")"))
-    ((val-vect items) (str "[" (string-join (map (fn [(it EvalValue)] -> String (format-val it)) items) " ") "]"))))
+    ((val-vect items) (str "[" (string-join (map (fn [(it EvalValue)] -> String (format-val it)) items) " ") "]"))
+    ((val-closure name _ _ _) (if (= name "") "(closure)" (str "(closure " name ")")))))

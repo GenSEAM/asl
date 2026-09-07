@@ -1,6 +1,6 @@
 (module asl-sql/test
   :d "Unit tests for native ASL cross-dialect SQL query builder and DDL generator."
-  :x [test-sql-select test-sql-dialects test-sql-ddl run-tests]
+  :x [test-sql-select test-sql-join-params test-sql-dialects test-sql-ddl run-tests]
   :i [(core :a sql)
       (ddl :a ddl)])
 
@@ -37,6 +37,36 @@
                                                  (and (string-contains? full-sql "FOR UPDATE SKIP LOCKED")
                                                       (string-contains? full-sql "RETURNING id")))))))))))))
 
+(df test-sql-join-params [] -> Bool
+  :d "Verifies SQL JOIN ON parameter collection and placeholder numbering."
+  (let [(j-cond1 (sql/binary (sql/eq) (sql/col-expr "orders.status") (sql/str-expr "completed")))
+        (j1 (sql/make-join (sql/inner-join) "orders" j-cond1))
+        (j-cond2 (sql/binary (sql/gt) (sql/col-expr "items.price") (sql/int-expr 100)))
+        (j2 (sql/make-join (sql/left-join) "items" j-cond2))
+        (where-cond (sql/binary (sql/eq) (sql/col-expr "users.active") (sql/bool-expr true)))
+        (q (sql/SelectQuery :columns (list "users.id" "orders.total")
+                            :from-table "users"
+                            :joins (list j1 j2)
+                            :where-clause (some where-cond)
+                            :order-column (none)
+                            :order-dir (sql/asc)
+                            :limit-count (none)
+                            :offset-count (none)
+                            :for-update-skip-locked false
+                            :returning-columns (list)))
+        (res-pg (sql/render-select q (sql/postgres)))
+        (res-sq (sql/render-select q (sql/sqlite)))
+        (sql-pg (.-sql res-pg))
+        (sql-sq (.-sql res-sq))]
+    (and (= (.-param-count res-pg) 3)
+         (and (= (list-length (.-params res-pg)) 3)
+              (and (string-contains? sql-pg "INNER JOIN orders ON orders.status = $1")
+                   (and (string-contains? sql-pg "LEFT JOIN items ON items.price > $2")
+                        (and (string-contains? sql-pg "WHERE users.active = $3")
+                             (and (string-contains? sql-sq "INNER JOIN orders ON orders.status = ?")
+                                  (and (string-contains? sql-sq "LEFT JOIN items ON items.price > ?")
+                                       (string-contains? sql-sq "WHERE users.active = ?"))))))))))
+
 (df test-sql-dialects [] -> Bool
   :d "Verifies dialect quoting and default dialects."
   (let [(q-pg (sql/dialect-quote-char (sql/postgres)))
@@ -69,5 +99,6 @@
   :d "Executes all SQL test assertions."
   (do
     (assert (test-sql-select))
+    (assert (test-sql-join-params))
     (assert (test-sql-dialects))
     (assert (test-sql-ddl))))

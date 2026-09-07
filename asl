@@ -326,6 +326,15 @@ case "$CMD" in
       if ! check_syntax_and_delimiters "$TARGET" "check"; then
         echo "    ✗ Check FAIL: $f delimiter balance or syntax error"
         FAIL=1
+        continue
+      fi
+      EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+      if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        if ! "$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" >/dev/null 2>&1; then
+          echo "    ✗ Check FAIL: $f static type inference or semantic error"
+          FAIL=1
+          continue
+        fi
       fi
     done
     exit $FAIL
@@ -859,6 +868,12 @@ case "$CMD" in
       echo "Usage: asl run <file.asl> [--wasm|--wat]"
       exit 1
     fi
+    RESOLVED="$(resolve_target_file "$TARGET")" || true
+    if [ -z "$RESOLVED" ] || [ ! -f "$RESOLVED" ]; then
+      echo "Error: file not found: $TARGET"
+      exit 1
+    fi
+    TARGET="$RESOLVED"
     IS_WASM=0
     IS_WAT=0
     for arg in "$@"; do
@@ -883,12 +898,12 @@ case "$CMD" in
       echo "  (export \"main\" (func \$main)))"
       exit 0
     fi
-    if [ "$IS_WASM" -eq 1 ]; then
-      echo "42"
-      exit 0
+    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+    if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+      exec "$NODE_BIN" "$EVAL_RUNNER" "$TARGET" "$@"
     fi
-    echo "42"
-    exit 0
+    echo "Error: Node runtime or evaluator bridge not found."
+    exit 1
     ;;
   exec|sh)
     exec "$@"
@@ -1075,6 +1090,8 @@ case "$CMD" in
     "$ROOT/asl" check "$FILE"
     if grep -qE '\(df[ \t]+(run-tests|test-)' "$FILE" >/dev/null 2>&1; then
       exec "$ROOT/asl" test "$FILE" "$@"
+    elif grep -qE '\(df[ \t]+main([ \t]|\))' "$FILE" >/dev/null 2>&1; then
+      exec "$ROOT/asl" run "$FILE" "$@"
     else
       echo "✓ Validated and verified pure ASL module: $FILE"
       exit 0

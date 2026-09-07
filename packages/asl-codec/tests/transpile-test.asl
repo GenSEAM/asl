@@ -72,12 +72,13 @@
 
 (df run-tests [] -> Bool
   :d "Runs all transpiler unit tests"
-  (and (test-json-to-asn-object)
-       (and (test-json-to-asn-array)
-            (and (test-asn-to-json)
-                 (and (test-yaml-to-asn)
-                      (and (test-asn-to-yaml)
-                           (and (test-html-to-vdom-asn)
-                                (and (test-vdom-asn-to-html)
-                                     (and (test-measure-savings)
-                                          (test-empty-and-malformed))))))))))
+  (do
+    (assert (test-json-to-asn-object))
+    (assert (test-json-to-asn-array))
+    (assert (test-asn-to-json))
+    (assert (test-yaml-to-asn))
+    (assert (test-asn-to-yaml))
+    (assert (test-html-to-vdom-asn))
+    (assert (test-vdom-asn-to-html))
+    (assert (test-measure-savings))
+    (assert (test-empty-and-malformed))))
