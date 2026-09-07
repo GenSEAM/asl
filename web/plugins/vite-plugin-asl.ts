@@ -163,6 +163,7 @@ if (container) {
 import { renderCosmicBackground } from './components/CosmicLandscapeBackground.asl';
 import { navbarView } from './components/Navbar.asl';
 import { footerView } from './components/Footer.asl';
+import { renderSearchModal } from './components/SearchModal.asl';
 import { renderHomeView } from './views/HomeView.asl';
 import { renderDocsView } from './views/DocsView.asl';
 import { renderBlogView } from './views/BlogView.asl';
@@ -181,7 +182,7 @@ export function renderView(route) {
   if (route === '/ecosystem' || route === '#ecosystem') return renderEcosystemView();
   if (route === '/roadmap' || route === '#roadmap') return renderRoadmapView();
   if (route === '/docs' || route === '#docs') return renderDocsView();
-  if (route === '/blog' || route === '#blog') return renderBlogView();
+  if (route === '/blog' || route === '#blog' || route.startsWith('/blog/') || route.startsWith('#blog/')) return renderBlogView();
   return renderHomeView();
 }
 
@@ -194,6 +195,7 @@ export function renderApp(currentRoute) {
     renderView(currentRoute) +
     '</div>' +
     footerView() +
+    renderSearchModal() +
     '</div>'
   );
 }
@@ -210,17 +212,83 @@ export function App() {
     const onHashChange = () => {
       const r = window.location.hash || window.location.pathname || '/';
       setRoute(r);
-      if (!window.location.hash.startsWith('#capabilities') && !window.location.hash.startsWith('#matrix') && !window.location.hash.startsWith('#wire-protocol')) {
+      if (!window.location.hash.startsWith('#capabilities') && !window.location.hash.startsWith('#matrix') && !window.location.hash.startsWith('#wire-protocol') && !window.location.hash.startsWith('#agent-way')) {
         window.scrollTo(0, 0);
       }
     };
     window.addEventListener('hashchange', onHashChange);
     window.addEventListener('popstate', onHashChange);
+
+    const onKeyDown = (e) => {
+      const modal = document.getElementById('search-modal-root');
+      const input = document.getElementById('sm-input');
+      if (e.key === 'Escape') {
+        if (modal) modal.style.display = 'none';
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        if (modal) {
+          const isHidden = modal.style.display === 'none' || !modal.style.display;
+          modal.style.display = isHidden ? 'flex' : 'none';
+          if (isHidden && input) setTimeout(() => input.focus(), 50);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+
+    // Wire search modal triggers
+    const setupSearch = () => {
+      const modal = document.getElementById('search-modal-root');
+      const input = document.getElementById('sm-input');
+      const closeBtn = document.getElementById('sm-close-btn');
+      const searchBtns = document.querySelectorAll('button[aria-label=\"Search documentation\"]');
+      searchBtns.forEach(btn => {
+        btn.onclick = () => {
+          if (modal) {
+            modal.style.display = 'flex';
+            if (input) setTimeout(() => input.focus(), 50);
+          }
+        };
+      });
+      if (closeBtn && modal) {
+        closeBtn.onclick = () => { modal.style.display = 'none'; };
+      }
+      if (modal) {
+        modal.onclick = (e) => {
+          if (e.target === modal) modal.style.display = 'none';
+        };
+      }
+      if (input) {
+        input.oninput = () => {
+          const q = input.value.toLowerCase().trim();
+          const items = document.querySelectorAll('.sm-item');
+          items.forEach(it => {
+            const data = (it.getAttribute('data-search') || '') + ' ' + (it.textContent || '');
+            it.style.display = (!q || data.toLowerCase().includes(q)) ? 'flex' : 'none';
+          });
+        };
+      }
+    };
+    setupSearch();
+
+    // Execute scripts inside active views (e.g. BlogView filter logic)
+    const container = document.querySelector('.asl-app-root');
+    if (container) {
+      const scripts = container.querySelectorAll('script');
+      scripts.forEach(s => {
+        try {
+          const fn = new Function(s.textContent || '');
+          fn();
+        } catch (err) {}
+      });
+    }
+
     return () => {
       window.removeEventListener('hashchange', onHashChange);
       window.removeEventListener('popstate', onHashChange);
+      window.removeEventListener('keydown', onKeyDown);
     };
-  }, []);
+  }, [route]);
 
   const html = renderApp(route);
 
@@ -230,7 +298,7 @@ export function App() {
   });
 }
 
-export default App;
+export { App as default };
 `,
           map: null
         };
