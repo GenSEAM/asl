@@ -46,4 +46,4 @@ In our benchmark evaluations across 30 autonomous engineering phases:
 ## Next Steps & Documentation
 - Read the [ASL Language Grammar & S-Expression Specification](https://aslang.dev/docs/grammar).
 - Explore the [Agent Swarm Bus Protocol](https://aslang.dev/docs/bus) for sub-millisecond inter-agent communication.
-- Next Article: [Fix LLM Delimiter Hallucinations Forever: Why S-Expressions Beat JSON for Agents](/blog/introducing-agentscript-asl).
+- Next Article: [AgentScript: Why S-Expressions and Algebraic Types are Mathematically Optimal for LLMs](/blog/agent-script-the-optimal-agent-language).
