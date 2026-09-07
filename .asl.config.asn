@@ -6,4 +6,13 @@
   :gates [1 2 3 4 5 6 7]
   :token-baseline 2
   :telemetry (:target-turn-ms 100 :max-token-ceiling 150)
-  :daemon (:resident true :memory-index true :max-files 2000))
+  :daemon (:resident true :memory-index true :max-files 2000)
+  :tasks [
+    (:task :name "gate" :cmd "asl gate" :doc "Run full 7-gate pure ASL verification")
+    (:task :name "test" :cmd "asl test" :doc "Run native ASL test suites")
+    (:task :name "coverage" :cmd "asl coverage" :doc "Audit native function test coverage")
+    (:task :name "telemetry" :cmd "asl telemetry" :doc "Collect performance telemetry and token metrics")
+    (:task :name "web:transpile" :cmd "asl transpile-pkg web/package.asn web/package.json" :doc "Transpile web package.asn to package.json")
+    (:task :name "web:build" :cmd "asl task web:transpile && npm --prefix web run build" :doc "Build production web showcase")
+    (:task :name "web:dev" :cmd "asl task web:transpile && npm --prefix web run dev" :doc "Start Vite development server")
+  ])

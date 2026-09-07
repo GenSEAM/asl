@@ -36,6 +36,28 @@ find_skills_runner() {
   fi
 }
 
+find_config_file() {
+  local dir="$PWD"
+  while [ "$dir" != "/" ] && [ "$dir" != "." ]; do
+    if [ -f "$dir/.asl.config.asn" ]; then
+      echo "$dir/.asl.config.asn"
+      return 0
+    elif [ -f "$dir/asl.config.asn" ]; then
+      echo "$dir/asl.config.asn"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  if [ -f "$ROOT/.asl.config.asn" ]; then
+    echo "$ROOT/.asl.config.asn"
+    return 0
+  elif [ -f "$ROOT/../.asl.config.asn" ]; then
+    echo "$ROOT/../.asl.config.asn"
+    return 0
+  fi
+  return 1
+}
+
 CMD="${1:-help}"
 shift || true
 
@@ -620,6 +642,101 @@ case "$CMD" in
     echo "✓ Successfully updated to v${REMOTE_VER}!"
     exit 0
     ;;
+  task|tasks|run-task)
+    CONFIG_FILE="$(find_config_file || true)"
+    if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
+      echo "Error: No .asl.config.asn found in workspace hierarchy."
+      exit 1
+    fi
+    TASK_NAME="$1"
+    shift || true
+    if [ -z "$TASK_NAME" ]; then
+      echo "AgentScript Configured Tasks ($CONFIG_FILE):"
+      printf "  %-15s %-45s %s\n" "Task" "Description" "Command"
+      printf "  %-15s %-45s %s\n" "----" "-----------" "-------"
+      awk '
+      BEGIN { in_tasks = 0; }
+      /:tasks[ \t]+\[/ { in_tasks = 1; next; }
+      in_tasks && /\(:task/ {
+        tname = $0; sub(/.*:name[ \t]+"/, "", tname); sub(/".*/, "", tname);
+        tcmd = $0; sub(/.*:cmd[ \t]+"/, "", tcmd); sub(/".*/, "", tcmd);
+        tdoc = $0; sub(/.*:doc[ \t]+"/, "", tdoc); sub(/".*/, "", tdoc);
+        if (tname != "") {
+          printf "  %-15s %-45s %s\n", tname, tdoc, tcmd;
+        }
+      }
+      in_tasks && /^[ \t]*\]/ { in_tasks = 0; }
+      ' "$CONFIG_FILE"
+      exit 0
+    fi
+
+    CMD_TO_RUN=$(awk -v target="$TASK_NAME" '
+    BEGIN { in_tasks = 0; found_cmd = ""; }
+    /:tasks[ \t]+\[/ { in_tasks = 1; next; }
+    in_tasks && /\(:task/ {
+      tname = $0; sub(/.*:name[ \t]+"/, "", tname); sub(/".*/, "", tname);
+      tcmd = $0; sub(/.*:cmd[ \t]+"/, "", tcmd); sub(/".*/, "", tcmd);
+      if (tname == target) {
+        found_cmd = tcmd;
+        exit;
+      }
+    }
+    in_tasks && /^[ \t]*\]/ { in_tasks = 0; }
+    END { if (found_cmd != "") print found_cmd; }
+    ' "$CONFIG_FILE")
+
+    if [ -z "$CMD_TO_RUN" ]; then
+      echo "Error: Task '\''$TASK_NAME'\'' not found in $CONFIG_FILE"
+      echo "Run '\''asl task'\'' to list available tasks."
+      exit 1
+    fi
+
+    echo "==> [ASL Task: $TASK_NAME] $CMD_TO_RUN $@"
+    eval "$CMD_TO_RUN $@"
+    exit $?
+    ;;
+
+  transpile-pkg|pkg:transpile)
+    SPEC="$1"
+    OUT="$2"
+    if [ -z "$SPEC" ] || [ ! -f "$SPEC" ]; then
+      echo "Usage: asl transpile-pkg <spec.asn> [dest.json]"
+      exit 1
+    fi
+    MEM_RUNNER="$(find_mem_daemon)"
+    RAW_JSON="$("$NODE_BIN" "$MEM_RUNNER" asn --to-json "$SPEC" 2>/dev/null || true)"
+    if [ -z "$RAW_JSON" ]; then
+      echo "Error: Failed to transpile $SPEC to JSON"
+      exit 1
+    fi
+    CLEAN_JSON="$(echo "$RAW_JSON" | grep -v '^[[:space:]]*"_type":' || true)"
+    if [ -n "$OUT" ]; then
+      echo "$CLEAN_JSON" > "$OUT"
+      echo "✓ Transpiled $SPEC ➔ $OUT"
+    else
+      echo "$CLEAN_JSON"
+    fi
+    exit 0
+    ;;
+
+  *.asl|*.asn)
+    FILE="$CMD"
+    if [ ! -f "$FILE" ] && [ -f "$ROOT/$FILE" ]; then
+      FILE="$ROOT/$FILE"
+    fi
+    if [ ! -f "$FILE" ]; then
+      echo "Error: ASL file not found: $CMD"
+      exit 1
+    fi
+    "$ROOT/asl" check "$FILE"
+    if grep -qE '\(df[ \t]+(run-tests|test-)' "$FILE" >/dev/null 2>&1; then
+      exec "$ROOT/asl" test "$FILE" "$@"
+    else
+      echo "✓ Validated and verified pure ASL module: $FILE"
+      exit 0
+    fi
+    ;;
+
   version|-v|--version)
     echo "asl 0.1.0 (pure AgentScript self-hosted toolchain)"
     exit 0
@@ -634,6 +751,8 @@ case "$CMD" in
     echo "  check <file>    Run semantic syntax and form verification"
     echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
     echo "  test [file]     Execute native ASL test suites"
+    echo "  task [name]     List or execute configured tasks from .asl.config.asn"
+    echo "  transpile-pkg   Transpile ASN package specification to standard package.json"
     echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
     echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index)"
     echo "  mem <subcmd>    In-memory vector memory engine (index, query, search, ptr)"
@@ -644,6 +763,17 @@ case "$CMD" in
     exit 0
     ;;
   *)
+    if [ -f "$CMD" ] || [ -f "$ROOT/$CMD" ]; then
+      FILE="$CMD"
+      [ ! -f "$FILE" ] && FILE="$ROOT/$CMD"
+      "$ROOT/asl" check "$FILE"
+      if grep -qE '\(df[ \t]+(run-tests|test-)' "$FILE" >/dev/null 2>&1; then
+        exec "$ROOT/asl" test "$FILE" "$@"
+      else
+        echo "✓ Validated and verified pure ASL module: $FILE"
+        exit 0
+      fi
+    fi
     echo "Unknown command '$CMD'. Run 'asl help' for usage."
     exit 1
     ;;
