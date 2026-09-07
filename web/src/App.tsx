@@ -10,6 +10,7 @@ import { DocsView } from './views/DocsView';
 import { BlogView } from './views/BlogView';
 import { StudioView } from './views/StudioView';
 import { PlaygroundView } from './views/PlaygroundView';
+import { EcosystemView } from './views/EcosystemView';
 
 const AppContent: React.FC = () => {
   const { currentPath } = useRouter();
@@ -17,7 +18,7 @@ const AppContent: React.FC = () => {
   const renderView = () => {
     if (currentPath === '/studio') return <StudioView />;
     if (currentPath === '/playground') return <PlaygroundView />;
-    if (currentPath === '/ecosystem') return <DocsView initialTab="ecosystem" />;
+    if (currentPath === '/ecosystem') return <EcosystemView />;
     if (currentPath === '/roadmap') return <RoadmapView />;
     if (currentPath === '/docs') return <DocsView />;
     if (currentPath === '/blog' || currentPath.startsWith('/blog/')) return <BlogView />;
