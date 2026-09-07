@@ -5,19 +5,46 @@
     <link>https://aslang.dev/blog</link>
     <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
     <language>en-us</language>
-    <lastBuildDate>Mon, 07 Sep 2026 08:15:00 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 08 Sep 2026 08:00:00 GMT</lastBuildDate>
     <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
     <item>
-      <title>The Agentic Toolchain: Continuous Action Loops, Native Verification Gates, and Pure ASL Architecture</title>
-      <link>https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</guid>
-      <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
+      <title>How to Fix Agentic Coding: Why Autonomous LLMs Break on Human Languages (and What Replaces Them)</title>
+      <link>https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</guid>
+      <pubDate>Tue, 08 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Tools &amp; Compiler Architecture</category>
-      <description>Why standard bash wrappers fail autonomous agents, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for AI code generation.</description>
+      <category>Language Theory &amp; Compilers</category>
+      <description>Why indentation and borrow-checked syntax trap coding agents in 38% syntax repair loops, and what deterministic single-pass S-expressions solve.</description>
     </item>
     <item>
-      <title>The Token-Density Fallacy: Why Disemvoweling Breaks BPE and How AgentScript Solves Identifier Economics</title>
+      <title>Stop Burning Money on JSON Context: How Structural Compaction Cuts LLM Bills by 65%</title>
+      <link>https://aslang.dev/blog/token-economy-and-structural-compression</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/token-economy-and-structural-compression</guid>
+      <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Token Economy &amp; Serialization</category>
+      <description>Why JSON repeats keys on every row, how tabular ASN hoists schemas into vector headers, and how structural compaction slashes LLM context bills by 64.7% without changing model weights.</description>
+    </item>
+    <item>
+      <title>Killing Docker Spin-Up Latency: How We Run Agent Test Sandboxes in 0.038ms</title>
+      <link>https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</guid>
+      <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Runtime &amp; Execution</category>
+      <description>Why spinning up Docker containers and microVMs (1.2s–12s) cripples agent action loops, and how compiling AgentScript directly to in-memory WebAssembly preview1 linear memory executes in 0.038ms.</description>
+    </item>
+    <item>
+      <title>The 78% Context Tax: How AST Interface Extraction Stops Agent Working Memory Rot</title>
+      <link>https://aslang.dev/blog/the-token-tax-and-interface-compression</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-token-tax-and-interface-compression</guid>
+      <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Context Architecture</category>
+      <description>Shuttling whole files between agents burns 78% of context on internal implementation details. Hoisting public interfaces into compact ASN ASTs preserves attention headroom over 50+ turns.</description>
+    </item>
+    <item>
+      <title>Why Disemvoweling Breaks BPE: How Naive Token Optimization Destroys Agent Intelligence</title>
       <link>https://aslang.dev/blog/the-token-density-fallacy-and-machine-understandability</link>
       <guid isPermaLink="true">https://aslang.dev/blog/the-token-density-fallacy-and-machine-understandability</guid>
       <pubDate>Mon, 07 Sep 2026 00:00:00 GMT</pubDate>
@@ -26,61 +53,79 @@
       <description>Why naive identifier compression like ctermtxt breaks BPE subtokenization, how synonym collisions cost thousands of repair tokens, and the findings of our 2-round adversarial consultation with Claude Fable 5.</description>
     </item>
     <item>
-      <title>Sub-Millisecond Vector Recall &amp; Git-Native Memory Matrices for Autonomous Agents</title>
-      <link>https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</guid>
-      <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
+      <title>Inter-Agent Protocol (AgP): Eradicating Natural Language Chatter with Typed S-Expression Frames</title>
+      <link>https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</guid>
+      <pubDate>Sun, 06 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Memory &amp; Vector Systems</category>
-      <description>Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits.</description>
+      <category>Protocols &amp; Mesh</category>
+      <description>Beyond conversational mesh chaos: replacing ambiguous natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and sub-millisecond IPC.</description>
     </item>
     <item>
-      <title>Cross-Dialect SQL Without Hallucinations: Compiling S-Expressions to Relational Engines</title>
-      <link>https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</guid>
-      <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
+      <title>The Single Grammar Doctrine: Why Multi-Agent Systems Collapse Without Homoiconic S-Expressions</title>
+      <link>https://aslang.dev/blog/the-agent-operational-circle</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-agent-operational-circle</guid>
+      <pubDate>Sun, 06 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Relational Data &amp; SQL</category>
-      <description>Why agents writing raw SQL fail 28% of the time, and how homoiconic relational S-expressions lower deterministically to Postgres, SQLite, MySQL, and Oracle without injection risk.</description>
+      <category>Autonomous Systems &amp; Grammar</category>
+      <description>Why autonomous agents collapse when juggling JSON, YAML, SVG XML, and Bash strings, and how unifying data, visuals, and execution into a single S-expression geometry eliminates 60% of syntax token overhead.</description>
     </item>
     <item>
-      <title>Zero-Server In-Browser Agent Runtimes: Developing in WebAssembly and OPFS</title>
-      <link>https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</guid>
-      <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
+      <title>The Mathematical Optimum: Why S-Expressions and Algebraic Types Beat Human Syntax for LLMs</title>
+      <link>https://aslang.dev/blog/agent-script-the-optimal-agent-language</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/agent-script-the-optimal-agent-language</guid>
+      <pubDate>Sun, 06 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Browser Technologies</category>
-      <description>Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs.</description>
+      <category>Language Theory</category>
+      <description>Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs.</description>
     </item>
     <item>
-      <title>The Epistemic Grounding Firewall: Halting Agent Hallucinations at the AST Boundary</title>
+      <title>Stop Making LLMs Do OS Work: Why Autonomous Coding Requires an ALU / Kernel Split</title>
+      <link>https://aslang.dev/blog/the-deterministic-agent-os</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-deterministic-agent-os</guid>
+      <pubDate>Sat, 05 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Architecture &amp; Operating Systems</category>
+      <description>Why treating an LLM as scheduler, filesystem, and interpreter causes cognitive collapse, and how separating the stochastic semantic ALU from a deterministic operating system achieves 92% benchmark solve rates.</description>
+    </item>
+    <item>
+      <title>Stop Your Agent from Faking Green Tests: AST Mutation Gates and Anti-Hallucination Firewalls</title>
       <link>https://aslang.dev/blog/epistemic-grounding-and-anti-hallucination-firewalls</link>
       <guid isPermaLink="true">https://aslang.dev/blog/epistemic-grounding-and-anti-hallucination-firewalls</guid>
-      <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
+      <pubDate>Sat, 05 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
       <category>Safety &amp; Grounding</category>
-      <description>Halting agent hallucinations at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing.</description>
+      <description>Halting Execution-Simulation Hallucinations (ESH) at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing.</description>
     </item>
     <item>
-      <title>Universal Cross-Platform Glue: One Source Across WebAssembly, Rust, TypeScript &amp; Python</title>
-      <link>https://aslang.dev/blog/universal-cross-platform-glue-without-drift</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/universal-cross-platform-glue-without-drift</guid>
+      <title>Why Bash Wrappers Fail Coding Agents: Persistent Action Loops and 7 In-Memory Verification Gates</title>
+      <link>https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-agentic-toolchain-and-native-action-loops</guid>
+      <pubDate>Sat, 05 Sep 2026 00:00:00 GMT</pubDate>
+      <author>dev@aslang.dev (GenSEAM)</author>
+      <category>Tools &amp; Compiler Architecture</category>
+      <description>Why stateless bash wrappers cause interactive terminal deadlocks, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for AI code generation.</description>
+    </item>
+    <item>
+      <title>Kill 80% of Agent Framework Bloat: Why Radical Simplicity Outperforms 10,000-Line Orchestrators</title>
+      <link>https://aslang.dev/blog/kill-80-percent-agent-code-bloat</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/kill-80-percent-agent-code-bloat</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Cross-Platform Runtimes</category>
-      <description>Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python.</description>
+      <category>Architecture &amp; Simplicity</category>
+      <description>Why multi-megabyte agent frameworks collapse after turn 4, and how the Ladder of Restraint and pure AgentScript S-expressions cut 80% of agent code bloat.</description>
     </item>
     <item>
-      <title>Multi-Dimensional Observability: How to Govern Autonomous Swarms Without Reading Raw Logs</title>
+      <title>Debugging Autonomous Swarms: Time-Travel Execution Replay Without Reading 50,000-Token Logs</title>
       <link>https://aslang.dev/blog/multi-dimensional-observability-for-autonomous-systems</link>
       <guid isPermaLink="true">https://aslang.dev/blog/multi-dimensional-observability-for-autonomous-systems</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
       <category>Observability &amp; Telemetry</category>
-      <description>How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and jailed capability traces.</description>
+      <description>How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and deterministic S-expression execution replay.</description>
     </item>
     <item>
-      <title>The Agent-Native Developer Cockpit: Architecture of a Zero-Latency Toolchain</title>
+      <title>The Sub-0.05ms Language Server: Building a Developer Cockpit for Synthetic Intelligences</title>
       <link>https://aslang.dev/blog/the-agent-native-developer-cockpit</link>
       <guid isPermaLink="true">https://aslang.dev/blog/the-agent-native-developer-cockpit</guid>
       <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
@@ -89,58 +134,49 @@
       <description>The complete agent-native developer cockpit: sub-0.05ms LSP, AST structural clone linters, autonomous auto-fixers, and live visual observability.</description>
     </item>
     <item>
-      <title>Inter-Agent Protocols &amp; Wire Frames: Beyond Conversational Mesh Chaos</title>
-      <link>https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/inter-agent-protocols-and-wire-frames</guid>
-      <pubDate>Fri, 04 Sep 2026 00:00:00 GMT</pubDate>
-      <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Protocols &amp; Mesh</category>
-      <description>Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and zero-drift delegations.</description>
-    </item>
-    <item>
-      <title>Token Economy &amp; Projections: The Mathematics of Agentic Serialization</title>
-      <link>https://aslang.dev/blog/token-economy-and-structural-compression</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/token-economy-and-structural-compression</guid>
+      <title>Killing the $4,000/Month Vector DB Bill: Sub-Millisecond Vector Recall in Git-Native Memory</title>
+      <link>https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/git-native-agent-memory-and-vector-recall</guid>
       <pubDate>Thu, 03 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Token Optimization</category>
-      <description>The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how structural compaction cuts prompt overhead by 65%.</description>
+      <category>Memory &amp; Vector Systems</category>
+      <description>Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits.</description>
     </item>
     <item>
-      <title>AgentScript: Why S-Expressions and Algebraic Types are Mathematically Optimal for LLMs</title>
-      <link>https://aslang.dev/blog/agent-script-the-optimal-agent-language</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/agent-script-the-optimal-agent-language</guid>
+      <title>Zero-Injection SQL by Construction: Compiling Relational S-Expressions to Postgres, SQLite &amp; ClickHouse</title>
+      <link>https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/cross-dialect-sql-without-hallucinations</guid>
       <pubDate>Thu, 03 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Language Theory</category>
-      <description>Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs.</description>
+      <category>Relational Data &amp; SQL</category>
+      <description>Why agents writing raw SQL fail 28% of the time, and how homoiconic relational S-expressions lower deterministically to Postgres, SQLite, MySQL, and ClickHouse without injection risk.</description>
     </item>
     <item>
-      <title>From Vibe-Code to WebAssembly in 0.04ms: The Architecture of Instant Agentic Sandboxing</title>
-      <link>https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/from-vibe-code-to-wasm-in-0-04ms</guid>
+      <title>The Zero-Server IDE: Running Full Autonomous Agent Sandboxes Inside a Chrome Tab</title>
+      <link>https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/zero-server-in-browser-agent-runtimes</guid>
       <pubDate>Wed, 02 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Runtime &amp; Execution</category>
-      <description>Replacing heavy Docker containers and microVMs with zero-overhead in-memory WebAssembly sandboxes running test suites in 0.038ms.</description>
+      <category>Browser Technologies</category>
+      <description>Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs.</description>
     </item>
     <item>
-      <title>The 78% Token Tax: How Interface Compression Solves Agent Context Rot</title>
-      <link>https://aslang.dev/blog/the-token-tax-and-interface-compression</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/the-token-tax-and-interface-compression</guid>
+      <title>Why LLMs Choke on SVG XML: Slashing 50.7% of Vector Graphic Tokens with Native S-Expressions</title>
+      <link>https://aslang.dev/blog/why-llms-break-on-svg-xml</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/why-llms-break-on-svg-xml</guid>
       <pubDate>Wed, 02 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Context Architecture</category>
-      <description>How AST interface extraction slashes multi-agent token consumption by 78.2% and eliminates context rot across distributed agent handoffs.</description>
+      <category>Vector Graphics &amp; Tokenomics</category>
+      <description>Why autoregressive LLMs blow through token context on raw SVG markup, and how native single-token ASN vector primitives cut token usage by 50.7% with zero XML delimiter hallucinations.</description>
     </item>
     <item>
-      <title>Why LLMs Struggle with Python &amp; Rust: The Case for Single-Pass S-Expressions</title>
-      <link>https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</link>
-      <guid isPermaLink="true">https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</guid>
+      <title>One Source Across Rust, TypeScript, Python &amp; Wasm: Eradicating Multi-Language Glue Drift</title>
+      <link>https://aslang.dev/blog/universal-cross-platform-glue-without-drift</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/universal-cross-platform-glue-without-drift</guid>
       <pubDate>Tue, 01 Sep 2026 00:00:00 GMT</pubDate>
       <author>dev@aslang.dev (GenSEAM)</author>
-      <category>Language Design</category>
-      <description>Why indentation and borrow-checked syntax cost LLMs 25% to 40% of their compute in repair loops, and what deterministic single-pass S-expressions solve.</description>
+      <category>Cross-Platform Runtimes</category>
+      <description>Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python.</description>
     </item>
   </channel>
 </rss>

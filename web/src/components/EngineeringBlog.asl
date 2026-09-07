@@ -36,12 +36,66 @@
       </p>
 
       <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-line pt-8\">
-        <!-- Essay 1 -->
-        <article data-slug=\"the-agentic-toolchain-and-native-action-loops\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+        <!-- Essay 1: Flagship Manifesto -->
+        <article data-slug=\"why-llms-struggle-with-python-and-rust\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
-                Tools &amp; Compiler Architecture
+                Language Theory &amp; Compilers
+              </span>
+              <span class=\"flex items-center gap-1\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3 h-3\">
+                  <circle cx=\"12\" cy=\"12\" r=\"10\"></circle>
+                  <polyline points=\"12 6 12 12 16 14\"></polyline>
+                </svg>
+                6 min read
+              </span>
+            </div>
+
+            <h3 class=\"text-base sm:text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2.5 leading-snug\">
+              How to Fix Agentic Coding: Why Autonomous LLMs Break on Human Languages (and What Replaces Them)
+            </h3>
+
+            <p class=\"text-xs sm:text-sm text-ink-2 leading-relaxed mb-4 line-clamp-3\">
+              Why indentation and borrow-checked syntax trap coding agents in 38% syntax repair loops, and what deterministic single-pass S-expressions solve.
+            </p>
+          </div>
+
+          <div>
+            <div class=\"flex flex-wrap gap-1.5 mb-3\">
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                Agentic Coding
+              </span>
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                Syntax Repair Tax
+              </span>
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                S-Expressions
+              </span>
+            </div>
+
+            <div class=\"flex items-center justify-between pt-2.5 border-t border-line/50 text-xs font-mono text-ink-3\">
+              <span>2026-09-08</span>
+              <span class=\"flex items-center gap-1 text-signal group-hover:translate-x-0.5 transition-transform font-medium\">
+                <span>Read Essay</span>
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">
+                  <line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line>
+                  <polyline points=\"12 5 19 12 12 19\"></polyline>
+                </svg>
+              </span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Essay 2: Token Economy & Data Exchange Protocol -->
+        <article data-slug=\"token-economy-and-structural-compression\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+          <div>
+            <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
+              <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
+                Token Economy &amp; Serialization
               </span>
               <span class=\"flex items-center gap-1\">
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3 h-3\">
@@ -53,11 +107,11 @@
             </div>
 
             <h3 class=\"text-base sm:text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2.5 leading-snug\">
-              The Agentic Toolchain: Continuous Action Loops, Native Verification Gates, and Pure ASL Architecture
+              Stop Burning Money on JSON Context: How Structural Compaction Cuts LLM Bills by 65%
             </h3>
 
             <p class=\"text-xs sm:text-sm text-ink-2 leading-relaxed mb-4 line-clamp-3\">
-              Why standard bash wrappers fail autonomous agents, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for AI code generation.
+              Why JSON repeats keys on every row, how tabular ASN hoists schemas into vector headers, and how structural compaction slashes LLM context bills by 64.7% without changing model weights.
             </p>
           </div>
 
@@ -65,15 +119,15 @@
             <div class=\"flex flex-wrap gap-1.5 mb-3\">
               <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Agent Toolchain
+                Token Economy
               </span>
               <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Action-Observation
+                ASN Tabular
               </span>
               <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Pure ASL
+                -65% Context
               </span>
             </div>
 
@@ -90,7 +144,61 @@
           </div>
         </article>
 
-        <!-- Essay 2 -->
+        <!-- Essay 3: Execution Speed & Sandboxing -->
+        <article data-slug=\"from-vibe-code-to-wasm-in-0-04ms\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+          <div>
+            <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
+              <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
+                Runtime &amp; Execution
+              </span>
+              <span class=\"flex items-center gap-1\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3 h-3\">
+                  <circle cx=\"12\" cy=\"12\" r=\"10\"></circle>
+                  <polyline points=\"12 6 12 12 16 14\"></polyline>
+                </svg>
+                5 min read
+              </span>
+            </div>
+
+            <h3 class=\"text-base sm:text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2.5 leading-snug\">
+              Killing Docker Spin-Up Latency: How We Run Agent Test Sandboxes in 0.038ms
+            </h3>
+
+            <p class=\"text-xs sm:text-sm text-ink-2 leading-relaxed mb-4 line-clamp-3\">
+              Why spinning up Docker containers and microVMs (1.2s–12s) cripples agent action loops, and how compiling AgentScript directly to in-memory WebAssembly preview1 linear memory executes in 0.038ms.
+            </p>
+          </div>
+
+          <div>
+            <div class=\"flex flex-wrap gap-1.5 mb-3\">
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                WebAssembly
+              </span>
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                WASI Preview 1
+              </span>
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                0.038ms Sandbox
+              </span>
+            </div>
+
+            <div class=\"flex items-center justify-between pt-2.5 border-t border-line/50 text-xs font-mono text-ink-3\">
+              <span>2026-09-07</span>
+              <span class=\"flex items-center gap-1 text-signal group-hover:translate-x-0.5 transition-transform font-medium\">
+                <span>Read Essay</span>
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">
+                  <line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line>
+                  <polyline points=\"12 5 19 12 12 19\"></polyline>
+                </svg>
+              </span>
+            </div>
+          </div>
+        </article>
+
+        <!-- Essay 4: BPE Tokenizer Mechanics & Language Theory -->
         <article data-slug=\"the-token-density-fallacy-and-machine-understandability\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
@@ -107,7 +215,7 @@
             </div>
 
             <h3 class=\"text-base sm:text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2.5 leading-snug\">
-              The Token-Density Fallacy: Why Disemvoweling Breaks BPE and How AgentScript Solves Identifier Economics
+              Why Disemvoweling Breaks BPE: How Naive Token Optimization Destroys Agent Intelligence
             </h3>
 
             <p class=\"text-xs sm:text-sm text-ink-2 leading-relaxed mb-4 line-clamp-3\">
@@ -119,128 +227,20 @@
             <div class=\"flex flex-wrap gap-1.5 mb-3\">
               <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Token Economics
-              </span>
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
                 BPE Subtokens
               </span>
               <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Machine Understandability
+                Identifier Economics
+              </span>
+              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
+                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
+                Claude Fable 5
               </span>
             </div>
 
             <div class=\"flex items-center justify-between pt-2.5 border-t border-line/50 text-xs font-mono text-ink-3\">
               <span>2026-09-07</span>
-              <span class=\"flex items-center gap-1 text-signal group-hover:translate-x-0.5 transition-transform font-medium\">
-                <span>Read Essay</span>
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">
-                  <line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line>
-                  <polyline points=\"12 5 19 12 12 19\"></polyline>
-                </svg>
-              </span>
-            </div>
-          </div>
-        </article>
-
-        <!-- Essay 3 -->
-        <article data-slug=\"the-deterministic-agent-os\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
-          <div>
-            <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
-              <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
-                Architecture &amp; Operating Systems
-              </span>
-              <span class=\"flex items-center gap-1\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3 h-3\">
-                  <circle cx=\"12\" cy=\"12\" r=\"10\"></circle>
-                  <polyline points=\"12 6 12 12 16 14\"></polyline>
-                </svg>
-                8 min read
-              </span>
-            </div>
-
-            <h3 class=\"text-base sm:text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2.5 leading-snug\">
-              The Deterministic Agent OS: Why Autonomous Systems Need an ALU/OS Split and Git-Native Textual Memory
-            </h3>
-
-            <p class=\"text-xs sm:text-sm text-ink-2 leading-relaxed mb-4 line-clamp-3\">
-              Why treating an LLM as both a scheduler, file system, and interpreter causes autonomous agents to collapse, and how separating the stochastic semantic ALU from a deterministic operating system achieves 92% benchmark solve rates.
-            </p>
-          </div>
-
-          <div>
-            <div class=\"flex flex-wrap gap-1.5 mb-3\">
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Agent OS
-              </span>
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Prompt VMM
-              </span>
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Deterministic Execution
-              </span>
-            </div>
-
-            <div class=\"flex items-center justify-between pt-2.5 border-t border-line/50 text-xs font-mono text-ink-3\">
-              <span>2026-09-06</span>
-              <span class=\"flex items-center gap-1 text-signal group-hover:translate-x-0.5 transition-transform font-medium\">
-                <span>Read Essay</span>
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">
-                  <line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line>
-                  <polyline points=\"12 5 19 12 12 19\"></polyline>
-                </svg>
-              </span>
-            </div>
-          </div>
-        </article>
-
-        <!-- Essay 4 -->
-        <article data-slug=\"the-agent-operational-circle\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
-          <div>
-            <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
-              <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
-                Autonomous Systems &amp; Grammar
-              </span>
-              <span class=\"flex items-center gap-1\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3 h-3\">
-                  <circle cx=\"12\" cy=\"12\" r=\"10\"></circle>
-                  <polyline points=\"12 6 12 12 16 14\"></polyline>
-                </svg>
-                7 min read
-              </span>
-            </div>
-
-            <h3 class=\"text-base sm:text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2.5 leading-snug\">
-              The Agent Operational Circle: Why Autonomous Systems Need a Single Universal Grammar
-            </h3>
-
-            <p class=\"text-xs sm:text-sm text-ink-2 leading-relaxed mb-4 line-clamp-3\">
-              Why autonomous agents collapse when juggling JSON, YAML, SVG XML, and Bash strings, and how unifying data, visuals, and execution into a single S-expression geometry eliminates 60% of syntax token overhead.
-            </p>
-          </div>
-
-          <div>
-            <div class=\"flex flex-wrap gap-1.5 mb-3\">
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                Agent Operational Circle
-              </span>
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                ASN
-              </span>
-              <span class=\"inline-flex items-center gap-0.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-line/60 text-ink-3\">
-                <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-2.5 h-2.5\"><path d=\"M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z\"></path><path d=\"M7 7h.01\"></path></svg>
-                AgentScript
-              </span>
-            </div>
-
-            <div class=\"flex items-center justify-between pt-2.5 border-t border-line/50 text-xs font-mono text-ink-3\">
-              <span>2026-09-06</span>
               <span class=\"flex items-center gap-1 text-signal group-hover:translate-x-0.5 transition-transform font-medium\">
                 <span>Read Essay</span>
                 <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">
