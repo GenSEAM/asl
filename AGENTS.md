@@ -1,5 +1,9 @@
 <!-- ASL_TOOLBELT_START -->
 Always activate and follow the asl-toolbelt skill; asl is available in PATH.
+⚡ MANDATORY FOR ALL AI AGENTS (Antigravity, Claude, Cursor, Factory Droid, Windsurf, Codex):
+1. FORBIDDEN to use loose file tools (grep_search, find_by_name, view_file, Read, Grep, Edit).
+2. ALL code exploration, AST outlines, syntax symbol resolution, caller graphs, resident text grep, vector semantic query, in-memory atomic edits, diffs, and gate checks MUST execute in a SINGLE ROUNDTRIP via `asl '(:batch ...)'` or `asl rpc '(:batch ...)'`.
+3. In-memory buffer hygiene: stage edits via (:edit ...)/(:repl ...), review with (:diff), commit with (:flush). On failure, inspect narrow line slices with (:read "file" start end) and revert dirty buffers with (:discard).
 <!-- ASL_TOOLBELT_END -->
 
 # AgentScript (ASL) — Autonomous Agent Operational Instructions

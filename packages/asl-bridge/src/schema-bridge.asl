@@ -73,7 +73,9 @@
       "integer"
       (if (= cat "float")
         "real"
-        cat))))
+        (if (= cat "bool")
+          "boolean"
+          cat)))))
 
 (df drizzle-col-builder [(col p/DbColumn)] -> Str
   :d "Renders Drizzle column builder chain."

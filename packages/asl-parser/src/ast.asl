@@ -488,9 +488,9 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
     (cond
       ((not (rd/is-list? s))
        (err (perr "expected a top-level declaration" pf)))
-      ((= h "defun")     (fun-node s exported pf))
-      ((= h "defschema") (schema-node s pf))
-      ((= h "defenum")   (enum-node s pf))
+      ((or (= h "defun") (= h "df"))     (fun-node s exported pf))
+      ((or (= h "defschema") (= h "dfs")) (schema-node s pf))
+      ((or (= h "defenum") (= h "dfe"))   (enum-node s pf))
       (:else (err (perr (str "not a declaration head: '" h "'") pf))))))
 
 (df read-type-vars [(items (List rd/SExpr))]

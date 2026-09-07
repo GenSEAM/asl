@@ -575,9 +575,13 @@ case "$CMD" in
     MEM_RUNNER="$(find_mem_daemon)"
     exec "$NODE_BIN" "$MEM_RUNNER" eval "$@"
     ;;
-  rpc|batch)
+  \(:*|rpc|batch)
     MEM_RUNNER="$(find_mem_daemon)"
-    exec "$NODE_BIN" "$MEM_RUNNER" rpc "$@"
+    if [ "$CMD" = "rpc" ] || [ "$CMD" = "batch" ]; then
+      exec "$NODE_BIN" "$MEM_RUNNER" rpc "$@"
+    else
+      exec "$NODE_BIN" "$MEM_RUNNER" rpc "$CMD" "$@"
+    fi
     ;;
   exec|sh|run)
     MEM_RUNNER="$(find_mem_daemon)"
@@ -710,25 +714,96 @@ case "$CMD" in
     echo "asl 0.1.0 (pure AgentScript self-hosted toolchain)"
     exit 0
     ;;
-  help|-h|--help)
-    echo "AgentScript Native CLI (100% Pure Self-Hosted ASL)"
-    echo "Usage: asl <command> [arguments]"
+  help|-h|--help|--help-full)
+    SHOW_FULL=0
+    if [ "$CMD" = "--help-full" ] || [ "$1" = "--full" ] || [ "$1" = "full" ] || [ "$1" = "-a" ] || [ "$1" = "--all" ]; then
+      SHOW_FULL=1
+    fi
+    if [ "$SHOW_FULL" -eq 1 ]; then
+      echo "AgentScript Native CLI (Full Toolchain & Diagnostics)"
+      echo "Usage: asl rpc '(:batch ...)'        [MANDATORY AI AGENT INTERFACE]"
+      echo "   or: asl '(:batch ...)'            [Direct S-expression shorthand]"
+      echo "   or: asl <command> [arguments]     [Core language toolchain]"
+      echo ""
+      echo "Primary Interface for AI Agents (Single-Roundtrip Atomic Batch RPC):"
+      echo "  asl rpc '(:batch ...)'   Execute all exploration, grep, vector query, symbol"
+      echo "                           resolution, call graphs, in-memory edits, and verification"
+      echo "                           in a single roundtrip with 85-95% token savings."
+      echo ""
+      echo "Batch RPC Operations (:batch ...):"
+      echo "  (:out \"<file>\")                  AST outline (polyglot: .asl, .ts, .js, .py, .go, .rs, .php, .md)"
+      echo "  (:sym \"<symbol>\")                Exact symbol definition, signature & declaration line"
+      echo "  (:callers \"<symbol>\")            Global call graph across entire workspace"
+      echo "  (:impact \"<symbol>\")             Blast-radius impact analysis before refactoring"
+      echo "  (:find \"<pattern>\" [:ext \"...\"]) Instant resident-memory grep across repository (<50ms)"
+      echo "  (:q \"<query>\")                   In-memory vector semantic query / similarity recall"
+      echo "  (:ls \"<dir>\")                    Fast directory listing & file sizing metadata"
+      echo "  (:read \"<file>\" <start> <end>)   Narrow line-range slice read (for edit failure recovery)"
+      echo "  (:sec \"<file>\" \"<heading>\")      Targeted markdown section extraction without whole-file dump"
+      echo "  (:edit \"<file>\" \"old\" \"new\")     In-memory atomic string replacement in RAM"
+      echo "  (:repl \"old\" \"new\" [:ext \"...\"]) In-memory mass refactor across repository files"
+      echo "  (:patch \"<file>\" \"<sym>\" \"new\")  AST-level function/struct form replacement"
+      echo "  (:diff)                          Review staged in-memory modifications"
+      echo "  (:flush)                         Atomically commit staged modifications to filesystem"
+      echo "  (:discard)                       Discard dirty in-memory buffers"
+      echo "  (:chk)                           Execute full 7-gate verification suite in resident RAM"
+      echo "  (:exec :cmd \"<cmd>\")             Supervised process execution with sliding 10s watchdog"
+      echo ""
+      echo "Core CLI Commands:"
+      echo "  gate            Run pure verification gate suite across files and packages"
+      echo "  test [file]     Execute native ASL test suites"
+      echo "  check <file>    Run semantic syntax and form verification"
+      echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
+      echo "  audit <target>  Execute complete 3-tier audit (Micro AST, Meso keywords, Macro module)"
+      echo "  version         Display toolchain version"
+      echo ""
+      echo "Human Developer & Diagnostic Commands (Do NOT use individually in agent loops):"
+      echo "  task [name]     List or execute configured tasks from .asl.config.asn"
+      echo "  transpile-pkg   Transpile ASN package specification to standard package.json"
+      echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
+      echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index)"
+      echo "  mem <subcmd>    In-memory vector memory engine (index, query, search, ptr)"
+      echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
+      echo "  upgrade         Update ASL CLI to latest published release"
+      exit 0
+    fi
+
+    echo "AgentScript Native CLI (Unified Agent Batch RPC & Toolchain)"
+    echo "Usage: asl rpc '(:batch ...)'        [MANDATORY AI AGENT INTERFACE]"
+    echo "   or: asl '(:batch ...)'            [Direct S-expression shorthand]"
+    echo "   or: asl <command> [arguments]     [Core language toolchain]"
     echo ""
-    echo "Commands:"
+    echo "⚡ AI AGENTS: DO NOT USE PIECEWISE COMMANDS OR LOOSE FILE TOOLS (view_file, grep, find)."
+    echo "Execute all polyglot exploration, grep, vector query, symbol resolution, call graphs,"
+    echo "in-memory edits, and verification in a single atomic roundtrip:"
+    echo ""
+    echo "Batch RPC Operations (:batch ...):"
+    echo "  (:out \"<file>\")                  AST outline (polyglot: .asl, .ts, .js, .py, .go, .rs, .php, .md)"
+    echo "  (:sym \"<symbol>\")                Exact symbol definition, signature & declaration line"
+    echo "  (:callers \"<symbol>\")            Global call graph across entire workspace"
+    echo "  (:impact \"<symbol>\")             Blast-radius impact analysis before refactoring"
+    echo "  (:find \"<pattern>\" [:ext \"...\"]) Instant resident-memory grep across repository (<50ms)"
+    echo "  (:q \"<query>\")                   In-memory vector semantic query / similarity recall"
+    echo "  (:ls \"<dir>\")                    Fast directory listing & file sizing metadata"
+    echo "  (:read \"<file>\" <start> <end>)   Narrow line-range slice read (for edit failure recovery)"
+    echo "  (:sec \"<file>\" \"<heading>\")      Targeted markdown section extraction without whole-file dump"
+    echo "  (:edit \"<file>\" \"old\" \"new\")     In-memory atomic string replacement in RAM"
+    echo "  (:repl \"old\" \"new\" [:ext \"...\"]) In-memory mass refactor across repository files"
+    echo "  (:patch \"<file>\" \"<sym>\" \"new\")  AST-level function/struct form replacement"
+    echo "  (:diff)                          Review staged in-memory modifications"
+    echo "  (:flush)                         Atomically commit staged modifications to filesystem"
+    echo "  (:discard)                       Discard dirty in-memory buffers"
+    echo "  (:chk)                           Execute full 7-gate verification suite in resident RAM"
+    echo "  (:exec :cmd \"<cmd>\")             Supervised process execution with sliding 10s watchdog"
+    echo ""
+    echo "Core CLI Commands:"
     echo "  gate            Run pure verification gate suite across files and packages"
-    echo "  audit <file>    Execute complete 3-tier audit (Micro AST, Meso keywords, Macro module)"
+    echo "  test [file]     Execute native ASL test suites"
     echo "  check <file>    Run semantic syntax and form verification"
     echo "  lint <file>     Inspect AST for anti-patterns and hallucinated keywords"
-    echo "  test [file]     Execute native ASL test suites"
-    echo "  task [name]     List or execute configured tasks from .asl.config.asn"
-    echo "  transpile-pkg   Transpile ASN package specification to standard package.json"
-    echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
-    echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index)"
-    echo "  mem <subcmd>    In-memory vector memory engine (index, query, search, ptr)"
-    echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
-    echo "  upgrade         Update ASL CLI to latest published release"
+    echo "  audit <target>  Execute complete 3-tier audit (Micro AST, Meso keywords, Macro module)"
     echo "  version         Display toolchain version"
-    echo "  help            Display this usage guide"
+    echo "  help --full     Display full human-developer legacy commands (intel, mem, doc...)"
     exit 0
     ;;
   *)

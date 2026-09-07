@@ -9,11 +9,17 @@
 
 (df format-help [] -> Str
   :d "Returns AgentScript native CLI help usage manual."
-  (str "AgentScript Native CLI (100% Pure Self-Hosted ASL)\n"
-       "Usage: asl <command> [arguments]\n\n"
+  (str "AgentScript Native CLI (Unified Agent Batch RPC & Toolchain)\n"
+       "Usage: asl rpc '(:batch ...)'        [MANDATORY AI AGENT INTERFACE]\n"
+       "   or: asl '(:batch ...)'            [Direct S-expression shorthand]\n"
+       "   or: asl <command> [arguments]     [Core language toolchain]\n\n"
+       "⚡ AI AGENTS: DO NOT USE PIECEWISE COMMANDS OR LOOSE FILE TOOLS (view_file, grep, find).\n"
+       "Execute all polyglot exploration, grep, vector query, symbol resolution, call graphs,\n"
+       "in-memory edits, and verification in a single atomic roundtrip.\n\n"
        "Commands:\n"
-       "  check <file>    Run semantic type and scope checking\n"
+       "  rpc '(:batch ...)'  Execute single-roundtrip compound batch operations\n"
        "  gate [files]    Run pure verification gate suite across files\n"
+       "  check <file>    Run semantic type and scope checking\n"
        "  build <file>    Compile ASL to standalone target code\n"
        "  eval <expr>     Evaluate S-expression in pure ASL runtime\n"
        "  run <file>      Dynamically execute ASL program or Wasm target\n"
@@ -21,7 +27,7 @@
        "  parse <file>    Parse S-expression AST and print node count\n"
        "  lint <file>     Inspect AST for basic validity\n"
        "  version         Display toolchain version\n"
-       "  help            Display this usage guide\n"))
+       "  help [--full]   Display this usage guide (use --full for legacy commands)\n"))
 
 (df find-defun [(forms (List a/TopForm))] -> (Option a/DefunNode)
   :d "Finds the first DefunNode in a list of TopForms."
@@ -137,7 +143,7 @@
      (if (list-empty? args)
          (err "Usage: asl eval <expr>")
          (let [(expr-str (string-join args " "))
-               (wrapped (str "(df __eval_temp [] -> Any\n  " expr-str ")"))]
+               (wrapped (str "(df eval-temp [] -> Any\n  " expr-str ")"))]
            (mt (a/parse wrapped)
              ((err pe)
               (err (str "Parse error: " (.-msg pe))))

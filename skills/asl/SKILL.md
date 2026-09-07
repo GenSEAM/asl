@@ -15,9 +15,7 @@ An S-expression language for autonomous AI agents: balanced delimiters, whitespa
 - `asl fmt <file.asl>` — Deterministic AST canonical formatter.
 - `asl lint <file.asl>` — Structural quality & best-practice file sizing inspector.
 - `asl check <file.asl>` — Static type and semantic invariant checker.
-- `asl graph --callers <sym>` — Code intelligence: callers and references across modules.
-- `asl graph --impact <sym>` — Code intelligence: transitive change impact radius.
-- `asl graph --node <sym>` — Code intelligence: symbol definition and location.
+- `asl '(:batch (:sym "<sym>") (:callers "<sym>") (:impact "<sym>"))'` — Unified in-memory code intelligence (symbols, callers, blast-radius).
 - `asl registry <pkg>` — Universal package and dependency inspector across ecosystems.
 - `asl gate` — Pure native verification gate runner.
 - `asl rpc '(:batch ...)'` — High-performance native batch RPC harness for agent tool calling & verification.

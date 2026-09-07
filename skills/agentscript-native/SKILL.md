@@ -30,7 +30,6 @@ Always use the built-in `asl` toolchain for execution and code intelligence:
 - `asl run <file.asl>`: Evaluates in sandboxed Wasm/native isolate.
 - `asl test <file.asl>`: Runs native test suites.
 - `asl lint <file.asl>`: Enforces quality, size ceiling (150–500 lines), and anti-fragmentation rules.
-- `asl graph --callers <symbol>`: Finds callers across all packages.
-- `asl graph --impact <symbol>`: Traces transitive change impact radius.
+- `asl '(:batch (:callers "<symbol>") (:impact "<symbol>"))'`: Traces callers and computes blast-radius impact in resident RAM.
 - `asl registry <pkg>`: Inspects packages across npm, PyPI, crates.io, Go, and ASL.
 - `asl gate`: Runs full pre-commit verification chain.
