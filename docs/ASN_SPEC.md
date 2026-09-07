@@ -66,7 +66,7 @@ Framing is `docs/AGENTIC_PROTOCOL.md`'s job, not this file's: see §12.
 
 The language has recently gained a **note**: a free-standing string literal, bound to nothing,
 standing where a comment used to (`grammar/agentscript.lark`'s `note: STRING`, gated by
-`grammar/corpus/valid/33-notes.agentscript`).
+`grammar/corpus/valid/33-notes.asl`).
 
 **ASN admits no notes, and keeps `;` comments.** The reason is not preference, it is that a note
 cannot exist here. A program is a *sequence of declarations*, so a bare string between two of them

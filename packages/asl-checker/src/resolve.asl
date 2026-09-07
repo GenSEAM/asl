@@ -285,19 +285,13 @@
   (mt (list-head roots)
     ((none) (none))
     ((some r)
-     (let [(cand-as (str r "/" mod-path ".agentscript"))
-           (cand-asl (str r "/" mod-path ".asl"))
+     (let [(cand-asl (str r "/" mod-path ".asl"))
            (rest-roots (safe-tail roots))]
-       (mt (file-exists? cand-as)
-         ((ok exists-as?)
-          (if exists-as?
-            (some cand-as)
-            (mt (file-exists? cand-asl)
-              ((ok exists-asl?)
-               (if exists-asl?
-                 (some cand-asl)
-                 (find-module-file! rest-roots mod-path)))
-              ((err _) (find-module-file! rest-roots mod-path)))))
+       (mt (file-exists? cand-asl)
+         ((ok exists-asl?)
+          (if exists-asl?
+            (some cand-asl)
+            (find-module-file! rest-roots mod-path)))
          ((err _) (find-module-file! rest-roots mod-path)))))))
 
 (df ! load-module-deps! [(roots (List String)) (imports (List String))] -> (Result (Map String ModuleSummary) IoError)
