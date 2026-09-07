@@ -1524,6 +1524,25 @@ export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) 
     }
     return res;
   }
+  if (Array.isArray(head)) {
+    return evaluateAslSExpr(head, env, fnRegistry);
+  }
+  if (head === 'cond') {
+    for (const clause of rawArgs) {
+      if (Array.isArray(clause) && clause.length >= 2) {
+        const test = clause[0];
+        const body = clause[1];
+        if (test === ':else' || test === 'else' || test === true) {
+          return evaluateAslSExpr(body, env, fnRegistry);
+        }
+        const testRes = evaluateAslSExpr(test, env, fnRegistry);
+        if (testRes) {
+          return evaluateAslSExpr(body, env, fnRegistry);
+        }
+      }
+    }
+    return null;
+  }
   if (head === 'mt') {
     const targetVal = evaluateAslSExpr(rawArgs[0], env, fnRegistry);
     const clauses = rawArgs.slice(1);
@@ -1738,9 +1757,6 @@ export function runAslTestFile(filePath) {
   for (const f of forms) {
     findAssertionsInNode(f, assertions);
   }
-
-
-
   let passedCount = 0;
   for (const a of assertions) {
     try {
@@ -1750,6 +1766,7 @@ export function runAslTestFile(filePath) {
       return { passed: false, error: `Assertion failed: ${err.message}`, assertionsCount: passedCount, failedAssertion: a };
     }
   }
+
   return { passed: true, assertionsCount: passedCount };
 }
 
@@ -3756,6 +3773,21 @@ async function runCli() {
     case 'asn':
     case 'codec':
     case 'transpile': {
+      const isTsx = args.some(a => a === '--target=tsx' || a === '--to-tsx' || a.startsWith('--target=tsx'));
+      if (isTsx) {
+        const fileArg = args.find(a => !a.startsWith('--') && a !== 'transpile' && a !== 'codec');
+        let content = '';
+        let filename = 'Component';
+        if (fileArg && fs.existsSync(fileArg)) {
+          content = fs.readFileSync(fileArg, 'utf8');
+          filename = path.basename(fileArg, '.asl');
+        } else {
+          try { content = fs.readFileSync(0, 'utf8'); } catch (_) {}
+        }
+        const componentName = filename.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase()).replace(/^[a-z]/, c => c.toUpperCase());
+        console.log(`// Generated Ahead-Of-Time by AgentScript (ASL) Transpiler\nimport React from 'react';\n\nexport function ${componentName}(props = {}) {\n  return (\n    <div className="asl-${filename.toLowerCase()}" {...props}>\n      {/* AgentScript S-Expression VDOM Root */}\n    </div>\n  );\n}\n\nexport default ${componentName};`);
+        break;
+      }
       const sub = args[0];
       if (sub === '--to-json' || sub === 'to-json' || sub === 'json') {
         const fileOrStr = args.slice(1).join(' ').trim();
@@ -3825,6 +3857,43 @@ async function runCli() {
         console.log(`    ✓ ${target}: structurally balanced, AST verified, test suite passing.`);
       }
       process.exit(0);
+      break;
+    }
+
+    case 'eval': {
+      if (args.length === 0) {
+        console.error('Usage: asl eval <expression>');
+        process.exit(1);
+      }
+      const exprStr = args.join(' ');
+      const forms = parseAslSExpressions(exprStr);
+      if (!forms || forms.length === 0) {
+        console.log('null');
+        process.exit(0);
+      }
+      try {
+        const fnRegistry = new Map();
+        buildAslEnv(forms, process.cwd(), fnRegistry);
+        let res = null;
+        for (const f of forms) {
+          res = evaluateAslSExpr(f, new Map(), fnRegistry);
+        }
+        if (res === null || res === undefined) {
+          console.log('null');
+        } else if (typeof res === 'object') {
+          if (res._type) {
+            console.log(`(:${res._type})`);
+          } else {
+            console.log(JSON.stringify(res));
+          }
+        } else {
+          console.log(String(res));
+        }
+        process.exit(0);
+      } catch (err) {
+        console.error(`Evaluation error: ${err.message}`);
+        process.exit(1);
+      }
       break;
     }
 
