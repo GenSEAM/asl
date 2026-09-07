@@ -102,7 +102,8 @@ let memoryIndex = {
   idf: new Map(), // term -> idf weight
   documents: [], // { id, name, kind, file, line, text, tokens, vector }
   fileBuffers: new Map(), // relPath -> { content, initialContent, isDirty }
-  dirtyMap: {} // relPath -> modifiedContent
+  dirtyMap: {}, // relPath -> modifiedContent
+  tombstones: new Set() // relPath -> staged deletions
 };
 
 // --- Dirty Buffer Persistence Helpers ---
@@ -140,6 +141,9 @@ export function normalizeBufferKey(rawPath) {
 export function getBufferContent(rawPath) {
   if (!rawPath) return null;
   const relPath = normalizeBufferKey(rawPath);
+  if (memoryIndex.tombstones && memoryIndex.tombstones.has(relPath)) {
+    return null;
+  }
   if (memoryIndex.dirtyMap && memoryIndex.dirtyMap[relPath] !== undefined) {
     return memoryIndex.dirtyMap[relPath];
   }
@@ -756,20 +760,56 @@ export function inMemoryMassReplace(matchStr, replaceStr, options = {}) {
 }
 
 // --- In-Memory Diff, Flush & Discard ---
+function computeLineDiff(oldLines, newLines) {
+  if (oldLines.length + newLines.length > 3000) {
+    const oldSet = new Set(oldLines);
+    const newSet = new Set(newLines);
+    let additions = 0, deletions = 0;
+    for (const l of newLines) if (!oldSet.has(l)) additions++;
+    for (const l of oldLines) if (!newSet.has(l)) deletions++;
+    return { additions, deletions, changed: additions + deletions };
+  }
+  const m = oldLines.length;
+  const n = newLines.length;
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+  for (let i = 0; i < m; i++) {
+    for (let j = 0; j < n; j++) {
+      if (oldLines[i] === newLines[j]) {
+        dp[i + 1][j + 1] = dp[i][j] + 1;
+      } else {
+        dp[i + 1][j + 1] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+  const lcs = dp[m][n];
+  const deletions = m - lcs;
+  const additions = n - lcs;
+  return { additions, deletions, changed: additions + deletions };
+}
+
 export function inMemoryDiff() {
   const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
   const dirtyKeys = Object.keys(dirty);
-  if (dirtyKeys.length === 0) {
+  const tombstones = memoryIndex.tombstones ? Array.from(memoryIndex.tombstones) : [];
+  const totalDirty = dirtyKeys.length + tombstones.length;
+
+  if (totalDirty === 0) {
     return "(:diff :status \"clean\" :dirty-files 0)";
   }
 
-  let out = `(:in-memory-diff :dirty-files ${dirtyKeys.length} :changes [\n`;
+  let out = `(:in-memory-diff :dirty-files ${totalDirty} :changes [\n`;
   for (const rel of dirtyKeys) {
     const diskContent = getInitialDiskContent(rel);
     const memContent = dirty[rel];
-    const diskLines = diskContent.split('\n');
-    const memLines = memContent.split('\n');
-    out += `  (:file "${rel}" :disk-lines ${diskLines.length} :mem-lines ${memLines.length})\n`;
+    const diskLines = diskContent.length === 0 ? [] : diskContent.split('\n');
+    const memLines = memContent.length === 0 ? [] : memContent.split('\n');
+    const diff = computeLineDiff(diskLines, memLines);
+    out += `  (:file "${rel}" :status "modified" :disk-lines ${diskLines.length} :mem-lines ${memLines.length} :additions ${diff.additions} :deletions ${diff.deletions} :changed-lines ${diff.changed})\n`;
+  }
+  for (const rel of tombstones) {
+    const diskContent = getInitialDiskContent(rel);
+    const diskLines = diskContent.length === 0 ? [] : diskContent.split('\n');
+    out += `  (:file "${rel}" :status "deleted" :disk-lines ${diskLines.length} :mem-lines 0 :additions 0 :deletions ${diskLines.length} :changed-lines ${diskLines.length})\n`;
   }
   out += `])`;
   return out;
@@ -778,7 +818,9 @@ export function inMemoryDiff() {
 export function inMemoryFlush() {
   const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
   const dirtyKeys = Object.keys(dirty);
-  if (dirtyKeys.length === 0) {
+  const tombstones = memoryIndex.tombstones ? Array.from(memoryIndex.tombstones) : [];
+
+  if (dirtyKeys.length === 0 && tombstones.length === 0) {
     return { flushedCount: 0, message: "No dirty in-memory buffers to flush." };
   }
 
@@ -791,16 +833,31 @@ export function inMemoryFlush() {
     fs.writeFileSync(fullPath, dirty[rel], 'utf8');
   }
 
-  // Clear dirty state
+  for (const rel of tombstones) {
+    const fullPath = path.isAbsolute(rel) ? rel : path.resolve(WORKSPACE_ROOT, rel);
+    if (fs.existsSync(fullPath)) {
+      try {
+        fs.unlinkSync(fullPath);
+      } catch (err) {}
+    }
+  }
+
+  // Clear dirty state and tombstones
   memoryIndex.dirtyMap = {};
+  if (memoryIndex.tombstones) {
+    memoryIndex.tombstones.clear();
+  }
   saveDirtyMap({});
   buildIndex(WORKSPACE_ROOT);
 
-  return { flushedCount: dirtyKeys.length, files: dirtyKeys };
+  return { flushedCount: dirtyKeys.length + tombstones.length, files: [...dirtyKeys, ...tombstones] };
 }
 
 export function inMemoryDiscard() {
   memoryIndex.dirtyMap = {};
+  if (memoryIndex.tombstones) {
+    memoryIndex.tombstones.clear();
+  }
   saveDirtyMap({});
   memoryIndex.fileBuffers.clear();
   return { status: "discarded", message: "All in-memory buffers reverted to disk." };
@@ -2013,27 +2070,109 @@ export function executeSupervisedCommand({
   });
 }
 
+function makeStepSuccess(id, op, detailsStr, elapsedMs) {
+  const elapsedPart = elapsedMs !== undefined ? ` :elapsed-ms ${elapsedMs}` : '';
+  const detailsPart = detailsStr ? ` ${detailsStr}` : '';
+  const stepBody = `  (:step :id ${id} :op "${op}" :status "ok"${elapsedPart}${detailsPart})\n`;
+  return {
+    stepBody,
+    status: 'ok',
+    code: null,
+    reason: null,
+    op,
+    id
+  };
+}
+
+function makeStepFailure(id, op, code, reason, extraStr) {
+  const cleanCode = code.replace(/^:/, '');
+  const extraPart = extraStr ? ` ${extraStr}` : '';
+  const stepBody = `  (:step :id ${id} :op "${op}" :status "failed" :code :${cleanCode} :reason "${reason.replace(/"/g, '\\"')}"${extraPart})\n`;
+  return {
+    stepBody,
+    status: 'failed',
+    code: `:${cleanCode}`,
+    reason,
+    op,
+    id
+  };
+}
+
+function makeStepRejected(id, op, code, reason, extraStr) {
+  const cleanCode = code.replace(/^:/, '');
+  const extraPart = extraStr ? ` ${extraStr}` : '';
+  const stepBody = `  (:step :id ${id} :op "${op}" :status "rejected" :code :${cleanCode} :reason "${reason.replace(/"/g, '\\"')}"${extraPart})\n`;
+  return {
+    stepBody,
+    status: 'rejected',
+    code: `:${cleanCode}`,
+    reason,
+    op,
+    id
+  };
+}
+
+function makeStepAborted(id, op, reason) {
+  const reasonPart = reason ? ` :reason "${reason.replace(/"/g, '\\"')}"` : '';
+  const stepBody = `  (:step :id ${id} :op "${op}" :status "aborted"${reasonPart})\n`;
+  return {
+    stepBody,
+    status: 'aborted',
+    code: null,
+    reason: reason || null,
+    op,
+    id
+  };
+}
+
 async function executeStep(item, idx, options = {}) {
   const stepStart = Date.now();
-  if (!Array.isArray(item) || item.length === 0) return '';
+  const stepId = idx + 1;
+  if (!Array.isArray(item) || item.length === 0) {
+    return makeStepAborted(stepId, 'noop', 'Empty step');
+  }
   const opTok = item[0];
   let rawOp = (opTok && opTok.type === 'keyword' ? opTok.value : String(opTok?.value || opTok)).replace(/^:/, '');
 
   const getArg = (keys, pos) => {
-    const keyList = Array.isArray(keys) ? keys : [keys];
-    for (let k = 1; k < item.length - 1; k++) {
+    const keyList = (Array.isArray(keys) ? keys : [keys]).map(k => String(k).replace(/^:/, ''));
+    for (let k = 1; k < item.length; k++) {
       const t = item[k];
-      if (t && t.type === 'keyword') {
-        const kName = t.value.replace(/^:/, '');
+      const isKw = (t && t.type === 'keyword') || (typeof t === 'string' && t.startsWith(':'));
+      if (isKw) {
+        const kName = (t && t.type === 'keyword' ? t.value : String(t)).replace(/^:/, '');
         if (keyList.includes(kName)) {
-          const next = item[k + 1];
-          return next && next.value !== undefined ? next.value : next;
+          if (k + 1 < item.length) {
+            const next = item[k + 1];
+            const nextIsKw = (next && next.type === 'keyword') || (typeof next === 'string' && next.startsWith(':'));
+            if (!nextIsKw) {
+              return next && next.value !== undefined ? next.value : next;
+            }
+          }
+          return true;
         }
       }
     }
-    if (pos !== undefined && item[pos] !== undefined) {
-      const val = item[pos];
-      return val && val.value !== undefined ? val.value : val;
+    if (pos !== undefined && pos >= 1) {
+      const positionalArgs = [];
+      for (let k = 1; k < item.length; k++) {
+        const t = item[k];
+        const isKw = (t && t.type === 'keyword') || (typeof t === 'string' && t.startsWith(':'));
+        if (isKw) {
+          if (k + 1 < item.length) {
+            const next = item[k + 1];
+            const nextIsKw = (next && next.type === 'keyword') || (typeof next === 'string' && next.startsWith(':'));
+            if (!nextIsKw) {
+              k++;
+            }
+          }
+        } else {
+          positionalArgs.push(t && t.value !== undefined ? t.value : t);
+        }
+      }
+      if (pos <= positionalArgs.length) {
+        return positionalArgs[pos - 1];
+      }
     }
     return null;
   };
@@ -2072,62 +2211,83 @@ async function executeStep(item, idx, options = {}) {
     'delete': 'delete',
     'rm': 'delete',
     'patch': 'patch',
-    'syntax': 'syntax'
+    'syntax': 'syntax',
+    'ls': 'ls',
+    'dir': 'ls',
+    'glob': 'ls'
   };
   const op = OP_ALIASES[rawOp] || rawOp;
 
-  let stepBody = '';
+  let result = null;
   try {
     switch (op) {
       case 'query': {
         const q = getArg(['q', 'query'], 1);
+        if (!q) {
+          result = makeStepFailure(stepId, 'query', 'ERR_MISSING_PARAMETER', 'Missing query parameter');
+          break;
+        }
         const limit = parseInt(getArg(['lim', 'limit'], 2) || '5', 10);
         const matches = querySemantic(q, limit);
-        stepBody = `  (:step :id ${idx + 1} :op "query" :elapsed-ms ${Date.now() - stepStart} :res [\n`;
+        let matchStr = ':res [\n';
         for (const m of matches) {
           const d = m.doc;
           const score = m.score.toFixed(3);
           const safeDoc = (d.doc || '').slice(0, 60).replace(/"/g, '\\"');
-          stepBody += `    (:match :score ${score} :name "${d.name}" :kind "${d.kind}" :file "${d.file}:${d.line}" :summary "${safeDoc}")\n`;
+          matchStr += `    (:match :score ${score} :name "${d.name}" :kind "${d.kind}" :file "${d.file}:${d.line}" :summary "${safeDoc}")\n`;
         }
-        stepBody += `  ])\n`;
+        matchStr += '  ]';
+        result = makeStepSuccess(stepId, 'query', matchStr, Date.now() - stepStart);
         break;
       }
 
       case 'outline': {
         const file = getArg(['file', 'f', 'path'], 1);
+        if (!file) {
+          result = makeStepFailure(stepId, 'outline', 'ERR_MISSING_PARAMETER', 'Missing file parameter');
+          break;
+        }
         const content = getBufferContent(file);
-
-        if (!content) {
-          stepBody = `  (:step :id ${idx + 1} :op "outline" :error "File not found: ${file}")\n`;
-        } else {
-          const ext = path.extname(file);
-          if (ext === '.asl') {
-            const syms = parseAslText(content, file);
-            stepBody = `  (:step :id ${idx + 1} :op "outline" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :symbols [\n`;
-            for (const s of syms) {
-              stepBody += `    (:sym :name "${s.name}" :kind "${s.kind}" :line ${s.line} :sig "${(s.signature || '').replace(/"/g, '\\"')}")\n`;
-            }
-            stepBody += `  ])\n`;
-          } else if (ext === '.md') {
-            stepBody = `  (:step :id ${idx + 1} :op "outline" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :res ${inMemoryDocOutline(file)})\n`;
-          } else {
-            const syms = parsePolyglotText(content, file);
-            stepBody = `  (:step :id ${idx + 1} :op "outline" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :symbols [\n`;
-            for (const s of syms) {
-              stepBody += `    (:sym :name "${s.name}" :kind "${s.kind}" :line ${s.line} :sig "${(s.signature || '').replace(/"/g, '\\"')}")\n`;
-            }
-            stepBody += `  ])\n`;
+        if (content === null || content === undefined) {
+          result = makeStepFailure(stepId, 'outline', 'ERR_FILE_NOT_FOUND', `File not found: ${file}`);
+          break;
+        }
+        const ext = path.extname(file);
+        if (ext === '.asl') {
+          const syms = parseAslText(content, file);
+          let symsStr = `:file "${file}" :symbols [\n`;
+          for (const s of syms) {
+            symsStr += `    (:sym :name "${s.name}" :kind "${s.kind}" :line ${s.line} :sig "${(s.signature || '').replace(/"/g, '\\"')}")\n`;
           }
+          symsStr += '  ]';
+          result = makeStepSuccess(stepId, 'outline', symsStr, Date.now() - stepStart);
+        } else if (ext === '.md') {
+          result = makeStepSuccess(stepId, 'outline', `:file "${file}" :res ${inMemoryDocOutline(file)}`, Date.now() - stepStart);
+        } else {
+          const syms = parsePolyglotText(content, file);
+          let symsStr = `:file "${file}" :symbols [\n`;
+          for (const s of syms) {
+            symsStr += `    (:sym :name "${s.name}" :kind "${s.kind}" :line ${s.line} :sig "${(s.signature || '').replace(/"/g, '\\"')}")\n`;
+          }
+          symsStr += '  ]';
+          result = makeStepSuccess(stepId, 'outline', symsStr, Date.now() - stepStart);
         }
         break;
       }
 
       case 'preload': {
         const sym = getArg(['symbol', 'sym', 'target', 's'], 1);
+        if (!sym) {
+          result = makeStepFailure(stepId, 'preload', 'ERR_MISSING_PARAMETER', 'Missing symbol parameter');
+          break;
+        }
         const budget = parseInt(getArg(['budget', 'b'], 2) || '500', 10);
         const horizon = preloadHorizon(sym, budget);
-        stepBody = `  (:step :id ${idx + 1} :op "preload" :elapsed-ms ${Date.now() - stepStart} :res ${horizon})\n`;
+        if (typeof horizon === 'string' && horizon.includes(':error')) {
+          result = makeStepFailure(stepId, 'preload', 'ERR_STRING_NOT_FOUND', `Symbol not found in in-memory index: ${sym}`);
+          break;
+        }
+        result = makeStepSuccess(stepId, 'preload', `:res ${horizon}`, Date.now() - stepStart);
         break;
       }
 
@@ -2135,14 +2295,31 @@ async function executeStep(item, idx, options = {}) {
       case 'section': {
         const file = getArg(['file', 'f', 'path'], 1);
         const title = getArg(['title', 'sec', 't'], 2);
+        if (!file || !title) {
+          result = makeStepFailure(stepId, 'doc-section', 'ERR_MISSING_PARAMETER', 'Missing file or title parameter');
+          break;
+        }
+        const content = getBufferContent(file);
+        if (content === null || content === undefined) {
+          result = makeStepFailure(stepId, 'doc-section', 'ERR_FILE_NOT_FOUND', `File not found: ${file}`);
+          break;
+        }
         const sec = inMemoryDocSection(file, title);
+        if (!sec) {
+          result = makeStepFailure(stepId, 'doc-section', 'ERR_STRING_NOT_FOUND', `Section not found: ${title}`);
+          break;
+        }
         const safeSec = (sec || '').replace(/"/g, '\\"');
-        stepBody = `  (:step :id ${idx + 1} :op "doc-section" :file "${file}" :title "${title}" :elapsed-ms ${Date.now() - stepStart} :content "${safeSec}")\n`;
+        result = makeStepSuccess(stepId, 'doc-section', `:file "${file}" :title "${title}" :content "${safeSec}"`, Date.now() - stepStart);
         break;
       }
 
       case 'search': {
         const sym = getArg(['symbol', 'sym', 'name', 's'], 1);
+        if (!sym) {
+          result = makeStepFailure(stepId, 'search', 'ERR_MISSING_PARAMETER', 'Missing symbol parameter');
+          break;
+        }
         let m = memoryIndex.symbols.get(sym);
         if (!m) {
           const grepMatches = inMemoryGrep(sym, { limit: 10 });
@@ -2161,86 +2338,113 @@ async function executeStep(item, idx, options = {}) {
           }
         }
         if (m) {
-          stepBody = `  (:step :id ${idx + 1} :op "search" :elapsed-ms ${Date.now() - stepStart} :res (:symbol :name "${m.name}" :kind "${m.kind}" :file "${m.file}" :line ${m.line} :sig "${(m.signature || '').replace(/"/g, '\\"')}"))\n`;
+          result = makeStepSuccess(stepId, 'search', `:res (:symbol :name "${m.name}" :kind "${m.kind}" :file "${m.file}" :line ${m.line} :sig "${(m.signature || '').replace(/"/g, '\\"')}")`, Date.now() - stepStart);
         } else {
-          stepBody = `  (:step :id ${idx + 1} :op "search" :res (:not-found :symbol "${sym}"))\n`;
+          result = makeStepSuccess(stepId, 'search', `:res (:not-found :symbol "${sym}")`, Date.now() - stepStart);
         }
         break;
       }
 
       case 'grep': {
         const pattern = getArg(['pattern', 'query', 'p', 'q'], 1);
+        if (!pattern) {
+          result = makeStepFailure(stepId, 'grep', 'ERR_MISSING_PARAMETER', 'Missing pattern parameter');
+          break;
+        }
         const ext = getArg(['ext', 'e'], 2);
         const matches = inMemoryGrep(pattern, { ext, limit: 10 });
-        stepBody = `  (:step :id ${idx + 1} :op "grep" :query "${pattern}" :elapsed-ms ${Date.now() - stepStart} :count ${matches.length} :matches [\n`;
+        let matchStr = `:query "${pattern}" :count ${matches.length} :matches [\n`;
         for (const m of matches) {
-          stepBody += `    (:m :file "${m.file}:${m.line}" :line "${m.content.slice(0, 70).replace(/"/g, '\\"')}")\n`;
+          matchStr += `    (:m :file "${m.file}:${m.line}" :line "${m.content.slice(0, 70).replace(/"/g, '\\"')}")\n`;
         }
-        stepBody += `  ])\n`;
+        matchStr += '  ]';
+        result = makeStepSuccess(stepId, 'grep', matchStr, Date.now() - stepStart);
         break;
       }
 
       case 'callers': {
         const sym = getArg(['symbol', 'sym', 's'], 1);
+        if (!sym) {
+          result = makeStepFailure(stepId, 'callers', 'ERR_MISSING_PARAMETER', 'Missing symbol parameter');
+          break;
+        }
         const limit = parseInt(getArg(['limit', 'l'], 2) || '20', 10);
         const callers = findCallers(sym, { limit });
-        stepBody = `  (:step :id ${idx + 1} :op "callers" :symbol "${sym}" :elapsed-ms ${Date.now() - stepStart} :count ${callers.length} :matches [\n`;
+        let matchStr = `:symbol "${sym}" :count ${callers.length} :matches [\n`;
         for (const c of callers) {
-          stepBody += `    (:caller :file "${c.file}:${c.line}" :line "${c.content.slice(0, 70).replace(/"/g, '\\"')}")\n`;
+          matchStr += `    (:caller :file "${c.file}:${c.line}" :line "${c.content.slice(0, 70).replace(/"/g, '\\"')}")\n`;
         }
-        stepBody += `  ])\n`;
+        matchStr += '  ]';
+        result = makeStepSuccess(stepId, 'callers', matchStr, Date.now() - stepStart);
         break;
       }
 
       case 'impact': {
         const sym = getArg(['symbol', 'sym', 's'], 1);
+        if (!sym) {
+          result = makeStepFailure(stepId, 'impact', 'ERR_MISSING_PARAMETER', 'Missing symbol parameter');
+          break;
+        }
         const limit = parseInt(getArg(['limit', 'l'], 2) || '20', 10);
         const affected = findImpact(sym, { limit });
-        stepBody = `  (:step :id ${idx + 1} :op "impact" :symbol "${sym}" :elapsed-ms ${Date.now() - stepStart} :count ${affected.length} :matches [\n`;
+        let matchStr = `:symbol "${sym}" :count ${affected.length} :matches [\n`;
         for (const a of affected) {
-          stepBody += `    (:affected :file "${a.file}:${a.line}" :line "${a.content.slice(0, 70).replace(/"/g, '\\"')}")\n`;
+          matchStr += `    (:affected :file "${a.file}:${a.line}" :line "${a.content.slice(0, 70).replace(/"/g, '\\"')}")\n`;
         }
-        stepBody += `  ])\n`;
+        matchStr += '  ]';
+        result = makeStepSuccess(stepId, 'impact', matchStr, Date.now() - stepStart);
         break;
       }
 
       case 'read': {
         const file = getArg(['file', 'f'], 1);
+        if (!file) {
+          result = makeStepFailure(stepId, 'read', 'ERR_MISSING_PARAMETER', 'Missing file parameter');
+          break;
+        }
         const start = parseInt(getArg(['start', 'from'], 2) || '1', 10);
         const end = parseInt(getArg(['end', 'to'], 3) || '50', 10);
         const content = getBufferContent(file);
-        if (!content) {
-          stepBody = `  (:step :id ${idx + 1} :op "read" :error "File not found: ${file}")\n`;
-        } else {
-          const lines = content.split('\n');
-          const slice = lines.slice(Math.max(0, start - 1), Math.min(lines.length, end)).join('\n');
-          stepBody = `  (:step :id ${idx + 1} :op "read" :file "${file}" :lines "${start}-${end}" :elapsed-ms ${Date.now() - stepStart} :content "${slice.replace(/"/g, '\\"')}")\n`;
+        if (content === null || content === undefined) {
+          result = makeStepFailure(stepId, 'read', 'ERR_FILE_NOT_FOUND', `File not found: ${file}`);
+          break;
         }
+        const lines = content.split('\n');
+        const slice = lines.slice(Math.max(0, start - 1), Math.min(lines.length, end)).join('\n');
+        result = makeStepSuccess(stepId, 'read', `:file "${file}" :lines "${start}-${end}" :content "${slice.replace(/"/g, '\\"')}"`, Date.now() - stepStart);
         break;
       }
 
       case 'web-search':
       case 'web': {
         if (process.env.ASL_AIRGAP === '1' || process.env.ASL_OFFLINE === '1') {
-          stepBody = `  (:step :id ${idx + 1} :op "web-search" :status "blocked" :error "AIRGAP_VIOLATION: External network access is strictly disabled in benchmark mode")\n`;
+          result = makeStepRejected(stepId, 'web-search', 'ERR_AIRGAP_VIOLATION', 'AIRGAP_VIOLATION: External network access is strictly disabled in benchmark mode');
           break;
         }
         const query = getArg(['query', 'q'], 1);
+        if (!query) {
+          result = makeStepFailure(stepId, 'web-search', 'ERR_MISSING_PARAMETER', 'Missing query parameter');
+          break;
+        }
         const engine = getArg(['engine', 'e'], 2) || 'duckduckgo';
         const limit = parseInt(getArg(['limit', 'lim', 'l'], 3) || '3', 10);
         const cleanQ = encodeURIComponent(query);
         const targetUrl = engine === 'github'
           ? `https://api.github.com/search/repositories?q=${cleanQ}&per_page=${limit}`
           : (engine === 'arxiv' ? `http://export.arxiv.org/api/query?search_query=all:${cleanQ}&max_results=${limit}` : `https://html.duckduckgo.com/html/?q=${cleanQ}`);
-        stepBody = `  (:step :id ${idx + 1} :op "web-search" :engine "${engine}" :query "${query}" :target-url "${targetUrl}")\n`;
+        result = makeStepSuccess(stepId, 'web-search', `:engine "${engine}" :query "${query}" :target-url "${targetUrl}"`);
         break;
       }
 
       case 'dep':
       case 'dependency': {
         const pkg = getArg(['package', 'pkg', 'name'], 1);
+        if (!pkg) {
+          result = makeStepFailure(stepId, 'dep', 'ERR_MISSING_PARAMETER', 'Missing package parameter');
+          break;
+        }
         const res = resolveDependencyTypes(pkg);
-        stepBody = `  (:step :id ${idx + 1} :op "dep" :package "${pkg}" :found ${res.found} :symbols-count ${res.symbolsCount || 0} :res ${formatDependencyAsn(res)})\n`;
+        result = makeStepSuccess(stepId, 'dep', `:package "${pkg}" :found ${res.found} :symbols-count ${res.symbolsCount || 0} :res ${formatDependencyAsn(res)}`);
         break;
       }
 
@@ -2248,17 +2452,34 @@ async function executeStep(item, idx, options = {}) {
         const file = getArg(['file', 'f'], 1);
         const oldT = getArg(['old', 'from'], 2);
         const newT = getArg(['new', 'to'], 3);
+        if (!file || oldT === null || oldT === undefined || newT === null || newT === undefined) {
+          result = makeStepFailure(stepId, 'edit', 'ERR_MISSING_PARAMETER', 'Missing file, old text, or new text parameter');
+          break;
+        }
+        const currentContent = getBufferContent(file);
+        if (currentContent === null || currentContent === undefined) {
+          result = makeStepFailure(stepId, 'edit', 'ERR_FILE_NOT_FOUND', `File not found: ${file}`);
+          break;
+        }
         const res = inMemoryEdit(file, oldT, newT);
-        stepBody = `  (:step :id ${idx + 1} :op "edit" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :status "${res.success ? 'dirty-in-ram' : 'failed'}" :error "${res.error || ''}")\n`;
+        if (!res.success) {
+          result = makeStepFailure(stepId, 'edit', 'ERR_STRING_NOT_FOUND', res.error || `Old text target not found in buffer: ${file}`);
+          break;
+        }
+        result = makeStepSuccess(stepId, 'edit', `:file "${file}" :buffer "dirty-in-ram"`, Date.now() - stepStart);
         break;
       }
 
       case 'replace': {
         const matchP = getArg(['match', 'm', 'old'], 1);
         const replP = getArg(['replace', 'with', 'r', 'new'], 2);
+        if (matchP === null || matchP === undefined || replP === null || replP === undefined) {
+          result = makeStepFailure(stepId, 'replace', 'ERR_MISSING_PARAMETER', 'Missing match or replace parameter');
+          break;
+        }
         const ext = getArg(['ext', 'e'], 3);
         const res = inMemoryMassReplace(matchP, replP, { ext });
-        stepBody = `  (:step :id ${idx + 1} :op "replace" :elapsed-ms ${Date.now() - stepStart} :files-changed ${res.filesChanged} :total-replacements ${res.totalReplacements})\n`;
+        result = makeStepSuccess(stepId, 'replace', `:files-changed ${res.filesChanged} :total-replacements ${res.totalReplacements}`, Date.now() - stepStart);
         break;
       }
 
@@ -2267,11 +2488,15 @@ async function executeStep(item, idx, options = {}) {
         const file = getArg(['file', 'f', 'path'], 1);
         const content = getArg(['content', 'data', 'c', 'd'], 2) ?? '';
         if (!file) {
-          stepBody = `  (:step :id ${idx + 1} :op "create" :status "failed" :error "Missing file parameter")\n`;
-        } else {
-          setBufferContent(file, content);
-          stepBody = `  (:step :id ${idx + 1} :op "create" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :status "created-in-ram")\n`;
+          result = makeStepFailure(stepId, 'create', 'ERR_MISSING_PARAMETER', 'Missing file parameter');
+          break;
         }
+        setBufferContent(file, content);
+        const rel = normalizeBufferKey(file);
+        if (memoryIndex.tombstones) {
+          memoryIndex.tombstones.delete(rel);
+        }
+        result = makeStepSuccess(stepId, 'create', `:file "${file}" :buffer "created-in-ram"`, Date.now() - stepStart);
         break;
       }
 
@@ -2279,11 +2504,21 @@ async function executeStep(item, idx, options = {}) {
       case 'rm': {
         const file = getArg(['file', 'f', 'path'], 1);
         if (!file) {
-          stepBody = `  (:step :id ${idx + 1} :op "delete" :status "failed" :error "Missing file parameter")\n`;
-        } else {
-          setBufferContent(file, "");
-          stepBody = `  (:step :id ${idx + 1} :op "delete" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :status "deleted-in-ram")\n`;
+          result = makeStepFailure(stepId, 'delete', 'ERR_MISSING_PARAMETER', 'Missing file parameter');
+          break;
         }
+        const relPath = normalizeBufferKey(file);
+        if (memoryIndex.dirtyMap && memoryIndex.dirtyMap[relPath] !== undefined) {
+          delete memoryIndex.dirtyMap[relPath];
+        }
+        if (memoryIndex.fileBuffers) {
+          memoryIndex.fileBuffers.delete(relPath);
+        }
+        if (!memoryIndex.tombstones) {
+          memoryIndex.tombstones = new Set();
+        }
+        memoryIndex.tombstones.add(relPath);
+        result = makeStepSuccess(stepId, 'delete', `:file "${file}" :buffer "deleted-in-ram"`, Date.now() - stepStart);
         break;
       }
 
@@ -2292,35 +2527,34 @@ async function executeStep(item, idx, options = {}) {
         const sym = getArg(['symbol', 's', 'sym', 'name'], 2);
         const repl = getArg(['replacement', 'r', 'repl', 'with', 'new'], 3);
         if (!file || !sym || repl === null || repl === undefined) {
-          stepBody = `  (:step :id ${idx + 1} :op "patch" :status "failed" :error "Missing file, symbol, or replacement parameter")\n`;
-        } else {
-          const content = getBufferContent(file);
-          if (content === null) {
-            stepBody = `  (:step :id ${idx + 1} :op "patch" :file "${file}" :status "failed" :error "File not found: ${file}")\n`;
-          } else {
-            let patched = null;
-            const defPrefixes = [`(df ${sym} `, `(df ${sym}\n`, `(df ${sym}[`, `(dfs ${sym} `, `(dfs ${sym}\n`, `(dfe ${sym} `, `(dfe ${sym}\n`];
-            for (const pfx of defPrefixes) {
-              const startIdx = content.indexOf(pfx);
-              if (startIdx !== -1) {
-                const form = findAslFormAt(content, startIdx);
-                if (form) {
-                  patched = content.replace(form, repl);
-                  break;
-                }
-              }
-            }
-            if (patched === null && content.includes(sym)) {
-              patched = content.replaceAll(sym, () => repl);
-            }
-
-            if (patched !== null) {
-              setBufferContent(file, patched);
-              stepBody = `  (:step :id ${idx + 1} :op "patch" :file "${file}" :symbol "${sym}" :elapsed-ms ${Date.now() - stepStart} :status "patched-in-ram")\n`;
-            } else {
-              stepBody = `  (:step :id ${idx + 1} :op "patch" :file "${file}" :symbol "${sym}" :status "failed" :error "Symbol or target string '${sym}' not found in ${file}")\n`;
+          result = makeStepFailure(stepId, 'patch', 'ERR_MISSING_PARAMETER', 'Missing file, symbol, or replacement parameter');
+          break;
+        }
+        const content = getBufferContent(file);
+        if (content === null || content === undefined) {
+          result = makeStepFailure(stepId, 'patch', 'ERR_FILE_NOT_FOUND', `File not found: ${file}`);
+          break;
+        }
+        let patched = null;
+        const defPrefixes = [`(df ${sym} `, `(df ${sym}\n`, `(df ${sym}[`, `(dfs ${sym} `, `(dfs ${sym}\n`, `(dfe ${sym} `, `(dfe ${sym}\n`];
+        for (const pfx of defPrefixes) {
+          const startIdx = content.indexOf(pfx);
+          if (startIdx !== -1) {
+            const form = findAslFormAt(content, startIdx);
+            if (form) {
+              patched = content.replace(form, repl);
+              break;
             }
           }
+        }
+        if (patched === null && content.includes(sym)) {
+          patched = content.replaceAll(sym, () => repl);
+        }
+        if (patched !== null) {
+          setBufferContent(file, patched);
+          result = makeStepSuccess(stepId, 'patch', `:file "${file}" :symbol "${sym}" :buffer "patched-in-ram"`, Date.now() - stepStart);
+        } else {
+          result = makeStepFailure(stepId, 'patch', 'ERR_STRING_NOT_FOUND', `Symbol or target string '${sym}' not found in ${file}`);
         }
         break;
       }
@@ -2328,155 +2562,102 @@ async function executeStep(item, idx, options = {}) {
       case 'syntax': {
         const file = getArg(['file', 'f', 'path'], 1);
         if (!file) {
-          stepBody = `  (:step :id ${idx + 1} :op "syntax" :valid false :error "Missing file parameter")\n`;
+          result = makeStepFailure(stepId, 'syntax', 'ERR_MISSING_PARAMETER', 'Missing file parameter');
+          break;
+        }
+        const content = getBufferContent(file);
+        if (content === null || content === undefined) {
+          result = makeStepFailure(stepId, 'syntax', 'ERR_FILE_NOT_FOUND', `File not found: ${file}`);
+          break;
+        }
+        const res = checkAslBalance(file);
+        if (!res.valid) {
+          result = makeStepFailure(stepId, 'syntax', 'ERR_SYNTAX_BALANCE', res.error || 'Syntax balance error', `:file "${file}" :valid false`);
         } else {
-          const res = checkAslBalance(file);
-          stepBody = `  (:step :id ${idx + 1} :op "syntax" :file "${file}" :valid ${res.valid ? 'true' : 'false'} :error "${res.error || ''}")\n`;
+          result = makeStepSuccess(stepId, 'syntax', `:file "${file}" :valid true`, Date.now() - stepStart);
         }
         break;
       }
 
-
       case 'diff': {
-        stepBody = `  (:step :id ${idx + 1} :op "diff" :res ${inMemoryDiff()})\n`;
+        result = makeStepSuccess(stepId, 'diff', `:res ${inMemoryDiff()}`, Date.now() - stepStart);
         break;
       }
 
       case 'flush': {
+        if (options.hasPrecedingFailure) {
+          result = makeStepAborted(stepId, 'flush', 'Cannot flush after failed step');
+          break;
+        }
         const res = inMemoryFlush();
-        stepBody = `  (:step :id ${idx + 1} :op "flush" :flushed ${res.flushedCount})\n`;
+        result = makeStepSuccess(stepId, 'flush', `:flushed ${res.flushedCount}`, Date.now() - stepStart);
         break;
       }
 
       case 'discard': {
         const res = inMemoryDiscard();
-        stepBody = `  (:step :id ${idx + 1} :op "discard" :status "${res.status}")\n`;
+        result = makeStepSuccess(stepId, 'discard', `:status "${res.status}"`, Date.now() - stepStart);
         break;
       }
 
-      case 'gate': {
-        const onlyArg = getArg(['only', 'gates'], 1);
-        const skipArg = getArg(['skip'], 2);
-        const only = onlyArg ? onlyArg.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)) : null;
-        const skip = skipArg ? skipArg.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)) : null;
-        const gres = await runAllSevenGates({ asn: true, only, skip });
-        const passedCount = gres.verdicts.filter(v => v.passed).length;
-        const activeCount = gres.verdicts.filter(v => !v.skipped).length;
-        stepBody = `  (:step :id ${idx + 1} :op "gate" :elapsed-ms ${Date.now() - stepStart} :all-clean ${gres.allPassed} :passed ${passedCount} :active ${activeCount} :total 7)\n`;
-        break;
-      }
-
-      case 'coverage': {
-        const covRes = computeAslCoverage();
-        stepBody = `  (:step :id ${idx + 1} :op "coverage" :total-functions ${covRes.totalFunctions} :covered ${covRes.coveredFunctions} :rate ${covRes.rate} :percent "${covRes.ratePercent}")\n`;
-        break;
-      }
-
-      case 'metrics':
-      case 'telemetry':
-      case 'bench': {
-        const telem = await recordAndComputeTelemetry();
-        stepBody = `  (:step :id ${idx + 1} :op "telemetry" :elapsed-ms ${Date.now() - stepStart} :res ${formatTelemetryAsn(telem)})\n`;
-        break;
-      }
-
-      case 'bundle-slm':
-      case 'gen-slm': {
-        const preset = generateSlmPreset();
-        stepBody = `  (:step :id ${idx + 1} :op "bundle-slm" :elapsed-ms ${Date.now() - stepStart} :bytes ${Buffer.byteLength(preset)} :status "ready")\n`;
-        break;
-      }
-
-      case 'cluster':
-      case 'cl': {
-        const subOp = getArg(['op', 'o'], 1) || 'status';
-        const role = getArg(['role', 'r'], 2) || 'coder';
-        const model = getArg(['arm', 'model', 'm'], 3) || 'qwen-3b';
-        stepBody = `  (:step :id ${idx + 1} :op "cluster" :sub "${subOp}" :role "${role}" :arm "${model}" :mesh "active" :status "ok")\n`;
-        break;
-      }
-
-      case 'rc':
-      case 'receipt': {
-        const node = getArg(['node', 'n'], 1) || 'local';
-        const task = getArg(['task', 't', 'task-id'], 2) || 'anonymous';
-        const status = String(getArg(['status', 'st'], 3) || 'pass').replace(/^:/, '');
-        const action = getArg(['action', 'a'], 4) || 'ast-patch';
-        const diff = getArg(['diff', 'd'], 5) || '0';
-        const gateMs = getArg(['gate-ms', 'gate', 'g'], 6) || '0';
-        stepBody = `  (:step :id ${idx + 1} :op "receipt" :node "${node}" :task "${task}" :status "${status}" :action "${action}" :diff ${diff} :gate-ms ${gateMs})\n`;
-        break;
-      }
-
-      case 'n':
-      case 'node':
-      case 'dag-node': {
-        const idVal = getArg(['id', 'i'], 1) || 'n0';
-        const titleVal = getArg(['title', 't'], 2) || '';
-        const depsCount = getArg(['deps', 'dependencies', 'd'], 3) || '0';
-        const premCount = getArg(['premises', 'prem', 'pr'], 4) || '0';
-        const stateVal = String(getArg(['state', 'st'], 5) || 'pending').replace(/^:/, '');
-        stepBody = `  (:step :id ${idx + 1} :op "dag-node" :id "${idVal}" :title "${titleVal}" :deps ${depsCount} :premises ${premCount} :state "${stateVal}")\n`;
-        break;
-      }
-
-      case 'codec': {
-        const fromFmt = String(getArg(['from', 'f'], 1) || 'json').toLowerCase();
-        const toFmt = String(getArg(['to', 't'], 2) || 'asn').toLowerCase();
-        const rawInput = getArg(['input', 'in', 'i', 'data', 'd'], 3) || '';
-        let output = '';
-        let origTokens = Math.max(1, Math.ceil(rawInput.length / 4));
-        let asnTokens = origTokens;
-
-        if (fromFmt === 'json' && toFmt === 'asn') {
-          try {
-            const parsed = JSON.parse(rawInput);
-            const toAsn = (v) => {
-              if (v === null || v === undefined) return '_';
-              if (typeof v === 'boolean' || typeof v === 'number') return String(v);
-              if (typeof v === 'string') return JSON.stringify(v);
-              if (Array.isArray(v)) return `[${v.map(toAsn).join(' ')}]`;
-              if (typeof v === 'object') {
-                const pairs = Object.entries(v).map(([k, val]) => `:${k} ${toAsn(val)}`);
-                return `(${pairs.join(' ')})`;
-              }
-              return String(v);
-            };
-            output = toAsn(parsed);
-            asnTokens = Math.max(1, Math.ceil(output.length / 4));
-          } catch (e) {
-            output = `(:error "Invalid JSON: ${e.message}")`;
-          }
-        } else if (fromFmt === 'asn' && toFmt === 'json') {
-          output = asnToJson(rawInput);
-
-        } else if (toFmt === 'svg') {
-          output = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">${rawInput.replace(/\(:rc\s+:x\s+(\d+)\s+:y\s+(\d+)\s+:w\s+(\d+)\s+:h\s+(\d+)\s+:f\s+"([^"]+)"\)/g, '<rect x="$1" y="$2" width="$3" height="$4" fill="$5" />')}</svg>`;
-        } else {
-          output = rawInput;
+      case 'ls':
+      case 'dir':
+      case 'glob': {
+        const rawTarget = getArg(['path', 'dir', 'p'], 1) || WORKSPACE_ROOT;
+        const pattern = getArg(['pattern', 'query', 'm'], 2);
+        const ext = getArg(['ext', 'e'], 3);
+        const dirPath = path.isAbsolute(rawTarget) ? rawTarget : path.resolve(WORKSPACE_ROOT, rawTarget);
+        if (!fs.existsSync(dirPath)) {
+          result = makeStepFailure(stepId, 'ls', 'ERR_FILE_NOT_FOUND', `Directory not found: ${rawTarget}`);
+          break;
         }
-
-        const savings = origTokens > 0 ? Math.max(0, Math.round(((origTokens - asnTokens) / origTokens) * 100)) : 0;
-        stepBody = `  (:step :id ${idx + 1} :op "codec" :from "${fromFmt}" :to "${toFmt}" :orig-tokens ${origTokens} :asn-tokens ${asnTokens} :savings "${savings}%" :output ${JSON.stringify(output)})\n`;
-        break;
-      }
-
-      case 'pointer': {
-        const action = getArg(['action', 'act', 'a'], 1) || 'offload';
-        const rawData = getArg(['data', 'd', 'content', 'c', 'text'], 2) || '';
-        const summary = getArg(['summary', 's'], 3) || 'Data blob';
-        const hash = crypto.createHash('sha256').update(rawData).digest('hex').slice(0, 12);
-        const tokensEst = Math.max(1, Math.ceil(rawData.length / 4));
-        const ptrId = `@ptr:{sha256:${hash}|summary:"${summary}"|tokens:${tokensEst}}`;
-        stepBody = `  (:step :id ${idx + 1} :op "pointer" :action "${action}" :ptr "${ptrId}" :tokens ${tokensEst} :savings "95%")\n`;
+        let entries = [];
+        try {
+          const rawEntries = fs.readdirSync(dirPath, { withFileTypes: true });
+          for (const ent of rawEntries) {
+            if (ent.name === '.git' || ent.name === 'node_modules') continue;
+            if (ext) {
+              const cleanExt = ext.startsWith('.') ? ext : `.${ext}`;
+              if (!ent.name.endsWith(cleanExt)) continue;
+            }
+            if (pattern) {
+              const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+              if (!regex.test(ent.name)) continue;
+            }
+            const entType = ent.isDirectory() ? 'dir' : (ent.isFile() ? 'file' : 'other');
+            let size = 0;
+            if (ent.isFile()) {
+              try {
+                size = fs.statSync(path.join(dirPath, ent.name)).size;
+              } catch {}
+            }
+            entries.push({ name: ent.name, type: entType, size });
+          }
+        } catch (e) {
+          result = makeStepFailure(stepId, 'ls', 'ERR_FILE_NOT_FOUND', e.message);
+          break;
+        }
+        let entriesStr = `:path "${rawTarget}" :count ${entries.length} :entries [\n`;
+        for (const e of entries) {
+          entriesStr += `    (:name "${e.name}" :type "${e.type}" :size ${e.size})\n`;
+        }
+        entriesStr += '  ]';
+        result = makeStepSuccess(stepId, 'ls', entriesStr, Date.now() - stepStart);
         break;
       }
 
       case 'exec': {
+        // Subprocess VFS Synchronization: auto-flush dirty buffers before spawning child process
+        const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
+        const hasDirty = Object.keys(dirty).length > 0 || (memoryIndex.tombstones && memoryIndex.tombstones.size > 0);
+        if (hasDirty) {
+          inMemoryFlush();
+        }
+
         const cmdRaw = getArg(['cmd', 'c', 'command', 'run', 'sh']);
         const cmd = cmdRaw || (item[1] && item[1].type !== 'keyword' ? (item[1].value || item[1]) : null);
         if (!cmd) {
-          stepBody = `  (:step :id ${idx + 1} :op "exec" :error "Missing command string")\n`;
+          result = makeStepFailure(stepId, 'exec', 'ERR_MISSING_PARAMETER', 'Missing command string');
           break;
         }
         const timeoutRaw = getArg(['timeout-ms', 'timeout', 't']);
@@ -2505,22 +2686,148 @@ async function executeStep(item, idx, options = {}) {
         const isDeadlockStr = res.isDeadlock ? 'true' : 'false';
         const promptStr = res.promptDetected ? ` :prompt ${JSON.stringify(res.promptDetected)} :hint "Provide input via :input or use non-interactive flag"` : '';
 
-        stepBody = `  (:step :id ${idx + 1} :op "exec" :cmd ${JSON.stringify(cmd)} :exit-code ${res.exitCode} :status "${res.status}" :elapsed-ms ${res.durationMs} :deadlock ${isDeadlockStr}${promptStr} :stdout ${safeStdout} :stderr ${safeStderr})\n`;
+        if (res.isDeadlock) {
+          result = makeStepFailure(stepId, 'exec', 'ERR_COMMAND_DEADLOCK', 'Command deadlocked waiting for interactive input', `:cmd ${JSON.stringify(cmd)} :exit-code ${res.exitCode} :elapsed-ms ${res.durationMs} :deadlock true${promptStr} :stdout ${safeStdout} :stderr ${safeStderr}`);
+        } else if (res.status === 'timeout') {
+          result = makeStepFailure(stepId, 'exec', 'ERR_COMMAND_TIMEOUT', `Command timed out after ${timeoutMs}ms`, `:cmd ${JSON.stringify(cmd)} :exit-code ${res.exitCode} :elapsed-ms ${res.durationMs} :deadlock ${isDeadlockStr} :stdout ${safeStdout} :stderr ${safeStderr}`);
+        } else if (res.exitCode !== 0) {
+          result = makeStepFailure(stepId, 'exec', 'ERR_COMMAND_FAILED', `Command failed with exit code ${res.exitCode}`, `:cmd ${JSON.stringify(cmd)} :exit-code ${res.exitCode} :elapsed-ms ${res.durationMs} :deadlock ${isDeadlockStr} :stdout ${safeStdout} :stderr ${safeStderr}`);
+        } else {
+          result = makeStepSuccess(stepId, 'exec', `:cmd ${JSON.stringify(cmd)} :exit-code 0 :status "${res.status}" :elapsed-ms ${res.durationMs} :deadlock ${isDeadlockStr}${promptStr} :stdout ${safeStdout} :stderr ${safeStderr}`);
+        }
+        break;
+      }
+
+      case 'gate': {
+        const onlyArg = getArg(['only', 'gates'], 1);
+        const skipArg = getArg(['skip'], 2);
+        const only = onlyArg ? String(onlyArg).split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)) : null;
+        const skip = skipArg ? String(skipArg).split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)) : null;
+        const gres = await runAllSevenGates({ asn: true, only, skip });
+        const passedCount = gres.verdicts.filter(v => v.passed).length;
+        const activeCount = gres.verdicts.filter(v => !v.skipped).length;
+        result = makeStepSuccess(stepId, 'gate', `:elapsed-ms ${Date.now() - stepStart} :all-clean ${gres.allPassed} :passed ${passedCount} :active ${activeCount} :total 7`);
+        break;
+      }
+
+      case 'coverage': {
+        const covRes = computeAslCoverage();
+        result = makeStepSuccess(stepId, 'coverage', `:total-functions ${covRes.totalFunctions} :covered ${covRes.coveredFunctions} :rate ${covRes.rate} :percent "${covRes.ratePercent}"`);
+        break;
+      }
+
+      case 'metrics':
+      case 'telemetry':
+      case 'bench': {
+        const telem = await recordAndComputeTelemetry();
+        result = makeStepSuccess(stepId, 'telemetry', `:elapsed-ms ${Date.now() - stepStart} :res ${formatTelemetryAsn(telem)}`);
+        break;
+      }
+
+      case 'bundle-slm':
+      case 'gen-slm': {
+        const preset = generateSlmPreset();
+        result = makeStepSuccess(stepId, 'bundle-slm', `:elapsed-ms ${Date.now() - stepStart} :bytes ${Buffer.byteLength(preset)} :status-detail "ready"`);
+        break;
+      }
+
+      case 'cluster':
+      case 'cl': {
+        const subOp = getArg(['op', 'o'], 1) || 'status';
+        const role = getArg(['role', 'r'], 2) || 'coder';
+        const model = getArg(['arm', 'model', 'm'], 3) || 'qwen-3b';
+        result = makeStepSuccess(stepId, 'cluster', `:sub "${subOp}" :role "${role}" :arm "${model}" :mesh "active"`);
+        break;
+      }
+
+      case 'rc':
+      case 'receipt': {
+        const node = getArg(['node', 'n'], 1) || 'local';
+        const task = getArg(['task', 't', 'task-id'], 2) || 'anonymous';
+        const status = String(getArg(['status', 'st'], 3) || 'pass').replace(/^:/, '');
+        const action = getArg(['action', 'a'], 4) || 'ast-patch';
+        const diff = getArg(['diff', 'd'], 5) || '0';
+        const gateMs = getArg(['gate-ms', 'gate', 'g'], 6) || '0';
+        result = makeStepSuccess(stepId, 'receipt', `:node "${node}" :task "${task}" :action-status "${status}" :action "${action}" :diff ${diff} :gate-ms ${gateMs}`);
+        break;
+      }
+
+      case 'n':
+      case 'node':
+      case 'dag-node': {
+        const idVal = getArg(['id', 'i'], 1) || 'n0';
+        const titleVal = getArg(['title', 't'], 2) || '';
+        const depsCount = getArg(['deps', 'dependencies', 'd'], 3) || '0';
+        const premCount = getArg(['premises', 'prem', 'pr'], 4) || '0';
+        const stateVal = String(getArg(['state', 'st'], 5) || 'pending').replace(/^:/, '');
+        result = makeStepSuccess(stepId, 'dag-node', `:id "${idVal}" :title "${titleVal}" :deps ${depsCount} :premises ${premCount} :state "${stateVal}"`);
+        break;
+      }
+
+      case 'codec': {
+        const fromFmt = String(getArg(['from', 'f'], 1) || 'json').toLowerCase();
+        const toFmt = String(getArg(['to', 't'], 2) || 'asn').toLowerCase();
+        const rawInput = getArg(['input', 'in', 'i', 'data', 'd'], 3) || '';
+        let output = '';
+        let origTokens = Math.max(1, Math.ceil(rawInput.length / 4));
+        let asnTokens = origTokens;
+
+        if (fromFmt === 'json' && toFmt === 'asn') {
+          try {
+            const parsed = JSON.parse(rawInput);
+            const toAsn = (v) => {
+              if (v === null || v === undefined) return '_';
+              if (typeof v === 'boolean' || typeof v === 'number') return String(v);
+              if (typeof v === 'string') return JSON.stringify(v);
+              if (Array.isArray(v)) return `[${v.map(toAsn).join(' ')}]`;
+              if (typeof v === 'object') {
+                const pairs = Object.entries(v).map(([k, val]) => `:${k} ${toAsn(val)}`);
+                return `(${pairs.join(' ')})`;
+              }
+              return String(v);
+            };
+            output = toAsn(parsed);
+            asnTokens = Math.max(1, Math.ceil(output.length / 4));
+          } catch (e) {
+            result = makeStepFailure(stepId, 'codec', 'ERR_SYNTAX_BALANCE', `Invalid JSON: ${e.message}`);
+            break;
+          }
+        } else if (fromFmt === 'asn' && toFmt === 'json') {
+          output = asnToJson(rawInput);
+        } else if (toFmt === 'svg') {
+          output = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200">${rawInput.replace(/\(:rc\s+:x\s+(\d+)\s+:y\s+(\d+)\s+:w\s+(\d+)\s+:h\s+(\d+)\s+:f\s+"([^"]+)"\)/g, '<rect x="$1" y="$2" width="$3" height="$4" fill="$5" />')}</svg>`;
+        } else {
+          output = rawInput;
+        }
+
+        const savings = origTokens > 0 ? Math.max(0, Math.round(((origTokens - asnTokens) / origTokens) * 100)) : 0;
+        result = makeStepSuccess(stepId, 'codec', `:from "${fromFmt}" :to "${toFmt}" :orig-tokens ${origTokens} :asn-tokens ${asnTokens} :savings "${savings}%" :output ${JSON.stringify(output)}`);
+        break;
+      }
+
+      case 'pointer': {
+        const action = getArg(['action', 'act', 'a'], 1) || 'offload';
+        const rawData = getArg(['data', 'd', 'content', 'c', 'text'], 2) || '';
+        const summary = getArg(['summary', 's'], 3) || 'Data blob';
+        const hash = crypto.createHash('sha256').update(rawData).digest('hex').slice(0, 12);
+        const tokensEst = Math.max(1, Math.ceil(rawData.length / 4));
+        const ptrId = `@ptr:{sha256:${hash}|summary:"${summary}"|tokens:${tokensEst}}`;
+        result = makeStepSuccess(stepId, 'pointer', `:action "${action}" :ptr "${ptrId}" :tokens ${tokensEst} :savings "95%"`);
         break;
       }
 
       default:
-        stepBody = `  (:step :id ${idx + 1} :op "${op}" :error "Unknown batch operation")\n`;
+        result = makeStepFailure(stepId, op, 'ERR_UNKNOWN_OP', `Unknown batch operation: ${op}`);
         break;
     }
   } catch (err) {
-    stepBody = `  (:step :id ${idx + 1} :op "${op}" :error "${err.message}")\n`;
+    result = makeStepFailure(stepId, op, 'ERR_COMMAND_FAILED', err.message);
   }
 
-  if (options.stream) {
-    process.stdout.write(stepBody);
+  if (options.stream && result && result.stepBody) {
+    process.stdout.write(result.stepBody);
   }
-  return stepBody;
+  return result;
 }
 
 export function asnToJson(rawInput) {
@@ -2652,7 +2959,6 @@ export function asnToJson(rawInput) {
 
 
 export async function runAsnBatch(rawAsn, options = {}) {
-
   const batchStart = Date.now();
   loadSnapshot();
   const tokens = tokenizeAsn(rawAsn);
@@ -2662,15 +2968,51 @@ export async function runAsnBatch(rawAsn, options = {}) {
     return `(:error "Invalid ASN batch payload")`;
   }
 
+  // Pre-batch state snapshot for transactional rollback (:atomic true default)
+  const preBatchDirtyMap = { ...(memoryIndex.dirtyMap || {}) };
+  const preBatchTombstones = new Set(memoryIndex.tombstones || []);
+
+  let onError = options['on-error'] || options.onError || 'abort';
+  let isAtomic = options.atomic !== undefined ? options.atomic : true;
+
   let items = [];
   const head = parsed[0];
   const isHeadKeyword = head && head.type === 'keyword';
   const headVal = isHeadKeyword ? head.value : (typeof head === 'string' ? head : head?.value);
 
   if (headVal === ':batch' || headVal === 'batch') {
-    items = parsed.slice(1);
-    if (items.length === 1 && Array.isArray(items[0]) && Array.isArray(items[0][0])) {
-      items = items[0];
+    let rawItems = parsed.slice(1);
+    if (rawItems.length === 1 && Array.isArray(rawItems[0]) && rawItems[0].length > 0 && Array.isArray(rawItems[0][0])) {
+      items = rawItems[0];
+    } else {
+      let i = 0;
+      while (i < rawItems.length) {
+        const tok = rawItems[i];
+        const isKw = (tok && tok.type === 'keyword') || (typeof tok === 'string' && tok.startsWith(':'));
+        if (isKw && !Array.isArray(tok)) {
+          const kw = (tok.type === 'keyword' ? tok.value : tok).replace(/^:/, '');
+          const next = rawItems[i + 1];
+          const nextVal = next && next.value !== undefined ? next.value : next;
+          if (kw === 'on-error' || kw === 'error-policy') {
+            onError = String(nextVal).replace(/^:/, '');
+            i += 2;
+          } else if (kw === 'atomic') {
+            isAtomic = nextVal === true || nextVal === 'true';
+            i += 2;
+          } else {
+            i++;
+          }
+        } else if (Array.isArray(tok)) {
+          if (tok.length > 0 && Array.isArray(tok[0])) {
+            items.push(...tok);
+          } else {
+            items.push(tok);
+          }
+          i++;
+        } else {
+          i++;
+        }
+      }
     }
   } else {
     items = [parsed];
@@ -2680,17 +3022,44 @@ export async function runAsnBatch(rawAsn, options = {}) {
     process.stdout.write(`(:batch-stream-start :items-count ${items.length})\n`);
   }
 
-  // Execute independent operations in parallel waves:
-  // Operations that mutate state ('edit', 'replace', 'flush', 'discard') act as sequential barriers.
-  // Contiguous read-only operations are executed concurrently via Promise.all!
   const results = new Array(items.length);
+  let hasPrecedingFailure = false;
+  let aborted = false;
+  let failedStep = null;
+  let failedStepIndex = 0;
   let currentParallelBatch = [];
 
   const flushParallelBatch = async () => {
     if (currentParallelBatch.length > 0) {
-      await Promise.all(currentParallelBatch.map(async ({ item, idx }) => {
-        results[idx] = await executeStep(item, idx, options);
-      }));
+      for (const { item, idx } of currentParallelBatch) {
+        if (aborted) {
+          const opTok = item[0];
+          const op = (opTok && opTok.type === 'keyword' ? opTok.value : String(opTok?.value || opTok)).replace(/^:/, '');
+          const stepRes = {
+            stepBody: `  (:step :id ${idx + 1} :op "${op}" :status "aborted")\n`,
+            status: 'aborted',
+            code: null,
+            reason: null,
+            op,
+            id: idx + 1
+          };
+          results[idx] = stepRes;
+          if (options.stream) {
+            process.stdout.write(stepRes.stepBody);
+          }
+        } else {
+          const stepRes = await executeStep(item, idx, { ...options, hasPrecedingFailure });
+          results[idx] = stepRes;
+          if (stepRes.status === 'failed' || stepRes.status === 'rejected') {
+            hasPrecedingFailure = true;
+            if (onError === 'abort') {
+              aborted = true;
+              failedStep = stepRes;
+              failedStepIndex = idx + 1;
+            }
+          }
+        }
+      }
       currentParallelBatch = [];
     }
   };
@@ -2701,10 +3070,50 @@ export async function runAsnBatch(rawAsn, options = {}) {
     const opTok = item[0];
     const op = (opTok && opTok.type === 'keyword' ? opTok.value : String(opTok?.value || opTok)).replace(/^:/, '');
 
+    if (aborted) {
+      const stepRes = {
+        stepBody: `  (:step :id ${idx + 1} :op "${op}" :status "aborted")\n`,
+        status: 'aborted',
+        code: null,
+        reason: null,
+        op,
+        id: idx + 1
+      };
+      results[idx] = stepRes;
+      if (options.stream) {
+        process.stdout.write(stepRes.stepBody);
+      }
+      continue;
+    }
+
     const isMutation = ['edit', 'replace', 'create', 'write', 'delete', 'rm', 'patch', 'flush', 'discard', 'exec'].includes(op);
     if (isMutation) {
       await flushParallelBatch();
-      results[idx] = await executeStep(item, idx, options);
+      if (aborted) {
+        const stepRes = {
+          stepBody: `  (:step :id ${idx + 1} :op "${op}" :status "aborted")\n`,
+          status: 'aborted',
+          code: null,
+          reason: null,
+          op,
+          id: idx + 1
+        };
+        results[idx] = stepRes;
+        if (options.stream) {
+          process.stdout.write(stepRes.stepBody);
+        }
+      } else {
+        const stepRes = await executeStep(item, idx, { ...options, hasPrecedingFailure });
+        results[idx] = stepRes;
+        if (stepRes.status === 'failed' || stepRes.status === 'rejected') {
+          hasPrecedingFailure = true;
+          if (onError === 'abort') {
+            aborted = true;
+            failedStep = stepRes;
+            failedStepIndex = idx + 1;
+          }
+        }
+      }
     } else {
       currentParallelBatch.push({ item, idx });
     }
@@ -2713,14 +3122,35 @@ export async function runAsnBatch(rawAsn, options = {}) {
 
   const totalDuration = Date.now() - batchStart;
 
+  // Transactional Rollback (:atomic true default):
+  // If the batch fails/is rejected under atomic mode, restore dirtyMap and tombstones to snapshot
+  if (isAtomic && hasPrecedingFailure) {
+    memoryIndex.dirtyMap = preBatchDirtyMap;
+    memoryIndex.tombstones = preBatchTombstones;
+  }
+
   if (options.stream) {
     process.stdout.write(`(:batch-stream-done :total ${items.length} :duration-ms ${totalDuration})\n`);
     return '';
   }
 
-  let out = `(:batch-res :items-count ${items.length} :parallel true :duration-ms ${totalDuration} :results [\n`;
+  const executedCount = results.filter(r => r && r.status !== 'aborted').length;
+
+  // Top-level batch response envelope:
+  if ((aborted || (hasPrecedingFailure && onError === 'abort')) && failedStep) {
+    const errCode = failedStep.code ? (failedStep.code.startsWith(':') ? failedStep.code : `:${failedStep.code}`) : ':ERR_UNKNOWN';
+    const reasonMsg = (failedStep.reason || '').replace(/"/g, '\\"');
+    let out = `(:batch-res :status "rejected" :failed-step-index ${failedStepIndex} :error-code ${errCode} :reason "${reasonMsg}" :executed-count ${executedCount} :total-steps ${items.length} :duration-ms ${totalDuration} :results [\n`;
+    for (const r of results) {
+      if (r) out += typeof r === 'string' ? r : r.stepBody;
+    }
+    out += `])`;
+    return out;
+  }
+
+  let out = `(:batch-res :status "completed" :items-count ${items.length} :parallel true :duration-ms ${totalDuration} :results [\n`;
   for (const r of results) {
-    if (r) out += r;
+    if (r) out += typeof r === 'string' ? r : r.stepBody;
   }
   out += `])`;
   return out;
@@ -2885,7 +3315,8 @@ async function runCli() {
     case 'batch':
     case 'eval': {
       const isStream = args.includes('--stream') || args.includes('-s');
-      const cleanArgs = args.filter(a => a !== '--stream' && a !== '-s');
+      const ignoreErrors = args.includes('--ignore-errors');
+      const cleanArgs = args.filter(a => a !== '--stream' && a !== '-s' && a !== '--ignore-errors');
       let input = cleanArgs.join(' ').trim();
       if (!input || input === '-') {
         input = fs.readFileSync(0, 'utf8').trim();
@@ -2893,11 +3324,14 @@ async function runCli() {
         input = fs.readFileSync(input, 'utf8').trim();
       }
       if (!input) {
-        console.log('Usage: asl rpc "(:batch ...)" [--stream] or cat req.asn | asl rpc');
+        console.log('Usage: asl rpc "(:batch ...)" [--stream] [--ignore-errors] or cat req.asn | asl rpc');
         process.exit(1);
       }
       const res = await runAsnBatch(input, { stream: isStream });
       if (res) console.log(res);
+      if (!ignoreErrors && res && (res.includes(':status "rejected"') || res.includes(':status "failed"'))) {
+        process.exit(1);
+      }
       break;
     }
 
