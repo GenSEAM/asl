@@ -16,4 +16,25 @@
     (:claim :metric "64KB" :category "wasm_memory" :source "packages/asl-mem" :desc "Linear memory page for Wasm vector store")
     (:claim :metric "-75%" :category "vdom_reduction" :source "packages/asl-vdom" :desc "AXTree + D2Snap DOM downsampling token reduction")
   ]
+  :peripheral-scopes [
+    (:scope
+      :package "@genseam/asl-quantum"
+      :status "conceptual-schema"
+      :driver "none"
+      :falsifiable false
+      :desc "Quantum circuit synthesis, gate operations, and OpenQASM 3.0 compiler scoped as theoretical S-expression interfaces; no physical QPU or cloud backend.")
+    (:scope
+      :package "@genseam/asl-arduino"
+      :status "conceptual-schema"
+      :driver "none"
+      :falsifiable false
+      :desc "Embedded hardware GPIO and serial interfaces scoped as compile-target schemas; no live AVR/ARM/ESP32 serial connection or bare-metal execution.")
+    (:scope
+      :package "@genseam/asl-voice"
+      :status "conceptual-schema"
+      :driver "none"
+      :falsifiable false
+      :desc "Streaming audio chunk, voice intent, and speech synthesis records scoped as conceptual data protocols; no live OS microphone or speaker drivers.")
+  ]
 )
+
