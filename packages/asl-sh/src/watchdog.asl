@@ -3,13 +3,16 @@
   :x [RssVerdict
       DeadlockVerdict
       PortVerdict
+      StepDeadlineVerdict
       make-rss-verdict
       check-rss-ceiling
       make-deadlock-verdict
       detect-deadlock
       make-port-verdict
       detect-bound-port
-      parse-port-number])
+      parse-port-number
+      make-step-deadline-verdict
+      check-step-deadline])
 
 (dfs RssVerdict
   (:f exceeded Bool "True if memory usage exceeded configured ceiling")
@@ -45,6 +48,24 @@
     (if (>= idle-ms cap)
         (make-deadlock-verdict true idle-ms cap ":deadlock-detected")
         (make-deadlock-verdict false idle-ms cap ":ok"))))
+
+(dfs StepDeadlineVerdict
+  (:f timed-out Bool "True if step execution duration exceeded watchdog deadline")
+  (:f elapsed-ms Int64 "Actual elapsed duration of step in milliseconds")
+  (:f ceiling-ms Int64 "Configured step deadline ceiling in milliseconds (default 10000)")
+  (:f error-code String "Error code emitted: :ERR_WATCHDOG_TIMEOUT or :none")
+  (:f event String "Audit event emitted: :step-timeout-recycled or :ok"))
+
+(df make-step-deadline-verdict [(timed-out Bool) (elapsed-ms Int64) (ceiling-ms Int64) (error-code String) (event String)] -> StepDeadlineVerdict
+  :d "Constructs a StepDeadlineVerdict."
+  (StepDeadlineVerdict :timed-out timed-out :elapsed-ms elapsed-ms :ceiling-ms ceiling-ms :error-code error-code :event event))
+
+(df check-step-deadline [(elapsed-ms Int64) (ceiling-ms Int64)] -> StepDeadlineVerdict
+  :d "Enforces a 10s deadline ceiling per batch execution step, returning :ERR_WATCHDOG_TIMEOUT when breached."
+  (let [(cap (if (<= ceiling-ms 0) 10000 ceiling-ms))]
+    (if (>= elapsed-ms cap)
+        (make-step-deadline-verdict true elapsed-ms cap ":ERR_WATCHDOG_TIMEOUT" ":step-timeout-recycled")
+        (make-step-deadline-verdict false elapsed-ms cap ":none" ":ok"))))
 
 (dfs PortVerdict
   (:f detected Bool "True if a listening network port was discovered")

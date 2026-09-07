@@ -6,10 +6,12 @@
   :tokens-baseline 1
   :symbols [
     ;; 1-Token Baseline Types
+    (:sym :name "DaemonEntry" :kind :type :tokens 1)
     (:sym :name "DeadlockVerdict" :kind :type :tokens 1)
     (:sym :name "Diagnostic" :kind :type :tokens 1)
     (:sym :name "DiagnosticSummary" :kind :type :tokens 1)
     (:sym :name "DiskSpool" :kind :type :tokens 1)
+    (:sym :name "LockVerdict" :kind :type :tokens 1)
     (:sym :name "LogEntry" :kind :type :tokens 1)
     (:sym :name "LogLevel" :kind :type :tokens 1)
     (:sym :name "Pipeline" :kind :type :tokens 1)
@@ -22,6 +24,9 @@
     (:sym :name "ReductionConfig" :kind :type :tokens 1)
     (:sym :name "RingBuffer" :kind :type :tokens 1)
     (:sym :name "RssVerdict" :kind :type :tokens 1)
+    (:sym :name "StepDeadlineVerdict" :kind :type :tokens 1)
+    (:sym :name "StreamFrame" :kind :type :tokens 1)
+    (:sym :name "SupervisorVerdict" :kind :type :tokens 1)
     (:sym :name "TwoTierSpool" :kind :type :tokens 1)
 
     ;; <= 2-Token Primary API Symbols
@@ -48,6 +53,7 @@
     (:sym :name "reduce-stream" :kind :fn :tokens 2)
     (:sym :name "reduce-text" :kind :fn :tokens 2)
     (:sym :name "render-receipt" :kind :fn :tokens 2)
+    (:sym :name "resolve-lock" :kind :fn :tokens 2)
     (:sym :name "ring-push" :kind :fn :tokens 2)
     (:sym :name "ring-size" :kind :fn :tokens 2)
     (:sym :name "ring-tail" :kind :fn :tokens 2)
@@ -61,6 +67,7 @@
     (:sym :name "spool-write" :kind :fn :tokens 2)
     (:sym :name "strip-ansi" :kind :fn :tokens 2)
     (:sym :name "summarize-diagnostics" :kind :fn :tokens 2)
+    (:sym :name "supervise-step" :kind :fn :tokens 2)
     (:sym :name "truncate-summary" :kind :fn :tokens 2)
     (:sym :name "warn!" :kind :fn :tokens 1)
     (:sym :name "window-lines" :kind :fn :tokens 2)
@@ -71,24 +78,38 @@
     ;; Multi-Token Symbols (with :rationale)
     (:sym :name "check-rss-ceiling" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'check-rss': scopes check specifically against configured memory ceiling threshold")
+    (:sym :name "check-step-deadline" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'check-deadline': scopes execution timeout evaluation specifically to APM batch steps")
     (:sym :name "clean-terminal-text" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'clean-text': preserves terminal ANSI and CR sanitization domain, preventing collision with general string trimming")
     (:sym :name "collapse-cr-line" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes terminal carriage-return overwrite emulation across an entire line from segment-level processing")
     (:sym :name "collapse-cr-segment" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes progress-bar segment overwrite processing from line-level collapsing")
+    (:sym :name "count-paren-balance" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'count-balance': distinguishes AST parenthesis balance calculation from general bracket or token counting")
     (:sym :name "detect-bound-port" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'detect-port': distinguishes network listening port detection from device port queries")
+    (:sym :name "extract-content-length" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'extract-length': explicitly scopes integer extraction to Content-Length protocol headers")
     (:sym :name "extract-error-summary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-summary': scopes extraction specifically to diagnostic errors and failure frames")
     (:sym :name "extract-python-frame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-frame': explicitly scopes stack frame extraction to Python traceback syntax")
+    (:sym :name "format-daemon-table" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'format-table': distinguishes APM daemon process inspection table rendering from general text tables")
     (:sym :name "generate-spool-path" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
+    (:sym :name "is-balanced-frame?" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'is-balanced?': scopes balance validation specifically to stream frame delineation")
+    (:sym :name "make-daemon-entry" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-entry': unambiguously scopes constructor to daemon process table records")
     (:sym :name "make-deadlock-verdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to pipe deadlock evaluation")
     (:sym :name "make-disk-spool" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to disk storage allocation with byte capping")
+    (:sym :name "make-lock-verdict" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to singleton advisory lock evaluation")
     (:sym :name "make-port-verdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to bound network port evaluation")
     (:sym :name "make-process-receipt" :kind :fn :tokens 3
@@ -97,6 +118,12 @@
           :rationale "Cannot be reduced to 'make-buffer': unambiguously scopes constructor to FIFO ring buffer semantics")
     (:sym :name "make-rss-verdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to memory RSS watchdog evaluation")
+    (:sym :name "make-step-deadline-verdict" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'make-verdict': explicitly scopes constructor to step execution deadline evaluation")
+    (:sym :name "make-stream-frame" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-frame': unambiguously scopes constructor to streaming protocol frame delineation")
+    (:sym :name "make-supervisor-verdict" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to split-loop worker supervisor evaluation")
     (:sym :name "make-two-tier-spool" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to RAM ring plus disk spool coordination")
     (:sym :name "parse-file-loc" :kind :fn :tokens 3
@@ -105,6 +132,8 @@
           :rationale "Cannot be reduced to 'parse-port': distinguishes integer network port parsing from hardware port strings")
     (:sym :name "parse-pytest-diagnostic" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to pytest assertion failures and summary blocks")
+    (:sym :name "parse-stream-frame" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'parse-frame': scopes parsing specifically to streaming multi-client socket frames")
     (:sym :name "parse-tsc-diagnostic" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to TypeScript tsc compiler diagnostic outputs")
     (:sym :name "ring-to-string" :kind :fn :tokens 3

@@ -38,16 +38,29 @@ find_mem_daemon() {
   fi
 }
 
-get_socket_path() {
+get_daemon_hash() {
   local HASH
   HASH="$(echo -n "$ROOT" | md5 2>/dev/null || echo -n "$ROOT" | md5sum 2>/dev/null | cut -c1-8 || echo "751f1272")"
-  HASH="$(echo "$HASH" | cut -c1-8)"
+  echo "$HASH" | cut -c1-8
+}
+
+get_socket_path() {
+  local HASH
+  HASH="$(get_daemon_hash)"
   echo "/tmp/asl_mem_${HASH}.sock"
+}
+
+get_lock_path() {
+  local HASH
+  HASH="$(get_daemon_hash)"
+  echo "/tmp/asl_mem_${HASH}.lock"
 }
 
 ensure_daemon_running() {
   local SOCK
   SOCK="$(get_socket_path)"
+  local LOCK
+  LOCK="$(get_lock_path)"
   local HOST_MJS
   HOST_MJS="$(find_daemon_host)"
   
@@ -56,6 +69,14 @@ ensure_daemon_running() {
     PONG="$(echo '(:ping)' | nc -U "$SOCK" 2>/dev/null || true)"
     if echo "$PONG" | grep -q 'pong'; then
       return 0
+    fi
+    if [ -f "$LOCK" ]; then
+      local HPID
+      HPID="$(cat "$LOCK" 2>/dev/null || true)"
+      if [ -n "$HPID" ] && kill -0 "$HPID" 2>/dev/null; then
+        return 0
+      fi
+      rm -f "$LOCK" 2>/dev/null || true
     fi
     rm -f "$SOCK" 2>/dev/null || true
   fi
@@ -250,7 +271,7 @@ END {
   echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Python, 0 JavaScript, 0 TypeScript, 0 Rust, 0 C, 0 Shell, 0 JSON in code packages)..."
   echo "    [Boundary] Legal host projections recognized: asl/bridges/node/, bin/, scripts/"
   local FOREIGN_FILES
-  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" \) 2>/dev/null | grep -v 'node_modules' || true)
+  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search editorial-matrix -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" \) 2>/dev/null | grep -v 'node_modules' || true)
   if [ -z "$FOREIGN_FILES" ]; then
     echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C, 0 Shell, 0 JSON)."
   else
@@ -502,11 +523,24 @@ case "$CMD" in
       fi
       EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
       if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
-        if ! "$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" >/dev/null 2>&1; then
-          echo "    ✗ Check FAIL: $f static type inference or semantic error"
-          FAIL=1
-          continue
-        fi
+        case "$TARGET" in
+          *.asn)
+            if [[ "$TARGET" == *manifest.asn ]]; then
+              if ! validate_manifest_ast "$TARGET"; then
+                echo "    ✗ Check FAIL: $f manifest AST validation failed"
+                FAIL=1
+                continue
+              fi
+            fi
+            ;;
+          *)
+            if ! "$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" >/dev/null 2>&1; then
+              echo "    ✗ Check FAIL: $f static type inference or semantic error"
+              FAIL=1
+              continue
+            fi
+            ;;
+        esac
       fi
     done
     exit $FAIL
@@ -1585,6 +1619,94 @@ console.log(emitWat(forms));
       echo "$CLEAN_JSON"
     fi
     exit 0
+    ;;
+
+  daemon)
+    SUBCMD="$1"
+    shift || true
+    case "$SUBCMD" in
+      top|"")
+        ensure_daemon_running
+        echo "DAEMON ID  PID     STATUS   RSS(MB)  UPTIME   ACTIVE OP  SOCKET"
+        echo "---------  ------  -------  -------  -------  ---------  ------"
+        FOUND_ANY=0
+        for PF in /tmp/asl_mem_*.pid; do
+          [ -f "$PF" ] || continue
+          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+          D_PID="$(cat "$PF" 2>/dev/null || true)"
+          [ -n "$D_PID" ] || continue
+          if kill -0 "$D_PID" 2>/dev/null; then
+            FOUND_ANY=1
+            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+            D_RSS="$(ps -o rss= -p "$D_PID" 2>/dev/null | awk '{print int($1/1024)}' || echo "?")"
+            D_TIME="$(ps -o etime= -p "$D_PID" 2>/dev/null | tr -d ' ' || echo "?")"
+            D_STATUS="active"
+            D_OP=":idle"
+            if [ -S "$D_SOCK" ]; then
+              INFO="$(printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true)"
+              OP_EXTRACT="$(echo "$INFO" | grep -o ':active-op "[^"]*"' | cut -d'"' -f2 || true)"
+              if [ -n "$OP_EXTRACT" ]; then
+                D_OP="$OP_EXTRACT"
+              fi
+            fi
+            printf "%-9s  %-6s  %-7s  %-7s  %-7s  %-9s  %s\n" "$D_HASH" "$D_PID" "$D_STATUS" "$D_RSS" "$D_TIME" "$D_OP" "$D_SOCK"
+          else
+            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
+          fi
+        done
+        exit 0
+        ;;
+      inspect)
+        TARGET="$1"
+        if [ -z "$TARGET" ]; then
+          TARGET="$(get_daemon_hash)"
+        fi
+        TARGET_PID=""
+        TARGET_HASH=""
+        if [ -f "/tmp/asl_mem_${TARGET}.pid" ]; then
+          TARGET_HASH="$TARGET"
+          TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.pid" 2>/dev/null)"
+        elif [ -f "/tmp/asl_mem_${TARGET}.lock" ]; then
+          TARGET_HASH="$TARGET"
+          TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.lock" 2>/dev/null)"
+        else
+          for PF in /tmp/asl_mem_*.pid; do
+            [ -f "$PF" ] || continue
+            P="$(cat "$PF" 2>/dev/null || true)"
+            if [ "$P" = "$TARGET" ]; then
+              TARGET_PID="$TARGET"
+              TARGET_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+              break
+            fi
+          done
+        fi
+        if [ -z "$TARGET_PID" ]; then
+          TARGET_PID="$TARGET"
+        fi
+        echo "=== ASL Daemon Inspection: PID $TARGET_PID (ID: ${TARGET_HASH:-unknown}) ==="
+        if kill -0 "$TARGET_PID" 2>/dev/null; then
+          echo "Status: Running (active)"
+          ps -o pid,ppid,rss,vsz,%cpu,%mem,etime,command -p "$TARGET_PID" 2>/dev/null || true
+          D_SOCK="/tmp/asl_mem_${TARGET_HASH}.sock"
+          if [ -n "$TARGET_HASH" ] && [ -S "$D_SOCK" ]; then
+            echo ""
+            echo "--- Socket Diagnostics: $D_SOCK ---"
+            printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true
+            echo ""
+          fi
+          echo ""
+          echo "--- Stack / Process Overview ---"
+          lsof -p "$TARGET_PID" 2>/dev/null | head -n 25 || true
+        else
+          echo "Status: Not running or process not found (PID: $TARGET_PID)"
+        fi
+        exit 0
+        ;;
+      *)
+        echo "Usage: asl daemon [top|inspect <pid>]"
+        exit 1
+        ;;
+    esac
     ;;
 
   *.asl|*.asn)

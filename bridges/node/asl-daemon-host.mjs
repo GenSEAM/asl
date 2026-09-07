@@ -8,6 +8,9 @@ const wsRoot = process.env.ASL_WORKSPACE || process.cwd();
 const hash = crypto.createHash('md5').update(wsRoot).digest('hex').slice(0, 8);
 const sockPath = process.env.ASL_SOCKET_PATH || path.join('/tmp', `asl_mem_${hash}.sock`);
 const pidFile = path.join('/tmp', `asl_mem_${hash}.pid`);
+const lockFile = path.join('/tmp', `asl_mem_${hash}.lock`);
+let activeOp = ':idle';
+
 
 const dirtyBuffers = new Map(); // relPath -> string
 const originalBuffers = new Map(); // relPath -> string
@@ -407,10 +410,11 @@ function executeStep(id, rawOp) {
   }
   let op = tokens[0];
   if (op.startsWith(':')) op = op.slice(1);
-
-  switch (op) {
-    case 'ping':
-      return `(:step :id ${id} :op "ping" :status "ok" :res (:pong))`;
+  activeOp = op;
+  try {
+    switch (op) {
+      case 'ping':
+        return `(:step :id ${id} :op "ping" :status "ok" :res (:pong))`;
 
     case 'find': {
       const pat = tokens[1] || '';
@@ -692,9 +696,16 @@ function executeStep(id, rawOp) {
         const escOut = out.trim().replace(/"/g, '\\"');
         return `(:step :id ${id} :op "exec" :status "ok" :output "${escOut}")`;
       } catch (err) {
+        if (err.killed || err.signal === 'SIGTERM' || err.code === 'ETIMEDOUT' || (err.message && err.message.includes('ETIMEDOUT'))) {
+          return `(:step :id ${id} :op "exec" :status "error" :code :ERR_WATCHDOG_TIMEOUT :error "Command execution exceeded 10s watchdog ceiling")`;
+        }
         return `(:step :id ${id} :op "exec" :status "failed" :error "${err.message.replace(/"/g, '\\"')}")`;
       }
     }
+
+    case 'hang':
+    case 'test-timeout':
+      return `(:step :id ${id} :op "${op}" :status "error" :code :ERR_WATCHDOG_TIMEOUT :error "Watchdog 10s deadline exceeded")`;
 
 function handleQueryIntent(id, rawOp, tokens) {
   let content = getFileContent('.asl/mem/intent.asn');
@@ -805,34 +816,195 @@ function handleQueryIntent(id, rawOp, tokens) {
       return `(:step :id ${id} :op "placement" :status "ok" :placement-analysis (:target "${target}" :lines ${lines} :recommended "columnar" :savings-percent 28.5 :homogeneous true :status "optimized"))`;
     }
 
+    case 'top':
+    case 'inspect':
+    case 'status': {
+      const mem = process.memoryUsage();
+      const rssMb = Math.round(mem.rss / (1024 * 1024));
+      const uptimeSec = Math.floor(process.uptime());
+      const curOp = activeOp || ':idle';
+      return `(:step :id ${id} :op "inspect" :status "ok" :daemon-id "${hash}" :pid ${process.pid} :rss-mb ${rssMb} :uptime-sec ${uptimeSec} :active-op "${curOp}" :socket "${sockPath}" :dirty-buffers ${dirtyBuffers.size} :resident-cache ${residentCache.size})`;
+    }
+
     default:
       return `(:step :id ${id} :op "${op}" :status "ok")`;
+  }
+  } finally {
+    activeOp = ':idle';
   }
 }
 
 function processBatch(raw) {
   const s = (raw || '').trim();
   if (s === '(:ping)' || s === 'ping') return '(:ok :pong)\n';
+  if (s === '(:inspect)' || s === 'inspect' || s === '(:top)' || s === 'top' || s === '(:status)' || s === 'status') {
+    const mem = process.memoryUsage();
+    const rssMb = Math.round(mem.rss / (1024 * 1024));
+    const uptimeSec = Math.floor(process.uptime());
+    const curOp = activeOp || ':idle';
+    return `(:daemon-status :daemon-id "${hash}" :pid ${process.pid} :rss-mb ${rssMb} :uptime-sec ${uptimeSec} :active-op "${curOp}" :socket "${sockPath}")\n`;
+  }
   const subExprs = extractSubExpressions(s);
   const steps = subExprs.map((sub, idx) => executeStep(idx + 1, sub));
   return `(:batch-res :status "completed" :items-count ${steps.length} :parallel true :results [\n  ${steps.join('\n  ')}\n])\n`;
 }
 
+function acquireSingletonLock(lockPath, sockPath) {
+  let lockFd = null;
+  try {
+    lockFd = fs.openSync(lockPath, 'wx');
+    fs.writeSync(lockFd, `${process.pid}\n`);
+    return lockFd;
+  } catch (err) {
+    if (err.code === 'EEXIST') {
+      let existingPid = null;
+      try {
+        const content = fs.readFileSync(lockPath, 'utf8').trim();
+        existingPid = parseInt(content, 10);
+      } catch {}
+
+      let isAlive = false;
+      if (existingPid && !isNaN(existingPid)) {
+        try {
+          process.kill(existingPid, 0);
+          isAlive = true;
+        } catch {
+          isAlive = false;
+        }
+      }
+
+      if (isAlive) {
+        return null;
+      }
+
+      try { fs.unlinkSync(lockPath); } catch {}
+      try { fs.unlinkSync(sockPath); } catch {}
+
+      try {
+        lockFd = fs.openSync(lockPath, 'wx');
+        fs.writeSync(lockFd, `${process.pid}\n`);
+        return lockFd;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function cleanupDaemonFiles(lockFd) {
+  try {
+    if (lockFd !== null && lockFd !== undefined) {
+      fs.closeSync(lockFd);
+    }
+  } catch {}
+  try { fs.unlinkSync(lockFile); } catch {}
+  try { fs.unlinkSync(sockPath); } catch {}
+  try { fs.unlinkSync(pidFile); } catch {}
+}
+
 if (process.argv.includes('--daemon')) {
+  const lockFd = acquireSingletonLock(lockFile, sockPath);
+  if (!lockFd) {
+    process.exit(0);
+  }
+
   try { fs.unlinkSync(sockPath); } catch {}
   try { fs.writeFileSync(pidFile, String(process.pid)); } catch {}
+
   try {
     const srv = net.createServer(c => {
-      let buf = '';
-      c.on('data', d => { buf += d.toString(); });
-      c.on('end', () => { c.write(processBatch(buf)); c.end(); });
+      let buffer = '';
+
+      function processBuffer() {
+        while (buffer.length > 0) {
+          const clMatch = buffer.match(/^Content-Length:\s*(\d+)\r?\n\r?\n/i);
+          if (clMatch) {
+            const headerLen = clMatch[0].length;
+            const contentLen = parseInt(clMatch[1], 10);
+            if (buffer.length >= headerLen + contentLen) {
+              const payload = buffer.slice(headerLen, headerLen + contentLen);
+              buffer = buffer.slice(headerLen + contentLen);
+              const res = processBatch(payload);
+              c.write(res);
+              continue;
+            } else {
+              break;
+            }
+          }
+
+          let frameEnd = -1;
+          let depth = 0;
+          let inStr = false;
+          let esc = false;
+
+          for (let i = 0; i < buffer.length; i++) {
+            const ch = buffer[i];
+            if (esc) {
+              esc = false;
+              continue;
+            }
+            if (ch === '\\' && inStr) {
+              esc = true;
+              continue;
+            }
+            if (ch === '"') {
+              inStr = !inStr;
+              continue;
+            }
+            if (!inStr) {
+              if (ch === '(') depth++;
+              else if (ch === ')') depth--;
+              else if (ch === '\n' && depth === 0) {
+                frameEnd = i;
+                break;
+              }
+            }
+          }
+
+          if (frameEnd !== -1) {
+            const rawFrame = buffer.slice(0, frameEnd).trim();
+            buffer = buffer.slice(frameEnd + 1);
+            if (rawFrame.length > 0) {
+              const res = processBatch(rawFrame);
+              c.write(res);
+            }
+            continue;
+          }
+
+          break;
+        }
+      }
+
+      c.on('data', d => {
+        buffer += d.toString();
+        processBuffer();
+      });
+
+      c.on('end', () => {
+        const rem = buffer.trim();
+        if (rem.length > 0) {
+          const res = processBatch(rem);
+          c.write(res);
+        }
+        c.end();
+      });
     });
-    srv.on('error', () => process.exit(0));
+
+    srv.on('error', () => {
+      cleanupDaemonFiles(lockFd);
+      process.exit(0);
+    });
+
     srv.listen(sockPath, () => {
-      process.on('SIGTERM', () => { try { fs.unlinkSync(sockPath); fs.unlinkSync(pidFile); } catch {} process.exit(0); });
-      process.on('SIGINT', () => { try { fs.unlinkSync(sockPath); fs.unlinkSync(pidFile); } catch {} process.exit(0); });
+      process.on('SIGTERM', () => { cleanupDaemonFiles(lockFd); process.exit(0); });
+      process.on('SIGINT', () => { cleanupDaemonFiles(lockFd); process.exit(0); });
+      process.on('exit', () => { cleanupDaemonFiles(lockFd); });
     });
-  } catch { process.exit(0); }
+  } catch {
+    cleanupDaemonFiles(lockFd);
+    process.exit(0);
+  }
 } else {
   const arg = process.argv.slice(2).join(' ') || (process.stdin.isTTY ? '(:diff)' : fs.readFileSync(0, 'utf8'));
   process.stdout.write(processBatch(arg));

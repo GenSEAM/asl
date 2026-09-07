@@ -3,5 +3,5 @@
  :entry "src/sh.asl"
  :description "Native AgentScript System & Process Automation Toolkit with Structured Shell Pipelines & Channel Redirection"
  :asl-first true
- :modules ["asl-sh/core" "asl-sh/reducer" "asl-sh/spool" "asl-sh/watchdog"]
+ :modules ["asl-sh/core" "asl-sh/reducer" "asl-sh/spool" "asl-sh/watchdog" "asl-sh/apm"]
  :dependencies [])
