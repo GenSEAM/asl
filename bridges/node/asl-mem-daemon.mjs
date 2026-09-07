@@ -33,6 +33,60 @@ const DIRTY_BUFFERS_PATH = path.join(CACHE_DIR, 'dirty_buffers.json');
 const SOCKET_PATH = path.join(os.tmpdir(), `asl_mem_${HASH}.sock`);
 const PID_FILE = path.join(CACHE_DIR, 'daemon.pid');
 
+export function cleanDeadSocket(socketPath = SOCKET_PATH, pidFile = PID_FILE) {
+  if (fs.existsSync(pidFile)) {
+    try {
+      const pidStr = fs.readFileSync(pidFile, 'utf8').trim();
+      const pid = parseInt(pidStr, 10);
+      let isAlive = false;
+      if (!isNaN(pid) && pid > 0) {
+        try {
+          process.kill(pid, 0);
+          isAlive = true;
+        } catch (e) {
+          isAlive = e.code === 'EPERM';
+        }
+      }
+      if (!isAlive) {
+        if (fs.existsSync(socketPath)) {
+          try { fs.unlinkSync(socketPath); } catch {}
+        }
+        try { fs.unlinkSync(pidFile); } catch {}
+      }
+    } catch {
+      if (fs.existsSync(socketPath)) {
+        try { fs.unlinkSync(socketPath); } catch {}
+      }
+      try { fs.unlinkSync(pidFile); } catch {}
+    }
+  } else if (fs.existsSync(socketPath)) {
+    try { fs.unlinkSync(socketPath); } catch {}
+  }
+}
+
+function registerCleanupHandlers(socketPath = SOCKET_PATH, pidFile = PID_FILE) {
+  const cleanup = () => {
+    try {
+      if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
+    } catch {}
+    try {
+      if (fs.existsSync(pidFile)) {
+        const pidStr = fs.readFileSync(pidFile, 'utf8').trim();
+        if (parseInt(pidStr, 10) === process.pid) {
+          fs.unlinkSync(pidFile);
+        }
+      }
+    } catch {}
+  };
+
+  process.once('exit', cleanup);
+  process.once('SIGINT', () => { cleanup(); process.exit(0); });
+  process.once('SIGTERM', () => { cleanup(); process.exit(0); });
+}
+
+cleanDeadSocket();
+registerCleanupHandlers();
+
 // --- In-Memory State ---
 let memoryIndex = {
   version: "0.2.0",
@@ -86,6 +140,9 @@ export function normalizeBufferKey(rawPath) {
 export function getBufferContent(rawPath) {
   if (!rawPath) return null;
   const relPath = normalizeBufferKey(rawPath);
+  if (memoryIndex.dirtyMap && memoryIndex.dirtyMap[relPath] !== undefined) {
+    return memoryIndex.dirtyMap[relPath];
+  }
   const dirty = loadDirtyMap();
   if (dirty[relPath] !== undefined) {
     return dirty[relPath];
@@ -118,9 +175,10 @@ export function getBufferContent(rawPath) {
 
 export function setBufferContent(rawPath, newContent) {
   const relPath = normalizeBufferKey(rawPath);
-  const dirty = loadDirtyMap();
-  dirty[relPath] = newContent;
-  saveDirtyMap(dirty);
+  if (!memoryIndex.dirtyMap) {
+    memoryIndex.dirtyMap = {};
+  }
+  memoryIndex.dirtyMap[relPath] = newContent;
 
   memoryIndex.fileBuffers.set(relPath, {
     content: newContent,
@@ -189,7 +247,7 @@ const IGNORED_DIRS = new Set([
   '.git', 'node_modules', 'dist', 'build', '.next', '.turbo', '.cache', 'scratch', 'coverage'
 ]);
 
-function walkDir(dir, fileList = []) {
+export function walkDir(dir, fileList = []) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.name.startsWith('.') && entry.name !== '.plans') continue;
@@ -199,7 +257,7 @@ function walkDir(dir, fileList = []) {
       }
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name);
-      if (['.asl', '.asn', '.md', '.json', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.rs', '.go', '.sh', '.yaml', '.yml'].includes(ext)) {
+      if (['.asl', '.asn', '.md', '.json', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.py', '.rs', '.go', '.sh', '.yaml', '.yml', '.php', '.toml', '.css', '.html', '.sql'].includes(ext)) {
         fileList.push(path.join(dir, entry.name));
       }
     }
@@ -382,7 +440,7 @@ export function buildIndex(rootDir = WORKSPACE_ROOT) {
   const docFreq = new Map();
 
   let totalFiles = 0;
-  const dirty = loadDirtyMap();
+  const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
 
   for (const f of allFiles) {
     const rel = path.relative(rootDir, f);
@@ -648,7 +706,7 @@ export function inMemoryEdit(relPath, oldText, newText) {
     return { success: false, error: `Target string not found in ${relPath}` };
   }
 
-  const updated = content.replace(oldText, newText);
+  const updated = content.replaceAll(oldText, () => newText);
   setBufferContent(relPath, updated);
   return { success: true, file: relPath, bytesDiff: updated.length - content.length };
 }
@@ -699,7 +757,7 @@ export function inMemoryMassReplace(matchStr, replaceStr, options = {}) {
 
 // --- In-Memory Diff, Flush & Discard ---
 export function inMemoryDiff() {
-  const dirty = loadDirtyMap();
+  const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
   const dirtyKeys = Object.keys(dirty);
   if (dirtyKeys.length === 0) {
     return "(:diff :status \"clean\" :dirty-files 0)";
@@ -718,7 +776,7 @@ export function inMemoryDiff() {
 }
 
 export function inMemoryFlush() {
-  const dirty = loadDirtyMap();
+  const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
   const dirtyKeys = Object.keys(dirty);
   if (dirtyKeys.length === 0) {
     return { flushedCount: 0, message: "No dirty in-memory buffers to flush." };
@@ -726,10 +784,15 @@ export function inMemoryFlush() {
 
   for (const rel of dirtyKeys) {
     const fullPath = path.isAbsolute(rel) ? rel : path.resolve(WORKSPACE_ROOT, rel);
+    const parentDir = path.dirname(fullPath);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
     fs.writeFileSync(fullPath, dirty[rel], 'utf8');
   }
 
   // Clear dirty state
+  memoryIndex.dirtyMap = {};
   saveDirtyMap({});
   buildIndex(WORKSPACE_ROOT);
 
@@ -737,6 +800,7 @@ export function inMemoryFlush() {
 }
 
 export function inMemoryDiscard() {
+  memoryIndex.dirtyMap = {};
   saveDirtyMap({});
   memoryIndex.fileBuffers.clear();
   return { status: "discarded", message: "All in-memory buffers reverted to disk." };
@@ -1018,9 +1082,15 @@ function walkGateDir(dir, filter, maxDepth = 10, depth = 0) {
   return results;
 }
 
-function checkAslBalance(filePath) {
-  let content;
-  try { content = fs.readFileSync(filePath, 'utf8'); } catch (err) { return { valid: false, error: err.message }; }
+export function checkAslBalance(filePath) {
+  let content = getBufferContent(filePath);
+  if (content === null || content === undefined) {
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch (err) {
+      return { valid: false, error: err.message };
+    }
+  }
   const stack = [];
   let inStr = false, esc = false;
   let line = 1, col = 1;
@@ -1061,6 +1131,33 @@ function checkAslBalance(filePath) {
     return { valid: false, error: `unclosed '${top.char}' opened at line ${top.line}:${top.col} (${stack.length} unclosed total)` };
   }
   return { valid: true, error: null };
+}
+
+function findAslFormAt(content, startIdx) {
+  let depth = 0;
+  let inStr = false, esc = false;
+  for (let i = startIdx; i < content.length; i++) {
+    const c = content[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === '\\') esc = true;
+      else if (c === '"') inStr = false;
+    } else {
+      if (c === ';') {
+        while (i < content.length && content[i] !== '\n') i++;
+      } else if (c === '"') {
+        inStr = true;
+      } else if (c === '(' || c === '[' || c === '{') {
+        depth++;
+      } else if (c === ')' || c === ']' || c === '}') {
+        depth--;
+        if (depth === 0) {
+          return content.slice(startIdx, i + 1);
+        }
+      }
+    }
+  }
+  return null;
 }
 
 function parseAsnConfig(content) {
@@ -1969,7 +2066,13 @@ async function executeStep(item, idx, options = {}) {
     'exec': 'exec',
     'sh': 'exec',
     'cmd': 'exec',
-    'run': 'exec'
+    'run': 'exec',
+    'create': 'create',
+    'write': 'create',
+    'delete': 'delete',
+    'rm': 'delete',
+    'patch': 'patch',
+    'syntax': 'syntax'
   };
   const op = OP_ALIASES[rawOp] || rawOp;
 
@@ -2156,6 +2259,80 @@ async function executeStep(item, idx, options = {}) {
         const ext = getArg(['ext', 'e'], 3);
         const res = inMemoryMassReplace(matchP, replP, { ext });
         stepBody = `  (:step :id ${idx + 1} :op "replace" :elapsed-ms ${Date.now() - stepStart} :files-changed ${res.filesChanged} :total-replacements ${res.totalReplacements})\n`;
+        break;
+      }
+
+      case 'create':
+      case 'write': {
+        const file = getArg(['file', 'f', 'path'], 1);
+        const content = getArg(['content', 'data', 'c', 'd'], 2) ?? '';
+        if (!file) {
+          stepBody = `  (:step :id ${idx + 1} :op "create" :status "failed" :error "Missing file parameter")\n`;
+        } else {
+          setBufferContent(file, content);
+          stepBody = `  (:step :id ${idx + 1} :op "create" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :status "created-in-ram")\n`;
+        }
+        break;
+      }
+
+      case 'delete':
+      case 'rm': {
+        const file = getArg(['file', 'f', 'path'], 1);
+        if (!file) {
+          stepBody = `  (:step :id ${idx + 1} :op "delete" :status "failed" :error "Missing file parameter")\n`;
+        } else {
+          setBufferContent(file, "");
+          stepBody = `  (:step :id ${idx + 1} :op "delete" :file "${file}" :elapsed-ms ${Date.now() - stepStart} :status "deleted-in-ram")\n`;
+        }
+        break;
+      }
+
+      case 'patch': {
+        const file = getArg(['file', 'f', 'path'], 1);
+        const sym = getArg(['symbol', 's', 'sym', 'name'], 2);
+        const repl = getArg(['replacement', 'r', 'repl', 'with', 'new'], 3);
+        if (!file || !sym || repl === null || repl === undefined) {
+          stepBody = `  (:step :id ${idx + 1} :op "patch" :status "failed" :error "Missing file, symbol, or replacement parameter")\n`;
+        } else {
+          const content = getBufferContent(file);
+          if (content === null) {
+            stepBody = `  (:step :id ${idx + 1} :op "patch" :file "${file}" :status "failed" :error "File not found: ${file}")\n`;
+          } else {
+            let patched = null;
+            const defPrefixes = [`(df ${sym} `, `(df ${sym}\n`, `(df ${sym}[`, `(dfs ${sym} `, `(dfs ${sym}\n`, `(dfe ${sym} `, `(dfe ${sym}\n`];
+            for (const pfx of defPrefixes) {
+              const startIdx = content.indexOf(pfx);
+              if (startIdx !== -1) {
+                const form = findAslFormAt(content, startIdx);
+                if (form) {
+                  patched = content.replace(form, repl);
+                  break;
+                }
+              }
+            }
+            if (patched === null && content.includes(sym)) {
+              patched = content.replaceAll(sym, () => repl);
+            }
+
+            if (patched !== null) {
+              setBufferContent(file, patched);
+              stepBody = `  (:step :id ${idx + 1} :op "patch" :file "${file}" :symbol "${sym}" :elapsed-ms ${Date.now() - stepStart} :status "patched-in-ram")\n`;
+            } else {
+              stepBody = `  (:step :id ${idx + 1} :op "patch" :file "${file}" :symbol "${sym}" :status "failed" :error "Symbol or target string '${sym}' not found in ${file}")\n`;
+            }
+          }
+        }
+        break;
+      }
+
+      case 'syntax': {
+        const file = getArg(['file', 'f', 'path'], 1);
+        if (!file) {
+          stepBody = `  (:step :id ${idx + 1} :op "syntax" :valid false :error "Missing file parameter")\n`;
+        } else {
+          const res = checkAslBalance(file);
+          stepBody = `  (:step :id ${idx + 1} :op "syntax" :file "${file}" :valid ${res.valid ? 'true' : 'false'} :error "${res.error || ''}")\n`;
+        }
         break;
       }
 
@@ -2492,6 +2669,9 @@ export async function runAsnBatch(rawAsn, options = {}) {
 
   if (headVal === ':batch' || headVal === 'batch') {
     items = parsed.slice(1);
+    if (items.length === 1 && Array.isArray(items[0]) && Array.isArray(items[0][0])) {
+      items = items[0];
+    }
   } else {
     items = [parsed];
   }
@@ -2521,7 +2701,7 @@ export async function runAsnBatch(rawAsn, options = {}) {
     const opTok = item[0];
     const op = (opTok && opTok.type === 'keyword' ? opTok.value : String(opTok?.value || opTok)).replace(/^:/, '');
 
-    const isMutation = ['edit', 'replace', 'flush', 'discard'].includes(op);
+    const isMutation = ['edit', 'replace', 'create', 'write', 'delete', 'rm', 'patch', 'flush', 'discard', 'exec'].includes(op);
     if (isMutation) {
       await flushParallelBatch();
       results[idx] = await executeStep(item, idx, options);
@@ -2951,7 +3131,7 @@ async function runCli() {
     }
 
     case 'status': {
-      const dirty = loadDirtyMap();
+      const dirty = { ...loadDirtyMap(), ...(memoryIndex.dirtyMap || {}) };
       const dirtyCount = Object.keys(dirty).length;
       loadSnapshot();
       console.log(`(:asl-mem-status :indexed-files ${memoryIndex.documents.length} :dirty-in-ram ${dirtyCount} :cache-dir "${CACHE_DIR}")`);
