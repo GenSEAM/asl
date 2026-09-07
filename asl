@@ -452,7 +452,7 @@ case "$CMD" in
         else
           echo "🚀 [ASL] Running standalone POSIX installer from pack/src/installer.asl..."
           WORKSPACE_ROOT="$(pwd)"
-          TOOLBELT_DIRECTIVE="<!-- ASL_TOOLBELT_START -->"$'\n'"Always activate and follow the asl-toolbelt skill; asl is available in PATH."$'\n'"<!-- ASL_TOOLBELT_END -->"
+          TOOLBELT_DIRECTIVE="<!-- ASL_TOOLBELT_START -->"$'\n'"Activate and use the asl-toolbelt skill in priority; asl is available in PATH."$'\n'"<!-- ASL_TOOLBELT_END -->"
           for F in "$WORKSPACE_ROOT/AGENTS.md" "$WORKSPACE_ROOT/.cursorrules"; do
             echo "$TOOLBELT_DIRECTIVE" > "$F"
             echo "✓ Updated $F"

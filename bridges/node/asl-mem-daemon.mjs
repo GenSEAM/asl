@@ -1878,16 +1878,35 @@ export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) 
   if (head === 'string-chars' || head === 'str-chars') return String(args[0]).split('');
   if (head === 'string-from-int64') return String(args[0]);
   if (head === 'string-from-float' || head === 'string-from-float64') return String(args[0]);
-  if (head === 'string-to-int64' || head === 'str-to-int64') return parseInt(String(args[0]), 10) || 0;
-  if (head === 'string-to-float64' || head === 'str-to-float64') return parseFloat(String(args[0])) || 0.0;
+  if (head === 'string-to-int64' || head === 'str-to-int64') {
+    const str = String(args[0]);
+    if (/^-?\d+$/.test(str.trim())) {
+      const n = parseInt(str.trim(), 10);
+      return { _type: 'some', _value: n };
+    }
+    return null;
+  }
+  if (head === 'string-to-float64' || head === 'str-to-float64') {
+    const str = String(args[0]);
+    if (/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(str.trim())) {
+      const n = parseFloat(str.trim());
+      return { _type: 'some', _value: n };
+    }
+    return null;
+  }
   if (head === 'list' || head === 'vector') return args;
   if (head === 'cons' || head === 'list-cons') return [args[0], ...(Array.isArray(args[1]) ? args[1] : [])];
-  if (head === 'first' || head === 'list-head') return Array.isArray(args[0]) ? (args[0].length > 0 ? args[0][0] : null) : null;
-  if (head === 'rest' || head === 'list-tail') return Array.isArray(args[0]) ? args[0].slice(1) : [];
-  if (head === 'list-empty?') return Array.isArray(args[0]) && args[0].length === 0;
+  if (head === 'first' || head === 'list-head') {
+    if (!Array.isArray(args[0]) || args[0].length === 0) return null;
+    return { _type: 'some', _value: args[0][0] };
+  }
+  if (head === 'rest' || head === 'list-tail') {
+    if (!Array.isArray(args[0]) || args[0].length === 0) return null;
+    return { _type: 'some', _value: args[0].slice(1) };
+  }
+  if (head === 'list-empty?') return !Array.isArray(args[0]) || args[0].length === 0;
   if (head === 'list-length') return Array.isArray(args[0]) ? args[0].length : 0;
-  if (head === 'list-concat') return (Array.isArray(args[0]) ? args[0] : []).concat(Array.isArray(args[1]) ? args[1] : []);
-  if (head === 'list-append') return (Array.isArray(args[0]) ? args[0] : []).concat([args[1]]);
+  if (head === 'list-concat' || head === 'list-append') return (Array.isArray(args[0]) ? args[0] : []).concat(Array.isArray(args[1]) ? args[1] : [args[1]]);
   if (head === 'list-reverse' || head === 'reverse') return Array.isArray(args[0]) ? [...args[0]].reverse() : [];
   if (head === 'list-get') return Array.isArray(args[0]) ? (args[1] < args[0].length ? args[0][args[1]] : null) : null;
   if (head === 'list-slice') return Array.isArray(args[0]) ? args[0].slice(Number(args[1]), args[2] !== undefined ? Number(args[2]) : undefined) : [];
@@ -1908,7 +1927,8 @@ export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) 
     const start = Number(args[0]);
     const end = Number(args[1]);
     const res = [];
-    for (let k = start; k < end; k++) res.push(k);
+    const limit = Math.min(end, start + 100000);
+    for (let k = start; k < limit; k++) res.push(k);
     return res;
   }
   if (head === 'zip') {
