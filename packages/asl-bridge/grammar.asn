@@ -10,6 +10,7 @@
     (:sym :name "DbResult" :kind :type :tokens 1)
     (:sym :name "DriverKind" :kind :type :tokens 1)
     (:sym :name "QueryPlan" :kind :type :tokens 1)
+    (:sym :name "SkillManifest" :kind :type :tokens 1)
     (:sym :name "TableDef" :kind :type :tokens 1)
     (:sym :name "TierKind" :kind :type :tokens 1)
 
@@ -44,6 +45,8 @@
           :rationale "Encapsulates database execution output containing returned row maps and affected row count")
     (:sym :name "make-query-plan" :kind :fn :tokens 3
           :rationale "Builds execution plan binding SQL statement, target execution tier, and query parameters")
+    (:sym :name "make-skill-manifest" :kind :fn :tokens 3
+          :rationale "Constructs SkillManifest record binding name, description, filesystem path, and verification status")
     (:sym :name "make-table-def" :kind :fn :tokens 3
           :rationale "Constructs entity table schema definition binding table name with typed column schema list")
     (:sym :name "render-kysely-col" :kind :fn :tokens 3
@@ -52,6 +55,8 @@
           :rationale "Transpiles DbColumn schema definition into Rust SeaORM entity struct field with derive annotations")
     (:sym :name "render-sqlalchemy-col" :kind :fn :tokens 3
           :rationale "Transpiles DbColumn schema definition into Python SQLAlchemy Column attribute assignment")
+    (:sym :name "resolve-skill-manifest" :kind :fn :tokens 3
+          :rationale "Resolves and constructs a SkillManifest record given a skill name identifier and directory path")
     (:sym :name "str-to-driver-kind" :kind :fn :tokens 4
           :rationale "Parses canonical driver string identifier into typed DriverKind enum variant")
     (:sym :name "str-to-tier-kind" :kind :fn :tokens 4
@@ -66,6 +71,8 @@
           :rationale "Generates complete Python SQLAlchemy declarative base model class from TableDef record")
     (:sym :name "test-ports-and-types" :kind :fn :tokens 4
           :rationale "Test suite verifying DbColumn, TableDef, QueryPlan, and DriverKind/TierKind conversions")
+    (:sym :name "test-resolve-manifest" :kind :fn :tokens 3
+          :rationale "Test suite verifying skill manifest resolution and record construction")
     (:sym :name "test-router-planning" :kind :fn :tokens 3
           :rationale "Test suite validating query planning defaults and tier selection per driver kind")
     (:sym :name "test-router-workload" :kind :fn :tokens 3
@@ -78,8 +85,12 @@
           :rationale "Test suite validating Rust SeaORM entity struct transpilation")
     (:sym :name "test-schema-sqlalchemy" :kind :fn :tokens 3
           :rationale "Test suite validating Python SQLAlchemy declarative model transpilation")
+    (:sym :name "test-validate-frontmatter" :kind :fn :tokens 3
+          :rationale "Test suite verifying skill YAML frontmatter delimiter and metadata validation")
     (:sym :name "tier-kind-to-str" :kind :fn :tokens 4
           :rationale "Converts TierKind enum variant into canonical execution tier name string")
     (:sym :name "to-pascal-case" :kind :fn :tokens 3
           :rationale "Converts snake_case and kebab-case identifiers to PascalCase for type and struct names")
+    (:sym :name "validate-skill-frontmatter" :kind :fn :tokens 3
+          :rationale "Validates that skill markdown content contains valid YAML frontmatter delimiters and required metadata")
   ])
