@@ -3,7 +3,8 @@
   :x [SqlColumnType ColumnDef TableDef InsertQuery UpdateQuery UpsertQuery
            type-to-sql-string render-column-def render-create-table
            render-insert render-update render-delete render-upsert
-           make-column make-column-custom make-table make-insert make-update make-upsert])
+           make-column make-column-custom make-table make-insert make-update make-upsert
+           col-int64 col-float64 col-text col-boolean col-bool col-timestamp])
 
 (dfe SqlColumnType
   (:c col-int64     [] "64-bit integer (BIGINT)")
@@ -11,6 +12,10 @@
   (:c col-text      [] "Variable length character string (TEXT)")
   (:c col-boolean   [] "Boolean flag (BOOLEAN or INTEGER)")
   (:c col-timestamp [] "Timestamp with timezone (TIMESTAMPTZ or TEXT)"))
+
+(df col-bool [] -> SqlColumnType
+  :d "Alias for col-boolean column type."
+  (col-boolean))
 
 (dfs ColumnDef
   (:f name String "Column identifier name")

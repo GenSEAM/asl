@@ -18,7 +18,7 @@
         (rsq (sb/render-sqlalchemy-col (p/make-db-column "id" "i64" false true)))
         (set (sb/seaorm-type "i64"))
         (rse (sb/render-seaorm-col (p/make-db-column "id" "i64" false true)))
-        (dummy-cap capitalize-word)]
+        (cap capitalize-word)]
     (and (= pas "UserProfile")
          (and (= cat "int")
               (and (= kt "number")

@@ -350,14 +350,14 @@ const knownBuiltins = new Set([
   '+', '-', '*', '/', 'mod',
   '=', '!=', '<', '>', '<=', '>=',
   'not', 'and', 'or',
-  'if', 'assert', 'let', 'do', 'cond', 'mt',
+  'if', 'assert', 'let', 'do', 'cond', 'when', 'unless', 'mt',
   'df', 'fn', 'module', 'dfe', 'dfs',
   'println', 'eprintln', 'print', 'str',
   'str-concat', 'str-len', 'str-contains?',
-  'string-from-int64', 'string-from-float64',
+  'string-length', 'string-from-int64', 'string-from-int', 'string-from-float64', 'string-from-float',
   'string-contains?', 'string-starts-with?', 'string-ends-with?',
   'string-split', 'string-join', 'string-trim', 'string-empty?',
-  'list', 'list-cons', 'list-head', 'list-tail', 'list-empty?', 'list-length', 'list-drop',
+  'list', 'list-cons', 'list-head', 'list-tail', 'list-empty?', 'list-length', 'list-len', 'list-drop',
   'list-sort', 'list-sort-by', 'list-sum', 'list-min', 'list-max', 'list-index-of',
   'cons', 'first', 'rest',
   'map-empty', 'map-set', 'map-get', 'map-size', 'map-keys', 'map-values', 'map-pairs', 'map-from-pairs', 'map-remove',
@@ -366,8 +366,8 @@ const knownBuiltins = new Set([
   'abs', 'neg', 'min', 'max', 'checked-div', 'checked-mod',
   'option-or', 'result-map', 'result-map-err', 'result-to-option',
   'already-exists', 'interrupted', 'invalid-path', 'not-found', 'other', 'permission-denied',
-  'list-append', 'list-contains?', 'list-get', 'list-slice', 'list-reverse', 'filter', 'fold', 'map', 'range', 'zip',
-  'map-has?', 'pair',
+  'list-append', 'list-concat', 'concat', 'list-contains?', 'list-get', 'list-slice', 'list-reverse', 'filter', 'fold', 'map', 'range', 'zip',
+  'map-has?', 'pair', 'show',
   'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float-from-int64', 'float', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
   'string-chars', 'string-lower', 'string-upper', 'string-replace', 'string-reverse', 'string-index-of', 'string-slice'
 ]);
@@ -686,7 +686,9 @@ function evalNode(node, env = new Map()) {
       const condVal = evalNode(node.items[1], env);
       const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
       if (!isTruthy) {
-        console.error("ERR_ASSERTION_FAILED: assertion evaluated to false");
+        const fnName = node.items[1]?.items?.[0]?.value || node.items[1]?.value || '';
+        const msg = node.items[2] ? evalNode(node.items[2], env) : 'assertion evaluated to false';
+        console.error(`ERR_ASSERTION_FAILED: ${fnName} ${msg}`);
         process.exit(1);
       }
       return true;
@@ -748,6 +750,132 @@ function evalNode(node, env = new Map()) {
       return null;
     }
 
+    // Special forms: cond
+    if (head === 'cond') {
+      for (let j = 1; j < node.items.length; j++) {
+        const branch = node.items[j];
+        if (branch && (branch.type === 'list' || branch.type === 'vec') && branch.items.length >= 2) {
+          const testNode = branch.items[0];
+          let isMatch = false;
+          if ((testNode.type === 'kw' && testNode.value === 'else') ||
+              (testNode.type === 'sym' && (testNode.value === 'else' || testNode.value === ':else'))) {
+            isMatch = true;
+          } else {
+            const testVal = evalNode(testNode, env);
+            isMatch = testVal !== false && testVal !== null && testVal !== undefined;
+          }
+          if (isMatch) {
+            let lastVal = null;
+            for (let k = 1; k < branch.items.length; k++) {
+              lastVal = evalNode(branch.items[k], env);
+            }
+            return lastVal;
+          }
+        }
+      }
+      return null;
+    }
+
+    // Special forms: when
+    if (head === 'when') {
+      const condVal = evalNode(node.items[1], env);
+      const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
+      if (isTruthy) {
+        let lastVal = null;
+        for (let j = 2; j < node.items.length; j++) {
+          lastVal = evalNode(node.items[j], env);
+        }
+        return lastVal;
+      }
+      return null;
+    }
+
+    // Special forms: unless
+    if (head === 'unless') {
+      const condVal = evalNode(node.items[1], env);
+      const isFalsy = condVal === false || condVal === null || condVal === undefined;
+      if (isFalsy) {
+        let lastVal = null;
+        for (let j = 2; j < node.items.length; j++) {
+          lastVal = evalNode(node.items[j], env);
+        }
+        return lastVal;
+      }
+      return null;
+    }
+
+    // Special forms: mt (pattern match)
+    if (head === 'mt') {
+      const targetVal = evalNode(node.items[1], env);
+      for (let j = 2; j < node.items.length; j++) {
+        const branch = node.items[j];
+        if (!branch || (branch.type !== 'list' && branch.type !== 'vec') || branch.items.length < 2) continue;
+        const patNode = branch.items[0];
+        const branchEnv = new Map(env);
+        let isMatch = false;
+
+        if (patNode.type === 'null' || (patNode.type === 'sym' && (patNode.value === '_' || patNode.value === 'else' || patNode.value === ':else')) || (patNode.type === 'kw' && patNode.value === 'else')) {
+          isMatch = true;
+        } else if (patNode.type === 'sym') {
+          isMatch = true;
+          branchEnv.set(patNode.value, targetVal);
+        } else if (patNode.type === 'list' || patNode.type === 'vec') {
+          if (patNode.items.length === 0) {
+            isMatch = Array.isArray(targetVal) && targetVal.length === 0;
+          } else {
+            const headPat = patNode.items[0];
+            const headPatName = headPat?.type === 'sym' ? headPat.value : null;
+
+            if (headPatName) {
+              if (targetVal && typeof targetVal === 'object') {
+                if (targetVal._type === 'variant' && targetVal._variant === headPatName) {
+                  isMatch = true;
+                  for (let k = 1; k < patNode.items.length; k++) {
+                    const varSym = patNode.items[k]?.value;
+                    if (varSym && varSym !== '_') {
+                      branchEnv.set(varSym, targetVal[`arg${k}`] !== undefined ? targetVal[`arg${k}`] : targetVal.value);
+                    }
+                  }
+                } else if (targetVal._tag === 'some' && headPatName === 'some') {
+                  isMatch = true;
+                  if (patNode.items[1]?.value && patNode.items[1].value !== '_') {
+                    branchEnv.set(patNode.items[1].value, targetVal.value);
+                  }
+                } else if (targetVal._tag === 'none' && headPatName === 'none') {
+                  isMatch = true;
+                } else if (targetVal._tag === 'ok' && headPatName === 'ok') {
+                  isMatch = true;
+                  if (patNode.items[1]?.value && patNode.items[1].value !== '_') {
+                    branchEnv.set(patNode.items[1].value, targetVal.value);
+                  }
+                } else if (targetVal._tag === 'err' && headPatName === 'err') {
+                  isMatch = true;
+                  if (patNode.items[1]?.value && patNode.items[1].value !== '_') {
+                    branchEnv.set(patNode.items[1].value, targetVal.value);
+                  }
+                }
+              }
+              if (!isMatch && targetVal === null && headPatName === 'none') {
+                isMatch = true;
+              }
+            }
+          }
+        } else {
+          const litVal = evalNode(patNode, env);
+          isMatch = (litVal === targetVal);
+        }
+
+        if (isMatch) {
+          let lastVal = null;
+          for (let k = 1; k < branch.items.length; k++) {
+            lastVal = evalNode(branch.items[k], branchEnv);
+          }
+          return lastVal;
+        }
+      }
+      return null;
+    }
+
     // Normal evaluation of arguments
     const evalArgs = node.items.slice(1).map(it => evalNode(it, env));
 
@@ -790,7 +918,7 @@ function evalNode(node, env = new Map()) {
       }
       if (head === '/') {
         if (isBig) return evalArgs.reduce((a, b) => a / b);
-        return evalArgs.reduce((a, b) => Math.floor(Number(a) / Number(b)));
+        return evalArgs.reduce((a, b) => Number(a) / Number(b));
       }
       if (head === 'mod') {
         if (isBig) return evalArgs.reduce((a, b) => a % b);
@@ -918,7 +1046,7 @@ function evalNode(node, env = new Map()) {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       return arr.length === 0;
     }
-    if (head === 'list-length' || head === 'length') {
+    if (head === 'list-length' || head === 'length' || head === 'list-len') {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       return BigInt(arr.length);
     }
@@ -927,10 +1055,13 @@ function evalNode(node, env = new Map()) {
       const count = Number(evalArgs[1]);
       return arr.slice(count);
     }
-    if (head === 'list-append') {
+    if (head === 'list-append' || head === 'list-concat' || head === 'concat') {
       const a = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
       const b = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
       return [...a, ...b];
+    }
+    if (head === 'show') {
+      return formatOutput(evalArgs[0]);
     }
     if (head === 'list-contains?') {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
@@ -1034,6 +1165,22 @@ function evalNode(node, env = new Map()) {
       delete obj[String(evalArgs[1])];
       return obj;
     }
+    if (head === 'map-empty') {
+      return {};
+    }
+    if (head === 'map-set') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? { ...evalArgs[0] } : {};
+      obj[String(evalArgs[1])] = evalArgs[2];
+      return obj;
+    }
+    if (head === 'map-get') {
+      const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
+      const key = String(evalArgs[1]);
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        return { _tag: 'some', value: obj[key] };
+      }
+      return { _tag: 'none', value: null };
+    }
 
     // Comparison builtins
     if (head === '=') {
@@ -1075,6 +1222,18 @@ function evalNode(node, env = new Map()) {
     if (head === 'str-concat') return evalArgs.join('');
     if (head === 'str-len' || head === 'string-length') return String(evalArgs[0] || '').length;
     if (head === 'str-contains?' || head === 'string-contains?') return String(evalArgs[0] || '').includes(String(evalArgs[1] || ''));
+    if (head === 'string-starts-with?') return String(evalArgs[0] || '').startsWith(String(evalArgs[1] || ''));
+    if (head === 'string-ends-with?') return String(evalArgs[0] || '').endsWith(String(evalArgs[1] || ''));
+    if (head === 'string-split') return String(evalArgs[0] || '').split(String(evalArgs[1] || ''));
+    if (head === 'string-join') {
+      const sep = String(evalArgs[1] || '');
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.map(formatOutput).join(sep);
+    }
+    if (head === 'string-trim') return String(evalArgs[0] || '').trim();
+    if (head === 'string-empty?') return String(evalArgs[0] || '').length === 0;
+    if (head === 'string-from-int64' || head === 'string-from-int') return String(evalArgs[0] ?? '');
+    if (head === 'string-from-float64' || head === 'string-from-float') return String(evalArgs[0] ?? '');
     if (head === 'string-to-int64') {
       const s = String(evalArgs[0] || '').trim();
       if (/^-?[0-9]+$/.test(s)) return { _tag: 'some', value: BigInt(s) };
@@ -1263,22 +1422,36 @@ function resolveModulePath(currentFile, modName) {
   const dir = path.dirname(currentFile);
   const cleanMod = modName.replace(/\.asl$/, '');
   const wsRoot = process.cwd();
-  const candidates = [
-    path.join(dir, cleanMod + '.asl'),
-    path.join(dir, '..', 'src', cleanMod + '.asl'),
-    path.join(dir, '..', 'src', 'core', cleanMod + '.asl'),
-    path.join(dir, 'src', cleanMod + '.asl'),
-    path.join(wsRoot, cleanMod + '.asl'),
-    path.join(wsRoot, 'harness', 'src', cleanMod + '.asl'),
-    path.join(wsRoot, 'gsa', 'src', cleanMod + '.asl'),
-    path.join(wsRoot, 'agent-bus', 'src', cleanMod + '.asl'),
-    path.join(wsRoot, 'asl', 'packages', cleanMod, 'src', cleanMod + '.asl'),
-    path.join(wsRoot, 'asl', 'packages', 'asl-' + cleanMod, 'src', cleanMod + '.asl'),
-    path.join(wsRoot, 'asl', 'packages', 'asl-' + cleanMod, 'src', 'core', cleanMod + '.asl'),
-    path.join(wsRoot, 'mem', 'src', cleanMod + '.asl')
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
+  const variants = [cleanMod, cleanMod.replace(/-/g, '_'), cleanMod.replace(/_/g, '-')];
+  if (cleanMod === 'core') variants.push('sql');
+
+  for (const v of variants) {
+    const candidates = [
+      path.join(dir, v + '.asl'),
+      path.join(dir, '..', 'src', v + '.asl'),
+      path.join(dir, '..', 'src', 'core', v + '.asl'),
+      path.join(dir, '..', 'src', 'core', 'sql.asl'),
+      path.join(dir, 'src', v + '.asl'),
+      path.join(dir, 'src', 'core', v + '.asl'),
+      path.join(wsRoot, v + '.asl'),
+      path.join(wsRoot, 'harness', 'src', v + '.asl'),
+      path.join(wsRoot, 'gsa', 'src', v + '.asl'),
+      path.join(wsRoot, 'agent-bus', 'src', v + '.asl'),
+      path.join(wsRoot, 'asl-contracts', 'src', v + '.asl'),
+      path.join(wsRoot, 'asl', 'packages', v, 'src', v + '.asl'),
+      path.join(wsRoot, 'asl', 'packages', 'asl-' + v, 'src', v + '.asl'),
+      path.join(wsRoot, 'asl', 'packages', 'asl-' + v, 'src', 'core', v + '.asl'),
+      path.join(wsRoot, 'asl', 'packages', 'asl-sql', 'src', 'core', v + '.asl'),
+      path.join(wsRoot, 'mem', 'src', v + '.asl'),
+      path.join(wsRoot, 'intel', 'src', v + '.asl'),
+      path.join(wsRoot, 'vdom', 'src', v + '.asl'),
+      path.join(wsRoot, 'pack', 'src', v + '.asl'),
+      path.join(wsRoot, 'voice', 'src', v + '.asl'),
+      path.join(wsRoot, 'crawler', 'src', v + '.asl')
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
+    }
   }
   return null;
 }
@@ -1353,6 +1526,12 @@ if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('
       const mainFn = rootEnv.get('main');
       if (mainFn && mainFn._type === 'closure') {
         lastResult = invokeClosure(mainFn, []);
+      }
+    } else {
+      for (const [fnName, fnVal] of rootEnv.entries()) {
+        if (fnName.startsWith('test-') && fnVal && fnVal._type === 'closure' && fnVal.params.length === 0) {
+          invokeClosure(fnVal, []);
+        }
       }
     }
     if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {

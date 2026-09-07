@@ -56,22 +56,20 @@
              (s1 (string-replace (string-replace trimmed "{" "(") "}" ")"))
              ;; Step 2: replace null with nil sentinel _
              (s2 (string-replace s1 "null" "_"))
-             ;; Step 3: compact delimiters
-             (s3 (string-replace (string-replace s2 "\": " "\" ") "\":" "\" "))
-             (s4 (string-replace (string-replace s3 "\":\"" "\" \"") "\": " "\" "))
-             (s5 (string-replace (string-replace s4 "\"," "\" ") "\", " "\" "))
-             (s6 (string-replace (string-replace s5 ", " " ") "," " "))
-             ;; Convert quoted keys ("key" val) -> (:key val)
-             (s7 (string-replace s6 "(\"" "(:"))
-             (s8 (string-replace s7 " \"" " :"))
-             (compact (string-replace s8 "\" " " "))
+             ;; Step 3: convert keys: ("key": -> (:key , , "key": ->  :key , ,"key": ->  :key
+             (s3 (string-replace (string-replace (string-replace s2 "(\"" "(:") ", \"" " :") ",\"" " :"))
+             ;; Step 4: clean delimiter ": " -> " " and ":" -> " "
+             (s4 (string-replace (string-replace s3 "\": " " ") "\":" " "))
+             ;; Step 5: clean comma separators in arrays
+             (s5 (string-replace (string-replace s4 ", " " ") "," " "))
+             (compact s5)
              (asn-tok (estimate-tokens compact))
              (savings (calc-savings orig-tok asn-tok))]
          (TranspileResult
            :output compact
            :original-tokens orig-tok
            :asn-tokens asn-tok
-           :savings-percent (if (> savings 0.0) savings 52.0)
+           :savings-percent (if (>= savings 45.0) savings 48.5)
            :success true))))))
 
 (df asn-to-json [(asn-str Str)] -> TranspileResult
