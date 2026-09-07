@@ -341,16 +341,58 @@ function extractStrings(str: string) {
       // For all other .asl files: transpile their functions!
       const parsedFns = parseFunctions(content);
       const exportedFns: string[] = [];
+      const exportedComponents: string[] = [];
 
       for (const fn of parsedFns) {
         const fnNameKebab = fn.name;
         const fnNameCamel = fnNameKebab.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
-        let strs = extractStrings(fn.code);
-        if (fn.code.includes(':d "') && strs.length > 1) {
-          strs = strs.slice(1);
+        const fnNamePascal = fnNameCamel.charAt(0).toUpperCase() + fnNameCamel.slice(1);
+        const codeWithoutDoc = fn.code.replace(/:d\s+"(?:[^"\\]|\\.)*"/, '');
+        let strs = extractStrings(codeWithoutDoc);
+        let resolvedStr = strs.map(parseSExpToHtml).join('');
+        if (!resolvedStr) {
+          const aliasMatch = codeWithoutDoc.match(/\(([a-zA-Z0-9_-]+)\)/);
+          if (aliasMatch) {
+            const calleeCamel = aliasMatch[1].replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+            exportedFns.push(`export function ${fnNameCamel}() {\n  return typeof ${calleeCamel} === 'function' ? ${calleeCamel}() : '';\n}`);
+          } else {
+            exportedFns.push(`export function ${fnNameCamel}() {\n  return "";\n}`);
+          }
+        } else {
+          exportedFns.push(`export function ${fnNameCamel}() {\n  return ${JSON.stringify(resolvedStr)};\n}`);
         }
-        const resolvedStr = strs.map(parseSExpToHtml).join('');
-        exportedFns.push(`export function ${fnNameCamel}() {\n  return ${JSON.stringify(resolvedStr)};\n}`);
+
+        exportedComponents.push(`export const ${fnNamePascal} = ({ className = '', title = '', strokeWidth, ...props } = {}) => {
+  let html = typeof ${fnNameCamel} === 'function' ? ${fnNameCamel}() : '';
+  if (className) {
+    if (html.startsWith('<svg')) {
+      html = html.replace(/<svg\\b([^>]*)>/, (m, rest) => {
+        if (rest.includes('class="')) {
+          return \`<svg\${rest.replace(/class="[^"]*"/, \`class="\${className}"\`)}>\`;
+        }
+        return \`<svg class="\${className}"\${rest}>\`;
+      });
+    } else {
+      html = html.replace(/^(<[a-z0-9]+)\\b([^>]*)>/, (m, tag, rest) => {
+        if (rest.includes('class="')) {
+          return \`\${tag}\${rest.replace(/class="([^"]*)"/, (_, cls) => \`class="\${cls} \${className}"\`)}>\`;
+        }
+        return \`\${tag} class="\${className}"\${rest}>\`;
+      });
+    }
+  }
+  if (title && html.includes('<svg')) {
+    html = html.replace(/aria-label="[^"]*"/, \`aria-label="\${title}"\`);
+  }
+  if (strokeWidth && html.includes('<svg')) {
+    html = html.replace(/stroke-width="[^"]*"/g, \`stroke-width="\${strokeWidth}"\`);
+  }
+  return React.createElement('span', {
+    className: 'asl-comp-wrapper ' + (className || ''),
+    style: { display: 'contents' },
+    dangerouslySetInnerHTML: { __html: html }
+  });
+};`);
       }
 
       const componentName = rawFilename
@@ -358,18 +400,25 @@ function extractStrings(str: string) {
         .replace(/^[a-z]/, (c) => c.toUpperCase());
 
       const primaryRenderFn = exportedFns.find(fn => fn.includes('render') || fn.includes('View'));
-      const renderCall = primaryRenderFn ? `${primaryRenderFn.split(' ')[2].split('(')[0]}()` : `""`;
+      const renderFnName = primaryRenderFn ? primaryRenderFn.split(' ')[2].split('(')[0] : null;
+
+      const alreadyDeclared = exportedComponents.some(c => c.startsWith(`export const ${componentName} =`));
+      const defaultComponentDecl = alreadyDeclared
+        ? ''
+        : `export const ${componentName} = ({ className = '', ...props } = {}) => {\n` +
+          `  const html = typeof ${renderFnName} === 'function' ? ${renderFnName}(props) : '';\n` +
+          `  return React.createElement('div', {\n` +
+          `    className: 'asl-${rawFilename.toLowerCase()} ' + (className || ''),\n` +
+          `    dangerouslySetInnerHTML: html ? { __html: html } : undefined\n` +
+          `  }, (!html && props && props.children) || null);\n` +
+          `};\n\n`;
 
       return {
         code: `import React from 'react';\n\n` +
-          exportedFns.join('\n\n') +
-          `\n\nexport const ${componentName} = (props) => {\n` +
-          `  const html = typeof ${renderCall} === 'function' ? ${renderCall} : '';\n` +
-          `  return React.createElement('div', {\n` +
-          `    className: 'asl-${rawFilename.toLowerCase()}',\n` +
-          `    dangerouslySetInnerHTML: html ? { __html: html } : undefined\n` +
-          `  }, (!html && props && props.children) || null);\n` +
-          `};\n\nexport default ${componentName};\n`,
+          exportedFns.join('\n\n') + '\n\n' +
+          exportedComponents.join('\n\n') + '\n\n' +
+          defaultComponentDecl +
+          `export default ${componentName};\n`,
         map: null
       };
     }
