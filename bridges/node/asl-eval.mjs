@@ -462,7 +462,7 @@ function parseSExpr(input) {
   return parseVal();
 }
 
-function evalNode(node) {
+function evalNode(node, env = new Map()) {
   if (!node) return null;
   if (node.type === 'int') return node.value;
   if (node.type === 'float') return node.value;
@@ -471,6 +471,7 @@ function evalNode(node) {
   if (node.type === 'null') return null;
   if (node.type === 'kw') return node;
   if (node.type === 'sym') {
+    if (env.has(node.value)) return env.get(node.value);
     if (node.value === 'true') return true;
     if (node.value === 'false') return false;
     if (node.value === 'null' || node.value === 'nil' || node.value === '_') return null;
@@ -478,7 +479,7 @@ function evalNode(node) {
     process.exit(1);
   }
   if (node.type === 'vec') {
-    return node.items.map(evalNode);
+    return node.items.map(it => evalNode(it, env));
   }
   if (node.type === 'list') {
     if (node.items.length === 0) return [];
@@ -489,7 +490,7 @@ function evalNode(node) {
         const kNode = node.items[j];
         const vNode = j + 1 < node.items.length ? node.items[j + 1] : null;
         if (kNode?.type === 'kw') {
-          obj[kNode.value] = evalNode(vNode);
+          obj[kNode.value] = evalNode(vNode, env);
         }
       }
       return obj;
@@ -499,25 +500,77 @@ function evalNode(node) {
       process.exit(1);
     }
     const head = headNode.value;
+
+    // Property accessor: (.-prop target)
+    if (head.startsWith('.-')) {
+      const prop = head.slice(2);
+      const target = evalNode(node.items[1], env);
+      if (target && typeof target === 'object') {
+        return target[prop];
+      }
+      return null;
+    }
+
     if (!knownBuiltins.has(head)) {
       console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
       process.exit(1);
     }
 
+    // Special forms: assert
+    if (head === 'assert') {
+      const condVal = evalNode(node.items[1], env);
+      const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
+      if (!isTruthy) {
+        console.error("ERR_ASSERTION_FAILED: assertion evaluated to false");
+        process.exit(1);
+      }
+      return true;
+    }
+
+    // Special forms: do
+    if (head === 'do') {
+      let lastVal = null;
+      for (let j = 1; j < node.items.length; j++) {
+        lastVal = evalNode(node.items[j], env);
+      }
+      return lastVal;
+    }
+
+    // Special forms: let
+    if (head === 'let') {
+      const bindingsNode = node.items[1];
+      const childEnv = new Map(env);
+      const pairs = bindingsNode?.items || [];
+      for (const pair of pairs) {
+        if (pair?.items && pair.items.length >= 2) {
+          const varSym = pair.items[0];
+          const valExpr = pair.items[1];
+          if (varSym?.type === 'sym') {
+            childEnv.set(varSym.value, evalNode(valExpr, childEnv));
+          }
+        }
+      }
+      let lastVal = null;
+      for (let j = 2; j < node.items.length; j++) {
+        lastVal = evalNode(node.items[j], childEnv);
+      }
+      return lastVal;
+    }
+
     // Special forms: if
     if (head === 'if') {
-      const condVal = evalNode(node.items[1]);
+      const condVal = evalNode(node.items[1], env);
       const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
       if (isTruthy) {
-        return evalNode(node.items[2]);
+        return evalNode(node.items[2], env);
       } else if (node.items[3]) {
-        return evalNode(node.items[3]);
+        return evalNode(node.items[3], env);
       }
       return null;
     }
 
     // Normal evaluation of arguments
-    const evalArgs = node.items.slice(1).map(evalNode);
+    const evalArgs = node.items.slice(1).map(it => evalNode(it, env));
 
     // Strict numeric typing for arithmetic: +, -, *, /, mod
     if (head === '+' || head === '-' || head === '*' || head === '/' || head === 'mod') {
