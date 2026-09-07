@@ -241,27 +241,31 @@ export default App;
         return {
           code: `import React from 'react';
 import { renderHero } from '../components/Hero.asl';
+import { renderEcosystem } from '../components/Ecosystem.asl';
 import { capabilitiesView } from '../components/KeyCapabilities.asl';
 import { agentWayView } from '../components/TheAgentWay.asl';
 import { renderWireProtocol } from '../components/AgentWireProtocol.asl';
 import { harnessView } from '../components/HarnessToolkit.asl';
-import { renderPackageMatrix } from '../components/UnifiedPackageMatrix.asl';
+import { renderModuleGraphVisualizer } from '../components/ModuleGraphVisualizer.asl';
 import { renderEngineeringBlog } from '../components/EngineeringBlog.asl';
+import { renderInBrowserAgent } from '../components/InBrowserAgent.asl';
 
 export function describeHomeView() {
-  return '(view :id "home" :components ["hero" "capabilities" "agent-way" "wire-protocol" "harness" "matrix" "blog"])';
+  return '(view :id "home" :components ["hero" "ecosystem" "capabilities" "agent-way" "wire-protocol" "harness" "module-graph" "blog" "in-browser-agent"])';
 }
 
 export function renderHomeView() {
   return (
     '<main class="flex-1">' +
     renderHero() +
+    renderEcosystem() +
     capabilitiesView() +
     agentWayView() +
     renderWireProtocol() +
     harnessView() +
-    renderPackageMatrix() +
+    renderModuleGraphVisualizer() +
     renderEngineeringBlog() +
+    renderInBrowserAgent() +
     '</main>'
   );
 }

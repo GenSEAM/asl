@@ -1,6 +1,6 @@
 (module asl-web/agent-wire-protocol
   :d "Agent-to-Agent Mesh Protocol showcase component in pure AgentScript."
-  :x [agent-wire-protocol render-agent-wire-protocol wire-protocol-view]
+  :x [agent-wire-protocol render-agent-wire-protocol wire-protocol-view render-wire-protocol]
   :i [])
 
 (df render-agent-wire-protocol [] -> Str
@@ -179,5 +179,9 @@
   (render-agent-wire-protocol))
 
 (df wire-protocol-view [] -> Str
+  :d "Alias for render-agent-wire-protocol."
+  (render-agent-wire-protocol))
+
+(df render-wire-protocol [] -> Str
   :d "Alias for render-agent-wire-protocol."
   (render-agent-wire-protocol))
