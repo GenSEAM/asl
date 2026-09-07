@@ -23,3 +23,6 @@ rust_out
 web/dist/
 .agents/
 .cursorrules
+*.local.asn
+*.local.config.asn
+.asl.local.config.asn

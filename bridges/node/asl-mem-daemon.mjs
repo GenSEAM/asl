@@ -1961,7 +1961,7 @@ export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) 
     return { _type: 'some', _value: args[0].slice(1) };
   }
   if (head === 'list-empty?') return !Array.isArray(args[0]) || args[0].length === 0;
-  if (head === 'list-length') return Array.isArray(args[0]) ? args[0].length : 0;
+  if (head === 'list-length' || head === 'list-len') return Array.isArray(args[0]) ? args[0].length : 0;
   if (head === 'list-concat' || head === 'list-append') return (Array.isArray(args[0]) ? args[0] : []).concat(Array.isArray(args[1]) ? args[1] : [args[1]]);
   if (head === 'list-reverse' || head === 'reverse') return Array.isArray(args[0]) ? [...args[0]].reverse() : [];
   if (head === 'list-get') return Array.isArray(args[0]) ? (args[1] < args[0].length ? args[0][args[1]] : null) : null;
@@ -2361,7 +2361,7 @@ export function loadHierarchicalConfig(targetDir = process.cwd(), effectiveRoot 
     chain.unshift(rootBound);
   }
 
-  // Scan each level for both .asl.config.asn and asl.config.asn (with and without dot)
+  // Scan each level for both project configs and private local configs
   for (const dir of chain) {
     const candidates = [
       path.join(dir, '.asl.config.asn'),
@@ -2375,8 +2375,26 @@ export function loadHierarchicalConfig(targetDir = process.cwd(), effectiveRoot 
         try {
           const raw = fs.readFileSync(cp, 'utf8');
           const parsed = cp.endsWith('.asn') ? parseAsnConfig(raw) : JSON.parse(raw);
-          const level = (dir === rootBound) ? 'workspace' : (dir === targetDir ? 'local' : 'subproject');
+          const level = (dir === rootBound) ? 'workspace' : 'subproject';
           configs.push({ path: cp, level, config: parsed });
+          break;
+        } catch {}
+      }
+    }
+
+    // Local private overrides (gitignored, highest precedence at this directory)
+    const localCandidates = [
+      path.join(dir, '.asl.local.config.asn'),
+      path.join(dir, 'asl.local.config.asn'),
+      path.join(dir, '.asl.local.json')
+    ];
+    for (const lp of localCandidates) {
+      if (fs.existsSync(lp) && !visitedPaths.has(lp)) {
+        visitedPaths.add(lp);
+        try {
+          const raw = fs.readFileSync(lp, 'utf8');
+          const parsed = lp.endsWith('.asn') ? parseAsnConfig(raw) : JSON.parse(raw);
+          configs.push({ path: lp, level: 'local', config: parsed });
           break;
         } catch {}
       }

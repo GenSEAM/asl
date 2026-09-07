@@ -93,4 +93,31 @@
           :rationale "Converts snake_case and kebab-case identifiers to PascalCase for type and struct names")
     (:sym :name "validate-skill-frontmatter" :kind :fn :tokens 3
           :rationale "Validates that skill markdown content contains valid YAML frontmatter delimiters and required metadata")
+
+    ;; Configuration Cascading & Secret Resolution Symbols
+    (:sym :name "ConfigCascadeEntry" :kind :type :tokens 2)
+    (:sym :name "ResolvedTool" :kind :type :tokens 2)
+    (:sym :name "cascade-merge" :kind :fn :tokens 2)
+    (:sym :name "mask-secret" :kind :fn :tokens 2)
+    (:sym :name "make-cascade-entry" :kind :fn :tokens 3
+          :rationale "Constructs config cascade entry binding level and parameter map")
+    (:sym :name "make-resolved-tool" :kind :fn :tokens 3
+          :rationale "Constructs fully resolved tool descriptor ready for execution")
+    (:sym :name "is-level-higher?" :kind :fn :tokens 3
+          :rationale "Predicate testing precedence ordering between configuration hierarchy levels")
+    (:sym :name "resolve-secret-value" :kind :fn :tokens 3
+          :rationale "Dynamically resolves secret references from environment or fallback values")
+    (:sym :name "resolve-env-binding" :kind :fn :tokens 3
+          :rationale "Resolves dynamic environment variable binding with fallback")
+    (:sym :name "test-cascade-entry-creation" :kind :fn :tokens 4
+          :rationale "Unit test suite verifying config cascade entry constructor")
+    (:sym :name "test-precedence-hierarchy" :kind :fn :tokens 4
+          :rationale "Unit test suite verifying hierarchy precedence ordering rules")
+    (:sym :name "test-cascade-merge" :kind :fn :tokens 3
+          :rationale "Unit test suite verifying leaf-over-parent parameter map merging")
+    (:sym :name "test-secret-env-resolution" :kind :fn :tokens 4
+          :rationale "Unit test suite verifying dynamic secret environment resolution")
+    (:sym :name "test-secret-masking" :kind :fn :tokens 3
+          :rationale "Unit test suite verifying credential masking for telemetry safety")
   ])
+
