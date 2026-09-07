@@ -4,7 +4,8 @@
            default-dialect dialect-quote-char dialect-param-prefix
            is-parameterized is-literal-param col-expr str-expr int-expr bool-expr raw-expr json-get-expr
            make-join make-select render-binary-op render-placeholder render-json-path
-           render-expr-str count-params render-select count-pair-params render-logical-op]
+           render-expr-str count-params render-select count-pair-params render-logical-op
+           collect-params]
   :i [(core/strings :a s)])
 
 (dfe SqlDialect
@@ -59,11 +60,15 @@
   (:f order-column (Option String) "Optional ordering column")
   (:f order-dir OrderDir "Sort direction (asc or desc)")
   (:f limit-count (Option Int64) "Maximum rows to return")
-  (:f offset-count (Option Int64) "Row offset"))
+  (:f offset-count (Option Int64) "Row offset")
+  (:f for-update-skip-locked Bool "Whether query locks rows with FOR UPDATE SKIP LOCKED")
+  (:f returning-columns (List String) "Columns to return in RETURNING clause"))
 
 (dfs RenderedQuery
-  (:f query-sql String "Parameterized SQL query string")
-  (:f param-count Int64 "Total bound parameter placeholders"))
+  (:f sql String "Parameterized SQL query string")
+  (:f query-sql String "Parameterized SQL query string alias")
+  (:f param-count Int64 "Total bound parameter placeholders")
+  (:f params (List SqlExpr) "Literal parameter expressions in traversal order"))
 
 (df default-dialect [] -> SqlDialect
   :d "Returns the default target SQL dialect (PostgreSQL)."
@@ -119,7 +124,9 @@
                :order-column (none)
                :order-dir (asc)
                :limit-count (none)
-               :offset-count (none)))
+               :offset-count (none)
+               :for-update-skip-locked false
+               :returning-columns (list)))
 
 (df render-binary-op [(op BinaryOp)] -> String
   :d "Renders binary operator token to standard SQL string."
@@ -161,6 +168,17 @@
       ((or-expr l r)    (count-pair-params l r))
       ((not-expr inner) (count-params inner))
       (_                0))))
+
+(df collect-params [(expr SqlExpr)] -> (List SqlExpr)
+  :d "Walks SqlExpr tree and extracts all literal parameters in traversal order."
+  (if (is-literal-param expr)
+    (list expr)
+    (mt expr
+      ((binary _ l r)   (list-concat (collect-params l) (collect-params r)))
+      ((and-expr l r)   (list-concat (collect-params l) (collect-params r)))
+      ((or-expr l r)    (list-concat (collect-params l) (collect-params r)))
+      ((not-expr inner) (collect-params inner))
+      (_                (list)))))
 
 (df is-parameterized [(expr SqlExpr)] -> Bool
   :d "Returns true if expression contains literal parameters that need binding."
@@ -206,14 +224,86 @@
       ((not-expr inner) (str "NOT (" (render-expr-str inner dialect param-idx) ")"))
       (_                ""))))
 
+(df render-join-type [(jt JoinType)] -> String
+  :d "Renders SQL join keyword."
+  (mt jt
+    ((inner-join) "INNER JOIN")
+    ((left-join)  "LEFT JOIN")
+    ((right-join) "RIGHT JOIN")
+    ((full-join)  "FULL JOIN")))
+
+(df render-join-clause [(j SqlJoin) (dialect SqlDialect)] -> String
+  :d "Renders a single JOIN clause fragment."
+  (str (render-join-type (.-join-type j)) " " (.-table j) " ON " (render-expr-str (.-on-clause j) dialect 1)))
+
+(df render-joins [(joins (List SqlJoin)) (dialect SqlDialect)] -> String
+  :d "Renders all JOIN clauses sequentially."
+  (if (list-empty? joins)
+    ""
+    (str " " (string-join (map (fn [j] (render-join-clause j dialect)) joins) " "))))
+
+(df render-order-dir [(dir OrderDir)] -> String
+  :d "Renders ORDER BY direction token."
+  (mt dir
+    ((asc)  "ASC")
+    ((desc) "DESC")))
+
+(df render-order-by [(col-opt (Option String)) (dir OrderDir)] -> String
+  :d "Renders ORDER BY clause if order column is present."
+  (mt col-opt
+    ((none) "")
+    ((some col) (str " ORDER BY " col " " (render-order-dir dir)))))
+
+(df render-limit [(limit-opt (Option Int64))] -> String
+  :d "Renders LIMIT clause if limit is present."
+  (mt limit-opt
+    ((none) "")
+    ((some lim) (str " LIMIT " (string-from-int64 lim)))))
+
+(df render-offset [(offset-opt (Option Int64))] -> String
+  :d "Renders OFFSET clause if offset is present."
+  (mt offset-opt
+    ((none) "")
+    ((some off) (str " OFFSET " (string-from-int64 off)))))
+
+(df render-for-update [(lock Bool)] -> String
+  :d "Renders FOR UPDATE SKIP LOCKED clause if enabled."
+  (if lock
+    " FOR UPDATE SKIP LOCKED"
+    ""))
+
+(df render-returning [(cols (List String))] -> String
+  :d "Renders RETURNING clause if columns are specified."
+  (if (list-empty? cols)
+    ""
+    (str " RETURNING " (string-join cols ", "))))
+
+(df render-where-clause [(where-opt (Option SqlExpr)) (dialect SqlDialect)] -> String
+  :d "Renders WHERE clause SQL string if present."
+  (mt where-opt
+    ((none) "")
+    ((some w-expr) (str " WHERE " (render-expr-str w-expr dialect 1)))))
+
+(df extract-where-params [(where-opt (Option SqlExpr))] -> (List SqlExpr)
+  :d "Extracts literal parameter list from optional WHERE clause."
+  (mt where-opt
+    ((none) (list))
+    ((some w-expr) (collect-params w-expr))))
+
 (df render-select [(q SelectQuery) (dialect SqlDialect)] -> RenderedQuery
   :d "Renders a complete SelectQuery into parameterized SQL string."
-  (let [(base (str "SELECT " (string-join (.-columns q) ", ") " FROM " (.-from-table q)))]
-    (mt (.-where-clause q)
-      ((none)
-       (RenderedQuery :query-sql base :param-count 0))
-      ((some w-expr)
-       (let [(where-sql (render-expr-str w-expr dialect 1))
-             (p-count (count-params w-expr))
-             (full-sql (str base " WHERE " where-sql))]
-         (RenderedQuery :query-sql full-sql :param-count p-count))))))
+  (let [(base-sql (str "SELECT " (string-join (.-columns q) ", ") " FROM " (.-from-table q)))
+        (joins-sql (render-joins (.-joins q) dialect))
+        (where-sql (render-where-clause (.-where-clause q) dialect))
+        (order-sql (render-order-by (.-order-column q) (.-order-dir q)))
+        (limit-sql (render-limit (.-limit-count q)))
+        (offset-sql (render-offset (.-offset-count q)))
+        (lock-sql (render-for-update (.-for-update-skip-locked q)))
+        (return-sql (render-returning (.-returning-columns q)))
+        (full-sql (str base-sql joins-sql where-sql order-sql limit-sql offset-sql lock-sql return-sql))
+        (params (extract-where-params (.-where-clause q)))
+        (p-count (list-length params))]
+    (RenderedQuery :sql full-sql
+                   :query-sql full-sql
+                   :param-count p-count
+                   :params params)))

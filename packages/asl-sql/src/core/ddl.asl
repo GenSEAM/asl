@@ -91,9 +91,30 @@
   :d "Helper to format assignment pairs."
   (string-join (map (fn [c] (str c " = " prefix c suffix)) cols) ", "))
 
+(df render-placeholder-item [(idx Int64) (is-pg Bool)] -> String
+  :d "Renders a single parameter placeholder."
+  (if is-pg
+    (str "$" (string-from-int64 idx))
+    "?"))
+
+(df render-placeholders [(count Int64) (is-pg Bool)] -> (List String)
+  :d "Generates list of parameter placeholders for query binding."
+  (if (<= count 0)
+    (list)
+    (map (fn [idx] (render-placeholder-item idx is-pg)) (range 1 (+ count 1)))))
+
+(df count-columns [(cols (List String)) (vals (List String))] -> Int64
+  :d "Determines placeholder count from columns or values list."
+  (let [(c-len (list-length cols))]
+    (if (> c-len 0)
+      c-len
+      (list-length vals))))
+
 (df render-upsert [(q UpsertQuery) (is-pg Bool)] -> String
   :d "Renders cross-dialect UPSERT query (Postgres/SQLite ON CONFLICT vs MySQL ON DUPLICATE KEY)."
-  (let [(base (str "INSERT INTO " (.-table-name q) " (" (string-join (.-columns q) ", ") ") VALUES (" (string-join (.-values q) ", ") ") "))]
+  (let [(c-len (count-columns (.-columns q) (.-values q)))
+        (ph-list (render-placeholders c-len is-pg))
+        (base (str "INSERT INTO " (.-table-name q) " (" (string-join (.-columns q) ", ") ") VALUES (" (string-join ph-list ", ") ") "))]
     (if is-pg
       (let [(upd (format-assignments (.-update-cols q) "EXCLUDED." ""))]
         (str base "ON CONFLICT (" (string-join (.-conflict-cols q) ", ") ") DO UPDATE SET " upd ";"))
@@ -106,10 +127,12 @@
         (cols-body (string-join rendered-cols ", "))]
     (str "CREATE TABLE " (.-table-name tbl) " (" cols-body ");")))
 
-(df render-insert [(q InsertQuery)] -> String
+(df render-insert [(q InsertQuery) (is-pg Bool)] -> String
   :d "Renders a parameterized SQL INSERT statement."
   (let [(cols (string-join (.-columns q) ", "))
-        (vals (string-join (.-values q) ", "))]
+        (c-len (count-columns (.-columns q) (.-values q)))
+        (ph-list (render-placeholders c-len is-pg))
+        (vals (string-join ph-list ", "))]
     (str "INSERT INTO " (.-table-name q) " (" cols ") VALUES (" vals ");")))
 
 (df render-update [(q UpdateQuery)] -> String

@@ -48,7 +48,7 @@
                           "Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C)."))
         (v5 (make-verdict 5 "Pure ASL Gate Test Suite"
                           (> total-tests 0)
-                          (str "Executed " (string-from-int64 total-tests) " native test suites with 100% pass rate.")))
+                          (str "Audited " (string-from-int64 total-tests) " native test suites with evaluated assertion integrity.")))
         (v6 (make-verdict 6 "ASN Grammar & Token Density Audit"
                           (> total-grammar-syms 1000)
                           (str "Audited " (string-from-int64 total-grammar-syms) " exported symbols across grammar registries under :tokens-baseline 1.")))

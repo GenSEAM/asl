@@ -23,5 +23,6 @@
          (> (string-length sql-pg) 0))))
 
 (df run-tests [] -> Bool
-  (and (test-ddl-table-creation)
-       (test-ddl-column-types)))
+  (do
+    (assert (test-ddl-table-creation))
+    (assert (test-ddl-column-types))))

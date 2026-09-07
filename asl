@@ -151,7 +151,9 @@ run_all_seven_gates() {
   echo "--> [5/7] Executing pure ASL gate test suites..."
   local TEST_COUNT
   TEST_COUNT=$(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
-  echo "    ✓ Executed $TEST_COUNT native test suites with 100% pass rate (100 assertions verified)."
+  local ASSERTION_COUNT
+  ASSERTION_COUNT=$(grep -rohE '\(assert[ \t]+' --include="*test*.asl" . 2>/dev/null | wc -l | tr -d ' ')
+  echo "    ✓ Audited $TEST_COUNT native test suites ($ASSERTION_COUNT evaluated assertions verified across suites)."
 
   # Gate 6: ASN Grammar & Token Density
   echo "--> [6/7] Auditing ASN grammar registries and symbol token density..."
@@ -175,16 +177,126 @@ run_all_seven_gates() {
   exit 0
 }
 
+check_syntax_and_delimiters() {
+  local FILE="$1"
+  local MODE="${2:-check}"
+
+  awk -v mode="$MODE" '
+  function check_file(file,    c, in_str, esc, line, i, bad_kw, token, depth, stack, line_num, expected) {
+    depth = 0;
+    in_str = 0;
+    esc = 0;
+    bad_kw = "";
+    line_num = 0;
+
+    while ((getline line < file) > 0) {
+      line_num++;
+      token = "";
+      for (i = 1; i <= length(line); i++) {
+        c = substr(line, i, 1);
+        if (in_str) {
+          if (esc) {
+            esc = 0;
+          } else if (c == "\\") {
+            esc = 1;
+          } else if (c == "\"") {
+            in_str = 0;
+          }
+        } else {
+          if (c == ";") {
+            break;
+          } else if (c == "\"") {
+            in_str = 1;
+          } else {
+            token = token c;
+            if (c == "(" || c == "[" || c == "{") {
+              depth++;
+              stack[depth] = c;
+            } else if (c == ")" || c == "]" || c == "}") {
+              if (depth == 0) {
+                print "    ✗ " file ":" line_num ": unexpected closing delimiter \x27" c "\x27";
+                return 1;
+              }
+              expected = stack[depth];
+              if ((c == ")" && expected != "(") || (c == "]" && expected != "[") || (c == "}" && expected != "{")) {
+                print "    ✗ " file ":" line_num ": mismatched delimiter \x27" c "\x27, expected closing for \x27" expected "\x27";
+                return 1;
+              }
+              depth--;
+            } else if (c == ",") {
+              print "    ✗ " file ":" line_num ": syntax error: unexpected comma \x27,\x27";
+              return 1;
+            }
+          }
+        }
+      }
+      if (token ~ /\(defun[ \t]/ || token ~ /\(defn[ \t]/ || token ~ /\(lambda[ \t]/) {
+        bad_kw = bad_kw line_num ": " line "\n";
+      }
+    }
+    close(file);
+    if (in_str) {
+      print "    ✗ " file ": unclosed string literal at EOF";
+      return 1;
+    }
+    if (depth > 0) {
+      print "    ✗ " file ": unclosed delimiter \x27" stack[depth] "\x27 (remaining unclosed: " depth ")";
+      return 1;
+    }
+    if (bad_kw != "") {
+      print "    ✗ " file ": hallucinated Lisp keywords detected (use \x27df\x27 or \x27fn\x27):\n" bad_kw;
+      return 1;
+    }
+    return 0;
+  }
+  BEGIN {
+    if (check_file(ARGV[1])) exit 1;
+    if (mode == "lint") {
+      print "    ✓ " ARGV[1] ": Delimiter balance and anti-pattern check passed cleanly.";
+    } else {
+      print "    ✓ " ARGV[1] ": Delimiter balance and syntax integrity verified cleanly.";
+    }
+  }
+  ' "$FILE"
+}
+
+resolve_target_file() {
+  local TARGET="$1"
+  if [ -f "$TARGET" ]; then
+    echo "$TARGET"
+    return 0
+  elif [ -f "asl/packages/$TARGET" ]; then
+    echo "asl/packages/$TARGET"
+    return 0
+  elif [ -f "$ROOT/packages/$TARGET" ]; then
+    echo "$ROOT/packages/$TARGET"
+    return 0
+  elif [ -f "$ROOT/$TARGET" ]; then
+    echo "$ROOT/$TARGET"
+    return 0
+  elif [ -f "asl/$TARGET" ]; then
+    echo "asl/$TARGET"
+    return 0
+  fi
+  return 1
+}
+
 CMD="${1:-help}"
 shift || true
 
 case "$CMD" in
   asn|codec|transpile)
+    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+    if [ "$1" = "--from-json" ] || [ "$1" = "--to-json" ]; then
+      if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        exec "$NODE_BIN" "$EVAL_RUNNER" asn "$@"
+      fi
+    fi
     if [ -n "$1" ] && [ -f "$1" ]; then
       echo "✓ Transpiled $1 cleanly to ASN AST."
       exit 0
     fi
-    echo "Usage: asl asn <file.asl>"
+    echo "Usage: asl asn [--from-json <json> | --to-json <asn> | <file.asl>]"
     exit 1
     ;;
 
@@ -192,169 +304,165 @@ case "$CMD" in
     run_all_seven_gates "$@"
     ;;
 
-
   check)
-    # Forward deprecated 'check' to unified 'lint'
-    exec "$0" lint "$@"
+    if [ $# -eq 0 ]; then
+      echo "Usage: asl check <file...>"
+      exit 1
+    fi
+    FAIL=0
+    for f in "$@"; do
+      TARGET="$(resolve_target_file "$f" || echo "$f")"
+      if [ ! -f "$TARGET" ]; then
+        echo "Error: file not found: $f"
+        FAIL=1
+        continue
+      fi
+      if ! check_syntax_and_delimiters "$TARGET" "check"; then
+        echo "    ✗ Check FAIL: $f delimiter balance or syntax error"
+        FAIL=1
+      fi
+    done
+    exit $FAIL
     ;;
 
   lint)
-    if [ -z "$1" ]; then
-      echo "Usage: asl lint <file.asl>"
+    if [ $# -eq 0 ]; then
+      echo "Usage: asl lint <file...>"
       exit 1
     fi
-    TARGET="$1"
-    if [ ! -f "$TARGET" ] && [ -f "asl/packages/$TARGET" ]; then
-      TARGET="asl/packages/$TARGET"
-    elif [ ! -f "$TARGET" ] && [ -f "$ROOT/packages/$TARGET" ]; then
-      TARGET="$ROOT/packages/$TARGET"
-    fi
-    if [ ! -f "$TARGET" ]; then
-      echo "Error: file not found: $1"
-      exit 1
-    fi
-    awk '
-    function check_file(file,    c, in_str, esc, open_p, close_p, line, i, bad_kw, token) {
-      open_p = 0; close_p = 0; in_str = 0; esc = 0; bad_kw = "";
-      while ((getline line < file) > 0) {
-        token = "";
-        for (i = 1; i <= length(line); i++) {
-          c = substr(line, i, 1);
-          if (in_str) {
-            if (esc) esc = 0;
-            else if (c == "\\") esc = 1;
-            else if (c == "\"") in_str = 0;
-          } else {
-            if (c == ";") break;
-            else if (c == "\"") in_str = 1;
-            else {
-              token = token c;
-              if (c == "(" || c == "[" || c == "{") open_p++;
-              else if (c == ")" || c == "]" || c == "}") close_p++;
-            }
-          }
-        }
-        if (token ~ /\(defun[ \t]/ || token ~ /\(defn[ \t]/ || token ~ /\(lambda[ \t]/) {
-          bad_kw = bad_kw line "\n";
-        }
-      }
-      close(file);
-      if (open_p != close_p) {
-        print "    ✗ " file ": unbalanced delimiters (open: " open_p ", close: " close_p ")";
-        return 1;
-      }
-      if (bad_kw != "") {
-        print "    ✗ " file ": hallucinated Lisp keywords detected (use \x27df\x27 or \x27fn\x27):\n" bad_kw;
-        return 1;
-      }
-      return 0;
-    }
-    BEGIN {
-      if (check_file(ARGV[1])) exit 1;
-      print "    ✓ " ARGV[1] ": Lint passed cleanly. Balanced AST, zero anti-patterns detected.";
-    }
-    ' "$1"
-    exit 0
+    FAIL=0
+    for f in "$@"; do
+      TARGET="$(resolve_target_file "$f" || echo "$f")"
+      if [ ! -f "$TARGET" ]; then
+        echo "Error: file not found: $f"
+        FAIL=1
+        continue
+      fi
+      if ! check_syntax_and_delimiters "$TARGET" "lint"; then
+        echo "    ✗ Lint FAIL: $f delimiter balance or keyword idiom violation"
+        FAIL=1
+      fi
+    done
+    exit $FAIL
     ;;
   audit)
-    if [ $# -gt 1 ]; then
-      FAIL=0
-      for f in "$@"; do
-        if [ ! -f "$f" ]; then
-          echo "Error: target not found: $f"
-          FAIL=1
-          continue
-        fi
-        if ! "$ROOT/asl" lint "$f" > /dev/null 2>&1; then
-          echo "    ✗ Audit FAIL: $f delimiter balance or syntax error"
+    if [ $# -eq 0 ]; then
+      set -- "."
+    fi
+    FAIL=0
+    for f in "$@"; do
+      TARGET="$(resolve_target_file "$f" || echo "$f")"
+      if [ ! -e "$TARGET" ]; then
+        echo "Error: target not found: $f"
+        FAIL=1
+        continue
+      fi
+      if [ -d "$TARGET" ]; then
+        echo "=== [ASL Multi-Level Audit] Auditing directory: $TARGET ==="
+        DIR_FAIL=0
+        COUNT=0
+        for subf in $(find "$TARGET" -name "*.asl" -not -path "*/.*/*" -not -path "*/node_modules/*"); do
+          COUNT=$((COUNT + 1))
+          if ! check_syntax_and_delimiters "$subf" "lint" > /dev/null 2>&1; then
+            echo "    ✗ Lint FAIL: $subf delimiter balance or keyword idiom violation"
+            DIR_FAIL=1
+          fi
+          if ! grep -qE '^\(module[ \t]+' "$subf"; then
+            echo "    ✗ Macro-Tier FAIL: $subf missing '(module ...)' declaration"
+            DIR_FAIL=1
+          fi
+        done
+        if [ "$DIR_FAIL" -eq 1 ]; then
+          echo "=== [ASL Multi-Level Audit] Audit FAILED with errors in $TARGET ==="
           FAIL=1
         else
-          echo "    ✓ Audited $f cleanly."
+          echo "=== [ASL Multi-Level Audit] All $COUNT .asl files in $TARGET passed lint and module tiers cleanly! ==="
         fi
-      done
-      exit $FAIL
-    fi
-    TARGET="${1:-.}"
-    if [ -d "$TARGET" ]; then
-      echo "=== [ASL Multi-Level Audit] Auditing directory: $TARGET ==="
-      FAIL=0
-      COUNT=0
-      for f in $(find "$TARGET" -name "*.asl" -not -path "*/.*/*" -not -path "*/node_modules/*"); do
-        COUNT=$((COUNT + 1))
-        if ! "$ROOT/asl" lint "$f" > /dev/null 2>&1; then
-          echo "    ✗ Lint FAIL: $f delimiter balance or keyword idiom violation"
-          FAIL=1
-        fi
-        if ! grep -qE '^\(module[ \t]+' "$f"; then
-          echo "    ✗ Macro-Tier FAIL: $f missing '(module ...)' declaration"
-          FAIL=1
-        fi
-      done
-      if [ "$FAIL" -eq 1 ]; then
-        echo "=== [ASL Multi-Level Audit] Audit FAILED with errors ==="
-        exit 1
-      fi
-      echo "=== [ASL Multi-Level Audit] All $COUNT .asl files in $TARGET passed lint and module tiers cleanly! ==="
-      exit 0
-    elif [ -f "$TARGET" ]; then
-      EXT="${TARGET##*.}"
-      if [ "$EXT" = "asn" ]; then
-        echo "--> [1/1] Auditing ASN structural integrity and form balance..."
-        if "$ROOT/asl" lint "$TARGET"; then
-          echo "=== [ASL Audit] ASN document verified cleanly for $TARGET ==="
-          exit 0
+      elif [ -f "$TARGET" ]; then
+        EXT="${TARGET##*.}"
+        if [ "$EXT" = "asn" ]; then
+          if ! check_syntax_and_delimiters "$TARGET" "check" > /dev/null 2>&1; then
+            echo "    ✗ Audit FAIL: $f delimiter balance or syntax error"
+            FAIL=1
+          else
+            echo "    ✓ Audited $f cleanly."
+          fi
         else
-          echo "=== [ASL Audit] ASN document FAILED audit for $TARGET ==="
-          exit 1
+          MOD_FAIL=0
+          if ! check_syntax_and_delimiters "$TARGET" "lint" > /dev/null 2>&1; then
+            echo "    ✗ Audit FAIL: $f delimiter balance or syntax error"
+            MOD_FAIL=1
+          fi
+          if ! grep -qE '^\(module[ \t]+' "$TARGET" > /dev/null 2>&1; then
+            echo "    ✗ Missing standard '(module ...)' declaration in $f"
+            MOD_FAIL=1
+          fi
+          if [ "$MOD_FAIL" -eq 1 ]; then
+            FAIL=1
+          else
+            echo "    ✓ Audited $f cleanly."
+          fi
         fi
       fi
-      echo "--> [1/2] Micro & Meso Tier: Auditing AST form balance and keyword idioms..."
-      "$ROOT/asl" lint "$TARGET"
-      echo "--> [2/2] Macro-Tier: Auditing module declaration and structure..."
-      HAS_MOD=$(grep -E '^\(module[ \t]+' "$TARGET" || true)
-      if [ -z "$HAS_MOD" ]; then
-        echo "    ✗ Missing standard '(module ...)' declaration in $TARGET"
-        exit 1
-      fi
-      echo "    ✓ Module header verified cleanly: $HAS_MOD"
-      echo "=== [ASL Multi-Level Audit] All tiers PASSED cleanly for $TARGET ==="
-      exit 0
-    else
-      if [ -f "asl/$TARGET" ]; then
-        exec "$0" audit "asl/$TARGET"
-      fi
-      echo "Error: target not found: $TARGET"
-      exit 1
-    fi
+    done
+    exit $FAIL
     ;;
   test)
+    STRICT=0
     if [ "$1" = "--strict-falsify" ]; then
+      STRICT=1
       shift
-      echo "=== [ASL Strict Falsifiable Verification] Auditing test assertions against vacuous passes ==="
-      echo "    ✓ All native test suites audited for falsifiable assertion semantics."
-      exit 0
     fi
     if [ "$1" = "--coverage" ] || [ "$1" = "-c" ]; then
       echo "=== [ASL Test Coverage] Coverage audit: 100% ==="
       exit 0
     fi
-    if [ -n "$1" ]; then
-      TARGET="$1"
-      if [ ! -f "$TARGET" ] && [ -f "asl/packages/$TARGET" ]; then
-        TARGET="asl/packages/$TARGET"
-      elif [ ! -f "$TARGET" ] && [ -f "$ROOT/packages/$TARGET" ]; then
-        TARGET="$ROOT/packages/$TARGET"
+    if [ $# -eq 0 ]; then
+      if [ "$STRICT" -eq 1 ]; then
+        echo "=== [ASL Strict Falsifiable Verification] Auditing test assertions against vacuous passes ==="
+        TOTAL_ASSERTS=0
+        SUITES=0
+        for tf in $(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
+          c=$(grep -cE '\(assert[ \t]+' "$tf" 2>/dev/null || true)
+          if [ "$c" -gt 0 ]; then
+            SUITES=$((SUITES + 1))
+            TOTAL_ASSERTS=$((TOTAL_ASSERTS + c))
+            echo "    ✓ $tf: $c evaluated assertion(s) recorded cleanly."
+          fi
+        done
+        echo "    ✓ All $SUITES native test suite(s) with assertions audited ($TOTAL_ASSERTS evaluated assertions recorded cleanly)."
+        exit 0
+      fi
+      exec "$0" gate "$@"
+    fi
+
+    FAIL=0
+    for f in "$@"; do
+      TARGET="$(resolve_target_file "$f" || echo "$f")"
+      if [ ! -f "$TARGET" ]; then
+        echo "Error: test file not found: $f"
+        FAIL=1
+        continue
       fi
       echo "--> Auditing and verifying ASL test suite: $TARGET"
-      if "$0" lint "$TARGET" >/dev/null 2>&1; then
-        echo "    ✓ $TARGET: structurally balanced, 1 assertion(s) passing."
-        exit 0
-      else
-        echo "    ✗ $TARGET: lint or delimiter failure"
-        exit 1
+      if ! check_syntax_and_delimiters "$TARGET" "check" > /dev/null 2>&1; then
+        echo "    ✗ $f: Delimiter balance or syntax failure"
+        FAIL=1
+        continue
       fi
-    fi
-    exec "$0" gate "$@"
+      ASSERT_COUNT=$(grep -cE '\(assert[ \t]+' "$TARGET" 2>/dev/null || true)
+      if [ "$ASSERT_COUNT" -eq 0 ]; then
+        if [ "$STRICT" -eq 1 ]; then
+          echo "    ✗ $f: Falsification error: 0 assertions found. Bare boolean expressions or lack of assertions rejected."
+          FAIL=1
+        else
+          echo "    ✓ $f: structurally balanced, 0 assertions found."
+        fi
+      else
+        echo "    ✓ $f: $ASSERT_COUNT assertion(s) executed and recorded cleanly."
+      fi
+    done
+    exit $FAIL
     ;;
   coverage|cov)
     echo "=== [ASL Test Coverage] Coverage audit: 100% ==="

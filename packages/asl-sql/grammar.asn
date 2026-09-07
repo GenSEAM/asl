@@ -24,6 +24,7 @@
     ;; <= 2-Token Primary API Symbols
     (:sym :name "bool-expr" :kind :fn :tokens 2)
     (:sym :name "col-expr" :kind :fn :tokens 2)
+    (:sym :name "collect-params" :kind :fn :tokens 2)
     (:sym :name "count-params" :kind :fn :tokens 2)
     (:sym :name "default-dialect" :kind :fn :tokens 2)
     (:sym :name "int-expr" :kind :fn :tokens 2)

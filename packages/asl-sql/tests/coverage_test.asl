@@ -36,5 +36,6 @@
         (dummy-render-json-func-28 render-json-func)
         (dummy-render-json-path-29 render-json-path)
         (dummy-render-expr-str-30 render-expr-str)
+        (dummy-collect-params-31 collect-params)
        ]
     true))
