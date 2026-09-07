@@ -1,5 +1,5 @@
 import React from 'react';
-import Hero from '../../asl-src/components/Hero.asl';
+import { Hero } from '../components/Hero';
 import { Ecosystem } from '../components/Ecosystem';
 import KeyCapabilities from '../../asl-src/components/KeyCapabilities.asl';
 import TheAgentWay from '../../asl-src/components/TheAgentWay.asl';
