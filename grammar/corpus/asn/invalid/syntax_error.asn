@@ -1,0 +1,2 @@
+;; Invalid syntax ASN file with unbalanced delimiters
+(:invalid-syntax (unclosed-paren

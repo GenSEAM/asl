@@ -76,6 +76,10 @@
           :rationale "Cannot be reduced to 'test-dialects': scopes test specifically to multi-engine SQL dialect differences")
     (:sym :name "test-sql-select" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-select': isolates SQL query generation tests from DDL and mutation statements")
+    (:sym :name "test-ddl-table-creation" :kind :fn :tokens 4
+          :rationale "Verifies DDL CREATE TABLE rendering")
+    (:sym :name "test-ddl-column-types" :kind :fn :tokens 4
+          :rationale "Verifies DDL column types mapping across SQL dialects")
     (:sym :name "type-to-sql-string" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'type-to-sql': distinguishes DDL type declaration string rendering from query expression lowering")
   ])
