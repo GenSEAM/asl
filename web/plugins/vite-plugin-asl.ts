@@ -167,17 +167,15 @@ import { renderSearchModal } from './components/SearchModal.asl';
 import { renderHomeView } from './views/HomeView.asl';
 import { renderDocsView } from './views/DocsView.asl';
 import { renderBlogView } from './views/BlogView.asl';
-import { renderStudioView } from './views/StudioView.asl';
 import { renderPlaygroundView } from './views/PlaygroundView.asl';
 import { renderRoadmapView } from './views/RoadmapView.asl';
 import { renderEcosystemView } from './views/EcosystemView.asl';
 
 export function appRoutes() {
-  return ['/', '/studio', '/playground', '/ecosystem', '/roadmap', '/docs', '/blog'];
+  return ['/', '/playground', '/ecosystem', '/roadmap', '/docs', '/blog'];
 }
 
 export function renderView(route) {
-  if (route === '/studio' || route === '#studio') return renderStudioView();
   if (route === '/playground' || route === '#playground') return renderPlaygroundView();
   if (route === '/ecosystem' || route === '#ecosystem') return renderEcosystemView();
   if (route === '/roadmap' || route === '#roadmap') return renderRoadmapView();
@@ -365,7 +363,11 @@ function parseConcat(fnCode: string): Array<{ type: 'str' | 'call'; val?: string
       let s = '';
       while (p < withoutDoc.length) {
         if (withoutDoc[p] === '\\' && p + 1 < withoutDoc.length) {
-          s += withoutDoc[p + 1];
+          const nextChar = withoutDoc[p + 1];
+          if (nextChar === 'n') s += '\n';
+          else if (nextChar === 't') s += '\t';
+          else if (nextChar === 'r') s += '\r';
+          else s += nextChar;
           p += 2;
         } else if (withoutDoc[p] === '"') {
           p++;
@@ -440,7 +442,11 @@ function extractStrings(str: string) {
       let s = '';
       while (pos < str.length) {
         if (str[pos] === '\\' && pos + 1 < str.length) {
-          s += str[pos + 1];
+          const nextChar = str[pos + 1];
+          if (nextChar === 'n') s += '\n';
+          else if (nextChar === 't') s += '\t';
+          else if (nextChar === 'r') s += '\r';
+          else s += nextChar;
           pos += 2;
         } else if (str[pos] === '"') {
           pos++;
