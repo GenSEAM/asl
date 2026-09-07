@@ -1,7 +1,7 @@
 import React from 'react';
 import { Hero } from '../components/Hero';
 import { Ecosystem } from '../components/Ecosystem';
-import KeyCapabilities from '../../asl-src/components/KeyCapabilities.asl';
+import { KeyCapabilities } from '../components/KeyCapabilities';
 import TheAgentWay from '../../asl-src/components/TheAgentWay.asl';
 import { InBrowserAgent } from '../components/InBrowserAgent';
 import { AgentWireProtocol } from '../components/AgentWireProtocol';
