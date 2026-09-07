@@ -2049,6 +2049,147 @@ export function evaluateAslSExpr(expr, env = new Map(), fnRegistry = new Map()) 
   if (head === 'ok') return { _type: 'ok', _args: [args[0]], val: args[0], value: args[0] };
   if (head === 'err') return { _type: 'err', _args: [args[0]], msg: args[0], error: args[0], value: args[0] };
 
+  // I/O builtins
+  if (head === 'println') {
+    const out = args.map(a => (a !== null && typeof a === 'object') ? (a._type ? `(:${a._type})` : JSON.stringify(a)) : String(a)).join(' ');
+    console.log(out);
+    return null;
+  }
+  if (head === 'print') {
+    const out = args.map(a => (a !== null && typeof a === 'object') ? (a._type ? `(:${a._type})` : JSON.stringify(a)) : String(a)).join(' ');
+    process.stdout.write(out);
+    return null;
+  }
+  if (head === 'eprintln') {
+    const out = args.map(a => (a !== null && typeof a === 'object') ? (a._type ? `(:${a._type})` : JSON.stringify(a)) : String(a)).join(' ');
+    console.error(out);
+    return null;
+  }
+
+  // Option & Result predicates & combinators
+  if (head === 'is-some?' || head === 'some?' || baseHead === 'some?') {
+    return Boolean(args[0] !== null && args[0] !== undefined && !(typeof args[0] === 'object' && args[0]._type === 'none'));
+  }
+  if (head === 'is-none?' || head === 'none?' || baseHead === 'none?') {
+    return Boolean(args[0] === null || args[0] === undefined || (typeof args[0] === 'object' && args[0]._type === 'none'));
+  }
+  if (head === 'is-ok?' || head === 'ok?' || baseHead === 'ok?') {
+    return Boolean(args[0] && typeof args[0] === 'object' && args[0]._type === 'ok');
+  }
+  if (head === 'is-err?' || head === 'err?' || baseHead === 'err?') {
+    return Boolean(args[0] && typeof args[0] === 'object' && args[0]._type === 'err');
+  }
+  if (head === 'result-or') {
+    const r = args[0];
+    if (r && typeof r === 'object' && r._type === 'ok') {
+      return r.val !== undefined ? r.val : (r.value !== undefined ? r.value : r._args?.[0]);
+    }
+    return args[1];
+  }
+  if (head === 'option-to-result' || head === 'opt-res') {
+    const opt = args[0];
+    if (opt !== null && opt !== undefined && !(typeof opt === 'object' && opt._type === 'none')) {
+      const v = (opt && typeof opt === 'object' && opt._type === 'some') ? opt._value : opt;
+      return { _type: 'ok', _args: [v], val: v, value: v };
+    }
+    const errVal = args[1] !== undefined ? args[1] : 'None';
+    return { _type: 'err', _args: [errVal], msg: errVal, error: errVal };
+  }
+  if (head === 'result-to-option' || head === 'res-opt') {
+    const r = args[0];
+    if (r && typeof r === 'object' && r._type === 'ok') {
+      const v = r.val !== undefined ? r.val : (r.value !== undefined ? r.value : r._args?.[0]);
+      return { _type: 'some', _value: v };
+    }
+    return null;
+  }
+
+  // IoError union constructors
+  if (head === 'not-found' || head === 'permission-denied' || head === 'already-exists' || head === 'invalid-path' || head === 'interrupted' || head === 'other') {
+    return { _type: head, _enum: 'IoError', message: args[0] || head, msg: args[0] || head };
+  }
+
+  // Extended numeric builtins & checked arithmetic
+  if (head === 'checked-div') {
+    if (Number(args[1]) === 0) throw new Error('Division by zero');
+    return Math.trunc(Number(args[0]) / Number(args[1]));
+  }
+  if (head === 'checked-mod') {
+    if (Number(args[1]) === 0) throw new Error('Modulo by zero');
+    return Number(args[0]) % Number(args[1]);
+  }
+  if (head === 'neg') return -Number(args[0]);
+  if (head === 'int32-to-int64' || head === 'widen') return Number(args[0]);
+  if (head === 'int64-to-int32' || head === 'narrow') return Number(args[0]) | 0;
+  if (head === 'int64-to-float64' || head === 'float') return Number(args[0]);
+  if (head === 'float64-to-int64' || head === 'trunc') return Math.trunc(Number(args[0]));
+
+  // Extended list & map utilities
+  if (head === 'list-sort') {
+    const list = Array.isArray(args[0]) ? [...args[0]] : [];
+    return list.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  }
+  if (head === 'list-sum') {
+    const list = Array.isArray(args[0]) ? args[0] : [];
+    return list.reduce((acc, x) => acc + Number(x), 0);
+  }
+  if (head === 'list-min') {
+    const list = Array.isArray(args[0]) ? args[0] : [];
+    return list.length > 0 ? Math.min(...list.map(Number)) : null;
+  }
+  if (head === 'list-max') {
+    const list = Array.isArray(args[0]) ? args[0] : [];
+    return list.length > 0 ? Math.max(...list.map(Number)) : null;
+  }
+  if (head === 'list-index-of') {
+    const list = Array.isArray(args[0]) ? args[0] : [];
+    const idx = list.indexOf(args[1]);
+    return idx === -1 ? null : idx;
+  }
+  if (head === 'map-keys' || head === 'keys' || baseHead === 'keys') {
+    return args[0] instanceof Map ? Array.from(args[0].keys()) : (typeof args[0] === 'object' && args[0] ? Object.keys(args[0]) : []);
+  }
+  if (head === 'map-values' || head === 'vals' || baseHead === 'vals') {
+    return args[0] instanceof Map ? Array.from(args[0].values()) : (typeof args[0] === 'object' && args[0] ? Object.values(args[0]) : []);
+  }
+  if (head === 'map-size') {
+    return args[0] instanceof Map ? args[0].size : (typeof args[0] === 'object' && args[0] ? Object.keys(args[0]).length : 0);
+  }
+  if (head === 'map-remove') {
+    const m = new Map(args[0] instanceof Map ? args[0] : []);
+    m.delete(args[1]);
+    return m;
+  }
+  if (head === 'map-pairs' || head === 'pairs' || baseHead === 'pairs') {
+    if (args[0] instanceof Map) {
+      return Array.from(args[0].entries()).map(([k, v]) => ({ first: k, second: v, _type: 'Pair' }));
+    }
+    return [];
+  }
+  if (head === 'map-from-pairs' || head === 'to-map') {
+    const m = new Map();
+    const list = Array.isArray(args[0]) ? args[0] : [];
+    for (const p of list) {
+      if (p && typeof p === 'object') {
+        const k = p.first !== undefined ? p.first : p[0];
+        const v = p.second !== undefined ? p.second : p[1];
+        m.set(k, v);
+      }
+    }
+    return m;
+  }
+  if (head === 'file-append' || head === 'append-file') {
+    const p = String(args[0]);
+    const c = String(args[1]);
+    try {
+      const targetPath = path.isAbsolute(p) ? p : path.resolve(process.cwd(), p);
+      fs.appendFileSync(targetPath, c, 'utf8');
+      return { _type: 'ok', _args: [true], val: true, value: true };
+    } catch (e) {
+      return { _type: 'err', _args: [e.message], msg: e.message, error: e.message };
+    }
+  }
+
   // External package mock/stub fallback
   if (typeof head === 'string' && head.includes('/')) {
     return { _type: baseHead, _mock: head, _args: args };
