@@ -2,6 +2,7 @@
   :d "Root Application Shell and Layout Router in pure AgentScript"
   :x [app-routes render-view render-app]
   :i [(core/strings :a s)
+      (components/CosmicLandscapeBackground :a bg)
       (components/Navbar :a nav)
       (components/Footer :a foot)
       (views/HomeView :a home)
@@ -18,17 +19,17 @@
 
 (df render-view [(route Str)] -> Str
   :d "Resolves and renders page view by active route path"
-  (if (= route "/studio")
+  (if (or (= route "/studio") (= route "#studio"))
     (studio/render-studio-view)
-    (if (= route "/playground")
+    (if (or (= route "/playground") (= route "#playground"))
       (play/render-playground-view)
-      (if (= route "/ecosystem")
+      (if (or (= route "/ecosystem") (= route "#ecosystem"))
         (eco/render-ecosystem-view)
-        (if (= route "/roadmap")
+        (if (or (= route "/roadmap") (= route "#roadmap"))
           (road/render-roadmap-view)
-          (if (= route "/docs")
+          (if (or (= route "/docs") (= route "#docs"))
             (docs/render-docs-view)
-            (if (= route "/blog")
+            (if (or (= route "/blog") (= route "#blog"))
               (blog/render-blog-view)
               (home/render-home-view))))))))
 
@@ -37,11 +38,13 @@
   (s/concat
     "<div class=\"min-h-screen bg-ground text-ink flex flex-col relative w-full overflow-x-hidden\">"
     (s/concat
-      (nav/navbar-view)
+      (bg/render-cosmic-background)
+      (s/concat
+        (nav/navbar-view)
       (s/concat
         "<div class=\"relative z-10 flex-1 flex flex-col\">"
         (s/concat
           (render-view current-route)
           (s/concat
             "</div>"
-            (s/concat (foot/footer-view) "</div>")))))))
+            (s/concat (foot/footer-view) "</div>"))))))))
