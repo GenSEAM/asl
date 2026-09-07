@@ -297,7 +297,7 @@ END {
   echo "    ✓ All symbols <= 2 tokens verified, and all $RATIONALE_COUNT symbols > 2 tokens carry verified :rationale."
   echo "    ✓ Zero collisions detected (state/status, task/to distinct), unambiguous canonical clarity enforced."
 
-  # Gate 7: Modular Skills Consistency
+  # Gate 7: Modular Skills Consistency & Manifesto Conformance
   echo "--> [7/7] Auditing modular skills consistency and freshness..."
   local SKILLS_COUNT=0
   for sk in $(find .agents/skills -name "SKILL.md" 2>/dev/null | sort); do
@@ -305,10 +305,15 @@ END {
       echo "    ✗ Skill frontmatter validation failed: $sk"
       exit 1
     fi
+    if grep -qiE "(tokensave|npx agent-browser|pip install)" "$sk"; then
+      echo "    ✗ Deprecated tool contamination detected in $sk (found tokensave, npx agent-browser, or pip install)"
+      exit 1
+    fi
     SKILLS_COUNT=$((SKILLS_COUNT + 1))
   done
   [ "$SKILLS_COUNT" -eq 0 ] && SKILLS_COUNT=80
   echo "    ✓ Audited $SKILLS_COUNT modular skills. All frontmatters, trigger descriptions, and protocol names are fresh."
+  echo "    ✓ Manifesto conformance verified: zero deprecated tool contamination (tokensave, npx agent-browser, pip install)."
 
   echo "================================================================================"
   echo "✓ === [Pure ASL Gate] ALL 7 VERIFICATION GATES PASSED CLEANLY ==="
