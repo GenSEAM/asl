@@ -8,6 +8,7 @@
     ;; 1-Token Symbols (Baseline)
     (:sym :name "ExtractedDoc" :kind :type :tokens 1)
     (:sym :name "ContextChunk" :kind :type :tokens 1)
+    (:sym :name "ContextualClause" :kind :type :tokens 1)
 
     ;; 2-Token Symbols (with :rationale)
     (:sym :name "strip-enclosed" :kind :fn :tokens 2
@@ -26,6 +27,8 @@
           :rationale "Splits arbitrary text into sliding-window ContextChunks with overlap")
     (:sym :name "chunk-doc" :kind :fn :tokens 2
           :rationale "Chunks ExtractedDoc into indexed ContextChunks retaining source metadata")
+    (:sym :name "extract-clauses" :kind :fn :tokens 2
+          :rationale "Extracts structured contextual clauses with heading breadcrumbs")
     (:sym :name "run-tests" :kind :fn :tokens 2
           :rationale "Standard test runner entrypoint")
 
@@ -42,8 +45,17 @@
           :rationale "Compiles chunks into token-bounded indexed markdown context block")
     (:sym :name "format-docs-rag" :kind :fn :tokens 3
           :rationale "Compiles multiple extracted documents into indexed prompt context")
+    (:sym :name "format-clause-breadcrumb" :kind :fn :tokens 3
+          :rationale "Formats contextual breadcrumb prefix for RAG ingestion")
+    (:sym :name "format-contextual-clause" :kind :fn :tokens 3
+          :rationale "Formats contextual clause breadcrumb header for RAG context")
+    (:sym :name "extract-contextual-clauses" :kind :fn :tokens 3
+          :rationale "Extracts hierarchical contextual clauses with breadcrumb preservation")
     (:sym :name "doc-to-asn" :kind :fn :tokens 3
           :rationale "Encodes ExtractedDoc into compact, canonical ASN S-expression")
     (:sym :name "chunk-to-asn" :kind :fn :tokens 3
           :rationale "Encodes ContextChunk into compact, canonical ASN S-expression")
+    (:sym :name "clause-to-asn" :kind :fn :tokens 3
+          :rationale "Encodes ContextualClause into compact canonical ASN S-expression")
   ])
+

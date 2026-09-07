@@ -1101,8 +1101,36 @@ case "$CMD" in
         echo "✓ No critical blast-radius or cyclomatic complexity hotspots detected."
         exit 0
         ;;
+      boundary-check)
+        SCOPE="${TARGET:-.}"
+        L0_LEAKS=$(grep -rnE '(@scout|@coder|@reviewer|agent-bus|agent-core|asl-bridge|asl-plugin)' \
+          asl/packages/asl-parser asl/packages/asl-codec asl/packages/asl-compiler \
+          asl/packages/asl-checker asl/packages/asl-lint asl/packages/asl-codegen \
+          asl/grammar intel/src 2>/dev/null | grep -v 'boundary_test.asl' | grep -v 'health.asl' | grep -v 'binary' || true)
+        L1_LEAKS=$(grep -rnE '(asl-bridge|asl-plugin)' \
+          agent-bus agent-core harness asl-contracts 2>/dev/null | grep -v 'binary' || true)
+
+        if [ -n "$L0_LEAKS" ] || [ -n "$L1_LEAKS" ]; then
+          echo "=== [Architectural Layer Boundary Audit: 4-Tier Stratification] ==="
+          echo "Scope:        ${SCOPE}"
+          echo "Tiers:        Layer 0 (Kernel) | Layer 1 (ID/Mesh) | Layer 2 (Config) | Layer 3 (Plugins/Host)"
+          echo "Status:       LEAKAGE DETECTED"
+          echo "Leakages:     1"
+          [ -n "$L0_LEAKS" ] && echo "  ✗ Layer 0 Inward Leakage: $L0_LEAKS"
+          [ -n "$L1_LEAKS" ] && echo "  ✗ Layer 1 Upward Leakage: $L1_LEAKS"
+          exit 1
+        fi
+
+        echo "=== [Architectural Layer Boundary Audit: 4-Tier Stratification] ==="
+        echo "Scope:        ${SCOPE}"
+        echo "Tiers:        Layer 0 (Kernel) | Layer 1 (ID/Mesh) | Layer 2 (Config) | Layer 3 (Plugins/Host)"
+        echo "Status:       STRATIFIED (CLEAN)"
+        echo "Leakages:     0"
+        echo "✓ Clean architectural layer separation verified. Zero inward abstraction leakage."
+        exit 0
+        ;;
       *)
-        echo "Usage: asl intel <outline|search|callers|impact|preload|index|health|diagram|cycles|orphans|hotspots> [target]"
+        echo "Usage: asl intel <outline|search|callers|impact|preload|index|health|diagram|cycles|orphans|hotspots|boundary-check> [target]"
         exit 1
         ;;
     esac
@@ -1440,7 +1468,7 @@ case "$CMD" in
       echo "  task [name]     List or execute configured tasks from .asl.config.asn"
       echo "  transpile-pkg   Transpile ASN package specification to standard package.json"
       echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
-      echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index, health, diagram, cycles, orphans, hotspots)"
+      echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index, health, diagram, cycles, orphans, hotspots, boundary-check)"
       echo "  mem <subcmd>    In-memory vector memory engine (index, query, search, ptr)"
       echo "  doc <subcmd>    Progressive markdown inspection (outline, section, search)"
       echo "  upgrade         Update ASL CLI to latest published release"

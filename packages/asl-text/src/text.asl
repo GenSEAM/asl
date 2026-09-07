@@ -1,6 +1,6 @@
 (module asl-text/text
   :d "Pure AgentScript text engine: HTML parsing, entity decoding, multi-format text extraction, chunking, and ASN structuring."
-  :x [ExtractedDoc ContextChunk decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag doc-to-asn chunk-to-asn])
+  :x [ExtractedDoc ContextChunk ContextualClause decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag format-clause-breadcrumb format-contextual-clause extract-clauses extract-contextual-clauses doc-to-asn chunk-to-asn clause-to-asn])
 
 (dfs ExtractedDoc
   (:f title Str "Document title or headline")
@@ -15,6 +15,14 @@
   (:f index I64 "1-based chunk sequence index")
   (:f char-count I64 "Length of chunk content in characters")
   (:f source Str "Origin document identifier or URL"))
+
+(dfs ContextualClause
+  (:f id Str "Deterministic clause identifier")
+  (:f doc-title Str "Origin document title")
+  (:f section-path (List Str) "Breadcrumb hierarchy e.g. ['Doc', 'Section 1', 'Clause a']")
+  (:f clause-text Str "Normalized clause body text")
+  (:f char-count I64 "Clause character count")
+  (:f source Str "Origin document URL, filepath, or citation"))
 
 (df decode-html-entities [(text Str)] -> Str
   :d "Decodes common HTML entities to plain text."
@@ -260,14 +268,18 @@
   (str (string-from-int64 index) ". **[" (.-title doc) "](" (.-source doc) ")** [" (.-format doc) " · " (string-from-int64 (.-char-count doc)) " chars]\n"
        (.-content doc) "\n"))
 
+(df format-docs-rag-helper [(docs (List ExtractedDoc)) (idx I64)] -> (List Str)
+  (if (list-empty? docs)
+      (list)
+      (let [(d (option-or (list-head docs) (ExtractedDoc :title "" :content "" :format "" :source "" :char-count 0)))
+            (rest (option-or (list-tail docs) (list)))]
+        (list-cons (format-doc-summary idx d) (format-docs-rag-helper rest (+ idx 1))))))
+
 (df format-docs-rag [(query Str) (docs (List ExtractedDoc))] -> Str
   :d "Formats multiple extracted documents into an indexed prompt context block."
   (let [(header (str "## Extracted Documents for query: '" query "' (" (string-from-int64 (list-length docs)) " docs)\n\n"))
-        (indexed (zip (range 1 (+ (list-length docs) 1)) docs))
-        (docs-md (string-join (map (fn [(p (Pair I64 ExtractedDoc))] -> Str
-                                     (format-doc-summary (.-first p) (.-second p)))
-                                   indexed)
-                              "\n"))]
+        (summaries (format-docs-rag-helper docs 1))
+        (docs-md (string-join summaries "\n"))]
     (str header docs-md)))
  
 (df doc-to-asn [(doc ExtractedDoc)] -> Str
@@ -285,3 +297,119 @@
        " :source \"" (.-source chunk)
        "\" :chars " (string-from-int64 (.-char-count chunk))
        " :payload \"" (string-replace (.-content chunk) "\"" "\\\"") "\")"))
+
+(dfs HeadingInfo
+  (:f level I64 "Heading hierarchy depth level")
+  (:f text Str "Heading label text"))
+
+(df format-clause-breadcrumb [(clause ContextualClause)] -> Str
+  :d "Formats contextual breadcrumb prefix for RAG ingestion."
+  (let [(path-str (string-join (.-section-path clause) " > "))
+        (header (str "[Doc: " (.-doc-title clause) " | Section: " path-str " | ID: " (.-id clause) "]\n"))]
+    (str header (.-clause-text clause))))
+
+(df format-contextual-clause [(clause ContextualClause)] -> Str
+  :d "Alias for format-clause-breadcrumb."
+  (format-clause-breadcrumb clause))
+
+(df clause-to-asn [(clause ContextualClause)] -> Str
+  :d "Encodes a ContextualClause into a compact, canonical ASN S-expression."
+  (let [(path-str (string-join (.-section-path clause) " > "))]
+    (str "(:clause :id \"" (.-id clause)
+         "\" :doc \"" (.-doc-title clause)
+         "\" :section \"" path-str
+         "\" :chars " (string-from-int64 (.-char-count clause))
+         " :payload \"" (string-replace (.-clause-text clause) "\"" "\\\"") "\")")))
+
+(df detect-heading [(line Str)] -> (Option HeadingInfo)
+  :d "Detects heading prefix returning level and text."
+  (let [(trimmed (string-trim line))]
+    (cond
+      ((string-starts-with? trimmed "### ")
+       (some (HeadingInfo :level 3 :text (string-trim (option-or (string-slice trimmed 4 (string-length trimmed)) "")))))
+      ((string-starts-with? trimmed "## ")
+       (some (HeadingInfo :level 2 :text (string-trim (option-or (string-slice trimmed 3 (string-length trimmed)) "")))))
+      ((string-starts-with? trimmed "# ")
+       (some (HeadingInfo :level 1 :text (string-trim (option-or (string-slice trimmed 2 (string-length trimmed)) "")))))
+      ((string-starts-with? trimmed "Article ")
+       (some (HeadingInfo :level 2 :text trimmed)))
+      ((string-starts-with? trimmed "Section ")
+       (some (HeadingInfo :level 3 :text trimmed)))
+      (:else (none)))))
+
+(df update-breadcrumb-path [(path (List Str)) (level I64) (heading Str)] -> (List Str)
+  :d "Updates section breadcrumb path maintaining hierarchy at level."
+  (let [(keep-count (max 1 (min (list-length path) level)))
+        (truncated (list-take path keep-count))]
+    (list-append truncated (list heading))))
+
+(df emit-clause-record [(doc-title Str) (path (List Str)) (text Str) (source Str) (idx I64)] -> ContextualClause
+  (ContextualClause
+    :id (str source "#clause-" (string-from-int64 idx))
+    :doc-title doc-title
+    :section-path path
+    :clause-text text
+    :char-count (string-length text)
+    :source source))
+
+(df extract-clauses-loop [(lines (List Str))
+                         (path (List Str))
+                         (para-acc (List Str))
+                         (doc-title Str)
+                         (source Str)
+                         (min-chars I64)
+                         (max-chars I64)
+                         (clause-idx I64)] -> (List ContextualClause)
+  (if (list-empty? lines)
+      (if (list-empty? para-acc)
+          (list)
+          (let [(text (string-join para-acc " "))]
+            (if (> (string-length (string-trim text)) 0)
+                (list (emit-clause-record doc-title path (string-trim text) source clause-idx))
+                (list))))
+      (let [(line (option-or (list-head lines) ""))
+            (rest (option-or (list-tail lines) (list)))
+            (trimmed (string-trim line))
+            (heading-opt (detect-heading trimmed))]
+        (mt heading-opt
+          ((some h)
+           (let [(h-level (.-level h))
+                 (h-text (.-text h))
+                 (new-path (update-breadcrumb-path path h-level h-text))]
+             (if (list-empty? para-acc)
+                 (extract-clauses-loop rest new-path (list) doc-title source min-chars max-chars clause-idx)
+                 (let [(para-str (string-trim (string-join para-acc " ")))]
+                   (if (> (string-length para-str) 0)
+                       (list-cons (emit-clause-record doc-title path para-str source clause-idx)
+                                  (extract-clauses-loop rest new-path (list) doc-title source min-chars max-chars (+ clause-idx 1)))
+                       (extract-clauses-loop rest new-path (list) doc-title source min-chars max-chars clause-idx))))))
+          ((none)
+           (if (string-empty? trimmed)
+               (if (list-empty? para-acc)
+                   (extract-clauses-loop rest path (list) doc-title source min-chars max-chars clause-idx)
+                   (let [(para-str (string-trim (string-join para-acc " ")))]
+                     (if (>= (string-length para-str) min-chars)
+                         (list-cons (emit-clause-record doc-title path para-str source clause-idx)
+                                    (extract-clauses-loop rest path (list) doc-title source min-chars max-chars (+ clause-idx 1)))
+                         (extract-clauses-loop rest path para-acc doc-title source min-chars max-chars clause-idx))))
+               (let [(next-para (list-append para-acc (list trimmed)))
+                     (curr-text (string-join next-para " "))]
+                 (if (>= (string-length curr-text) max-chars)
+                     (list-cons (emit-clause-record doc-title path (string-trim curr-text) source clause-idx)
+                                (extract-clauses-loop rest path (list) doc-title source min-chars max-chars (+ clause-idx 1)))
+                     (extract-clauses-loop rest path next-para doc-title source min-chars max-chars clause-idx)))))))))
+
+(df extract-clauses [(doc ExtractedDoc) (min-chars I64) (max-chars I64)] -> (List ContextualClause)
+  :d "Extracts structured contextual clauses with breadcrumbs from an ExtractedDoc."
+  (let [(title (if (string-empty? (string-trim (.-title doc))) "Document" (string-trim (.-title doc))))
+        (source (if (string-empty? (string-trim (.-source doc))) "doc" (string-trim (.-source doc))))
+        (safe-min (max 1 min-chars))
+        (safe-max (max safe-min max-chars))
+        (init-path (list title))
+        (lines (string-split (.-content doc) "\n"))]
+    (extract-clauses-loop lines init-path (list) title source safe-min safe-max 1)))
+
+(df extract-contextual-clauses [(doc ExtractedDoc) (min-chars I64) (max-chars I64)] -> (List ContextualClause)
+  :d "Alias for extract-clauses with breadcrumb preservation."
+  (extract-clauses doc min-chars max-chars))
+
