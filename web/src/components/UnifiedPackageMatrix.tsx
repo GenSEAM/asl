@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import UnifiedPackageMatrixAsl from './UnifiedPackageMatrix.asl';
 import {
   Cpu,
   Zap,
@@ -372,46 +373,12 @@ await runner.dispatchA2AFrame(compactFrame);`,
 ];
 
 export const UnifiedPackageMatrix: React.FC = () => {
-  const [selectedStage, setSelectedStage] = useState<number | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [expandedCodeId, setExpandedCodeId] = useState<string | null>(null);
-  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
+  return <UnifiedPackageMatrixAsl />;
+};
 
-  const filteredPackages = useMemo(() => {
-    return PACKAGES.filter((pkg) => {
-      const matchesStage = selectedStage === 'all' || pkg.stageNum === selectedStage;
-      if (!matchesStage) return false;
-      if (!searchQuery.trim()) return true;
+export default UnifiedPackageMatrix;
 
-      const q = searchQuery.toLowerCase();
-      return (
-        pkg.id.toLowerCase().includes(q) ||
-        pkg.name.toLowerCase().includes(q) ||
-        pkg.tagline.toLowerCase().includes(q) ||
-        pkg.description.toLowerCase().includes(q) ||
-        pkg.highlights.some((h) => h.toLowerCase().includes(q)) ||
-        pkg.interfaces.some((i) => i.toLowerCase().includes(q))
-      );
-    });
-  }, [selectedStage, searchQuery]);
-
-  const copyInstallCmd = (pkgId: string, cmd: string) => {
-    navigator.clipboard.writeText(cmd);
-    setCopiedId(pkgId);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const copyCode = (pkgId: string, code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedCodeId(pkgId);
-    setTimeout(() => setCopiedCodeId(null), 2000);
-  };
-
-  const toggleExpand = (id: string) => {
-    setExpandedCodeId((prev) => (prev === id ? null : id));
-  };
-
+const _LegacyUnifiedPackageMatrix: React.FC = () => {
   return (
     <div className="space-y-10">
       {/* Ecosystem Summary Stats */}
