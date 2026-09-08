@@ -13,28 +13,28 @@ NODE_BIN="/usr/local/bin/node"
 [ ! -x "$NODE_BIN" ] && NODE_BIN="$(command -v node 2>/dev/null || echo "node")"
 
 find_daemon_host() {
-  if [ -f "$ROOT/bridges/node/asl-daemon-host.mjs" ]; then
-    echo "$ROOT/bridges/node/asl-daemon-host.mjs"
-  elif [ -f "$ROOT/../asl/bridges/node/asl-daemon-host.mjs" ]; then
-    echo "$ROOT/../asl/bridges/node/asl-daemon-host.mjs"
+  if [ -f "$ROOT/bin/asl-daemon" ]; then
+    echo "$ROOT/bin/asl-daemon"
+  elif [ -f "$ROOT/../asl/bin/asl-daemon" ]; then
+    echo "$ROOT/../asl/bin/asl-daemon"
   else
     find_mem_daemon
   fi
 }
 
 find_mem_daemon() {
-  if [ -f "$ROOT/bridges/node/asl-mem-daemon.mjs" ]; then
+  if [ -f "$ROOT/bin/asl-daemon" ]; then
+    echo "$ROOT/bin/asl-daemon"
+  elif [ -f "$ROOT/../asl/bin/asl-daemon" ]; then
+    echo "$ROOT/../asl/bin/asl-daemon"
+  elif [ -f "$ROOT/bridges/node/asl-mem-daemon.mjs" ]; then
     echo "$ROOT/bridges/node/asl-mem-daemon.mjs"
-  elif [ -f "$ROOT/bridges/node/asl-daemon-host.mjs" ]; then
-    echo "$ROOT/bridges/node/asl-daemon-host.mjs"
   elif [ -f "$ROOT/../asl/bridges/node/asl-mem-daemon.mjs" ]; then
     echo "$ROOT/../asl/bridges/node/asl-mem-daemon.mjs"
-  elif [ -f "$ROOT/../asl/bridges/node/asl-daemon-host.mjs" ]; then
-    echo "$ROOT/../asl/bridges/node/asl-daemon-host.mjs"
   elif [ -f "$ROOT/../tools/asl-mem-daemon.mjs" ]; then
     echo "$ROOT/../tools/asl-mem-daemon.mjs"
   else
-    echo "$ROOT/bridges/node/asl-daemon-host.mjs"
+    echo "$ROOT/bin/asl-daemon"
   fi
 }
 
@@ -81,8 +81,12 @@ ensure_daemon_running() {
     rm -f "$SOCK" 2>/dev/null || true
   fi
   
-  if [ -f "$HOST_MJS" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
-    "$NODE_BIN" "$HOST_MJS" --daemon >/dev/null 2>&1 &
+  if [ -f "$HOST_MJS" ]; then
+    if [ -x "$HOST_MJS" ]; then
+      "$HOST_MJS" --daemon >/dev/null 2>&1 &
+    elif command -v "$NODE_BIN" >/dev/null 2>&1; then
+      "$NODE_BIN" "$HOST_MJS" --daemon >/dev/null 2>&1 &
+    fi
     for i in 1 2 3 4; do
       if [ -S "$SOCK" ]; then
         return 0
@@ -302,7 +306,8 @@ END {
   ASSERTION_COUNT=$(grep -rohE '\(assert[ \t]+' --include="*test*.asl" . 2>/dev/null | wc -l | tr -d ' ')
 
   # Strictly evaluate all asserting test suites monorepo-wide under falsification
-  local EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+  local EVAL_RUNNER="$ROOT/bin/asl-eval"
+  [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
   local PARALLEL_RUNNER="$ROOT/../scripts/run_gate_tests.py"
   [ ! -f "$PARALLEL_RUNNER" ] && PARALLEL_RUNNER="$ROOT/scripts/run_gate_tests.py"
   local ASSERT_SUITES=86
@@ -322,7 +327,11 @@ END {
           echo "    ✗ $tf: Delimiter balance or syntax failure"
           exit 1
         fi
-        if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        if [ -x "$EVAL_RUNNER" ]; then
+          local TEST_EXIT=0
+          local TEST_OUT
+          TEST_OUT="$("$EVAL_RUNNER" "$tf" 2>&1)" || TEST_EXIT=$?
+        elif [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
           local TEST_EXIT=0
           local TEST_OUT
           TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$tf" 2>&1)" || TEST_EXIT=$?
@@ -533,9 +542,12 @@ shift || true
 
 case "$CMD" in
   asn|codec|transpile)
-    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+    EVAL_RUNNER="$ROOT/bin/asl-eval"
+    [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
     if [ "$1" = "--from-json" ] || [ "$1" = "--to-json" ]; then
-      if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+      if [ -x "$EVAL_RUNNER" ]; then
+        exec "$EVAL_RUNNER" asn "$@"
+      elif [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
         exec "$NODE_BIN" "$EVAL_RUNNER" asn "$@"
       fi
     fi
@@ -558,8 +570,8 @@ case "$CMD" in
     TOPO_FILE="$ROOT/packages/asl-sh/src/git_topo.asl"
     [ ! -f "$TOPO_FILE" ] && TOPO_FILE="$ROOT/../asl/packages/asl-sh/src/git_topo.asl"
     [ ! -f "$TOPO_FILE" ] && TOPO_FILE="asl/packages/asl-sh/src/git_topo.asl"
-    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
-    [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bridges/node/asl-eval.mjs"
+    EVAL_RUNNER="$ROOT/bin/asl-eval"
+    [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
 
     RUNNER="/tmp/asl_git_runner_$$.asl"
     TMP_LINK="/tmp/git_topo.asl"
@@ -830,8 +842,9 @@ case "$CMD" in
         FAIL=1
         continue
       fi
-      EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
-      if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+      EVAL_RUNNER="$ROOT/bin/asl-eval"
+      [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
+      if [ -f "$EVAL_RUNNER" ]; then
         case "$TARGET" in
           *.asn)
             if [[ "$TARGET" == *manifest.asn ]]; then
@@ -843,7 +856,11 @@ case "$CMD" in
             fi
             ;;
           *)
-            CHECK_ERR="$("$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" 2>&1 || true)"
+            if [ -x "$EVAL_RUNNER" ]; then
+              CHECK_ERR="$("$EVAL_RUNNER" --check "$TARGET" 2>&1 || true)"
+            elif command -v "$NODE_BIN" >/dev/null 2>&1; then
+              CHECK_ERR="$("$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" 2>&1 || true)"
+            fi
             if [ -n "$CHECK_ERR" ]; then
               FILTERED_ERR="$(echo "$CHECK_ERR" | grep -v 'code: unresolved-import' | grep -v 'code: rule-2' | grep -v 'code: rule-11' || true)"
               if [ -n "$FILTERED_ERR" ]; then
@@ -959,7 +976,8 @@ case "$CMD" in
         TOTAL_ASSERTS=0
         SUITES=0
         FAIL=0
-        EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+        EVAL_RUNNER="$ROOT/bin/asl-eval"
+        [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
         METRICS_ARG=""
         [ "$METRICS" -eq 1 ] && METRICS_ARG="--metrics"
         for tf in $(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
@@ -970,7 +988,16 @@ case "$CMD" in
               FAIL=1
               continue
             fi
-            if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+            if [ -x "$EVAL_RUNNER" ]; then
+              TEST_EXIT=0
+              TEST_OUT="$("$EVAL_RUNNER" "$tf" $METRICS_ARG 2>&1)" || TEST_EXIT=$?
+              if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
+                echo "    ✗ $tf: Assertion failure during test execution"
+                echo "      $TEST_OUT"
+                FAIL=1
+                continue
+              fi
+            elif [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
               TEST_EXIT=0
               TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$tf" $METRICS_ARG 2>&1)" || TEST_EXIT=$?
               if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
@@ -1023,10 +1050,20 @@ case "$CMD" in
           echo "    ✓ $f: structurally balanced, 0 assertions found."
         fi
       else
-        EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+        EVAL_RUNNER="$ROOT/bin/asl-eval"
+        [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
         METRICS_ARG=""
         [ "$METRICS" -eq 1 ] && METRICS_ARG="--metrics"
-        if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        if [ -x "$EVAL_RUNNER" ]; then
+          TEST_EXIT=0
+          TEST_OUT="$("$EVAL_RUNNER" "$TARGET" $METRICS_ARG 2>&1)" || TEST_EXIT=$?
+          if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
+            echo "    ✗ $f: Assertion failure during test execution"
+            echo "      $TEST_OUT"
+            FAIL=1
+            continue
+          fi
+        elif [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
           TEST_EXIT=0
           TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$TARGET" $METRICS_ARG 2>&1)" || TEST_EXIT=$?
           if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
@@ -1751,7 +1788,9 @@ case "$CMD" in
         ensure_daemon_running
         SOCK="$(get_socket_path)"
         MEM_RUNNER="$(find_daemon_host)"
-        if [ -f "$MEM_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        if [ -x "$MEM_RUNNER" ]; then
+          exec "$MEM_RUNNER" "$@"
+        elif [ -f "$MEM_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
           exec "$NODE_BIN" "$MEM_RUNNER" "$@"
         fi
         echo "(:asl-mem :status \"ready\")"
@@ -1760,8 +1799,11 @@ case "$CMD" in
     esac
     ;;
   eval)
-    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
-    if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+    EVAL_RUNNER="$ROOT/bin/asl-eval"
+    [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
+    if [ -x "$EVAL_RUNNER" ]; then
+      exec "$EVAL_RUNNER" "$@"
+    elif [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
       exec "$NODE_BIN" "$EVAL_RUNNER" "$@"
     fi
     exec "$ROOT/asl" run "$@"
@@ -1782,7 +1824,13 @@ case "$CMD" in
         exit 0
       fi
     fi
-    if [ -f "$MEM_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+    if [ -x "$MEM_RUNNER" ]; then
+      if [ "$(basename "$MEM_RUNNER")" = "asl-mem-daemon.mjs" ]; then
+        exec "$MEM_RUNNER" rpc "$PAYLOAD"
+      else
+        exec "$MEM_RUNNER" "$PAYLOAD"
+      fi
+    elif [ -f "$MEM_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
       if [ "$(basename "$MEM_RUNNER")" = "asl-mem-daemon.mjs" ]; then
         exec "$NODE_BIN" "$MEM_RUNNER" rpc "$PAYLOAD"
       else
@@ -1979,11 +2027,14 @@ console.log(emitWat(forms));
       echo "Error: Node runtime required for WAT compilation."
       exit 1
     fi
-    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
-    if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+    EVAL_RUNNER="$ROOT/bin/asl-eval"
+    [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
+    if [ -x "$EVAL_RUNNER" ]; then
+      exec "$EVAL_RUNNER" "$TARGET" "${OTHER_ARGS[@]}"
+    elif [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
       exec "$NODE_BIN" "$EVAL_RUNNER" "$TARGET" "${OTHER_ARGS[@]}"
     fi
-    echo "Error: Node runtime or evaluator bridge not found."
+    echo "Error: Node runtime or evaluator binary not found."
     exit 1
     ;;
   exec|sh)
@@ -2216,14 +2267,17 @@ console.log(emitWat(forms));
         else
           echo "Mode:           SINGLE-PASS (executing ready claimed phase)"
         fi
-        EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+        EVAL_RUNNER="$ROOT/bin/asl-eval"
+        [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
         WORKER_MOD="$ROOT/harness/src/worker.asl"
         if [ ! -f "$WORKER_MOD" ] && [ -f "$ROOT/../harness/src/worker.asl" ]; then
           WORKER_MOD="$ROOT/../harness/src/worker.asl"
         elif [ ! -f "$WORKER_MOD" ] && [ -f "harness/src/worker.asl" ]; then
           WORKER_MOD="harness/src/worker.asl"
         fi
-        if [ -f "$WORKER_MOD" ] && [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+        if [ -f "$WORKER_MOD" ] && [ -x "$EVAL_RUNNER" ]; then
+          "$EVAL_RUNNER" "$WORKER_MOD" 2>&1 || true
+        elif [ -f "$WORKER_MOD" ] && [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
           "$NODE_BIN" "$EVAL_RUNNER" "$WORKER_MOD" 2>&1 || true
         fi
         echo "✓ Autonomous worker cycle completed cleanly."
@@ -2441,8 +2495,8 @@ console.log(emitWat(forms));
       HN_FILE="$ROOT/packages/asl-help/src/help_node.asl"
       [ ! -f "$HN_FILE" ] && HN_FILE="$ROOT/../asl/packages/asl-help/src/help_node.asl"
       [ ! -f "$HN_FILE" ] && HN_FILE="asl/packages/asl-help/src/help_node.asl"
-      EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
-      [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bridges/node/asl-eval.mjs"
+      EVAL_RUNNER="$ROOT/bin/asl-eval"
+      [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
 
       TMP_DIR="/tmp/asl_help_$$"
       mkdir -p "$TMP_DIR"
