@@ -1,6 +1,6 @@
 (module asl-checker/resolve-test
   :d "Unit tests for asl-checker/resolve"
-  :x [test-resolve]
+  :x [test-resolve run-tests]
   :i [(types :a ty) (ast :a a) (resolve :a r)])
 
 (df check-has-code [(diags (List ty/Diagnostic)) (want-code String)] -> Bool
@@ -44,16 +44,22 @@
 (df test-builtin-ref-probe [] -> Bool
   (test-probe "(df shout [(xs (List String))] -> (List String) (map string-upper xs))" "builtin-reference"))
 
-(df test-resolve [] -> String
+(df test-resolve [] -> Bool
   :d "Unit tests for resolve"
-  (cond
-    ((not (test-unbound-probe)) "fail unbound probe rule-2")
-    ((not (test-missing-doc-probe)) "fail missing doc probe rule-8")
-    ((not (test-reserved-probe)) "fail reserved probe rule-7")
-    ((not (test-unbound-typevar-probe)) "fail unbound typevar probe rule-10")
-    ((not (test-effect-probe)) "fail effect probe rule-12")
-    ((not (test-arity-probe)) "fail arity probe")
-    ((not (test-ctor-probe)) "fail ctor probe")
-    ((not (test-not-callable-probe)) "fail not-callable probe")
-    ((not (test-builtin-ref-probe)) "fail builtin-ref probe")
-    (:else "ok")))
+  (do
+    (assert (test-unbound-probe) "unbound probe rule-2")
+    (assert (test-missing-doc-probe) "missing doc probe rule-8")
+    (assert (test-reserved-probe) "reserved probe rule-7")
+    (assert (test-unbound-typevar-probe) "unbound typevar probe rule-10")
+    (assert (test-effect-probe) "effect probe rule-12")
+    (assert (test-arity-probe) "arity probe")
+    (assert (test-ctor-probe) "ctor probe")
+    (assert (test-not-callable-probe) "not-callable probe")
+    (assert (test-builtin-ref-probe) "builtin-ref probe")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Runs resolve test suite"
+  (do
+    (assert (test-resolve) "test-resolve must pass")
+    true))

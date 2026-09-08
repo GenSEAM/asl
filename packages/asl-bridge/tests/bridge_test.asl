@@ -11,8 +11,6 @@
       test-router-planning]
   :i [(ports :a p) (schema-bridge :a sb) (router :a r)])
 
-"run: (run-tests)"
-
 (df sample-table [] -> p/TableDef
   :d "Constructs a sample TableDef record with diverse column types."
   (let [(c1 (p/make-db-column "id" "i64" false true))
@@ -35,64 +33,69 @@
         (row1 (map-set (map-empty) "id" "1"))
         (rows (cons row1 (list)))
         (res (p/make-db-result rows 1))]
-    (and (= (.-name tbl) "users")
-         (and (= (list-length (.-columns tbl)) 5)
-              (and (= (p/driver-kind-to-str p-wasm) "drv-sqlite-wasm")
-                   (and (= (p/driver-kind-to-str p-pg) "drv-pg-socket")
-                        (and (= (p/tier-kind-to-str t-w) "tier-wasm-sandbox")
-                             (and (= (p/tier-kind-to-str t-h) "tier-host-ipc")
-                                  (and (= (p/tier-kind-to-str t-m) "tier-microvm")
-                                       (and (= (.-sql qp) "SELECT * FROM users")
-                                            (and (= (.-affected res) 1)
-                                                 (= (list-length (.-rows res)) 1))))))))))))
+    (assert (= (.-name tbl) "users") "Table name must be users")
+    (assert (= (list-length (.-columns tbl)) 5) "Columns count must be 5")
+    (assert (= (p/driver-kind-to-str p-wasm) "drv-sqlite-wasm") "Driver kind wasm must match")
+    (assert (= (p/driver-kind-to-str p-pg) "drv-pg-socket") "Driver kind pg must match")
+    (assert (= (p/tier-kind-to-str t-w) "tier-wasm-sandbox") "Tier wasm must match")
+    (assert (= (p/tier-kind-to-str t-h) "tier-host-ipc") "Tier host must match")
+    (assert (= (p/tier-kind-to-str t-m) "tier-microvm") "Tier microvm must match")
+    (assert (= (.-sql qp) "SELECT * FROM users") "SQL must match")
+    (assert (= (.-affected res) 1) "Affected rows must be 1")
+    (assert (= (list-length (.-rows res)) 1) "Result rows count must be 1")
+    true))
 
 (df test-schema-kysely [] -> Bool
   :d "Verifies TypeScript Kysely interface transpilation."
   (let [(tbl (sample-table))
         (out (sb/table-to-kysely tbl))]
-    (and (string-contains? out "export interface UsersTable {")
-         (and (string-contains? out "  id: number;")
-              (and (string-contains? out "  name: string;")
-                   (and (string-contains? out "  email: string | null;")
-                        (and (string-contains? out "  is_active: boolean;")
-                             (string-contains? out "  score: number | null;"))))))))
+    (assert (string-contains? out "export interface UsersTable {") "Kysely interface must exist")
+    (assert (string-contains? out "  id: number;") "id column must be number")
+    (assert (string-contains? out "  name: string;") "name column must be string")
+    (assert (string-contains? out "  email: string | null;") "email column must be nullable string")
+    (assert (string-contains? out "  is_active: boolean;") "is_active column must be boolean")
+    (assert (string-contains? out "  score: number | null;") "score column must be nullable number")
+    true))
 
 (df test-schema-drizzle [] -> Bool
   :d "Verifies TypeScript Drizzle table definition transpilation."
   (let [(tbl (sample-table))
         (out (sb/table-to-drizzle tbl))]
-    (and (string-contains? out "export const users = pgTable(\"users\", {")
-         (and (string-contains? out "  id: integer(\"id\").primaryKey(),")
-              (and (string-contains? out "  name: text(\"name\").notNull(),")
-                   (and (string-contains? out "  email: text(\"email\"),")
-                        (and (string-contains? out "  is_active: boolean(\"is_active\").notNull(),")
-                             (string-contains? out "  score: real(\"score\"),"))))))))
+    (assert (string-contains? out "export const users = pgTable(\"users\", {") "pgTable must exist")
+    (assert (string-contains? out "  id: integer(\"id\").primaryKey(),") "id primary key must exist")
+    (assert (string-contains? out "  name: text(\"name\").notNull(),") "name notNull must exist")
+    (assert (string-contains? out "  email: text(\"email\"),") "email text must exist")
+    (assert (string-contains? out "  is_active: boolean(\"is_active\").notNull(),") "is_active notNull must exist")
+    (assert (string-contains? out "  score: real(\"score\"),") "score real must exist")
+    true))
 
 (df test-schema-sqlalchemy [] -> Bool
   :d "Verifies Python SQLAlchemy 2.0 DeclarativeBase model transpilation."
   (let [(tbl (sample-table))
         (out (sb/table-to-sqlalchemy tbl))]
-    (and (string-contains? out "class Users(Base):")
-         (and (string-contains? out "__tablename__ = \"users\"")
-              (and (string-contains? out "id: Mapped[int] = mapped_column(primary_key=True)")
-                   (and (string-contains? out "name: Mapped[str] = mapped_column(nullable=False)")
-                        (and (string-contains? out "email: Mapped[Optional[str]] = mapped_column(nullable=True)")
-                             (and (string-contains? out "is_active: Mapped[bool] = mapped_column(nullable=False)")
-                                  (string-contains? out "score: Mapped[Optional[float]] = mapped_column(nullable=True)")))))))))
+    (assert (string-contains? out "class Users(Base):") "Base class must exist")
+    (assert (string-contains? out "__tablename__ = \"users\"") "tablename must exist")
+    (assert (string-contains? out "id: Mapped[int] = mapped_column(primary_key=True)") "id mapped_column must exist")
+    (assert (string-contains? out "name: Mapped[str] = mapped_column(nullable=False)") "name mapped_column must exist")
+    (assert (string-contains? out "email: Mapped[Optional[str]] = mapped_column(nullable=True)") "email mapped_column must exist")
+    (assert (string-contains? out "is_active: Mapped[bool] = mapped_column(nullable=False)") "is_active mapped_column must exist")
+    (assert (string-contains? out "score: Mapped[Optional[float]] = mapped_column(nullable=True)") "score mapped_column must exist")
+    true))
 
 (df test-schema-seaorm [] -> Bool
   :d "Verifies Rust SeaORM entity struct transpilation."
   (let [(tbl (sample-table))
         (out (sb/table-to-seaorm tbl))]
-    (and (string-contains? out "#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]")
-         (and (string-contains? out "#[sea_orm(table_name = \"users\")]")
-              (and (string-contains? out "pub struct Model {")
-                   (and (string-contains? out "#[sea_orm(primary_key)]")
-                        (and (string-contains? out "pub id: i64,")
-                             (and (string-contains? out "pub name: String,")
-                                  (and (string-contains? out "pub email: Option<String>,")
-                                       (and (string-contains? out "pub is_active: bool,")
-                                            (string-contains? out "pub score: Option<f64>,")))))))))))
+    (assert (string-contains? out "#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]") "DeriveEntityModel must exist")
+    (assert (string-contains? out "#[sea_orm(table_name = \"users\")]") "table_name must exist")
+    (assert (string-contains? out "pub struct Model {") "Model struct must exist")
+    (assert (string-contains? out "#[sea_orm(primary_key)]") "primary_key must exist")
+    (assert (string-contains? out "pub id: i64,") "pub id must exist")
+    (assert (string-contains? out "pub name: String,") "pub name must exist")
+    (assert (string-contains? out "pub email: Option<String>,") "pub email must exist")
+    (assert (string-contains? out "pub is_active: bool,") "pub is_active must exist")
+    (assert (string-contains? out "pub score: Option<f64>,") "pub score must exist")
+    true))
 
 (df test-router-workload [] -> Bool
   :d "Verifies workload router tiers based on capabilities and ops."
@@ -101,11 +104,12 @@
         (t3 (r/route-workload "train-model" false true))
         (t4 (r/route-workload "gpu-compute" false false))
         (t5 (r/route-workload "host-ipc" false false))]
-    (and (r/is-wasm-tier? t1)
-         (and (r/is-host-tier? t2)
-              (and (r/is-microvm-tier? t3)
-                   (and (r/is-microvm-tier? t4)
-                        (r/is-host-tier? t5)))))))
+    (assert (r/is-wasm-tier? t1) "t1 must be wasm tier")
+    (assert (r/is-host-tier? t2) "t2 must be host tier")
+    (assert (r/is-microvm-tier? t3) "t3 must be microvm tier")
+    (assert (r/is-microvm-tier? t4) "t4 must be microvm tier")
+    (assert (r/is-host-tier? t5) "t5 must be host tier")
+    true))
 
 (df test-router-planning [] -> Bool
   :d "Verifies query planning defaults per driver kind."
@@ -114,19 +118,21 @@
         (p-my (r/plan-query "SELECT 1" (p/drv-mysql) (list)))
         (p-bus (r/plan-query "SELECT 1" (p/drv-agentbus-ipc) (list)))
         (p-cust (r/plan-custom "SELECT 1" (p/tier-microvm) (list)))]
-    (and (r/is-wasm-tier? (.-tier p-wasm))
-         (and (r/is-host-tier? (.-tier p-pg))
-              (and (r/is-host-tier? (.-tier p-my))
-                   (and (r/is-host-tier? (.-tier p-bus))
-                        (r/is-microvm-tier? (.-tier p-cust))))))))
+    (assert (r/is-wasm-tier? (.-tier p-wasm)) "p-wasm must be wasm tier")
+    (assert (r/is-host-tier? (.-tier p-pg)) "p-pg must be host tier")
+    (assert (r/is-host-tier? (.-tier p-my)) "p-my must be host tier")
+    (assert (r/is-host-tier? (.-tier p-bus)) "p-bus must be host tier")
+    (assert (r/is-microvm-tier? (.-tier p-cust)) "p-cust must be microvm tier")
+    true))
 
 (df run-tests [] -> Bool
   :d "Runs all Polyglot Bridge test suites."
-  (let [(results (list (test-ports-and-types)
-                       (test-schema-kysely)
-                       (test-schema-drizzle)
-                       (test-schema-sqlalchemy)
-                       (test-schema-seaorm)
-                       (test-router-workload)
-                       (test-router-planning)))]
-    (not (list-contains? results false))))
+  (do
+    (assert (test-ports-and-types) "test-ports-and-types must pass")
+    (assert (test-schema-kysely) "test-schema-kysely must pass")
+    (assert (test-schema-drizzle) "test-schema-drizzle must pass")
+    (assert (test-schema-sqlalchemy) "test-schema-sqlalchemy must pass")
+    (assert (test-schema-seaorm) "test-schema-seaorm must pass")
+    (assert (test-router-workload) "test-router-workload must pass")
+    (assert (test-router-planning) "test-router-planning must pass")
+    true))

@@ -12,7 +12,7 @@
         (acc (.-acc st))]
     (cond
       ((= s 0)
-       (if (= ch "\x1b")
+       (if (= ch "\u001b")
            (AnsiState :state 1 :acc acc)
            (AnsiState :state 0 :acc (list-cons ch acc))))
       ((= s 1)
@@ -21,17 +21,17 @@
          ((= ch "]") (AnsiState :state 3 :acc acc))
          ((or (= ch "(") (= ch ")")) (AnsiState :state 4 :acc acc))
          ((or (= ch "N") (= ch "O")) (AnsiState :state 4 :acc acc))
-         ((= ch "\x1b") (AnsiState :state 1 :acc acc))
+         ((= ch "\u001b") (AnsiState :state 1 :acc acc))
          (:else (AnsiState :state 0 :acc acc))))
       ((= s 2)
        (cond
          ((and (>= ch "@") (<= ch "~")) (AnsiState :state 0 :acc acc))
-         ((= ch "\x1b") (AnsiState :state 1 :acc acc))
+         ((= ch "\u001b") (AnsiState :state 1 :acc acc))
          (:else st)))
       ((= s 3)
        (cond
-         ((or (= ch "\x07") (= ch "\x00")) (AnsiState :state 0 :acc acc))
-         ((= ch "\x1b") (AnsiState :state 5 :acc acc))
+         ((or (= ch "\u0007") (= ch "\u0000")) (AnsiState :state 0 :acc acc))
+         ((= ch "\u001b") (AnsiState :state 5 :acc acc))
          (:else st)))
       ((= s 4)
        (AnsiState :state 0 :acc acc))
@@ -45,7 +45,7 @@
 
 (df strip-ansi [(s String)] -> String
   :d "Strips ANSI escape sequences from a string."
-  (if (not (string-contains? s "\x1b"))
+  (if (not (string-contains? s "\u001b"))
       s
       (let [(init (AnsiState :state 0 :acc (list)))
             (fin (fold ansi-step init (string-chars s)))]

@@ -7,7 +7,7 @@
     (:claim :metric "-64.7%" :category "token_compression" :source "bench/token_frames.py" :desc "Token reduction on agent tool frames")
     (:claim :metric "78%" :category "mcp_compression" :source "packages/asl-mcp" :desc "MCP interface compression")
     (:claim :metric "-83.4%" :category "bus_delegation" :source "packages/asl-skyloom" :desc "SeamBus delegation reduction")
-    (:claim :metric "<100ms" :category "cold_start" :source "packages/asl-eddie/benchmark/run.js" :desc "Shrody agent launch latency")
+    (:claim :metric "<100ms" :category "cold_start" :source "packages/asl-eddie/benchmark/run.js" :desc "Agent Eddy launch latency")
     (:claim :metric "24MB" :category "memory_rss" :source "packages/asl-eddie/benchmark/run.js" :desc "Peak RSS memory ceiling")
     (:claim :metric "<=2 tokens" :category "primitive_cost" :source "bench/token_audit.py" :desc "BPE primitive token ceiling")
     (:claim :metric "107/107" :category "vocab_coverage" :source "prelude/coverage.lock" :desc "Executed vocabulary coverage")

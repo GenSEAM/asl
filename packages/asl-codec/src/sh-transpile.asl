@@ -8,7 +8,8 @@
       make-pipe
       make-script
       measure-sh-savings]
-  :i [(std/string :a s)])
+  :i [(std/string :a s)
+      (asl-text/escape :a esc)])
 
 (dfs ShTranspileResult
   (:f output Str "Transpiled shell command string or diagnostic message")
@@ -35,31 +36,8 @@
             (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
 
 (df escape-sh-arg [(arg Str)] -> Str
-  :d "Safely escapes an argument string for POSIX shell using single-quote wrapping."
-  (let [(trimmed (string-trim arg))]
-    (cond
-      ((string-empty? trimmed) "''")
-      ((and (not (string-contains? trimmed " "))
-            (not (string-contains? trimmed "\""))
-            (not (string-contains? trimmed "'"))
-            (not (string-contains? trimmed "$"))
-            (not (string-contains? trimmed "`"))
-            (not (string-contains? trimmed "\\"))
-            (not (string-contains? trimmed ";"))
-            (not (string-contains? trimmed "&"))
-            (not (string-contains? trimmed "|"))
-            (not (string-contains? trimmed ">"))
-            (not (string-contains? trimmed "<"))
-            (not (string-contains? trimmed "("))
-            (not (string-contains? trimmed ")"))
-            (not (string-contains? trimmed "*"))
-            (not (string-contains? trimmed "?"))
-            (not (string-contains? trimmed "~"))
-            (not (string-contains? trimmed "!")))
-       trimmed)
-      (true
-       (let [(escaped (string-replace trimmed "'" "'\\''"))]
-         (s/concat (s/concat "'" escaped) "'"))))))
+  :d "Safely escapes an argument string for POSIX shell using canonical asl-text/escape."
+  (esc/escape-sh-compact arg))
 
 (df make-cmd [(bin Str) (args (List Str))] -> Str
   :d "Constructs an ASN command S-expression from binary name and argument list."

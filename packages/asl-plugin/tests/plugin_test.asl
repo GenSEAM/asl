@@ -18,16 +18,18 @@
         (updated-reg (pl/register-plugin reg manifest))
         (found (pl/lookup-plugin updated-reg "plugin-sqlite"))
         (by-cap (pl/find-plugins-by-capability updated-reg "cap-db"))]
-    (and (is-some? found)
-         (and (= (list-length by-cap) 1)
-              (pl/has-capability? manifest "cap-db")))))
+    (assert (is-some? found) "plugin found")
+    (assert (= (list-length by-cap) 1) "cap-db plugins count")
+    (assert (pl/has-capability? manifest "cap-db") "has capability")
+    true))
 
 (df test-validate-manifest [] -> Bool
   :d "Tests manifest validation checks."
   (let [(valid (pl/PluginManifest :id "p1" :name "Plugin One" :version "1.0.0" :kind (pl/kind-wasm) :capabilities (list) :exports (list) :entrypoint "main.wasm"))
         (invalid (pl/PluginManifest :id "" :name "Invalid" :version "1.0.0" :kind (pl/kind-wasm) :capabilities (list) :exports (list) :entrypoint "main.wasm"))]
-    (and (is-ok? (pl/validate-manifest valid))
-         (is-err? (pl/validate-manifest invalid)))))
+    (assert (is-ok? (pl/validate-manifest valid)) "valid manifest ok")
+    (assert (is-err? (pl/validate-manifest invalid)) "invalid manifest err")
+    true))
 
 (df test-dispatch-call [] -> Bool
   :d "Tests plugin call dispatch validation."
@@ -38,12 +40,15 @@
         (res-ok (pl/dispatch-call reg2 (pl/PluginCall :plugin-id "p-sh" :symbol-name "exec" :payload "ls")))
         (res-missing-sym (pl/dispatch-call reg2 (pl/PluginCall :plugin-id "p-sh" :symbol-name "non-existent" :payload "")))
         (res-missing-plugin (pl/dispatch-call reg2 (pl/PluginCall :plugin-id "unknown" :symbol-name "exec" :payload "")))]
-    (and (.-success res-ok)
-         (and (not (.-success res-missing-sym))
-              (not (.-success res-missing-plugin))))))
+    (assert (.-success res-ok) "res-ok success")
+    (assert (not (.-success res-missing-sym)) "missing-sym fails")
+    (assert (not (.-success res-missing-plugin)) "missing-plugin fails")
+    true))
 
 (df run-tests [] -> Bool
   :d "Runs all plugin test suites."
-  (and (test-registry-and-lookup)
-       (and (test-validate-manifest)
-            (test-dispatch-call))))
+  (do
+    (assert (test-registry-and-lookup) "test-registry-and-lookup must pass")
+    (assert (test-validate-manifest) "test-validate-manifest must pass")
+    (assert (test-dispatch-call) "test-dispatch-call must pass")
+    true))

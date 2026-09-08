@@ -1,6 +1,32 @@
 (module asl-sh/process
   :d "Native AgentScript Process Execution and Typed Command Builder (@pcp:d-446d)."
-  :x [ProcessCmd ProcessOutput ProcessError ProcessReceipt cmd with-cwd with-timeout with-stdin exec! run-simple! make-process-receipt render-receipt estimate-tokens receipt-tokens])
+  :x [ProcessCmd
+      ProcessOutput
+      ProcessError
+      ProcessReceipt
+      ProcessSession
+      cmd
+      with-cwd
+      with-timeout
+      with-stdin
+      exec!
+      run-simple!
+      session-spawn!
+      session-send-input!
+      session-input!
+      session-poll-tail!
+      session-tail!
+      session-emit-stdout!
+      session-emit-stderr!
+      session-kill!
+      session-check-deadlock
+      session-tick-idle
+      session-extend-timeout
+      session-set-timeout
+      make-process-receipt
+      render-receipt
+      estimate-tokens
+      receipt-tokens])
 
 (dfs ProcessCmd
   (:f bin        String              "Executable binary path or system command")
@@ -22,6 +48,19 @@
   (:f peak-rss-mb Int64  "Peak memory resident set size in megabytes")
   (:f spool-path  String "Filesystem path to ephemeral disk spool")
   (:f summary     String "Compact diagnostic string (<100 tokens, errors only)"))
+
+(dfs ProcessSession
+  (:f id String "Unique session identifier e.g. sess-1")
+  (:f pid Int64 "Operating system process identifier")
+  (:f state String "Session lifecycle state: active, idle, or terminated")
+  (:f cmd ProcessCmd "Underlying command specification")
+  (:f stdin-buffer (List String) "Pending or injected standard input lines")
+  (:f stdout-buffer (List String) "Captured standard output lines in FIFO order")
+  (:f stderr-buffer (List String) "Captured standard error lines in FIFO order")
+  (:f exit-code (Option Int64) "Termination exit status code if finished")
+  (:f idle-ms Int64 "Milliseconds elapsed since last stdin or stdout event")
+  (:f timeout-ms Int64 "Configurable watchdog timeout ceiling in milliseconds")
+  (:f deadlock-detected Bool "True if process reached idle deadlock threshold"))
 
 (dfe ProcessError
   (:c not-found         [(bin String)]              "Command binary was not found")
@@ -114,4 +153,163 @@
 (df receipt-tokens [(r ProcessReceipt)] -> Int64
   :d "Estimates total BPE tokens for a rendered ProcessReceipt."
   (estimate-tokens (render-receipt r)))
+
+(df ! session-spawn! [(id String) (c ProcessCmd)] -> ProcessSession
+  :d "Initializes an interactive process session bound to a ProcessCmd."
+  (ProcessSession
+    :id id
+    :pid 1001
+    :state "active"
+    :cmd c
+    :stdin-buffer (list)
+    :stdout-buffer (list)
+    :stderr-buffer (list)
+    :exit-code (none)
+    :idle-ms 0
+    :timeout-ms (.-timeout-ms c)
+    :deadlock-detected false))
+
+(df ! session-send-input! [(s ProcessSession) (input String)] -> ProcessSession
+  :d "Injects standard input data into an active session resetting idle timer."
+  (if (= (.-state s) "terminated")
+      s
+      (ProcessSession
+        :id (.-id s)
+        :pid (.-pid s)
+        :state "active"
+        :cmd (.-cmd s)
+        :stdin-buffer (list-append (.-stdin-buffer s) (list input))
+        :stdout-buffer (.-stdout-buffer s)
+        :stderr-buffer (.-stderr-buffer s)
+        :exit-code (.-exit-code s)
+        :idle-ms 0
+        :timeout-ms (.-timeout-ms s)
+        :deadlock-detected false)))
+
+(df ! session-input! [(s ProcessSession) (input String)] -> ProcessSession
+  :d "Short alias for session-send-input!."
+  (session-send-input! s input))
+
+(df ! session-emit-stdout! [(s ProcessSession) (line String)] -> ProcessSession
+  :d "Appends a line of captured stdout to session buffer and resets idle timer."
+  (ProcessSession
+    :id (.-id s)
+    :pid (.-pid s)
+    :state (.-state s)
+    :cmd (.-cmd s)
+    :stdin-buffer (.-stdin-buffer s)
+    :stdout-buffer (list-append (.-stdout-buffer s) (list line))
+    :stderr-buffer (.-stderr-buffer s)
+    :exit-code (.-exit-code s)
+    :idle-ms 0
+    :timeout-ms (.-timeout-ms s)
+    :deadlock-detected false))
+
+(df ! session-emit-stderr! [(s ProcessSession) (line String)] -> ProcessSession
+  :d "Appends a line of captured stderr to session buffer."
+  (ProcessSession
+    :id (.-id s)
+    :pid (.-pid s)
+    :state (.-state s)
+    :cmd (.-cmd s)
+    :stdin-buffer (.-stdin-buffer s)
+    :stdout-buffer (.-stdout-buffer s)
+    :stderr-buffer (list-append (.-stderr-buffer s) (list line))
+    :exit-code (.-exit-code s)
+    :idle-ms 0
+    :timeout-ms (.-timeout-ms s)
+    :deadlock-detected false))
+
+(df session-poll-tail! [(s ProcessSession) (n Int64)] -> (List String)
+  :d "Retrieves the trailing n lines from the session stdout buffer."
+  (let [(buf (.-stdout-buffer s))
+        (cnt (list-length buf))]
+    (cond
+      ((<= n 0) (list))
+      ((>= n cnt) buf)
+      (:else (option-or (list-slice buf (- cnt n) cnt) (list))))))
+
+(df session-tail! [(s ProcessSession) (n Int64)] -> (List String)
+  :d "Short alias for session-poll-tail!."
+  (session-poll-tail! s n))
+
+(df ! session-kill! [(s ProcessSession) (sig String)] -> ProcessSession
+  :d "Terminates an interactive session with the specified signal."
+  (let [(code (if (= sig "SIGKILL") 137 (if (= sig "SIGTERM") 143 1)))]
+    (ProcessSession
+      :id (.-id s)
+      :pid (.-pid s)
+      :state "terminated"
+      :cmd (.-cmd s)
+      :stdin-buffer (.-stdin-buffer s)
+      :stdout-buffer (.-stdout-buffer s)
+      :stderr-buffer (.-stderr-buffer s)
+      :exit-code (some code)
+      :idle-ms (.-idle-ms s)
+      :timeout-ms (.-timeout-ms s)
+      :deadlock-detected false)))
+
+(df session-check-deadlock [(s ProcessSession) (idle-ceiling Int64)] -> ProcessSession
+  :d "Audits session idle duration against deadlock ceiling setting deadlock flag if breached."
+  (let [(cap (if (<= idle-ceiling 0)
+               (if (<= (.-timeout-ms s) 0) 10000 (.-timeout-ms s))
+               idle-ceiling))
+        (breached (>= (.-idle-ms s) cap))]
+    (ProcessSession
+      :id (.-id s)
+      :pid (.-pid s)
+      :state (if breached "idle" (.-state s))
+      :cmd (.-cmd s)
+      :stdin-buffer (.-stdin-buffer s)
+      :stdout-buffer (.-stdout-buffer s)
+      :stderr-buffer (.-stderr-buffer s)
+      :exit-code (.-exit-code s)
+      :idle-ms (.-idle-ms s)
+      :timeout-ms (.-timeout-ms s)
+      :deadlock-detected breached)))
+
+(df session-tick-idle [(s ProcessSession) (delta-ms Int64)] -> ProcessSession
+  :d "Advances session idle duration counter by elapsed milliseconds."
+  (ProcessSession
+    :id (.-id s)
+    :pid (.-pid s)
+    :state (.-state s)
+    :cmd (.-cmd s)
+    :stdin-buffer (.-stdin-buffer s)
+    :stdout-buffer (.-stdout-buffer s)
+    :stderr-buffer (.-stderr-buffer s)
+    :exit-code (.-exit-code s)
+    :idle-ms (+ (.-idle-ms s) delta-ms)
+    :timeout-ms (.-timeout-ms s)
+    :deadlock-detected (.-deadlock-detected s)))
+
+(df session-extend-timeout [(s ProcessSession) (extend-ms Int64)] -> ProcessSession
+  :d "Dynamically extends watchdog timeout ceiling on active session resetting idle timer."
+  (ProcessSession
+    :id (.-id s)
+    :pid (.-pid s)
+    :state (.-state s)
+    :cmd (.-cmd s)
+    :stdin-buffer (.-stdin-buffer s)
+    :stdout-buffer (.-stdout-buffer s)
+    :stderr-buffer (.-stderr-buffer s)
+    :exit-code (.-exit-code s)
+    :idle-ms 0
+    :timeout-ms (+ (.-timeout-ms s) extend-ms)
+    :deadlock-detected false))
+
+(df session-set-timeout [(s ProcessSession) (new-ms Int64)] -> ProcessSession
+  :d "Explicitly updates watchdog timeout ceiling on active session resetting idle timer."
+  (ProcessSession
+    :id (.-id s)
+    :pid (.-pid s)
+    :state (.-state s)
+    :cmd (.-cmd s)
+    :stdin-buffer (.-stdin-buffer s)
+    :stdout-buffer (.-stdout-buffer s)
+    :stderr-buffer (.-stderr-buffer s)
+    :exit-code (.-exit-code s)
+    :idle-ms 0
+    :timeout-ms new-ms
+    :deadlock-detected false))
 

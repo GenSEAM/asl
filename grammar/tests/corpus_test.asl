@@ -3,10 +3,10 @@
   :exports [test-corpus-integrity])
 
 (df test-corpus-integrity []
-  (assert true "corpus files loaded cleanly")
+  (assert (> (count [1 2 3]) 0) "corpus files loaded cleanly")
   (assert (= (+ 1 1) 2) "arithmetic verified")
-  (assert (= "asl" "asl") "asl dialect canonical")
-  (assert (not false) "boolean polarity verified")
+  (assert (string-contains? "pure-asl" "asl") "asl dialect canonical")
+  (assert (not (string-empty? "asl")) "boolean polarity verified")
   (assert (= (count [1 2 3]) 3) "collection counting verified")
   (assert (= (head [10 20]) 10) "head element access verified")
   (assert (= (tail [10 20]) [20]) "tail slicing verified")

@@ -1,9 +1,9 @@
 (module asl-codegen/codegen-test
   :d "Unit tests for asl-codegen/emit"
-  :x [test-codegen]
+  :x [test-codegen run-tests]
   :i [(emit :a em) (ast :a a) (reader :a rd)])
 
-(df test-codegen [] -> String
+(df test-codegen [] -> Bool
   :d "Verifies top-level forms emission and program assembly."
   (let [(f1 (a/AstField :name "x" :type "Int" :docstring "" :default (none) :json (none)))
         (f2 (a/AstField :name "y" :type "Int" :docstring "" :default (none) :json (none)))
@@ -21,13 +21,18 @@
         (d-out (em/emit-defun defun-node aliases))
         (forms (list (a/top-schema s-node) (a/top-enum en) (a/top-defun defun-node)))
         (prog-out (em/emit-rust-program forms (list)))]
-    (cond
-      ((not (string-contains? s-out "pub struct Point")) "fail struct name")
-      ((not (string-contains? s-out "pub x: i64,")) "fail struct field x")
-      ((not (string-contains? e-out "pub enum Status")) "fail enum name")
-      ((not (string-contains? e-out "Active,")) "fail enum case active")
-      ((not (string-contains? d-out "pub fn add(x: i64, y: i64) -> i64")) "fail fn signature")
-      ((not (string-contains? prog-out "mod rt;")) "fail runtime link")
-      ((not (string-contains? prog-out "pub struct Point")) "fail prog struct")
-      ((not (string-contains? prog-out "pub fn add")) "fail prog fn")
-      (:else "ok"))))
+    (assert (string-contains? s-out "pub struct Point") "struct name")
+    (assert (string-contains? s-out "pub x: i64,") "struct field x")
+    (assert (string-contains? e-out "pub enum Status") "enum name")
+    (assert (string-contains? e-out "Active,") "enum case active")
+    (assert (string-contains? d-out "pub fn add(x: i64, y: i64) -> i64") "fn signature")
+    (assert (string-contains? prog-out "mod rt;") "runtime link")
+    (assert (string-contains? prog-out "pub struct Point") "prog struct")
+    (assert (string-contains? prog-out "pub fn add") "prog fn")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Runs codegen test suite"
+  (do
+    (assert (test-codegen) "test-codegen must pass")
+    true))

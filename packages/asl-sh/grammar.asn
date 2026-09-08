@@ -22,16 +22,19 @@
     (:sym :name "LockVerdict" :kind :type :tokens 1)
     (:sym :name "LogEntry" :kind :type :tokens 1)
     (:sym :name "LogLevel" :kind :type :tokens 1)
+    (:sym :name "OutputSkeleton" :kind :type :tokens 1)
     (:sym :name "Pipeline" :kind :type :tokens 1)
     (:sym :name "PortVerdict" :kind :type :tokens 1)
     (:sym :name "ProcessCmd" :kind :type :tokens 1)
     (:sym :name "ProcessError" :kind :type :tokens 1)
     (:sym :name "ProcessOutput" :kind :type :tokens 1)
     (:sym :name "ProcessReceipt" :kind :type :tokens 1)
+    (:sym :name "ProcessSession" :kind :type :tokens 1)
     (:sym :name "ReducedStream" :kind :type :tokens 1)
     (:sym :name "ReductionConfig" :kind :type :tokens 1)
     (:sym :name "RingBuffer" :kind :type :tokens 1)
     (:sym :name "RssVerdict" :kind :type :tokens 1)
+    (:sym :name "SkeletonSection" :kind :type :tokens 1)
     (:sym :name "StepDeadlineVerdict" :kind :type :tokens 1)
     (:sym :name "StreamFrame" :kind :type :tokens 1)
     (:sym :name "SupervisorVerdict" :kind :type :tokens 1)
@@ -71,6 +74,10 @@
     (:sym :name "run-simple!" :kind :fn :tokens 2)
     (:sym :name "run-tests" :kind :fn :tokens 2)
     (:sym :name "run-tests!" :kind :fn :tokens 2)
+    (:sym :name "session-input!" :kind :fn :tokens 2)
+    (:sym :name "session-kill!" :kind :fn :tokens 2)
+    (:sym :name "session-spawn!" :kind :fn :tokens 2)
+    (:sym :name "session-tail!" :kind :fn :tokens 2)
     (:sym :name "spool-truncate" :kind :fn :tokens 2)
     (:sym :name "spool-unlink" :kind :fn :tokens 2)
     (:sym :name "spool-write" :kind :fn :tokens 2)
@@ -103,10 +110,14 @@
           :rationale "Cannot be reduced to 'extract-length': explicitly scopes integer extraction to Content-Length protocol headers")
     (:sym :name "extract-error-summary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-summary': scopes extraction specifically to diagnostic errors and failure frames")
+    (:sym :name "extract-output-skeleton" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'output-skeleton': parses stream lines into section outlines and diagnostics")
     (:sym :name "extract-python-frame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-frame': explicitly scopes stack frame extraction to Python traceback syntax")
     (:sym :name "format-daemon-table" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-table': distinguishes APM daemon process inspection table rendering from general text tables")
+    (:sym :name "format-output-skeleton" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'format-skeleton': renders structural ASCII outline table from OutputSkeleton")
     (:sym :name "generate-spool-path" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
     (:sym :name ":git-commit" :kind :type :tokens 2
@@ -183,6 +194,24 @@
           :rationale "Cannot be reduced to 'ring-string': distinguishes string rendering from ring buffer identifier")
     (:sym :name "scan-stream-diagnostics" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'scan-stream': distinguishes diagnostic scanning from general stream reading or byte windowing")
+    (:sym :name "session-check-deadlock" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'check-deadlock': evaluates deadlock specifically for an interactive session instance")
+    (:sym :name "session-emit-stderr!" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'session-stderr': appends streaming standard error chunks to session buffer")
+    (:sym :name "session-emit-stdout!" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'session-stdout': appends streaming standard output chunks to session buffer")
+    (:sym :name "session-poll-tail!" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'session-tail': drains unconsumed output delta lines since last cursor poll")
+    (:sym :name "session-send-input!" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'session-input': injects streaming stdin input into active running process session")
+    (:sym :name "session-tick-idle" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'session-tick': advances idle timeout clock on quiet interactive session")
+    (:sym :name "session-extend-timeout" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'extend-timeout': dynamically pushes watchdog ceiling on active session")
+    (:sym :name "session-set-timeout" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'set-timeout': explicitly updates watchdog ceiling on active session")
+    (:sym :name "skeleton-has-errors?" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'has-errors?': evaluates error predicates specifically on OutputSkeleton records")
     (:sym :name "spool-is-unlinked?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-unlinked?': disambiguates disk spool auto-unlink predicate from general file unlinking")
     (:sym :name "test-ansi-stripping" :kind :fn :tokens 3

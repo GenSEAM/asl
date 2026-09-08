@@ -1,12 +1,12 @@
 (module asl-checker/unify-test
   :d "Unit tests for asl-checker/unify"
-  :x [test-unify]
+  :x [test-unify run-tests]
   :i [(types :a ty) (unify :a u)])
 
 (df int-type [] -> ty/Type
   (ty/ty-con "Int64" (list) (none) (none)))
 
-(df assert-unify-equal [(t1 ty/Type) (t2 ty/Type) (s0 (Map Int64 ty/Type)) (v ty/Type) (expected ty/Type)] -> Bool
+(df check-unify-equal [(t1 ty/Type) (t2 ty/Type) (s0 (Map Int64 ty/Type)) (v ty/Type) (expected ty/Type)] -> Bool
   (mt (u/unify t1 t2 s0)
     ((u/u-err _ _) false)
     ((u/u-ok s1) (u/type-equal? (u/apply-subst s1 v) expected))))
@@ -14,7 +14,7 @@
 (df test-bind [(s0 (Map Int64 ty/Type))] -> Bool
   (let [(v1 (ty/ty-var 1 "any"))
         (c-i64 (int-type))]
-    (assert-unify-equal v1 c-i64 s0 v1 c-i64)))
+    (check-unify-equal v1 c-i64 s0 v1 c-i64)))
 
 (df test-occurs [(s0 (Map Int64 ty/Type))] -> Bool
   (let [(v1 (ty/ty-var 1 "any"))
@@ -52,7 +52,7 @@
         (c-i64 (int-type))
         (fn-v1 (ty/ty-fun (list v1) v1))
         (fn-i64 (ty/ty-fun (list c-i64) c-i64))]
-    (assert-unify-equal fn-v1 fn-i64 s0 v1 c-i64)))
+    (check-unify-equal fn-v1 fn-i64 s0 v1 c-i64)))
 
 (df test-reject-fn [(s0 (Map Int64 ty/Type))] -> Bool
   (let [(v-num (ty/ty-var 3 "num"))
@@ -62,16 +62,21 @@
       ((u/u-ok _) false)
       ((u/u-err _ _) true))))
 
-(df test-unify [] -> String
+(df test-unify [] -> Bool
   :d "Unit tests for unify"
   (let [(s0 (map-empty))]
-    (cond
-      ((not (test-bind s0)) "fail bind metavar")
-      ((not (test-occurs s0)) "fail occurs check")
-      ((not (test-narrow-any-num)) "fail kind narrow any num")
-      ((not (test-narrow-num-int)) "fail kind narrow num int")
-      ((not (test-num-mismatch-true s0)) "fail numeric mismatch flag true")
-      ((not (test-num-mismatch-false s0)) "fail numeric mismatch flag false")
-      ((not (test-hof s0)) "fail hof unification")
-      ((not (test-reject-fn s0)) "fail reject fn for num metavar")
-      (:else "ok"))))
+    (assert (test-bind s0) "fail bind metavar")
+    (assert (test-occurs s0) "fail occurs check")
+    (assert (test-narrow-any-num) "fail kind narrow any num")
+    (assert (test-narrow-num-int) "fail kind narrow num int")
+    (assert (test-num-mismatch-true s0) "fail numeric mismatch flag true")
+    (assert (test-num-mismatch-false s0) "fail numeric mismatch flag false")
+    (assert (test-hof s0) "fail hof unification")
+    (assert (test-reject-fn s0) "fail reject fn for num metavar")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Runs unify test suite"
+  (do
+    (assert (test-unify) "test-unify must pass")
+    true))

@@ -1,7 +1,7 @@
 (module asl-registry/tests/registry-test
   :d "Unit test suite for universal package registry and version inspector."
   :x [test-parse-specifier test-semver-comparison test-outdated-evaluation
-      test-formatting main]
+      test-formatting run-tests main]
   :i [(regtypes :a ty) (version :a ver) (registry :a reg)])
 
 (df test-parse-specifier [] -> Bool
@@ -9,22 +9,25 @@
   (let [(s1 (reg/parse-package-specifier "npm:kysely@^0.27.0"))
         (s2 (reg/parse-package-specifier "pypi:requests"))
         (s3 (reg/parse-package-specifier "crates:serde@1.0.197"))]
-    (and (= (.-name s1) "kysely")
-    (and (= (ty/eco-to-string (.-eco s1)) "npm")
-    (and (= (.-version-req s1) "^0.27.0")
-    (and (= (.-name s2) "requests")
-    (and (= (ty/eco-to-string (.-eco s2)) "pypi")
-    (and (= (.-name s3) "serde")
-    (and (= (ty/eco-to-string (.-eco s3)) "crates")
-         (= (.-version-req s3) "1.0.197"))))))))))
+    (assert (= (.-name s1) "kysely") "s1 name")
+    (assert (= (ty/eco-to-string (.-eco s1)) "npm") "s1 eco")
+    (assert (= (.-version-req s1) "^0.27.0") "s1 version-req")
+    (assert (= (.-name s2) "requests") "s2 name")
+    (assert (= (ty/eco-to-string (.-eco s2)) "pypi") "s2 eco")
+    (assert (= (.-name s3) "serde") "s3 name")
+    (assert (= (ty/eco-to-string (.-eco s3)) "crates") "s3 eco")
+    (assert (= (.-version-req s3) "1.0.197") "s3 version-req")
+    true))
 
 (df test-semver-comparison [] -> Bool
   :d "Tests semantic version ordering and comparison."
-  (and (= (ver/compare-semver "0.1.0" "0.2.0") 1)
-  (and (= (ver/compare-semver "1.2.3" "1.2.3") 0)
-  (and (= (ver/compare-semver "1.0.0" "2.0.0") -1)
-  (and (= (ver/compare-semver "v1.5.0" "1.4.9") 1)
-       (= (ver/compare-semver "0.3.1" "0.3.2") -1))))))
+  (do
+    (assert (= (ver/compare-semver "0.1.0" "0.2.0") -1) "0.1.0 < 0.2.0")
+    (assert (= (ver/compare-semver "1.2.3" "1.2.3") 0) "1.2.3 == 1.2.3")
+    (assert (= (ver/compare-semver "1.0.0" "2.0.0") -1) "1.0.0 < 2.0.0")
+    (assert (= (ver/compare-semver "v1.5.0" "1.4.9") 1) "1.5.0 > 1.4.9")
+    (assert (= (ver/compare-semver "0.3.1" "0.3.2") -1) "0.3.1 < 0.3.2")
+    true))
 
 (df test-outdated-evaluation [] -> Bool
   :d "Tests upgrade severity classification."
@@ -32,14 +35,15 @@
         (r2 (ver/evaluate-outdated "next" "14.0.0" "15.0.0"))
         (r3 (ver/evaluate-outdated "tokio" "1.35.0" "1.35.1"))
         (r4 (ver/evaluate-outdated "asl" "0.1.0" "0.1.0"))]
-    (and (.-outdated r1)
-    (and (= (.-severity r1) "minor")
-    (and (.-outdated r2)
-    (and (= (.-severity r2) "major")
-    (and (.-outdated r3)
-    (and (= (.-severity r3) "patch")
-    (and (not (.-outdated r4))
-         (= (.-severity r4) "current"))))))))))
+    (assert (.-outdated r1) "r1 outdated")
+    (assert (= (.-severity r1) "minor") "r1 minor")
+    (assert (.-outdated r2) "r2 outdated")
+    (assert (= (.-severity r2) "major") "r2 major")
+    (assert (.-outdated r3) "r3 outdated")
+    (assert (= (.-severity r3) "patch") "r3 patch")
+    (assert (not (.-outdated r4)) "r4 not outdated")
+    (assert (= (.-severity r4) "current") "r4 current")
+    true))
 
 (df test-formatting [] -> Bool
   :d "Tests summary and table markdown formatters."
@@ -55,20 +59,26 @@
                  :description "AgentScript Memory Matrix"
                  :capabilities (list "vector" "graph")))
         (tbl (reg/format-asl-registry-table (list entry)))]
-    (and (string-contains? summary "requests")
-    (and (string-contains? summary "v2.31.0")
-    (and (string-contains? rep "minor update available")
-    (and (string-contains? tbl "@genseam/asl-mem")
-         (string-contains? tbl "v0.1.0")))))))
+    (assert (string-contains? summary "requests") "summary requests")
+    (assert (string-contains? summary "v2.31.0") "summary v2.31.0")
+    (assert (string-contains? rep "minor update available") "rep minor")
+    (assert (string-contains? tbl "@genseam/asl-mem") "tbl asl-mem")
+    (assert (string-contains? tbl "v0.1.0") "tbl v0.1.0")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Runs all registry tests."
+  (do
+    (assert (test-parse-specifier) "test-parse-specifier must pass")
+    (assert (test-semver-comparison) "test-semver-comparison must pass")
+    (assert (test-outdated-evaluation) "test-outdated-evaluation must pass")
+    (assert (test-formatting) "test-formatting must pass")
+    true))
 
 (df ! main [(args (List Str))] -> (Result Unit IoError)
   :d "Main test runner entrypoint."
-  (let [(p1 (test-parse-specifier))
-        (p2 (test-semver-comparison))
-        (p3 (test-outdated-evaluation))
-        (p4 (test-formatting))]
-    (if (and p1 (and p2 (and p3 p4)))
-        (let [(unused-u (println "✓ ALL ASL REGISTRY TESTS PASSED"))]
-          (ok ()))
-        (let [(unused-e (eprintln "FAILED ASL REGISTRY TESTS"))]
-          (err (other))))))
+  (if (run-tests)
+      (let [(unused-u (println "✓ ALL ASL REGISTRY TESTS PASSED"))]
+        (ok ()))
+      (let [(unused-e (eprintln "FAILED ASL REGISTRY TESTS"))]
+        (err (other)))))

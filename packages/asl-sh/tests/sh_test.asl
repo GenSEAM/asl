@@ -1,6 +1,6 @@
 (module asl-sh/tests
   :d "Verification suite for AgentScript process automation and piping (@pcp:d-446d)."
-  :x [run-tests!]
+  :x [run-tests run-tests!]
   :i [(core/process :a proc)
       (core/log     :a log)
       (reducer      :a red)])
@@ -9,8 +9,9 @@
   :d "Verifies command constructor and field setters."
   (let [(c (proc/cmd "git" (list "status" "-s")))
         (c2 (proc/with-timeout c 2500))]
-    (and (= (.-bin c) "git")
-         (= (.-timeout-ms c2) 2500))))
+    (assert (= (.-bin c) "git") "cmd bin git")
+    (assert (= (.-timeout-ms c2) 2500) "timeout 2500")
+    true))
 
 (df test-log-formatter [] -> Bool
   :d "Verifies log entry rendering."
@@ -20,19 +21,27 @@
                  :timestamp 1700000000
                  :subsystem "worker"))
         (formatted (log/format-entry entry))]
-    (not (string-empty? formatted))))
+    (assert (not (string-empty? formatted)) "formatted log not empty")
+    true))
 
 (df test-reducer-integration [] -> Bool
   :d "Verifies stream reducer defaults and execution."
   (let [(cfg (red/default-config))
         (stream (red/reduce-text "test line"))]
-    (and (= (.-head-limit cfg) 500)
-         (= (.-reduced-line-count stream) 1))))
+    (assert (= (.-head-limit cfg) 500) "head limit 500")
+    (assert (= (.-reduced-line-count stream) 1) "reduced line count 1")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Runs all validation checks for asl-sh."
+  (do
+    (assert (test-command-builder) "test-command-builder must pass")
+    (assert (test-log-formatter) "test-log-formatter must pass")
+    (assert (test-reducer-integration) "test-reducer-integration must pass")
+    true))
 
 (df ! run-tests! [] -> (Result Unit String)
   :d "Runs all validation checks for asl-sh."
-  (if (and (test-command-builder)
-           (and (test-log-formatter)
-                (test-reducer-integration)))
+  (if (run-tests)
       (ok ())
       (err "asl-sh tests failed")))

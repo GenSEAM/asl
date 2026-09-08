@@ -34,7 +34,7 @@
                 (mt (list-head desc-lines)
                   ((none) true)
                   ((some dl)
-                   (let [(after-prefix (string-slice dl 12 (string-length dl)))]
+                   (let [(after-prefix (option-or (string-slice dl 12 (string-length dl)) ""))]
                      (not (string-contains? after-prefix ": "))))))))))
 
 (df validate-skill-frontmatter [(raw-text Str)] -> Bool

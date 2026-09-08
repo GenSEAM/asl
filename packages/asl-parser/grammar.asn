@@ -7,6 +7,7 @@
   :symbols [
     ;; 1-Token Baseline Types
     (:sym :name "AstField" :kind :type :tokens 1)
+    (:sym :name "BalanceResult" :kind :type :tokens 1)
     (:sym :name "ClosureHeads" :kind :type :tokens 1)
     (:sym :name "DefunNode" :kind :type :tokens 1)
     (:sym :name "EnumCase" :kind :type :tokens 1)
@@ -67,4 +68,10 @@
           :rationale "Cannot be reduced to 'token-name': disambiguates lexer token category names from identifier token literal strings")
     (:sym :name "validate-token-sequence" :kind :fn :tokens 3
           :rationale "Validates whether sequential token stream satisfies grammar trie transition constraints to terminal state")
+    (:sym :name "check-delimiter-balance" :kind :fn :tokens 3
+          :rationale "Computes structural delimiter balance and nesting across parens brackets and braces")
+    (:sym :name "is-delimiter-balanced?" :kind :fn :tokens 3
+          :rationale "Convenience predicate checking if source code has perfectly balanced delimiters")
+    (:sym :name "count-unclosed-parens" :kind :fn :tokens 3
+          :rationale "Returns count of unclosed open parentheses in source string for auto-repair and delimiter balancing")
   ])

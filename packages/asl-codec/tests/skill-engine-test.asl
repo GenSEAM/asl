@@ -1,6 +1,6 @@
 (module asl-codec/tests/skill-engine-test
   :d "Unit tests verifying ASN skill compilation, Markdown generation, and token compression."
-  :x []
+  :x [run-skill-engine-tests run-tests]
   :i [(asl-codec/skill-engine :a se)])
 
 (df run-skill-engine-tests [] -> Bool
@@ -17,10 +17,15 @@
         (md (se/emit-skill skill))
         (stub (se/emit-stub skill))
         (savings (se/calc-savings skill))]
-    (and (string-contains? md "name: asl-toolbelt")
-         (and (string-contains? md "description: >-\n  Universal ASL Code Intelligence: Triggers: \"where is X\", test: pass")
-              (and (string-contains? md "asl intel outline <file>")
-                   (and (string-contains? stub ":skill-stub")
-                        (> savings 50.0)))))))
+    (assert (string-contains? md "name: asl-toolbelt") "md must contain skill name")
+    (assert (string-contains? md "description: >-\n  Universal ASL Code Intelligence: Triggers: \"where is X\", test: pass") "md must contain description")
+    (assert (string-contains? md "asl intel outline <file>") "md must contain tool trigger")
+    (assert (string-contains? stub ":skill-stub") "stub must contain :skill-stub")
+    (assert (> savings 50.0) "savings must exceed 50%")
+    true))
 
-(run-skill-engine-tests)
+(df run-tests [] -> Bool
+  :d "Runs skill engine test suite"
+  (do
+    (assert (run-skill-engine-tests) "run-skill-engine-tests must pass")
+    true))

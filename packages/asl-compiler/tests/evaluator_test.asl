@@ -18,10 +18,11 @@
         (v-true (ev/eval-sexpr (rd/make-atom "true") env))
         (v-false (ev/eval-sexpr (rd/make-atom "false") env))
         (v-null (ev/eval-sexpr (rd/make-atom "null") env))]
-    (and (mt v-int ((ev/val-int n) (= n 42)) (_ false))
-         (and (mt v-true ((ev/val-bool b) b) (_ false))
-              (and (mt v-false ((ev/val-bool b) (not b)) (_ false))
-                   (mt v-null ((ev/val-null) true) (_ false)))))))
+    (assert (mt v-int ((ev/val-int n) (= n 42)) (_ false)) "int literal")
+    (assert (mt v-true ((ev/val-bool b) b) (_ false)) "true literal")
+    (assert (mt v-false ((ev/val-bool b) (not b)) (_ false)) "false literal")
+    (assert (mt v-null ((ev/val-null) true) (_ false)) "null literal")
+    true))
 
 (df test-eval-arithmetic [] -> Bool
   :d "Verifies evaluation of arithmetic builtins (+, -, *, /, mod)."
@@ -36,11 +37,12 @@
         (r-mul (ev/eval-sexpr mul-expr env))
         (r-div (ev/eval-sexpr div-expr env))
         (r-mod (ev/eval-sexpr mod-expr env))]
-    (and (mt r-add ((ev/val-int n) (= n 30)) (_ false))
-         (and (mt r-sub ((ev/val-int n) (= n 35)) (_ false))
-              (and (mt r-mul ((ev/val-int n) (= n 42)) (_ false))
-                   (and (mt r-div ((ev/val-int n) (= n 25)) (_ false))
-                        (mt r-mod ((ev/val-int n) (= n 2)) (_ false))))))))
+    (assert (mt r-add ((ev/val-int n) (= n 30)) (_ false)) "add")
+    (assert (mt r-sub ((ev/val-int n) (= n 35)) (_ false)) "sub")
+    (assert (mt r-mul ((ev/val-int n) (= n 42)) (_ false)) "mul")
+    (assert (mt r-div ((ev/val-int n) (= n 25)) (_ false)) "div")
+    (assert (mt r-mod ((ev/val-int n) (= n 2)) (_ false)) "mod")
+    true))
 
 (df test-eval-comparison [] -> Bool
   :d "Verifies evaluation of comparison operators (=, !=, <, >=)."
@@ -53,10 +55,11 @@
         (r-neq (ev/eval-sexpr neq-expr env))
         (r-lt (ev/eval-sexpr lt-expr env))
         (r-gte (ev/eval-sexpr gte-expr env))]
-    (and (mt r-eq ((ev/val-bool b) b) (_ false))
-         (and (mt r-neq ((ev/val-bool b) b) (_ false))
-              (and (mt r-lt ((ev/val-bool b) b) (_ false))
-                   (mt r-gte ((ev/val-bool b) b) (_ false)))))))
+    (assert (mt r-eq ((ev/val-bool b) b) (_ false)) "eq")
+    (assert (mt r-neq ((ev/val-bool b) b) (_ false)) "neq")
+    (assert (mt r-lt ((ev/val-bool b) b) (_ false)) "lt")
+    (assert (mt r-gte ((ev/val-bool b) b) (_ false)) "gte")
+    true))
 
 (df test-eval-logic [] -> Bool
   :d "Verifies evaluation of boolean logic builtins (and, or)."
@@ -65,8 +68,9 @@
         (or-expr (rd/make-list (list (rd/make-atom "or") (rd/make-atom "false") (rd/make-atom "true"))))
         (r-and (ev/eval-sexpr and-expr env))
         (r-or (ev/eval-sexpr or-expr env))]
-    (and (mt r-and ((ev/val-bool b) (not b)) (_ false))
-         (mt r-or ((ev/val-bool b) b) (_ false)))))
+    (assert (mt r-and ((ev/val-bool b) (not b)) (_ false)) "and")
+    (assert (mt r-or ((ev/val-bool b) b) (_ false)) "or")
+    true))
 
 (df test-eval-strings [] -> Bool
   :d "Verifies evaluation of string operations (str-concat, str-len, str-contains?)."
@@ -77,9 +81,10 @@
         (r-cat (ev/eval-sexpr cat-expr env))
         (r-len (ev/eval-sexpr len-expr env))
         (r-cont (ev/eval-sexpr cont-expr env))]
-    (and (mt r-cat ((ev/val-str s) (= s "hello world")) (_ false))
-         (and (mt r-len ((ev/val-int n) (= n 8)) (_ false))
-              (mt r-cont ((ev/val-bool b) b) (_ false))))))
+    (assert (mt r-cat ((ev/val-str s) (= s "hello world")) (_ false)) "cat")
+    (assert (mt r-len ((ev/val-int n) (= n 8)) (_ false)) "len")
+    (assert (mt r-cont ((ev/val-bool b) b) (_ false)) "cont")
+    true))
 
 (df test-eval-env-binding [] -> Bool
   :d "Verifies environment binding creation and lexical lookup."
@@ -90,9 +95,10 @@
         (look-x (ev/env-lookup b2 "x"))
         (look-y (ev/env-lookup b2 "y"))
         (look-z (ev/env-lookup b2 "z"))]
-    (and (mt look-x ((some (ev/val-int v)) (= v 100)) (_ false))
-         (and (mt look-y ((some (ev/val-int v)) (= v 200)) (_ false))
-              (mt look-z ((none) true) (_ false))))))
+    (assert (mt look-x ((some (ev/val-int v)) (= v 100)) (_ false)) "lookup x")
+    (assert (mt look-y ((some (ev/val-int v)) (= v 200)) (_ false)) "lookup y")
+    (assert (mt look-z ((none) true) (_ false)) "lookup z none")
+    true))
 
 (df test-eval-assert [] -> Bool
   :d "Verifies falsifiable assertion semantics: truthy returns ok, falsy returns val-error."
@@ -101,11 +107,10 @@
         (fail-expr (rd/make-list (list (rd/make-atom "assert") (rd/make-atom "false") (rd/make-atom "\"expected failure\""))))
         (r-pass (ev/eval-sexpr pass-expr env))
         (r-fail (ev/eval-sexpr fail-expr env))]
-    (and (ev/eval-result-is-ok? r-pass)
-         (and (not (ev/eval-result-is-ok? r-fail))
-              (mt r-fail
-                ((ev/val-error msg) (= msg "expected failure"))
-                (_ false))))))
+    (assert (ev/eval-result-is-ok? r-pass) "r-pass ok")
+    (assert (not (ev/eval-result-is-ok? r-fail)) "r-fail not ok")
+    (assert (mt r-fail ((ev/val-error msg) (= msg "expected failure")) (_ false)) "r-fail msg")
+    true))
 
 (df test-eval-if-branch [] -> Bool
   :d "Verifies branch selection in conditional if forms."
@@ -114,16 +119,19 @@
         (else-expr (rd/make-list (list (rd/make-atom "if") (rd/make-atom "false") (rd/make-atom "1") (rd/make-atom "2"))))
         (r-then (ev/eval-sexpr then-expr env))
         (r-else (ev/eval-sexpr else-expr env))]
-    (and (mt r-then ((ev/val-int n) (= n 1)) (_ false))
-         (mt r-else ((ev/val-int n) (= n 2)) (_ false)))))
+    (assert (mt r-then ((ev/val-int n) (= n 1)) (_ false)) "then branch")
+    (assert (mt r-else ((ev/val-int n) (= n 2)) (_ false)) "else branch")
+    true))
 
 (df run-tests [] -> Bool
   :d "Runs all pure AgentScript evaluator engine test suites."
-  (and (test-eval-literals)
-       (and (test-eval-arithmetic)
-            (and (test-eval-comparison)
-                 (and (test-eval-logic)
-                      (and (test-eval-strings)
-                           (and (test-eval-env-binding)
-                                (and (test-eval-assert)
-                                     (test-eval-if-branch)))))))))
+  (do
+    (assert (test-eval-literals) "test-eval-literals must pass")
+    (assert (test-eval-arithmetic) "test-eval-arithmetic must pass")
+    (assert (test-eval-comparison) "test-eval-comparison must pass")
+    (assert (test-eval-logic) "test-eval-logic must pass")
+    (assert (test-eval-strings) "test-eval-strings must pass")
+    (assert (test-eval-env-binding) "test-eval-env-binding must pass")
+    (assert (test-eval-assert) "test-eval-assert must pass")
+    (assert (test-eval-if-branch) "test-eval-if-branch must pass")
+    true))

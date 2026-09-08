@@ -10,47 +10,52 @@
 (df test-packages-catalog [] -> Bool
   :d "Validates packages catalog structure and count"
   (let [(pkgs (pkg/package-catalog))]
-    (and (>= (list-length pkgs) 10)
-         true)))
+    (assert (>= (list-length pkgs) 10) "Packages catalog must have at least 10 entries")
+    true))
 
 (df test-plugins-catalog [] -> Bool
   :d "Validates plugins catalog structure and count"
   (let [(plugins (plg/plugin-catalog))]
-    (and (>= (list-length plugins) 5)
-         true)))
+    (assert (>= (list-length plugins) 5) "Plugins catalog must have at least 5 entries")
+    true))
 
 (df test-skills-catalog [] -> Bool
   :d "Validates skills catalog structure and count"
   (let [(skills (skl/skill-catalog))]
-    (and (>= (list-length skills) 5)
-         true)))
+    (assert (>= (list-length skills) 5) "Skills catalog must have at least 5 entries")
+    true))
 
 (df test-version-info [] -> Bool
   :d "Validates version information and download endpoints"
   (let [(v (ver/version-info))]
-    (and (not (string-empty? (.-version v)))
-         (= (.-channel v) "stable"))))
+    (assert (not (string-empty? (.-version v))) "Version must not be empty")
+    (assert (= (.-channel v) "stable") "Channel must be stable")
+    true))
 
 (df test-installer-config [] -> Bool
   :d "Validates installer parameters and target binaries"
   (let [(cfg (inst/installer-config))]
-    (and (= (.-cli_name cfg) "asl")
-         (string-contains? (.-repo_url cfg) "github.com"))))
+    (assert (= (.-cli_name cfg) "asl") "CLI name must be asl")
+    (assert (string-contains? (.-repo_url cfg) "github.com") "Repo url must contain github.com")
+    true))
 
 (df test-installer-script-generation [] -> Bool
   :d "Validates pure ASL generation of POSIX Bash installer with automatic PATH setup"
   (let [(script (inst/generate-install-script))]
-    (and (string-contains? script "#!/bin/bash")
-         (and (string-contains? script "export PATH=")
-              (and (string-contains? script ".local/bin/asl")
-                   (and (string-contains? script ".zshrc")
-                        (string-contains? script ".bashrc")))))))
+    (assert (string-contains? script "#!/bin/bash") "Script must contain bash shebang")
+    (assert (string-contains? script "export PATH=") "Script must export PATH")
+    (assert (string-contains? script ".local/bin/asl") "Script must contain .local/bin/asl")
+    (assert (string-contains? script ".zshrc") "Script must configure .zshrc")
+    (assert (string-contains? script ".bashrc") "Script must configure .bashrc")
+    true))
 
 (df run-tests [] -> Bool
   :d "Runs all generator model unit tests"
-  (and (test-packages-catalog)
-       (and (test-plugins-catalog)
-            (and (test-skills-catalog)
-                 (and (test-version-info)
-                      (and (test-installer-config)
-                           (test-installer-script-generation)))))))
+  (do
+    (assert (test-packages-catalog) "test-packages-catalog must pass")
+    (assert (test-plugins-catalog) "test-plugins-catalog must pass")
+    (assert (test-skills-catalog) "test-skills-catalog must pass")
+    (assert (test-version-info) "test-version-info must pass")
+    (assert (test-installer-config) "test-installer-config must pass")
+    (assert (test-installer-script-generation) "test-installer-script-generation must pass")
+    true))

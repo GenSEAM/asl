@@ -1,22 +1,21 @@
-# Comparative End-to-End Benchmark Report: ASL Shrody Migration
+# Comparative End-to-End Benchmark Report: ASL Eddy Migration
 
-> **Reference Specification:** [`.plans/shrody-asl-migration/PLAN.md`](file://.plans/shrody-asl-migration/PLAN.md) (Items 6 & 7)  
-> **Target Milestone:** `shrody-benchmark-e2e` in [`master-unified-ecosystem-v1`](file://.plans/PHASES.md)  
-> **Target Package:** [`packages/asl-shrody`](file://packages/asl-shrody)  
-> **Source Repository Reference:** [`/Users/purplelephant/projects/shrody`](file:///Users/purplelephant/projects/shrody)  
-> **Evaluation Script:** [`packages/asl-shrody/benchmark/run.js`](file://packages/asl-shrody/benchmark/run.js)  
+> **Reference Specification:** [`ai-docs/constitution.yaml`](file://ai-docs/constitution.yaml)  
+> **Target Milestone:** `eddy-benchmark-e2e` in [`asl/ROADMAP.md`](file://asl/ROADMAP.md)  
+> **Target Package:** [`packages/asl-eddie`](file://packages/asl-eddie)  
+> **Evaluation Script:** [`packages/asl-eddie/benchmark/run.js`](file://packages/asl-eddie/benchmark/run.js)  
 
 ---
 
 ## 1. Executive Summary
 
-This report documents the empirical comparative end-to-end benchmark results between legacy **Shrody** (monolithic Node.js runtime hosting ONNX Runtime, HuggingFace Transformers, React 19, and Ink CLI) and the migrated **AgentScript (ASL) Shrody** micro-harness.
+This report documents the empirical comparative end-to-end benchmark results between legacy **Node Runtime** (monolithic Node.js runtime hosting ONNX Runtime, HuggingFace Transformers, React 19, and Ink CLI) and the migrated **AgentScript (ASL) Agent Eddy** micro-harness.
 
-The benchmark demonstrates definitive resolution of the four architectural debt vectors that compromised Shrody:
+The benchmark demonstrates definitive resolution of the four architectural debt vectors that compromised legacy architectures:
 1. **Multi-Second Process Launch Lag:** Cut by **>98%** (from ~2,480 ms down to **0.02 ms** in-process, **37.5 ms** subprocess launch).
 2. **Out-of-Memory (OOM) Crashes:** Peak agent execution memory is strictly bounded to **5.01 MB** (well under the 24 MB ceiling), with pure ASL isolates operating at **854 KB** (ceiling: 16 MB). Total process RSS dropped by **95.9%** (from ~1,200 MB down to **49.3 MB**).
 3. **Token Bloat in Agentic Loops:** S-expression tool calling (`asl-toolcall`) achieves a **72.7% token reduction** over verbose JSON Schema definitions and invocations (1,016 tokens down to 297 tokens under OpenAI `cl100k_base` and `o200k_base`).
-4. **Interactive Permission Prompt Spam:** Manifest-driven capability sandboxing completely eliminates user prompts for pre-authorized workspace and worktree paths (**0 prompts vs 14 prompts per errand** in legacy Shrody), while maintaining strict rejection of directory traversal and sensitive system file escapes.
+4. **Interactive Permission Prompt Spam:** Manifest-driven capability sandboxing completely eliminates user prompts for pre-authorized workspace and worktree paths (**0 prompts vs 14 prompts per errand** in legacy baseline), while maintaining strict rejection of directory traversal and sensitive system file escapes.
 
 All six verification gates defined in the iteration plan pass cleanly with **Exit Code 0**.
 
@@ -34,7 +33,7 @@ All benchmark suites were executed locally in a standardized, reproducible test 
 | **Node.js Runtime** | `v22.22.3` (V8 `12.4.254.21-node.56`) |
 | **Python Runtime** | `3.13.0` (with `tiktoken 0.8.0`) |
 | **AgentScript Toolchain** | `asl` 0.2.0 (AST Intent Matcher, FFI HostBridge, Jailed Sandbox) |
-| **Execution Command** | `node packages/asl-shrody/benchmark/run.js --check` |
+| **Execution Command** | `node packages/asl-eddie/benchmark/run.js --check` |
 
 ---
 
@@ -42,7 +41,7 @@ All benchmark suites were executed locally in a standardized, reproducible test 
 
 The following table summarizes empirical measurements gathered across 50 iterations of cold start trials, 5 concurrent scenario runs, 9 token schema comparisons, and 200 permission boundary tests:
 
-| Evaluation Dimension | Legacy Shrody (Baseline) | ASL Shrody (Micro-Harness) | Plan Threshold | Measured Impact | Verdict |
+| Evaluation Dimension | Legacy Node Baseline | ASL Agent Eddy (Micro-Harness) | Plan Threshold | Measured Impact | Verdict |
 |---|---|---|---|---|---|
 | **Cold Start Latency (In-Process)** | ~2,480.0 ms | **0.020 ms** (P95: 0.033 ms) | `< 100.0 ms` | **-100.0%** latency reduction | **PASS [✓]** |
 | **Cold Start Latency (Subprocess)** | ~2,500.0 ms | **37.49 ms** | `< 100.0 ms` | **-98.5%** latency reduction | **PASS [✓]** |
@@ -61,8 +60,8 @@ The following table summarizes empirical measurements gathered across 50 iterati
 ## 4. In-Depth Benchmark Analysis
 
 ### 4.1. Cold Start Latency & Process Spawn
-- **The Bottleneck in Shrody:** Legacy Shrody loaded heavy native bindings (`onnxruntime-node`), speech models, and React/Ink rendering on every startup. This incurred a cold start delay of **2,480 ms – 2,800 ms** before the agent could process user voice or text commands.
-- **The ASL Cure:** In ASL Shrody, the front-line cognitive router, policy checker, and intent triage engine execute as lightweight ASL / Wasm modules or zero-dependency HostBridge instances.
+- **The Bottleneck in Legacy Baseline:** Legacy runtime loaded heavy native bindings (`onnxruntime-node`), speech models, and React/Ink rendering on every startup. This incurred a cold start delay of **2,480 ms – 2,800 ms** before the agent could process user voice or text commands.
+- **The ASL Cure:** In ASL Agent Eddy, the front-line cognitive router, policy checker, and intent triage engine execute as lightweight ASL / Wasm modules or zero-dependency HostBridge instances.
 - **Measured Result:**
   - In-process intent triage and capability verification executes in **0.020 ms** (median) and **0.033 ms** (P95).
   - Clean Node isolate process launch takes **37.49 ms**.
@@ -72,7 +71,7 @@ The following table summarizes empirical measurements gathered across 50 iterati
 - **The Problem:** General errands, status checks, and simple questions previously launched full CLI processes that allocated over **1.2 GB RSS**, triggering Out-of-Memory crashes when multi-tasking.
 - **The ASL Invariant:** In accordance with Architectural Invariant 1, research, errands, and triage execute within pure ASL isolates with an explicit 16 MB cap (`--memory 16`).
 - **Measured Result:**
-  - Running pure ASL agent loops (`asl-shrody/src/agent.asl`) inside the jailed sandbox allocates **854 KB** of memory.
+  - Running pure ASL agent loops (`agent-core/src/agent.asl`) inside the jailed sandbox allocates **854 KB** of memory.
   - In the host harness under continuous load, agent execution peak memory is bounded at **5.01 MB** (well under the 24 MB ceiling).
   - 5 concurrent ReAct errand tasks (file search, multi-aspect question triage, data aggregation, audio interrupt, dependency analysis) finished concurrently with **zero OOM crashes** and total process RSS of **49.34 MB**.
 
@@ -105,7 +104,7 @@ The following table summarizes empirical measurements gathered across 50 iterati
   - Total interactive prompts required for authorized operations: **0**.
 
 ### 4.5. Conversational Barge-In Latency
-- **The Improvement:** Conversational interruption in Shrody previously took ~85 ms due to child process signal propagation. The ASL `HostBridge` uses zero-copy abort controllers.
+- **The Improvement:** Conversational interruption previously took ~85 ms due to child process signal propagation. The ASL `HostBridge` uses zero-copy abort controllers.
 - **Measured Result:**
   - 1,000 synthetic audio cutoff cycles measured an average cutoff latency of **0.004 ms** (P95: **0.005 ms**, Max: **0.163 ms**), far below the `< 5.0 ms` requirement.
 
@@ -115,11 +114,11 @@ The following table summarizes empirical measurements gathered across 50 iterati
 
 ### Gate 1: End-to-End Comparative Benchmark Suite
 ```bash
-node packages/asl-shrody/benchmark/run.js --check
+node packages/asl-eddie/benchmark/run.js --check
 ```
 ```
 ========================================================================================
-            AgentScript (ASL) Shrody End-to-End Comparative Benchmark           
+            AgentScript (ASL) Agent Eddy End-to-End Comparative Benchmark           
 ========================================================================================
 Hardware : Apple M1 Pro (10 cores), 32.00 GB RAM
 Runtime  : Node.js v22.22.3 (V8 12.4.254.21-node.56) on darwin 25.1.0 (arm64)
@@ -128,7 +127,7 @@ Runtime  : Node.js v22.22.3 (V8 12.4.254.21-node.56) on darwin 25.1.0 (arm64)
 [1] COLD START LATENCY
   ASL Agent In-Process Median : 0.02 ms (P95: 0.033 ms)
   ASL Agent Subprocess Launch : 37.49 ms
-  Legacy Shrody Node Baseline : 2480 ms
+  Legacy Node Baseline        : 2480 ms
   Latency Reduction           : 100% (Threshold: < 100 ms)
   Verdict                     : PASS [✓]
 
@@ -136,7 +135,7 @@ Runtime  : Node.js v22.22.3 (V8 12.4.254.21-node.56) on darwin 25.1.0 (arm64)
   ASL Isolate Allocation      : 854 KB (Cap: 16 MB)
   Agent Execution Peak Memory : 5.01 MB (Threshold: <= 24 MB)
   Total Process Peak RSS      : 49.34 MB
-  Legacy Shrody Peak RSS      : 1200 MB
+  Legacy Node Baseline RSS    : 1200 MB
   Memory Overhead Reduction   : 95.89% (Reduction >= 90%)
   Concurrent Tasks Executed   : 5/5 (OOM Crashes: 0)
   Verdict                     : PASS [✓]
@@ -151,7 +150,7 @@ Runtime  : Node.js v22.22.3 (V8 12.4.254.21-node.56) on darwin 25.1.0 (arm64)
   Authorized Operations       : 150/150 allowed silently (100%)
   Interactive User Prompts    : 0 prompts (Threshold: 0)
   Unauthorized / Traversals   : 50/50 strictly rejected (100%)
-  Legacy Shrody Prompt Spam   : 14 interactive prompts per task
+  Legacy Prompt Overhead      : 14 interactive prompts per task
   Verdict                     : PASS [✓]
 
 [5] CONVERSATIONAL BARGE-IN (AUDIO CUTOFF)
@@ -162,7 +161,7 @@ Runtime  : Node.js v22.22.3 (V8 12.4.254.21-node.56) on darwin 25.1.0 (arm64)
 ========================================================================================
                             TELEMETRY COMPARISON TABLE                           
 ========================================================================================
-Metric                          Legacy Shrody        ASL Agent (Shrody)   Improvement   Status
+Metric                          Legacy Node Baseline ASL Agent (Eddy)     Improvement   Status
 ----------------------------------------------------------------------------------------
 Cold Start Latency (ms)         2480.0 ms            0.02 ms              -100%       PASS
 Peak Memory (Execution)         1200.0 MB (RSS)      5.01 MB              -95.89%       PASS
@@ -182,17 +181,23 @@ Conversational Barge-In         ~85.0 ms             0.004 ms             -98.8%
 ...
 package source                                             verdict
 ----------------------------------------------------------------------------------------
-packages/asl-shrody/src/agent.asl                          ok
-packages/asl-shrody/src/ffi.asl                            ok
-packages/asl-shrody/src/policy.asl                         ok
-packages/asl-shrody/src/triage.asl                         ok
+agent-core/src/agent.asl                                   ok
+agent-core/src/ffi.asl                                     ok
+agent-core/src/policy.asl                                  ok
+agent-core/src/triage.asl                                  ok
 ...
 0 failure(s)
 ```
 
 ### Gate 3: Unit Test Suite
 ```bash
-node --test packages/asl-shrody/test/*.test.js
+node --test packages/asl-eddie/test/*.test.js
+```
+```
+# tests 20
+# pass 20
+# fail 0
+# duration_ms 65.12
 ```
 ```
 # tests 20

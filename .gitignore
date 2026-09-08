@@ -26,3 +26,7 @@ web/dist/
 *.local.asn
 *.local.config.asn
 .asl.local.config.asn
+.asl/
+bench/*.lock
+grammar/*.lock
+prelude/*.lock

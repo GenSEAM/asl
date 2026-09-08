@@ -1,0 +1,187 @@
+;; Canonical Batch RPC Operations Registry (Single Source of Truth)
+(:rpc-registry
+  :version "1.0.0"
+  :operations [
+    ;; === Reading & Progressive Disclosure ===
+    (:op :id "asl-intel-ast"
+         :cmd "asl rpc '(:batch (:out \"...\") (:sym \"...\"))'"
+         :category "reading"
+         :purpose "Polyglot AST outline extraction and precise symbol definition lookup without reading full files"
+         :savings "94%")
+
+    (:op :id "asl-intel-read"
+         :cmd "asl rpc '(:batch (:read \"...\" <start> <end>))'"
+         :category "reading"
+         :purpose "Targeted line-range slice read avoiding full-file dumps and context bloat"
+         :savings "90%")
+
+    (:op :id "asl-intel-sec"
+         :cmd "asl rpc '(:batch (:sec \"...\" \"<heading>\"))'"
+         :category "reading"
+         :purpose "Targeted markdown section extraction without whole-file dump"
+         :savings "92%")
+
+    (:op :id "asl-intel-ls"
+         :cmd "asl rpc '(:batch (:ls \"...\"))'"
+         :category "reading"
+         :purpose "Fast directory listing and file sizing metadata in resident memory"
+         :savings "85%")
+
+    ;; === Search & Code Intelligence ===
+    (:op :id "asl-intel-impact"
+         :cmd "asl rpc '(:batch (:callers \"...\") (:impact \"...\"))'"
+         :category "search"
+         :purpose "Call graph tracing and blast-radius impact analysis across workspace before code changes"
+         :savings "88%")
+
+    (:op :id "asl-mem-search"
+         :cmd "asl rpc '(:batch (:find \"...\" [:ext \"...\"]) (:q \"...\"))'"
+         :category "search"
+         :purpose "Instant resident-memory grep (<15ms) and vector semantic search across docstrings and comments"
+         :savings "90%")
+
+    ;; === Editing & Agentic IDE Refactoring ===
+    (:op :id "asl-mem-edit"
+         :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\") (:diff) (:flush))'"
+         :category "editing"
+         :purpose "In-memory atomic text replacement, staged diff inspection, and atomic filesystem flush"
+         :savings "85%")
+
+    (:op :id "asl-mem-patch"
+         :cmd "asl rpc '(:batch (:patch \"...\" \"<sym>\" \"new\") (:diff) (:flush))'"
+         :category "editing"
+         :purpose "AST-level function/struct form replacement: scoped refactoring in resident memory"
+         :savings "88%")
+
+    (:op :id "asl-mem-repl"
+         :cmd "asl rpc '(:batch (:repl \"old\" \"new\" [:ext \"...\"]) (:diff) (:flush))'"
+         :category "editing"
+         :purpose "In-memory mass refactoring and symbol replacement across repository files"
+         :savings "90%")
+
+    ;; === Git-Native Memory & Trajectory Continuity ===
+    (:op :id "asl-mem-intent"
+         :cmd "asl rpc '(:batch (:sec \".asl/mem/intent.asn\" \"<section>\"))'"
+         :category "memory"
+         :purpose "Query Git-native intent, axioms, constraints, and architecture decisions"
+         :savings "95%")
+
+    (:op :id "asl-mem-task"
+         :cmd "asl rpc '(:batch (:read \".asl/mem/tasks/<task-id>.asn\" 1 50))'"
+         :category "memory"
+         :purpose "Inspect task execution state, baseline gates, and physical verification receipts"
+         :savings "90%")
+
+    (:op :id "asl-mem-roadmap"
+         :cmd "asl rpc '(:batch (:read \".asl/mem/roadmap.asn\" 1 60))'"
+         :category "memory"
+         :purpose "Inspect active waves, dependency ordering, and phase completion roadmap"
+         :savings "92%")
+
+    (:op :id "asl-storage"
+         :cmd "asl rpc '(:batch (:storage :mode \"git-native\"|\"ephemeral\" [:path \"...\"]))'"
+         :category "memory"
+         :purpose "Configures memory storage tier: default Git-native (.asl/mem/), 100% ephemeral in-RAM, or external custom path"
+         :savings "92%")
+
+    (:op :id "asl-mem-write"
+         :cmd "asl rpc '(:batch (:write \"...\" \"content\") (:flush))'"
+         :category "editing"
+         :purpose "Direct virtual file creation and atomic overwrite in resident RAM VFS"
+         :savings "85%")
+
+    (:op :id "asl-mem-discard"
+         :cmd "asl rpc '(:batch (:diff) (:discard))'"
+         :category "editing"
+         :purpose "Inspect staged buffer modifications and discard dirty in-memory buffers on error"
+         :savings "90%")
+
+    ;; === Supervised Execution & Git ===
+    (:op :id "asl-exec"
+         :cmd "asl exec \"<cmd>\" or asl rpc '(:batch (:exec :cmd \"...\" [:timeout-ms <ms>] [:daemon true]))'"
+         :category "execution"
+         :purpose "Supervised process execution with autonomous 15m default ceiling, sliding watchdog, deadlock trapping, and daemon mode"
+         :savings "80%")
+
+    (:op :id "asl-git"
+         :cmd "asl git <subcmd> or asl rpc '(:batch (:git :op \"...\"))'"
+         :category "git"
+         :purpose "Git topology orientation (where), commit history, and worktree steering"
+         :savings "85%")
+
+    ;; === Codec, Pointers & Zero-JSON ===
+    (:op :id "asl-toolcall"
+         :cmd "asl rpc '(:batch (:call :tool \"...\" ...))'"
+         :category "codec"
+         :purpose "Zero-JSON S-expression tool invocation and transpilation with strict schema validation"
+         :savings "75%")
+
+    (:op :id "asl-codec"
+         :cmd "asl rpc '(:batch (:codec :from \"json\" :to \"asn\" :data \"...\"))'"
+         :category "codec"
+         :purpose "Universal bidirectional format transpiler between JSON, YAML, HTML, and compact ASN S-expressions"
+         :savings "70%")
+
+    (:op :id "asl-pointer"
+         :cmd "asl rpc '(:batch (:ptr :action \"offload\" :data \"...\"))'"
+         :category "codec"
+         :purpose "Perceptual pointer offloading to store heavy data in memory and retain context economy"
+         :savings "95%")
+
+    ;; === Interactive Process & Spool Navigation ===
+    (:op :id "asl-proc-spawn"
+         :cmd "asl rpc '(:batch (:proc-spawn :cmd \"...\" [:args [...]] [:timeout-ms <ms>] [:daemon true]))'"
+         :category "process"
+         :purpose "Spawns an interactive managed process session in resident memory with streaming channels, 15m autonomous default, and daemon mode"
+         :savings "80%")
+
+    (:op :id "asl-proc-input"
+         :cmd "asl rpc '(:batch (:proc-input :id \"...\" :data \"...\"))'"
+         :category "process"
+         :purpose "Injects streaming input into an active process stdin channel without hanging on prompts"
+         :savings "85%")
+
+    (:op :id "asl-proc-timeout"
+         :cmd "asl rpc '(:batch (:proc-timeout :id \"...\" :extend-ms <ms>))' or (:batch (:proc-timeout :id \"...\" :timeout-ms <ms>))"
+         :category "process"
+         :purpose "Dynamically extends or updates process watchdog timeout when observing active forward progress"
+         :savings "88%")
+
+    (:op :id "asl-proc-skeleton"
+         :cmd "asl rpc '(:batch (:proc-skeleton :id \"...\"))'"
+         :category "process"
+         :purpose "Extracts compact structural output skeleton and error coordinates (<80 tokens) before whole-log dumps"
+         :savings "92%")
+
+    (:op :id "asl-proc-read"
+         :cmd "asl rpc '(:batch (:proc-read :id \"...\" :start <start> :end <end>))'"
+         :category "process"
+         :purpose "Reads narrow line range from process spool buffer without loading full log"
+         :savings "90%")
+
+    (:op :id "asl-proc-find"
+         :cmd "asl rpc '(:batch (:proc-find :id \"...\" :query \"...\" [:top-k <k>]))'"
+         :category "process"
+         :purpose "Executes sub-millisecond in-memory BM25 query over process spool to retrieve ranked matching lines"
+         :savings "94%")
+
+    (:op :id "asl-proc-signal"
+         :cmd "asl rpc '(:batch (:proc-signal :id \"...\" :sig \"KILL\"))'"
+         :category "process"
+         :purpose "Dispatches POSIX signal to terminate or interrupt running process session"
+         :savings "80%")
+
+    ;; === Verification & Onboarding ===
+    (:op :id "asl-gate-chk"
+         :cmd "asl rpc '(:batch (:chk))' or asl gate"
+         :category "verification"
+         :purpose "Complete 7-tier verification gate across all packages, manifests, forms, tests, and skills"
+         :savings "95%")
+
+    (:op :id "asl-onboard"
+         :cmd "asl rpc '(:batch (:onboard))' or asl gate"
+         :category "verification"
+         :purpose "Instant workspace onboarding, topology discovery, active wave inspection, and gate verification"
+         :savings "95%")
+  ]
+)

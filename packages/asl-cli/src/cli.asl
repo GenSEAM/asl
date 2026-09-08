@@ -13,7 +13,7 @@
        "Usage: asl rpc '(:batch ...)'        [MANDATORY AI AGENT INTERFACE]\n"
        "   or: asl '(:batch ...)'            [Direct S-expression shorthand]\n"
        "   or: asl <command> [arguments]     [Core language toolchain]\n\n"
-       "⚡ AI AGENTS: DO NOT USE PIECEWISE COMMANDS OR LOOSE FILE TOOLS (view_file, grep, find).\n"
+       "[!] AI AGENTS: DO NOT USE PIECEWISE COMMANDS OR LOOSE FILE TOOLS (view_file, grep, find).\n"
        "Execute all polyglot exploration, grep, vector query, symbol resolution, call graphs,\n"
        "in-memory edits, and verification in a single atomic roundtrip.\n\n"
        "Commands:\n"

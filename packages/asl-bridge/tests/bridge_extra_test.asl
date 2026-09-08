@@ -1,6 +1,6 @@
 (module asl-bridge/extra-test
   :d "Unit tests for remaining bridge and schema functions."
-  :x []
+  :x [test-extra run-tests]
   :i [(ports :a p) (schema-bridge :a sb) (router :a r)])
 
 (df test-extra [] -> Bool
@@ -19,8 +19,15 @@
         (set (sb/seaorm-type "i64"))
         (rse (sb/render-seaorm-col (p/make-db-column "id" "i64" false true)))
         (cap capitalize-word)]
-    (and (= pas "UserProfile")
-         (and (= cat "int")
-              (and (= kt "number")
-                   (and (= sqt "Integer")
-                        (= set "i64")))))))
+    (assert (= pas "UserProfile") "PascalCase conversion must match")
+    (assert (= cat "int") "Category must be int")
+    (assert (= kt "number") "Kysely type must be number")
+    (assert (= sqt "int") "SQLAlchemy type must be int")
+    (assert (= set "i64") "SeaORM type must be i64")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Executes extra test suite."
+  (do
+    (assert (test-extra) "test-extra must pass")
+    true))

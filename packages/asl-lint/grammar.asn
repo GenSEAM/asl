@@ -23,7 +23,9 @@
     ;; <= 2-Token Primary API Symbols
     (:sym :name "can-autofix" :kind :fn :tokens 2)
     (:sym :name "is-error" :kind :fn :tokens 2)
+    (:sym :name "is-orthogonal?" :kind :fn :tokens 2)
     (:sym :name "main" :kind :fn :tokens 1)
+    (:sym :name "OrthogonalityVerdict" :kind :type :tokens 2)
     (:sym :name "severity-penalty" :kind :fn :tokens 2)
     (:sym :name "token-ceiling" :kind :fn :tokens 2)
 
@@ -32,6 +34,8 @@
           :rationale "Cannot be reduced to 'quality-score': separates the multi-factor calculation function from the resulting metric value")
     (:sym :name "can-auto-repair" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'can-repair': specifies automated linter rule repair without human interaction")
+    (:sym :name "check-rational-orthogonality" :kind :fn :tokens 3
+          :rationale "Scopes static linting heuristic specifically to the Doctrine of Rational Universalism and architectural orthogonality")
     (:sym :name "compute-density-score" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'density-score': separates dynamic AST token density scoring from static threshold constants")
     (:sym :name "compute-duplication-ratio" :kind :fn :tokens 3

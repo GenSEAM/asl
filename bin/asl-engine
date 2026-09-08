@@ -1,0 +1,783 @@
+#!/usr/bin/env python3
+import sys
+import os
+import re
+import socket
+import signal
+import time
+import difflib
+import subprocess
+from pathlib import Path
+
+def escape_asn(s):
+    if s is None:
+        return ""
+    return str(s).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+def tokenize(text):
+    tokens = []
+    i = 0
+    n = len(text)
+    while i < n:
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c in "()":
+            tokens.append(c)
+            i += 1
+            continue
+        if c == '"':
+            i += 1
+            s = []
+            while i < n:
+                if text[i] == "\\" and i + 1 < n:
+                    s.append(text[i+1])
+                    i += 2
+                elif text[i] == '"':
+                    i += 1
+                    break
+                else:
+                    s.append(text[i])
+                    i += 1
+            tokens.append("".join(s))
+            continue
+        start = i
+        while i < n and not text[i].isspace() and text[i] not in "()\"":
+            i += 1
+        tokens.append(text[start:i])
+    return tokens
+
+def parse_tokens(tokens):
+    if not tokens:
+        return []
+    stack = [[]]
+    for tok in tokens:
+        if tok == "(":
+            new_list = []
+            stack[-1].append(new_list)
+            stack.append(new_list)
+        elif tok == ")":
+            if len(stack) > 1:
+                stack.pop()
+        else:
+            stack[-1].append(tok)
+    return stack[0][0] if stack[0] else []
+
+def to_op_dict(item):
+    if not item or not isinstance(item, list):
+        return {"op": "unknown"}
+    op_raw = str(item[0])
+    op = op_raw[1:] if op_raw.startswith(":") else op_raw
+    d = {"op": op}
+    j = 1
+    while j < len(item):
+        k = item[j]
+        if isinstance(k, str) and k.startswith(":"):
+            key = k[1:]
+            if j + 1 < len(item) and not (isinstance(item[j+1], str) and item[j+1].startswith(":") and not item[j+1].startswith("::")):
+                d[key] = item[j+1]
+                j += 2
+            else:
+                d[key] = True
+                j += 1
+        else:
+            d.setdefault("_pos", []).append(k)
+            j += 1
+    return d
+
+class MemoryVFS:
+    def __init__(self, root_dir):
+        self.root = os.path.abspath(root_dir)
+        self.cache = {}
+        self.dirty = set()
+        self.original = {}
+        self.active_op = ":idle"
+
+    def resolve_path(self, rel_path):
+        if not rel_path:
+            return None, None
+        if os.path.isabs(rel_path):
+            target = os.path.normpath(rel_path)
+        else:
+            target = os.path.normpath(os.path.join(self.root, rel_path))
+        try:
+            if os.path.commonpath([self.root, target]) != self.root:
+                return None, None
+        except ValueError:
+            return None, None
+        norm_rel = os.path.relpath(target, self.root)
+        return target, norm_rel
+
+    def resolve_full_path(self, rel_path):
+        fp, _ = self.resolve_path(rel_path)
+        return fp
+
+    def get_rel_path(self, full_path):
+        return os.path.relpath(full_path, self.root)
+
+    def read_buffer(self, rel_path):
+        full_path, norm_rel = self.resolve_path(rel_path)
+        if not full_path:
+            return None, "ERR_BOUNDARY_VIOLATION"
+        if norm_rel in self.cache:
+            return self.cache[norm_rel], None
+        if not os.path.isfile(full_path):
+            return None, "ERR_FILE_NOT_FOUND"
+        try:
+            with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read()
+            self.cache[norm_rel] = content
+            self.original[norm_rel] = content
+            return content, None
+        except Exception as e:
+            return None, str(e)
+
+    def set_buffer(self, rel_path, content, auto_flush=True):
+        full_path, norm_rel = self.resolve_path(rel_path)
+        if not full_path:
+            return False, "ERR_BOUNDARY_VIOLATION"
+        if norm_rel not in self.original and os.path.isfile(full_path):
+            try:
+                with open(full_path, "r", encoding="utf-8", errors="replace") as f:
+                    self.original[norm_rel] = f.read()
+            except Exception:
+                self.original[norm_rel] = ""
+        self.cache[norm_rel] = content
+        self.dirty.add(norm_rel)
+        if auto_flush:
+            try:
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                self.dirty.discard(norm_rel)
+                self.original[norm_rel] = content
+            except Exception as e:
+                return False, str(e)
+        return True, None
+
+    def flush_buffers(self, target_rel=None):
+        flushed = []
+        if target_rel:
+            _, norm_target = self.resolve_path(target_rel)
+            targets = [norm_target] if norm_target and norm_target in self.dirty else []
+        else:
+            targets = list(self.dirty)
+        for rel in targets:
+            if rel not in self.dirty:
+                continue
+            full_path, _ = self.resolve_path(rel)
+            if not full_path:
+                continue
+            try:
+                os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                with open(full_path, "w", encoding="utf-8") as f:
+                    f.write(self.cache[rel])
+                self.dirty.discard(rel)
+                flushed.append(rel)
+            except Exception:
+                pass
+        return flushed
+
+    def discard_buffers(self, target_rel=None):
+        discarded = []
+        if target_rel:
+            _, norm_target = self.resolve_path(target_rel)
+            targets = [norm_target] if norm_target and norm_target in self.dirty else []
+        else:
+            targets = list(self.dirty)
+        for rel in targets:
+            if rel not in self.dirty:
+                continue
+            if rel in self.original:
+                self.cache[rel] = self.original[rel]
+            else:
+                self.cache.pop(rel, None)
+            self.dirty.discard(rel)
+            discarded.append(rel)
+        return discarded
+
+    def get_diff(self, target_rel=None):
+        diffs = []
+        if target_rel:
+            _, norm_target = self.resolve_path(target_rel)
+            targets = [norm_target] if norm_target and norm_target in self.dirty else []
+        else:
+            targets = list(self.dirty)
+        for rel in targets:
+            orig = self.original.get(rel, "")
+            curr = self.cache.get(rel, "")
+            orig_lines = orig.splitlines(keepends=True)
+            curr_lines = curr.splitlines(keepends=True)
+            udiff = difflib.unified_diff(orig_lines, curr_lines, fromfile="a/" + rel, tofile="b/" + rel)
+            diffs.append("".join(udiff))
+        return "\n".join(diffs)
+
+class SovereignEngine:
+    def __init__(self, workspace_root):
+        self.vfs = MemoryVFS(workspace_root)
+        self.start_time = time.time()
+
+    def handle_payload(self, raw_payload):
+        raw_payload = raw_payload.strip()
+        if not raw_payload:
+            return '(:batch-res :status "completed" :items-count 0 :parallel true :results [])'
+
+        if raw_payload == "(:inspect)":
+            rss_mb = 0
+            try:
+                import resource
+                rss_mb = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
+            except Exception:
+                pass
+            return f'(:daemon-status :status "active" :active-op "{self.vfs.active_op}" :rss-mb {rss_mb} :cached-files {len(self.vfs.cache)} :dirty-files {len(self.vfs.dirty)})'
+
+        toks = tokenize(raw_payload)
+        parsed = parse_tokens(toks)
+        if not parsed:
+            return '(:batch-res :status "error" :error ":ERR_PARSE_FAILED" :results [])'
+
+        if parsed and parsed[0] in (":batch", "batch"):
+            items = parsed[1:]
+        else:
+            items = [parsed]
+
+        results = []
+        step_id = 1
+        for it in items:
+            d = to_op_dict(it)
+            res_str = self.execute_op(step_id, d)
+            results.append(res_str)
+            step_id += 1
+
+        formatted_results = "\n  ".join(results)
+        return f'(:batch-res :status "completed" :items-count {len(results)} :parallel true :results [\n  {formatted_results}\n])'
+
+    def execute_op(self, step_id, d):
+        op = d.get("op", "unknown")
+        self.vfs.active_op = f":{op}"
+        try:
+            if op == "ping":
+                return f'(:step :id {step_id} :op "ping" :status "ok" :res (:pong))'
+
+            elif op in ("status", "inspect"):
+                return f'(:step :id {step_id} :op "status" :status "ok" :daemon-status :active :active-op "{self.vfs.active_op}")'
+
+            elif op == "onboard":
+                manifests = list(Path(self.vfs.root).rglob("manifest.asn"))
+                grammars = list(Path(self.vfs.root).rglob("grammar.asn"))
+                return f'(:step :id {step_id} :op "onboard" :status "ok" :workspace "{escape_asn(self.vfs.root)}" :packages {len(manifests)} :grammars {len(grammars)})'
+
+            elif op == "gate":
+                res = subprocess.run([os.path.join(self.vfs.root, "asl", "asl"), "gate"], cwd=self.vfs.root, capture_output=True, text=True)
+                status = "ok" if res.returncode == 0 else "error"
+                return f'(:step :id {step_id} :op "gate" :status "{status}" :exit-code {res.returncode})'
+
+            elif op == "read":
+                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not rel:
+                    return f'(:step :id {step_id} :op "read" :status "error" :error ":ERR_MISSING_FILE")'
+                content, err = self.vfs.read_buffer(rel)
+                if err:
+                    return f'(:step :id {step_id} :op "read" :status "error" :error ":{err}")'
+                lines = content.splitlines()
+                start = int(d.get("start", 1))
+                end = int(d.get("end", len(lines)))
+                if start < 1:
+                    start = 1
+                if end > len(lines):
+                    end = len(lines)
+                sliced = lines[start-1:end] if start <= end else []
+                out_content = "\n".join(sliced)
+                return f'(:step :id {step_id} :op "read" :status "ok" :file "{escape_asn(rel)}" :start {start} :end {end} :lines {len(sliced)} :content "{escape_asn(out_content)}")'
+
+            elif op == "sec":
+                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                heading = d.get("heading") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                if not rel:
+                    return f'(:step :id {step_id} :op "sec" :status "error" :error ":ERR_MISSING_FILE")'
+                content, err = self.vfs.read_buffer(rel)
+                if err:
+                    return f'(:step :id {step_id} :op "sec" :status "error" :error ":{err}")'
+                lines = content.splitlines()
+                extracted = []
+                in_sec = False
+                sec_level = 0
+                target_h = heading.lower().strip()
+                for line in lines:
+                    m = re.match(r'^(#{1,6})\s+(.*)$', line)
+                    if m:
+                        level = len(m.group(1))
+                        title = m.group(2).lower().strip()
+                        if target_h in title:
+                            in_sec = True
+                            sec_level = level
+                            extracted.append(line)
+                            continue
+                        elif in_sec and level <= sec_level:
+                            break
+                    if in_sec:
+                        extracted.append(line)
+                return f'(:step :id {step_id} :op "sec" :status "ok" :file "{escape_asn(rel)}" :heading "{escape_asn(heading)}" :lines {len(extracted)} :content "{escape_asn(chr(10).join(extracted))}")'
+
+            elif op == "ls":
+                rel = d.get("dir") or (d.get("_pos")[0] if d.get("_pos") else ".")
+                full_path = self.vfs.resolve_full_path(rel)
+                if not full_path or not os.path.isdir(full_path):
+                    return f'(:step :id {step_id} :op "ls" :status "error" :error ":ERR_DIR_NOT_FOUND")'
+                entries = []
+                for entry in sorted(os.listdir(full_path)):
+                    if entry.startswith(".git") or entry == "node_modules":
+                        continue
+                    epath = os.path.join(full_path, entry)
+                    etype = "dir" if os.path.isdir(epath) else "file"
+                    size = os.path.getsize(epath) if etype == "file" else 0
+                    entries.append(f'(:entry :name "{escape_asn(entry)}" :type "{etype}" :size {size})')
+                entries_str = " ".join(entries)
+                return f'(:step :id {step_id} :op "ls" :status "ok" :dir "{escape_asn(rel)}" :count {len(entries)} :entries [ {entries_str} ])'
+
+            elif op == "find":
+                pattern = d.get("pattern") or (d.get("_pos")[0] if d.get("_pos") else "*")
+                rel_dir = d.get("dir") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else ".")
+                full_dir = self.vfs.resolve_full_path(rel_dir)
+                if not full_dir or not os.path.isdir(full_dir):
+                    return f'(:step :id {step_id} :op "find" :status "error" :error ":ERR_DIR_NOT_FOUND")'
+                matches = []
+                regex = re.compile(pattern.replace(".", "\\.").replace("*", ".*"))
+                for root, dirs, files in os.walk(full_dir):
+                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                    for fn in files:
+                        if regex.search(fn):
+                            rel_file = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+                            matches.append(f'"{escape_asn(rel_file)}"')
+                            if len(matches) >= 100:
+                                break
+                    if len(matches) >= 100:
+                        break
+                matches_str = " ".join(matches)
+                return f'(:step :id {step_id} :op "find" :status "ok" :count {len(matches)} :files [ {matches_str} ])'
+
+            elif op == "css-vars":
+                target_file = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                scope = d.get("scope", ".")
+                vars_list = []
+                files_to_scan = []
+                if target_file:
+                    files_to_scan = [target_file]
+                else:
+                    full_scope = self.vfs.resolve_full_path(scope)
+                    if full_scope and os.path.isdir(full_scope):
+                        for root, dirs, files in os.walk(full_scope):
+                            dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                            for fn in files:
+                                if fn.endswith((".css", ".tsx", ".jsx", ".html", ".vue", ".asl")):
+                                    files_to_scan.append(os.path.relpath(os.path.join(root, fn), self.vfs.root))
+
+                var_regex = re.compile(r'(--[a-zA-Z0-9_-]+)\s*:\s*([^;}\n]+)')
+                for rf in files_to_scan:
+                    content, _ = self.vfs.read_buffer(rf)
+                    if not content:
+                        continue
+                    for l_idx, line in enumerate(content.splitlines(), start=1):
+                        for m in var_regex.finditer(line):
+                            vname = m.group(1).strip()
+                            vval = m.group(2).strip()
+                            vars_list.append(f'(:var :name "{escape_asn(vname)}" :val "{escape_asn(vval)}" :file "{escape_asn(rf)}" :line {l_idx})')
+
+                vars_str = " ".join(vars_list)
+                return f'(:step :id {step_id} :op "css-vars" :status "ok" :count {len(vars_list)} :vars [ {vars_str} ])'
+
+            elif op == "classes":
+                query_name = d.get("name") or (d.get("_pos")[0] if d.get("_pos") else "")
+                target_file = d.get("file")
+                scope = d.get("scope", ".")
+                classes_list = []
+                files_to_scan = []
+                if target_file:
+                    files_to_scan = [target_file]
+                else:
+                    full_scope = self.vfs.resolve_full_path(scope)
+                    if full_scope and os.path.isdir(full_scope):
+                        for root, dirs, files in os.walk(full_scope):
+                            dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                            for fn in files:
+                                if fn.endswith((".css", ".tsx", ".jsx", ".html", ".vue", ".asl")):
+                                    files_to_scan.append(os.path.relpath(os.path.join(root, fn), self.vfs.root))
+
+                class_regex = re.compile(r'(?:class(?:Name)?\s*=\s*["\']([^"\']+)["\']|\.([a-zA-Z0-9_-]+)|:class\s+["\']([^"\']+)["\'])')
+                for rf in files_to_scan:
+                    content, _ = self.vfs.read_buffer(rf)
+                    if not content:
+                        continue
+                    for l_idx, line in enumerate(content.splitlines(), start=1):
+                        if query_name:
+                            if query_name in line:
+                                snippet = line.strip()
+                                if len(snippet) > 200:
+                                    snippet = snippet[:197] + "..."
+                                classes_list.append(f'(:class-match :file "{escape_asn(rf)}" :line {l_idx} :snippet "{escape_asn(snippet)}")')
+                        else:
+                            for m in class_regex.finditer(line):
+                                matched_classes = m.group(1) or m.group(2) or m.group(3) or ""
+                                for single_c in matched_classes.split():
+                                    single_c = single_c.strip(".")
+                                    if single_c:
+                                        classes_list.append(f'(:class :name "{escape_asn(single_c)}" :file "{escape_asn(rf)}" :line {l_idx})')
+                                        if len(classes_list) >= 200:
+                                            break
+                            if len(classes_list) >= 200:
+                                break
+                    if len(classes_list) >= 200:
+                        break
+
+                classes_str = " ".join(classes_list)
+                return f'(:step :id {step_id} :op "classes" :status "ok" :query "{escape_asn(query_name)}" :count {len(classes_list)} :classes [ {classes_str} ])'
+
+            elif op == "edit":
+                pos = d.get("_pos", [])
+                rel = d.get("file") or (pos[0] if len(pos) > 0 else None)
+                target = d.get("target") or (pos[1] if len(pos) > 1 else None)
+                replacement = d.get("replacement") or (pos[2] if len(pos) > 2 else None)
+                allow_multiple = bool(d.get("allow-multiple", False))
+                staged = bool(d.get("staged", False))
+                if not rel or target is None or replacement is None:
+                    return f'(:step :id {step_id} :op "edit" :status "error" :error ":ERR_MISSING_ARGS")'
+                content, err = self.vfs.read_buffer(rel)
+                if err:
+                    return f'(:step :id {step_id} :op "edit" :status "error" :error ":{err}")'
+                count = content.count(target)
+                if count == 0:
+                    return f'(:step :id {step_id} :op "edit" :status "error" :error ":ERR_MATCH_NOT_FOUND" :msg "Target content not found in file")'
+                if count > 1 and not allow_multiple:
+                    return f'(:step :id {step_id} :op "edit" :status "error" :error ":ERR_MULTIPLE_MATCHES" :msg "Multiple occurrences found ({count}), pass :allow-multiple true")'
+                new_content = content.replace(target, replacement)
+                ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=not staged)
+                if not ok:
+                    return f'(:step :id {step_id} :op "edit" :status "error" :error ":{err}")'
+                return f'(:step :id {step_id} :op "edit" :status "ok" :file "{escape_asn(rel)}" :modified true :matches {count} :staged {str(staged).lower()})'
+
+            elif op == "repl":
+                pos = d.get("_pos", [])
+                find_tok = d.get("find") or (pos[0] if len(pos) > 0 else None)
+                repl_tok = d.get("replace") or (pos[1] if len(pos) > 1 else None)
+                ext = d.get("ext") or (pos[2] if len(pos) > 2 else "asl")
+                scope = d.get("dir", ".")
+                if not find_tok or repl_tok is None:
+                    return f'(:step :id {step_id} :op "repl" :status "error" :error ":ERR_MISSING_ARGS")'
+                full_scope = self.vfs.resolve_full_path(scope)
+                if not full_scope or not os.path.isdir(full_scope):
+                    return f'(:step :id {step_id} :op "repl" :status "error" :error ":ERR_DIR_NOT_FOUND")'
+                modified_files = []
+                ext_check = ("." + ext.lstrip(".")) if ext else ""
+                for root, dirs, files in os.walk(full_scope):
+                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                    for fn in files:
+                        if not ext_check or fn.endswith(ext_check):
+                            rf = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+                            c, _ = self.vfs.read_buffer(rf)
+                            if c and find_tok in c:
+                                new_c = c.replace(find_tok, repl_tok)
+                                self.vfs.set_buffer(rf, new_c, auto_flush=True)
+                                modified_files.append(f'"{escape_asn(rf)}"')
+                files_str = " ".join(modified_files)
+                return f'(:step :id {step_id} :op "repl" :status "ok" :modified-count {len(modified_files)} :files [ {files_str} ])'
+
+            elif op == "write":
+                pos = d.get("_pos", [])
+                rel = d.get("file") or (pos[0] if len(pos) > 0 else None)
+                content = d.get("content") or (pos[1] if len(pos) > 1 else "")
+                staged = bool(d.get("staged", False))
+                if not rel:
+                    return f'(:step :id {step_id} :op "write" :status "error" :error ":ERR_MISSING_FILE")'
+                ok, err = self.vfs.set_buffer(rel, content, auto_flush=not staged)
+                if not ok:
+                    return f'(:step :id {step_id} :op "write" :status "error" :error ":{err}")'
+                return f'(:step :id {step_id} :op "write" :status "ok" :file "{escape_asn(rel)}" :bytes {len(content)} :staged {str(staged).lower()})'
+
+            elif op == "diff":
+                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                diff_text = self.vfs.get_diff(rel)
+                return f'(:step :id {step_id} :op "diff" :status "ok" :diff "{escape_asn(diff_text)}")'
+
+            elif op == "flush":
+                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                flushed = self.vfs.flush_buffers(rel)
+                files_str = " ".join(f'"{escape_asn(f)}"' for f in flushed)
+                return f'(:step :id {step_id} :op "flush" :status "ok" :flushed-count {len(flushed)} :files [ {files_str} ])'
+
+            elif op == "discard":
+                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                discarded = self.vfs.discard_buffers(rel)
+                return f'(:step :id {step_id} :op "discard" :status "ok" :discarded-count {len(discarded)})'
+
+            elif op == "exec":
+                cmd = d.get("cmd") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not cmd:
+                    return f'(:step :id {step_id} :op "exec" :status "error" :error ":ERR_MISSING_CMD")'
+                res = subprocess.run(cmd, shell=True, cwd=self.vfs.root, capture_output=True, text=True)
+                out = res.stdout + ("\n" + res.stderr if res.stderr else "")
+                status = "ok" if res.returncode == 0 else "error"
+                return f'(:step :id {step_id} :op "exec" :status "{status}" :exit-code {res.returncode} :output "{escape_asn(out.strip())}")'
+
+            elif op == "out":
+                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not rel:
+                    return f'(:step :id {step_id} :op "out" :status "error" :error ":ERR_MISSING_FILE")'
+                content, err = self.vfs.read_buffer(rel)
+                if err:
+                    return f'(:step :id {step_id} :op "out" :status "error" :error ":{err}")'
+                syms = []
+                for l_idx, line in enumerate(content.splitlines(), start=1):
+                    m = re.match(r'^\((df|dfs|def|deftype)\s+([a-zA-Z0-9_\-\.\?]+)', line)
+                    if m:
+                        kind, name = m.group(1), m.group(2)
+                        syms.append(f'(:item :kind "{kind}" :name "{escape_asn(name)}" :line {l_idx})')
+                    else:
+                        m2 = re.match(r'^(?:export\s+)?(?:function|class|interface|type|const)\s+([a-zA-Z0-9_]+)', line)
+                        if m2:
+                            syms.append(f'(:item :kind "def" :name "{escape_asn(m2.group(1))}" :line {l_idx})')
+                syms_str = " ".join(syms)
+                return f'(:step :id {step_id} :op "out" :status "ok" :file "{escape_asn(rel)}" :count {len(syms)} :symbols [ {syms_str} ])'
+
+            elif op in ("sym", "callers", "impact"):
+                name = d.get("name") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not name:
+                    return f'(:step :id {step_id} :op "{op}" :status "error" :error ":ERR_MISSING_NAME")'
+                matches = []
+                for root, dirs, files in os.walk(self.vfs.root):
+                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                    for fn in files:
+                        if fn.endswith((".asl", ".asn", ".ts", ".js")):
+                            rf = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+                            c, _ = self.vfs.read_buffer(rf)
+                            if c and name in c:
+                                for l_idx, line in enumerate(c.splitlines(), start=1):
+                                    if name in line:
+                                        matches.append(f'(:match :file "{escape_asn(rf)}" :line {l_idx})')
+                                        if len(matches) >= 50:
+                                            break
+                        if len(matches) >= 50:
+                            break
+                    if len(matches) >= 50:
+                        break
+                matches_str = " ".join(matches)
+                return f'(:step :id {step_id} :op "{op}" :status "ok" :name "{escape_asn(name)}" :count {len(matches)} :occurrences [ {matches_str} ])'
+
+            elif op == "patch":
+                pos = d.get("_pos", [])
+                rel = d.get("file") or (pos[0] if len(pos) > 0 else None)
+                sym = d.get("sym") or (pos[1] if len(pos) > 1 else None)
+                new_code = d.get("new") or (pos[2] if len(pos) > 2 else None)
+                if not rel or not sym or new_code is None:
+                    return f'(:step :id {step_id} :op "patch" :status "error" :error ":ERR_MISSING_ARGS")'
+                content, err = self.vfs.read_buffer(rel)
+                if err:
+                    return f'(:step :id {step_id} :op "patch" :status "error" :error ":{err}")'
+                pattern = re.compile(rf'\((?:df|dfs|def|deftype)\s+{re.escape(sym)}\b[\s\S]*?\n\)(?=\n|\Z)', re.MULTILINE)
+                if not pattern.search(content):
+                    return f'(:step :id {step_id} :op "patch" :status "error" :error ":ERR_SYMBOL_NOT_FOUND" :symbol "{escape_asn(sym)}")'
+                new_content = pattern.sub(new_code.strip(), content, count=1)
+                ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=True)
+                if not ok:
+                    return f'(:step :id {step_id} :op "patch" :status "error" :error ":{err}")'
+                return f'(:step :id {step_id} :op "patch" :status "ok" :file "{escape_asn(rel)}" :symbol "{escape_asn(sym)}")'
+
+            elif op in ("gate", "chk"):
+                res = subprocess.run([os.path.join(self.vfs.root, "asl", "asl"), "gate"], cwd=self.vfs.root, capture_output=True, text=True)
+                status = "ok" if res.returncode == 0 else "error"
+                return f'(:step :id {step_id} :op "{op}" :status "{status}" :exit-code {res.returncode})'
+
+            elif op == "q":
+                query = d.get("query") or (d.get("_pos")[0] if d.get("_pos") else "")
+                res = subprocess.run([os.path.join(self.vfs.root, "asl", "asl"), "intel", "q", query], cwd=self.vfs.root, capture_output=True, text=True)
+                status = "ok" if res.returncode == 0 else "error"
+                return f'(:step :id {step_id} :op "q" :status "{status}" :query "{escape_asn(query)}" :output "{escape_asn(res.stdout.strip())}")'
+
+            else:
+                return f'(:step :id {step_id} :op "{op}" :status "error" :error ":ERR_UNKNOWN_OP")'
+
+        finally:
+            self.vfs.active_op = ":idle"
+
+def find_ws_root():
+    d = os.getcwd()
+    while d and d != "/":
+        if os.path.exists(os.path.join(d, ".asl.config.asn")) or os.path.exists(os.path.join(d, "asl.config.asn")) or os.path.isdir(os.path.join(d, ".git")):
+            return d
+        d = os.path.dirname(d)
+    return os.getcwd()
+
+def run_serve(sock_path, ws_root, pid_file):
+    if os.path.exists(sock_path):
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.connect(sock_path)
+            s.close()
+            print(f"Error: Engine already listening on socket: {sock_path}")
+            sys.exit(1)
+        except Exception:
+            try:
+                os.unlink(sock_path)
+            except Exception:
+                pass
+
+    os.makedirs(os.path.dirname(os.path.abspath(sock_path)), exist_ok=True)
+    if pid_file:
+        os.makedirs(os.path.dirname(os.path.abspath(pid_file)), exist_ok=True)
+        with open(pid_file, "w") as pf:
+            pf.write(str(os.getpid()))
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(sock_path)
+    server.listen(16)
+
+    engine = SovereignEngine(ws_root)
+
+    def cleanup(signum=None, frame=None):
+        try:
+            server.close()
+        except Exception:
+            pass
+        if os.path.exists(sock_path):
+            try:
+                os.unlink(sock_path)
+            except Exception:
+                pass
+        if pid_file and os.path.exists(pid_file):
+            try:
+                os.unlink(pid_file)
+            except Exception:
+                pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+
+    print(f"ASL Sovereign Engine resident at: {sock_path} (PID: {os.getpid()})")
+    sys.stdout.flush()
+
+    while True:
+        try:
+            conn, _ = server.accept()
+        except Exception:
+            break
+        try:
+            conn.settimeout(5.0)
+            data_chunks = []
+            depth = 0
+            started = False
+            in_str = False
+            esc = False
+            while True:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                data_chunks.append(text)
+                for c in text:
+                    if esc:
+                        esc = False
+                        continue
+                    if c == "\\":
+                        esc = True
+                        continue
+                    if c == '"':
+                        in_str = not in_str
+                        continue
+                    if not in_str:
+                        if c == "(":
+                            depth += 1
+                            started = True
+                        elif c == ")":
+                            depth -= 1
+                            if started and depth == 0:
+                                break
+                if started and depth == 0:
+                    break
+
+            raw = "".join(data_chunks).strip()
+            if raw:
+                resp = engine.handle_payload(raw)
+                conn.sendall((resp + "\n").encode("utf-8"))
+        except Exception as e:
+            try:
+                conn.sendall(f'(:batch-res :status "error" :error "{escape_asn(str(e))}")\n'.encode("utf-8"))
+            except Exception:
+                pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+def main():
+    args = sys.argv[1:]
+    ws_root = os.environ.get("ASL_WORKSPACE_ROOT") or find_ws_root()
+
+    if len(args) >= 1 and args[0] == "--serve":
+        sock_path = args[1] if len(args) > 1 else f"/tmp/asl_mem_{os.path.basename(ws_root)}.sock"
+        ws = args[2] if len(args) > 2 else ws_root
+        pid_file = args[3] if len(args) > 3 else f"/tmp/asl_mem_{os.path.basename(ws_root)}.pid"
+        run_serve(sock_path, ws, pid_file)
+        return
+
+    if len(args) >= 1 and args[0] == "--status":
+        sock_path = args[1] if len(args) > 1 else f"/tmp/asl_mem_{os.path.basename(ws_root)}.sock"
+        if not os.path.exists(sock_path):
+            print("Status: Offline (Socket does not exist)")
+            sys.exit(1)
+        try:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(1.0)
+            s.connect(sock_path)
+            s.sendall(b"(:inspect)\n")
+            data = s.recv(4096).decode("utf-8", errors="replace")
+            s.close()
+            print(data.strip())
+            sys.exit(0)
+        except Exception as e:
+            print(f"Status: Unresponsive ({e})")
+            sys.exit(1)
+
+    if len(args) >= 1 and args[0] == "--stop":
+        pid_file = args[1] if len(args) > 1 else f"/tmp/asl_mem_{os.path.basename(ws_root)}.pid"
+        sock_path = args[2] if len(args) > 2 else f"/tmp/asl_mem_{os.path.basename(ws_root)}.sock"
+        if os.path.exists(pid_file):
+            try:
+                with open(pid_file, "r") as pf:
+                    pid = int(pf.read().strip())
+                os.kill(pid, signal.SIGTERM)
+                for _ in range(20):
+                    time.sleep(0.05)
+                    try:
+                        os.kill(pid, 0)
+                    except OSError:
+                        break
+            except Exception:
+                pass
+        for p in (pid_file, sock_path):
+            if os.path.exists(p):
+                try:
+                    os.unlink(p)
+                except Exception:
+                    pass
+        print("ASL Engine stopped cleanly.")
+        sys.exit(0)
+
+    # CLI On-Demand Mode
+    payload = ""
+    if len(args) >= 1 and not args[0].startswith("-"):
+        payload = " ".join(args)
+    elif not sys.stdin.isatty():
+        payload = sys.stdin.read()
+
+    if not payload:
+        print("Usage: asl-engine <payload> | echo '<payload>' | asl-engine | asl-engine --serve <sock> <ws> <pid>")
+        sys.exit(1)
+
+    engine = SovereignEngine(ws_root)
+    result = engine.handle_payload(payload)
+    print(result)
+
+if __name__ == "__main__":
+    main()

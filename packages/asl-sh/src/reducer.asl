@@ -2,6 +2,8 @@
   :d "Pure ASL stream reducer: ANSI stripping, carriage return collapsing, duplicate-line suppression, head/tail windowing, and semantic diagnostic extraction."
   :x [ReductionConfig
       ReducedStream
+      SkeletonSection
+      OutputSkeleton
       default-config
       window-lines
       dedup-lines
@@ -11,7 +13,10 @@
       truncate-summary
       generate-spool-path
       extract-error-summary
-      demux-stream]
+      demux-stream
+      extract-output-skeleton
+      skeleton-has-errors?
+      format-output-skeleton]
   :i [(ansi :a ansi)
       (diagnostics :a diag)
       (core/process :a proc)])
@@ -28,6 +33,27 @@
   (:f lines (List String) "Retained stream lines")
   (:f text String "Complete reduced text joined by newlines")
   (:f diagnostics diag/DiagnosticSummary "Structured compiler and test diagnostics"))
+
+(dfs SkeletonSection
+  (:f title String "Section title or milestone identifier")
+  (:f start-line Int64 "1-based starting line number")
+  (:f end-line Int64 "1-based ending line number")
+  (:f line-count Int64 "Number of lines in section")
+  (:f has-error Bool "True if section contains errors or failures"))
+
+(dfs OutputSkeleton
+  (:f total-lines Int64 "Total number of lines in raw stream")
+  (:f total-bytes Int64 "Total size of raw stream in bytes")
+  (:f sections (List SkeletonSection) "Logical sections identified in stream")
+  (:f diagnostics (List diag/Diagnostic) "Extracted compiler and test diagnostics")
+  (:f summary String "Ultra-compact one-line summary"))
+
+(dfs SectionBuilderState
+  (:f current-title String "Title of currently open section")
+  (:f start-line Int64 "1-based starting line of open section")
+  (:f current-line Int64 "Current line index being scanned")
+  (:f has-err Bool "Whether current section encountered an error")
+  (:f completed (List SkeletonSection) "Completed sections in reverse order"))
 
 (df default-config [] -> ReductionConfig
   :d "Creates default ReductionConfig with 500 head lines, 1500 tail lines, and repeat deduplication enabled."
@@ -172,4 +198,129 @@
   :d "Demultiplexes raw process output into an ephemeral spool reference and a compact ProcessReceipt."
   (let [(summary (extract-error-summary stdout-text stderr-text exit-code))]
     (proc/make-process-receipt exit-code duration-ms 0 spool-path summary)))
+
+(df is-section-header? [(line String)] -> Bool
+  :d "Detects whether a log line represents a structural section or milestone boundary."
+  (let [(t (string-trim line))]
+    (or (string-starts-with? t "--> ")
+        (or (string-starts-with? t "=== ")
+            (or (string-starts-with? t "--- ")
+                (or (string-starts-with? t "### ")
+                    (or (string-starts-with? t "## ")
+                        (or (string-starts-with? t "[Phase ")
+                            (or (string-starts-with? t "[Step ")
+                                (or (string-starts-with? t "Step ")
+                                    (or (string-starts-with? t "Phase ")
+                                        (or (string-starts-with? t "Test suite ")
+                                            (or (string-starts-with? t "PASS ")
+                                                (or (string-starts-with? t "FAIL ")
+                                                    (or (string-starts-with? t "FAILED ")
+                                                        (or (string-starts-with? t "[Config]")
+                                                            (string-starts-with? t "================================================================================")))))))))))))))))
+
+(df is-error-line? [(line String)] -> Bool
+  :d "Detects whether an individual log line contains an error or failure indicator."
+  (let [(lower (string-to-lowercase line))]
+    (or (string-contains? lower "error")
+        (or (string-contains? lower "failed")
+            (or (string-contains? lower "fatal")
+                (string-contains? lower "panic"))))))
+
+(df step-section [(st SectionBuilderState) (line String)] -> SectionBuilderState
+  :d "Processes next line during section partitioning."
+  (let [(next-idx (+ (.-current-line st) 1))]
+    (if (is-section-header? line)
+        (let [(completed-sec (SkeletonSection
+                               :title (.-current-title st)
+                               :start-line (.-start-line st)
+                               :end-line (.-current-line st)
+                               :line-count (+ (- (.-current-line st) (.-start-line st)) 1)
+                               :has-error (.-has-err st)))
+              (title (truncate-summary (string-trim line) 40))]
+          (SectionBuilderState
+            :current-title title
+            :start-line next-idx
+            :current-line next-idx
+            :has-err (is-error-line? line)
+            :completed (list-cons completed-sec (.-completed st))))
+        (SectionBuilderState
+          :current-title (.-current-title st)
+          :start-line (.-start-line st)
+          :current-line next-idx
+          :has-err (or (.-has-err st) (is-error-line? line))
+          :completed (.-completed st)))))
+
+(df partition-sections [(lines (List String))] -> (List SkeletonSection)
+  :d "Partitions lines into structural milestone sections."
+  (if (list-empty? lines)
+      (list)
+      (let [(first-line (option-or (list-head lines) ""))
+            (first-title (if (is-section-header? first-line)
+                             (truncate-summary (string-trim first-line) 40)
+                             "Initial Output"))
+            (init-st (SectionBuilderState
+                       :current-title first-title
+                       :start-line 1
+                       :current-line 1
+                       :has-err (is-error-line? first-line)
+                       :completed (list)))
+            (rest-lines (option-or (list-tail lines) (list)))
+            (fin (fold step-section init-st rest-lines))
+            (final-sec (SkeletonSection
+                         :title (.-current-title fin)
+                         :start-line (.-start-line fin)
+                         :end-line (.-current-line fin)
+                         :line-count (+ (- (.-current-line fin) (.-start-line fin)) 1)
+                         :has-error (.-has-err fin)))]
+        (list-reverse (list-cons final-sec (.-completed fin))))))
+
+(df build-skeleton-summary [(total-lines Int64) (sec-count Int64) (diags (List diag/Diagnostic))] -> String
+  :d "Constructs compact one-line summary describing lines, sections, and failure count."
+  (let [(diag-count (list-length diags))]
+    (if (= diag-count 0)
+        (str "Lines: " (string-from-int64 total-lines) " | Sections: " (string-from-int64 sec-count) " | Status: clean")
+        (let [(first-d (option-or (list-head diags) (diag/Diagnostic :kind "" :severity "" :message "error" :file "" :line 0 :col 0 :raw (list))))
+              (loc (if (string-empty? (.-file first-d)) "" (str (.-file first-d) ":" (string-from-int64 (.-line first-d)) " ")))]
+          (str "Lines: " (string-from-int64 total-lines) " | Sections: " (string-from-int64 sec-count) " | Errors: " (string-from-int64 diag-count) " (" loc (truncate-summary (.-message first-d) 20) ")")))))
+
+(df extract-output-skeleton [(raw-text String)] -> OutputSkeleton
+  :d "Extracts structural sections, diagnostics, and high-SNR metadata outline from raw stream text."
+  (if (string-empty? (string-trim raw-text))
+      (OutputSkeleton
+        :total-lines 0
+        :total-bytes 0
+        :sections (list)
+        :diagnostics (list)
+        :summary "Lines: 0 | Sections: 0 | Status: clean")
+      (let [(cleaned (ansi/clean-terminal-text raw-text))
+            (norm (string-replace cleaned "\r\n" "\n"))
+            (lines (string-split norm "\n"))
+            (total-lines (list-length lines))
+            (total-bytes (string-length norm))
+            (diags (diag/extract-diagnostics lines))
+            (sections (partition-sections lines))
+            (summary (build-skeleton-summary total-lines (list-length sections) diags))]
+        (OutputSkeleton
+          :total-lines total-lines
+          :total-bytes total-bytes
+          :sections sections
+          :diagnostics diags
+          :summary summary))))
+
+(df skeleton-has-errors? [(skel OutputSkeleton)] -> Bool
+  :d "Returns true if the output skeleton contains any diagnostics or failed sections."
+  (or (> (list-length (.-diagnostics skel)) 0)
+      (fold (fn [(acc Bool) (s SkeletonSection)] -> Bool (or acc (.-has-error s))) false (.-sections skel))))
+
+(df format-output-skeleton [(skel OutputSkeleton)] -> String
+  :d "Renders an ASCII structural table of sections and diagnostic coordinates."
+  (let [(header (str "=== Output Skeleton (" (string-from-int64 (.-total-lines skel)) " lines, " (string-from-int64 (.-total-bytes skel)) " bytes) ===\n"))
+        (sec-rows (map (fn [(s SkeletonSection)] -> String
+                         (let [(err-tag (if (.-has-error s) " [FAIL]" " [OK]"))]
+                           (str "  L" (string-from-int64 (.-start-line s)) "-L" (string-from-int64 (.-end-line s))
+                                " (" (string-from-int64 (.-line-count s)) " lines)" err-tag " " (.-title s))))
+                       (.-sections skel)))
+        (body (string-join sec-rows "\n"))
+        (summary-line (str "\nSummary: " (.-summary skel)))]
+    (str header body summary-line)))
 

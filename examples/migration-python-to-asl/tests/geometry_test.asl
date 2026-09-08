@@ -1,6 +1,6 @@
 (module migration-geometry/geometry-test
   :d "Unit tests for migrated geometric functions asserting parity with Python baseline."
-  :x [test-euclidean-distance test-batch-closest-point]
+  :x [test-euclidean-distance test-batch-closest-point run-tests]
   :i [(geometry :a geo)])
 
 (df test-euclidean-distance [] -> Bool
@@ -8,7 +8,8 @@
   (let [(p1 (geo/Point2D :x 0.0 :y 0.0))
         (p2 (geo/Point2D :x 3.0 :y 4.0))
         (dist (geo/euclidean-distance p1 p2))]
-    (= dist 5.0)))
+    (assert (= dist 5.0) "Distance must equal 5.0")
+    true))
 
 (df test-batch-closest-point [] -> Bool
   :d "Verifies batch closest point selector finds nearest neighbor."
@@ -18,5 +19,13 @@
         (p3 (geo/Point2D :x 50.0 :y 50.0))
         (pts (list p1 p2 p3))
         (closest (geo/batch-closest-point target pts))]
-    (and (= (.-x closest) 11.0)
-         (= (.-y closest) 10.0))))
+    (assert (= (.-x closest) 11.0) "Closest point x must equal 11.0")
+    (assert (= (.-y closest) 10.0) "Closest point y must equal 10.0")
+    true))
+
+(df run-tests [] -> Bool
+  :d "Runs all geometry tests"
+  (do
+    (assert (test-euclidean-distance) "test-euclidean-distance must pass")
+    (assert (test-batch-closest-point) "test-batch-closest-point must pass")
+    true))

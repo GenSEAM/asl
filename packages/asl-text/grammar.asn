@@ -57,5 +57,15 @@
           :rationale "Encodes ContextChunk into compact, canonical ASN S-expression")
     (:sym :name "clause-to-asn" :kind :fn :tokens 3
           :rationale "Encodes ContextualClause into compact canonical ASN S-expression")
+    (:sym :name "escape-asn-str" :kind :fn :tokens 3
+          :rationale "Escapes backslashes, double quotes, and control characters for ASN literals")
+    (:sym :name "unescape-asn-str" :kind :fn :tokens 3
+          :rationale "Inverts ASN string literal escaping")
+    (:sym :name "escape-json-str" :kind :fn :tokens 3
+          :rationale "Escapes backslashes, double quotes, and control characters for RFC 8259 JSON literals")
+    (:sym :name "unescape-json-str" :kind :fn :tokens 3
+          :rationale "Inverts RFC 8259 JSON string literal escaping")
+    (:sym :name "escape-sh-arg" :kind :fn :tokens 3
+          :rationale "Wraps string argument in POSIX single quotes escaping internal quotes")
   ])
 

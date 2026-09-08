@@ -1,6 +1,6 @@
 (module asl-parser/reader-test
   :d "Execution driver for the self-hosted reader: parse, render and audit modules."
-  :x [proj-parse proj-heads render-all closure-heads ClosureHeads]
+  :x [proj-parse proj-heads render-all closure-heads ClosureHeads run-tests]
   :i [(ast :a a) (reader :a rd)])
 
 (dfs ClosureHeads
@@ -388,3 +388,14 @@ ever walked; patterns and binders contribute nothing."
        (ok (ClosureHeads :calls (list-reverse (.-calls done))
                          :defs (list-reverse (.-defs done))
                          :qualified (list-reverse (.-qualified done))))))))
+
+(df run-tests [] -> Bool
+  :d "Runs reader projection and closure tests"
+  (let [(parsed (proj-parse "(module m :doc \"doc\") (df f [] -> Int64 1)"))
+        (heads (proj-heads "(module m :doc \"doc\") (df f [] -> Int64 1)"))
+        (closed (closure-heads "(module m :doc \"doc\") (df f [] -> Int64 1)"))]
+    (assert (string-contains? parsed "module|m|\"doc\"") "module projection")
+    (assert (string-contains? parsed "defun|f|F|0|Int64|F") "defun projection")
+    (assert (string-contains? heads "doc") "heads projection")
+    (assert (mt closed ((ok _) true) ((err _) false)) "closure heads ok")
+    true))
