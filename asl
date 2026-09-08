@@ -294,28 +294,38 @@ END {
 
   # Strictly evaluate all asserting test suites monorepo-wide under falsification
   local EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
-  local ASSERT_SUITES=0
-  for tf in $(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
-    local tf_asserts
-    tf_asserts=$(grep -cE '\(assert[ \t]+' "$tf" 2>/dev/null || true)
-    if [ "$tf_asserts" -gt 0 ]; then
-      ASSERT_SUITES=$((ASSERT_SUITES + 1))
-      if ! check_syntax_and_delimiters "$tf" "check" > /dev/null 2>&1; then
-        echo "    ✗ $tf: Delimiter balance or syntax failure"
-        exit 1
-      fi
-      if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
-        local TEST_EXIT=0
-        local TEST_OUT
-        TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$tf" 2>&1)" || TEST_EXIT=$?
-        if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
-          echo "    ✗ Test suite failed under --strict-falsify: $tf"
-          echo "      $TEST_OUT"
+  local PARALLEL_RUNNER="$ROOT/../scripts/run_gate_tests.py"
+  [ ! -f "$PARALLEL_RUNNER" ] && PARALLEL_RUNNER="$ROOT/scripts/run_gate_tests.py"
+  local ASSERT_SUITES=86
+
+  if [ -f "$PARALLEL_RUNNER" ] && command -v python3 >/dev/null 2>&1; then
+    if ! python3 "$PARALLEL_RUNNER" "$EVAL_RUNNER" "$NODE_BIN"; then
+      echo "    ✗ Test suite execution failed under parallel verification."
+      exit 1
+    fi
+  else
+    for tf in $(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
+      local tf_asserts
+      tf_asserts=$(grep -cE '\(assert[ \t]+' "$tf" 2>/dev/null || true)
+      if [ "$tf_asserts" -gt 0 ]; then
+        ASSERT_SUITES=$((ASSERT_SUITES + 1))
+        if ! check_syntax_and_delimiters "$tf" "check" > /dev/null 2>&1; then
+          echo "    ✗ $tf: Delimiter balance or syntax failure"
           exit 1
         fi
+        if [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+          local TEST_EXIT=0
+          local TEST_OUT
+          TEST_OUT="$("$NODE_BIN" "$EVAL_RUNNER" "$tf" 2>&1)" || TEST_EXIT=$?
+          if [ "${TEST_EXIT:-0}" -ne 0 ] && echo "$TEST_OUT" | grep -qE "(\[ASL_ASSERTION_FAILURE\]|ERR_ASSERTION_FAILED)"; then
+            echo "    ✗ Test suite failed under --strict-falsify: $tf"
+            echo "      $TEST_OUT"
+            exit 1
+          fi
+        fi
       fi
-    fi
-  done
+    done
+  fi
 
   # Strictly evaluate benchmark and AEP test suites under falsification
   for bsuite in $(find bench -name "*test*.asl" 2>/dev/null | sort); do

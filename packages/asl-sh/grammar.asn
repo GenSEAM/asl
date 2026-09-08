@@ -11,6 +11,8 @@
     (:sym :name "Diagnostic" :kind :type :tokens 1)
     (:sym :name "DiagnosticSummary" :kind :type :tokens 1)
     (:sym :name "DiskSpool" :kind :type :tokens 1)
+    (:sym :name "GitDiffFile" :kind :type :tokens 1)
+    (:sym :name "GitDiffHunk" :kind :type :tokens 1)
     (:sym :name "LockVerdict" :kind :type :tokens 1)
     (:sym :name "LogEntry" :kind :type :tokens 1)
     (:sym :name "LogLevel" :kind :type :tokens 1)
@@ -30,6 +32,7 @@
     (:sym :name "TwoTierSpool" :kind :type :tokens 1)
 
     ;; <= 2-Token Primary API Symbols
+    (:sym :name ":diff-summary" :kind :type :tokens 2)
     (:sym :name "cmd" :kind :fn :tokens 1)
     (:sym :name "collapse-cr" :kind :fn :tokens 2)
     (:sym :name "dedup-lines" :kind :fn :tokens 2)
@@ -100,6 +103,10 @@
           :rationale "Cannot be reduced to 'format-table': distinguishes APM daemon process inspection table rendering from general text tables")
     (:sym :name "generate-spool-path" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
+    (:sym :name "git-diff-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'diff-parse': distinguishes git unified diff parser from general AST or text diffing")
+    (:sym :name "git-diff-summary" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'diff-summary': distinguishes git repository diff compaction statistics from diagnostic or log summaries")
     (:sym :name "is-balanced-frame?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-balanced?': scopes balance validation specifically to stream frame delineation")
     (:sym :name "make-daemon-entry" :kind :fn :tokens 3
