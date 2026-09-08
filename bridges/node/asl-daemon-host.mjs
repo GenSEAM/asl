@@ -17,19 +17,83 @@ const originalBuffers = new Map(); // relPath -> string
 const residentCache = new Map(); // relPath -> string (in-memory clean buffer cache)
 const activeToolDomains = new Set(); // domain -> active dynamic tool domains
 const EXCLUDE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.asl-cache']);
+const ignoreFile = path.join(wsRoot, '.aslignore');
+let ignoreRules = [];
+let ignoreMtime = -1;
+
+function globToRegExpBody(glob) {
+  let re = '';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*') {
+      if (glob[i + 1] === '*') {
+        re += '.*';
+        i++;
+        if (glob[i + 1] === '/') i++;
+      } else {
+        re += '[^/]*';
+      }
+    } else if (c === '?') {
+      re += '[^/]';
+    } else {
+      re += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return re;
+}
+
+function loadIgnoreRules() {
+  let mtime = -1;
+  try { mtime = fs.statSync(ignoreFile).mtimeMs; } catch { ignoreRules = []; ignoreMtime = -1; return ignoreRules; }
+  if (mtime === ignoreMtime) return ignoreRules;
+  const rules = [];
+  try {
+    for (const raw of fs.readFileSync(ignoreFile, 'utf8').split(/\r?\n/)) {
+      let line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      let negate = false;
+      if (line.startsWith('!')) { negate = true; line = line.slice(1); }
+      let dirOnly = false;
+      if (line.endsWith('/')) { dirOnly = true; line = line.slice(0, -1); }
+      const anchored = line.startsWith('/') || line.includes('/');
+      if (line.startsWith('/')) line = line.slice(1);
+      if (!line) continue;
+      const body = globToRegExpBody(line);
+      const re = anchored ? new RegExp('^' + body + '(/|$)') : new RegExp('(^|/)' + body + '(/|$)');
+      rules.push({ re, negate, dirOnly });
+    }
+  } catch {}
+  ignoreRules = rules;
+  ignoreMtime = mtime;
+  return rules;
+}
+
+function isIgnored(rel, isDir) {
+  const posix = rel.split(path.sep).join('/');
+  let ignored = false;
+  for (const rule of loadIgnoreRules()) {
+    const m = posix.match(rule.re);
+    if (!m) continue;
+    if (rule.dirOnly && !isDir && m.index + m[0].length === posix.length) continue;
+    ignored = !rule.negate;
+  }
+  return ignored;
+}
 
 function walkWorkspaceFiles(dir = wsRoot, fileList = []) {
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      const rel = path.relative(wsRoot, full);
       if (entry.isDirectory()) {
-        if (!EXCLUDE_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
-          walkWorkspaceFiles(path.join(dir, entry.name), fileList);
+        if (!EXCLUDE_DIRS.has(entry.name) && !entry.name.startsWith('.') && !isIgnored(rel, true)) {
+          walkWorkspaceFiles(full, fileList);
         }
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name);
-        if (['.asl', '.asn', '.ts', '.tsx', '.js', '.mjs', '.cjs', '.py', '.go', '.rs', '.php', '.md', '.json', '.yaml', '.yml', '.sql'].includes(ext)) {
-          fileList.push(path.relative(wsRoot, path.join(dir, entry.name)));
+        if (['.asl', '.asn', '.ts', '.tsx', '.js', '.mjs', '.cjs', '.py', '.go', '.rs', '.php', '.md', '.json', '.yaml', '.yml', '.sql'].includes(ext) && !isIgnored(rel, false)) {
+          fileList.push(rel);
         }
       }
     }

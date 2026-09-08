@@ -11,8 +11,11 @@
     (:sym :name "Diagnostic" :kind :type :tokens 1)
     (:sym :name "DiagnosticSummary" :kind :type :tokens 1)
     (:sym :name "DiskSpool" :kind :type :tokens 1)
+    (:sym :name "GitCommitEntry" :kind :type :tokens 1)
     (:sym :name "GitDiffFile" :kind :type :tokens 1)
     (:sym :name "GitDiffHunk" :kind :type :tokens 1)
+    (:sym :name "GitTopology" :kind :type :tokens 1)
+    (:sym :name "GitWorktreeEntry" :kind :type :tokens 1)
     (:sym :name "LockVerdict" :kind :type :tokens 1)
     (:sym :name "LogEntry" :kind :type :tokens 1)
     (:sym :name "LogLevel" :kind :type :tokens 1)
@@ -103,10 +106,34 @@
           :rationale "Cannot be reduced to 'format-table': distinguishes APM daemon process inspection table rendering from general text tables")
     (:sym :name "generate-spool-path" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
+    (:sym :name ":git-commit" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':commit': distinguishes git commit entry payload from transaction commit tags")
+    (:sym :name ":git-log" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':log': distinguishes git linearized commit history envelope from general application log payloads")
+    (:sym :name ":git-topo" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':topo': distinguishes git repository topology payload from network or ast topology")
+    (:sym :name ":git-worktree" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':worktree': distinguishes git worktree record payload from working directory tags")
+    (:sym :name ":git-worktrees" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':worktrees': distinguishes git worktree roster envelope from general tree collections")
+    (:sym :name ":where-am-i" :kind :type :tokens 3
+          :rationale "Cannot be reduced to ':where': standard 3-token orientation query tag for agent context bootstrap")
     (:sym :name "git-diff-parse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'diff-parse': distinguishes git unified diff parser from general AST or text diffing")
     (:sym :name "git-diff-summary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'diff-summary': distinguishes git repository diff compaction statistics from diagnostic or log summaries")
+    (:sym :name "git-log-format" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'log-format': distinguishes git linearized commit log ASN formatter from general log formatters")
+    (:sym :name "git-log-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'log-parse': distinguishes git linearized commit history parser from general application log parsers")
+    (:sym :name "git-topo-format" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'topo-format': distinguishes git topology orientation ASN formatter from general topology formatters")
+    (:sym :name "git-topo-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'topo-parse': distinguishes git repository topology parser from general AST or network topology")
+    (:sym :name "git-worktree-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'worktree-parse': distinguishes git worktree porcelain parser from general directory tree parsers")
+    (:sym :name "git-worktrees-format" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'worktrees-format': distinguishes git worktree roster ASN formatter from general tree formatters")
     (:sym :name "is-balanced-frame?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-balanced?': scopes balance validation specifically to stream frame delineation")
     (:sym :name "make-daemon-entry" :kind :fn :tokens 3
