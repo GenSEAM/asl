@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Terminal Bench 4 Astra-Hard Grounded Real Evaluation Bridge
+ * Terminal Bench 4 Astra-Hard Grounded Real Evaluation Bridge (Addie Harness)
  * Generated/Transpiled runtime artifact for pure AgentScript module: harness/src/terminal-bench.asl
  * Model: gemma-4-31b-it via LLM Gateway
  */
@@ -10,9 +10,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 
-let GATEWAY_URL = process.env.EDDIE_GATEWAY_URL || process.env.OPENAI_BASE_URL || "https://api.llmgateway.io/v1/chat/completions";
-let GATEWAY_KEY = process.env.EDDIE_GATEWAY_KEY || process.env.OPENAI_API_KEY || "";
-let MODEL = process.env.EDDIE_MODEL || "gemma-4-31b-it";
+let GATEWAY_URL = process.env.ADDIE_GATEWAY_URL || process.env.EDDIE_GATEWAY_URL || process.env.OPENAI_BASE_URL || "https://api.llmgateway.io/v1/chat/completions";
+let GATEWAY_KEY = process.env.ADDIE_GATEWAY_KEY || process.env.EDDIE_GATEWAY_KEY || process.env.OPENAI_API_KEY || "";
+let MODEL = process.env.ADDIE_MODEL || process.env.EDDIE_MODEL || "gemma-4-31b-it";
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || "8");
 const IS_DRY_RUN = process.argv.includes("--dry-run");
 
@@ -21,14 +21,20 @@ if (!GATEWAY_URL.endsWith("/chat/completions")) {
 }
 
 try {
-  const homeConfig = path.join(os.homedir(), ".eddie/config.asn");
-  if (fs.existsSync(homeConfig)) {
-    const raw = fs.readFileSync(homeConfig, 'utf8');
-    const keyMatch = raw.match(/:api-key\s+"([^"]+)"/);
-    if (keyMatch && !GATEWAY_KEY) GATEWAY_KEY = keyMatch[1];
-    const urlMatch = raw.match(/:base-url\s+"([^"]+)"/);
-    if (urlMatch && !process.env.EDDIE_GATEWAY_URL && !process.env.OPENAI_BASE_URL) {
-      GATEWAY_URL = urlMatch[1].replace(/\/+$/, '') + "/chat/completions";
+  const configPaths = [
+    path.join(os.homedir(), ".addie/config.asn"),
+    path.join(os.homedir(), ".eddie/config.asn"),
+  ];
+  for (const homeConfig of configPaths) {
+    if (fs.existsSync(homeConfig)) {
+      const raw = fs.readFileSync(homeConfig, 'utf8');
+      const keyMatch = raw.match(/:api-key\s+"([^"]+)"/);
+      if (keyMatch && !GATEWAY_KEY) GATEWAY_KEY = keyMatch[1];
+      const urlMatch = raw.match(/:base-url\s+"([^"]+)"/);
+      if (urlMatch && !process.env.ADDIE_GATEWAY_URL && !process.env.EDDIE_GATEWAY_URL && !process.env.OPENAI_BASE_URL) {
+        GATEWAY_URL = urlMatch[1].replace(/\/+$/, '') + "/chat/completions";
+      }
+      if (GATEWAY_KEY) break;
     }
   }
 } catch (e) {}
