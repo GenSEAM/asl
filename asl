@@ -282,13 +282,13 @@ END {
   fi
   echo "    ✓ Grounded $CLAIMS_COUNT benchmark claims across published registry."
 
-  # Gate 4: Zero Foreign Code
-  echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Python, 0 JavaScript, 0 TypeScript, 0 Rust, 0 C, 0 Shell, 0 JSON in code packages)..."
+  # Gate 4: Zero Foreign Code & Manifest Hygiene
+  echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Py, 0 JS, 0 TS, 0 Rust, 0 C, 0 Shell, 0 JSON, 0 YAML, 0 TOML, 0 Lock in code packages)..."
   echo "    [Boundary] Legal host projections recognized: asl/bridges/node/, bin/, scripts/"
   local FOREIGN_FILES
-  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search editorial-matrix -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" \) 2>/dev/null | grep -v 'node_modules' || true)
+  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search editorial-matrix -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.lock" -o -name "package.json" -o -name "*-lock.*" \) 2>/dev/null | grep -v 'node_modules' | grep -v 'editorial-matrix/.github/' || true)
   if [ -z "$FOREIGN_FILES" ]; then
-    echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C, 0 Shell, 0 JSON)."
+    echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C, 0 Shell, 0 JSON, 0 YAML, 0 TOML, 0 Lock)."
   else
     echo "    ✗ Foreign files detected in packages: $FOREIGN_FILES"
     exit 1
@@ -2132,6 +2132,18 @@ console.log(emitWat(forms));
     exit $?
     ;;
 
+  project)
+    PROJECT_SCRIPT="$ROOT/../scripts/project.py"
+    [ ! -f "$PROJECT_SCRIPT" ] && PROJECT_SCRIPT="$ROOT/scripts/project.py"
+    if [ -f "$PROJECT_SCRIPT" ] && command -v python3 >/dev/null 2>&1; then
+      python3 "$PROJECT_SCRIPT" "$@"
+      exit $?
+    else
+      echo "Error: Projection runner scripts/project.py not found"
+      exit 1
+    fi
+    ;;
+
   transpile-pkg|pkg:transpile)
     SPEC="$1"
     OUT="$2"
@@ -2461,6 +2473,7 @@ console.log(emitWat(forms));
       echo ""
       echo "Human Developer & Diagnostic Commands (Do NOT use individually in agent loops):"
       echo "  task [name]     List or execute configured tasks from .asl.config.asn"
+      echo "  project [--check] Transpile declared ASN projections to host targets (JSON, TOML, YAML)"
       echo "  transpile-pkg   Transpile ASN package specification to standard package.json"
       echo "  skill <subcmd>  Compile and sync skills from ASN specs (compile, stub, sync)"
       echo "  intel <subcmd>  Code intelligence (outline, search, callers, impact, preload, index, health, diagram, cycles, orphans, hotspots, boundary-check)"

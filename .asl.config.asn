@@ -3,11 +3,33 @@
   :version "0.1.0"
   :pure-asl true
   :asl-first true
+  :projections [
+    (:proj :from "package.asn" :to "package.json" :format "json" :doc "Root ASL NPM manifest")
+    (:proj :from "web/package.asn" :to "web/package.json" :format "json" :doc "Web showcase package manifest")
+    (:proj :from "wrangler.asn" :to "wrangler.toml" :format "toml" :doc "Cloudflare Workers configuration")
+  ]
+  :ignore [
+    "scratch/**"
+    "tmp/**"
+    ".asl/cache/**"
+    ".asl/log/**"
+    "**/.system_generated/**"
+    "**/*.tmp"
+    "bench/*.lock"
+    "grammar/*.lock"
+    "prelude/*.lock"
+    ".pre-commit-config.yaml"
+    "**/pnpm-lock.yaml"
+    "**/package-lock.json"
+    "**/pnpm-workspace.yaml"
+    "web/dist/**"
+  ]
   :gates [1 2 3 4 5 6 7]
   :token-baseline 2
   :telemetry (:target-turn-ms 100 :max-token-ceiling 150)
   :daemon (:resident true :memory-index true :max-files 2000)
   :tasks [
+    (:task :name "project" :cmd "asl project" :doc "Transpile all declared ASN projections to host targets")
     (:task :name "gate" :cmd "asl gate" :doc "Run full 7-gate pure ASL verification")
     (:task :name "test" :cmd "asl test" :doc "Run native ASL test suites")
     (:task :name "coverage" :cmd "asl coverage" :doc "Audit native function test coverage")

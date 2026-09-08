@@ -4,11 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "packageManager": "pnpm@11.25.0",
-  "engines": {
-    "node": ">=20.0.0"
-  },
+  "engines": {},
   "scripts": {
-    "build:wasm-runner": "echo 'wasm-runner pure native'",
     "test:wasm-runner": "echo 'ok'",
     "build:web": "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true",
     "dev:web": "npm --prefix web run dev",

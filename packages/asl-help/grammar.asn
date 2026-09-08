@@ -1,0 +1,23 @@
+(:grammar
+  :package @genseam/asl-help
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    (:sym :name "HelpNode" :kind :type :tokens 1)
+    (:sym :name "catalog-size" :kind :fn :tokens 2)
+    (:sym :name "core-help-catalog" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'catalog': identifies the baseline primitive passport catalog")
+    (:sym :name "format-constraints" :kind :fn :tokens 2)
+    (:sym :name "format-help-node" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'format-node': specializes ASN serialization specifically for help passport nodes")
+    (:sym :name "help!" :kind :fn :tokens 1)
+    (:sym :name "lookup-help-node" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'lookup-node': distinguishes symbol catalog search from generic node retrieval")
+    (:sym :name "main" :kind :fn :tokens 1)
+    (:sym :name "make-empty-help-node" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'empty-node': provides fallback empty HelpNode record for failed lookups")
+    (:sym :name "make-help-node" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'make-node': record constructor specifically for HelpNode")
+    (:sym :name "parse-help-node" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'parse-node': specializes deserialization to help node record")
+  ])

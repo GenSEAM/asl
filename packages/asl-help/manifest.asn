@@ -1,0 +1,6 @@
+(:package @genseam/asl-help
+ :version "0.1.0"
+ :entry "src/registry.asl"
+ :description "Self-Contained Machine-Readable ASN Help System and Zero-Overhead On-Demand Routing"
+ :asl-first true
+ :dependencies [])
