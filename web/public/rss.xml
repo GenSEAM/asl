@@ -7,6 +7,20 @@
     <language>en-us</language>
     <lastBuildDate>Tue, 08 Sep 2026 08:00:00 GMT</lastBuildDate>
     <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
+        <item>
+      <title>Zero-Overhead Test Telemetry: Nanosecond-Resolution Observability and Resource Tracking in Pure ASL</title>
+      <link>https://aslang.dev/blog/zero-overhead-test-telemetry-and-resource-observability</link>
+      <description>How we engineered sub-microsecond test timing and RSS memory tracking into the pure ASL evaluation engine with zero observer effect (<20ns), turning test suites into multi-dimensional observability probes.</description>
+      <pubDate>Tue, 08 Sep 2026 00:00:00 GMT</pubDate>
+      <guid>https://aslang.dev/blog/zero-overhead-test-telemetry-and-resource-observability</guid>
+    </item>
+    <item>
+      <title>Beyond Flat Context: Multi-Tier Recursive Fractal Memory and Holistic Tree Aggregation in AgentScript</title>
+      <link>https://aslang.dev/blog/multi-tier-recursive-fractal-memory-and-tree-aggregation</link>
+      <description>Why two-tier memory models collapse under deep system hierarchies, and how homoiconic fractal memory, logical URI addressing (@mem:...), and zero-disk tree aggregation give autonomous agents holistic system observability across 32 packages.</description>
+      <pubDate>Tue, 08 Sep 2026 00:00:00 GMT</pubDate>
+      <guid>https://aslang.dev/blog/multi-tier-recursive-fractal-memory-and-tree-aggregation</guid>
+    </item>
     <item>
       <title>How to Fix Agentic Coding: Why Autonomous LLMs Break on Human Languages (and What Replaces Them)</title>
       <link>https://aslang.dev/blog/why-llms-struggle-with-python-and-rust</link>

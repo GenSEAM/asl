@@ -8,14 +8,16 @@
   :i [(posts :a blog)])
 
 (df test-blog-posts-count [] -> Bool
-  :d "Verifies total blog post catalog contains exactly 19 articles"
+  :d "Verifies total blog post catalog contains exactly 21 articles"
   (let [(all-posts (blog/get-all-posts))]
-    (assert (= (list-len all-posts) 19) "post count is not 19")
+    (assert (= (list-len all-posts) 21) "post count is not 21")
     true))
 
 (df test-blog-posts-slugs [] -> Bool
-  :d "Verifies presence of all 19 canonical slugs across catalog"
+  :d "Verifies presence of all 21 canonical slugs across catalog"
   (do
+        (assert (!= (blog/get-post-by-slug "zero-overhead-test-telemetry-and-resource-observability") nil) "missing slug 21")
+    (assert (!= (blog/get-post-by-slug "multi-tier-recursive-fractal-memory-and-tree-aggregation") nil) "missing slug 20")
     (assert (!= (blog/get-post-by-slug "why-llms-struggle-with-python-and-rust") nil) "missing slug 1")
     (assert (!= (blog/get-post-by-slug "token-economy-and-structural-compression") nil) "missing slug 2")
     (assert (!= (blog/get-post-by-slug "from-vibe-code-to-wasm-in-0-04ms") nil) "missing slug 3")
@@ -51,6 +53,26 @@
       (assert (!= (.-excerpt p1) "") "p1 excerpt is empty")
       (assert (!= (.-content p1) "") "p1 content is empty")
       (assert (> (list-len (.-tags p1)) 0) "p1 tags empty"))
+        (let [(p21 (blog/get-post-by-slug "zero-overhead-test-telemetry-and-resource-observability"))]
+      (assert (!= p21 nil) "p21 is nil")
+      (assert (!= (.-title p21) "") "p21 title is empty")
+      (assert (!= (.-date p21) "") "p21 date is empty")
+      (assert (!= (.-author p21) "") "p21 author is empty")
+      (assert (!= (.-category p21) "") "p21 category is empty")
+      (assert (!= (.-read-time p21) "") "p21 read-time is empty")
+      (assert (!= (.-excerpt p21) "") "p21 excerpt is empty")
+      (assert (!= (.-content p21) "") "p21 content is empty")
+      (assert (> (list-len (.-tags p21)) 0) "p21 tags empty"))
+    (let [(p20 (blog/get-post-by-slug "multi-tier-recursive-fractal-memory-and-tree-aggregation"))]
+      (assert (!= p20 nil) "p20 is nil")
+      (assert (!= (.-title p20) "") "p20 title is empty")
+      (assert (!= (.-date p20) "") "p20 date is empty")
+      (assert (!= (.-author p20) "") "p20 author is empty")
+      (assert (!= (.-category p20) "") "p20 category is empty")
+      (assert (!= (.-read-time p20) "") "p20 read-time is empty")
+      (assert (!= (.-excerpt p20) "") "p20 excerpt is empty")
+      (assert (!= (.-content p20) "") "p20 content is empty")
+      (assert (> (list-len (.-tags p20)) 0) "p20 tags empty"))
     (let [(p19 (blog/get-post-by-slug "universal-cross-platform-glue-without-drift"))]
       (assert (!= p19 nil) "p19 is nil")
       (assert (!= (.-title p19) "") "p19 title is empty")
