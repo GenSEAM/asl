@@ -259,22 +259,17 @@
          :success false))
       (:else
        (let [(orig-tok (estimate-tokens trimmed))
-             ;; Attributes
              (s1 (string-replace trimmed " (:class \"" " class=\""))
              (s2 (string-replace s1 " :id \"" " id=\""))
              (s3 (string-replace s2 " (:src \"" " src=\""))
              (s4 (string-replace s3 " (:value \"" " value=\""))
-             ;; Close attributes
              (s5 (string-replace s4 "\") (" "\">("))
              (s6 (string-replace s5 "\") " "\">"))
-             ;; Container tags
              (s7 (string-replace (string-replace s6 "(div " "<div ") "(div>" "<div >"))
              (s8 (string-replace (string-replace s7 "(span \"" "<span>") "(span " "<span "))
              (s9 (string-replace (string-replace s8 "(p \"" "<p>") "(p " "<p "))
              (s10 (string-replace (string-replace s9 "(h1 \"" "<h1>") "(h1 " "<h1 "))
-             ;; Close text container and parent
              (s11 (string-replace (string-replace s10 "\"))" "</span></div>") "\")" "</span>"))
-             ;; Void tags
              (s12 (string-replace (string-replace s11 "(img " "<img ") "(input " "<input "))
              (s13 (string-replace (string-replace s12 "\"/>" "/>") "\">" "\">"))
              (s14 (string-replace s13 "\">(" "\"><"))
