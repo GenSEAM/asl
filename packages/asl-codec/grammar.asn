@@ -240,6 +240,30 @@
           :rationale "Transpiles JSON Lines streaming document into ASNL S-expressions")
     (:sym :name "asnl-to-jsonl" :kind :fn :tokens 3
           :rationale "Transpiles ASNL S-expression lines into RFC 8259 JSON Lines")
+
+    ;; Phase 317 Dense Tabular, DAG Pyramid & Sparkline Codec Symbols
+    (:sym :name "TableData" :kind :type :tokens 1)
+    (:sym :name "DagNode" :kind :type :tokens 1)
+    (:sym :name "DagPyramid" :kind :type :tokens 1)
+    (:sym :name "SparkMetric" :kind :type :tokens 1)
+    (:sym :name "encode-dense-table" :kind :fn :tokens 3
+          :rationale "Serializes TableData record into compact ASN tabular representation")
+    (:sym :name "decode-dense-table" :kind :fn :tokens 3
+          :rationale "Parses compact ASN tabular S-expression into TableData record")
+    (:sym :name "table-to-markdown" :kind :fn :tokens 3
+          :rationale "Renders TableData record into standard Markdown table format")
+    (:sym :name "measure-table-savings" :kind :fn :tokens 3
+          :rationale "Calculates token compaction percentage of dense ASN table over Markdown")
+    (:sym :name "encode-dag-pyramid" :kind :fn :tokens 3
+          :rationale "Serializes DagPyramid record into compact ASN DAG pyramid representation")
+    (:sym :name "decode-dag-pyramid" :kind :fn :tokens 3
+          :rationale "Parses compact ASN DAG pyramid S-expression into DagPyramid record")
+    (:sym :name "encode-sparkline-metric" :kind :fn :tokens 3
+          :rationale "Serializes SparkMetric record into compact ASN sparkline telemetry representation")
+    (:sym :name "decode-sparkline-metric" :kind :fn :tokens 3
+          :rationale "Parses compact ASN sparkline S-expression into SparkMetric record")
+    (:sym :name "render-sparkline-ascii" :kind :fn :tokens 3
+          :rationale "Renders sequence of float telemetry values into Unicode 8-level sparkline string")
   ])
 
 
