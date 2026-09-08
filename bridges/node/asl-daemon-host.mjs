@@ -15,6 +15,7 @@ let activeOp = ':idle';
 const dirtyBuffers = new Map(); // relPath -> string
 const originalBuffers = new Map(); // relPath -> string
 const residentCache = new Map(); // relPath -> string (in-memory clean buffer cache)
+const activeToolDomains = new Set(); // domain -> active dynamic tool domains
 const EXCLUDE_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', '.asl-cache']);
 
 function walkWorkspaceFiles(dir = wsRoot, fileList = []) {
@@ -913,6 +914,98 @@ function handleQueryIntent(id, rawOp, tokens) {
     return `(:step :id ${id} :op "query-intent" :status "ok" :found false)`;
   }
 }
+
+function handleToolLoad(id, domain) {
+  if (domain) activeToolDomains.add(domain);
+  let tools = [];
+  const regContent = getFileContent('.asl/tools/registry.asn');
+  if (regContent && domain) {
+    const dIdx = regContent.indexOf(`:domain :${domain}`);
+    if (dIdx !== -1) {
+      const nextDomainIdx = regContent.indexOf(':domain :', dIdx + 10);
+      const domainBlock = nextDomainIdx === -1 ? regContent.slice(dIdx) : regContent.slice(dIdx, nextDomainIdx);
+      const toolMatches = domainBlock.matchAll(/:tool\s+:name\s+"([^"]+)"/g);
+      for (const m of toolMatches) {
+        tools.push(`"${m[1]}"`);
+      }
+    }
+  }
+  if (tools.length === 0 && domain) {
+    const defaults = {
+      git: ['"status"', '"diff"', '"commit"', '"log"'],
+      intel: ['"callers"', '"impact"', '"outline"', '"lookup"'],
+      crawler: ['"fetch"', '"snapshot"', '"interact"'],
+      fs: ['"read"', '"write"', '"edit"', '"list"'],
+      compiler: ['"compile"', '"typecheck"', '"eval"'],
+      mesh: ['"peers"', '"lease"', '"release"', '"broadcast"'],
+      bench: ['"run"', '"verify-claims"', '"telemetry"']
+    };
+    tools = defaults[domain] || [];
+  }
+  return `(:step :id ${id} :op "tool-load" :status "ok" :domain "${domain}" :mounted true :tools-count ${tools.length} :tools [${tools.join(' ')}])`;
+}
+
+function handleToolUnload(id, domain) {
+  if (domain) activeToolDomains.delete(domain);
+  return `(:step :id ${id} :op "tool-unload" :status "ok" :domain "${domain}" :unmounted true :active-domains-count ${activeToolDomains.size})`;
+}
+
+    case 'call': {
+      let toolName = '';
+      let domain = '';
+      for (let i = 1; i < tokens.length; i++) {
+        if ((tokens[i] === ':tool' || tokens[i] === 'tool') && tokens[i + 1]) {
+          toolName = tokens[i + 1].replace(/^"|"$/g, '');
+        }
+        if ((tokens[i] === ':domain' || tokens[i] === 'domain') && tokens[i + 1]) {
+          domain = tokens[i + 1].replace(/^[:"]+|["]+$/g, '');
+        }
+      }
+      if (!domain) {
+        const dMatch = rawOp.match(/[:\(]domain\s+[:"]?([a-zA-Z0-9_\-]+)["\)]?/);
+        if (dMatch) domain = dMatch[1];
+      }
+      if (!toolName) {
+        const tMatch = rawOp.match(/[:\(]tool\s+[:"]?([a-zA-Z0-9_\-]+)["\)]?/);
+        if (tMatch) toolName = tMatch[1];
+      }
+
+      if (toolName === 'tool-load') {
+        return handleToolLoad(id, domain);
+      }
+      if (toolName === 'tool-unload') {
+        return handleToolUnload(id, domain);
+      }
+      return `(:step :id ${id} :op "call" :tool "${toolName}" :domain "${domain}" :status "ok")`;
+    }
+
+    case 'tool-load': {
+      let domain = '';
+      for (let i = 1; i < tokens.length; i++) {
+        if ((tokens[i] === ':domain' || tokens[i] === 'domain') && tokens[i + 1]) {
+          domain = tokens[i + 1].replace(/^[:"]+|["]+$/g, '');
+        }
+      }
+      if (!domain) {
+        const dMatch = rawOp.match(/[:\(]domain\s+[:"]?([a-zA-Z0-9_\-]+)["\)]?/);
+        if (dMatch) domain = dMatch[1];
+      }
+      return handleToolLoad(id, domain);
+    }
+
+    case 'tool-unload': {
+      let domain = '';
+      for (let i = 1; i < tokens.length; i++) {
+        if ((tokens[i] === ':domain' || tokens[i] === 'domain') && tokens[i + 1]) {
+          domain = tokens[i + 1].replace(/^[:"]+|["]+$/g, '');
+        }
+      }
+      if (!domain) {
+        const dMatch = rawOp.match(/[:\(]domain\s+[:"]?([a-zA-Z0-9_\-]+)["\)]?/);
+        if (dMatch) domain = dMatch[1];
+      }
+      return handleToolUnload(id, domain);
+    }
 
     case 'asl': {
       if (tokens.some(t => t === ':query-intent' || t === 'query-intent' || t === ':intent' || t === 'intent')) {
