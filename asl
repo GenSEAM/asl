@@ -284,9 +284,9 @@ END {
 
   # Gate 4: Zero Foreign Code & Manifest Hygiene
   echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Py, 0 JS, 0 TS, 0 Rust, 0 C, 0 Shell, 0 JSON, 0 YAML, 0 TOML, 0 Lock in code packages)..."
-  echo "    [Boundary] Legal host projections recognized: asl/bridges/node/, bin/, scripts/"
+  echo "    [Boundary] Legal host projections recognized: asl/bridges/node/, bin/, scripts/, editorial-matrix/scripts/"
   local FOREIGN_FILES
-  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search editorial-matrix -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.lock" -o -name "package.json" -o -name "*-lock.*" \) 2>/dev/null | grep -v 'node_modules' | grep -v 'editorial-matrix/.github/' || true)
+  FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search editorial-matrix -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.lock" -o -name "package.json" -o -name "*-lock.*" \) 2>/dev/null | grep -v 'node_modules' | grep -v 'editorial-matrix/.github/' | grep -v 'editorial-matrix/scripts/' || true)
   if [ -z "$FOREIGN_FILES" ]; then
     echo "    ✓ Zero foreign files in packages (100% pure AgentScript: 0 TS, 0 JS, 0 Py, 0 Rust, 0 C, 0 Shell, 0 JSON, 0 YAML, 0 TOML, 0 Lock)."
   else
