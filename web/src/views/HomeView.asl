@@ -13,16 +13,16 @@
 
 (df describe-home-view [] -> Str
   :d "Returns structural metadata for the Home view."
-  "(view :id \"home\" :components [\"hero\" \"ecosystem\" \"capabilities\" \"agent-way\" \"wire-protocol\" \"harness\" \"module-graph\" \"blog\" \"in-browser-agent\"])")
+  "(view :id \"home\" :components [\"hero\" \"agent-way\" \"capabilities\" \"ecosystem\" \"wire-protocol\" \"harness\" \"module-graph\" \"blog\" \"in-browser-agent\"])")
 
 (df render-home-view [] -> Str
   :d "Renders the full showcase home landing page."
   (s/concat
     "<main class=\"flex-1\">"
     (s/concat (hero)
-    (s/concat (ecosystem)
-    (s/concat (key-capabilities)
     (s/concat (the-agent-way)
+    (s/concat (key-capabilities)
+    (s/concat (ecosystem)
     (s/concat (agent-wire-protocol)
     (s/concat (harness-toolkit)
     (s/concat (module-graph-visualizer)

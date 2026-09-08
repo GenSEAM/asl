@@ -1,0 +1,11 @@
+
+> agentscript-showcase@0.1.0 dev
+> vite
+
+
+  VITE v6.4.3  ready in 542 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+5:18:08 AM [vite] (client) ✨ new dependencies optimized: react-dom/client
+5:18:08 AM [vite] (client) ✨ optimized dependencies changed. reloading

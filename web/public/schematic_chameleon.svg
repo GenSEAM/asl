@@ -19,6 +19,15 @@
     stroke-linejoin="round"
   />
 
+  <!-- Mouth Line (opening) -->
+  <path
+    d="M 76 56
+       C 72 58, 66 58, 64 56"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="1.6"
+    stroke-linecap="round"
+  />
+
   <!-- Crest Back to Spine & Inward Spiral Tail -->
   <path
     d="M 52 14
@@ -34,6 +43,15 @@
     stroke-width="2.0"
     stroke-linecap="round"
     stroke-linejoin="round"
+  />
+
+  <!-- Ear outline naturally connecting to crest -->
+  <path
+    d="M 42 30
+       C 48 24, 56 24, 60 28"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="1.6"
+    stroke-linecap="round"
   />
 
   <!-- Concentric Focal Eye (Chameleon Turret) -->
@@ -63,8 +81,20 @@
     stroke-linecap="round"
   />
 
+  <!-- Schematic Paw / Leg extending from belly -->
+  <path
+    d="M 38 82
+       C 38 92, 44 96, 48 96"
+    stroke="url(#chameleonLineGrad)"
+    stroke-width="2.0"
+    stroke-linecap="round"
+  />
+
   <!-- Subtle blueprint coordinate nodes -->
   <circle cx="52" cy="14" r="1.5" fill="#d8b4fe" opacity="0.8" />
   <circle cx="84" cy="38" r="1.5" fill="#d8b4fe" opacity="0.8" />
   <circle cx="42" cy="124" r="1.5" fill="#d8b4fe" opacity="0.8" />
+
+  <!-- Added node for paw -->
+  <circle cx="48" cy="96" r="1.5" fill="#d8b4fe" opacity="0.8" />
 </svg>
