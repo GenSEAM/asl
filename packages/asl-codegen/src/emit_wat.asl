@@ -11,7 +11,11 @@
       wat-mod
       wat-emit
       emit-wat-expr
-      emit-wat-module]
+      emit-wat-module
+      emit-wasi-imports
+      emit-wasi-fd-write
+      emit-wasi-proc-exit
+      emit-wasi-clock-time-get]
   :i [])
 
 (df wat-type [(ty Str)] -> Str
@@ -115,3 +119,23 @@
         (body (str instr " " (wat-get arg-a) " " (wat-get arg-b)))
         (fn-def (wat-fn fn-name params ret-ty body true))]
     (emit-wat-module (str "  " fn-def) false)))
+
+(df emit-wasi-imports [] -> Str
+  :d "Emits WASI snapshot preview 1 host function import declarations for wasm32-wasip1 runtime linking."
+  (str "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))\n"
+       "  (import \"wasi_snapshot_preview1\" \"fd_read\" (func $fd_read (param i32 i32 i32 i32) (result i32)))\n"
+       "  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func $proc_exit (param i32)))\n"
+       "  (import \"wasi_snapshot_preview1\" \"clock_time_get\" (func $clock_time_get (param i32 i64 i32) (result i32)))"))
+
+(df emit-wasi-fd-write [(fd I64) (iovs-offset I64) (iovs-len I64) (nwritten-offset I64)] -> Str
+  :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 fd_write invocation with iovec buffer arguments."
+  (str "(call $fd_write (i32.const " fd ") (i32.const " iovs-offset ") (i32.const " iovs-len ") (i32.const " nwritten-offset "))"))
+
+(df emit-wasi-proc-exit [(exit-code I64)] -> Str
+  :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 proc_exit invocation terminating process execution."
+  (str "(call $proc_exit (i32.const " exit-code "))"))
+
+(df emit-wasi-clock-time-get [(clock-id I64) (precision I64) (time-offset I64)] -> Str
+  :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 clock_time_get high-resolution timestamp queries."
+  (str "(call $clock_time_get (i32.const " clock-id ") (i64.const " precision ") (i32.const " time-offset "))"))
+

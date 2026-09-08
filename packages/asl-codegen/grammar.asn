@@ -125,4 +125,12 @@
           :rationale "Cannot be reduced to 'mentions-float?': scopes AST type inspection to numeric float descriptors")
     (:sym :name "type-mentions-io-error?" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'mentions-error?': explicitly scopes search to I/O error sum variants, preventing false positives on generic errors")
+    (:sym :name "emit-wasi-imports" :kind :fn :tokens 3
+          :rationale "Emits WASI snapshot preview 1 host function import declarations for wasm32-wasip1 runtime linking")
+    (:sym :name "emit-wasi-fd-write" :kind :fn :tokens 4
+          :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 fd_write invocation with iovec buffer arguments")
+    (:sym :name "emit-wasi-proc-exit" :kind :fn :tokens 4
+          :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 proc_exit invocation terminating process execution")
+    (:sym :name "emit-wasi-clock-time-get" :kind :fn :tokens 5
+          :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 clock_time_get high-resolution timestamp queries")
   ])
