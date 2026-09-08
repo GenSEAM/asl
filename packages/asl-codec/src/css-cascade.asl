@@ -46,7 +46,6 @@
         (CssSpecificity :inline 1 :ids 0 :classes 0 :tags 0)
         (let [(ids (count-char clean "#"))
               (classes (count-char clean "."))
-              ;; Estimate tag count as words not starting with . or #
               (tokens (filter (fn [(w Str)] -> Bool (and (> (string-length w) 0) (and (not (string-starts-with? w ".")) (not (string-starts-with? w "#")))))
                               (string-split clean " ")))]
           (CssSpecificity :inline 0 :ids ids :classes classes :tags (list-length tokens))))))
@@ -136,12 +135,7 @@
         (inline-props (parse-prop-declarations inline-style))
         (all-vars (extract-css-variables (s/join "\n" (map (fn [(r CssRule)] -> Str
                                                              (s/join "; " (map (fn [(p CssProperty)] -> Str (s/concat (.-name p) ": " (.-value p))) (.-properties r))))
-                                                           rules))))]
-    ;; Flatten and resolve matching properties with priority:
-    ;; 1. !important inline
-    ;; 2. !important stylesheet (sorted by specificity, then source-order)
-    ;; 3. normal inline
-    ;; 4. normal stylesheet (sorted by specificity, then source-order)
+                                                            rules))))]
     (let [(merged-map
             (fold (fn [(acc (List (Pair Str Str))) (rule CssRule)] -> (List (Pair Str Str))
                     (fold (fn [(inner (List (Pair Str Str))) (p CssProperty)] -> (List (Pair Str Str))
@@ -151,7 +145,6 @@
                           (.-properties rule)))
                   (list)
                   matching-rules))
-          ;; Merge inline style overrides
           (final-map
             (fold (fn [(acc (List (Pair Str Str))) (ip CssProperty)] -> (List (Pair Str Str))
                     (let [(existing (filter (fn [(pair (Pair Str Str))] -> Bool (!= (pair-first pair) (.-name ip))) acc))]

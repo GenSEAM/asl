@@ -3,7 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rawArgs = process.argv.slice(2);
-if (rawArgs.length === 0) {
+const wantsMetrics = rawArgs.includes('--metrics');
+const cleanArgs = rawArgs.filter(a => a !== '--metrics');
+const t0 = performance.now();
+if (cleanArgs.length === 0) {
   process.exit(0);
 }
 
@@ -307,8 +310,8 @@ function toJson(val) {
 // CLI Mode Dispatch: ASN Codec or ASL Evaluator
 // ---------------------------------------------------------------------------
 
-if (rawArgs[0] === 'asn' || rawArgs[0] === '--from-json' || rawArgs[0] === '--to-json') {
-  const subArgs = rawArgs[0] === 'asn' ? rawArgs.slice(1) : rawArgs;
+if (cleanArgs[0] === 'asn' || cleanArgs[0] === '--from-json' || cleanArgs[0] === '--to-json') {
+  const subArgs = cleanArgs[0] === 'asn' ? cleanArgs.slice(1) : cleanArgs;
   if (subArgs.length === 0) {
     console.error("Usage: asl asn [--from-json <json> | --to-json <asn>]");
     process.exit(1);
@@ -1554,8 +1557,8 @@ function runStaticTypeCheck(forms, code, filePath) {
   }
 }
 
-if (rawArgs[0] === '--check' && rawArgs[1]) {
-  const filePath = rawArgs[1];
+if (cleanArgs[0] === '--check' && cleanArgs[1]) {
+  const filePath = cleanArgs[1];
   if (!fs.existsSync(filePath)) {
     console.error(`Error: file not found: ${filePath}`);
     process.exit(1);
@@ -1664,8 +1667,8 @@ function loadModuleImports(forms, filePath, env, loading = new Set()) {
   }
 }
 
-if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('(')) {
-  const filePath = rawArgs[0];
+if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].startsWith('(')) {
+  const filePath = cleanArgs[0];
   const code = fs.readFileSync(filePath, 'utf8');
   try {
     const forms = parseAllSExprs(code);
@@ -1700,6 +1703,11 @@ if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('
     if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {
       console.log(formatOutput(lastResult));
     }
+    if (wantsMetrics) {
+      const elapsedMs = (performance.now() - t0).toFixed(2);
+      const memMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(2);
+      console.log(`(:metrics :elapsed-ms ${elapsedMs} :rss-mb ${memMb})`);
+    }
     process.exit(0);
   } catch (e) {
     if (e.message && e.message.startsWith('ERR_UNBOUND_SYMBOL')) {
@@ -1710,7 +1718,7 @@ if (rawArgs.length >= 1 && fs.existsSync(rawArgs[0]) && !rawArgs[0].startsWith('
   }
 }
 
-const expr = rawArgs.join(' ').trim();
+const expr = cleanArgs.join(' ').trim();
 if (!expr) {
   process.exit(0);
 }
@@ -1744,6 +1752,11 @@ try {
   }
   if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {
     console.log(formatOutput(lastResult));
+  }
+  if (wantsMetrics) {
+    const elapsedMs = (performance.now() - t0).toFixed(2);
+    const memMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(2);
+    console.log(`(:metrics :elapsed-ms ${elapsedMs} :rss-mb ${memMb})`);
   }
   process.exit(0);
 } catch (e) {

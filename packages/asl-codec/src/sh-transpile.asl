@@ -39,7 +39,6 @@
   (let [(trimmed (string-trim arg))]
     (cond
       ((string-empty? trimmed) "''")
-      ;; If arg already has no special characters, return as-is
       ((and (not (string-contains? trimmed " "))
             (not (string-contains? trimmed "\""))
             (not (string-contains? trimmed "'"))
@@ -58,7 +57,6 @@
             (not (string-contains? trimmed "~"))
             (not (string-contains? trimmed "!")))
        trimmed)
-      ;; Wrap in single quotes, escaping any internal single quotes
       (true
        (let [(escaped (string-replace trimmed "'" "'\\''"))]
          (s/concat (s/concat "'" escaped) "'"))))))
@@ -116,18 +114,14 @@
          :success false))
       (true
        (let [(asn-tok (estimate-tokens trimmed))
-             ;; Replace :pipe container with pipeline syntax
              (s1 (string-replace trimmed "(:pipe" ""))
-             ;; Replace :seq container with sequential execution
              (s2 (string-replace s1 "(:seq" ""))
-             ;; Replace command headers
              (s3 (string-replace s2 "(:cmd" ""))
              (s4 (string-replace s3 ":args [" ""))
              (s5 (string-replace s4 ":args" ""))
              (s6 (string-replace s5 "]" ""))
              (s7 (string-replace s6 "\"" ""))
              (s8 (string-replace s7 ")" ""))
-             ;; Handle script header
              (s9 (if (string-contains? trimmed ":strict true")
                      (s/concat "set -euo pipefail\n" (string-trim (string-replace s8 ":script :strict true" "")))
                      s8))

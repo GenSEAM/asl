@@ -1288,6 +1288,12 @@ if (process.argv.includes('--daemon')) {
     process.exit(0);
   }
 } else {
-  const arg = process.argv.slice(2).join(' ') || (process.stdin.isTTY ? '(:diff)' : fs.readFileSync(0, 'utf8'));
+  let stdinInput = '';
+  if (!process.stdin.isTTY) {
+    try {
+      stdinInput = fs.readFileSync(0, 'utf8');
+    } catch {}
+  }
+  const arg = process.argv.slice(2).join(' ') || stdinInput || '(:diff)';
   process.stdout.write(processBatch(arg));
 }

@@ -54,7 +54,6 @@
          :success false))
       (true
        (let [(asn-tok (estimate-tokens trimmed))
-             ;; Normalization from ASN S-expression to SVG tags
               (s1 (string-replace trimmed "(:svg" "<svg xmlns=\"http://www.w3.org/2000/svg\""))
               (s2 (string-replace s1 "(:defs" "<defs>"))
               (s2b (string-replace s2 "(:def" "<defs>"))
@@ -98,7 +97,6 @@
               (s29 (string-replace s28 ":d " "d=\""))
               (s30 (string-replace s29 ":id " "id=\""))
               (s31 (string-replace s30 ")" "/>"))
-             ;; Close root svg properly
              (final-svg (if (string-ends-with? s31 "/>")
                             (s/concat (option-or (string-slice s31 0 (- (string-length s31) 2)) "") "</svg>")
                             (s/concat s31 "</svg>")))
@@ -132,7 +130,6 @@
          :success false))
       (true
        (let [(orig-tok (estimate-tokens trimmed))
-             ;; Normalization from SVG XML to ASN S-expression
              (s1 (string-replace trimmed "<svg" "(:svg"))
              (s2 (string-replace s1 "xmlns=\"http://www.w3.org/2000/svg\"" ""))
              (s3 (string-replace s2 "<defs>" "(:defs"))

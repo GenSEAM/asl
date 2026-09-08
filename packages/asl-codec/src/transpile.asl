@@ -52,15 +52,10 @@
          :success false))
       (:else
        (let [(orig-tok (estimate-tokens trimmed))
-             ;; Step 1: replace object delimiters { -> ( and } -> )
              (s1 (string-replace (string-replace trimmed "{" "(") "}" ")"))
-             ;; Step 2: replace null with nil sentinel _
              (s2 (string-replace s1 "null" "_"))
-             ;; Step 3: convert keys: ("key": -> (:key , , "key": ->  :key , ,"key": ->  :key
              (s3 (string-replace (string-replace (string-replace s2 "(\"" "(:") ", \"" " :") ",\"" " :"))
-             ;; Step 4: clean delimiter ": " -> " " and ":" -> " "
              (s4 (string-replace (string-replace s3 "\": " " ") "\":" " "))
-             ;; Step 5: clean comma separators in arrays
              (s5 (string-replace (string-replace s4 ", " " ") "," " "))
              (compact s5)
              (asn-tok (estimate-tokens compact))
@@ -149,7 +144,6 @@
          :success false))
       (:else
        (let [(orig-tok (estimate-tokens trimmed))
-             ;; Normalize YAML line by line into S-expression
              (s1 (string-replace trimmed ": " " "))
              (s2 (string-replace s1 "\n  " " :"))
              (s3 (string-replace s2 "\n" " :"))
@@ -207,7 +201,6 @@
          :success false))
       (:else
        (let [(orig-tok (estimate-tokens trimmed))
-              ;; Handle void/self-closing elements: <img src="pic.png"> -> (img (:src "pic.png"))
               (s_img (if (string-contains? trimmed "<img ")
                          (let [(parts (string-split trimmed "<img "))
                                (head-part (option-or (list-head parts) ""))
@@ -228,7 +221,6 @@
                                (vdom-inp (str "(input (:" (string-replace (string-replace attr-part "=\"" " \"") "/>" "") "))"))]
                            (str head-part vdom-inp rest-part))
                          s_img))
-              ;; Handle container tags: <div class="btn">...</div>
               (s1 (string-replace (string-replace s_inp "<div" "(div") "</div>" ")"))
               (s2 (string-replace (string-replace s1 "<span" "(span") "</span>" ")"))
               (s3 (string-replace (string-replace s2 "<p" "(p") "</p>" ")"))
