@@ -6,6 +6,7 @@
       test-vector-flow
       test-vector-icon
       test-vector-compact
+      test-vector-filters-and-containers
       test-svg-compaction
       test-svg-malformed
       run-svg-tests
@@ -73,7 +74,33 @@
     (assert (string-contains? (.-output res) "font-size=\"12\"") "has font-size")
     (assert (string-contains? (.-output res) "viewBox=\"0 0 100 100\"") "has viewBox")
     (assert (string-contains? (.-output res) "stroke-width=\"1\"") "has stroke-width")
+    (assert (string-contains? (.-output res) "<g>") "has opening <g>")
+    (assert (string-contains? (.-output res) "</g>") "has closing </g>")
+    (assert (not (string-contains? (.-output res) "/>/>")) "zero double closing slashes")
+    (assert (not (string-contains? (.-output res) "\"\"")) "zero duplicate quotes")
     true))
+
+(df test-vector-filters-and-containers [] -> Bool
+  :d "Tests paired container tags and filter/gradient definitions"
+  (let [(asn-input "(:svg :w 200 :h 200 :v \"0 0 200 200\" (:defs (:grad :id \"g1\" (:stop :off \"0%\" :col \"#ff0000\") (:stop :off \"100%\" :col \"#00ff00\")) (:filter :id \"glow\" (:feGaussianBlur :std-dev \"3\" :result \"b1\") (:feMerge (:feMergeNode :in \"b1\") (:feMergeNode :in \"SourceGraphic\")))) (:g (:rc :x 0 :y 0 :w 200 :h 200 :f \"url(#g1)\") (:circ :cx 100 :cy 100 :r 50 :filter \"url(#glow)\")))")
+        (res (svg/asn-to-svg asn-input))]
+    (assert (.-success res) "res must succeed")
+    (let [(xml (.-output res))]
+      (assert (string-contains? xml "<defs>") "has <defs>")
+      (assert (string-contains? xml "</defs>") "has </defs>")
+      (assert (string-contains? xml "<linearGradient id=\"g1\">") "has <linearGradient>")
+      (assert (string-contains? xml "</linearGradient>") "has </linearGradient>")
+      (assert (string-contains? xml "<filter id=\"glow\">") "has <filter>")
+      (assert (string-contains? xml "</filter>") "has </filter>")
+      (assert (string-contains? xml "<feMerge>") "has <feMerge>")
+      (assert (string-contains? xml "</feMerge>") "has </feMerge>")
+      (assert (string-contains? xml "<g>") "has <g>")
+      (assert (string-contains? xml "</g>") "has </g>")
+      (assert (string-contains? xml "<stop offset=\"0%\" stop-color=\"#ff0000\"/>") "has clean stop 1")
+      (assert (string-contains? xml "<feGaussianBlur stdDeviation=\"3\" result=\"b1\"/>") "has feGaussianBlur")
+      (assert (not (string-contains? xml "/>/>")) "zero double slashes")
+      (assert (not (string-contains? xml "\"\"")) "zero duplicate quotes")
+      true)))
 
 (df test-svg-compaction [] -> Bool
   :d "Verifies >= 30% token savings between raw verbose SVG XML and compact ASN"
@@ -108,6 +135,7 @@
     (assert (test-vector-flow) "test-vector-flow must pass")
     (assert (test-vector-icon) "test-vector-icon must pass")
     (assert (test-vector-compact) "test-vector-compact must pass")
+    (assert (test-vector-filters-and-containers) "test-vector-filters-and-containers must pass")
     (assert (test-svg-compaction) "test-svg-compaction must pass")
     (assert (test-svg-malformed) "test-svg-malformed must pass")
     true))

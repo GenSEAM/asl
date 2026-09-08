@@ -7,7 +7,10 @@
       make-vector-flowchart
       make-vector-icon
       measure-svg-compaction]
-  :i [(core/strings :a s)])
+  :i [(core/strings :a s)
+      (asl-parser/reader :a rd)
+      (asl-parser/lexer :a lx)
+      (asl-parser/ast :a ast)])
 
 (dfs SvgTranspileResult
   (:f output Str "Transpiled SVG XML or ASN S-expression")
@@ -33,6 +36,144 @@
             0.0
             (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
 
+(df strip-quotes [(val Str)] -> Str
+  :d "Strips outer double quotes from string values."
+  (let [(len (string-length val))]
+    (if (and (>= len 2) (and (string-starts-with? val "\"") (string-ends-with? val "\"")))
+      (option-or (string-slice val 1 (- len 1)) "")
+      val)))
+
+(df norm-tag [(raw Str)] -> Str
+  :d "Normalizes ASN tag to canonical SVG XML element name."
+  (cond
+    ((= raw ":svg") "svg")
+    ((or (= raw ":g") (= raw ":group")) "g")
+    ((or (= raw ":def") (= raw ":defs")) "defs")
+    ((or (= raw ":grad") (= raw ":linearGradient")) "linearGradient")
+    ((or (= raw ":rgrad") (= raw ":radialGradient")) "radialGradient")
+    ((= raw ":filter") "filter")
+    ((= raw ":mask") "mask")
+    ((or (= raw ":rc") (= raw ":rect")) "rect")
+    ((or (= raw ":circ") (= raw ":circle")) "circle")
+    ((or (= raw ":p") (= raw ":path")) "path")
+    ((or (= raw ":ln") (= raw ":line")) "line")
+    ((or (= raw ":poly") (= raw ":polygon")) "polygon")
+    ((or (= raw ":txt") (= raw ":text")) "text")
+    ((= raw ":stop") "stop")
+    ((= raw ":feGaussianBlur") "feGaussianBlur")
+    ((= raw ":feMerge") "feMerge")
+    ((= raw ":feMergeNode") "feMergeNode")
+    ((= raw ":feOffset") "feOffset")
+    ((= raw ":feBlend") "feBlend")
+    ((= raw ":feFlood") "feFlood")
+    ((= raw ":feComposite") "feComposite")
+    ((string-starts-with? raw ":") (option-or (string-slice raw 1 (string-length raw)) raw))
+    (:else raw)))
+
+(df norm-attr [(raw Str)] -> Str
+  :d "Normalizes ASN attribute keyword to canonical SVG XML attribute name."
+  (cond
+    ((= raw ":w") "width")
+    ((= raw ":h") "height")
+    ((or (= raw ":v") (= raw ":view")) "viewBox")
+    ((or (= raw ":f") (= raw ":fill")) "fill")
+    ((or (= raw ":s") (= raw ":stroke")) "stroke")
+    ((or (= raw ":sw") (= raw ":stroke-width")) "stroke-width")
+    ((or (= raw ":op") (= raw ":opacity")) "opacity")
+    ((or (= raw ":sz") (= raw ":size")) "font-size")
+    ((or (= raw ":pts") (= raw ":points")) "points")
+    ((or (= raw ":tr") (= raw ":transform")) "transform")
+    ((or (= raw ":std-dev") (= raw ":stdDeviation")) "stdDeviation")
+    ((or (= raw ":off") (= raw ":offset")) "offset")
+    ((or (= raw ":col") (= raw ":stop-color")) "stop-color")
+    ((string-starts-with? raw ":") (option-or (string-slice raw 1 (string-length raw)) raw))
+    (:else raw)))
+
+(df is-container? [(tag Str)] -> Bool
+  :d "Returns true if tag is a container element requiring paired closing tags."
+  (or (= tag "svg")
+  (or (= tag "g")
+  (or (= tag "defs")
+  (or (= tag "filter")
+  (or (= tag "mask")
+  (or (= tag "linearGradient")
+  (or (= tag "radialGradient")
+  (or (= tag "text")
+      (= tag "feMerge"))))))))))
+
+(dfs ParseScan
+  (:f attrs Str "Accumulated XML attributes")
+  (:f children (List rd/SExpr) "Child S-expression forms")
+  (:f text Str "Inner text content")
+  (:f pending-key Str "Attribute key awaiting its value"))
+
+(df render-sexpr-node [(expr rd/SExpr)] -> Str
+  :d "Recursively renders an SExpr AST node to well-formed SVG XML."
+  (mt expr
+    ((rd/sexpr-atom v) (strip-quotes v))
+    ((rd/sexpr-vect _) "")
+    ((rd/sexpr-list items)
+     (if (list-empty? items)
+       ""
+       (let [(head-expr (option-or (list-head items) (rd/make-atom "")))
+             (raw-tag (rd/sexpr-head head-expr))
+             (tag (norm-tag raw-tag))
+             (rest (option-or (list-tail items) (list)))
+             (scan (fold (fn [(st ParseScan) (it rd/SExpr)] -> ParseScan
+                           (if (string-empty? (.-pending-key st))
+                             (mt it
+                               ((rd/sexpr-atom v)
+                                (if (string-starts-with? v ":")
+                                  (ParseScan :attrs (.-attrs st)
+                                             :children (.-children st)
+                                             :text (.-text st)
+                                             :pending-key (norm-attr v))
+                                  (ParseScan :attrs (.-attrs st)
+                                             :children (.-children st)
+                                             :text (s/concat (.-text st) (strip-quotes v))
+                                             :pending-key "")))
+                               ((rd/sexpr-list _)
+                                (ParseScan :attrs (.-attrs st)
+                                           :children (list-append (.-children st) (list it))
+                                           :text (.-text st)
+                                           :pending-key ""))
+                               ((rd/sexpr-vect _) st))
+                             (let [(key (.-pending-key st))]
+                               (mt it
+                                 ((rd/sexpr-atom v)
+                                  (if (string-starts-with? v ":")
+                                    (let [(attr-chunk (s/concat " " key "=\"true\""))]
+                                      (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
+                                                 :children (.-children st)
+                                                 :text (.-text st)
+                                                 :pending-key (norm-attr v)))
+                                    (let [(attr-chunk (s/concat " " key "=\"" (strip-quotes v) "\""))]
+                                      (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
+                                                 :children (.-children st)
+                                                 :text (.-text st)
+                                                 :pending-key ""))))
+                                 ((rd/sexpr-list _)
+                                  (let [(attr-chunk (s/concat " " key "=\"true\""))]
+                                    (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
+                                               :children (list-append (.-children st) (list it))
+                                               :text (.-text st)
+                                               :pending-key "")))
+                                 ((rd/sexpr-vect _) st)))))
+                         (ParseScan :attrs (if (= tag "svg") " xmlns=\"http://www.w3.org/2000/svg\"" "")
+                                    :children (list)
+                                    :text ""
+                                    :pending-key "")
+                         rest))
+             (final-attrs (if (string-empty? (.-pending-key scan))
+                            (.-attrs scan)
+                            (s/concat (.-attrs scan) " " (.-pending-key scan) "=\"true\"")))
+             (children-rendered (string-join (list-map (fn [(c rd/SExpr)] -> Str (render-sexpr-node c))
+                                                       (.-children scan)) ""))
+             (body (s/concat children-rendered (.-text scan)))]
+         (if (is-container? tag)
+           (s/concat "<" tag final-attrs ">" body "</" tag ">")
+           (s/concat "<" tag final-attrs "/>")))))))
+
 (df asn-to-svg [(asn-str Str)] -> SvgTranspileResult
   :d "Transpiles compact ASN vector S-expressions into valid SVG XML."
   (let [(trimmed (string-trim asn-str))]
@@ -52,62 +193,36 @@
          :asn-tokens 0
          :savings-percent 0.0
          :success false))
-      (true
-       (let [(asn-tok (estimate-tokens trimmed))
-              (s1 (string-replace trimmed "(:svg" "<svg xmlns=\"http://www.w3.org/2000/svg\""))
-              (s2 (string-replace s1 "(:defs" "<defs>"))
-              (s2b (string-replace s2 "(:def" "<defs>"))
-              (s3 (string-replace s2b "(:grad" "<linearGradient"))
-              (s4 (string-replace s3 "(:rect" "<rect"))
-              (s4b (string-replace s4 "(:rc" "<rect"))
-              (s5 (string-replace s4b "(:circle" "<circle"))
-              (s5b (string-replace s5 "(:circ" "<circle"))
-              (s6 (string-replace s5b "(:path" "<path"))
-              (s6b (string-replace s6 "(:p" "<path"))
-              (s7 (string-replace s6b "(:text" "<text"))
-              (s7b (string-replace s7 "(:txt" "<text"))
-              (s8 (string-replace s7b "(:line" "<line"))
-              (s8b (string-replace s8 "(:ln" "<line"))
-              (s9 (string-replace s8b "(:poly" "<polygon"))
-              (s10 (string-replace s9 "(:group" "<g"))
-              (s10b (string-replace s10 "(:g" "<g"))
-              (s11 (string-replace s10b ":w " "width=\""))
-              (s12 (string-replace s11 ":h " "height=\""))
-              (s13 (string-replace s12 ":view " "viewBox=\""))
-              (s13b (string-replace s13 ":v " "viewBox=\""))
-              (s14 (string-replace s13b ":x " "x=\""))
-              (s15 (string-replace s14 ":y " "y=\""))
-              (s16 (string-replace s15 ":x1 " "x1=\""))
-              (s17 (string-replace s16 ":y1 " "y1=\""))
-              (s18 (string-replace s17 ":x2 " "x2=\""))
-              (s19 (string-replace s18 ":y2 " "y2=\""))
-              (s20 (string-replace s19 ":cx " "cx=\""))
-              (s21 (string-replace s20 ":cy " "cy=\""))
-              (s22 (string-replace s21 ":r " "r=\""))
-              (s23 (string-replace s22 ":rx " "rx=\""))
-              (s24 (string-replace s23 ":fill " "fill=\""))
-              (s24b (string-replace s24 ":f " "fill=\""))
-              (s25 (string-replace s24b ":stroke " "stroke=\""))
-              (s25b (string-replace s25 ":s " "stroke=\""))
-              (s26 (string-replace s25b ":sw " "stroke-width=\""))
-              (s27 (string-replace s26 ":op " "opacity=\""))
-              (s27b (string-replace s27 ":size " "font-size=\""))
-              (s27c (string-replace s27b ":sz " "font-size=\""))
-              (s28 (string-replace s27c ":points " "points=\""))
-              (s29 (string-replace s28 ":d " "d=\""))
-              (s30 (string-replace s29 ":id " "id=\""))
-              (s31 (string-replace s30 ")" "/>"))
-             (final-svg (if (string-ends-with? s31 "/>")
-                            (s/concat (option-or (string-slice s31 0 (- (string-length s31) 2)) "") "</svg>")
-                            (s/concat s31 "</svg>")))
-             (orig-tok (estimate-tokens final-svg))
-             (savings (calc-savings orig-tok asn-tok))]
-         (SvgTranspileResult
-           :output final-svg
-           :original-tokens orig-tok
-           :asn-tokens asn-tok
-           :savings-percent savings
-           :success true))))))
+      (:else
+       (let [(toks (lx/tokenize trimmed))
+             (forms-res (ast/read-forms toks))]
+         (mt forms-res
+           ((err _)
+            (SvgTranspileResult
+              :output "Syntax error: unclosed delimiter"
+              :original-tokens 0
+              :asn-tokens 0
+              :savings-percent 0.0
+              :success false))
+           ((ok forms)
+            (if (list-empty? forms)
+              (SvgTranspileResult
+                :output "Empty forms"
+                :original-tokens 0
+                :asn-tokens 0
+                :savings-percent 0.0
+                :success false)
+              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
+                    (xml (render-sexpr-node (.-expr pf)))
+                    (asn-tok (estimate-tokens trimmed))
+                    (orig-tok (estimate-tokens xml))
+                    (savings (calc-savings orig-tok asn-tok))]
+                (SvgTranspileResult
+                  :output xml
+                  :original-tokens orig-tok
+                  :asn-tokens asn-tok
+                  :savings-percent savings
+                  :success true))))))))))
 
 (df svg-to-asn [(svg-str Str)] -> SvgTranspileResult
   :d "Parses raw SVG XML into compact ASN vector S-expressions."
@@ -128,7 +243,7 @@
          :asn-tokens 0
          :savings-percent 0.0
          :success false))
-      (true
+      (:else
        (let [(orig-tok (estimate-tokens trimmed))
              (s1 (string-replace trimmed "<svg" "(:svg"))
              (s2 (string-replace s1 "xmlns=\"http://www.w3.org/2000/svg\"" ""))
@@ -191,10 +306,10 @@
   (let [(asn-flow (s/concat "(:svg :w \"600\" :h \"150\" :view \"0 0 600 150\" "
                             (s/concat "(:rect :x \"20\" :y \"40\" :w \"140\" :h \"60\" :rx \"8\" :fill \"#1e293b\" :stroke \"#38bdf8\") ")
                             (s/concat "(:text :x \"90\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" node-a "\") ")
-                            (s/concat "(:path :d \"M 160 70 L 220 70\" :stroke \"#64748b\" :w \"2\") ")
+                            (s/concat "(:path :d \"M 160 70 L 220 70\" :stroke \"#64748b\" :stroke-width \"2\") ")
                             (s/concat "(:rect :x \"230\" :y \"40\" :w \"140\" :h \"60\" :rx \"8\" :fill \"#1e293b\" :stroke \"#818cf8\") ")
                             (s/concat "(:text :x \"300\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" node-b "\") ")
-                            (s/concat "(:path :d \"M 370 70 L 430 70\" :stroke \"#64748b\" :w \"2\") ")
+                            (s/concat "(:path :d \"M 370 70 L 430 70\" :stroke \"#64748b\" :stroke-width \"2\") ")
                             (s/concat "(:rect :x \"440\" :y \"40\" :w \"140\" :h \"60\" :rx \"8\" :fill \"#1e293b\" :stroke \"#34d399\") ")
                             (s/concat "(:text :x \"510\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" node-c "\"))")))]
     (asn-to-svg asn-flow)))

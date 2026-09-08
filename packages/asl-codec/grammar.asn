@@ -111,6 +111,8 @@
           :rationale "Verifies vector icon generation")
     (:sym :name "test-vector-compact" :kind :fn :tokens 3
           :rationale "Verifies single-token ultra-compact vector ASN transpile")
+    (:sym :name "test-vector-filters-and-containers" :kind :fn :tokens 4
+          :rationale "Verifies paired container tags and filter/gradient definitions")
     (:sym :name "test-svg-compaction" :kind :fn :tokens 3
           :rationale "Verifies token savings measurement between SVG and ASN")
     (:sym :name "test-svg-malformed" :kind :fn :tokens 3
