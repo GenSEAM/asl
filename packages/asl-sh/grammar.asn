@@ -14,6 +14,9 @@
     (:sym :name "GitCommitEntry" :kind :type :tokens 1)
     (:sym :name "GitDiffFile" :kind :type :tokens 1)
     (:sym :name "GitDiffHunk" :kind :type :tokens 1)
+    (:sym :name "GitHubCiCheck" :kind :type :tokens 1)
+    (:sym :name "GitHubIssue" :kind :type :tokens 1)
+    (:sym :name "GitHubPrSummary" :kind :type :tokens 1)
     (:sym :name "GitTopology" :kind :type :tokens 1)
     (:sym :name "GitWorktreeEntry" :kind :type :tokens 1)
     (:sym :name "LockVerdict" :kind :type :tokens 1)
@@ -134,6 +137,12 @@
           :rationale "Cannot be reduced to 'worktree-parse': distinguishes git worktree porcelain parser from general directory tree parsers")
     (:sym :name "git-worktrees-format" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'worktrees-format': distinguishes git worktree roster ASN formatter from general tree formatters")
+    (:sym :name "github-diff-compact" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'diff-compact': explicitly scopes diff compaction to GitHub PR patch and review payloads")
+    (:sym :name "github-issue-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'issue-parse': scopes issue and comment parser specifically to GitHub issue JSON representations")
+    (:sym :name "github-pr-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'pr-parse': distinguishes GitHub pull request payload parser from general patch or review tools")
     (:sym :name "is-balanced-frame?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-balanced?': scopes balance validation specifically to stream frame delineation")
     (:sym :name "make-daemon-entry" :kind :fn :tokens 3

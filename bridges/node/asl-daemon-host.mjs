@@ -1172,6 +1172,53 @@ function handleToolUnload(id, domain) {
       return `(:step :id ${id} :op "inspect" :status "ok" :daemon-id "${hash}" :pid ${process.pid} :rss-mb ${rssMb} :uptime-sec ${uptimeSec} :active-op "${curOp}" :socket "${sockPath}" :dirty-buffers ${dirtyBuffers.size} :resident-cache ${residentCache.size})`;
     }
 
+    case 'git': {
+      let subOp = 'where';
+      for (let i = 1; i < tokens.length; i++) {
+        if ((tokens[i] === ':op' || tokens[i] === 'op') && tokens[i + 1]) {
+          subOp = tokens[i + 1].replace(/^"|"$/g, '');
+        }
+      }
+      let branch = 'main';
+      let commit = 'HEAD';
+      let root = wsRoot;
+      try {
+        branch = execSync('git rev-parse --abbrev-ref HEAD 2>/dev/null', { cwd: wsRoot, encoding: 'utf8', timeout: 5000 }).trim() || 'main';
+        commit = execSync('git rev-parse HEAD 2>/dev/null', { cwd: wsRoot, encoding: 'utf8', timeout: 5000 }).trim() || 'HEAD';
+        root = execSync('git rev-parse --show-toplevel 2>/dev/null', { cwd: wsRoot, encoding: 'utf8', timeout: 5000 }).trim() || wsRoot;
+      } catch {
+        // fallback
+      }
+      return `(:step :id ${id} :op "git" :status :ok :sub-op "${subOp}" :where-am-i (:branch "${branch}" :commit "${commit}" :root "${root}"))`;
+    }
+
+    case 'gh': {
+      let subOp = 'status';
+      for (let i = 1; i < tokens.length; i++) {
+        if ((tokens[i] === ':op' || tokens[i] === 'op') && tokens[i + 1]) {
+          subOp = tokens[i + 1].replace(/^"|"$/g, '');
+        }
+      }
+      let defaultRepo = '';
+      let authenticated = false;
+      try {
+        const remoteOut = execSync('git config --get remote.origin.url 2>/dev/null', { cwd: wsRoot, encoding: 'utf8', timeout: 5000 }).trim();
+        if (remoteOut) {
+          const m = remoteOut.match(/github\.com[:/]([^/]+\/[^/.]+)/);
+          if (m) defaultRepo = m[1];
+        }
+      } catch {
+        // fallback
+      }
+      try {
+        execSync('gh auth status 2>/dev/null', { cwd: wsRoot, encoding: 'utf8', timeout: 5000 });
+        authenticated = true;
+      } catch {
+        authenticated = Boolean(process.env.GITHUB_TOKEN || process.env.GH_TOKEN);
+      }
+      return `(:step :id ${id} :op "gh" :status :ok :sub-op "${subOp}" :gh-status (:authenticated ${authenticated} :default-repo "${defaultRepo}"))`;
+    }
+
     default:
       return `(:step :id ${id} :op "${op}" :status "ok")`;
   }
