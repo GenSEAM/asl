@@ -56,5 +56,13 @@
           :rationale "Standard string prefix predicate with clear domain semantics")
     (:sym :name "string-from-int64" :kind :fn :tokens 3
           :rationale "Explicit typed scalar formatting distinguishing I64 conversion")
+
+    ;; Falsification & Test Polarity Forms (1-2 tokens)
+    (:sym :name "assert" :kind :form :tokens 1)
+    (:sym :name "refute" :kind :form :tokens 1)
+    (:sym :name "assert-reject" :kind :fn :tokens 2)
+    (:sym :name "assert-err" :kind :fn :tokens 2)
+    (:sym :name "assert-case" :kind :fn :tokens 2)
+    (:sym :name "refute-case" :kind :fn :tokens 2)
   ]
 )

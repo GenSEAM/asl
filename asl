@@ -1613,6 +1613,8 @@ total_qualified = 0
 total_under = 0
 total_zero = 0
 total_asserts = 0
+total_dual_polarity = 0
+all_test_texts = []
 
 core_tests = 0
 core_qualified = 0
@@ -1641,6 +1643,7 @@ for root, dirs, files in os.walk(ws_root):
             
             with open(path, 'r', encoding='utf-8', errors='ignore') as fp:
                 content = fp.read()
+            all_test_texts.append(content)
             
             file_asserts = len(re.findall(r'\(assert\b', content))
             packages[pkg]['asserts'] += file_asserts
@@ -1660,10 +1663,15 @@ for root, dirs, files in os.walk(ws_root):
                 if name in ['run-tests', 'test-runner']:
                     continue
                 
-                assert_count = len(re.findall(r'\(assert\b', fn))
+                pos = len(re.findall(r'\(assert\b(?!\s*\(not\b)', fn))
+                neg = len(re.findall(r'(\(refute\b|\(refute-case\b|\(assert-reject\b|\(assert-err\b|\(assert\s+\(not\b|\(assert\s+false\b)', fn))
+                assert_count = pos + neg
                 if assert_count == 0:
                     if re.search(r'\(assert\s+\(' + re.escape(name) + r'\b', content):
                         assert_count = 1
+                
+                if pos >= 1 and neg >= 1:
+                    total_dual_polarity += 1
                 
                 packages[pkg]['tests'] += 1
                 if not is_excluded:
@@ -1688,6 +1696,25 @@ for root, dirs, files in os.walk(ws_root):
                     if not is_excluded:
                         total_qualified += 1
 
+case_store_files = 0
+case_ids = []
+for r, d, fs in os.walk(ws_root):
+    if any(p in r for p in ['node_modules', '/.', 'jobs', 'tmp']):
+        continue
+    for f in fs:
+        if f.endswith('cases.asn') and 'grammar/cases.asn' not in os.path.join(r, f):
+            case_store_files += 1
+            with open(os.path.join(r, f), 'r', errors='ignore') as fp:
+                case_ids.extend(re.findall(r':id\s+\"([^\"]+)\"', fp.read()))
+
+case_store_total = len(case_ids)
+case_store_covered = 0
+if case_store_total > 0:
+    all_content = ' '.join(all_test_texts)
+    for cid in case_ids:
+        if cid in all_content:
+            case_store_covered += 1
+
 print(f\"{'Package / Subsystem':<30} {'Suites':>6} {'Tests':>6} {'Qualified':>10} {'Under':>6} {'Zero':>6} {'Coverage':>9} {'Tier/Status':>13}\")
 print('-' * 92)
 for pkg in sorted(packages.keys()):
@@ -1704,6 +1731,7 @@ print(f\"--> Multi-Tier Test Coverage & Robustness Summary:\")
 print(f\"    • Production native test suites:  {total_suites} suites\")
 print(f\"    • Production test functions:      {total_tests} functions\")
 print(f\"    • Dual-case qualified tests:     {total_qualified} ({tot_cov:.1f}%) [target: >={desired_cov:.1f}%]\")
+print(f\"    • Strict dual-polarity tests:    {total_dual_polarity} ({total_dual_polarity/total_tests*100:.1f}%) [positive + negative]\")
 print(f\"    • Single-case tests:             {total_under} (missing negative/edge cases)\")
 print(f\"    • Zero-assertion tests:          {total_zero} (discounted from coverage)\")
 print(f\"    • Non-zero assertion rate:       {non_zero_cov:.1f}%\")
@@ -1711,6 +1739,9 @@ print(f\"    • Total verified assertions:     {total_asserts} non-vacuous asse
 core_cov = (core_qualified / core_tests * 100) if core_tests > 0 else 100.0
 if core_tests > 0:
     print(f\"    • Core Tier Coverage:             {core_qualified}/{core_tests} ({core_cov:.1f}%) [target: {core_desired:.1f}%]\")
+if case_store_total > 0:
+    cs_cov = (case_store_covered / case_store_total * 100)
+    print(f\"    • Case Store Matrix Coverage:    {case_store_covered}/{case_store_total} ({cs_cov:.1f}%) across {case_store_files} registries\")
 print('=' * 92)
 
 passes_global = tot_cov >= desired_cov

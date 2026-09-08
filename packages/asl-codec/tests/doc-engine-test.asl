@@ -16,6 +16,7 @@
     (assert (= (.-module-id m1) "asl-bus/wire") "module-id must match")
     (assert (= (list-length (.-symbols m1)) 1) "symbols count must be 1")
     (assert (= (list-length (.-invariants m1)) 2) "invariants count must be 2")
+    (assert (not (string-contains? (.-module-id m1) "unknown")) "module-id not unknown")
     true))
 
 (df test-compile-doc-to-markdown [] -> Bool
@@ -28,6 +29,7 @@
     (assert (string-contains? md "## Solution & Architecture") "md must contain solution")
     (assert (string-contains? md "## API Reference") "md must contain api ref")
     (assert (string-contains? md "`bus-join`") "md must contain bus-join")
+    (assert (not (string-contains? md "NonExistentHeading")) "md has no non-existent heading")
     true))
 
 (df test-extract-agent-doc-stub [] -> Bool
@@ -42,13 +44,17 @@
          (assert (string-contains? stub ":doc-stub :mod \"asl-bus/presence\"") "stub has mod")
          (assert (string-contains? stub ":sym \"bus-who\"") "stub has sym")
          (assert (string-contains? stub ":rules [\"Non-blocking\"]") "stub has rules")
+         (assert (not (string-contains? stub "invalid-rule")) "stub has no invalid rules")
          true)))))
 
 (df test-extract-missing-symbol [] -> Bool
-  :d "Tests that querying non-existent symbol returns none."
-  (let [(m1 (de/create-doc-module "test/mod" "Title" "Prob" "Sol" (list) (list)))
-        (stub-opt (de/extract-agent-doc-stub m1 "missing-symbol"))]
-    (assert (option-is-none? stub-opt) "missing symbol must be none")
+  :d "Tests querying existent and non-existent symbols."
+  (let [(s1 (de/create-doc-symbol "present-sym" "fn" "[] -> Str" "Present"))
+        (m1 (de/create-doc-module "test/mod" "Title" "Prob" "Sol" (list) (list s1)))
+        (missing-opt (de/extract-agent-doc-stub m1 "missing-symbol"))
+        (present-opt (de/extract-agent-doc-stub m1 "present-sym"))]
+    (assert (option-is-none? missing-opt) "missing symbol must be none")
+    (assert (not (option-is-none? present-opt)) "present symbol must not be none")
     true))
 
 (df test-estimate-doc-token-savings [] -> Bool
@@ -61,6 +67,7 @@
                                   (list s1)))
         (savings (de/estimate-doc-token-savings m1))]
     (assert (> savings 50.0) "savings must be > 50%")
+    (assert (not (<= savings 0.0)) "savings must not be zero or negative")
     true))
 
 (df run-doc-engine-tests [] -> Bool

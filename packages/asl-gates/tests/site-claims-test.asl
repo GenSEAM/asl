@@ -12,9 +12,14 @@
     true))
 
 (df test-unknown-claim [] -> Bool
-  :d "Verifies ungrounded claims are rejected."
+  :d "Verifies ungrounded claims are rejected and grounded claims pass."
   (let [(registry (sc/standard-claims))]
+    (assert (sc/is-known-metric "24MB" registry) "known valid metric claim accepted")
+    (assert (sc/is-known-metric "0.038ms" registry) "known sub-millisecond metric claim accepted")
     (assert (not (sc/is-known-metric "99.999% fake" registry)) "fake claim rejected")
+    (assert (not (sc/is-known-metric "" registry)) "empty claim string rejected")
+    (assert (not (sc/is-known-metric "bogus-throughput" registry)) "unregistered bogus metric rejected")
+    (assert (not (.-grounded (sc/audit-claim "ungrounded-speedup" registry))) "audit claim of ungrounded metric must not be grounded")
     true))
 
 (df test-claims-audit [] -> Bool
@@ -29,9 +34,16 @@
     true))
 
 (df test-full-grounding [] -> Bool
-  :d "Verifies standard claims matrix is fully grounded."
-  (do
+  :d "Verifies standard claims matrix is fully grounded and ungrounded audits fail."
+  (let [(registry (sc/standard-claims))
+        (good-report (sc/run-claims-audit registry registry))
+        (bad-report (sc/run-claims-audit (list "fabricated-speedup" "invalid-metric") registry))]
     (assert (sc/verify-claims-grounding) "claims grounded")
+    (assert (= (.-status good-report) "PASS") "canonical claims audit report must pass")
+    (assert (= (.-failed good-report) 0) "canonical claims audit must have zero failures")
+    (assert (not (= (.-status bad-report) "PASS")) "ungrounded claims audit report must not pass")
+    (assert (not (= (.-failed bad-report) 0)) "ungrounded claims audit must have non-zero failure count")
+    (assert (not (sc/is-known-metric "fabricated-speedup" registry)) "invalid claim must not be in standard registry")
     true))
 
 (df run-tests [] -> Bool

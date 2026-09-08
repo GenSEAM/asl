@@ -11,12 +11,21 @@
   :d "Verifies clean syntax passes gate parser check."
   (do
     (assert (g/verify-source-syntax "(module test/m :doc \"d\" :export [f]) (df f [(x Int64)] -> Int64 :doc \"f\" (+ x 1))") "valid syntax")
+    (assert (not (g/verify-source-syntax "(module broken (:export unclosed")) "unclosed form syntax rejected")
+    (assert (not (g/verify-source-syntax "(df incomplete [(x Int64)] ->")) "incomplete function signature rejected")
+    (assert (not (g/verify-foreign-ext ".py")) "rejected gate condition for foreign python file")
     true))
 
 (df test-syntax-invalid [] -> Bool
-  :d "Verifies invalid syntax is rejected by gate parser."
+  :d "Verifies invalid syntax and invalid gate conditions are rejected by gate parser."
   (do
+    (assert (g/verify-source-syntax "(module valid/m :doc \"doc\" :export [])") "valid minimal syntax accepted")
+    (assert (g/verify-foreign-ext ".asl") "accepted gate condition for valid asl extension")
     (assert (not (g/verify-source-syntax "(module broken (:export unclosed")) "invalid syntax")
+    (assert (not (g/verify-source-syntax "((( unbalanced ((((" )) "unbalanced delimiters rejected")
+    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "@genseam/asl-test" "" "src/main.asl"))) "missing manifest version field rejected")
+    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "@genseam/asl-test" "0.1.0" ""))) "missing manifest entry field rejected")
+    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "unscoped-pkg" "0.1.0" "src/main.asl"))) "missing @genseam prefix package name rejected")
     true))
 
 (df test-foreign-ext [] -> Bool

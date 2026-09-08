@@ -1,0 +1,26 @@
+;; AgentScript Declarative Case Store & Test Specification Schema (ASN)
+;; Single Source of Truth for Positive, Negative, Edge, and Fuzzing Test Cases
+(:schema
+  :package @genseam/asl-core
+  :version "1.0.0"
+  :types [
+    (:type :name "CasePolarity" :kind :enum
+           :variants ["positive" "negative" "edge" "fuzz"])
+
+    (:type :name "TestCase" :kind :struct
+           :fields [
+             (:f :name "id" :type "Str" :doc "Unique case identifier across package")
+             (:f :name "polarity" :type "CasePolarity" :doc "Positive requirement or negative rejection")
+             (:f :name "desc" :type "Str" :doc "Epistemic description of requirement under test")
+             (:f :name "input" :type "Str" :doc "Input payload or argument vector")
+             (:f :name "expect" :type "Str" :doc "Expected return value or error classifier")
+           ])
+
+    (:type :name "CaseRegistry" :kind :struct
+           :fields [
+             (:f :name "package" :type "Str" :doc "Target package identifier")
+             (:f :name "feature" :type "Str" :doc "Target feature or subsystem domain")
+             (:f :name "cases" :type "(List TestCase)" :doc "Vector of declarative test cases")
+           ])
+  ]
+)

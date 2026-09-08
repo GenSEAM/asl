@@ -9,7 +9,7 @@
         false
         diags))
 
-(df test-probe [(src String) (want-code String)] -> Bool
+(df resolve-probe [(src String) (want-code String)] -> Bool
   (mt (a/parse src)
     ((err _) false)
     ((ok forms)
@@ -18,31 +18,58 @@
        (check-has-code diags want-code)))))
 
 (df test-unbound-probe [] -> Bool
-  (test-probe "(df f [] -> Int64 (+ x 1))" "rule-2"))
+  (do
+    (assert (resolve-probe "(df f [] -> Int64 (+ x 1))" "rule-2") "unbound var rule-2")
+    (assert (not (resolve-probe "(df f [(x Int64)] -> Int64 (+ x 1))" "rule-2")) "bound var not rule-2")
+    true))
 
 (df test-missing-doc-probe [] -> Bool
-  (test-probe "(module m :export [f]) (df f [] -> Int64 1)" "rule-8"))
+  (do
+    (assert (resolve-probe "(module m :export [f]) (df f [] -> Int64 1)" "rule-8") "missing doc rule-8")
+    (assert (not (resolve-probe "(module m :d \"m\" :x [f]) (df f [] -> Int64 :d \"doc\" 1)" "rule-8")) "documented export not rule-8")
+    true))
 
 (df test-reserved-probe [] -> Bool
-  (test-probe "(df agentscript-foo [] -> Int64 1)" "rule-7"))
+  (do
+    (assert (resolve-probe "(df agentscript-foo [] -> Int64 1)" "rule-7") "reserved prefix rule-7")
+    (assert (not (resolve-probe "(df user-foo [] -> Int64 1)" "rule-7")) "unreserved prefix not rule-7")
+    true))
 
 (df test-unbound-typevar-probe [] -> Bool
-  (test-probe "(df f [] -> UnknownType 1)" "rule-10"))
+  (do
+    (assert (resolve-probe "(df f [] -> UnknownType 1)" "rule-10") "unknown type rule-10")
+    (assert (not (resolve-probe "(df f [] -> Int64 1)" "rule-10")) "known type not rule-10")
+    true))
 
 (df test-effect-probe [] -> Bool
-  (test-probe "(df f [] -> (Result Unit IoError) (println \"hi\"))" "rule-12"))
+  (do
+    (assert (resolve-probe "(df f [] -> (Result Unit IoError) (println \"hi\"))" "rule-12") "effectful call in pure df rule-12")
+    (assert (not (resolve-probe "(df f [] -> Int64 42)" "rule-12")) "pure function not rule-12")
+    true))
 
 (df test-arity-probe [] -> Bool
-  (test-probe "(df f [(x Int64)] -> Int64 (+ x 1)) (df g [] -> Int64 (f 1 2))" "arity"))
+  (do
+    (assert (resolve-probe "(df f [(x Int64)] -> Int64 (+ x 1)) (df g [] -> Int64 (f 1 2))" "arity") "excess args trigger arity")
+    (assert (not (resolve-probe "(df f [(x Int64)] -> Int64 (+ x 1)) (df g [] -> Int64 (f 1))" "arity")) "matching args do not trigger arity")
+    true))
 
 (df test-ctor-probe [] -> Bool
-  (test-probe "(defschema Pt (:field x Int64 \"x\") (:field y Int64 \"y\")) (df f [] -> Pt (Pt :x 1))" "ctor"))
+  (do
+    (assert (resolve-probe "(defschema Pt (:field x Int64 \"x\") (:field y Int64 \"y\")) (df f [] -> Pt (Pt :x 1))" "ctor") "missing schema field ctor")
+    (assert (not (resolve-probe "(defschema Pt (:field x Int64 \"x\") (:field y Int64 \"y\")) (df f [] -> Pt (Pt :x 1 :y 2))" "ctor")) "complete schema fields not ctor")
+    true))
 
 (df test-not-callable-probe [] -> Bool
-  (test-probe "(df f [] -> Int64 (-1 2))" "not-callable"))
+  (do
+    (assert (resolve-probe "(df f [] -> Int64 (-1 2))" "not-callable") "invalid head not-callable")
+    (assert (not (resolve-probe "(df f [] -> Int64 (+ 1 2))" "not-callable")) "valid head is callable")
+    true))
 
 (df test-builtin-ref-probe [] -> Bool
-  (test-probe "(df shout [(xs (List String))] -> (List String) (map string-upper xs))" "builtin-reference"))
+  (do
+    (assert (resolve-probe "(df shout [(xs (List String))] -> (List String) (map string-upper xs))" "builtin-reference") "naked builtin in HOF builtin-reference")
+    (assert (not (resolve-probe "(df f [] -> Int64 (+ 1 2))" "builtin-reference")) "normal call not builtin-reference")
+    true))
 
 (df test-resolve [] -> Bool
   :d "Unit tests for resolve"
@@ -56,10 +83,12 @@
     (assert (test-ctor-probe) "ctor probe")
     (assert (test-not-callable-probe) "not-callable probe")
     (assert (test-builtin-ref-probe) "builtin-ref probe")
+    (assert (not (check-has-code (list) "rule-2")) "empty diagnostics has no error")
     true))
 
 (df run-tests [] -> Bool
   :d "Runs resolve test suite"
   (do
     (assert (test-resolve) "test-resolve must pass")
+    (assert (not (resolve-probe "(df f [] -> Int64 42)" "rule-2")) "pure constant has no rule-2")
     true))

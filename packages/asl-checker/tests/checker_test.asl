@@ -14,12 +14,13 @@
   :d "Check file on disk"
   (c/check-file! path roots))
 
-(df test-corpus-smoke [] -> String
+(df test-corpus-smoke [] -> Bool
   :d "Smoke test"
-  (let [(res (c/check-source "(module m :d \"d\" :x [f]) (df f [] -> Int64 42)" (map-empty) "m.asl"))]
-    (if (list-empty? res)
-      "ok"
-      "fail smoke")))
+  (let [(d-ok (c/check-source "(module m :d \"d\" :x [f]) (df f [] -> Int64 42)" (map-empty) "m.asl"))
+        (d-bad (c/check-source "(module m :d \"d\" :x [f]) (df f [] -> Int64 \"fail\")" (map-empty) "m.asl"))]
+    (assert (list-empty? d-ok) "Smoke test well-typed produces zero diagnostics")
+    (assert (not (list-empty? d-bad)) "Smoke test ill-typed produces diagnostics")
+    true))
 
 (df test-unification [] -> Bool
   :d "Verifies Hindley-Milner type unification and metavariable substitution."
@@ -83,7 +84,7 @@
 
 (df run-tests [] -> Bool
   :d "Verifies Hindley-Milner type inference, unification, occurs-check, and source checking."
-  (assert (= (test-corpus-smoke) "ok") "Smoke test passes")
+  (assert (test-corpus-smoke) "Smoke test passes")
   (assert (test-unification) "HM unification tests pass")
   (assert (test-occurs) "Occurs-check tests pass")
   (assert (test-check-source) "Source checking tests pass")
