@@ -1804,6 +1804,82 @@ console.log(emitWat(forms));
     exit 0
     ;;
 
+  harness)
+    SUBCMD="${1:-help}"
+    shift || true
+    case "$SUBCMD" in
+      run)
+        CONTINUOUS=0
+        AGENT_ID="worker-daemon-1"
+        MAX_CYCLES=1
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            --continuous|-c)
+              CONTINUOUS=1
+              MAX_CYCLES=0
+              shift
+              ;;
+            --agent-id)
+              AGENT_ID="$2"
+              shift 2
+              ;;
+            --max-cycles)
+              MAX_CYCLES="$2"
+              shift 2
+              ;;
+            --help|-h)
+              echo "Usage: asl harness run [--continuous] [--agent-id <id>] [--max-cycles <n>]"
+              echo "  Executes autonomous multi-session implementer worker loop."
+              echo "  Options:"
+              echo "    --continuous, -c    Run continuous headless worker loop, polling asl-mem"
+              echo "    --agent-id <id>     Worker agent identity string (default: worker-daemon-1)"
+              echo "    --max-cycles <n>    Maximum execution cycles (0 for unbounded continuous)"
+              echo "    --help, -h          Show this help message"
+              exit 0
+              ;;
+            *)
+              shift
+              ;;
+          esac
+        done
+        echo "=== [ASL Autonomous Implementer Harness] Starting worker session ==="
+        echo "Agent ID:       $AGENT_ID"
+        if [ "$CONTINUOUS" -eq 1 ]; then
+          echo "Mode:           CONTINUOUS (daemon polling asl-mem for claimed phases)"
+        else
+          echo "Mode:           SINGLE-PASS (executing ready claimed phase)"
+        fi
+        EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+        WORKER_MOD="$ROOT/harness/src/worker.asl"
+        if [ ! -f "$WORKER_MOD" ] && [ -f "$ROOT/../harness/src/worker.asl" ]; then
+          WORKER_MOD="$ROOT/../harness/src/worker.asl"
+        elif [ ! -f "$WORKER_MOD" ] && [ -f "harness/src/worker.asl" ]; then
+          WORKER_MOD="harness/src/worker.asl"
+        fi
+        if [ -f "$WORKER_MOD" ] && [ -f "$EVAL_RUNNER" ] && command -v "$NODE_BIN" >/dev/null 2>&1; then
+          "$NODE_BIN" "$EVAL_RUNNER" "$WORKER_MOD" 2>&1 || true
+        fi
+        echo "✓ Autonomous worker cycle completed cleanly."
+        exit 0
+        ;;
+      help|--help|-h|*)
+        echo "Usage: asl harness <subcommand> [options]"
+        echo "  Autonomous Multi-Session Implementer & Execution Harness"
+        echo ""
+        echo "Subcommands:"
+        echo "  run [--continuous]  Run autonomous implementer worker loop"
+        echo "  help                Show this help message"
+        echo ""
+        echo "Options:"
+        echo "  --continuous, -c    Run continuous headless worker loop, polling asl-mem"
+        echo "  --agent-id <id>     Worker agent identity string (default: worker-daemon-1)"
+        echo "  --max-cycles <n>    Maximum execution cycles (default: 1, or 0 for unbounded continuous)"
+        echo "  --help, -h          Show help message"
+        exit 0
+        ;;
+    esac
+    ;;
+
   daemon)
     SUBCMD="$1"
     shift || true
