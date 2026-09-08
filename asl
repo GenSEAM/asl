@@ -552,6 +552,113 @@ case "$CMD" in
     exit 1
     ;;
 
+  git)
+    GIT_SUBCMD="${1:-help}"
+    shift || true
+    TOPO_FILE="$ROOT/packages/asl-sh/src/git_topo.asl"
+    [ ! -f "$TOPO_FILE" ] && TOPO_FILE="$ROOT/../asl/packages/asl-sh/src/git_topo.asl"
+    [ ! -f "$TOPO_FILE" ] && TOPO_FILE="asl/packages/asl-sh/src/git_topo.asl"
+    EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+    [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bridges/node/asl-eval.mjs"
+
+    RUNNER="/tmp/asl_git_runner_$$.asl"
+    TMP_LINK="/tmp/git_topo.asl"
+    [ -f "$TOPO_FILE" ] && (ln -sf "$TOPO_FILE" "$TMP_LINK" 2>/dev/null || cp "$TOPO_FILE" "$TMP_LINK" 2>/dev/null || true)
+    trap 'rm -f "$RUNNER" "$TMP_LINK" 2>/dev/null' EXIT INT TERM
+
+    case "$GIT_SUBCMD" in
+      where)
+        GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        GIT_STATUS="$(git status --porcelain=v2 --branch 2>/dev/null || true)"
+        INPUT="$(printf "# worktree %s\n%s" "$GIT_ROOT" "$GIT_STATUS")"
+        "$NODE_BIN" -e '
+          import fs from "node:fs";
+          import { spawnSync } from "node:child_process";
+          const input = process.argv[1];
+          const runnerPath = process.argv[2];
+          const evalRunner = process.argv[3];
+          const nodeBin = process.argv[4];
+          const code = "(module asl-sh/git-where-cli\n  :d \"CLI runner for git where\"\n  :i [(git_topo :a topo)])\n\n(df main [] -> String\n  (topo/git-topo-format (topo/git-topo-parse " + JSON.stringify(input) + ")))\n";
+          fs.writeFileSync(runnerPath, code);
+          const res = spawnSync(nodeBin, [evalRunner, runnerPath], { encoding: "utf8" });
+          try { fs.unlinkSync(runnerPath); } catch {}
+          if (res.stdout) process.stdout.write(res.stdout);
+          if (res.status !== 0) process.exit(res.status || 1);
+        ' "$INPUT" "$RUNNER" "$EVAL_RUNNER" "$NODE_BIN"
+        exit 0
+        ;;
+
+      log)
+        COUNT="10"
+        while [ $# -gt 0 ]; do
+          case "$1" in
+            -n)
+              COUNT="$2"
+              shift 2
+              ;;
+            -n*)
+              COUNT="${1#-n}"
+              shift
+              ;;
+            *)
+              if [[ "$1" =~ ^[0-9]+$ ]]; then
+                COUNT="$1"
+              fi
+              shift
+              ;;
+          esac
+        done
+        INPUT="$(git log -n "$COUNT" --format="%H|%an|%ad|%s" --date=short 2>/dev/null || true)"
+        "$NODE_BIN" -e '
+          import fs from "node:fs";
+          import { spawnSync } from "node:child_process";
+          const input = process.argv[1];
+          const runnerPath = process.argv[2];
+          const evalRunner = process.argv[3];
+          const nodeBin = process.argv[4];
+          const code = "(module asl-sh/git-log-cli\n  :d \"CLI runner for git log\"\n  :i [(git_topo :a topo)])\n\n(df main [] -> String\n  (topo/git-log-format (topo/git-log-parse " + JSON.stringify(input) + ")))\n";
+          fs.writeFileSync(runnerPath, code);
+          const res = spawnSync(nodeBin, [evalRunner, runnerPath], { encoding: "utf8" });
+          try { fs.unlinkSync(runnerPath); } catch {}
+          if (res.stdout) process.stdout.write(res.stdout);
+          if (res.status !== 0) process.exit(res.status || 1);
+        ' "$INPUT" "$RUNNER" "$EVAL_RUNNER" "$NODE_BIN"
+        exit 0
+        ;;
+
+      worktrees)
+        INPUT="$(git worktree list --porcelain 2>/dev/null || true)"
+        "$NODE_BIN" -e '
+          import fs from "node:fs";
+          import { spawnSync } from "node:child_process";
+          const input = process.argv[1];
+          const runnerPath = process.argv[2];
+          const evalRunner = process.argv[3];
+          const nodeBin = process.argv[4];
+          const code = "(module asl-sh/git-wt-cli\n  :d \"CLI runner for git worktrees\"\n  :i [(git_topo :a topo)])\n\n(df main [] -> String\n  (topo/git-worktrees-format (topo/git-worktree-parse " + JSON.stringify(input) + ")))\n";
+          fs.writeFileSync(runnerPath, code);
+          const res = spawnSync(nodeBin, [evalRunner, runnerPath], { encoding: "utf8" });
+          try { fs.unlinkSync(runnerPath); } catch {}
+          if (res.stdout) process.stdout.write(res.stdout);
+          if (res.status !== 0) process.exit(res.status || 1);
+        ' "$INPUT" "$RUNNER" "$EVAL_RUNNER" "$NODE_BIN"
+        exit 0
+        ;;
+
+      help|--help|-h|*)
+        echo "Usage: asl git <subcommand> [options]"
+        echo "  Pure AgentScript Git Topology, Linearized History & Worktrees"
+        echo ""
+        echo "Subcommands:"
+        echo "  where            Instant Git topology orientation (:where-am-i) in <60 tokens"
+        echo "  log [-n <count>] Linearized commit history formatted as compact :git-log ASN"
+        echo "  worktrees        Inspect on-demand worktree roster formatted as :git-worktrees ASN"
+        echo "  help             Show this help message"
+        exit 0
+        ;;
+    esac
+    ;;
+
   asnl)
     if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ $# -eq 0 ]; then
       echo "Usage: asl asnl [--to-jsonl <asnl-input> | --from-jsonl <jsonl-input>]"
@@ -2392,6 +2499,7 @@ console.log(emitWat(forms));
     echo "  (:exec :cmd \"<cmd>\")             Supervised process execution with sliding 10s watchdog"
     echo ""
     echo "Core CLI Commands:"
+    echo "  git <subcmd>    Git topology orientation (where), log, and worktree steering"
     echo "  gate            Run pure verification gate suite across files and packages"
     echo "  test [file]     Execute native ASL test suites"
     echo "  check <file>    Run semantic syntax and form verification"
