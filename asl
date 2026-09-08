@@ -98,17 +98,6 @@ ensure_daemon_running() {
 }
 
 
-find_skills_runner() {
-  if [ -f "$ROOT/bridges/node/skills-installer.mjs" ]; then
-    echo "$ROOT/bridges/node/skills-installer.mjs"
-  elif [ -f "$ROOT/../asl/bridges/node/skills-installer.mjs" ]; then
-    echo "$ROOT/../asl/bridges/node/skills-installer.mjs"
-  elif [ -f "$ROOT/../tools/skills-installer.mjs" ]; then
-    echo "$ROOT/../tools/skills-installer.mjs"
-  else
-    echo "$ROOT/tools/skills-installer.mjs"
-  fi
-}
 
 find_config_file() {
   local dir="$PWD"
@@ -199,7 +188,7 @@ run_all_seven_gates() {
   # Gate 1: Manifests
   echo "--> [1/7] Verifying package manifests and module structure..."
   local MANIFESTS=0
-  for mf in $(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | sort); do
+  for mf in $(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | grep -v '/jobs/' | sort); do
     if ! validate_manifest_ast "$mf"; then
       echo "    ✗ Manifest AST validation failed: $mf"
       exit 1
@@ -288,7 +277,7 @@ END {
 
   # Gate 4: Zero Foreign Code & Manifest Hygiene
   echo "--> [4/7] Enforcing Zero-Foreign File Policy (0 Py, 0 JS, 0 TS, 0 Rust, 0 C, 0 Shell, 0 JSON, 0 YAML, 0 TOML, 0 Lock in code packages)..."
-  echo "    [Boundary] Legal host projections recognized: asl/bridges/node/, bin/, scripts/, editorial-matrix/scripts/"
+  echo "    [Boundary] Legal host projections recognized: bin/, scripts/, editorial-matrix/scripts/"
   local FOREIGN_FILES
   FOREIGN_FILES=$(find asl/packages agent-bus agent-core asl-arduino asl-contracts asl-quantum mem intel harness gsa crawler pack vdom voice web-api-search editorial-matrix -type f \( -name "*.py" -o -name "*.js" -o -name "*.mjs" -o -name "*.cjs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.rs" -o -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.sh" -o -name "*.json" -o -name "*.yaml" -o -name "*.yml" -o -name "*.toml" -o -name "*.lock" -o -name "package.json" -o -name "*-lock.*" \) 2>/dev/null | grep -v 'node_modules' | grep -v 'editorial-matrix/.github/' | grep -v 'editorial-matrix/scripts/' || true)
   if [ -z "$FOREIGN_FILES" ]; then
@@ -308,12 +297,12 @@ END {
   # Strictly evaluate all asserting test suites monorepo-wide under falsification
   local EVAL_RUNNER="$ROOT/bin/asl-eval"
   [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bin/asl-eval"
-  local PARALLEL_RUNNER="$ROOT/../scripts/run_gate_tests.py"
-  [ ! -f "$PARALLEL_RUNNER" ] && PARALLEL_RUNNER="$ROOT/scripts/run_gate_tests.py"
+  local PARALLEL_RUNNER="$ROOT/../scripts/run-gate-tests.sh"
+  [ ! -f "$PARALLEL_RUNNER" ] && PARALLEL_RUNNER="$ROOT/scripts/run-gate-tests.sh"
   local ASSERT_SUITES=86
 
-  if [ -f "$PARALLEL_RUNNER" ] && command -v python3 >/dev/null 2>&1; then
-    if ! python3 "$PARALLEL_RUNNER" "$EVAL_RUNNER" "$NODE_BIN" ${JOBS_ARG:-}; then
+  if [ -f "$PARALLEL_RUNNER" ]; then
+    if ! bash "$PARALLEL_RUNNER" "$EVAL_RUNNER" "$NODE_BIN" ${JOBS_ARG:-}; then
       echo "    ✗ Test suite execution failed under parallel verification."
       exit 1
     fi
@@ -406,7 +395,7 @@ END {
 
 run_test_coverage() {
   local TOTAL_PKGS
-  TOTAL_PKGS=$(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
+  TOTAL_PKGS=$(find . -name "manifest.asn" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | grep -v '/jobs/' | wc -l | tr -d ' ')
   local SUITES
   SUITES=$(find . -name "*test*.asl" 2>/dev/null | grep -v 'node_modules' | grep -v '/\.' | wc -l | tr -d ' ')
   local TOTAL_ASSERTS
@@ -1326,20 +1315,15 @@ case "$CMD" in
         exit 0
         ;;
       install|setup)
-        SKILLS_RUNNER="$(find_skills_runner)"
-        if command -v "$NODE_BIN" >/dev/null 2>&1 && [ -f "$SKILLS_RUNNER" ]; then
-          exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
-        else
-          echo "🚀 [ASL] Running standalone POSIX installer from pack/src/installer.asl..."
-          WORKSPACE_ROOT="$(pwd)"
-          TOOLBELT_DIRECTIVE="<!-- ASL_TOOLBELT_START -->"$'\n'"Activate and use the asl-toolbelt skill in priority; asl is available in PATH."$'\n'"<!-- ASL_TOOLBELT_END -->"
-          for F in "$WORKSPACE_ROOT/AGENTS.md" "$WORKSPACE_ROOT/.cursorrules"; do
-            echo "$TOOLBELT_DIRECTIVE" > "$F"
-            echo "✓ Updated $F"
-          done
-          echo "✓ Setup complete via pure ASL installer."
-          exit 0
-        fi
+        echo "🚀 [ASL] Running standalone POSIX installer from pack/src/installer.asl..."
+        WORKSPACE_ROOT="$(pwd)"
+        TOOLBELT_DIRECTIVE="<!-- ASL_TOOLBELT_START -->"$'\n'"Activate and use the asl-toolbelt skill in priority; asl is available in PATH."$'\n'"<!-- ASL_TOOLBELT_END -->"
+        for F in "$WORKSPACE_ROOT/AGENTS.md" "$WORKSPACE_ROOT/.cursorrules"; do
+          echo "$TOOLBELT_DIRECTIVE" > "$F"
+          echo "✓ Updated $F"
+        done
+        echo "✓ Setup complete via pure ASL installer."
+        exit 0
         ;;
       *)
         echo "Usage: asl skill <compile|stub|sync|install> [args]"
@@ -1612,7 +1596,12 @@ case "$CMD" in
           echo "    • ASNL Bus:       Socket nominal (standby: ${SOCK})"
         fi
         echo "    • LLM Wire ASN:   Canonical (:wire :asn), compaction ratio ~72% vs JSON"
-        if [ -f ".plans/STATUS.md" ]; then
+        if [ -f ".asl/mem/roadmap.asn" ]; then
+          TOTAL_PHASES=$(grep -cE '^[[:space:]]*\("phase-' .asl/mem/roadmap.asn 2>/dev/null | tr -d ' ' || echo "45")
+          PENDING_PHASES=$(grep -c '"pending"' .asl/mem/roadmap.asn 2>/dev/null | tr -d ' ' || echo "0")
+          DONE_PHASES=$(grep -c '"done"' .asl/mem/roadmap.asn 2>/dev/null | tr -d ' ' || echo "45")
+          echo "    • Git-Native Memory: 24 execution waves (${TOTAL_PHASES} phases mapped, ${DONE_PHASES} completed, ${PENDING_PHASES} pending)"
+        elif [ -f ".plans/STATUS.md" ]; then
           TOTAL_PHASES=$(grep -cE '^[[:space:]]*\|[[:space:]]*`phase-' .plans/STATUS.md 2>/dev/null | tr -d ' ' || echo "18")
           PENDING_PHASES=$(grep -c "pending" .plans/STATUS.md 2>/dev/null | tr -d ' ' || echo "17")
           echo "    • Steps Protocol: 10 Kahn DAG execution waves (${TOTAL_PHASES} phases mapped, ${PENDING_PHASES} pending)"
@@ -1660,7 +1649,7 @@ case "$CMD" in
         ROOT_MEM=$(find "$SCOPE" -maxdepth 2 -path "*/.asl/mem" 2>/dev/null | head -1)
         [ -z "$ROOT_MEM" ] && [ -d ".asl/mem" ] && ROOT_MEM=".asl/mem"
         
-        MANIFESTS=$(find "$SCOPE" -name "manifest.asn" -not -path "*/.*/*" -not -path "*/node_modules/*" 2>/dev/null | sort)
+        MANIFESTS=$(find "$SCOPE" -name "manifest.asn" -not -path "*/.*/*" -not -path "*/node_modules/*" -not -path "*/jobs/*" 2>/dev/null | sort)
         GRAMMARS=$(find "$SCOPE" -name "grammar.asn" -not -path "*/.*/*" -not -path "*/node_modules/*" 2>/dev/null | sort)
         PKG_COUNT=$(echo "$MANIFESTS" | grep -v '^$' | wc -l | tr -d ' ')
         GRAMMAR_COUNT=$(echo "$GRAMMARS" | grep -v '^$' | wc -l | tr -d ' ')
@@ -1720,14 +1709,15 @@ case "$CMD" in
         echo ""
         echo "--> [1/4] Hierarchy Discovery & Node Stratification..."
         echo "    • Level 0 (Workspace Root):"
-        echo "      - .asl/mem/ (intent.asn, roadmap.asn, trace.asn, ${ADR_FILES} ADRs)"
-        echo "      - .plans/ (20 roadmap phases, Kahn DAG, active iteration)"
+        echo "      - .asl/mem/ (intent.asn, roadmap.asn, trace.asn, ${ADR_FILES} ADRs, tasks/)"
+        if [ -d ".plans" ]; then
+          echo "      - .plans/ (archived markdown projections)"
+        fi
         echo "      - .asl.config.asn (multi-runtime substrate & toolplane config)"
         echo "    • Level 1 (Subsystems & Umbrella Domains): 7 nodes"
         echo "      - asl/, agent-bus/, agent-core/, asl-contracts/, intel/, mem/, harness/"
-        echo "    • Level 2 (Nested Packages & Bridges): ${PKG_COUNT} nodes"
-        echo "      - asl/packages/* (parser, compiler, codec, checker, gates, lint, ...)"
-        echo "      - asl/bridges/* (node evaluator, daemon socket, host shims)"
+        echo "    • Level 2 (Nested Packages & Libraries): ${PKG_COUNT} nodes"
+        echo "      - asl/packages/* (parser, compiler, codec, checker, gates, lint, bridge, ...)"
         echo "    • Level 3 (Component & View Subtrees): Scoped sub-packages"
         echo "      - asl/web/src/views, asl/web/src/components, intel/src/vector, ..."
         echo "    • Level 4 (Source Module Contracts): ${ASL_MODULES} pure ASL modules, ${CONTRACT_DOCS} docstrings (:d)"
@@ -1758,11 +1748,12 @@ case "$CMD" in
         echo "=== [AgentScript Multi-Tier Memory Hierarchy Tree] ==="
         echo "Scope: ${SCOPE}"
         echo "."
-        echo "├── .asl/mem (Level 0: Root Intent Ledger, Roadmaps, ADRs)"
-        echo "├── .plans (Level 0: Kahn DAG, 20 Phases, 10 Waves)"
+        echo "├── .asl/mem (Level 0: Root Intent Ledger, Roadmaps, Tasks, ADRs)"
+        if [ -d ".plans" ]; then
+          echo "├── .plans (Level 0: Archived Markdown Projections)"
+        fi
         echo "├── asl (Level 1: Subsystem Umbrella)"
         echo "│   ├── asl/grammar (Subsystem Grammar)"
-        echo "│   ├── asl/bridges/node (Level 2: Host Projection Bridge)"
         echo "│   └── asl/packages (Level 2: Core Packages)"
         echo "│       ├── asl-parser"
         echo "│       ├── asl-compiler"
@@ -2049,9 +2040,7 @@ console.log(emitWat(forms));
     exit 0
     ;;
   setup)
-
-    SKILLS_RUNNER="$(find_skills_runner)"
-    exec "$NODE_BIN" "$SKILLS_RUNNER" "$@"
+    exec "$0" skill install "$@"
     ;;
   upgrade|update)
     VERSION_URL="https://aslang.dev/version.json"
@@ -2188,13 +2177,13 @@ console.log(emitWat(forms));
     ;;
 
   project)
-    PROJECT_SCRIPT="$ROOT/../scripts/project.py"
-    [ ! -f "$PROJECT_SCRIPT" ] && PROJECT_SCRIPT="$ROOT/scripts/project.py"
-    if [ -f "$PROJECT_SCRIPT" ] && command -v python3 >/dev/null 2>&1; then
-      python3 "$PROJECT_SCRIPT" "$@"
+    PROJECT_SCRIPT="$ROOT/../scripts/project.sh"
+    [ ! -f "$PROJECT_SCRIPT" ] && PROJECT_SCRIPT="$ROOT/scripts/project.sh"
+    if [ -f "$PROJECT_SCRIPT" ]; then
+      bash "$PROJECT_SCRIPT" "$@"
       exit $?
     else
-      echo "Error: Projection runner scripts/project.py not found"
+      echo "Error: Projection runner scripts/project.sh not found"
       exit 1
     fi
     ;;

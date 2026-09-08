@@ -85,12 +85,13 @@ if exist "%ASL_DIR%asl.exe" (
 if exist "%LOCALAPPDATA%\asl\repo\asl" (
     if "%1"=="upgrade" goto do_upgrade
     if "%1"=="update" goto do_upgrade
-    if exist "%LOCALAPPDATA%\asl\repo\bridges\node\asl-daemon-host.mjs" (
-        where node >nul 2>&1
-        if %ERRORLEVEL% EQU 0 (
-            node "%LOCALAPPDATA%\asl\repo\bridges\node\asl-daemon-host.mjs" %*
-            exit /b %ERRORLEVEL%
-        )
+    if exist "%LOCALAPPDATA%\asl\repo\bin\asl-daemon.exe" (
+        "%LOCALAPPDATA%\asl\repo\bin\asl-daemon.exe" %*
+        exit /b %ERRORLEVEL%
+    )
+    if exist "%LOCALAPPDATA%\asl\bin\asl-daemon.exe" (
+        "%LOCALAPPDATA%\asl\bin\asl-daemon.exe" %*
+        exit /b %ERRORLEVEL%
     )
     where bash >nul 2>&1
     if %ERRORLEVEL% EQU 0 (
@@ -125,12 +126,14 @@ if (Test-Path "`$ScriptDir\asl.exe") {
     & "`$ScriptDir\asl.exe" @args
     return
 }
-`$HostMjs = "`$env:LOCALAPPDATA\asl\repo\bridges\node\asl-daemon-host.mjs"
-if (Test-Path `$HostMjs) {
-    if (Get-Command node -ErrorAction SilentlyContinue) {
-        & node `$HostMjs @args
-        return
-    }
+if (Test-Path "`$ScriptDir\asl-daemon.exe") {
+    & "`$ScriptDir\asl-daemon.exe" @args
+    return
+}
+`$DaemonBin = "`$env:LOCALAPPDATA\asl\repo\bin\asl-daemon.exe"
+if (Test-Path `$DaemonBin) {
+    & `$DaemonBin @args
+    return
 }
 `$BashBin = Get-Command bash -ErrorAction SilentlyContinue
 if (`$BashBin -and (Test-Path "`$env:LOCALAPPDATA\asl\repo\asl")) {

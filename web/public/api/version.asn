@@ -9,8 +9,6 @@
     :darwin-x64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-darwin-x64.tar.gz"
     :linux-x64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-x64.tar.gz"
     :linux-arm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-arm64.tar.gz"
-    :windows-x64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-windows-x64.zip"
-    :windows-arm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-windows-arm64.zip"
   )
   :release-notes "ASL (df, dfs, dfe, F64, I64, Str, Bool) v0.3 release with in-memory WebAssembly execution and Universal Agent Skills Hub."
 )

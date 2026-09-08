@@ -1,0 +1,68 @@
+(
+  :model "dry-run"
+  :target "interp"
+  :spent-usd 0.003645
+  :aborted false
+  :samples [
+    (
+      :task "synthetic_dry_run"
+      :index 0
+      :stage-reached "correct"
+      :passed true
+      :detail ""
+      :in-tokens 3250
+      :out-tokens 200
+      :code "(module synthetic :doc \"Dry run test\" :export [main])\n(defun ! main [(args (List String))] -> (Result Unit IoError)\n  :doc \"Entry point.\"\n  (println \"hello dry-run\"))"
+    )
+    (
+      :task "synthetic_dry_run"
+      :index 1
+      :stage-reached "extract"
+      :passed false
+      :detail "no code block in reply"
+      :in-tokens 3250
+      :out-tokens 200
+      :code ""
+    )
+    (
+      :task "synthetic_dry_run"
+      :index 2
+      :stage-reached "parse"
+      :passed false
+      :detail "UnexpectedCharacters: No terminal matches '-' in the current parser context, at line 1 col 17\n\n(defun broken [ -> Int64 1)\n                ^\nExpected one of: \n\t"
+      :in-tokens 3250
+      :out-tokens 200
+      :code "(defun broken [ -> Int64 1)"
+    )
+    (
+      :task "synthetic_dry_run"
+      :index 3
+      :stage-reached "check"
+      :passed false
+      :detail "type: return of main: expected (Result Unit IoError), found String"
+      :in-tokens 3250
+      :out-tokens 200
+      :code "(module synthetic :doc \"Dry run test\" :export [main])\n(defun ! main [(args (List String))] -> (Result Unit IoError)\n  :doc \"Entry point.\"\n  \"not-a-result\")"
+    )
+    (
+      :task "synthetic_dry_run"
+      :index 4
+      :stage-reached "execute"
+      :passed false
+      :detail "case 0 mismatch: exit=0 (want 0), stdout='interp-sample-4\\n' (want 'hello dry-run\\n'), stderr='' (want '')"
+      :in-tokens 3250
+      :out-tokens 200
+      :code "(module synthetic :doc \"Dry run test\" :export [main])\n(defun ! main [(args (List String))] -> (Result Unit IoError)\n  :doc \"Entry point.\"\n  (println \"interp-sample-4\"))"
+    )
+    (
+      :task "synthetic_dry_run"
+      :index 5
+      :stage-reached "execute"
+      :passed false
+      :detail "case 0 mismatch: exit=0 (want 0), stdout='wrong-dry-run-output\\n' (want 'hello dry-run\\n'), stderr='' (want '')"
+      :in-tokens 3250
+      :out-tokens 200
+      :code "(module synthetic :doc \"Dry run test\" :export [main])\n(defun ! main [(args (List String))] -> (Result Unit IoError)\n  :doc \"Entry point.\"\n  (println \"wrong-dry-run-output\"))"
+    )
+  ]
+)

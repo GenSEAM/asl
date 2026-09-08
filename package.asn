@@ -6,8 +6,8 @@
   :packageManager "pnpm@11.25.0"
   :engines (:node ">=20.0.0")
   :scripts (
-    :build:wasm-runner "echo 'wasm-runner pure native'"
-    :test:wasm-runner "echo 'ok'"
+    :build:wasm-runner "asl test --strict-falsify packages/asl-codegen/tests/emit_wat_test.asl"
+    :test:wasm-runner "asl test --strict-falsify packages/asl-codegen/tests/emit_wat_test.asl"
     :build:web "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true"
     :dev:web "npm --prefix web run dev"
     :build "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true"

@@ -6,7 +6,7 @@
   "packageManager": "pnpm@11.25.0",
   "engines": {},
   "scripts": {
-    "test:wasm-runner": "echo 'ok'",
+    "test:wasm-runner": "asl test --strict-falsify packages/asl-codegen/tests/emit_wat_test.asl",
     "build:web": "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true",
     "dev:web": "npm --prefix web run dev",
     "build": "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true",

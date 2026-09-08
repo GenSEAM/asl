@@ -1,0 +1,1393 @@
+(
+  :$comment "SINGLE SOURCE OF TRUTH for the AgentScript vocabulary. The specification tables, both grammars, the agent handbook, the closure gate and the backends are all GENERATED from this file. Never edit those by hand; edit here and run prelude/generate.py."
+  :version "0.2"
+  :runtime (:py "_agentscript" :js "_agentscript")
+  :special-forms (
+    :declarations [
+      "module"
+      "defschema"
+      "defenum"
+      "defun"
+    ]
+    :expressions [
+      "fn"
+      "let"
+      "if"
+      "cond"
+      "match"
+      "try"
+    ]
+    :constructors [
+      "ok"
+      "err"
+      "some"
+      "none"
+      "list"
+      "pair"
+      "not-found"
+      "permission-denied"
+      "already-exists"
+      "invalid-path"
+      "interrupted"
+      "other"
+    ]
+    :patterns [
+      "ok"
+      "err"
+      "some"
+      "none"
+      "list"
+      "cons"
+      "pair"
+      "not-found"
+      "permission-denied"
+      "already-exists"
+      "invalid-path"
+      "interrupted"
+      "other"
+    ]
+  )
+  :types (
+    :primitive [
+      "Bool"
+      "Int32"
+      "Int64"
+      "Float64"
+      "String"
+      "Unit"
+    ]
+    :constructed [
+      "List"
+      "Option"
+      "Result"
+      "Pair"
+      "Map"
+    ]
+    :aliases (
+      :Int "Int64"
+      :I64 "Int64"
+      :I32 "Int32"
+      :F64 "Float64"
+      :F32 "Float64"
+      :Num "Float64"
+      :Str "String"
+      :Bool "Bool"
+      :Unit "Unit"
+      :Float "Float64"
+    )
+    :nano (
+      :Int64 "I64"
+      :Int32 "I32"
+      :Float64 "F64"
+      :String "Str"
+      :Bool "Bool"
+      :Unit "Unit"
+    )
+    :reserved-widths (
+      :$comment "A width alias Core does not actually have. Accepted, resolved to the type named here, and carrying none of that width's semantics -- no narrowing, no wrap, no trap at the narrower boundary. Groundwork for host interop (C, C++, Rust) where a real fixed-width type will land later."
+      :F32 "Float64"
+    )
+    :unions (
+      :IoError [
+        "not-found"
+        "permission-denied"
+        "already-exists"
+        "invalid-path"
+        "interrupted"
+        "other"
+      ]
+    )
+  )
+  :projection (
+    :$comment "The Nano projection. Every entry is an ALIAS FOR A POSITION, never a global rewrite: `nano` means `verbose` only where `where` says, and anywhere else it is an ordinary atom. A record key spelled :x is therefore legal and untouched. Consumers: both grammars (generated), the transcoder, the interface compressor, the formatter and the self-hosted parser."
+    :heads [
+      (
+        :verbose "defun"
+        :nano "df"
+        :also ["def"]
+        :where "decl-head"
+      )
+      (
+        :verbose "defschema"
+        :nano "dfs"
+        :also ["schema"]
+        :where "decl-head"
+      )
+      (
+        :verbose "defenum"
+        :nano "dfe"
+        :also ["enum"]
+        :where "decl-head"
+      )
+      (
+        :verbose "match"
+        :nano "mt"
+        :also []
+        :where "expr-head"
+      )
+    ]
+    :options [
+      (:verbose ":doc" :nano ":d" :where "module-opt, defun-opt")
+      (:verbose ":export" :nano ":x" :where "module-opt")
+      (:verbose ":import" :nano ":i" :where "module-opt")
+      (:verbose ":as" :nano ":a" :where "import-spec")
+      (:verbose ":field" :nano ":f" :where "field-head")
+      (:verbose ":case" :nano ":c" :where "enum-case-head")
+    ]
+    :builtins [
+      (:verbose "string-starts-with?" :nano "starts?" :where "call-head")
+      (:verbose "string-ends-with?" :nano "ends?" :where "call-head")
+      (:verbose "list-length" :nano "len" :where "call-head")
+      (:verbose "list-head" :nano "head" :where "call-head")
+      (:verbose "list-tail" :nano "tail" :where "call-head")
+      (:verbose "list-reverse" :nano "rev" :where "call-head")
+      (:verbose "list-sum" :nano "sum" :where "call-head")
+      (:verbose "string-split" :nano "split" :where "call-head")
+      (:verbose "string-join" :nano "join" :where "call-head")
+      (:verbose "string-trim" :nano "trim" :where "call-head")
+      (:verbose "list-slice" :nano "slice" :where "call-head")
+      (:verbose "string-chars" :nano "chars" :where "call-head")
+      (:verbose "string-to-float64" :nano "f64" :where "call-head")
+      (:verbose "string-to-int64" :nano "i64" :where "call-head")
+      (:verbose "map-keys" :nano "keys" :where "call-head")
+      (:verbose "map-values" :nano "vals" :where "call-head")
+      (:verbose "map-has?" :nano "has?" :where "call-head")
+      (:verbose "list-empty?" :nano "empty?" :where "call-head")
+      (:verbose "is-some?" :nano "some?" :where "call-head")
+      (:verbose "is-none?" :nano "none?" :where "call-head")
+      (:verbose "is-ok?" :nano "ok?" :where "call-head")
+      (:verbose "is-err?" :nano "err?" :where "call-head")
+      (:verbose "string-empty?" :nano "blank?" :where "call-head")
+      (:verbose "string-slice" :nano "substr" :where "call-head")
+      (:verbose "string-index-of" :nano "str-find" :where "call-head")
+      (:verbose "string-contains?" :nano "includes?" :where "call-head")
+      (:verbose "string-lower" :nano "lower" :where "call-head")
+      (:verbose "string-reverse" :nano "strrev" :where "call-head")
+      (:verbose "string-replace" :nano "replace" :where "call-head")
+      (:verbose "string-from-int64" :nano "str-i" :where "call-head")
+      (:verbose "string-from-float64" :nano "str-f" :where "call-head")
+      (:verbose "int32-to-int64" :nano "widen" :where "call-head")
+      (:verbose "int64-to-int32" :nano "narrow" :where "call-head")
+      (:verbose "int64-to-float64" :nano "float" :where "call-head")
+      (:verbose "float64-to-int64" :nano "trunc" :where "call-head")
+      (:verbose "list-contains?" :nano "contains?" :where "call-head")
+      (:verbose "list-index-of" :nano "index-of" :where "call-head")
+      (:verbose "list-sort-by" :nano "sort-by" :where "call-head")
+      (:verbose "map-pairs" :nano "pairs" :where "call-head")
+      (:verbose "map-from-pairs" :nano "to-map" :where "call-head")
+      (:verbose "result-map-err" :nano "err-map" :where "call-head")
+      (:verbose "option-to-result" :nano "opt-res" :where "call-head")
+      (:verbose "result-to-option" :nano "res-opt" :where "call-head")
+      (:verbose "permission-denied" :nano "denied" :where "call-head")
+      (:verbose "already-exists" :nano "exists" :where "call-head")
+      (:verbose "file-exists?" :nano "exists?" :where "call-head")
+      (:verbose "list-append" :nano "append" :where "call-head")
+      (:verbose "file-append" :nano "append-file" :where "call-head")
+    ]
+    :unaliased (
+      :$comment "Forms deliberately without a Nano spelling: they are already one token, or shortening them would collide with an identifier shape."
+      :forms [
+        "module"
+        "fn"
+        "let"
+        "if"
+        "cond"
+        "try"
+      ]
+      :options [
+        ":else"
+        ":default"
+        ":json"
+        ":json-case"
+      ]
+    )
+  )
+  :builtins [
+    (
+      :name "+"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Sum. Traps on integer overflow."
+      :py "_agentscript.add({0}, {1})"
+      :js "_agentscript.add({0}, {1})"
+      :rs "rt::add({0}, {1})"
+      :ts "RT.add({0}, {1})"
+      :go "Add({0}, {1})"
+    )
+    (
+      :name "-"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Difference. Traps on integer overflow."
+      :py "_agentscript.sub({0}, {1})"
+      :js "_agentscript.sub({0}, {1})"
+      :rs "rt::sub({0}, {1})"
+      :ts "RT.sub({0}, {1})"
+      :go "Sub({0}, {1})"
+    )
+    (
+      :name "*"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Product. Traps on integer overflow."
+      :py "_agentscript.mul({0}, {1})"
+      :js "_agentscript.mul({0}, {1})"
+      :rs "rt::mul({0}, {1})"
+      :ts "RT.mul({0}, {1})"
+      :go "Mul({0}, {1})"
+    )
+    (
+      :name "/"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Division; integer division truncates toward zero. Traps on a zero divisor and on a quotient outside the type."
+      :py "_agentscript.div({0}, {1})"
+      :js "_agentscript.div({0}, {1})"
+      :rs "rt::div({0}, {1})"
+      :ts "RT.div({0}, {1})"
+      :go "Div({0}, {1})"
+    )
+    (
+      :name "mod"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Remainder; the sign follows the dividend. Traps on a zero divisor."
+      :py "_agentscript.mod({0}, {1})"
+      :js "_agentscript.mod({0}, {1})"
+      :rs "rt::rem({0}, {1})"
+      :ts "RT.rem({0}, {1})"
+      :go "Rem({0}, {1})"
+    )
+    (
+      :name "checked-div"
+      :sec "Arithmetic"
+      :type "N N -> (Option N)"
+      :doc "Division, or none on a zero divisor or a quotient outside the type."
+      :py "_agentscript.checked_div({0}, {1})"
+      :js "_agentscript.checkedDiv({0}, {1})"
+      :rs "rt::checked_div({0}, {1})"
+      :ts "RT.checkedDiv({0}, {1})"
+      :go "CheckedDiv({0}, {1})"
+    )
+    (
+      :name "checked-mod"
+      :sec "Arithmetic"
+      :type "N N -> (Option N)"
+      :doc "Remainder, or none on a zero divisor; the remainder is always in range."
+      :py "_agentscript.checked_mod({0}, {1})"
+      :js "_agentscript.checkedMod({0}, {1})"
+      :rs "rt::checked_rem({0}, {1})"
+      :ts "RT.checkedRem({0}, {1})"
+      :go "CheckedRem({0}, {1})"
+    )
+    (
+      :name "neg"
+      :sec "Arithmetic"
+      :type "N -> N"
+      :doc "Arithmetic negation. Traps on integer overflow."
+      :py "_agentscript.neg({0})"
+      :js "_agentscript.neg({0})"
+      :rs "rt::neg({0})"
+      :ts "RT.neg({0})"
+      :go "Neg({0})"
+    )
+    (
+      :name "abs"
+      :sec "Arithmetic"
+      :type "N -> N"
+      :doc "Absolute value. Traps on integer overflow."
+      :py "_agentscript.absolute({0})"
+      :js "_agentscript.absolute({0})"
+      :rs "rt::abs({0})"
+      :ts "RT.absv({0})"
+      :go "Abs({0})"
+    )
+    (
+      :name "min"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Lesser of two values in the sort order, so NaN is the greater."
+      :py "_agentscript.min_({0}, {1})"
+      :js "_agentscript.min({0}, {1})"
+      :rs "rt::min({0}, {1})"
+      :ts "RT.min({0}, {1})"
+      :go "Min({0}, {1})"
+    )
+    (
+      :name "max"
+      :sec "Arithmetic"
+      :type "N N -> N"
+      :doc "Greater of two values in the sort order, so NaN is the greater."
+      :py "_agentscript.max_({0}, {1})"
+      :js "_agentscript.max({0}, {1})"
+      :rs "rt::max({0}, {1})"
+      :ts "RT.max({0}, {1})"
+      :go "Max({0}, {1})"
+    )
+    (
+      :name "="
+      :sec "Comparison and logic"
+      :type "T T -> Bool"
+      :doc "Structural equality."
+      :py "_agentscript.eq({0}, {1})"
+      :js "_agentscript.eq({0}, {1})"
+      :rs "({0} == {1})"
+      :ts "RT.eq({0}, {1})"
+      :go "Eq({0}, {1})"
+    )
+    (
+      :name "!="
+      :sec "Comparison and logic"
+      :type "T T -> Bool"
+      :doc "Structural inequality."
+      :py "(not _agentscript.eq({0}, {1}))"
+      :js "(!_agentscript.eq({0}, {1}))"
+      :rs "({0} != {1})"
+      :ts "(!RT.eq({0}, {1}))"
+      :go "(!Eq({0}, {1}))"
+    )
+    (
+      :name "<"
+      :sec "Comparison and logic"
+      :type "T T -> Bool"
+      :doc "Ordered comparison, for numbers and strings."
+      :py "({0} < {1})"
+      :js "({0} < {1})"
+      :rs "({0} < {1})"
+      :ts "(RT.cmp({0}, {1}) < 0)"
+      :go "({0} < {1})"
+    )
+    (
+      :name "<="
+      :sec "Comparison and logic"
+      :type "T T -> Bool"
+      :doc "Ordered comparison, for numbers and strings."
+      :py "({0} <= {1})"
+      :js "({0} <= {1})"
+      :rs "({0} <= {1})"
+      :ts "(RT.cmp({0}, {1}) <= 0)"
+      :go "({0} <= {1})"
+    )
+    (
+      :name ">"
+      :sec "Comparison and logic"
+      :type "T T -> Bool"
+      :doc "Ordered comparison, for numbers and strings."
+      :py "({0} > {1})"
+      :js "({0} > {1})"
+      :rs "({0} > {1})"
+      :ts "(RT.cmp({0}, {1}) > 0)"
+      :go "({0} > {1})"
+    )
+    (
+      :name ">="
+      :sec "Comparison and logic"
+      :type "T T -> Bool"
+      :doc "Ordered comparison, for numbers and strings."
+      :py "({0} >= {1})"
+      :js "({0} >= {1})"
+      :rs "({0} >= {1})"
+      :ts "(RT.cmp({0}, {1}) >= 0)"
+      :go "({0} >= {1})"
+    )
+    (
+      :name "and"
+      :sec "Comparison and logic"
+      :type "Bool Bool -> Bool"
+      :doc "Conjunction; short-circuits."
+      :py "({0} and {1})"
+      :js "({0} && {1})"
+      :rs "({0} && {1})"
+      :ts "({0} && {1})"
+      :go "({0} && {1})"
+    )
+    (
+      :name "or"
+      :sec "Comparison and logic"
+      :type "Bool Bool -> Bool"
+      :doc "Disjunction; short-circuits."
+      :py "({0} or {1})"
+      :js "({0} || {1})"
+      :rs "({0} || {1})"
+      :ts "({0} || {1})"
+      :go "({0} || {1})"
+    )
+    (
+      :name "not"
+      :sec "Comparison and logic"
+      :type "Bool -> Bool"
+      :doc "Negation."
+      :py "(not {0})"
+      :js "(!{0})"
+      :rs "(!{0})"
+      :ts "(!{0})"
+      :go "(!{0})"
+    )
+    (
+      :name "string-length"
+      :sec "String"
+      :type "String -> Int64"
+      :doc "Length in characters."
+      :py "len({0})"
+      :js "[...{0}].length"
+      :rs "rt::str_len(&{0})"
+      :ts "RT.strLen({0})"
+      :go "StrLen({0})"
+    )
+    (
+      :name "string-empty?"
+      :sec "String"
+      :type "String -> Bool"
+      :doc "True when the string has no characters."
+      :py "(len({0}) == 0)"
+      :js "({0}.length === 0)"
+      :rs "{0}.is_empty()"
+      :ts "({0}.length === 0)"
+      :go "({0} == \"\")"
+    )
+    (
+      :name "str"
+      :sec "String"
+      :type "String... -> String"
+      :doc "Concatenate strings. Takes strings only; convert first."
+      :py "\"\".join([{*}])"
+      :js "[{*}].join('')"
+      :rs "rt::concat(&[{*}])"
+      :ts "RT.concat([{*}])"
+      :go "Concat({*})"
+    )
+    (
+      :name "string-slice"
+      :sec "String"
+      :type "String Int64 Int64 -> (Option String)"
+      :doc "Half-open character slice, or none when out of range."
+      :py "_agentscript.str_slice({0}, {1}, {2})"
+      :js "_agentscript.strSlice({0}, {1}, {2})"
+      :rs "rt::str_slice(&{0}, {1}, {2})"
+      :ts "RT.strSlice({0}, {1}, {2})"
+      :go "StrSlice({0}, {1}, {2})"
+    )
+    (
+      :name "string-index-of"
+      :sec "String"
+      :type "String String -> (Option Int64)"
+      :doc "Character index of the first occurrence."
+      :py "_agentscript.str_index_of({0}, {1})"
+      :js "_agentscript.strIndexOf({0}, {1})"
+      :rs "rt::str_index_of(&{0}, &{1})"
+      :ts "RT.strIndexOf({0}, {1})"
+      :go "StrIndexOf({0}, {1})"
+    )
+    (
+      :name "string-contains?"
+      :sec "String"
+      :type "String String -> Bool"
+      :doc "True when the substring occurs."
+      :py "({1} in {0})"
+      :js "{0}.includes({1})"
+      :rs "{0}.contains(&{1})"
+      :ts "{0}.includes({1})"
+      :go "StrContains({0}, {1})"
+    )
+    (
+      :name "string-starts-with?"
+      :sec "String"
+      :type "String String -> Bool"
+      :doc "True when the string begins with the prefix."
+      :py "{0}.startswith({1})"
+      :js "{0}.startsWith({1})"
+      :rs "{0}.starts_with(&{1})"
+      :ts "{0}.startsWith({1})"
+      :go "StrStartsWith({0}, {1})"
+    )
+    (
+      :name "string-ends-with?"
+      :sec "String"
+      :type "String String -> Bool"
+      :doc "True when the string ends with the suffix."
+      :py "{0}.endswith({1})"
+      :js "{0}.endsWith({1})"
+      :rs "{0}.ends_with(&{1})"
+      :ts "{0}.endsWith({1})"
+      :go "StrEndsWith({0}, {1})"
+    )
+    (
+      :name "string-split"
+      :sec "String"
+      :type "String String -> (List String)"
+      :doc "Split on a separator."
+      :py "{0}.split({1})"
+      :js "{0}.split({1})"
+      :rs "rt::split(&{0}, &{1})"
+      :ts "RT.split({0}, {1})"
+      :go "Split({0}, {1})"
+    )
+    (
+      :name "string-join"
+      :sec "String"
+      :type "(List String) String -> String"
+      :doc "Join with a separator."
+      :py "{1}.join({0})"
+      :js "{0}.join({1})"
+      :rs "{0}.join(&{1})"
+      :ts "{0}.join({1})"
+      :go "StrJoin({0}, {1})"
+    )
+    (
+      :name "string-upper"
+      :sec "String"
+      :type "String -> String"
+      :doc "Upper case."
+      :py "{0}.upper()"
+      :js "{0}.toUpperCase()"
+      :rs "{0}.to_uppercase()"
+      :ts "{0}.toUpperCase()"
+      :go "StrUpper({0})"
+    )
+    (
+      :name "string-lower"
+      :sec "String"
+      :type "String -> String"
+      :doc "Lower case."
+      :py "{0}.lower()"
+      :js "{0}.toLowerCase()"
+      :rs "{0}.to_lowercase()"
+      :ts "{0}.toLowerCase()"
+      :go "StrLower({0})"
+    )
+    (
+      :name "string-trim"
+      :sec "String"
+      :type "String -> String"
+      :doc "Remove leading and trailing whitespace."
+      :py "{0}.strip()"
+      :js "{0}.trim()"
+      :rs "{0}.trim().to_string()"
+      :ts "{0}.trim()"
+      :go "StrTrim({0})"
+    )
+    (
+      :name "string-reverse"
+      :sec "String"
+      :type "String -> String"
+      :doc "Reverse the character sequence."
+      :py "{0}[::-1]"
+      :js "[...{0}].reverse().join('')"
+      :rs "rt::str_rev(&{0})"
+      :ts "RT.strRev({0})"
+      :go "StrRev({0})"
+    )
+    (
+      :name "string-replace"
+      :sec "String"
+      :type "String String String -> String"
+      :doc "Replace every occurrence."
+      :py "{0}.replace({1}, {2})"
+      :js "{0}.replaceAll({1}, {2})"
+      :rs "{0}.replace(&{1}, &{2})"
+      :ts "RT.replace({0}, {1}, {2})"
+      :go "StrReplace({0}, {1}, {2})"
+    )
+    (
+      :name "string-chars"
+      :sec "String"
+      :type "String -> (List String)"
+      :doc "Characters as one-character strings."
+      :py "list({0})"
+      :js "[...{0}]"
+      :rs "rt::chars(&{0})"
+      :ts "RT.chars({0})"
+      :go "Chars({0})"
+    )
+    (
+      :name "string-from-int64"
+      :sec "String"
+      :type "Int64 -> String"
+      :doc "Decimal rendering of an integer."
+      :py "str({0})"
+      :js "String({0})"
+      :rs "rt::fmt_i64({0})"
+      :ts "String({0})"
+      :go "FmtI64({0})"
+    )
+    (
+      :name "string-from-float64"
+      :sec "String"
+      :type "Float64 -> String"
+      :doc "Decimal rendering of a float."
+      :py "repr(float({0}))"
+      :js "_agentscript.fmtF64({0})"
+      :rs "rt::fmt_f64({0})"
+      :ts "RT.fmtF64({0})"
+      :go "FmtF64({0})"
+    )
+    (
+      :name "string-to-int64"
+      :sec "String"
+      :type "String -> (Option Int64)"
+      :doc "Parse an integer, or none when it is malformed or outside Int64."
+      :py "_agentscript.to_int({0})"
+      :js "_agentscript.toInt({0})"
+      :rs "rt::to_i64(&{0})"
+      :ts "RT.toI64({0})"
+      :go "ToI64({0})"
+    )
+    (
+      :name "string-to-float64"
+      :sec "String"
+      :type "String -> (Option Float64)"
+      :doc "Parse a float, or none."
+      :py "_agentscript.to_float({0})"
+      :js "_agentscript.toFloat({0})"
+      :rs "rt::to_f64(&{0})"
+      :ts "RT.toF64({0})"
+      :go "ToF64({0})"
+    )
+    (
+      :name "int32-to-int64"
+      :sec "Numeric conversion"
+      :type "Int32 -> Int64"
+      :doc "Widen."
+      :py "{0}"
+      :js "{0}"
+      :rs "({0} as i64)"
+      :ts "{0}"
+      :go "int64({0})"
+    )
+    (
+      :name "int64-to-int32"
+      :sec "Numeric conversion"
+      :type "Int64 -> (Option Int32)"
+      :doc "Narrow, or none when out of range."
+      :py "_agentscript.to_i32({0})"
+      :js "_agentscript.toI32({0})"
+      :rs "rt::to_i32({0})"
+      :ts "RT.toI32({0})"
+      :go "ToI32({0})"
+    )
+    (
+      :name "int64-to-float64"
+      :sec "Numeric conversion"
+      :type "Int64 -> Float64"
+      :doc "Convert to floating point."
+      :py "float({0})"
+      :js "{0}"
+      :rs "rt::i_to_f({0})"
+      :ts "Number({0})"
+      :go "float64({0})"
+    )
+    (
+      :name "float64-to-int64"
+      :sec "Numeric conversion"
+      :type "Float64 -> (Option Int64)"
+      :doc "Truncate toward zero, or none for NaN, infinity or out of range."
+      :py "_agentscript.f_to_i({0})"
+      :js "_agentscript.fToI({0})"
+      :rs "rt::f_to_i({0})"
+      :ts "RT.fToI({0})"
+      :go "FToI({0})"
+    )
+    (
+      :name "list"
+      :sec "List"
+      :type "T... -> (List T)"
+      :doc "Construct a list."
+      :py "[{*}]"
+      :js "[{*}]"
+      :rs "vec![{*}]"
+      :ts "[{*}]"
+      :go "ListOf({*})"
+    )
+    (
+      :name "list-empty?"
+      :sec "List"
+      :type "(List T) -> Bool"
+      :doc "True when the list has no elements."
+      :py "(len({0}) == 0)"
+      :js "({0}.length === 0)"
+      :rs "{0}.is_empty()"
+      :ts "({0}.length === 0)"
+      :go "(len({0}) == 0)"
+    )
+    (
+      :name "list-length"
+      :sec "List"
+      :type "(List T) -> Int64"
+      :doc "Element count."
+      :py "len({0})"
+      :js "{0}.length"
+      :rs "({0}.len() as i64)"
+      :ts "BigInt({0}.length)"
+      :go "(int64(len({0})))"
+    )
+    (
+      :name "list-get"
+      :sec "List"
+      :type "(List T) Int64 -> (Option T)"
+      :doc "Element at an index, or none."
+      :py "_agentscript.at({0}, {1})"
+      :js "_agentscript.at({0}, {1})"
+      :rs "rt::at(&{0}, {1})"
+      :ts "RT.at({0}, {1})"
+      :go "At({0}, {1})"
+    )
+    (
+      :name "list-head"
+      :sec "List"
+      :type "(List T) -> (Option T)"
+      :doc "First element, or none."
+      :py "_agentscript.at({0}, 0)"
+      :js "_agentscript.at({0}, 0)"
+      :rs "rt::at(&{0}, 0)"
+      :ts "RT.at({0}, 0n)"
+      :go "At({0}, int64(0))"
+    )
+    (
+      :name "list-tail"
+      :sec "List"
+      :type "(List T) -> (Option (List T))"
+      :doc "All but the first element, or none when empty."
+      :py "_agentscript.tail({0})"
+      :js "_agentscript.tail({0})"
+      :rs "rt::tail(&{0})"
+      :ts "RT.tail({0})"
+      :go "Tail({0})"
+    )
+    (
+      :name "list-cons"
+      :sec "List"
+      :type "T (List T) -> (List T)"
+      :doc "Prepend an element."
+      :py "([{0}] + {1})"
+      :js "[{0}, ...{1}]"
+      :rs "rt::cons({0}, {1})"
+      :ts "[{0}, ...{1}]"
+      :go "Cons({0}, {1})"
+    )
+    (
+      :name "list-append"
+      :sec "List"
+      :type "(List T) (List T) -> (List T)"
+      :doc "Concatenate two lists."
+      :py "({0} + {1})"
+      :js "[...{0}, ...{1}]"
+      :rs "rt::append({0}, {1})"
+      :ts "[...{0}, ...{1}]"
+      :go "Append({0}, {1})"
+    )
+    (
+      :name "list-reverse"
+      :sec "List"
+      :type "(List T) -> (List T)"
+      :doc "Reverse order."
+      :py "{0}[::-1]"
+      :js "[...{0}].reverse()"
+      :rs "rt::rev({0})"
+      :ts "[...{0}].reverse()"
+      :go "Rev({0})"
+    )
+    (
+      :name "list-slice"
+      :sec "List"
+      :type "(List T) Int64 Int64 -> (Option (List T))"
+      :doc "Half-open slice, or none when out of range."
+      :py "_agentscript.list_slice({0}, {1}, {2})"
+      :js "_agentscript.listSlice({0}, {1}, {2})"
+      :rs "rt::list_slice(&{0}, {1}, {2})"
+      :ts "RT.listSlice({0}, {1}, {2})"
+      :go "ListSlice({0}, {1}, {2})"
+    )
+    (
+      :name "list-contains?"
+      :sec "List"
+      :type "(List T) T -> Bool"
+      :doc "True when the element occurs."
+      :py "_agentscript.contains({0}, {1})"
+      :js "_agentscript.contains({0}, {1})"
+      :rs "{0}.contains(&{1})"
+      :ts "RT.contains({0}, {1})"
+      :go "Contains({0}, {1})"
+    )
+    (
+      :name "list-index-of"
+      :sec "List"
+      :type "(List T) T -> (Option Int64)"
+      :doc "Index of the first occurrence."
+      :py "_agentscript.index_of({0}, {1})"
+      :js "_agentscript.indexOf({0}, {1})"
+      :rs "rt::index_of(&{0}, &{1})"
+      :ts "RT.indexOf({0}, {1})"
+      :go "IndexOf({0}, {1})"
+    )
+    (
+      :name "list-sort"
+      :sec "List"
+      :type "(List T) -> (List T)"
+      :doc "Stable ascending sort; a value holding a NaN sorts last."
+      :py "sorted({0}, key=_agentscript.order_key)"
+      :js "_agentscript.sort({0})"
+      :rs "rt::sort({0})"
+      :ts "RT.sort({0})"
+      :go "Sort({0})"
+    )
+    (
+      :name "list-sort-by"
+      :sec "List"
+      :type "(fn [T] -> K) (List T) -> (List T)"
+      :doc "Stable ascending sort by a derived key; a key holding a NaN sorts last."
+      :py "sorted({1}, key=_agentscript.order_by({0}))"
+      :js "_agentscript.sortBy({0}, {1})"
+      :rs "rt::sort_by({1}, {0})"
+      :ts "RT.sortBy({0}, {1})"
+      :go "SortBy({0}, {1})"
+    )
+    (
+      :name "map"
+      :sec "List"
+      :type "(fn [A] -> B) (List A) -> (List B)"
+      :doc "Apply a function to every element."
+      :py "[{0}(_x) for _x in {1}]"
+      :js "{1}.map({0})"
+      :rs "{1}.into_iter().map({0}).collect::<Vec<_>>()"
+      :ts "{1}.map({0})"
+      :go "Map({0}, {1})"
+    )
+    (
+      :name "filter"
+      :sec "List"
+      :type "(fn [T] -> Bool) (List T) -> (List T)"
+      :doc "Keep elements satisfying a predicate."
+      :py "[_x for _x in {1} if {0}(_x)]"
+      :js "{1}.filter({0})"
+      :rs "rt::filter({1}, {0})"
+      :ts "{1}.filter({0})"
+      :go "Filter({0}, {1})"
+    )
+    (
+      :name "fold"
+      :sec "List"
+      :type "(fn [B A] -> B) B (List A) -> B"
+      :doc "Left fold with an initial accumulator."
+      :py "_agentscript.fold({0}, {1}, {2})"
+      :js "{2}.reduce({0}, {1})"
+      :rs "{2}.into_iter().fold({1}, {0})"
+      :ts "RT.fold({0}, {1}, {2})"
+      :go "Fold({0}, {1}, {2})"
+    )
+    (
+      :name "range"
+      :sec "List"
+      :type "Int64 Int64 -> (List Int64)"
+      :doc "Half-open integer range; empty when start is not below end."
+      :py "list(range({0}, {1}))"
+      :js "_agentscript.range({0}, {1})"
+      :rs "rt::range({0}, {1})"
+      :ts "RT.range({0}, {1})"
+      :go "Range({0}, {1})"
+    )
+    (
+      :name "zip"
+      :sec "List"
+      :type "(List A) (List B) -> (List (Pair A B))"
+      :doc "Pair up elements, truncating to the shorter list."
+      :py "_agentscript.zip_({0}, {1})"
+      :js "_agentscript.zip({0}, {1})"
+      :rs "rt::zip({0}, {1})"
+      :ts "RT.zip({0}, {1})"
+      :go "Zip({0}, {1})"
+    )
+    (
+      :name "list-sum"
+      :sec "List"
+      :type "(List N) -> N"
+      :doc "Sum of elements, 0 when empty. Traps on integer overflow."
+      :py "_agentscript.sum_({0})"
+      :js "_agentscript.sum({0})"
+      :rs "rt::sum({0})"
+      :ts "RT.sum({0})"
+      :go "Sum({0})"
+    )
+    (
+      :name "list-min"
+      :sec "List"
+      :type "(List T) -> (Option T)"
+      :doc "Least element in the sort order, or none when empty."
+      :py "_agentscript.least({0})"
+      :js "_agentscript.least({0})"
+      :rs "rt::least(&{0})"
+      :ts "RT.least({0})"
+      :go "Least({0})"
+    )
+    (
+      :name "list-max"
+      :sec "List"
+      :type "(List T) -> (Option T)"
+      :doc "Greatest element in the sort order, or none when empty."
+      :py "_agentscript.greatest({0})"
+      :js "_agentscript.greatest({0})"
+      :rs "rt::greatest(&{0})"
+      :ts "RT.greatest({0})"
+      :go "Greatest({0})"
+    )
+    (
+      :name "map-empty"
+      :sec "Map"
+      :type "-> (Map K V)"
+      :doc "The empty map."
+      :py "{{}}"
+      :js "new Map()"
+      :rs "std::collections::BTreeMap::new()"
+      :ts "RT.MAP_EMPTY"
+      :go "MAP_EMPTY"
+    )
+    (
+      :name "map-get"
+      :sec "Map"
+      :type "(Map K V) K -> (Option V)"
+      :doc "Value for a key, or none."
+      :py "_agentscript.m_get({0}, {1})"
+      :js "_agentscript.mGet({0}, {1})"
+      :rs "rt::m_get(&{0}, &{1})"
+      :ts "RT.mGet({0}, {1})"
+      :go "MGet({0}, {1})"
+    )
+    (
+      :name "map-set"
+      :sec "Map"
+      :type "(Map K V) K V -> (Map K V)"
+      :doc "Map with the key bound to the value."
+      :py "_agentscript.m_set({0}, {1}, {2})"
+      :js "_agentscript.mSet({0}, {1}, {2})"
+      :rs "rt::m_set({0}, {1}, {2})"
+      :ts "RT.mSet({0}, {1}, {2})"
+      :go "MSet({0}, {1}, {2})"
+    )
+    (
+      :name "map-remove"
+      :sec "Map"
+      :type "(Map K V) K -> (Map K V)"
+      :doc "Map without the key."
+      :py "_agentscript.m_del({0}, {1})"
+      :js "_agentscript.mDel({0}, {1})"
+      :rs "rt::m_del({0}, &{1})"
+      :ts "RT.mDel({0}, {1})"
+      :go "MDel({0}, {1})"
+    )
+    (
+      :name "map-has?"
+      :sec "Map"
+      :type "(Map K V) K -> Bool"
+      :doc "True when the key is present."
+      :py "({1} in {0})"
+      :js "{0}.has({1})"
+      :rs "{0}.contains_key(&{1})"
+      :ts "RT.mHas({0}, {1})"
+      :go "MHas({0}, {1})"
+    )
+    (
+      :name "map-size"
+      :sec "Map"
+      :type "(Map K V) -> Int64"
+      :doc "Number of entries."
+      :py "len({0})"
+      :js "{0}.size"
+      :rs "({0}.len() as i64)"
+      :ts "RT.mSize({0})"
+      :go "(int64(len({0})))"
+    )
+    (
+      :name "map-keys"
+      :sec "Map"
+      :type "(Map K V) -> (List K)"
+      :doc "Keys, sorted."
+      :py "sorted({0}.keys())"
+      :js "_agentscript.mKeys({0})"
+      :rs "{0}.keys().cloned().collect::<Vec<_>>()"
+      :ts "RT.mKeys({0})"
+      :go "MKeys({0})"
+    )
+    (
+      :name "map-values"
+      :sec "Map"
+      :type "(Map K V) -> (List V)"
+      :doc "Values, ordered by sorted key."
+      :py "[{0}[_k] for _k in sorted({0})]"
+      :js "_agentscript.mValues({0})"
+      :rs "{0}.values().cloned().collect::<Vec<_>>()"
+      :ts "RT.mValues({0})"
+      :go "MValues({0})"
+    )
+    (
+      :name "map-pairs"
+      :sec "Map"
+      :type "(Map K V) -> (List (Pair K V))"
+      :doc "Entries as pairs, ordered by sorted key."
+      :py "_agentscript.m_pairs({0})"
+      :js "_agentscript.mPairs({0})"
+      :rs "rt::m_pairs(&{0})"
+      :ts "RT.mPairs({0})"
+      :go "MPairs({0})"
+    )
+    (
+      :name "map-from-pairs"
+      :sec "Map"
+      :type "(List (Pair K V)) -> (Map K V)"
+      :doc "Build from pairs; later entries win."
+      :py "_agentscript.m_from({0})"
+      :js "_agentscript.mFrom({0})"
+      :rs "rt::m_from({0})"
+      :ts "RT.mFrom({0})"
+      :go "MFrom({0})"
+    )
+    (
+      :name "some"
+      :sec "Option, Result, Pair"
+      :type "T -> (Option T)"
+      :doc "A present value."
+      :py "_agentscript.some({0})"
+      :js "_agentscript.some({0})"
+      :rs "Some({0})"
+      :ts "RT.some({0})"
+      :go "Some({0})"
+    )
+    (
+      :name "none"
+      :sec "Option, Result, Pair"
+      :type "-> (Option T)"
+      :doc "An absent value."
+      :py "_agentscript.NONE"
+      :js "_agentscript.NONE"
+      :rs "None"
+      :ts "RT.NONE"
+      :go "None[T]()"
+    )
+    (
+      :name "ok"
+      :sec "Option, Result, Pair"
+      :type "T -> (Result T E)"
+      :doc "A successful result."
+      :py "_agentscript.ok({0})"
+      :js "_agentscript.ok({0})"
+      :rs "Ok({0})"
+      :ts "RT.ok({0})"
+      :go "Ok({0})"
+    )
+    (
+      :name "err"
+      :sec "Option, Result, Pair"
+      :type "E -> (Result T E)"
+      :doc "A failed result."
+      :py "_agentscript.err({0})"
+      :js "_agentscript.err({0})"
+      :rs "Err({0})"
+      :ts "RT.err({0})"
+      :go "Err({0})"
+    )
+    (
+      :name "is-some?"
+      :sec "Option, Result, Pair"
+      :type "(Option T) -> Bool"
+      :doc "True when a value is present."
+      :py "_agentscript.is_some({0})"
+      :js "_agentscript.isSome({0})"
+      :rs "{0}.is_some()"
+      :ts "({0}.tag === \"some\")"
+      :go "({0}.Present)"
+    )
+    (
+      :name "is-none?"
+      :sec "Option, Result, Pair"
+      :type "(Option T) -> Bool"
+      :doc "True when no value is present."
+      :py "(not _agentscript.is_some({0}))"
+      :js "(!_agentscript.isSome({0}))"
+      :rs "{0}.is_none()"
+      :ts "({0}.tag === \"none\")"
+      :go "(!{0}.Present)"
+    )
+    (
+      :name "is-ok?"
+      :sec "Option, Result, Pair"
+      :type "(Result T E) -> Bool"
+      :doc "True when the result succeeded."
+      :py "_agentscript.is_ok({0})"
+      :js "_agentscript.isOk({0})"
+      :rs "{0}.is_ok()"
+      :ts "({0}.tag === \"ok\")"
+      :go "({0}.IsOk)"
+    )
+    (
+      :name "is-err?"
+      :sec "Option, Result, Pair"
+      :type "(Result T E) -> Bool"
+      :doc "True when the result failed."
+      :py "(not _agentscript.is_ok({0}))"
+      :js "(!_agentscript.isOk({0}))"
+      :rs "{0}.is_err()"
+      :ts "({0}.tag === \"err\")"
+      :go "(!{0}.IsOk)"
+    )
+    (
+      :name "option-or"
+      :sec "Option, Result, Pair"
+      :type "(Option T) T -> T"
+      :doc "The value, or a fallback when absent."
+      :py "_agentscript.opt_or({0}, {1})"
+      :js "_agentscript.optOr({0}, {1})"
+      :rs "{0}.unwrap_or({1})"
+      :ts "RT.optOr({0}, {1})"
+      :go "OptOr({0}, {1})"
+    )
+    (
+      :name "result-or"
+      :sec "Option, Result, Pair"
+      :type "(Result T E) T -> T"
+      :doc "The value, or a fallback on failure."
+      :py "_agentscript.res_or({0}, {1})"
+      :js "_agentscript.resOr({0}, {1})"
+      :rs "{0}.unwrap_or({1})"
+      :ts "RT.resOr({0}, {1})"
+      :go "ResOr({0}, {1})"
+    )
+    (
+      :name "option-map"
+      :sec "Option, Result, Pair"
+      :type "(fn [A] -> B) (Option A) -> (Option B)"
+      :doc "Transform a present value."
+      :py "_agentscript.opt_map({0}, {1})"
+      :js "_agentscript.optMap({0}, {1})"
+      :rs "{1}.map({0})"
+      :ts "RT.optMap({0}, {1})"
+      :go "OptMap({0}, {1})"
+    )
+    (
+      :name "result-map"
+      :sec "Option, Result, Pair"
+      :type "(fn [A] -> B) (Result A E) -> (Result B E)"
+      :doc "Transform a successful value."
+      :py "_agentscript.res_map({0}, {1})"
+      :js "_agentscript.resMap({0}, {1})"
+      :rs "{1}.map({0})"
+      :ts "RT.resMap({0}, {1})"
+      :go "ResMap({0}, {1})"
+    )
+    (
+      :name "result-map-err"
+      :sec "Option, Result, Pair"
+      :type "(fn [E] -> F) (Result T E) -> (Result T F)"
+      :doc "Transform a failure value."
+      :py "_agentscript.res_map_err({0}, {1})"
+      :js "_agentscript.resMapErr({0}, {1})"
+      :rs "{1}.map_err({0})"
+      :ts "RT.resMapErr({0}, {1})"
+      :go "ResMapErr({0}, {1})"
+    )
+    (
+      :name "option-to-result"
+      :sec "Option, Result, Pair"
+      :type "(Option T) E -> (Result T E)"
+      :doc "Absent becomes the given failure."
+      :py "_agentscript.opt_to_res({0}, {1})"
+      :js "_agentscript.optToRes({0}, {1})"
+      :rs "{0}.ok_or({1})"
+      :ts "RT.optToRes({0}, {1})"
+      :go "OptToRes({0}, {1})"
+    )
+    (
+      :name "result-to-option"
+      :sec "Option, Result, Pair"
+      :type "(Result T E) -> (Option T)"
+      :doc "Failure becomes absence."
+      :py "_agentscript.res_to_opt({0})"
+      :js "_agentscript.resToOpt({0})"
+      :rs "{0}.ok()"
+      :ts "RT.resToOpt({0})"
+      :go "ResToOpt({0})"
+    )
+    (
+      :name "pair"
+      :sec "Option, Result, Pair"
+      :type "A B -> (Pair A B)"
+      :doc "Construct a pair."
+      :py "_agentscript.pair({0}, {1})"
+      :js "_agentscript.pair({0}, {1})"
+      :rs "({0}, {1})"
+      :ts "new RT.ASPair({0}, {1})"
+      :go "MkPair({0}, {1})"
+    )
+    (
+      :name "not-found"
+      :sec "I/O"
+      :type "-> IoError"
+      :doc "The not found failure."
+      :py "(\"not-found\",)"
+      :js "[\"not-found\"]"
+      :rs "rt::IoError::NotFound"
+      :ts "RT.notFound()"
+      :go "NotFound()"
+    )
+    (
+      :name "permission-denied"
+      :sec "I/O"
+      :type "-> IoError"
+      :doc "The permission denied failure."
+      :py "(\"permission-denied\",)"
+      :js "[\"permission-denied\"]"
+      :rs "rt::IoError::PermissionDenied"
+      :ts "RT.permissionDenied()"
+      :go "PermissionDenied()"
+    )
+    (
+      :name "already-exists"
+      :sec "I/O"
+      :type "-> IoError"
+      :doc "The already exists failure."
+      :py "(\"already-exists\",)"
+      :js "[\"already-exists\"]"
+      :rs "rt::IoError::AlreadyExists"
+      :ts "RT.alreadyExists()"
+      :go "AlreadyExists()"
+    )
+    (
+      :name "invalid-path"
+      :sec "I/O"
+      :type "-> IoError"
+      :doc "The invalid path failure."
+      :py "(\"invalid-path\",)"
+      :js "[\"invalid-path\"]"
+      :rs "rt::IoError::InvalidPath"
+      :ts "RT.invalidPath()"
+      :go "InvalidPath()"
+    )
+    (
+      :name "interrupted"
+      :sec "I/O"
+      :type "-> IoError"
+      :doc "The interrupted failure."
+      :py "(\"interrupted\",)"
+      :js "[\"interrupted\"]"
+      :rs "rt::IoError::Interrupted"
+      :ts "RT.interrupted()"
+      :go "Interrupted()"
+    )
+    (
+      :name "other"
+      :sec "I/O"
+      :type "-> IoError"
+      :doc "The other failure."
+      :py "(\"other\",)"
+      :js "[\"other\"]"
+      :rs "rt::IoError::Other"
+      :ts "RT.other()"
+      :go "Other()"
+    )
+    (
+      :name "read-line"
+      :sec "I/O"
+      :type "-> (Result (Option String) IoError)"
+      :doc "Read one line from standard input; none at end of input."
+      :py "_agentscript.read_line()"
+      :js "_agentscript.readLine()"
+      :rs "rt::read_line()"
+      :effect true
+      :ts "RT.readLine()"
+      :go "ReadLine()"
+    )
+    (
+      :name "read-all"
+      :sec "I/O"
+      :type "-> (Result String IoError)"
+      :doc "Read all of standard input."
+      :py "_agentscript.read_all()"
+      :js "_agentscript.readAll()"
+      :rs "rt::read_all()"
+      :effect true
+      :ts "RT.readAll()"
+      :go "ReadAll()"
+    )
+    (
+      :name "print"
+      :sec "I/O"
+      :type "String -> (Result Unit IoError)"
+      :doc "Write to standard output with no trailing newline."
+      :py "_agentscript.print_out({0})"
+      :js "_agentscript.printOut({0})"
+      :rs "rt::print_out(&{0})"
+      :effect true
+      :ts "RT.print_({0})"
+      :go "PrintOut({0})"
+    )
+    (
+      :name "println"
+      :sec "I/O"
+      :type "String -> (Result Unit IoError)"
+      :doc "Write a line to standard output."
+      :py "_agentscript.println({0})"
+      :js "_agentscript.println({0})"
+      :rs "rt::println(&{0})"
+      :effect true
+      :ts "RT.println({0})"
+      :go "Println({0})"
+    )
+    (
+      :name "eprintln"
+      :sec "I/O"
+      :type "String -> (Result Unit IoError)"
+      :doc "Write a line to standard error."
+      :py "_agentscript.eprintln({0})"
+      :js "_agentscript.eprintln({0})"
+      :rs "rt::eprintln(&{0})"
+      :effect true
+      :ts "RT.eprintln({0})"
+      :go "Eprintln({0})"
+    )
+    (
+      :name "file-read"
+      :sec "I/O"
+      :type "String -> (Result String IoError)"
+      :doc "Read a whole file as text."
+      :py "_agentscript.file_read({0})"
+      :js "_agentscript.fileRead({0})"
+      :rs "rt::file_read(&{0})"
+      :effect true
+      :ts "RT.fileRead({0})"
+      :go "FileRead({0})"
+    )
+    (
+      :name "file-write"
+      :sec "I/O"
+      :type "String String -> (Result Unit IoError)"
+      :doc "Write text to a file, replacing it."
+      :py "_agentscript.file_write({0}, {1})"
+      :js "_agentscript.fileWrite({0}, {1})"
+      :rs "rt::file_write(&{0}, &{1})"
+      :effect true
+      :ts "RT.fileWrite({0}, {1})"
+      :go "FileWrite({0}, {1})"
+    )
+    (
+      :name "file-append"
+      :sec "I/O"
+      :type "String String -> (Result Unit IoError)"
+      :doc "Append text to a file, creating it if absent."
+      :py "_agentscript.file_append({0}, {1})"
+      :js "_agentscript.fileAppend({0}, {1})"
+      :rs "rt::file_append(&{0}, &{1})"
+      :effect true
+      :ts "RT.fileAppend({0}, {1})"
+      :go "FileAppend({0}, {1})"
+    )
+    (
+      :name "file-exists?"
+      :sec "I/O"
+      :type "String -> (Result Bool IoError)"
+      :doc "Whether a path exists."
+      :py "_agentscript.file_exists({0})"
+      :js "_agentscript.fileExists({0})"
+      :rs "rt::file_exists(&{0})"
+      :effect true
+      :ts "RT.ok(RT.fileExists({0}))"
+      :go "FileExistsRes({0})"
+    )
+  ]
+)

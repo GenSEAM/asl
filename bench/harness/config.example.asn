@@ -1,0 +1,11 @@
+(
+  :endpoint "https://YOUR-GATEWAY/v1/chat/completions"
+  :model "EXACT-MODEL-ID-AS-THE-API-ACCEPTS-IT"
+  :api-key-env "ASEX_GATEWAY_KEY"
+  :price-per-1m-input 0.15
+  :price-per-1m-output 0.6
+  :spend-cap-usd 0.2
+  :samples-per-task 5
+  :temperature 0.2
+  :max-tokens 1200
+)
