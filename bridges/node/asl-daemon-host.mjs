@@ -1029,6 +1029,75 @@ function handleToolUnload(id, domain) {
       return `(:step :id ${id} :op "placement" :status "ok" :placement-analysis (:target "${target}" :lines ${lines} :recommended "columnar" :savings-percent 28.5 :homogeneous true :status "optimized"))`;
     }
 
+    case 'ptr': {
+      let action = 'offload';
+      let data = '';
+      let summary = 'pointer offload';
+      let ptrId = '';
+      let file = null;
+
+      for (let i = 1; i < tokens.length; i++) {
+        if (tokens[i] === ':action' && tokens[i + 1]) action = tokens[i + 1].replace(/^"|"$/g, '');
+        else if (tokens[i] === ':data' && tokens[i + 1]) data = tokens[i + 1];
+        else if (tokens[i] === ':summary' && tokens[i + 1]) summary = tokens[i + 1].replace(/^"|"$/g, '');
+        else if (tokens[i] === ':id' && tokens[i + 1]) ptrId = tokens[i + 1].replace(/^"|"$/g, '');
+        else if (tokens[i] === ':file' && tokens[i + 1]) file = tokens[i + 1].replace(/^"|"$/g, '');
+      }
+
+      if (!data && rawOp.includes(':data')) {
+        const dMatch = rawOp.match(/:data\s+"((?:[^"\\]|\\.)*)"/);
+        if (dMatch) {
+          try {
+            data = JSON.parse(`"${dMatch[1]}"`);
+          } catch {
+            data = dMatch[1];
+          }
+        }
+      }
+      if (!summary && rawOp.includes(':summary')) {
+        const sMatch = rawOp.match(/:summary\s+"((?:[^"\\]|\\.)*)"/);
+        if (sMatch) summary = sMatch[1];
+      }
+      if (!ptrId && rawOp.includes(':id')) {
+        const idMatch = rawOp.match(/:id\s+"((?:[^"\\]|\\.)*)"/);
+        if (idMatch) ptrId = idMatch[1];
+      }
+      if (file) {
+        const content = getFileContent(file);
+        if (content !== null) data = content;
+      }
+
+      const cacheDir = path.join(wsRoot, '.asl', 'cache', 'ptr');
+      if (!fs.existsSync(cacheDir)) {
+        try {
+          fs.mkdirSync(cacheDir, { recursive: true });
+        } catch {}
+      }
+
+      if (action === 'deref' || action === 'dereference') {
+        if (!ptrId) {
+          return `(:step :id ${id} :op "ptr" :status "failed" :error "missing id for deref")`;
+        }
+        const candidateFile = ptrId.endsWith('.asn') ? ptrId : `${ptrId}.asn`;
+        const filePath = path.join(cacheDir, candidateFile);
+        if (!fs.existsSync(filePath)) {
+          return `(:step :id ${id} :op "ptr" :status "failed" :id "${ptrId}" :error "pointer not found")`;
+        }
+        const content = fs.readFileSync(filePath, 'utf8');
+        const escContent = content.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        return `(:step :id ${id} :op "ptr" :status "ok" :action "deref" :id "${ptrId}" :bytes ${Buffer.byteLength(content, 'utf8')} :data "${escContent}")`;
+      }
+
+      const contentHash = crypto.createHash('sha256').update(data).digest('hex').slice(0, 16);
+      const finalId = ptrId || contentHash;
+      const targetFile = path.join(cacheDir, `${finalId}.asn`);
+      fs.writeFileSync(targetFile, data, 'utf8');
+      const bytes = Buffer.byteLength(data, 'utf8');
+      const tokensSaved = Math.max(1, Math.floor(bytes / 4));
+
+      return `(:step :id ${id} :op "ptr" :status "ok" :ptr (:ptr :id "${finalId}" :action "offload" :bytes ${bytes} :tokens-saved ${tokensSaved} :summary "${summary}"))`;
+    }
+
     case 'top':
     case 'inspect':
     case 'status': {

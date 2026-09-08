@@ -184,6 +184,11 @@ function parseAsn(asnStr) {
         else if (esc === "r") s += "\r";
         else if (esc === "\\") s += "\\";
         else if (esc === "\"") s += "\"";
+        else if (esc === "u") {
+          const hex = asnStr.slice(i, i + 4);
+          i += 4;
+          s += String.fromCharCode(parseInt(hex, 16));
+        }
         else s += esc;
       } else {
         s += c;
@@ -457,6 +462,11 @@ function parseAllSExprs(input) {
         else if (esc === "r") s += "\r";
         else if (esc === "\\") s += "\\";
         else if (esc === "\"") s += "\"";
+        else if (esc === "u") {
+          const hex = input.slice(i, i + 4);
+          i += 4;
+          s += String.fromCharCode(parseInt(hex, 16));
+        }
         else s += esc;
       } else {
         s += c;
