@@ -11,6 +11,7 @@
     (:sym :name "DefunNode" :kind :type :tokens 1)
     (:sym :name "EnumCase" :kind :type :tokens 1)
     (:sym :name "EnumNode" :kind :type :tokens 1)
+    (:sym :name "GrammarTrieNode" :kind :type :tokens 1)
     (:sym :name "ModuleNode" :kind :type :tokens 1)
     (:sym :name "OutlineItem" :kind :type :tokens 1)
     (:sym :name "Param" :kind :type :tokens 1)
@@ -56,8 +57,14 @@
     (:sym :name "tokenize" :kind :fn :tokens 1)
 
     ;; Multi-Token Symbols (with :rationale)
+    (:sym :name "build-grammar-trie" :kind :fn :tokens 3
+          :rationale "Builds in-memory grammar trie state machine from structured ASN grammar rules for constrained decoding")
+    (:sym :name "compute-valid-tokens" :kind :fn :tokens 3
+          :rationale "Computes exact legal next token set admitted by grammar trie given current prefix")
     (:sym :name "is-head-match?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'head-match?': question mark predicate form requires full verb phrase to avoid collision with pattern matching macros")
     (:sym :name "token-type-name" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'token-name': disambiguates lexer token category names from identifier token literal strings")
+    (:sym :name "validate-token-sequence" :kind :fn :tokens 3
+          :rationale "Validates whether sequential token stream satisfies grammar trie transition constraints to terminal state")
   ])
