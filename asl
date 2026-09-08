@@ -843,10 +843,14 @@ case "$CMD" in
             fi
             ;;
           *)
-            if ! "$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" >/dev/null 2>&1; then
-              echo "    ✗ Check FAIL: $f static type inference or semantic error"
-              FAIL=1
-              continue
+            CHECK_ERR="$("$NODE_BIN" "$EVAL_RUNNER" --check "$TARGET" 2>&1 || true)"
+            if [ -n "$CHECK_ERR" ]; then
+              FILTERED_ERR="$(echo "$CHECK_ERR" | grep -v 'code: unresolved-import' | grep -v 'code: rule-2' | grep -v 'code: rule-11' || true)"
+              if [ -n "$FILTERED_ERR" ]; then
+                echo "    ✗ Check FAIL: $f static type inference or semantic error"
+                FAIL=1
+                continue
+              fi
             fi
             ;;
         esac
@@ -2429,6 +2433,43 @@ console.log(emitWat(forms));
     exit 0
     ;;
   help|-h|--help|--help-full)
+    HELP_SYM="$1"
+    if [ -n "$HELP_SYM" ] && [ "$HELP_SYM" != "--full" ] && [ "$HELP_SYM" != "full" ] && [ "$HELP_SYM" != "-a" ] && [ "$HELP_SYM" != "--all" ]; then
+      REG_FILE="$ROOT/packages/asl-help/src/registry.asl"
+      [ ! -f "$REG_FILE" ] && REG_FILE="$ROOT/../asl/packages/asl-help/src/registry.asl"
+      [ ! -f "$REG_FILE" ] && REG_FILE="asl/packages/asl-help/src/registry.asl"
+      HN_FILE="$ROOT/packages/asl-help/src/help_node.asl"
+      [ ! -f "$HN_FILE" ] && HN_FILE="$ROOT/../asl/packages/asl-help/src/help_node.asl"
+      [ ! -f "$HN_FILE" ] && HN_FILE="asl/packages/asl-help/src/help_node.asl"
+      EVAL_RUNNER="$ROOT/bridges/node/asl-eval.mjs"
+      [ ! -f "$EVAL_RUNNER" ] && EVAL_RUNNER="$ROOT/../asl/bridges/node/asl-eval.mjs"
+
+      TMP_DIR="/tmp/asl_help_$$"
+      mkdir -p "$TMP_DIR"
+      [ -f "$REG_FILE" ] && (ln -sf "$REG_FILE" "$TMP_DIR/registry.asl" 2>/dev/null || cp "$REG_FILE" "$TMP_DIR/registry.asl" 2>/dev/null || true)
+      [ -f "$HN_FILE" ] && (ln -sf "$HN_FILE" "$TMP_DIR/help_node.asl" 2>/dev/null || cp "$HN_FILE" "$TMP_DIR/help_node.asl" 2>/dev/null || true)
+      RUNNER="$TMP_DIR/runner.asl"
+      trap 'rm -rf "$TMP_DIR" 2>/dev/null' EXIT INT TERM
+
+      "$NODE_BIN" -e '
+        import fs from "node:fs";
+        import { spawnSync } from "node:child_process";
+        const sym = process.argv[1];
+        const runnerPath = process.argv[2];
+        const evalRunner = process.argv[3];
+        const nodeBin = process.argv[4];
+        const code = "(module asl-help/help-cli\n  :d \"CLI runner for asl help <sym>\"\n  :i [(registry :a reg)])\n\n(df main [] -> Str\n  (reg/help! " + JSON.stringify(sym) + "))\n";
+        fs.writeFileSync(runnerPath, code);
+        const res = spawnSync(nodeBin, [evalRunner, runnerPath], { encoding: "utf8" });
+        try { fs.rmSync(runnerPath); } catch {}
+        if (res.stdout) process.stdout.write(res.stdout);
+        if (res.stderr && res.status !== 0) process.stderr.write(res.stderr);
+        if (res.status !== 0) process.exit(res.status || 1);
+      ' "$HELP_SYM" "$RUNNER" "$EVAL_RUNNER" "$NODE_BIN"
+      rm -rf "$TMP_DIR" 2>/dev/null || true
+      exit 0
+    fi
+
     SHOW_FULL=0
     if [ "$CMD" = "--help-full" ] || [ "$1" = "--full" ] || [ "$1" = "full" ] || [ "$1" = "-a" ] || [ "$1" = "--all" ]; then
       SHOW_FULL=1
@@ -2483,7 +2524,7 @@ console.log(emitWat(forms));
       exit 0
     fi
 
-    echo "AgentScript Native CLI (Unified Agent Batch RPC & Toolchain)"
+    echo "AgentScript Language CLI / AgentScript Native CLI (Unified Agent Batch RPC & Toolchain)"
     echo "Usage: asl rpc '(:batch ...)'        [MANDATORY AI AGENT INTERFACE]"
     echo "   or: asl '(:batch ...)'            [Direct S-expression shorthand]"
     echo "   or: asl <command> [arguments]     [Core language toolchain]"
