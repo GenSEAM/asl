@@ -172,9 +172,18 @@ validate_manifest_ast() {
 
 run_all_seven_gates() {
   local STRICT_ALL=0
+  local JOBS_ARG=""
+  local NEXT_IS_JOBS=0
   for arg in "$@"; do
-    if [ "$arg" = "--strict-all-suites" ]; then
+    if [ "$NEXT_IS_JOBS" -eq 1 ]; then
+      JOBS_ARG="--jobs=$arg"
+      NEXT_IS_JOBS=0
+    elif [ "$arg" = "--strict-all-suites" ]; then
       STRICT_ALL=1
+    elif [ "$arg" = "--jobs" ] || [ "$arg" = "-j" ]; then
+      NEXT_IS_JOBS=1
+    elif [[ "$arg" == --jobs=* ]] || [[ "$arg" == -j* ]]; then
+      JOBS_ARG="$arg"
     fi
   done
   echo "    [Config] Loaded hierarchical configuration (1 level): .asl.config.asn"
@@ -299,7 +308,7 @@ END {
   local ASSERT_SUITES=86
 
   if [ -f "$PARALLEL_RUNNER" ] && command -v python3 >/dev/null 2>&1; then
-    if ! python3 "$PARALLEL_RUNNER" "$EVAL_RUNNER" "$NODE_BIN"; then
+    if ! python3 "$PARALLEL_RUNNER" "$EVAL_RUNNER" "$NODE_BIN" ${JOBS_ARG:-}; then
       echo "    ✗ Test suite execution failed under parallel verification."
       exit 1
     fi
