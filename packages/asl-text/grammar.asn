@@ -34,6 +34,7 @@
 
     ;; >2 Token Symbols (with :rationale)
     (:sym :name "decode-html-entities" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Replaces standard HTML character entity references with UTF-8 characters")
     (:sym :name "extract-json-kv" :kind :fn :tokens 3
           :rationale "Extracts normalized key-value fields from JSON text payloads")
@@ -46,26 +47,37 @@
     (:sym :name "format-docs-rag" :kind :fn :tokens 3
           :rationale "Compiles multiple extracted documents into indexed prompt context")
     (:sym :name "format-clause-breadcrumb" :kind :fn :tokens 3
+          :rationality :context-specific :context-dependent true
           :rationale "Formats contextual breadcrumb prefix for RAG ingestion")
     (:sym :name "format-contextual-clause" :kind :fn :tokens 3
+          :rationality :context-specific :context-dependent true
           :rationale "Formats contextual clause breadcrumb header for RAG context")
     (:sym :name "extract-contextual-clauses" :kind :fn :tokens 3
+          :rationality :context-specific :context-dependent true
           :rationale "Extracts hierarchical contextual clauses with breadcrumb preservation")
     (:sym :name "doc-to-asn" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Encodes ExtractedDoc into compact, canonical ASN S-expression")
     (:sym :name "chunk-to-asn" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Encodes ContextChunk into compact, canonical ASN S-expression")
     (:sym :name "clause-to-asn" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Encodes ContextualClause into compact canonical ASN S-expression")
     (:sym :name "escape-asn-str" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Escapes backslashes, double quotes, and control characters for ASN literals")
     (:sym :name "unescape-asn-str" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Inverts ASN string literal escaping")
     (:sym :name "escape-json-str" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Escapes backslashes, double quotes, and control characters for RFC 8259 JSON literals")
     (:sym :name "unescape-json-str" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Inverts RFC 8259 JSON string literal escaping")
     (:sym :name "escape-sh-arg" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
           :rationale "Wraps string argument in POSIX single quotes escaping internal quotes")
 
     ;; Modular String Aliases (d46, d47)
