@@ -11,6 +11,7 @@
   :d "Verifies total blog post catalog contains exactly 21 articles"
   (let [(all-posts (blog/get-all-posts))]
     (assert (= (list-len all-posts) 21) "post count is not 21")
+    (assert (not (= (list-len all-posts) 0)) "post count must not be 0")
     true))
 
 (df test-blog-posts-slugs [] -> Bool

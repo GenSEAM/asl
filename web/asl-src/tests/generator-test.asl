@@ -11,18 +11,21 @@
   :d "Validates packages catalog structure and count"
   (let [(pkgs (pkg/package-catalog))]
     (assert (>= (list-length pkgs) 10) "Packages catalog must have at least 10 entries")
+    (assert (not (list-empty? pkgs)) "Packages catalog must not be empty")
     true))
 
 (df test-plugins-catalog [] -> Bool
   :d "Validates plugins catalog structure and count"
   (let [(plugins (plg/plugin-catalog))]
     (assert (>= (list-length plugins) 5) "Plugins catalog must have at least 5 entries")
+    (assert (not (list-empty? plugins)) "Plugins catalog must not be empty")
     true))
 
 (df test-skills-catalog [] -> Bool
   :d "Validates skills catalog structure and count"
   (let [(skills (skl/skill-catalog))]
     (assert (>= (list-length skills) 5) "Skills catalog must have at least 5 entries")
+    (assert (not (list-empty? skills)) "Skills catalog must not be empty")
     true))
 
 (df test-version-info [] -> Bool

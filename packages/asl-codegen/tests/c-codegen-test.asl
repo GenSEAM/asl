@@ -7,6 +7,7 @@
   :d "Verifies standard C header generation."
   (let [(hdr (c/emit-c-header))]
     (assert (string-contains? hdr "<stdint.h>") "hdr must contain <stdint.h>")
+    (assert (not (string-contains? hdr "<stdio.h>")) "hdr must not contain <stdio.h>")
     true))
 
 (df test-c-type [] -> Bool

@@ -874,22 +874,95 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "engine" :status "ok" :query "{escape_asn(query)}" :tier "{escape_asn(tier)}" :count {len(trimmed_results)} :results [ {items_str} ])'
 
             elif op == "find":
-                pattern = d.get("pattern") or (d.get("_pos")[0] if d.get("_pos") else "*")
-                rel_dir = d.get("dir") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else ".")
+                import fnmatch
+                pos_args = d.get("_pos", [])
+                pattern = d.get("pattern")
+                rel_dir = d.get("dir")
+
+                if not pattern and not rel_dir:
+                    if len(pos_args) == 1:
+                        resolved = self.vfs.resolve_full_path(pos_args[0])
+                        if resolved and os.path.isdir(resolved):
+                            rel_dir = pos_args[0]
+                            pattern = "*"
+                        else:
+                            pattern = pos_args[0]
+                            rel_dir = "."
+                    elif len(pos_args) > 1:
+                        pattern = pos_args[0]
+                        rel_dir = pos_args[1]
+                    else:
+                        pattern = "*"
+                        rel_dir = "."
+                else:
+                    pattern = pattern or (pos_args[0] if len(pos_args) > 0 else "*")
+                    rel_dir = rel_dir or (pos_args[1] if len(pos_args) > 1 else ".")
+
+                content_query = d.get("content") or d.get("query") or d.get("grep") or None
+                ext_filter = d.get("ext") or None
+                limit = int(d.get("limit") or 2000)
+                is_foreign = bool(d.get("foreign") or False)
+                exclude_tests = bool(d.get("exclude-tests") or False)
+
                 full_dir = self.vfs.resolve_full_path(rel_dir)
                 if not full_dir or not os.path.isdir(full_dir):
                     return f'(:step :id {step_id} :op "find" :status "error" :error ":ERR_DIR_NOT_FOUND")'
+
+                FOREIGN_EXTS = (".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".rs", ".c", ".cpp", ".h", ".rb", ".go", ".sh")
+
+                if any(c in pattern for c in ("*", "?", "[", "]")):
+                    try:
+                        fn_regex = re.compile(fnmatch.translate(pattern))
+                    except Exception:
+                        fn_regex = re.compile(pattern.replace(".", "\\.").replace("*", ".*"))
+                else:
+                    fn_regex = re.compile(re.escape(pattern))
+
+                content_re = None
+                if content_query:
+                    try:
+                        content_re = re.compile(content_query, re.IGNORECASE)
+                    except Exception:
+                        content_re = None
+
                 matches = []
-                regex = re.compile(pattern.replace(".", "\\.").replace("*", ".*"))
                 for root, dirs, files in os.walk(full_dir):
-                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn not in ("node_modules", "dist", "jobs")]
                     for fn in files:
-                        if regex.search(fn):
-                            rel_file = os.path.relpath(os.path.join(root, fn), self.vfs.root)
-                            matches.append(f'"{escape_asn(rel_file)}"')
-                            if len(matches) >= 100:
-                                break
-                    if len(matches) >= 100:
+                        if fn.startswith("."):
+                            continue
+                        rel_file = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+
+                        if is_foreign:
+                            if not any(fn.endswith(fe) for fe in FOREIGN_EXTS):
+                                continue
+                        elif pattern != "*":
+                            if not fn_regex.search(fn):
+                                continue
+
+                        if ext_filter:
+                            target_ext = ext_filter.lstrip(".")
+                            if not fn.endswith("." + target_ext):
+                                continue
+
+                        if exclude_tests:
+                            if "test" in fn.lower() or "/tests/" in rel_file:
+                                continue
+
+                        if content_query:
+                            buf, _ = self.vfs.read_buffer(rel_file)
+                            if not buf:
+                                continue
+                            if content_re:
+                                if not content_re.search(buf):
+                                    continue
+                            elif content_query not in buf:
+                                continue
+
+                        matches.append(f'"{escape_asn(rel_file)}"')
+                        if len(matches) >= limit:
+                            break
+                    if len(matches) >= limit:
                         break
                 matches_str = " ".join(matches)
                 return f'(:step :id {step_id} :op "find" :status "ok" :count {len(matches)} :files [ {matches_str} ])'

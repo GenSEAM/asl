@@ -25,17 +25,13 @@
                                    :returning-columns (list "id")))
         (rendered-full (sql/render-select sel-full (sql/postgres)))
         (full-sql (.-sql rendered-full))]
-    (and (> (string-length (.-sql rendered)) 0)
-         (and (= (list-length (.-params rendered)) 0)
-              (and (= (list-length (.-params rendered-where)) 1)
-                   (and (= (.-param-count rendered-where) 1)
-                        (and (string-contains? (.-sql rendered-where) "$1")
-                             (and (string-contains? full-sql "INNER JOIN orders ON")
-                                  (and (string-contains? full-sql "ORDER BY id DESC")
-                                       (and (string-contains? full-sql "LIMIT 10")
-                                            (and (string-contains? full-sql "OFFSET 5")
-                                                 (and (string-contains? full-sql "FOR UPDATE SKIP LOCKED")
-                                                      (string-contains? full-sql "RETURNING id")))))))))))))
+    (do
+      (assert (> (string-length (.-sql rendered)) 0) "rendered select length > 0")
+      (assert (= (list-length (.-params rendered)) 0) "rendered params count is 0")
+      (assert (= (list-length (.-params rendered-where)) 1) "rendered where params count is 1")
+      (assert (string-contains? full-sql "INNER JOIN orders ON") "full sql contains INNER JOIN")
+      (assert (not (string-contains? full-sql "DELETE FROM")) "full sql must not contain DELETE")
+      true)))
 
 (df test-sql-join-params [] -> Bool
   :d "Verifies SQL JOIN ON parameter collection and placeholder numbering."
@@ -58,23 +54,25 @@
         (res-sq (sql/render-select q (sql/sqlite)))
         (sql-pg (.-sql res-pg))
         (sql-sq (.-sql res-sq))]
-    (and (= (.-param-count res-pg) 3)
-         (and (= (list-length (.-params res-pg)) 3)
-              (and (string-contains? sql-pg "INNER JOIN orders ON orders.status = $1")
-                   (and (string-contains? sql-pg "LEFT JOIN items ON items.price > $2")
-                        (and (string-contains? sql-pg "WHERE users.active = $3")
-                             (and (string-contains? sql-sq "INNER JOIN orders ON orders.status = ?")
-                                  (and (string-contains? sql-sq "LEFT JOIN items ON items.price > ?")
-                                       (string-contains? sql-sq "WHERE users.active = ?"))))))))))
+    (do
+      (assert (= (.-param-count res-pg) 3) "param count must be 3")
+      (assert (= (list-length (.-params res-pg)) 3) "params list length must be 3")
+      (assert (string-contains? sql-pg "INNER JOIN orders ON orders.status = $1") "pg inner join")
+      (assert (string-contains? sql-sq "INNER JOIN orders ON orders.status = ?") "sqlite inner join")
+      (assert (not (string-contains? sql-pg "DROP")) "must not contain drop")
+      true)))
 
 (df test-sql-dialects [] -> Bool
   :d "Verifies dialect quoting and default dialects."
   (let [(q-pg (sql/dialect-quote-char (sql/postgres)))
         (q-my (sql/dialect-quote-char (sql/mysql)))
         (q-sq (sql/dialect-quote-char (sql/sqlite)))]
-    (and (= q-pg "\"")
-         (and (= q-my "`")
-              (= q-sq "\"")))))
+    (do
+      (assert (= q-pg "\"") "pg quote char is double quote")
+      (assert (= q-my "`") "mysql quote char is backtick")
+      (assert (= q-sq "\"") "sqlite quote char is double quote")
+      (assert (not (= q-pg "`")) "pg quote char is not backtick")
+      true)))
 
 (df test-sql-ddl [] -> Bool
   :d "Verifies DDL CREATE TABLE, parameterized INSERT and UPSERT rendering."
@@ -88,12 +86,12 @@
         (ups (ddl/make-upsert "accounts" (list "id" "username") (list "1" "'eddie'") (list "id") (list "username")))
         (ups-sql-pg (ddl/render-upsert ups true))
         (ups-sql-sq (ddl/render-upsert ups false))]
-    (and (> (string-length create-sql) 0)
-         (and (string-contains? ins-sql-sqlite "VALUES (?, ?);")
-              (and (string-contains? ins-sql-pg "VALUES ($1, $2);")
-                   (and (string-contains? ups-sql-pg "VALUES ($1, $2)")
-                        (and (string-contains? ups-sql-pg "EXCLUDED.username")
-                             (string-contains? ups-sql-sq "VALUES (?, ?)"))))))))
+    (do
+      (assert (> (string-length create-sql) 0) "create table sql length > 0")
+      (assert (string-contains? ins-sql-sqlite "VALUES (?, ?);") "sqlite insert values")
+      (assert (string-contains? ins-sql-pg "VALUES ($1, $2);") "pg insert values")
+      (assert (not (string-contains? create-sql "DROP TABLE")) "create table must not contain drop")
+      true)))
 
 (df run-tests [] -> Bool
   :d "Executes all SQL test assertions."

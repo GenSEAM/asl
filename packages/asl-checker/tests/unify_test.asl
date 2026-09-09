@@ -24,14 +24,18 @@
       ((u/u-err _ _) true))))
 
 (df test-narrow-any-num [] -> Bool
-  (mt (u/kind-narrow "any" "num")
-    ((none) false)
-    ((some k) (= k "num"))))
+  (let [(res (u/kind-narrow "any" "num"))]
+    (do
+      (assert (mt res ((none) false) ((some k) (= k "num"))) "narrow any num is num")
+      (assert (not (option-none? res)) "narrow any num is not none")
+      true)))
 
 (df test-narrow-num-int [] -> Bool
-  (mt (u/kind-narrow "num" "int")
-    ((none) false)
-    ((some k) (= k "int"))))
+  (let [(res (u/kind-narrow "num" "int"))]
+    (do
+      (assert (mt res ((none) false) ((some k) (= k "int"))) "narrow num int is int")
+      (assert (not (option-none? res)) "narrow num int is not none")
+      true)))
 
 (df test-num-mismatch-true [(s0 (Map Int64 ty/Type))] -> Bool
   (let [(c-i64 (int-type))

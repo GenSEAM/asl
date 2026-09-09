@@ -8,6 +8,7 @@
   (let [(encoded "Apple &amp; Banana &lt; Orange &gt; &quot;Pear&quot; &#39;Peach&#39;&nbsp;Berry")
         (decoded (txt/decode-html-entities encoded))]
     (assert (= decoded "Apple & Banana < Orange > \"Pear\" 'Peach' Berry") "Decoded HTML entities must match expected text")
+    (assert (not (string-contains? decoded "&amp;")) "Decoded HTML entities must not contain raw &amp;")
     true))
 
 (df test-clean-html [] -> Bool

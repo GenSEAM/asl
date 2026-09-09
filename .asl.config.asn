@@ -31,13 +31,12 @@
   :coverage (
     :desired 75.0
     :min-assertions 2
+    :strict-polarity false
     :discount-zero-asserts true
     :core-desired 100.0
     :core-packages ["agent-core" "asl/asl-compiler" "asl/asl-parser" "crawler" "browser-plugin" "web-api-search"]
     :exclude ["examples/**" "asl-arduino/**" "asl-quantum/**"]
   )
-  :desired-test-coverage 75.0
-  :min-assertions-per-test 2
   :tasks [
     (:task :name "project" :cmd "asl project" :doc "Transpile all declared ASN projections to host targets")
     (:task :name "gate" :cmd "asl gate" :doc "Run full 7-gate pure ASL verification")

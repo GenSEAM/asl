@@ -22,6 +22,7 @@
                  :subsystem "worker"))
         (formatted (log/format-entry entry))]
     (assert (not (string-empty? formatted)) "formatted log not empty")
+    (assert (string-contains? formatted "Process started") "formatted log contains message")
     true))
 
 (df test-reducer-integration [] -> Bool

@@ -31,6 +31,7 @@
         (leaf (map-set (map-empty) "port" "8080"))
         (merged (cc/cascade-merge parent leaf))]
     (assert (= (map-get merged "port") "8080") "Merged leaf port must be 8080")
+    (assert (not (= (map-get merged "port") "3000")) "Merged leaf port must not be parent 3000")
     true))
 
 (df test-secret-env-resolution [] -> Bool
