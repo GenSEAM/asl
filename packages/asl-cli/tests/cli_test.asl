@@ -13,10 +13,10 @@
   :d "Asserts command line argument dispatching through main module."
   (do
     (mt (m/dispatch (list "version"))
-      ((ok _) (assert true "version dispatch ok"))
+      ((ok _) (assert (> (string-length (c/format-version)) 0) "version dispatch ok"))
       ((err _) (assert false "version dispatch should succeed")))
     (mt (m/dispatch (list "help"))
-      ((ok _) (assert true "help dispatch ok"))
+      ((ok _) (assert (> (string-length (c/format-help)) 0) "help dispatch ok"))
       ((err _) (assert false "help dispatch should succeed")))
     (mt (m/dispatch (list "invalid-command-xyz"))
       ((ok _) (assert false "invalid command should fail"))
