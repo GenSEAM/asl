@@ -73,4 +73,29 @@
           :rationale "Scopes unit test suite specifically to falsifiable assertion execution and error propagation")
     (:sym :name "test-eval-if-branch" :kind :fn :tokens 4
           :rationale "Scopes unit test suite specifically to evaluator conditional if-branch execution")
+
+    ;; Compact Rewrite Symbols (Phase 395)
+    (:sym :name "CompactionRule" :kind :type :tokens 1)
+    (:sym :name "make-compaction-rule" :kind :fn :tokens 3
+          :rationale "Constructs a compaction rule with verbose symbol, compact alias, and estimated token savings")
+    (:sym :name "rewrite-ast-tokens" :kind :fn :tokens 3
+          :rationale "AST rewriter pass transforming verbose symbol tokens into 1-to-2 token modular aliases")
+    (:sym :name "is-compaction-target?" :kind :fn :tokens 3
+          :rationale "Checks whether a symbol is a candidate for compaction rewrite")
+    (:sym :name "default-compaction-rules" :kind :fn :tokens 3
+          :rationale "Provides standard catalog of canonical token shrinking compaction rules")
+
+    ;; Compact Rewrite Test Symbols
+    (:sym :name "test-compact-rule-creation" :kind :fn :tokens 4
+          :rationale "Verifies construction and property access of compaction rules")
+    (:sym :name "test-is-compaction-target" :kind :fn :tokens 4
+          :rationale "Verifies symbol matching against compaction target list")
+    (:sym :name "test-default-compaction-rules" :kind :fn :tokens 4
+          :rationale "Verifies default rules count and presence of required canonical rules")
+    (:sym :name "test-rewrite-ast-tokens-basic" :kind :fn :tokens 4
+          :rationale "Verifies single and multi-symbol rewriting of verbose identifiers")
+    (:sym :name "test-rewrite-preserves-literals" :kind :fn :tokens 4
+          :rationale "Verifies that string literals and comments are not mutated during AST token rewrite")
+    (:sym :name "test-rewrite-idempotency" :kind :fn :tokens 3
+          :rationale "Verifies that rewriting already compact code is idempotent")
   ])
