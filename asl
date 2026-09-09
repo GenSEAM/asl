@@ -5246,14 +5246,14 @@ for tid, ti, why in tasks:
         echo "ENGINE ID  PID     STATUS   RSS(MB)  UPTIME   ACTIVE OP  SOCKET"
         echo "---------  ------  -------  -------  -------  ---------  ------"
         FOUND_ANY=0
-        for PF in /tmp/asl_mem_*.pid; do
+        for PF in /tmp/asl_mem_*.pid /tmp/asl_*_global.pid; do
           [ -f "$PF" ] || continue
-          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/asl_//;s/_global//;s/\.pid//')"
           D_PID="$(cat "$PF" 2>/dev/null || true)"
           [ -n "$D_PID" ] || continue
           if kill -0 "$D_PID" 2>/dev/null; then
             FOUND_ANY=1
-            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+            D_SOCK="${PF%.pid}.sock"
             D_RSS="$(ps -o rss= -p "$D_PID" 2>/dev/null | awk '{print int($1/1024)}' || echo "?")"
             D_TIME="$(ps -o etime= -p "$D_PID" 2>/dev/null | tr -d ' ' || echo "?")"
             D_STATUS="active"
@@ -5267,7 +5267,7 @@ for tid, ti, why in tasks:
             fi
             printf "%-9s  %-6s  %-7s  %-7s  %-7s  %-9s  %s\n" "$D_HASH" "$D_PID" "$D_STATUS" "$D_RSS" "$D_TIME" "$D_OP" "$D_SOCK"
           else
-            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
+            rm -f "$PF" "${PF%.pid}.lock" "${PF%.pid}.sock" 2>/dev/null || true
           fi
         done
         exit 0
@@ -5284,15 +5284,15 @@ for tid, ti, why in tasks:
         PEER_ENTRIES=""
         NOW_EPOCH="$(date +%s 2>/dev/null || echo "0")"
 
-        for PF in /tmp/asl_mem_*.pid; do
+        for PF in /tmp/asl_mem_*.pid /tmp/asl_*_global.pid; do
           [ -f "$PF" ] || continue
-          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/asl_//;s/_global//;s/\.pid//')"
           D_PID="$(cat "$PF" 2>/dev/null || true)"
           [ -n "$D_PID" ] || continue
           if kill -0 "$D_PID" 2>/dev/null; then
             FOUND_ANY=1
             TOTAL_DAEMONS=$((TOTAL_DAEMONS + 1))
-            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+            D_SOCK="${PF%.pid}.sock"
             D_STATUS="active"
             D_ROLE=":master"
             if echo "$SEEN_WS" | grep -q "(ws:$D_HASH)"; then
@@ -5317,7 +5317,7 @@ for tid, ti, why in tasks:
             printf "%-9s  %-9s  %-10s  %-7s  %-9s  %-6s  %s\n" "$D_HASH" "$D_HASH" "$D_ROLE" "$D_STATUS" "$D_HB" "$D_PID" "$D_SOCK"
             PEER_ENTRIES="${PEER_ENTRIES}    (:peer :daemon-id \"$D_HASH\" :workspace-hash \"$D_HASH\" :pid $D_PID :socket \"$D_SOCK\" :port 0 :role $D_ROLE :heartbeat-epoch $NOW_EPOCH :status \"$D_STATUS\")\n"
           else
-            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
+            rm -f "$PF" "${PF%.pid}.lock" "${PF%.pid}.sock" 2>/dev/null || true
           fi
         done
 
@@ -5359,12 +5359,12 @@ for tid, ti, why in tasks:
           TARGET_HASH="$TARGET"
           TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.lock" 2>/dev/null)"
         else
-          for PF in /tmp/asl_mem_*.pid; do
+          for PF in /tmp/asl_mem_*.pid /tmp/asl_*_global.pid; do
             [ -f "$PF" ] || continue
             P="$(cat "$PF" 2>/dev/null || true)"
             if [ "$P" = "$TARGET" ]; then
               TARGET_PID="$TARGET"
-              TARGET_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+              TARGET_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/asl_//;s/_global//;s/\.pid//')"
               break
             fi
           done
@@ -5376,8 +5376,14 @@ for tid, ti, why in tasks:
         if kill -0 "$TARGET_PID" 2>/dev/null; then
           echo "Status: Running (active)"
           ps -o pid,ppid,rss,vsz,%cpu,%mem,etime,command -p "$TARGET_PID" 2>/dev/null || true
-          D_SOCK="/tmp/asl_mem_${TARGET_HASH}.sock"
-          if [ -n "$TARGET_HASH" ] && [ -S "$D_SOCK" ]; then
+          D_SOCK="${TARGET_PID}.sock"
+          for S in "/tmp/asl_mem_${TARGET_HASH}.sock" "/tmp/asl_${TARGET_HASH}_global.sock"; do
+            if [ -S "$S" ]; then
+              D_SOCK="$S"
+              break
+            fi
+          done
+          if [ -S "$D_SOCK" ]; then
             echo ""
             echo "--- Socket Diagnostics: $D_SOCK ---"
             printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true
@@ -5405,13 +5411,13 @@ for tid, ti, why in tasks:
           ensure_daemon_running
           echo "ENGINE ID  PID     STATUS   RSS(MB)  UPTIME   ACTIVE OP  SOCKET"
           echo "---------  ------  -------  -------  -------  ---------  ------"
-          for PF in /tmp/asl_mem_*.pid; do
+          for PF in /tmp/asl_mem_*.pid /tmp/asl_*_global.pid; do
             [ -f "$PF" ] || continue
-            D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+            D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/asl_//;s/_global//;s/\.pid//')"
             D_PID="$(cat "$PF" 2>/dev/null || true)"
             [ -n "$D_PID" ] || continue
             if kill -0 "$D_PID" 2>/dev/null; then
-              D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+              D_SOCK="${PF%.pid}.sock"
               D_RSS="$(ps -o rss= -p "$D_PID" 2>/dev/null | awk '{print int($1/1024)}' || echo "?")"
               D_TIME="$(ps -o etime= -p "$D_PID" 2>/dev/null | tr -d ' ' || echo "?")"
               printf "%-9s  %-6s  %-7s  %-7s  %-7s  %-9s  %s\n" "$D_HASH" "$D_PID" "active" "$D_RSS" "$D_TIME" ":idle" "$D_SOCK"
