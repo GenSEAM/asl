@@ -8,6 +8,7 @@
     ;; 1-Token Baseline Types
 
     ;; <= 2-Token Primary API Symbols
+    (:sym :name "dispatch" :kind :fn :tokens 1)
     (:sym :name "dispatch-asn" :kind :fn :tokens 2)
     (:sym :name "dispatch-cmd" :kind :fn :tokens 2)
     (:sym :name "execute-cli" :kind :fn :tokens 2)
@@ -40,4 +41,14 @@
           :rationale "Cannot be reduced to 'test-unknown': scopes test to CLI subcommand dispatch fallback for invalid flags")
     (:sym :name "test-dispatch-version" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-version': scopes test to CLI version command dispatch rather than package semver parsing")
+    (:sym :name "test-main-dispatch" :kind :fn :tokens 3
+          :rationale "Asserts command line argument dispatching through main module")
+    (:sym :name "test-version-output" :kind :fn :tokens 3
+          :rationale "Asserts canonical version string output formatting")
+    (:sym :name "test-help-output" :kind :fn :tokens 3
+          :rationale "Asserts command line help manual formatting and options")
+    (:sym :name "test-subcommands-dispatch" :kind :fn :tokens 3
+          :rationale "Asserts dispatching of language toolchain subcommands")
+    (:sym :name "test-eval-dispatch" :kind :fn :tokens 3
+          :rationale "Asserts inline expression evaluation dispatch and math results")
   ])

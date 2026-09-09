@@ -1,6 +1,6 @@
 (module asl-gates/runner
   :d "Unified pure AgentScript 7-Gate Verification and Continuous Audit Orchestrator."
-  :x [GateVerdict GateSummary run-all-seven-gates format-gate-summary]
+  :x [GateVerdict GateSummary run-all run-all-seven-gates format-gate-summary]
   :i [(gates :a g)
       (site-claims :a sc)
       (grammar-gate :a gg)
@@ -65,6 +65,16 @@
       :passed-gates passed-count
       :all-clean (= passed-count 7)
       :verdicts verdicts)))
+
+(df run-all [(total-manifests I64)
+             (total-asl-files I64)
+             (grounded-claims I64)
+             (foreign-files I64)
+             (total-tests I64)
+             (total-grammar-syms I64)
+             (total-skills I64)] -> GateSummary
+  :d "Executes pure ASL 7-gate verification suite."
+  (run-all-seven-gates total-manifests total-asl-files grounded-claims foreign-files total-tests total-grammar-syms total-skills))
 
 (df format-gate-summary [(summary GateSummary)] -> Str
   :d "Formats the 7-Gate audit summary into a clean terminal report."

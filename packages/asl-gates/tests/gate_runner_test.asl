@@ -5,6 +5,9 @@
       test-extensionless-audit
       test-dead-code-audit
       test-summary-formatting
+      test-verify-balance
+      test-verify-manifests
+      test-run-all
       run-tests]
   :i [(gate-runner :a gr)
       (shebang-audit :a sa)
@@ -88,10 +91,44 @@
     (assert (> (string-length rep-clean) 100) "Report length must be substantial")
     true))
 
-(df run-tests [] -> Bool
+(df test-verify-balance [] -> Bool
+  :d "Asserts verification of S-expression delimiter balance and sigil prohibition."
+  (let [(valid-src "(df test-fn [] -> I64 42)")
+        (unclosed-src "(df test-fn [] -> I64 (+ 1 2)")
+        (sigil-src "(df test-fn [] -> Str @bad)")]
+    (assert (g/verify-balance valid-src) "Valid balanced ASL source must pass")
+    (assert (not (g/verify-balance unclosed-src)) "Unclosed delimiter must fail")
+    (assert (not (g/verify-balance sigil-src)) "Forbidden sigil @ must fail")
+    true))
+
+(df ! test-verify-manifests [] -> Bool
+  :d "Asserts verification of package manifest structure and sigil hygiene."
+  (let [(valid-mf "(:package asl-codec :version \"0.1.0\" :entry \"src/main.asl\")")
+        (sigil-mf "(:package @asl-codec :version \"0.1.0\" :entry \"src/main.asl\")")
+        (invalid-mf "(:not-a-package 123)")
+        (real-paths (list "asl/packages/asl-gates/manifest.asn"))]
+    (assert (g/verify-manifest-string valid-mf) "Valid manifest string must pass")
+    (assert (not (g/verify-manifest-string sigil-mf)) "Manifest with sigil must fail")
+    (assert (not (g/verify-manifest-string invalid-mf)) "Malformed manifest must fail")
+    (assert (g/verify-manifests real-paths) "Real package manifests must pass verification")
+    true))
+
+(df test-run-all [] -> Bool
+  :d "Asserts run-all convenience function forwards to all 7 gates."
+  (let [(s-clean (gr/run-all 34 673 12 0 212 3223 29))
+        (s-fail (gr/run-all 0 673 12 0 212 3223 29))]
+    (assert (.-all-clean s-clean) "gr/run-all clean must pass all 7 gates")
+    (assert (= (.-passed-gates s-clean) 7) "gr/run-all clean passed count must be 7")
+    (assert (not (.-all-clean s-fail)) "gr/run-all with 0 manifests must fail")
+    true))
+
+(df ! run-tests [] -> Bool
   :d "Master test runner executing all gate runner assertion suites."
   (and (test-all-gates-pass)
        (and (test-gate-fail-fast)
             (and (test-extensionless-audit)
                  (and (test-dead-code-audit)
-                      (test-summary-formatting))))))
+                      (and (test-summary-formatting)
+                           (and (test-verify-balance)
+                                (and (test-verify-manifests)
+                                     (test-run-all)))))))))

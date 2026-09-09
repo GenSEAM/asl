@@ -45,6 +45,12 @@
           :rationale "Evaluates dependency edge between two modules and produces a StratificationReport")
     (:sym :name "test-stratification" :kind :fn :tokens 2
           :rationale "Asserts correct 4-tier layer mappings, boundary enforcement, and kernel hygiene")
+    (:sym :name "run-all" :kind :fn :tokens 2
+          :rationale "Executes pure ASL 7-gate verification suite")
+    (:sym :name "verify-balance" :kind :fn :tokens 2
+          :rationale "Audits S-expression delimiter balance and sigil prohibition")
+    (:sym :name "verify-manifests" :kind :fn :tokens 2
+          :rationale "Verifies package manifest structure across packages")
 
     ;; >2 Token Symbols (with :rationale)
     (:sym :name "verify-source-syntax" :kind :fn :tokens 3
@@ -122,4 +128,12 @@
           :rationale "Audits Layer 0 source code to guarantee zero agent identity or bridge leakage")
     (:sym :name "test-vacuity-rejection" :kind :fn :tokens 3
           :rationale "Asserts non-vacuous assertion execution under Gate 5 falsification")
+    (:sym :name "verify-manifest-string" :kind :fn :tokens 3
+          :rationale "Verifies that manifest content string has a valid package id without sigils")
+    (:sym :name "test-verify-balance" :kind :fn :tokens 3
+          :rationale "Verifies delimiter balance audit and sigil prohibition")
+    (:sym :name "test-verify-manifests" :kind :fn :tokens 3
+          :rationale "Verifies package manifest structure audit and sigil hygiene")
+    (:sym :name "test-run-all" :kind :fn :tokens 3
+          :rationale "Verifies run-all convenience function forwards to all 7 gates")
   ])

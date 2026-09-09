@@ -3,6 +3,7 @@
   :x [GateVerdict
       GateSummary
       make-verdict
+      run-all
       run-all-gates
       run-all-seven-gates
       format-gate-summary
@@ -70,6 +71,16 @@
       :passed-gates passed-count
       :all-clean (= passed-count 7)
       :verdicts verdicts)))
+
+(df run-all [(total-manifests I64)
+             (total-asl-files I64)
+             (grounded-claims I64)
+             (foreign-files I64)
+             (total-tests I64)
+             (total-grammar-syms I64)
+             (total-skills I64)] -> GateSummary
+  :d "Pure ASL Gate Runner orchestrating continuous audit gates."
+  (run-all-seven-gates total-manifests total-asl-files grounded-claims foreign-files total-tests total-grammar-syms total-skills))
 
 (df run-all-gates [(total-manifests I64)
                    (total-asl-files I64)

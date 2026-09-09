@@ -1,13 +1,45 @@
 (module asl-gates/gates
   :d "Pure AgentScript verification gate runners and continuous audit engine."
-  :x [verify-source-syntax verify-file-semantic verify-foreign-ext run-suite main]
-  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk)])
+  :x [verify-source-syntax
+      verify-file-semantic
+      verify-foreign-ext
+      verify-balance
+      verify-manifest-string
+      verify-manifests
+      run-suite
+      main]
+  :i [(ast :a a)
+      (compiler :a comp)
+      (types :a ty)
+      (check :a chk)
+      (manifest-gate :a mg)])
 
 (df verify-source-syntax [(src Str)] -> Bool
   :d "Verifies that source parses cleanly into well-formed AST under pure ASL parser."
   (mt (a/parse src)
     ((ok _) true)
     ((err _) false)))
+
+(df verify-balance [(src Str)] -> Bool
+  :d "Audits S-expression delimiter balance and sigil prohibition."
+  (verify-source-syntax src))
+
+(df verify-manifest-string [(content Str)] -> Bool
+  :d "Verifies that manifest content string has a valid package id without sigils."
+  (let [(pkg (mg/parse-package-id content))]
+    (and (> (string-length pkg) 2)
+         (mg/is-valid-pkg-name? pkg))))
+
+(df ! verify-manifests [(manifest-paths (List Str))] -> Bool
+  :d "Verifies package manifest structure across packages."
+  (fold (fn ! [(acc Bool) (path Str)] -> Bool
+          (and acc
+               (mt (file-read path)
+                 ((err _) false)
+                 ((ok content)
+                  (verify-manifest-string content)))))
+        true
+        manifest-paths))
 
 (df ! verify-file-semantic [(path Str)] -> (Result Unit Str)
   :d "Verifies that an AgentScript file passes pure ASL semantic and type checks."
