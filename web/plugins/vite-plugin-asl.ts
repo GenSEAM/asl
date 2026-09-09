@@ -2,6 +2,113 @@ import fs from 'fs';
 import path from 'path';
 
 /**
+ * Parses canonical posts.asn S-expression into structured post records.
+ */
+export function parseAsnPosts(raw: string): any[] {
+  const tokens: Array<{ type: string; val: string }> = [];
+  let pos = 0;
+  while (pos < raw.length) {
+    while (pos < raw.length && /\s/.test(raw[pos])) pos++;
+    if (pos >= raw.length) break;
+    const ch = raw[pos];
+    if (ch === '(' || ch === ')' || ch === '[' || ch === ']') {
+      tokens.push({ type: ch, val: ch });
+      pos++;
+    } else if (ch === '"') {
+      pos++;
+      let s = '';
+      while (pos < raw.length) {
+        if (raw[pos] === '\\' && pos + 1 < raw.length) {
+          const next = raw[pos + 1];
+          if (next === 'n') s += '\n';
+          else if (next === 't') s += '\t';
+          else if (next === 'r') s += '\r';
+          else if (next === '"') s += '"';
+          else if (next === '\\') s += '\\';
+          else s += next;
+          pos += 2;
+        } else if (raw[pos] === '"') {
+          pos++;
+          break;
+        } else {
+          s += raw[pos++];
+        }
+      }
+      tokens.push({ type: 'str', val: s });
+    } else {
+      let word = '';
+      while (pos < raw.length && !/[\s()[\]]/.test(raw[pos])) {
+        word += raw[pos++];
+      }
+      tokens.push({ type: 'atom', val: word });
+    }
+  }
+
+  let i = 0;
+  function parseNode(): any {
+    if (i >= tokens.length) return null;
+    const t = tokens[i++];
+    if (t.type === 'str') return t.val;
+    if (t.type === 'atom') {
+      if (!isNaN(Number(t.val))) return Number(t.val);
+      return t.val;
+    }
+    if (t.type === '[') {
+      const arr: any[] = [];
+      while (i < tokens.length && tokens[i].type !== ']') {
+        arr.push(parseNode());
+      }
+      if (i < tokens.length && tokens[i].type === ']') i++;
+      return arr;
+    }
+    if (t.type === '(') {
+      if (i < tokens.length && tokens[i].type === ')') {
+        i++;
+        return {};
+      }
+      const tag = tokens[i++];
+      const obj: Record<string, any> = { _tag: tag.val };
+      while (i < tokens.length && tokens[i].type !== ')') {
+        const keyTok = tokens[i];
+        if (keyTok.type === 'atom' && keyTok.val.startsWith(':')) {
+          i++;
+          const key = keyTok.val.slice(1);
+          const val = parseNode();
+          obj[key] = val;
+        } else if (keyTok.type === '(') {
+          const nested = parseNode();
+          if (!obj._children) obj._children = [];
+          obj._children.push(nested);
+        } else {
+          i++;
+        }
+      }
+      if (i < tokens.length && tokens[i].type === ')') i++;
+      return obj;
+    }
+    return null;
+  }
+
+  const root = parseNode();
+  const children = (root && root._children) || [];
+  return children.map((p: any) => ({
+    slug: p.slug || '',
+    title: p.title || '',
+    date: p.date || '',
+    author: p.author || '',
+    category: p.category || '',
+    readTime: p['read-time'] || p.readTime || '',
+    excerpt: p.excerpt || '',
+    tags: Array.isArray(p.tags) ? p.tags : [],
+    order: typeof p.order === 'number' ? p.order : 0,
+    importance: p.importance || 'technical',
+    popularityRank: p.popularityRank || 0,
+    status: p.status || 'published',
+    content: p.content || ''
+  }));
+}
+
+/**
  * Parses ASN S-expression VDOM string into valid HTML5 string.
  */
 export function parseSExpToHtml(str: string): string {
@@ -167,7 +274,7 @@ import { renderSearchModal } from './components/SearchModal.asl';
 import { renderHomeView } from './views/HomeView.asl';
 import { renderDocsView } from './views/DocsView.asl';
 import { renderBlogView } from './views/BlogView.asl';
-import { renderArticleDetailView } from './views/ArticleDetailView';
+import { renderArticleDetailView } from './views/ArticleDetailView.asl';
 import { renderPlaygroundView } from './views/PlaygroundView.asl';
 import { renderRoadmapView } from './views/RoadmapView.asl';
 import { renderEcosystemView } from './views/EcosystemView.asl';
