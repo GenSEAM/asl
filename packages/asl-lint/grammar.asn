@@ -22,6 +22,8 @@
 
     ;; <= 2-Token Primary API Symbols
     (:sym :name "can-autofix" :kind :fn :tokens 2)
+    (:sym :name "detect-crutches" :kind :fn :tokens 2)
+    (:sym :name "IncongruityReport" :kind :type :tokens 2)
     (:sym :name "is-error" :kind :fn :tokens 2)
     (:sym :name "is-orthogonal?" :kind :fn :tokens 2)
     (:sym :name "main" :kind :fn :tokens 1)
@@ -56,6 +58,12 @@
           :rationale "Cannot be reduced to 'is-smell': scopes rule check specifically to token bloat violations in symbol names")
     (:sym :name "min-clone-node-threshold" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'clone-threshold': distinguishes AST subtree node count threshold from clone instance frequency")
+    (:sym :name "detect-lingering-sigils" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'detect-sigils': targets deprecated lingering sigils specifically")
+    (:sym :name "make-incongruity-report" :kind :fn :tokens 3
+          :rationale "Standard constructor function for IncongruityReport record")
+    (:sym :name "scan-monorepo-incongruities" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'scan-incongruities': scopes forensic audit specifically to the monorepo boundary")
     (:sym :name "should-block-gate" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'block-gate': distinguishes the general error severity gate check from specialized sub-gates")
     (:sym :name "should-block-token-gate" :kind :fn :tokens 4
