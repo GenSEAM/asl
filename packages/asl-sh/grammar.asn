@@ -284,4 +284,10 @@
           :rationale "Simulates cascading wave execution abort by marking subsequent wave steps skipped")
     (:sym :name "dag-format-summary" :kind :fn :tokens 3
           :rationale "Formats standard ASN summary string of batch execution status tallies")
+
+    ;; Modular Process Supervision Aliases (d46, d47)
+    (:sym :name "proc/status" :kind :fn :tokens 2
+          :rationale "Modular 1-to-2 token alias for process supervision step status")
+    (:sym :name "proc/list" :kind :fn :tokens 2
+          :rationale "Modular 1-to-2 token alias for process table listing")
   ])
