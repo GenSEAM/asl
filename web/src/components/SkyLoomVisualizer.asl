@@ -254,8 +254,7 @@
   :channel \"tasks/codegen\"
   :body {\"action\":\"compile_wasm\",\"module\":\"core/matrix\",\"opt\":\"O3\",\"timeout-ms\":5000})
 
-;; The envelope is an s-expression; the body is JSON until ASN lands.
-;; asl/coord (next tab) is already fully typed.</pre>
+(:d \"Pure S-expression envelope with typed coordination frame.\")</pre>
               </div>
 
               <!-- Tab 2: asl/coord -->

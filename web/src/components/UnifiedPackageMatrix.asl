@@ -110,7 +110,7 @@
   :d \"Universal ASN tabular serialization with hoisted schema.\"
   :i [(asl-codec/asn :a asn)])
 
-;; Hoists schema keys once; streams 57% fewer tokens than JSON
+(:d \"Hoists schema keys once; streams 57% fewer tokens than JSON\")
 (asn/encode-table
   [:id :sku :qty :status]
   [[101 \"A-44\" 5 \"shipped\"]
@@ -177,7 +177,7 @@
   :i [(asl-sh/process :a proc)
       (asl-sh/reducer :a reducer)])
 
-;; Direct posix_spawn execution streamed into windowing reducer
+(:d \"Direct posix_spawn execution streamed into windowing reducer\")
 (let [(cmd (proc/cmd \"cargo\" [\"test\" \"--all\"]))
       (stream (proc/exec-stream! cmd))]
   (reducer/reduce-stream stream
@@ -243,7 +243,7 @@
   :i [(asl-agent-core/onion :a onion)
       (asl-agent-core/core :a core)])
 
-;; Register security and telemetry hooks with topological dependencies
+(:d \"Register security and telemetry hooks with topological dependencies\")
 (let [(auth-mw  (onion/make-middleware \"auth\" \"Capability Gate\" onion/kind-filter 10 [] []))
       (audit-mw (onion/make-middleware \"audit\" \"Telemetry Logger\" onion/kind-audit 20 [\"auth\"] []))
       (pipeline (onion/make-pipeline [auth-mw audit-mw]))]
@@ -309,7 +309,7 @@
   :i [(asl-eddie/agent :a eddie)
       (asl-eddie/policy :a policy)])
 
-;; Jailed ReAct loop with &lt;100ms launch and zero permission prompts
+(:d \"Jailed ReAct loop with &lt;100ms launch and zero permission prompts\")
 (eddie/execute-react-loop
   :intent (eddie/triage-intent user-speech-frame)
   :policy (policy/workspace-jail \"/workspace\" :allow-read-only [\"/tmp\"])
@@ -435,7 +435,7 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
   :d \"Sub-0.05ms local vector recall inside 64KB WebAssembly.\"
   :i [(asl-mem/vector :a vmem)])
 
-;; Initialize local vector store and query top-k nearest neighbors
+(:d \"Initialize local vector store and query top-k nearest neighbors\")
 (let [(store (vmem/init-store :dim 384 :metric :cosine))]
   (vmem/insert! store \"chunk-91\" query-vector)
   (vmem/knn-search store query-vector :top-k 5))</pre></div>
@@ -500,7 +500,7 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
   :i [(asl-vdom/html :a h)
       (asl-vdom/perception :a perc)])
 
-;; Declarative UI dialect transpiled directly to React 19 TSX
+(:d \"Declarative UI dialect transpiled directly to React 19 TSX\")
 (df render-card [(title Str) (count I64)] -> h/VNode
   (h/div :class \"rounded-2xl border border-line bg-surface p-4\"
     [(h/span :class \"font-mono text-micro text-signal\" title)

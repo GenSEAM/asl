@@ -7,9 +7,9 @@
   "engines": {},
   "scripts": {
     "test:wasm-runner": "asl test --strict-falsify packages/asl-codegen/tests/emit_wat_test.asl",
-    "build:web": "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true",
+    "build:web": "cd web && npx --yes vite build && cp dist/index.html dist/404.html && cd .. && rm -rf ./dist && cp -r web/dist ./dist 2>/dev/null || true",
     "dev:web": "npm --prefix web run dev",
-    "build": "cd web && npx --yes vite build && cd .. && cp -r web/dist ./dist 2>/dev/null || true",
+    "build": "cd web && npx --yes vite build && cp dist/index.html dist/404.html && cd .. && rm -rf ./dist && cp -r web/dist ./dist 2>/dev/null || true",
     "preview:web": "npm --prefix web run preview"
   }
 }

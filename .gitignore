@@ -21,6 +21,7 @@ packages/asl-skyloom/dist/
 .DS_Store
 rust_out
 web/dist/
+dist/
 .agents/
 .cursorrules
 *.local.asn

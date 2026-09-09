@@ -167,6 +167,7 @@ import { renderSearchModal } from './components/SearchModal.asl';
 import { renderHomeView } from './views/HomeView.asl';
 import { renderDocsView } from './views/DocsView.asl';
 import { renderBlogView } from './views/BlogView.asl';
+import { renderArticleDetailView } from './views/ArticleDetailView';
 import { renderPlaygroundView } from './views/PlaygroundView.asl';
 import { renderRoadmapView } from './views/RoadmapView.asl';
 import { renderEcosystemView } from './views/EcosystemView.asl';
@@ -175,12 +176,41 @@ export function appRoutes() {
   return ['/', '/playground', '/ecosystem', '/roadmap', '/docs', '/blog'];
 }
 
+export function resolveCurrentRoute() {
+  if (typeof window === 'undefined') return '/';
+  const path = window.location.pathname || '/';
+  const hash = window.location.hash || '';
+  if (path !== '/' && path !== '') {
+    return path;
+  }
+  if (hash.startsWith('#/')) {
+    return hash.slice(1);
+  }
+  if (hash === '#blog' || hash.startsWith('#blog/')) {
+    return hash.replace('#', '/');
+  }
+  if (hash === '#docs' || hash.startsWith('#docs/')) {
+    return hash.replace('#', '/');
+  }
+  if (hash === '#roadmap' || hash === '#ecosystem' || hash === '#playground') {
+    return hash.replace('#', '/');
+  }
+  return hash || path || '/';
+}
+
 export function renderView(route) {
   if (route === '/playground' || route === '#playground') return renderPlaygroundView();
   if (route === '/ecosystem' || route === '#ecosystem') return renderEcosystemView();
   if (route === '/roadmap' || route === '#roadmap') return renderRoadmapView();
   if (route === '/docs' || route === '#docs') return renderDocsView();
-  if (route === '/blog' || route === '#blog' || route.startsWith('/blog/') || route.startsWith('#blog/')) return renderBlogView();
+  if (route === '/blog' || route === '#blog') return renderBlogView();
+  if (route.startsWith('/blog/') || route.startsWith('#blog/')) {
+    const clean = route.replace(/^#/, '').split('?')[0];
+    const parts = clean.split('/').filter(Boolean);
+    const slug = parts[0] === 'blog' ? parts[1] : '';
+    if (slug) return renderArticleDetailView(slug);
+    return renderBlogView();
+  }
   return renderHomeView();
 }
 
@@ -200,15 +230,12 @@ export function renderApp(currentRoute) {
 
 export function App() {
   const [route, setRoute] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.location.hash || window.location.pathname || '/';
-    }
-    return '/';
+    return resolveCurrentRoute();
   });
 
   useEffect(() => {
     const onHashChange = () => {
-      const r = window.location.hash || window.location.pathname || '/';
+      const r = resolveCurrentRoute();
       setRoute(r);
       if (!window.location.hash.startsWith('#capabilities') && !window.location.hash.startsWith('#matrix') && !window.location.hash.startsWith('#wire-protocol') && !window.location.hash.startsWith('#agent-way')) {
         window.scrollTo(0, 0);
@@ -234,12 +261,41 @@ export function App() {
     };
     window.addEventListener('keydown', onKeyDown);
 
+    // Global link and blog card click interception for seamless SPA routing
+    const onGlobalClick = (e) => {
+      const target = e.target;
+      if (!target) return;
+
+      const link = target.closest ? target.closest('a') : null;
+      if (link) {
+        const href = link.getAttribute('href');
+        if (href && href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/llms.txt')) {
+          e.preventDefault();
+          window.history.pushState(null, '', href);
+          onHashChange();
+          return;
+        }
+      }
+
+      const blogCard = target.closest ? target.closest('.bv-post-card, .asl-blog-card') : null;
+      if (blogCard) {
+        const slug = blogCard.getAttribute('data-slug');
+        if (slug) {
+          e.preventDefault();
+          window.history.pushState(null, '', '/blog/' + slug);
+          onHashChange();
+          return;
+        }
+      }
+    };
+    document.addEventListener('click', onGlobalClick);
+
     // Wire search modal triggers
     const setupSearch = () => {
       const modal = document.getElementById('search-modal-root');
       const input = document.getElementById('sm-input');
       const closeBtn = document.getElementById('sm-close-btn');
-      const searchBtns = document.querySelectorAll('button[aria-label=\"Search documentation\"]');
+      const searchBtns = document.querySelectorAll('button[aria-label="Search documentation"]');
       searchBtns.forEach(btn => {
         btn.onclick = () => {
           if (modal) {
@@ -285,6 +341,7 @@ export function App() {
       window.removeEventListener('hashchange', onHashChange);
       window.removeEventListener('popstate', onHashChange);
       window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('click', onGlobalClick);
     };
   }, [route]);
 
