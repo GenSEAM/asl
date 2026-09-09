@@ -73,6 +73,11 @@
           :rationale "Extracts scalar field value from YAML frontmatter header")
     (:sym :name "verify-skill-record" :kind :fn :tokens 3
           :rationale "Validates skill record frontmatter and description freshness")
+    (:sym :name "AsnSkillSpec" :kind :type :tokens 2)
+    (:sym :name "make-asn-skill-spec" :kind :fn :tokens 3
+          :rationale "Constructs AsnSkillSpec descriptor for co-located ASN skills")
+    (:sym :name "verify-asn-skill-spec" :kind :fn :tokens 3
+          :rationale "Validates that a co-located ASN skill spec has non-empty metadata, rules, and tools")
     (:sym :name "is-clean-of-legacy?" :kind :fn :tokens 4
           :rationale "Enforces modern naming without unaliased legacy terms")
     (:sym :name "is-valid-yaml-description?" :kind :fn :tokens 4

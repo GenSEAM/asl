@@ -1,0 +1,60 @@
+(:skills-collection
+  :package asl
+  :version "0.1.0"
+  :skills [
+    (:skill
+      :name "asl"
+      :desc "AgentScript (ASL) reference: S-expression syntax, the closed vocabulary, the semantic rules, and the CLI and MCP tools."
+      :rules [
+        (:rule :type "syntax" :text "Pure S-expression language with closed core form vocabulary and zero punctuation ambiguity.")
+        (:rule :type "formatting" :text "Enforce strict balanced delimiters and pure ASL zero-comment invariant (C1).")
+        (:rule :type "typing" :text "Typed structs (dfs), open interfaces (dfe), and algebraic result envelopes (Result, Option).")
+      ]
+      :tools [
+        (:tool :name "asl-check" :command "asl check <file>" :purpose "Verify S-expression delimiter balance and syntax integrity" :savings "95%")
+        (:tool :name "asl-lint" :command "asl lint <file>" :purpose "Audit AST quality, token density, and naming conventions" :savings "90%")
+        (:tool :name "asl-test" :command "asl test <file>" :purpose "Execute native asserting test suite under strict falsification" :savings "95%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+
+    (:skill
+      :name "asl-toolbelt"
+      :desc "Activate and use in priority before reading, searching, or editing ANY file in this repository. Routes all exploration, grep, edit, and verification through a single 'asl rpc (:batch ...)' roundtrip."
+      :rules [
+        (:rule :type "mandatory" :text "Never execute verbose whole-file dumps (>50 lines); extract targeted outlines (:out) and symbols (:sym).")
+        (:rule :type "atomic-surgery" :text "Perform all file modifications via in-memory batch surgery (:edit, :patch, :repl), review staged diffs (:diff), and commit atomically (:flush).")
+        (:rule :type "polyglot" :text "Supports AgentScript (.asl, .asn), TypeScript (.ts, .tsx), JavaScript (.js), Python (.py), Go (.go), Rust (.rs), PHP (.php).")
+      ]
+      :tools [
+        (:tool :name "asl-rpc-batch" :command "asl rpc '(:batch ...)'" :purpose "Compound batch RPC execution across all file ops, search, and gates" :savings "95%")
+        (:tool :name "asl-gate" :command "asl gate" :purpose "Run full 7-gate verification suite" :savings "98%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+
+    (:skill
+      :name "asl-native"
+      :desc "Author, verify, test, and execute pure AgentScript (ASL) modules without foreign code in AgentScript repositories."
+      :rules [
+        (:rule :type "zero-foreign" :text "Maintain 100% pure AgentScript codebase conforming to ASL-first invariant (Gate 4).")
+        (:rule :type "separation" :text "Maintain clean boundary projection when interfacing with foreign host ecosystems.")
+      ]
+      :tools [
+        (:tool :name "asl-build" :command "asl build <file.asl>" :purpose "Compile pure AgentScript modules to bytecode or native targets" :savings "90%")
+        (:tool :name "asl-test-all" :command "asl test" :purpose "Execute all asserting test suites across monorepo packages" :savings "95%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+
+    (:skill
+      :name "asl-intel"
+      :desc "Unified code intelligence and structural audit: symbol navigation via 'asl rpc', call graphs, impact, and architectural checks via 'asl audit'."
+      :rules [
+        (:rule :type "impact-first" :text "Always analyze blast-radius impact before modifying public function or interface signatures.")
+        (:rule :type "multimesh" :text "Audit structural health across all 10 quality tiers via asl audit multimesh.")
+      ]
+      :tools [
+        (:tool :name "asl-intel-callers" :command "asl intel callers <symbol>" :purpose "Discover workspace call graph for symbol" :savings "85%")
+        (:tool :name "asl-intel-impact" :command "asl intel impact <symbol>" :purpose "Calculate blast-radius impact analysis" :savings "90%")
+        (:tool :name "asl-audit-multimesh" :command "asl audit multimesh" :purpose "Execute full 10-tier architectural quality audit" :savings "95%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+  ])

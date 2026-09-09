@@ -1,7 +1,28 @@
 (module asl-gates/skills-gate
   :d "Pure AgentScript modular skills consistency and freshness verification gate."
-  :x [SkillRecord make-skill-record parse-frontmatter-field verify-skill-record is-clean-of-legacy? is-valid-yaml-description?]
+  :x [SkillRecord make-skill-record parse-frontmatter-field verify-skill-record is-clean-of-legacy? is-valid-yaml-description?
+      AsnSkillSpec make-asn-skill-spec verify-asn-skill-spec]
   :i [])
+
+(dfs AsnSkillSpec
+  (:f name Str "Skill identifier name")
+  (:f description Str "Trigger description")
+  (:f rules-count I64 "Number of declared rules")
+  (:f tools-count I64 "Number of declared tools"))
+
+(df make-asn-skill-spec [(name Str) (desc Str) (rules-cnt I64) (tools-cnt I64)] -> AsnSkillSpec
+  (AsnSkillSpec
+    :name name
+    :description desc
+    :rules-count rules-cnt
+    :tools-count tools-cnt))
+
+(df verify-asn-skill-spec [(spec AsnSkillSpec)] -> Bool
+  :d "Validates that a co-located ASN skill spec has non-empty metadata, rules, and tools."
+  (and (> (string-length (.-name spec)) 0)
+       (and (> (string-length (.-description spec)) 0)
+            (and (> (.-rules-count spec) 0)
+                 (> (.-tools-count spec) 0)))))
 
 (dfs SkillRecord
   (:f path Str "Relative path to SKILL.md file")
@@ -32,7 +53,7 @@
 
 (df is-clean-of-legacy? [(content Str)] -> Bool
   :d "Enforces clean modern naming: flags legacy skyloom references without alias tag."
-  (let [(lower (string-to-lowercase content))]
+  (let [(lower (string-lower content))]
     (if (string-contains? lower "skyloom")
         (string-contains? lower "alias")
         true)))
