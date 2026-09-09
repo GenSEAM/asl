@@ -1,5 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Parses canonical posts.asn S-expression into structured post records.
@@ -212,12 +216,190 @@ export function parseSExpToHtml(str) {
 }
 
 /**
+ * Escapes characters for strict XML validity.
+ */
+export function escapeXml(unsafe) {
+  if (!unsafe) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+/**
+ * Formats YYYY-MM-DD string into RFC-822 / RFC-1123 date string for RSS.
+ */
+export function formatRssDate(dateStr) {
+  if (!dateStr) return new Date().toUTCString();
+  const d = new Date(dateStr + 'T00:00:00Z');
+  return isNaN(d.getTime()) ? new Date().toUTCString() : d.toUTCString();
+}
+
+/**
+ * Returns sitemap metadata (priority, changefreq) for standard routes.
+ */
+export function getRouteMetadata(route) {
+  switch (route) {
+    case '/':
+      return { priority: '1.0', changefreq: 'daily' };
+    case '/blog':
+      return { priority: '0.95', changefreq: 'daily' };
+    case '/docs':
+      return { priority: '0.9', changefreq: 'weekly' };
+    case '/llms.txt':
+    case '/llms-full.txt':
+      return { priority: '0.95', changefreq: 'weekly' };
+    case '/roadmap':
+    case '/playground':
+    case '/ecosystem':
+      return { priority: '0.8', changefreq: 'weekly' };
+    default:
+      return { priority: '0.7', changefreq: 'weekly' };
+  }
+}
+
+/**
+ * Generates canonical RSS 2.0 XML from posts catalog.
+ */
+export function generateRssXml(posts) {
+  const latestDate = posts.map(p => p.date).filter(Boolean).sort().reverse()[0];
+  const lastBuild = latestDate ? formatRssDate(latestDate) : new Date().toUTCString();
+
+  const itemsXml = posts.map(p => {
+    const title = escapeXml(p.title);
+    const link = `https://aslang.dev/blog/${escapeXml(p.slug)}`;
+    const desc = escapeXml(p.excerpt);
+    const pubDate = formatRssDate(p.date);
+    const author = escapeXml(p.author ? `${p.author} (GenSEAM)` : 'dev@aslang.dev (GenSEAM)');
+    const category = escapeXml(p.category || 'Engineering');
+    return `    <item>
+      <title>${title}</title>
+      <link>${link}</link>
+      <guid isPermaLink="true">${link}</guid>
+      <pubDate>${pubDate}</pubDate>
+      <author>${author}</author>
+      <category>${category}</category>
+      <description>${desc}</description>
+    </item>`;
+  }).join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AgentScript (ASL) — Engineering &amp; Systems Blog</title>
+    <link>https://aslang.dev/blog</link>
+    <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
+    <language>en-us</language>
+    <lastBuildDate>${lastBuild}</lastBuildDate>
+    <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
+${itemsXml}
+  </channel>
+</rss>
+`;
+}
+
+/**
+ * Generates canonical Sitemap XML from router pages and blog catalog.
+ */
+export function generateSitemapXml(routes, posts) {
+  const baseUrl = 'https://aslang.dev';
+  const latestDate = posts.map(p => p.date).filter(Boolean).sort().reverse()[0] || new Date().toISOString().split('T')[0];
+
+  const allStaticRoutes = Array.from(new Set([...routes, '/llms.txt', '/llms-full.txt']));
+
+  const staticUrls = allStaticRoutes.map(r => {
+    const meta = getRouteMetadata(r);
+    const loc = r === '/' ? `${baseUrl}/` : `${baseUrl}${r}`;
+    return `  <url>
+    <loc>${loc}</loc>
+    <lastmod>${latestDate}</lastmod>
+    <changefreq>${meta.changefreq}</changefreq>
+    <priority>${meta.priority}</priority>
+  </url>`;
+  });
+
+  const postUrls = posts.map(p => {
+    const loc = `${baseUrl}/blog/${p.slug}`;
+    const lastmod = p.date || latestDate;
+    const priority = p.importance === 'flagship' ? '0.9' : '0.8';
+    return `  <url>
+    <loc>${loc}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
+        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+${staticUrls.join('\n\n')}
+
+${postUrls.join('\n\n')}
+</urlset>
+`;
+}
+
+/**
+ * Synchronizes generated RSS and Sitemap to public and dist directories.
+ */
+export function syncRssAndSitemap() {
+  try {
+    const postsAsnPath = path.resolve(__dirname, '../src/data/blog/posts.asn');
+    if (!fs.existsSync(postsAsnPath)) return;
+    const raw = fs.readFileSync(postsAsnPath, 'utf-8');
+    const posts = parseAsnPosts(raw);
+    const routes = ['/', '/blog', '/docs', '/roadmap', '/playground', '/ecosystem'];
+
+    const rssXml = generateRssXml(posts);
+    const sitemapXml = generateSitemapXml(routes, posts);
+
+    const publicDir = path.resolve(__dirname, '../public');
+    if (fs.existsSync(publicDir)) {
+      fs.writeFileSync(path.join(publicDir, 'rss.xml'), rssXml, 'utf-8');
+      fs.writeFileSync(path.join(publicDir, 'sitemap.xml'), sitemapXml, 'utf-8');
+    }
+
+    const distDir = path.resolve(__dirname, '../dist');
+    if (fs.existsSync(distDir)) {
+      fs.writeFileSync(path.join(distDir, 'rss.xml'), rssXml, 'utf-8');
+      fs.writeFileSync(path.join(distDir, 'sitemap.xml'), sitemapXml, 'utf-8');
+    }
+  } catch (e) {
+    console.warn('[vite-plugin-asl] Failed to sync RSS and Sitemap:', e);
+  }
+}
+
+/**
  * Zero-overhead Vite plugin for AgentScript (ASL)
  */
 export function aslPlugin() {
   return {
     name: 'vite-plugin-asl',
     enforce: 'pre',
+
+    buildStart() {
+      syncRssAndSitemap();
+    },
+
+    configureServer(server) {
+      syncRssAndSitemap();
+      const postsAsnPath = path.resolve(__dirname, '../src/data/blog/posts.asn');
+      server.watcher.add(postsAsnPath);
+      server.watcher.on('change', (file) => {
+        if (file === postsAsnPath) {
+          syncRssAndSitemap();
+        }
+      });
+    },
+
+    closeBundle() {
+      syncRssAndSitemap();
+    },
 
     resolveId(id, importer) {
       if (id.endsWith('.asl')) {
