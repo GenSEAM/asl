@@ -67,5 +67,23 @@
           :rationale "Inverts RFC 8259 JSON string literal escaping")
     (:sym :name "escape-sh-arg" :kind :fn :tokens 3
           :rationale "Wraps string argument in POSIX single quotes escaping internal quotes")
+
+    ;; Modular String Aliases (d46, d47)
+    (:sym :name "txt/starts?" :kind :fn :tokens 2
+          :rationale "Modular 1-to-2 token alias for string-starts-with?")
+    (:sym :name "txt/ends?" :kind :fn :tokens 2
+          :rationale "Modular 1-to-2 token alias for string suffix checking")
+    (:sym :name "txt/has?" :kind :fn :tokens 2
+          :rationale "Modular 1-to-2 token alias for string-contains?")
+    (:sym :name "txt/split" :kind :fn :tokens 2
+          :rationale "Modular 1-to-2 token alias for string-split")
+    (:sym :name "txt-starts?" :kind :fn :tokens 2
+          :rationale "Hyphen compatibility alias for txt/starts?")
+    (:sym :name "txt-ends?" :kind :fn :tokens 2
+          :rationale "Hyphen compatibility alias for txt/ends?")
+    (:sym :name "txt-has?" :kind :fn :tokens 2
+          :rationale "Hyphen compatibility alias for txt/has?")
+    (:sym :name "txt-split" :kind :fn :tokens 2
+          :rationale "Hyphen compatibility alias for txt/split")
   ])
 
