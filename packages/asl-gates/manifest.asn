@@ -1,4 +1,4 @@
-(:package @genseam/asl-gates
+(:package asl-gates
  :version "0.1.0"
  :entry "src/gates.asl"
  :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
@@ -6,6 +6,6 @@
  :modules ["asl-gates/gates"
            "asl-gates/site-claims"
            "asl-gates/stratification"]
- :dependencies ["@genseam/asl-parser"
-                "@genseam/asl-checker"
-                "@genseam/asl-compiler"])
+ :dependencies ["asl-parser"
+                "asl-checker"
+                "asl-compiler"])

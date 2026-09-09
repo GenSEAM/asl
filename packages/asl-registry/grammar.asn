@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-registry
+;; asl-registry
 (:grammar
-  :package @genseam/asl-registry
+  :package asl-registry
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
@@ -65,7 +65,7 @@
     (:sym :name "make-package-info" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'package-info': separates the record constructor function from the PackageInfo type itself")
     (:sym :name "parse-package-specifier" :kind :fn :tokens 3
-          :rationale "Cannot be reduced to 'parse-spec': distinguishes dependency requirement strings (@scope/pkg@^1.0) from compiler specs")
+          :rationale "Cannot be reduced to 'parse-spec': distinguishes dependency requirement strings (pkg^1.0) from compiler specs")
     (:sym :name "parse-semver-triplet" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-semver': explicitly bounds parsing to the three numeric components (major.minor.patch)")
     (:sym :name "resolve-git-clone-cmd" :kind :fn :tokens 4

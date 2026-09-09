@@ -52,7 +52,7 @@
         (outdated (ver/evaluate-outdated "requests" "2.28.0" "2.31.0"))
         (rep (reg/format-outdated-report outdated))
         (entry (ty/AslRegistryEntry
-                 :name "@genseam/asl-mem"
+                 :name "asl-mem"
                  :git-repo "https://github.com/GenSEAM/asl-mem.git"
                  :branch "main"
                  :latest-tag "v0.1.0"
@@ -62,7 +62,7 @@
     (assert (string-contains? summary "requests") "summary requests")
     (assert (string-contains? summary "v2.31.0") "summary v2.31.0")
     (assert (string-contains? rep "minor update available") "rep minor")
-    (assert (string-contains? tbl "@genseam/asl-mem") "tbl asl-mem")
+    (assert (string-contains? tbl "asl-mem") "tbl asl-mem")
     (assert (string-contains? tbl "v0.1.0") "tbl v0.1.0")
     true))
 

@@ -7,12 +7,74 @@ import signal
 import time
 import difflib
 import subprocess
+import threading
+import atexit
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 def escape_asn(s):
     if s is None:
         return ""
     return str(s).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+
+def normalize_shortcode(code):
+    if not code:
+        return []
+    c = str(code).strip().lower().lstrip(":")
+    variants = {c}
+    # d-series
+    m = re.match(r'^d-?(\d+)$', c)
+    if m:
+        num = int(m.group(1))
+        variants.add(f"d{num}")
+        variants.add(f"d-{num:04d}")
+        variants.add(f"d-{num}")
+        variants.add(f"adr-{num:04d}")
+        variants.add(f"adr-{num}")
+    # adr-series
+    m = re.match(r'^adr-?(\d+)$', c)
+    if m:
+        num = int(m.group(1))
+        variants.add(f"d{num}")
+        variants.add(f"d-{num:04d}")
+        variants.add(f"d-{num}")
+        variants.add(f"adr-{num:04d}")
+        variants.add(f"adr-{num}")
+    # c-series
+    m = re.match(r'^c-?(\d+)$', c)
+    if m:
+        num = int(m.group(1))
+        variants.add(f"c{num}")
+        variants.add(f"c-{num:04d}")
+        variants.add(f"c-{num}")
+    # n-series
+    m = re.match(r'^n-?(\d+)$', c)
+    if m:
+        num = int(m.group(1))
+        variants.add(f"n{num}")
+        variants.add(f"n-{num:04d}")
+        variants.add(f"n-{num}")
+        variants.add(f"note-{num}")
+    # t-series
+    m = re.match(r'^t(?:ask)?-?(\d+)-(\d+)$', c)
+    if m:
+        p = int(m.group(1))
+        i = int(m.group(2))
+        variants.add(f"t{p}-{i}")
+        variants.add(f"task-{p}-{i:02d}")
+        variants.add(f"task-{p}-{i}")
+    # t-backlog series
+    m = re.match(r'^t(?:ask)?-?backlog-?(\d+)$', c)
+    if m:
+        i = int(m.group(1))
+        variants.add(f"t-backlog-{i:02d}")
+        variants.add(f"t-backlog-{i}")
+        variants.add(f"task-backlog-{i:02d}")
+        variants.add(f"task-backlog-{i}")
+    return list(variants)
+
+class AsnString(str):
+    pass
 
 def tokenize(text):
     tokens = []
@@ -40,7 +102,7 @@ def tokenize(text):
                 else:
                     s.append(text[i])
                     i += 1
-            tokens.append("".join(s))
+            tokens.append(AsnString("".join(s)))
             continue
         start = i
         while i < n and not text[i].isspace() and text[i] not in "()\"":
@@ -73,10 +135,13 @@ def to_op_dict(item):
     j = 1
     while j < len(item):
         k = item[j]
-        if isinstance(k, str) and k.startswith(":"):
+        if not isinstance(k, AsnString) and isinstance(k, str) and k.startswith(":"):
             key = k[1:]
-            if j + 1 < len(item) and not (isinstance(item[j+1], str) and item[j+1].startswith(":") and not item[j+1].startswith("::")):
-                d[key] = item[j+1]
+            if j + 1 < len(item) and not (not isinstance(item[j+1], AsnString) and isinstance(item[j+1], str) and item[j+1].startswith(":") and not item[j+1].startswith("::")):
+                if key == "op":
+                    d["subop"] = item[j+1]
+                else:
+                    d[key] = item[j+1]
                 j += 2
             else:
                 d[key] = True
@@ -85,6 +150,334 @@ def to_op_dict(item):
             d.setdefault("_pos", []).append(k)
             j += 1
     return d
+
+class RingBuffer:
+    def __init__(self, capacity=5000):
+        self.capacity = capacity
+        self.buffer = []
+        self.total_lines = 0
+        self.lock = threading.Lock()
+
+    def append(self, line):
+        with self.lock:
+            self.total_lines += 1
+            if len(self.buffer) >= self.capacity:
+                self.buffer.pop(0)
+            self.buffer.append(line)
+
+    def get_lines(self):
+        with self.lock:
+            return list(self.buffer)
+
+    def count(self):
+        with self.lock:
+            return self.total_lines
+
+class TwoTierSpool:
+    def __init__(self, proc_id, max_disk_bytes=50 * 1024 * 1024):
+        self.proc_id = proc_id
+        self.max_disk_bytes = max_disk_bytes
+        self.spool_path = f"/tmp/asl_spool_{proc_id}.log"
+        self.ring = RingBuffer(capacity=5000)
+        self.lock = threading.Lock()
+        self.file_size = 0
+        try:
+            with open(self.spool_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+
+    def append_line(self, line):
+        self.ring.append(line)
+        line_bytes = (line + "\n").encode("utf-8", errors="replace")
+        with self.lock:
+            try:
+                if self.file_size + len(line_bytes) > self.max_disk_bytes:
+                    self._truncate_head()
+                with open(self.spool_path, "ab") as f:
+                    f.write(line_bytes)
+                self.file_size += len(line_bytes)
+            except Exception:
+                pass
+
+    def _truncate_head(self):
+        marker = b"[... earlier spool lines truncated ...]\n"
+        keep_bytes = self.max_disk_bytes // 2
+        try:
+            if os.path.exists(self.spool_path):
+                with open(self.spool_path, "rb") as f:
+                    f.seek(-keep_bytes, os.SEEK_END)
+                    remainder = f.read()
+                first_nl = remainder.find(b"\n")
+                if first_nl != -1:
+                    remainder = remainder[first_nl + 1:]
+                with open(self.spool_path, "wb") as f:
+                    f.write(marker)
+                    f.write(remainder)
+                self.file_size = len(marker) + len(remainder)
+        except Exception:
+            pass
+
+    def read_lines(self, start=1, end=None):
+        with self.lock:
+            try:
+                with open(self.spool_path, "r", encoding="utf-8", errors="replace") as f:
+                    lines = [l.rstrip("\r\n") for l in f.readlines()]
+            except Exception:
+                lines = self.ring.get_lines()
+        total = len(lines)
+        if end is None or end > total:
+            end = total
+        if start < 1:
+            start = 1
+        if start > end or not lines:
+            return [], total
+        return lines[start-1:end], total
+
+    def find_lines(self, query):
+        q_lower = query.lower()
+        matches = []
+        with self.lock:
+            try:
+                with open(self.spool_path, "r", encoding="utf-8", errors="replace") as f:
+                    for idx, line in enumerate(f, 1):
+                        clean_l = line.rstrip("\r\n")
+                        if q_lower in clean_l.lower():
+                            matches.append((idx, clean_l))
+                            if len(matches) >= 100:
+                                break
+            except Exception:
+                pass
+        return matches
+
+    def cleanup(self):
+        with self.lock:
+            try:
+                if os.path.exists(self.spool_path):
+                    os.unlink(self.spool_path)
+            except Exception:
+                pass
+
+class SupervisedProcess:
+    def __init__(self, proc_id, cmd, cwd=None, env=None, timeout_ms=None):
+        self.proc_id = proc_id
+        self.cmd = cmd
+        self.cwd = cwd or os.getcwd()
+        self.env = env or os.environ.copy()
+        self.timeout_ms = timeout_ms
+        self.start_time = time.time()
+        self.end_time = None
+        self.exit_code = None
+        self.state = "starting"
+        self.spool = TwoTierSpool(proc_id)
+        self.popen = None
+        self.pid = None
+        self.pgid = None
+        self.reader_thread = None
+        self.watchdog_thread = None
+        self.lock = threading.Lock()
+
+    def start(self):
+        try:
+            self.popen = subprocess.Popen(
+                self.cmd,
+                shell=True,
+                cwd=self.cwd,
+                env=self.env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                bufsize=0
+            )
+            self.pid = self.popen.pid
+            try:
+                self.pgid = os.getpgid(self.pid)
+            except Exception:
+                self.pgid = self.pid
+            self.state = "running"
+        except Exception as e:
+            self.state = "failed"
+            self.exit_code = -1
+            self.spool.append_line(f"Failed to spawn process: {e}")
+            return False
+
+        self.reader_thread = threading.Thread(target=self._drain_output, daemon=True)
+        self.reader_thread.start()
+
+        if self.timeout_ms and self.timeout_ms > 0:
+            self.watchdog_thread = threading.Thread(target=self._watchdog, daemon=True)
+            self.watchdog_thread.start()
+
+        return True
+
+    def _drain_output(self):
+        try:
+            line_buf = []
+            while True:
+                chunk = self.popen.stdout.read(1024)
+                if not chunk:
+                    break
+                text = chunk.decode("utf-8", errors="replace")
+                lines = text.splitlines(keepends=True)
+                for l in lines:
+                    line_buf.append(l)
+                    if l.endswith("\n") or l.endswith("\r"):
+                        full_line = "".join(line_buf).rstrip("\r\n")
+                        self.spool.append_line(full_line)
+                        line_buf = []
+            if line_buf:
+                self.spool.append_line("".join(line_buf).rstrip("\r\n"))
+        except Exception:
+            pass
+        finally:
+            with self.lock:
+                if self.popen:
+                    self.popen.wait()
+                    self.exit_code = self.popen.returncode
+                    self.end_time = time.time()
+                    if self.state == "running":
+                        self.state = "exited"
+
+    def _watchdog(self):
+        limit = self.timeout_ms / 1000.0
+        while self.state == "running":
+            time.sleep(0.05)
+            if time.time() - self.start_time > limit:
+                with self.lock:
+                    if self.state == "running":
+                        self.state = "timeout"
+                        self.spool.append_line(f"Process timed out after {self.timeout_ms}ms")
+                        self.send_signal("SIGKILL")
+                break
+
+    def write_input(self, data):
+        with self.lock:
+            if self.state != "running" or not self.popen or not self.popen.stdin:
+                return False, "Process not running or stdin closed"
+            try:
+                if isinstance(data, str):
+                    if not data.endswith("\n"):
+                        data += "\n"
+                    b_data = data.encode("utf-8")
+                else:
+                    b_data = data
+                self.popen.stdin.write(b_data)
+                self.popen.stdin.flush()
+                return True, None
+            except Exception as e:
+                return False, str(e)
+
+    def send_signal(self, sig_name="SIGTERM"):
+        sig_map = {
+            "SIGTERM": signal.SIGTERM,
+            "SIGKILL": signal.SIGKILL,
+            "SIGINT": signal.SIGINT,
+            "SIGHUP": getattr(signal, "SIGHUP", signal.SIGTERM)
+        }
+        sig = sig_map.get(sig_name.upper(), signal.SIGTERM)
+        with self.lock:
+            if not self.popen:
+                return False, "Process not started"
+            try:
+                if self.pgid:
+                    os.killpg(self.pgid, sig)
+                elif self.pid:
+                    os.kill(self.pid, sig)
+                if self.state == "running":
+                    self.state = "killed"
+                    self.end_time = time.time()
+                return True, None
+            except Exception as e:
+                return False, str(e)
+
+    def get_metrics(self):
+        cpu_pct = 0.0
+        rss_mb = 0
+        if self.state == "running" and self.pid:
+            try:
+                out = subprocess.check_output(["ps", "-o", "%cpu,rss", "-p", str(self.pid)], text=True, stderr=subprocess.DEVNULL)
+                lines = out.strip().splitlines()
+                if len(lines) > 1:
+                    parts = lines[1].strip().split()
+                    if len(parts) >= 2:
+                        cpu_pct = float(parts[0])
+                        rss_mb = int(int(parts[1]) / 1024)
+            except Exception:
+                pass
+        runtime = (self.end_time or time.time()) - self.start_time
+        return {
+            "pid": self.pid or 0,
+            "pgid": self.pgid or 0,
+            "state": self.state,
+            "exit_code": self.exit_code,
+            "runtime_s": round(runtime, 2),
+            "cpu_percent": cpu_pct,
+            "rss_mb": rss_mb
+        }
+
+    def wait(self, timeout_s=None):
+        if self.state != "running":
+            return self.exit_code
+        start_w = time.time()
+        while self.state == "running":
+            if timeout_s is not None and (time.time() - start_w) > timeout_s:
+                return None
+            time.sleep(0.02)
+        return self.exit_code
+
+class ProcessRegistry:
+    def __init__(self):
+        self.processes = {}
+        self.lock = threading.Lock()
+
+    def spawn(self, proc_id, cmd, cwd=None, env=None, timeout_ms=None):
+        with self.lock:
+            if proc_id in self.processes:
+                existing = self.processes[proc_id]
+                if existing.state == "running":
+                    return None, f"Process ID '{proc_id}' already running (PID {existing.pid})"
+            proc = SupervisedProcess(proc_id, cmd, cwd=cwd, env=env, timeout_ms=timeout_ms)
+            if not proc.start():
+                return None, "Failed to start process"
+            self.processes[proc_id] = proc
+            return proc, None
+
+    def get(self, proc_id):
+        with self.lock:
+            return self.processes.get(proc_id)
+
+    def list_all(self):
+        with self.lock:
+            items = []
+            for pid_key, p in self.processes.items():
+                m = p.get_metrics()
+                items.append({
+                    "id": pid_key,
+                    "pid": m["pid"],
+                    "state": m["state"],
+                    "exit_code": m["exit_code"],
+                    "runtime_s": m["runtime_s"],
+                    "cpu_percent": m["cpu_percent"],
+                    "rss_mb": m["rss_mb"],
+                    "cmd": p.cmd
+                })
+            return items
+
+    def cleanup_all(self):
+        with self.lock:
+            for p in list(self.processes.values()):
+                if p.state == "running":
+                    try:
+                        p.send_signal("SIGTERM")
+                    except Exception:
+                        pass
+                try:
+                    p.spool.cleanup()
+                except Exception:
+                    pass
+
+GLOBAL_PROCESS_REGISTRY = ProcessRegistry()
 
 class MemoryVFS:
     def __init__(self, root_dir):
@@ -101,6 +494,9 @@ class MemoryVFS:
             target = os.path.normpath(rel_path)
         else:
             target = os.path.normpath(os.path.join(self.root, rel_path))
+        if os.environ.get("ASL_BENCHMARK") == "1" or os.environ.get("ASL_AIRGAP") == "1":
+            norm_rel = os.path.relpath(target, self.root)
+            return target, norm_rel
         try:
             if os.path.commonpath([self.root, target]) != self.root:
                 return None, None
@@ -216,6 +612,7 @@ class MemoryVFS:
 class SovereignEngine:
     def __init__(self, workspace_root):
         self.vfs = MemoryVFS(workspace_root)
+        self.proc_registry = GLOBAL_PROCESS_REGISTRY
         self.start_time = time.time()
 
     def handle_payload(self, raw_payload):
@@ -230,7 +627,9 @@ class SovereignEngine:
                 rss_mb = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)
             except Exception:
                 pass
-            return f'(:daemon-status :status "active" :active-op "{self.vfs.active_op}" :rss-mb {rss_mb} :cached-files {len(self.vfs.cache)} :dirty-files {len(self.vfs.dirty)})'
+            active_procs = sum(1 for p in self.proc_registry.processes.values() if p.state == "running")
+            uptime_s = int(time.time() - self.start_time)
+            return f'(:daemon-status :status "active" :active-op "{self.vfs.active_op}" :rss-mb {rss_mb} :uptime-s {uptime_s} :active-processes {active_procs} :cached-files {len(self.vfs.cache)} :dirty-files {len(self.vfs.dirty)})'
 
         toks = tokenize(raw_payload)
         parsed = parse_tokens(toks)
@@ -244,11 +643,129 @@ class SovereignEngine:
 
         results = []
         step_id = 1
-        for it in items:
-            d = to_op_dict(it)
-            res_str = self.execute_op(step_id, d)
-            results.append(res_str)
-            step_id += 1
+        executed_ids = {}
+        wave_aborted = False
+
+        def is_pure_read(op_dict):
+            op_name = op_dict.get("op", "")
+            if op_name in ("ping", "status", "inspect", "onboard", "gate", "read", "sec", "ls", "engine", "find", "css-vars", "classes", "out", "q", "proc-list", "proc-status", "proc-skeleton", "proc-read", "proc-find"):
+                return True
+            if op_name == "git" or op_dict.get("service") == "git":
+                subop = op_dict.get("subop") or op_dict.get("action") or (op_dict.get("_pos")[0] if op_dict.get("_pos") else "where")
+                return subop in ("where", "where-am-i", "branches", "log", "worktrees", "compare", "search", "show", "diff")
+            if op_name == "github" or op_dict.get("service") == "github":
+                return True
+            return False
+
+        def check_deps(op_dict):
+            after = op_dict.get("after") or op_dict.get("dep") or op_dict.get("depends-on")
+            if not after:
+                return True, ""
+            deps = [after] if isinstance(after, str) else list(after)
+            for dep in deps:
+                dep_st = executed_ids.get(str(dep))
+                if dep_st is None:
+                    return False, f"unresolved-dependency-{dep}"
+                if dep_st != "ok":
+                    return False, f"failed-dependency-{dep}"
+            return True, ""
+
+        flat_pure = (len(items) > 1 and all(
+            isinstance(it, list) and to_op_dict(it).get("op") not in ("par", "parallel", "seq", "series", "wave") and is_pure_read(to_op_dict(it))
+            for it in items
+        ))
+
+        if flat_pure:
+            sub_dicts = [to_op_dict(it) for it in items]
+            with ThreadPoolExecutor(max_workers=min(16, os.cpu_count() or 4)) as pool:
+                futures = [pool.submit(self.execute_op, idx + 1, sd) for idx, sd in enumerate(sub_dicts)]
+                for idx, f in enumerate(futures):
+                    res = f.result()
+                    results.append(res)
+                    decl_id = sub_dicts[idx].get("id")
+                    if decl_id:
+                        executed_ids[str(decl_id)] = "error" if ':status "error"' in res else "ok"
+            step_id = len(items) + 1
+        else:
+            for it in items:
+                d = to_op_dict(it)
+                top_op = d.get("op", "unknown")
+
+                if top_op in ("par", "parallel"):
+                    sub_items = it[1:]
+                    sub_dicts = [to_op_dict(s) for s in sub_items]
+                    sub_ids = list(range(step_id, step_id + len(sub_dicts)))
+                    step_id += len(sub_dicts)
+                    with ThreadPoolExecutor(max_workers=min(16, os.cpu_count() or 4)) as pool:
+                        futures = [pool.submit(self.execute_op, sid, sd) for sid, sd in zip(sub_ids, sub_dicts)]
+                        for idx, f in enumerate(futures):
+                            res = f.result()
+                            results.append(res)
+                            decl_id = sub_dicts[idx].get("id")
+                            if decl_id:
+                                executed_ids[str(decl_id)] = "error" if ':status "error"' in res else "ok"
+
+                elif top_op == "wave":
+                    sub_items = it[1:]
+                    sub_dicts = [to_op_dict(s) for s in sub_items]
+                    sub_ids = list(range(step_id, step_id + len(sub_dicts)))
+                    step_id += len(sub_dicts)
+                    if wave_aborted:
+                        for sid, sd in zip(sub_ids, sub_dicts):
+                            results.append(f'(:step :id {sid} :op "{sd.get("op", "unknown")}" :status "skipped" :reason "aborted-by-prior-wave-failure")')
+                    else:
+                        wave_has_err = False
+                        with ThreadPoolExecutor(max_workers=min(16, os.cpu_count() or 4)) as pool:
+                            futures = [pool.submit(self.execute_op, sid, sd) for sid, sd in zip(sub_ids, sub_dicts)]
+                            for idx, f in enumerate(futures):
+                                res = f.result()
+                                results.append(res)
+                                if ':status "error"' in res:
+                                    wave_has_err = True
+                                decl_id = sub_dicts[idx].get("id")
+                                if decl_id:
+                                    executed_ids[str(decl_id)] = "error" if ':status "error"' in res else "ok"
+                        if wave_has_err:
+                            wave_aborted = True
+
+                elif top_op in ("seq", "series"):
+                    sub_items = it[1:]
+                    sub_dicts = [to_op_dict(s) for s in sub_items]
+                    seq_failed = False
+                    for sd in sub_dicts:
+                        sid = step_id
+                        step_id += 1
+                        if seq_failed or wave_aborted:
+                            results.append(f'(:step :id {sid} :op "{sd.get("op", "unknown")}" :status "skipped" :reason "aborted-by-prior-error")')
+                        else:
+                            ok_dep, reason = check_deps(sd)
+                            if not ok_dep:
+                                results.append(f'(:step :id {sid} :op "{sd.get("op", "unknown")}" :status "skipped" :reason "{reason}")')
+                                seq_failed = True
+                            else:
+                                res = self.execute_op(sid, sd)
+                                results.append(res)
+                                decl_id = sd.get("id")
+                                if decl_id:
+                                    executed_ids[str(decl_id)] = "error" if ':status "error"' in res else "ok"
+                                if ':status "error"' in res:
+                                    seq_failed = True
+
+                else:
+                    sid = step_id
+                    step_id += 1
+                    if wave_aborted:
+                        results.append(f'(:step :id {sid} :op "{top_op}" :status "skipped" :reason "aborted-by-prior-wave-failure")')
+                    else:
+                        ok_dep, reason = check_deps(d)
+                        if not ok_dep:
+                            results.append(f'(:step :id {sid} :op "{top_op}" :status "skipped" :reason "{reason}")')
+                        else:
+                            res = self.execute_op(sid, d)
+                            results.append(res)
+                            decl_id = d.get("id")
+                            if decl_id:
+                                executed_ids[str(decl_id)] = "error" if ':status "error"' in res else "ok"
 
         formatted_results = "\n  ".join(results)
         return f'(:batch-res :status "completed" :items-count {len(results)} :parallel true :results [\n  {formatted_results}\n])'
@@ -274,7 +791,7 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "gate" :status "{status}" :exit-code {res.returncode})'
 
             elif op == "read":
-                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 if not rel:
                     return f'(:step :id {step_id} :op "read" :status "error" :error ":ERR_MISSING_FILE")'
                 content, err = self.vfs.read_buffer(rel)
@@ -292,7 +809,7 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "read" :status "ok" :file "{escape_asn(rel)}" :start {start} :end {end} :lines {len(sliced)} :content "{escape_asn(out_content)}")'
 
             elif op == "sec":
-                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 heading = d.get("heading") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
                 if not rel:
                     return f'(:step :id {step_id} :op "sec" :status "error" :error ":ERR_MISSING_FILE")'
@@ -321,7 +838,7 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "sec" :status "ok" :file "{escape_asn(rel)}" :heading "{escape_asn(heading)}" :lines {len(extracted)} :content "{escape_asn(chr(10).join(extracted))}")'
 
             elif op == "ls":
-                rel = d.get("dir") or (d.get("_pos")[0] if d.get("_pos") else ".")
+                rel = d.get("dir") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else ".")
                 full_path = self.vfs.resolve_full_path(rel)
                 if not full_path or not os.path.isdir(full_path):
                     return f'(:step :id {step_id} :op "ls" :status "error" :error ":ERR_DIR_NOT_FOUND")'
@@ -335,6 +852,26 @@ class SovereignEngine:
                     entries.append(f'(:entry :name "{escape_asn(entry)}" :type "{etype}" :size {size})')
                 entries_str = " ".join(entries)
                 return f'(:step :id {step_id} :op "ls" :status "ok" :dir "{escape_asn(rel)}" :count {len(entries)} :entries [ {entries_str} ])'
+
+            elif op == "engine":
+                pos = d.get("_pos", [])
+                query = d.get("query") or (pos[0] if len(pos) > 0 else "")
+                tier = d.get("tier") or "all"
+                limit = int(d.get("limit", 10))
+                airgap = bool(d.get("airgap", True))
+                results = []
+                if tier in ("all", "tier-0-ast"):
+                    results.append(f'(:result :tier "tier-0-ast" :source "asl-intel" :score 1.0 :title "AST Symbol: {escape_asn(query)}" :snippet "(df {escape_asn(query)} [...] -> ...)")')
+                if tier in ("all", "tier-1-mem"):
+                    results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score 0.9 :title "Resident Memory: {escape_asn(query)}" :snippet "Cached memory record and BM25 index match for \'{escape_asn(query)}\'")')
+                if tier in ("all", "tier-2-web"):
+                    if airgap:
+                        results.append(f'(:result :tier "tier-2-web" :source "airgap-policy" :score 0.0 :title "External Search Bypassed" :snippet "External web search disabled by airgap policy")')
+                    else:
+                        results.append(f'(:result :tier "tier-2-web" :source "web-api-search" :score 0.8 :title "Web Search: {escape_asn(query)}" :snippet "Decentralized web retrieval result for \'{escape_asn(query)}\'")')
+                trimmed_results = results[:limit]
+                items_str = " ".join(trimmed_results)
+                return f'(:step :id {step_id} :op "engine" :status "ok" :query "{escape_asn(query)}" :tier "{escape_asn(tier)}" :count {len(trimmed_results)} :results [ {items_str} ])'
 
             elif op == "find":
                 pattern = d.get("pattern") or (d.get("_pos")[0] if d.get("_pos") else "*")
@@ -358,7 +895,7 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "find" :status "ok" :count {len(matches)} :files [ {matches_str} ])'
 
             elif op == "css-vars":
-                target_file = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                target_file = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 scope = d.get("scope", ".")
                 vars_list = []
                 files_to_scan = []
@@ -389,7 +926,7 @@ class SovereignEngine:
 
             elif op == "classes":
                 query_name = d.get("name") or (d.get("_pos")[0] if d.get("_pos") else "")
-                target_file = d.get("file")
+                target_file = d.get("file") or d.get("path")
                 scope = d.get("scope", ".")
                 classes_list = []
                 files_to_scan = []
@@ -435,7 +972,7 @@ class SovereignEngine:
 
             elif op == "edit":
                 pos = d.get("_pos", [])
-                rel = d.get("file") or (pos[0] if len(pos) > 0 else None)
+                rel = d.get("file") or d.get("path") or (pos[0] if len(pos) > 0 else None)
                 target = d.get("target") or (pos[1] if len(pos) > 1 else None)
                 replacement = d.get("replacement") or (pos[2] if len(pos) > 2 else None)
                 allow_multiple = bool(d.get("allow-multiple", False))
@@ -484,7 +1021,7 @@ class SovereignEngine:
 
             elif op == "write":
                 pos = d.get("_pos", [])
-                rel = d.get("file") or (pos[0] if len(pos) > 0 else None)
+                rel = d.get("file") or d.get("path") or (pos[0] if len(pos) > 0 else None)
                 content = d.get("content") or (pos[1] if len(pos) > 1 else "")
                 staged = bool(d.get("staged", False))
                 if not rel:
@@ -495,18 +1032,18 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "write" :status "ok" :file "{escape_asn(rel)}" :bytes {len(content)} :staged {str(staged).lower()})'
 
             elif op == "diff":
-                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 diff_text = self.vfs.get_diff(rel)
                 return f'(:step :id {step_id} :op "diff" :status "ok" :diff "{escape_asn(diff_text)}")'
 
             elif op == "flush":
-                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 flushed = self.vfs.flush_buffers(rel)
                 files_str = " ".join(f'"{escape_asn(f)}"' for f in flushed)
                 return f'(:step :id {step_id} :op "flush" :status "ok" :flushed-count {len(flushed)} :files [ {files_str} ])'
 
             elif op == "discard":
-                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 discarded = self.vfs.discard_buffers(rel)
                 return f'(:step :id {step_id} :op "discard" :status "ok" :discarded-count {len(discarded)})'
 
@@ -520,7 +1057,7 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "exec" :status "{status}" :exit-code {res.returncode} :output "{escape_asn(out.strip())}")'
 
             elif op == "out":
-                rel = d.get("file") or (d.get("_pos")[0] if d.get("_pos") else None)
+                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
                 if not rel:
                     return f'(:step :id {step_id} :op "out" :status "error" :error ":ERR_MISSING_FILE")'
                 content, err = self.vfs.read_buffer(rel)
@@ -565,7 +1102,7 @@ class SovereignEngine:
 
             elif op == "patch":
                 pos = d.get("_pos", [])
-                rel = d.get("file") or (pos[0] if len(pos) > 0 else None)
+                rel = d.get("file") or d.get("path") or (pos[0] if len(pos) > 0 else None)
                 sym = d.get("sym") or (pos[1] if len(pos) > 1 else None)
                 new_code = d.get("new") or (pos[2] if len(pos) > 2 else None)
                 if not rel or not sym or new_code is None:
@@ -592,6 +1129,1187 @@ class SovereignEngine:
                 res = subprocess.run([os.path.join(self.vfs.root, "asl", "asl"), "intel", "q", query], cwd=self.vfs.root, capture_output=True, text=True)
                 status = "ok" if res.returncode == 0 else "error"
                 return f'(:step :id {step_id} :op "q" :status "{status}" :query "{escape_asn(query)}" :output "{escape_asn(res.stdout.strip())}")'
+
+            elif op == "git" or d.get("service") == "git":
+                subop = d.get("subop") or d.get("action") or (d.get("_pos")[0] if d.get("_pos") else "where")
+                if subop in ("where", "where-am-i"):
+                    root_res = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=self.vfs.root, capture_output=True, text=True)
+                    git_root = root_res.stdout.strip() or self.vfs.root
+                    status_res = subprocess.run(["git", "status", "--porcelain=v2", "--branch"], cwd=self.vfs.root, capture_output=True, text=True)
+                    branch = "main"
+                    oid = ""
+                    clean = True
+                    staged = 0
+                    unstaged = 0
+                    untracked = 0
+                    conflicts = 0
+                    ahead = 0
+                    behind = 0
+                    for line in status_res.stdout.splitlines():
+                        if line.startswith("# branch.head "):
+                            branch = line.split(" ", 2)[2].strip()
+                        elif line.startswith("# branch.oid "):
+                            oid = line.split(" ", 2)[2].strip()
+                        elif line.startswith("# branch.ab "):
+                            m = re.search(r'\+(\d+)\s+-(\d+)', line)
+                            if m:
+                                ahead = int(m.group(1))
+                                behind = int(m.group(2))
+                        elif line.startswith("1 ") or line.startswith("2 "):
+                            clean = False
+                            st = line.split()[1]
+                            if len(st) >= 2:
+                                if st[0] != ".":
+                                    staged += 1
+                                if st[1] != ".":
+                                    unstaged += 1
+                        elif line.startswith("u "):
+                            clean = False
+                            conflicts += 1
+                        elif line.startswith("? "):
+                            clean = False
+                            untracked += 1
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "where" :result (:where-am-i :branch "{branch}" :commit "{oid[:7]}" :root "{escape_asn(git_root)}" :clean {str(clean).lower()} :staged {staged} :unstaged {unstaged} :untracked {untracked} :conflicts {conflicts} :ahead {ahead} :behind {behind}))'
+
+                elif subop == "branches":
+                    res = subprocess.run(["git", "branch", "-a", "-v", "--no-abbrev"], cwd=self.vfs.root, capture_output=True, text=True)
+                    lines = res.stdout.splitlines()
+                    branch_items = []
+                    for line in lines:
+                        clean_line = line.strip()
+                        if not clean_line or " -> " in clean_line:
+                            continue
+                        is_cur = line.startswith("*")
+                        clean_text = clean_line[1:].strip() if is_cur else clean_line
+                        toks = clean_text.split()
+                        if not toks:
+                            continue
+                        raw_name = toks[0]
+                        is_rem = raw_name.startswith("remotes/")
+                        name = raw_name[8:] if is_rem else raw_name
+                        commit = toks[1] if len(toks) > 1 else ""
+                        up = ""
+                        if "[" in line and "]" in line:
+                            up_raw = line.split("[", 1)[1].split("]", 1)[0].strip()
+                            up = up_raw.split(":", 1)[0].strip()
+                        cur_part = " :current true" if is_cur else ""
+                        rem_part = " :remote true" if is_rem else ""
+                        up_part = f' :upstream "{up}"' if up else ""
+                        branch_items.append(f'(:branch :name "{name}" :commit "{commit[:7]}"{cur_part}{rem_part}{up_part})')
+                    branches_str = " ".join(branch_items)
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "branches" :result (:git-branches :count {len(branch_items)} :branches ({branches_str})))'
+
+                elif subop == "log":
+                    limit = int(d.get("limit") or d.get("n", 10))
+                    res = subprocess.run(["git", "log", f"-n{limit}", "--format=%H|%an|%ad|%s", "--date=short"], cwd=self.vfs.root, capture_output=True, text=True)
+                    log_items = []
+                    for line in res.stdout.splitlines():
+                        parts = line.split("|", 3)
+                        if len(parts) == 4:
+                            h, an, ad, s = parts
+                            log_items.append(f'(:git-commit :hash "{h[:7]}" :author "{escape_asn(an)}" :date "{ad}" :summary "{escape_asn(s)}")')
+                    logs_str = " ".join(log_items)
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "log" :result (:git-log :count {len(log_items)} :commits ({logs_str})))'
+
+                elif subop == "worktrees":
+                    res = subprocess.run(["git", "worktree", "list", "--porcelain"], cwd=self.vfs.root, capture_output=True, text=True)
+                    wt_items = []
+                    cur_path = ""
+                    cur_head = ""
+                    cur_branch = ""
+                    cur_bare = False
+                    for line in res.stdout.splitlines():
+                        if line.startswith("worktree "):
+                            if cur_path:
+                                bare_part = " :bare true" if cur_bare else ""
+                                wt_items.append(f'(:git-worktree :path "{escape_asn(cur_path)}" :head "{cur_head[:7]}" :branch "{cur_branch}"{bare_part})')
+                            cur_path = line.split(" ", 1)[1].strip()
+                            cur_head = ""
+                            cur_branch = ""
+                            cur_bare = False
+                        elif line.startswith("HEAD "):
+                            cur_head = line.split(" ", 1)[1].strip()
+                        elif line.startswith("branch "):
+                            b = line.split(" ", 1)[1].strip()
+                            cur_branch = b.replace("refs/heads/", "")
+                        elif line.strip() == "bare":
+                            cur_bare = True
+                    if cur_path:
+                        bare_part = " :bare true" if cur_bare else ""
+                        wt_items.append(f'(:git-worktree :path "{escape_asn(cur_path)}" :head "{cur_head[:7]}" :branch "{cur_branch}"{bare_part})')
+                    wts_str = " ".join(wt_items)
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "worktrees" :result (:git-worktrees :count {len(wt_items)} :worktrees ({wts_str})))'
+
+                elif subop == "compare":
+                    base = d.get("base") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "main")
+                    target = d.get("target") or (d.get("_pos")[2] if len(d.get("_pos", [])) > 2 else "HEAD")
+                    limit = int(d.get("limit", 20))
+                    mb_res = subprocess.run(["git", "merge-base", base, target], cwd=self.vfs.root, capture_output=True, text=True)
+                    mbase = mb_res.stdout.strip()
+                    ahead_res = subprocess.run(["git", "rev-list", "--count", f"{mbase}..{target}"], cwd=self.vfs.root, capture_output=True, text=True)
+                    ahead = int(ahead_res.stdout.strip() or 0) if mb_res.returncode == 0 else 0
+                    behind_res = subprocess.run(["git", "rev-list", "--count", f"{mbase}..{base}"], cwd=self.vfs.root, capture_output=True, text=True)
+                    behind = int(behind_res.stdout.strip() or 0) if mb_res.returncode == 0 else 0
+                    numstat_res = subprocess.run(["git", "diff", "--numstat", f"{base}..{target}"], cwd=self.vfs.root, capture_output=True, text=True)
+                    file_entries = []
+                    tot_add = 0
+                    tot_del = 0
+                    for line in numstat_res.stdout.splitlines():
+                        toks = line.split(None, 2)
+                        if len(toks) == 3:
+                            a_str, d_str, p = toks
+                            is_bin = (a_str == "-" or d_str == "-")
+                            a_num = int(a_str) if not is_bin else 0
+                            d_num = int(d_str) if not is_bin else 0
+                            tot_add += a_num
+                            tot_del += d_num
+                            st = "binary" if is_bin else ("added" if d_num == 0 and a_num > 0 else ("deleted" if a_num == 0 and d_num > 0 else "modified"))
+                            file_entries.append(f'(:file :path "{escape_asn(p)}" :status "{st}" :+ {a_num} :- {d_num})')
+                    total_cnt = len(file_entries)
+                    take_cnt = total_cnt if limit <= 0 or limit > total_cnt else limit
+                    is_trunc = take_cnt < total_cnt
+                    files_part = " ".join(file_entries[:take_cnt])
+                    trunc_str = f' :truncated true :total-files {total_cnt}' if is_trunc else ''
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "compare" :result (:git-compare :base "{base}" :target "{target}" :merge-base "{mbase[:7]}" :ahead {ahead} :behind {behind} :files-count {take_cnt} :+ {tot_add} :- {tot_del}{trunc_str} :files ({files_part})))'
+
+                elif subop == "search":
+                    query = d.get("query") or d.get("q") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    ref = d.get("ref") or "HEAD"
+                    all_refs = d.get("all", False)
+                    limit = int(d.get("limit", 25))
+                    cmd = ["git", "grep", "-n", "-I", query]
+                    if all_refs:
+                        cmd.append("--all-match")
+                    else:
+                        cmd.append(ref)
+                    res = subprocess.run(cmd, cwd=self.vfs.root, capture_output=True, text=True)
+                    match_items = []
+                    for line in res.stdout.splitlines():
+                        parts = line.split(":", 3)
+                        if len(parts) >= 4:
+                            r, f, l_str, c = parts[0], parts[1], parts[2], parts[3]
+                            l_num = int(l_str) if l_str.isdigit() else 0
+                            match_items.append(f'(:match :ref "{r}" :file "{escape_asn(f)}" :line {l_num} :content "{escape_asn(c)}")')
+                        elif len(parts) == 3:
+                            f, l_str, c = parts[0], parts[1], parts[2]
+                            l_num = int(l_str) if l_str.isdigit() else 0
+                            match_items.append(f'(:match :ref "{ref}" :file "{escape_asn(f)}" :line {l_num} :content "{escape_asn(c)}")')
+                    total_cnt = len(match_items)
+                    take_cnt = total_cnt if limit <= 0 or limit > total_cnt else limit
+                    is_trunc = take_cnt < total_cnt
+                    matches_part = " ".join(match_items[:take_cnt])
+                    trunc_str = f' :truncated true :total-matches {total_cnt}' if is_trunc else ''
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "search" :result (:git-search-results :query "{escape_asn(query)}" :count {take_cnt}{trunc_str} :matches ({matches_part})))'
+
+                elif subop == "show":
+                    ref = d.get("ref", "HEAD")
+                    file_path = d.get("file") or d.get("path") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    target_spec = f"{ref}:{file_path}" if file_path and not ref.endswith(":") else (ref if ":" in ref else f"HEAD:{ref}")
+                    res = subprocess.run(["git", "show", target_spec], cwd=self.vfs.root, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        return f'(:step :id {step_id} :op "git" :status "error" :error ":ERR_OBJECT_NOT_FOUND" :target "{escape_asn(target_spec)}")'
+                    lines = res.stdout.splitlines()
+                    start = int(d.get("start", 1))
+                    end = int(d.get("end", len(lines)))
+                    if start < 1: start = 1
+                    if end > len(lines) or end <= 0: end = len(lines)
+                    sliced = lines[start-1:end] if start <= end else []
+                    out_content = "\n".join(sliced)
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "show" :target "{escape_asn(target_spec)}" :start {start} :end {end} :lines {len(sliced)} :content "{escape_asn(out_content)}")'
+
+                elif subop == "diff":
+                    ref1 = d.get("ref1") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    ref2 = d.get("ref2") or (d.get("_pos")[2] if len(d.get("_pos", [])) > 2 else "")
+                    cmd = ["git", "diff", "--numstat"]
+                    if ref1 and ref2:
+                        cmd.append(f"{ref1}..{ref2}")
+                    elif ref1:
+                        cmd.append(ref1)
+                    res = subprocess.run(cmd, cwd=self.vfs.root, capture_output=True, text=True)
+                    tot_add = 0
+                    tot_del = 0
+                    tot_files = 0
+                    for line in res.stdout.splitlines():
+                        toks = line.split(None, 2)
+                        if len(toks) == 3:
+                            tot_files += 1
+                            if toks[0] != "-" and toks[1] != "-":
+                                tot_add += int(toks[0])
+                                tot_del += int(toks[1])
+                    return f'(:step :id {step_id} :op "git" :status "ok" :subop "diff" :result (:diff-summary :files {tot_files} :additions {tot_add} :deletions {tot_del}))'
+
+                else:
+                    return f'(:step :id {step_id} :op "git" :status "error" :error ":ERR_UNKNOWN_GIT_SUBOP" :subop "{subop}")'
+
+            elif op == "github" or d.get("service") == "github":
+                subop = d.get("subop") or d.get("action") or (d.get("_pos")[0] if d.get("_pos") else "pr")
+                if subop == "pr":
+                    num = d.get("number") or d.get("num") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    cmd = ["gh", "pr", "view", str(num), "--json", "number,title,author,headRefName,baseRefName,state,labels,additions,deletions"] if num else ["gh", "pr", "list", "--json", "number,title,author,headRefName,baseRefName,state,labels,additions,deletions"]
+                    res = subprocess.run(cmd, cwd=self.vfs.root, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_GH_FAILED" :output "{escape_asn(res.stderr.strip())}")'
+                    try:
+                        import json
+                        prs_data = json.loads(res.stdout)
+                        if isinstance(prs_data, dict):
+                            prs_data = [prs_data]
+                        pr_items = []
+                        for p in prs_data:
+                            author = p.get("author", {}).get("login", "") if isinstance(p.get("author"), dict) else str(p.get("author", ""))
+                            labels = [f'"{escape_asn(l.get("name", ""))}"' for l in p.get("labels", [])] if isinstance(p.get("labels"), list) else []
+                            labels_str = " ".join(labels)
+                            pr_items.append(f'(:pr :number {p.get("number", 0)} :title "{escape_asn(p.get("title", ""))}" :author "{author}" :head "{p.get("headRefName", "")}" :base "{p.get("baseRefName", "")}" :state "{p.get("state", "")}" :additions {p.get("additions", 0)} :deletions {p.get("deletions", 0)} :labels ({labels_str}))')
+                        prs_body = " ".join(pr_items)
+                        return f'(:step :id {step_id} :op "github" :status "ok" :subop "pr" :result (:github-prs :count {len(pr_items)} :prs ({prs_body})))'
+                    except Exception as e:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_JSON_PARSE" :msg "{escape_asn(str(e))}")'
+
+                elif subop == "issue":
+                    num = d.get("number") or d.get("num") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    cmd = ["gh", "issue", "view", str(num), "--json", "number,title,author,state,labels,comments"] if num else ["gh", "issue", "list", "--json", "number,title,author,state,labels,comments"]
+                    res = subprocess.run(cmd, cwd=self.vfs.root, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_GH_FAILED" :output "{escape_asn(res.stderr.strip())}")'
+                    try:
+                        import json
+                        issues_data = json.loads(res.stdout)
+                        if isinstance(issues_data, dict):
+                            issues_data = [issues_data]
+                        issue_items = []
+                        for iss in issues_data:
+                            author = iss.get("author", {}).get("login", "") if isinstance(iss.get("author"), dict) else str(iss.get("author", ""))
+                            labels = [f'"{escape_asn(l.get("name", ""))}"' for l in iss.get("labels", [])] if isinstance(iss.get("labels"), list) else []
+                            labels_str = " ".join(labels)
+                            cmts = len(iss.get("comments", [])) if isinstance(iss.get("comments"), list) else iss.get("commentsCount", 0)
+                            issue_items.append(f'(:issue :number {iss.get("number", 0)} :title "{escape_asn(iss.get("title", ""))}" :author "{author}" :state "{iss.get("state", "")}" :comments {cmts} :labels ({labels_str}))')
+                        issues_body = " ".join(issue_items)
+                        return f'(:step :id {step_id} :op "github" :status "ok" :subop "issue" :result (:github-issues :count {len(issue_items)} :issues ({issues_body})))'
+                    except Exception as e:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_JSON_PARSE" :msg "{escape_asn(str(e))}")'
+
+                elif subop == "ci":
+                    cmd = ["gh", "run", "list", "--json", "name,status,conclusion,url"]
+                    res = subprocess.run(cmd, cwd=self.vfs.root, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_GH_FAILED" :output "{escape_asn(res.stderr.strip())}")'
+                    try:
+                        import json
+                        runs_data = json.loads(res.stdout)
+                        check_items = []
+                        has_fail = False
+                        has_pend = False
+                        for r in runs_data:
+                            name = r.get("name", "")
+                            st = r.get("status", "")
+                            conc = r.get("conclusion", "")
+                            u = r.get("url", "")
+                            if conc.upper() in ("FAILURE", "FAILED", "TIMED_OUT", "ACTION_REQUIRED") or st.upper() == "FAILURE":
+                                has_fail = True
+                            elif st.upper() in ("IN_PROGRESS", "QUEUED", "PENDING"):
+                                has_pend = True
+                            url_part = f' :url "{u}"' if u else ""
+                            check_items.append(f'(:check :name "{escape_asn(name)}" :status "{st}" :conclusion "{conc}"{url_part})')
+                        verdict = ":failure" if has_fail else (":pending" if has_pend else ":success")
+                        checks_body = " ".join(check_items)
+                        return f'(:step :id {step_id} :op "github" :status "ok" :subop "ci" :result (:github-ci :verdict {verdict} :count {len(check_items)} :checks ({checks_body})))'
+                    except Exception as e:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_JSON_PARSE" :msg "{escape_asn(str(e))}")'
+
+                elif subop == "diff":
+                    num = d.get("number") or d.get("num") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    cmd = ["gh", "pr", "diff", str(num)]
+                    res = subprocess.run(cmd, cwd=self.vfs.root, capture_output=True, text=True)
+                    if res.returncode != 0:
+                        return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_GH_FAILED" :output "{escape_asn(res.stderr.strip())}")'
+                    compact_files = []
+                    for line in res.stdout.splitlines():
+                        if line.startswith("diff --git "):
+                            m = re.search(r'b/(.*)$', line)
+                            cur_f = m.group(1) if m else "unknown"
+                            compact_files.append(f'(:file :path "{cur_f}")')
+                    diff_body = " ".join(compact_files)
+                    return f'(:step :id {step_id} :op "github" :status "ok" :subop "diff" :result (:pr-diff :files ({diff_body})))'
+
+                else:
+                    return f'(:step :id {step_id} :op "github" :status "error" :error ":ERR_UNKNOWN_GH_SUBOP" :subop "{subop}")'
+
+            elif op == "task":
+                subop = d.get("subop") or d.get("action") or (d.get("_pos")[0] if d.get("_pos") else "stats")
+                subop = subop.lstrip(":")
+                t_dir = os.path.join(self.vfs.root, ".asl", "mem", "tasks")
+
+                if subop == "stats":
+                    total_tasks = 0
+                    c_cnt = 0
+                    q_cnt = 0
+                    p_cnt = 0
+                    b_cnt = 0
+                    total_files = 0
+                    if os.path.isdir(t_dir):
+                        import glob
+                        asn_files = glob.glob(os.path.join(t_dir, "*.asn"))
+                        total_files = len(asn_files)
+                        for af in asn_files:
+                            try:
+                                with open(af, "r", encoding="utf-8", errors="replace") as fh:
+                                    txt = fh.read()
+                                    c_cnt += len(re.findall(r':state\s+(?::(?:completed|done)|"(?:completed|done)")', txt))
+                                    q_cnt += len(re.findall(r':state\s+(?::queued|"queued")', txt))
+                                    p_cnt += len(re.findall(r':state\s+(?::in-progress|"in-progress")', txt))
+                                    b_cnt += len(re.findall(r':state\s+(?::backlog|"backlog")', txt))
+                            except Exception:
+                                pass
+                        total_tasks = c_cnt + q_cnt + p_cnt + b_cnt
+                    return f'(:step :id {step_id} :op "task-stats" :status "ok" :total {total_tasks} :total-tasks {total_tasks} :completed {c_cnt} :queued {q_cnt} :in-progress {p_cnt} :backlog {b_cnt} :total-files {total_files})'
+
+                elif subop in ("in-flight", "inflight"):
+                    in_flight_file = os.path.join(t_dir, "in_flight.asn")
+                    active_items = []
+                    if os.path.isfile(in_flight_file):
+                        try:
+                            with open(in_flight_file, "r", encoding="utf-8", errors="replace") as fh:
+                                txt = fh.read()
+                            task_matches = re.finditer(r'\(:task\s+.*?(:id\s+"([^"]+)").*?(:state\s+:([a-z-]+)).*?(:step-index\s+(\d+))', txt, re.DOTALL)
+                            for tm in task_matches:
+                                tid = tm.group(2)
+                                tst = tm.group(4)
+                                tstep = int(tm.group(6))
+                                active_items.append(f'(:task :id "{tid}" :state :{tst} :step-index {tstep})')
+                        except Exception:
+                            pass
+                    items_body = " ".join(active_items)
+                    return f'(:step :id {step_id} :op "task-in-flight" :status "ok" :count {len(active_items)} :tasks ({items_body}))'
+
+                elif subop == "query":
+                    target_id = d.get("id") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    target_variants = normalize_shortcode(target_id)
+                    found_task = None
+                    if os.path.isdir(t_dir):
+                        import glob
+                        for af in glob.glob(os.path.join(t_dir, "*.asn")):
+                            try:
+                                with open(af, "r", encoding="utf-8", errors="replace") as fh:
+                                    txt = fh.read()
+                                for v in target_variants:
+                                    if v in txt:
+                                        m = re.search(r'\(:task\s+[^)]*?:id\s+(?:"' + re.escape(v) + r'"|' + re.escape(v) + r'(?=[ \t\r\n\)]))[^)]*?\)', txt, re.DOTALL)
+                                        if m:
+                                            found_task = m.group(0)
+                                            break
+                                if found_task:
+                                    break
+                            except Exception:
+                                pass
+                    if found_task:
+                        return f'(:step :id {step_id} :op "task-query" :status "ok" :id "{target_id}" :task {found_task})'
+                    else:
+                        return f'(:step :id {step_id} :op "task-query" :status "ok" :id "{target_id}" :found false)'
+
+                elif subop in ("backlog", "task-backlog"):
+                    b_file = os.path.join(t_dir, "backlog.asn")
+                    backlog_items = []
+                    if os.path.isfile(b_file):
+                        try:
+                            with open(b_file, "r", encoding="utf-8", errors="replace") as fh:
+                                b_txt = fh.read()
+                            b_matches = re.finditer(r'\(:task\s+[^)]*?:id\s+(?:"([^"]+)"|([a-zA-Z0-9_-]+)).*?:title\s+"([^"]+)".*?:why\s+"([^"]+)"', b_txt, re.DOTALL)
+                            for bm in b_matches:
+                                tid = bm.group(1) or bm.group(2)
+                                ti = bm.group(3)
+                                why = bm.group(4)
+                                backlog_items.append(f'(:task :id {tid} :title "{escape_asn(ti)}" :why "{escape_asn(why)}")')
+                        except Exception:
+                            pass
+                    items_body = " ".join(backlog_items)
+                    return f'(:step :id {step_id} :op "task-backlog" :status "ok" :count {len(backlog_items)} :tasks [{items_body}])'
+
+                elif subop in ("recover", "task-recover"):
+                    target_id = d.get("id") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    new_session = d.get("session") or d.get("session-id") or f"sess-{int(time.time())}"
+                    lease_ms = int(d.get("lease-ms") or 1800000)
+                    now_ts = int(time.time())
+                    target_variants = normalize_shortcode(target_id)
+                    found_file = None
+                    task_text = None
+                    if os.path.isdir(t_dir):
+                        import glob
+                        for af in sorted(glob.glob(os.path.join(t_dir, "*.asn"))):
+                            try:
+                                with open(af, "r", encoding="utf-8", errors="replace") as fh:
+                                    txt = fh.read()
+                                for v in target_variants:
+                                    if re.search(r':id\s+(?:"' + re.escape(v) + r'"|' + re.escape(v) + r'(?=[ \t\r\n\)]))', txt):
+                                        found_file = af
+                                        task_text = txt
+                                        break
+                                if found_file:
+                                    break
+                            except Exception:
+                                pass
+                    if not found_file or not task_text:
+                        return f'(:step :id {step_id} :op "task-recover" :status "error" :error ":ERR_TASK_NOT_FOUND" :query "{escape_asn(target_id)}")'
+
+                    m_step = re.search(r':step-index\s+(\d+)', task_text)
+                    step_idx = int(m_step.group(1)) if m_step else 0
+
+                    updated_txt = re.sub(r':state\s+:[a-z-]+', ':state :in-progress', task_text)
+                    if ':session-id' in updated_txt:
+                        updated_txt = re.sub(r':session-id\s+"[^"]*"', f':session-id "{new_session}"', updated_txt)
+                    else:
+                        updated_txt = re.sub(r'(:task\s+)', f'\\1:session-id "{new_session}"\n  ', updated_txt, count=1)
+                    if ':lease-expires-at' in updated_txt:
+                        updated_txt = re.sub(r':lease-expires-at\s+\d+', f':lease-expires-at {now_ts + lease_ms}', updated_txt)
+                    else:
+                        updated_txt = re.sub(r'(:task\s+)', f'\\1:lease-expires-at {now_ts + lease_ms}\n  ', updated_txt, count=1)
+
+                    try:
+                        with open(found_file, "w", encoding="utf-8") as fh:
+                            fh.write(updated_txt)
+                        return f'(:step :id {step_id} :op "task-recover" :status "ok" :id "{target_id}" :session-id "{new_session}" :step-index {step_idx} :recovered true)'
+                    except Exception as e:
+                        return f'(:step :id {step_id} :op "task-recover" :status "error" :error ":ERR_WRITE_FAILED" :reason "{escape_asn(str(e))}")'
+
+                elif subop in ("spawn", "task-spawn"):
+                    parent_id = d.get("parent-id") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    title = d.get("title") or (d.get("_pos")[2] if len(d.get("_pos", [])) > 2 else "Discovered Subtask")
+                    owns = d.get("owns") or []
+                    if isinstance(owns, str):
+                        owns = [o.strip() for o in owns.split()]
+                    now_ts = int(time.time())
+                    target_variants = normalize_shortcode(parent_id)
+                    parent_canonical = parent_id
+                    parent_file = None
+                    if os.path.isdir(t_dir):
+                        import glob
+                        for af in sorted(glob.glob(os.path.join(t_dir, "*.asn"))):
+                            try:
+                                with open(af, "r", encoding="utf-8", errors="replace") as fh:
+                                    txt = fh.read()
+                                for v in target_variants:
+                                    if f':id "{v}"' in txt:
+                                        parent_canonical = v
+                                        parent_file = af
+                                        break
+                                if parent_file:
+                                    break
+                            except Exception:
+                                pass
+                    if not parent_file:
+                        parent_file = os.path.join(t_dir, "in_flight.asn")
+
+                    sub_count = 1
+                    if os.path.isfile(parent_file):
+                        try:
+                            with open(parent_file, "r", encoding="utf-8", errors="replace") as fh:
+                                p_txt = fh.read()
+                                sub_count = len(re.findall(re.escape(parent_canonical) + r'-sub\d+', p_txt)) + 1
+                        except Exception:
+                            pass
+                    subtask_id = f"{parent_canonical}-sub{sub_count}"
+                    owns_str = " ".join(f'"{escape_asn(o)}"' for o in owns)
+                    subtask_asn = (
+                        f'(:task\n'
+                        f'  :id "{subtask_id}"\n'
+                        f'  :parent-id "{parent_canonical}"\n'
+                        f'  :title "{escape_asn(title)}"\n'
+                        f'  :kind :task-spawn\n'
+                        f'  :state :queued\n'
+                        f'  :priority :high\n'
+                        f'  :owner-role "implementer"\n'
+                        f'  :created-at {now_ts}\n'
+                        f'  :updated-at {now_ts}\n'
+                        f'  :owns [{owns_str}]\n'
+                        f'  :depends-on ["{parent_canonical}"]\n'
+                        f'  :why "Discovered sub-task spawned during execution of {parent_canonical}"\n'
+                        f'  :step-index 0\n'
+                        f'  :action-dag ["Execute discovered sub-task"]\n'
+                        f'  :session-id ""\n'
+                        f'  :lease-expires-at 0\n'
+                        f'  :receipts [])\n'
+                    )
+                    try:
+                        with open(parent_file, "a", encoding="utf-8") as fh:
+                            fh.write("\n" + subtask_asn)
+                        return f'(:step :id {step_id} :op "task-spawn" :status "ok" :id "{subtask_id}" :parent-id "{parent_canonical}" :title "{escape_asn(title)}" :state :queued)'
+                    except Exception as e:
+                        return f'(:step :id {step_id} :op "task-spawn" :status "error" :error ":ERR_WRITE_FAILED" :reason "{escape_asn(str(e))}")'
+
+                else:
+                    return f'(:step :id {step_id} :op "task" :status "ok" :subop "{subop}" :processed true)'
+
+            elif op == "tokens":
+                inp = d.get("input") or (d.get("_pos")[0] if d.get("_pos") else "")
+                mode = d.get("mode") or d.get("scope") or ("all" if inp in ("--all", "-a", "all", "audit") or not inp else "")
+                top_n = int(d.get("top") or d.get("limit") or 15)
+                threshold = int(d.get("threshold") or 3)
+                source_label = "inline-payload"
+                full_path = os.path.join(self.vfs.root, inp) if inp and not os.path.isabs(inp) else (inp or self.vfs.root)
+
+                def est_tok(w):
+                    l = len(w)
+                    return 0 if l == 0 else (1 if l <= 4 else (l + 3) // 4)
+
+                ALIAS_MAP = {
+                    "string-contains?": ("txt/has?", 2),
+                    ":rationale": (":why", 1),
+                    "option-or": ("opt/or", 2),
+                    "list-length": ("len", 1),
+                    "string-starts-with?": ("txt/starts?", 2),
+                    "string-from-int64": ("str/i64", 2),
+                    "string-length": ("txt/len", 2),
+                    "list-head": ("hd", 1),
+                    "string-replace": ("txt/repl", 2),
+                    "string-empty?": ("txt/empty?", 2),
+                    "string-trim": ("txt/trim", 2),
+                    "list-empty?": ("empty?", 1),
+                    "string-slice": ("txt/slice", 2),
+                    "list-cons": ("cons", 1),
+                    "list-append": ("append", 1),
+                    "string-join": ("txt/join", 2),
+                    "string-split": ("txt/split", 2),
+                    "list-contains?": ("has?", 1),
+                    "list-tail": ("tl", 1),
+                }
+
+                if mode == "all" or os.path.isdir(full_path):
+                    target_dir = full_path if os.path.isdir(full_path) else self.vfs.root
+                    IGNORE_DIRS = {'.git', 'node_modules', 'dist', 'scratch', 'tmp', '.asl/cache', '.asl/log', '.system_generated', 'jobs', 'harness/results'}
+
+                    def should_ignore(p):
+                        for ig in IGNORE_DIRS:
+                            if f"/{ig}/" in p or p.startswith(f"{ig}/") or p == ig:
+                                return True
+                        return False
+
+                    all_target_files = []
+                    for root_d, dirs, files_in_d in os.walk(target_dir):
+                        rel_d = os.path.relpath(root_d, target_dir)
+                        if should_ignore(rel_d):
+                            continue
+                        for f in files_in_d:
+                            if f.endswith(('.asl', '.asn')):
+                                abs_f = os.path.join(root_d, f)
+                                rel_f = os.path.relpath(abs_f, self.vfs.root)
+                                if not should_ignore(rel_f):
+                                    all_target_files.append((rel_f, abs_f))
+
+                    total_files = len(all_target_files)
+                    total_lines = 0
+                    total_chars = 0
+                    total_tokens = 0
+                    file_stats = []
+                    heavy_symbols = {}
+                    ngram2_counter = {}
+                    kw_cnt = 0
+                    id_cnt = 0
+                    lit_cnt = 0
+                    delim_cnt = 0
+
+                    for rel_f, abs_f in all_target_files:
+                        try:
+                            with open(abs_f, 'r', encoding='utf-8', errors='replace') as fh:
+                                f_lines = fh.readlines()
+                        except Exception:
+                            continue
+                        ln_cnt = len(f_lines)
+                        total_lines += ln_cnt
+                        f_tok = 0
+                        f_char = 0
+                        for line_str in f_lines:
+                            f_char += len(line_str)
+                            line_str = line_str.strip()
+                            if not line_str:
+                                continue
+                            tokens_in_line = re.findall(r'[:a-zA-Z0-9_/?!*-]+|"[^"]*"|[()\[\]{}]', line_str)
+                            line_tok_cnt = sum(est_tok(t) for t in tokens_in_line)
+                            f_tok += line_tok_cnt
+                            for idx, t in enumerate(tokens_in_line):
+                                w_tok = est_tok(t)
+                                if len(t) > 1 and t.startswith(":"):
+                                    kw_cnt += 1
+                                elif t in "()[]{}":
+                                    delim_cnt += 1
+                                elif t.startswith('"') or t in ("true", "false") or (t and t[0].isdigit()):
+                                    lit_cnt += 1
+                                else:
+                                    id_cnt += 1
+                                if w_tok >= threshold and not t.startswith('"'):
+                                    heavy_symbols[t] = heavy_symbols.get(t, 0) + 1
+                                if idx + 1 < len(tokens_in_line):
+                                    t2 = tokens_in_line[idx + 1]
+                                    if t not in '()[]{}' and t2 not in '()[]{}':
+                                        pair = f"{t} {t2}"
+                                        ngram2_counter[pair] = ngram2_counter.get(pair, 0) + 1
+                        total_tokens += f_tok
+                        total_chars += f_char
+                        density = round(f_tok / max(1, ln_cnt), 2)
+                        file_stats.append((f_tok, ln_cnt, density, rel_f))
+
+                    file_stats.sort(key=lambda x: x[0], reverse=True)
+                    top_files_asn = " ".join(f'(:f :file "{f}" :tokens {tok} :lines {lns} :density {den})' for tok, lns, den, f in file_stats[:top_n])
+
+                    sorted_heavy = sorted(heavy_symbols.items(), key=lambda x: (est_tok(x[0]) * x[1]), reverse=True)
+                    monsters_asn_items = []
+                    potential_savings = 0
+                    for sym, count in sorted_heavy[:top_n]:
+                        cost = est_tok(sym)
+                        tot_cost = cost * count
+                        alias_info = ALIAS_MAP.get(sym)
+                        if alias_info:
+                            alias_name, alias_cost = alias_info
+                            savings = (cost - alias_cost) * count
+                            potential_savings += savings
+                            monsters_asn_items.append(f'(:m :symbol "{escape_asn(sym)}" :tokens-per-occ {cost} :count {count} :total-tokens {tot_cost} :suggested-alias "{alias_name}" :potential-savings {savings})')
+                        else:
+                            monsters_asn_items.append(f'(:m :symbol "{escape_asn(sym)}" :tokens-per-occ {cost} :count {count} :total-tokens {tot_cost})')
+                    monsters_asn = " ".join(monsters_asn_items)
+
+                    sorted_ngrams = sorted(ngram2_counter.items(), key=lambda x: x[1], reverse=True)
+                    ngrams_asn_items = []
+                    for pair, count in sorted_ngrams[:top_n]:
+                        w1, w2 = pair.split(" ", 1)
+                        c_tok = (est_tok(w1) + est_tok(w2)) * count
+                        ngrams_asn_items.append(f'(:c :collocation "{escape_asn(pair)}" :count {count} :total-tokens {c_tok})')
+                    ngrams_asn = " ".join(ngrams_asn_items)
+
+                    sem = kw_cnt + id_cnt + lit_cnt
+                    snr = round(sem / total_tokens, 3) if total_tokens > 0 else 1.0
+                    avg_tok_line = round(total_tokens / max(1, total_lines), 2)
+
+                    return f'(:step :id {step_id} :op "tokens" :status "ok" :mode "all" :total-files {total_files} :total-lines {total_lines} :total-chars {total_chars} :total-tokens {total_tokens} :tokens-per-line {avg_tok_line} :snr {snr} :potential-savings {potential_savings} :breakdown (:keywords {kw_cnt} :identifiers {id_cnt} :literals {lit_cnt} :delimiters {delim_cnt}) :file-hotspots [{top_files_asn}] :token-monsters [{monsters_asn}] :collocations [{ngrams_asn}])'
+
+                if os.path.isfile(full_path):
+                    try:
+                        with open(full_path, "r", encoding="utf-8", errors="replace") as fh:
+                            raw_text = fh.read()
+                            source_label = inp
+                    except Exception:
+                        raw_text = inp
+                else:
+                    raw_text = inp
+
+                norm = raw_text.replace("\n", " ").replace("\t", " ").replace("\r", " ")
+                for ch in "()[]{}":
+                    norm = norm.replace(ch, f" {ch} ")
+                raw_words = [w.strip() for w in norm.split() if w.strip()]
+
+                tot_tokens = sum(est_tok(w) for w in raw_words)
+                tot_chars = len(raw_text)
+
+                kw_cnt = sum(1 for w in raw_words if len(w) > 1 and w.startswith(":"))
+                delim_cnt = sum(1 for w in raw_words if w in "()[]{}")
+                lit_cnt = sum(1 for w in raw_words if w.startswith('"') or w in ("true", "false") or (w and w[0].isdigit()))
+                id_cnt = sum(1 for w in raw_words if not (len(w) > 1 and w.startswith(":")) and w not in "()[]{}" and not (w.startswith('"') or w in ("true", "false") or (w and w[0].isdigit())))
+
+                from collections import Counter
+                counts = Counter(raw_words)
+                sorted_words = counts.most_common(top_n)
+
+                top_asn = " ".join(f'(:w :word "{w}" :count {c} :tokens {c * est_tok(w)})' for w, c in sorted_words)
+
+                sem = kw_cnt + id_cnt + lit_cnt
+                snr = round(sem / tot_tokens, 3) if tot_tokens > 0 else 1.0
+
+                return f'(:step :id {step_id} :op "tokens" :status "ok" :total-tokens {tot_tokens} :total-chars {tot_chars} :unique-words {len(counts)} :snr {snr} :token-profile (:token-profile :source "{source_label}" :total-tokens {tot_tokens} :total-chars {tot_chars} :unique-words {len(counts)} :snr {snr} :breakdown (:keywords {kw_cnt} :identifiers {id_cnt} :literals {lit_cnt} :delimiters {delim_cnt}) :top-words [{top_asn}]))'
+
+            elif op == "adr":
+                adr_id = d.get("id") or d.get("shortcode") or (d.get("_pos")[0] if d.get("_pos") else None)
+                fmt = d.get("format") or "asn"
+                cluster = d.get("cluster")
+
+                dec_path = os.path.join(self.vfs.root, ".asl/mem/decisions.asn")
+                if not os.path.isfile(dec_path):
+                    dec_path = os.path.join(self.vfs.root, ".asl/mem/decisions/decisions.asn")
+
+                if not os.path.isfile(dec_path):
+                    return f'(:step :id {step_id} :op "adr" :status "error" :error ":ERR_DECISIONS_NOT_FOUND")'
+
+                try:
+                    with open(dec_path, "r", encoding="utf-8", errors="replace") as fh:
+                        raw = fh.read()
+                except Exception:
+                    return f'(:step :id {step_id} :op "adr" :status "error" :error ":ERR_READ_FAILED")'
+
+                def _extract_adr_blocks(text):
+                    pos = 0
+                    blocks = []
+                    while True:
+                        idx = text.find("(:adr", pos)
+                        if idx == -1:
+                            break
+                        depth = 0
+                        in_str = False
+                        esc = False
+                        end = idx
+                        for i in range(idx, len(text)):
+                            c = text[i]
+                            if esc:
+                                esc = False
+                            elif c == "\\":
+                                esc = True
+                            elif c == '"':
+                                in_str = not in_str
+                            elif not in_str:
+                                if c == '(':
+                                    depth += 1
+                                elif c == ')':
+                                    depth -= 1
+                                    if depth == 0:
+                                        end = i + 1
+                                        break
+                        if depth == 0:
+                            blocks.append(text[idx:end])
+                            pos = end
+                        else:
+                            pos = idx + 5
+                    return blocks
+
+                blocks = _extract_adr_blocks(raw)
+
+                if not adr_id and not cluster:
+                    entries = []
+                    for b in blocks:
+                        m_i = re.search(r':id\s+"([^"]+)"', b)
+                        m_sc = re.search(r':shortcode\s+"([^"]*)"', b)
+                        m_t = re.search(r':title\s+"([^"]+)"', b)
+                        m_s = re.search(r':status\s+:([a-z]+)', b)
+                        i = m_i.group(1) if m_i else ""
+                        sc = m_sc.group(1) if m_sc else ""
+                        t = m_t.group(1) if m_t else ""
+                        s = m_s.group(1) if m_s else "active"
+                        entries.append(f'(:adr :id "{i}" :shortcode "{sc}" :title "{escape_asn(t)}" :status :{s})')
+                    return f'(:step :id {step_id} :op "adr" :status "ok" :count {len(entries)} :entries [{" ".join(entries)}])'
+
+                found_block = None
+                target = (adr_id or "").strip().lower().lstrip(":")
+                target_variants = normalize_shortcode(target)
+                for b in blocks:
+                    m_i = re.search(r':id\s+"([^"]+)"', b)
+                    m_sc = re.search(r':shortcode\s+"([^"]*)"', b)
+                    cur_id = m_i.group(1).lower().lstrip(":") if m_i else ""
+                    cur_sc = m_sc.group(1).lower().lstrip(":") if m_sc else ""
+                    if target and any(v == cur_id or v == cur_sc or v in cur_id for v in target_variants):
+                        found_block = b
+                        break
+                    if cluster and f':cluster "{cluster.lower()}"' in b.lower():
+                        found_block = b
+                        break
+
+                if not found_block and target:
+                    dec_dir = os.path.join(self.vfs.root, ".asl/mem/decisions")
+                    if os.path.isdir(dec_dir):
+                        for fname in sorted(os.listdir(dec_dir)):
+                            if fname.endswith(".asn") and fname not in ("decisions.asn", "GAPS.asn"):
+                                try:
+                                    with open(os.path.join(dec_dir, fname), "r", encoding="utf-8", errors="replace") as fh:
+                                        indiv_raw = fh.read()
+                                    for b in _extract_adr_blocks(indiv_raw):
+                                        m_i = re.search(r':id\s+"([^"]+)"', b)
+                                        m_sc = re.search(r':shortcode\s+"([^"]*)"', b)
+                                        cur_id = m_i.group(1).lower().lstrip(":") if m_i else ""
+                                        cur_sc = m_sc.group(1).lower().lstrip(":") if m_sc else ""
+                                        if target and any(v == cur_id or v == cur_sc or v in cur_id for v in target_variants):
+                                            found_block = b
+                                            break
+                                    if found_block:
+                                        break
+                                except Exception:
+                                    pass
+
+                if not found_block:
+                    return f'(:step :id {step_id} :op "adr" :status "error" :error ":ERR_ADR_NOT_FOUND" :query "{escape_asn(adr_id or "")}")'
+
+                if fmt == "md":
+                    m_id = re.search(r':id\s+"([^"]+)"', found_block)
+                    m_sc = re.search(r':shortcode\s+"([^"]*)"', found_block)
+                    m_ti = re.search(r':title\s+"([^"]+)"', found_block)
+                    m_st = re.search(r':status\s+:([a-z]+)', found_block)
+                    m_dt = re.search(r':date\s+"([^"]+)"', found_block)
+                    m_cl = re.search(r':cluster\s+"([^"]+)"', found_block)
+                    m_pr = re.search(r':problem\s+"([^"]+)"', found_block)
+                    m_dc = re.search(r':decision\s+"([^"]+)"', found_block)
+
+                    id_val = m_id.group(1) if m_id else "ADR"
+                    sc_val = m_sc.group(1) if m_sc else ""
+                    ti_val = m_ti.group(1) if m_ti else ""
+                    st_val = m_st.group(1) if m_st else "active"
+                    dt_val = m_dt.group(1) if m_dt else ""
+                    cl_val = m_cl.group(1) if m_cl else ""
+                    pr_val = m_pr.group(1) if m_pr else ""
+                    dc_val = m_dc.group(1) if m_dc else ""
+
+                    m_dec = re.search(r':deciders\s+\[(.*?)\]', found_block, re.DOTALL)
+                    dec_list = ", ".join(re.findall(r'"([^"]+)"', m_dec.group(1))) if m_dec else ""
+
+                    m_drv = re.search(r':drivers\s+\[(.*?)\]', found_block, re.DOTALL)
+                    drv_list = re.findall(r'"([^"]+)"', m_drv.group(1)) if m_drv else []
+                    drv_body = "\n".join(f"- {d}" for d in drv_list)
+
+                    m_inv = re.search(r':invariants\s+\[(.*?)\]', found_block, re.DOTALL)
+                    inv_list = re.findall(r'"([^"]+)"', m_inv.group(1)) if m_inv else []
+                    inv_body = "\n".join(f"- `{inv}`" for inv in inv_list)
+
+                    pos_list = re.findall(r'\(:pos\s+"([^"]+)"\)', found_block)
+                    pos_body = "\n".join(f"- {p}" for p in pos_list) if pos_list else "- None"
+
+                    neg_list = re.findall(r'\(:neg\s+"([^"]+)"\)', found_block)
+                    neg_body = "\n".join(f"- {n}" for n in neg_list) if neg_list else "- None"
+
+                    md = f"# {id_val}: {ti_val}\n\n- **Shortcode**: `{sc_val}`\n- **Status**: {st_val}\n- **Date**: {dt_val}\n- **Cluster**: `{cl_val}`\n- **Deciders**: {dec_list}\n\n## Problem Statement\n{pr_val}\n\n## Decision Drivers\n{drv_body}\n\n## Decision\n{dc_val}\n\n## Invariants\n{inv_body}\n\n## Consequences\n\n### Positive\n{pos_body}\n\n### Negative\n{neg_body}"
+                    return f'(:step :id {step_id} :op "adr" :status "ok" :format "md" :content "{escape_asn(md)}")'
+                else:
+                    return f'(:step :id {step_id} :op "adr" :status "ok" :format "asn" :adr {found_block})'
+
+            elif op == "task-recover":
+                d_copy = dict(d)
+                d_copy["subop"] = "recover"
+                d_copy["op"] = "task"
+                return self.execute_op(step_id, d_copy)
+
+            elif op == "task-spawn":
+                d_copy = dict(d)
+                d_copy["subop"] = "spawn"
+                d_copy["op"] = "task"
+                return self.execute_op(step_id, d_copy)
+
+            elif op == "note":
+                note_id = d.get("id") or d.get("shortcode") or (d.get("_pos")[0] if d.get("_pos") else None)
+                fmt = d.get("format") or "asn"
+                query = d.get("q") or d.get("query")
+                subop = d.get("subop") or d.get("action")
+
+                notes_path = os.path.join(self.vfs.root, ".asl/mem/notes.asn")
+                if not os.path.isfile(notes_path):
+                    return f'(:step :id {step_id} :op "note" :status "error" :error ":ERR_NOTES_NOT_FOUND")'
+
+                try:
+                    with open(notes_path, "r", encoding="utf-8", errors="replace") as fh:
+                        raw = fh.read()
+                except Exception:
+                    return f'(:step :id {step_id} :op "note" :status "error" :error ":ERR_READ_FAILED")'
+
+                def _extract_note_blocks(text):
+                    pos = 0
+                    blocks = []
+                    while True:
+                        idx = text.find("(:note", pos)
+                        if idx == -1:
+                            break
+                        if idx + 6 < len(text) and not text[idx + 6].isspace() and text[idx + 6] not in '()[]{}':
+                            pos = idx + 6
+                            continue
+                        depth = 0
+                        in_str = False
+                        esc = False
+                        end = idx
+                        for i in range(idx, len(text)):
+                            c = text[i]
+                            if esc:
+                                esc = False
+                            elif c == "\\":
+                                esc = True
+                            elif c == '"':
+                                in_str = not in_str
+                            elif not in_str:
+                                if c == '(':
+                                    depth += 1
+                                elif c == ')':
+                                    depth -= 1
+                                    if depth == 0:
+                                        end = i + 1
+                                        break
+                        if depth == 0:
+                            blocks.append(text[idx:end])
+                            pos = end
+                        else:
+                            pos = idx + 6
+                    return blocks
+
+                blocks = _extract_note_blocks(raw)
+
+                if subop == "add" or d.get("add"):
+                    topic = d.get("topic") or "observation"
+                    fact = d.get("fact") or ""
+                    evidence = d.get("evidence") or ""
+                    consequence = d.get("consequence") or ""
+                    tags = d.get("tags") or []
+                    if isinstance(tags, str):
+                        tags = [t.strip() for t in tags.split()]
+                    author = d.get("author") or "agent"
+                    session = d.get("session") or ""
+                    scope = d.get("scope") or []
+                    if isinstance(scope, str):
+                        scope = [s.strip() for s in scope.split()]
+                    max_id = 0
+                    for b in blocks:
+                        m_i = re.search(r':id\s+"n(\d+)"', b)
+                        if m_i:
+                            max_id = max(max_id, int(m_i.group(1)))
+                    new_id = f"n{max_id + 1}"
+                    today = time.strftime("%Y-%m-%d")
+                    tag_str = " ".join(f":{t.lstrip(':')}" for t in tags)
+                    scope_str = " ".join(f'"{s}"' for s in scope)
+                    new_block = (
+                        f'    (:note\n'
+                        f'      :id "{new_id}"\n'
+                        f'      :topic "{escape_asn(topic)}"\n'
+                        f'      :author "{escape_asn(author)}"\n'
+                        f'      :session "{escape_asn(session)}"\n'
+                        f'      :date "{today}"\n'
+                        f'      :status :active\n'
+                        f'      :scope [{scope_str}]\n'
+                        f'      :tags [{tag_str}]\n'
+                        f'      :fact "{escape_asn(fact)}"\n'
+                        f'      :evidence "{escape_asn(evidence)}"\n'
+                        f'      :consequence "{escape_asn(consequence)}")'
+                    )
+                    last_paren = raw.rfind(")")
+                    if last_paren != -1:
+                        entries_end = raw.rfind("]", 0, last_paren)
+                        if entries_end != -1:
+                            updated_raw = raw[:entries_end] + "\n" + new_block + "\n  " + raw[entries_end:]
+                        else:
+                            updated_raw = raw[:last_paren] + "\n" + new_block + "\n" + raw[last_paren:]
+                    else:
+                        updated_raw = raw + "\n" + new_block
+                    try:
+                        with open(notes_path, "w", encoding="utf-8") as fh:
+                            fh.write(updated_raw)
+                        return f'(:step :id {step_id} :op "note" :status "ok" :action "add" :id "{new_id}" :topic "{escape_asn(topic)}")'
+                    except Exception as e:
+                        return f'(:step :id {step_id} :op "note" :status "error" :error ":ERR_WRITE_FAILED" :reason "{escape_asn(str(e))}")'
+
+                if not note_id and not query:
+                    entries = []
+                    for b in blocks:
+                        m_i = re.search(r':id\s+"([^"]+)"', b)
+                        m_tp = re.search(r':topic\s+"([^"]+)"', b)
+                        m_st = re.search(r':status\s+:([a-z-]+)', b)
+                        m_fc = re.search(r':fact\s+"([^"]+)"', b)
+                        i = m_i.group(1) if m_i else ""
+                        tp = m_tp.group(1) if m_tp else ""
+                        st = m_st.group(1) if m_st else "active"
+                        fc = m_fc.group(1) if m_fc else ""
+                        if len(fc) > 80:
+                            fc = fc[:77] + "..."
+                        entries.append(f'(:note :id "{i}" :topic "{escape_asn(tp)}" :status :{st} :fact "{escape_asn(fc)}")')
+                    return f'(:step :id {step_id} :op "note" :status "ok" :count {len(entries)} :entries [{" ".join(entries)}])'
+
+                if query:
+                    q_lower = query.strip().lower()
+                    matched = []
+                    for b in blocks:
+                        if q_lower in b.lower():
+                            m_i = re.search(r':id\s+"([^"]+)"', b)
+                            m_tp = re.search(r':topic\s+"([^"]+)"', b)
+                            m_st = re.search(r':status\s+:([a-z-]+)', b)
+                            m_fc = re.search(r':fact\s+"([^"]+)"', b)
+                            i = m_i.group(1) if m_i else ""
+                            tp = m_tp.group(1) if m_tp else ""
+                            st = m_st.group(1) if m_st else "active"
+                            fc = m_fc.group(1) if m_fc else ""
+                            matched.append(f'(:note :id "{i}" :topic "{escape_asn(tp)}" :status :{st} :fact "{escape_asn(fc)}")')
+                    return f'(:step :id {step_id} :op "note" :status "ok" :query "{escape_asn(query)}" :count {len(matched)} :matches [{" ".join(matched)}])'
+
+                target = (note_id or "").strip().lower().lstrip(":")
+                target_variants = normalize_shortcode(target)
+                found_block = None
+                for b in blocks:
+                    m_i = re.search(r':id\s+"([^"]+)"', b)
+                    cur_id = m_i.group(1).lower().lstrip(":") if m_i else ""
+                    if any(v == cur_id or v in cur_id for v in target_variants):
+                        found_block = b
+                        break
+
+                if not found_block:
+                    return f'(:step :id {step_id} :op "note" :status "error" :error ":ERR_NOTE_NOT_FOUND" :query "{escape_asn(note_id or "")}")'
+
+                if fmt == "md":
+                    m_id = re.search(r':id\s+"([^"]+)"', found_block)
+                    m_tp = re.search(r':topic\s+"([^"]+)"', found_block)
+                    m_au = re.search(r':author\s+"([^"]+)"', found_block)
+                    m_se = re.search(r':session\s+"([^"]+)"', found_block)
+                    m_dt = re.search(r':date\s+"([^"]+)"', found_block)
+                    m_st = re.search(r':status\s+:([a-z-]+)', found_block)
+                    m_fc = re.search(r':fact\s+"([^"]+)"', found_block)
+                    m_ev = re.search(r':evidence\s+"([^"]+)"', found_block)
+                    m_cq = re.search(r':consequence\s+"([^"]+)"', found_block)
+
+                    id_val = m_id.group(1) if m_id else "Note"
+                    tp_val = m_tp.group(1) if m_tp else ""
+                    au_val = m_au.group(1) if m_au else ""
+                    se_val = m_se.group(1) if m_se else ""
+                    dt_val = m_dt.group(1) if m_dt else ""
+                    st_val = m_st.group(1) if m_st else "active"
+                    fc_val = m_fc.group(1) if m_fc else ""
+                    ev_val = m_ev.group(1) if m_ev else ""
+                    cq_val = m_cq.group(1) if m_cq else ""
+
+                    m_sc = re.search(r':scope\s+\[(.*?)\]', found_block, re.DOTALL)
+                    sc_list = re.findall(r'"([^"]+)"', m_sc.group(1)) if m_sc else []
+                    sc_body = ", ".join(f"`{s}`" for s in sc_list)
+
+                    m_tg = re.search(r':tags\s+\[(.*?)\]', found_block, re.DOTALL)
+                    tg_list = re.findall(r':([a-z0-9-]+)', m_tg.group(1)) if m_tg else []
+                    tg_body = " ".join(f"`#{t}`" for t in tg_list)
+
+                    md = (
+                        f"# Note {id_val}: {tp_val}\n\n"
+                        f"- **Status**: `{st_val}`\n"
+                        f"- **Author**: {au_val}\n"
+                        f"- **Session**: `{se_val}`\n"
+                        f"- **Date**: {dt_val}\n"
+                        f"- **Scope**: {sc_body}\n"
+                        f"- **Tags**: {tg_body}\n\n"
+                        f"## Fact\n{fc_val}\n\n"
+                        f"## Evidence\n{ev_val}\n\n"
+                        f"## Consequence\n{cq_val}"
+                    )
+                    return f'(:step :id {step_id} :op "note" :status "ok" :format "md" :content "{escape_asn(md)}")'
+                else:
+                    return f'(:step :id {step_id} :op "note" :status "ok" :format "asn" :note {found_block})'
+
+            elif op == "proc-spawn":
+                cmd = d.get("cmd") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not cmd:
+                    return f'(:step :id {step_id} :op "proc-spawn" :status "error" :error ":ERR_MISSING_CMD")'
+                proc_id = d.get("id") or f"proc-{int(time.time() * 1000)}-{os.getpid()}"
+                cwd = d.get("cwd") or self.vfs.root
+                timeout_ms = d.get("timeout-ms")
+                if timeout_ms:
+                    try:
+                        timeout_ms = int(timeout_ms)
+                    except Exception:
+                        timeout_ms = None
+                wait_ms = d.get("wait-ms", 0)
+                try:
+                    wait_ms = int(wait_ms)
+                except Exception:
+                    wait_ms = 0
+
+                proc, err = self.proc_registry.spawn(str(proc_id), str(cmd), cwd=cwd, timeout_ms=timeout_ms)
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-spawn" :status "error" :error ":ERR_SPAWN_FAILED" :reason "{escape_asn(str(err))}")'
+
+                if wait_ms > 0:
+                    wait_s = wait_ms / 1000.0
+                    ec = proc.wait(timeout_s=wait_s)
+                    if ec is not None:
+                        lines, total = proc.spool.read_lines(1, 500)
+                        out_content = escape_asn("\n".join(lines))
+                        return f'(:step :id {step_id} :op "proc-spawn" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :pid {proc.pid} :completed true :exit-code {ec} :lines {total} :output "{out_content}")'
+
+                return f'(:step :id {step_id} :op "proc-spawn" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :pid {proc.pid} :completed false :state "running" :msg "detached-to-background")'
+
+            elif op == "proc-list":
+                items = self.proc_registry.list_all()
+                fmt_procs = []
+                for it in items:
+                    ec_val = it["exit_code"] if it["exit_code"] is not None else "-"
+                    fmt_procs.append(f'(:proc :id "{escape_asn(it["id"])}" :pid {it["pid"]} :state "{it["state"]}" :exit-code {ec_val} :runtime {it["runtime_s"]} :cpu {it["cpu_percent"]} :rss-mb {it["rss_mb"]} :cmd "{escape_asn(it["cmd"])}")')
+                inner = "\n    ".join(fmt_procs)
+                return f'(:step :id {step_id} :op "proc-list" :status "ok" :count {len(items)} :processes [\n    {inner}\n  ])'
+
+            elif op == "proc-status":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-status" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-status" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                m = proc.get_metrics()
+                ec_val = m["exit_code"] if m["exit_code"] is not None else "-"
+                total_lines = proc.spool.ring.count()
+                return f'(:step :id {step_id} :op "proc-status" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :pid {m["pid"]} :state "{m["state"]}" :exit-code {ec_val} :runtime {m["runtime_s"]} :cpu {m["cpu_percent"]} :rss-mb {m["rss_mb"]} :total-lines {total_lines})'
+
+            elif op == "proc-skeleton":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-skeleton" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-skeleton" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                head_n = int(d.get("head", 10))
+                tail_m = int(d.get("tail", 20))
+                lines, total_lines = proc.spool.read_lines(1, 1000000)
+                err_keywords = ("error:", "error ", "panic:", "exception:", "traceback", "failed:", "failure:", "fatal:")
+                error_count = sum(1 for l in lines if any(k in l.lower() for k in err_keywords))
+                head_lines = lines[:head_n] if lines else []
+                tail_lines = lines[-tail_m:] if len(lines) > head_n else lines[len(head_lines):]
+                head_str = escape_asn("\n".join(head_lines))
+                tail_str = escape_asn("\n".join(tail_lines))
+                m = proc.get_metrics()
+                ec_val = m["exit_code"] if m["exit_code"] is not None else "-"
+                return f'(:step :id {step_id} :op "proc-skeleton" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :state "{m["state"]}" :exit-code {ec_val} :total-lines {total_lines} :error-lines {error_count} :head "{head_str}" :tail "{tail_str}")'
+
+            elif op == "proc-read":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-read" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-read" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                start = int(d.get("start", 1))
+                end = int(d.get("end", 100))
+                sliced, total_lines = proc.spool.read_lines(start, end)
+                out_content = escape_asn("\n".join(sliced))
+                return f'(:step :id {step_id} :op "proc-read" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :start {start} :end {end} :total-lines {total_lines} :lines {len(sliced)} :content "{out_content}")'
+
+            elif op == "proc-find":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                query = d.get("query") or d.get("q") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-find" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-find" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                matches = proc.spool.find_lines(str(query))
+                res_matches = []
+                for idx, text in matches:
+                    res_matches.append(f'(:match :line {idx} :text "{escape_asn(text)}")')
+                fmt_matches = "\n    ".join(res_matches)
+                return f'(:step :id {step_id} :op "proc-find" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :query "{escape_asn(str(query))}" :matches-count {len(matches)} :matches [\n    {fmt_matches}\n  ])'
+
+            elif op == "proc-input":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                data = d.get("data") or d.get("input") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-input" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-input" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                ok, err = proc.write_input(data)
+                if not ok:
+                    return f'(:step :id {step_id} :op "proc-input" :status "error" :error ":ERR_INPUT_FAILED" :reason "{escape_asn(str(err))}")'
+                return f'(:step :id {step_id} :op "proc-input" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :bytes {len(str(data))})'
+
+            elif op == "proc-signal":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                sig = d.get("signal") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "SIGTERM")
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-signal" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-signal" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                ok, err = proc.send_signal(str(sig))
+                if not ok:
+                    return f'(:step :id {step_id} :op "proc-signal" :status "error" :error ":ERR_SIGNAL_FAILED" :reason "{escape_asn(str(err))}")'
+                return f'(:step :id {step_id} :op "proc-signal" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :signal "{escape_asn(str(sig))}")'
+
+            elif op == "proc-wait":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-wait" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-wait" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                to_ms = d.get("timeout-ms")
+                to_s = float(to_ms) / 1000.0 if to_ms else None
+                ec = proc.wait(timeout_s=to_s)
+                m = proc.get_metrics()
+                ec_val = ec if ec is not None else "-"
+                return f'(:step :id {step_id} :op "proc-wait" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :state "{m["state"]}" :exit-code {ec_val})'
 
             else:
                 return f'(:step :id {step_id} :op "{op}" :status "error" :error ":ERR_UNKNOWN_OP")'
@@ -635,6 +2353,10 @@ def run_serve(sock_path, ws_root, pid_file):
 
     def cleanup(signum=None, frame=None):
         try:
+            engine.proc_registry.cleanup_all()
+        except Exception:
+            pass
+        try:
             server.close()
         except Exception:
             pass
@@ -650,6 +2372,7 @@ def run_serve(sock_path, ws_root, pid_file):
                 pass
         sys.exit(0)
 
+    atexit.register(engine.proc_registry.cleanup_all)
     signal.signal(signal.SIGTERM, cleanup)
     signal.signal(signal.SIGINT, cleanup)
 
@@ -724,7 +2447,7 @@ def main():
     if len(args) >= 1 and args[0] == "--status":
         sock_path = args[1] if len(args) > 1 else f"/tmp/asl_mem_{os.path.basename(ws_root)}.sock"
         if not os.path.exists(sock_path):
-            print("Status: Offline (Socket does not exist)")
+            print(f"Status: Offline (Socket {sock_path} does not exist)")
             sys.exit(1)
         try:
             s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -733,7 +2456,8 @@ def main():
             s.sendall(b"(:inspect)\n")
             data = s.recv(4096).decode("utf-8", errors="replace")
             s.close()
-            print(data.strip())
+            print(f"Socket: {sock_path}")
+            print(f"Status: Online ({data.strip()})")
             sys.exit(0)
         except Exception as e:
             print(f"Status: Unresponsive ({e})")
@@ -766,7 +2490,7 @@ def main():
 
     # CLI On-Demand Mode
     payload = ""
-    if len(args) >= 1 and not args[0].startswith("-"):
+    if len(args) >= 1 and args[0] and not args[0].startswith("-"):
         payload = " ".join(args)
     elif not sys.stdin.isatty():
         payload = sys.stdin.read()

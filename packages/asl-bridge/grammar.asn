@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-bridge
+;; asl-bridge
 (:grammar
-  :package @genseam/asl-bridge
+  :package asl-bridge
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [

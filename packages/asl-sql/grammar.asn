@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-sql
+;; asl-sql
 (:grammar
-  :package @genseam/asl-sql
+  :package asl-sql
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [

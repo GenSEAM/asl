@@ -1,7 +1,7 @@
 ;; AgentScript Core Language Grammar & Built-in Symbol Registry (ASN)
 ;; Single Source of Truth for Core Syntax, Forms, and Primitive Token Budgets
 (:grammar
-  :package @genseam/asl-core
+  :package asl-core
   :version "0.1.0"
   :tokens-baseline 2
   :symbols [

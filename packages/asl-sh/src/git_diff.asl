@@ -2,8 +2,12 @@
   :d "Pure AgentScript unified diff parser and token-optimized ASN diff summary codec."
   :x [GitDiffHunk
       GitDiffFile
+      GitNumstatEntry
+      GitBranchCompare
       git-diff-parse
-      git-diff-summary])
+      git-diff-summary
+      git-numstat-parse
+      git-compare-format])
 
 (dfs GitDiffHunk
   (:f old-start Int64 "Hunk line start in old file")
@@ -277,3 +281,85 @@
          " :additions " (string-from-int64 total-additions)
          " :deletions " (string-from-int64 total-deletions)
          " :hunks " (string-from-int64 total-hunks) ")")))
+
+(dfs GitNumstatEntry
+  (:f path String "Target file path")
+  (:f additions Int64 "Lines added")
+  (:f deletions Int64 "Lines deleted")
+  (:f status String "Inferred status: added, deleted, modified, or binary"))
+
+(dfs GitBranchCompare
+  (:f base String "Base branch or reference")
+  (:f target String "Target branch or reference")
+  (:f merge-base String "Common ancestor commit hash")
+  (:f ahead Int64 "Commits ahead of base")
+  (:f behind Int64 "Commits behind base")
+  (:f files (List GitNumstatEntry) "List of changed file records")
+  (:f total-additions Int64 "Total lines added across all files")
+  (:f total-deletions Int64 "Total lines deleted across all files"))
+
+(df parse-numstat-line [(line String)] -> (Option GitNumstatEntry)
+  :d "Parses a single git diff --numstat line into a GitNumstatEntry record."
+  (let [(clean (string-trim line))]
+    (if (string-empty? clean)
+        (none)
+        (let [(parts (string-split clean "\t"))]
+          (if (>= (list-length parts) 3)
+              (let [(add-raw (string-trim (option-or (list-get parts 0) "0")))
+                    (del-raw (string-trim (option-or (list-get parts 1) "0")))
+                    (path-raw (string-trim (option-or (list-get parts 2) "")))
+                    (is-bin (or (= add-raw "-") (= del-raw "-")))
+                    (adds (if is-bin 0 (option-or (string-to-int64 add-raw) 0)))
+                    (dels (if is-bin 0 (option-or (string-to-int64 del-raw) 0)))
+                    (st (cond
+                          (is-bin "binary")
+                          ((and (= dels 0) (> adds 0)) "added")
+                          ((and (= adds 0) (> dels 0)) "deleted")
+                          (:else "modified")))]
+                (some (GitNumstatEntry :path path-raw :additions adds :deletions dels :status st)))
+              (none))))))
+
+(df git-numstat-parse [(raw-numstat String)] -> (List GitNumstatEntry)
+  :d "Parses multi-line git diff --numstat output into a list of GitNumstatEntry records."
+  (let [(clean (string-replace raw-numstat "\r" ""))
+        (lines (string-split clean "\n"))
+        (reversed (fold (fn [(acc (List GitNumstatEntry)) (ln String)] -> (List GitNumstatEntry)
+                          (mt (parse-numstat-line ln)
+                            ((some e) (list-cons e acc))
+                            ((none) acc)))
+                        (list)
+                        lines))]
+    (list-reverse reversed)))
+
+(df format-numstat-entry [(e GitNumstatEntry)] -> String
+  :d "Formats a single GitNumstatEntry into an ASN file delta item."
+  (str "(:file :path \"" (.-path e) "\""
+       " :status \"" (.-status e) "\""
+       " :+ " (string-from-int64 (.-additions e))
+       " :- " (string-from-int64 (.-deletions e)) ")"))
+
+(df git-compare-format [(cmp GitBranchCompare) (limit Int64)] -> String
+  :d "Formats a GitBranchCompare record into a compact token-bounded :git-compare ASN envelope."
+  (let [(all-files (.-files cmp))
+        (total-cnt (list-length all-files))
+        (take-cnt (if (or (<= limit 0) (> limit total-cnt)) total-cnt limit))
+        (is-trunc (< take-cnt total-cnt))
+        (truncated-files (list-take all-files take-cnt))
+        (file-items (fold (fn [(acc String) (f GitNumstatEntry)] -> String
+                            (let [(item (format-numstat-entry f))]
+                              (if (string-empty? acc)
+                                  item
+                                  (str acc " " item))))
+                          ""
+                          truncated-files))
+        (trunc-part (if is-trunc (str " :truncated true :total-files " (string-from-int64 total-cnt)) ""))]
+    (str "(:git-compare :base \"" (.-base cmp) "\""
+         " :target \"" (.-target cmp) "\""
+         " :merge-base \"" (.-merge-base cmp) "\""
+         " :ahead " (string-from-int64 (.-ahead cmp))
+         " :behind " (string-from-int64 (.-behind cmp))
+         " :files-count " (string-from-int64 take-cnt)
+         " :+ " (string-from-int64 (.-total-additions cmp))
+         " :- " (string-from-int64 (.-total-deletions cmp))
+         trunc-part
+         " :files (" file-items "))")))

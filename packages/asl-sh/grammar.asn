@@ -1,22 +1,28 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-sh
+;; asl-sh
 (:grammar
-  :package @genseam/asl-sh
+  :package asl-sh
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
     ;; 1-Token Baseline Types
+    (:sym :name "BatchDagPlan" :kind :type :tokens 1)
+    (:sym :name "BatchDagStep" :kind :type :tokens 1)
     (:sym :name "DaemonEntry" :kind :type :tokens 1)
     (:sym :name "DeadlockVerdict" :kind :type :tokens 1)
     (:sym :name "Diagnostic" :kind :type :tokens 1)
     (:sym :name "DiagnosticSummary" :kind :type :tokens 1)
     (:sym :name "DiskSpool" :kind :type :tokens 1)
+    (:sym :name "GitBranchCompare" :kind :type :tokens 1)
+    (:sym :name "GitBranchRecord" :kind :type :tokens 1)
     (:sym :name "GitCommitEntry" :kind :type :tokens 1)
     (:sym :name "GitDiffFile" :kind :type :tokens 1)
     (:sym :name "GitDiffHunk" :kind :type :tokens 1)
     (:sym :name "GitHubCiCheck" :kind :type :tokens 1)
     (:sym :name "GitHubIssue" :kind :type :tokens 1)
     (:sym :name "GitHubPrSummary" :kind :type :tokens 1)
+    (:sym :name "GitNumstatEntry" :kind :type :tokens 1)
+    (:sym :name "GitSearchMatch" :kind :type :tokens 1)
     (:sym :name "GitTopology" :kind :type :tokens 1)
     (:sym :name "GitWorktreeEntry" :kind :type :tokens 1)
     (:sym :name "LockVerdict" :kind :type :tokens 1)
@@ -120,10 +126,16 @@
           :rationale "Cannot be reduced to 'format-skeleton': renders structural ASCII outline table from OutputSkeleton")
     (:sym :name "generate-spool-path" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
+    (:sym :name ":git-branches" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':branches': distinguishes git branch catalog envelope from general graph branches")
     (:sym :name ":git-commit" :kind :type :tokens 2
           :rationale "Cannot be reduced to ':commit': distinguishes git commit entry payload from transaction commit tags")
+    (:sym :name ":git-compare" :kind :type :tokens 2
+          :rationale "Cannot be reduced to ':compare': distinguishes git cross-branch comparison envelope from general equality diffs")
     (:sym :name ":git-log" :kind :type :tokens 2
           :rationale "Cannot be reduced to ':log': distinguishes git linearized commit history envelope from general application log payloads")
+    (:sym :name ":git-search-results" :kind :type :tokens 3
+          :rationale "Cannot be reduced to ':search': distinguishes git cross-branch search result envelope from general engine queries")
     (:sym :name ":git-topo" :kind :type :tokens 2
           :rationale "Cannot be reduced to ':topo': distinguishes git repository topology payload from network or ast topology")
     (:sym :name ":git-worktree" :kind :type :tokens 2
@@ -132,6 +144,12 @@
           :rationale "Cannot be reduced to ':worktrees': distinguishes git worktree roster envelope from general tree collections")
     (:sym :name ":where-am-i" :kind :type :tokens 3
           :rationale "Cannot be reduced to ':where': standard 3-token orientation query tag for agent context bootstrap")
+    (:sym :name "git-branches-format" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'branches-format': distinguishes git branch roster ASN formatter from tree formatters")
+    (:sym :name "git-branches-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'branches-parse': distinguishes git branch listing parser from syntax tree branch parsers")
+    (:sym :name "git-compare-format" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'compare-format': distinguishes git cross-branch comparison ASN formatter from general diff formatters")
     (:sym :name "git-diff-parse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'diff-parse': distinguishes git unified diff parser from general AST or text diffing")
     (:sym :name "git-diff-summary" :kind :fn :tokens 3
@@ -140,6 +158,12 @@
           :rationale "Cannot be reduced to 'log-format': distinguishes git linearized commit log ASN formatter from general log formatters")
     (:sym :name "git-log-parse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'log-parse': distinguishes git linearized commit history parser from general application log parsers")
+    (:sym :name "git-numstat-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'numstat-parse': distinguishes git numstat diff parser from general numeric statistics parsers")
+    (:sym :name "git-search-format" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'search-format': distinguishes git cross-branch search ASN formatter from general engine formatters")
+    (:sym :name "git-search-parse" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'search-parse': distinguishes git grep search output parser from general text search parsers")
     (:sym :name "git-topo-format" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'topo-format': distinguishes git topology orientation ASN formatter from general topology formatters")
     (:sym :name "git-topo-parse" :kind :fn :tokens 3
@@ -246,4 +270,18 @@
           :rationale "Cannot be reduced to 'spool-close': indicates two-tier cleanup guaranteeing disk spool auto-unlink")
     (:sym :name "two-tier-push" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-push': indicates dual write to RAM ring buffer and disk spool simultaneously")
+    (:sym :name "dag-step-create" :kind :fn :tokens 3
+          :rationale "Constructs a new pending BatchDagStep with initialized empty skip reason")
+    (:sym :name "dag-plan-create" :kind :fn :tokens 3
+          :rationale "Constructs a BatchDagPlan from execution mode and step sequence")
+    (:sym :name "dag-find-step" :kind :fn :tokens 3
+          :rationale "Locates a step in a batch DAG plan by logical name or numeric string identifier")
+    (:sym :name "dag-validate-deps" :kind :fn :tokens 3
+          :rationale "Validates acyclic dependency graph references across all declared DAG steps")
+    (:sym :name "dag-skip-on-prior-failure" :kind :fn :tokens 5
+          :rationale "Simulates sequential fail-fast execution by marking subsequent steps skipped upon error")
+    (:sym :name "dag-skip-wave-on-failure" :kind :fn :tokens 5
+          :rationale "Simulates cascading wave execution abort by marking subsequent wave steps skipped")
+    (:sym :name "dag-format-summary" :kind :fn :tokens 3
+          :rationale "Formats standard ASN summary string of batch execution status tallies")
   ])

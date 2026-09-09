@@ -1,4 +1,4 @@
-(:package @genseam/asl-text
+(:package asl-text
  :version "0.1.0"
  :entry "src/text.asl"
  :description "Pure AgentScript high-performance text extraction, HTML parsing, entity decoding, chunking, and ASN structuring engine"

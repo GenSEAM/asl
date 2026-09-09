@@ -7,7 +7,10 @@
       github-issue-parse
       github-diff-compact
       github-ci-parse
-      github-ci-rollup])
+      github-ci-rollup
+      github-prs-format
+      github-issues-format
+      github-ci-format])
 
 (dfs GitHubPrSummary
   (:f number Int64 "Pull request number")
@@ -693,3 +696,80 @@
         (let [(file-strs (map (fn [(f CompactFile)] -> String (format-compact-file f)) files))
               (files-body (string-join file-strs " "))]
           (str "(:pr-diff :files (" files-body "))")))))
+
+(df format-pr-item [(pr GitHubPrSummary)] -> String
+  :d "Formats a single GitHubPrSummary record into an ASN PR item."
+  (let [(labels-str (fold (fn [(acc String) (lbl String)] -> String
+                            (let [(esc-l (string-replace lbl "\"" "\\\""))]
+                              (if (string-empty? acc)
+                                  (str "\"" esc-l "\"")
+                                  (str acc " \"" esc-l "\""))))
+                          ""
+                          (.-labels pr)))
+        (esc-title (string-replace (.-title pr) "\"" "\\\""))]
+    (str "(:pr :number " (string-from-int64 (.-number pr))
+         " :title \"" esc-title "\""
+         " :author \"" (.-author pr) "\""
+         " :head \"" (.-head pr) "\""
+         " :base \"" (.-base pr) "\""
+         " :state \"" (.-state pr) "\""
+         " :additions " (string-from-int64 (.-additions pr))
+         " :deletions " (string-from-int64 (.-deletions pr))
+         " :labels (" labels-str "))")))
+
+(df github-prs-format [(prs (List GitHubPrSummary))] -> String
+  :d "Formats a list of GitHubPrSummary records into a compact :github-prs ASN envelope."
+  (let [(items (fold (fn [(acc String) (pr GitHubPrSummary)] -> String
+                       (let [(item (format-pr-item pr))]
+                         (if (string-empty? acc) item (str acc " " item))))
+                     ""
+                     prs))]
+    (str "(:github-prs :count " (string-from-int64 (list-length prs)) " :prs (" items "))")))
+
+(df format-issue-item [(issue GitHubIssue)] -> String
+  :d "Formats a single GitHubIssue record into an ASN issue item."
+  (let [(labels-str (fold (fn [(acc String) (lbl String)] -> String
+                            (let [(esc-l (string-replace lbl "\"" "\\\""))]
+                              (if (string-empty? acc)
+                                  (str "\"" esc-l "\"")
+                                  (str acc " \"" esc-l "\""))))
+                          ""
+                          (.-labels issue)))
+        (esc-title (string-replace (.-title issue) "\"" "\\\""))]
+    (str "(:issue :number " (string-from-int64 (.-number issue))
+         " :title \"" esc-title "\""
+         " :author \"" (.-author issue) "\""
+         " :state \"" (.-state issue) "\""
+         " :comments " (string-from-int64 (.-comments-count issue))
+         " :labels (" labels-str "))")))
+
+(df github-issues-format [(issues (List GitHubIssue))] -> String
+  :d "Formats a list of GitHubIssue records into a compact :github-issues ASN envelope."
+  (let [(items (fold (fn [(acc String) (issue GitHubIssue)] -> String
+                       (let [(item (format-issue-item issue))]
+                         (if (string-empty? acc) item (str acc " " item))))
+                     ""
+                     issues))]
+    (str "(:github-issues :count " (string-from-int64 (list-length issues)) " :issues (" items "))")))
+
+(df format-ci-item [(c GitHubCiCheck)] -> String
+  :d "Formats a single GitHubCiCheck record into an ASN check item."
+  (let [(esc-name (string-replace (.-name c) "\"" "\\\""))]
+    (str "(:check :name \"" esc-name "\""
+         " :status \"" (.-status c) "\""
+         " :conclusion \"" (.-conclusion c) "\""
+         (if (string-empty? (.-target-url c)) "" (str " :url \"" (.-target-url c) "\""))
+         ")")))
+
+(df github-ci-format [(checks (List GitHubCiCheck))] -> String
+  :d "Formats a list of GitHubCiCheck records and their rollup verdict into a compact :github-ci ASN envelope."
+  (let [(verdict (github-ci-rollup checks))
+        (items (fold (fn [(acc String) (c GitHubCiCheck)] -> String
+                       (let [(item (format-ci-item c))]
+                         (if (string-empty? acc) item (str acc " " item))))
+                     ""
+                     checks))]
+    (str "(:github-ci :verdict " verdict
+         " :count " (string-from-int64 (list-length checks))
+         " :checks (" items "))")))
+

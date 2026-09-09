@@ -23,9 +23,9 @@
     (assert (g/verify-foreign-ext ".asl") "accepted gate condition for valid asl extension")
     (assert (not (g/verify-source-syntax "(module broken (:export unclosed")) "invalid syntax")
     (assert (not (g/verify-source-syntax "((( unbalanced ((((" )) "unbalanced delimiters rejected")
-    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "@genseam/asl-test" "" "src/main.asl"))) "missing manifest version field rejected")
-    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "@genseam/asl-test" "0.1.0" ""))) "missing manifest entry field rejected")
-    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "unscoped-pkg" "0.1.0" "src/main.asl"))) "missing @genseam prefix package name rejected")
+    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "asl-test" "" "src/main.asl"))) "missing manifest version field rejected")
+    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "asl-test" "0.1.0" ""))) "missing manifest entry field rejected")
+    (assert (not (mg/verify-manifest-record (mg/make-manifest-record "manifest.asn" "@sigil-pkg" "0.1.0" "src/main.asl"))) "prohibited @ sigil package name rejected")
     true))
 
 (df test-foreign-ext [] -> Bool
@@ -64,8 +64,8 @@
 
 (df test-manifest-gate [] -> Bool
   :d "Verifies package manifest structure verification."
-  (let [(valid-m (mg/make-manifest-record "manifest.asn" "@genseam/asl-codec" "0.1.0" "src/codec.asl"))
-        (invalid-m (mg/make-manifest-record "manifest.asn" "bad-name" "0.1.0" "src/codec.asl"))]
+  (let [(valid-m (mg/make-manifest-record "manifest.asn" "asl-codec" "0.1.0" "src/codec.asl"))
+        (invalid-m (mg/make-manifest-record "manifest.asn" "@bad-sigil" "0.1.0" "src/codec.asl"))]
     (assert (mg/verify-manifest-record valid-m) "valid-m")
     (assert (not (mg/verify-manifest-record invalid-m)) "invalid-m")
     true))

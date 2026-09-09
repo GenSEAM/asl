@@ -5,7 +5,7 @@
   :i [(regtypes :a ty) (version :a ver)])
 
 (dfs PublishSpec
-  (:f package-name Str "Package identifier e.g. @genseam/asl-quantum")
+  (:f package-name Str "Package identifier e.g. asl-quantum")
   (:f target-version Str "Semver release version string")
   (:f entry-point Str "Path to primary entry source file")
   (:f files (List Str) "List of distribution files included in release")

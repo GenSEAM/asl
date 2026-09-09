@@ -1,6 +1,6 @@
-(:package @genseam/asl-checker
+(:package asl-checker
  :version "0.1.0"
  :entry "src/check.asl"
  :description "100% Self-Hosted Pure AgentScript Semantic Type Checker"
  :asl-first true
- :dependencies ["@genseam/asl-parser"])
+ :dependencies ["asl-parser"])

@@ -57,7 +57,7 @@
           (= ch "_"))
     true
     (if is-asl
-      (or (= ch "-") (or (= ch "/") (or (= ch "@") (= ch ":"))))
+      (or (= ch "-") (or (= ch "/") (= ch ":")))
       false)))
 
 (df find-ident-end [(s String) (idx Int64) (len Int64) (is-asl Bool)] -> Int64

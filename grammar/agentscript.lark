@@ -191,7 +191,7 @@ DEFAULT_KW: ":default"
 // Priority: ":json-case" must out-rank ":json" and the general KEYWORD regex,
 // both of which also match its prefix.
 JSON_CASE_KW.3: ":json-case"
-TAG_HEAD.3: ":tag" | "@tag"
+TAG_HEAD.3: ":tag"
 JSON_KW: ":json"
 ELSE_KW: ":else"
 

@@ -99,11 +99,47 @@
         (assert (= (.-deletions f) 1) "Deletions must equal 1")
         true))))
 
+(df test-numstat-and-compare [] -> Bool
+  :d "Verifies parsing of git diff --numstat lines and formatting of compact :git-compare ASN."
+  (let [(raw-numstat (str "12\t5\tsrc/main.asl\n"
+                          "40\t0\tnew_module.asl\n"
+                          "0\t15\told_file.asl\n"
+                          "-\t-\tassets/logo.png\n"))
+        (entries (diff/git-numstat-parse raw-numstat))]
+    (assert (= (list-length entries) 4) "Numstat parse must yield 4 entries")
+    (let [(e1 (option-or (list-get entries 0) (diff/GitNumstatEntry :path "" :additions 0 :deletions 0 :status "")))
+          (e2 (option-or (list-get entries 1) (diff/GitNumstatEntry :path "" :additions 0 :deletions 0 :status "")))
+          (e3 (option-or (list-get entries 2) (diff/GitNumstatEntry :path "" :additions 0 :deletions 0 :status "")))
+          (e4 (option-or (list-get entries 3) (diff/GitNumstatEntry :path "" :additions 0 :deletions 0 :status "")))]
+      (assert (= (.-path e1) "src/main.asl") "First entry path must match src/main.asl")
+      (assert (= (.-status e1) "modified") "First entry with adds and dels must be modified")
+      (assert (= (.-additions e1) 12) "First entry additions must match 12")
+      (assert (= (.-deletions e1) 5) "First entry deletions must match 5")
+      (assert (= (.-status e2) "added") "Second entry with 0 deletions must be added")
+      (assert (= (.-status e3) "deleted") "Third entry with 0 additions must be deleted")
+      (assert (= (.-status e4) "binary") "Fourth binary entry with hyphen counts must be binary")
+      (let [(cmp (diff/GitBranchCompare
+                   :base "main"
+                   :target "feature-branch"
+                   :merge-base "abc1234"
+                   :ahead 3
+                   :behind 1
+                   :files entries
+                   :total-additions 52
+                   :total-deletions 20))
+            (fmt-full (diff/git-compare-format cmp 0))
+            (fmt-trunc (diff/git-compare-format cmp 2))]
+        (assert (string-contains? fmt-full ":git-compare :base \"main\" :target \"feature-branch\"") "Full compare format must contain base and target")
+        (assert (string-contains? fmt-full ":merge-base \"abc1234\" :ahead 3 :behind 1") "Full compare format must contain merge-base and ahead/behind")
+        (assert (string-contains? fmt-full ":files-count 4 :+ 52 :- 20") "Full compare format must report correct total file count and metrics")
+        (assert (string-contains? fmt-trunc ":truncated true :total-files 4") "Truncated compare format must indicate truncation with total files 4")
+        (assert (string-contains? fmt-trunc ":files-count 2") "Truncated compare format files-count must match limit 2")
+        true))))
+
 (df run-tests [] -> Bool
   :d "Runs all falsifiable test suites for git diff parser and ASN summary formatter."
   (and (test-single-file-and-hunks)
        (and (test-empty-diff)
             (and (test-multi-file-and-ordering)
-                 (test-single-line-hunk-header)))))
-
-(run-tests)
+                 (and (test-single-line-hunk-header)
+                      (test-numstat-and-compare))))))

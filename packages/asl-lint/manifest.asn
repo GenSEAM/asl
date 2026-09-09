@@ -1,4 +1,4 @@
-(:package @genseam/asl-lint
+(:package asl-lint
  :version "0.1.0"
  :entry "src/core/lint.asl"
  :description "AgentScript Native Quality, Smell, and Anti-Pattern Analysis Engine"

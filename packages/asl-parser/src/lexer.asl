@@ -80,7 +80,7 @@
   replaced silently dropped every clause past the second and let `{`, `\"` and `:`
   extend a symbol run."
   (and (not (string-empty? c))
-       (not (string-contains? " \t\n\r()[]{}\";:" c))))
+       (not (string-contains? " \t\n\r()[]{}\";:@" c))))
 
 (df delim-kind [(c String)] -> TokenType
   :d "The nullary token kind a delimiter character names."
@@ -222,6 +222,9 @@
                 :run (none)))
     ((= ch "\"")   (open-run st (run-string) "\"" ch))
     ((= ch ";")    (ScanState :toks (list-cons (make-token (tok-error "unexpected ';'") ";" (.-line st) (.-col st))
+                                             (.-toks st))
+                               :line (.-line st) :col (+ (.-col st) 1) :run (none)))
+    ((= ch "@")    (ScanState :toks (list-cons (make-token (tok-error "invalid character '@': sigils are forbidden in AgentScript grammar") "@" (.-line st) (.-col st))
                                              (.-toks st))
                                :line (.-line st) :col (+ (.-col st) 1) :run (none)))
     ((is-digit ch) (open-run st (run-int) ch ch))

@@ -20,7 +20,7 @@
   (:f rationale Str "Architectural justification for multi-token symbols"))
 
 (dfs GrammarRegistry
-  (:f package Str "Package identifier e.g. @genseam/asl-codec")
+  (:f package Str "Package identifier e.g. asl-codec")
   (:f baseline I64 "Baseline token ceiling (default: 1)")
   (:f symbols (List SymbolEntry) "List of registered symbols"))
 

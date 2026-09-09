@@ -34,13 +34,13 @@
 
 (df test-asn-outline [] -> Bool
   :d "Verifies ASN registry and module extraction"
-  (let [(code "(:grammar :package @my/parser :version \"0.1.0\")\n\n(module my/parser :d \"desc\")\n")
+  (let [(code "(:grammar :package my/parser :version \"0.1.0\")\n\n(module my/parser :d \"desc\")\n")
         (items (fsm/scan-outline code "asl"))]
     (assert (= (list-length items) 2) "ASN snippet must yield exactly 2 items")
     (let [(g (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (m (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))]
       (assert (= (.-kind g) "grammar") "First item kind must be grammar")
-      (assert (= (.-name g) "@my/parser") "Grammar package name must match")
+      (assert (= (.-name g) "my/parser") "Grammar package name must match")
       (assert (= (.-line g) 1) "Grammar line must be 1")
       (assert (= (.-kind m) "module") "Second item kind must be module")
       (assert (= (.-name m) "my/parser") "Module name must match")

@@ -29,7 +29,7 @@
     <div class=\"flex flex-wrap items-center gap-2 mb-8 p-1.5 bg-surface-2/60 border border-line rounded-2xl w-fit\" id=\"bv-mode-tabs\">
       <button type=\"button\" data-mode=\"all\" class=\"bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all bg-signal text-ground font-semibold shadow-sm\">
         <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\"><path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"></path><path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"></path></svg>
-        <span>All Published (19)</span>
+        <span>All Published (21)</span>
       </button>
       <button type=\"button\" data-mode=\"flagship\" class=\"bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all text-ink-2 hover:text-ink\">
         <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\"><path d=\"m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z\"></path></svg>
@@ -42,7 +42,7 @@
       <!-- Category Pills -->
       <div class=\"flex flex-wrap items-center gap-1.5\" id=\"bv-cat-pills\">
         <button type=\"button\" data-cat=\"All\" class=\"bv-cat-btn px-3 py-1 rounded-full text-xs font-mono transition-colors border bg-signal text-ground font-semibold border-signal shadow-sm\">
-          All <span class=\"opacity-60 text-[10px]\">(19)</span>
+          All <span class=\"opacity-60 text-[10px]\">(21)</span>
         </button>
         <button type=\"button\" data-cat=\"Language\" class=\"bv-cat-btn px-3 py-1 rounded-full text-xs font-mono transition-colors border bg-surface-2 text-ink-2 border-line hover:text-ink hover:border-line-2\">
           Language &amp; Grammar <span class=\"opacity-60 text-[10px]\">(5)</span>
@@ -51,7 +51,7 @@
           Token Economics <span class=\"opacity-60 text-[10px]\">(3)</span>
         </button>
         <button type=\"button\" data-cat=\"Harness\" class=\"bv-cat-btn px-3 py-1 rounded-full text-xs font-mono transition-colors border bg-surface-2 text-ink-2 border-line hover:text-ink hover:border-line-2\">
-          Harness &amp; Systems <span class=\"opacity-60 text-[10px]\">(6)</span>
+          Harness &amp; Systems <span class=\"opacity-60 text-[10px]\">(8)</span>
         </button>
         <button type=\"button\" data-cat=\"Ecosystem\" class=\"bv-cat-btn px-3 py-1 rounded-full text-xs font-mono transition-colors border bg-surface-2 text-ink-2 border-line hover:text-ink hover:border-line-2\">
           Ecosystem &amp; Adapters <span class=\"opacity-60 text-[10px]\">(5)</span>
@@ -72,6 +72,44 @@
 
     <!-- Post Grid -->
     <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\" id=\"bv-posts-grid\">
+      <!-- Post 21: zero-overhead-test-telemetry-and-resource-observability -->
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"zero-overhead-test-telemetry-and-resource-observability\" data-importance=\"flagship\" data-cat=\"Tools &amp; Compiler Architecture Harness &amp; Systems\" data-search=\"zero-overhead test telemetry: nanosecond-resolution observability and resource tracking in pure asl how we engineered sub-microsecond test timing and rss memory tracking into the pure asl evaluation engine with zero observer effect (<20ns), turning test suites into multi-dimensional observability probes. test telemetry zero-overhead observability resource tracking gate 5 pure asl wasi tools &amp; compiler architecture genseam\">
+        <div>
+          <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
+            <div class=\"flex items-center gap-1.5 flex-wrap\">
+              <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Tools &amp; Compiler Architecture</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+            </div>
+            <span>9 min read</span>
+          </div>
+          <h3 class=\"text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2 line-clamp-2\">Zero-Overhead Test Telemetry: Nanosecond-Resolution Observability and Resource Tracking in Pure ASL</h3>
+          <p class=\"text-meta text-ink-2 line-clamp-3 mb-4\">How we engineered sub-microsecond test timing and RSS memory tracking into the pure ASL evaluation engine with zero observer effect (&lt;20ns), turning test suites into multi-dimensional observability probes.</p>
+        </div>
+        <div class=\"flex items-center justify-between pt-4 border-t border-line/60 text-micro font-mono text-ink-3\">
+          <span>2026-09-08 • GenSEAM</span>
+          <span class=\"text-signal font-semibold group-hover:translate-x-0.5 transition-transform\">&rarr;</span>
+        </div>
+      </article>
+
+      <!-- Post 20: multi-tier-recursive-fractal-memory-and-tree-aggregation -->
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"multi-tier-recursive-fractal-memory-and-tree-aggregation\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Memory Systems Harness &amp; Systems\" data-search=\"beyond flat context: multi-tier recursive fractal memory and holistic tree aggregation in agentscript why two-tier memory models collapse under deep system hierarchies, and how homoiconic fractal memory, logical uri addressing (mem:...), and zero-disk tree aggregation give autonomous agents holistic system observability across 32 packages. fractal memory homoiconicity tree aggregation observability adr-0010 pure asl architecture &amp; memory systems genseam\">
+        <div>
+          <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
+            <div class=\"flex items-center gap-1.5 flex-wrap\">
+              <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Architecture &amp; Memory Systems</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+            </div>
+            <span>11 min read</span>
+          </div>
+          <h3 class=\"text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2 line-clamp-2\">Beyond Flat Context: Multi-Tier Recursive Fractal Memory and Holistic Tree Aggregation in AgentScript</h3>
+          <p class=\"text-meta text-ink-2 line-clamp-3 mb-4\">Why two-tier memory models collapse under deep system hierarchies, and how homoiconic fractal memory, logical URI addressing (mem:...), and zero-disk tree aggregation give autonomous agents holistic system observability across 32 packages.</p>
+        </div>
+        <div class=\"flex items-center justify-between pt-4 border-t border-line/60 text-micro font-mono text-ink-3\">
+          <span>2026-09-08 • GenSEAM</span>
+          <span class=\"text-signal font-semibold group-hover:translate-x-0.5 transition-transform\">&rarr;</span>
+        </div>
+      </article>
+
       <!-- Post 1: why-llms-struggle-with-python-and-rust -->
       <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-llms-struggle-with-python-and-rust\" data-importance=\"flagship\" data-cat=\"Language Theory &amp; Compilers\" data-search=\"how to fix agentic coding: why autonomous llms break on human languages (and what replaces them) why indentation and borrow-checked syntax trap coding agents in 38% syntax repair loops, and what deterministic single-pass s-expressions solve. agentic coding grammars llm autoregression syntax repair loop s-expressions pure asl language theory &amp; compilers genseam\">
         <div>

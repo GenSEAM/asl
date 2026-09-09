@@ -28,6 +28,12 @@
          :savings "85%")
 
     ;; === Search & Code Intelligence ===
+    (:op :id "asl-engine"
+         :cmd "asl rpc '(:batch (:engine :query \"...\" [:tier \"all\"|\"tier-0-ast\"|\"tier-1-mem\"|\"tier-2-web\"]))'"
+         :category "search"
+         :purpose "Unified tripartite engine gateway dispatching across AST (Tier 0), Resident Memory (Tier 1), and Web (Tier 2)"
+         :savings "90%")
+
     (:op :id "asl-intel-impact"
          :cmd "asl rpc '(:batch (:callers \"...\") (:impact \"...\"))'"
          :category "search"
@@ -96,6 +102,25 @@
          :purpose "Inspect staged buffer modifications and discard dirty in-memory buffers on error"
          :savings "90%")
 
+    ;; === DAG Execution Combinators & Parallelism ===
+    (:op :id "asl-batch-par"
+         :cmd "asl rpc '(:batch (:par (:read \"...\") (:sym \"...\")))'"
+         :category "concurrency"
+         :purpose "Parallel execution block running child operations concurrently across thread pool without graph bookkeeping"
+         :savings "80%")
+
+    (:op :id "asl-batch-seq"
+         :cmd "asl rpc '(:batch (:seq (:edit \"...\") (:flush) (:chk)))'"
+         :category "concurrency"
+         :purpose "Sequential execution block with fail-fast abort on error preventing corrupted dirty flushes"
+         :savings "85%")
+
+    (:op :id "asl-batch-wave"
+         :cmd "asl rpc '(:batch (:wave (:read \"a\") (:read \"b\")) (:wave (:edit \"a\" ...) (:flush)))'"
+         :category "concurrency"
+         :purpose "Topological wave execution: atomic parallel phases where subsequent waves wait or skip on failure"
+         :savings "90%")
+
     ;; === Supervised Execution & Git ===
     (:op :id "asl-exec"
          :cmd "asl exec \"<cmd>\" or asl rpc '(:batch (:exec :cmd \"...\" [:timeout-ms <ms>] [:daemon true]))'"
@@ -104,9 +129,15 @@
          :savings "80%")
 
     (:op :id "asl-git"
-         :cmd "asl git <subcmd> or asl rpc '(:batch (:git :op \"...\"))'"
+         :cmd "asl git <subcmd> or asl rpc '(:batch (:git :op \"where\"|\"branches\"|\"compare\"|\"search\"|\"show\"|\"log\"|\"worktrees\"|\"diff\"))'"
          :category "git"
-         :purpose "Git topology orientation (where), commit history, and worktree steering"
+         :purpose "Git topology orientation, branch tracking, token-compacted compare, cross-branch search without checkout, and worktree steering"
+         :savings "95%")
+
+    (:op :id "asl-github"
+         :cmd "asl github <subcmd> or asl rpc '(:batch (:github :op \"pr\"|\"issue\"|\"ci\"|\"diff\"))'"
+         :category "github"
+         :purpose "GitHub PR and issue projections, aggregate CI rollup verdicts, and token-compacted PR diffs"
          :savings "85%")
 
     ;; === Codec, Pointers & Zero-JSON ===
@@ -183,5 +214,26 @@
          :category "verification"
          :purpose "Instant workspace onboarding, topology discovery, active wave inspection, and gate verification"
          :savings "95%")
+
+    ;; === Token Economy & Lexical Profiling ===
+    (:op :id "asl-tokens"
+         :cmd "asl rpc '(:batch (:tokens :input \"...\" [:top <n>]))' or asl tokens <input>"
+         :category "token-economy"
+         :purpose "Hierarchical token counting, category breakdown, SNR calculation, and ranked frequency decomposition"
+         :savings "90%")
+
+    ;; === Architectural Decisions & Governance ===
+    (:op :id "asl-adr"
+         :cmd "asl rpc '(:batch (:adr [:id \"...\"] [:shortcode \"...\"] [:cluster \"...\"] [:format \"asn\"|\"md\"]))' or asl adr show <id>"
+         :category "governance"
+         :purpose "Deterministic architectural decision querying, sub-200 token AST retrieval, and dual-projection Markdown export"
+         :savings "80%")
+
+    ;; === Machine Notes & Observations ===
+    (:op :id "asl-note"
+         :cmd "asl rpc '(:batch (:note [:id \"...\"] [:q \"...\"] [:format \"asn\"|\"md\"]))' or asl note show <id>"
+         :category "memory"
+         :purpose "Deterministic machine-native notes querying, keyword search, and dual-projection Markdown export"
+         :savings "85%")
   ]
 )

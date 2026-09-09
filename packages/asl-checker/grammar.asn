@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-checker
+;; asl-checker
 (:grammar
-  :package @genseam/asl-checker
+  :package asl-checker
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [

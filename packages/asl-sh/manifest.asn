@@ -1,7 +1,7 @@
-(:package @genseam/asl-sh
+(:package asl-sh
  :version "0.1.0"
  :entry "src/sh.asl"
  :description "Native AgentScript System & Process Automation Toolkit with Structured Shell Pipelines & Channel Redirection"
  :asl-first true
- :modules ["asl-sh/core" "asl-sh/reducer" "asl-sh/spool" "asl-sh/watchdog" "asl-sh/apm"]
+ :modules ["asl-sh/core" "asl-sh/reducer" "asl-sh/spool" "asl-sh/watchdog" "asl-sh/apm" "asl-sh/git-diff" "asl-sh/git-topo" "asl-sh/github" "asl-sh/git-search" "asl-sh/batch-dag"]
  :dependencies [])

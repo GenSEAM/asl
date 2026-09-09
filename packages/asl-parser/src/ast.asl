@@ -451,10 +451,10 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
               :defs defs))
 
 (df is-tag? [(s rd/SExpr)] -> Bool
-  :d "True when an SExpr is a (:tag ...) or (@tag ...) metadata form."
+  :d "True when an SExpr is a (:tag ...) metadata form."
   (and (rd/is-list? s)
        (let [(h (rd/sexpr-head s))]
-         (or (= h ":tag") (= h "@tag")))))
+         (= h ":tag"))))
 
 (df decl-step [(acc (Result (List TopForm) ParseError)) (pf PosForm)
                   (exported (List String))]

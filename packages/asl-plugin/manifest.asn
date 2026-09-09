@@ -1,4 +1,4 @@
-(:package @genseam/asl-plugin
+(:package asl-plugin
  :version "0.1.0"
  :entry "src/plugin.asl"
  :description "Modular Plugin Architecture & Foreign Capability Interface for AgentScript Core"

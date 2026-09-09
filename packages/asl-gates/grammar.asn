@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-gates
+;; asl-gates
 (:grammar
-  :package @genseam/asl-gates
+  :package asl-gates
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
@@ -78,11 +78,11 @@
     (:sym :name "is-valid-yaml-description?" :kind :fn :tokens 4
           :rationale "Enforces valid YAML syntax on skill descriptions")
     (:sym :name "is-valid-pkg-name?" :kind :fn :tokens 4
-          :rationale "Validates @genseam/* namespace format")
+          :rationale "Validates native package symbol format without sigils")
     (:sym :name "make-manifest-record" :kind :fn :tokens 3
           :rationale "Constructs ManifestRecord descriptor")
     (:sym :name "parse-package-id" :kind :fn :tokens 3
-          :rationale "Extracts @genseam/* package identifier from manifest S-expression")
+          :rationale "Extracts package identifier from manifest S-expression")
     (:sym :name "verify-manifest-record" :kind :fn :tokens 3
           :rationale "Validates manifest record compliance")
     (:sym :name "run-all-seven-gates" :kind :fn :tokens 4

@@ -86,7 +86,7 @@
   (:f severity Str "Bump degree: major, minor, patch, or current"))
 
 (dfs AslRegistryEntry
-  (:f name Str "AgentScript package name (e.g. @genseam/asl-mem)")
+  (:f name Str "AgentScript package name (e.g. asl-mem)")
   (:f git-repo Str "Git repository HTTPS or SSH URI")
   (:f branch Str "Default branch (typically main)")
   (:f latest-tag Str "Latest tagged release (e.g. v0.1.0)")

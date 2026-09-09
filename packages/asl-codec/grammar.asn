@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-codec
+;; asl-codec
 (:grammar
-  :package @genseam/asl-codec
+  :package asl-codec
   :version "0.1.0"
   :tokens-baseline 2
   :symbols [
@@ -26,6 +26,9 @@
     (:sym :name "asn-check" :kind :fn :tokens 2)
     (:sym :name "diag-codes" :kind :fn :tokens 2)
     (:sym :name "TranspileResult" :kind :type :tokens 1)
+    (:sym :name "YamlTranspileResult" :kind :type :tokens 1)
+    (:sym :name "CsvTranspileResult" :kind :type :tokens 1)
+    (:sym :name "TomlTranspileResult" :kind :type :tokens 1)
     (:sym :name "canon" :kind :type :tokens 1)
     (:sym :name "shape" :kind :type :tokens 1)
     (:sym :name "kinds" :kind :type :tokens 1)
@@ -86,6 +89,62 @@
           :rationale "Verifies token compaction measurement")
     (:sym :name "test-empty-and-malformed" :kind :fn :tokens 4
           :rationale "Verifies graceful error handling on empty or invalid inputs")
+    (:sym :name "csv-to-asn" :kind :fn :tokens 3
+          :rationale "Transpiles RFC 4180 CSV tables into compact ASN table S-expressions")
+    (:sym :name "asn-to-csv" :kind :fn :tokens 3
+          :rationale "Serializes compact ASN table S-expressions into standard CSV format")
+    (:sym :name "tsv-to-asn" :kind :fn :tokens 3
+          :rationale "Transpiles tab-separated TSV tables into compact ASN table S-expressions")
+    (:sym :name "asn-to-tsv" :kind :fn :tokens 3
+          :rationale "Serializes compact ASN table S-expressions into tab-separated TSV format")
+    (:sym :name "measure-csv-savings" :kind :fn :tokens 3
+          :rationale "Measures empirical token reduction percentage between CSV/TSV and ASN tables")
+    (:sym :name "toml-to-asn" :kind :fn :tokens 3
+          :rationale "Transpiles TOML configurations and tables into compact ASN S-expressions")
+    (:sym :name "asn-to-toml" :kind :fn :tokens 3
+          :rationale "Serializes compact ASN S-expressions into standard TOML format")
+    (:sym :name "measure-toml-savings" :kind :fn :tokens 3
+          :rationale "Measures empirical token reduction percentage between TOML and ASN")
+    (:sym :name "measure-yaml-savings" :kind :fn :tokens 3
+          :rationale "Measures empirical token reduction percentage between YAML and ASN")
+    (:sym :name "test-yaml-basic-mapping" :kind :fn :tokens 4
+          :rationale "Verifies basic key-value mapping transpilation for YAML")
+    (:sym :name "test-yaml-sequences" :kind :fn :tokens 3
+          :rationale "Verifies sequence list item transpilation for YAML")
+    (:sym :name "test-yaml-nested-mapping" :kind :fn :tokens 4
+          :rationale "Verifies nested dictionary hierarchy transpilation for YAML")
+    (:sym :name "test-yaml-list-of-maps" :kind :fn :tokens 5
+          :rationale "Verifies list of mappings transpilation for YAML")
+    (:sym :name "test-yaml-comments-and-quotes" :kind :fn :tokens 5
+          :rationale "Verifies comment stripping and quoted string parsing for YAML")
+    (:sym :name "test-yaml-roundtrip" :kind :fn :tokens 3
+          :rationale "Verifies bidirectional roundtrip conversion between YAML and ASN")
+    (:sym :name "test-yaml-negative" :kind :fn :tokens 3
+          :rationale "Verifies error handling on malformed or empty YAML input")
+    (:sym :name "test-csv-basic-table" :kind :fn :tokens 4
+          :rationale "Verifies basic RFC 4180 CSV table parsing into ASN tabular vectors")
+    (:sym :name "test-csv-quoted-fields-and-commas" :kind :fn :tokens 6
+          :rationale "Verifies CSV field parsing with embedded quotes, commas, and newlines")
+    (:sym :name "test-tsv-tabs" :kind :fn :tokens 3
+          :rationale "Verifies tab-delimited TSV table transpilation into ASN table vectors")
+    (:sym :name "test-csv-roundtrip" :kind :fn :tokens 3
+          :rationale "Verifies bidirectional roundtrip conversion between CSV and ASN tables")
+    (:sym :name "test-csv-negative" :kind :fn :tokens 3
+          :rationale "Verifies error handling on empty or invalid CSV inputs")
+    (:sym :name "test-toml-basic-kv" :kind :fn :tokens 4
+          :rationale "Verifies basic key-value pair transpilation for TOML")
+    (:sym :name "test-toml-sections" :kind :fn :tokens 3
+          :rationale "Verifies section table header parsing and AST grouping for TOML")
+    (:sym :name "test-toml-inline-arrays" :kind :fn :tokens 4
+          :rationale "Verifies inline scalar array parsing and serialization for TOML")
+    (:sym :name "test-toml-array-of-tables" :kind :fn :tokens 5
+          :rationale "Verifies double bracket array-of-tables parsing and serialization for TOML")
+    (:sym :name "test-toml-comments-stripped" :kind :fn :tokens 4
+          :rationale "Verifies inline and full-line comment stripping for TOML")
+    (:sym :name "test-toml-roundtrip" :kind :fn :tokens 3
+          :rationale "Verifies bidirectional roundtrip conversion between TOML and ASN")
+    (:sym :name "test-toml-negative" :kind :fn :tokens 3
+          :rationale "Verifies error handling on empty or malformed TOML inputs")
     (:sym :name "SvgTranspileResult" :kind :type :tokens 1)
     (:sym :name "asn-to-svg" :kind :fn :tokens 3
           :rationale "Transpiles compact ASN vector S-expressions into valid SVG XML")

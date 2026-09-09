@@ -1,4 +1,4 @@
-"Decoupled metadata tags (:tag and @tag) in module, defun, defschema, and defenum."
+"Decoupled metadata tags (:tag) in module, defun, defschema, and defenum."
 
 (module demo/meta-tags
   :doc "Demonstrates decoupled metadata annotations."
@@ -23,4 +23,4 @@
     true
     false))
 
-(@tag :global "provenance" :source "system")
+(:tag :global "provenance" :source "system")

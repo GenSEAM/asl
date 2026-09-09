@@ -1,7 +1,7 @@
 ;; Package Grammar & Exported Symbol Registry (ASN)
-;; @genseam/asl-lint
+;; asl-lint
 (:grammar
-  :package @genseam/asl-lint
+  :package asl-lint
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [

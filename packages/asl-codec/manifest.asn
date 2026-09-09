@@ -1,7 +1,21 @@
-(:package @genseam/asl-codec
+(:package asl-codec
  :version "0.1.0"
  :entry "src/core/codec.asl"
  :description "AgentScript Native Schema Codec & Structural Compact Serializer"
  :asl-first true
- :modules ["asl-codec/core" "asl-codec/placement" "asl-codec/asnl"]
- :dependencies ["@genseam/asl-parser" "@genseam/asl-text"])
+ :modules ["asl-codec/core"
+           "asl-codec/asn"
+           "asl-codec/asn-check"
+           "asl-codec/placement"
+           "asl-codec/asnl"
+           "asl-codec/transpile"
+           "asl-codec/yaml-transpile"
+           "asl-codec/csv-transpile"
+           "asl-codec/toml-transpile"
+           "asl-codec/svg-transpile"
+           "asl-codec/compact-notations"
+           "asl-codec/css-cascade"
+           "asl-codec/sh-transpile"
+           "asl-codec/doc-engine"
+           "asl-codec/skill-engine"]
+ :dependencies ["asl-parser" "asl-text"])

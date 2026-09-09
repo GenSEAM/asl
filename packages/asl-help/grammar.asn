@@ -1,5 +1,5 @@
 (:grammar
-  :package @genseam/asl-help
+  :package asl-help
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
