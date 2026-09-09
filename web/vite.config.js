@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
-import { aslPlugin } from './plugins/vite-plugin-asl';
+import { aslPlugin } from './plugins/vite-plugin-asl.js';
 
 export default defineConfig({
   plugins: [aslPlugin(), react({ include: /\.(asl|[tj]sx?)$/ })],

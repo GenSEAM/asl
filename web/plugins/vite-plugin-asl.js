@@ -4,8 +4,8 @@ import path from 'path';
 /**
  * Parses canonical posts.asn S-expression into structured post records.
  */
-export function parseAsnPosts(raw: string): any[] {
-  const tokens: Array<{ type: string; val: string }> = [];
+export function parseAsnPosts(raw) {
+  const tokens = [];
   let pos = 0;
   while (pos < raw.length) {
     while (pos < raw.length && /\s/.test(raw[pos])) pos++;
@@ -45,7 +45,7 @@ export function parseAsnPosts(raw: string): any[] {
   }
 
   let i = 0;
-  function parseNode(): any {
+  function parseNode() {
     if (i >= tokens.length) return null;
     const t = tokens[i++];
     if (t.type === 'str') return t.val;
@@ -54,7 +54,7 @@ export function parseAsnPosts(raw: string): any[] {
       return t.val;
     }
     if (t.type === '[') {
-      const arr: any[] = [];
+      const arr = [];
       while (i < tokens.length && tokens[i].type !== ']') {
         arr.push(parseNode());
       }
@@ -67,7 +67,7 @@ export function parseAsnPosts(raw: string): any[] {
         return {};
       }
       const tag = tokens[i++];
-      const obj: Record<string, any> = { _tag: tag.val };
+      const obj = { _tag: tag.val };
       while (i < tokens.length && tokens[i].type !== ')') {
         const keyTok = tokens[i];
         if (keyTok.type === 'atom' && keyTok.val.startsWith(':')) {
@@ -91,7 +91,7 @@ export function parseAsnPosts(raw: string): any[] {
 
   const root = parseNode();
   const children = (root && root._children) || [];
-  return children.map((p: any) => ({
+  return children.map((p) => ({
     slug: p.slug || '',
     title: p.title || '',
     date: p.date || '',
@@ -111,7 +111,7 @@ export function parseAsnPosts(raw: string): any[] {
 /**
  * Parses ASN S-expression VDOM string into valid HTML5 string.
  */
-export function parseSExpToHtml(str: string): string {
+export function parseSExpToHtml(str) {
   if (!str) return '';
   const trimmed = str.trim();
   if (trimmed.startsWith('<')) return trimmed;
@@ -152,14 +152,14 @@ export function parseSExpToHtml(str: string): string {
     return { type: 'atom', val: word };
   }
 
-  const tokens: Array<{ type: string; val: string }> = [];
+  const tokens = [];
   let tok;
   while ((tok = parseToken()) !== null) {
     tokens.push(tok);
   }
 
   let idx = 0;
-  function parseNode(): string {
+  function parseNode() {
     if (idx >= tokens.length) return '';
     const t = tokens[idx++];
     if (t.type === 'str') return t.val;
@@ -170,8 +170,8 @@ export function parseSExpToHtml(str: string): string {
         return '';
       }
       const tag = tokens[idx++].val;
-      const attrs: Record<string, string> = {};
-      const children: string[] = [];
+      const attrs = {};
+      const children = [];
 
       while (idx < tokens.length && tokens[idx].type !== ')') {
         const next = tokens[idx];
@@ -217,9 +217,9 @@ export function parseSExpToHtml(str: string): string {
 export function aslPlugin() {
   return {
     name: 'vite-plugin-asl',
-    enforce: 'pre' as const,
+    enforce: 'pre',
 
-    resolveId(id: string, importer?: string) {
+    resolveId(id, importer) {
       if (id.endsWith('.asl')) {
         if (id.startsWith('/')) {
           return path.resolve(__dirname, '..', id.slice(1));
@@ -232,7 +232,7 @@ export function aslPlugin() {
       return null;
     },
 
-    load(id: string) {
+    load(id) {
       if (!id.includes('.asl')) return null;
 
       const cleanId = id.split('?')[0];
@@ -514,7 +514,7 @@ export default function HomeView() {
       // Handle ArticleDetailView.asl specifically
       if (rawFilename === 'ArticleDetailView') {
         const postsAsnPath = path.resolve(__dirname, '../src/data/blog/posts.asn');
-        let posts: any[] = [];
+        let posts = [];
         try {
           if (fs.existsSync(postsAsnPath)) {
             const raw = fs.readFileSync(postsAsnPath, 'utf-8');
@@ -954,13 +954,13 @@ export { ArticleDetailView as default };
         };
       }
 
-function parseConcat(fnCode: string): Array<{ type: 'str' | 'call'; val?: string; name?: string }> | null {
+function parseConcat(fnCode) {
   const withoutDoc = fnCode.replace(/:d\s+"(?:[^"\\]|\\.)*"/, '');
   const concatIdx = withoutDoc.indexOf('(s/concat');
   if (concatIdx === -1) return null;
 
   let p = concatIdx + 9;
-  const parts: Array<{ type: 'str' | 'call'; val?: string; name?: string }> = [];
+  const parts = [];
   while (p < withoutDoc.length) {
     while (p < withoutDoc.length && /\s/.test(withoutDoc[p])) p++;
     if (withoutDoc[p] === ')') break;
@@ -1005,8 +1005,8 @@ function parseConcat(fnCode: string): Array<{ type: 'str' | 'call'; val?: string
   return parts;
 }
 
-function parseFunctions(str: string) {
-  const fns: Array<{ name: string; code: string }> = [];
+function parseFunctions(str) {
+  const fns = [];
   let pos = 0;
   while (pos < str.length) {
     const dfIdx = str.indexOf('(df ', pos);
@@ -1040,8 +1040,8 @@ function parseFunctions(str: string) {
   return fns;
 }
 
-function extractStrings(str: string) {
-  const strs: string[] = [];
+function extractStrings(str) {
+  const strs = [];
   let pos = 0;
   while (pos < str.length) {
     if (str[pos] === '"') {
@@ -1072,8 +1072,8 @@ function extractStrings(str: string) {
 
       // For all other .asl files: transpile their functions!
       const parsedFns = parseFunctions(content);
-      const exportedFns: string[] = [];
-      const exportedComponents: string[] = [];
+      const exportedFns = [];
+      const exportedComponents = [];
 
       for (const fn of parsedFns) {
         const fnNameKebab = fn.name;
