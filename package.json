@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "packageManager": "pnpm@11.25.0",
   "engines": {},
   "scripts": {
     "test:wasm-runner": "asl test --strict-falsify packages/asl-codegen/tests/emit_wat_test.asl",
