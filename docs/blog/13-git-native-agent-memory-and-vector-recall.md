@@ -92,7 +92,7 @@ The fatal flaw of cloud vector databases is **temporal decoupling**. When an age
 ```text
 .mem/
 ├── index.asn          # 15.3KB compact binary embedding table
-├── decisions.asl      # Verifiable architectural decisions (@pcp:d-xxxx)
+├── decisions.asl      # Verifiable architectural decisions (d-xxxx)
 └── symbol_graph.asn   # Sub-symbol dependency matrix
 ```
 

@@ -108,6 +108,17 @@ export function renderMarkdownToHtml(md: string): string {
     }
   }
 
+function detectCodeLang(lines: string[]): string {
+  const first = lines.find(l => l.trim())?.trim() || '';
+  if (first.startsWith('(module') || first.startsWith('(df ') || first.startsWith('(dfs ') || first.startsWith('(defun') || first.startsWith('(defschema')) return 'asl';
+  if (first.startsWith('(:') || first.startsWith('(?')) return 'asn';
+  if (first.startsWith('{') || (first.startsWith('[') && first.endsWith(']'))) return 'json';
+  if (first.startsWith('$ ') || first.startsWith('asl ') || first.startsWith('curl ') || first.startsWith('pnpm ') || first.startsWith('git ')) return 'bash';
+  if (first.startsWith('SELECT') || first.startsWith('CREATE') || first.startsWith('INSERT')) return 'sql';
+  if (first.startsWith('<svg') || first.startsWith('<div') || first.startsWith('<!doctype')) return 'html';
+  return 'code';
+}
+
   for (let i = startIdx; i < lines.length; i++) {
     const rawLine = lines[i];
     const trimmed = rawLine.trim();
@@ -116,17 +127,50 @@ export function renderMarkdownToHtml(md: string): string {
     if (trimmed.startsWith('```')) {
       if (inCodeBlock) {
         // End of code block
-        const escaped = escapeHtml(codeBlockLines.join('\n'));
-        const badgeLang = codeBlockLang || 'code';
-        out.push(`
-          <div class="relative my-6 rounded-2xl border border-line bg-ground overflow-hidden shadow-e1 group">
-            <div class="flex items-center justify-between px-4 py-2 bg-surface-2/60 border-b border-line text-micro font-mono text-ink-3">
-              <span class="font-semibold uppercase tracking-wider text-signal">${badgeLang}</span>
-              <span class="text-[10px] opacity-70">pure AST</span>
+        const langLower = (codeBlockLang || '').toLowerCase().trim();
+        if (langLower === 'mermaid') {
+          const rawDiagram = codeBlockLines.join('\n');
+          out.push(`
+            <div class="my-8 rounded-2xl border border-line bg-surface/80 p-4 sm:p-6 shadow-e1">
+              <div class="flex items-center justify-between px-2 pb-3 mb-3 border-b border-line/50 text-micro font-mono text-ink-3">
+                <span class="font-semibold uppercase tracking-wider text-signal flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                  Architecture Flow
+                </span>
+                <span class="text-[10px] opacity-70 font-mono">Mermaid Visualizer</span>
+              </div>
+              <div class="asl-mermaid-diagram flex justify-center items-center overflow-x-auto py-2">
+                <pre class="mermaid text-xs font-mono select-all">${escapeHtml(rawDiagram)}</pre>
+              </div>
             </div>
-            <pre class="p-4 sm:p-5 overflow-x-auto font-mono text-xs sm:text-sm text-ink leading-relaxed"><code>${escaped}</code></pre>
-          </div>
-        `);
+          `);
+        } else {
+          const escaped = escapeHtml(codeBlockLines.join('\n'));
+          const badgeLang = codeBlockLang || detectCodeLang(codeBlockLines);
+          const subBadge = (badgeLang === 'asl' || badgeLang === 'asn') ? 'pure AST' : 'spec';
+          out.push(`
+            <div class="relative my-6 rounded-2xl border border-line bg-ground overflow-hidden shadow-e1 group">
+              <div class="flex items-center justify-between px-4 py-2 bg-surface-2/60 border-b border-line text-micro font-mono text-ink-3">
+                <span class="font-semibold uppercase tracking-wider text-signal">${badgeLang}</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-[10px] opacity-70">${subBadge}</span>
+                  <button type="button" class="asl-copy-code-btn px-2 py-0.5 rounded text-[10px] text-ink-3 hover:text-signal hover:bg-surface-2 transition-colors border border-transparent hover:border-line/60" onclick="(function(btn){
+                    var code = btn.closest('.group').querySelector('code');
+                    if (code) {
+                      navigator.clipboard.writeText(code.innerText).then(function() {
+                        var old = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        btn.classList.add('text-signal');
+                        setTimeout(function(){ btn.textContent = old; btn.classList.remove('text-signal'); }, 2000);
+                      });
+                    }
+                  })(this)">Copy</button>
+                </div>
+              </div>
+              <pre class="p-4 sm:p-5 overflow-x-auto font-mono text-xs sm:text-sm text-ink leading-relaxed"><code>${escaped}</code></pre>
+            </div>
+          `);
+        }
         inCodeBlock = false;
         codeBlockLang = '';
         codeBlockLines = [];
@@ -361,6 +405,53 @@ export function renderArticleDetailView(slug: string): string {
     </section>
   ` : '';
 
+  const mermaidScript = bodyHtml.includes('class="mermaid') ? `
+    <script>
+      (function() {
+        function runMermaid() {
+          var targets = document.querySelectorAll('pre.mermaid:not([data-processed="true"])');
+          if (!targets || targets.length === 0) return;
+          if (window.mermaid) {
+            try {
+              window.mermaid.initialize({
+                startOnLoad: false,
+                theme: 'dark',
+                securityLevel: 'loose',
+                fontFamily: 'Fira Code, monospace',
+                themeVariables: {
+                  darkMode: true,
+                  background: '#0d1117',
+                  primaryColor: '#00f2ff',
+                  primaryTextColor: '#e6edf3',
+                  primaryBorderColor: '#30363d',
+                  lineColor: '#58a6ff',
+                  secondaryColor: '#161b22',
+                  tertiaryColor: '#21262d'
+                }
+              });
+              window.mermaid.run({ nodes: targets });
+            } catch(e) {
+              console.warn('Mermaid render error:', e);
+            }
+          } else {
+            if (!document.getElementById('mermaid-cdn-script')) {
+              var s = document.createElement('script');
+              s.id = 'mermaid-cdn-script';
+              s.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
+              s.onload = function() {
+                setTimeout(runMermaid, 50);
+              };
+              document.head.appendChild(s);
+            } else {
+              setTimeout(runMermaid, 150);
+            }
+          }
+        }
+        setTimeout(runMermaid, 50);
+      })();
+    </script>
+  ` : '';
+
   return `
     <main class="flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full" id="bv-article-view">
       <!-- Top Navigation -->
@@ -430,6 +521,8 @@ export function renderArticleDetailView(slug: string): string {
 
       <!-- Related Posts -->
       ${relatedHtml}
+
+      ${mermaidScript}
     </main>
   `;
 }

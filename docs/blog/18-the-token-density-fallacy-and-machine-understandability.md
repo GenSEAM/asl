@@ -136,6 +136,6 @@ graph TD
 
 By eliminating token inflation, preventing synonym drift, and respecting the physics of BPE tokenizers, AgentScript provides the cleanest, most deterministic substrate for autonomous AI software engineering.
 
-- Read the full consultation transcript in [.plans/CLAUDE_FABLE_CONSULTATION.md](https://github.com/aslang/asex/blob/main/.plans/CLAUDE_FABLE_CONSULTATION.md).
+- Read the companion analysis in [Token Economy & Structural Compression](/blog/token-economy-and-structural-compression).
 - Explore the [Pure ASL Specification](https://aslang.dev/docs).
 - Inspect our [100% Verified Grammar Registries](https://aslang.dev/docs/grammar).
