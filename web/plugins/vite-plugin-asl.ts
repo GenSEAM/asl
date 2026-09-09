@@ -538,7 +538,7 @@ function escapeHtml(str) {
 }
 
 function renderInlineMarkdown(text) {
-  let out = text.replace(/\\`([^\\`]+)\\`/g, (_, code) => {
+  let out = text.replace(new RegExp(String.fromCharCode(96) + '([^' + String.fromCharCode(96) + ']+)' + String.fromCharCode(96), 'g'), (_, code) => {
     return '<code class="px-1.5 py-0.5 rounded bg-surface-2 border border-line text-signal font-mono text-xs">' + escapeHtml(code) + '</code>';
   });
   out = out.replace(/\\$([^\\$]+)\\$/g, (_, math) => {
@@ -629,7 +629,7 @@ export function renderMarkdownToHtml(md) {
     const rawLine = lines[i];
     const trimmed = rawLine.trim();
 
-    if (trimmed.startsWith('\`\`\`')) {
+    if (trimmed.startsWith(String.fromCharCode(96, 96, 96))) {
       if (inCodeBlock) {
         const langLower = (codeBlockLang || '').toLowerCase().trim();
         if (langLower === 'mermaid') {
