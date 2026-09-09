@@ -3360,7 +3360,7 @@ CMD="${1:-help}"
 shift || true
 
 case "$CMD" in
-  find|ls|read|sec|out|sym|callers|impact|css-vars|classes|edit|repl|patch|write|diff|flush|discard|q|engine|ping|status|inspect|onboard|proc-spawn|proc-list|proc-status|proc-skeleton|proc-read|proc-find|proc-input|proc-signal|proc-wait)
+  find|ls|read|sec|out|sym|callers|impact|css-vars|classes|edit|repl|patch|write|diff|flush|discard|q|ping|status|inspect|onboard|proc-spawn|proc-list|proc-status|proc-skeleton|proc-read|proc-find|proc-input|proc-signal|proc-wait)
     dispatch_rpc_command "$CMD" "$@"
     exit $?
     ;;
@@ -5162,7 +5162,7 @@ for tid, ti, why in tasks:
     esac
     ;;
 
-  engine)
+  engine|daemon)
     SUBCMD="$1"
     shift || true
     ENGINE_BIN="$(find_engine_bin)"
@@ -5185,7 +5185,7 @@ for tid, ti, why in tasks:
       start)
         if [ -S "$SOCK" ]; then
           if [ -x "$ENGINE_BIN" ] && "$ENGINE_BIN" --status "$SOCK" >/dev/null 2>&1; then
-            echo "ASL Engine is already running on $SOCK"
+            echo "ASL Sovereign Engine is already running on $SOCK"
             exit 0
           fi
           rm -f "$SOCK" "$PID_FILE" 2>/dev/null || true
@@ -5228,25 +5228,196 @@ for tid, ti, why in tasks:
           if [ -S "$SOCK" ]; then
             echo "Socket exists: $SOCK"
             echo "Status: Online"
+            exit 0
           else
             echo "Status: Offline"
+            exit 1
           fi
         fi
         ;;
       restart)
-        "$0" engine stop "$@"
+        "$0" engine stop "$@" 2>/dev/null || true
         sleep 0.1
         "$0" engine start "$@"
         exit $?
         ;;
+      top)
+        ensure_daemon_running
+        echo "ENGINE ID  PID     STATUS   RSS(MB)  UPTIME   ACTIVE OP  SOCKET"
+        echo "---------  ------  -------  -------  -------  ---------  ------"
+        FOUND_ANY=0
+        for PF in /tmp/asl_mem_*.pid; do
+          [ -f "$PF" ] || continue
+          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+          D_PID="$(cat "$PF" 2>/dev/null || true)"
+          [ -n "$D_PID" ] || continue
+          if kill -0 "$D_PID" 2>/dev/null; then
+            FOUND_ANY=1
+            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+            D_RSS="$(ps -o rss= -p "$D_PID" 2>/dev/null | awk '{print int($1/1024)}' || echo "?")"
+            D_TIME="$(ps -o etime= -p "$D_PID" 2>/dev/null | tr -d ' ' || echo "?")"
+            D_STATUS="active"
+            D_OP=":idle"
+            if [ -S "$D_SOCK" ]; then
+              INFO="$(printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true)"
+              OP_EXTRACT="$(echo "$INFO" | grep -o ':active-op "[^"]*"' | cut -d'"' -f2 || true)"
+              if [ -n "$OP_EXTRACT" ]; then
+                D_OP="$OP_EXTRACT"
+              fi
+            fi
+            printf "%-9s  %-6s  %-7s  %-7s  %-7s  %-9s  %s\n" "$D_HASH" "$D_PID" "$D_STATUS" "$D_RSS" "$D_TIME" "$D_OP" "$D_SOCK"
+          else
+            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
+          fi
+        done
+        exit 0
+        ;;
+      list)
+        ensure_daemon_running
+        mkdir -p "$ROOT/.asl/mesh" 2>/dev/null || true
+        echo "ENGINE ID  WORKSPACE  ROLE        STATUS   HEARTBEAT  PID     SOCKET"
+        echo "---------  ---------  ----------  -------  ---------  ------  ------"
+        FOUND_ANY=0
+        COLLISIONS=0
+        TOTAL_DAEMONS=0
+        SEEN_WS=""
+        PEER_ENTRIES=""
+        NOW_EPOCH="$(date +%s 2>/dev/null || echo "0")"
+
+        for PF in /tmp/asl_mem_*.pid; do
+          [ -f "$PF" ] || continue
+          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+          D_PID="$(cat "$PF" 2>/dev/null || true)"
+          [ -n "$D_PID" ] || continue
+          if kill -0 "$D_PID" 2>/dev/null; then
+            FOUND_ANY=1
+            TOTAL_DAEMONS=$((TOTAL_DAEMONS + 1))
+            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+            D_STATUS="active"
+            D_ROLE=":master"
+            if echo "$SEEN_WS" | grep -q "(ws:$D_HASH)"; then
+              D_ROLE=":secondary"
+              D_STATUS="collision"
+              COLLISIONS=$((COLLISIONS + 1))
+            else
+              SEEN_WS="${SEEN_WS} (ws:$D_HASH)"
+            fi
+
+            HB_SEC=0
+            if [ -S "$D_SOCK" ]; then
+              SOCK_MTIME="$(stat -f %m "$D_SOCK" 2>/dev/null || stat -c %Y "$D_SOCK" 2>/dev/null || echo "$NOW_EPOCH")"
+              HB_SEC=$((NOW_EPOCH - SOCK_MTIME))
+              [ "$HB_SEC" -lt 0 ] && HB_SEC=0
+            fi
+            D_HB="${HB_SEC}s ago"
+            if [ "$HB_SEC" -eq 0 ]; then
+              D_HB="<1s ago"
+            fi
+
+            printf "%-9s  %-9s  %-10s  %-7s  %-9s  %-6s  %s\n" "$D_HASH" "$D_HASH" "$D_ROLE" "$D_STATUS" "$D_HB" "$D_PID" "$D_SOCK"
+            PEER_ENTRIES="${PEER_ENTRIES}    (:peer :daemon-id \"$D_HASH\" :workspace-hash \"$D_HASH\" :pid $D_PID :socket \"$D_SOCK\" :port 0 :role $D_ROLE :heartbeat-epoch $NOW_EPOCH :status \"$D_STATUS\")\n"
+          else
+            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
+          fi
+        done
+
+        if [ "$FOUND_ANY" -eq 0 ]; then
+          echo "No active sovereign engines detected."
+        else
+          echo ""
+          if [ "$COLLISIONS" -gt 0 ]; then
+            echo "[COLLISION DETECTED] $COLLISIONS engine collision(s) detected across shared workspace hashes."
+          else
+            UNIQUE_WS=$(echo "$SEEN_WS" | tr ' ' '\n' | grep -c '(ws:' || echo "1")
+            echo "[DISJOINT WORKSPACES] $TOTAL_DAEMONS active engine(s) across $UNIQUE_WS isolated workspace(s). Zero collisions."
+          fi
+          PEERS_FILE=""
+          if [ -d "$ROOT/.asl/mesh" ]; then
+            PEERS_FILE="$ROOT/.asl/mesh/peers.asn"
+          elif [ -d "$ROOT/../.asl/mesh" ]; then
+            PEERS_FILE="$ROOT/../.asl/mesh/peers.asn"
+          elif [ -d ".asl/mesh" ]; then
+            PEERS_FILE=".asl/mesh/peers.asn"
+          fi
+          if [ -n "$PEERS_FILE" ]; then
+            (printf ";; Mesh Peer Registry Schema & Active Daemon Manifest\n(:mesh-peers\n  :version 1\n  :peers [\n%b  ])\n" "$PEER_ENTRIES" > "$PEERS_FILE") 2>/dev/null || true
+          fi
+        fi
+        exit 0
+        ;;
+      inspect)
+        TARGET="$1"
+        if [ -z "$TARGET" ]; then
+          TARGET="$(get_daemon_hash)"
+        fi
+        TARGET_PID=""
+        TARGET_HASH=""
+        if [ -f "/tmp/asl_mem_${TARGET}.pid" ]; then
+          TARGET_HASH="$TARGET"
+          TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.pid" 2>/dev/null)"
+        elif [ -f "/tmp/asl_mem_${TARGET}.lock" ]; then
+          TARGET_HASH="$TARGET"
+          TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.lock" 2>/dev/null)"
+        else
+          for PF in /tmp/asl_mem_*.pid; do
+            [ -f "$PF" ] || continue
+            P="$(cat "$PF" 2>/dev/null || true)"
+            if [ "$P" = "$TARGET" ]; then
+              TARGET_PID="$TARGET"
+              TARGET_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+              break
+            fi
+          done
+        fi
+        if [ -z "$TARGET_PID" ]; then
+          TARGET_PID="$TARGET"
+        fi
+        echo "=== ASL Sovereign Engine Inspection: PID $TARGET_PID (ID: ${TARGET_HASH:-unknown}) ==="
+        if kill -0 "$TARGET_PID" 2>/dev/null; then
+          echo "Status: Running (active)"
+          ps -o pid,ppid,rss,vsz,%cpu,%mem,etime,command -p "$TARGET_PID" 2>/dev/null || true
+          D_SOCK="/tmp/asl_mem_${TARGET_HASH}.sock"
+          if [ -n "$TARGET_HASH" ] && [ -S "$D_SOCK" ]; then
+            echo ""
+            echo "--- Socket Diagnostics: $D_SOCK ---"
+            printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true
+            echo ""
+          fi
+          echo ""
+          echo "--- Stack / Process Overview ---"
+          lsof -p "$TARGET_PID" 2>/dev/null | head -n 25 || true
+        else
+          echo "Status: Not running or process not found (PID: $TARGET_PID)"
+        fi
+        exit 0
+        ;;
       *)
         if [ -n "$SUBCMD" ]; then
-          exec "$ENGINE_BIN" "$SUBCMD" "$@"
+          if [[ "$SUBCMD" == \(* ]]; then
+            exec "$ENGINE_BIN" "$SUBCMD" "$@"
+          else
+            dispatch_rpc_command "engine" "$SUBCMD" "$@"
+            exit $?
+          fi
         elif [ ! -t 0 ]; then
           exec "$ENGINE_BIN"
         else
-          echo "Usage: asl engine <start|stop|status|restart> or asl engine '<payload>' or echo '<payload>' | asl engine"
-          exit 1
+          ensure_daemon_running
+          echo "ENGINE ID  PID     STATUS   RSS(MB)  UPTIME   ACTIVE OP  SOCKET"
+          echo "---------  ------  -------  -------  -------  ---------  ------"
+          for PF in /tmp/asl_mem_*.pid; do
+            [ -f "$PF" ] || continue
+            D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
+            D_PID="$(cat "$PF" 2>/dev/null || true)"
+            [ -n "$D_PID" ] || continue
+            if kill -0 "$D_PID" 2>/dev/null; then
+              D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
+              D_RSS="$(ps -o rss= -p "$D_PID" 2>/dev/null | awk '{print int($1/1024)}' || echo "?")"
+              D_TIME="$(ps -o etime= -p "$D_PID" 2>/dev/null | tr -d ' ' || echo "?")"
+              printf "%-9s  %-6s  %-7s  %-7s  %-7s  %-9s  %s\n" "$D_HASH" "$D_PID" "active" "$D_RSS" "$D_TIME" ":idle" "$D_SOCK"
+            fi
+          done
+          exit 0
         fi
         ;;
     esac
@@ -5551,167 +5722,6 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
         ;;
       *)
         echo "Usage: asl note <list|show <id> [--md]|check|add <topic> <fact>>"
-        exit 1
-        ;;
-    esac
-    ;;
-
-  daemon)
-    SUBCMD="$1"
-    shift || true
-    case "$SUBCMD" in
-      top|"")
-        ensure_daemon_running
-        echo "DAEMON ID  PID     STATUS   RSS(MB)  UPTIME   ACTIVE OP  SOCKET"
-        echo "---------  ------  -------  -------  -------  ---------  ------"
-        FOUND_ANY=0
-        for PF in /tmp/asl_mem_*.pid; do
-          [ -f "$PF" ] || continue
-          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
-          D_PID="$(cat "$PF" 2>/dev/null || true)"
-          [ -n "$D_PID" ] || continue
-          if kill -0 "$D_PID" 2>/dev/null; then
-            FOUND_ANY=1
-            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
-            D_RSS="$(ps -o rss= -p "$D_PID" 2>/dev/null | awk '{print int($1/1024)}' || echo "?")"
-            D_TIME="$(ps -o etime= -p "$D_PID" 2>/dev/null | tr -d ' ' || echo "?")"
-            D_STATUS="active"
-            D_OP=":idle"
-            if [ -S "$D_SOCK" ]; then
-              INFO="$(printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true)"
-              OP_EXTRACT="$(echo "$INFO" | grep -o ':active-op "[^"]*"' | cut -d'"' -f2 || true)"
-              if [ -n "$OP_EXTRACT" ]; then
-                D_OP="$OP_EXTRACT"
-              fi
-            fi
-            printf "%-9s  %-6s  %-7s  %-7s  %-7s  %-9s  %s\n" "$D_HASH" "$D_PID" "$D_STATUS" "$D_RSS" "$D_TIME" "$D_OP" "$D_SOCK"
-          else
-            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
-          fi
-        done
-        exit 0
-        ;;
-      list)
-        ensure_daemon_running
-        mkdir -p "$ROOT/.asl/mesh" 2>/dev/null || true
-        echo "DAEMON ID  WORKSPACE  ROLE        STATUS   HEARTBEAT  PID     SOCKET"
-        echo "---------  ---------  ----------  -------  ---------  ------  ------"
-        FOUND_ANY=0
-        COLLISIONS=0
-        TOTAL_DAEMONS=0
-        SEEN_WS=""
-        PEER_ENTRIES=""
-        NOW_EPOCH="$(date +%s 2>/dev/null || echo "0")"
-
-        for PF in /tmp/asl_mem_*.pid; do
-          [ -f "$PF" ] || continue
-          D_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
-          D_PID="$(cat "$PF" 2>/dev/null || true)"
-          [ -n "$D_PID" ] || continue
-          if kill -0 "$D_PID" 2>/dev/null; then
-            FOUND_ANY=1
-            TOTAL_DAEMONS=$((TOTAL_DAEMONS + 1))
-            D_SOCK="/tmp/asl_mem_${D_HASH}.sock"
-            D_STATUS="active"
-            D_ROLE=":master"
-            if echo "$SEEN_WS" | grep -q "(ws:$D_HASH)"; then
-              D_ROLE=":secondary"
-              D_STATUS="collision"
-              COLLISIONS=$((COLLISIONS + 1))
-            else
-              SEEN_WS="${SEEN_WS} (ws:$D_HASH)"
-            fi
-
-            HB_SEC=0
-            if [ -S "$D_SOCK" ]; then
-              SOCK_MTIME="$(stat -f %m "$D_SOCK" 2>/dev/null || stat -c %Y "$D_SOCK" 2>/dev/null || echo "$NOW_EPOCH")"
-              HB_SEC=$((NOW_EPOCH - SOCK_MTIME))
-              [ "$HB_SEC" -lt 0 ] && HB_SEC=0
-            fi
-            D_HB="${HB_SEC}s ago"
-            if [ "$HB_SEC" -eq 0 ]; then
-              D_HB="<1s ago"
-            fi
-
-            printf "%-9s  %-9s  %-10s  %-7s  %-9s  %-6s  %s\n" "$D_HASH" "$D_HASH" "$D_ROLE" "$D_STATUS" "$D_HB" "$D_PID" "$D_SOCK"
-            PEER_ENTRIES="${PEER_ENTRIES}    (:peer :daemon-id \"$D_HASH\" :workspace-hash \"$D_HASH\" :pid $D_PID :socket \"$D_SOCK\" :port 0 :role $D_ROLE :heartbeat-epoch $NOW_EPOCH :status \"$D_STATUS\")\n"
-          else
-            rm -f "$PF" "/tmp/asl_mem_${D_HASH}.lock" "/tmp/asl_mem_${D_HASH}.sock" 2>/dev/null || true
-          fi
-        done
-
-        if [ "$FOUND_ANY" -eq 0 ]; then
-          echo "No active daemons detected."
-        else
-          echo ""
-          if [ "$COLLISIONS" -gt 0 ]; then
-            echo "[COLLISION DETECTED] $COLLISIONS daemon collision(s) detected across shared workspace hashes."
-          else
-            UNIQUE_WS=$(echo "$SEEN_WS" | tr ' ' '\n' | grep -c '(ws:' || echo "1")
-            echo "[DISJOINT WORKSPACES] $TOTAL_DAEMONS active daemon(s) across $UNIQUE_WS isolated workspace(s). Zero collisions."
-          fi
-          PEERS_FILE=""
-          if [ -d "$ROOT/.asl/mesh" ]; then
-            PEERS_FILE="$ROOT/.asl/mesh/peers.asn"
-          elif [ -d "$ROOT/../.asl/mesh" ]; then
-            PEERS_FILE="$ROOT/../.asl/mesh/peers.asn"
-          elif [ -d ".asl/mesh" ]; then
-            PEERS_FILE=".asl/mesh/peers.asn"
-          fi
-          if [ -n "$PEERS_FILE" ]; then
-            (printf ";; Mesh Peer Registry Schema & Active Daemon Manifest\n(:mesh-peers\n  :version 1\n  :peers [\n%b  ])\n" "$PEER_ENTRIES" > "$PEERS_FILE") 2>/dev/null || true
-          fi
-        fi
-        exit 0
-        ;;
-      inspect)
-        TARGET="$1"
-        if [ -z "$TARGET" ]; then
-          TARGET="$(get_daemon_hash)"
-        fi
-        TARGET_PID=""
-        TARGET_HASH=""
-        if [ -f "/tmp/asl_mem_${TARGET}.pid" ]; then
-          TARGET_HASH="$TARGET"
-          TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.pid" 2>/dev/null)"
-        elif [ -f "/tmp/asl_mem_${TARGET}.lock" ]; then
-          TARGET_HASH="$TARGET"
-          TARGET_PID="$(cat "/tmp/asl_mem_${TARGET}.lock" 2>/dev/null)"
-        else
-          for PF in /tmp/asl_mem_*.pid; do
-            [ -f "$PF" ] || continue
-            P="$(cat "$PF" 2>/dev/null || true)"
-            if [ "$P" = "$TARGET" ]; then
-              TARGET_PID="$TARGET"
-              TARGET_HASH="$(basename "$PF" | sed 's/asl_mem_//;s/\.pid//')"
-              break
-            fi
-          done
-        fi
-        if [ -z "$TARGET_PID" ]; then
-          TARGET_PID="$TARGET"
-        fi
-        echo "=== ASL Daemon Inspection: PID $TARGET_PID (ID: ${TARGET_HASH:-unknown}) ==="
-        if kill -0 "$TARGET_PID" 2>/dev/null; then
-          echo "Status: Running (active)"
-          ps -o pid,ppid,rss,vsz,%cpu,%mem,etime,command -p "$TARGET_PID" 2>/dev/null || true
-          D_SOCK="/tmp/asl_mem_${TARGET_HASH}.sock"
-          if [ -n "$TARGET_HASH" ] && [ -S "$D_SOCK" ]; then
-            echo ""
-            echo "--- Socket Diagnostics: $D_SOCK ---"
-            printf '(:inspect)\n' | nc -U "$D_SOCK" 2>/dev/null || true
-            echo ""
-          fi
-          echo ""
-          echo "--- Stack / Process Overview ---"
-          lsof -p "$TARGET_PID" 2>/dev/null | head -n 25 || true
-        else
-          echo "Status: Not running or process not found (PID: $TARGET_PID)"
-        fi
-        exit 0
-        ;;
-      *)
-        echo "Usage: asl daemon [top|list|inspect <pid>]"
         exit 1
         ;;
     esac

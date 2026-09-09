@@ -9,6 +9,7 @@ import difflib
 import subprocess
 import threading
 import atexit
+import math
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -479,13 +480,157 @@ class ProcessRegistry:
 
 GLOBAL_PROCESS_REGISTRY = ProcessRegistry()
 
+def tokenize_bm25_terms(text):
+    if not text:
+        return []
+    cleaned = re.sub(r'[\.,;:!\?"\'\(\)\[\]\{\}\-_\/\\\n\t<>=+*^%$#@~`|]', ' ', text)
+    tokens = [t.lower() for t in cleaned.split() if len(t) > 1]
+    return tokens
+
+def fnv1a_64(text):
+    h = 14695981039346656037
+    prime = 1099511628211
+    mask = 0xFFFFFFFFFFFFFFFF
+    for b in str(text).encode('utf-8', errors='ignore'):
+        h = ((h ^ b) * prime) & mask
+    return h
+
+def simhash_64(text):
+    tokens = tokenize_bm25_terms(text)
+    if not tokens:
+        return 0
+    v = [0] * 64
+    for tok in tokens:
+        h = fnv1a_64(tok)
+        for i in range(64):
+            if (h >> i) & 1:
+                v[i] += 1
+            else:
+                v[i] -= 1
+    sim_hash = 0
+    for i in range(64):
+        if v[i] > 0:
+            sim_hash |= (1 << i)
+    return sim_hash
+
+def hamming_distance(h1, h2):
+    return bin(h1 ^ h2).count('1')
+
+def simhash_similarity(h1, h2):
+    return max(0.0, 1.0 - (hamming_distance(h1, h2) / 64.0))
+
+class BM25Indexer:
+    def __init__(self):
+        self.doc_terms = {}
+        self.doc_lengths = {}
+        self.term_df = {}
+        self.total_docs = 0
+        self.avg_doc_len = 0.0
+
+    def index_document(self, rel_path, content):
+        terms = tokenize_bm25_terms(content)
+        if rel_path in self.doc_terms:
+            self.remove_document(rel_path)
+        self.doc_terms[rel_path] = terms
+        self.doc_lengths[rel_path] = len(terms)
+        for t in set(terms):
+            self.term_df[t] = self.term_df.get(t, 0) + 1
+        self.total_docs = len(self.doc_terms)
+        if self.total_docs > 0:
+            self.avg_doc_len = sum(self.doc_lengths.values()) / self.total_docs
+
+    def remove_document(self, rel_path):
+        if rel_path not in self.doc_terms:
+            return
+        for t in set(self.doc_terms[rel_path]):
+            if t in self.term_df:
+                self.term_df[t] -= 1
+                if self.term_df[t] <= 0:
+                    del self.term_df[t]
+        del self.doc_terms[rel_path]
+        del self.doc_lengths[rel_path]
+        self.total_docs = len(self.doc_terms)
+        if self.total_docs > 0:
+            self.avg_doc_len = sum(self.doc_lengths.values()) / self.total_docs
+
+    def score(self, query, limit=10, ext_filter=None, k1=1.5, b=0.75):
+        q_terms = tokenize_bm25_terms(query)
+        if not q_terms or self.total_docs == 0:
+            return []
+        scores = {}
+        for qt in q_terms:
+            df = self.term_df.get(qt, 0)
+            if df == 0:
+                continue
+            idf = math.log(1.0 + (self.total_docs - df + 0.5) / (df + 0.5))
+            for doc, terms in self.doc_terms.items():
+                if ext_filter and not doc.endswith(ext_filter):
+                    continue
+                tf = terms.count(qt)
+                if tf == 0:
+                    continue
+                doc_len = self.doc_lengths.get(doc, 0)
+                norm_tf = (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b + b * (doc_len / max(1.0, self.avg_doc_len))))
+                scores[doc] = scores.get(doc, 0.0) + (idf * norm_tf)
+        ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return ranked[:limit]
+
 class MemoryVFS:
     def __init__(self, root_dir):
         self.root = os.path.abspath(root_dir)
         self.cache = {}
         self.dirty = set()
         self.original = {}
+        self.overlays = {}
         self.active_op = ":idle"
+
+    def create_fork(self, fork_id):
+        if not fork_id:
+            return False, "ERR_MISSING_FORK_ID"
+        if fork_id in self.overlays:
+            return False, "ERR_FORK_EXISTS"
+        self.overlays[fork_id] = {
+            "cache": {},
+            "dirty": set(),
+            "created_at": time.time(),
+            "status": "active"
+        }
+        return True, None
+
+    def discard_fork(self, fork_id):
+        if not fork_id or fork_id not in self.overlays:
+            return False, "ERR_FORK_NOT_FOUND"
+        del self.overlays[fork_id]
+        return True, None
+
+    def merge_fork(self, fork_id, auto_flush=False):
+        if not fork_id or fork_id not in self.overlays:
+            return False, "ERR_FORK_NOT_FOUND", []
+        fork_data = self.overlays[fork_id]
+        merged = []
+        for rel, content in fork_data["cache"].items():
+            self.cache[rel] = content
+            self.dirty.add(rel)
+            merged.append(rel)
+            if auto_flush:
+                full_path, _ = self.resolve_path(rel)
+                if full_path:
+                    try:
+                        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                        with open(full_path, "w", encoding="utf-8") as f:
+                            f.write(content)
+                        self.dirty.discard(rel)
+                        self.original[rel] = content
+                    except Exception:
+                        pass
+        del self.overlays[fork_id]
+        return True, None, merged
+
+    def list_forks(self):
+        return [
+            {"id": fid, "dirty_count": len(fdata["dirty"]), "created_at": int(fdata["created_at"])}
+            for fid, fdata in self.overlays.items()
+        ]
 
     def resolve_path(self, rel_path):
         if not rel_path:
@@ -512,7 +657,11 @@ class MemoryVFS:
     def get_rel_path(self, full_path):
         return os.path.relpath(full_path, self.root)
 
-    def read_buffer(self, rel_path):
+    def read_buffer(self, rel_path, fork_id=None):
+        if fork_id and fork_id in self.overlays:
+            _, norm_rel = self.resolve_path(rel_path)
+            if norm_rel and norm_rel in self.overlays[fork_id]["cache"]:
+                return self.overlays[fork_id]["cache"][norm_rel], None
         full_path, norm_rel = self.resolve_path(rel_path)
         if not full_path:
             return None, "ERR_BOUNDARY_VIOLATION"
@@ -529,10 +678,16 @@ class MemoryVFS:
         except Exception as e:
             return None, str(e)
 
-    def set_buffer(self, rel_path, content, auto_flush=True):
+    def set_buffer(self, rel_path, content, auto_flush=True, fork_id=None):
         full_path, norm_rel = self.resolve_path(rel_path)
         if not full_path:
             return False, "ERR_BOUNDARY_VIOLATION"
+        if fork_id:
+            if fork_id not in self.overlays:
+                self.create_fork(fork_id)
+            self.overlays[fork_id]["cache"][norm_rel] = content
+            self.overlays[fork_id]["dirty"].add(norm_rel)
+            return True, None
         if norm_rel not in self.original and os.path.isfile(full_path):
             try:
                 with open(full_path, "r", encoding="utf-8", errors="replace") as f:
@@ -614,6 +769,52 @@ class SovereignEngine:
         self.vfs = MemoryVFS(workspace_root)
         self.proc_registry = GLOBAL_PROCESS_REGISTRY
         self.start_time = time.time()
+        self.bm25 = BM25Indexer()
+        self.bm25_indexed = False
+
+    def ensure_bm25_index(self):
+        if self.bm25_indexed:
+            return
+        self.bm25_indexed = True
+        extensions = (".asl", ".asn", ".md", ".sh", ".ts", ".py")
+        count = 0
+        for root, dirs, files in os.walk(self.vfs.root):
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "dist", "build", ".git")]
+            for f in files:
+                if f.endswith(extensions) and not f.startswith("."):
+                    full_p = os.path.join(root, f)
+                    try:
+                        sz = os.path.getsize(full_p)
+                        if sz < 500000:
+                            rel_p = os.path.relpath(full_p, self.vfs.root)
+                            with open(full_p, "r", encoding="utf-8", errors="replace") as fh:
+                                self.bm25.index_document(rel_p, fh.read())
+                            count += 1
+                    except Exception:
+                        pass
+                    if count >= 2000:
+                        break
+            if count >= 2000:
+                break
+
+    def get_bm25_snippet(self, rel_path, query):
+        content, _ = self.vfs.read_buffer(rel_path)
+        if not content:
+            return f"Match in {rel_path}"
+        q_lower = query.lower()
+        lines = content.splitlines()
+        for line in lines:
+            if q_lower in line.lower():
+                return line.strip()[:160]
+        words = q_lower.split()
+        for line in lines:
+            for w in words:
+                if len(w) > 2 and w in line.lower():
+                    return line.strip()[:160]
+        for line in lines:
+            if line.strip():
+                return line.strip()[:160]
+        return f"Match in {rel_path}"
 
     def handle_payload(self, raw_payload):
         raw_payload = raw_payload.strip()
@@ -648,7 +849,7 @@ class SovereignEngine:
 
         def is_pure_read(op_dict):
             op_name = op_dict.get("op", "")
-            if op_name in ("ping", "status", "inspect", "onboard", "gate", "read", "sec", "ls", "engine", "find", "css-vars", "classes", "out", "q", "proc-list", "proc-status", "proc-skeleton", "proc-read", "proc-find"):
+            if op_name in ("ping", "status", "inspect", "onboard", "gate", "read", "sec", "ls", "engine", "find", "css-vars", "classes", "out", "q", "proc-list", "proc-status", "proc-skeleton", "proc-read", "proc-find", "bm25", "simhash", "vfs-forks"):
                 return True
             if op_name == "git" or op_dict.get("service") == "git":
                 subop = op_dict.get("subop") or op_dict.get("action") or (op_dict.get("_pos")[0] if op_dict.get("_pos") else "where")
@@ -792,9 +993,10 @@ class SovereignEngine:
 
             elif op == "read":
                 rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
+                fork_id = d.get("fork-id") or d.get("fork")
                 if not rel:
                     return f'(:step :id {step_id} :op "read" :status "error" :error ":ERR_MISSING_FILE")'
-                content, err = self.vfs.read_buffer(rel)
+                content, err = self.vfs.read_buffer(rel, fork_id=fork_id)
                 if err:
                     return f'(:step :id {step_id} :op "read" :status "error" :error ":{err}")'
                 lines = content.splitlines()
@@ -863,7 +1065,15 @@ class SovereignEngine:
                 if tier in ("all", "tier-0-ast"):
                     results.append(f'(:result :tier "tier-0-ast" :source "asl-intel" :score 1.0 :title "AST Symbol: {escape_asn(query)}" :snippet "(df {escape_asn(query)} [...] -> ...)")')
                 if tier in ("all", "tier-1-mem"):
-                    results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score 0.9 :title "Resident Memory: {escape_asn(query)}" :snippet "Cached memory record and BM25 index match for \'{escape_asn(query)}\'")')
+                    self.ensure_bm25_index()
+                    bm25_scores = self.bm25.score(query, limit=limit)
+                    if bm25_scores:
+                        for file_rel, sc in bm25_scores:
+                            snip = self.get_bm25_snippet(file_rel, query)
+                            norm_score = round(min(1.0, max(0.1, sc / 10.0)), 3)
+                            results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score {norm_score} :title "{escape_asn(file_rel)}" :snippet "{escape_asn(snip)}")')
+                    else:
+                        results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score 0.9 :title "Resident Memory: {escape_asn(query)}" :snippet "Cached memory record and BM25 index match for \'{escape_asn(query)}\'")')
                 if tier in ("all", "tier-2-web"):
                     if airgap:
                         results.append(f'(:result :tier "tier-2-web" :source "airgap-policy" :score 0.0 :title "External Search Bypassed" :snippet "External web search disabled by airgap policy")')
@@ -872,6 +1082,84 @@ class SovereignEngine:
                 trimmed_results = results[:limit]
                 items_str = " ".join(trimmed_results)
                 return f'(:step :id {step_id} :op "engine" :status "ok" :query "{escape_asn(query)}" :tier "{escape_asn(tier)}" :count {len(trimmed_results)} :results [ {items_str} ])'
+
+            elif op == "bm25":
+                pos = d.get("_pos", [])
+                query = d.get("query") or (pos[0] if len(pos) > 0 else "")
+                limit = int(d.get("limit", 10))
+                ext_filter = d.get("ext")
+                self.ensure_bm25_index()
+                scores = self.bm25.score(query, limit=limit, ext_filter=ext_filter)
+                results_asn = []
+                for file_rel, sc in scores:
+                    snippet = self.get_bm25_snippet(file_rel, query)
+                    results_asn.append(f'(:item :file "{escape_asn(file_rel)}" :score {round(sc, 3)} :snippet "{escape_asn(snippet)}")')
+                items_str = " ".join(results_asn)
+                return f'(:step :id {step_id} :op "bm25" :status "ok" :query "{escape_asn(query)}" :count {len(results_asn)} :results [ {items_str} ])'
+
+            elif op == "simhash":
+                pos = d.get("_pos", [])
+                text = d.get("text") or (pos[0] if len(pos) > 0 else None)
+                rel_file = d.get("file")
+                compare_text = d.get("compare")
+                compare_file = d.get("compare-file")
+                if not text and rel_file:
+                    content, err = self.vfs.read_buffer(rel_file)
+                    if not err and content is not None:
+                        text = content
+                if not text:
+                    return f'(:step :id {step_id} :op "simhash" :status "error" :error ":ERR_MISSING_TEXT")'
+                h1 = simhash_64(text)
+                pop = bin(h1).count("1")
+                h1_hex = f"{h1:016x}"
+                if compare_file:
+                    c_content, _ = self.vfs.read_buffer(compare_file)
+                    if c_content:
+                        compare_text = c_content
+                if compare_text:
+                    h2 = simhash_64(compare_text)
+                    dist = hamming_distance(h1, h2)
+                    sim = simhash_similarity(h1, h2)
+                    return f'(:step :id {step_id} :op "simhash" :status "ok" :hash "{h1_hex}" :popcount {pop} :distance {dist} :similarity {round(sim, 4)})'
+                return f'(:step :id {step_id} :op "simhash" :status "ok" :hash "{h1_hex}" :popcount {pop})'
+
+            elif op in ("vfs-fork", "fork"):
+                fork_id = d.get("fork-id") or d.get("fork") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not fork_id:
+                    return f'(:step :id {step_id} :op "vfs-fork" :status "error" :error ":ERR_MISSING_FORK_ID")'
+                ok, err = self.vfs.create_fork(fork_id)
+                if not ok:
+                    return f'(:step :id {step_id} :op "vfs-fork" :status "error" :error ":{err}")'
+                return f'(:step :id {step_id} :op "vfs-fork" :status "ok" :fork-id "{escape_asn(fork_id)}" :res (:created))'
+
+            elif op in ("vfs-discard", "discard-fork"):
+                fork_id = d.get("fork-id") or d.get("fork") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not fork_id:
+                    return f'(:step :id {step_id} :op "vfs-discard" :status "error" :error ":ERR_MISSING_FORK_ID")'
+                ok, err = self.vfs.discard_fork(fork_id)
+                if not ok:
+                    return f'(:step :id {step_id} :op "vfs-discard" :status "error" :error ":{err}")'
+                return f'(:step :id {step_id} :op "vfs-discard" :status "ok" :fork-id "{escape_asn(fork_id)}" :res (:discarded))'
+
+            elif op in ("vfs-merge", "merge"):
+                fork_id = d.get("fork-id") or d.get("fork") or (d.get("_pos")[0] if d.get("_pos") else None)
+                flush = bool(d.get("flush", False))
+                if not fork_id:
+                    return f'(:step :id {step_id} :op "vfs-merge" :status "error" :error ":ERR_MISSING_FORK_ID")'
+                ok, err, merged = self.vfs.merge_fork(fork_id, auto_flush=flush)
+                if not ok:
+                    return f'(:step :id {step_id} :op "vfs-merge" :status "error" :error ":{err}")'
+                for f in merged:
+                    buf, _ = self.vfs.read_buffer(f)
+                    if buf:
+                        self.bm25.index_document(f, buf)
+                m_str = " ".join(f'"{escape_asn(f)}"' for f in merged)
+                return f'(:step :id {step_id} :op "vfs-merge" :status "ok" :fork-id "{escape_asn(fork_id)}" :merged-count {len(merged)} :files [ {m_str} ])'
+
+            elif op in ("vfs-forks", "forks"):
+                forks = self.vfs.list_forks()
+                f_items = [f'(:fork :id "{escape_asn(f["id"])}" :dirty-count {f["dirty_count"]})' for f in forks]
+                return f'(:step :id {step_id} :op "vfs-forks" :status "ok" :count {len(forks)} :forks [ {" ".join(f_items)} ])'
 
             elif op == "find":
                 import fnmatch
@@ -1050,9 +1338,10 @@ class SovereignEngine:
                 replacement = d.get("replacement") or (pos[2] if len(pos) > 2 else None)
                 allow_multiple = bool(d.get("allow-multiple", False))
                 staged = bool(d.get("staged", False))
+                fork_id = d.get("fork-id") or d.get("fork")
                 if not rel or target is None or replacement is None:
                     return f'(:step :id {step_id} :op "edit" :status "error" :error ":ERR_MISSING_ARGS")'
-                content, err = self.vfs.read_buffer(rel)
+                content, err = self.vfs.read_buffer(rel, fork_id=fork_id)
                 if err:
                     return f'(:step :id {step_id} :op "edit" :status "error" :error ":{err}")'
                 count = content.count(target)
@@ -1061,9 +1350,11 @@ class SovereignEngine:
                 if count > 1 and not allow_multiple:
                     return f'(:step :id {step_id} :op "edit" :status "error" :error ":ERR_MULTIPLE_MATCHES" :msg "Multiple occurrences found ({count}), pass :allow-multiple true")'
                 new_content = content.replace(target, replacement)
-                ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=not staged)
+                ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=not staged, fork_id=fork_id)
                 if not ok:
                     return f'(:step :id {step_id} :op "edit" :status "error" :error ":{err}")'
+                if not fork_id:
+                    self.bm25.index_document(rel, new_content)
                 return f'(:step :id {step_id} :op "edit" :status "ok" :file "{escape_asn(rel)}" :modified true :matches {count} :staged {str(staged).lower()})'
 
             elif op == "repl":
@@ -1097,11 +1388,14 @@ class SovereignEngine:
                 rel = d.get("file") or d.get("path") or (pos[0] if len(pos) > 0 else None)
                 content = d.get("content") or (pos[1] if len(pos) > 1 else "")
                 staged = bool(d.get("staged", False))
+                fork_id = d.get("fork-id") or d.get("fork")
                 if not rel:
                     return f'(:step :id {step_id} :op "write" :status "error" :error ":ERR_MISSING_FILE")'
-                ok, err = self.vfs.set_buffer(rel, content, auto_flush=not staged)
+                ok, err = self.vfs.set_buffer(rel, content, auto_flush=not staged, fork_id=fork_id)
                 if not ok:
                     return f'(:step :id {step_id} :op "write" :status "error" :error ":{err}")'
+                if not fork_id:
+                    self.bm25.index_document(rel, content)
                 return f'(:step :id {step_id} :op "write" :status "ok" :file "{escape_asn(rel)}" :bytes {len(content)} :staged {str(staged).lower()})'
 
             elif op == "diff":
@@ -1178,18 +1472,21 @@ class SovereignEngine:
                 rel = d.get("file") or d.get("path") or (pos[0] if len(pos) > 0 else None)
                 sym = d.get("sym") or (pos[1] if len(pos) > 1 else None)
                 new_code = d.get("new") or (pos[2] if len(pos) > 2 else None)
+                fork_id = d.get("fork-id") or d.get("fork")
                 if not rel or not sym or new_code is None:
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":ERR_MISSING_ARGS")'
-                content, err = self.vfs.read_buffer(rel)
+                content, err = self.vfs.read_buffer(rel, fork_id=fork_id)
                 if err:
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":{err}")'
                 pattern = re.compile(rf'\((?:df|dfs|def|deftype)\s+{re.escape(sym)}\b[\s\S]*?\n\)(?=\n|\Z)', re.MULTILINE)
                 if not pattern.search(content):
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":ERR_SYMBOL_NOT_FOUND" :symbol "{escape_asn(sym)}")'
                 new_content = pattern.sub(new_code.strip(), content, count=1)
-                ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=True)
+                ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=True, fork_id=fork_id)
                 if not ok:
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":{err}")'
+                if not fork_id:
+                    self.bm25.index_document(rel, new_content)
                 return f'(:step :id {step_id} :op "patch" :status "ok" :file "{escape_asn(rel)}" :symbol "{escape_asn(sym)}")'
 
             elif op in ("gate", "chk"):
@@ -2533,7 +2830,11 @@ def main():
             print(f"Status: Online ({data.strip()})")
             sys.exit(0)
         except Exception as e:
-            print(f"Status: Unresponsive ({e})")
+            try:
+                os.unlink(sock_path)
+            except Exception:
+                pass
+            print(f"Status: Offline ({e})")
             sys.exit(1)
 
     if len(args) >= 1 and args[0] == "--stop":
