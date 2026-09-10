@@ -2,50 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
-/*
-  Design System: High-end architectural cosmic slate monochrome with luminous electric violet and lavender accents.
-  Zero generic gradients; precision blueprint schematics, mathematical curves, and agentic UI.
-*/
 @layer base {
   :root {
     --ground: 248 247 252;
     --sunken: 238 235 245;
     --surface: 255 255 255;
     --inset: 244 242 248;
-
     --line: 225 219 236;
     --line-strong: 146 128 176;
-
     --ink: 24 18 36;
     --ink-2: 76 64 96;
     --ink-3: 112 98 134;
-
-    /* Architectural Deep Electric Purple */
     --signal: 126 34 206;
     --signal-soft: 147 51 234;
-
     --shadow-hue: 270 25% 10%;
     --shadow-strength: 0.08;
   }
 
   .dark {
-    /* Cosmic Deep Violet Slate */
     --ground: 12 9 20;
     --sunken: 4 2 7;
     --surface: 24 19 39;
     --inset: 17 13 29;
-
     --line: 48 38 72;
     --line-strong: 136 102 198;
-
     --ink: 246 244 255;
     --ink-2: 198 183 253;
     --ink-3: 152 140 175;
-
-    /* Electric Violet & Luminous Lilac */
     --signal: 176 96 255;
     --signal-soft: 198 142 255;
-
     --shadow-hue: 270 50% 5%;
     --shadow-strength: 0.65;
   }
@@ -86,17 +71,27 @@
     color: rgb(var(--ink));
   }
 
-  ::-webkit-scrollbar { width: 8px; height: 8px; }
-  ::-webkit-scrollbar-track { background: rgb(var(--ground)); }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: rgb(var(--ground));
+  }
+
   ::-webkit-scrollbar-thumb {
     background: rgb(var(--line-strong) / 0.35);
     border-radius: 999px;
   }
-  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--signal)); }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--signal));
+  }
+
 }
 
 @layer components {
-  /* A hairline that fades at both ends, so a full-bleed rule never reads as a hard band. */
   .rule-fade {
     height: 1px;
     background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.4), transparent);
@@ -107,11 +102,8 @@
     background-size: 24px 24px;
   }
 
-  /* Rich architectural blueprint grid with subtle coordinate tick markings */
   .bg-blueprint-grid {
-    background-image: 
-      linear-gradient(to right, rgb(var(--line) / 0.4) 1px, transparent 1px),
-      linear-gradient(to bottom, rgb(var(--line) / 0.4) 1px, transparent 1px);
+    background-image: linear-gradient(to right, rgb(var(--line) / 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--line) / 0.4) 1px, transparent 1px);
     background-size: 36px 36px;
   }
 
@@ -122,10 +114,13 @@
   .glow-purple-sm {
     box-shadow: 0 0 25px -5px rgba(168, 85, 247, 0.2);
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
+  html {
+    scroll-behavior: auto;
+  }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

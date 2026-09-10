@@ -5,8 +5,26 @@
     <link>https://aslang.dev/blog</link>
     <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
     <language>en-us</language>
-    <lastBuildDate>Wed, 09 Sep 2026 00:00:00 GMT</lastBuildDate>
+    <lastBuildDate>Thu, 10 Sep 2026 00:00:00 GMT</lastBuildDate>
     <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Why 3B Local Models Fail at Python but Fly on S-Expressions: Zero-Tax Autonomous Coding on Apple Silicon</title>
+      <link>https://aslang.dev/blog/why-3b-local-models-fail-at-python-but-fly-on-s-expressions</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/why-3b-local-models-fail-at-python-but-fly-on-s-expressions</guid>
+      <pubDate>Thu, 10 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>Language Design &amp; SLM Inference</category>
+      <description>How small 3B quantized models (Qwen 2.5-Coder, Llama 3.2) bleed 61% of their attention capacity on Python indentation and bracket bookkeeping, and how single-pass S-expressions deliver 94.2% test pass rates under a 2GB unified memory ceiling on Apple Silicon.</description>
+    </item>
+    <item>
+      <title>The Death of JSON-RPC: Why Autonomous Agent Swarms Need Zero-Copy S-Expression Wire Protocols</title>
+      <link>https://aslang.dev/blog/the-death-of-json-rpc-and-zero-copy-wire-protocols</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-death-of-json-rpc-and-zero-copy-wire-protocols</guid>
+      <pubDate>Thu, 10 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>Protocols &amp; Multi-Agent Swarms</category>
+      <description>Why JSON-RPC and OpenAPI schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how Agent Script Notation (ASN) and SeamBus ring buffers enable sub-microsecond zero-copy inter-agent messaging.</description>
+    </item>
     <item>
       <title>Zero-Overhead Test Telemetry: Nanosecond-Resolution Observability and Resource Tracking in Pure ASL</title>
       <link>https://aslang.dev/blog/zero-overhead-test-telemetry-and-resource-observability</link>

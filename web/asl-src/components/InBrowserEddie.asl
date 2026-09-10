@@ -7,10 +7,10 @@
   :i [(core/strings :a s)])
 
 (dfe BrowserAgentModel
-  (:c qwen-05b-q4 [] "Qwen 2.5 Coder 0.5B (Quantized q4f16_1, ~240MB download / 945MB VRAM, 55 tok/s)")
-  (:c qwen-05b-fp16 [] "Qwen 2.5 Coder 0.5B (Unquantized q0f16, ~980MB download / 1.6GB VRAM, 45 tok/s)")
-  (:c qwen-15b-q4 [] "Qwen 2.5 Coder 1.5B (Quantized q4f16_1, ~850MB download / 1.6GB VRAM, 38 tok/s)")
-  (:c qwen-3b-q4 [] "Qwen 2.5 Coder 3B (Quantized q4f16_1, ~1.7GB download / 2.5GB VRAM, 25 tok/s)"))
+  (:c qwen-3b-q4 [] "Qwen 2.5 Coder 3B Instruct (Quantized Q4_K_M, ~2.0GB download / 2.8GB VRAM, 25 tok/s)")
+  (:c qwen-15b-q4 [] "Qwen 2.5 Coder 1.5B Instruct (Quantized Q4_K_M, ~850MB download / 1.6GB VRAM, 38 tok/s)")
+  (:c qwen-05b-q4 [] "Qwen 2.5 Coder 0.5B (Quantized Q4_K_M, ~240MB download / 945MB VRAM, 55 tok/s)")
+  (:c qwen-05b-fp16 [] "Qwen 2.5 Coder 0.5B (Unquantized q0f16, ~980MB download / 1.6GB VRAM, 45 tok/s)"))
 
 (dfe PositionalToolkind
   (:c tool-html [] "Positional HTML execution: (:c :html ...)")
@@ -27,11 +27,11 @@
 
 (df supported-browser-models [] -> (List Str)
   :d "Returns canonical list of in-browser WebGPU model identifiers."
-  (list "qwen-coder-0.5b-q4" "qwen-coder-0.5b-fp16" "qwen-coder-1.5b-q4" "qwen-coder-3b-q4"))
+  (list "qwen-coder-3b-q4" "qwen-coder-1.5b-q4" "qwen-coder-0.5b-q4" "qwen-coder-0.5b-fp16"))
 
 (df default-browser-model [] -> Str
   :d "Returns recommended default model for client-side execution."
-  "qwen-coder-0.5b-q4")
+  "qwen-coder-3b-q4")
 
 (df detect-positional-tool [(raw Str)] -> PositionalToolkind
   :d "Detects 1-2 token positional ASN tool calling from raw stream."

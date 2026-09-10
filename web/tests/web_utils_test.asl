@@ -61,10 +61,10 @@
 (df test-web-lib-queries [] -> Bool
   :d "Verifies web library blog data queries, category filtering, and post retrieval"
   (let [(all-posts (blog/get-all-posts))]
-    (assert (= (list-len all-posts) 21) "total blog posts count should be 21")
+    (assert (= (list-len all-posts) 23) "total blog posts count should be 23")
     (let [(arch-posts (blog/filter-by-category "Architecture & Language Theory"))]
       (assert (> (list-len arch-posts) 0) "category filter returned empty list")
-      (assert (<= (list-len arch-posts) 21) "category filter exceeded total"))
+      (assert (<= (list-len arch-posts) 23) "category filter exceeded total"))
     (let [(flagship (blog/get-flagship-posts))]
       (assert (> (list-len flagship) 0) "flagship posts should not be empty"))
     (let [(published (blog/get-published-posts))]

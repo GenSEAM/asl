@@ -8,15 +8,17 @@
   :i [(posts :a blog)])
 
 (df test-blog-posts-count [] -> Bool
-  :d "Verifies total blog post catalog contains exactly 21 articles"
+  :d "Verifies total blog post catalog contains exactly 23 articles"
   (let [(all-posts (blog/get-all-posts))]
-    (assert (= (list-len all-posts) 21) "post count is not 21")
+    (assert (= (list-len all-posts) 23) "post count is not 23")
     (assert (not (= (list-len all-posts) 0)) "post count must not be 0")
     true))
 
 (df test-blog-posts-slugs [] -> Bool
-  :d "Verifies presence of all 21 canonical slugs across catalog"
+  :d "Verifies presence of all 23 canonical slugs across catalog"
   (do
+    (assert (!= (blog/get-post-by-slug "why-3b-local-models-fail-at-python-but-fly-on-s-expressions") nil) "missing slug 22")
+    (assert (!= (blog/get-post-by-slug "the-death-of-json-rpc-and-zero-copy-wire-protocols") nil) "missing slug 23")
         (assert (!= (blog/get-post-by-slug "zero-overhead-test-telemetry-and-resource-observability") nil) "missing slug 21")
     (assert (!= (blog/get-post-by-slug "multi-tier-recursive-fractal-memory-and-tree-aggregation") nil) "missing slug 20")
     (assert (!= (blog/get-post-by-slug "why-llms-struggle-with-python-and-rust") nil) "missing slug 1")
@@ -44,6 +46,26 @@
   :d "Verifies that all posts satisfy strict schema invariants"
   (let [(posts (blog/get-all-posts))]
     (assert (> (list-len posts) 0) "posts list is empty")
+    (let [(p22 (blog/get-post-by-slug "why-3b-local-models-fail-at-python-but-fly-on-s-expressions"))]
+      (assert (!= p22 nil) "p22 is nil")
+      (assert (!= (.-title p22) "") "p22 title is empty")
+      (assert (!= (.-date p22) "") "p22 date is empty")
+      (assert (!= (.-author p22) "") "p22 author is empty")
+      (assert (!= (.-category p22) "") "p22 category is empty")
+      (assert (!= (.-read-time p22) "") "p22 read-time is empty")
+      (assert (!= (.-excerpt p22) "") "p22 excerpt is empty")
+      (assert (!= (.-content p22) "") "p22 content is empty")
+      (assert (> (list-len (.-tags p22)) 0) "p22 tags empty"))
+    (let [(p23 (blog/get-post-by-slug "the-death-of-json-rpc-and-zero-copy-wire-protocols"))]
+      (assert (!= p23 nil) "p23 is nil")
+      (assert (!= (.-title p23) "") "p23 title is empty")
+      (assert (!= (.-date p23) "") "p23 date is empty")
+      (assert (!= (.-author p23) "") "p23 author is empty")
+      (assert (!= (.-category p23) "") "p23 category is empty")
+      (assert (!= (.-read-time p23) "") "p23 read-time is empty")
+      (assert (!= (.-excerpt p23) "") "p23 excerpt is empty")
+      (assert (!= (.-content p23) "") "p23 content is empty")
+      (assert (> (list-len (.-tags p23)) 0) "p23 tags empty"))
     (let [(p1 (blog/get-post-by-slug "why-llms-struggle-with-python-and-rust"))]
       (assert (!= p1 nil) "p1 is nil")
       (assert (!= (.-title p1) "") "p1 title is empty")

@@ -108,15 +108,23 @@
               <div class=\"flex flex-col items-end\">
                 <span class=\"text-[10px] font-mono text-ink-muted\">In-Browser Model (4-bit):</span>
                 <select id=\"pg-studio-model\" onchange=\"window.onStudioModelChange()\" class=\"px-3 py-1.5 rounded-xl bg-surface border border-line font-mono text-xs text-ink outline-none focus:border-signal cursor-pointer\">
-                  <option value=\"qwen-1.5b\" selected>Qwen 2.5 Coder 1.5B (Recommended, 850MB)</option>
-                  <option value=\"qwen-0.5b\">Qwen 2.5 Coder 0.5B (Fast, 240MB)</option>
-                  <option value=\"qwen-3b\">Qwen 2.5 Coder 3B (Pro, 1.7GB)</option>
-                  <option value=\"smol-360m\">SmolLM2 360M (Ultra-Light, 180MB)</option>
+                  <option value=\"nano-100m\">Маленькая версия (SmolLM2-135M · 95MB)</option>
+                  <option value=\"qwen-1.5b\" selected>Средняя версия (Qwen2.5-1.5B · 1.1GB)</option>
+                  <option value=\"qwen-3b\">Умная версия (Qwen2.5-3B · 2.2GB)</option>
                 </select>
               </div>
               <span id=\"pg-studio-model-badge\" class=\"px-2.5 py-1 rounded-xl bg-signal/10 text-signal border border-signal/20 font-mono text-[11px] font-semibold\">
-                q4f16_1 &bull; 850MB
+                WebGPU &bull; ~1.18GB VRAM &bull; 62 tok/s
               </span>
+            </div>
+          </div>
+
+          <!-- Model Download Caution Notice -->
+          <div id=\"pg-studio-model-caution\" class=\"flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-xs leading-relaxed\">
+            <span class=\"text-sm leading-none mt-0.5\">⚠️</span>
+            <div class=\"flex flex-col gap-0.5\">
+              <span class=\"font-bold text-amber-200 tracking-wide text-[11px]\">DEFAULT MODEL WEIGHT DOWNLOAD ADVISORY (~2.0 GB)</span>
+              <span class=\"text-amber-300/90 text-[11px]\">The default model <strong>Qwen2.5-Coder-3B-Instruct (Q4_K_M)</strong> requires downloading <strong>~2.0 GB</strong> of quantized model weights into your browser cache on first run. Please ensure an unmetered, high-speed connection and sufficient WebGPU VRAM (~2.8 GB).</span>
             </div>
           </div>
 
@@ -566,10 +574,11 @@
             </div>
             <div class=\"flex items-center gap-2\">
               <select id=\"pg-slm-model\" class=\"px-3 py-1.5 rounded-xl bg-surface border border-line font-mono text-xs text-ink outline-none\">
-                <option value=\"qwen\">Qwen2.5-Coder-1.5B-Instruct (4-bit)</option>
-                <option value=\"smol\">SmolLM2-360M-Instruct (4-bit)</option>
-                <option value=\"llama\">Llama-3.2-1B-Instruct (4-bit)</option>
-                <option value=\"deepseek\">DeepSeek-R1-Distill-Qwen-1.5B (4-bit)</option>
+                <option value=\"qwen-3b\" selected>Qwen2.5-Coder-3B-Instruct (Q4_K_M, ~2.0GB)</option>
+                <option value=\"qwen\">Qwen2.5-Coder-1.5B-Instruct (4-bit, 850MB)</option>
+                <option value=\"smol\">SmolLM2-360M-Instruct (4-bit, 180MB)</option>
+                <option value=\"llama\">Llama-3.2-1B-Instruct (4-bit, 650MB)</option>
+                <option value=\"deepseek\">DeepSeek-R1-Distill-Qwen-1.5B (4-bit, 850MB)</option>
               </select>
             </div>
           </div>
@@ -808,16 +817,21 @@
     window.onStudioModelChange = function() {
       var sel = document.getElementById('pg-studio-model');
       var badge = document.getElementById('pg-studio-model-badge');
+      var caution = document.getElementById('pg-studio-model-caution');
       if (!sel || !badge) return;
       var val = sel.value;
-      if (val === 'qwen-1.5b') {
-        badge.innerText = 'q4f16_1 · 850MB';
-      } else if (val === 'qwen-0.5b') {
-        badge.innerText = 'q4f16_1 · 240MB';
-      } else if (val === 'qwen-3b') {
-        badge.innerText = 'q4f16_1 · 1.7GB';
-      } else if (val === 'smol-360m') {
-        badge.innerText = 'q4f16_1 · 180MB';
+      if (val === 'qwen-3b') {
+        badge.innerText = 'Desktop WebGPU · ~2.15GB VRAM · 45 tok/s';
+        badge.className = 'px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono text-[11px] font-semibold';
+        if (caution) caution.style.display = 'flex';
+      } else if (val === 'qwen-1.5b') {
+        badge.innerText = 'WebGPU · ~1.18GB VRAM · 62 tok/s';
+        badge.className = 'px-2.5 py-1 rounded-xl bg-signal/10 text-signal border border-signal/20 font-mono text-[11px] font-semibold';
+        if (caution) caution.style.display = 'none';
+      } else if (val === 'nano-100m') {
+        badge.innerText = 'WASM CPU · ~95MB RAM · 128 tok/s';
+        badge.className = 'px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-[11px] font-semibold';
+        if (caution) caution.style.display = 'none';
       }
       modelCached = false;
       var st = document.getElementById('pg-studio-model-state');
@@ -972,10 +986,11 @@
 
       if (!modelCached) {
         // Simulate progressive model weight downloading & shader compilation
-        var totalMB = 850;
+        var totalMB = 2000;
         var sel = document.getElementById('pg-studio-model');
         if (sel && sel.value === 'qwen-0.5b') totalMB = 240;
-        if (sel && sel.value === 'qwen-3b') totalMB = 1700;
+        if (sel && sel.value === 'qwen-1.5b') totalMB = 850;
+        if (sel && sel.value === 'qwen-3b') totalMB = 2000;
         if (sel && sel.value === 'smol-360m') totalMB = 180;
 
         var downloaded = 0;
