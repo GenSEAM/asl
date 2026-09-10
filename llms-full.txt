@@ -1026,6 +1026,6 @@ Every builtin function in AgentScript 0.2 with declared type, semantics, and tar
 - `asl check <file.asl>` — Typechecker and semantic gate.
 - `asl transcode <file.asl> --to verbose` — Projection transcoder (standard compact to verbose preview).
 - `asl topo` — Module dependency DAG and circularity auditor.
-- `asl mcp` — Model Context Protocol server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`.
+- `asl mcp` — Model Context Protocol server exposing `asl_check`, `asl_eval`, `asl_format`, `asl_compress_module`.
 
 Canonical Website: https://aslang.dev · Repository: https://github.com/GenSEAM/asl · MIT License

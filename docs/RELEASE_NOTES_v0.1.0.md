@@ -22,7 +22,7 @@ We are proud to announce the **v0.1.0 release of AgentScript (ASL)** — the fir
 - Live 60fps Canvas audio telemetry cockpit in the interactive technical showcase.
 
 ### 5. Developer Agent MCP Server
-- Stdlib-only JSON-RPC 2.0 MCP server exposing `asex_check`, `asex_eval`, `asex_format`, `asex_compress_module`, and `asex_ast_query`.
+- Stdlib-only JSON-RPC 2.0 MCP server exposing `asl_check`, `asl_eval`, `asl_format`, `asl_compress_module`, and `asl_ast_query`.
 - Reduces LLM context token consumption by 70–85% through AST signature compression.
 
 ## Verification & Metrics

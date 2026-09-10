@@ -68,10 +68,10 @@ Connect the ASL MCP Server (`tools/mcp/server.py`) to Claude Desktop, Cursor, or
 
 **Recommended Agent Execution Loop:**
 1. Agent generates an S-expression module.
-2. Agent calls `asex_check(source)` to verify types in-memory.
+2. Agent calls `asl_check(source)` to verify types in-memory.
 3. If errors exist, diagnostic JSON points to exact line/column with rule name (`09-rule`).
-4. Agent calls `asex_eval(source)` to verify return values and test assertions.
-5. Agent calls `asex_compress_module(source)` before passing contracts to peer subagents (-78% token savings).
+4. Agent calls `asl_eval(source)` to verify return values and test assertions.
+5. Agent calls `asl_compress_module(source)` before passing contracts to peer subagents (-78% token savings).
 
 ---
 
