@@ -136,4 +136,32 @@
           :rationale "Verifies package manifest structure audit and sigil hygiene")
     (:sym :name "test-run-all" :kind :fn :tokens 3
           :rationale "Verifies run-all convenience function forwards to all 7 gates")
+    (:sym :name "TestPolarityResult" :kind :type :tokens 2
+          :rationale "Outcome record of dual-polarity assertion audit")
+    (:sym :name "CoverageSummary" :kind :type :tokens 2
+          :rationale "Coverage percentage and qualification status across test suites")
+    (:sym :name "is-test-symbol?" :kind :fn :tokens 2
+          :rationale "Predicate testing if symbol is an executable test case")
+    (:sym :name "is-negative-assertion?" :kind :fn :tokens 3
+          :rationale "Predicate detecting negative, refute, or rejection assertions")
+    (:sym :name "count-negative-assertions" :kind :fn :tokens 3
+          :rationale "Counts negative and refutation assertions in test body")
+    (:sym :name "count-positive-assertions" :kind :fn :tokens 3
+          :rationale "Counts positive assertions in test body")
+    (:sym :name "audit-test-polarity" :kind :fn :tokens 3
+          :rationale "Audits dual-case assertion balance for a test function")
+    (:sym :name "calculate-coverage-pct" :kind :fn :tokens 3
+          :rationale "Calculates integer coverage percentage")
+    (:sym :name "summarize-coverage" :kind :fn :tokens 2
+          :rationale "Aggregates test polarity results into overall coverage summary")
+    (:sym :name "TestIsTestSymbolIdentification" :kind :fn :tokens 3
+          :rationale "Verifies test symbol naming convention pattern matching")
+    (:sym :name "TestNegativeAssertionDetection" :kind :fn :tokens 3
+          :rationale "Verifies detection of negative assertions and refute forms")
+    (:sym :name "TestAssertionCounting" :kind :fn :tokens 3
+          :rationale "Verifies counting of positive and negative assertions")
+    (:sym :name "TestAuditTestPolarityStrict" :kind :fn :tokens 3
+          :rationale "Verifies dual-polarity qualification under strict and lenient modes")
+    (:sym :name "TestCoverageSummaryCalculation" :kind :fn :tokens 3
+          :rationale "Verifies coverage percentage and threshold passing status")
   ])

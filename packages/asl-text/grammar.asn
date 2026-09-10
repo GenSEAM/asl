@@ -97,5 +97,21 @@
           :rationale "Hyphen compatibility alias for txt/has?")
     (:sym :name "txt-split" :kind :fn :tokens 2
           :rationale "Hyphen compatibility alias for txt/split")
+
+    ;; Emoji Guard Invariant Symbols (C2, D77)
+    (:sym :name "EmojiViolation" :kind :type :tokens 1)
+    (:sym :name "EmojiScanResult" :kind :type :tokens 1)
+    (:sym :name "has-raw-emoji?" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
+          :rationale "Detects presence of raw UTF-8 emoji byte sequences per invariant C2")
+    (:sym :name "scan-line-emoji" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
+          :rationale "Scans an individual line for raw emoji characters and produces optional violation")
+    (:sym :name "scan-file-emoji" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
+          :rationale "Scans all lines of a file and accumulates emoji violations")
+    (:sym :name "audit-asn-emojis" :kind :fn :tokens 3
+          :rationality :absolute :context-dependent false
+          :rationale "Audits a list of file contents and returns true if zero emoji violations exist")
   ])
 

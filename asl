@@ -19,7 +19,16 @@ if [ ! -x "$NODE_BIN" ]; then
 fi
 socket_probe_ping() {
   local s="$1"
-  python3 -c "
+  if [ -S "$s" ]; then
+    if command -v nc >/dev/null 2>&1; then
+      local res
+      res="$(echo '(:ping)' | nc -U -w 1 "$s" 2>/dev/null || true)"
+      if [[ "$res" == *"pong"* ]]; then
+        return 0
+      fi
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -c "
 import socket, sys
 try:
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -32,14 +41,23 @@ try:
     sys.exit(1)
 except Exception:
     sys.exit(1)
-" "$s" 2>/dev/null
+" "$s" 2>/dev/null && return 0
+    fi
+  fi
+  return 1
 }
 
 socket_send_recv() {
   local s="$1"
   local payload="$2"
   local timeout="${3:-0.5}"
-  python3 -c "
+  if [ -S "$s" ]; then
+    if command -v nc >/dev/null 2>&1; then
+      printf "%s\n" "$payload" | nc -U -w 1 "$s" 2>/dev/null || true
+      return 0
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -c "
 import socket, sys
 try:
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -57,17 +75,19 @@ try:
 except Exception:
     pass
 " "$s" "$payload" "$timeout" 2>/dev/null
+    fi
+  fi
 }
 
 find_engine_bin() {
-  if [ -f "$ROOT/bin/asl-engine" ]; then
-    echo "$ROOT/bin/asl-engine"
-  elif [ -f "$ROOT/../asl/bin/asl-engine" ]; then
-    echo "$ROOT/../asl/bin/asl-engine"
-  elif [ -f "$ROOT/bin/asl-daemon" ]; then
+  if [ -f "$ROOT/bin/asl-daemon" ]; then
     echo "$ROOT/bin/asl-daemon"
   elif [ -f "$ROOT/../asl/bin/asl-daemon" ]; then
     echo "$ROOT/../asl/bin/asl-daemon"
+  elif [ -f "$ROOT/bin/asl-engine" ]; then
+    echo "$ROOT/bin/asl-engine"
+  elif [ -f "$ROOT/../asl/bin/asl-engine" ]; then
+    echo "$ROOT/../asl/bin/asl-engine"
   else
     find_mem_daemon
   fi
@@ -2273,7 +2293,7 @@ END { if (err) exit 1; }
       local UNIGNORED_FOREIGN=""
       for sf in $(find scripts -name "*.sh" 2>/dev/null); do
         case "$sf" in
-          scripts/build-from-source.sh|scripts/install.sh|scripts/project.sh|scripts/release.sh|scripts/run-gate-tests.sh)
+          scripts/build-from-source.sh|scripts/install.sh|scripts/project.sh|scripts/release.sh|scripts/run-gate-tests.sh|scripts/build_and_install.sh)
             ;;
           *)
             UNIGNORED_FOREIGN="$UNIGNORED_FOREIGN $sf"
@@ -2572,30 +2592,14 @@ print(f'{tot_cov:.1f}% {qual_mode} qualified ({total_qualified}/{total_tests} te
     echo "    ✓ Zero collisions detected (state/status, task/to distinct), unambiguous canonical clarity enforced."
 
     # Enforce c-0002: Zero emojis in machine ASN specifications and protocols
-    if command -v python3 >/dev/null 2>&1; then
-      if ! python3 -c '
-import os, sys, re
-pat = re.compile(r"[\U0001F300-\U0001FAFF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF]")
-err = 0
-for root, dirs, files in os.walk("."):
-    if "node_modules" in dirs: dirs.remove("node_modules")
-    if ".git" in dirs: dirs.remove(".git")
-    if "jobs" in dirs: dirs.remove("jobs")
-    for f in files:
-        if f.endswith(".asn"):
-            p = os.path.join(root, f)
-            with open(p, "r", encoding="utf-8", errors="ignore") as fh:
-                for idx, line in enumerate(fh, 1):
-                    if pat.search(line):
-                        print(f"    ✗ {p}:{idx}: raw emoji prohibited in machine ASN (c-0002): {line.strip()}")
-                        err = 1
-sys.exit(err)
-'; then
-        echo "    ✗ Machine ASN emoji audit failed (violates invariant c-0002)."
-        exit 1
-      fi
-      echo "    ✓ Machine ASN zero-emoji invariant (c-0002) verified across all ASN specifications."
+    local EMOJI_ERRORS
+    EMOJI_ERRORS="$(env LC_ALL=C grep -r -n -F $'\xF0\x9F' --include="*.asn" --exclude-dir="node_modules" --exclude-dir=".git" --exclude-dir="jobs" . 2>/dev/null || true)"
+    if [ -n "$EMOJI_ERRORS" ]; then
+      echo "    ✗ Machine ASN emoji audit failed (violates invariant c-0002):"
+      echo "$EMOJI_ERRORS" | head -n 10
+      exit 1
     fi
+    echo "    ✓ Machine ASN zero-emoji invariant (c-0002) verified across all ASN specifications."
   else
     echo "--> [6/7] ASN grammar registries: Skipped per filter."
   fi
@@ -3999,8 +4003,12 @@ dispatch_rpc_command() {
 
   if [ -z "$RES" ]; then
     local ENGINE_BIN="$(find_engine_bin)"
-    if [ -x "$ENGINE_BIN" ] && command -v python3 >/dev/null 2>&1; then
-      RES="$("$ENGINE_BIN" "$BATCH" 2>/dev/null || true)"
+    if [ -x "$ENGINE_BIN" ]; then
+      if [[ "$ENGINE_BIN" == *"asl-engine"* ]] && ! command -v python3 >/dev/null 2>&1; then
+        :
+      else
+        RES="$("$ENGINE_BIN" "$BATCH" 2>/dev/null || true)"
+      fi
     fi
   fi
 
@@ -4723,35 +4731,15 @@ print("\nCompaction Guidance: Run '\''asl tokens --paradigm'\'' for rational bou
                 continue
               fi
             fi
-            if command -v python3 >/dev/null 2>&1; then
-              if ! python3 -c '
-import sys, re
-pat = re.compile(r"[\U0001F300-\U0001FAFF\U0001F600-\U0001F64F\U0001F680-\U0001F6FF]")
-with open(sys.argv[1], "r", encoding="utf-8", errors="ignore") as f:
-    for idx, line in enumerate(f, 1):
-        if pat.search(line):
-            print(f"    ✗ {sys.argv[1]}:{idx}: raw emoji prohibited in machine ASN (c-0002): {line.strip()}")
-            sys.exit(1)
-' "$TARGET"; then
-                echo "    ✗ Check FAIL: $f violates c-0002 (zero emojis in machine ASN)"
-                FAIL=1
-                continue
-              fi
+            if env LC_ALL=C grep -q -n -F $'\xF0\x9F' "$TARGET" 2>/dev/null; then
+              echo "    ✗ Check FAIL: $f violates c-0002 (zero emojis in machine ASN)"
+              FAIL=1
+              continue
             fi
             ;;
           *)
             CHECK_ERR=""
-            if command -v python3 >/dev/null 2>&1 && [ -x "$EVAL_RUNNER" ]; then
-              CHECK_ERR="$(python3 -c '
-import subprocess, sys
-try:
-    res = subprocess.run([sys.argv[1], "--check", sys.argv[2]], timeout=3, capture_output=True, text=True)
-    out = (res.stdout or "") + "\n" + (res.stderr or "")
-    if out.strip(): sys.stdout.write(out)
-except Exception:
-    pass
-' "$EVAL_RUNNER" "$TARGET" 2>&1 || true)"
-            elif [ -x "$EVAL_RUNNER" ]; then
+            if [ -x "$EVAL_RUNNER" ]; then
               CHECK_ERR="$("$EVAL_RUNNER" --check "$TARGET" 2>&1 || true)"
             fi
             if [ -n "$CHECK_ERR" ]; then
@@ -5485,11 +5473,15 @@ except Exception:
       fi
     fi
     ENGINE_BIN="$(find_engine_bin)"
-    if [ -x "$ENGINE_BIN" ] && command -v python3 >/dev/null 2>&1; then
-      if [ -n "$PAYLOAD" ]; then
-        exec "$ENGINE_BIN" "$PAYLOAD"
+    if [ -x "$ENGINE_BIN" ]; then
+      if [[ "$ENGINE_BIN" == *"asl-engine"* ]] && ! command -v python3 >/dev/null 2>&1; then
+        :
       else
-        exec "$ENGINE_BIN"
+        if [ -n "$PAYLOAD" ]; then
+          exec "$ENGINE_BIN" "$PAYLOAD"
+        else
+          exec "$ENGINE_BIN"
+        fi
       fi
     fi
     execute_batch_inline "$PAYLOAD"
