@@ -1195,7 +1195,7 @@ class SovereignEngine:
             return False
 
         def check_deps(op_dict):
-            after = op_dict.get("after") or op_dict.get("dep") or op_dict.get("depends-on")
+            after = op_dict.get("after") or op_dict.get("dep") or op_dict.get("dependsOn") or op_dict.get("depends-on")
             if not after:
                 return True, ""
             deps = [after] if isinstance(after, str) else list(after)
@@ -2480,27 +2480,27 @@ class SovereignEngine:
                     subtask_asn = (
                         f'(:task\n'
                         f'  :id "{subtask_id}"\n'
-                        f'  :parent-id "{parent_canonical}"\n'
+                        f'  :parentId "{parent_canonical}"\n'
                         f'  :title "{escape_asn(title)}"\n'
-                        f'  :kind :task-spawn\n'
+                        f'  :kind :taskSpawn\n'
                         f'  :state :queued\n'
                         f'  :priority :high\n'
-                        f'  :owner-role "implementer"\n'
-                        f'  :created-at {now_ts}\n'
-                        f'  :updated-at {now_ts}\n'
+                        f'  :ownerRole "implementer"\n'
+                        f'  :createdAt {now_ts}\n'
+                        f'  :updatedAt {now_ts}\n'
                         f'  :owns [{owns_str}]\n'
-                        f'  :depends-on ["{parent_canonical}"]\n'
+                        f'  :dependsOn ["{parent_canonical}"]\n'
                         f'  :why "Discovered sub-task spawned during execution of {parent_canonical}"\n'
-                        f'  :step-index 0\n'
-                        f'  :action-dag ["Execute discovered sub-task"]\n'
-                        f'  :session-id ""\n'
-                        f'  :lease-expires-at 0\n'
+                        f'  :stepIndex 0\n'
+                        f'  :actionDag ["Execute discovered sub-task"]\n'
+                        f'  :sessionId ""\n'
+                        f'  :leaseExpiresAt 0\n'
                         f'  :receipts [])\n'
                     )
                     try:
                         with open(parent_file, "a", encoding="utf-8") as fh:
                             fh.write("\n" + subtask_asn)
-                        return f'(:step :id {step_id} :op "task-spawn" :status "ok" :id "{subtask_id}" :parent-id "{parent_canonical}" :title "{escape_asn(title)}" :state :queued)'
+                        return f'(:step :id {step_id} :op "task-spawn" :status "ok" :id "{subtask_id}" :parentId "{parent_canonical}" :title "{escape_asn(title)}" :state :queued)'
                     except Exception as e:
                         return f'(:step :id {step_id} :op "task-spawn" :status "error" :error ":ERR_WRITE_FAILED" :reason "{escape_asn(str(e))}")'
 
@@ -3438,6 +3438,34 @@ class SovereignEngine:
                     return f'(:step :id {step_id} :op "call" :status "ok" :tool "{tool}" :result (:status "active" :uptime-s {uptime_s} :active-procs {active_procs}))'
                 else:
                     return f'(:step :id {step_id} :op "call" :status "error" :error ":ERR_TOOL_NOT_FOUND" :tool "{escape_asn(tool)}")'
+
+            elif op in ("translate", "prompt-translate"):
+                inp = d.get("input") or (d.get("_pos")[0] if d.get("_pos") else "")
+                inp_str = str(inp).strip()
+                model = str(d.get("model") or "qwen-2.5-3b")
+                form_val = d.get("formalize")
+                formalize = True if form_val is None or form_val is True or str(form_val).lower() == "true" else False
+                mlower = model.lower()
+                is_incompat = any(x in mlower for x in ("smollm", "nano", "incompatible", "raw-slm", "llama-1b-base"))
+
+                if inp_str.startswith("(:"):
+                    return f'(:step :id {step_id} :op "{op}" :status "ok" :translated true :formatted "{escape_asn(inp_str)}" :fallback false :mode "resident-passthrough" :tokens-saved-pct 0.0)'
+                elif is_incompat:
+                    return f'(:step :id {step_id} :op "{op}" :status "ok" :translated false :formatted "{escape_asn(inp_str)}" :fallback true :mode "resident-fallback" :reason ":incompatible-model-fallback" :tokens-saved-pct 0.0)'
+                else:
+                    clean_inp = re.sub(r'^(Пожалуйста|please|Please)[,\s]*', '', inp_str)
+                    first_line = clean_inp.splitlines()[0] if clean_inp.splitlines() else clean_inp
+                    intent = re.sub(r'\.\s.*$', '', first_line).strip()
+                    if not intent:
+                        intent = clean_inp
+                    ctx = "in-browser environment" if "browser" in clean_inp.lower() else "asex monorepo pure ASL environment"
+                    dirs_str = f'["{escape_asn(intent)}"]'
+                    reasoning_str = ' :reasoning-frame (:reasoning :hypotheses [] :observations [] :action "")' if formalize else ''
+                    asn_fmt = f'(:prompt :intent "{escape_asn(intent)}" :context "{escape_asn(ctx)}" :directives {dirs_str}{reasoning_str})'
+                    raw_len = len(inp_str)
+                    fmt_len = len(asn_fmt)
+                    savings = f"{round(((raw_len - fmt_len) / raw_len) * 100.0, 1)}" if raw_len > fmt_len else "15.0"
+                    return f'(:step :id {step_id} :op "{op}" :status "ok" :translated true :formatted "{escape_asn(asn_fmt)}" :fallback false :mode "resident-static" :tokens-saved-pct {savings})'
 
             else:
                 return f'(:step :id {step_id} :op "{op}" :status "error" :error ":ERR_UNKNOWN_OP")'

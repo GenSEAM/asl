@@ -1,4 +1,4 @@
-(module asl-web/in-browser-eddie
+(module asl-web/in-browser-addie
   :d "In-Browser Autonomous Agent (Addie): WebGPU micro-model orchestrator, positional 1-2 token grammar & anti-hallucination firewall."
   :x [BrowserAgentModel PositionalToolkind AgentExecutionReport
       supported-browser-models default-browser-model

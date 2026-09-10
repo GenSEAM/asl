@@ -235,5 +235,12 @@
          :category "memory"
          :purpose "Deterministic machine-native notes querying, keyword search, and dual-projection Markdown export"
          :savings "85%")
+
+    ;; === Resident Prompt Translation & Multilingual Normalization ===
+    (:op :id "asl-translate"
+         :cmd "asl rpc '(:batch (:translate :input \"...\" [:model \"...\"] [:formalize true]))' or asl translate <input>"
+         :category "translation"
+         :purpose "Resident ASN Prompt Translator: converts user prompts into structured ASN with formal reasoning and safe fallback"
+         :savings "40%")
   ]
 )

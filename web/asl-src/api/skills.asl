@@ -8,7 +8,7 @@
     (:id "asl-core" :name "AgentScript Language Core" :category "Code Generation & Wasm"
      :description "Official AgentScript SDK, compiler, and in-memory WebAssembly execution engine."
      :token_cost 1100 :platforms ["Claude Code" "Cursor" "Antigravity" "Windsurf" "OpenDevin"] :verified true)
-    (:id "asl-eddie" :name "EDDIE Swarm Orchestrator" :category "Swarm & Task Allocation"
+    (:id "asl-addie" :name "ADDIE Swarm Orchestrator" :category "Swarm & Task Allocation"
      :description "3-layer superposition triage and consultative agent router with DAG scheduler."
      :token_cost 1450 :platforms ["Claude Code" "Cursor" "Antigravity" "Windsurf"] :verified true)
     (:id "asl-voice" :name "Voice Stream Assistant" :category "Audio & Real-Time"

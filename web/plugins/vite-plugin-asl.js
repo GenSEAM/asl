@@ -458,6 +458,7 @@ import { renderDocsView } from './views/DocsView.asl';
 import { renderBlogView } from './views/BlogView.asl';
 import { renderArticleDetailView } from './views/ArticleDetailView.asl';
 import { renderPlaygroundView } from './views/PlaygroundView.asl';
+import { renderInIdeView } from './views/InIdeView.asl';
 import { renderRoadmapView } from './views/RoadmapView.asl';
 import { renderEcosystemView } from './views/EcosystemView.asl';
 
@@ -481,13 +482,14 @@ export function resolveCurrentRoute() {
   if (hash === '#docs' || hash.startsWith('#docs/')) {
     return hash.replace('#', '/');
   }
-  if (hash === '#roadmap' || hash === '#ecosystem' || hash === '#playground') {
+  if (hash === '#roadmap' || hash === '#ecosystem' || hash === '#playground' || hash === '#in-ide') {
     return hash.replace('#', '/');
   }
   return hash || path || '/';
 }
 
 export function renderView(route) {
+  if (route === '/in-ide' || route === '#in-ide') return renderInIdeView();
   if (route === '/playground' || route === '#playground') return renderPlaygroundView();
   if (route === '/ecosystem' || route === '#ecosystem') return renderEcosystemView();
   if (route === '/roadmap' || route === '#roadmap') return renderRoadmapView();
