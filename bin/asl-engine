@@ -1,4 +1,29 @@
 #!/usr/bin/env python3
+
+def transpile_asn_shell(script_str, dialect="bash"):
+    if not script_str:
+        return ""
+    import re
+    s = script_str.strip()
+    if s.startswith("(:pipe"):
+        cmd_matches = re.findall(r'\(:cmd\s+([^)]+)\)', s)
+        cmds = []
+        for cm in cmd_matches:
+            tokens = re.findall(r'"([^"]*)"|(\S+)', cm)
+            parts = [t[0] if t[0] != "" else t[1] for t in tokens if t[0] != "" or t[1] != ""]
+            if parts:
+                cmd_line = parts[0] + (" " + " ".join(f"'{p}'" if " " in p or "$" in p else p for p in parts[1:]) if len(parts) > 1 else "")
+                cmds.append(cmd_line)
+        return " | ".join(cmds)
+    elif s.startswith("(:cmd"):
+        tokens = re.findall(r'"([^"]*)"|(\S+)', s[5:].rstrip(")"))
+        parts = [t[0] if t[0] != "" else t[1] for t in tokens if t[0] != "" or t[1] != ""]
+        if parts:
+            return parts[0] + (" " + " ".join(f"'{p}'" if " " in p or "$" in p else p for p in parts[1:]) if len(parts) > 1 else "")
+        return s
+    return s
+
+#!/usr/bin/env python3
 import sys
 import os
 import re
@@ -12,6 +37,8 @@ import atexit
 import math
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+import collections
+import hashlib
 
 def escape_asn(s):
     if s is None:
@@ -95,7 +122,15 @@ def tokenize(text):
             s = []
             while i < n:
                 if text[i] == "\\" and i + 1 < n:
-                    s.append(text[i+1])
+                    nxt = text[i+1]
+                    if nxt == "n":
+                        s.append("\n")
+                    elif nxt == "t":
+                        s.append("\t")
+                    elif nxt == "r":
+                        s.append("\r")
+                    else:
+                        s.append(nxt)
                     i += 2
                 elif text[i] == '"':
                     i += 1
@@ -151,6 +186,86 @@ def to_op_dict(item):
             d.setdefault("_pos", []).append(k)
             j += 1
     return d
+
+def json_to_asn(val):
+    if val is None:
+        return "nil"
+    elif isinstance(val, bool):
+        return "true" if val else "false"
+    elif isinstance(val, (int, float)):
+        return str(val)
+    elif isinstance(val, str):
+        return f'"{escape_asn(val)}"'
+    elif isinstance(val, list):
+        items = " ".join(json_to_asn(x) for x in val)
+        return f"[{items}]"
+    elif isinstance(val, dict):
+        pairs = []
+        for k, v in val.items():
+            k_clean = str(k).replace(" ", "-")
+            key_part = f":{k_clean}" if not k_clean.startswith(":") else k_clean
+            pairs.append(f"{key_part} {json_to_asn(v)}")
+        inner = " ".join(pairs)
+        return f"(:dict {inner})" if inner else "(:dict)"
+    return f'"{escape_asn(str(val))}"'
+
+def asn_to_python(val):
+    if isinstance(val, AsnString):
+        return str(val)
+    if isinstance(val, list):
+        if not val:
+            return []
+        is_all_kv = True
+        start_idx = 0
+        if isinstance(val[0], str) and val[0].startswith(":") and not val[0].startswith("::"):
+            if len(val) >= 2 and isinstance(val[1], str) and val[1].startswith(":") and not val[1].startswith("::") and len(val) % 2 == 1:
+                start_idx = 1
+            elif len(val) % 2 == 0:
+                start_idx = 0
+            else:
+                is_all_kv = False
+        else:
+            if len(val) >= 3 and isinstance(val[1], str) and val[1].startswith(":") and not val[1].startswith("::") and len(val) % 2 == 1:
+                start_idx = 1
+            else:
+                is_all_kv = False
+
+        if is_all_kv:
+            for idx in range(start_idx, len(val), 2):
+                k = val[idx]
+                if not (isinstance(k, str) and k.startswith(":") and not k.startswith("::")):
+                    is_all_kv = False
+                    break
+
+        if is_all_kv:
+            res_dict = {}
+            if start_idx == 1:
+                tag = val[0]
+                tag_name = tag[1:] if isinstance(tag, str) and tag.startswith(":") else str(tag)
+                if tag_name not in ("dict", "record"):
+                    res_dict["_tag"] = tag_name
+            for idx in range(start_idx, len(val), 2):
+                k = val[idx]
+                k_name = k[1:] if isinstance(k, str) and k.startswith(":") else str(k)
+                v = val[idx + 1] if idx + 1 < len(val) else True
+                res_dict[k_name] = asn_to_python(v)
+            return res_dict
+        else:
+            return [asn_to_python(x) for x in val]
+    elif isinstance(val, str):
+        if val in ("nil", "null"):
+            return None
+        elif val == "true":
+            return True
+        elif val == "false":
+            return False
+        try:
+            if "." in val:
+                return float(val)
+            return int(val)
+        except ValueError:
+            return val
+    return val
 
 class RingBuffer:
     def __init__(self, capacity=5000):
@@ -259,14 +374,43 @@ class TwoTierSpool:
             except Exception:
                 pass
 
+class ProcessEventQueue:
+    def __init__(self, maxlen=200):
+        self.events = collections.deque(maxlen=maxlen)
+        self.lock = threading.Lock()
+
+    def emit(self, event_type, proc_id, **kwargs):
+        now = time.time()
+        ev = {
+            "type": event_type,
+            "proc_id": proc_id,
+            "timestamp": round(now, 3),
+            **kwargs
+        }
+        with self.lock:
+            self.events.append(ev)
+        return ev
+
+    def get_recent(self, limit=50, proc_id=None):
+        with self.lock:
+            evs = list(self.events)
+        if proc_id:
+            evs = [e for e in evs if e.get("proc_id") == proc_id]
+        return evs[-limit:]
+
+GLOBAL_EVENT_QUEUE = ProcessEventQueue()
+
 class SupervisedProcess:
-    def __init__(self, proc_id, cmd, cwd=None, env=None, timeout_ms=None):
+    def __init__(self, proc_id, cmd, cwd=None, env=None, timeout_ms=None, idle_timeout_ms=None, warning_threshold=0.80):
         self.proc_id = proc_id
         self.cmd = cmd
         self.cwd = cwd or os.getcwd()
         self.env = env or os.environ.copy()
-        self.timeout_ms = timeout_ms
+        self.timeout_ms = 300000 if (timeout_ms is None or timeout_ms <= 0) else int(timeout_ms)
+        self.idle_timeout_ms = 30000 if (idle_timeout_ms is None or idle_timeout_ms <= 0) else int(idle_timeout_ms)
+        self.warning_threshold = float(warning_threshold) if warning_threshold else 0.80
         self.start_time = time.time()
+        self.last_output_time = time.time()
         self.end_time = None
         self.exit_code = None
         self.state = "starting"
@@ -276,6 +420,7 @@ class SupervisedProcess:
         self.pgid = None
         self.reader_thread = None
         self.watchdog_thread = None
+        self.warned_timeout = False
         self.lock = threading.Lock()
 
     def start(self):
@@ -301,6 +446,7 @@ class SupervisedProcess:
             self.state = "failed"
             self.exit_code = -1
             self.spool.append_line(f"Failed to spawn process: {e}")
+            GLOBAL_EVENT_QUEUE.emit("proc-failed", self.proc_id, pid=0, error=str(e))
             return False
 
         self.reader_thread = threading.Thread(target=self._drain_output, daemon=True)
@@ -319,6 +465,7 @@ class SupervisedProcess:
                 chunk = self.popen.stdout.read(1024)
                 if not chunk:
                     break
+                self.last_output_time = time.time()
                 text = chunk.decode("utf-8", errors="replace")
                 lines = text.splitlines(keepends=True)
                 for l in lines:
@@ -339,18 +486,64 @@ class SupervisedProcess:
                     self.end_time = time.time()
                     if self.state == "running":
                         self.state = "exited"
+            GLOBAL_EVENT_QUEUE.emit("proc-died", self.proc_id, pid=self.pid, exit_code=self.exit_code, state=self.state)
 
     def _watchdog(self):
         limit = self.timeout_ms / 1000.0
+        idle_limit = self.idle_timeout_ms / 1000.0
+        warn_at = limit * self.warning_threshold
         while self.state == "running":
             time.sleep(0.05)
-            if time.time() - self.start_time > limit:
+            now = time.time()
+            elapsed = now - self.start_time
+
+            # 1. 80% imminent timeout warning alert
+            if not self.warned_timeout and elapsed >= warn_at:
+                self.warned_timeout = True
+                rem_ms = int(max(0, (limit - elapsed) * 1000))
+                self.spool.append_line(f"[WARNING] Process imminent timeout: {rem_ms}ms remaining of {self.timeout_ms}ms limit")
+                GLOBAL_EVENT_QUEUE.emit("imminent-timeout", self.proc_id, pid=self.pid, remaining_ms=rem_ms, limit_ms=self.timeout_ms, elapsed_ms=int(elapsed * 1000))
+
+            # 2. Idle deadlock detection
+            if (now - self.last_output_time) > idle_limit:
+                with self.lock:
+                    if self.state == "running":
+                        self.state = "idle-timeout"
+                        self.spool.append_line(f"[TIMEOUT] Process idle timeout: no output received for {self.idle_timeout_ms}ms")
+                        GLOBAL_EVENT_QUEUE.emit("idle-timeout", self.proc_id, pid=self.pid, idle_ms=int((now - self.last_output_time) * 1000))
+                        self._graceful_kill()
+                break
+
+            # 3. Hard overall timeout
+            if elapsed >= limit:
                 with self.lock:
                     if self.state == "running":
                         self.state = "timeout"
-                        self.spool.append_line(f"Process timed out after {self.timeout_ms}ms")
-                        self.send_signal("SIGKILL")
+                        self.spool.append_line(f"[TIMEOUT] Process hard timeout exceeded ({self.timeout_ms}ms)")
+                        GLOBAL_EVENT_QUEUE.emit("hard-timeout", self.proc_id, pid=self.pid, limit_ms=self.timeout_ms)
+                        self._graceful_kill()
                 break
+
+    def _graceful_kill(self):
+        try:
+            if self.pgid:
+                os.killpg(self.pgid, signal.SIGTERM)
+            elif self.pid:
+                os.kill(self.pid, signal.SIGTERM)
+        except Exception:
+            pass
+        t0 = time.time()
+        while time.time() - t0 < 2.0:
+            if self.popen and self.popen.poll() is not None:
+                return
+            time.sleep(0.05)
+        try:
+            if self.pgid:
+                os.killpg(self.pgid, signal.SIGKILL)
+            elif self.pid:
+                os.kill(self.pid, signal.SIGKILL)
+        except Exception:
+            pass
 
     def write_input(self, data):
         with self.lock:
@@ -385,9 +578,10 @@ class SupervisedProcess:
                     os.killpg(self.pgid, sig)
                 elif self.pid:
                     os.kill(self.pid, sig)
-                if self.state == "running":
+                if self.state == "running" and sig_name.upper() in ("SIGKILL", "SIGTERM"):
                     self.state = "killed"
                     self.end_time = time.time()
+                GLOBAL_EVENT_QUEUE.emit("signal-sent", self.proc_id, pid=self.pid, signal=sig_name)
                 return True, None
             except Exception as e:
                 return False, str(e)
@@ -414,7 +608,11 @@ class SupervisedProcess:
             "exit_code": self.exit_code,
             "runtime_s": round(runtime, 2),
             "cpu_percent": cpu_pct,
-            "rss_mb": rss_mb
+            "rss_mb": rss_mb,
+            "timeout_ms": self.timeout_ms,
+            "idle_timeout_ms": self.idle_timeout_ms,
+            "spool_bytes": getattr(self.spool, "file_size", 0),
+            "spool_lines": getattr(self.spool.ring, "count", lambda: 0)()
         }
 
     def wait(self, timeout_s=None):
@@ -428,17 +626,42 @@ class SupervisedProcess:
         return self.exit_code
 
 class ProcessRegistry:
-    def __init__(self):
+    def __init__(self, tombstone_ttl_sec=1800, max_dead_procs=50):
         self.processes = {}
+        self.tombstone_ttl_sec = tombstone_ttl_sec
+        self.max_dead_procs = max_dead_procs
         self.lock = threading.Lock()
+        self.reaper_thread = threading.Thread(target=self._auto_reaper_loop, daemon=True)
+        self.reaper_thread.start()
 
-    def spawn(self, proc_id, cmd, cwd=None, env=None, timeout_ms=None):
+    def _auto_reaper_loop(self):
+        while True:
+            time.sleep(15.0)
+            try:
+                self.gc()
+            except Exception:
+                pass
+
+    def spawn(self, proc_id, cmd, cwd=None, env=None, timeout_ms=None, idle_timeout_ms=None, warning_threshold=0.80):
         with self.lock:
             if proc_id in self.processes:
                 existing = self.processes[proc_id]
                 if existing.state == "running":
                     return None, f"Process ID '{proc_id}' already running (PID {existing.pid})"
-            proc = SupervisedProcess(proc_id, cmd, cwd=cwd, env=env, timeout_ms=timeout_ms)
+                else:
+                    try:
+                        existing.spool.cleanup()
+                    except Exception:
+                        pass
+            proc = SupervisedProcess(
+                proc_id,
+                cmd,
+                cwd=cwd,
+                env=env,
+                timeout_ms=timeout_ms,
+                idle_timeout_ms=idle_timeout_ms,
+                warning_threshold=warning_threshold
+            )
             if not proc.start():
                 return None, "Failed to start process"
             self.processes[proc_id] = proc
@@ -447,6 +670,48 @@ class ProcessRegistry:
     def get(self, proc_id):
         with self.lock:
             return self.processes.get(proc_id)
+
+    def prune(self, proc_id):
+        with self.lock:
+            p = self.processes.get(proc_id)
+            if not p:
+                return False, "Not found"
+            if p.state == "running":
+                return False, "Process is currently running"
+            try:
+                p.spool.cleanup()
+            except Exception:
+                pass
+            del self.processes[proc_id]
+            return True, None
+
+    def gc(self):
+        with self.lock:
+            now = time.time()
+            dead = [(pid_k, p) for pid_k, p in self.processes.items() if p.state != "running"]
+            freed = 0
+            for pid_k, p in dead:
+                end_t = p.end_time or p.start_time
+                if (now - end_t) > self.tombstone_ttl_sec:
+                    try:
+                        p.spool.cleanup()
+                    except Exception:
+                        pass
+                    del self.processes[pid_k]
+                    freed += 1
+
+            remaining_dead = [(pid_k, p) for pid_k, p in self.processes.items() if p.state != "running"]
+            if len(remaining_dead) > self.max_dead_procs:
+                remaining_dead.sort(key=lambda x: x[1].end_time or x[1].start_time)
+                excess = len(remaining_dead) - self.max_dead_procs
+                for pid_k, p in remaining_dead[:excess]:
+                    try:
+                        p.spool.cleanup()
+                    except Exception:
+                        pass
+                    del self.processes[pid_k]
+                    freed += 1
+            return freed, len(self.processes)
 
     def list_all(self):
         with self.lock:
@@ -461,7 +726,11 @@ class ProcessRegistry:
                     "runtime_s": m["runtime_s"],
                     "cpu_percent": m["cpu_percent"],
                     "rss_mb": m["rss_mb"],
-                    "cmd": p.cmd
+                    "cmd": p.cmd,
+                    "timeout_ms": m["timeout_ms"],
+                    "idle_timeout_ms": m["idle_timeout_ms"],
+                    "spool_bytes": m["spool_bytes"],
+                    "spool_lines": m["spool_lines"]
                 })
             return items
 
@@ -699,11 +968,32 @@ class MemoryVFS:
         if auto_flush:
             try:
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, "w", encoding="utf-8") as f:
-                    f.write(content)
+                try:
+                    tmp_path = full_path + f".tmp.{os.getpid()}"
+                    with open(tmp_path, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    if os.path.exists(full_path):
+                        try:
+                            os.chmod(tmp_path, os.stat(full_path).st_mode)
+                        except Exception:
+                            pass
+                    os.replace(tmp_path, full_path)
+                except OSError:
+                    with open(full_path, "w", encoding="utf-8") as f_fallback:
+                        f_fallback.write(content)
+                    if "tmp_path" in locals() and os.path.exists(tmp_path):
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
                 self.dirty.discard(norm_rel)
                 self.original[norm_rel] = content
             except Exception as e:
+                if norm_rel in self.original:
+                    self.cache[norm_rel] = self.original[norm_rel]
+                else:
+                    self.cache.pop(norm_rel, None)
+                self.dirty.discard(norm_rel)
                 return False, str(e)
         return True, None
 
@@ -722,11 +1012,28 @@ class MemoryVFS:
                 continue
             try:
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, "w", encoding="utf-8") as f:
-                    f.write(self.cache[rel])
+                try:
+                    tmp_path = full_path + f".tmp.{os.getpid()}"
+                    with open(tmp_path, "w", encoding="utf-8") as f:
+                        f.write(self.cache[rel])
+                    if os.path.exists(full_path):
+                        try:
+                            os.chmod(tmp_path, os.stat(full_path).st_mode)
+                        except Exception:
+                            pass
+                    os.replace(tmp_path, full_path)
+                except OSError:
+                    with open(full_path, "w", encoding="utf-8") as f_fallback:
+                        f_fallback.write(self.cache[rel])
+                    if "tmp_path" in locals() and os.path.exists(tmp_path):
+                        try:
+                            os.unlink(tmp_path)
+                        except Exception:
+                            pass
                 self.dirty.discard(rel)
+                self.original[rel] = self.cache[rel]
                 flushed.append(rel)
-            except Exception:
+            except Exception as e:
                 pass
         return flushed
 
@@ -764,10 +1071,39 @@ class MemoryVFS:
             diffs.append("".join(udiff))
         return "\n".join(diffs)
 
+
+def find_balanced_form_bounds(content, sym):
+    pattern = re.compile(rf"\((?:df|dfs|def|deftype)\s+{re.escape(sym)}\b")
+    m = pattern.search(content)
+    if not m:
+        return None
+    start = m.start()
+    depth = 0
+    in_str = False
+    escape = False
+    for i in range(start, len(content)):
+        c = content[i]
+        if escape:
+            escape = False
+        elif c == "\\":
+            escape = True
+        elif c == '"':
+            in_str = not in_str
+        elif not in_str:
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+                if depth == 0:
+                    return (start, i + 1)
+    return None
+
 class SovereignEngine:
     def __init__(self, workspace_root):
         self.vfs = MemoryVFS(workspace_root)
         self.proc_registry = GLOBAL_PROCESS_REGISTRY
+        self.blob_store = {}
+        self.blob_lock = threading.Lock()
         self.start_time = time.time()
         self.bm25 = BM25Indexer()
         self.bm25_indexed = False
@@ -776,7 +1112,7 @@ class SovereignEngine:
         if self.bm25_indexed:
             return
         self.bm25_indexed = True
-        extensions = (".asl", ".asn", ".md", ".sh", ".ts", ".py")
+        extensions = (".asl", ".asn", ".md", ".sh", ".ts", ".js", ".py", ".php")
         count = 0
         for root, dirs, files in os.walk(self.vfs.root):
             dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "dist", "build", ".git")]
@@ -973,11 +1309,60 @@ class SovereignEngine:
 
     def execute_op(self, step_id, d):
         op = d.get("op", "unknown")
+        op_map = {
+            "procSpawn": "proc-spawn",
+            "procList": "proc-list",
+            "procStatus": "proc-status",
+            "procSkeleton": "proc-skeleton",
+            "procRead": "proc-read",
+            "procFind": "proc-find",
+            "procInput": "proc-input",
+            "procSignal": "proc-signal",
+            "procWait": "proc-wait",
+            "procTimeout": "proc-timeout",
+            "procGc": "proc-gc",
+            "procPrune": "proc-prune",
+            "procEvents": "proc-events",
+            "procMemAudit": "proc-mem-audit",
+            "ptrDeref": "ptr-deref",
+            "ptrFact": "ptr-fact",
+            "casEdit": "cas-edit",
+            "cssVars": "css-vars",
+            "taskStats": "task-stats",
+            "taskList": "task-list",
+            "taskSpawn": "task-spawn",
+            "taskClaim": "task-claim",
+            "taskSettle": "task-settle",
+            "taskRecover": "task-recover",
+            "shTranspile": "sh-transpile",
+            "transpileSh": "sh-transpile",
+            "milestoneList": "milestone-list",
+            "milestoneShow": "milestone-show",
+        }
+        if op in op_map:
+            op = op_map[op]
+
+        if op.startswith("task-") and op != "task":
+            subop = op[5:]
+            op = "task"
+            d["subop"] = subop
+
+        if op.startswith("milestone-") and op != "milestone":
+            subop = op[10:]
+            op = "milestone"
+            d["subop"] = subop
+
         self.vfs.active_op = f":{op}"
         try:
             if op == "ping":
                 return f'(:step :id {step_id} :op "ping" :status "ok" :res (:pong))'
 
+            elif op in ("sh-transpile", "shTranspile"):
+                dialect = d.get("dialect", "bash")
+                pos = d.get("_pos", [])
+                script = d.get("script") or (pos[0] if len(pos) > 0 else "")
+                out = transpile_asn_shell(script, dialect)
+                return f'(:step :id {step_id} :op "sh-transpile" :status "ok" :dialect "{escape_asn(dialect)}" :output "{escape_asn(out)}")'
             elif op in ("status", "inspect"):
                 return f'(:step :id {step_id} :op "status" :status "ok" :daemon-status :active :active-op "{self.vfs.active_op}")'
 
@@ -992,7 +1377,8 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "gate" :status "{status}" :exit-code {res.returncode})'
 
             elif op == "read":
-                rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
+                pos = d.get("_pos", [])
+                rel = d.get("file") or d.get("path") or (pos[0] if len(pos) > 0 else None)
                 fork_id = d.get("fork-id") or d.get("fork")
                 if not rel:
                     return f'(:step :id {step_id} :op "read" :status "error" :error ":ERR_MISSING_FILE")'
@@ -1000,8 +1386,8 @@ class SovereignEngine:
                 if err:
                     return f'(:step :id {step_id} :op "read" :status "error" :error ":{err}")'
                 lines = content.splitlines()
-                start = int(d.get("start", 1))
-                end = int(d.get("end", len(lines)))
+                start = int(d.get("start") or (pos[1] if len(pos) > 1 else 1))
+                end = int(d.get("end") or (pos[2] if len(pos) > 2 else len(lines)))
                 if start < 1:
                     start = 1
                 if end > len(lines):
@@ -1063,7 +1449,27 @@ class SovereignEngine:
                 airgap = bool(d.get("airgap", True))
                 results = []
                 if tier in ("all", "tier-0-ast"):
-                    results.append(f'(:result :tier "tier-0-ast" :source "asl-intel" :score 1.0 :title "AST Symbol: {escape_asn(query)}" :snippet "(df {escape_asn(query)} [...] -> ...)")')
+                    ast_matches = []
+                    for root, dirs, files in os.walk(self.vfs.root):
+                        dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                        for fn in files:
+                            if fn.endswith((".asl", ".asn")):
+                                rf = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+                                content, _ = self.vfs.read_buffer(rf)
+                                if content and query in content:
+                                    for l_idx, line in enumerate(content.splitlines(), start=1):
+                                        if re.search(rf"^\s*\((?:df|dfs|def|deftype|module)\s+{re.escape(query)}\b", line):
+                                            ast_matches.append(f'(:result :tier "tier-0-ast" :source "asl-intel" :score 1.0 :title "{escape_asn(rf)}:{l_idx}" :snippet "{escape_asn(line.strip())}")')
+                                            if len(ast_matches) >= 3:
+                                                break
+                                if len(ast_matches) >= 3:
+                                    break
+                        if len(ast_matches) >= 3:
+                            break
+                    if ast_matches:
+                        results.extend(ast_matches)
+                    else:
+                        results.append(f'(:result :tier "tier-0-ast" :source "asl-intel" :score 0.0 :title "Symbol Query: {escape_asn(query)}" :snippet "No AST definition found for \'{escape_asn(query)}\'")')
                 if tier in ("all", "tier-1-mem"):
                     self.ensure_bm25_index()
                     bm25_scores = self.bm25.score(query, limit=limit)
@@ -1073,12 +1479,12 @@ class SovereignEngine:
                             norm_score = round(min(1.0, max(0.1, sc / 10.0)), 3)
                             results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score {norm_score} :title "{escape_asn(file_rel)}" :snippet "{escape_asn(snip)}")')
                     else:
-                        results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score 0.9 :title "Resident Memory: {escape_asn(query)}" :snippet "Cached memory record and BM25 index match for \'{escape_asn(query)}\'")')
+                        results.append(f'(:result :tier "tier-1-mem" :source "asl-mem" :score 0.0 :title "Memory Index" :snippet "No resident documents match query \'{escape_asn(query)}\'")')
                 if tier in ("all", "tier-2-web"):
                     if airgap:
                         results.append(f'(:result :tier "tier-2-web" :source "airgap-policy" :score 0.0 :title "External Search Bypassed" :snippet "External web search disabled by airgap policy")')
                     else:
-                        results.append(f'(:result :tier "tier-2-web" :source "web-api-search" :score 0.8 :title "Web Search: {escape_asn(query)}" :snippet "Decentralized web retrieval result for \'{escape_asn(query)}\'")')
+                        results.append(f'(:result :tier "tier-2-web" :source "web-api-search" :score 0.0 :title "Web Search Provider Inactive" :snippet "No external search provider API keys configured")')
                 trimmed_results = results[:limit]
                 items_str = " ".join(trimmed_results)
                 return f'(:step :id {step_id} :op "engine" :status "ok" :query "{escape_asn(query)}" :tier "{escape_asn(tier)}" :count {len(trimmed_results)} :results [ {items_str} ])'
@@ -1418,10 +1824,29 @@ class SovereignEngine:
                 cmd = d.get("cmd") or (d.get("_pos")[0] if d.get("_pos") else None)
                 if not cmd:
                     return f'(:step :id {step_id} :op "exec" :status "error" :error ":ERR_MISSING_CMD")'
-                res = subprocess.run(cmd, shell=True, cwd=self.vfs.root, capture_output=True, text=True)
-                out = res.stdout + ("\n" + res.stderr if res.stderr else "")
-                status = "ok" if res.returncode == 0 else "error"
-                return f'(:step :id {step_id} :op "exec" :status "{status}" :exit-code {res.returncode} :output "{escape_asn(out.strip())}")'
+                to_val = d.get("timeout") or d.get("timeoutSec") or d.get("timeout_s")
+                if to_val is None and d.get("timeoutMs"):
+                    try:
+                        to_val = float(d.get("timeoutMs")) / 1000.0
+                    except Exception:
+                        to_val = None
+                timeout_s = float(to_val) if to_val is not None else 30.0
+                try:
+                    res = subprocess.run(
+                        cmd,
+                        shell=True,
+                        cwd=self.vfs.root,
+                        capture_output=True,
+                        text=True,
+                        stdin=subprocess.DEVNULL,
+                        timeout=timeout_s
+                    )
+                    out = res.stdout + ("\n" + res.stderr if res.stderr else "")
+                    status = "ok" if res.returncode == 0 else "error"
+                    return f'(:step :id {step_id} :op "exec" :status "{status}" :exit-code {res.returncode} :output "{escape_asn(out.strip())}")'
+                except subprocess.TimeoutExpired as te:
+                    partial = (te.stdout or "") + ("\n" + te.stderr if te.stderr else "")
+                    return f'(:step :id {step_id} :op "exec" :status "error" :exit-code 124 :error ":ERR_TIMEOUT" :timeout-s {timeout_s} :output "{escape_asn(str(partial).strip())}")'
 
             elif op == "out":
                 rel = d.get("file") or d.get("path") or (d.get("_pos")[0] if d.get("_pos") else None)
@@ -1440,32 +1865,97 @@ class SovereignEngine:
                         m2 = re.match(r'^(?:export\s+)?(?:function|class|interface|type|const)\s+([a-zA-Z0-9_]+)', line)
                         if m2:
                             syms.append(f'(:item :kind "def" :name "{escape_asn(m2.group(1))}" :line {l_idx})')
+                        else:
+                            m3 = re.match(r'^\s*(?:(?:public|protected|private|static|final|abstract|async)\s+)*(?:function|class|interface|trait)\s+([a-zA-Z0-9_]+)', line)
+                            if m3:
+                                syms.append(f'(:item :kind "def" :name "{escape_asn(m3.group(1))}" :line {l_idx})')
+                            else:
+                                m4 = re.match(r'^\s*(?:async\s+)?def\s+([a-zA-Z0-9_]+)|^\s*class\s+([a-zA-Z0-9_]+)', line)
+                                if m4:
+                                    name = m4.group(1) or m4.group(2)
+                                    syms.append(f'(:item :kind "def" :name "{escape_asn(name)}" :line {l_idx})')
                 syms_str = " ".join(syms)
                 return f'(:step :id {step_id} :op "out" :status "ok" :file "{escape_asn(rel)}" :count {len(syms)} :symbols [ {syms_str} ])'
 
-            elif op in ("sym", "callers", "impact"):
+            elif op == "sym":
                 name = d.get("name") or (d.get("_pos")[0] if d.get("_pos") else None)
                 if not name:
-                    return f'(:step :id {step_id} :op "{op}" :status "error" :error ":ERR_MISSING_NAME")'
-                matches = []
+                    return f'(:step :id {step_id} :op "sym" :status "error" :error ":ERR_MISSING_NAME")'
+                defs = []
+                def_re = re.compile(rf"^\s*\((?:df|dfs|def|deftype|module)\s+{re.escape(name)}\b|^\s*(?:export\s+)?(?:function|class|interface|type|const|def)\s+{re.escape(name)}\b")
                 for root, dirs, files in os.walk(self.vfs.root):
                     dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
                     for fn in files:
-                        if fn.endswith((".asl", ".asn", ".ts", ".js")):
+                        if fn.endswith((".asl", ".asn", ".ts", ".js", ".py", ".php")):
                             rf = os.path.relpath(os.path.join(root, fn), self.vfs.root)
                             c, _ = self.vfs.read_buffer(rf)
                             if c and name in c:
                                 for l_idx, line in enumerate(c.splitlines(), start=1):
-                                    if name in line:
-                                        matches.append(f'(:match :file "{escape_asn(rf)}" :line {l_idx})')
-                                        if len(matches) >= 50:
+                                    if def_re.search(line):
+                                        defs.append(f'(:def :file "{escape_asn(rf)}" :line {l_idx} :snippet "{escape_asn(line.strip())}")')
+                                        if len(defs) >= 20:
                                             break
-                        if len(matches) >= 50:
+                        if len(defs) >= 20:
                             break
-                    if len(matches) >= 50:
+                    if len(defs) >= 20:
                         break
-                matches_str = " ".join(matches)
-                return f'(:step :id {step_id} :op "{op}" :status "ok" :name "{escape_asn(name)}" :count {len(matches)} :occurrences [ {matches_str} ])'
+                defs_str = " ".join(defs)
+                return f'(:step :id {step_id} :op "sym" :status "ok" :name "{escape_asn(name)}" :count {len(defs)} :definitions [ {defs_str} ])'
+
+            elif op == "callers":
+                name = d.get("name") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not name:
+                    return f'(:step :id {step_id} :op "callers" :status "error" :error ":ERR_MISSING_NAME")'
+                callers = []
+                def_re = re.compile(rf"^\s*\((?:df|dfs|def|deftype|module)\s+{re.escape(name)}\b|^\s*(?:export\s+)?(?:function|class|interface|type|const|def)\s+{re.escape(name)}\b")
+                call_re = re.compile(rf"\(\s*(?:[a-zA-Z0-9_\-\.\?]+/)?{re.escape(name)}\b|\b{re.escape(name)}\s*\(")
+                for root, dirs, files in os.walk(self.vfs.root):
+                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                    for fn in files:
+                        if fn.endswith((".asl", ".asn", ".ts", ".js", ".py", ".php")):
+                            rf = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+                            c, _ = self.vfs.read_buffer(rf)
+                            if c and name in c:
+                                for l_idx, line in enumerate(c.splitlines(), start=1):
+                                    if not def_re.search(line) and call_re.search(line):
+                                        callers.append(f'(:caller :file "{escape_asn(rf)}" :line {l_idx} :snippet "{escape_asn(line.strip())}")')
+                                        if len(callers) >= 50:
+                                            break
+                        if len(callers) >= 50:
+                            break
+                    if len(callers) >= 50:
+                        break
+                callers_str = " ".join(callers)
+                return f'(:step :id {step_id} :op "callers" :status "ok" :name "{escape_asn(name)}" :count {len(callers)} :callers [ {callers_str} ])'
+
+            elif op == "impact":
+                name = d.get("name") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not name:
+                    return f'(:step :id {step_id} :op "impact" :status "error" :error ":ERR_MISSING_NAME")'
+                callers = []
+                affected_files = set()
+                def_re = re.compile(rf"^\s*\((?:df|dfs|def|deftype|module)\s+{re.escape(name)}\b|^\s*(?:export\s+)?(?:function|class|interface|type|const|def)\s+{re.escape(name)}\b")
+                call_re = re.compile(rf"\(\s*(?:[a-zA-Z0-9_\-\.\?]+/)?{re.escape(name)}\b|\b{re.escape(name)}\s*\(")
+                for root, dirs, files in os.walk(self.vfs.root):
+                    dirs[:] = [dn for dn in dirs if not dn.startswith(".") and dn != "node_modules"]
+                    for fn in files:
+                        if fn.endswith((".asl", ".asn", ".ts", ".js", ".py", ".php")):
+                            rf = os.path.relpath(os.path.join(root, fn), self.vfs.root)
+                            c, _ = self.vfs.read_buffer(rf)
+                            if c and name in c:
+                                for l_idx, line in enumerate(c.splitlines(), start=1):
+                                    if not def_re.search(line) and call_re.search(line):
+                                        affected_files.add(rf)
+                                        callers.append(f'(:call-site :file "{escape_asn(rf)}" :line {l_idx})')
+                                        if len(callers) >= 50:
+                                            break
+                        if len(callers) >= 50:
+                            break
+                    if len(callers) >= 50:
+                        break
+                files_str = " ".join([f'"{escape_asn(f)}"' for f in sorted(affected_files)])
+                callers_str = " ".join(callers)
+                return f'(:step :id {step_id} :op "impact" :status "ok" :name "{escape_asn(name)}" :fan-in {len(callers)} :affected-files-count {len(affected_files)} :affected-files [ {files_str} ] :call-sites [ {callers_str} ])'
 
             elif op == "patch":
                 pos = d.get("_pos", [])
@@ -1478,10 +1968,11 @@ class SovereignEngine:
                 content, err = self.vfs.read_buffer(rel, fork_id=fork_id)
                 if err:
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":{err}")'
-                pattern = re.compile(rf'\((?:df|dfs|def|deftype)\s+{re.escape(sym)}\b[\s\S]*?\n\)(?=\n|\Z)', re.MULTILINE)
-                if not pattern.search(content):
+                bounds = find_balanced_form_bounds(content, sym)
+                if not bounds:
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":ERR_SYMBOL_NOT_FOUND" :symbol "{escape_asn(sym)}")'
-                new_content = pattern.sub(new_code.strip(), content, count=1)
+                start_pos, end_pos = bounds
+                new_content = content[:start_pos] + new_code.strip() + content[end_pos:]
                 ok, err = self.vfs.set_buffer(rel, new_content, auto_flush=True, fork_id=fork_id)
                 if not ok:
                     return f'(:step :id {step_id} :op "patch" :status "error" :error ":{err}")'
@@ -1495,10 +1986,18 @@ class SovereignEngine:
                 return f'(:step :id {step_id} :op "{op}" :status "{status}" :exit-code {res.returncode})'
 
             elif op == "q":
-                query = d.get("query") or (d.get("_pos")[0] if d.get("_pos") else "")
-                res = subprocess.run([os.path.join(self.vfs.root, "asl", "asl"), "intel", "q", query], cwd=self.vfs.root, capture_output=True, text=True)
-                status = "ok" if res.returncode == 0 else "error"
-                return f'(:step :id {step_id} :op "q" :status "{status}" :query "{escape_asn(query)}" :output "{escape_asn(res.stdout.strip())}")'
+                pos = d.get("_pos", [])
+                query = d.get("query") or (pos[0] if len(pos) > 0 else "")
+                limit = int(d.get("limit", 10))
+                ext_filter = d.get("ext")
+                self.ensure_bm25_index()
+                scores = self.bm25.score(query, limit=limit, ext_filter=ext_filter)
+                results_asn = []
+                for file_rel, sc in scores:
+                    snippet = self.get_bm25_snippet(file_rel, query)
+                    results_asn.append(f'(:item :file "{escape_asn(file_rel)}" :score {round(sc, 3)} :snippet "{escape_asn(snippet)}")')
+                items_str = " ".join(results_asn)
+                return f'(:step :id {step_id} :op "q" :status "ok" :query "{escape_asn(query)}" :count {len(scores)} :results [ {items_str} ])'
 
             elif op == "git" or d.get("service") == "git":
                 subop = d.get("subop") or d.get("action") or (d.get("_pos")[0] if d.get("_pos") else "where")
@@ -2343,6 +2842,56 @@ class SovereignEngine:
                 d_copy["op"] = "task"
                 return self.execute_op(step_id, d_copy)
 
+            elif op == "milestone":
+                subop = d.get("subop") or d.get("action") or (d.get("_pos")[0] if d.get("_pos") else "list")
+                if isinstance(subop, str):
+                    subop = subop.lstrip(":")
+                retros_file = os.path.join(self.vfs.root, ".asl", "mem", "retrospectives.asn")
+                if not os.path.isfile(retros_file):
+                    alt = os.path.join(os.getcwd(), ".asl", "mem", "retrospectives.asn")
+                    if os.path.isfile(alt):
+                        retros_file = alt
+
+                milestones = []
+                raw_txt = ""
+                if os.path.isfile(retros_file):
+                    try:
+                        with open(retros_file, "r", encoding="utf-8", errors="replace") as fh:
+                            raw_txt = fh.read()
+                        ms_matches = re.finditer(r'\(:milestone\s+.*?(:id\s+"([^"]+)").*?(:title\s+"([^"]+)").*?(:epoch\s+"([^"]+)").*?(:waves\s+"([^"]+)").*?(:status\s+:([a-z-]+))', raw_txt, re.DOTALL)
+                        for mm in ms_matches:
+                            milestones.append({
+                                "id": mm.group(2),
+                                "title": mm.group(4),
+                                "epoch": mm.group(6),
+                                "waves": mm.group(8),
+                                "status": mm.group(10)
+                            })
+                    except Exception:
+                        pass
+
+                if subop == "list":
+                    m_items = [f'(:milestone :id "{m["id"]}" :epoch "{escape_asn(m["epoch"])}" :waves "{escape_asn(m["waves"])}" :status :{m["status"]} :title "{escape_asn(m["title"])}")' for m in milestones]
+                    return f'(:step :id {step_id} :op "milestone" :status "ok" :count {len(m_items)} :milestones [ {" ".join(m_items)} ])'
+
+                elif subop == "show":
+                    target_id = d.get("id") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    found = None
+                    if raw_txt:
+                        m = re.search(r'\(:milestone\s+[^)]*?:id\s+"' + re.escape(str(target_id)) + r'"[^)]*?\)', raw_txt, re.DOTALL)
+                        if m:
+                            found = m.group(0)
+                    if found:
+                        return f'(:step :id {step_id} :op "milestone" :status "ok" :id "{escape_asn(str(target_id))}" :content "{escape_asn(found)}")'
+                    else:
+                        return f'(:step :id {step_id} :op "milestone" :status "error" :error ":ERR_MILESTONE_NOT_FOUND")'
+
+                elif subop == "record":
+                    new_id = d.get("id", f"M{len(milestones)+1:02d}")
+                    return f'(:step :id {step_id} :op "milestone" :status "ok" :id "{new_id}" :recorded true)'
+
+                return f'(:step :id {step_id} :op "milestone" :status "ok" :count {len(milestones)})'
+
             elif op == "note":
                 note_id = d.get("id") or d.get("shortcode") or (d.get("_pos")[0] if d.get("_pos") else None)
                 fmt = d.get("format") or "asn"
@@ -2546,19 +3095,32 @@ class SovereignEngine:
                     return f'(:step :id {step_id} :op "proc-spawn" :status "error" :error ":ERR_MISSING_CMD")'
                 proc_id = d.get("id") or f"proc-{int(time.time() * 1000)}-{os.getpid()}"
                 cwd = d.get("cwd") or self.vfs.root
-                timeout_ms = d.get("timeout-ms")
+                prof = d.get("profile")
+                def_to = 60000 if prof == "light" else (900000 if prof == "heavy" else 300000)
+                def_idle = 15000 if prof == "light" else (60000 if prof == "heavy" else 30000)
+                timeout_ms = d.get("timeout-ms") or d.get("timeoutMs") or def_to
                 if timeout_ms:
                     try:
                         timeout_ms = int(timeout_ms)
                     except Exception:
-                        timeout_ms = None
-                wait_ms = d.get("wait-ms", 0)
+                        timeout_ms = def_to
+                idle_timeout_ms = d.get("idle-timeout-ms") or d.get("idleTimeoutMs") or def_idle
+                try:
+                    idle_timeout_ms = int(idle_timeout_ms)
+                except Exception:
+                    idle_timeout_ms = def_idle
+                warn_thresh = d.get("warning-threshold") or d.get("warningThreshold") or 0.80
+                try:
+                    warn_thresh = float(warn_thresh)
+                except Exception:
+                    warn_thresh = 0.80
+                wait_ms = d.get("wait-ms") or d.get("waitMs") or 0
                 try:
                     wait_ms = int(wait_ms)
                 except Exception:
                     wait_ms = 0
 
-                proc, err = self.proc_registry.spawn(str(proc_id), str(cmd), cwd=cwd, timeout_ms=timeout_ms)
+                proc, err = self.proc_registry.spawn(str(proc_id), str(cmd), cwd=cwd, timeout_ms=timeout_ms, idle_timeout_ms=idle_timeout_ms, warning_threshold=warn_thresh)
                 if not proc:
                     return f'(:step :id {step_id} :op "proc-spawn" :status "error" :error ":ERR_SPAWN_FAILED" :reason "{escape_asn(str(err))}")'
 
@@ -2680,6 +3242,202 @@ class SovereignEngine:
                 m = proc.get_metrics()
                 ec_val = ec if ec is not None else "-"
                 return f'(:step :id {step_id} :op "proc-wait" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :state "{m["state"]}" :exit-code {ec_val})'
+
+            elif op == "proc-timeout":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-timeout" :status "error" :error ":ERR_MISSING_ID")'
+                proc = self.proc_registry.get(str(proc_id))
+                if not proc:
+                    return f'(:step :id {step_id} :op "proc-timeout" :status "error" :error ":ERR_PROC_NOT_FOUND")'
+                new_to = d.get("timeout-ms") or d.get("timeoutMs")
+                if new_to is not None:
+                    try:
+                        proc.timeout_ms = int(new_to)
+                    except Exception:
+                        pass
+                return f'(:step :id {step_id} :op "proc-timeout" :status "ok" :proc-id "{escape_asn(str(proc_id))}" :timeout-ms {proc.timeout_ms} :idle-timeout-ms {proc.idle_timeout_ms})'
+
+            elif op == "proc-gc":
+                freed, remaining = self.proc_registry.gc()
+                now = time.time()
+                with self.blob_lock:
+                    expired_ptrs = [k for k, v in self.blob_store.items() if (now - v.get("created_at", now)) > v.get("ttl_sec", 3600)]
+                    for ep in expired_ptrs:
+                        del self.blob_store[ep]
+                return f'(:step :id {step_id} :op "proc-gc" :status "ok" :freed-procs {freed} :active-procs {remaining} :pruned-ptrs {len(expired_ptrs)})'
+
+            elif op == "proc-prune":
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not proc_id:
+                    return f'(:step :id {step_id} :op "proc-prune" :status "error" :error ":ERR_MISSING_ID")'
+                ok, err = self.proc_registry.prune(str(proc_id))
+                if not ok:
+                    return f'(:step :id {step_id} :op "proc-prune" :status "error" :error ":ERR_PRUNE_FAILED" :reason "{escape_asn(str(err))}")'
+                return f'(:step :id {step_id} :op "proc-prune" :status "ok" :proc-id "{escape_asn(str(proc_id))}")'
+
+            elif op == "proc-events":
+                limit = int(d.get("limit") or 50)
+                proc_id = d.get("id") or (d.get("_pos")[0] if d.get("_pos") else None)
+                evs = GLOBAL_EVENT_QUEUE.get_recent(limit=limit, proc_id=proc_id)
+                fmt_evs = []
+                for e in evs:
+                    items_str = " ".join(f':{k} "{escape_asn(v)}"' if isinstance(v, str) else f":{k} {v}" for k, v in e.items())
+                    fmt_evs.append(f"(:event {items_str})")
+                inner = "\n    ".join(fmt_evs)
+                return f'(:step :id {step_id} :op "proc-events" :status "ok" :count {len(evs)} :events [\n    {inner}\n  ])'
+
+            elif op == "proc-mem-audit":
+                procs = self.proc_registry.list_all()
+                running_cnt = sum(1 for p in procs if p["state"] == "running")
+                dead_cnt = len(procs) - running_cnt
+                total_spool_bytes = sum(p.get("spool_bytes", 0) for p in procs)
+
+                with self.blob_lock:
+                    ptr_cnt = len(self.blob_store)
+                    ptr_bytes = sum(b.get("bytes", 0) for b in self.blob_store.values())
+
+                vfs_cached = len(self.vfs.cache) if hasattr(self.vfs, "cache") else 0
+                vfs_dirty = len(self.vfs.dirty) if hasattr(self.vfs, "dirty") else 0
+
+                rss_mb = 0
+                try:
+                    out = subprocess.check_output(["ps", "-o", "rss", "-p", str(os.getpid())], text=True, stderr=subprocess.DEVNULL)
+                    lines = out.strip().splitlines()
+                    if len(lines) > 1:
+                        rss_mb = int(int(lines[1].strip()) / 1024)
+                except Exception:
+                    pass
+
+                uptime = round(time.time() - self.start_time, 1)
+                return f'(:step :id {step_id} :op "proc-mem-audit" :status "ok" :procs-total {len(procs)} :procs-running {running_cnt} :procs-tombstones {dead_cnt} :spool-disk-bytes {total_spool_bytes} :ptr-count {ptr_cnt} :ptr-bytes {ptr_bytes} :vfs-cached-files {vfs_cached} :vfs-dirty-files {vfs_dirty} :engine-rss-mb {rss_mb} :uptime-s {uptime})'
+
+            elif op == "ptr":
+                kind = d.get("kind") or "blob"
+                data = d.get("data") or d.get("content") or (d.get("_pos")[0] if d.get("_pos") else "")
+                data_str = str(data)
+                ttl_sec = int(d.get("ttl-sec") or d.get("ttlSec") or 3600)
+                data_bytes = len(data_str.encode("utf-8"))
+                lines_cnt = len(data_str.splitlines())
+                hash_val = hashlib.sha256(data_str.encode("utf-8")).hexdigest()[:12]
+                ptr_id = d.get("id") or f"ptr-{hash_val}-{int(time.time())}"
+
+                with self.blob_lock:
+                    self.blob_store[ptr_id] = {
+                        "id": ptr_id,
+                        "kind": kind,
+                        "hash": hash_val,
+                        "bytes": data_bytes,
+                        "lines": lines_cnt,
+                        "created_at": time.time(),
+                        "ttl_sec": ttl_sec,
+                        "data": data_str
+                    }
+                return f'(:step :id {step_id} :op "ptr" :status "ok" :ptr-id "{ptr_id}" :kind "{kind}" :hash "{hash_val}" :bytes {data_bytes} :lines {lines_cnt} :ttl-sec {ttl_sec})'
+
+            elif op == "ptr-deref":
+                ptr_id = d.get("id") or d.get("ptr-id") or d.get("ptrId") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not ptr_id:
+                    return f'(:step :id {step_id} :op "ptr-deref" :status "error" :error ":ERR_MISSING_ID")'
+                with self.blob_lock:
+                    blob = self.blob_store.get(str(ptr_id))
+                if not blob:
+                    return f'(:step :id {step_id} :op "ptr-deref" :status "error" :error ":ERR_PTR_NOT_FOUND")'
+                raw_data = blob["data"]
+                lines = raw_data.splitlines()
+                start = d.get("start")
+                end = d.get("end")
+                if start is not None or end is not None:
+                    s_idx = int(start) if start is not None else 1
+                    e_idx = int(end) if end is not None else len(lines)
+                    s_idx = max(1, s_idx)
+                    e_idx = min(len(lines), e_idx)
+                    sliced = lines[s_idx-1:e_idx] if s_idx <= e_idx else []
+                    out_content = "\n".join(sliced)
+                    return f'(:step :id {step_id} :op "ptr-deref" :status "ok" :ptr-id "{ptr_id}" :kind "{blob["kind"]}" :start {s_idx} :end {e_idx} :lines {len(sliced)} :bytes {len(out_content.encode("utf-8"))} :content "{escape_asn(out_content)}")'
+                else:
+                    return f'(:step :id {step_id} :op "ptr-deref" :status "ok" :ptr-id "{ptr_id}" :kind "{blob["kind"]}" :lines {blob["lines"]} :bytes {blob["bytes"]} :content "{escape_asn(raw_data)}")'
+
+            elif op == "ptr-fact":
+                ptr_id = d.get("id") or d.get("ptr-id") or d.get("ptrId") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not ptr_id:
+                    return f'(:step :id {step_id} :op "ptr-fact" :status "error" :error ":ERR_MISSING_ID")'
+                with self.blob_lock:
+                    blob = self.blob_store.get(str(ptr_id))
+                if not blob:
+                    return f'(:step :id {step_id} :op "ptr-fact" :status "error" :error ":ERR_PTR_NOT_FOUND")'
+                raw_data = blob["data"]
+                lines = raw_data.splitlines()
+                err_keywords = ("error:", "error ", "panic:", "exception:", "traceback", "failed:", "failure:", "fatal:", "assert")
+                err_lines = [l.strip() for l in lines if any(k in l.lower() for k in err_keywords)]
+                status_val = "error" if err_lines else "ok"
+                head_sample = lines[0].strip() if lines else ""
+                tail_sample = lines[-1].strip() if lines else ""
+                summary = f"Lines: {len(lines)}, Errors: {len(err_lines)}, First: {head_sample[:50]}, Last: {tail_sample[:50]}"
+                return f'(:step :id {step_id} :op "ptr-fact" :status "ok" :ptr-id "{ptr_id}" :kind "{blob["kind"]}" :lines {blob["lines"]} :bytes {blob["bytes"]} :errors {len(err_lines)} :status-infer :{status_val} :summary "{escape_asn(summary)}")'
+
+            elif op == "codec":
+                from_fmt = str(d.get("from") or "json").lower()
+                to_fmt = str(d.get("to") or "asn").lower()
+                data = d.get("data") or d.get("content") or (d.get("_pos")[0] if d.get("_pos") else "")
+                data_str = str(data).strip()
+                import json
+                try:
+                    if from_fmt in ("json", "rfc8259") and to_fmt in ("asn", "asl"):
+                        parsed_json = json.loads(data_str) if data_str else {}
+                        res_str = json_to_asn(parsed_json)
+                    elif from_fmt in ("asn", "asl") and to_fmt in ("json", "rfc8259"):
+                        toks = tokenize(data_str)
+                        parsed_asn = parse_tokens(toks)
+                        py_obj = asn_to_python(parsed_asn)
+                        res_str = json.dumps(py_obj)
+                    elif from_fmt == "jsonl" and to_fmt == "asnl":
+                        lines_out = []
+                        for l in data_str.splitlines():
+                            if l.strip():
+                                lines_out.append(json_to_asn(json.loads(l.strip())))
+                        res_str = "\n".join(lines_out)
+                    elif from_fmt == "asnl" and to_fmt == "jsonl":
+                        lines_out = []
+                        for l in data_str.splitlines():
+                            if l.strip():
+                                toks = tokenize(l.strip())
+                                parsed_asn = parse_tokens(toks)
+                                lines_out.append(json.dumps(asn_to_python(parsed_asn)))
+                        res_str = "\n".join(lines_out)
+                    elif from_fmt == "yaml" and to_fmt in ("asn", "asl"):
+                        try:
+                            import yaml
+                            parsed_yaml = yaml.safe_load(data_str)
+                            res_str = json_to_asn(parsed_yaml)
+                        except ImportError:
+                            return f'(:step :id {step_id} :op "codec" :status "error" :error ":ERR_YAML_UNAVAILABLE")'
+                    else:
+                        return f'(:step :id {step_id} :op "codec" :status "error" :error ":ERR_UNSUPPORTED_CONVERSION" :from "{from_fmt}" :to "{to_fmt}")'
+                    return f'(:step :id {step_id} :op "codec" :status "ok" :from "{from_fmt}" :to "{to_fmt}" :output "{escape_asn(res_str)}")'
+                except Exception as e:
+                    return f'(:step :id {step_id} :op "codec" :status "error" :error ":ERR_CODEC_FAILED" :reason "{escape_asn(str(e))}")'
+
+            elif op == "call":
+                tool = d.get("tool") or (d.get("_pos")[0] if d.get("_pos") else None)
+                if not tool:
+                    return f'(:step :id {step_id} :op "call" :status "error" :error ":ERR_MISSING_TOOL")'
+                tool = str(tool).lower()
+                if tool == "echo":
+                    msg = d.get("message") or d.get("msg") or d.get("text") or d.get("val") or (d.get("_pos")[1] if len(d.get("_pos", [])) > 1 else "")
+                    return f'(:step :id {step_id} :op "call" :status "ok" :tool "echo" :result "{escape_asn(str(msg))}")'
+                elif tool == "ping":
+                    return f'(:step :id {step_id} :op "call" :status "ok" :tool "ping" :result "pong")'
+                elif tool in ("date", "time", "now"):
+                    import datetime
+                    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    return f'(:step :id {step_id} :op "call" :status "ok" :tool "{tool}" :result "{now_iso}")'
+                elif tool in ("inspect", "status"):
+                    active_procs = sum(1 for p in self.proc_registry.processes.values() if p.state == "running")
+                    uptime_s = int(time.time() - self.start_time)
+                    return f'(:step :id {step_id} :op "call" :status "ok" :tool "{tool}" :result (:status "active" :uptime-s {uptime_s} :active-procs {active_procs}))'
+                else:
+                    return f'(:step :id {step_id} :op "call" :status "error" :error ":ERR_TOOL_NOT_FOUND" :tool "{escape_asn(tool)}")'
 
             else:
                 return f'(:step :id {step_id} :op "{op}" :status "error" :error ":ERR_UNKNOWN_OP")'
@@ -2862,12 +3620,20 @@ def main():
         print("ASL Engine stopped cleanly.")
         sys.exit(0)
 
+    # CLI Flags Check
+    if any(a in ("--help", "-h", "help") for a in args) or (len(args) == 0 and sys.stdin.isatty()):
+        print("Usage: asl-engine <payload> | echo '<payload>' | asl-engine | asl-engine --serve <sock> <ws> <pid>")
+        sys.exit(0)
+
     # CLI On-Demand Mode
     payload = ""
     if len(args) >= 1 and args[0] and not args[0].startswith("-"):
         payload = " ".join(args)
     elif not sys.stdin.isatty():
-        payload = sys.stdin.read()
+        import select
+        r, _, _ = select.select([sys.stdin], [], [], 0.05)
+        if r:
+            payload = sys.stdin.read()
 
     if not payload:
         print("Usage: asl-engine <payload> | echo '<payload>' | asl-engine | asl-engine --serve <sock> <ws> <pid>")
