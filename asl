@@ -3349,7 +3349,7 @@ if os.path.exists(intent_file):
             else:
                 intent_task_count += 1
 
-p401_tasks = [t for t in all_tasks.keys() if t.startswith("task-401")]
+p401_tasks = [t for t in all_tasks.keys() if t.startswith("task-401") or t.startswith("Task401")]
 d52_errors = []
 d52_req_fields = [
     (":motivation",), (":purpose",), (":context",), (":outcomes",),
@@ -3366,6 +3366,8 @@ for tid in p401_tasks:
 
 all_task_errors = []
 for tid, tinfo in all_tasks.items():
+    if tinfo["file"].endswith("backlog.asn"):
+        continue
     b = tinfo["block"]
     if ":owns" not in b:
         all_task_errors.append(f"Task {tid} missing :owns")

@@ -2472,10 +2472,10 @@ class SovereignEngine:
                         try:
                             with open(parent_file, "r", encoding="utf-8", errors="replace") as fh:
                                 p_txt = fh.read()
-                                sub_count = len(re.findall(re.escape(parent_canonical) + r'-sub\d+', p_txt)) + 1
+                                sub_count = len(re.findall(re.escape(parent_canonical) + r'(?:-sub|Sub)\d+', p_txt)) + 1
                         except Exception:
                             pass
-                    subtask_id = f"{parent_canonical}-sub{sub_count}"
+                    subtask_id = f"{parent_canonical}Sub{sub_count}"
                     owns_str = " ".join(f'"{escape_asn(o)}"' for o in owns)
                     subtask_asn = (
                         f'(:task\n'
