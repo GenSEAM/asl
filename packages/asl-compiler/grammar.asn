@@ -53,10 +53,14 @@
           :rationale "Cannot be reduced to 'test-clean-schema': scopes compiler verification to struct/union schema lowering, avoiding parser test overlap")
     (:sym :name "test-compile-embedded-target" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-embedded': scopes compiler test specifically to embedded C/Arduino backend generation")
+    (:sym :name "test-compile-go-target" :kind :fn :tokens 4
+          :rationale "Scopes compiler test specifically to Go cloud-native platform leaf generation")
     (:sym :name "test-compile-parse-error" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-parse-error': distinguishes compiler-level diagnostic reporting from raw lexer/parser error generation")
     (:sym :name "test-compile-type-error" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-type-error': distinguishes full compilation failure reporting from isolated typechecker tests")
+    (:sym :name "test-compile-wasm-target" :kind :fn :tokens 4
+          :rationale "Scopes compiler test specifically to WebAssembly universal core target lowering")
     (:sym :name "test-eval-literals" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to evaluator primitive literal decoding, avoiding parser overlap")
     (:sym :name "test-eval-arithmetic" :kind :fn :tokens 3
