@@ -1,0 +1,158 @@
+(:stylesheet
+  :version "1.0.0"
+  :tailwind [:base :components :utilities]
+  :layers [
+    (:layer
+      :name "base"
+      :themes [
+        (:theme
+          :selector ":root"
+          :tokens [
+            (:ground "248 247 252")
+            (:sunken "238 235 245")
+            (:surface "255 255 255")
+            (:inset "244 242 248")
+            (:line "225 219 236")
+            (:line-strong "146 128 176")
+            (:ink "24 18 36")
+            (:ink-2 "76 64 96")
+            (:ink-3 "112 98 134")
+            (:signal "126 34 206")
+            (:signal-soft "147 51 234")
+            (:shadow-hue "270 25% 10%")
+            (:shadow-strength "0.08")
+          ])
+        (:theme
+          :selector ".dark"
+          :tokens [
+            (:ground "12 9 20")
+            (:sunken "4 2 7")
+            (:surface "24 19 39")
+            (:inset "17 13 29")
+            (:line "48 38 72")
+            (:line-strong "136 102 198")
+            (:ink "246 244 255")
+            (:ink-2 "198 183 253")
+            (:ink-3 "152 140 175")
+            (:signal "176 96 255")
+            (:signal-soft "198 142 255")
+            (:shadow-hue "270 50% 5%")
+            (:shadow-strength "0.65")
+          ])
+      ]
+      :rules [
+        (:rule
+          :selector "html"
+          :declarations [
+            (:scroll-behavior "smooth")
+            (:scroll-padding-top "6rem")
+            (:width "100%")
+            (:max-width "100vw")
+            (:overflow-x "hidden")
+          ])
+        (:rule
+          :selector "body"
+          :declarations [
+            (:margin "0")
+            (:width "100%")
+            (:max-width "100vw")
+            (:background-color "rgb(var(--ground))")
+            (:color "rgb(var(--ink))")
+            (:font-family "'Inter', system-ui, -apple-system, sans-serif")
+            (:overflow-x "hidden")
+            (:-webkit-font-smoothing "antialiased")
+            (:text-rendering "optimizeLegibility")
+          ])
+        (:rule
+          :selector "code, pre, .font-mono"
+          :declarations [
+            (:font-family "'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace")
+            (:font-variant-ligatures "none")
+          ])
+        (:rule
+          :selector ":focus-visible"
+          :declarations [
+            (:outline "2px solid rgb(var(--signal))")
+            (:outline-offset "3px")
+            (:border-radius "4px")
+          ])
+        (:rule
+          :selector "::selection"
+          :declarations [
+            (:background "rgb(var(--signal) / 0.18)")
+            (:color "rgb(var(--ink))")
+          ])
+        (:rule
+          :selector "::-webkit-scrollbar"
+          :declarations [
+            (:width "8px")
+            (:height "8px")
+          ])
+        (:rule
+          :selector "::-webkit-scrollbar-track"
+          :declarations [
+            (:background "rgb(var(--ground))")
+          ])
+        (:rule
+          :selector "::-webkit-scrollbar-thumb"
+          :declarations [
+            (:background "rgb(var(--line-strong) / 0.35)")
+            (:border-radius "999px")
+          ])
+        (:rule
+          :selector "::-webkit-scrollbar-thumb:hover"
+          :declarations [
+            (:background "rgb(var(--signal))")
+          ])
+      ])
+    (:layer
+      :name "components"
+      :rules [
+        (:rule
+          :selector ".rule-fade"
+          :declarations [
+            (:height "1px")
+            (:background "linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.4), transparent)")
+          ])
+        (:rule
+          :selector ".bg-dot-grid"
+          :declarations [
+            (:background-image "radial-gradient(rgb(var(--line-strong) / 0.18) 1px, transparent 1px)")
+            (:background-size "24px 24px")
+          ])
+        (:rule
+          :selector ".bg-blueprint-grid"
+          :declarations [
+            (:background-image "linear-gradient(to right, rgb(var(--line) / 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--line) / 0.4) 1px, transparent 1px)")
+            (:background-size "36px 36px")
+          ])
+        (:rule
+          :selector ".glow-purple"
+          :declarations [
+            (:box-shadow "0 0 50px -10px rgba(168, 85, 247, 0.25)")
+          ])
+        (:rule
+          :selector ".glow-purple-sm"
+          :declarations [
+            (:box-shadow "0 0 25px -5px rgba(168, 85, 247, 0.2)")
+          ])
+      ])
+  ]
+  :media [
+    (:media-query
+      :condition "(prefers-reduced-motion: reduce)"
+      :rules [
+        (:rule
+          :selector "html"
+          :declarations [
+            (:scroll-behavior "auto")
+          ])
+        (:rule
+          :selector "*, *::before, *::after"
+          :declarations [
+            (:animation-duration "0.01ms !important")
+            (:animation-iteration-count "1 !important")
+            (:transition-duration "0.01ms !important")
+          ])
+      ])
+  ])

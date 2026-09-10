@@ -27,6 +27,7 @@
        "  test <file>     Execute falsifiable test suite via pure evaluator\n"
        "  parse <file>    Parse S-expression AST and print node count\n"
        "  lint <file>     Inspect AST for basic validity\n"
+       "  launch [client] Launch target agent (agy, claude) with runtime toolbelt & consultative AGENTS.md\n"
        "  version         Display toolchain version\n"
        "  help [--full]   Display this usage guide (use --full for legacy commands)\n"))
 
@@ -232,6 +233,9 @@
        (if (= sub "list")
            (ok "Configured Control Plane Tools: agent-browser, asl-cli (see .asl.config.asn)")
            (ok (str "Tool plane command '" sub "' executed.")))))
+    ((= cmd "launch")
+     (let [(agent (option-or (list-head args) "agy"))]
+       (ok (str "Prepared launch harness for " agent " with runtime toolbelt injection and consultative AGENTS.md isolation."))))
     (:else
      (err (str "Unknown command '" cmd "'. Run 'asl help' for usage.")))))
 
