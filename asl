@@ -6620,8 +6620,16 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
     ;;
 
   launch)
-    TARGET_AGENT="${1:-agy}"
-    [ $# -gt 0 ] && shift || true
+    if [ $# -gt 0 ] && [[ "$1" == -* ]]; then
+      TARGET_AGENT="agy"
+    else
+      TARGET_AGENT="${1:-agy}"
+      [ $# -gt 0 ] && shift || true
+    fi
+    TARGET_AGENT="$(echo "$TARGET_AGENT" | tr '[:upper:]' '[:lower:]')"
+    case "$TARGET_AGENT" in
+      agi) TARGET_AGENT="agy" ;;
+    esac
 
     DRY_RUN=0
     NO_STASH=0
@@ -6643,7 +6651,7 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
 
     while [ $# -gt 0 ]; do
       case "$1" in
-        --orchestrator|-o)
+        --orchestrator|-o|orchestrator)
           ORCHESTRATOR=1
           shift
           ;;
@@ -6766,7 +6774,22 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
           ;;
         --)
           shift
-          EXTRA_ARGS=("$@")
+          while [ $# -gt 0 ]; do
+            case "$1" in
+              orchestrator|--orchestrator|-o)
+                ORCHESTRATOR=1
+                shift
+                ;;
+              --dry-run|-n)
+                DRY_RUN=1
+                shift
+                ;;
+              *)
+                EXTRA_ARGS+=("$1")
+                shift
+                ;;
+            esac
+          done
           break
           ;;
         *)
@@ -6777,7 +6800,7 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
     done
 
     case "$TARGET_AGENT" in
-      agy|antigravity|gemini)
+      agy|antigravity|gemini|agi)
         CLIENT_ID="agy"
         CLIENT_NAME="agy (Antigravity CLI)"
         PROMPT_CHANNEL="<RULE[user_global]>"
