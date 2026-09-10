@@ -3366,7 +3366,7 @@ for tid in p401_tasks:
 
 all_task_errors = []
 for tid, tinfo in all_tasks.items():
-    if tinfo["file"].endswith("backlog.asn"):
+    if "backlog.asn" in tinfo.get("file", ""):
         continue
     b = tinfo["block"]
     if ":owns" not in b:
@@ -6833,6 +6833,7 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
         echo ""
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
+        echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
         echo "  --preset, -P <name>   Preset: fast-research, balanced, deep-architecture, audit-hardening, canvas-interactive"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
@@ -6849,6 +6850,7 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
         echo ""
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
+        echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
         echo "  --preset, -P <name>   Preset: fast-research, balanced, deep-architecture, audit-hardening, canvas-interactive"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
@@ -6915,6 +6917,46 @@ with open('$AGENTS_FILE', 'w') as f:
     export ASL_SEPARATE_AGENTS="$SEPARATE_AGENTS"
     export ASL_ORCH_TARGET="$ORCH_TARGET"
 
+    AUTO_FLAGS=()
+    if [ "$ORCHESTRATOR" -eq 1 ]; then
+      if [ "$CLIENT_ID" = "claude" ]; then
+        HAS_DANGEROUS=0
+        for arg in "${EXTRA_ARGS[@]}"; do
+          if [ "$arg" = "--dangerously-skip-permissions" ]; then
+            HAS_DANGEROUS=1
+            break
+          fi
+        done
+        if [ "$HAS_DANGEROUS" -eq 0 ]; then
+          EXTRA_ARGS=("--dangerously-skip-permissions" "${EXTRA_ARGS[@]}")
+        fi
+        AUTO_FLAGS=("--dangerously-skip-permissions")
+        export CLAUDE_AUTO=1
+        export CLAUDE_PERMISSION_MODE="automatic"
+      elif [ "$CLIENT_ID" = "agy" ]; then
+        HAS_DANGEROUS=0
+        HAS_RESCUE=0
+        for arg in "${EXTRA_ARGS[@]}"; do
+          if [ "$arg" = "--dangerously-skip-permissions" ]; then
+            HAS_DANGEROUS=1
+          fi
+          if [ "$arg" = "--rescue" ]; then
+            HAS_RESCUE=1
+          fi
+        done
+        if [ "$HAS_RESCUE" -eq 0 ]; then
+          EXTRA_ARGS=("--rescue" "${EXTRA_ARGS[@]}")
+        fi
+        if [ "$HAS_DANGEROUS" -eq 0 ]; then
+          EXTRA_ARGS=("--dangerously-skip-permissions" "${EXTRA_ARGS[@]}")
+        fi
+        AUTO_FLAGS=("--dangerously-skip-permissions" "--rescue")
+        export AGY_PERMISSION_TIER="dangerous-rescue"
+        export AGY_RESCUE=1
+        export AGY_DANGEROUSLY_SKIP_PERMISSIONS=1
+      fi
+    fi
+
     echo "================================================================================"
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       echo "          AgentScript Autonomous Client Launcher: $CLIENT_NAME"
@@ -6927,6 +6969,11 @@ with open('$AGENTS_FILE', 'w') as f:
     echo "  • Primary Channel:      $PROMPT_CHANNEL"
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       echo "  • Mode:                 AUTONOMOUS MULTI-AGENT ORCHESTRATOR"
+      if [ "$CLIENT_ID" = "claude" ]; then
+        echo "  • Permission Tier:      AUTOMATIC (--dangerously-skip-permissions)"
+      elif [ "$CLIENT_ID" = "agy" ]; then
+        echo "  • Permission Tier:      DANGEROUS RESCUE (--dangerously-skip-permissions --rescue)"
+      fi
       echo "  • Supervisory Model:    $ORCH_MODEL (Reasoning: $ORCH_REASONING)"
       echo "  • Orchestration Target: $ORCH_TARGET (Baseline: native sub-agents; separate-agents decoupled)"
       echo "  • Concurrency Bounds:   Soft limit: $SOFT_LIMIT | Hard limit: $HARD_LIMIT (Burst on Multi-Project)"
@@ -6962,6 +7009,13 @@ with open('$AGENTS_FILE', 'w') as f:
       if [ "$ORCHESTRATOR" -eq 1 ]; then
         echo "  (:launch-session"
         echo "    :client \"$CLIENT_ID\""
+        if [ "$CLIENT_ID" = "claude" ]; then
+          echo "    :claude-mode \"automatic\""
+          echo "    :auto-flags [\"--dangerously-skip-permissions\"]"
+        elif [ "$CLIENT_ID" = "agy" ]; then
+          echo "    :permission-tier \"dangerous-rescue\""
+          echo "    :auto-flags [\"--dangerously-skip-permissions\" \"--rescue\"]"
+        fi
         echo "    :channel \"$PROMPT_CHANNEL\""
         echo "    :orchestrator-mode true"
         echo "    :supervisory-model \"$ORCH_MODEL\""
