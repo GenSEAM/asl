@@ -407,24 +407,22 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
           CHANNEL_LINK_TARGET="$(readlink "$CHANNEL_FILE")"
           EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
           rm -f "$CHANNEL_FILE"
-          printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE" 2>/dev/null || true
+          printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE"
           trap cleanup_launch EXIT INT TERM HUP
         elif [ -f "$CHANNEL_FILE" ]; then
           CHANNEL_STASH="/tmp/asl_channel_stash_$$"
           cp -f "$CHANNEL_FILE" "$CHANNEL_STASH"
           trap cleanup_launch EXIT INT TERM HUP
-          if [ -w "$CHANNEL_FILE" ]; then
-            if ! grep -q "ASL_TOOLBELT_START" "$CHANNEL_FILE" 2>/dev/null; then
+          if ! grep -q "ASL_TOOLBELT_START" "$CHANNEL_FILE" 2>/dev/null; then
             EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
-                          printf "%s\n\n%s\n" "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE" 2>/dev/null || true
-            elif [ "$ORCHESTRATOR" -eq 1 ] && ! grep -q "ORCHESTRATOR_START" "$CHANNEL_FILE" 2>/dev/null; then
+            printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
+          elif [ "$ORCHESTRATOR" -eq 1 ] && ! grep -q "ORCHESTRATOR_START" "$CHANNEL_FILE" 2>/dev/null; then
             EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
-                          printf "%s\n\n%s\n" "$ORCH_DIRECTIVE" "$EXISTING_CONTENT" > "$CHANNEL_FILE" 2>/dev/null || true
-              fi
+            printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
           fi
         else
           mkdir -p "$(dirname "$CHANNEL_FILE")" 2>/dev/null || true
-          printf '%s\n' "$DIRECTIVE_PAYLOAD" > "$CHANNEL_FILE" 2>/dev/null || true
+          printf '%s\n' "$DIRECTIVE_PAYLOAD" > "$CHANNEL_FILE"
           CHANNEL_CREATED=1
           trap cleanup_launch EXIT INT TERM HUP
         fi
@@ -621,18 +619,33 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       exit 0
     fi
 
-    if [ -z "" ] || [ ! -x "" ]; then
-      echo "Error: sovereign client binary not found or not executable for ''." >&2
+    if [ -n "$CLIENT_BIN" ]; then
+      echo "🚀 Starting $CLIENT_NAME session..."
+      EXIT_CODE=0
+      if [ -n "$INITIAL_PROMPT" ]; then
+        "$CLIENT_BIN" "${EXTRA_ARGS[@]}" "$INITIAL_PROMPT" || EXIT_CODE=$?
+      else
+        "$CLIENT_BIN" "${EXTRA_ARGS[@]}" || EXIT_CODE=$?
+      fi
       cleanup_launch
       trap - EXIT INT TERM HUP
-      exit 1
+      if [ "$EXIT_CODE" -eq 0 ]; then
+        echo "✓ $CLIENT_NAME session ended. Restored consultative buffers."
+      else
+        echo "Notice: $CLIENT_NAME session ended with exit code $EXIT_CODE."
+      fi
+      exit "$EXIT_CODE"
+    else
+      echo "Notice: '$CLIENT_ID' binary was not detected in PATH or standard installation paths."
+      echo "The pre-flight environment and consultative AGENTS.md have been staged."
+      echo "You can launch $CLIENT_NAME from your terminal/IDE now."
+      echo "Press [Enter] to restore AGENTS.md when done, or Ctrl+C to abort."
+      read -r _ || true
+      cleanup_launch
+      trap - EXIT INT TERM HUP
+      echo "✓ Restored original workspace configuration."
+      exit 0
     fi
-
-    "" "${EXTRA_ARGS[@]}"
-    CLIENT_EXIT_CODE=$?
-    cleanup_launch
-    trap - EXIT INT TERM HUP
-    exit $CLIENT_EXIT_CODE
 }
 
 if [ "$1" = "launch" ]; then
