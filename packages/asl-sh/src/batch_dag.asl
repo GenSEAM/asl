@@ -102,9 +102,9 @@
                                :status "skipped"
                                :deps (.-deps s)
                                :reason "aborted-by-prior-error"))]
-              (dag-skip-walk steps (+ idx 1) len true (list-append acc skipped-s)))
+              (dag-skip-walk steps (+ idx 1) len true (list-append acc (list skipped-s))))
             (let [(is-err (= (.-status s) "error"))]
-              (dag-skip-walk steps (+ idx 1) len is-err (list-append acc s)))))))
+              (dag-skip-walk steps (+ idx 1) len is-err (list-append acc (list s))))))))
 
 (df dag-skip-on-prior-failure [(steps (List BatchDagStep))] -> (List BatchDagStep)
   :d "Executes sequential fail-fast semantics: once a step fails with status error, subsequent steps become skipped."
@@ -123,7 +123,7 @@
                          :status "skipped"
                          :deps (.-deps s)
                          :reason "aborted-by-prior-wave-failure"))]
-        (dag-mark-wave-skipped steps (+ idx 1) len (list-append acc skipped-s)))))
+        (dag-mark-wave-skipped steps (+ idx 1) len (list-append acc (list skipped-s))))))
 
 (df dag-skip-wave-on-failure [(wave1-failed Bool) (wave2-steps (List BatchDagStep))] -> (List BatchDagStep)
   :d "Executes wave cascading abort semantics: if prior wave had errors, all steps in current wave are marked skipped."

@@ -56,7 +56,7 @@
                           (>= total-skills 10)
                           (str "Audited " (string-from-int64 total-skills) " modular skills. All frontmatters and protocols fresh.")))
         (verdicts (list v1 v2 v3 v4 v5 v6 v7))
-        (passed-count (fold-left (fn [(acc I64) (v GateVerdict)] -> I64
+        (passed-count (fold (fn [(acc I64) (v GateVerdict)] -> I64
                                    (if (.-passed v) (+ acc 1) acc))
                                  0
                                  verdicts))]
@@ -79,7 +79,7 @@
 (df format-gate-summary [(summary GateSummary)] -> Str
   :d "Formats the 7-Gate audit summary into a clean terminal report."
   (let [(header "================================================================================\n          AgentScript Pure ASL Verification Gate & Continuous Audit             \n================================================================================\n")
-        (body (fold-left (fn [(acc Str) (v GateVerdict)] -> Str
+        (body (fold (fn [(acc Str) (v GateVerdict)] -> Str
                            (let [(mark (if (.-passed v) "✓" "✗"))
                                  (line (str "--> [" (string-from-int64 (.-gate-num v)) "/7] "
                                             (.-gate-name v) "...\n    " mark " " (.-message v) "\n"))]

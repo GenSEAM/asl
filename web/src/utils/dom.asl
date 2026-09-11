@@ -9,11 +9,10 @@
 
 (df format-attr [(attr Any)] -> Str
   :d "Serializes a single attribute pair or record into key-value string format"
-  (if (= (.-_tag (list-head attr)) "some")
-      (let [(k-raw (.-value (list-head attr)))
-            (v (.-value (list-get attr 1)))]
-        (let [(k (if (!= (.-value k-raw) nil) (.-value k-raw) (str k-raw)))]
-          (str " " k "=\"" v "\"")))
+  (if (> (list-len attr) 1)
+      (let [(k (option-unwrap (list-get attr 0)))
+            (v (option-unwrap (list-get attr 1)))]
+        (str " " k "=\"" v "\""))
       (str " " (.-name attr) "=\"" (.-value attr) "\"")))
 
 (df format-attrs [(attrs (List Any))] -> Str

@@ -24,18 +24,6 @@
   (:f baseline I64 "Baseline token ceiling (default: 1)")
   (:f symbols (List SymbolEntry) "List of registered symbols"))
 
-(df sym-fn [] -> SymbolKind
-  (sym-fn))
-
-(df sym-type [] -> SymbolKind
-  (sym-type))
-
-(df sym-val [] -> SymbolKind
-  (sym-val))
-
-(df sym-macro [] -> SymbolKind
-  (sym-macro))
-
 (df make-symbol-entry [(name Str) (kind SymbolKind) (tokens I64) (has-rationale Bool) (rationale Str)] -> SymbolEntry
   (SymbolEntry
     :name name
