@@ -101,8 +101,8 @@ static void sb_append_int(StrBuf *sb, long long val) {
    ------------------------------------------------------------------------- */
 
 static volatile sig_atomic_t g_running = 1;
-static char g_sock_path[1024] = {0};
-static char g_pid_path[1024] = {0};
+static char g_sock_path[4096] = {0};
+static char g_pid_path[4096] = {0};
 
 static void cleanup_files(void) {
     if (g_sock_path[0]) unlink(g_sock_path);
@@ -130,6 +130,7 @@ static int is_safe_path(const char *ws_root, const char *path) {
     if (path[0] == '/') {
         size_t wlen = strlen(ws_root);
         if (strncmp(path, ws_root, wlen) != 0) return 0;
+        if (path[wlen] != '\0' && path[wlen] != '/') return 0;
     }
     return 1;
 }
@@ -145,11 +146,11 @@ static void resolve_path(const char *ws_root, const char *path, char *out, size_
 }
 
 static char *find_ws_root(void) {
-    static char buf[1024];
+    static char buf[4096];
     if (getcwd(buf, sizeof(buf))) {
         char *p = buf;
         while (*p) {
-            char test[1200];
+            char test[4096];
             snprintf(test, sizeof(test), "%s/.asl.config.asn", buf);
             if (file_exists(test)) return buf;
             snprintf(test, sizeof(test), "%s/.git", buf);
@@ -349,9 +350,18 @@ static __attribute__((unused)) long long parse_int_arg(const char *src, const ch
 }
 
 typedef struct {
-    char str[1024];
+    char *str;
     int is_keyword;
 } StepToken;
+
+static void free_tokens(StepToken *tokens, int count) {
+    for (int i = 0; i < count; i++) {
+        if (tokens[i].str) {
+            free(tokens[i].str);
+            tokens[i].str = NULL;
+        }
+    }
+}
 
 static int tokenize_step(const char *src, StepToken *tokens, int max_tokens) {
     int count = 0;
@@ -366,13 +376,16 @@ static int tokenize_step(const char *src, StepToken *tokens, int max_tokens) {
         tokens[count].is_keyword = (*p == ':');
         if (*p == ':') p++;
 
+        StrBuf sb;
+        sb_init(&sb);
+
         if (*p == '"') {
             p++;
-            size_t idx = 0;
             int esc = 0;
-            while (*p && idx + 1 < sizeof(tokens[count].str)) {
+            while (*p) {
                 if (esc) {
-                    tokens[count].str[idx++] = *p++;
+                    sb_append_len(&sb, p, 1);
+                    p++;
                     esc = 0;
                 } else if (*p == '\\') {
                     esc = 1;
@@ -381,17 +394,17 @@ static int tokenize_step(const char *src, StepToken *tokens, int max_tokens) {
                     p++;
                     break;
                 } else {
-                    tokens[count].str[idx++] = *p++;
+                    sb_append_len(&sb, p, 1);
+                    p++;
                 }
             }
-            tokens[count].str[idx] = '\0';
         } else {
-            size_t idx = 0;
-            while (*p && !isspace((unsigned char)*p) && *p != ')' && *p != ']' && idx + 1 < sizeof(tokens[count].str)) {
-                tokens[count].str[idx++] = *p++;
+            while (*p && !isspace((unsigned char)*p) && *p != ')' && *p != ']') {
+                sb_append_len(&sb, p, 1);
+                p++;
             }
-            tokens[count].str[idx] = '\0';
         }
+        tokens[count].str = sb.data;
         count++;
     }
     return count;
@@ -426,7 +439,7 @@ static const char *get_pos_arg(StepToken *tokens, int n, int target_pos) {
 typedef void (*WalkFileCallback)(const char *rel_path, const char *full_path, void *user_data);
 
 static void walk_dir_recursive(const char *base_dir, const char *sub_dir, WalkFileCallback cb, void *user_data) {
-    char full_dir[2048];
+    char full_dir[4096];
     if (!sub_dir || !sub_dir[0] || strcmp(sub_dir, ".") == 0) {
         snprintf(full_dir, sizeof(full_dir), "%s", base_dir);
     } else {
@@ -700,7 +713,7 @@ static void callers_walker_cb(const char *rel_path, const char *full_path, void 
     long long nr = 0;
     while (fgets(line, sizeof(line), fp)) {
         nr++;
-        char pat[256];
+        char pat[1024];
         snprintf(pat, sizeof(pat), "(%s ", ctx->sym);
         if (strstr(line, pat) || strstr(line, ctx->sym)) {
             sb_append(ctx->sb, " (:caller :file \"");
@@ -756,8 +769,8 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
     }
     op[oidx] = '\0';
 
-    StepToken tokens[32];
-    int ntokens = tokenize_step(step_str, tokens, 32);
+    StepToken tokens[64];
+    int ntokens = tokenize_step(step_str, tokens, 64);
 
     if (strcmp(op, "ping") == 0) {
         sb_append(out, "  (:step :id ");
@@ -777,7 +790,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         sb_append_int(out, step_id);
         sb_append(out, " :op \"inspect\" :status \"ok\" :daemon-status (:daemon-status :status \"active\" :active-op \":idle\"))\n");
     } else if (strcmp(op, "read") == 0) {
-        char file[1024] = {0};
+        char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
         if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
         if (kf) strncpy(file, kf, sizeof(file) - 1);
@@ -800,7 +813,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
-            char full_path[2048];
+            char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
             if (!file_exists(full_path)) {
                 sb_append(out, "  (:step :id ");
@@ -830,8 +843,8 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             }
         }
     } else if (strcmp(op, "sec") == 0) {
-        char file[1024] = {0};
-        char heading[256] = {0};
+        char file[4096] = {0};
+        char heading[1024] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
         if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
         if (kf) strncpy(file, kf, sizeof(file) - 1);
@@ -848,7 +861,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
-            char full_path[2048];
+            char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
             if (!file_exists(full_path)) {
                 sb_append(out, "  (:step :id ");
@@ -873,7 +886,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             }
         }
     } else if (strcmp(op, "out") == 0) {
-        char file[1024] = {0};
+        char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
         if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
         if (kf) strncpy(file, kf, sizeof(file) - 1);
@@ -884,7 +897,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
-            char full_path[2048];
+            char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
             if (!file_exists(full_path)) {
                 sb_append(out, "  (:step :id ");
@@ -909,7 +922,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             }
         }
     } else if (strcmp(op, "ls") == 0) {
-        char dir[1024] = {0};
+        char dir[4096] = {0};
         const char *kd = get_kw_arg(tokens, ntokens, "dir");
         if (!kd) kd = get_pos_arg(tokens, ntokens, 1);
         if (kd && kd[0]) strncpy(dir, kd, sizeof(dir) - 1);
@@ -922,7 +935,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append_escaped(out, dir);
             sb_append(out, "\")\n");
         } else {
-            char full_dir[2048];
+            char full_dir[4096];
             resolve_path(ws_root, dir, full_dir, sizeof(full_dir));
             DIR *d = opendir(full_dir);
             if (!d) {
@@ -941,7 +954,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 int count = 0;
                 while ((de = readdir(d)) != NULL && count < 50) {
                     if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) continue;
-                    char ep[2048];
+                    char ep[4096];
                     snprintf(ep, sizeof(ep), "%s/%s", full_dir, de->d_name);
                     struct stat st;
                     long long sz = 0;
@@ -976,18 +989,16 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         sb_append_int(out, step_id);
         sb_append(out, " :op \"discard\" :status \"ok\" :vfs-status \"clean\")\n");
     } else if (strcmp(op, "edit") == 0) {
-        char file[1024] = {0};
-        char old_txt[2048] = {0};
-        char new_txt[2048] = {0};
+        char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
         if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
         if (kf) strncpy(file, kf, sizeof(file) - 1);
         const char *ko = get_kw_arg(tokens, ntokens, "old");
         if (!ko) ko = get_pos_arg(tokens, ntokens, 2);
-        if (ko) strncpy(old_txt, ko, sizeof(old_txt) - 1);
+        const char *old_txt = ko ? ko : "";
         const char *kn = get_kw_arg(tokens, ntokens, "new");
         if (!kn) kn = get_pos_arg(tokens, ntokens, 3);
-        if (kn) strncpy(new_txt, kn, sizeof(new_txt) - 1);
+        const char *new_txt = kn ? kn : "";
 
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
@@ -996,7 +1007,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
-            char full_path[2048];
+            char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
             FILE *fp = fopen(full_path, "r");
             if (!fp) {
@@ -1056,14 +1067,13 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             }
         }
     } else if (strcmp(op, "write") == 0) {
-        char file[1024] = {0};
-        char content[4096] = {0};
+        char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
         if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
         if (kf) strncpy(file, kf, sizeof(file) - 1);
         const char *kc = get_kw_arg(tokens, ntokens, "content");
         if (!kc) kc = get_pos_arg(tokens, ntokens, 2);
-        if (kc) strncpy(content, kc, sizeof(content) - 1);
+        const char *content = kc ? kc : "";
 
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
@@ -1072,9 +1082,9 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
-            char full_path[2048];
+            char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
-            char parent_dir[2048];
+            char parent_dir[4096];
             snprintf(parent_dir, sizeof(parent_dir), "%s", full_path);
             char *last_slash = strrchr(parent_dir, '/');
             if (last_slash) {
@@ -1185,8 +1195,8 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_free(&i_sb);
         }
     } else if (strcmp(op, "find") == 0 || strcmp(op, "q") == 0 || strcmp(op, "grep") == 0) {
-        char pat[256] = {0};
-        char dir[1024] = {0};
+        char pat[1024] = {0};
+        char dir[4096] = {0};
         parse_string_arg(step_str, "pattern", pat, sizeof(pat));
         if (!pat[0]) parse_string_arg(step_str, "query", pat, sizeof(pat));
         parse_string_arg(step_str, "dir", dir, sizeof(dir));
@@ -1215,7 +1225,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         }
         if (!pat[0]) strcpy(pat, "*test*.asl");
 
-        char search_base[2048];
+        char search_base[4096];
         int is_ext = 0;
         if (dir[0]) {
             if (dir[0] == '/') {
@@ -1252,7 +1262,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         if (!subop[0]) strcpy(subop, "status");
 
         if (strcmp(subop, "status") == 0) {
-            char cmd[2048];
+            char cmd[4096];
             snprintf(cmd, sizeof(cmd), "git -C \"%s\" status --porcelain=v1 -b 2>/dev/null", ws_root);
             FILE *p = popen(cmd, "r");
             if (!p) {
@@ -1260,7 +1270,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 sb_append_int(out, step_id);
                 sb_append(out, " :op \"git\" :subop \"status\" :status \"rejected\" :error-code \":ERR_GIT_FAILED\")\n");
             } else {
-                char line[2048];
+                char line[4096];
                 char branch[128] = "unknown";
                 int is_clean = 1;
                 StrBuf mod_sb, stg_sb, unt_sb;
@@ -1340,7 +1350,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             if (cnt < 1) cnt = 5;
             if (cnt > 50) cnt = 50;
 
-            char cmd[2048];
+            char cmd[4096];
             snprintf(cmd, sizeof(cmd), "git -C \"%s\" log -n %lld --format=\"(:commit :hash \\\"%%h\\\" :author \\\"%%an\\\" :msg \\\"%%s\\\")\" 2>/dev/null", ws_root, cnt);
             FILE *p = popen(cmd, "r");
             if (!p) {
@@ -1353,7 +1363,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 sb_append(out, " :op \"git\" :subop \"log\" :status \"ok\" :count ");
                 sb_append_int(out, cnt);
                 sb_append(out, " :commits [ ");
-                char line[2048];
+                char line[4096];
                 int lcnt = 0;
                 while (fgets(line, sizeof(line), p)) {
                     size_t llen = strlen(line);
@@ -1369,12 +1379,12 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 sb_append(out, " ])\n");
             }
         } else if (strcmp(subop, "diff") == 0) {
-            char target_file[1024] = {0};
+            char target_file[4096] = {0};
             const char *kf = get_kw_arg(tokens, ntokens, "file");
             if (!kf && ntokens > 1) kf = tokens[1].str;
             if (kf) strncpy(target_file, kf, sizeof(target_file) - 1);
 
-            char cmd[2048];
+            char cmd[4096];
             if (target_file[0]) {
                 snprintf(cmd, sizeof(cmd), "git -C \"%s\" diff --stat -- \"%s\" 2>/dev/null", ws_root, target_file);
             } else {
@@ -1388,7 +1398,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             } else {
                 StrBuf diff_sb;
                 sb_init(&diff_sb);
-                char line[2048];
+                char line[4096];
                 while (fgets(line, sizeof(line), p)) {
                     sb_append_escaped(&diff_sb, line);
                 }
@@ -1401,7 +1411,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 sb_free(&diff_sb);
             }
         } else if (strcmp(subop, "branch") == 0) {
-            char cmd[2048];
+            char cmd[4096];
             snprintf(cmd, sizeof(cmd), "git -C \"%s\" branch --show-current 2>/dev/null", ws_root);
             FILE *p = popen(cmd, "r");
             char br[128] = "unknown";
@@ -1433,7 +1443,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 snprintf(cmd, sizeof(cmd), "git -C \"%s\" commit -m \"%s\" 2>/dev/null", ws_root, msg);
                 int ret = system(cmd);
                 if (ret == 0) {
-                    char rev_cmd[1024];
+                    char rev_cmd[4096];
                     snprintf(rev_cmd, sizeof(rev_cmd), "git -C \"%s\" rev-parse --short HEAD 2>/dev/null", ws_root);
                     FILE *rp = popen(rev_cmd, "r");
                     char hash[64] = "unknown";
@@ -1473,6 +1483,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         sb_append_escaped(out, op);
         sb_append(out, "\" :status \"ok\")\n");
     }
+    free_tokens(tokens, ntokens);
 }
 
 static void handle_payload(const char *payload, const char *ws_root, StrBuf *resp) {
@@ -2396,7 +2407,7 @@ static int check_zero_foreign_files(const char *ws_root) {
 static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_assert_suites, int *out_assert_count) {
     char runner_cmd[2048];
     const char *runner_script = "scripts/run-gate-tests.sh";
-    char script_buf[1024];
+    char script_buf[4096];
     if (!file_exists(runner_script)) {
         snprintf(script_buf, sizeof(script_buf), "%s/scripts/run-gate-tests.sh", ws_root);
         if (file_exists(script_buf)) {
@@ -2726,7 +2737,7 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
     DIR *d = opendir(path);
     if (!d) return 1;
     struct dirent *ent;
-    ConsistencyTask tasks[1024];
+    ConsistencyTask *tasks = (ConsistencyTask *)calloc(4096, sizeof(ConsistencyTask)); if (!tasks) { closedir(d); return 1; }
     int task_count = 0;
     int phase_coll_count = 0;
     int all_task_errors = 0;
@@ -2781,7 +2792,7 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
             char *m_id = strstr(blk, ":id ");
             if (!m_id) m_id = strstr(blk, ":id\t");
             if (!m_id) m_id = strstr(blk, ":id\n");
-            if (m_id && task_count < 1024) {
+            if (m_id && task_count < 4096) {
                 char *q1 = strchr(m_id, '"');
                 if (q1 && q1 < blk + blk_len) {
                     char *q2 = strchr(q1 + 1, '"');
@@ -3094,6 +3105,7 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
     printf("================================================================================\n");
 
     int total_errors = adr_errors + task_adr_errors + intent_errors + d52_errors + all_task_errors + roadmap_errors + balance_errors + emoji_errors;
+    free(tasks);
     if (total_errors > 0) {
         printf("✗ === [Consistency Audit] FAILED (%d errors detected) ===\n", total_errors);
         return 1;
@@ -3109,7 +3121,7 @@ static int file_has_assert(const char *path) {
     char line[4096];
     int found = 0;
     while (fgets(line, sizeof(line), fp)) {
-        if (strstr(line, "(assert ") || strstr(line, "(assert\t") || strstr(line, "(assert\n")) {
+        if (strstr(line, "(assert ") || strstr(line, "(assert\t") || strstr(line, "(assert\n") || strstr(line, "(assert-")) {
             found = 1;
             break;
         }
@@ -3129,7 +3141,7 @@ int main(int argc, char **argv) {
     }
 
     char *ws_root = getenv("ASL_WORKSPACE_ROOT");
-    char discovered_ws[1024];
+    char discovered_ws[4096];
     if (!ws_root || !ws_root[0]) {
         ws_root = find_ws_root();
     }
@@ -3137,9 +3149,9 @@ int main(int argc, char **argv) {
 
     /* Direct daemon engine flags */
     if (argc >= 2 && strcmp(argv[1], "--serve") == 0) {
-        char sock[1024];
-        char ws[1024];
-        char pid[1024];
+        char sock[4096];
+        char ws[4096];
+        char pid[4096];
         const char *bname = strrchr(discovered_ws, '/');
         bname = bname ? bname + 1 : "default";
 
@@ -3156,8 +3168,8 @@ int main(int argc, char **argv) {
     if (argc >= 2 && strcmp(argv[1], "--daemon") == 0) {
         const char *bname = strrchr(discovered_ws, '/');
         bname = bname ? bname + 1 : "default";
-        char sock[1024];
-        char pid[1024];
+        char sock[4096];
+        char pid[4096];
         snprintf(sock, sizeof(sock), "/tmp/asl_mem_%s.sock", bname);
         snprintf(pid, sizeof(pid), "/tmp/asl_mem_%s.pid", bname);
 
@@ -3177,7 +3189,7 @@ int main(int argc, char **argv) {
     if (argc >= 2 && strcmp(argv[1], "--status") == 0) {
         const char *bname = strrchr(discovered_ws, '/');
         bname = bname ? bname + 1 : "default";
-        char sock[1024];
+        char sock[4096];
         snprintf(sock, sizeof(sock), "%s", (argc > 2) ? argv[2] : "");
         if (!sock[0]) snprintf(sock, sizeof(sock), "/tmp/asl_mem_%s.sock", bname);
 
@@ -3206,8 +3218,8 @@ int main(int argc, char **argv) {
     if (argc >= 2 && strcmp(argv[1], "--stop") == 0) {
         const char *bname = strrchr(discovered_ws, '/');
         bname = bname ? bname + 1 : "default";
-        char pid_file[1024];
-        char sock[1024];
+        char pid_file[4096];
+        char sock[4096];
         snprintf(pid_file, sizeof(pid_file), "%s", (argc > 2) ? argv[2] : "");
         if (!pid_file[0]) snprintf(pid_file, sizeof(pid_file), "/tmp/asl_mem_%s.pid", bname);
         snprintf(sock, sizeof(sock), "%s", (argc > 3) ? argv[3] : "");
