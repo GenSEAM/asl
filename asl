@@ -41,6 +41,7 @@ find_workspace_root() {
 run_launch() {
     TARGET_AGENT=""
     DRY_RUN=0
+    PRINT_PAYLOAD=0
     NO_STASH=0
     ORCHESTRATOR=0
     ORCH_MODEL="gemini-3.8-flash"
@@ -301,6 +302,11 @@ run_launch() {
           DRY_RUN=1
           shift
           ;;
+        --print-payload)
+          PRINT_PAYLOAD=1
+          DRY_RUN=1
+          shift
+          ;;
         --no-stash)
           NO_STASH=1
           shift
@@ -318,6 +324,11 @@ run_launch() {
                 shift
                 ;;
               --dry-run|-n)
+                DRY_RUN=1
+                shift
+                ;;
+              --print-payload)
+                PRINT_PAYLOAD=1
                 DRY_RUN=1
                 shift
                 ;;
@@ -446,35 +457,71 @@ run_launch() {
         ;;
     esac
 
-    DIRECTIVE_PAYLOAD='<!-- ASL_TOOLBELT_START -->
-Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
-(:rule :tools
-  :forbid [:view_file :replace_file_content :write_to_file :find_by_name :list_dir :View :Edit :Write :Grep :Glob :LS]
-  :require [(:asl :binary "asl" :batch true)]
-  :execution (:mode :maximum-parallel :waves true :concurrency (:soft 4 :hard 6) :git-via-rpc true))
-<!-- ASL_TOOLBELT_END -->
+    DIRECTIVE_PAYLOAD='<!-- ASL_RULES_START -->
+(:rules :v 6 :src ADR-0081 :when [:scout :plan :implement :grade :all]
+  (:rule :id tools :when [:scout :implement]
+    :do "prefer asl rpc (:batch (:sym x) (:out f) (:read f a b) (:sec f h) (:ls d) (:callers x) (:impact x)) in one roundtrip; use host tools for content search and file edits until :grep and staged :edit ship"
+    :not "treat :status ok as success; :find is a filename glob; :q is unimplemented; :edit writes disk immediately and :diff :discard do not stage")
+  (:rule :id context :when [:all]
+    :do "load by symbol and slice, not by file; keep the invariant prefix byte-stable and append step-scoped context after it; never change tool definitions mid-session"
+    :why "retrieval beat full-context in AutoExperiment (41.7 vs 36.1; AST retrieval 33.3); cached prefix reads are discounted at model-specific rates; a tool-definition change invalidates the cached prefix")
+  (:rule :id output :when [:all]
+    :do "return typed receipts as ASN with path and line; reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
+    :why "compact tool-result notations lost accuracy on several model and benchmark pairs (Notation Matters, up to 9-14pp); the effect is not uniform, so measure, do not assume")
+  (:rule :id names :when [:implement]
+    :do "CamelCase for composite identifiers, structs and tests; precise conventional names; do not shorten a name only to save tokens; domain aliases are allowed when they carry meaning"
+    :why "CamelCase measured cheaper than kebab-case on cl100k for the documented identifiers, pending reproduction in Task43806; alias costs in the lock are context-dependent; semantic names carry meaning the model uses")
+  (:rule :id semantics :when [:implement :grade]
+    :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
+    :now "the evaluator abandons a body at exit 0 on unknown symbols until Phase436 (prior audit: about half of declared assertions never ran); treat green as unverified and confirm asserts executed")
+  (:rule :id gates :when [:plan :implement :grade]
+    :do "every change carries a gate that fails before and passes after, and the baseline failure must be the intended semantic failure, not a missing command or a grep label; report exit code and executed asserts; assertion inversion measures reachability, production-code mutation measures fault detection, report both"
+    :not "weaken, skip, loosen, mock, or stub to reach green; exit 0 is not non-vacuity; a printed label is not a result")
+  (:rule :id grading :when [:grade]
+    :do "the writer never grades its own work; a reviewer runs the gates in a clean context and verification rests on reproducible evidence, not on role labels; scouts are read-only and parallel"
+    :why "self-correction without external feedback tends to degrade results; self-preference bias in self-evaluation; persona prompts showed no overall benefit on factual QA")
+  (:rule :id concepts :when [:plan]
+    :do "a normative principle may be adopted explicitly without measurement, but every number in a rule needs source, scope and uncertainty; an empirical claim enters only with a measurable definition and a baseline-failing gate"
+    :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
+  (:rule :id foreign :when [:implement]
+    :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
+    :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
+  (:rule :id git :when [:implement]
+    :do "concise commits; verify base, diff and log before merge; intended changes only; commit only when asked"
+    :coAuthor (:claude :host :agy false))
+  (:rule :id parallel :when [:plan]
+    :do "independent reads and scouts in one wave; one writer per owned partition and serialized conflicting commits; subagents soft 4 hard 6 are defaults, not optima")
+  (:rule :id anchor :when [:all]
+    :do "the plan lives in the ledger, not in memory: (:plan) once, (:where) before every mutation and after every gate, act from what it returns; until the ledger ops exist keep the plan in the task file and re-read it"
+    :why "compliance odds declined per generated function within a session (OR 0.944, exploratory, 2605.10039); whether re-anchoring restores it is the Task44106 hypothesis")
+  (:rule :id oneStep :when [:implement]
+    :do "a step is a transaction with an owned write set and a closing gate; batch independent edits inside it; advance only with a runner-issued receipt bound to session, step, gate and source digest"
+    :not "batch several steps then verify; claim progress with a caller-supplied exit code")
+  (:rule :id budget :when [:all]
+    :do "run a gate after a provisional six tool calls without one; when (:budget) says :compact true, prefer recoverable observation masking, then (:handoff) and reset; thresholds are set by Task44106"
+    :why "instruction-load effects are model-dependent (IFScale); compaction at task boundaries and observation masking both reduced context without measured accuracy loss in their studies")
+  (:rule :id hiddenTests :when [:implement :grade]
+    :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
+    :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
+  (:rule :id bounded :when [:scout :implement]
+    :do "every read carries :limit and continues with :more; bound the output, not file completeness: a small relevant file may fit the bound"
+    :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
+  (:rule :id edge :when [:all]
+    :do "when no plan step covers the situation: if the action is unauthorized or cannot be safely contained, escalate at once; otherwise recognize ((:where) has no matching step), preserve optionality (read before write, stage before flush, branch before merge, ask before delete), contain (smallest diff inside :owns), refute (run the cheapest thing that would prove you wrong), escalate ((:escalate :seen :tried :fork :resolves) to the principal)"
+    :bias "declared: reversibility over optimality, evidence over confidence, stated intent over inferred intent"
+    :why "no rule set matches edge-case variety; models fill gaps fluently instead of noticing them; the loop ends in a receipt to someone else because self-correction without external signal degrades")
+  (:rule :id ssot :when [:all]
+    :do "rules live in one tracked source, asl/grammar/rules.asn; every exported surface is rendered from it by scripts/install.sh --render-rules and checked by --check-rules; per-client or per-tier editions are checked against their deterministic rendering; editing a rendered surface by hand is a defect"
+    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails"))
+<!-- ASL_RULES_END -->'
 
-<!-- PARALLEL_START -->
-(:rule :parallel :batch :wave :scope [:search :scout :audit :patch :git])
-<!-- PARALLEL_END -->
-
-<!-- GROUND_TRUTH_START -->
-(:rule :ground-truth
-  :falsify  (:must-fail true :exit 0)
-  :strict   (:forbid [:stub :todo :mock :swallow :co-author] :require [:bounds :errors])
-  :critic   (:self false :stance :adversary)
-  :receipt  (:format :asn :asserts (> 0) :claims false))
-<!-- GROUND_TRUTH_END -->
-
-<!-- GIT_START -->
-(:rule :git
-  :co-author false
-  :commit    (:concise true)
-  :branch    (:base :target :verify true)
-  :merge     (:verify [:base :diff :log]
-              :strict (:require [:intended-only :safe-merge]
-                       :forbid  [:unrelated-commits :wrong-base])))
-<!-- GIT_END -->'
+    AGY_DANGEROUS=0
+    for arg in "${EXTRA_ARGS[@]}"; do
+      if [ "$arg" = "--dangerously-skip-permissions" ]; then
+        AGY_DANGEROUS=1
+        break
+      fi
+    done
 
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       ORCH_DIRECTIVE="
@@ -484,50 +531,42 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
   :client \"$CLIENT_ID\""
       if [ "$CLIENT_ID" = "claude" ]; then
         ORCH_DIRECTIVE="$ORCH_DIRECTIVE
-  :claude-mode \"system-guided\"
-  :auto-flags []"
+  :claude-mode \"auto\"
+  :permission-tier \"auto-approval\"
+  :auto-flags [\"--permission-mode\" \"auto\"]"
+        ORCH_MANDATES='    \"Delegate read-only discovery and independent review to Agent subagents; writes stay single-threaded; ingest only receipts.\"
+    \"Run in native Auto mode; never pass dangerous escape flags; the system prompt is append-only.\"
+    \"Prefer asl rpc (:batch ...) in one roundtrip; fall back to host tools where an op is unimplemented.\"'
       elif [ "$CLIENT_ID" = "agy" ]; then
         ORCH_DIRECTIVE="$ORCH_DIRECTIVE
   :permission-tier \"dangerous-rescue\"
   :auto-flags [\"--dangerously-skip-permissions\"]"
+        ORCH_MANDATES='    \"Delegate read-only discovery and independent review via invoke_subagent; writes stay single-threaded; ingest only receipts.\"
+    \"Execute in dangerous rescue mode for unattended self-healing.\"
+    \"Prefer asl rpc (:batch ...) in one roundtrip; fall back to host tools where an op is unimplemented.\"'
       elif [ "$CLIENT_ID" = "codex" ]; then
         ORCH_DIRECTIVE="$ORCH_DIRECTIVE
   :codex-mode \"autorun-supervised\"
+  :permission-tier \"bounded-autonomous\"
   :auto-flags [\"-a\" \"never\" \"-s\" \"workspace-write\"]"
+        ORCH_MANDATES='    \"Bounded autonomy (-a never -s workspace-write); writes stay single-threaded; ingest only receipts.\"
+    \"Prefer asl rpc (:batch ...) in one roundtrip; fall back to host tools where an op is unimplemented.\"'
       fi
       ORCH_DIRECTIVE="$ORCH_DIRECTIVE
   :channel \"$PROMPT_CHANNEL\"
   :orchestrator-mode true
-  :supervisory-model \"$ORCH_MODEL\"
-  :reasoning-level \"$ORCH_REASONING\"
-  :orchestration-target \"$ORCH_TARGET\"
-  :separate-agents-feature-flag $([ "$SEPARATE_AGENTS" -eq 1 ] && echo "true" || echo "false")
-  :minimal-orchestrator true
   :soft-limit $SOFT_LIMIT
   :hard-limit $HARD_LIMIT
-  :max-subagents $HARD_LIMIT
-  :scaling-condition \"Single project -> max 4 agents (soft limit); burst scaling up to 6 agents (hard limit) triggered exclusively when multiple Workspace projects are actively engaged concurrently.\"
-  :multi-project-orchestration true
-  :code-execution true
-  :subagent-tiers (:research \"$RESEARCH_MODEL\" :planning \"$PLANNING_MODEL\" :execution \"$EXECUTION_MODEL\")
-  :role-assignments (:scout \"$ROLE_SCOUT\" :planner \"$ROLE_PLANNER\" :implementer \"$ROLE_IMPLEMENTER\" :auditor \"$ROLE_AUDITOR\")
-  :upgrade-path \"gemini-next\"
   :mandates [
-    \"Baseline delegation: Use sub-agents (invoke_subagent in Antigravity, Agent in Claude Code) as the primary execution model.\"
-    \"Role-to-agent mesh: Scout ($ROLE_SCOUT) for discovery, Planner ($ROLE_PLANNER) for DAG and failing gates, Implementer ($ROLE_IMPLEMENTER) for atomic code execution, Auditor ($ROLE_AUDITOR) for independent falsifiable review.\"
-    \"Claude Code permission mandate: Never use dangerous permissions (--dangerously-skip-permissions) with Claude Code. Guide execution strictly via system instructions (--append-system-prompt).\"
-    \"Antigravity permission mandate: Antigravity must always execute in dangerous rescue mode (--dangerously-skip-permissions) for unconstrained self-healing.\"
-    \"Codex autorun mandate: Enforce supervised autorun (-a never -s workspace-write) for unattended execution bounded to workspace modifications.\"
-    \"Context hygiene: Keep orchestrator context minimal by offloading search, exploration, and edits into sub-agent conversation branches; ingest only scalar task receipts.\"
-    \"Lean supervisor rule: If sub-agent overhead exceeds task complexity, execute directly via compact batch RPC rather than spawning unneeded sub-agents.\"
-    \"Feature flag extension: Separate OS-level agent orchestration is decoupled under --separate-agents for future cross-process scaling.\"
-    \"Never execute complex multi-part tasks directly; decompose and spawn specialized subagents (invoke_subagent in Antigravity, Agent in Claude Code).\"
-    \"Supervised code execution: Run build, tests, and gate verification commands in isolated subagents, strictly requiring exit code 0.\"
-    \"Utilize asl rpc (:batch ...) in priority for workspace-aware symbol navigation, callers, and impact analysis.\"
+$ORCH_MANDATES
   ]
-  :rules [:asl-toolbelt :ground-truth :git :orchestrator])
+  :rules [:asl-rules-v4])
 <!-- ORCHESTRATOR_END -->"
       DIRECTIVE_PAYLOAD="$DIRECTIVE_PAYLOAD$ORCH_DIRECTIVE"
+    fi
+    if [ "$PRINT_PAYLOAD" -eq 1 ]; then
+      printf '%s\n' "$DIRECTIVE_PAYLOAD"
+      exit 0
     fi
 
     STASH_FILE=""
@@ -558,7 +597,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
           CHANNEL_STASH="/tmp/asl_channel_stash_$$"
           cp -f "$CHANNEL_FILE" "$CHANNEL_STASH"
           trap cleanup_launch EXIT INT TERM HUP
-          if ! grep -q "ASL_TOOLBELT_START" "$CHANNEL_FILE" 2>/dev/null; then
+          if ! grep -q "ASL_RULES_START" "$CHANNEL_FILE" 2>/dev/null; then
             EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
             printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
           elif [ "$ORCHESTRATOR" -eq 1 ] && ! grep -q "ORCHESTRATOR_START" "$CHANNEL_FILE" 2>/dev/null; then
@@ -574,13 +613,13 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       fi
 
       if [ "$CLIENT_ID" != "claude" ] && [ "$CHANNEL_FILE" != "$AGENTS_FILE" ] && [ -f "$AGENTS_FILE" ]; then
-        if grep -q "ASL_TOOLBELT_START" "$AGENTS_FILE" 2>/dev/null; then
+        if grep -q "ASL_RULES_START" "$AGENTS_FILE" 2>/dev/null; then
           STASH_FILE="/tmp/asl_agents_stash_$$"
           cp -f "$AGENTS_FILE" "$STASH_FILE"
           trap cleanup_launch EXIT INT TERM HUP
           awk '
-          /<!-- ASL_TOOLBELT_START -->/ { in_tb = 1; print "<!-- ASL_LOADER: consultative mode active during asl launch; runtime toolbelt injected via channel -->"; next; }
-          /<!-- ASL_TOOLBELT_END -->/ { in_tb = 0; next; }
+          /<!-- ASL_RULES_START -->/ { in_tb = 1; next; }
+          /<!-- ASL_RULES_END -->/ { in_tb = 0; next; }
           !in_tb { print; }
           ' "$AGENTS_FILE" > "$AGENTS_FILE.tmp" && mv -f "$AGENTS_FILE.tmp" "$AGENTS_FILE"
         fi
@@ -692,6 +731,19 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       if [ "$CLIENT_ID" = "claude" ]; then
         AUTO_FLAGS=()
+        HAS_PERM_MODE=0
+        for ((i=0; i<${#EXTRA_ARGS[@]}; i++)); do
+          if [ "${EXTRA_ARGS[i]}" = "--permission-mode" ]; then
+            HAS_PERM_MODE=1
+            break
+          fi
+        done
+        if [ "$HAS_PERM_MODE" -eq 0 ]; then
+          EXTRA_ARGS=("--permission-mode" "auto" "${EXTRA_ARGS[@]}")
+          AUTO_FLAGS+=("--permission-mode" "auto")
+        fi
+        export CLAUDE_AUTO=1
+        export CLAUDE_PERMISSION_MODE="auto"
       elif [ "$CLIENT_ID" = "agy" ]; then
         HAS_DANGEROUS=0
         for arg in "${EXTRA_ARGS[@]}"; do
@@ -755,7 +807,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       echo "  • Mode:                 AUTONOMOUS MULTI-AGENT ORCHESTRATOR"
       if [ "$CLIENT_ID" = "claude" ]; then
-        echo "  • Permission Tier:      SYSTEM-GUIDED (safe permissions; zero dangerous flags)"
+        echo "  • Permission Tier:      AUTO-APPROVAL (--permission-mode auto; zero dangerous flags)"
       elif [ "$CLIENT_ID" = "agy" ]; then
         echo "  • Permission Tier:      DANGEROUS RESCUE (--dangerously-skip-permissions)"
       elif [ "$CLIENT_ID" = "codex" ]; then
@@ -808,8 +860,9 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         echo "  (:launch-session"
         echo "    :client \"$CLIENT_ID\""
         if [ "$CLIENT_ID" = "claude" ]; then
-          echo "    :claude-mode \"system-guided\""
-          echo "    :auto-flags []"
+          echo "    :claude-mode \"auto\""
+          echo "    :permission-tier \"auto-approval\""
+          echo "    :auto-flags [\"--permission-mode\" \"auto\"]"
         elif [ "$CLIENT_ID" = "agy" ]; then
           echo "    :permission-tier \"dangerous-rescue\""
           echo "    :auto-flags [\"--dangerously-skip-permissions\"]"

@@ -7,7 +7,7 @@
 
 (dfs SkillTool
   (:f name Str "Tool identifier e.g. asl-intel-outline")
-  (:f command Str "Terminal command invocation e.g. asl intel outline <file>")
+  (:f command Str "Terminal command invocation e.g. asl rpc (:batch (:out file))")
   (:f purpose Str "Brief description of command utility")
   (:f savings Str "Token reduction percentage e.g. 94%"))
 

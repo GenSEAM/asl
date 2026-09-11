@@ -4,7 +4,7 @@
   :skills [
     (:skill
       :name "asl"
-      :desc "AgentScript (ASL) reference: S-expression syntax, the closed vocabulary, the semantic rules, and the CLI and MCP tools."
+      :desc "AgentScript (ASL) reference: S-expression syntax, the closed vocabulary, the semantic rules, and the CLI."
       :rules [
         (:rule :type "syntax" :text "Pure S-expression language with closed core form vocabulary and zero punctuation ambiguity.")
         (:rule :type "formatting" :text "Enforce strict balanced delimiters and pure ASL zero-comment invariant (C1).")
@@ -49,12 +49,12 @@
       :desc "Unified code intelligence and structural audit: symbol navigation via 'asl rpc', call graphs, impact, and architectural checks via 'asl audit'."
       :rules [
         (:rule :type "impact-first" :text "Always analyze blast-radius impact before modifying public function or interface signatures.")
-        (:rule :type "multimesh" :text "Audit structural health across all 10 quality tiers via asl audit multimesh.")
+        (:rule :type "multimesh" :text "Audit structural health across all 10 quality tiers via asl audit gates.")
       ]
       :tools [
-        (:tool :name "asl-intel-callers" :command "asl intel callers <symbol>" :purpose "Discover workspace call graph for symbol" :savings "85%")
-        (:tool :name "asl-intel-impact" :command "asl intel impact <symbol>" :purpose "Calculate blast-radius impact analysis" :savings "90%")
-        (:tool :name "asl-audit-multimesh" :command "asl audit multimesh" :purpose "Execute full 10-tier architectural quality audit" :savings "95%")
+        (:tool :name "asl-intel-callers" :command "asl rpc '(:batch (:callers "x"))'" :purpose "Discover workspace call graph for symbol" :savings "85%")
+        (:tool :name "asl-intel-impact" :command "asl rpc '(:batch (:impact "x"))'" :purpose "Calculate blast-radius impact analysis" :savings "90%")
+        (:tool :name "asl-audit-multimesh" :command "asl audit gates" :purpose "Execute full 10-tier architectural quality audit" :savings "95%")
       ]
       :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
   ])

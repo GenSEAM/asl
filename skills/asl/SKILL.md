@@ -1,6 +1,6 @@
 ---
 name: asl
-description: AgentScript (ASL) reference — S-expression syntax, the closed vocabulary, the semantic rules, and the CLI and MCP tools.
+description: AgentScript (ASL) reference — S-expression syntax, the closed vocabulary, the semantic rules, and the CLI.
 ---
 
 # AgentScript (ASL)
