@@ -6905,8 +6905,8 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
   :client \"$CLIENT_ID\""
       if [ "$CLIENT_ID" = "claude" ]; then
         ORCH_DIRECTIVE="$ORCH_DIRECTIVE
-  :claude-mode \"automatic\"
-  :auto-flags [\"--dangerously-skip-permissions\"]"
+  :claude-mode \"system-guided\"
+  :auto-flags []"
       elif [ "$CLIENT_ID" = "agy" ]; then
         ORCH_DIRECTIVE="$ORCH_DIRECTIVE
   :permission-tier \"dangerous-rescue\"
@@ -6930,7 +6930,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
   :upgrade-path \"gemini-next\"
   :mandates [
     \"Baseline delegation: Use sub-agents (invoke_subagent in Antigravity, Agent in Claude Code) as the primary execution model.\"
-    \"Claude Code permission mandate: Claude Code must always execute in automatic mode (--dangerously-skip-permissions) without tool confirmation prompts.\"
+    \"Claude Code permission mandate: Never use dangerous permissions (--dangerously-skip-permissions) with Claude Code. Guide execution strictly via system instructions (--append-system-prompt).\"
     \"Antigravity permission mandate: Antigravity must always execute in dangerous rescue mode (--dangerously-skip-permissions) for unconstrained self-healing.\"
     \"Context hygiene: Keep orchestrator context minimal by offloading search, exploration, and edits into sub-agent conversation branches; ingest only scalar task receipts.\"
     \"Lean supervisor rule: If sub-agent overhead exceeds task complexity, execute directly via compact batch RPC rather than spawning unneeded sub-agents.\"
@@ -7051,19 +7051,17 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
 
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       if [ "$CLIENT_ID" = "claude" ]; then
-        HAS_DANGEROUS=0
+        # Strictly forbid dangerous permissions for Claude Code; guide via system prompt
+        FILTERED_ARGS=()
         for arg in "${EXTRA_ARGS[@]}"; do
-          if [ "$arg" = "--dangerously-skip-permissions" ]; then
-            HAS_DANGEROUS=1
-            break
+          if [ "$arg" != "--dangerously-skip-permissions" ]; then
+            FILTERED_ARGS+=("$arg")
           fi
         done
-        if [ "$HAS_DANGEROUS" -eq 0 ]; then
-          EXTRA_ARGS=("--dangerously-skip-permissions" "${EXTRA_ARGS[@]}")
-        fi
-        AUTO_FLAGS=("--dangerously-skip-permissions")
-        export CLAUDE_AUTO=1
-        export CLAUDE_PERMISSION_MODE="automatic"
+        EXTRA_ARGS=("${FILTERED_ARGS[@]}")
+        AUTO_FLAGS=()
+        export CLAUDE_AUTO=0
+        unset CLAUDE_PERMISSION_MODE 2>/dev/null || true
       elif [ "$CLIENT_ID" = "agy" ]; then
         HAS_DANGEROUS=0
         for arg in "${EXTRA_ARGS[@]}"; do
@@ -7095,7 +7093,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       echo "  • Mode:                 AUTONOMOUS MULTI-AGENT ORCHESTRATOR"
       if [ "$CLIENT_ID" = "claude" ]; then
-        echo "  • Permission Tier:      AUTOMATIC (--dangerously-skip-permissions)"
+        echo "  • Permission Tier:      SYSTEM-GUIDED (safe permissions; zero dangerous flags)"
       elif [ "$CLIENT_ID" = "agy" ]; then
         echo "  • Permission Tier:      DANGEROUS RESCUE (--dangerously-skip-permissions)"
       fi
@@ -7109,7 +7107,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       echo "      - Research & Web:   $RESEARCH_MODEL (internet browsing, repo-scout, documentation)"
       echo "      - Planning & Arch:  $PLANNING_MODEL (topological DAG, failing gates, ADRs)"
       echo "      - Code Execution:   $EXECUTION_MODEL (isolated branch/share, gate verification)"
-      echo "  • Delegation Rule:      MANDATORY SUBAGENT SPAWNING (invoke_subagent)"
+      echo "  • Delegation Rule:      MANDATORY SUBAGENT SPAWNING (invoke_subagent in Antigravity, Agent in Claude Code)"
       echo "  • Model Upgrade Path:   gemini-next (forward-compatible architecture)"
     else
       echo "  • Mode:                 DIRECT AGENT HARNESS"
@@ -7135,8 +7133,8 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         echo "  (:launch-session"
         echo "    :client \"$CLIENT_ID\""
         if [ "$CLIENT_ID" = "claude" ]; then
-          echo "    :claude-mode \"automatic\""
-          echo "    :auto-flags [\"--dangerously-skip-permissions\"]"
+          echo "    :claude-mode \"system-guided\""
+          echo "    :auto-flags []"
         elif [ "$CLIENT_ID" = "agy" ]; then
           echo "    :permission-tier \"dangerous-rescue\""
           echo "    :auto-flags [\"--dangerously-skip-permissions\"]"
