@@ -301,7 +301,7 @@ static int mkdir_p(const char *path) {
     return 0;
 }
 
-static void parse_string_arg(const char *src, const char *key, char *out, size_t out_max) {
+static __attribute__((unused)) void parse_string_arg(const char *src, const char *key, char *out, size_t out_max) {
     out[0] = '\0';
     if (!src || !key) return;
     char pat[128];
@@ -341,12 +341,86 @@ static void parse_string_arg(const char *src, const char *key, char *out, size_t
     }
 }
 
-static long long parse_int_arg(const char *src, const char *key, long long def_val) {
+static __attribute__((unused)) long long parse_int_arg(const char *src, const char *key, long long def_val) {
     char buf[64];
     parse_string_arg(src, key, buf, sizeof(buf));
     if (buf[0]) return atoll(buf);
     return def_val;
 }
+
+typedef struct {
+    char str[1024];
+    int is_keyword;
+} StepToken;
+
+static int tokenize_step(const char *src, StepToken *tokens, int max_tokens) {
+    int count = 0;
+    const char *p = src;
+    while (*p == ' ' || *p == '\t' || *p == '(') p++;
+    while (*p && !isspace((unsigned char)*p) && *p != ')') p++;
+
+    while (*p && *p != ')' && count < max_tokens) {
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') p++;
+        if (!*p || *p == ')') break;
+
+        tokens[count].is_keyword = (*p == ':');
+        if (*p == ':') p++;
+
+        if (*p == '"') {
+            p++;
+            size_t idx = 0;
+            int esc = 0;
+            while (*p && idx + 1 < sizeof(tokens[count].str)) {
+                if (esc) {
+                    tokens[count].str[idx++] = *p++;
+                    esc = 0;
+                } else if (*p == '\\') {
+                    esc = 1;
+                    p++;
+                } else if (*p == '"') {
+                    p++;
+                    break;
+                } else {
+                    tokens[count].str[idx++] = *p++;
+                }
+            }
+            tokens[count].str[idx] = '\0';
+        } else {
+            size_t idx = 0;
+            while (*p && !isspace((unsigned char)*p) && *p != ')' && *p != ']' && idx + 1 < sizeof(tokens[count].str)) {
+                tokens[count].str[idx++] = *p++;
+            }
+            tokens[count].str[idx] = '\0';
+        }
+        count++;
+    }
+    return count;
+}
+
+static const char *get_kw_arg(StepToken *tokens, int n, const char *key) {
+    for (int i = 0; i < n - 1; i++) {
+        if (tokens[i].is_keyword && strcmp(tokens[i].str, key) == 0) {
+            return tokens[i + 1].str;
+        }
+    }
+    return NULL;
+}
+
+static const char *get_pos_arg(StepToken *tokens, int n, int target_pos) {
+    int pos = 0;
+    for (int i = 0; i < n; i++) {
+        if (tokens[i].is_keyword) {
+            i++;
+            continue;
+        }
+        pos++;
+        if (pos == target_pos) {
+            return tokens[i].str;
+        }
+    }
+    return NULL;
+}
+
 
 /* Recursive Workspace File Walker */
 typedef void (*WalkFileCallback)(const char *rel_path, const char *full_path, void *user_data);
@@ -682,6 +756,9 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
     }
     op[oidx] = '\0';
 
+    StepToken tokens[32];
+    int ntokens = tokenize_step(step_str, tokens, 32);
+
     if (strcmp(op, "ping") == 0) {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
@@ -701,9 +778,18 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         sb_append(out, " :op \"inspect\" :status \"ok\" :daemon-status (:daemon-status :status \"active\" :active-op \":idle\"))\n");
     } else if (strcmp(op, "read") == 0) {
         char file[1024] = {0};
-        parse_string_arg(step_str, "file", file, sizeof(file));
-        long long start = parse_int_arg(step_str, "start", 1);
-        long long end = parse_int_arg(step_str, "end", 50);
+        const char *kf = get_kw_arg(tokens, ntokens, "file");
+        if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
+        if (kf) strncpy(file, kf, sizeof(file) - 1);
+
+        const char *ks = get_kw_arg(tokens, ntokens, "start");
+        if (!ks) ks = get_pos_arg(tokens, ntokens, 2);
+        long long start = ks ? atoll(ks) : 1;
+
+        const char *ke = get_kw_arg(tokens, ntokens, "end");
+        if (!ke) ke = get_pos_arg(tokens, ntokens, 3);
+        long long end = ke ? atoll(ke) : 50;
+
         if (start < 1) start = 1;
         if (end < start) end = start;
 
@@ -746,9 +832,14 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
     } else if (strcmp(op, "sec") == 0) {
         char file[1024] = {0};
         char heading[256] = {0};
-        parse_string_arg(step_str, "file", file, sizeof(file));
-        parse_string_arg(step_str, "heading", heading, sizeof(heading));
-        if (!heading[0]) parse_string_arg(step_str, "title", heading, sizeof(heading));
+        const char *kf = get_kw_arg(tokens, ntokens, "file");
+        if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
+        if (kf) strncpy(file, kf, sizeof(file) - 1);
+
+        const char *kh = get_kw_arg(tokens, ntokens, "heading");
+        if (!kh) kh = get_kw_arg(tokens, ntokens, "title");
+        if (!kh) kh = get_pos_arg(tokens, ntokens, 2);
+        if (kh) strncpy(heading, kh, sizeof(heading) - 1);
 
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
@@ -783,7 +874,9 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         }
     } else if (strcmp(op, "out") == 0) {
         char file[1024] = {0};
-        parse_string_arg(step_str, "file", file, sizeof(file));
+        const char *kf = get_kw_arg(tokens, ntokens, "file");
+        if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
+        if (kf) strncpy(file, kf, sizeof(file) - 1);
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
             sb_append_int(out, step_id);
@@ -817,8 +910,10 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         }
     } else if (strcmp(op, "ls") == 0) {
         char dir[1024] = {0};
-        parse_string_arg(step_str, "dir", dir, sizeof(dir));
-        if (!dir[0]) strcpy(dir, ".");
+        const char *kd = get_kw_arg(tokens, ntokens, "dir");
+        if (!kd) kd = get_pos_arg(tokens, ntokens, 1);
+        if (kd && kd[0]) strncpy(dir, kd, sizeof(dir) - 1);
+        else strcpy(dir, ".");
 
         if (!is_safe_path(ws_root, dir)) {
             sb_append(out, "  (:step :id ");
@@ -884,9 +979,15 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         char file[1024] = {0};
         char old_txt[2048] = {0};
         char new_txt[2048] = {0};
-        parse_string_arg(step_str, "file", file, sizeof(file));
-        parse_string_arg(step_str, "old", old_txt, sizeof(old_txt));
-        parse_string_arg(step_str, "new", new_txt, sizeof(new_txt));
+        const char *kf = get_kw_arg(tokens, ntokens, "file");
+        if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
+        if (kf) strncpy(file, kf, sizeof(file) - 1);
+        const char *ko = get_kw_arg(tokens, ntokens, "old");
+        if (!ko) ko = get_pos_arg(tokens, ntokens, 2);
+        if (ko) strncpy(old_txt, ko, sizeof(old_txt) - 1);
+        const char *kn = get_kw_arg(tokens, ntokens, "new");
+        if (!kn) kn = get_pos_arg(tokens, ntokens, 3);
+        if (kn) strncpy(new_txt, kn, sizeof(new_txt) - 1);
 
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
@@ -957,8 +1058,12 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
     } else if (strcmp(op, "write") == 0) {
         char file[1024] = {0};
         char content[4096] = {0};
-        parse_string_arg(step_str, "file", file, sizeof(file));
-        parse_string_arg(step_str, "content", content, sizeof(content));
+        const char *kf = get_kw_arg(tokens, ntokens, "file");
+        if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
+        if (kf) strncpy(file, kf, sizeof(file) - 1);
+        const char *kc = get_kw_arg(tokens, ntokens, "content");
+        if (!kc) kc = get_pos_arg(tokens, ntokens, 2);
+        if (kc) strncpy(content, kc, sizeof(content) - 1);
 
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
@@ -996,65 +1101,89 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         }
     } else if (strcmp(op, "sym") == 0) {
         char sym_name[256] = {0};
-        parse_string_arg(step_str, "sym", sym_name, sizeof(sym_name));
-        if (!sym_name[0]) parse_string_arg(step_str, "name", sym_name, sizeof(sym_name));
-        if (!sym_name[0]) parse_string_arg(step_str, "symbol", sym_name, sizeof(sym_name));
+        const char *ks = get_kw_arg(tokens, ntokens, "sym");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "symbol");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "name");
+        if (!ks) ks = get_pos_arg(tokens, ntokens, 1);
+        if (ks) strncpy(sym_name, ks, sizeof(sym_name) - 1);
 
-        StrBuf sym_defs;
-        sb_init(&sym_defs);
-        struct SymCbCtx sctx = { sym_name, &sym_defs, 0 };
-        walk_dir_recursive(ws_root, "", sym_walker_cb, &sctx);
+        if (!sym_name[0]) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"sym\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Symbol name required\")\n");
+        } else {
+            StrBuf sym_defs;
+            sb_init(&sym_defs);
+            struct SymCbCtx sctx = { sym_name, &sym_defs, 0 };
+            walk_dir_recursive(ws_root, "", sym_walker_cb, &sctx);
 
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"sym\" :status \"ok\" :symbol \"");
-        sb_append_escaped(out, sym_name);
-        sb_append(out, "\" :definitions [");
-        sb_append(out, sym_defs.data ? sym_defs.data : "");
-        sb_append(out, " ])\n");
-        sb_free(&sym_defs);
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"sym\" :status \"ok\" :symbol \"");
+            sb_append_escaped(out, sym_name);
+            sb_append(out, "\" :definitions [");
+            sb_append(out, sym_defs.data ? sym_defs.data : "");
+            sb_append(out, " ])\n");
+            sb_free(&sym_defs);
+        }
     } else if (strcmp(op, "callers") == 0) {
         char sym_name[256] = {0};
-        parse_string_arg(step_str, "sym", sym_name, sizeof(sym_name));
-        if (!sym_name[0]) parse_string_arg(step_str, "symbol", sym_name, sizeof(sym_name));
-        if (!sym_name[0]) parse_string_arg(step_str, "name", sym_name, sizeof(sym_name));
+        const char *ks = get_kw_arg(tokens, ntokens, "sym");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "symbol");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "name");
+        if (!ks) ks = get_pos_arg(tokens, ntokens, 1);
+        if (ks) strncpy(sym_name, ks, sizeof(sym_name) - 1);
 
-        StrBuf c_sb;
-        sb_init(&c_sb);
-        struct CallersCbCtx cctx = { sym_name, &c_sb, 0 };
-        walk_dir_recursive(ws_root, "", callers_walker_cb, &cctx);
+        if (!sym_name[0]) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"callers\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Symbol name required\")\n");
+        } else {
+            StrBuf c_sb;
+            sb_init(&c_sb);
+            struct CallersCbCtx cctx = { sym_name, &c_sb, 0 };
+            walk_dir_recursive(ws_root, "", callers_walker_cb, &cctx);
 
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"callers\" :status \"ok\" :symbol \"");
-        sb_append_escaped(out, sym_name);
-        sb_append(out, "\" :count ");
-        sb_append_int(out, cctx.count);
-        sb_append(out, " :callers [");
-        sb_append(out, c_sb.data ? c_sb.data : "");
-        sb_append(out, " ])\n");
-        sb_free(&c_sb);
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"callers\" :status \"ok\" :symbol \"");
+            sb_append_escaped(out, sym_name);
+            sb_append(out, "\" :count ");
+            sb_append_int(out, cctx.count);
+            sb_append(out, " :callers [");
+            sb_append(out, c_sb.data ? c_sb.data : "");
+            sb_append(out, " ])\n");
+            sb_free(&c_sb);
+        }
     } else if (strcmp(op, "impact") == 0) {
         char sym_name[256] = {0};
-        parse_string_arg(step_str, "sym", sym_name, sizeof(sym_name));
-        if (!sym_name[0]) parse_string_arg(step_str, "symbol", sym_name, sizeof(sym_name));
-        if (!sym_name[0]) parse_string_arg(step_str, "name", sym_name, sizeof(sym_name));
+        const char *ks = get_kw_arg(tokens, ntokens, "sym");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "symbol");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "name");
+        if (!ks) ks = get_pos_arg(tokens, ntokens, 1);
+        if (ks) strncpy(sym_name, ks, sizeof(sym_name) - 1);
 
-        StrBuf i_sb;
-        sb_init(&i_sb);
-        struct ImpactCbCtx ictx = { sym_name, &i_sb, 0 };
-        walk_dir_recursive(ws_root, "", impact_walker_cb, &ictx);
+        if (!sym_name[0]) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"impact\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Target symbol required\")\n");
+        } else {
+            StrBuf i_sb;
+            sb_init(&i_sb);
+            struct ImpactCbCtx ictx = { sym_name, &i_sb, 0 };
+            walk_dir_recursive(ws_root, "", impact_walker_cb, &ictx);
 
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"impact\" :status \"ok\" :target \"");
-        sb_append_escaped(out, sym_name);
-        sb_append(out, "\" :scope \"workspace\" :count ");
-        sb_append_int(out, ictx.count);
-        sb_append(out, " :affected [");
-        sb_append(out, i_sb.data ? i_sb.data : "");
-        sb_append(out, " ])\n");
-        sb_free(&i_sb);
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"impact\" :status \"ok\" :target \"");
+            sb_append_escaped(out, sym_name);
+            sb_append(out, "\" :scope \"workspace\" :count ");
+            sb_append_int(out, ictx.count);
+            sb_append(out, " :affected [");
+            sb_append(out, i_sb.data ? i_sb.data : "");
+            sb_append(out, " ])\n");
+            sb_free(&i_sb);
+        }
     } else if (strcmp(op, "find") == 0 || strcmp(op, "q") == 0 || strcmp(op, "grep") == 0) {
         char pat[256] = {0};
         char dir[1024] = {0};
@@ -1114,6 +1243,225 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         sb_append(out, f_sb.data ? f_sb.data : "");
         sb_append(out, " ])\n");
         sb_free(&f_sb);
+    } else if (strcmp(op, "git") == 0) {
+        char subop[64] = {0};
+        const char *ks = get_kw_arg(tokens, ntokens, "subop");
+        if (!ks) ks = get_kw_arg(tokens, ntokens, "op");
+        if (!ks && ntokens > 0) ks = tokens[0].str;
+        if (ks) strncpy(subop, ks, sizeof(subop) - 1);
+        if (!subop[0]) strcpy(subop, "status");
+
+        if (strcmp(subop, "status") == 0) {
+            char cmd[2048];
+            snprintf(cmd, sizeof(cmd), "git -C \"%s\" status --porcelain=v1 -b 2>/dev/null", ws_root);
+            FILE *p = popen(cmd, "r");
+            if (!p) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"status\" :status \"rejected\" :error-code \":ERR_GIT_FAILED\")\n");
+            } else {
+                char line[2048];
+                char branch[128] = "unknown";
+                int is_clean = 1;
+                StrBuf mod_sb, stg_sb, unt_sb;
+                sb_init(&mod_sb);
+                sb_init(&stg_sb);
+                sb_init(&unt_sb);
+                int mod_cnt = 0, stg_cnt = 0, unt_cnt = 0;
+
+                while (fgets(line, sizeof(line), p)) {
+                    size_t llen = strlen(line);
+                    while (llen > 0 && (line[llen - 1] == '\n' || line[llen - 1] == '\r')) {
+                        line[--llen] = '\0';
+                    }
+                    if (strncmp(line, "## ", 3) == 0) {
+                        const char *bstart = line + 3;
+                        const char *dots = strstr(bstart, "...");
+                        if (dots) {
+                            size_t blen = dots - bstart;
+                            if (blen < sizeof(branch)) {
+                                strncpy(branch, bstart, blen);
+                                branch[blen] = '\0';
+                            }
+                        } else {
+                            strncpy(branch, bstart, sizeof(branch) - 1);
+                        }
+                    } else if (llen >= 3) {
+                        is_clean = 0;
+                        char x = line[0];
+                        char y = line[1];
+                        const char *fname = line + 3;
+                        if (x == '?' && y == '?') {
+                            if (unt_cnt++ > 0) sb_append(&unt_sb, " ");
+                            sb_append(&unt_sb, "\"");
+                            sb_append_escaped(&unt_sb, fname);
+                            sb_append(&unt_sb, "\"");
+                        } else {
+                            if (x != ' ' && x != '?') {
+                                if (stg_cnt++ > 0) sb_append(&stg_sb, " ");
+                                sb_append(&stg_sb, "\"");
+                                sb_append_escaped(&stg_sb, fname);
+                                sb_append(&stg_sb, "\"");
+                            }
+                            if (y != ' ' && y != '?') {
+                                if (mod_cnt++ > 0) sb_append(&mod_sb, " ");
+                                sb_append(&mod_sb, "\"");
+                                sb_append_escaped(&mod_sb, fname);
+                                sb_append(&mod_sb, "\"");
+                            }
+                        }
+                    }
+                }
+                pclose(p);
+
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"status\" :status \"ok\" :branch \"");
+                sb_append_escaped(out, branch);
+                sb_append(out, "\" :clean ");
+                sb_append(out, is_clean ? "true" : "false");
+                sb_append(out, " :modified [");
+                sb_append(out, mod_sb.data ? mod_sb.data : "");
+                sb_append(out, " ] :staged [");
+                sb_append(out, stg_sb.data ? stg_sb.data : "");
+                sb_append(out, " ] :untracked [");
+                sb_append(out, unt_sb.data ? unt_sb.data : "");
+                sb_append(out, " ])\n");
+
+                sb_free(&mod_sb);
+                sb_free(&stg_sb);
+                sb_free(&unt_sb);
+            }
+        } else if (strcmp(subop, "log") == 0) {
+            const char *kc = get_kw_arg(tokens, ntokens, "n");
+            if (!kc) kc = get_kw_arg(tokens, ntokens, "count");
+            if (!kc && ntokens > 1) kc = tokens[1].str;
+            long long cnt = kc ? atoll(kc) : 5;
+            if (cnt < 1) cnt = 5;
+            if (cnt > 50) cnt = 50;
+
+            char cmd[2048];
+            snprintf(cmd, sizeof(cmd), "git -C \"%s\" log -n %lld --format=\"(:commit :hash \\\"%%h\\\" :author \\\"%%an\\\" :msg \\\"%%s\\\")\" 2>/dev/null", ws_root, cnt);
+            FILE *p = popen(cmd, "r");
+            if (!p) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"log\" :status \"rejected\" :error-code \":ERR_GIT_FAILED\")\n");
+            } else {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"log\" :status \"ok\" :count ");
+                sb_append_int(out, cnt);
+                sb_append(out, " :commits [ ");
+                char line[2048];
+                int lcnt = 0;
+                while (fgets(line, sizeof(line), p)) {
+                    size_t llen = strlen(line);
+                    while (llen > 0 && (line[llen - 1] == '\n' || line[llen - 1] == '\r')) {
+                        line[--llen] = '\0';
+                    }
+                    if (line[0]) {
+                        if (lcnt++ > 0) sb_append(out, " ");
+                        sb_append(out, line);
+                    }
+                }
+                pclose(p);
+                sb_append(out, " ])\n");
+            }
+        } else if (strcmp(subop, "diff") == 0) {
+            char target_file[1024] = {0};
+            const char *kf = get_kw_arg(tokens, ntokens, "file");
+            if (!kf && ntokens > 1) kf = tokens[1].str;
+            if (kf) strncpy(target_file, kf, sizeof(target_file) - 1);
+
+            char cmd[2048];
+            if (target_file[0]) {
+                snprintf(cmd, sizeof(cmd), "git -C \"%s\" diff --stat -- \"%s\" 2>/dev/null", ws_root, target_file);
+            } else {
+                snprintf(cmd, sizeof(cmd), "git -C \"%s\" diff --stat 2>/dev/null", ws_root);
+            }
+            FILE *p = popen(cmd, "r");
+            if (!p) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"diff\" :status \"rejected\" :error-code \":ERR_GIT_FAILED\")\n");
+            } else {
+                StrBuf diff_sb;
+                sb_init(&diff_sb);
+                char line[2048];
+                while (fgets(line, sizeof(line), p)) {
+                    sb_append_escaped(&diff_sb, line);
+                }
+                pclose(p);
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"diff\" :status \"ok\" :stat \"");
+                sb_append(out, diff_sb.data ? diff_sb.data : "");
+                sb_append(out, "\")\n");
+                sb_free(&diff_sb);
+            }
+        } else if (strcmp(subop, "branch") == 0) {
+            char cmd[2048];
+            snprintf(cmd, sizeof(cmd), "git -C \"%s\" branch --show-current 2>/dev/null", ws_root);
+            FILE *p = popen(cmd, "r");
+            char br[128] = "unknown";
+            if (p) {
+                if (fgets(br, sizeof(br), p)) {
+                    size_t blen = strlen(br);
+                    while (blen > 0 && (br[blen - 1] == '\n' || br[blen - 1] == '\r')) br[--blen] = '\0';
+                }
+                pclose(p);
+            }
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"git\" :subop \"branch\" :status \"ok\" :branch \"");
+            sb_append_escaped(out, br);
+            sb_append(out, "\")\n");
+        } else if (strcmp(subop, "commit") == 0) {
+            char msg[1024] = {0};
+            const char *km = get_kw_arg(tokens, ntokens, "msg");
+            if (!km) km = get_kw_arg(tokens, ntokens, "message");
+            if (!km && ntokens > 1) km = tokens[1].str;
+            if (km) strncpy(msg, km, sizeof(msg) - 1);
+
+            if (!msg[0]) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"git\" :subop \"commit\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Commit message required\")\n");
+            } else {
+                char cmd[4096];
+                snprintf(cmd, sizeof(cmd), "git -C \"%s\" commit -m \"%s\" 2>/dev/null", ws_root, msg);
+                int ret = system(cmd);
+                if (ret == 0) {
+                    char rev_cmd[1024];
+                    snprintf(rev_cmd, sizeof(rev_cmd), "git -C \"%s\" rev-parse --short HEAD 2>/dev/null", ws_root);
+                    FILE *rp = popen(rev_cmd, "r");
+                    char hash[64] = "unknown";
+                    if (rp) {
+                        if (fgets(hash, sizeof(hash), rp)) {
+                            size_t hlen = strlen(hash);
+                            while (hlen > 0 && (hash[hlen - 1] == '\n' || hash[hlen - 1] == '\r')) hash[--hlen] = '\0';
+                        }
+                        pclose(rp);
+                    }
+                    sb_append(out, "  (:step :id ");
+                    sb_append_int(out, step_id);
+                    sb_append(out, " :op \"git\" :subop \"commit\" :status \"ok\" :hash \"");
+                    sb_append_escaped(out, hash);
+                    sb_append(out, "\" :msg \"");
+                    sb_append_escaped(out, msg);
+                    sb_append(out, "\")\n");
+                } else {
+                    sb_append(out, "  (:step :id ");
+                    sb_append_int(out, step_id);
+                    sb_append(out, " :op \"git\" :subop \"commit\" :status \"rejected\" :error-code \":ERR_COMMIT_FAILED\" :message \"git commit returned non-zero\")\n");
+                }
+            }
+        } else {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"git\" :status \"rejected\" :error-code \":ERR_UNKNOWN_SUBOP\" :message \"Unknown git subop\")\n");
+        }
     } else if (strcmp(op, "gate") == 0 || strcmp(op, "chk") == 0) {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
@@ -3157,6 +3505,11 @@ int main(int argc, char **argv) {
             return 0;
         }
         sb_free(&payload_buf);
+    }
+
+    if (argc >= 2 && argv[1][0] != '-' && strcmp(argv[1], "help") != 0 && strcmp(argv[1], "--help") != 0) {
+        fprintf(stderr, "Error: unrecognized subcommand '%s'\n", argv[1]);
+        return 1;
     }
 
     /* Default help/usage */

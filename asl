@@ -307,11 +307,11 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
 (:rule :tools
   :forbid [:view_file :replace_file_content :write_to_file :find_by_name :list_dir :View :Edit :Write :Grep :Glob :LS]
   :require [(:asl :binary "asl" :batch true)]
-  :orchestrator (:require [:invoke_subagent :Agent] :forbid [:monolithic-root-execution]))
+  :execution (:mode :maximum-parallel :waves true :concurrency (:soft 4 :hard 6) :git-via-rpc true))
 <!-- ASL_TOOLBELT_END -->
 
 <!-- PARALLEL_START -->
-(:rule :parallel :batch :wave :scope [:search :scout :audit :patch])
+(:rule :parallel :batch :wave :scope [:search :scout :audit :patch :git])
 <!-- PARALLEL_END -->
 
 <!-- GROUND_TRUTH_START -->
