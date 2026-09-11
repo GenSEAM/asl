@@ -7037,6 +7037,32 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
 
     AUTO_FLAGS=()
     if [ "$CLIENT_ID" = "claude" ]; then
+      # STRICT INVARIANT 1: Never overwrite Claude base system prompt; only append (--append-system-prompt).
+      # STRICT INVARIANT 2: Never use dangerous permissions (--dangerously-skip-permissions) with Claude Code.
+      FILTERED_ARGS=()
+      SKIP_NEXT=0
+      CUSTOM_APPEND_PROMPTS=()
+      for ((i=0; i<${#EXTRA_ARGS[@]}; i++)); do
+        arg="${EXTRA_ARGS[i]}"
+        if [ "$SKIP_NEXT" -eq 1 ]; then
+          SKIP_NEXT=0
+          continue
+        fi
+        if [ "$arg" = "--dangerously-skip-permissions" ]; then
+          echo "⚠️  [ASL] Dangerous permissions forbidden for Claude Code; stripped."
+          continue
+        fi
+        if [ "$arg" = "--system-prompt" ]; then
+          next_arg="${EXTRA_ARGS[i+1]}"
+          CUSTOM_APPEND_PROMPTS+=("$next_arg")
+          SKIP_NEXT=1
+          echo "⚠️  [ASL] Direct --system-prompt overwrite blocked for Claude Code; converted to --append-system-prompt."
+        else
+          FILTERED_ARGS+=("$arg")
+        fi
+      done
+      EXTRA_ARGS=("${FILTERED_ARGS[@]}")
+
       HAS_APPEND_PROMPT=0
       for arg in "${EXTRA_ARGS[@]}"; do
         if [ "$arg" = "--append-system-prompt" ]; then
@@ -7047,21 +7073,16 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       if [ "$HAS_APPEND_PROMPT" -eq 0 ]; then
         EXTRA_ARGS=("--append-system-prompt" "$DIRECTIVE_PAYLOAD" "${EXTRA_ARGS[@]}")
       fi
+      for extra_prompt in "${CUSTOM_APPEND_PROMPTS[@]}"; do
+        EXTRA_ARGS+=("--append-system-prompt" "$extra_prompt")
+      done
+      export CLAUDE_AUTO=0
+      unset CLAUDE_PERMISSION_MODE 2>/dev/null || true
     fi
 
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       if [ "$CLIENT_ID" = "claude" ]; then
-        # Strictly forbid dangerous permissions for Claude Code; guide via system prompt
-        FILTERED_ARGS=()
-        for arg in "${EXTRA_ARGS[@]}"; do
-          if [ "$arg" != "--dangerously-skip-permissions" ]; then
-            FILTERED_ARGS+=("$arg")
-          fi
-        done
-        EXTRA_ARGS=("${FILTERED_ARGS[@]}")
         AUTO_FLAGS=()
-        export CLAUDE_AUTO=0
-        unset CLAUDE_PERMISSION_MODE 2>/dev/null || true
       elif [ "$CLIENT_ID" = "agy" ]; then
         HAS_DANGEROUS=0
         for arg in "${EXTRA_ARGS[@]}"; do
