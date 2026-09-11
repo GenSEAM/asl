@@ -60,7 +60,7 @@ run_launch() {
 
     while [ $# -gt 0 ]; do
       case "$1" in
-        agy|antigravity|claude|claude-code|cursor|windsurf|gemini|agi)
+        agy|antigravity|claude|claude-code|codex|openai-codex|openai|cursor|windsurf|gemini|agi)
           if [ -z "$TARGET_AGENT" ]; then
             TARGET_AGENT="$1"
             shift
@@ -68,6 +68,10 @@ run_launch() {
             EXTRA_ARGS+=("$1")
             shift
           fi
+          ;;
+        help|--help|-h)
+          TARGET_AGENT="help"
+          shift
           ;;
         --orchestrator|-o|orchestrator)
           ORCHESTRATOR=1
@@ -248,8 +252,14 @@ run_launch() {
         PROMPT_CHANNEL=".codeium/windsurf/memories/global_rules.md"
         BIN_NAMES=("windsurf" "/usr/local/bin/windsurf")
         ;;
+      codex|openai-codex|openai)
+        CLIENT_ID="codex"
+        CLIENT_NAME="Codex CLI (OpenAI)"
+        PROMPT_CHANNEL="AGENTS.md"
+        BIN_NAMES=("/opt/homebrew/bin/codex" "/usr/local/bin/codex" "$HOME/.npm-global/bin/codex" "$HOME/.local/bin/codex" "$HOME/.cargo/bin/codex" "$HOME/.bun/bin/codex" "codex")
+        ;;
       help|--help|-h)
-        echo "Usage: asl launch <agy|claude|cursor|windsurf> [--orchestrator|-o] [--preset <name>] [--model <name>] [--reasoning <level>] [--soft-limit <n>] [--hard-limit <n>] [--multi-project] [--code-exec] [--dry-run] [--no-stash] [--prompt <msg>] [-- <agent-args...>]"
+        echo "Usage: asl launch <agy|claude|codex|cursor|windsurf> [--orchestrator|-o] [--preset <name>] [--model <name>] [--reasoning <level>] [--soft-limit <n>] [--hard-limit <n>] [--multi-project] [--code-exec] [--dry-run] [--no-stash] [--prompt <msg>] [-- <agent-args...>]"
         echo ""
         echo "Launches target agent with runtime ASL toolbelt injection and consultative AGENTS.md isolation."
         echo ""
@@ -266,7 +276,7 @@ run_launch() {
         exit 0
         ;;
       *)
-        echo "Usage: asl launch <agy|claude|cursor|windsurf> [--orchestrator|-o] [--preset <name>] [--model <name>] [--reasoning <level>] [--soft-limit <n>] [--hard-limit <n>] [--multi-project] [--code-exec] [--dry-run] [--no-stash] [--prompt <msg>] [-- <agent-args...>]"
+        echo "Usage: asl launch <agy|claude|codex|cursor|windsurf> [--orchestrator|-o] [--preset <name>] [--model <name>] [--reasoning <level>] [--soft-limit <n>] [--hard-limit <n>] [--multi-project] [--code-exec] [--dry-run] [--no-stash] [--prompt <msg>] [-- <agent-args...>]"
         echo ""
         echo "Launches target agent with runtime ASL toolbelt injection and consultative AGENTS.md isolation."
         echo ""
@@ -297,7 +307,7 @@ run_launch() {
       windsurf)
         CHANNEL_FILE="$WS_ROOT/.codeium/windsurf/memories/global_rules.md"
         ;;
-      agy)
+      agy|codex)
         CHANNEL_FILE="$WS_ROOT/AGENTS.md"
         ;;
     esac
@@ -346,6 +356,10 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         ORCH_DIRECTIVE="$ORCH_DIRECTIVE
   :permission-tier \"dangerous-rescue\"
   :auto-flags [\"--dangerously-skip-permissions\"]"
+      elif [ "$CLIENT_ID" = "codex" ]; then
+        ORCH_DIRECTIVE="$ORCH_DIRECTIVE
+  :codex-mode \"autorun-supervised\"
+  :auto-flags [\"-a\" \"never\" \"-s\" \"workspace-write\"]"
       fi
       ORCH_DIRECTIVE="$ORCH_DIRECTIVE
   :channel \"$PROMPT_CHANNEL\"
@@ -367,6 +381,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
     \"Baseline delegation: Use sub-agents (invoke_subagent in Antigravity, Agent in Claude Code) as the primary execution model.\"
     \"Claude Code permission mandate: Never use dangerous permissions (--dangerously-skip-permissions) with Claude Code. Guide execution strictly via system instructions (--append-system-prompt).\"
     \"Antigravity permission mandate: Antigravity must always execute in dangerous rescue mode (--dangerously-skip-permissions) for unconstrained self-healing.\"
+    \"Codex autorun mandate: Enforce supervised autorun (-a never -s workspace-write) for unattended execution bounded to workspace modifications.\"
     \"Context hygiene: Keep orchestrator context minimal by offloading search, exploration, and edits into sub-agent conversation branches; ingest only scalar task receipts.\"
     \"Lean supervisor rule: If sub-agent overhead exceeds task complexity, execute directly via compact batch RPC rather than spawning unneeded sub-agents.\"
     \"Feature flag extension: Separate OS-level agent orchestration is decoupled under --separate-agents for future cross-process scaling.\"
@@ -438,14 +453,39 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
 
     CLIENT_BIN=""
     for CANDIDATE in "${BIN_NAMES[@]}"; do
-      if command -v "$CANDIDATE" >/dev/null 2>&1; then
-        CLIENT_BIN="$(command -v "$CANDIDATE")"
-        break
-      elif [ -x "$CANDIDATE" ]; then
-        CLIENT_BIN="$CANDIDATE"
-        break
+      RESOLVED=""
+      if [ -x "$CANDIDATE" ]; then
+        RESOLVED="$CANDIDATE"
+      elif command -v "$CANDIDATE" >/dev/null 2>&1; then
+        RESOLVED="$(command -v "$CANDIDATE")"
+      fi
+      if [ -n "$RESOLVED" ]; then
+        if "$RESOLVED" --version >/dev/null 2>&1; then
+          CLIENT_BIN="$RESOLVED"
+          break
+        fi
       fi
     done
+
+    CODEX_AUTORUN=0
+    CODEX_SANDBOX=0
+    CODEX_EXEC=0
+    CODEX_DANGEROUS=0
+    if [ "$CLIENT_ID" = "codex" ] && [ -n "$CLIENT_BIN" ]; then
+      CODEX_HELP="$("$CLIENT_BIN" --help 2>&1 || true)"
+      if echo "$CODEX_HELP" | grep -qE -- "--ask-for-approval|-a\b"; then
+        CODEX_AUTORUN=1
+      fi
+      if echo "$CODEX_HELP" | grep -qE -- "--sandbox|-s\b"; then
+        CODEX_SANDBOX=1
+      fi
+      if echo "$CODEX_HELP" | grep -qE -- "\bexec\b"; then
+        CODEX_EXEC=1
+      fi
+      if echo "$CODEX_HELP" | grep -qE -- "--dangerously-bypass-approvals-and-sandbox"; then
+        CODEX_DANGEROUS=1
+      fi
+    fi
 
     export ASL_LAUNCHED=1
     export ASL_CLIENT="$CLIENT_ID"
@@ -527,6 +567,38 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         export AGY_PERMISSION_TIER="dangerous-rescue"
         export AGY_RESCUE=1
         export AGY_DANGEROUSLY_SKIP_PERMISSIONS=1
+      elif [ "$CLIENT_ID" = "codex" ]; then
+        AUTO_FLAGS=()
+        if [ "$CODEX_AUTORUN" -eq 1 ]; then
+          HAS_APPROVAL_ARG=0
+          for ((i=0; i<${#EXTRA_ARGS[@]}; i++)); do
+            if [ "${EXTRA_ARGS[i]}" = "-a" ] || [ "${EXTRA_ARGS[i]}" = "--ask-for-approval" ]; then
+              HAS_APPROVAL_ARG=1
+              break
+            fi
+          done
+          if [ "$HAS_APPROVAL_ARG" -eq 0 ]; then
+            EXTRA_ARGS=("-a" "never" "${EXTRA_ARGS[@]}")
+            AUTO_FLAGS+=("-a" "never")
+          fi
+        fi
+        if [ "$CODEX_SANDBOX" -eq 1 ]; then
+          HAS_SANDBOX_ARG=0
+          for ((i=0; i<${#EXTRA_ARGS[@]}; i++)); do
+            if [ "${EXTRA_ARGS[i]}" = "-s" ] || [ "${EXTRA_ARGS[i]}" = "--sandbox" ]; then
+              HAS_SANDBOX_ARG=1
+              break
+            fi
+          done
+          if [ "$HAS_SANDBOX_ARG" -eq 0 ]; then
+            EXTRA_ARGS=("-s" "workspace-write" "${EXTRA_ARGS[@]}")
+            AUTO_FLAGS+=("-s" "workspace-write")
+          fi
+        fi
+        export CODEX_ORCHESTRATOR=1
+        export CODEX_AUTO=1
+        export CODEX_APPROVAL_POLICY="never"
+        export CODEX_SANDBOX="workspace-write"
       fi
     fi
 
@@ -546,6 +618,14 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         echo "  • Permission Tier:      SYSTEM-GUIDED (safe permissions; zero dangerous flags)"
       elif [ "$CLIENT_ID" = "agy" ]; then
         echo "  • Permission Tier:      DANGEROUS RESCUE (--dangerously-skip-permissions)"
+      elif [ "$CLIENT_ID" = "codex" ]; then
+        if [ "$CODEX_AUTORUN" -eq 1 ]; then
+          echo "  • Permission Tier:      AUTORUN SUPERVISED (-a never -s workspace-write)"
+          echo "  • Autorun Capability:   DETECTED (Unattended: yes, Sandbox: workspace-write$([ "$CODEX_EXEC" -eq 1 ] && echo ", Exec: available"))"
+        else
+          echo "  • Permission Tier:      STANDARD INTERACTIVE"
+          echo "  • Autorun Capability:   NOT DETECTED (Interactive approvals required)"
+        fi
       fi
       echo "  • Supervisory Model:    $ORCH_MODEL (Reasoning: $ORCH_REASONING)"
       echo "  • Orchestration Target: $ORCH_TARGET (Baseline: native sub-agents; separate-agents decoupled)"
@@ -588,6 +668,9 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         elif [ "$CLIENT_ID" = "agy" ]; then
           echo "    :permission-tier \"dangerous-rescue\""
           echo "    :auto-flags [\"--dangerously-skip-permissions\"]"
+        elif [ "$CLIENT_ID" = "codex" ]; then
+          echo "    :codex-mode \"autorun-supervised\""
+          echo "    :auto-flags [\"-a\" \"never\" \"-s\" \"workspace-write\"]"
         fi
         echo "    :channel \"$PROMPT_CHANNEL\""
         echo "    :orchestrator-mode true"
