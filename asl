@@ -100,7 +100,7 @@ run_launch() {
               ROLE_IMPLEMENTER="agy"
               ROLE_AUDITOR="codex"
               ;;
-            codex-plan-audit|codex-architect)
+            codex-planner|codex-plan|codex-planning|codex-plan-audit|codex-architect)
               ORCH_MODEL="gemini-3.8-flash"
               ORCH_REASONING="high"
               SOFT_LIMIT=4
@@ -268,10 +268,12 @@ run_launch() {
           ;;
         --planner|--plan)
           ROLE_PLANNER="$2"
+          PLANNING_MODEL="$2"
           shift 2
           ;;
         --implementer|--impl)
           ROLE_IMPLEMENTER="$2"
+          EXECUTION_MODEL="$2"
           shift 2
           ;;
         --auditor|--audit)
@@ -362,7 +364,7 @@ run_launch() {
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
         echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
-        echo "  --preset, -P <name>   Preset: codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
+        echo "  --preset, -P <name>   Preset: codex-planner, codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
         echo "  --soft-limit <n>      Soft limit for concurrent subagents within single project (default: 4)"
@@ -385,7 +387,7 @@ run_launch() {
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
         echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
-        echo "  --preset, -P <name>   Preset: codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
+        echo "  --preset, -P <name>   Preset: codex-planner, codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
         echo "  --soft-limit <n>      Soft limit for concurrent subagents within single project (default: 4)"
