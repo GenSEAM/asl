@@ -407,22 +407,24 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
           CHANNEL_LINK_TARGET="$(readlink "$CHANNEL_FILE")"
           EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
           rm -f "$CHANNEL_FILE"
-          printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE"
+          printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE" 2>/dev/null || true
           trap cleanup_launch EXIT INT TERM HUP
         elif [ -f "$CHANNEL_FILE" ]; then
           CHANNEL_STASH="/tmp/asl_channel_stash_$$"
           cp -f "$CHANNEL_FILE" "$CHANNEL_STASH"
           trap cleanup_launch EXIT INT TERM HUP
-          if ! grep -q "ASL_TOOLBELT_START" "$CHANNEL_FILE" 2>/dev/null; then
+          if [ -w "$CHANNEL_FILE" ]; then
+            if ! grep -q "ASL_TOOLBELT_START" "$CHANNEL_FILE" 2>/dev/null; then
             EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
-            printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
-          elif [ "$ORCHESTRATOR" -eq 1 ] && ! grep -q "ORCHESTRATOR_START" "$CHANNEL_FILE" 2>/dev/null; then
+                          printf "%s\n\n%s\n" "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE" 2>/dev/null || true
+            elif [ "$ORCHESTRATOR" -eq 1 ] && ! grep -q "ORCHESTRATOR_START" "$CHANNEL_FILE" 2>/dev/null; then
             EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
-            printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
+                          printf "%s\n\n%s\n" "$ORCH_DIRECTIVE" "$EXISTING_CONTENT" > "$CHANNEL_FILE" 2>/dev/null || true
+              fi
           fi
         else
           mkdir -p "$(dirname "$CHANNEL_FILE")" 2>/dev/null || true
-          printf '%s\n' "$DIRECTIVE_PAYLOAD" > "$CHANNEL_FILE"
+          printf '%s\n' "$DIRECTIVE_PAYLOAD" > "$CHANNEL_FILE" 2>/dev/null || true
           CHANNEL_CREATED=1
           trap cleanup_launch EXIT INT TERM HUP
         fi
@@ -619,6 +621,18 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       exit 0
     fi
 
+    if [ -z "" ] || [ ! -x "" ]; then
+      echo "Error: sovereign client binary not found or not executable for ''." >&2
+      cleanup_launch
+      trap - EXIT INT TERM HUP
+      exit 1
+    fi
+
+    "" "${EXTRA_ARGS[@]}"
+    CLIENT_EXIT_CODE=$?
+    cleanup_launch
+    trap - EXIT INT TERM HUP
+    exit $CLIENT_EXIT_CODE
 }
 
 if [ "$1" = "launch" ]; then
