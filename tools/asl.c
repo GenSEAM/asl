@@ -3163,6 +3163,5 @@ int main(int argc, char **argv) {
     printf("AgentScript Native CLI (Unified Agent Batch RPC & Sovereign Toolchain)\n");
     printf("Usage: asl rpc '(:batch ...)'        [MANDATORY AI AGENT INTERFACE]\n");
     printf("   or: asl '(:batch ...)'            [Direct S-expression shorthand]\n");
-    printf("   or: asl <command> [arguments]     [Core language toolchain]\n");
     return 0;
 }
