@@ -100,6 +100,20 @@ run_launch() {
               ROLE_IMPLEMENTER="agy"
               ROLE_AUDITOR="codex"
               ;;
+            codex-astro|codex-astro-high|astro-high|astro)
+              ORCH_MODEL="gemini-3.8-flash"
+              ORCH_REASONING="high"
+              SOFT_LIMIT=4
+              HARD_LIMIT=6
+              MAX_AGENTS=6
+              RESEARCH_MODEL="flash"
+              PLANNING_MODEL="astro-high"
+              EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="codex"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
+              ;;
             codex-planner|codex-plan|codex-planning|codex-plan-audit|codex-architect)
               ORCH_MODEL="gemini-3.8-flash"
               ORCH_REASONING="high"
@@ -268,6 +282,9 @@ run_launch() {
           ;;
         --planner|--plan)
           ROLE_PLANNER="$2"
+          shift 2
+          ;;
+        --plan-model|--planning-model)
           PLANNING_MODEL="$2"
           shift 2
           ;;
@@ -364,7 +381,7 @@ run_launch() {
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
         echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
-        echo "  --preset, -P <name>   Preset: codex-planner, codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
+        echo "  --preset, -P <name>   Preset: codex-astro-high, codex-planner, codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
         echo "  --soft-limit <n>      Soft limit for concurrent subagents within single project (default: 4)"
@@ -376,7 +393,8 @@ run_launch() {
         echo "  --scout <agent>       Agent/model for Scout role (default: asl)"
         echo "  --planner, --plan <m> Agent/model for Planner/Architect role (default: pro)"
         echo "  --implementer, --impl <agent> Agent/model for Implementer role (default: agy)"
-        echo "  --auditor, --audit <agent>   Agent/model for Auditor/Critic role (default: codex)"
+        echo "  --auditor, --audit <agent>   Agent/model for Auditor/Critic role (default: codex)
+  --plan-model <model>         Planning model specification (e.g. astro-high, pro, codex)"
         exit 0
         ;;
       *)
@@ -387,7 +405,7 @@ run_launch() {
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
         echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
-        echo "  --preset, -P <name>   Preset: codex-planner, codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
+        echo "  --preset, -P <name>   Preset: codex-astro-high, codex-planner, codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
         echo "  --soft-limit <n>      Soft limit for concurrent subagents within single project (default: 4)"
@@ -399,7 +417,8 @@ run_launch() {
         echo "  --scout <agent>       Agent/model for Scout role (default: asl)"
         echo "  --planner, --plan <m> Agent/model for Planner/Architect role (default: pro)"
         echo "  --implementer, --impl <agent> Agent/model for Implementer role (default: agy)"
-        echo "  --auditor, --audit <agent>   Agent/model for Auditor/Critic role (default: codex)"
+        echo "  --auditor, --audit <agent>   Agent/model for Auditor/Critic role (default: codex)
+  --plan-model <model>         Planning model specification (e.g. astro-high, pro, codex)"
         exit 1
         ;;
     esac
