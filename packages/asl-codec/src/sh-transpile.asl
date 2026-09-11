@@ -9,7 +9,8 @@
       make-script
       measure-sh-savings]
   :i [(std/string :a s)
-      (asl-text/escape :a esc)])
+      (asl-text/escape :a esc)
+      (asl-text/text :a txt)])
 
 (dfs ShTranspileResult
   (:f output Str "Transpiled shell command string or diagnostic message")
@@ -19,12 +20,8 @@
   (:f success Bool "True if transpilation succeeded"))
 
 (df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE token estimation based on character length and whitespace."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (true (/ (+ len 3) 4)))))
+  :d "Deterministic BPE token estimation via canonical asl-text/text."
+  (txt/estimate-tokens text))
 
 (df calc-savings [(orig I64) (asn I64)] -> F64
   :d "Calculates token savings percentage."

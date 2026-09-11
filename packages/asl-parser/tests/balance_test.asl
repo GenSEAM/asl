@@ -51,9 +51,19 @@
     (assert (= (bal/count-unclosed-parens code-bal) 0) "Balanced code unclosed count must be 0")
     true))
 
+(df test-balance-delimiters [] -> Bool
+  :d "Verifies balance-delimiters appends closing parentheses to unclosed S-expressions."
+  (let [(unclosed "(defn foo [x] (+ x 1")
+        (balanced (bal/balance-delimiters unclosed))
+        (already-bal "(defn bar [] 42)")
+        (unchanged (bal/balance-delimiters already-bal))]
+    (assert (= balanced "(defn foo [x] (+ x 1))") "Must append 1 closing paren")
+    (assert (= unchanged already-bal) "Must leave balanced code unchanged")
+    true))
+
 (df run-tests [] -> Bool
   :d "Executes all delimiter balance unit tests."
   (and (test-balanced-forms)
        (and (test-unbalanced-forms)
             (and (test-delimiters-in-strings)
-                 (test-count-unclosed-parens)))))
+                 (and (test-count-unclosed-parens) (test-balance-delimiters))))))

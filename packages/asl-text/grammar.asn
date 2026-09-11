@@ -113,5 +113,13 @@
     (:sym :name "audit-asn-emojis" :kind :fn :tokens 3
           :rationality :absolute :context-dependent false
           :rationale "Audits a list of file contents and returns true if zero emoji violations exist")
+    (:sym :name "strip-quotes" :kind :fn :tokens 2
+          :rationale "Strips outer double quotes from string values if present")
+    (:sym :name "strip-colon" :kind :fn :tokens 2
+          :rationale "Strips leading colon from keyword or symbol string")
+    (:sym :name "estimate-tokens" :kind :fn :tokens 2
+          :rationale "Deterministic BPE token count estimation based on character length")
+    (:sym :name "concat" :kind :fn :tokens 1)
+    (:sym :name "join" :kind :fn :tokens 1)
   ])
 

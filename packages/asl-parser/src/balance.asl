@@ -1,6 +1,6 @@
 (module asl-parser/balance
   :d "Pure AgentScript delimiter balance and structural paren/bracket/brace validation engine."
-  :x [BalanceResult check-delimiter-balance is-delimiter-balanced? count-unclosed-parens])
+  :x [BalanceResult check-delimiter-balance is-delimiter-balanced? count-unclosed-parens balance-delimiters])
 
 (dfs BalanceResult
   (:f balanced Bool "True if all delimiters are balanced and properly nested")
@@ -55,3 +55,12 @@
     (if (and (not (.-balanced res)) (> (.-open-parens res) 0))
       (.-open-parens res)
       0)))
+
+
+(df balance-delimiters [(raw Str)] -> Str
+  :d "Balances unclosed parentheses in S-expressions with quote and escape awareness."
+  (let [(delta (count-unclosed-parens raw))]
+    (if (> delta 0)
+      (let [(closers (fold (fn [(acc Str) (_ I64)] -> Str (str acc ")")) "" (range 0 delta)))]
+        (str raw closers))
+      raw)))

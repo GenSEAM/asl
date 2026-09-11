@@ -74,4 +74,6 @@
           :rationale "Convenience predicate checking if source code has perfectly balanced delimiters")
     (:sym :name "count-unclosed-parens" :kind :fn :tokens 3
           :rationale "Returns count of unclosed open parentheses in source string for auto-repair and delimiter balancing")
+    (:sym :name "balance-delimiters" :kind :fn :tokens 2
+          :rationale "Balances unclosed parentheses in source code with quote and escape awareness")
   ])

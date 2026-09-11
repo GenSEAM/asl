@@ -106,6 +106,17 @@
        (assert (string-contains? (txt/format-clause-breadcrumb c1) "GDPR Guide") "Formatted breadcrumb must include doc title")))
     true))
 
+(df test-text-helpers [] -> Bool
+  :d "Verifies strip-quotes, strip-colon, and estimate-tokens foundational primitives."
+  (assert (= (txt/strip-quotes "\"hello\"") "hello") "strip-quotes must strip outer quotes")
+  (assert (= (txt/strip-quotes "hello") "hello") "strip-quotes must leave unquoted string intact")
+  (assert (= (txt/strip-colon ":action") "action") "strip-colon must strip leading colon")
+  (assert (= (txt/strip-colon "action") "action") "strip-colon must leave non-colon symbol intact")
+  (assert (= (txt/estimate-tokens "") 0) "estimate-tokens on empty must be 0")
+  (assert (= (txt/estimate-tokens "test") 1) "estimate-tokens on 4 chars must be 1")
+  (assert (> (txt/estimate-tokens "this is a longer sentence") 3) "estimate-tokens must scale with length")
+  true)
+
 (df run-tests [] -> Bool
   :d "Runs all asl-text unit tests."
   (and (test-decode-entities)
@@ -117,5 +128,5 @@
                                 (and (test-rag-formatting)
                                      (and (test-asn-encoding)
                                           (and (test-contextual-clause-breadcrumb)
-                                               (test-extract-clauses)))))))))))
+                                               (and (test-extract-clauses) (test-text-helpers))))))))))))
 

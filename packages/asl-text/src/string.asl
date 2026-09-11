@@ -4,6 +4,8 @@
       ends?
       has?
       split
+      concat
+      join
       txt-starts?
       txt-ends?
       txt-has?
@@ -50,3 +52,12 @@
 (df txt-split [(s Str) (delim Str)] -> (List Str)
   :d "Hyphen compatibility alias for split."
   (split s delim))
+
+
+(df concat [(a Str) (b Str)] -> Str
+  :d "Concatenates two strings."
+  (str a b))
+
+(df join [(parts (List Str)) (sep Str)] -> Str
+  :d "Joins list of strings with separator."
+  (string-join parts sep))

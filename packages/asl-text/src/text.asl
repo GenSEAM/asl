@@ -1,6 +1,6 @@
 (module asl-text/text
   :d "Pure AgentScript text engine: HTML parsing, entity decoding, multi-format text extraction, chunking, and ASN structuring."
-  :x [ExtractedDoc ContextChunk ContextualClause decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag format-clause-breadcrumb format-contextual-clause extract-clauses extract-contextual-clauses doc-to-asn chunk-to-asn clause-to-asn])
+  :x [ExtractedDoc ContextChunk ContextualClause decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag format-clause-breadcrumb format-contextual-clause extract-clauses extract-contextual-clauses doc-to-asn chunk-to-asn clause-to-asn strip-quotes strip-colon estimate-tokens])
 
 (dfs ExtractedDoc
   (:f title Str "Document title or headline")
@@ -413,3 +413,25 @@
   :d "Alias for extract-clauses with breadcrumb preservation."
   (extract-clauses doc min-chars max-chars))
 
+
+
+(df strip-quotes [(val Str)] -> Str
+  :d "Strips outer double quotes from string values if present."
+  (let [(len (string-length val))]
+    (if (and (>= len 2) (and (string-starts-with? val "\"") (string-ends-with? val "\"")))
+      (option-or (string-slice val 1 (- len 1)) "")
+      val)))
+
+(df strip-colon [(val Str)] -> Str
+  :d "Strips leading colon from keyword or symbol string."
+  (if (string-starts-with? val ":")
+    (option-or (string-slice val 1 (string-length val)) "")
+    val))
+
+(df estimate-tokens [(text Str)] -> I64
+  :d "Deterministic BPE token estimation based on character length."
+  (let [(len (string-length text))]
+    (cond
+      ((<= len 0) 0)
+      ((<= len 4) 1)
+      (:else (/ (+ len 3) 4)))))
