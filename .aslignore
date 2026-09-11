@@ -1,0 +1,13 @@
+scratch/
+tmp/
+*.tmp
+.asl/cache/
+.asl/log/
+.system_generated/
+*.log
+**/fixtures/unbalanced/
+*.lock
+bench/*.lock
+grammar/*.lock
+prelude/*.lock
+tools/**

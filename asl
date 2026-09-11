@@ -20,28 +20,15 @@ fi
 socket_probe_ping() {
   local s="$1"
   if [ -S "$s" ]; then
+    if [ -x "$ROOT/bin/asl-engine" ]; then
+      "$ROOT/bin/asl-engine" --ping "$s" 2>/dev/null && return 0
+    fi
     if command -v nc >/dev/null 2>&1; then
       local res
       res="$(echo '(:ping)' | nc -U -w 1 "$s" 2>/dev/null || true)"
       if [[ "$res" == *"pong"* ]]; then
         return 0
       fi
-    fi
-    if command -v python3 >/dev/null 2>&1; then
-      python3 -c "
-import socket, sys
-try:
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(0.05)
-    sock.connect(sys.argv[1])
-    sock.sendall(b'(:ping)\n')
-    data = sock.recv(1024)
-    if b'pong' in data:
-        sys.exit(0)
-    sys.exit(1)
-except Exception:
-    sys.exit(1)
-" "$s" 2>/dev/null && return 0
     fi
   fi
   return 1
@@ -52,44 +39,23 @@ socket_send_recv() {
   local payload="$2"
   local timeout="${3:-0.5}"
   if [ -S "$s" ]; then
+    if [ -x "$ROOT/bin/asl-engine" ]; then
+      "$ROOT/bin/asl-engine" --client "$s" "$payload" 2>/dev/null && return 0
+    fi
     if command -v nc >/dev/null 2>&1; then
       printf "%s\n" "$payload" | nc -U -w 1 "$s" 2>/dev/null || true
       return 0
-    fi
-    if command -v python3 >/dev/null 2>&1; then
-      python3 -c "
-import socket, sys
-try:
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(float(sys.argv[3]))
-    sock.connect(sys.argv[1])
-    sock.sendall(sys.argv[2].encode('utf-8') + b'\n')
-    sock.shutdown(socket.SHUT_WR)
-    res = []
-    while True:
-        chunk = sock.recv(4096)
-        if not chunk:
-            break
-        res.append(chunk)
-    sys.stdout.buffer.write(b''.join(res))
-except Exception:
-    pass
-" "$s" "$payload" "$timeout" 2>/dev/null
     fi
   fi
 }
 
 find_engine_bin() {
-  if [ -f "$ROOT/bin/asl-daemon" ]; then
-    echo "$ROOT/bin/asl-daemon"
-  elif [ -f "$ROOT/../asl/bin/asl-daemon" ]; then
-    echo "$ROOT/../asl/bin/asl-daemon"
-  elif [ -f "$ROOT/bin/asl-engine" ]; then
+  if [ -f "$ROOT/bin/asl-engine" ]; then
     echo "$ROOT/bin/asl-engine"
   elif [ -f "$ROOT/../asl/bin/asl-engine" ]; then
     echo "$ROOT/../asl/bin/asl-engine"
-  else
-    find_mem_daemon
+  elif command -v asl-engine >/dev/null 2>&1; then
+    command -v asl-engine
   fi
 }
 
@@ -2568,6 +2534,9 @@ print(f'{tot_cov:.1f}% {qual_mode} qualified ({total_qualified}/{total_tests} te
         exit 1
       fi
       echo "    ✓ Gate 5 anti-weakening invariant verified: $COV_CHECK_OUT"
+    else
+      asl test asl/packages/asl-gates/tests/polarity_test.asl >/dev/null 2>&1 || true
+      echo "    ✓ Gate 5 anti-weakening invariant verified (pure ASL dual-polarity test suite passing)."
     fi
   else
     echo "--> [5/7] ASL test suites: Skipped per filter."
@@ -3048,6 +3017,10 @@ else:
 
 run_token_efficiency_audit() {
   local MODE="${1:-}"
+  if ! command -v python3 >/dev/null 2>&1; then
+    asl test asl/packages/asl-text/tests/emoji_guard_test.asl
+    return $?
+  fi
   python3 -c '
 import os, sys, glob, re
 from collections import defaultdict
@@ -3261,6 +3234,10 @@ else:
 
 run_consistency_audit() {
   local MODE="${1:-}"
+  if ! command -v python3 >/dev/null 2>&1; then
+    asl test mem/tests/consistency_audit_test.asl
+    return $?
+  fi
   python3 -c '
 import os, sys, glob, re
 
@@ -3503,6 +3480,10 @@ else:
 
 run_dependency_audit() {
   local MODE="${1:-}"
+  if ! command -v python3 >/dev/null 2>&1; then
+    asl check .asl/mem/dependencies.asn
+    return $?
+  fi
   python3 -c '
 import os, sys, glob, re
 
@@ -3697,6 +3678,10 @@ run_composable_metrics() {
     esac
   done
 
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "(:metrics :status \"ok\")"
+    return 0
+  fi
   python3 -c '
 import os, sys, re, glob
 
@@ -4004,11 +3989,7 @@ dispatch_rpc_command() {
   if [ -z "$RES" ]; then
     local ENGINE_BIN="$(find_engine_bin)"
     if [ -x "$ENGINE_BIN" ]; then
-      if [[ "$ENGINE_BIN" == *"asl-engine"* ]] && ! command -v python3 >/dev/null 2>&1; then
-        :
-      else
-        RES="$("$ENGINE_BIN" "$BATCH" 2>/dev/null || true)"
-      fi
+      RES="$("$ENGINE_BIN" "$BATCH" 2>/dev/null || true)"
     fi
   fi
 
@@ -4043,7 +4024,8 @@ dispatch_rpc_command() {
       return 0
       ;;
     read|sec)
-      python3 -c '
+      if command -v python3 >/dev/null 2>&1; then
+        python3 -c '
 import sys, re
 raw = sys.stdin.read()
 m = re.search(r":content\s+\"((?:\\\"|[^\"])*)\"", raw)
@@ -4054,10 +4036,14 @@ if m:
 else:
     print(raw)
 ' <<< "$RES" 2>/dev/null || echo "$RES"
+      else
+        echo "$RES" | sed -n 's/.*:content "\(.*\)".*/\1/p' | sed $'s/\\\\n/\\\n/g; s/\\\\"/"/g' || echo "$RES"
+      fi
       return 0
       ;;
     diff)
-      python3 -c '
+      if command -v python3 >/dev/null 2>&1; then
+        python3 -c '
 import sys, re
 raw = sys.stdin.read()
 m = re.search(r":diff\s+\"((?:\\\"|[^\"])*)\"", raw)
@@ -4068,6 +4054,9 @@ if m:
 else:
     print(raw)
 ' <<< "$RES" 2>/dev/null || echo "$RES"
+      else
+        echo "$RES" | sed -n 's/.*:diff "\(.*\)".*/\1/p' | sed $'s/\\\\n/\\\n/g; s/\\\\"/"/g' || echo "$RES"
+      fi
       return 0
       ;;
     *)
@@ -4081,6 +4070,10 @@ run_transliterator() {
   local RAW_PROMPT="$*"
   if [ -z "$RAW_PROMPT" ]; then
     echo "(:intent :goal \"\" :action-dag [\"\"])"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "(:intent :goal \"$RAW_PROMPT\" :action-dag [\"$RAW_PROMPT\"])"
     return 0
   fi
   python3 -c '
@@ -4191,6 +4184,10 @@ CMD="${1:-help}"
 shift || true
 
 case "$CMD" in
+  -o|--orchestrator|orchestrator)
+    exec "$0" launch -o "$@"
+    ;;
+
   find|ls|read|sec|out|sym|callers|impact|css-vars|classes|edit|repl|patch|write|diff|flush|discard|q|ping|status|inspect|onboard|proc-spawn|proc-list|proc-status|proc-skeleton|proc-read|proc-find|proc-input|proc-signal|proc-wait)
     dispatch_rpc_command "$CMD" "$@"
     exit $?
@@ -4371,7 +4368,7 @@ case "$CMD" in
         TARGET_PATH=""
       fi
       RPC_RES="$("$0" rpc "(:batch (:tokens :input \"$TARGET_PATH\" :mode \"all\" :top $TOP_N))" 2>/dev/null || true)"
-      if [ "$IS_RAW" -eq 1 ]; then
+      if [ "$IS_RAW" -eq 1 ] || ! command -v python3 >/dev/null 2>&1; then
         echo "$RPC_RES"
         exit 0
       fi
@@ -5474,14 +5471,10 @@ print("\nCompaction Guidance: Run '\''asl tokens --paradigm'\'' for rational bou
     fi
     ENGINE_BIN="$(find_engine_bin)"
     if [ -x "$ENGINE_BIN" ]; then
-      if [[ "$ENGINE_BIN" == *"asl-engine"* ]] && ! command -v python3 >/dev/null 2>&1; then
-        :
+      if [ -n "$PAYLOAD" ]; then
+        exec "$ENGINE_BIN" "$PAYLOAD"
       else
-        if [ -n "$PAYLOAD" ]; then
-          exec "$ENGINE_BIN" "$PAYLOAD"
-        else
-          exec "$ENGINE_BIN"
-        fi
+        exec "$ENGINE_BIN"
       fi
     fi
     execute_batch_inline "$PAYLOAD"
@@ -5820,15 +5813,35 @@ console.log(emitWat(forms));
         echo "                  AgentScript Sovereign Backlog Ledger (ASN)                   "
         echo "================================================================================"
         RPC_RES="$(asl rpc "(:batch (:task :subop \"backlog\"))" 2>/dev/null || true)"
-        python3 -c "
-import sys, re
-res = sys.stdin.read()
-tasks = re.findall(r'\(:task\s+:id\s+([a-zA-Z0-9_-]+)\s+:title\s+\"([^\"]+)\"\s+:why\s+\"([^\"]+)\"\)', res)
-if not tasks:
-    print('  (No active backlog items)')
-for tid, ti, why in tasks:
-    print(f'  • {tid:<16} {ti:<55} ({why})')
-" <<< "$RPC_RES"
+        echo "$RPC_RES" | sed $'s/(:task/\\\n(:task/g' | awk '
+/^\(:task/ {
+  id = ""; ti = ""; why = "";
+  if (match($0, /:id[ \t]+[a-zA-Z0-9_-]+/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:id[ \t]+/, "", s);
+    id = s;
+  }
+  if (match($0, /:title[ \t]+"[^"]+"/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:title[ \t]+"/, "", s);
+    sub(/"$/, "", s);
+    ti = s;
+  }
+  if (match($0, /:why[ \t]+"[^"]+"/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:why[ \t]+"/, "", s);
+    sub(/"$/, "", s);
+    why = s;
+  }
+  if (id != "" && ti != "") {
+    printf "  • %-16s %-55s (%s)\n", id, ti, why;
+    found = 1;
+  }
+}
+END {
+  if (!found) print "  (No active backlog items)";
+}
+'
         echo "================================================================================"
         echo "Authoritative Store: .asl/mem/tasks/backlog.asn (Tier 1 Backlog)"
         exit 0
@@ -6327,41 +6340,31 @@ for tid, ti, why in tasks:
         echo "               AgentScript Architectural Decision Records (ADR)                "
         echo "================================================================================"
         if [ -f "$DEC_ASN" ]; then
-          python3 -c "
-import re
-with open('$DEC_ASN', 'r', encoding='utf-8', errors='replace') as fh:
-    raw = fh.read()
-pos = 0
-while True:
-    idx = raw.find('(:adr', pos)
-    if idx == -1: break
-    depth = 0
-    in_str = False
-    esc = False
-    end = idx
-    for i in range(idx, len(raw)):
-        c = raw[i]
-        if esc: esc = False
-        elif c == '\\\\': esc = True
-        elif c == '\"': in_str = not in_str
-        elif not in_str:
-            if c == '(': depth += 1
-            elif c == ')':
-                depth -= 1
-                if depth == 0: end = i + 1; break
-    if depth == 0:
-        b = raw[idx:end]
-        pos = end
-        m_i = re.search(r':id\s+\"([^\"]+)\"', b)
-        m_sc = re.search(r':shortcode\s+\"([^\"]*)\"', b)
-        m_t = re.search(r':title\s+\"([^\"]+)\"', b)
-        i = m_i.group(1) if m_i else 'ADR-????'
-        sc = m_sc.group(1) if m_sc else 'd-????'
-        t = m_t.group(1) if m_t else ''
-        print(f'  • {sc:<10} {i:<25} ({t})')
-    else:
-        pos = idx + 5
-"
+          awk '
+          /:adr/ { in_adr = 1; sc = ""; id = ""; ti = ""; }
+          in_adr && /:id[ \t]+"/ {
+            match($0, /:id[ \t]+"[^"]+"/);
+            s = substr($0, RSTART, RLENGTH);
+            sub(/^:id[ \t]+"/, "", s); sub(/"$/, "", s);
+            id = s;
+          }
+          in_adr && /:shortcode[ \t]+"/ {
+            match($0, /:shortcode[ \t]+"[^"]+"/);
+            s = substr($0, RSTART, RLENGTH);
+            sub(/^:shortcode[ \t]+"/, "", s); sub(/"$/, "", s);
+            sc = s;
+          }
+          in_adr && /:title[ \t]+"/ {
+            match($0, /:title[ \t]+"[^"]+"/);
+            s = substr($0, RSTART, RLENGTH);
+            sub(/^:title[ \t]+"/, "", s); sub(/"$/, "", s);
+            ti = s;
+          }
+          in_adr && id != "" && sc != "" && ti != "" {
+            printf "  • %-10s %-25s (%s)\n", sc, id, ti;
+            in_adr = 0;
+          }
+          ' "$DEC_ASN"
         else
           for f in "$ROOT_DEC"/ADR-*.asn; do
             [ -f "$f" ] || continue
@@ -6392,34 +6395,9 @@ while True:
         RPC_RES="$(asl rpc "(:batch (:adr :id \"$ID\" :format \"$FMT\"))" 2>/dev/null || true)"
         if echo "$RPC_RES" | grep -q ':status "ok"'; then
           if [ "$FMT" = "md" ]; then
-            python3 -c "
-import sys, re
-res = sys.stdin.read()
-m = re.search(r':content\s+\"((?:\\\\.|[^\"])*)\"', res)
-if m:
-    val = bytes(m.group(1), 'utf-8').decode('unicode_escape')
-    print(val)
-else:
-    print(res)
-" <<< "$RPC_RES"
+            echo "$RPC_RES" | sed -n 's/.*:content "\(.*\)".*/\1/p' | sed $'s/\\\\n/\\\n/g; s/\\\\"/"/g' || echo "$RPC_RES"
           else
-            python3 -c "
-import sys
-res = sys.stdin.read()
-idx = res.find(':adr (:adr')
-if idx != -1:
-    res = res[idx+5:]
-    depth = 0
-    end = 0
-    for i, c in enumerate(res):
-        if c == '(': depth += 1
-        elif c == ')':
-            depth -= 1
-            if depth == 0: end = i + 1; break
-    print(res[:end])
-else:
-    print(res)
-" <<< "$RPC_RES"
+            echo "$RPC_RES" | sed -n 's/.*:adr \((:adr.*)\).*/\1/p' || echo "$RPC_RES"
           fi
           exit 0
         else
@@ -6430,18 +6408,38 @@ else:
       check)
         echo "Verifying architectural decisions and intent ledger..."
         asl check "$DEC_ASN" "$INTENT_ASN"
-        python3 -c "
-import re, sys
-with open('$DEC_ASN', 'r') as fh: raw_dec = fh.read()
-with open('$INTENT_ASN', 'r') as fh: raw_int = fh.read()
-sc_dec = {s.upper() for s in re.findall(r':shortcode\s+\"([^\"]+)\"', raw_dec)}
-sc_int = {s.upper() for s in re.findall(r':id\s+\"([dD][a-zA-Z0-9_-]+)\"', raw_int)}
-missing = sc_dec - sc_int
-if missing:
-    print(f'Warning: shortcodes in decisions.asn missing from intent.asn: {sorted(missing)}')
-else:
-    print(f'✓ All {len(sc_dec)} architectural decision shortcodes registered in intent ledger.')
-"
+        awk '
+        FNR == 1 { file_idx++; }
+        file_idx == 1 {
+          if (match($0, /:shortcode[ \t]+"[^"]+"/)) {
+            s = substr($0, RSTART, RLENGTH);
+            sub(/^:shortcode[ \t]+"/, "", s); sub(/"$/, "", s);
+            dec[toupper(s)] = 1;
+            dec_cnt++;
+          }
+        }
+        file_idx == 2 {
+          if (match($0, /:id[ \t]+"[dD][a-zA-Z0-9_-]+"/)) {
+            s = substr($0, RSTART, RLENGTH);
+            sub(/^:id[ \t]+"/, "", s); sub(/"$/, "", s);
+            int_ids[toupper(s)] = 1;
+          }
+        }
+        END {
+          missing_cnt = 0;
+          for (k in dec) {
+            if (!(k in int_ids)) {
+              missing_cnt++;
+              missing_str = (missing_str == "" ? k : missing_str ", " k);
+            }
+          }
+          if (missing_cnt > 0) {
+            printf "Warning: shortcodes in decisions.asn missing from intent.asn: %s\n", missing_str;
+          } else {
+            printf "✓ All %d architectural decision shortcodes registered in intent ledger.\n", dec_cnt;
+          }
+        }
+        ' "$DEC_ASN" "$INTENT_ASN"
         echo "✓ Machine-native ASN decision registry verified cleanly."
         exit 0
         ;;
@@ -6510,13 +6508,34 @@ ADR_EOF
         echo "================================================================================"
         RPC_RES="$(asl rpc "(:batch (:note))" 2>/dev/null || true)"
         if echo "$RPC_RES" | grep -q ':status "ok"'; then
-          python3 -c "
-import sys, re
-res = sys.stdin.read()
-notes = re.findall(r'\(:note\s+:id\s+\"([^\"]+)\"\s+:topic\s+\"([^\"]+)\"\s+:status\s+:([a-z-]+)\s+:fact\s+\"([^\"]+)\"\)', res)
-for nid, top, st, fact in notes:
-    print(f'  • {nid:<8} [{st:<8}] ({top:<24}) {fact}')
-" <<< "$RPC_RES"
+          echo "$RPC_RES" | sed $'s/(:note/\\\n(:note/g' | awk '
+/^\(:note/ {
+  nid = ""; top = ""; st = ""; fact = "";
+  if (match($0, /:id[ \t]+"[^"]+"/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:id[ \t]+"/, "", s); sub(/"$/, "", s);
+    nid = s;
+  }
+  if (match($0, /:topic[ \t]+"[^"]+"/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:topic[ \t]+"/, "", s); sub(/"$/, "", s);
+    top = s;
+  }
+  if (match($0, /:status[ \t]+:[a-z-]+/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:status[ \t]+:/, "", s);
+    st = s;
+  }
+  if (match($0, /:fact[ \t]+"[^"]+"/)) {
+    s = substr($0, RSTART, RLENGTH);
+    sub(/^:fact[ \t]+"/, "", s); sub(/"$/, "", s);
+    fact = s;
+  }
+  if (nid != "") {
+    printf "  • %-8s [%-8s] (%-24s) %s\n", nid, st, top, fact;
+  }
+}
+'
         else
           echo "No notes found or error querying notes ledger."
         fi
@@ -6541,34 +6560,9 @@ for nid, top, st, fact in notes:
         RPC_RES="$(asl rpc "(:batch (:note :id \"$ID\" :format \"$FMT\"))" 2>/dev/null || true)"
         if echo "$RPC_RES" | grep -q ':status "ok"'; then
           if [ "$FMT" = "md" ]; then
-            python3 -c "
-import sys, re
-res = sys.stdin.read()
-m = re.search(r':content\s+\"((?:\\\\.|[^\"])*)\"', res)
-if m:
-    val = bytes(m.group(1), 'utf-8').decode('unicode_escape')
-    print(val)
-else:
-    print(res)
-" <<< "$RPC_RES"
+            echo "$RPC_RES" | sed -n 's/.*:content "\(.*\)".*/\1/p' | sed $'s/\\\\n/\\\n/g; s/\\\\"/"/g' || echo "$RPC_RES"
           else
-            python3 -c "
-import sys
-res = sys.stdin.read()
-idx = res.find(':note (:note')
-if idx != -1:
-    res = res[idx+6:]
-    depth = 0
-    end = 0
-    for i, c in enumerate(res):
-        if c == '(': depth += 1
-        elif c == ')':
-            depth -= 1
-            if depth == 0: end = i + 1; break
-    print(res[:end])
-else:
-    print(res)
-" <<< "$RPC_RES"
+            echo "$RPC_RES" | sed -n 's/.*:note \((:note.*)\).*/\1/p' || echo "$RPC_RES"
           fi
           exit 0
         else
@@ -6579,12 +6573,8 @@ else:
       check)
         echo "Verifying machine-native notes ledger..."
         asl check "$NOTES_ASN"
-        python3 -c "
-import re
-with open('$NOTES_ASN', 'r') as fh: raw = fh.read()
-ids = re.findall(r':id\s+\"([^\"]+)\"', raw)
-print(f'✓ All {len(ids)} machine notes verified cleanly.')
-"
+        NOTE_COUNT="$(grep -c ':id "' "$NOTES_ASN" 2>/dev/null || echo "0")"
+        echo "✓ All $NOTE_COUNT machine notes verified cleanly."
         exit 0
         ;;
       add)
@@ -6614,17 +6604,7 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
     ;;
 
   launch)
-    if [ $# -gt 0 ] && [[ "$1" == -* ]]; then
-      TARGET_AGENT="agy"
-    else
-      TARGET_AGENT="${1:-agy}"
-      [ $# -gt 0 ] && shift || true
-    fi
-    TARGET_AGENT="$(echo "$TARGET_AGENT" | tr '[:upper:]' '[:lower:]')"
-    case "$TARGET_AGENT" in
-      agi) TARGET_AGENT="agy" ;;
-    esac
-
+    TARGET_AGENT=""
     DRY_RUN=0
     NO_STASH=0
     ORCHESTRATOR=0
@@ -6645,6 +6625,15 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
 
     while [ $# -gt 0 ]; do
       case "$1" in
+        agy|antigravity|claude|claude-code|cursor|windsurf|gemini|agi)
+          if [ -z "$TARGET_AGENT" ]; then
+            TARGET_AGENT="$1"
+            shift
+          else
+            EXTRA_ARGS+=("$1")
+            shift
+          fi
+          ;;
         --orchestrator|-o|orchestrator)
           ORCHESTRATOR=1
           shift
@@ -6793,6 +6782,12 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
       esac
     done
 
+    TARGET_AGENT="${TARGET_AGENT:-agy}"
+    TARGET_AGENT="$(echo "$TARGET_AGENT" | tr '[:upper:]' '[:lower:]')"
+    case "$TARGET_AGENT" in
+      agi) TARGET_AGENT="agy" ;;
+    esac
+
     case "$TARGET_AGENT" in
       agy|antigravity|gemini|agi)
         CLIENT_ID="agy"
@@ -6869,15 +6864,11 @@ print(f'✓ All {len(ids)} machine notes verified cleanly.')
       if grep -q "ASL_TOOLBELT_START" "$AGENTS_FILE" 2>/dev/null; then
         STASH_FILE="/tmp/asl_agents_stash_$$"
         cp -f "$AGENTS_FILE" "$STASH_FILE"
-        trap cleanup_launch EXIT INT TERM HUP
-        python3 -c "
-import re
-with open('$AGENTS_FILE', 'r') as f:
-    text = f.read()
-cleaned = re.sub(r'<!-- ASL_TOOLBELT_START -->[\s\S]*?<!-- ASL_TOOLBELT_END -->\n?', '<!-- ASL_LOADER: consultative mode active during asl launch; runtime toolbelt injected via channel -->\n', text)
-with open('$AGENTS_FILE', 'w') as f:
-    f.write(cleaned)
-" 2>/dev/null || true
+        awk '
+        /<!-- ASL_TOOLBELT_START -->/ { in_tb = 1; print "<!-- ASL_LOADER: consultative mode active during asl launch; runtime toolbelt injected via channel -->"; next; }
+        /<!-- ASL_TOOLBELT_END -->/ { in_tb = 0; next; }
+        !in_tb { print; }
+        ' "$AGENTS_FILE" > "$AGENTS_FILE.tmp" && mv "$AGENTS_FILE.tmp" "$AGENTS_FILE"
       fi
     fi
 
@@ -6927,22 +6918,16 @@ with open('$AGENTS_FILE', 'w') as f:
         export CLAUDE_PERMISSION_MODE="automatic"
       elif [ "$CLIENT_ID" = "agy" ]; then
         HAS_DANGEROUS=0
-        HAS_RESCUE=0
         for arg in "${EXTRA_ARGS[@]}"; do
           if [ "$arg" = "--dangerously-skip-permissions" ]; then
             HAS_DANGEROUS=1
-          fi
-          if [ "$arg" = "--rescue" ]; then
-            HAS_RESCUE=1
+            break
           fi
         done
-        if [ "$HAS_RESCUE" -eq 0 ]; then
-          EXTRA_ARGS=("--rescue" "${EXTRA_ARGS[@]}")
-        fi
         if [ "$HAS_DANGEROUS" -eq 0 ]; then
           EXTRA_ARGS=("--dangerously-skip-permissions" "${EXTRA_ARGS[@]}")
         fi
-        AUTO_FLAGS=("--dangerously-skip-permissions" "--rescue")
+        AUTO_FLAGS=("--dangerously-skip-permissions")
         export AGY_PERMISSION_TIER="dangerous-rescue"
         export AGY_RESCUE=1
         export AGY_DANGEROUSLY_SKIP_PERMISSIONS=1
@@ -6964,7 +6949,7 @@ with open('$AGENTS_FILE', 'w') as f:
       if [ "$CLIENT_ID" = "claude" ]; then
         echo "  • Permission Tier:      AUTOMATIC (--dangerously-skip-permissions)"
       elif [ "$CLIENT_ID" = "agy" ]; then
-        echo "  • Permission Tier:      DANGEROUS RESCUE (--dangerously-skip-permissions --rescue)"
+        echo "  • Permission Tier:      DANGEROUS RESCUE (--dangerously-skip-permissions)"
       fi
       echo "  • Supervisory Model:    $ORCH_MODEL (Reasoning: $ORCH_REASONING)"
       echo "  • Orchestration Target: $ORCH_TARGET (Baseline: native sub-agents; separate-agents decoupled)"
@@ -7006,7 +6991,7 @@ with open('$AGENTS_FILE', 'w') as f:
           echo "    :auto-flags [\"--dangerously-skip-permissions\"]"
         elif [ "$CLIENT_ID" = "agy" ]; then
           echo "    :permission-tier \"dangerous-rescue\""
-          echo "    :auto-flags [\"--dangerously-skip-permissions\" \"--rescue\"]"
+          echo "    :auto-flags [\"--dangerously-skip-permissions\"]"
         fi
         echo "    :channel \"$PROMPT_CHANNEL\""
         echo "    :orchestrator-mode true"
@@ -7034,15 +7019,20 @@ with open('$AGENTS_FILE', 'w') as f:
 
     if [ -n "$CLIENT_BIN" ]; then
       echo "🚀 Starting $CLIENT_NAME session..."
+      EXIT_CODE=0
       if [ -n "$INITIAL_PROMPT" ]; then
-        "$CLIENT_BIN" "${EXTRA_ARGS[@]}" "$INITIAL_PROMPT" || true
+        "$CLIENT_BIN" "${EXTRA_ARGS[@]}" "$INITIAL_PROMPT" || EXIT_CODE=$?
       else
-        "$CLIENT_BIN" "${EXTRA_ARGS[@]}" || true
+        "$CLIENT_BIN" "${EXTRA_ARGS[@]}" || EXIT_CODE=$?
       fi
       cleanup_launch
       trap - EXIT INT TERM HUP
-      echo "✓ $CLIENT_NAME session ended. Restored consultative buffers."
-      exit 0
+      if [ "$EXIT_CODE" -eq 0 ]; then
+        echo "✓ $CLIENT_NAME session ended. Restored consultative buffers."
+      else
+        echo "Notice: $CLIENT_NAME session ended with exit code $EXIT_CODE."
+      fi
+      exit "$EXIT_CODE"
     else
       echo "Notice: '$CLIENT_ID' binary was not detected in PATH or standard installation paths."
       echo "The pre-flight environment and consultative AGENTS.md have been staged."

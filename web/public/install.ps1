@@ -85,12 +85,12 @@ if exist "%ASL_DIR%asl.exe" (
 if exist "%LOCALAPPDATA%\asl\repo\asl" (
     if "%1"=="upgrade" goto do_upgrade
     if "%1"=="update" goto do_upgrade
-    if exist "%LOCALAPPDATA%\asl\repo\bin\asl-daemon.exe" (
-        "%LOCALAPPDATA%\asl\repo\bin\asl-daemon.exe" %*
+    if exist "%LOCALAPPDATA%\asl\repo\bin\asl-engine.exe" (
+        "%LOCALAPPDATA%\asl\repo\bin\asl-engine.exe" %*
         exit /b %ERRORLEVEL%
     )
-    if exist "%LOCALAPPDATA%\asl\bin\asl-daemon.exe" (
-        "%LOCALAPPDATA%\asl\bin\asl-daemon.exe" %*
+    if exist "%LOCALAPPDATA%\asl\bin\asl-engine.exe" (
+        "%LOCALAPPDATA%\asl\bin\asl-engine.exe" %*
         exit /b %ERRORLEVEL%
     )
     where bash >nul 2>&1
@@ -118,7 +118,7 @@ $Ps1Content = @"
 `$ErrorActionPreference = 'Stop'
 `$ScriptDir = `$PSScriptRoot
 if (`$args.Count -gt 0 -and (`$args[0] -eq 'upgrade' -or `$args[0] -eq 'update')) {
-    Write-Host "🚀 Checking for AgentScript updates..." -ForegroundColor Cyan
+    Write-Host "Checking for AgentScript updates..." -ForegroundColor Cyan
     Invoke-Expression (Invoke-RestMethod -Uri "https://aslang.dev/install.ps1")
     return
 }
@@ -126,11 +126,11 @@ if (Test-Path "`$ScriptDir\asl.exe") {
     & "`$ScriptDir\asl.exe" @args
     return
 }
-if (Test-Path "`$ScriptDir\asl-daemon.exe") {
-    & "`$ScriptDir\asl-daemon.exe" @args
+if (Test-Path "`$ScriptDir\asl-engine.exe") {
+    & "`$ScriptDir\asl-engine.exe" @args
     return
 }
-`$DaemonBin = "`$env:LOCALAPPDATA\asl\repo\bin\asl-daemon.exe"
+`$DaemonBin = "`$env:LOCALAPPDATA\asl\repo\bin\asl-engine.exe"
 if (Test-Path `$DaemonBin) {
     & `$DaemonBin @args
     return
