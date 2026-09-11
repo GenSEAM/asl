@@ -6,14 +6,14 @@
 (df render-skyloom-visualizer [] -> Str
   :d "Renders the interactive SeamBus inter-agent protocol and asymmetric mesh cockpit."
   "<section id=\"skyloom-mesh\" class=\"overflow-hidden border-t border-line py-16 bg-sunken/40\">
-    <!-- Section Header -->
+    
     <div class=\"text-center max-w-3xl mx-auto px-4 mb-6\">
       <span class=\"font-mono text-micro uppercase tracking-widest text-signal font-semibold mb-2 inline-block\">SeamBus Resilient Swarm Mesh</span>
       <h2 id=\"skyloom-title\" class=\"text-3xl sm:text-4xl font-bold text-ink tracking-tight\">Zero-Drift Inter-Agent Protocol &amp; Asymmetric Mesh</h2>
       <p class=\"mt-4 text-ink-2 text-base sm:text-lg leading-relaxed\">A unified high-speed machine protocol connecting ASL-native aware agents, unprimed vanilla LLMs, and warm CLI subagents with self-healing mailbox queues, heartbeat watchdogs, and zero schema drift.</p>
     </div>
 
-    <!-- Under Development Status Pill -->
+    
     <div class=\"flex justify-center -mt-2 mb-8\">
       <span class=\"inline-flex items-center gap-2 px-3.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wide\">
         <span class=\"w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse\"></span>
@@ -22,7 +22,7 @@
     </div>
 
     <div class=\"max-w-6xl mx-auto px-4 space-y-8\">
-      <!-- Telemetry Bar -->
+      
       <div class=\"grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 rounded-2xl border border-line bg-surface/80 backdrop-blur-md shadow-e1\" id=\"skyloom-telemetry\">
         <div class=\"flex flex-col\">
           <span class=\"font-mono text-micro text-ink-3 uppercase\">Total Frames</span>
@@ -59,9 +59,9 @@
         </div>
       </div>
 
-      <!-- Live Swarm Topology Grid -->
+      
       <div class=\"grid grid-cols-1 lg:grid-cols-3 gap-6\">
-        <!-- Agent Nodes Panel -->
+        
         <div class=\"lg:col-span-1 p-6 rounded-2xl border border-line bg-surface flex flex-col justify-between shadow-e2\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line mb-4\">
@@ -72,9 +72,9 @@
               </span>
             </div>
 
-            <!-- Agent Nodes List -->
+            
             <div class=\"space-y-3\" id=\"sl-agent-list\">
-              <!-- Agent 1: Orchestrator Pro -->
+              
               <div class=\"p-3 rounded-xl border border-line bg-ground hover:border-line transition-all sl-agent-node\" data-id=\"agent-orchestrator\">
                 <div class=\"flex items-center justify-between\">
                   <div class=\"flex items-center gap-2.5\">
@@ -92,7 +92,7 @@
                 </div>
               </div>
 
-              <!-- Agent 2: Strategic Planner -->
+              
               <div class=\"p-3 rounded-xl border border-line bg-ground hover:border-line transition-all sl-agent-node\" data-id=\"agent-planner\">
                 <div class=\"flex items-center justify-between\">
                   <div class=\"flex items-center gap-2.5\">
@@ -110,7 +110,7 @@
                 </div>
               </div>
 
-              <!-- Agent 3: Fast Coder 1 -->
+              
               <div class=\"p-3 rounded-xl border border-line bg-ground hover:border-line transition-all sl-agent-node\" data-id=\"agent-coder-1\">
                 <div class=\"flex items-center justify-between\">
                   <div class=\"flex items-center gap-2.5\">
@@ -128,7 +128,7 @@
                 </div>
               </div>
 
-              <!-- Agent 4: Vanilla Claude/GPT -->
+              
               <div class=\"p-3 rounded-xl border border-line bg-ground hover:border-line transition-all sl-agent-node\" data-id=\"agent-vanilla-llm\">
                 <div class=\"flex items-center justify-between\">
                   <div class=\"flex items-center gap-2.5\">
@@ -146,7 +146,7 @@
                 </div>
               </div>
 
-              <!-- Agent 5: Late-Joining Specialist -->
+              
               <div class=\"p-3 rounded-xl border border-line bg-surface shadow-sm transition-all sl-agent-node\" data-id=\"agent-lonely-sub\">
                 <div class=\"flex items-center justify-between\">
                   <div class=\"flex items-center gap-2.5\">
@@ -170,7 +170,7 @@
             </div>
           </div>
 
-          <!-- Scenario Trigger Buttons -->
+          
           <div class=\"pt-6 border-t border-line mt-6\">
             <p class=\"font-mono text-micro uppercase text-ink-3 mb-2 flex items-center gap-1.5\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\"><line x1=\"4\" x2=\"4\" y1=\"21\" y2=\"14\"></line><line x1=\"4\" x2=\"4\" y1=\"10\" y2=\"3\"></line><line x1=\"12\" x2=\"12\" y1=\"21\" y2=\"12\"></line><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"3\"></line><line x1=\"20\" x2=\"20\" y1=\"21\" y2=\"16\"></line><line x1=\"20\" x2=\"20\" y1=\"12\" y2=\"3\"></line><line x1=\"2\" x2=\"6\" y1=\"14\" y2=\"14\"></line><line x1=\"10\" x2=\"14\" y1=\"8\" y2=\"8\"></line><line x1=\"18\" x2=\"22\" y1=\"16\" y2=\"16\"></line></svg>
@@ -207,7 +207,7 @@
           </div>
         </div>
 
-        <!-- Wire Format & Live Packet Inspector -->
+        
         <div class=\"lg:col-span-2 p-6 rounded-2xl border border-line bg-surface flex flex-col justify-between shadow-e2\">
           <div>
             <div class=\"flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-line mb-4\">
@@ -222,7 +222,7 @@
                 </span>
               </div>
 
-              <!-- Dialect Tabs -->
+              
               <div class=\"flex flex-wrap items-center gap-1 p-0.5 rounded-lg bg-inset border border-line max-w-full\" id=\"sl-tabs-container\">
                 <button type=\"button\" data-tab=\"asl\" class=\"sl-tab-btn px-2 py-1 rounded font-mono text-micro font-medium transition-all bg-surface text-ink shadow-sm\">
                   ASL Native
@@ -239,9 +239,9 @@
               </div>
             </div>
 
-            <!-- Code Previews -->
+            
             <div class=\"relative min-h-[220px]\">
-              <!-- Tab 1: ASL Native -->
+              
               <div class=\"sl-code-pane block\" id=\"sl-pane-asl\">
                 <pre class=\"p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed shadow-inner\" id=\"sl-asl-pre\">(sb
   :v 1
@@ -257,7 +257,7 @@
 (:d \"Pure S-expression envelope with typed coordination frame.\")</pre>
               </div>
 
-              <!-- Tab 2: asl/coord -->
+              
               <div class=\"sl-code-pane hidden space-y-3\" id=\"sl-pane-coord\">
                 <pre class=\"p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed shadow-inner\">(pass
   :v 1
@@ -287,7 +287,7 @@
                 </div>
               </div>
 
-              <!-- Tab 3: Polyglot -->
+              
               <div class=\"sl-code-pane hidden\" id=\"sl-pane-polyglot\">
                 <pre class=\"p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed shadow-inner\">&lt;!-- SEAMBUS_HEADER: {\"v\":1,\"id\":\"msg-9f201\",\"from\":\"agent-orchestrator\",\"to\":\"agent-vanilla-llm\",\"dialect\":\"polyglot/v1\",\"type\":\"DATA\"} --&gt;
 [SeamBus Autonomous Protocol Primer]
@@ -304,14 +304,14 @@ Please execute the requested task and reply in a fenced JSON code block:
 &lt;!-- SEAMBUS_FOOTER --&gt;</pre>
               </div>
 
-              <!-- Tab 4: Compact -->
+              
               <div class=\"sl-code-pane hidden\" id=\"sl-pane-compact\">
                 <pre class=\"p-4 rounded-xl font-mono text-xs bg-ground text-ink border border-line overflow-x-auto leading-relaxed shadow-inner\">SB1|1|msg-9f201|agent-orchestrator|agent-coder-1|DATA|tasks/codegen|1772879500000||{\"action\":\"compile_wasm\",\"module\":\"core/matrix\",\"opt\":\"O3\"}</pre>
               </div>
             </div>
           </div>
 
-          <!-- Protocol Explanation Footer -->
+          
           <div class=\"mt-6 pt-4 border-t border-line flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3\">
             <div class=\"flex items-center gap-2\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-emerald-400\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg>

@@ -26,7 +26,7 @@
       </div>
 
       <div id=\"sm-results-list\" class=\"max-h-80 overflow-y-auto p-2 divide-y divide-line/40\">
-        <!-- Result 1 -->
+        
         <a href=\"/#agent-way\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"the agent way why languages designed for typing hands fail autonomous agents docs\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
@@ -43,7 +43,7 @@
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
-        <!-- Result 2 -->
+        
         <a href=\"/ecosystem\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"multi-runtime ecosystem wasm rust typescript python sql cross-compilation toolchain\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
@@ -60,7 +60,7 @@
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
-        <!-- Result 3 -->
+        
         <a href=\"/roadmap\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"canons roadmap strategic trajectory agent meshes self-hosted runtimes grammar\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
@@ -77,7 +77,7 @@
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
-        <!-- Result 4 -->
+        
         <a href=\"/docs\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"documentation cli reference toolchain commands grammar invariants quick start guides docs\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
@@ -94,7 +94,7 @@
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
-        <!-- Result 5 -->
+        
         <a href=\"/#a2a-protocol\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"a2a wire protocol low-latency agent-to-agent s-expression frame serialization protocol\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
@@ -111,7 +111,7 @@
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
-        <!-- Result 6 -->
+        
         <a href=\"/llms.txt\" target=\"_blank\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"agent specification /llms.txt machine-readable formal grammar invariant tables for ai agents grammar\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
@@ -128,7 +128,7 @@
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
-        <!-- Result 7 (Blog) -->
+        
         <a href=\"/blog/manifesto\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"manifesto dual-projection principle pure agentscript token compaction blog\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">

@@ -21,7 +21,7 @@
         </p>
       </header>
 
-      <!-- Status Clarity Banner -->
+      
       <div class=\"flex justify-center -mt-6 mb-10\">
         <span class=\"inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wide\">
           <span class=\"w-1.5 h-1.5 rounded-full bg-amber-400\"></span>
@@ -30,7 +30,7 @@
       </div>
 
       <div class=\"max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6\">
-        <!-- Capability 1: Dynamic Plugin Architecture -->
+        
         <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
@@ -62,7 +62,7 @@
           </div>
         </div>
 
-        <!-- Capability 2: Dynamic Agent Escalation -->
+        
         <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
@@ -102,7 +102,7 @@
           </div>
         </div>
 
-        <!-- Capability 3: Separation of Duties -->
+        
         <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
@@ -137,7 +137,7 @@
           </div>
         </div>
 
-        <!-- Capability 4: Structured Mesh Bus -->
+        
         <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">

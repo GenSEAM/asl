@@ -22,7 +22,7 @@
         </p>
       </header>
 
-      <!-- Prominent Status Badge & Direct Creator Studio Link -->
+      
       <div class=\"flex flex-wrap items-center justify-center gap-3 -mt-6 mb-12\">
         <span class=\"inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wider shadow-sm\">
           <span class=\"w-2 h-2 rounded-full bg-amber-400 animate-pulse\"></span>
@@ -37,9 +37,9 @@
         </a>
       </div>
 
-      <!-- Interactive Browser Cockpit Visualizer -->
+      
       <div class=\"max-w-5xl mx-auto rounded-3xl border border-line bg-surface/85 backdrop-blur-2xl shadow-e3 overflow-hidden\">
-        <!-- Browser Top Navigation Chrome -->
+        
         <div class=\"px-5 py-3.5 border-b border-line bg-inset/70 flex flex-wrap items-center justify-between gap-4\">
           <div class=\"flex items-center gap-2.5\">
             <span class=\"w-3 h-3 rounded-full bg-rose-500/70\"></span>
@@ -70,9 +70,9 @@
           </div>
         </div>
 
-        <!-- Cockpit Content Grid -->
+        
         <div class=\"grid grid-cols-1 lg:grid-cols-12\">
-          <!-- Left Column: Semantic Context & Render Readiness -->
+          
           <div class=\"lg:col-span-7 p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-line flex flex-col justify-between\">
             <div>
               <div class=\"flex items-center justify-between pb-4 border-b border-line flex-wrap gap-2\">
@@ -97,9 +97,9 @@
                 </div>
               </div>
 
-              <!-- Code Panel Display -->
+              
               <div class=\"mt-5 p-4 rounded-2xl bg-ground border border-line font-mono text-xs leading-relaxed overflow-x-auto min-h-[230px]\">
-                <!-- Context Tab Panel -->
+                
                 <div id=\"iba-panel-context\">
                   <pre class=\"text-purple-300\"><span class=\"text-ink-3\">;; Render readiness &amp; visual layout synthesized by browser agent</span>
 <span class=\"text-signal\">(! browser/context</span>
@@ -115,7 +115,7 @@
   :vision-critique <span class=\"text-emerald-400\">&quot;Layout verified clean: zero overlapping elements&quot;</span>)</pre>
                 </div>
 
-                <!-- Action Tab Panel -->
+                
                 <div id=\"iba-panel-action\" class=\"hidden\">
                   <pre class=\"text-emerald-300\"><span class=\"text-ink-3\">;; External agent (Antigravity/Cursor) dispatches instruction</span>
 <span class=\"text-signal\">(? browser/exec</span>
@@ -132,7 +132,7 @@
   :latency-ms <span class=\"text-amber-300\">4.2</span>)</pre>
                 </div>
 
-                <!-- Raw Tab Panel -->
+                
                 <div id=\"iba-panel-raw\" class=\"hidden\">
                   <pre class=\"text-ink-3 opacity-60\">&lt;div id=&quot;root&quot; class=&quot;min-h-screen bg-slate-950 flex flex-col&quot;&gt;
   &lt;header class=&quot;h-16 border-b border-slate-800 px-6 flex items-center justify-between&quot;&gt;
@@ -159,7 +159,7 @@
             </div>
           </div>
 
-          <!-- Right Column: Key Modes of Operation -->
+          
           <div class=\"lg:col-span-5 p-6 sm:p-8 bg-inset/30 flex flex-col justify-between space-y-6\">
             <div>
               <span class=\"font-mono text-micro uppercase text-signal font-semibold tracking-wider\">

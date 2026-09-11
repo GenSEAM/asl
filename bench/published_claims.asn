@@ -18,19 +18,19 @@
   ]
   :peripheral-scopes [
     (:scope
-      :package "@genseam/asl-quantum"
+      :package "asl-quantum"
       :status "conceptual-schema"
       :driver "none"
       :falsifiable false
       :desc "Quantum circuit synthesis, gate operations, and OpenQASM 3.0 compiler scoped as theoretical S-expression interfaces; no physical QPU or cloud backend.")
     (:scope
-      :package "@genseam/asl-arduino"
+      :package "asl-arduino"
       :status "conceptual-schema"
       :driver "none"
       :falsifiable false
       :desc "Embedded hardware GPIO and serial interfaces scoped as compile-target schemas; no live AVR/ARM/ESP32 serial connection or bare-metal execution.")
     (:scope
-      :package "@genseam/asl-voice"
+      :package "asl-voice"
       :status "conceptual-schema"
       :driver "none"
       :falsifiable false

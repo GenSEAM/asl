@@ -17,7 +17,7 @@
         </p>
       </div>
 
-      <!-- Framework Target Tabs -->
+      
       <div class=\"flex items-center bg-surface-2 p-1 rounded-xl border border-line\" id=\"ps-tabs\">
         <button type=\"button\" data-target=\"react\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize bg-signal text-ground font-bold shadow-sm\">
           React 19 (TSX)
@@ -35,7 +35,7 @@
     </div>
 
     <div class=\"grid grid-cols-1 lg:grid-cols-2 gap-6\">
-      <!-- Source Input -->
+      
       <div class=\"flex flex-col gap-2\">
         <div class=\"flex items-center justify-between text-xs font-mono text-ink-muted px-1\">
           <span>Declarative ASL Source</span>
@@ -55,7 +55,7 @@
     \"Execute Action\"))</textarea>
       </div>
 
-      <!-- Transpiled Output -->
+      
       <div class=\"flex flex-col gap-2 relative\">
         <div class=\"flex items-center justify-between text-xs font-mono text-ink-muted px-1\">
           <span id=\"ps-target-label\">Target Output: REACT</span>
@@ -200,7 +200,7 @@ const handleAction = () => {
   </button>
 </div>`,
 
-          'html': `<!-- Pure HTML Target -->
+          'html': `
 <div class=\"p-6 rounded-2xl bg-surface border border-line shadow-lg\">
   <div class=\"flex items-center gap-3 mb-4\">
     <span class=\"w-3 h-3 rounded-full bg-signal\"></span>

@@ -6,7 +6,7 @@
 (df render-unified-package-matrix [] -> Str
   :d "Renders the 8 official AgentScript packages matrix with stage filters, search bar, and interactive code inspect."
   "<div class=\"space-y-10\" id=\"upm-container\">
-    <!-- Ecosystem Summary Stats -->
+    
     <div class=\"grid grid-cols-2 sm:grid-cols-4 gap-4\">
       <div class=\"p-4 sm:p-5 rounded-2xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1\">
         <span class=\"font-mono text-micro uppercase text-ink-3\">Unified Packages</span>
@@ -30,9 +30,9 @@
       </div>
     </div>
 
-    <!-- Filter and Search Bar -->
+    
     <div class=\"flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-3 sm:p-4 rounded-2xl border border-line bg-surface/90 backdrop-blur-xl shadow-e1\">
-      <!-- Stage Filter Buttons -->
+      
       <div class=\"flex flex-wrap items-center gap-1.5 sm:gap-2\" id=\"upm-stage-filters\">
         <button type=\"button\" data-stage=\"all\" class=\"upm-stage-btn px-3 py-1.5 rounded-xl font-mono text-micro transition-all bg-signal text-white font-semibold shadow-sm\">
           All Packages (8)
@@ -48,7 +48,7 @@
         </button>
       </div>
 
-      <!-- Search Input -->
+      
       <div class=\"relative flex-1 max-w-md\">
         <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none\">
           <circle cx=\"11\" cy=\"11\" r=\"8\"></circle>
@@ -58,10 +58,10 @@
       </div>
     </div>
 
-    <!-- Packages Grid -->
+    
     <div class=\"grid grid-cols-1 lg:grid-cols-2 gap-6\" id=\"upm-packages-grid\">
 
-      <!-- Package 1: asl-codec -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-codec\" data-stage=\"1\" data-search=\"asl-codec universal asn codec token compaction json single-pass ll(1)\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -127,7 +127,7 @@
         </div>
       </div>
 
-      <!-- Package 2: asl-sh -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-sh\" data-stage=\"1\" data-search=\"asl-sh process guard streaming reducer middle eviction window retention posix_spawn\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -193,7 +193,7 @@
         </div>
       </div>
 
-      <!-- Package 3: asl-agent-core -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-agent-core\" data-stage=\"2\" data-search=\"asl-agent-core onion middleware capability negotiator topological dag\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -259,7 +259,7 @@
         </div>
       </div>
 
-      <!-- Package 4: asl-eddie -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-eddie\" data-stage=\"2\" data-search=\"asl-eddie superposition swarm orchestrator react frontline barge-in\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -325,7 +325,7 @@
         </div>
       </div>
 
-      <!-- Package 5: asl-agent-bus -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-agent-bus\" data-stage=\"2\" data-search=\"asl-agent-bus unix socket sse mcp a2a mesh warm daemon\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -386,7 +386,7 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
         </div>
       </div>
 
-      <!-- Package 6: asl-mem -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-mem\" data-stage=\"2\" data-search=\"asl-mem hierarchical memory matrix wasm vector store cosine knn 64kb\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -450,7 +450,7 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
         </div>
       </div>
 
-      <!-- Package 7: asl-vdom -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-vdom\" data-stage=\"3\" data-search=\"asl-vdom axtree d2snap dom downsampler tsx declarative ui react 19 vue 3\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">
@@ -516,7 +516,7 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
         </div>
       </div>
 
-      <!-- Package 8: asl-browser-plugin -->
+      
       <div class=\"upm-card group p-6 sm:p-7 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between space-y-6\" data-id=\"@genseam/asl-browser-plugin\" data-stage=\"3\" data-search=\"asl-browser-plugin in-tab agent copilot wasi preview1 runner manifest v3\">
         <div class=\"space-y-4\">
           <div class=\"flex items-start justify-between gap-4\">

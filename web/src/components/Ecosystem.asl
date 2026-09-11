@@ -22,7 +22,7 @@
         </p>
       </header>
 
-      <!-- Status Clarity Banner -->
+      
       <div class=\"flex justify-center -mt-6 mb-10\">
         <span class=\"inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wide\">
           <span class=\"w-1.5 h-1.5 rounded-full bg-amber-400\"></span>
@@ -30,7 +30,7 @@
         </span>
       </div>
 
-      <!-- Architecture Flow Visualizer -->
+      
       <div class=\"mb-14 p-6 sm:p-8 rounded-3xl border border-line bg-surface/90 backdrop-blur-2xl shadow-e3\">
         <div class=\"flex flex-col lg:flex-row items-center justify-between gap-6 pb-6 border-b border-line\">
           <div>
@@ -50,9 +50,9 @@
           </div>
         </div>
 
-        <!-- Visual Flow Diagram -->
+        
         <div class=\"mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center\">
-          <!-- Step 1 -->
+          
           <div class=\"p-5 rounded-2xl border border-line bg-ground/80 text-center flex flex-col items-center\">
             <div class=\"w-12 h-12 rounded-2xl bg-signal/10 border border-signal/30 flex items-center justify-center text-signal mb-3\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-6 h-6\">
@@ -70,7 +70,7 @@
             </p>
           </div>
 
-          <!-- Step 2 -->
+          
           <div class=\"p-5 rounded-2xl border border-signal/40 bg-surface text-center flex flex-col items-center shadow-e2 relative\">
             <div class=\"w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center mb-3 shadow-md\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-6 h-6\">
@@ -85,7 +85,7 @@
             </p>
           </div>
 
-          <!-- Step 3 -->
+          
           <div class=\"p-5 rounded-2xl border border-line bg-ground/80 text-center flex flex-col items-center\">
             <div class=\"w-12 h-12 rounded-2xl bg-signal/10 border border-signal/30 flex items-center justify-center text-signal mb-3\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-6 h-6\">
@@ -101,9 +101,9 @@
         </div>
       </div>
 
-      <!-- 6 Target Ecosystems Grid -->
+      
       <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6\">
-        <!-- Target 1: WebAssembly -->
+        
         <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
@@ -140,7 +140,7 @@
           </div>
         </div>
 
-        <!-- Target 2: Rust -->
+        
         <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
@@ -184,7 +184,7 @@
           </div>
         </div>
 
-        <!-- Target 3: TypeScript & JavaScript -->
+        
         <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
@@ -222,7 +222,7 @@
           </div>
         </div>
 
-        <!-- Target 4: Go -->
+        
         <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
@@ -258,7 +258,7 @@
           </div>
         </div>
 
-        <!-- Target 5: Python -->
+        
         <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
@@ -297,7 +297,7 @@
           </div>
         </div>
 
-        <!-- Target 6: Relational SQL AST -->
+        
         <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
@@ -335,7 +335,7 @@
         </div>
       </div>
 
-      <!-- Machine-Readable Specs for Agents -->
+      
       <div class=\"mt-14 p-6 sm:p-8 rounded-3xl border border-line bg-gradient-to-r from-surface via-surface/90 to-surface/60 backdrop-blur-2xl shadow-e3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6\">
         <div class=\"space-y-1.5 max-w-2xl\">
           <div class=\"flex items-center gap-2\">

@@ -23,7 +23,7 @@
       </header>
 
       <div class=\"mt-8 space-y-6\" id=\"mgv-cockpit\">
-        <!-- Metric Summary Ribbon -->
+        
         <div class=\"grid grid-cols-2 sm:grid-cols-4 gap-4\">
           <div class=\"p-4 rounded-xl border border-line bg-surface/90 backdrop-blur-xl shadow-sm\">
             <span class=\"text-[10px] font-semibold uppercase tracking-wider text-ink-3\">Total Modules</span>
@@ -47,7 +47,7 @@
           </div>
         </div>
 
-        <!-- Category Filters -->
+        
         <div class=\"flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl border border-line bg-surface/90 backdrop-blur-xl\">
           <div class=\"flex flex-wrap items-center gap-2\" id=\"mgv-filter-buttons\">
             <span class=\"text-xs font-semibold uppercase tracking-wider text-ink-3 mr-2\">
@@ -75,12 +75,12 @@
           </div>
         </div>
 
-        <!-- Split Cockpit: Module Selector + Deep Inspector -->
+        
         <div class=\"grid grid-cols-1 lg:grid-cols-12 gap-6\">
-          <!-- Module Nodes Grid -->
+          
           <div class=\"lg:col-span-5 space-y-3\" id=\"mgv-modules-list\">
             
-            <!-- Module 1: asl-sql-core -->
+            
             <div data-id=\"asl-sql-core\" data-category=\"sql\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface/90 backdrop-blur-xl border-signal shadow-md\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -95,7 +95,7 @@
               </div>
             </div>
 
-            <!-- Module 2: asl-sql-ddl -->
+            
             <div data-id=\"asl-sql-ddl\" data-category=\"sql\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -110,7 +110,7 @@
               </div>
             </div>
 
-            <!-- Module 3: asl-seambus-core -->
+            
             <div data-id=\"asl-seambus-core\" data-category=\"mesh\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -125,7 +125,7 @@
               </div>
             </div>
 
-            <!-- Module 4: asl-lint-core -->
+            
             <div data-id=\"asl-lint-core\" data-category=\"quality\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -140,7 +140,7 @@
               </div>
             </div>
 
-            <!-- Module 5: asl-lint-clone -->
+            
             <div data-id=\"asl-lint-clone\" data-category=\"quality\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -155,7 +155,7 @@
               </div>
             </div>
 
-            <!-- Module 6: asl-lint-heal -->
+            
             <div data-id=\"asl-lint-heal\" data-category=\"quality\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -170,7 +170,7 @@
               </div>
             </div>
 
-            <!-- Module 7: asl-mem-store -->
+            
             <div data-id=\"asl-mem-store\" data-category=\"core\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -185,7 +185,7 @@
               </div>
             </div>
 
-            <!-- Module 8: asl-eddie-eddie -->
+            
             <div data-id=\"asl-eddie-eddie\" data-category=\"mesh\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -200,7 +200,7 @@
               </div>
             </div>
 
-            <!-- Module 9: asl-fsm-fsm -->
+            
             <div data-id=\"asl-fsm-fsm\" data-category=\"core\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -215,7 +215,7 @@
               </div>
             </div>
 
-            <!-- Module 10: asl-codec-core -->
+            
             <div data-id=\"asl-codec-core\" data-category=\"core\" class=\"mgv-mod-item p-4 rounded-xl border cursor-pointer transition-all bg-surface border-line hover:border-signal/40\">
               <div class=\"flex items-center justify-between\">
                 <div class=\"flex items-center gap-2\">
@@ -232,7 +232,7 @@
 
           </div>
 
-          <!-- Deep Architectural Inspector Panel -->
+          
           <div class=\"lg:col-span-7 flex flex-col rounded-xl border border-line bg-surface/90 backdrop-blur-xl overflow-hidden\">
             <div class=\"flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 sm:px-5 py-3 sm:py-4 border-b border-line bg-surface\">
               <div class=\"flex items-center gap-2\">
@@ -255,14 +255,14 @@
             </div>
 
             <div class=\"p-6 space-y-6 flex-1 overflow-y-auto\" id=\"mgv-panel-content\">
-              <!-- Architecture View -->
+              
               <div id=\"mgv-view-arch\" class=\"space-y-6\">
                 <div>
                   <h4 id=\"mgv-detail-name\" class=\"font-mono text-sm font-bold text-ink\">asl-sql/core</h4>
                   <p id=\"mgv-detail-doc\" class=\"text-xs text-ink-2 mt-1\">Native AgentScript Cross-Dialect SQL AST Query Builder and Parameterized Renderer.</p>
                 </div>
 
-                <!-- Schemas Section -->
+                
                 <div>
                   <h4 class=\"text-xs font-bold uppercase tracking-wider text-ink-3 mb-3\">
                     🏛 Defined Schemas (<span id=\"mgv-detail-schemas-count\">3</span>)
@@ -274,7 +274,7 @@
                   </div>
                 </div>
 
-                <!-- Enums Section -->
+                
                 <div>
                   <h4 class=\"text-xs font-bold uppercase tracking-wider text-ink-3 mb-3\">
                     🏷 Algebraic Enums (<span id=\"mgv-detail-enums-count\">5</span>)
@@ -288,7 +288,7 @@
                   </div>
                 </div>
 
-                <!-- Dependencies Section -->
+                
                 <div>
                   <h4 class=\"text-xs font-bold uppercase tracking-wider text-ink-3 mb-3\">
                     🔗 Direct Dependencies (<span id=\"mgv-detail-deps-count\">0</span>)
@@ -298,7 +298,7 @@
                   </div>
                 </div>
 
-                <!-- Architectural Safety Telemetry -->
+                
                 <div class=\"p-4 rounded-xl bg-surface/60 border border-line space-y-2\">
                   <div class=\"flex items-center justify-between text-xs\">
                     <span class=\"text-ink font-medium\">Control-Flow Linearization (@pcp:c-adc8)</span>
@@ -315,7 +315,7 @@
                 </div>
               </div>
 
-              <!-- Sandbox View (Hidden initially) -->
+              
               <div id=\"mgv-view-sandbox\" class=\"space-y-5 hidden\">
                 <div class=\"p-4 rounded-xl bg-surface/60 border border-line space-y-3\">
                   <div class=\"flex items-center justify-between\">
@@ -347,7 +347,7 @@
                   </span>
                 </div>
 
-                <!-- Telemetry Output Block -->
+                
                 <div class=\"p-4 rounded-xl bg-surface/60 border border-line font-mono text-xs space-y-3\">
                   <div class=\"flex items-center justify-between border-b border-line pb-2\">
                     <span class=\"text-ink-3\">Execution Telemetry</span>

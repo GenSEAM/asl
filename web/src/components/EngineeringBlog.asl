@@ -36,7 +36,7 @@
       </p>
 
       <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-line pt-8\">
-        <!-- Essay 1: Flagship Manifesto -->
+        
         <article data-slug=\"why-llms-struggle-with-python-and-rust\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
@@ -90,7 +90,7 @@
           </div>
         </article>
 
-        <!-- Essay 2: Token Economy & Data Exchange Protocol -->
+        
         <article data-slug=\"token-economy-and-structural-compression\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
@@ -144,7 +144,7 @@
           </div>
         </article>
 
-        <!-- Essay 3: Execution Speed & Sandboxing -->
+        
         <article data-slug=\"from-vibe-code-to-wasm-in-0-04ms\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
@@ -198,7 +198,7 @@
           </div>
         </article>
 
-        <!-- Essay 4: BPE Tokenizer Mechanics & Language Theory -->
+        
         <article data-slug=\"the-token-density-fallacy-and-machine-understandability\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">

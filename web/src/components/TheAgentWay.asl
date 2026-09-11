@@ -22,7 +22,7 @@
       </header>
 
       <ol class=\"grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-t border-line\">
-        <!-- 1990s: Object-oriented -->
+        
         <li class=\"relative pt-8 pb-10 lg:pr-8 border-b border-line lg:border-b-0 lg:border-r last:border-r-0 lg:pl-8 first:lg:pl-0\">
           <p class=\"font-mono text-micro uppercase text-ink-3\">1990s</p>
           <h3 class=\"mt-4 text-h3 font-medium text-ink-2\">Object-oriented</h3>
@@ -36,7 +36,7 @@
           </ul>
         </li>
 
-        <!-- 2010s: Functional -->
+        
         <li class=\"relative pt-8 pb-10 lg:pr-8 border-b border-line lg:border-b-0 lg:border-r last:border-r-0 lg:pl-8 first:lg:pl-0\">
           <p class=\"font-mono text-micro uppercase text-ink-3\">2010s</p>
           <h3 class=\"mt-4 text-h3 font-medium text-ink-2\">Functional</h3>
@@ -50,7 +50,7 @@
           </ul>
         </li>
 
-        <!-- 2023: Prompt and pray -->
+        
         <li class=\"relative pt-8 pb-10 lg:pr-8 border-b border-line lg:border-b-0 lg:border-r last:border-r-0 lg:pl-8 first:lg:pl-0\">
           <p class=\"font-mono text-micro uppercase text-ink-3\">2023</p>
           <h3 class=\"mt-4 text-h3 font-medium text-ink-2\">Prompt and pray</h3>
@@ -65,7 +65,7 @@
           </ul>
         </li>
 
-        <!-- 2026: Agentic -->
+        
         <li class=\"relative pt-8 pb-10 lg:pr-8 border-b border-line lg:border-b-0 lg:border-r last:border-r-0 lg:pl-8 first:lg:pl-0\">
           <span class=\"absolute -top-[3px] left-0 lg:left-8 w-8 h-1 rounded-full bg-signal\" aria-hidden=\"true\"></span>
           <p class=\"font-mono text-micro uppercase text-ink-3\">2026</p>

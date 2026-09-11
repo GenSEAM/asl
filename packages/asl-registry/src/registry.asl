@@ -43,7 +43,7 @@
 
 (df format-package-summary [(m ty/PackageMeta)] -> Str
   :d "Formats concise package summary for terminal and LLM agent consumption."
-  (str "📦 " (.-name m) " [" (ty/eco-to-string (.-eco m)) "]\n"
+  (str "[PKG] " (.-name m) " [" (ty/eco-to-string (.-eco m)) "]\n"
        "   Latest:  v" (.-latest-version m) "\n"
        "   License: " (.-license m) "\n"
        "   Summary: " (.-description m) "\n"
@@ -52,9 +52,9 @@
 (df format-outdated-report [(r ty/OutdatedReport)] -> Str
   :d "Formats outdated status with severity emoji."
   (if (.-outdated r)
-      (str "⚠️  " (.-package-name r) ": " (.-current-version r) " -> "
+      (str "[WARN] " (.-package-name r) ": " (.-current-version r) " -> "
            (.-latest-version r) " (" (.-severity r) " update available)")
-      (str "✓  " (.-package-name r) ": " (.-current-version r) " is up-to-date")))
+      (str "[OK] " (.-package-name r) ": " (.-current-version r) " is up-to-date")))
 
 (df resolve-git-clone-cmd [(entry ty/AslRegistryEntry)] -> Str
   :d "Constructs shallow Git clone command for targeted ASL package version."

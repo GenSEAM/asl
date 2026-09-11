@@ -23,7 +23,7 @@
 
       <div class=\"max-w-5xl mx-auto\">
         <div class=\"p-6 sm:p-8 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3\">
-          <!-- Agent Communication Mesh Diagram -->
+          
           <div class=\"flex flex-col sm:flex-row items-center justify-between gap-6 pb-8 border-b border-line\">
             <div class=\"flex items-center gap-3\">
               <div class=\"w-10 h-10 rounded-2xl bg-inset flex items-center justify-center border border-line\">
@@ -73,7 +73,7 @@
             </div>
           </div>
 
-          <!-- 4 Protocol Pillars -->
+          
           <div class=\"mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4\">
             <div class=\"p-5 rounded-2xl border border-line bg-ground/80 backdrop-blur-sm flex flex-col justify-between\">
               <div>
@@ -120,9 +120,9 @@
             </div>
           </div>
 
-          <!-- Side-by-Side Code Comparison: Conversational English vs AgentScript Frame -->
+          
           <div class=\"mt-8 grid grid-cols-1 md:grid-cols-2 gap-6 pt-8 border-t border-line\">
-            <!-- The Chatty English & JSON Way -->
+            
             <div class=\"p-6 rounded-2xl border border-rose-500/20 bg-rose-500/5\">
               <div class=\"flex items-center justify-between pb-3 border-b border-rose-500/20\">
                 <span class=\"font-mono text-micro uppercase text-rose-400 font-semibold flex items-center gap-1.5\">
@@ -146,7 +146,7 @@
               </p>
             </div>
 
-            <!-- The AgentScript Wire Frame Way -->
+            
             <div class=\"p-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-e1\">
               <div class=\"flex items-center justify-between pb-3 border-b border-emerald-500/20\">
                 <span class=\"font-mono text-micro uppercase text-emerald-400 font-semibold flex items-center gap-1.5\">
