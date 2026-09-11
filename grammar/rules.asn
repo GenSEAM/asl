@@ -1,4 +1,4 @@
-(:rules :v 6 :src ADR-0081 :when [:scout :plan :implement :grade :all]
+(:rules :v 7 :src ADR-0081 :when [:scout :plan :implement :grade :all]
   (:rule :id tools :when [:scout :implement]
     :do "prefer asl rpc (:batch (:sym x) (:out f) (:read f a b) (:sec f h) (:ls d) (:callers x) (:impact x)) in one roundtrip; use host tools for content search and file edits until :grep and staged :edit ship"
     :not "treat :status ok as success; :find is a filename glob; :q is unimplemented; :edit writes disk immediately and :diff :discard do not stage")
@@ -52,4 +52,8 @@
     :why "no rule set matches edge-case variety; models fill gaps fluently instead of noticing them; the loop ends in a receipt to someone else because self-correction without external signal degrades")
   (:rule :id ssot :when [:all]
     :do "rules live in one tracked source, asl/grammar/rules.asn; every exported surface is rendered from it by scripts/install.sh --render-rules and checked by --check-rules; per-client or per-tier editions are checked against their deterministic rendering; editing a rendered surface by hand is a defect"
-    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails"))
+    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails")
+  (:rule :id capabilities :when [:all]
+    :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
+    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
+    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7"))
