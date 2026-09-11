@@ -48,6 +48,10 @@ run_launch() {
     RESEARCH_MODEL="flash"
     PLANNING_MODEL="pro"
     EXECUTION_MODEL="inherit"
+    ROLE_SCOUT=""
+    ROLE_PLANNER=""
+    ROLE_IMPLEMENTER=""
+    ROLE_AUDITOR=""
     MAX_AGENTS=6
     SOFT_LIMIT=4
     HARD_LIMIT=6
@@ -82,6 +86,62 @@ run_launch() {
           PRESET="$2"
           shift 2
           case "$PRESET" in
+            codex-audit|codex-review)
+              ORCH_MODEL="gemini-3.8-flash"
+              ORCH_REASONING="high"
+              SOFT_LIMIT=4
+              HARD_LIMIT=6
+              MAX_AGENTS=6
+              RESEARCH_MODEL="flash"
+              PLANNING_MODEL="pro"
+              EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
+              ;;
+            codex-plan-audit|codex-architect)
+              ORCH_MODEL="gemini-3.8-flash"
+              ORCH_REASONING="high"
+              SOFT_LIMIT=4
+              HARD_LIMIT=6
+              MAX_AGENTS=6
+              RESEARCH_MODEL="flash"
+              PLANNING_MODEL="codex"
+              EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="codex"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
+              ;;
+            antigravity-solo|agy-solo)
+              ORCH_MODEL="gemini-3.8-flash"
+              ORCH_REASONING="high"
+              SOFT_LIMIT=4
+              HARD_LIMIT=6
+              MAX_AGENTS=6
+              RESEARCH_MODEL="flash"
+              PLANNING_MODEL="pro"
+              EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="pro"
+              ;;
+            claude-audit|claude-review)
+              ORCH_MODEL="gemini-3.8-flash"
+              ORCH_REASONING="high"
+              SOFT_LIMIT=4
+              HARD_LIMIT=6
+              MAX_AGENTS=6
+              RESEARCH_MODEL="flash"
+              PLANNING_MODEL="pro"
+              EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="claude"
+              ;;
             fast-research|research)
               ORCH_MODEL="gemini-3.8-flash"
               ORCH_REASONING="low"
@@ -91,6 +151,10 @@ run_launch() {
               RESEARCH_MODEL="flash"
               PLANNING_MODEL="flash"
               EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="flash"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="flash"
               ;;
             deep-architecture|architecture|arch)
               ORCH_MODEL="gemini-3.8-flash"
@@ -101,6 +165,10 @@ run_launch() {
               RESEARCH_MODEL="flash"
               PLANNING_MODEL="pro"
               EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
               ;;
             audit-hardening|audit)
               ORCH_MODEL="gemini-3.8-flash"
@@ -111,6 +179,10 @@ run_launch() {
               RESEARCH_MODEL="flash"
               PLANNING_MODEL="pro"
               EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
               ;;
             canvas-interactive|canvas)
               ORCH_MODEL="gemini-3.8-flash"
@@ -121,6 +193,10 @@ run_launch() {
               RESEARCH_MODEL="flash"
               PLANNING_MODEL="pro"
               EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
               ;;
             balanced|*)
               ORCH_MODEL="gemini-3.8-flash"
@@ -131,6 +207,10 @@ run_launch() {
               RESEARCH_MODEL="flash"
               PLANNING_MODEL="pro"
               EXECUTION_MODEL="inherit"
+              ROLE_SCOUT="asl"
+              ROLE_PLANNER="pro"
+              ROLE_IMPLEMENTER="agy"
+              ROLE_AUDITOR="codex"
               ;;
           esac
           ;;
@@ -181,6 +261,22 @@ run_launch() {
           SEPARATE_AGENTS=0
           ORCH_TARGET="sub-agents"
           shift
+          ;;
+        --scout)
+          ROLE_SCOUT="$2"
+          shift 2
+          ;;
+        --planner|--plan)
+          ROLE_PLANNER="$2"
+          shift 2
+          ;;
+        --implementer|--impl)
+          ROLE_IMPLEMENTER="$2"
+          shift 2
+          ;;
+        --auditor|--audit)
+          ROLE_AUDITOR="$2"
+          shift 2
           ;;
         --dry-run|-n)
           DRY_RUN=1
@@ -266,13 +362,19 @@ run_launch() {
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
         echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
-        echo "  --preset, -P <name>   Preset: fast-research, balanced, deep-architecture, audit-hardening, canvas-interactive"
+        echo "  --preset, -P <name>   Preset: codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
         echo "  --soft-limit <n>      Soft limit for concurrent subagents within single project (default: 4)"
         echo "  --hard-limit <n>      Hard limit for concurrent subagents across multi-project bursts (default: 6)"
         echo "  --multi-project       Enable multi-project workspace routing across projects"
         echo "  --code-exec           Enable supervised code execution and gate verification (default: 1)"
+        echo ""
+        echo "Role Assignment Options:"
+        echo "  --scout <agent>       Agent/model for Scout role (default: asl)"
+        echo "  --planner, --plan <m> Agent/model for Planner/Architect role (default: pro)"
+        echo "  --implementer, --impl <agent> Agent/model for Implementer role (default: agy)"
+        echo "  --auditor, --audit <agent>   Agent/model for Auditor/Critic role (default: codex)"
         exit 0
         ;;
       *)
@@ -283,16 +385,27 @@ run_launch() {
         echo "Orchestration Options:"
         echo "  --orchestrator, -o    Enable autonomous multi-agent orchestration supervisor mode"
         echo "                        (Claude Code: automatic mode; Antigravity: dangerous rescue permissions)"
-        echo "  --preset, -P <name>   Preset: fast-research, balanced, deep-architecture, audit-hardening, canvas-interactive"
+        echo "  --preset, -P <name>   Preset: codex-audit, codex-plan-audit, antigravity-solo, claude-audit, balanced, deep-architecture, fast-research"
         echo "  --model, -m <model>   Supervisory orchestrator model (default: gemini-3.8-flash)"
         echo "  --reasoning, -r <lvl> Reasoning depth: low, medium, high, max (default: high)"
         echo "  --soft-limit <n>      Soft limit for concurrent subagents within single project (default: 4)"
         echo "  --hard-limit <n>      Hard limit for concurrent subagents across multi-project bursts (default: 6)"
         echo "  --multi-project       Enable multi-project workspace routing across projects"
         echo "  --code-exec           Enable supervised code execution and gate verification (default: 1)"
+        echo ""
+        echo "Role Assignment Options:"
+        echo "  --scout <agent>       Agent/model for Scout role (default: asl)"
+        echo "  --planner, --plan <m> Agent/model for Planner/Architect role (default: pro)"
+        echo "  --implementer, --impl <agent> Agent/model for Implementer role (default: agy)"
+        echo "  --auditor, --audit <agent>   Agent/model for Auditor/Critic role (default: codex)"
         exit 1
         ;;
     esac
+
+    ROLE_SCOUT="${ROLE_SCOUT:-asl}"
+    ROLE_PLANNER="${ROLE_PLANNER:-$PLANNING_MODEL}"
+    ROLE_IMPLEMENTER="${ROLE_IMPLEMENTER:-$CLIENT_ID}"
+    ROLE_AUDITOR="${ROLE_AUDITOR:-codex}"
 
     WS_ROOT="$(find_workspace_root 2>/dev/null || pwd)"
     AGENTS_FILE="$WS_ROOT/AGENTS.md"
@@ -376,9 +489,11 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
   :multi-project-orchestration true
   :code-execution true
   :subagent-tiers (:research \"$RESEARCH_MODEL\" :planning \"$PLANNING_MODEL\" :execution \"$EXECUTION_MODEL\")
+  :role-assignments (:scout \"$ROLE_SCOUT\" :planner \"$ROLE_PLANNER\" :implementer \"$ROLE_IMPLEMENTER\" :auditor \"$ROLE_AUDITOR\")
   :upgrade-path \"gemini-next\"
   :mandates [
     \"Baseline delegation: Use sub-agents (invoke_subagent in Antigravity, Agent in Claude Code) as the primary execution model.\"
+    \"Role-to-agent mesh: Scout ($ROLE_SCOUT) for discovery, Planner ($ROLE_PLANNER) for DAG and failing gates, Implementer ($ROLE_IMPLEMENTER) for atomic code execution, Auditor ($ROLE_AUDITOR) for independent falsifiable review.\"
     \"Claude Code permission mandate: Never use dangerous permissions (--dangerously-skip-permissions) with Claude Code. Guide execution strictly via system instructions (--append-system-prompt).\"
     \"Antigravity permission mandate: Antigravity must always execute in dangerous rescue mode (--dangerously-skip-permissions) for unconstrained self-healing.\"
     \"Codex autorun mandate: Enforce supervised autorun (-a never -s workspace-write) for unattended execution bounded to workspace modifications.\"
@@ -496,6 +611,10 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
     export ASL_RESEARCH_MODEL="$RESEARCH_MODEL"
     export ASL_PLANNING_MODEL="$PLANNING_MODEL"
     export ASL_EXECUTION_MODEL="$EXECUTION_MODEL"
+    export ASL_ROLE_SCOUT="$ROLE_SCOUT"
+    export ASL_ROLE_PLANNER="$ROLE_PLANNER"
+    export ASL_ROLE_IMPLEMENTER="$ROLE_IMPLEMENTER"
+    export ASL_ROLE_AUDITOR="$ROLE_AUDITOR"
     export ASL_MAX_SUBAGENTS="$MAX_AGENTS"
     export ASL_SOFT_LIMIT="$SOFT_LIMIT"
     export ASL_HARD_LIMIT="$HARD_LIMIT"
@@ -633,6 +752,11 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       echo "  • Workspace Routing:    Multi-project orchestration across Workspace roots"
       echo "  • Code Execution:       Enabled (supervised gate verification & test runs)"
       echo "  • Context Discipline:   Minimal orchestrator (scalar receipts only; zero context bloat)"
+      echo "  • Role-to-Agent Mesh:"
+      echo "      - Scout (Signal Keeper):        $ROLE_SCOUT"
+      echo "      - Planner (Invariant Architect): $ROLE_PLANNER"
+      echo "      - Implementer (Delta Executor):  $ROLE_IMPLEMENTER"
+      echo "      - Auditor (Falsifiable Critic):  $ROLE_AUDITOR"
       echo "  • Subagent Routing:"
       echo "      - Research & Web:   $RESEARCH_MODEL (internet browsing, repo-scout, documentation)"
       echo "      - Planning & Arch:  $PLANNING_MODEL (topological DAG, failing gates, ADRs)"
@@ -686,6 +810,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         echo "    :multi-project-orchestration true"
         echo "    :code-execution true"
         echo "    :subagent-tiers (:research \"$RESEARCH_MODEL\" :planning \"$PLANNING_MODEL\" :execution \"$EXECUTION_MODEL\")"
+        echo "    :role-assignments (:scout \"$ROLE_SCOUT\" :planner \"$ROLE_PLANNER\" :implementer \"$ROLE_IMPLEMENTER\" :auditor \"$ROLE_AUDITOR\")"
         echo "    :upgrade-path \"gemini-next\""
         echo "    :rules [:asl-toolbelt :ground-truth :git :orchestrator])"
       else
