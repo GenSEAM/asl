@@ -95,13 +95,13 @@ sync_decisions() {
 find_workspace_root() {
   local dir="$PWD"
   while [ "$dir" != "/" ] && [ "$dir" != "." ]; do
-    if [ -f "$dir/.asl.config.asn" ] || [ -f "$dir/asl.config.asn" ] || [ -d "$dir/.git" ]; then
+    if [ -f "$dir/.asl.config.asn" ] || [ -f "$dir/asl.config.asn" ] || [ -e "$dir/.git" ]; then
       echo "$dir"
       return 0
     fi
     dir="$(dirname "$dir")"
   done
-  if [ -f "$ROOT/../.asl.config.asn" ] || [ -d "$ROOT/../.git" ]; then
+  if [ -f "$ROOT/../.asl.config.asn" ] || [ -e "$ROOT/../.git" ]; then
     (cd -P "$ROOT/.." && pwd)
     return 0
   fi
@@ -6851,24 +6851,155 @@ ADR_EOF
 
     WS_ROOT="$(find_workspace_root 2>/dev/null || pwd)"
     AGENTS_FILE="$WS_ROOT/AGENTS.md"
+    CHANNEL_FILE=""
+    case "$CLIENT_ID" in
+      claude)
+        CHANNEL_FILE="$WS_ROOT/CLAUDE.md"
+        ;;
+      cursor)
+        CHANNEL_FILE="$WS_ROOT/.cursorrules"
+        ;;
+      windsurf)
+        CHANNEL_FILE="$WS_ROOT/.codeium/windsurf/memories/global_rules.md"
+        ;;
+      agy)
+        CHANNEL_FILE="$WS_ROOT/AGENTS.md"
+        ;;
+    esac
+
+    DIRECTIVE_PAYLOAD='<!-- ASL_TOOLBELT_START -->
+Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
+<!-- ASL_TOOLBELT_END -->
+
+<!-- PARALLEL_START -->
+(:rule :parallel :batch :wave :scope [:search :scout :audit :patch])
+<!-- PARALLEL_END -->
+
+<!-- GROUND_TRUTH_START -->
+(:rule :ground-truth
+  :falsify  (:must-fail true :exit 0)
+  :strict   (:forbid [:stub :todo :mock :swallow :co-author] :require [:bounds :errors])
+  :critic   (:self false :stance :adversary)
+  :receipt  (:format :asn :asserts (> 0) :claims false))
+<!-- GROUND_TRUTH_END -->
+
+<!-- GIT_START -->
+(:rule :git
+  :co-author false
+  :commit    (:concise true)
+  :branch    (:base :target :verify true)
+  :merge     (:verify [:base :diff :log]
+              :strict (:require [:intended-only :safe-merge]
+                       :forbid  [:unrelated-commits :wrong-base])))
+<!-- GIT_END -->'
+
+    if [ "$ORCHESTRATOR" -eq 1 ]; then
+      ORCH_DIRECTIVE="
+
+<!-- ORCHESTRATOR_START -->
+(:launch-session
+  :client \"$CLIENT_ID\""
+      if [ "$CLIENT_ID" = "claude" ]; then
+        ORCH_DIRECTIVE="$ORCH_DIRECTIVE
+  :claude-mode \"automatic\"
+  :auto-flags [\"--dangerously-skip-permissions\"]"
+      elif [ "$CLIENT_ID" = "agy" ]; then
+        ORCH_DIRECTIVE="$ORCH_DIRECTIVE
+  :permission-tier \"dangerous-rescue\"
+  :auto-flags [\"--dangerously-skip-permissions\"]"
+      fi
+      ORCH_DIRECTIVE="$ORCH_DIRECTIVE
+  :channel \"$PROMPT_CHANNEL\"
+  :orchestrator-mode true
+  :supervisory-model \"$ORCH_MODEL\"
+  :reasoning-level \"$ORCH_REASONING\"
+  :orchestration-target \"$ORCH_TARGET\"
+  :separate-agents-feature-flag $([ "$SEPARATE_AGENTS" -eq 1 ] && echo "true" || echo "false")
+  :minimal-orchestrator true
+  :soft-limit $SOFT_LIMIT
+  :hard-limit $HARD_LIMIT
+  :max-subagents $HARD_LIMIT
+  :scaling-condition \"Single project -> max 4 agents (soft limit); burst scaling up to 6 agents (hard limit) triggered exclusively when multiple Workspace projects are actively engaged concurrently.\"
+  :multi-project-orchestration true
+  :code-execution true
+  :subagent-tiers (:research \"$RESEARCH_MODEL\" :planning \"$PLANNING_MODEL\" :execution \"$EXECUTION_MODEL\")
+  :upgrade-path \"gemini-next\"
+  :mandates [
+    \"Baseline delegation: Use Antigravity sub-agents (invoke_subagent) as the primary execution model.\"
+    \"Claude Code permission mandate: Claude Code must always execute in automatic mode (--dangerously-skip-permissions) without tool confirmation prompts.\"
+    \"Antigravity permission mandate: Antigravity must always execute in dangerous rescue mode (--dangerously-skip-permissions) for unconstrained self-healing.\"
+    \"Context hygiene: Keep orchestrator context minimal by offloading search, exploration, and edits into sub-agent conversation branches; ingest only scalar task receipts.\"
+    \"Lean supervisor rule: If sub-agent overhead exceeds task complexity, execute directly via compact batch RPC rather than spawning unneeded sub-agents.\"
+    \"Feature flag extension: Separate OS-level agent orchestration is decoupled under --separate-agents for future cross-process scaling.\"
+    \"Never execute complex multi-part tasks directly; decompose and spawn specialized subagents via invoke_subagent.\"
+    \"Supervised code execution: Run build, tests, and gate verification commands in isolated subagents, strictly requiring exit code 0.\"
+    \"Utilize asl rpc (:batch ...) in priority for workspace-aware symbol navigation, callers, and impact analysis.\"
+  ]
+  :rules [:asl-toolbelt :ground-truth :git :orchestrator])
+<!-- ORCHESTRATOR_END -->"
+      DIRECTIVE_PAYLOAD="$DIRECTIVE_PAYLOAD$ORCH_DIRECTIVE"
+    fi
+
     STASH_FILE=""
+    CHANNEL_STASH=""
+    CHANNEL_LINK_TARGET=""
+    CHANNEL_CREATED=0
 
     cleanup_launch() {
       if [ -n "$STASH_FILE" ] && [ -f "$STASH_FILE" ]; then
         cp -f "$STASH_FILE" "$AGENTS_FILE" 2>/dev/null || true
         rm -f "$STASH_FILE" 2>/dev/null || true
       fi
+      if [ -n "$CHANNEL_LINK_TARGET" ]; then
+        rm -rf "$CHANNEL_FILE" 2>/dev/null || true
+        ln -sf "$CHANNEL_LINK_TARGET" "$CHANNEL_FILE" 2>/dev/null || true
+      elif [ -n "$CHANNEL_STASH" ] && [ -f "$CHANNEL_STASH" ]; then
+        rm -rf "$CHANNEL_FILE" 2>/dev/null || true
+        cp -f "$CHANNEL_STASH" "$CHANNEL_FILE" 2>/dev/null || true
+        rm -f "$CHANNEL_STASH" 2>/dev/null || true
+      elif [ "$CHANNEL_CREATED" -eq 1 ] && [ -f "$CHANNEL_FILE" ]; then
+        rm -f "$CHANNEL_FILE" 2>/dev/null || true
+      fi
     }
 
-    if [ "$NO_STASH" -eq 0 ] && [ -f "$AGENTS_FILE" ]; then
-      if grep -q "ASL_TOOLBELT_START" "$AGENTS_FILE" 2>/dev/null; then
-        STASH_FILE="/tmp/asl_agents_stash_$$"
-        cp -f "$AGENTS_FILE" "$STASH_FILE"
-        awk '
-        /<!-- ASL_TOOLBELT_START -->/ { in_tb = 1; print "<!-- ASL_LOADER: consultative mode active during asl launch; runtime toolbelt injected via channel -->"; next; }
-        /<!-- ASL_TOOLBELT_END -->/ { in_tb = 0; next; }
-        !in_tb { print; }
-        ' "$AGENTS_FILE" > "$AGENTS_FILE.tmp" && mv "$AGENTS_FILE.tmp" "$AGENTS_FILE"
+    if [ "$NO_STASH" -eq 0 ]; then
+      if [ -n "$CHANNEL_FILE" ]; then
+        if [ -L "$CHANNEL_FILE" ]; then
+          CHANNEL_LINK_TARGET="$(readlink "$CHANNEL_FILE")"
+          EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
+          rm -f "$CHANNEL_FILE"
+          printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE"
+          trap cleanup_launch EXIT INT TERM HUP
+        elif [ -f "$CHANNEL_FILE" ]; then
+          CHANNEL_STASH="/tmp/asl_channel_stash_$$"
+          cp -f "$CHANNEL_FILE" "$CHANNEL_STASH"
+          trap cleanup_launch EXIT INT TERM HUP
+          if ! grep -q "ASL_TOOLBELT_START" "$CHANNEL_FILE" 2>/dev/null; then
+            EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
+            printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
+          elif [ "$ORCHESTRATOR" -eq 1 ] && ! grep -q "ORCHESTRATOR_START" "$CHANNEL_FILE" 2>/dev/null; then
+            EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
+            printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE.tmp" && mv -f "$CHANNEL_FILE.tmp" "$CHANNEL_FILE"
+          fi
+        else
+          mkdir -p "$(dirname "$CHANNEL_FILE")" 2>/dev/null || true
+          printf '%s\n' "$DIRECTIVE_PAYLOAD" > "$CHANNEL_FILE"
+          CHANNEL_CREATED=1
+          trap cleanup_launch EXIT INT TERM HUP
+        fi
+      fi
+
+      if [ "$CHANNEL_FILE" != "$AGENTS_FILE" ] && [ -f "$AGENTS_FILE" ]; then
+        if grep -q "ASL_TOOLBELT_START" "$AGENTS_FILE" 2>/dev/null; then
+          STASH_FILE="/tmp/asl_agents_stash_$$"
+          cp -f "$AGENTS_FILE" "$STASH_FILE"
+          trap cleanup_launch EXIT INT TERM HUP
+          awk '
+          /<!-- ASL_TOOLBELT_START -->/ { in_tb = 1; print "<!-- ASL_LOADER: consultative mode active during asl launch; runtime toolbelt injected via channel -->"; next; }
+          /<!-- ASL_TOOLBELT_END -->/ { in_tb = 0; next; }
+          !in_tb { print; }
+          ' "$AGENTS_FILE" > "$AGENTS_FILE.tmp" && mv -f "$AGENTS_FILE.tmp" "$AGENTS_FILE"
+        fi
       fi
     fi
 
@@ -6901,6 +7032,19 @@ ADR_EOF
     export ASL_ORCH_TARGET="$ORCH_TARGET"
 
     AUTO_FLAGS=()
+    if [ "$CLIENT_ID" = "claude" ]; then
+      HAS_APPEND_PROMPT=0
+      for arg in "${EXTRA_ARGS[@]}"; do
+        if [ "$arg" = "--append-system-prompt" ]; then
+          HAS_APPEND_PROMPT=1
+          break
+        fi
+      done
+      if [ "$HAS_APPEND_PROMPT" -eq 0 ]; then
+        EXTRA_ARGS=("--append-system-prompt" "$DIRECTIVE_PAYLOAD" "${EXTRA_ARGS[@]}")
+      fi
+    fi
+
     if [ "$ORCHESTRATOR" -eq 1 ]; then
       if [ "$CLIENT_ID" = "claude" ]; then
         HAS_DANGEROUS=0
