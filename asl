@@ -371,7 +371,7 @@ run_launch() {
         CLIENT_ID="codex"
         CLIENT_NAME="Codex CLI (OpenAI)"
         PROMPT_CHANNEL="AGENTS.md"
-        BIN_NAMES=("/opt/homebrew/bin/codex" "/usr/local/bin/codex" "$HOME/.npm-global/bin/codex" "$HOME/.local/bin/codex" "$HOME/.cargo/bin/codex" "$HOME/.bun/bin/codex" "codex")
+        BIN_NAMES=("$HOME/.local/bin/codex" "/opt/homebrew/bin/codex" "/usr/local/bin/codex" "codex")
         ;;
       help|--help|-h)
         echo "Usage: asl launch <agy|claude|codex|cursor|windsurf> [--orchestrator|-o] [--preset <name>] [--model <name>] [--reasoning <level>] [--soft-limit <n>] [--hard-limit <n>] [--multi-project] [--code-exec] [--dry-run] [--no-stash] [--prompt <msg>] [-- <agent-args...>]"
