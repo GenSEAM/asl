@@ -401,15 +401,9 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
       fi
     }
 
-    if [ "$NO_STASH" -eq 0 ]; then
-      if [ -n "$CHANNEL_FILE" ]; then
-        if [ -L "$CHANNEL_FILE" ]; then
-          CHANNEL_LINK_TARGET="$(readlink "$CHANNEL_FILE")"
-          EXISTING_CONTENT="$(cat "$CHANNEL_FILE" 2>/dev/null || true)"
-          rm -f "$CHANNEL_FILE"
-          printf '%s\n\n%s\n' "$DIRECTIVE_PAYLOAD" "$EXISTING_CONTENT" > "$CHANNEL_FILE"
-          trap cleanup_launch EXIT INT TERM HUP
-        elif [ -f "$CHANNEL_FILE" ]; then
+    if [ "$DRY_RUN" -eq 0 ] && [ "$NO_STASH" -eq 0 ]; then
+      if [ "$CLIENT_ID" != "claude" ] && [ -n "$CHANNEL_FILE" ] && [ ! -L "$CHANNEL_FILE" ]; then
+        if [ -f "$CHANNEL_FILE" ]; then
           CHANNEL_STASH="/tmp/asl_channel_stash_$$"
           cp -f "$CHANNEL_FILE" "$CHANNEL_STASH"
           trap cleanup_launch EXIT INT TERM HUP
@@ -428,7 +422,7 @@ Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
         fi
       fi
 
-      if [ "$CHANNEL_FILE" != "$AGENTS_FILE" ] && [ -f "$AGENTS_FILE" ]; then
+      if [ "$CLIENT_ID" != "claude" ] && [ "$CHANNEL_FILE" != "$AGENTS_FILE" ] && [ -f "$AGENTS_FILE" ]; then
         if grep -q "ASL_TOOLBELT_START" "$AGENTS_FILE" 2>/dev/null; then
           STASH_FILE="/tmp/asl_agents_stash_$$"
           cp -f "$AGENTS_FILE" "$STASH_FILE"
