@@ -15,7 +15,10 @@
       emit-wasi-imports
       emit-wasi-fd-write
       emit-wasi-proc-exit
-      emit-wasi-clock-time-get]
+      emit-wasi-clock-time-get
+      emit-wasm-memory-model
+      emit-wasm-export-dispatch
+      emit-asl-core-wasm-module]
   :i [])
 
 (df wat-type [(ty Str)] -> Str
@@ -138,4 +141,27 @@
 (df emit-wasi-clock-time-get [(clock-id I64) (precision I64) (time-offset I64)] -> Str
   :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 clock_time_get high-resolution timestamp queries."
   (str "(call $clock_time_get (i32.const " clock-id ") (i64.const " precision ") (i32.const " time-offset "))"))
+
+(df emit-wasm-memory-model [(initial-pages I64) (max-pages I64)] -> Str
+  :d "Emits WebAssembly linear memory export declaration with initial and maximum page bounds."
+  (if (> max-pages 0)
+      (str "  (memory (export \"memory\") " initial-pages " " max-pages ")\n")
+      (str "  (memory (export \"memory\") " initial-pages ")\n")))
+
+(df emit-wasm-export-dispatch [(module-name Str)] -> Str
+  :d "Emits sovereign in-browser Batch RPC dispatcher export signatures for WebAssembly linear memory."
+  (str "  (func $asl_alloc (export \"asl_alloc\") (param $size i32) (result i32)\n"
+       "    (i32.const 65536))\n"
+       "  (func $asl_free (export \"asl_free\") (param $ptr i32) (param $size i32))\n"
+       "  (func $asl_rpc_dispatch (export \"asl_rpc_dispatch\") (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (result i32)\n"
+       "    (i32.const 0))\n"))
+
+(df emit-asl-core-wasm-module [(funcs-wat Str)] -> Str
+  :d "Emits complete standalone asl-core.wasm module envelope with WASI preview 1 imports and Batch RPC exports."
+  (str "(module\n"
+       (emit-wasi-imports) "\n"
+       (emit-wasm-memory-model 1 256)
+       (emit-wasm-export-dispatch "asl-core")
+       funcs-wat "\n"
+       ")"))
 

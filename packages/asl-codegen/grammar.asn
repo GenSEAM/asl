@@ -144,4 +144,11 @@
           :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 proc_exit invocation terminating process execution")
     (:sym :name "emit-wasi-clock-time-get" :kind :fn :tokens 5
           :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 clock_time_get high-resolution timestamp queries")
+    (:sym :name "emit-wasm-memory-model" :kind :fn :tokens 4
+          :rationale "Emits WebAssembly linear memory export declaration with initial and maximum page bounds")
+    (:sym :name "emit-wasm-export-dispatch" :kind :fn :tokens 4
+          :rationale "Emits sovereign in-browser Batch RPC dispatcher export signatures for WebAssembly linear memory")
+    (:sym :name "emit-asl-core-wasm-module" :kind :fn :tokens 5
+          :rationale "Emits complete standalone asl-core.wasm module envelope with WASI preview 1 imports and Batch RPC exports")
   ])
+

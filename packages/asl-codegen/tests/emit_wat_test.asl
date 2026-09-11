@@ -137,6 +137,33 @@
     (assert (string-contains? monotonic-call "(i64.const 0)") "monotonic precision argument must be (i64.const 0)")
     true))
 
+(df test-wasm-memory-model [] -> Bool
+  :d "Verifies WebAssembly linear memory export declaration emission."
+  (let [(m-bounded (w/emit-wasm-memory-model 1 256))
+        (m-unbounded (w/emit-wasm-memory-model 2 0))]
+    (assert (string-contains? m-bounded "(memory (export \"memory\") 1 256)") "Bounded memory must declare initial 1 and max 256 pages")
+    (assert (string-contains? m-unbounded "(memory (export \"memory\") 2)") "Unbounded memory must declare initial 2 pages")
+    true))
+
+(df test-wasm-export-dispatch [] -> Bool
+  :d "Verifies Batch RPC linear memory dispatch export definitions."
+  (let [(dispatch-wat (w/emit-wasm-export-dispatch "asl-core"))]
+    (assert (string-contains? dispatch-wat "(export \"asl_alloc\")") "Dispatch WAT must export asl_alloc")
+    (assert (string-contains? dispatch-wat "(export \"asl_free\")") "Dispatch WAT must export asl_free")
+    (assert (string-contains? dispatch-wat "(export \"asl_rpc_dispatch\")") "Dispatch WAT must export asl_rpc_dispatch")
+    (assert (string-contains? dispatch-wat "(param $in_ptr i32)") "asl_rpc_dispatch must receive in_ptr i32")
+    true))
+
+(df test-asl-core-wasm-module [] -> Bool
+  :d "Verifies complete standalone asl-core.wasm module envelope."
+  (let [(envelope (w/emit-asl-core-wasm-module "  (func $dummy)"))]
+    (assert (string-contains? envelope "(module") "Module envelope must open with (module")
+    (assert (string-contains? envelope "wasi_snapshot_preview1") "Module must contain WASI preview 1 imports")
+    (assert (string-contains? envelope "(memory (export \"memory\") 1 256)") "Module must declare 1..256 page memory")
+    (assert (string-contains? envelope "(export \"asl_rpc_dispatch\")") "Module must export asl_rpc_dispatch")
+    (assert (string-contains? envelope "(func $dummy)") "Module must embed payload functions")
+    true))
+
 (df run-tests [] -> Bool
   :d "Runs all WebAssembly codegen unit tests."
   (let [(_t1 (test-wat-type))
@@ -150,5 +177,9 @@
         (_t9 (test-wasi-imports))
         (_t10 (test-wasi-fd-write))
         (_t11 (test-wasi-proc-exit))
-        (_t12 (test-wasi-clock-time-get))]
+        (_t12 (test-wasi-clock-time-get))
+        (_t13 (test-wasm-memory-model))
+        (_t14 (test-wasm-export-dispatch))
+        (_t15 (test-asl-core-wasm-module))]
     true))
+
