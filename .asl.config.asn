@@ -34,7 +34,7 @@
     :strict-polarity false
     :discount-zero-asserts true
     :core-desired 100.0
-    :core-packages ["agent-core" "asl/asl-compiler" "asl/asl-parser" "crawler" "browser-plugin" "web-api-search"]
+    :core-packages ["packages/asl-compiler" "packages/asl-parser" "packages/asl-codec" "packages/asl-lint" "packages/asl-gates"]
     :exclude ["examples/**" "asl-arduino/**" "asl-quantum/**"]
   )
   :tasks [
