@@ -6162,12 +6162,14 @@ static char *resolve_client_binary(const char *client, const char *ws_root) {
         if (access("/usr/local/bin/agy", X_OK) == 0) return strdup("/usr/local/bin/agy");
         if (access("/opt/homebrew/bin/agy", X_OK) == 0) return strdup("/opt/homebrew/bin/agy");
     } else if (strcmp(client, "claude") == 0) {
-        if (access("/usr/local/bin/claude", X_OK) == 0) return strdup("/usr/local/bin/claude");
-        if (access("/opt/homebrew/bin/claude", X_OK) == 0) return strdup("/opt/homebrew/bin/claude");
         if (home) {
             snprintf(path, sizeof(path), "%s/.local/bin/claude", home);
             if (access(path, X_OK) == 0) return strdup(path);
+            snprintf(path, sizeof(path), "%s/.npm-global/bin/claude", home);
+            if (access(path, X_OK) == 0) return strdup(path);
         }
+        if (access("/opt/homebrew/bin/claude", X_OK) == 0) return strdup("/opt/homebrew/bin/claude");
+        if (access("/usr/local/bin/claude", X_OK) == 0) return strdup("/usr/local/bin/claude");
     } else if (strcmp(client, "codex") == 0) {
         if (home) {
             snprintf(path, sizeof(path), "%s/.local/bin/codex", home);
