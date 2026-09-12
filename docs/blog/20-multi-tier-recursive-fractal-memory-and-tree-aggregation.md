@@ -31,7 +31,7 @@ graph TD
     Sub1 --> Pkg1["Package: asl-checker (mem:asl/checker)"]
     Sub1 --> Pkg2["Package: asl-compiler (mem:asl/compiler)"]
     Sub1 --> Pkg3["Package: asl-codec (mem:asl/codec)"]
-    Pkg1 --> Comp1["Component: rules/c-0001 (mem:asl/checker/rules)"]
+    Pkg1 --> Comp1["Component: rules/C0001 (mem:asl/checker/rules)"]
     Pkg2 --> Comp2["Component: codegen (mem:asl/compiler/codegen)"]
 ```
 
@@ -39,7 +39,7 @@ graph TD
 1. **Self-Similarity**: Every node in the hierarchy—whether the root repository, a core compiler package, or a nested parser module—exhibits the exact same memory schema:
    - `intent.asn`: Operational intent, shortcodes, and goal state.
    - `decisions/`: Architecture Decision Records (`ADR-xxxx.md` / `d-xxxx`).
-   - `invariants.asn`: Strict architectural constraints (e.g. `c-0001` zero comments).
+   - `invariants.asn`: Strict architectural constraints (e.g. `C0001` zero comments).
    - `knowledge/`: Distilled domain rules and behavioral contracts.
 2. **Local Ownership & Non-Interference**: When an agent introduces a change or records an architectural decision inside `packages/asl-checker/`, that record belongs strictly to `packages/asl-checker/.asl/mem/`. It does not pollute the root repository workspace unless an upper tier explicitly intercepts or aggregates it.
 3. **Deterministic Inheritance**: Child tiers automatically inherit parent constraints unless explicitly overridden by authorized local policies.
@@ -56,12 +56,12 @@ In AgentScript, **memory is homoiconic**:
 
 ```lisp
 (:invariant
-  :id "c-0001"
+  :id "C0001"
   :name "zero-comment-policy"
   :d "Enforces zero comments (;;) to preserve maximum token density and machine understandability in pure ASL"
   :tier :package
   :scope "packages/asl-checker"
-  :uri "mem:asl/checker/invariants/c-0001"
+  :uri "mem:asl/checker/invariants/C0001"
   :predicate (df check-zero-comments [(source String)] -> Bool
                (not (string-contains? source ";;")))
   :rationale "Preserve maximum token density and machine understandability in pure ASL.")
@@ -80,7 +80,7 @@ Physical paths on disk (`/Users/.../packages/asl-checker/.asl/mem/...`) are host
 
 AgentScript introduces **Logical Memory URIs**:
 - `mem:root/intent` $\longrightarrow$ Root workspace intent and active phase.
-- `mem:asl/checker/decisions/d-0010` $\longrightarrow$ Compiler package ADR-0010.
+- `mem:asl/checker/decisions/D0010` $\longrightarrow$ Compiler package ADR-0010.
 - `mem:vdom/components/reconciler` $\longrightarrow$ Virtual DOM component memory.
 
 ```mermaid
@@ -144,8 +144,8 @@ Serializes the entire multi-tier memory graph into a single, compact S-expressio
   :packages-count 32
   :subsystems [
     (:subsystem :name "asl" :path "./asl" :packages [
-      (:pkg :name "asl-checker" :symbols 112 :invariants ["c-0001"])
-      (:pkg :name "asl-compiler" :symbols 204 :decisions ["d-0001" "d-0010"])
+      (:pkg :name "asl-checker" :symbols 112 :invariants ["C0001"])
+      (:pkg :name "asl-compiler" :symbols 204 :decisions ["D0001" "D0010"])
       (:pkg :name "asl-codec" :symbols 88 :grammar-symbols 92)
     ])
   ]

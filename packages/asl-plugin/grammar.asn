@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-plugin
 (:grammar
   :package asl-plugin
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "PluginCall" :kind :type :tokens 1)
     (:sym :name "PluginCapability" :kind :type :tokens 1)
     (:sym :name "PluginExport" :kind :type :tokens 1)
@@ -14,7 +11,6 @@
     (:sym :name "PluginRegistry" :kind :type :tokens 1)
     (:sym :name "PluginResult" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "dispatch-call" :kind :fn :tokens 2)
     (:sym :name "empty-registry" :kind :fn :tokens 2)
     (:sym :name "format-manifest" :kind :fn :tokens 2)
@@ -24,7 +20,6 @@
     (:sym :name "run-tests" :kind :fn :tokens 2)
     (:sym :name "validate-manifest" :kind :fn :tokens 2)
 
-    ;; Dynamic Tool Plane Types
     (:sym :name "ActiveLandscape" :kind :type :tokens 1)
     (:sym :name "MountReceipt" :kind :type :tokens 1)
     (:sym :name "ToolDef" :kind :type :tokens 1)
@@ -33,7 +28,6 @@
     (:sym :name "ToolPlane" :kind :type :tokens 1)
     (:sym :name "UnmountReceipt" :kind :type :tokens 1)
 
-    ;; Dynamic Tool Plane Functions (<= 2 tokens)
     (:sym :name "active-domains" :kind :fn :tokens 2)
     (:sym :name "active-landscape" :kind :fn :tokens 2)
     (:sym :name "base-landscape?" :kind :fn :tokens 2)
@@ -57,7 +51,6 @@
     (:sym :name "unload-domain" :kind :fn :tokens 2)
     (:sym :name "unmount-receipt" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "find-plugins-by-capability" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'find-plugins': explicitly scopes query filtering by advertised capability keyword rather than name or version")
   ])

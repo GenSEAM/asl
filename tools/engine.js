@@ -1,5 +1,9 @@
 let assertionCount = 0;
 let refutationCount = 0;
+let rejectionCount = 0;
+let plannedTestCount = 0;
+let startedTestCount = 0;
+let completedTestCount = 0;
 
 
 
@@ -327,7 +331,10 @@ if (cleanArgs[0] === 'asn' || cleanArgs[0] === '--from-json' || cleanArgs[0] ===
   if (fs.existsSync(payload)) {
     try {
       payload = fs.readFileSync(payload, 'utf8');
-    } catch {}
+    } catch (e) {
+      console.error(e.message);
+      process.exit(1);
+    }
   }
   if (flag === '--from-json') {
     try {
@@ -361,7 +368,7 @@ const knownBuiltins = new Set([
   '+', '-', '*', '/', 'mod',
   '=', '==', '!=', '<', '>', '<=', '>=',
   'not', 'and', 'or',
-  'if', 'assert', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try',
+  'if', 'assert', 'reject', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try',
   'df', 'fn', 'module', 'dfe', 'dfs',
   'println', 'eprintln', 'print', 'str',
   'str-concat', 'str-len', 'str-contains?',
@@ -382,7 +389,7 @@ const knownBuiltins = new Set([
   'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float-from-int64', 'float', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
   'string-chars', 'string-lower', 'string-upper', 'string-replace', 'string-reverse', 'string-index-of', 'string-slice',
   'string-equals?', 'foldl', 'append-item', 'string-to-lower', 'list-indexed', 'tuple', 'tuple-first', 'tuple-second', 'option-none?', 'option-some?', 'int-to-string',
-  'case', 'match', 'refute', 'fst', 'snd', 'second', 'pair-first', 'pair-second', 'tuple2-first', 'list-second', 'list-first', 'list-last', 'list-take', 'list-range', 'list-fold', 'list-filter', 'list-map', 'list-any?', 'fold-left', 'reverse', 'length', 'append', 'count', 'enumerate', 'nil?', 'map-merge', 'get', 'div-i64', 'as-i64', 'as-f64', 'float64-from-int64', 'int64-from-float', 'int-to-str', 'string-to-lowercase', 'string-trim-left', 'string-count-char', 'string-repeat', 'string-append', 'join', 'all', 'tuple2-second', 'head', 'tail', 'div-f64', 'sqrt', 'Ok', 'Err', 'file-read', 'file-write', 'file-exists?', 'file-append', 'error-or', 'file-read', 'read-file'
+  'case', 'match', 'refute', 'fst', 'snd', 'second', 'pair-first', 'pair-second', 'tuple2-first', 'list-second', 'list-first', 'list-last', 'list-take', 'list-range', 'list-fold', 'list-filter', 'list-map', 'list-any?', 'any?', 'any', 'all?', 'list-all?', 'fold-left', 'reverse', 'length', 'append', 'count', 'enumerate', 'nil?', 'map-merge', 'get', 'div-i64', 'as-i64', 'as-f64', 'float64-from-int64', 'int64-from-float', 'int-to-str', 'string-to-lowercase', 'string-trim-left', 'string-count-char', 'string-repeat', 'string-append', 'join', 'all', 'tuple2-second', 'head', 'tail', 'div-f64', 'sqrt', 'Ok', 'Err', 'file-read', 'file-write', 'file-exists?', 'file-append', 'error-or', 'file-read', 'read-file'
 ]);
 
 function extractParamNames(paramsNode) {
@@ -580,6 +587,8 @@ function matchPattern(patNode, targetVal, branchEnv) {
     const headPatName = headPat?.type === 'sym' ? headPat.value : null;
     if (!headPatName) return false;
     const shortPatName = headPatName.includes('/') ? headPatName.split('/').pop() : headPatName;
+    const variantOnly = shortPatName.includes(':') ? shortPatName.split(':').pop() : shortPatName;
+    const enumOnly = shortPatName.includes(':') ? shortPatName.split(':')[0] : null;
 
     if (targetVal === null && (headPatName === 'none' || shortPatName === 'none')) {
       return true;
@@ -589,7 +598,9 @@ function matchPattern(patNode, targetVal, branchEnv) {
       return false;
     }
 
-    if (targetVal._type === 'variant' && (targetVal._variant === headPatName || targetVal._variant === shortPatName)) {
+    if (targetVal._type === 'variant' &&
+        (targetVal._variant === headPatName || targetVal._variant === shortPatName || targetVal._variant === variantOnly) &&
+        (!enumOnly || targetVal._enum === enumOnly)) {
       for (let k = 1; k < patNode.items.length; k++) {
         const subPat = patNode.items[k];
         const val = targetVal[`arg${k}`] !== undefined ? targetVal[`arg${k}`] : targetVal.value;
@@ -629,7 +640,7 @@ function evalNode(node, env = new Map()) {
     if (node.value === 'true') return true;
     if (node.value === 'false') return false;
     if (node.value === 'null' || node.value === 'nil' || node.value === '_' || node.value === 'Unit') return null;
-    if (knownBuiltins.has(node.value) && !['if', 'assert', 'refute', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try', 'df', 'fn', 'module', 'dfe', 'dfs', 'case', 'match'].includes(node.value)) {
+    if (knownBuiltins.has(node.value) && !['if', 'assert', 'reject', 'refute', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try', 'df', 'fn', 'module', 'dfe', 'dfs', 'case', 'match'].includes(node.value)) {
       return {
         _type: 'closure',
         name: node.value,
@@ -758,6 +769,9 @@ function evalNode(node, env = new Map()) {
                 body: []
               };
               env.set(variantName, constructor);
+              if (enumName) {
+                env.set(`${enumName}:${variantName}`, constructor);
+              }
             }
           }
         }
@@ -850,6 +864,17 @@ function evalNode(node, env = new Map()) {
         throw new Error(`[ASL_ASSERTION_FAILURE]: ${msg}`);
       }
       assertionCount++;
+      return true;
+    }
+
+    if (head === 'reject') {
+      const condVal = evalNode(node.items[1], env);
+      const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
+      if (isTruthy) {
+        const msg = node.items[2] ? evalNode(node.items[2], env) : 'rejection condition evaluated to true';
+        throw new Error(`[ASL_REJECTION_FAILURE]: ${msg}`);
+      }
+      rejectionCount++;
       return true;
     }
 
@@ -1726,21 +1751,35 @@ function evaluateBuiltinFunction(head, evalArgs, env) {
         return res !== false && res !== null && res !== undefined;
       });
     }
-    if (head === 'list-any?') {
+    if (head === 'list-any?' || head === 'any?' || head === 'any') {
+      if (evalArgs.length === 1) {
+        const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+        for (const it of arr) {
+          if (it !== false && it !== null && it !== undefined && it !== 0 && it !== 0n) return true;
+        }
+        return false;
+      }
       const fn = evalArgs[0];
       const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
       for (const it of arr) {
         const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it);
-        if (res !== false && res !== null && res !== undefined) return true;
+        if (res !== false && res !== null && res !== undefined && res !== 0 && res !== 0n) return true;
       }
       return false;
     }
-    if (head === 'all') {
+    if (head === 'all' || head === 'all?' || head === 'list-all?') {
+      if (evalArgs.length === 1) {
+        const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+        for (const it of arr) {
+          if (it === false || it === null || it === undefined || it === 0 || it === 0n) return false;
+        }
+        return true;
+      }
       const fn = evalArgs[0];
       const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
       for (const it of arr) {
         const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it);
-        if (res === false || res === null || res === undefined) return false;
+        if (res === false || res === null || res === undefined || res === 0 || res === 0n) return false;
       }
       return true;
     }
@@ -1897,6 +1936,7 @@ function getCheckerClosure() {
     }
   } catch (e) {
     checkerClosure = null;
+    throw e;
   } finally {
     inCheckerBootstrap = false;
   }
@@ -2016,7 +2056,7 @@ function getWorkspaceAslFiles(wsRoot) {
       try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
       } catch (e) {
-        return;
+        throw e;
       }
       if (!Array.isArray(entries)) return;
       for (const entry of entries) {
@@ -2123,7 +2163,7 @@ function buildModuleNameIndex(startDir) {
           moduleNameIndex.set(modName, full);
         }
       }
-    } catch (e) {}
+    } catch (e) { throw e; }
   }
 
   return moduleNameIndex;
@@ -2282,6 +2322,13 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
     rootEnv.set('nil', null);
     loadModuleImports(forms, filePath, rootEnv);
 
+    for (const [fnName, fnVal] of rootEnv.entries()) {
+      if ((fnName.startsWith('test-') || fnName.startsWith('Test')) && fnVal && fnVal._type === 'closure' && !fnVal._isStructConstructor && !fnVal._isEnumVariant && fnVal.params.length === 0) {
+        plannedTestCount++;
+      }
+    }
+    if (rootEnv.has('run-tests') || rootEnv.has('RunTests') || rootEnv.has('run-wire-tests')) plannedTestCount = Math.max(plannedTestCount, 1);
+
     let lastResult = null;
     for (const form of forms) {
       lastResult = evalNode(form, rootEnv);
@@ -2289,11 +2336,25 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
     if (rootEnv.has('run-tests')) {
       const runTestsFn = rootEnv.get('run-tests');
       if (runTestsFn && runTestsFn._type === 'closure') {
+        startedTestCount++;
         const res = invokeClosure(runTestsFn, []);
         if (res !== true) {
           console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'run-tests' returned ${formatOutput(res)} instead of true`);
           process.exit(1);
         }
+        completedTestCount++;
+        lastResult = res;
+      }
+    } else if (rootEnv.has('RunTests')) {
+      const runTestsFn = rootEnv.get('RunTests');
+      if (runTestsFn && runTestsFn._type === 'closure') {
+        startedTestCount++;
+        const res = invokeClosure(runTestsFn, []);
+        if (res !== true) {
+          console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'RunTests' returned ${formatOutput(res)} instead of true`);
+          process.exit(1);
+        }
+        completedTestCount++;
         lastResult = res;
       }
     } else if (rootEnv.has('run-wire-tests')) {
@@ -2319,11 +2380,13 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
     } else {
       for (const [fnName, fnVal] of rootEnv.entries()) {
         if ((fnName.startsWith('test-') || fnName.startsWith('Test')) && fnVal && fnVal._type === 'closure' && !fnVal._isStructConstructor && !fnVal._isEnumVariant && fnVal.params.length === 0) {
+          startedTestCount++;
           const res = invokeClosure(fnVal, []);
           if (res !== true) {
             console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry '${fnName}' returned ${formatOutput(res)} instead of true`);
             process.exit(1);
           }
+          completedTestCount++;
           lastResult = res;
         }
       }
@@ -2340,7 +2403,7 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
     if (wantsMetrics) {
       const elapsedMs = (performance.now() - t0).toFixed(2);
       const memMb = (process.memoryUsage().rss / (1024 * 1024)).toFixed(2);
-      console.log(`(:metrics :elapsed-ms ${elapsedMs} :rss-mb ${memMb})`);
+      console.log(`(:metrics :elapsed-ms ${elapsedMs} :rss-mb ${memMb} :planned-tests ${plannedTestCount} :started-tests ${startedTestCount} :completed-tests ${completedTestCount} :assertions ${assertionCount} :refutations ${refutationCount} :rejections ${rejectionCount})`);
     }
     process.exit(0);
   } catch (e) {
@@ -2394,4 +2457,3 @@ try {
   console.error(e.message);
   process.exit(1);
 }
-

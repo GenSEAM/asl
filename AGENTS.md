@@ -65,7 +65,7 @@ AgentScript supports two projection formats derived from `prelude/prelude.json`:
 All code exploration, reading, text search, editing, diffing, and verification MUST execute through exclusive `asl rpc '(:batch ...)'` compound operations in a single roundtrip. Avoid multiple individual tool calls or standalone commands when a compound batch can accomplish the objective atomically.
 
 ### 4.1 Compound Batch RPC Execution
-Execute combined exploration, reading, editing, diffing, and validation in a single batch round-trip:
+Execute combined exploration and reading in a single batch round-trip:
 
 ```bash
 asl rpc '(:batch
@@ -73,24 +73,18 @@ asl rpc '(:batch
   (:sym "handleRequest")              ; Exact symbol definition & declaration line
   (:callers "handleRequest")          ; Call graph: all callers across workspace
   (:impact "handleRequest")           ; Blast-radius impact analysis before edits
-  (:find "authHeader")                ; Fast in-memory text grep across codebase
-  (:q "token validation")             ; In-memory vector semantic query
+  (:find "*.ts")                      ; Filename glob (NOT text search)
   (:read "src/server.ts" 1 40)        ; Read narrow slice of lines
   (:sec "doc.md" "Section Title")     ; Read isolated markdown section
-  (:edit "src/server.ts" "old" "new") ; In-memory atomic string replacement
-  (:repl "old_pat" "new_pat")         ; Mass in-memory refactor across files
-  (:diff)                             ; Review staged in-memory modifications
-  (:flush)                            ; Atomically persist staged edits to disk
-  (:chk)                              ; Run full 7-gate verification suite
 )'
 ```
 
 Supported capabilities across ASL, TypeScript, JavaScript, Python, Go, Rust, and PHP:
 - **AST Outline**: `(:out "<file>")` to inspect structure without loading entire files into context.
 - **Symbol Lookup & Callers**: `(:sym "<name>")`, `(:callers "<name>")`, and `(:impact "<name>")` for sub-millisecond symbol reference queries.
-- **In-Memory Search**: `(:find "<pattern>")` for fast in-memory grep and `(:q "<query>")` for vector semantic search.
-- **In-Memory Modifications**: `(:edit "<file>" "<old>" "<new>")`, `(:repl "<old>" "<new>")`, review with `(:diff)`, commit with `(:flush)`.
-- **Continuous Verification**: `(:chk)` or `asl gate` to evaluate all 7 verification gates.
+- **File Search**: `(:find "*.ts")` for filename globbing. Use host tools (`grep_search`) for content search until Phase438.
+- **Modifications**: `(:edit ...)` writes to disk immediately. `(:diff)` and `(:discard)` do not stage. Use host tools for edits until staging ships.
+- **Continuous Verification**: `asl test` to evaluate test suites.
 
 ### 4.2 Failure Protocol & Error Recovery
 Adhere strictly to deterministic error recovery when executing batch RPC operations:

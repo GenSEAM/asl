@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-bridge
 (:grammar
   :package asl-bridge
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "DbColumn" :kind :type :tokens 1)
     (:sym :name "DbResult" :kind :type :tokens 1)
     (:sym :name "DriverKind" :kind :type :tokens 1)
@@ -14,7 +11,6 @@
     (:sym :name "TableDef" :kind :type :tokens 1)
     (:sym :name "TierKind" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "col-category" :kind :fn :tokens 2)
     (:sym :name "driver-tier" :kind :fn :tokens 2)
     (:sym :name "kysely-type" :kind :fn :tokens 2)
@@ -26,7 +22,6 @@
     (:sym :name "seaorm-type" :kind :fn :tokens 2)
     (:sym :name "sqlalchemy-type" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with verified architectural :rationale)
     (:sym :name "driver-kind-to-str" :kind :fn :tokens 4
           :rationale "Converts DriverKind enum variant into canonical driver string identifier")
     (:sym :name "drizzle-col-builder" :kind :fn :tokens 3
@@ -96,7 +91,6 @@
     (:sym :name "validate-skill-frontmatter" :kind :fn :tokens 3
           :rationale "Validates that skill markdown content contains valid YAML frontmatter delimiters and required metadata")
 
-    ;; Configuration Cascading & Secret Resolution Symbols
     (:sym :name "ConfigCascadeEntry" :kind :type :tokens 2)
     (:sym :name "ResolvedTool" :kind :type :tokens 2)
     (:sym :name "cascade-merge" :kind :fn :tokens 2)

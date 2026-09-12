@@ -89,7 +89,7 @@ AgentScript is engineered as the universal, lightweight, agent-native execution 
 | **OpenAI / Codex Swarm** | Function Calling & System Prompts | **< 0.04 ms** (Wasm) | **<= 16 MB** | Deterministic S-Expr AST | Wasm preview1 isolated memory | Pure ASL self-checker |
 | **Factory Droid** | Shell Plugin & Autonomous Sandbox | **< 100 ms** (Host CLI) | **<= 24 MB** | `asl search` (AST-Grep) | Zero-prompt capability jail | `asl gate` |
 | **OpenCode** | Open Agent Runner & CLI Toolchain | **< 100 ms** (Host CLI) | **<= 24 MB** | Built-in symbol resolver | In-memory stream reducer (`asl-sh`) | Full differential gate |
-| **Cursor / Windsurf / IDEs** | stdio LSP 3.17 (`asl lsp`) + MCP | **< 50 ms** (JSON-RPC) | **<= 20 MB** | Real-time hover docs & AST jump | Virtual Projection (`asl view`) | Instant linter |
+| **Cursor / Windsurf / IDEs** | stdio LSP 3.17 (`asl lsp`) + AWP | **< 50 ms** (JSON-RPC) | **<= 20 MB** | Real-time hover docs & AST jump | Virtual Projection (`asl view`) | Instant linter |
 
 ---
 

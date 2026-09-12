@@ -8,7 +8,7 @@
       test-optimize-placement-string
       run-tests]
   :i [(asl-codec/placement :a p)
-      (core/asn :a a)])
+      (asl-codec/asn :a a)])
 
 (df make-test-record [(id Str) (name Str) (role Str)] -> a/AsnValue
   :d "Constructs a test record with 3 keys."

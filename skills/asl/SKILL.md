@@ -61,7 +61,7 @@ An S-expression language for autonomous AI agents: balanced delimiters, whitespa
 
 - Tabular matrix: `([:id :name :role] [[101 "Alice" :admin] [102 "Bob" :user]])` (saves >65% tokens).
 - Constant pool: `(:pool ["https://api.genseam.org" "agent/alpha"] :events [[(:ref 1) (:ref 0)]])`.
-- Symbolic anchors: `@d-1234` or `@auth/token` linking to external ledgers with zero in-band token bloat.
+- Symbolic anchors: `D1234` or `@auth/token` linking to external ledgers with zero in-band token bloat.
 
 ## Agent-to-Agent (A2A) Wire Frame
 
@@ -70,7 +70,7 @@ An S-expression language for autonomous AI agents: balanced delimiters, whitespa
   :tx "tx-9942a"
   :from "agent/coordinator"
   :to "agent/worker"
-  :ref @d-9942
+  :ref D9942
   :payload (:action "verify" :target "auth/token"))
 ```
 

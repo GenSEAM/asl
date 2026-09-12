@@ -1,13 +1,9 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-cli
 (:grammar
   :package asl-cli
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "dispatch" :kind :fn :tokens 1)
     (:sym :name "dispatch-asn" :kind :fn :tokens 2)
     (:sym :name "dispatch-cmd" :kind :fn :tokens 2)
@@ -20,7 +16,6 @@
     (:sym :name "test-help" :kind :fn :tokens 2)
     (:sym :name "test-version" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "asn-to-json-value" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'to-json': explicitly bounds transformation from ASN AST to JSON value types without string serialization")
     (:sym :name "format-asn-help" :kind :fn :tokens 3

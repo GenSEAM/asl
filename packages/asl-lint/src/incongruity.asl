@@ -5,7 +5,7 @@
       detect-crutches
       detect-lingering-sigils
       make-incongruity-report]
-  :i [(core/tokens :a tok)])
+  :i [(asl-lint/tokens :a tok)])
 
 (dfs IncongruityReport
   (:f total-scanned I64 "Total items, files, or symbols scanned")

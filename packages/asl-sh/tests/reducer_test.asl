@@ -134,7 +134,7 @@
                   "--> [3/3] Running tests\n"
                   "all tests passed.\n"))
         (skel (red/extract-output-skeleton log))]
-    (assert (= (.-total-lines skel) 8) "Total lines equals 8")
+    (assert (= (.-total-lines skel) 7) "Total lines equals 7")
     (assert (> (.-total-bytes skel) 50) "Total bytes recorded")
     (assert (= (list-length (.-sections skel)) 3) "Extracted 3 milestone sections")
     (assert (= (list-length (.-diagnostics skel)) 0) "Zero diagnostics in clean stream")

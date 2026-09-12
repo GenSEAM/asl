@@ -1,9 +1,11 @@
 (module asl-sh/apm-test
   :d "Falsifiable test suite for APM stream demultiplexer and ProcessReceipt token budget ceiling."
-  :x [run-tests]
-  :i [(core/process :a proc)
+  :x [test-oob-stream-demux-memory-bound
+      run-tests]
+  :i [(asl-sh/process :a proc)
       (reducer      :a red)
-      (sh           :a sh)])
+      (sh           :a sh)
+      (apm          :a apm)])
 
 (df test-receipt-structure [] -> Bool
   :d "Verifies ProcessReceipt record structure and field extraction."
@@ -91,6 +93,25 @@
        (assert false "run-cmd! must succeed")
        false))))
 
+(df test-oob-stream-demux-memory-bound [] -> Bool
+  :d "Verifies that streaming 100MB of synthetic data through OobDemuxer is bounded < 64MB with clean termination."
+  (let [(spool-path "/tmp/asl-proc-oob-100mb.spool")
+        (demuxer0 (apm/make-oob-demuxer spool-path 67108864))
+        (chunk-1mb (string-repeat "0123456789ABCDEF" 65536))
+        (demuxer-100 (fold (fn [(d apm/OobDemuxer) (_i Int64)] -> apm/OobDemuxer
+                             (apm/oob-demux-chunk d chunk-1mb))
+                           demuxer0
+                           (range 0 100)))
+        (receipt (apm/oob-demux-finish demuxer-100 0 1200))]
+    (assert (.-is-terminated demuxer-100) "Demuxer must be terminated after exceeding 64MB limit")
+    (assert (= (.-termination-reason demuxer-100) ":buffer-overflow") "Termination reason must be :buffer-overflow")
+    (assert (<= (.-buffer-bytes demuxer-100) 67108864) "Active in-flight buffer must be strictly bounded <= 64MB")
+    (assert (= (.-total-bytes demuxer-100) 104857600) "Total processed bytes must equal exactly 100MB (104857600)")
+    (assert (= (.-exit-code receipt) 137) "Terminated stream exit code must be 137")
+    (assert (string-contains? (.-summary receipt) "memory bound < 64MB exceeded") "Summary must cite memory bound exceeded")
+    (assert (< (proc/receipt-tokens receipt) 80) "ProcessReceipt tokens must be strictly < 80")
+    true))
+
 (df run-tests [] -> Bool
   :d "Executes all APM stream demultiplexer and ProcessReceipt test suites."
   (and (test-receipt-structure)
@@ -99,4 +120,5 @@
                  (and (test-error-extraction)
                       (and (test-exit-preservation)
                            (and (test-demux-stream)
-                                (test-sh-run-cmd))))))))
+                                (and (test-sh-run-cmd)
+                                     (test-oob-stream-demux-memory-bound)))))))))

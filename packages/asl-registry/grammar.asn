@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-registry
 (:grammar
   :package asl-registry
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "AslRegistryEntry" :kind :type :tokens 1)
     (:sym :name "EcosystemKind" :kind :type :tokens 1)
     (:sym :name "OutdatedReport" :kind :type :tokens 1)
@@ -16,7 +13,6 @@
     (:sym :name "ReleaseArtifact" :kind :type :tokens 1)
     (:sym :name "ReleaseItem" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "build-headers" :kind :fn :tokens 2)
     (:sym :name "clean-version" :kind :fn :tokens 2)
     (:sym :name "compare-semver" :kind :fn :tokens 2)
@@ -25,7 +21,6 @@
     (:sym :name "run-tests" :kind :fn :tokens 2)
     (:sym :name "test-formatting" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "build-package-url" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'package-url': distinguishes dynamic URL construction for specific versions from static package homepage URLs")
     (:sym :name "build-search-url" :kind :fn :tokens 3

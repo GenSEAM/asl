@@ -1,8 +1,8 @@
 (module asl-sh/tests
   :d "Verification suite for AgentScript process automation and piping (@pcp:d-446d)."
   :x [run-tests run-tests!]
-  :i [(core/process :a proc)
-      (core/log     :a log)
+  :i [(asl-sh/process :a proc)
+      (asl-sh/log     :a log)
       (reducer      :a red)])
 
 (df test-command-builder [] -> Bool

@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-parser
 (:grammar
   :package asl-parser
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "AstField" :kind :type :tokens 1)
     (:sym :name "BalanceResult" :kind :type :tokens 1)
     (:sym :name "ClosureHeads" :kind :type :tokens 1)
@@ -23,7 +20,6 @@
     (:sym :name "TokenType" :kind :type :tokens 1)
     (:sym :name "TopForm" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "closure-heads" :kind :fn :tokens 2)
     (:sym :name "detect-lang" :kind :fn :tokens 2)
     (:sym :name "dump" :kind :fn :tokens 1)
@@ -57,7 +53,6 @@
     (:sym :name "token-kind" :kind :fn :tokens 2)
     (:sym :name "tokenize" :kind :fn :tokens 1)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "build-grammar-trie" :kind :fn :tokens 3
           :rationale "Builds in-memory grammar trie state machine from structured ASN grammar rules for constrained decoding")
     (:sym :name "compute-valid-tokens" :kind :fn :tokens 3

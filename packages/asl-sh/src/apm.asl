@@ -4,6 +4,7 @@
       StreamFrame
       SupervisorVerdict
       DaemonEntry
+      OobDemuxer
       make-lock-verdict
       resolve-lock
       make-stream-frame
@@ -14,8 +15,13 @@
       make-supervisor-verdict
       supervise-step
       make-daemon-entry
-      format-daemon-table]
-  :i [(watchdog :a wd)])
+      format-daemon-table
+      make-oob-demuxer
+      oob-demux-chunk
+      oob-demux-finish]
+  :i [(watchdog     :a wd)
+      (spool        :a spool)
+      (core/process :a proc)])
 
 (dfs LockVerdict
   (:f acquired Bool "True if singleton advisory lock was successfully acquired")
@@ -167,3 +173,66 @@
                           (.-active-op e)))
                    entries))]
     (string-join (list-append (list header) rows) "\n")))
+
+(dfs OobDemuxer
+  (:f max-buffer-bytes Int64 "Hard memory buffer ceiling in bytes (default 64MB: 67108864)")
+  (:f buffer-bytes Int64 "Current active in-flight buffer size in bytes")
+  (:f total-bytes Int64 "Cumulative byte count processed across stream")
+  (:f spool spool/TwoTierSpool "Integrated two-tier spool (RAM ring + circular disk)")
+  (:f is-terminated Bool "True if stream was terminated due to memory/stream boundary breach")
+  (:f termination-reason String "Reason for stream termination: :none, :buffer-overflow, or :sigkill"))
+
+(df make-oob-demuxer [(spool-path String) (max-buffer-bytes Int64)] -> OobDemuxer
+  :d "Constructs an OobDemuxer with bounded memory buffer ceiling and two-tier spool."
+  (let [(limit (if (<= max-buffer-bytes 0) 67108864 max-buffer-bytes))
+        (tt (spool/make-two-tier-spool spool-path 200 10485760))]
+    (OobDemuxer
+      :max-buffer-bytes limit
+      :buffer-bytes 0
+      :total-bytes 0
+      :spool tt
+      :is-terminated false
+      :termination-reason ":none")))
+
+(df oob-demux-chunk [(demuxer OobDemuxer) (chunk String)] -> OobDemuxer
+  :d "Streams a chunk into the two-tier spool while bounding active buffer memory strictly under max-buffer-bytes."
+  (let [(chunk-len (int32-to-int64 (string-length chunk)))
+        (new-total (+ (.-total-bytes demuxer) chunk-len))
+        (max-buf (.-max-buffer-bytes demuxer))]
+    (if (.-is-terminated demuxer)
+        (OobDemuxer
+          :max-buffer-bytes max-buf
+          :buffer-bytes (.-buffer-bytes demuxer)
+          :total-bytes new-total
+          :spool (.-spool demuxer)
+          :is-terminated true
+          :termination-reason (.-termination-reason demuxer))
+        (let [(new-buf (+ (.-buffer-bytes demuxer) chunk-len))]
+          (if (> new-buf max-buf)
+              (OobDemuxer
+                :max-buffer-bytes max-buf
+                :buffer-bytes (.-buffer-bytes demuxer)
+                :total-bytes new-total
+                :spool (.-spool demuxer)
+                :is-terminated true
+                :termination-reason ":buffer-overflow")
+              (let [(updated-spool (spool/two-tier-push (.-spool demuxer) chunk))]
+                (OobDemuxer
+                  :max-buffer-bytes max-buf
+                  :buffer-bytes new-buf
+                  :total-bytes new-total
+                  :spool updated-spool
+                  :is-terminated false
+                  :termination-reason ":none")))))))
+
+(df oob-demux-finish [(demuxer OobDemuxer) (exit-code Int64) (duration-ms Int64)] -> proc/ProcessReceipt
+  :d "Finalizes two-tier spool and returns a compact ProcessReceipt (<80 tokens)."
+  (let [(closed-spool (spool/two-tier-close (.-spool demuxer)))
+        (spool-path (.-path (.-disk closed-spool)))
+        (final-exit (if (.-is-terminated demuxer) 137 exit-code))
+        (final-summary (if (.-is-terminated demuxer)
+                           "OOB stream terminated: memory bound < 64MB exceeded"
+                           (if (= exit-code 0)
+                               "Command succeeded"
+                               (str "Process failed with exit code " (string-from-int64 exit-code)))))]
+    (proc/make-process-receipt final-exit duration-ms 32 spool-path final-summary)))

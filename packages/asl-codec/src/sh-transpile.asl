@@ -19,10 +19,6 @@
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if transpilation succeeded"))
 
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE token estimation via canonical asl-text/text."
-  (txt/estimate-tokens text))
-
 (df calc-savings [(orig I64) (asn I64)] -> F64
   :d "Calculates token savings percentage."
   (if (<= orig 0)
@@ -88,7 +84,7 @@
          :savings-percent 0.0
          :success false))
       (true
-       (let [(asn-tok (estimate-tokens trimmed))
+       (let [(asn-tok (txt/estimate-tokens trimmed))
              (s1 (string-replace trimmed "(:pipe" ""))
              (s2 (string-replace s1 "(:seq" ""))
              (s3 (string-replace s2 "(:cmd" ""))
@@ -101,7 +97,7 @@
                      (s/concat "set -euo pipefail\n" (string-trim (string-replace s8 ":script :strict true" "")))
                      s8))
              (cleaned (string-trim s9))
-             (raw-tok (estimate-tokens cleaned))
+             (raw-tok (txt/estimate-tokens cleaned))
              (savings (calc-savings raw-tok asn-tok))]
          (ShTranspileResult
            :output cleaned
@@ -122,9 +118,9 @@
          :savings-percent 0.0
          :success false))
       (true
-       (let [(raw-tok (estimate-tokens trimmed))
+       (let [(raw-tok (txt/estimate-tokens trimmed))
              (asn-out (s/concat (s/concat "(:cmd \"" trimmed) "\")"))
-             (asn-tok (estimate-tokens asn-out))
+             (asn-tok (txt/estimate-tokens asn-out))
              (savings (calc-savings raw-tok asn-tok))]
          (ShTranspileResult
            :output asn-out

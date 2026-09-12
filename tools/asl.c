@@ -4836,6 +4836,9 @@ static int run_cmd_audit_plan(int argc, char **argv) {
 
     printf("--> [2/2] Dependency DAG Topology & Acyclicity:\n");
     printf("    • Cycle detection status:   %d cycle(s) detected\n", cycle_count);
+    printf("(:plan-audit-report :status \"%s\" :phases %d :tasks %d :cycles %d :d52-errors %d)\n",
+           (d52_errors == 0 && cycle_count == 0) ? "clean" : "defective",
+           phase_count, task_count, cycle_count, d52_errors);
 
     if (d52_errors == 0 && cycle_count == 0) {
         printf("================================================================================\n");
@@ -5524,6 +5527,7 @@ static void print_usage(void) {
     printf("   or: asl '(:batch ...)'                [Legacy ASN batch shorthand]\n");
     printf("   or: asl rpc '(:batch ...)'            [DEPRECATED RPC COMPATIBILITY]\n");
     printf("   or: asl audit <consistency|gates|plan> [Repository & plan integrity audit]\n");
+    printf("   or: asl plan verify                   [Verify plan DAG acyclicity and D52 completeness]\n");
     printf("   or: asl doctor                        [Capability & environment truth probe]\n");
     printf("   or: asl scaffold <module|fn|test> <name> [Native code scaffolding]\n");
     printf("   or: asl inventory                     [List all tools with status and fallback]\n");
@@ -5805,6 +5809,14 @@ int main(int argc, char **argv) {
             printf("Usage: asl audit <consistency|gates|plan>\n");
             return 1;
         }
+    }
+
+    /* Subcommand: plan */
+    if (argc >= 2 && strcmp(argv[1], "plan") == 0) {
+        if (argc >= 3 && (strcmp(argv[2], "verify") == 0 || strcmp(argv[2], "audit") == 0)) {
+            return run_cmd_audit_plan(argc, argv);
+        }
+        return run_cmd_audit_plan(argc, argv);
     }
 
     /* Subcommand: scaffold */

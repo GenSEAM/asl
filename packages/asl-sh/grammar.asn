@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-sh
 (:grammar
   :package asl-sh
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "BatchDagPlan" :kind :type :tokens 1)
     (:sym :name "BatchDagStep" :kind :type :tokens 1)
     (:sym :name "DaemonEntry" :kind :type :tokens 1)
@@ -28,6 +25,7 @@
     (:sym :name "LockVerdict" :kind :type :tokens 1)
     (:sym :name "LogEntry" :kind :type :tokens 1)
     (:sym :name "LogLevel" :kind :type :tokens 1)
+    (:sym :name "OobDemuxer" :kind :type :tokens 1)
     (:sym :name "OutputSkeleton" :kind :type :tokens 1)
     (:sym :name "Pipeline" :kind :type :tokens 1)
     (:sym :name "PortVerdict" :kind :type :tokens 1)
@@ -46,7 +44,6 @@
     (:sym :name "SupervisorVerdict" :kind :type :tokens 1)
     (:sym :name "TwoTierSpool" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name ":diff-summary" :kind :type :tokens 2)
     (:sym :name "cmd" :kind :fn :tokens 1)
     (:sym :name "collapse-cr" :kind :fn :tokens 2)
@@ -84,6 +81,7 @@
     (:sym :name "session-kill!" :kind :fn :tokens 2)
     (:sym :name "session-spawn!" :kind :fn :tokens 2)
     (:sym :name "session-tail!" :kind :fn :tokens 2)
+    (:sym :name "spool-sync!" :kind :fn :tokens 2)
     (:sym :name "spool-truncate" :kind :fn :tokens 2)
     (:sym :name "spool-unlink" :kind :fn :tokens 2)
     (:sym :name "spool-write" :kind :fn :tokens 2)
@@ -97,7 +95,6 @@
     (:sym :name "with-stdin" :kind :fn :tokens 2)
     (:sym :name "with-timeout" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "check-rss-ceiling" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'check-rss': scopes check specifically against configured memory ceiling threshold")
     (:sym :name "check-step-deadline" :kind :fn :tokens 3
@@ -112,6 +109,8 @@
           :rationale "Cannot be reduced to 'count-balance': distinguishes AST parenthesis balance calculation from general bracket or token counting")
     (:sym :name "detect-bound-port" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'detect-port': distinguishes network listening port detection from device port queries")
+    (:sym :name "detect-deadlock-escalation" :kind :fn :tokens 3
+          :rationale "Enforces two-stage stdin deadlock escalation with SIGTERM and SIGKILL thresholds")
     (:sym :name "extract-content-length" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-length': explicitly scopes integer extraction to Content-Length protocol headers")
     (:sym :name "extract-error-summary" :kind :fn :tokens 3
@@ -136,8 +135,6 @@
           :rationale "Cannot be reduced to ':log': distinguishes git linearized commit history envelope from general application log payloads")
     (:sym :name ":git-search-results" :kind :type :tokens 3
           :rationale "Cannot be reduced to ':search': distinguishes git cross-branch search result envelope from general engine queries")
-    (:sym :name ":git-topo" :kind :type :tokens 2
-          :rationale "Cannot be reduced to ':topo': distinguishes git repository topology payload from network or ast topology")
     (:sym :name ":git-worktree" :kind :type :tokens 2
           :rationale "Cannot be reduced to ':worktree': distinguishes git worktree record payload from working directory tags")
     (:sym :name ":git-worktrees" :kind :type :tokens 2
@@ -188,6 +185,8 @@
           :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to disk storage allocation with byte capping")
     (:sym :name "make-lock-verdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to singleton advisory lock evaluation")
+    (:sym :name "make-oob-demuxer" :kind :fn :tokens 3
+          :rationale "Constructs an OobDemuxer with bounded memory buffer ceiling and two-tier spool")
     (:sym :name "make-port-verdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to bound network port evaluation")
     (:sym :name "make-process-receipt" :kind :fn :tokens 3
@@ -204,6 +203,10 @@
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to split-loop worker supervisor evaluation")
     (:sym :name "make-two-tier-spool" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to RAM ring plus disk spool coordination")
+    (:sym :name "oob-demux-chunk" :kind :fn :tokens 3
+          :rationale "Streams a chunk into the two-tier spool while bounding active memory under 64MB")
+    (:sym :name "oob-demux-finish" :kind :fn :tokens 3
+          :rationale "Finalizes two-tier spool and returns a compact ProcessReceipt (<80 tokens)")
     (:sym :name "parse-file-loc" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-loc': distinguishes compiler diagnostic file:line:col parsing from memory or URL location strings")
     (:sym :name "parse-port-number" :kind :fn :tokens 3
@@ -234,6 +237,8 @@
           :rationale "Cannot be reduced to 'extend-timeout': dynamically pushes watchdog ceiling on active session")
     (:sym :name "session-set-timeout" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'set-timeout': explicitly updates watchdog ceiling on active session")
+    (:sym :name "session-step-watchdog!" :kind :fn :tokens 3
+          :rationale "Advances session idle timer and enforces two-stage watchdog deadlock escalation")
     (:sym :name "skeleton-has-errors?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'has-errors?': evaluates error predicates specifically on OutputSkeleton records")
     (:sym :name "spool-is-unlinked?" :kind :fn :tokens 3
@@ -242,14 +247,20 @@
           :rationale "Cannot be reduced to 'test-stripping': isolates ANSI sequence removal assertions from general string trimming tests")
     (:sym :name "test-cr-collapsing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-collapsing': isolates terminal carriage return overwrite tests from whitespace collapsing")
+    (:sym :name "spool-write-sync!" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'write-sync': distinguishes disk spool atomic circular write-and-flush operation")
     (:sym :name "test-diagnostic-extraction" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-extraction': scopes test specifically to multi-compiler diagnostic parsing")
+    (:sym :name "test-disk-spool-50mb-hard-cap" :kind :fn :tokens 6
+          :rationale "Cannot be reduced to 'test-spool-cap': explicitly verifies 50MB stream data bounded strictly within 10MB hard cap in RAM and on disk")
     (:sym :name "test-disk-spool-auto-unlink" :kind :fn :tokens 5
           :rationale "Cannot be reduced to 'test-unlink': isolates auto-unlink file descriptor lifecycle guarantee")
     (:sym :name "test-disk-spool-circular-cap" :kind :fn :tokens 5
           :rationale "Cannot be reduced to 'test-spool': isolates 10MB circular truncation boundary verification")
     (:sym :name "test-line-dedup" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-dedup': scopes test specifically to stream log line deduplication algorithms")
+    (:sym :name "test-oob-stream-demux-memory-bound" :kind :fn :tokens 6
+          :rationale "Verifies 100MB synthetic stream bounded strictly < 64MB with clean termination")
     (:sym :name "test-reduce-stream-integration" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-reduce': scopes test to the integrated ANSI stripping, windowing, and parsing pipeline")
     (:sym :name "test-retention-windowing" :kind :fn :tokens 3
@@ -258,6 +269,8 @@
           :rationale "Cannot be reduced to 'test-ring': isolates 200-line capacity wrap verification")
     (:sym :name "test-sh-lifecycle-wiring" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-sh': isolates command lifecycle spooling and watchdog wiring")
+    (:sym :name "test-session-deadlock-detection" :kind :fn :tokens 4
+          :rationale "Verifies idle deadlock auditing and flag transitions")
     (:sym :name "test-two-tier-spool-integration" :kind :fn :tokens 5
           :rationale "Cannot be reduced to 'test-spool': tests integrated RAM ring and disk spool execution")
     (:sym :name "test-watchdog-deadlock" :kind :fn :tokens 3
@@ -285,7 +298,6 @@
     (:sym :name "dag-format-summary" :kind :fn :tokens 3
           :rationale "Formats standard ASN summary string of batch execution status tallies")
 
-    ;; Modular Process Supervision Aliases (d46, d47)
     (:sym :name "proc/status" :kind :fn :tokens 2
           :rationale "Modular 1-to-2 token alias for process supervision step status")
     (:sym :name "proc/list" :kind :fn :tokens 2

@@ -1,7 +1,7 @@
 (module search/engine
   :d "SearXNG metasearch aggregator, proxy pool rotator, and agent context extractor"
   :x [Proxy ProxyStatus SearchItem SearchResult select-proxy deduplicate-results format-for-llm]
-  :i [(core/strings :as s)])
+  :i [(asl-text/string :as s)])
 
 (dfe ProxyStatus
   (:c active   []               "Healthy and active proxy")

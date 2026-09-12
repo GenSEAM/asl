@@ -3,8 +3,16 @@
  :entry "src/gates.asl"
  :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
  :asl-first true
- :modules ["asl-gates/gates"
+ :modules ["asl-gates/annotation-lint"
+           "asl-gates/gate-runner"
+           "asl-gates/gates"
+           "asl-gates/grammar-gate"
+           "asl-gates/manifest-gate"
+           "asl-gates/polarity"
+           "asl-gates/runner"
+           "asl-gates/shebang-audit"
            "asl-gates/site-claims"
+           "asl-gates/skills-gate"
            "asl-gates/stratification"]
  :dependencies ["asl-parser"
                 "asl-checker"

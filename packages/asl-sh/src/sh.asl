@@ -1,47 +1,31 @@
 (module asl-sh
   :d "AgentScript Shell & Process Automation Engine: Subprocess execution, pipelines & logging (@pcp:d-446d)."
   :x [run-cmd! exec-receipt! run-pipeline! log-info! log-warn! log-err!]
-  :i [(core/process :a proc)
-      (core/pipe    :a pipe)
-      (core/log     :a log)
+  :i [(asl-sh/process :a proc)
+      (asl-sh/pipe    :a pipe)
+      (asl-sh/log     :a log)
       (reducer      :a red)
       (spool        :a spool)
-      (watchdog     :a wd)])
+      (watchdog     :a wd)
+      (apm          :a apm)])
 
 (df ! exec-receipt! [(c proc/ProcessCmd)] -> (Result proc/ProcessReceipt proc/ProcessError)
   :d "Executes a typed ProcessCmd and demuxes output into a compact ProcessReceipt with two-tier spooling and watchdog guards."
   (mt (proc/exec! c)
     ((ok out)
      (let [(spool-path (red/generate-spool-path (.-bin c) (.-duration-ms out)))
-           (tt-spool (spool/make-two-tier-spool spool-path 200 10485760))
-           (out-lines (if (string-empty? (.-stdout out)) (list) (string-split (.-stdout out) "\n")))
-           (spooled (fold (fn [(st spool/TwoTierSpool) (ln String)] -> spool/TwoTierSpool (spool/two-tier-push st ln)) tt-spool out-lines))
+           (demuxer (apm/make-oob-demuxer spool-path 67108864))
+           (demuxed (if (string-empty? (.-stdout out))
+                        demuxer
+                        (apm/oob-demux-chunk demuxer (.-stdout out))))
            (rss-verdict (wd/check-rss-ceiling 0 512))
            (deadlock-verdict (wd/detect-deadlock 0 10000))
-           (bound-port (fold (fn [(acc (Option Int64)) (ln String)] -> (Option Int64)
-                               (mt acc
-                                 ((some _) acc)
-                                 ((none)
-                                  (let [(pv (wd/detect-bound-port ln))]
-                                    (if (.-detected pv)
-                                        (some (.-port pv))
-                                        (none))))))
-                             (none)
-                             out-lines))
+           (bound-port (let [(pv (wd/detect-bound-port (.-stdout out)))]
+                         (if (.-detected pv) (some (.-port pv)) (none))))
            (_ (mt bound-port
                 ((some p) (log/info! "asl-sh" (str ":port-bound " (string-from-int64 p))))
                 ((none) ())))
-           (closed-spool (spool/two-tier-close spooled))
-           (base-receipt (red/demux-stream (.-stdout out) (.-stderr out) (.-exit-code out) (.-duration-ms out) (.-path (.-disk closed-spool))))
-           (final-summary (if (.-exceeded rss-verdict)
-                              (str (.-summary base-receipt) " :oom-killed")
-                              (.-summary base-receipt)))
-           (receipt (proc/make-process-receipt
-                      (.-exit-code base-receipt)
-                      (.-duration-ms base-receipt)
-                      (.-peak-rss-mb base-receipt)
-                      (.-spool-path base-receipt)
-                      final-summary))]
+           (receipt (apm/oob-demux-finish demuxed (.-exit-code out) (.-duration-ms out)))]
        (ok receipt)))
     ((err e) (err e))))
 

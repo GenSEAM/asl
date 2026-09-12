@@ -1,0 +1,14 @@
+(:lexicon
+  :version "1.0.0"
+  :source "asl/grammar/lexicon.asn"
+  :terms [
+    (:term :canonical "harness" :spoken ["хайнесс" "ханес" "хайнес" "харнесс"] :scope :tool :why "Acoustic ASR mishearing correction for test and evaluation harness")
+    (:term :canonical "asex" :spoken ["асекс" "эйсекс" "асех"] :scope :project :why "Acoustic ASR correction for repository and project codename")
+    (:term :canonical "shrody" :spoken ["шроуди" "шроди" "шродя"] :scope :tool :why "Acoustic ASR correction for Shrody browser agent tool")
+    (:term :canonical "pcp" :spoken ["пцп" "пиписи"] :scope :tool :why "Acoustic ASR correction for Prompt Context Protocol tool")
+    (:term :canonical "edison" :spoken ["эдисон" "эддисон" "эди"] :scope :agent :why "Acoustic ASR correction for Edison agent role")
+    (:term :canonical "genseam" :spoken ["генсим" "дженсим"] :scope :project :why "Acoustic ASR correction for GenSEAM organization namespace")
+    (:term :canonical "scout" :spoken ["скаут"] :scope :agent :why "Acoustic ASR correction for scout perception agent")
+    (:term :canonical "reviewer" :spoken ["ревьюер" "ревью"] :scope :agent :why "Acoustic ASR correction for reviewer agent")
+  ]
+)

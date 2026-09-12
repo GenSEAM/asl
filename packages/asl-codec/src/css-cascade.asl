@@ -134,7 +134,7 @@
   (let [(matching-rules (filter (fn [(r CssRule)] -> Bool (selector-matches? (.-selector r) target-selector)) rules))
         (inline-props (parse-prop-declarations inline-style))
         (all-vars (extract-css-variables (s/join "\n" (map (fn [(r CssRule)] -> Str
-                                                             (s/join "; " (map (fn [(p CssProperty)] -> Str (s/concat (.-name p) ": " (.-value p))) (.-properties r))))
+                                                             (s/join "; " (map (fn [(p CssProperty)] -> Str (str (.-name p) ": " (.-value p))) (.-properties r))))
                                                             rules))))]
     (let [(merged-map
             (fold (fn [(acc (List (Pair Str Str))) (rule CssRule)] -> (List (Pair Str Str))
@@ -158,8 +158,8 @@
 
 (df format-computed-style [(style ComputedStyle)] -> Str
   :d "Formats resolved computed style as dense ASN S-expression."
-  (let [(prop-strs (map (fn [(p (Pair Str Str))] -> Str (s/concat ":" (pair-first p) " \"" (pair-second p) "\"")) (.-properties style)))
-        (var-strs (map (fn [(v (Pair Str Str))] -> Str (s/concat ":" (pair-first v) " \"" (pair-second v) "\"")) (.-resolved-variables style)))]
-    (s/concat "(:computed-style :selector \"" (.-selector style) "\" "
+  (let [(prop-strs (map (fn [(p (Pair Str Str))] -> Str (str ":" (pair-first p) " \"" (pair-second p) "\"")) (.-properties style)))
+        (var-strs (map (fn [(v (Pair Str Str))] -> Str (str ":" (pair-first v) " \"" (pair-second v) "\"")) (.-resolved-variables style)))]
+    (str "(:computed-style :selector \"" (.-selector style) "\" "
               ":props [" (s/join " " prop-strs) "] "
               ":variables [" (s/join " " var-strs) "])")))

@@ -1,6 +1,6 @@
 (module grammar/density-test
   :d "Automated assertion test suite for grammar density and rationale compliance"
-  :exports [test-density-audit])
+  :x [test-density-audit])
 
 (df test-density-audit []
   (assert (> (count [:df :fn :module :import :export :assert]) 0) "grammar symbols verified")

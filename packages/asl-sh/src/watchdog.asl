@@ -8,6 +8,7 @@
       check-rss-ceiling
       make-deadlock-verdict
       detect-deadlock
+      detect-deadlock-escalation
       make-port-verdict
       detect-bound-port
       parse-port-number
@@ -36,11 +37,21 @@
   (:f deadlocked Bool "True if stdin pipe has been idle at or beyond deadline")
   (:f idle-ms Int64 "Duration stdin pipe has been idle in milliseconds")
   (:f ceiling-ms Int64 "Configured idle deadlock ceiling in milliseconds (default 10000)")
-  (:f event String "Audit event emitted: :deadlock-detected or :ok"))
+  (:f event String "Audit event emitted: :deadlock-detected, :deadlock-sigterm, :deadlock-sigkill, or :ok")
+  (:f signal String "Signal dispatched: NONE, SIGTERM, or SIGKILL")
+  (:f exit-code Int64 "Synthetic exit status code: 0, 143, or 137")
+  (:f kill-ceiling-ms Int64 "Configured SIGKILL ceiling in milliseconds (default 12000)"))
 
 (df make-deadlock-verdict [(deadlocked Bool) (idle-ms Int64) (ceiling-ms Int64) (event String)] -> DeadlockVerdict
   :d "Constructs a DeadlockVerdict."
-  (DeadlockVerdict :deadlocked deadlocked :idle-ms idle-ms :ceiling-ms ceiling-ms :event event))
+  (DeadlockVerdict
+    :deadlocked deadlocked
+    :idle-ms idle-ms
+    :ceiling-ms ceiling-ms
+    :event event
+    :signal (if deadlocked "SIGTERM" "NONE")
+    :exit-code (if deadlocked 143 0)
+    :kill-ceiling-ms 12000))
 
 (df detect-deadlock [(idle-ms Int64) (ceiling-ms Int64)] -> DeadlockVerdict
   :d "Checks idle duration on blocking stdin pipe against ceiling (default 10,000ms)."
@@ -48,6 +59,39 @@
     (if (>= idle-ms cap)
         (make-deadlock-verdict true idle-ms cap ":deadlock-detected")
         (make-deadlock-verdict false idle-ms cap ":ok"))))
+
+(df detect-deadlock-escalation [(idle-ms Int64) (term-ms Int64) (kill-ms Int64)] -> DeadlockVerdict
+  :d "Enforces two-stage stdin deadlock escalation: SIGTERM at term-ms (default 10s), SIGKILL at kill-ms (default 12s)."
+  (let [(t-cap (if (<= term-ms 0) 10000 term-ms))
+        (k-cap (if (<= kill-ms 0) 12000 kill-ms))]
+    (cond
+      ((>= idle-ms k-cap)
+       (DeadlockVerdict
+         :deadlocked true
+         :idle-ms idle-ms
+         :ceiling-ms t-cap
+         :event ":deadlock-sigkill"
+         :signal "SIGKILL"
+         :exit-code 137
+         :kill-ceiling-ms k-cap))
+      ((>= idle-ms t-cap)
+       (DeadlockVerdict
+         :deadlocked true
+         :idle-ms idle-ms
+         :ceiling-ms t-cap
+         :event ":deadlock-sigterm"
+         :signal "SIGTERM"
+         :exit-code 143
+         :kill-ceiling-ms k-cap))
+      (:else
+       (DeadlockVerdict
+         :deadlocked false
+         :idle-ms idle-ms
+         :ceiling-ms t-cap
+         :event ":ok"
+         :signal "NONE"
+         :exit-code 0
+         :kill-ceiling-ms k-cap)))))
 
 (dfs StepDeadlineVerdict
   (:f timed-out Bool "True if step execution duration exceeded watchdog deadline")

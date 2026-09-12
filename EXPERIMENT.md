@@ -190,7 +190,7 @@ unevaluable at this sample size. What the pilot *can* do is detect catastrophic 
 that cannot produce parseable or type-correct AgentScript at all — which is a cheap and legitimate kill
 gate. A positive pilot licenses spending on a real run; it does not validate the concept.
 
-**Host language decided:** the compiler is hosted in Rust (PCP `d-2030`). This does not affect the
+**Host language decided:** the compiler is hosted in Rust (PCP `D2030`). This does not affect the
 measurement targets, which remain Python and JavaScript per amendment 2026-08-20-b.
 
 ### 2026-08-21-a — H5 restated to the backends that exist (made BEFORE any results)
@@ -236,7 +236,7 @@ builtins, failures are values of the closed union `IoError`, effects are tracked
 the signature (§4.2, §5.7), and a program's entry point is `main` (§4.0). Every backend lowers it,
 and the differential gate compares whole programs on stdout *and* exit status across all six
 targets, including a failing path, so the error mapping each host derives independently is checked
-rather than assumed. PCP `r-56bf`, `d-4533`.
+rather than assumed. PCP `r-56bf`, `D4533`.
 
 The earlier amendment's text is left as written. Pre-registration means the record of what was
 believed when is not edited afterwards; a later fact goes in a later entry, dated, which is what

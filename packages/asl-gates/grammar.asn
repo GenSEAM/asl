@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-gates
 (:grammar
   :package asl-gates
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Symbols (Baseline)
     (:sym :name "main" :kind :fn :tokens 1)
     (:sym :name "ClaimRecord" :kind :type :tokens 1)
     (:sym :name "AuditResult" :kind :type :tokens 1)
@@ -20,7 +17,6 @@
     (:sym :name "LayerTier" :kind :type :tokens 1)
     (:sym :name "StratificationReport" :kind :type :tokens 1)
 
-    ;; 2-Token Symbols (with :rationale)
     (:sym :name "run-suite" :kind :fn :tokens 2
           :rationale "Executes semantic verification across list of paths")
     (:sym :name "audit-claim" :kind :fn :tokens 2
@@ -52,7 +48,6 @@
     (:sym :name "verify-manifests" :kind :fn :tokens 2
           :rationale "Verifies package manifest structure across packages")
 
-    ;; >2 Token Symbols (with :rationale)
     (:sym :name "verify-source-syntax" :kind :fn :tokens 3
           :rationale "Verifies pure ASL AST parse without errors")
     (:sym :name "verify-file-semantic" :kind :fn :tokens 3

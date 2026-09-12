@@ -10,6 +10,8 @@
       ring-to-string
       make-disk-spool
       spool-write
+      spool-sync!
+      spool-write-sync!
       spool-truncate
       spool-unlink
       spool-is-unlinked?
@@ -83,24 +85,44 @@
   (let [(chunk-len (int32-to-int64 (string-length chunk)))]
     (if (<= chunk-len 0)
         spool
-        (let [(combined (str (.-content spool) chunk))
-              (comb-len (+ (.-current-bytes spool) chunk-len))
-              (cap (.-max-bytes spool))]
-          (if (<= comb-len cap)
-              (DiskSpool
-                :path (.-path spool)
-                :max-bytes cap
-                :current-bytes comb-len
-                :content combined
-                :is-unlinked false)
-              (let [(start (- comb-len cap))
-                    (truncated (option-or (string-slice combined start comb-len) ""))]
+        (let [(cap (.-max-bytes spool))]
+          (if (>= chunk-len cap)
+              (let [(truncated (option-or (string-slice chunk (- chunk-len cap) chunk-len) ""))]
                 (DiskSpool
                   :path (.-path spool)
                   :max-bytes cap
                   :current-bytes cap
                   :content truncated
-                  :is-unlinked false)))))))
+                  :is-unlinked false))
+              (let [(cur-len (.-current-bytes spool))
+                    (comb-len (+ cur-len chunk-len))]
+                (if (<= comb-len cap)
+                    (DiskSpool
+                      :path (.-path spool)
+                      :max-bytes cap
+                      :current-bytes comb-len
+                      :content (str (.-content spool) chunk)
+                      :is-unlinked false)
+                    (let [(keep-len (- cap chunk-len))
+                          (head-retained (option-or (string-slice (.-content spool) (- cur-len keep-len) cur-len) ""))
+                          (truncated (str head-retained chunk))]
+                      (DiskSpool
+                        :path (.-path spool)
+                        :max-bytes cap
+                        :current-bytes cap
+                        :content truncated
+                        :is-unlinked false)))))))))
+
+(df ! spool-sync! [(spool DiskSpool)] -> (Result DiskSpool String)
+  :d "Writes spool content to disk using builtin file-write, ensuring file on disk is strictly <= max-bytes."
+  (mt (file-write (.-path spool) (.-content spool))
+    ((ok _) (ok spool))
+    ((err _) (err (str "Failed to sync disk spool to " (.-path spool))))))
+
+(df ! spool-write-sync! [(spool DiskSpool) (chunk String)] -> (Result DiskSpool String)
+  :d "Pushes chunk circularly and flushes to disk."
+  (let [(w (spool-write spool chunk))]
+    (spool-sync! w)))
 
 (df spool-truncate [(spool DiskSpool)] -> DiskSpool
   :d "Enforces circular byte truncation to max-bytes."
@@ -119,13 +141,14 @@
             :is-unlinked (.-is-unlinked spool))))))
 
 (df spool-unlink [(spool DiskSpool)] -> DiskSpool
-  :d "Reclaims disk spool storage and marks file descriptor as unlinked."
-  (DiskSpool
-    :path (.-path spool)
-    :max-bytes (.-max-bytes spool)
-    :current-bytes 0
-    :content ""
-    :is-unlinked true))
+  :d "Reclaims disk spool storage and marks file descriptor as unlinked, truncating file on disk."
+  (let [(_ (file-write (.-path spool) ""))]
+    (DiskSpool
+      :path (.-path spool)
+      :max-bytes (.-max-bytes spool)
+      :current-bytes 0
+      :content ""
+      :is-unlinked true)))
 
 (df spool-is-unlinked? [(spool DiskSpool)] -> Bool
   :d "Verifies whether the ephemeral disk spool has been unlinked."

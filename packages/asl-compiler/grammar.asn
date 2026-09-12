@@ -1,16 +1,12 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-compiler
 (:grammar
   :package asl-compiler
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "CompileResult" :kind :type :tokens 1)
     (:sym :name "EvalValue" :kind :type :tokens 1)
     (:sym :name "EvalEnv" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "compile-source" :kind :fn :tokens 2)
     (:sym :name "format-diagnostic" :kind :fn :tokens 2)
     (:sym :name "run-tests" :kind :fn :tokens 2)
@@ -22,7 +18,6 @@
     (:sym :name "is-truthy?" :kind :fn :tokens 2)
     (:sym :name "format-val" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "compile-source-target" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compile-target': 'source' component is mandatory to distinguish in-memory string compilation from disk file compilation")
     (:sym :name "compile-standalone-source" :kind :fn :tokens 3
@@ -78,7 +73,6 @@
     (:sym :name "test-eval-if-branch" :kind :fn :tokens 4
           :rationale "Scopes unit test suite specifically to evaluator conditional if-branch execution")
 
-    ;; Compact Rewrite Symbols (Phase 395)
     (:sym :name "CompactionRule" :kind :type :tokens 1)
     (:sym :name "make-compaction-rule" :kind :fn :tokens 3
           :rationale "Constructs a compaction rule with verbose symbol, compact alias, and estimated token savings")
@@ -89,7 +83,6 @@
     (:sym :name "default-compaction-rules" :kind :fn :tokens 3
           :rationale "Provides standard catalog of canonical token shrinking compaction rules")
 
-    ;; Compact Rewrite Test Symbols
     (:sym :name "test-compact-rule-creation" :kind :fn :tokens 4
           :rationale "Verifies construction and property access of compaction rules")
     (:sym :name "test-is-compaction-target" :kind :fn :tokens 4

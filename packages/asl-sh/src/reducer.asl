@@ -19,7 +19,7 @@
       format-output-skeleton]
   :i [(ansi :a ansi)
       (diagnostics :a diag)
-      (core/process :a proc)])
+      (asl-sh/process :a proc)])
 
 (dfs ReductionConfig
   (:f head-limit Int64 "Maximum lines retained at stream head (default 500)")
@@ -212,11 +212,8 @@
                                 (or (string-starts-with? t "Step ")
                                     (or (string-starts-with? t "Phase ")
                                         (or (string-starts-with? t "Test suite ")
-                                            (or (string-starts-with? t "PASS ")
-                                                (or (string-starts-with? t "FAIL ")
-                                                    (or (string-starts-with? t "FAILED ")
-                                                        (or (string-starts-with? t "[Config]")
-                                                            (string-starts-with? t "================================================================================")))))))))))))))))
+                                            (or (string-starts-with? t "[Config]")
+                                                (string-starts-with? t "================================================================================"))))))))))))))
 
 (df is-error-line? [(line String)] -> Bool
   :d "Detects whether an individual log line contains an error or failure indicator."
@@ -294,7 +291,10 @@
         :summary "Lines: 0 | Sections: 0 | Status: clean")
       (let [(cleaned (ansi/clean-terminal-text raw-text))
             (norm (string-replace cleaned "\r\n" "\n"))
-            (lines (string-split norm "\n"))
+            (trimmed (if (string-ends-with? norm "\n")
+                         (option-or (string-slice norm 0 (- (string-length norm) 1)) norm)
+                         norm))
+            (lines (string-split trimmed "\n"))
             (total-lines (list-length lines))
             (total-bytes (string-length norm))
             (diags (diag/extract-diagnostics lines))

@@ -1,14 +1,10 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-codegen
 (:grammar
   :package asl-codegen
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "VNode" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "any-true?" :kind :fn :tokens 2)
     (:sym :name "builtin-template" :kind :fn :tokens 2)
     (:sym :name "capitalize-seg" :kind :fn :tokens 2)
@@ -59,7 +55,6 @@
     (:sym :name "wat-set" :kind :fn :tokens 2)
     (:sym :name "wat-type" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "boxed-type-if-recursive" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'boxed-type': the 'if-recursive' condition is mandatory to prevent unconditional heap allocation of non-recursive types in Rust")
     (:sym :name "clone-if-ident" :kind :fn :tokens 3

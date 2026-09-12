@@ -6,7 +6,7 @@
            make-join make-select render-binary-op render-placeholder render-json-path
            render-expr-str count-params render-select count-pair-params render-logical-op
            collect-params collect-joins-params render-joins-indexed render-where-clause-indexed]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (dfe SqlDialect
   (:c sqlite     [] "SQLite 3 embedded dialect with '?' positional placeholders")

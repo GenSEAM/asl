@@ -2,7 +2,7 @@
   :d "Pure AgentScript native CLI command handler for ASN transcoding and inspection."
   :x [dispatch-asn format-asn-help run-check run-to-json run-from-json
       asn-to-json-value]
-  :i [(core/asn :a a) (core/codec :a c)])
+  :i [(asl-codec/asn :a a) (asl-codec/core :a c)])
 
 
 

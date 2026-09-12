@@ -137,9 +137,8 @@
 
 (df run-tests [] -> Bool
   :d "Runs all co-testing parity test suites."
-  (let [(_t1 (test-co-algebraic-parity))
-        (_t2 (test-co-comparison-parity))
-        (_t3 (test-co-logic-parity))
-        (_t4 (test-co-control-parity))
-        (_t5 (test-co-wasm-lowering-parity))]
-    true))
+  (let [(t1 (test-co-algebraic-parity))
+        (t2 (test-co-comparison-parity))
+        (t3 (test-co-logic-parity))
+        (t4 (test-co-control-parity))
+        (t5 (test-co-wasm-lowering-parity))] (and t1 (and t2 (and t3 (and t4 t5))))))

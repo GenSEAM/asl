@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-sql
 (:grammar
   :package asl-sql
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "BinaryOp" :kind :type :tokens 1)
     (:sym :name "ColumnDef" :kind :type :tokens 1)
     (:sym :name "InsertQuery" :kind :type :tokens 1)
@@ -21,7 +18,6 @@
     (:sym :name "UpdateQuery" :kind :type :tokens 1)
     (:sym :name "UpsertQuery" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "bool-expr" :kind :fn :tokens 2)
     (:sym :name "col-expr" :kind :fn :tokens 2)
     (:sym :name "collect-params" :kind :fn :tokens 2)
@@ -46,7 +42,6 @@
     (:sym :name "run-tests" :kind :fn :tokens 2)
     (:sym :name "str-expr" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "count-pair-params" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'count-params': specifically counts key-value insertion/update pairs rather than flat positional parameters")
     (:sym :name "dialect-param-prefix" :kind :fn :tokens 3

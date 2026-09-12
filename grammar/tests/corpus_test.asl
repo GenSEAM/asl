@@ -1,6 +1,6 @@
 (module grammar/corpus-test
   :d "Automated assertion test suite for grammar corpus"
-  :exports [test-corpus-integrity])
+  :x [test-corpus-integrity])
 
 (df test-corpus-integrity []
   (assert (> (count [1 2 3]) 0) "corpus files loaded cleanly")

@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-lint
 (:grammar
   :package asl-lint
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "CloneGroup" :kind :type :tokens 1)
     (:sym :name "CloneType" :kind :type :tokens 1)
     (:sym :name "CloneVerdict" :kind :type :tokens 1)
@@ -20,7 +17,6 @@
     (:sym :name "TokenMetrics" :kind :type :tokens 1)
     (:sym :name "TokenSmell" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "can-autofix" :kind :fn :tokens 2)
     (:sym :name "detect-crutches" :kind :fn :tokens 2)
     (:sym :name "IncongruityReport" :kind :type :tokens 2)
@@ -31,7 +27,6 @@
     (:sym :name "severity-penalty" :kind :fn :tokens 2)
     (:sym :name "token-ceiling" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "calculate-quality-score" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'quality-score': separates the multi-factor calculation function from the resulting metric value")
     (:sym :name "can-auto-repair" :kind :fn :tokens 3

@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-codec
 (:grammar
   :package asl-codec
   :version "0.1.0"
   :tokens-baseline 2
   :symbols [
-    ;; Core Types and Functions (<= 2 tokens)
     (:sym :name "JsonValue" :kind :type :tokens 1)
     (:sym :name "JsonEntry" :kind :type :tokens 1)
     (:sym :name "make-kv" :kind :fn :tokens 2)
@@ -46,7 +43,6 @@
     (:sym :name "emit-stub" :kind :fn :tokens 2)
     (:sym :name "calc-savings" :kind :fn :tokens 2)
 
-    ;; Symbols with > 2 tokens (with verified :rationale)
     (:sym :name "render-json-array" :kind :fn :tokens 3
           :rationale "Renders JSON array literal from list of values")
     (:sym :name "render-json-object" :kind :fn :tokens 3
@@ -179,7 +175,6 @@
     (:sym :name "run-svg-tests" :kind :fn :tokens 3
           :rationale "Executes complete vector transpile test suite")
 
-    ;; Phase 24 CSS Cascade Engine Symbols
     (:sym :name "CssSpecificity" :kind :type :tokens 1)
     (:sym :name "CssProperty" :kind :type :tokens 1)
     (:sym :name "CssRule" :kind :type :tokens 1)
@@ -207,7 +202,6 @@
     (:sym :name "run-css-tests" :kind :fn :tokens 3
           :rationale "Executes complete CSS cascade unit test suite")
 
-    ;; Phase 35 ASN Documentation Schema & Dual-Target Compiler Symbols
     (:sym :name "DocSymbol" :kind :type :tokens 1)
     (:sym :name "DocModule" :kind :type :tokens 1)
     (:sym :name "create-doc-symbol" :kind :fn :tokens 3
@@ -233,7 +227,6 @@
     (:sym :name "run-doc-engine-tests" :kind :fn :tokens 3
           :rationale "Runs complete unit test suite for documentation schema and compiler")
 
-    ;; ASN Shell Command DSL & Transpiler Symbols
     (:sym :name "ShTranspileResult" :kind :type :tokens 1)
     (:sym :name "make-cmd" :kind :fn :tokens 2)
     (:sym :name "make-pipe" :kind :fn :tokens 2)
@@ -265,7 +258,6 @@
     (:sym :name "run-sh-tests" :kind :fn :tokens 3
           :rationale "Test runner executing all shell transpile test cases")
 
-    ;; Phase 266 Data Placement Optimizer Symbols
     (:sym :name "PlacementKind" :kind :type :tokens 2)
     (:sym :name "placement-aos" :kind :val :tokens 2)
     (:sym :name "placement-columnar" :kind :val :tokens 2)
@@ -288,7 +280,6 @@
     (:sym :name "measure-placement-savings" :kind :fn :tokens 3
           :rationale "Calculates percentage token compaction delta relative to baseline AoS layout")
 
-    ;; Phase 290 ASNL Streaming Protocol Symbols
     (:sym :name "asnl-validate-line" :kind :fn :tokens 3
           :rationale "Validates single ASNL line delimiter balance and escaping")
     (:sym :name "asnl-encode-line" :kind :fn :tokens 3
@@ -302,7 +293,6 @@
     (:sym :name "asnl-to-jsonl" :kind :fn :tokens 3
           :rationale "Transpiles ASNL S-expression lines into RFC 8259 JSON Lines")
 
-    ;; Phase 317 Dense Tabular, DAG Pyramid & Sparkline Codec Symbols
     (:sym :name "TableData" :kind :type :tokens 1)
     (:sym :name "DagNode" :kind :type :tokens 1)
     (:sym :name "DagPyramid" :kind :type :tokens 1)

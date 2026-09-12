@@ -130,7 +130,8 @@
               (after-star (if is-cur
                               (string-trim (option-or (string-slice line 1 (string-length line)) ""))
                               clean))
-              (toks (string-split after-star " "))
+              (raw-toks (string-split after-star " "))
+              (toks (list-filter (fn [(t String)] -> Bool (not (string-empty? (string-trim t)))) raw-toks))
               (raw-name (string-trim (option-or (list-get toks 0) "")))]
           (if (string-empty? raw-name)
               (none)

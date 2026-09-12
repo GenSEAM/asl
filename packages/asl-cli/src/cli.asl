@@ -57,7 +57,7 @@
     ((none) (ev/val-null))))
 
 (df find-asserts [(expr rd/SExpr)] -> (List rd/SExpr)
-  :d "Recursively walks an SExpr to collect all (assert ...) forms."
+  :d "Recursively walks an SExpr to collect all assert and reject forms."
   (mt expr
     ((rd/sexpr-atom _) (list))
     ((rd/sexpr-vect items)
@@ -66,7 +66,7 @@
            (list)
            items))
     ((rd/sexpr-list items)
-     (if (= (rd/sexpr-head expr) "assert")
+     (if (or (= (rd/sexpr-head expr) "assert") (= (rd/sexpr-head expr) "reject"))
          (list expr)
          (fold (fn [(acc (List rd/SExpr)) (it rd/SExpr)] -> (List rd/SExpr)
                  (list-concat acc (find-asserts it)))

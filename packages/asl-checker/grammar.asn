@@ -1,11 +1,8 @@
-;; Package Grammar & Exported Symbol Registry (ASN)
-;; asl-checker
 (:grammar
   :package asl-checker
   :version "0.1.0"
   :tokens-baseline 1
   :symbols [
-    ;; 1-Token Baseline Types
     (:sym :name "CaseSummary" :kind :type :tokens 1)
     (:sym :name "Diagnostic" :kind :type :tokens 1)
     (:sym :name "EnumSummary" :kind :type :tokens 1)
@@ -17,7 +14,6 @@
     (:sym :name "Type" :kind :type :tokens 1)
     (:sym :name "UnifyOutcome" :kind :type :tokens 1)
 
-    ;; <= 2-Token Primary API Symbols
     (:sym :name "apply-subst" :kind :fn :tokens 2)
     (:sym :name "builtin-sig" :kind :fn :tokens 2)
     (:sym :name "check-file!" :kind :fn :tokens 2)
@@ -43,7 +39,6 @@
     (:sym :name "unify" :kind :fn :tokens 1)
     (:sym :name "unordered-type?" :kind :fn :tokens 2)
 
-    ;; Multi-Token Symbols (with :rationale)
     (:sym :name "clean-num-sign" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'clean-sign': explicitly bounds stripping to numeric literals, preventing collision with operator symbols")
     (:sym :name "first-char-str" :kind :fn :tokens 3

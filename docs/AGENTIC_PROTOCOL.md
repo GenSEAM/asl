@@ -26,7 +26,7 @@ Neighbouring documents and what they govern:
 Natural language between agents is bloated, lossy, and unverifiable. AgP frames an
 agent-to-agent exchange as typed AgentScript s-expressions that run natively over:
 
-- **MCP (Model Context Protocol)** JSON-RPC 2.0 stdio and SSE transports
+- **AWP (Agent Wire Protocol)** JSON-RPC 2.0 stdio and SSE transports
 - **Google A2A** and client-to-agent streams
 - **Unix domain sockets and WebSockets** for local multi-agent swarms
 

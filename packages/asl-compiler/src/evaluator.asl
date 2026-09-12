@@ -85,6 +85,12 @@
       (val-bool true)
       (val-error msg-str)))
 
+(df eval-reject [(cond-val EvalValue) (msg-str String)] -> EvalValue
+  :d "Rejects a truthy forbidden-state condition and returns val-bool on safe state."
+  (if (is-truthy? cond-val)
+      (val-error msg-str)
+      (val-bool true)))
+
 (df eval-atom [(atom-str String) (env EvalEnv)] -> EvalValue
   :d "Evaluates an atomic token literal or resolves an identifier from environment."
   (cond
@@ -510,7 +516,7 @@
       ((none) env))))
 
 (df eval-special-form [(op String) (args (List rd/SExpr)) (env EvalEnv)] -> EvalValue
-  :d "Evaluates special forms including if, assert, let, do, df, fn, and module."
+  :d "Evaluates special forms including if, assert, reject, let, do, df, fn, and module."
   (cond
     ((= op "if")
      (mt (list-head args)
@@ -553,6 +559,12 @@
                        ((none) "Assertion failed")))]
             (eval-assert c-val msg))))
        ((none) (val-error "ERR_MALFORMED_ASSERT"))))
+    ((= op "reject")
+     (mt (list-head args)
+       ((some cond-expr)
+        (let [(c-val (eval-sexpr cond-expr env))]
+          (eval-reject c-val "Rejection condition evaluated to true")))
+       ((none) (val-error "ERR_MALFORMED_REJECT"))))
     ((= op "do")
      (mt (list-head args)
        ((some first-expr)
@@ -644,7 +656,7 @@
         (mt h
           ((rd/sexpr-atom op)
            (cond
-             ((or (= op "if") (or (= op "assert") (or (= op "do") (or (= op "let") (or (= op "df") (or (= op "fn") (= op "module")))))))
+             ((or (= op "if") (or (= op "assert") (or (= op "reject") (or (= op "do") (or (= op "let") (or (= op "df") (or (= op "fn") (= op "module"))))))))
               (mt (list-tail items)
                 ((some args) (eval-special-form op args env))
                 ((none) (eval-special-form op (list) env))))

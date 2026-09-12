@@ -1,7 +1,7 @@
 (module asl-lint/test
   :d "Unit tests for asl-lint: QualityMetrics, smell codes, score calculation, cognitive nesting, and rational universalism orthogonality."
   :x [main]
-  :i [(core/lint :a l) (rules :a r)])
+  :i [(asl-lint/core :a l) (rules :a r)])
 
 (df test-quality-score [] -> Bool
   (assert (= (l/calculate-quality-score 0 0) 100) "Quality score with 0 errors and warnings must be 100")
@@ -35,7 +35,7 @@
     true))
 
 (df test-rational-orthogonality [] -> Bool
-  :d "Verifies Rational Universalism orthogonality checks (c-0003, d-0034)."
+  :d "Verifies Rational Universalism orthogonality checks (C0003, D0034)."
   (let [(single (r/check-rational-orthogonality "unique-fn" 1 false false))
         (justified-divergent (r/check-rational-orthogonality "frame-codec" 3 false true))
         (unjustified-duplication (r/check-rational-orthogonality "escape-str" 2 false false))

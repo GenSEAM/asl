@@ -8,11 +8,12 @@
       test-watchdog-deadlock
       test-watchdog-port-detection
       test-sh-lifecycle-wiring
+      test-disk-spool-50mb-hard-cap
       run-tests]
   :i [(spool        :a spool)
       (watchdog     :a wd)
       (sh           :a sh)
-      (core/process :a proc)])
+      (asl-sh/process :a proc)])
 
 (df test-ring-buffer-capacity [] -> Bool
   :d "Verifies that RAM RingBuffer evicts oldest lines FIFO when 200 capacity is exceeded."
@@ -144,6 +145,40 @@
        (assert false "run-cmd! execution must succeed")
        false))))
 
+(df test-disk-spool-50mb-hard-cap [] -> Bool
+  :d "Verifies that streaming 50MB of data enforces the 10MB hard cap in RAM and on disk."
+  (let [(path "/tmp/asl-proc-test-50mb.spool")
+        (spool0 (spool/make-disk-spool path 10485760))
+        (chunk-1mb (string-repeat "0123456789ABCDEF" 65536))
+        (last-chunk (str (string-repeat "0123456789ABCDEF" 65535) "FINAL_BYTES_50MB"))
+        (spool-49 (fold (fn [(s spool/DiskSpool) (_i Int64)] -> spool/DiskSpool
+                          (spool/spool-write s chunk-1mb))
+                        spool0
+                        (range 0 49)))
+        (spool-50 (spool/spool-write spool-49 last-chunk))
+        (sync-res (spool/spool-sync! spool-50))]
+    (assert (= (.-current-bytes spool-50) 10485760) "Spool current-bytes must be exactly 10MB (10485760)")
+    (assert (<= (int32-to-int64 (string-length (.-content spool-50))) 10485760) "Spool content length in RAM must be <= 10485760")
+    (assert (string-ends-with? (.-content spool-50) "FINAL_BYTES_50MB") "Tail of spool content must match the final bytes of 50MB stream")
+    (mt sync-res
+      ((ok synced)
+       (let [(read-res (file-read path))]
+         (mt read-res
+           ((ok disk-data)
+            (let [(disk-len (int32-to-int64 (string-length disk-data)))]
+              (assert (<= disk-len 10485760) "Synced disk file size read via file-read must be <= 10485760 bytes")
+              (assert (= disk-len 10485760) "Synced disk file size must be exactly 10485760 bytes")
+              (assert (string-ends-with? disk-data "FINAL_BYTES_50MB") "Disk content must preserve trailing stream bytes")
+              (let [(unlinked (spool/spool-unlink synced))]
+                (assert (spool/spool-is-unlinked? unlinked) "Spool must be unlinked after test")
+                true)))
+           ((err _)
+            (assert false "file-read of synced spool must succeed")
+            false))))
+      ((err _)
+       (assert false "spool-sync! must succeed")
+       false))))
+
 (df run-tests [] -> Bool
   :d "Executes all test suites for two-tier spooling and resource watchdogs."
   (and (test-ring-buffer-capacity)
@@ -153,4 +188,5 @@
                       (and (test-watchdog-rss-ceiling)
                            (and (test-watchdog-deadlock)
                                 (and (test-watchdog-port-detection)
-                                     (test-sh-lifecycle-wiring)))))))))
+                                     (and (test-sh-lifecycle-wiring)
+                                          (test-disk-spool-50mb-hard-cap))))))))))

@@ -59,6 +59,7 @@
 
     ;; Falsification & Test Polarity Forms (1-2 tokens)
     (:sym :name "assert" :kind :form :tokens 1)
+    (:sym :name "reject" :kind :form :tokens 1)
     (:sym :name "refute" :kind :form :tokens 1)
     (:sym :name "assert-reject" :kind :fn :tokens 2)
     (:sym :name "assert-err" :kind :fn :tokens 2)

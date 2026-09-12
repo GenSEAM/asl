@@ -82,11 +82,10 @@
 
 (df run-tests [] -> Bool
   :d "Runs all compiler pipeline tests."
-  (let [(_t1 (test-compile-clean-function))
-        (_t2 (test-compile-wasm-target))
-        (_t3 (test-compile-go-target))
-        (_t4 (test-compile-clean-schema))
-        (_t5 (test-compile-embedded-target))
-        (_t6 (test-compile-parse-error))
-        (_t7 (test-compile-type-error))]
-    true))
+  (let [(t1 (test-compile-clean-function))
+        (t2 (test-compile-wasm-target))
+        (t3 (test-compile-go-target))
+        (t4 (test-compile-clean-schema))
+        (t5 (test-compile-embedded-target))
+        (t6 (test-compile-parse-error))
+        (t7 (test-compile-type-error))] (and t1 (and t2 (and t3 (and t4 (and t5 (and t6 t7))))))))
