@@ -16,5 +16,9 @@
     (:tier :id "deployed"
       :purpose "Autonomous sovereign native binary"
       :constraint "Single binary (bin/asl) with zero host external runtime requirements (no Node, Python, or MCP).")
+    (:tier :id "oracle"
+      :purpose "Optional development-time differential oracle and reference implementation"
+      :allowed ["racket"]
+      :constraint "Permitted as development-time boundary only; strictly forbidden as a deployment dependency.")
   ]
 )
