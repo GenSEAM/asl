@@ -2,6 +2,7 @@
   :package asl-codec
   :version "0.1.0"
   :tokens-baseline 2
+  :substrate (:conversion "lossless" :property "round trip" :preservation ["positions" "escaping" "keywords"])
   :symbols [
     (:sym :name "JsonValue" :kind :type :tokens 1)
     (:sym :name "JsonEntry" :kind :type :tokens 1)

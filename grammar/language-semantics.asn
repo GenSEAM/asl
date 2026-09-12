@@ -185,5 +185,9 @@
       :rule "Human legibility is provided strictly via out-of-band decoders and never paid for as language source bloat; decoder output is strictly rejected if submitted as source code."
       :failureCode "ERR_DECODER_OUTPUT_REENTRY"
       :exitCode 1)
+    (:semantic :id losslessAsnCodeConversion
+      :rule "Conversion between language forms and ASN records is total and lossless in both directions, preserving positions and escaping; non round tripping constructs are defects."
+      :failureCode "ERR_LOSSY_SUBSTRATE_CONVERSION"
+      :exitCode 1)
   ]
 )
