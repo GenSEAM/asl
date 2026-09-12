@@ -3,6 +3,13 @@
   :hostAdapter (:path "asl/tools/asl.c" :boundary "host-adapter" :declared true :third-party false :reported true)
   :substrate (:zero-substrate-claimed false :substrate-status "declared-host-substrate" :host-runtime "macOS/POSIX")
   :collectionRoots ["asl/packages" "."]
+  :developmentBoundaries [
+    (:boundary :id "racket-reference"
+      :purpose "Semantic naming and reference dialect; optional differential oracle"
+      :status :reference-only
+      :deployedRequirement :forbidden
+      :differentialOracle (:maintenanceCost "two-implementation drift overhead" :adopted false))
+  ]
   :tiers [
     (:tier :id "bootstrap"
       :purpose "Seed compiler and C host used to compile the resident engine"
