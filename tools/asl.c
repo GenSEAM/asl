@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <mach/mach.h>
 #include <fnmatch.h>
+#include <math.h>
 #include <JavaScriptCore/JavaScriptCore.h>
 
 #include "engine_js.h"
@@ -1417,6 +1418,280 @@ static int op_leases(int step_id, const char *ws_root, StrBuf *out) {
     return 0;
 }
 
+typedef struct {
+    char file[1024];
+    int line;
+    double score;
+    char snippet[256];
+} Bm25Hit;
+
+typedef struct {
+    char files[512][1024];
+    int count;
+    int cap;
+} Bm25FileList;
+
+static void bm25_collector_cb(const char *rel_path, const char *full_path, void *user_data) {
+    Bm25FileList *list = (Bm25FileList *)user_data;
+    if (list->count >= list->cap) return;
+    size_t len = strlen(full_path);
+    if (len > 4 && (strcmp(full_path + len - 4, ".asn") == 0 || strcmp(full_path + len - 4, ".asl") == 0)) {
+        strncpy(list->files[list->count], full_path, sizeof(list->files[list->count]) - 1);
+        list->count++;
+    }
+}
+
+static int compare_bm25_hits(const void *a, const void *b) {
+    const Bm25Hit *ha = (const Bm25Hit *)a;
+    const Bm25Hit *hb = (const Bm25Hit *)b;
+    if (hb->score > ha->score) return 1;
+    if (hb->score < ha->score) return -1;
+    return 0;
+}
+
+static int op_q(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *query = get_kw_arg(tokens, ntokens, "query");
+    if (!query) query = get_pos_arg(tokens, ntokens, 1);
+    if (!query || !query[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"q\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Query string required\")\n");
+        return 1;
+    }
+
+    const char *scope = get_kw_arg(tokens, ntokens, "scope");
+    if (!scope) scope = "decisions";
+    if (scope[0] == ':') scope++;
+
+    char search_dir[4096];
+    if (strcmp(scope, "decisions") == 0) {
+        snprintf(search_dir, sizeof(search_dir), "%s/.asl/mem/decisions", ws_root);
+    } else if (strcmp(scope, "tasks") == 0) {
+        snprintf(search_dir, sizeof(search_dir), "%s/.asl/mem/tasks", ws_root);
+    } else if (strcmp(scope, "code") == 0) {
+        snprintf(search_dir, sizeof(search_dir), "%s", ws_root);
+    } else if (strcmp(scope, "mem") == 0 || strcmp(scope, "all") == 0) {
+        snprintf(search_dir, sizeof(search_dir), "%s/.asl/mem", ws_root);
+    } else {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"q\" :status \"rejected\" :error-code \":ERR_UNSUPPORTED\" :message \"Unsupported scope: ");
+        sb_append_escaped(out, scope);
+        sb_append(out, "\")\n");
+        return 1;
+    }
+
+    const char *klimit = get_kw_arg(tokens, ntokens, "limit");
+    int limit = klimit ? atoi(klimit) : 10;
+    if (limit <= 0) limit = 10;
+
+    char qterms[32][64];
+    int nqterms = 0;
+    const char *qp = query;
+    while (*qp && nqterms < 32) {
+        while (*qp && !isalnum((unsigned char)*qp)) qp++;
+        if (!*qp) break;
+        int tlen = 0;
+        while (*qp && isalnum((unsigned char)*qp) && tlen < 63) {
+            qterms[nqterms][tlen++] = (char)tolower((unsigned char)*qp);
+            qp++;
+        }
+        qterms[nqterms][tlen] = '\0';
+        if (tlen > 0) nqterms++;
+    }
+
+    if (nqterms == 0) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"q\" :status \"ok\" :query \"");
+        sb_append_escaped(out, query);
+        sb_append(out, "\" :scope \"");
+        sb_append_escaped(out, scope);
+        sb_append(out, "\" :count 0 :hits [])\n");
+        return 0;
+    }
+
+    Bm25FileList flist;
+    flist.count = 0;
+    flist.cap = 512;
+    walk_dir_recursive(search_dir, "", bm25_collector_cb, &flist);
+
+    if (flist.count == 0) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"q\" :status \"ok\" :query \"");
+        sb_append_escaped(out, query);
+        sb_append(out, "\" :scope \"");
+        sb_append_escaped(out, scope);
+        sb_append(out, "\" :count 0 :hits [])\n");
+        return 0;
+    }
+
+    typedef struct {
+        int doc_len;
+        int tf[32];
+        int best_line;
+        char best_snippet[256];
+    } DocStat;
+
+    DocStat *doc_stats = (DocStat *)calloc(flist.count, sizeof(DocStat));
+    if (!doc_stats) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"q\" :status \"rejected\" :error-code \":ERR_OOM\" :message \"Memory allocation failure\")\n");
+        return 1;
+    }
+
+    int term_dfs[32] = {0};
+    double total_len = 0.0;
+
+    for (int i = 0; i < flist.count; i++) {
+        FILE *fp = fopen(flist.files[i], "r");
+        if (!fp) continue;
+
+        char line[2048];
+        int line_no = 0;
+        int max_line_matches = 0;
+        int doc_words = 0;
+
+        while (fgets(line, sizeof(line), fp)) {
+            line_no++;
+            int line_matches = 0;
+            char *lp = line;
+
+            while (*lp) {
+                while (*lp && !isalnum((unsigned char)*lp)) lp++;
+                if (!*lp) break;
+                char word[64];
+                int wlen = 0;
+                while (*lp && isalnum((unsigned char)*lp) && wlen < 63) {
+                    word[wlen++] = (char)tolower((unsigned char)*lp);
+                    lp++;
+                }
+                word[wlen] = '\0';
+                doc_words++;
+
+                for (int t = 0; t < nqterms; t++) {
+                    if (strcmp(word, qterms[t]) == 0) {
+                        doc_stats[i].tf[t]++;
+                        line_matches++;
+                    }
+                }
+            }
+
+            if (line_matches > max_line_matches || (line_matches > 0 && doc_stats[i].best_line == 0)) {
+                max_line_matches = line_matches;
+                doc_stats[i].best_line = line_no;
+
+                char *start = line;
+                while (*start == ' ' || *start == '\t') start++;
+                char clean[256];
+                int ci = 0;
+                while (*start && *start != '\n' && *start != '\r' && ci < 250) {
+                    if (*start == '"') clean[ci++] = '\'';
+                    else if (isspace((unsigned char)*start)) clean[ci++] = ' ';
+                    else clean[ci++] = *start;
+                    start++;
+                }
+                clean[ci] = '\0';
+                strncpy(doc_stats[i].best_snippet, clean, sizeof(doc_stats[i].best_snippet) - 1);
+            }
+        }
+        fclose(fp);
+
+        doc_stats[i].doc_len = doc_words > 0 ? doc_words : 1;
+        total_len += doc_stats[i].doc_len;
+
+        for (int t = 0; t < nqterms; t++) {
+            if (doc_stats[i].tf[t] > 0) {
+                term_dfs[t]++;
+            }
+        }
+    }
+
+    double avg_len = total_len / flist.count;
+    if (avg_len < 1.0) avg_len = 1.0;
+    double k1 = 1.2;
+    double b = 0.75;
+    double N = (double)flist.count;
+
+    Bm25Hit *hits = (Bm25Hit *)malloc(flist.count * sizeof(Bm25Hit));
+    int nhits = 0;
+
+    for (int i = 0; i < flist.count; i++) {
+        double score = 0.0;
+        for (int t = 0; t < nqterms; t++) {
+            if (doc_stats[i].tf[t] > 0) {
+                double df = (double)term_dfs[t];
+                double idf = log(1.0 + (N - df + 0.5) / (df + 0.5));
+                if (idf < 0.0) idf = 0.0;
+                double tf = (double)doc_stats[i].tf[t];
+                double num = tf * (k1 + 1.0);
+                double den = tf + k1 * (1.0 - b + b * (doc_stats[i].doc_len / avg_len));
+                score += idf * (num / den);
+            }
+        }
+
+        if (score > 0.0001) {
+            const char *fpath = flist.files[i];
+            if (strncmp(fpath, ws_root, strlen(ws_root)) == 0) {
+                fpath += strlen(ws_root);
+                if (*fpath == '/') fpath++;
+            }
+            strncpy(hits[nhits].file, fpath, sizeof(hits[nhits].file) - 1);
+            hits[nhits].line = doc_stats[i].best_line > 0 ? doc_stats[i].best_line : 1;
+            hits[nhits].score = score;
+            strncpy(hits[nhits].snippet, doc_stats[i].best_snippet, sizeof(hits[nhits].snippet) - 1);
+            nhits++;
+        }
+    }
+
+    free(doc_stats);
+
+    if (nhits == 0) {
+        free(hits);
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"q\" :status \"ok\" :query \"");
+        sb_append_escaped(out, query);
+        sb_append(out, "\" :scope \"");
+        sb_append_escaped(out, scope);
+        sb_append(out, "\" :count 0 :hits [])\n");
+        return 0;
+    }
+
+    qsort(hits, nhits, sizeof(Bm25Hit), compare_bm25_hits);
+
+    int return_count = nhits < limit ? nhits : limit;
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"q\" :status \"ok\" :query \"");
+    sb_append_escaped(out, query);
+    sb_append(out, "\" :scope \"");
+    sb_append_escaped(out, scope);
+    sb_append(out, "\" :count ");
+    sb_append_int(out, nhits);
+    sb_append(out, " :hits [");
+
+    for (int k = 0; k < return_count; k++) {
+        sb_append(out, " (:hit :file \"");
+        sb_append_escaped(out, hits[k].file);
+        sb_append(out, "\" :line ");
+        sb_append_int(out, hits[k].line);
+        sb_append(out, " :score ");
+        char sc_str[32];
+        snprintf(sc_str, sizeof(sc_str), "%.4f", hits[k].score);
+        sb_append(out, sc_str);
+        sb_append(out, " :snippet \"");
+        sb_append_escaped(out, hits[k].snippet);
+        sb_append(out, "\")");
+    }
+    sb_append(out, " ])\n");
+
+    free(hits);
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -2369,6 +2644,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_claim(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "leases") == 0) {
         op_leases(step_id, ws_root, out);
+    } else if (strcmp(op, "q") == 0) {
+        op_q(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);

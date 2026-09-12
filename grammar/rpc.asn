@@ -2,7 +2,7 @@
 (:rpc-registry
   :version "1.0.0"
   :rejectionCode ":ERR_UNIMPLEMENTED"
-  :rejectionPolicy "Unrecognized or unimplemented operations (such as legacy :q) are rejected with status rejected and error-code :ERR_UNIMPLEMENTED."
+  :rejectionPolicy "Unrecognized or unimplemented operations are rejected with status rejected and error-code :ERR_UNIMPLEMENTED."
   :operations [
     ;; === Reading & Progressive Disclosure ===
     (:op :id "asl-intel-ast"
@@ -53,6 +53,13 @@
          :cmd "asl rpc '(:batch (:grep \"...\" [:file \"...\" | :dir \"...\"]))' or asl grep <pattern> [path]"
          :category "search"
          :purpose "Substring line search across text files returning 1-indexed line numbers, file paths, and line text"
+         :savings "90%")
+
+    (:op "q"
+         :id "asl-q"
+         :cmd "asl rpc '(:batch (:q :query \"...\" [:scope \"decisions\"|\"tasks\"|\"code\"] [:limit <n>]))'"
+         :category "search"
+         :purpose "Semantic recall and ranked Okapi BM25 retrieval over .asl/mem ledgers and codebase"
          :savings "90%")
 
     ;; === Editing & Agentic IDE Refactoring ===
