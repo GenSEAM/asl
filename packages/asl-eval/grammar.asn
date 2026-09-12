@@ -1,0 +1,15 @@
+(:grammar
+  :package asl-eval
+  :version "0.1.0"
+  :tokens-baseline 1
+  :symbols [
+    (:sym :name "EvalResult" :kind :type :tokens 1)
+    (:sym :name "EvalEnv" :kind :type :tokens 1)
+    (:sym :name "Closure" :kind :type :tokens 1)
+
+    (:sym :name "eval-node" :kind :fn :tokens 2)
+    (:sym :name "invoke-closure" :kind :fn :tokens 2)
+    (:sym :name "load-module" :kind :fn :tokens 2)
+    (:sym :name "make-eval-env" :kind :fn :tokens 2)
+  ]
+)
