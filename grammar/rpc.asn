@@ -140,11 +140,11 @@
          :savings "90%")
 
     ;; === Supervised Execution & Git ===
-    (:op :id "asl-exec"
-         :cmd "asl exec \"<cmd>\" or asl rpc '(:batch (:exec :cmd \"...\" [:timeout-ms <ms>] [:daemon true]))'"
+    (:op :id "asl-run"
+         :cmd "asl rpc '(:batch (:run :cmd \"...\" [:cwd \"...\"] [:timeout-ms <ms>] [:limit <bytes>]))'"
          :category "execution"
-         :purpose "Supervised process execution with autonomous 15m default ceiling, sliding watchdog, deadlock trapping, and daemon mode"
-         :savings "80%")
+         :purpose "Structured supervised execution under watchdog with exit code, duration, separated stdout/stderr, and bounded output"
+         :savings "85%")
 
     (:op :id "asl-git"
          :cmd "asl git <subcmd> or asl rpc '(:batch (:git :op \"where\"|\"branches\"|\"compare\"|\"search\"|\"show\"|\"log\"|\"worktrees\"|\"diff\"))'"

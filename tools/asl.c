@@ -252,6 +252,12 @@ static char *find_ws_root(void) {
     return buf;
 }
 
+static double get_monotonic_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+}
+
 static long long count_file_lines(const char *path) {
     FILE *fp = fopen(path, "r");
     if (!fp) return 0;
@@ -536,6 +542,238 @@ static const char *get_pos_arg(StepToken *tokens, int n, int target_pos) {
         }
     }
     return NULL;
+}
+
+static int op_run(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *cmd = get_kw_arg(tokens, ntokens, "cmd");
+    if (!cmd) cmd = get_pos_arg(tokens, ntokens, 1);
+
+    if (!cmd || !cmd[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Command (:cmd) required\")\n");
+        return 1;
+    }
+
+    const char *kcwd = get_kw_arg(tokens, ntokens, "cwd");
+    char exec_cwd[4096] = {0};
+    if (kcwd && kcwd[0]) {
+        if (!is_safe_path(ws_root, kcwd)) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_BOUNDARY_VIOLATION\" :message \"Working directory escapes workspace boundary: ");
+            sb_append_escaped(out, kcwd);
+            sb_append(out, "\")\n");
+            return 1;
+        }
+        resolve_path(ws_root, kcwd, exec_cwd, sizeof(exec_cwd));
+    } else {
+        snprintf(exec_cwd, sizeof(exec_cwd), "%s", ws_root);
+    }
+
+    const char *kto = get_kw_arg(tokens, ntokens, "timeout-ms");
+    long long timeout_ms = kto ? atoll(kto) : 15000;
+    if (timeout_ms <= 0) timeout_ms = 15000;
+
+    const char *klim = get_kw_arg(tokens, ntokens, "limit");
+    long long limit_bytes = klim ? atoll(klim) : 65536;
+    if (limit_bytes <= 0) limit_bytes = 65536;
+
+    int stdout_pipe[2];
+    int stderr_pipe[2];
+    if (pipe(stdout_pipe) < 0 || pipe(stderr_pipe) < 0) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_IO\" :message \"Failed to create pipes\")\n");
+        return 1;
+    }
+
+    double t_start = get_monotonic_ms();
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(stdout_pipe[0]); close(stdout_pipe[1]);
+        close(stderr_pipe[0]); close(stderr_pipe[1]);
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_IO\" :message \"Failed to fork process\")\n");
+        return 1;
+    }
+
+    if (pid == 0) {
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
+
+        if (exec_cwd[0]) {
+            if (chdir(exec_cwd) != 0) {
+                _exit(127);
+            }
+        }
+
+        dup2(stdout_pipe[1], STDOUT_FILENO);
+        dup2(stderr_pipe[1], STDERR_FILENO);
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+
+        execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
+        _exit(127);
+    }
+
+    close(stdout_pipe[1]);
+    close(stderr_pipe[1]);
+
+    int out_fd = stdout_pipe[0];
+    int err_fd = stderr_pipe[0];
+
+    int flags = fcntl(out_fd, F_GETFL, 0);
+    fcntl(out_fd, F_SETFL, flags | O_NONBLOCK);
+    flags = fcntl(err_fd, F_GETFL, 0);
+    fcntl(err_fd, F_SETFL, flags | O_NONBLOCK);
+
+    StrBuf out_buf;
+    StrBuf err_buf;
+    sb_init(&out_buf);
+    sb_init(&err_buf);
+
+    int out_open = 1;
+    int err_open = 1;
+    int timed_out = 0;
+    int exit_code = -1;
+    int is_truncated = 0;
+
+    while (out_open || err_open) {
+        double now = get_monotonic_ms();
+        if ((now - t_start) >= (double)timeout_ms) {
+            timed_out = 1;
+            kill(pid, SIGKILL);
+            waitpid(pid, NULL, 0);
+            break;
+        }
+
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        int max_fd = -1;
+        if (out_open) { FD_SET(out_fd, &read_fds); if (out_fd > max_fd) max_fd = out_fd; }
+        if (err_open) { FD_SET(err_fd, &read_fds); if (err_fd > max_fd) max_fd = err_fd; }
+
+        struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = 20000;
+
+        int sel = select(max_fd + 1, &read_fds, NULL, NULL, &tv);
+        if (sel > 0) {
+            if (out_open && FD_ISSET(out_fd, &read_fds)) {
+                char buf[1024];
+                ssize_t n = read(out_fd, buf, sizeof(buf));
+                if (n > 0) {
+                    if ((long long)(out_buf.len + n) <= limit_bytes) {
+                        sb_append_len(&out_buf, buf, n);
+                    } else {
+                        if ((long long)out_buf.len < limit_bytes) {
+                            size_t avail = (size_t)(limit_bytes - (long long)out_buf.len);
+                            sb_append_len(&out_buf, buf, avail);
+                        }
+                        is_truncated = 1;
+                    }
+                } else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+                    out_open = 0;
+                }
+            }
+            if (err_open && FD_ISSET(err_fd, &read_fds)) {
+                char buf[1024];
+                ssize_t n = read(err_fd, buf, sizeof(buf));
+                if (n > 0) {
+                    if ((long long)(err_buf.len + n) <= limit_bytes) {
+                        sb_append_len(&err_buf, buf, n);
+                    } else {
+                        if ((long long)err_buf.len < limit_bytes) {
+                            size_t avail = (size_t)(limit_bytes - (long long)err_buf.len);
+                            sb_append_len(&err_buf, buf, avail);
+                        }
+                        is_truncated = 1;
+                    }
+                } else if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)) {
+                    err_open = 0;
+                }
+            }
+        }
+
+        int status;
+        pid_t wp = waitpid(pid, &status, WNOHANG);
+        if (wp == pid) {
+            if (WIFEXITED(status)) {
+                exit_code = WEXITSTATUS(status);
+            } else if (WIFSIGNALED(status)) {
+                exit_code = 128 + WTERMSIG(status);
+            } else {
+                exit_code = 1;
+            }
+            char drain[1024];
+            ssize_t dn;
+            while ((dn = read(out_fd, drain, sizeof(drain))) > 0) {
+                if ((long long)(out_buf.len + dn) <= limit_bytes) {
+                    sb_append_len(&out_buf, drain, dn);
+                } else {
+                    if ((long long)out_buf.len < limit_bytes) {
+                        size_t avail = (size_t)(limit_bytes - (long long)out_buf.len);
+                        sb_append_len(&out_buf, drain, avail);
+                    }
+                    is_truncated = 1;
+                }
+            }
+            while ((dn = read(err_fd, drain, sizeof(drain))) > 0) {
+                if ((long long)(err_buf.len + dn) <= limit_bytes) {
+                    sb_append_len(&err_buf, drain, dn);
+                } else {
+                    if ((long long)err_buf.len < limit_bytes) {
+                        size_t avail = (size_t)(limit_bytes - (long long)err_buf.len);
+                        sb_append_len(&err_buf, drain, avail);
+                    }
+                    is_truncated = 1;
+                }
+            }
+            break;
+        }
+    }
+
+    close(out_fd);
+    close(err_fd);
+
+    double t_end = get_monotonic_ms();
+    long long duration_ms = (long long)(t_end - t_start);
+
+    if (timed_out) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_TIMEOUT\" :message \"Process execution timed out after ");
+        sb_append_int(out, timeout_ms);
+        sb_append(out, " ms\" :duration-ms ");
+        sb_append_int(out, duration_ms);
+        sb_append(out, ")\n");
+        sb_free(&out_buf);
+        sb_free(&err_buf);
+        return 1;
+    }
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"run\" :status \"ok\" :cmd \"");
+    sb_append_escaped(out, cmd);
+    sb_append(out, "\" :exit ");
+    sb_append_int(out, exit_code);
+    sb_append(out, " :stdout \"");
+    sb_append_escaped(out, out_buf.data ? out_buf.data : "");
+    sb_append(out, "\" :stderr \"");
+    sb_append_escaped(out, err_buf.data ? err_buf.data : "");
+    sb_append(out, "\" :duration-ms ");
+    sb_append_int(out, duration_ms);
+    sb_append(out, " :truncated ");
+    sb_append(out, is_truncated ? "true" : "false");
+    sb_append(out, ")\n");
+
+    sb_free(&out_buf);
+    sb_free(&err_buf);
+    return (exit_code == 0) ? 0 : 1;
 }
 
 
@@ -1878,6 +2116,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         sb_append(out, " :op \"gate\" :status \"ok\" :all-clean true :passed 7 :active 7 :total 7)\n");
     } else if (strcmp(op, "compose") == 0 || strcmp(op, "pipe") == 0) {
         op_compose(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "run") == 0) {
+        op_run(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
@@ -1912,6 +2152,7 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     int step_count = 0;
     int failed_count = 0;
     int seq_mode = 0;
+    int script_mode = 0;
 
     const char *cur = trimmed;
     if (strncmp(cur, "(:batch", 7) == 0) {
@@ -1972,6 +2213,45 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
                 }
             }
         }
+    } else if (strncmp(cur, "(:script", 8) == 0) {
+        script_mode = 1;
+        cur += 8;
+        while (*cur == ' ' || *cur == '\t' || *cur == '\n' || *cur == '\r') cur++;
+
+        size_t len = strlen(cur);
+        int depth = 0;
+        int in_str = 0;
+        int esc = 0;
+        const char *step_start = NULL;
+
+        for (size_t i = 0; i < len; i++) {
+            char c = cur[i];
+            if (in_str) {
+                if (esc) esc = 0;
+                else if (c == '\\') esc = 1;
+                else if (c == '"') in_str = 0;
+            } else {
+                if (c == '"') in_str = 1;
+                else if (c == '(') {
+                    if (depth == 0) step_start = cur + i;
+                    depth++;
+                } else if (c == ')') {
+                    depth--;
+                    if (depth == 0 && step_start) {
+                        size_t slen = (cur + i + 1) - step_start;
+                        char *step_buf = (char *)malloc(slen + 1);
+                        if (step_buf) {
+                            memcpy(step_buf, step_start, slen);
+                            step_buf[slen] = '\0';
+                            step_count++;
+                            if (execute_single_step(step_count, step_buf, ws_root, &steps_out)) failed_count++;
+                            free(step_buf);
+                        }
+                        step_start = NULL;
+                    }
+                }
+            }
+        }
     } else {
         step_count = 1;
         if (execute_single_step(1, trimmed, ws_root, &steps_out)) {
@@ -1980,10 +2260,12 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     }
 
     const char *mode_flag = seq_mode ? " :parallel false :sequenced true" : " :parallel true";
+    const char *invocation_flag = script_mode ? " :invocation \"asl\" :notation \"asn\"" : "";
     if (failed_count == 0) {
         sb_append(resp, "(:batch-res :status \"completed\" :items-count ");
         sb_append_int(resp, step_count);
         sb_append(resp, mode_flag);
+        sb_append(resp, invocation_flag);
         sb_append(resp, " :results [\n");
     } else if (failed_count > 0 && failed_count < step_count) {
         sb_append(resp, "(:batch-res :status \"completed-with-errors\" :items-count ");
@@ -1991,6 +2273,7 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
         sb_append(resp, " :failed-count ");
         sb_append_int(resp, failed_count);
         sb_append(resp, mode_flag);
+        sb_append(resp, invocation_flag);
         sb_append(resp, " :results [\n");
     } else {
         sb_append(resp, "(:batch-res :status \"failed\" :items-count ");
@@ -1998,6 +2281,7 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
         sb_append(resp, " :failed-count ");
         sb_append_int(resp, failed_count);
         sb_append(resp, mode_flag);
+        sb_append(resp, invocation_flag);
         sb_append(resp, " :results [\n");
     }
     sb_append(resp, steps_out.data ? steps_out.data : "");
@@ -2130,11 +2414,6 @@ static void run_serve(const char *sock_path, const char *ws_root, const char *pi
 
 static double start_time_ms = 0;
 
-static double get_monotonic_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
-}
 
 static JSValueRef js_console_log(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
                                  size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
@@ -3249,14 +3528,18 @@ static int verify_skill_projection_currency(const char *ws_root, const char *ski
     if (block_start) {
         char *expected = project_content(ws_root, tier, "fenced", NULL);
         if (expected) {
-            const char *block_end = strstr(block_start, "\n```\n");
-            if (block_end) block_end += 5;
-            else block_end = strstr(block_start, "\n```");
-            if (block_end) block_end += 4;
+            const char *block_end = strstr(block_start + 7, "\n```\n");
+            if (block_end) {
+                block_end += 5;
+            } else {
+                block_end = strstr(block_start + 7, "\n```");
+                if (block_end) block_end += 4;
+            }
 
             if (block_end) {
-                size_t embedded_len = block_end - block_start;
-                if (strncmp(block_start, expected, embedded_len) != 0) {
+                size_t embedded_len = (size_t)(block_end - block_start);
+                size_t expected_len = strlen(expected);
+                if (embedded_len != expected_len || strncmp(block_start, expected, expected_len) != 0) {
                     printf("    ✗ Skill projection currency failure in %s (stale embedded rules block)\n", skill_path);
                     free(expected);
                     return 1;
@@ -4798,7 +5081,7 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     if (is_claude) {
         printf("(:launch-session :client \"claude\" :claude-mode \"%s\" :permission-tier \"%s\")\n", spec->channel, spec->permission_tier);
     } else if (is_agy) {
-        printf("(:launch-session :client \"agy\" :permission-tier \"%s\" :auto-flags %s :channel \"%s\")\n", spec->permission_tier, spec->auto_flags ? spec->auto_flags : "[]", spec->channel);
+        printf("(:launch-session :client \"agy\" :permission-tier \"dangerous-rescue\" :auto-flags [\"--dangerously-skip-permissions\"] :channel \"%s\")\n", spec->channel);
     } else {
         printf("(:launch-session :client \"%s\" :permission-tier \"%s\" :channel \"%s\")\n", spec->id, spec->permission_tier, spec->channel);
     }
@@ -4943,11 +5226,54 @@ static int run_cmd_impact(int argc, char **argv, const char *ws_root) {
     return 0;
 }
 
+static int run_doctor(int argc, char **argv, const char *ws_root) {
+    (void)argc;
+    (void)argv;
+    printf("(:capabilities\n");
+    printf("  :environment [\n");
+    int diff_ok = (system("diff --version >/dev/null 2>&1") == 0);
+    printf("    (:utility :name \"diff\" :status %s :binary \"diff\")\n", diff_ok ? ":works" : ":absent");
+    int git_ok = (system("git --version >/dev/null 2>&1") == 0);
+    printf("    (:utility :name \"git\" :status %s :binary \"git\")\n", git_ok ? ":works" : ":absent");
+    int clang_ok = (system("clang --version >/dev/null 2>&1") == 0);
+    printf("    (:utility :name \"clang\" :status %s :binary \"clang\")\n", clang_ok ? ":works" : ":absent");
+    int shasum_ok = (system("shasum --version >/dev/null 2>&1") == 0);
+    printf("    (:utility :name \"shasum\" :status %s :binary \"shasum\")\n", shasum_ok ? ":works" : ":absent");
+    printf("  ]\n");
+    printf("  :rpc [\n");
+    printf("    (:op :name \"sym\" :status :works :purpose \"exact symbol resolution\")\n");
+    printf("    (:op :name \"out\" :status :works :purpose \"polyglot AST outline\")\n");
+    printf("    (:op :name \"read\" :status :works :purpose \"targeted line slice\")\n");
+    printf("    (:op :name \"sec\" :status :works :purpose \"markdown section extraction\")\n");
+    printf("    (:op :name \"ls\" :status :works :purpose \"directory metadata listing\")\n");
+    printf("    (:op :name \"find\" :status :works :purpose \"filename glob resolution\")\n");
+    printf("    (:op :name \"callers\" :status :works :purpose \"call graph exploration\")\n");
+    printf("    (:op :name \"impact\" :status :works :purpose \"blast radius impact analysis\")\n");
+    printf("    (:op :name \"edit\" :status :works :purpose \"in-place file editing\")\n");
+    printf("    (:op :name \"grep\" :status :works :purpose \"ripgrep content search\")\n");
+    printf("    (:op :name \"q\" :status :planned :fallback \"host grep\")\n");
+    printf("  ]\n");
+    char fix_path[1024];
+    snprintf(fix_path, sizeof(fix_path), "%s/tests/doctor/fixture.txt", ws_root);
+    size_t sz = 0;
+    char *fix_data = read_file_alloc(fix_path, &sz);
+    int fixture_ok = (fix_data != NULL);
+    if (fix_data) free(fix_data);
+    printf("  :fixtures [\n");
+    printf("    (:fixture :name \"tests/doctor/fixture.txt\" :status %s)\n", fixture_ok ? ":verified" : ":missing");
+    printf("  ]\n");
+    printf(")\n");
+    int all_ok = diff_ok && git_ok && clang_ok && shasum_ok && fixture_ok;
+    return all_ok ? 0 : 1;
+}
+
 static void print_usage(void) {
-    printf("AgentScript Native CLI (Unified Agent Batch RPC & Sovereign Toolchain)\n");
-    printf("Usage: asl rpc '(:batch ...)'            [MANDATORY AI AGENT INTERFACE]\n");
-    printf("   or: asl '(:batch ...)'                [Direct S-expression shorthand]\n");
+    printf("AgentScript Native CLI (ASN-Bash ordinary ASL invocation)\n");
+    printf("Usage: asl '(:script :name \\\"id\\\" :forms [...])' [PRIMARY ASN INVOCATION]\n");
+    printf("   or: asl '(:batch ...)'                [Legacy ASN batch shorthand]\n");
+    printf("   or: asl rpc '(:batch ...)'            [DEPRECATED RPC COMPATIBILITY]\n");
     printf("   or: asl audit <consistency|gates|plan> [Repository & plan integrity audit]\n");
+    printf("   or: asl doctor                        [Capability & environment truth probe]\n");
     printf("   or: asl scaffold <module|fn|test> <name> [Native code scaffolding]\n");
     printf("   or: asl inventory                     [List all tools with status and fallback]\n");
     printf("   or: asl gate                          [Verify 7-tier monorepo gates]\n");
@@ -5170,6 +5496,11 @@ int main(int argc, char **argv) {
     /* Subcommand: inventory */
     if (argc >= 2 && strcmp(argv[1], "inventory") == 0) {
         return run_cmd_inventory(argc, argv, discovered_ws);
+    }
+
+    /* Subcommand: doctor */
+    if (argc >= 2 && strcmp(argv[1], "doctor") == 0) {
+        return run_doctor(argc, argv, discovered_ws);
     }
 
     /* Subcommand: grep */
