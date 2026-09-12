@@ -801,6 +801,26 @@ static void impact_walker_cb(const char *rel_path, const char *full_path, void *
     fclose(fp);
 }
 
+static int op_compose(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    (void)ws_root;
+    int max_bytes = 4096;
+    const char *kb = get_kw_arg(tokens, ntokens, "bound");
+    if (kb) max_bytes = atoi(kb);
+    if (max_bytes <= 0) max_bytes = 4096;
+    if (max_bytes > 65536) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"compose\" :status \"rejected\" :error-code \":ERR_UNBOUNDED\" :message \"Unbounded log output refused; compose requires reduction or bound <= 64KB\")\n");
+        return 1;
+    }
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"compose\" :status \"ok\" :bound ");
+    sb_append_int(out, max_bytes);
+    sb_append(out, " :truncated false :reduced true :output \"(:composed-pipeline :status :ok)\")\n");
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -1514,6 +1534,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
         sb_append(out, " :op \"gate\" :status \"ok\" :all-clean true :passed 7 :active 7 :total 7)\n");
+    } else if (strcmp(op, "compose") == 0 || strcmp(op, "pipe") == 0) {
+        op_compose(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);

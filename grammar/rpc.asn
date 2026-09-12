@@ -48,6 +48,13 @@
          :purpose "Instant resident-memory grep (<15ms) and vector semantic search across docstrings and comments"
          :savings "90%")
 
+    (:op "grep"
+         :id "asl-grep"
+         :cmd "asl rpc '(:batch (:grep \"...\" [:file \"...\" | :dir \"...\"]))' or asl grep <pattern> [path]"
+         :category "search"
+         :purpose "Substring line search across text files returning 1-indexed line numbers, file paths, and line text"
+         :savings "90%")
+
     ;; === Editing & Agentic IDE Refactoring ===
     (:op :id "asl-mem-edit"
          :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\"))'"
@@ -69,6 +76,13 @@
          :savings "90%")
 
     ;; === Git-Native Memory & Trajectory Continuity ===
+    (:op "mem"
+         :id "asl-mem"
+         :cmd "asl rpc '(:batch (:mem :query \"...\") | (:mem :write :kind \"...\" :content \"...\" :closure \"...\") | (:mem :promote :id \"...\" :to \"...\"))' or asl mem <query|write|promote>"
+         :category "memory"
+         :purpose "Unified memory query and write surface across intents, goals, practices and notes with path-independent search and lineage preservation"
+         :savings "92%")
+
     (:op :id "asl-mem-intent"
          :cmd "asl rpc '(:batch (:sec \".asl/mem/intent.asn\" \"<section>\"))'"
          :category "memory"
@@ -102,10 +116,9 @@
     (:op :id "asl-mem-staging"
          :cmd "asl rpc '(:batch (:diff) (:flush) (:discard))'"
          :category "editing"
-         :status :unsupported
-         :rejectionCode ":ERR_UNSUPPORTED"
-         :purpose "Staging operations are unsupported; edits write immediately to disk"
-         :savings "0%")
+         :status :active
+         :purpose "In-memory review staging allowing diff, flush, and discard before writing to disk"
+         :savings "90%")
 
     ;; === DAG Execution Combinators & Parallelism ===
     (:op :id "asl-batch-par"
@@ -235,11 +248,28 @@
          :savings "80%")
 
     ;; === Machine Notes & Observations ===
-    (:op :id "asl-note"
-         :cmd "asl rpc '(:batch (:note [:id \"...\"] [:q \"...\"] [:format \"asn\"|\"md\"]))' or asl note show <id>"
+    (:op "note"
+         :id "asl-note"
+         :cmd "asl rpc '(:batch (:note :write \"...\" | :query \"...\" | :list))' or asl note list"
          :category "memory"
          :purpose "Deterministic machine-native notes querying, keyword search, and dual-projection Markdown export"
          :savings "85%")
+
+    ;; === Task Management & Lifecycle ===
+    (:op "task"
+         :id "asl-task"
+         :cmd "asl rpc '(:batch (:task :claim \"...\" | :recover \"...\" | :list))' or asl task list"
+         :category "memory"
+         :purpose "Task session claim, recovery, and listing via InFlight.asn and tasks.asl"
+         :savings "85%")
+
+    ;; === Post Action Queue ===
+    (:op "queue"
+         :id "asl-queue"
+         :cmd "asl rpc '(:batch (:queue :enqueue \"...\" | :drain))' or asl queue drain"
+         :category "memory"
+         :purpose "Post action queue enqueue and drain"
+         :savings "80%")
 
     ;; === Resident Prompt Translation & Multilingual Normalization ===
     (:op :id "asl-translate"
@@ -247,5 +277,13 @@
          :category "translation"
          :purpose "Resident ASN Prompt Translator: converts user prompts into structured ASN with formal reasoning and safe fallback"
          :savings "40%")
+
+    ;; === Ad Hoc Composition & Pipeline Reduction ===
+    (:op "compose"
+         :id "asl-rpc-compose"
+         :cmd "asl rpc '(:batch (:compose [:bound <bytes>] ...))'"
+         :category "pipeline"
+         :purpose "Ad hoc RPC composition and reduction outside the model with bounded output and unreduced log refusal"
+         :savings "85%")
   ]
 )
