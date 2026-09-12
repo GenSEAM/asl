@@ -113,5 +113,13 @@
       :rule "A module is instantiated exactly once per resolved path and cached across requiring sites, ensuring consistent binding sharing."
       :failureCode "ERR_MULTIPLE_INSTANTIATION"
       :exitCode 1)
+    (:semantic :id sourceLocationPreservation
+      :rule "Every parsed S-expression form carries source location metadata (source path, line number, column, and span) through reading, macro expansion, and evaluation, mirroring Racket syntax objects."
+      :failureCode "ERR_SOURCE_LOCATION_MISSING"
+      :exitCode 1)
+    (:semantic :id diagnosticPositionQuoting
+      :rule "Compiler and runtime error diagnostics quote the exact source, line, and column of the responsible form rather than detached downstream call sites."
+      :failureCode "ERR_UNLOCATED_DIAGNOSTIC"
+      :exitCode 1)
   ]
 )
