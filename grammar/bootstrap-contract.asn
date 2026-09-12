@@ -1,0 +1,14 @@
+(:bootstrapContract :v 1 :src ADR-0081
+  :summary "Bootstrap generations, toolchain progression, and closure invariants for autonomous self-hosted ASL."
+  :stages [
+    (:stage :id 0 :name "seed" :toolchain "asl/tools/asl.c" :output "bin/asl" :desc "Owned C bootstrap interpreter seed")
+    (:stage :id 1 :name "stage1" :toolchain "asl-compiler" :output "asl/bin/asl-stage1" :desc "First-generation compiler built using seed")
+    (:stage :id 2 :name "stage2" :toolchain "asl-stage1" :output "asl/bin/asl-self" :desc "Second-generation autonomous self-compiled binary")
+    (:stage :id "wasm" :name "wasm32-wasi" :toolchain "asl-codegen/emit_wat" :output "asl/bin/asl-self.wasm" :desc "Portable WASM artifact")
+  ]
+  :closureCriteria [
+    "Autonomous compiler rebuild closure without external ecosystem dependencies"
+    "Explicit declared host boundaries and zero runtime dependencies"
+    "Semantic equivalence across bootstrap stages"
+  ]
+)
