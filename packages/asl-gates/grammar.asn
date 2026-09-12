@@ -188,4 +188,8 @@
           :rationale "Verifies emitted receipts retain path and line evidence")
     (:sym :name "audit-runtime-only-rules" :kind :fn :tokens 4
           :rationale "Verifies runtime-only rules declare explicit architectural reason")
+    (:sym :name "audit-c3-duplicates" :kind :fn :tokens 3
+          :rationale "Audits duplicate capabilities and symbol definitions outside allowlist")
+    (:sym :name "audit-d51-convergence" :kind :fn :tokens 3
+          :rationale "Audits per-package CamelCase test functions and camelCase keys convergence")
   ])

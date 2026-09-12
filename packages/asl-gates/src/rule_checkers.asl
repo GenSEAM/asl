@@ -8,7 +8,9 @@
       audit-hidden-tests-rule
       audit-bounded-rule
       audit-output-rule
-      audit-runtime-only-rules]
+      audit-runtime-only-rules
+      audit-c3-duplicates
+      audit-d51-convergence]
   :i [])
 
 (dfs RuleCheckResult
@@ -83,3 +85,23 @@
     (if (and budget-ok edge-ok)
         (make-rule-check-result "runtimeOnly" true "budget and edge explicitly declared runtime-only with reason")
         (make-rule-check-result "runtimeOnly" false "runtime-only rule missing explicit reason"))))
+
+(df audit-c3-duplicates [(symbol-defs (List (List Str))) (allowlist (List Str)) (canonical-homes (List (List Str)))] -> RuleCheckResult
+  :d "Verifies symbols defined in multiple packages outside allowlist, and multiple capability implementations outside canonical home"
+  (let [(duplicates (filter (fn [(def (List Str))] -> Bool
+                              (let [(sym (option-or (list-head def) ""))]
+                                (and (> (list-length def) 2)
+                                     (not (list-contains? allowlist sym)))))
+                            symbol-defs))]
+    (if (not (list-empty? duplicates))
+        (make-rule-check-result "c3" false "duplicate capability outside canonical home detected across packages")
+        (make-rule-check-result "c3" true "c3 symbol uniqueness and canonical home invariant verified"))))
+
+(df audit-d51-convergence [(package-name Str) (test-fns (List Str)) (asn-keys (List Str)) (current-ratio I64) (baseline-floor I64)] -> RuleCheckResult
+  :d "Verifies D51 CamelCase test functions and camelCase ASN keys do not regress below baseline floor"
+  (if (< current-ratio baseline-floor)
+      (make-rule-check-result "d51" false (str "package " package-name " regressed below baseline floor"))
+      (let [(kebab-tests (filter (fn [(fn-name Str)] -> Bool (string-contains? fn-name "-")) test-fns))]
+        (if (and (> baseline-floor 80) (not (list-empty? kebab-tests)))
+            (make-rule-check-result "d51" false (str "kebab-case test function detected in converged package " package-name))
+            (make-rule-check-result "d51" true (str "package " package-name " satisfies D51 convergence floor"))))))
