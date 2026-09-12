@@ -173,5 +173,9 @@
       :rule "Among candidate names that carry intended meaning, take the measured minimum token count; length, devowelling, and family uniformity are explicitly refuted as selection criteria."
       :failureCode "ERR_SPECULATIVE_NAME_CHOICE"
       :exitCode 1)
+    (:semantic :id symbolAdmissionMeasuredCostRule
+      :rule "No symbol enters the grammar unmeasured: every symbol record must declare measured token count and considered alternatives; checks recompute counts rather than trusting declarations."
+      :failureCode "ERR_UNMEASURED_SYMBOL_ADMISSION"
+      :exitCode 1)
   ]
 )
