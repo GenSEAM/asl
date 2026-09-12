@@ -169,5 +169,9 @@
       :rule "Dependency direction is strictly unidirectional: extensions depend on core surfaces, and core modules never depend on extensions or require specific extensions to be present."
       :failureCode "ERR_INVERTED_CORE_DEPENDENCY"
       :exitCode 1)
+    (:semantic :id measuredTokenCostSelectionRule
+      :rule "Among candidate names that carry intended meaning, take the measured minimum token count; length, devowelling, and family uniformity are explicitly refuted as selection criteria."
+      :failureCode "ERR_SPECULATIVE_NAME_CHOICE"
+      :exitCode 1)
   ]
 )
