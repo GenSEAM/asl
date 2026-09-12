@@ -18,6 +18,7 @@
     (:sym :name "StratificationReport" :kind :type :tokens 1)
     (:sym :name "LexiconTerm" :kind :type :tokens 1)
     (:sym :name "LexiconRegistry" :kind :type :tokens 1)
+    (:sym :name "RuleCheckResult" :kind :type :tokens 1)
 
     (:sym :name "run-suite" :kind :fn :tokens 2
           :rationale "Executes semantic verification across list of paths")
@@ -171,4 +172,20 @@
           :rationale "Verifies canonical terms have active referents in codebase")
     (:sym :name "is-spoken-mishearing?" :kind :fn :tokens 3
           :rationale "Predicate testing if term matches known acoustic mishearing")
+    (:sym :name "make-rule-check-result" :kind :fn :tokens 4
+          :rationale "Constructs static rule verification result record")
+    (:sym :name "audit-grading-rule" :kind :fn :tokens 3
+          :rationale "Verifies grading separation between author and reviewer roles and paths")
+    (:sym :name "audit-concepts-rule" :kind :fn :tokens 3
+          :rationale "Verifies numeric claims in principles and rules cite grounded sources")
+    (:sym :name "audit-ownership-disjointness" :kind :fn :tokens 3
+          :rationale "Verifies disjointness of owns boundaries across concurrent in-flight tasks")
+    (:sym :name "audit-hidden-tests-rule" :kind :fn :tokens 4
+          :rationale "Verifies implementer owns boundaries exclude grader acceptance test paths")
+    (:sym :name "audit-bounded-rule" :kind :fn :tokens 3
+          :rationale "Verifies read call sites carry explicit bounded limits")
+    (:sym :name "audit-output-rule" :kind :fn :tokens 3
+          :rationale "Verifies emitted receipts retain path and line evidence")
+    (:sym :name "audit-runtime-only-rules" :kind :fn :tokens 4
+          :rationale "Verifies runtime-only rules declare explicit architectural reason")
   ])
