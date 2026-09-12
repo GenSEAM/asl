@@ -182,6 +182,13 @@
          :purpose "Inspect active writer claims and path digests in resident memory ledger"
          :savings "90%")
 
+    (:op :id "asl-release"
+         :tier [:affordance :full]
+         :cmd "asl rpc '(:batch (:release :path \"...\" [:sessionId \"...\"]))'"
+         :category "concurrency"
+         :purpose "Explicitly release an active path lease held by session"
+         :savings "85%")
+
     ;; === Supervised Execution & Git ===
     (:op :id "asl-run"
          :tier [:affordance :full]
