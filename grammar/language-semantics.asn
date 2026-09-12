@@ -137,5 +137,9 @@
       :rule "Function and module boundaries carry contracts with blame: a violated precondition blames the caller, a violated postcondition blames the definition, and deferred checks are reported as unchecked rather than satisfied."
       :failureCode "ERR_CONTRACT_BLAME_VIOLATION"
       :exitCode 1)
+    (:semantic :id racketReferenceBoundary
+      :rule "Racket is an architectural and semantic reference design and optional development-time differential oracle, but is strictly excluded from deployed runtime dependencies."
+      :failureCode "ERR_FORBIDDEN_DEPLOYMENT_DEPENDENCY"
+      :exitCode 1)
   ]
 )
