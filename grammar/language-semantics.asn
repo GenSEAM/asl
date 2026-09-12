@@ -113,6 +113,18 @@
       :rule "A module is instantiated exactly once per resolved path and cached across requiring sites, ensuring consistent binding sharing."
       :failureCode "ERR_MULTIPLE_INSTANTIATION"
       :exitCode 1)
+    (:semantic :id syntaxObjectSourceLocation
+      :rule "The reader attaches source file, line, column, and span to every form as a syntax object; the evaluator preserves them through binding and application, and every diagnostic quotes the position of the responsible form."
+      :failureCode "ERR_MISSING_SOURCE_LOCATION"
+      :exitCode 1)
+    (:semantic :id dualPositionDiagnostic
+      :rule "An error inside a function called from another module quotes both the definition site and the call site rather than truncating to one of them."
+      :failureCode "ERR_TRUNCATED_ERROR_SITE"
+      :exitCode 1)
+    (:semantic :id syntaxPositionPreservation
+      :rule "Syntax object position metadata survives higher-order function passing, ensuring static analysis and runtime error reporting identify the same source line for the same defect."
+      :failureCode "ERR_SYNTAX_POSITION_LOST"
+      :exitCode 1)
     (:semantic :id sourceLocationPreservation
       :rule "Every parsed S-expression form carries source location metadata (source path, line number, column, and span) through reading, macro expansion, and evaluation, mirroring Racket syntax objects."
       :failureCode "ERR_SOURCE_LOCATION_MISSING"

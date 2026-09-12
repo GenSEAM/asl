@@ -19,5 +19,8 @@
     (:rule :id emptyCatalogRejection
       :description "Empty claims catalogs cannot satisfy verification and must fail."
       :falsification "Empty catalog produces status FAIL and total > 0.")
+    (:rule :id contractBlameAttribution
+      :description "Function and module boundary contracts assign mechanical blame: violated preconditions blame the caller, violated postconditions blame the definition, and deferred checks are reported as unchecked rather than satisfied."
+      :falsification "Contract violation without proper caller or definition blame, or silently counting unchecked contracts as satisfied, fails gate.")
   ]
 )
