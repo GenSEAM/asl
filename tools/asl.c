@@ -3220,32 +3220,96 @@ static int run_gate_6_grammar(const char *ws_root, int *out_total_syms, int *out
     return 0;
 }
 
-static int run_gate_7_skills(const char *ws_root, int *out_skills_count) {
-    char skills_dir[1024];
-    snprintf(skills_dir, sizeof(skills_dir), "%s/asl/.agents/skills", ws_root);
-    struct stat st;
-    if (stat(skills_dir, &st) != 0 || !S_ISDIR(st.st_mode)) {
-        snprintf(skills_dir, sizeof(skills_dir), "%s/.agents/skills", ws_root);
-    }
-    char **skills = NULL;
-    int scnt = 0, scap = 0;
-    collect_tree_files(skills_dir, "", ".md", "SKILL.md", &skills, &scnt, &scap);
+static char *load_rule_payload(const char *ws_root);
+static char *project_content(const char *ws_root, const char *content_type, const char *shape, const char *dest);
 
-    for (int i = 0; i < scnt; i++) {
+static int verify_skill_projection_currency(const char *ws_root, const char *skill_path, const char *skill_content) {
+    if (!ws_root || !skill_content) return 0;
+    const char *proj = strstr(skill_content, "projection:");
+    if (!proj) return 0;
+
+    char tier[64] = "full";
+    const char *quote1 = strchr(proj, '"');
+    if (quote1) {
+        const char *quote2 = strchr(quote1 + 1, '"');
+        if (quote2 && (quote2 - quote1 - 1) < (int)sizeof(tier)) {
+            int len = (int)(quote2 - quote1 - 1);
+            char decl[64];
+            memcpy(decl, quote1 + 1, len);
+            decl[len] = '\0';
+            if (strncmp(decl, "rules:", 6) == 0) {
+                strncpy(tier, decl + 6, sizeof(tier) - 1);
+            } else if (strcmp(decl, "rules") == 0) {
+                strcpy(tier, "full");
+            }
+        }
+    }
+
+    const char *block_start = strstr(skill_content, "```asn\n(:rules");
+    if (block_start) {
+        char *expected = project_content(ws_root, tier, "fenced", NULL);
+        if (expected) {
+            const char *block_end = strstr(block_start, "\n```\n");
+            if (block_end) block_end += 5;
+            else block_end = strstr(block_start, "\n```");
+            if (block_end) block_end += 4;
+
+            if (block_end) {
+                size_t embedded_len = block_end - block_start;
+                if (strncmp(block_start, expected, embedded_len) != 0) {
+                    printf("    ✗ Skill projection currency failure in %s (stale embedded rules block)\n", skill_path);
+                    free(expected);
+                    return 1;
+                }
+            }
+            free(expected);
+        }
+    }
+    return 0;
+}
+
+static int run_gate_7_skills(const char *ws_root, int *out_skills_count) {
+    char root_dir[1024];
+    char asl_dir[1024];
+    snprintf(root_dir, sizeof(root_dir), "%s/.agents/skills", ws_root);
+    snprintf(asl_dir, sizeof(asl_dir), "%s/asl/.agents/skills", ws_root);
+
+    char **root_skills = NULL;
+    int r_cnt = 0, r_cap = 0;
+    collect_tree_files(root_dir, "", ".md", "SKILL.md", &root_skills, &r_cnt, &r_cap);
+
+    char **asl_skills = NULL;
+    int a_cnt = 0, a_cap = 0;
+    collect_tree_files(asl_dir, "", ".md", "SKILL.md", &asl_skills, &a_cnt, &a_cap);
+
+    if (r_cnt != a_cnt) {
+        printf("    ✗ Skill tree mismatch: root .agents/skills has %d skills, asl/.agents/skills has %d skills\n", r_cnt, a_cnt);
+        for (int k = 0; k < r_cnt; k++) free(root_skills[k]);
+        free(root_skills);
+        for (int k = 0; k < a_cnt; k++) free(asl_skills[k]);
+        free(asl_skills);
+        return 1;
+    }
+
+    for (int k = 0; k < a_cnt; k++) free(asl_skills[k]);
+    free(asl_skills);
+
+    int checked_count = 0;
+    for (int i = 0; i < r_cnt; i++) {
         char full[1024];
-        snprintf(full, sizeof(full), "%s/%s", skills_dir, skills[i]);
+        snprintf(full, sizeof(full), "%s/%s", root_dir, root_skills[i]);
         size_t sz = 0;
         char *c = read_file_alloc(full, &sz);
         if (!c) {
-            for (int k = 0; k < scnt; k++) free(skills[k]);
-            free(skills);
+            for (int k = 0; k < r_cnt; k++) free(root_skills[k]);
+            free(root_skills);
             return 1;
         }
         if (strncmp(c, "---", 3) != 0 || !strstr(c, "name:") || !strstr(c, "description:")) {
-            printf("    ✗ Skill frontmatter validation failed: %s\n", skills[i]);
+            printf("    ✗ Skill frontmatter validation failed: %s\n", root_skills[i]);
             free(c);
-            for (int k = 0; k < scnt; k++) free(skills[k]);
-            free(skills);
+            for (int k = 0; k < r_cnt; k++) free(root_skills[k]);
+            free(root_skills);
             return 1;
         }
         char lower[4096];
@@ -3253,19 +3317,27 @@ static int run_gate_7_skills(const char *ws_root, int *out_skills_count) {
         for (size_t b = 0; b < copy_len; b++) lower[b] = (char)tolower((unsigned char)c[b]);
         lower[copy_len] = '\0';
         if (strstr(lower, "tokensave") || strstr(lower, "npx agent-browser") || strstr(lower, "pip install")) {
-            printf("    ✗ Deprecated tool contamination detected in %s\n", skills[i]);
+            printf("    ✗ Deprecated tool contamination detected in %s\n", root_skills[i]);
             free(c);
-            for (int k = 0; k < scnt; k++) free(skills[k]);
-            free(skills);
+            for (int k = 0; k < r_cnt; k++) free(root_skills[k]);
+            free(root_skills);
             return 1;
         }
+        if (verify_skill_projection_currency(ws_root, root_skills[i], c) != 0) {
+            free(c);
+            for (int k = 0; k < r_cnt; k++) free(root_skills[k]);
+            free(root_skills);
+            return 1;
+        }
+        checked_count++;
         free(c);
-        free(skills[i]);
+        free(root_skills[i]);
     }
-    free(skills);
+    free(root_skills);
 
-    if (out_skills_count) *out_skills_count = scnt;
-    return (scnt > 0) ? 0 : 1;
+    printf("    ✓ Audited %d/%d modular skills across canonical trees. Currency against source verified.\n", checked_count, r_cnt);
+    if (out_skills_count) *out_skills_count = checked_count;
+    return (checked_count > 0) ? 0 : 1;
 }
 
 static void parse_gate_numbers(const char *str, int *gates, int val) {
@@ -4627,6 +4699,50 @@ int run_cmd_project(int argc, char **argv, const char *ws_root) {
     return 0;
 }
 
+typedef struct {
+    const char *id;
+    const char *channel;
+    const char *permission_tier;
+    const char *auto_flags;
+} ClientTargetSpec;
+
+static const ClientTargetSpec g_client_specs[] = {
+    {"agy", "<RULE[user_global]>", "dangerous-rescue", "[\"--dangerously-skip-permissions\"]"},
+    {"claude", "system-guided", "safe", NULL},
+    {"codex", "system", "safe", NULL},
+    {"addie", "native", "safe", NULL},
+    {"eddie", "native", "safe", NULL},
+    {NULL, NULL, NULL, NULL}
+};
+
+static const ClientTargetSpec *lookup_client_spec(const char *name) {
+    if (!name) return NULL;
+    for (int i = 0; g_client_specs[i].id != NULL; i++) {
+        if (strcmp(g_client_specs[i].id, name) == 0) {
+            return &g_client_specs[i];
+        }
+    }
+    return NULL;
+}
+
+static int enforce_claude_system_prompt_append(const char *arg) {
+    if (!arg) return 0;
+    if (strcmp(arg, "--system-prompt") == 0 || strcmp(arg, "-s") == 0) {
+        printf("[ASL Launch] Converted system prompt overwrite to append for Claude Code: --append-system-prompt\n");
+        return 1;
+    }
+    return 0;
+}
+
+static int enforce_claude_strip_dangerous_permissions(const char *arg) {
+    if (!arg) return 0;
+    if (strcmp(arg, "--dangerously-skip-permissions") == 0) {
+        printf("[ASL Launch] Stripped dangerous permissions for Claude Code (invariant enforcement)\n");
+        return 1;
+    }
+    return 0;
+}
+
 int run_launch(int argc, char **argv, const char *ws_root) {
     (void)ws_root;
     if (argc < 2 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
@@ -4659,18 +4775,19 @@ int run_launch(int argc, char **argv, const char *ws_root) {
         return 0;
     }
     const char *client = argv[1];
+    const ClientTargetSpec *spec = lookup_client_spec(client);
+    if (!spec || !spec->channel) {
+        fprintf(stderr, "Error: Unknown or undeclared client '%s'. Must be declared with channel location in protocol-conformance.asn\n", client ? client : "(null)");
+        return 1;
+    }
     int is_claude = (strcmp(client, "claude") == 0);
     int is_agy = (strcmp(client, "agy") == 0);
     int dry_run = 0;
     for (int i = 2; i < argc; i++) {
         if (strcmp(argv[i], "--dry-run") == 0) dry_run = 1;
         if (is_claude) {
-            if (strcmp(argv[i], "--system-prompt") == 0 || strcmp(argv[i], "-s") == 0) {
-                printf("[ASL Launch] Converted system prompt overwrite to append for Claude Code: --append-system-prompt\n");
-            }
-            if (strcmp(argv[i], "--dangerously-skip-permissions") == 0) {
-                printf("[ASL Launch] Stripped dangerous permissions for Claude Code (invariant enforcement)\n");
-            }
+            enforce_claude_system_prompt_append(argv[i]);
+            enforce_claude_strip_dangerous_permissions(argv[i]);
         }
     }
     char *rules_payload = load_rule_payload(ws_root);
@@ -4679,11 +4796,11 @@ int run_launch(int argc, char **argv, const char *ws_root) {
 
     /* Client projections: :claude-mode "system-guided" :permission-tier "dangerous-rescue" :client "codex" */
     if (is_claude) {
-        printf("(:launch-session :client \"claude\" :claude-mode \"system-guided\" :permission-tier \"safe\")\n");
+        printf("(:launch-session :client \"claude\" :claude-mode \"%s\" :permission-tier \"%s\")\n", spec->channel, spec->permission_tier);
     } else if (is_agy) {
-        printf("(:launch-session :client \"agy\" :permission-tier \"dangerous-rescue\" :auto-flags [\"--dangerously-skip-permissions\"] :channel \"<RULE[user_global]>\")\n");
-    } else if (strcmp(client, "codex") == 0) {
-        printf("(:launch-session :client \"codex\" :permission-tier \"safe\")\n");
+        printf("(:launch-session :client \"agy\" :permission-tier \"%s\" :auto-flags %s :channel \"%s\")\n", spec->permission_tier, spec->auto_flags ? spec->auto_flags : "[]", spec->channel);
+    } else {
+        printf("(:launch-session :client \"%s\" :permission-tier \"%s\" :channel \"%s\")\n", spec->id, spec->permission_tier, spec->channel);
     }
     if (dry_run) {
         printf("✓ Pre-flight validation successful (DRY-RUN).\n");

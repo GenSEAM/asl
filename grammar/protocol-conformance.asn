@@ -7,4 +7,27 @@
     (:contract :id aggregateBatchStatus
       :rule "Batch aggregate status honestly reflects inner step results: completed, completed-with-errors, or failed."
       :statuses ["completed" "completed-with-errors" "failed"])
+    (:contract :id engine
+      :rule "Host engine residency and execution protocol contract across CLI and RPC sessions."
+      :engine [
+        (:residency "Host bootstrap adapter embedding JavaScriptCore on macOS/POSIX")
+        (:sessionModel ":session-model ephemeral CLI execution or persistent background daemon")
+        (:processLifetime ":process-lifetime bounded child process lifecycle with 15m watchdog ceiling")
+        (:rootDetermination ":root-determination workspace root resolution via discovered_ws and .asl.config.asn")
+      ])
+    (:contract :id swarmResidency
+      :rule "Swarm room presence and path claims are host-resident in engine memory with single-agent zero overhead and daemonless lifecycle."
+      :modes ["resident" "ephemeral"])
+    (:contract :id clientLauncher
+      :rule "Client targeting, channels, orchestration limits, and client-specific security invariants."
+      :clients [
+        (:client :id "agy" :channel "<RULE[user_global]>" :permissionTier "dangerous-rescue" :autoFlags ["--dangerously-skip-permissions"])
+        (:client :id "claude" :channel "system-guided" :permissionTier "safe" :invariants [
+          (:invariant :id "claudeSystemPromptAppend" :rule "Convert system prompt overwrite (-s/--system-prompt) to append (--append-system-prompt)")
+          (:invariant :id "claudeStripDangerousPermissions" :rule "Strip --dangerously-skip-permissions to enforce safe permission tier")
+        ])
+        (:client :id "codex" :channel "system" :permissionTier "safe")
+        (:client :id "addie" :channel "native" :permissionTier "safe")
+        (:client :id "eddie" :channel "native" :permissionTier "safe")
+      ])
   ])
