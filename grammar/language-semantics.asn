@@ -93,5 +93,13 @@
       :rule "Retired abbreviated core forms are removed cleanly with zero backward-compatibility aliases left behind."
       :failureCode "ERR_ABBREVIATION_ALIAS_FORBIDDEN"
       :exitCode 1)
+    (:semantic :id racketBindingShape
+      :rule "Local binding forms adopt Racket's canonical parenthesized pairs syntax (let ([a 1] [b 2]) body); malformed or legacy binding shapes trigger reader and evaluation failure."
+      :failureCode "ERR_INVALID_BINDING_SHAPE"
+      :exitCode 1)
+    (:semantic :id clojureBindingShapeRejection
+      :rule "Flat vector-style Clojure bindings (let [a 1 b 2] body) are rejected despite saving 0.69 percent tokens, maintaining single-reference alignment with Scheme/Racket."
+      :failureCode "ERR_UNALIGNED_BINDING_SHAPE"
+      :exitCode 1)
   ]
 )
