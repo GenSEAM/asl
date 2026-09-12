@@ -28,7 +28,7 @@
     (:situation :id plan :pack [:audit :development] :question "Is this plan sound before I start?"
       :caps [
         (:cap :id planVerify :use "asl plan verify: unique ids, acyclic DAG, resolvable contracts, every gate fails on baseline" :status :absent :fallback "run each gate by hand and require a non-zero exit before accepting the task" :task Task44204 :tier [:full])
-        (:cap :id consistency :use "asl audit consistency over ADR, tasks, intent, roadmap" :status :partial :fallback "it checks 6 of 300+ tasks for D52 completeness; do not read it as full coverage" :task Task43904 :tier [:full])])
+        (:cap :id consistency :use "asl audit consistency over ADR, tasks, intent, roadmap" :status :works :fallback "" :task Task43904 :tier [:full])])
     (:situation :id change :pack [:development :design] :question "How do I modify a file safely?"
       :caps [
         (:cap :id immediateEdit :use "(:edit \"f\" \"old\" \"new\") writes to disk at once" :status :works :fallback "" :task "" :tier [:minimal :full])
@@ -44,7 +44,7 @@
         (:cap :id runCommand :use "(:run cmd) returns real exit, stdout, stderr" :status :absent :fallback "run in the host shell WITHOUT a pipe: cmd >/dev/null 2>&1; echo $? . A pipe reports the pipe status" :task Task44202 :tier [:minimal :full])
         (:cap :id executeTests :use "asl test executes assertions" :status :partial :fallback "it checks delimiters and only reached assertions; an unbound symbol abandons the body at exit 0, so green does not mean executed" :task Task43601 :tier [:minimal :full])
         (:cap :id gateSuite :use "asl audit gates runs the seven gates" :status :partial :fallback "gate 3 audits a list against itself, gate 4 excludes tools, gate 5 counts substrings; read a pass as syntax-level only" :task Task43605 :tier [:full])
-        (:cap :id mutationScore :use "asl test --strict-falsify reports fault-detection power" :status :absent :fallback "invert one assertion by hand and confirm the suite exits non-zero" :task Task43901 :tier [:full])
+        (:cap :id mutationScore :use "asl test --strict-falsify reports fault-detection power" :status :works :fallback "" :task Task43901 :tier [:full])
         (:cap :id boundReceipt :use "(:step-done N) advances on a runner-issued receipt bound to a digest" :status :absent :fallback "record the command and its exit code in your own report; do not claim verification without one" :task Task44101 :tier [:minimal :full])])
     (:situation :id recover :pack [:development :audit] :question "Something failed or I am off-plan."
       :caps [
