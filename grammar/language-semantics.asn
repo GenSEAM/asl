@@ -45,5 +45,13 @@
       :rule "Retired built-in identifiers must be completely removed with zero backward-compatibility aliases left behind, preventing fragmented parallel spellings."
       :failureCode "ERR_RETIRED_ALIAS"
       :exitCode 1)
+    (:semantic :id assertionParityAcrossTransformations
+      :rule "Executed assertion counts must remain exactly preserved and non-vacuous across mechanical CamelCase and identifier renames; any silent unbinding or assertion loss triggers loud failure."
+      :failureCode "ERR_UNBOUND_IDENTIFIER_MUTATION"
+      :exitCode 1)
+    (:semantic :id stringLiteralPreservation
+      :rule "Mechanical identifier renames and CamelCase transformations must strictly preserve string literals without rewriting substrings within quotes."
+      :failureCode "ERR_MUTATED_STRING_LITERAL"
+      :exitCode 1)
   ]
 )
