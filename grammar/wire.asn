@@ -1,0 +1,53 @@
+(:wireSchema
+  :version 1
+  :keys [:identity :sessionId :causality :payload :digest]
+  :transports [:stdio :unixSocket :http :sse]
+  :types [
+    (:record :name "CanonicalWireFrame"
+      :fields [
+        (:field :name "identity" :type :string :required true)
+        (:field :name "sessionId" :type :string :required true)
+        (:field :name "causality" :type :string :required true)
+        (:field :name "payload" :type :string :required true)
+        (:field :name "digest" :type :string :required true)
+      ])
+    (:record :name "WireError"
+      :fields [
+        (:field :name "errorKind" :type :string :required true)
+        (:field :name "message" :type :string :required true)
+        (:field :name "rejectedRaw" :type :string :required true)
+      ])
+  ]
+  :conformanceVectors [
+    (:vector :id "vec-valid-01"
+      :valid true
+      :identity "frame-001"
+      :sessionId "sess-446"
+      :causality "root-cause-0"
+      :payload "(:ping true)"
+      :digest "sha256-mock-12345678")
+    (:vector :id "vec-valid-02"
+      :valid true
+      :identity "frame-002"
+      :sessionId "sess-446"
+      :causality "frame-001"
+      :payload "(:pong true)"
+      :digest "sha256-mock-87654321")
+    (:vector :id "vec-invalid-missing-identity"
+      :valid false
+      :identity ""
+      :sessionId "sess-446"
+      :causality "root"
+      :payload "(:action :ping)"
+      :digest "sha256-none"
+      :expectedError "ERR_MISSING_IDENTITY")
+    (:vector :id "vec-invalid-malformed"
+      :valid false
+      :identity "frame-003"
+      :sessionId "sess-446"
+      :causality "root"
+      :payload "(:malformed-unclosed"
+      :digest "sha256-err"
+      :expectedError "ERR_MALFORMED_FRAME")
+  ]
+)
