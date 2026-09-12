@@ -16,6 +16,8 @@
     (:sym :name "GateSummary" :kind :type :tokens 1)
     (:sym :name "LayerTier" :kind :type :tokens 1)
     (:sym :name "StratificationReport" :kind :type :tokens 1)
+    (:sym :name "LexiconTerm" :kind :type :tokens 1)
+    (:sym :name "LexiconRegistry" :kind :type :tokens 1)
 
     (:sym :name "run-suite" :kind :fn :tokens 2
           :rationale "Executes semantic verification across list of paths")
@@ -159,4 +161,14 @@
           :rationale "Verifies dual-polarity qualification under strict and lenient modes")
     (:sym :name "TestCoverageSummaryCalculation" :kind :fn :tokens 3
           :rationale "Verifies coverage percentage and threshold passing status")
+    (:sym :name "make-lexicon-term" :kind :fn :tokens 3
+          :rationale "Constructs canonical lexicon term entry with spoken forms")
+    (:sym :name "audit-lexicon-terms" :kind :fn :tokens 3
+          :rationale "Audits canonical lexicon registry entries for complete metadata")
+    (:sym :name "check-local-alias-tables" :kind :fn :tokens 4
+          :rationale "Verifies absence of unauthorized local alias tables outside canonical lexicon")
+    (:sym :name "verify-canonical-referents" :kind :fn :tokens 3
+          :rationale "Verifies canonical terms have active referents in codebase")
+    (:sym :name "is-spoken-mishearing?" :kind :fn :tokens 3
+          :rationale "Predicate testing if term matches known acoustic mishearing")
   ])
