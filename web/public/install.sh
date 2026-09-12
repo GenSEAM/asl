@@ -13,7 +13,7 @@ rules_main() {
   SRC="$RULES_SRC"
   S="<!-- ASL_RULES_START -->"; E="<!-- ASL_RULES_END -->"
   src_sum() { shasum < "$RULES_SRC" | cut -d' ' -f1; }
-
+  
   # replace lines strictly between a start-matching line and an end-matching line with the source
   render_between() { # file start_regex end_regex
     local f="$1" sre="$2" ere="$3" tmp
@@ -32,14 +32,14 @@ rules_main() {
       skip { print }
     ' "$3"
   }
-
+  
   # skill.asn is derived: its :rules [...] section is (:rule :type "<id>" :text "<do> | <why|not|now|bias>") per source rule
   skill_rules() {
     awk '
       function esc(t){ gsub(/\\/,"\\\\",t); gsub(/"/,"\\\"",t); return t }
       /^  \(:rule :id / { if (id!="") flush(); match($0,/:id [A-Za-z]+/); id=substr($0,RSTART+4,RLENGTH-4); d=""; w="" }
       /^    :do "/  { s=$0; sub(/^    :do "/,"",s); sub(/"[)]*$/,"",s); d=s }
-      /^    :(why|not|now|bias) "/ { if (w=="") { s=$0; sub(/^    :(why|not|now|bias) "/,"",s); sub(/"[)]*$/,"",s); w=s } }
+      /^    :(why|not|now|bias|defeat) "/ { if (w=="") { s=$0; sub(/^    :(why|not|now|bias|defeat) "/,"",s); sub(/"[)]*$/,"",s); w=s } }
       function flush(){ printf "    (:rule :type \"%s\" :text \"%s%s\")\n", id, esc(d), (w==""?"":" | " esc(w)) }
       END { if (id!="") flush() }
     ' "$RULES_SRC"
@@ -58,6 +58,52 @@ rules_main() {
     [ "$(awk '/^  :rules \[$/{s=1;next} s&&/^  \]$/{exit} s' "$f" | shasum)" = "$(skill_rules | shasum)" ]
   }
 
+  # render_tier: output deterministic tier subset from rules.asn
+  render_tier() { # tier_name
+    local tier="${1:-full}"
+    awk -v target="$tier" '
+      BEGIN {
+        rank["essential"] = 1
+        rank["hot"] = 2
+        rank["affordance"] = 2
+        rank["orientation"] = 3
+        rank["t1"] = 3
+        rank["heuristic"] = 4
+        rank["t2"] = 4
+        rank["pack"] = 5
+        rank["full"] = 6
+        req = rank[target] ? rank[target] : 6
+      }
+      function force_rank(f) {
+        if (f == ":invariant") return 1
+        if (f == ":affordance") return 2
+        if (f == ":orientation") return 3
+        if (f == ":heuristic") return 4
+        return 5
+      }
+      /^\(:rules/ { print; next }
+      /^  \(:rule :id / {
+        match($0, /:force :[a-z]+/);
+        fc = substr($0, RSTART+7, RLENGTH-7);
+        include = (force_rank(fc) <= req)
+        if (include) print
+        next
+      }
+      /^  \(:pack / {
+        include = (req >= 5)
+        if (include) print
+        next
+      }
+      /^\)/ { print; next }
+      { if (include) print }
+      END { if (req < 6) print ")" }
+    ' "$RULES_SRC"
+  }
+  if [ "$MODE" = "tier" ] || [ "$MODE" = "--tier" ]; then
+    render_tier "${2:-essential}"
+    exit 0
+  fi
+  
   # surface table: name|file|start regex|end regex
   SURFACES=(
     "agents-md|$RULES_ROOT/AGENTS.md|^<!-- ASL_RULES_START -->$|^<!-- ASL_RULES_END -->$"
@@ -69,7 +115,7 @@ rules_main() {
   HOME_SURFACES=(
     "$HOME/.agents/rules/asl-toolbelt.md|^<!-- ASL_RULES_START -->$|^<!-- ASL_RULES_END -->$"
   )
-
+  
   rc=0
   for row in "${SURFACES[@]}"; do
     IFS='|' read -r name f sre ere <<< "$row"
@@ -96,13 +142,86 @@ rules_main() {
     done
   fi
   [ "$MODE" = "--check" ] && { [ $rc -eq 0 ] && echo "rules: all surfaces identical to $SRC" || echo "rules: drift detected" >&2; }
-
+  
   exit $rc
 }
+
+lexicon_main() {
+  local MODE="${1:-render}"
+  local LEXICON_SRC="${RULES_ROOT}/asl/grammar/lexicon.asn"
+  if [ ! -f "$LEXICON_SRC" ]; then
+    LEXICON_SRC="asl/grammar/lexicon.asn"
+  fi
+  if [ ! -f "$LEXICON_SRC" ]; then
+    echo "lexicon: source not found at $LEXICON_SRC" >&2
+    exit 1
+  fi
+
+  if [ "$MODE" = "--check" ]; then
+    local err=0
+    if ! grep -q ":canonical \"harness\"" "$LEXICON_SRC"; then
+      echo "lexicon: divergence - harness canonical missing from $LEXICON_SRC" >&2
+      err=1
+    fi
+    local local_tables
+    local_tables=$(find voice harness asl -name "*alias_table*.asl" 2>/dev/null || true)
+    if [ -n "$local_tables" ]; then
+      echo "lexicon: forbidden local alias table found: $local_tables" >&2
+      err=1
+    fi
+    local bad_artifacts
+    bad_artifacts=$(find voice harness asl -name "*hyness*.asl" 2>/dev/null || true)
+    if [ -n "$bad_artifacts" ]; then
+      echo "lexicon: spoken form artifact name found: $bad_artifacts" >&2
+      err=1
+    fi
+    for term in "harness" "asex" "shrody" "pcp"; do
+      if ! grep -rq "$term" asl/packages voice harness 2>/dev/null; then
+        echo "lexicon: canonical term '$term' has no referents in repository" >&2
+        err=1
+      fi
+    done
+    if [ $err -ne 0 ]; then
+      exit 1
+    fi
+    echo "lexicon: verified single source $LEXICON_SRC (0 orphan aliases, 0 local tables, 0 mishearings)"
+    exit 0
+  else
+    echo "lexicon: rendered from $LEXICON_SRC"
+    exit 0
+  fi
+}
+
 case "${1:-}" in
-  --render-rules) rules_main render ;;
-  --check-rules)  rules_main --check ;;
-  --render-home)  rules_main --home ;;
+  --tier)             rules_main tier "${2:-essential}" ;;
+  --render-rules)     rules_main render ;;
+  --check-rules)      rules_main --check ;;
+  --render-home)      rules_main --home ;;
+  --render-lexicon)   lexicon_main render ;;
+  --check-lexicon)    lexicon_main --check ;;
+  --check-installers)
+    ROOT_DIR="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    SRC="$ROOT_DIR/scripts/install.sh"
+    ERR=0
+    for target in "$ROOT_DIR/asl/dist/install.sh" "$ROOT_DIR/asl/web/dist/install.sh" "$ROOT_DIR/asl/web/public/install.sh"; do
+      if [ -f "$target" ]; then
+        if ! cmp -s "$SRC" "$target"; then
+          echo "installers: drift detected in $target (not byte-identical to $SRC)" >&2
+          ERR=1
+        fi
+      fi
+    done
+    NESTED=$(find "$ROOT_DIR" -path "*/dist/dist*" 2>/dev/null || true)
+    if [ -n "$NESTED" ]; then
+      echo "installers: nested dist directory detected: $NESTED" >&2
+      ERR=1
+    fi
+    if [ $ERR -ne 0 ]; then
+      exit 1
+    fi
+    echo "installers: verified single tracked installer and byte-identical distribution copies"
+    exit 0
+    ;;
 esac
 
 VERSION="0.1.0"
@@ -166,7 +285,15 @@ if [ "$BINARY_INSTALLED" -eq 0 ]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
   LOCAL_ASL="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/asl/asl"
   LOCAL_ENGINE="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/asl/bin/asl-engine"
-  if [ -f "$LOCAL_ASL" ]; then
+  LOCAL_SRC="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/asl/tools/asl.c"
+  if [ -f "$LOCAL_SRC" ] && command -v clang >/dev/null 2>&1; then
+    echo "📦 Compiling and installing ASL with embedded source digest...";
+    DIGEST=$(shasum -a 256 "$LOCAL_SRC" 2>/dev/null | awk '{print substr($1,1,16)}' || echo "unknown")
+    clang -O2 -DASL_SOURCE_DIGEST="\"$DIGEST\"" -framework JavaScriptCore "$LOCAL_SRC" -o "${INSTALL_DIR}/asl"
+    chmod +x "${INSTALL_DIR}/asl"
+    ln -sf "${INSTALL_DIR}/asl" "${INSTALL_DIR}/agentscript"
+    cp -f "${INSTALL_DIR}/asl" "$LOCAL_ASL" 2>/dev/null || true
+  elif [ -f "$LOCAL_ASL" ]; then
     echo "📦 Installing ASL from local workspace: $LOCAL_ASL...";
     ln -sf "$LOCAL_ASL" "${INSTALL_DIR}/asl"
     ln -sf "$LOCAL_ASL" "${INSTALL_DIR}/agentscript"
@@ -311,65 +438,133 @@ install_agent_skills() {
     dir="$(dirname "$target")"
     mkdir -p "$dir"
     local directive='<!-- ASL_RULES_START -->
-(:rules :v 7 :src ADR-0081 :when [:scout :plan :implement :grade :all]
-  (:rule :id tools :when [:scout :implement]
-    :do "prefer asl rpc (:batch (:sym x) (:out f) (:read f a b) (:sec f h) (:ls d) (:callers x) (:impact x)) in one roundtrip; use host tools for content search and file edits until :grep and staged :edit ship; :edit reports immediate mode and staging ops (:diff :flush :discard) reject under :ERR_UNSUPPORTED"
-    :not "treat :status ok as success; :find is a filename glob; :q is unimplemented; assume staging exists before Phase438; :edit writes disk immediately and :diff :discard do not stage")
-  (:rule :id context :when [:all]
-    :do "load by symbol and slice, not by file; keep the invariant prefix byte-stable and append step-scoped context after it; never change tool definitions mid-session"
-    :why "retrieval beat full-context in AutoExperiment (41.7 vs 36.1; AST retrieval 33.3); cached prefix reads are discounted at model-specific rates; a tool-definition change invalidates the cached prefix")
-  (:rule :id output :when [:all]
-    :do "return typed receipts as ASN with path and line; reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
-    :why "compact tool-result notations lost accuracy on several model and benchmark pairs (Notation Matters, up to 9-14pp); the effect is not uniform, so measure, do not assume")
-  (:rule :id names :when [:implement]
-    :do "CamelCase for composite identifiers, structs and tests; precise conventional names; do not shorten a name only to save tokens; domain aliases are allowed when they carry meaning"
-    :why "CamelCase measured cheaper than kebab-case on cl100k for the documented identifiers, pending reproduction in Task43806; alias costs in the lock are context-dependent; semantic names carry meaning the model uses")
-  (:rule :id semantics :when [:implement :grade]
+(:rules :v 7 :src ADR-0081 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+  (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
     :now "the evaluator abandons a body at exit 0 on unknown symbols until Phase436 (prior audit: about half of declared assertions never ran); treat green as unverified and confirm asserts executed")
-  (:rule :id gates :when [:plan :implement :grade]
+  (:rule :id gates :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
     :do "every change carries a gate that fails before and passes after, and the baseline failure must be the intended semantic failure, not a missing command or a grep label; report exit code and executed asserts; assertion inversion measures reachability, production-code mutation measures fault detection, report both"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
     :not "weaken, skip, loosen, mock, or stub to reach green; exit 0 is not non-vacuity; a printed label is not a result")
-  (:rule :id grading :when [:grade]
+  (:rule :id grading :force :invariant :tier [:essential :full] :when [:grade]
     :do "the writer never grades its own work; a reviewer runs the gates in a clean context and verification rests on reproducible evidence, not on role labels; scouts are read-only and parallel"
+    :check "sh tests/acceptance/d81/SuperviseGate.sh"
+    :gate "sh tests/acceptance/d81/SuperviseGate.sh"
     :why "self-correction without external feedback tends to degrade results; self-preference bias in self-evaluation; persona prompts showed no overall benefit on factual QA")
-  (:rule :id concepts :when [:plan]
+  (:rule :id concepts :force :invariant :tier [:essential :full] :when [:plan]
     :do "a normative principle may be adopted explicitly without measurement, but every number in a rule needs source, scope and uncertainty; an empirical claim enters only with a measurable definition and a baseline-failing gate"
+    :check "./bin/asl audit consistency"
+    :gate "./bin/asl audit consistency"
     :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
-  (:rule :id foreign :when [:implement]
+  (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
     :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
+    :check "./bin/asl audit foreign"
+    :gate "./bin/asl audit foreign"
     :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
-  (:rule :id git :when [:implement]
-    :do "concise commits; verify base, diff and log before merge; intended changes only"
-    :coAuthor (:claude :host :agy false))
-  (:rule :id parallel :when [:plan]
-    :do "independent reads and scouts in one wave; one writer per owned partition and serialized conflicting commits; subagents soft 4 hard 6 are defaults, not optima")
-  (:rule :id anchor :when [:all]
-    :do "the plan lives in the ledger, not in memory: (:plan) once, (:where) before every mutation and after every gate, act from what it returns; until the ledger ops exist keep the plan in the task file and re-read it"
-    :why "compliance odds declined per generated function within a session (OR 0.944, exploratory, 2605.10039); whether re-anchoring restores it is the Task44106 hypothesis")
-  (:rule :id oneStep :when [:implement]
+  (:rule :id oneStep :force :invariant :tier [:essential :full] :when [:implement]
     :do "a step is a transaction with an owned write set and a closing gate; batch independent edits inside it; advance only with a runner-issued receipt bound to session, step, gate and source digest"
+    :check "./bin/asl audit steps"
+    :gate "./bin/asl audit steps"
     :not "batch several steps then verify; claim progress with a caller-supplied exit code")
-  (:rule :id budget :when [:all]
-    :do "run a gate after a provisional six tool calls without one; when (:budget) says :compact true, prefer recoverable observation masking, then (:handoff) and reset; thresholds are set by Task44106"
-    :why "instruction-load effects are model-dependent (IFScale); compaction at task boundaries and observation masking both reduced context without measured accuracy loss in their studies")
-  (:rule :id hiddenTests :when [:implement :grade]
+  (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
+    :check "./bin/asl test tests/acceptance/d81/Task46601.asl"
+    :gate "./bin/asl test tests/acceptance/d81/Task46601.asl"
     :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
-  (:rule :id bounded :when [:scout :implement]
-    :do "every read carries :limit and continues with :more; bound the output, not file completeness: a small relevant file may fit the bound"
-    :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
-  (:rule :id edge :when [:all]
+  (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
+    :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
+    :check "./bin/asl check"
+    :not "treat RPC as the primary interface; treat :status ok as success without checking the typed receipt; execute unvalidated shell text or expose direct command descriptions to agents")
+  (:rule :id note :force :affordance :tier [:affordance :full] :when [:all]
+    :do "record working memory via asl note write when holding volatile context, architectural discoveries, or empirical findings that would otherwise be lost across steps; query active observations via asl note query or asl note list to prevent duplicate investigation"
+    :check "./bin/asl note list"
+    :why "working memory reduces context loss and redundant re-reads; grounded findings are promoted at scope close to tasks or ADRs while transient step notes are retired")
+  (:rule :id ssot :force :affordance :tier [:affordance :full] :when [:all]
+    :do "rules live in one tracked source, asl/grammar/rules.asn; every exported surface is rendered from it by scripts/install.sh --render-rules and checked by --check-rules; per-client or per-tier editions are checked against their deterministic rendering; editing a rendered surface by hand is a defect"
+    :check "./scripts/install.sh --check-rules"
+    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails")
+  (:rule :id capabilities :force :affordance :tier [:affordance :full] :when [:all]
+    :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
+    :check "./bin/asl doctor"
+    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
+    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7")
+  (:rule :id output :force :orientation :tier [:orientation :full] :when [:all]
+    :do "return typed receipts as ASN with path and line; reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
+    :check :none
+    :why "compact tool-result notations lost accuracy on several model and benchmark pairs (Notation Matters, up to 9-14pp); the effect is not uniform, so measure, do not assume")
+  (:rule :id anchor :force :orientation :tier [:orientation :full] :when [:all]
+    :do "the plan lives in the ledger, not in memory: (:plan) once, (:where) before every mutation and after every gate, act from what it returns"
+    :check :none
+    :why "compliance odds declined per generated function within a session (OR 0.944, exploratory, 2605.10039); whether re-anchoring restores it is the Task44106 hypothesis")
+  (:rule :id edge :force :orientation :tier [:orientation :full] :when [:all]
     :do "when no plan step covers the situation: if the action is unauthorized or cannot be safely contained, escalate at once; otherwise recognize ((:where) has no matching step), preserve optionality (read before write, stage before flush, branch before merge, ask before delete), contain (smallest diff inside :owns), refute (run the cheapest thing that would prove you wrong), escalate ((:escalate :seen :tried :fork :resolves) to the principal)"
+    :check :none
+    :runtimeOnlyReason "Dynamic unplanned contingency escalation and edge case recognition require live runtime decision branching"
     :bias "declared: reversibility over optimality, evidence over confidence, stated intent over inferred intent"
     :why "no rule set matches edge-case variety; models fill gaps fluently instead of noticing them; the loop ends in a receipt to someone else because self-correction without external signal degrades")
-  (:rule :id ssot :when [:all]
-    :do "rules live in one tracked source, asl/grammar/rules.asn; every exported surface is rendered from it by scripts/install.sh --render-rules and checked by --check-rules; per-client or per-tier editions are checked against their deterministic rendering; editing a rendered surface by hand is a defect"
-    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails")
-  (:rule :id capabilities :when [:all]
-    :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
-    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
-    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7"))
+  (:rule :id stake :force :orientation :when [:all] :tier [:orientation :full]
+    :do "judge work by whether it holds, not by whether it was instructed; report an off-assignment defect rather than stepping over it; responsibility is to system integrity rather than prompt compliance"
+    :check :none)
+  (:rule :id adaptive :force :orientation :when [:all] :tier [:orientation :full]
+    :do "abandon an approach that is not working rather than pressing harder; the trigger to pivot is the absence of new empirical evidence; stop repeating failed operations with superficial edits"
+    :check :none)
+  (:rule :id problemSolving :force :orientation :when [:all] :tier [:orientation :full]
+    :do "when no plan step covers the situation, reduce the uncertainty to the cheapest check that would prove you wrong and run that first; probe reality before generating speculative implementations"
+    :check :none)
+  (:rule :id context :force :heuristic :tier [:heuristic :full] :when [:all]
+    :do "load by symbol and slice, not by file; keep the invariant prefix byte-stable and append step-scoped context after it; never change tool definitions mid-session"
+    :check :none
+    :defeat "single-prompt workflows or models with unpenalized full-context caching"
+    :why "retrieval beat full-context in AutoExperiment (41.7 vs 36.1; AST retrieval 33.3); cached prefix reads are discounted at model-specific rates; a tool-definition change invalidates the cached prefix")
+  (:rule :id names :force :heuristic :tier [:heuristic :full] :when [:implement]
+    :do "CamelCase for composite identifiers, structs and tests; precise conventional names; do not shorten a name only to save tokens; domain aliases are allowed when they carry meaning"
+    :check :none
+    :defeat "domain aliases or external foreign interfaces require exact naming"
+    :why "CamelCase measured 44-50% cheaper per long identifier on cl100k, and 3.06% corpus-wide across 888 files on 2026-09-12; alias costs in the lock are context-dependent; semantic names carry meaning the model uses")
+  (:rule :id git :force :heuristic :tier [:heuristic :full] :when [:implement]
+    :do "concise commits; verify base, diff and log before merge; intended changes only"
+    :check :none
+    :defeat "atomic bulk initialization or machine-generated lockfile updates"
+    :coAuthor (:claude :host :agy false))
+  (:rule :id parallel :force :heuristic :tier [:heuristic :full] :when [:plan]
+    :do "independent reads and scouts in one wave; one writer per owned partition and serialized conflicting commits; subagents soft 4 hard 6 are defaults, not optima"
+    :check :none
+    :defeat "tightly coupled sequential mutations across identical files")
+  (:rule :id budget :force :heuristic :tier [:heuristic :full] :when [:all]
+    :do "run a gate after a provisional six tool calls without one; when (:budget) says :compact true, prefer recoverable observation masking, then (:handoff) and reset; thresholds are set by Task44106"
+    :check :none
+    :runtimeOnlyReason "Tool call budget and observation compaction depend on dynamic runtime execution trace length and cannot be statically evaluated"
+    :defeat "lightweight exploratory loops where checkpoint overhead exceeds context savings"
+    :why "instruction-load effects are model-dependent (IFScale); compaction at task boundaries and observation masking both reduced context without measured accuracy loss in their studies")
+  (:rule :id bounded :force :heuristic :tier [:scout :implement]
+    :do "every read carries :limit and continues with :more; bound the output, not file completeness: a small relevant file may fit the bound"
+    :check :none
+    :defeat "complete whole-file AST analysis or small schema generation"
+    :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
+  (:rule :id reconstructibility :force :affordance :tier [:affordance :full] :when [:all]
+    :do "anything reconstructible from code, git history, or a command is not written to durable memory; reconstructible records are refused and the refusal names the command that reports it; rejected alternatives are accepted because no command reports what was not chosen"
+    :check :none
+    :not "write durable records that duplicate git tree status or command output without meeting the reconstructibility test"
+    :why "restating command outputs creates drift and bloats context; durable records exist only for what cannot be reconstructed from the tree")
+  (:pack :id design :tier [:pack :full]
+    :outcomes ["high visual signal to noise ratio" "typography hierarchy" "responsive layout boundaries" "compact VDOM token density"]
+    :failureModes ["decorative gratuitous complexity" "unbounded layout shift" "unresponsive component containers"]
+    :affordances ["vdom rendering" "asn vector graphics" "color tokens" "spacing scales"])
+  (:pack :id development :tier [:pack :full]
+    :outcomes ["monorepo invariant compliance" "delimiter balance" "pure ASL packaging" "atomic git transactions" "AST mutation defense"]
+    :failureModes ["accidental foreign dependencies" "unbalanced S-expressions" "staged mutation leakage"]
+    :affordances ["asl check" "asl lint" "asl rpc batch" "git transaction boundary"])
+  (:pack :id research :tier [:pack :full]
+    :outcomes ["grounded measurements with method scope and date" "refutation of proxy metrics" "epistemic uncertainty markers" "empirical ledger tracking"]
+    :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
+    :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
+  (:pack :id audit :tier [:pack :full]
+    :outcomes ["independent verification in clean contexts" "falsifiable gates shown to fail on baseline" "structural gap analysis" "rejection of vacuous test suites"]
+    :failureModes ["self-grading by author" "loosened test assertions to reach green" "unreachability masking"]
+    :affordances ["supervise gate" "asl audit gates" "strict falsify harness" "receipt validation"]))
 <!-- ASL_RULES_END -->'
 
     if [ -f "$target" ]; then
@@ -403,65 +598,133 @@ description: >-
 ## Rules
 
 ```asn
-(:rules :v 7 :src ADR-0081 :when [:scout :plan :implement :grade :all]
-  (:rule :id tools :when [:scout :implement]
-    :do "prefer asl rpc (:batch (:sym x) (:out f) (:read f a b) (:sec f h) (:ls d) (:callers x) (:impact x)) in one roundtrip; use host tools for content search and file edits until :grep and staged :edit ship; :edit reports immediate mode and staging ops (:diff :flush :discard) reject under :ERR_UNSUPPORTED"
-    :not "treat :status ok as success; :find is a filename glob; :q is unimplemented; assume staging exists before Phase438; :edit writes disk immediately and :diff :discard do not stage")
-  (:rule :id context :when [:all]
-    :do "load by symbol and slice, not by file; keep the invariant prefix byte-stable and append step-scoped context after it; never change tool definitions mid-session"
-    :why "retrieval beat full-context in AutoExperiment (41.7 vs 36.1; AST retrieval 33.3); cached prefix reads are discounted at model-specific rates; a tool-definition change invalidates the cached prefix")
-  (:rule :id output :when [:all]
-    :do "return typed receipts as ASN with path and line; reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
-    :why "compact tool-result notations lost accuracy on several model and benchmark pairs (Notation Matters, up to 9-14pp); the effect is not uniform, so measure, do not assume")
-  (:rule :id names :when [:implement]
-    :do "CamelCase for composite identifiers, structs and tests; precise conventional names; do not shorten a name only to save tokens; domain aliases are allowed when they carry meaning"
-    :why "CamelCase measured cheaper than kebab-case on cl100k for the documented identifiers, pending reproduction in Task43806; alias costs in the lock are context-dependent; semantic names carry meaning the model uses")
-  (:rule :id semantics :when [:implement :grade]
+(:rules :v 7 :src ADR-0081 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+  (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
     :now "the evaluator abandons a body at exit 0 on unknown symbols until Phase436 (prior audit: about half of declared assertions never ran); treat green as unverified and confirm asserts executed")
-  (:rule :id gates :when [:plan :implement :grade]
+  (:rule :id gates :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
     :do "every change carries a gate that fails before and passes after, and the baseline failure must be the intended semantic failure, not a missing command or a grep label; report exit code and executed asserts; assertion inversion measures reachability, production-code mutation measures fault detection, report both"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
     :not "weaken, skip, loosen, mock, or stub to reach green; exit 0 is not non-vacuity; a printed label is not a result")
-  (:rule :id grading :when [:grade]
+  (:rule :id grading :force :invariant :tier [:essential :full] :when [:grade]
     :do "the writer never grades its own work; a reviewer runs the gates in a clean context and verification rests on reproducible evidence, not on role labels; scouts are read-only and parallel"
+    :check "sh tests/acceptance/d81/SuperviseGate.sh"
+    :gate "sh tests/acceptance/d81/SuperviseGate.sh"
     :why "self-correction without external feedback tends to degrade results; self-preference bias in self-evaluation; persona prompts showed no overall benefit on factual QA")
-  (:rule :id concepts :when [:plan]
+  (:rule :id concepts :force :invariant :tier [:essential :full] :when [:plan]
     :do "a normative principle may be adopted explicitly without measurement, but every number in a rule needs source, scope and uncertainty; an empirical claim enters only with a measurable definition and a baseline-failing gate"
+    :check "./bin/asl audit consistency"
+    :gate "./bin/asl audit consistency"
     :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
-  (:rule :id foreign :when [:implement]
+  (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
     :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
+    :check "./bin/asl audit foreign"
+    :gate "./bin/asl audit foreign"
     :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
-  (:rule :id git :when [:implement]
-    :do "concise commits; verify base, diff and log before merge; intended changes only"
-    :coAuthor (:claude :host :agy false))
-  (:rule :id parallel :when [:plan]
-    :do "independent reads and scouts in one wave; one writer per owned partition and serialized conflicting commits; subagents soft 4 hard 6 are defaults, not optima")
-  (:rule :id anchor :when [:all]
-    :do "the plan lives in the ledger, not in memory: (:plan) once, (:where) before every mutation and after every gate, act from what it returns; until the ledger ops exist keep the plan in the task file and re-read it"
-    :why "compliance odds declined per generated function within a session (OR 0.944, exploratory, 2605.10039); whether re-anchoring restores it is the Task44106 hypothesis")
-  (:rule :id oneStep :when [:implement]
+  (:rule :id oneStep :force :invariant :tier [:essential :full] :when [:implement]
     :do "a step is a transaction with an owned write set and a closing gate; batch independent edits inside it; advance only with a runner-issued receipt bound to session, step, gate and source digest"
+    :check "./bin/asl audit steps"
+    :gate "./bin/asl audit steps"
     :not "batch several steps then verify; claim progress with a caller-supplied exit code")
-  (:rule :id budget :when [:all]
-    :do "run a gate after a provisional six tool calls without one; when (:budget) says :compact true, prefer recoverable observation masking, then (:handoff) and reset; thresholds are set by Task44106"
-    :why "instruction-load effects are model-dependent (IFScale); compaction at task boundaries and observation masking both reduced context without measured accuracy loss in their studies")
-  (:rule :id hiddenTests :when [:implement :grade]
+  (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
+    :check "./bin/asl test tests/acceptance/d81/Task46601.asl"
+    :gate "./bin/asl test tests/acceptance/d81/Task46601.asl"
     :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
-  (:rule :id bounded :when [:scout :implement]
-    :do "every read carries :limit and continues with :more; bound the output, not file completeness: a small relevant file may fit the bound"
-    :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
-  (:rule :id edge :when [:all]
+  (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
+    :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
+    :check "./bin/asl check"
+    :not "treat RPC as the primary interface; treat :status ok as success without checking the typed receipt; execute unvalidated shell text or expose direct command descriptions to agents")
+  (:rule :id note :force :affordance :tier [:affordance :full] :when [:all]
+    :do "record working memory via asl note write when holding volatile context, architectural discoveries, or empirical findings that would otherwise be lost across steps; query active observations via asl note query or asl note list to prevent duplicate investigation"
+    :check "./bin/asl note list"
+    :why "working memory reduces context loss and redundant re-reads; grounded findings are promoted at scope close to tasks or ADRs while transient step notes are retired")
+  (:rule :id ssot :force :affordance :tier [:affordance :full] :when [:all]
+    :do "rules live in one tracked source, asl/grammar/rules.asn; every exported surface is rendered from it by scripts/install.sh --render-rules and checked by --check-rules; per-client or per-tier editions are checked against their deterministic rendering; editing a rendered surface by hand is a defect"
+    :check "./scripts/install.sh --check-rules"
+    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails")
+  (:rule :id capabilities :force :affordance :tier [:affordance :full] :when [:all]
+    :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
+    :check "./bin/asl doctor"
+    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
+    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7")
+  (:rule :id output :force :orientation :tier [:orientation :full] :when [:all]
+    :do "return typed receipts as ASN with path and line; reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
+    :check :none
+    :why "compact tool-result notations lost accuracy on several model and benchmark pairs (Notation Matters, up to 9-14pp); the effect is not uniform, so measure, do not assume")
+  (:rule :id anchor :force :orientation :tier [:orientation :full] :when [:all]
+    :do "the plan lives in the ledger, not in memory: (:plan) once, (:where) before every mutation and after every gate, act from what it returns"
+    :check :none
+    :why "compliance odds declined per generated function within a session (OR 0.944, exploratory, 2605.10039); whether re-anchoring restores it is the Task44106 hypothesis")
+  (:rule :id edge :force :orientation :tier [:orientation :full] :when [:all]
     :do "when no plan step covers the situation: if the action is unauthorized or cannot be safely contained, escalate at once; otherwise recognize ((:where) has no matching step), preserve optionality (read before write, stage before flush, branch before merge, ask before delete), contain (smallest diff inside :owns), refute (run the cheapest thing that would prove you wrong), escalate ((:escalate :seen :tried :fork :resolves) to the principal)"
+    :check :none
+    :runtimeOnlyReason "Dynamic unplanned contingency escalation and edge case recognition require live runtime decision branching"
     :bias "declared: reversibility over optimality, evidence over confidence, stated intent over inferred intent"
     :why "no rule set matches edge-case variety; models fill gaps fluently instead of noticing them; the loop ends in a receipt to someone else because self-correction without external signal degrades")
-  (:rule :id ssot :when [:all]
-    :do "rules live in one tracked source, asl/grammar/rules.asn; every exported surface is rendered from it by scripts/install.sh --render-rules and checked by --check-rules; per-client or per-tier editions are checked against their deterministic rendering; editing a rendered surface by hand is a defect"
-    :why "the same rules existed in seven places and drifted; hand-synchronising them is the maintenance mode that fails")
-  (:rule :id capabilities :when [:all]
-    :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
-    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
-    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7"))
+  (:rule :id stake :force :orientation :when [:all] :tier [:orientation :full]
+    :do "judge work by whether it holds, not by whether it was instructed; report an off-assignment defect rather than stepping over it; responsibility is to system integrity rather than prompt compliance"
+    :check :none)
+  (:rule :id adaptive :force :orientation :when [:all] :tier [:orientation :full]
+    :do "abandon an approach that is not working rather than pressing harder; the trigger to pivot is the absence of new empirical evidence; stop repeating failed operations with superficial edits"
+    :check :none)
+  (:rule :id problemSolving :force :orientation :when [:all] :tier [:orientation :full]
+    :do "when no plan step covers the situation, reduce the uncertainty to the cheapest check that would prove you wrong and run that first; probe reality before generating speculative implementations"
+    :check :none)
+  (:rule :id context :force :heuristic :tier [:heuristic :full] :when [:all]
+    :do "load by symbol and slice, not by file; keep the invariant prefix byte-stable and append step-scoped context after it; never change tool definitions mid-session"
+    :check :none
+    :defeat "single-prompt workflows or models with unpenalized full-context caching"
+    :why "retrieval beat full-context in AutoExperiment (41.7 vs 36.1; AST retrieval 33.3); cached prefix reads are discounted at model-specific rates; a tool-definition change invalidates the cached prefix")
+  (:rule :id names :force :heuristic :tier [:heuristic :full] :when [:implement]
+    :do "CamelCase for composite identifiers, structs and tests; precise conventional names; do not shorten a name only to save tokens; domain aliases are allowed when they carry meaning"
+    :check :none
+    :defeat "domain aliases or external foreign interfaces require exact naming"
+    :why "CamelCase measured 44-50% cheaper per long identifier on cl100k, and 3.06% corpus-wide across 888 files on 2026-09-12; alias costs in the lock are context-dependent; semantic names carry meaning the model uses")
+  (:rule :id git :force :heuristic :tier [:heuristic :full] :when [:implement]
+    :do "concise commits; verify base, diff and log before merge; intended changes only"
+    :check :none
+    :defeat "atomic bulk initialization or machine-generated lockfile updates"
+    :coAuthor (:claude :host :agy false))
+  (:rule :id parallel :force :heuristic :tier [:heuristic :full] :when [:plan]
+    :do "independent reads and scouts in one wave; one writer per owned partition and serialized conflicting commits; subagents soft 4 hard 6 are defaults, not optima"
+    :check :none
+    :defeat "tightly coupled sequential mutations across identical files")
+  (:rule :id budget :force :heuristic :tier [:heuristic :full] :when [:all]
+    :do "run a gate after a provisional six tool calls without one; when (:budget) says :compact true, prefer recoverable observation masking, then (:handoff) and reset; thresholds are set by Task44106"
+    :check :none
+    :runtimeOnlyReason "Tool call budget and observation compaction depend on dynamic runtime execution trace length and cannot be statically evaluated"
+    :defeat "lightweight exploratory loops where checkpoint overhead exceeds context savings"
+    :why "instruction-load effects are model-dependent (IFScale); compaction at task boundaries and observation masking both reduced context without measured accuracy loss in their studies")
+  (:rule :id bounded :force :heuristic :tier [:scout :implement]
+    :do "every read carries :limit and continues with :more; bound the output, not file completeness: a small relevant file may fit the bound"
+    :check :none
+    :defeat "complete whole-file AST analysis or small schema generation"
+    :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
+  (:rule :id reconstructibility :force :affordance :tier [:affordance :full] :when [:all]
+    :do "anything reconstructible from code, git history, or a command is not written to durable memory; reconstructible records are refused and the refusal names the command that reports it; rejected alternatives are accepted because no command reports what was not chosen"
+    :check :none
+    :not "write durable records that duplicate git tree status or command output without meeting the reconstructibility test"
+    :why "restating command outputs creates drift and bloats context; durable records exist only for what cannot be reconstructed from the tree")
+  (:pack :id design :tier [:pack :full]
+    :outcomes ["high visual signal to noise ratio" "typography hierarchy" "responsive layout boundaries" "compact VDOM token density"]
+    :failureModes ["decorative gratuitous complexity" "unbounded layout shift" "unresponsive component containers"]
+    :affordances ["vdom rendering" "asn vector graphics" "color tokens" "spacing scales"])
+  (:pack :id development :tier [:pack :full]
+    :outcomes ["monorepo invariant compliance" "delimiter balance" "pure ASL packaging" "atomic git transactions" "AST mutation defense"]
+    :failureModes ["accidental foreign dependencies" "unbalanced S-expressions" "staged mutation leakage"]
+    :affordances ["asl check" "asl lint" "asl rpc batch" "git transaction boundary"])
+  (:pack :id research :tier [:pack :full]
+    :outcomes ["grounded measurements with method scope and date" "refutation of proxy metrics" "epistemic uncertainty markers" "empirical ledger tracking"]
+    :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
+    :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
+  (:pack :id audit :tier [:pack :full]
+    :outcomes ["independent verification in clean contexts" "falsifiable gates shown to fail on baseline" "structural gap analysis" "rejection of vacuous test suites"]
+    :failureModes ["self-grading by author" "loosened test assertions to reach green" "unreachability masking"]
+    :affordances ["supervise gate" "asl audit gates" "strict falsify harness" "receipt validation"]))
 ```
 
 ## Tool Suite Reference (verified 2026-09-11)

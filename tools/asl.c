@@ -5246,6 +5246,13 @@ static int check_rule_checkers(const char *ws_root) {
     return 0;
 }
 
+static int check_distribution_installers(const char *ws_root) {
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "bash \"%s/scripts/install.sh\" --check-installers >/dev/null 2>&1", ws_root);
+    int res = system(cmd);
+    return (res == 0) ? 0 : 1;
+}
+
 static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
     int gate_enabled[8];
     for (int i = 1; i <= 7; i++) gate_enabled[i] = 1;
@@ -5438,6 +5445,12 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
             return 1;
         }
         printf("    ✓ Rule checkers verified: every rule names its checker; phantom checkers rejected.\n");
+
+        if (check_distribution_installers(ws_root) != 0) {
+            printf("    ✗ Distribution installers verification failed: drift or nested dist detected\n");
+            return 1;
+        }
+        printf("    ✓ Distribution installers verified: single tracked source and byte-identical distribution copies.\n");
     } else {
         printf("--> [7/7] Auditing modular skills consistency and freshness...\n");
         printf("    ↳ [Gate 7] Skipped by selective filter.\n");
