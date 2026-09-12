@@ -209,6 +209,11 @@
       :rule "Language changes are evaluated by model generation against a versioned fixed task set, measuring the emission error rate of forms that fail to parse, bind, or assert; a change that lowers tokens while raising the error rate is rejected."
       :failureCode "ERR_UNMEASURED_EMISSION_ERROR_RATE"
       :exitCode 1)
+    (:semantic :id refutedStructuralRewritesRule
+      :rule "Refuted structural compaction rewrites (devowelling, delimiter deletion, indentation-significant rendering) are recorded with their empirical refutations and failure reasons; explicit delimiters remain the token-optimal structural encoding at current corpus depth, and reopening a refuted rewrite requires a new measurement rather than argument."
+      :failureCode "ERR_REOPENED_REFUTED_REWRITE"
+      :exitCode 1)
   ]
 )
+
 
