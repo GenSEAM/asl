@@ -1,0 +1,28 @@
+(:sessionContract :v 1 :src ADR-0081
+  :summary "Session progression, runner-issued receipts, and lease invariants for autonomous agent harnesses."
+  :rules [
+    (:rule :id trustedRunnerReceipt
+      :description "Ledger progression advances solely upon presentation of a runner-issued receipt matching active session, current step, and gate identity."
+      :falsification "Caller-supplied exit zero, fake hash, or mismatched session/step is rejected without state change.")
+    (:rule :id sourceDigestBinding
+      :description "Receipts must bind source tree digest; stale or divergent source invalidates in-flight execution."
+      :falsification "Stale digest or modified tree after test run fails progression.")
+    (:rule :id leaseIsolation
+      :description "File and task leases belong to active session; expired leases or foreign sessions cannot overwrite unowned buffers."
+      :falsification "Concurrent unleased mutations trigger lease violation error.")
+    (:rule :id durableStateRecovery
+      :description "Crash recovery restores durable verified state from ledger, discarding uncommitted in-flight mutations."
+      :falsification "Unverified mutations are discarded on recovery.")
+  ]
+  :receiptSchema [
+    (:field :id "receiptId" :type "Str" :desc "Unique runner-issued receipt identifier")
+    (:field :id "sessionId" :type "Str" :desc "Active session identifier")
+    (:field :id "taskId" :type "Str" :desc "Grounded task identifier")
+    (:field :id "stepIndex" :type "I64" :desc "Ordered step index within action DAG")
+    (:field :id "gateCommand" :type "Str" :desc "Exact command line executed by runner")
+    (:field :id "exitCode" :type "I64" :desc "Process return code recorded by runner")
+    (:field :id "sourceDigest" :type "Str" :desc "Workspace source digest at execution time")
+    (:field :id "status" :type "Str" :desc "Execution verdict :verified or :failed")
+    (:field :id "timestamp" :type "I64" :desc "Unix millisecond timestamp")
+  ]
+)
