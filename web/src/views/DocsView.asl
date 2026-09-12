@@ -29,35 +29,35 @@
         </header>
 
         <div class=\"p-1.5 rounded-2xl bg-surface/90 border border-line backdrop-blur-xl shadow-e2 mb-8 flex flex-wrap gap-1.5\" id=\"dv-tabs\">
-          <button type=\"button\" data-tab=\"cli\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-signal text-white shadow-sm flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"cli\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-signal text-white shadow-sm flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"4 17 10 11 4 5\"></polyline><line x1=\"12\" y1=\"19\" x2=\"20\" y2=\"19\"></line></svg>
             CLI Toolbelt
           </button>
-          <button type=\"button\" data-tab=\"mesh\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"mesh\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"16\" height=\"16\" x=\"4\" y=\"4\" rx=\"2\"></rect><rect width=\"6\" height=\"6\" x=\"9\" y=\"9\"></rect></svg>
             Wire Mesh &amp; IPC
           </button>
-          <button type=\"button\" data-tab=\"data\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"data\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"></ellipse><path d=\"M21 12c0 1.66-4 3-9 3s-9-1.34-9-3\"></path><path d=\"M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5\"></path></svg>
             ASN Token Density
           </button>
-          <button type=\"button\" data-tab=\"sql\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"sql\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><ellipse cx=\"12\" cy=\"5\" rx=\"9\" ry=\"3\"></ellipse><path d=\"M3 12a9 3 0 0 0 18 0\"></path></svg>
             Typed SQL Compiler
           </button>
-          <button type=\"button\" data-tab=\"syntax\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"syntax\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"16 18 22 12 16 6\"></polyline><polyline points=\"8 6 2 12 8 18\"></polyline></svg>
             Polyglot Syntax
           </button>
-          <button type=\"button\" data-tab=\"control\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"control\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m10 15 5-3-5-3v6Z\"></path></svg>
             Control Flow
           </button>
-          <button type=\"button\" data-tab=\"stdlib\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"stdlib\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z\"></path></svg>
             Standard Library
           </button>
-          <button type=\"button\" data-tab=\"ecosystem\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
+          <button type=\"button\" data-tab=\"ecosystem\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polygon points=\"12 2 2 7 12 12 22 7 12 2\"></polygon><polyline points=\"2 17 12 22 22 17\"></polyline><polyline points=\"2 12 12 17 22 12\"></polyline></svg>
             Package Ecosystem
           </button>
@@ -278,9 +278,9 @@
           function setTab(tab) {
             tabBtns.forEach(function(btn) {
               if (btn.getAttribute('data-tab') === tab) {
-                btn.className = 'dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-signal text-white shadow-sm flex items-center gap-2';
+                btn.className = 'dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-signal text-white shadow-sm flex items-center gap-2';
               } else {
-                btn.className = 'dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2';
+                btn.className = 'dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-colors bg-inset text-ink-2 hover:text-ink hover:bg-surface border border-line/60 flex items-center gap-2';
               }
             });
 
