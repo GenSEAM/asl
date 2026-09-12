@@ -21,7 +21,7 @@
       </span>
     </div>
 
-    <div class=\"max-w-6xl mx-auto px-4 space-y-8\">
+    <div class=\"max-w-canvas mx-auto px-4 space-y-8\">
       
       <div class=\"grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 rounded-2xl border border-line bg-surface/80 backdrop-blur-md shadow-e1\" id=\"skyloom-telemetry\">
         <div class=\"flex flex-col\">

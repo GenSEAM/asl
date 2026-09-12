@@ -7,7 +7,7 @@
   :d "Renders the complete 4-phase strategic roadmap view."
   "<div class=\"pt-28 pb-20\">
     <section id=\"roadmap\" aria-labelledby=\"roadmap-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
-      <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
+      <div class=\"max-w-shell mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
         <header class=\"mb-16 sm:mb-20 max-w-3xl\">
           <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
             <span class=\"text-signal\">Strategic Trajectory</span>

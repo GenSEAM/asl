@@ -13,7 +13,7 @@
   :d "Renders the complete documentation cockpit in pure AgentScript."
   (s/concat
     "<div class=\"pt-24 sm:pt-28 pb-24\" id=\"dv-container\">
-      <section id=\"docs\" aria-labelledby=\"docs-title\" class=\"relative py-12 sm:py-16 transition-colors bg-transparent max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">
+      <section id=\"docs\" aria-labelledby=\"docs-title\" class=\"relative py-12 sm:py-16 transition-colors bg-transparent max-w-shell mx-auto px-4 sm:px-6 lg:px-8\">
         <header class=\"mb-10 sm:mb-14 max-w-3xl\">
           <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
             <span class=\"text-signal\">04</span>

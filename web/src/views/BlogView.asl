@@ -5,7 +5,7 @@
 
 (df render-blog-view [] -> Str
   :d "Renders the complete engineering blog listing with interactive category filters, search, and article cards."
-  "<main class=\"flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full\" id=\"bv-main\">
+  "<main class=\"flex-1 max-w-shell mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full\" id=\"bv-main\">
     <header class=\"mb-16 sm:mb-20 max-w-3xl\">
       <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
         <span class=\"text-signal\">06</span>
