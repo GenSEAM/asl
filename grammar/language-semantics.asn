@@ -37,5 +37,13 @@
       :rule "A type conversion is source-to-target (e.g. int-to-string, not int-from-string, to-string, or as-string)."
       :failureCode "ERR_RETIRED_CONVERSION_FORM"
       :exitCode 1)
+    (:semantic :id expensiveBuiltinsRenamed
+      :rule "The 14 measured expensive multi-token builtins (including string-contains?, string-starts-with?, string-from-int64, string-replace, list-length) are renamed to their shortest unambiguous form; usage of retired spellings fails loudly."
+      :failureCode "ERR_RETIRED_BUILTIN"
+      :exitCode 1)
+    (:semantic :id zeroCompatibilityAliases
+      :rule "Retired built-in identifiers must be completely removed with zero backward-compatibility aliases left behind, preventing fragmented parallel spellings."
+      :failureCode "ERR_RETIRED_ALIAS"
+      :exitCode 1)
   ]
 )
