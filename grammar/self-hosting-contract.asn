@@ -1,0 +1,15 @@
+(:selfHostingDocumentation :v 1 :src ADR-0081
+  :summary "Grounded self-hosting claims, bootstrap generations, and settled architectural choices under ADR-0081."
+  :stages [
+    (:stage :id 0 :name "seed" :role "Explicit owned C seed adapter" :runtime "Native Darwin/POSIX C" :status :grounded)
+    (:stage :id 1 :name "stage1" :role "First-generation compiler built via seed" :runtime "ASL Native" :status :grounded)
+    (:stage :id 2 :name "stage2" :role "Autonomous self-compiled native tool without seed" :runtime "Pure ASL Self-Hosted" :status :grounded)
+    (:stage :id "wasm" :name "wasm32-wasi" :role "Portable WebAssembly compilation target" :runtime "WASM / WASI Host" :status :grounded)
+  ]
+  :settledClaims [
+    (:claim :id "bootstrap-closure" :description "Autonomous compiler rebuild closure without external ecosystem compilers or runtimes" :verified true)
+    (:claim :id "declared-boundaries" :description "Explicit declared OS/ABI host boundary at asl/tools/asl.c, zero undeclared deployed dependencies" :verified true)
+    (:claim :id "measured-metrics" :description "Published quantitative claims grounded in published_claims.asn and verified receipts ledger" :verified true)
+    (:claim :id "conceptual-clarity" :description "Peripheral scopes (quantum, arduino, voice) explicitly cataloged as non-falsifiable conceptual schemas" :verified true)
+  ]
+)
