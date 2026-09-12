@@ -1452,6 +1452,45 @@ static int op_leases(int step_id, const char *ws_root, StrBuf *out) {
     return 0;
 }
 
+static int op_release(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    (void)ws_root;
+    const char *path = get_kw_arg(tokens, ntokens, "path");
+    if (!path) path = get_pos_arg(tokens, ntokens, 1);
+    if (!path || !path[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"release\" :status \"rejected\" :error-code \":ERR_INVALID_ARG\" :message \"Missing required path\")\n");
+        return 1;
+    }
+    char session_id[128] = "default";
+    const char *ks = get_kw_arg(tokens, ntokens, "sessionId");
+    if (!ks) ks = get_kw_arg(tokens, ntokens, "session-id");
+    if (ks && ks[0]) strncpy(session_id, ks, sizeof(session_id) - 1);
+
+    FileLease *existing = find_lease_for_path(path);
+    if (!existing) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"release\" :status \"rejected\" :error-code \":ERR_LEASE_NOT_FOUND\" :message \"No lease found for path\")\n");
+        return 1;
+    }
+    if (strcmp(existing->session_id, session_id) != 0) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"release\" :status \"rejected\" :error-code \":ERR_NOT_LEASE_HOLDER\" :message \"Session does not hold lease\")\n");
+        return 1;
+    }
+    existing->active = 0;
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"release\" :status \"ok\" :path \"");
+    sb_append_escaped(out, path);
+    sb_append(out, "\" :session-id \"");
+    sb_append_escaped(out, session_id);
+    sb_append(out, "\")\n");
+    return 0;
+}
+
 typedef struct {
     char file[1024];
     int line;
@@ -2899,10 +2938,10 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 sb_append(out, "\")\n");
                 free_tokens(tokens, ntokens);
                 return 1;
-            } else if (st_err == 2) {
+            } else if (st_err == 2 || st_err == 3) {
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
-                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_LEASE_CONFLICT\" :message \"");
+                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_STALE_LEASE\" :message \"");
                 sb_append_escaped(out, err_msg);
                 sb_append(out, "\")\n");
                 free_tokens(tokens, ntokens);
@@ -3409,6 +3448,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_claim(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "leases") == 0) {
         op_leases(step_id, ws_root, out);
+    } else if (strcmp(op, "release") == 0) {
+        op_release(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "q") == 0) {
         op_q(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "trace") == 0) {
