@@ -139,6 +139,18 @@
          :purpose "Topological wave execution: atomic parallel phases where subsequent waves wait or skip on failure"
          :savings "90%")
 
+    (:op :id "asl-claim"
+         :cmd "asl rpc '(:batch (:claim :path \"...\" [:sessionId \"...\"] [:ttl-ms <ms>]))'"
+         :category "concurrency"
+         :purpose "Acquire path lease with on-disk digest preventing concurrent writer collision and dirty overwrites"
+         :savings "85%")
+
+    (:op :id "asl-leases"
+         :cmd "asl rpc '(:batch (:leases))'"
+         :category "concurrency"
+         :purpose "Inspect active writer claims and path digests in resident memory ledger"
+         :savings "90%")
+
     ;; === Supervised Execution & Git ===
     (:op :id "asl-run"
          :cmd "asl rpc '(:batch (:run :cmd \"...\" [:cwd \"...\"] [:timeout-ms <ms>] [:limit <bytes>]))'"

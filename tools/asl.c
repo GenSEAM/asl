@@ -1220,6 +1220,203 @@ static void clear_staged_buffers(void) {
     g_nstaged = 0;
 }
 
+/* -------------------------------------------------------------------------
+   Concurrent Writer Leases & Staleness Detection (D81 Task44203)
+   ------------------------------------------------------------------------- */
+
+typedef struct {
+    char rel_path[1024];
+    char session_id[128];
+    char digest[64];
+    double acquired_at_ms;
+    double ttl_ms;
+    int active;
+} FileLease;
+
+#define MAX_FILE_LEASES 128
+static FileLease g_file_leases[MAX_FILE_LEASES];
+static int g_nleases = 0;
+
+static int compute_file_digest(const char *full_path, char *out_digest, size_t max_len) {
+    if (!full_path || !out_digest || max_len < 32) return 0;
+    FILE *fp = fopen(full_path, "rb");
+    if (!fp) {
+        snprintf(out_digest, max_len, "absent");
+        return 0;
+    }
+    unsigned long long hash = 14695981039346656037ULL;
+    unsigned char buf[4096];
+    size_t nr;
+    size_t total = 0;
+    while ((nr = fread(buf, 1, sizeof(buf), fp)) > 0) {
+        total += nr;
+        for (size_t i = 0; i < nr; i++) {
+            hash ^= (unsigned long long)buf[i];
+            hash *= 1099511628211ULL;
+        }
+    }
+    fclose(fp);
+    snprintf(out_digest, max_len, "%016llx-%zu", hash, total);
+    return 1;
+}
+
+static FileLease *find_lease_for_path(const char *rel_path) {
+    double now = get_monotonic_ms();
+    for (int i = 0; i < g_nleases; i++) {
+        if (g_file_leases[i].active && strcmp(g_file_leases[i].rel_path, rel_path) == 0) {
+            if ((now - g_file_leases[i].acquired_at_ms) > g_file_leases[i].ttl_ms) {
+                g_file_leases[i].active = 0;
+                continue;
+            }
+            return &g_file_leases[i];
+        }
+    }
+    return NULL;
+}
+
+static int check_lease_staleness(const char *ws_root, const char *rel_path, const char *session_id, char *err_msg, size_t err_msg_sz) {
+    FileLease *lease = find_lease_for_path(rel_path);
+    if (!lease) return 0;
+
+    if (session_id && session_id[0] && strcmp(lease->session_id, session_id) != 0) {
+        snprintf(err_msg, err_msg_sz, "Active lease held by session '%s'", lease->session_id);
+        return 2;
+    }
+
+    char full_path[4096];
+    resolve_path(ws_root, rel_path, full_path, sizeof(full_path));
+    char cur_digest[64] = {0};
+    compute_file_digest(full_path, cur_digest, sizeof(cur_digest));
+
+    if (strcmp(lease->digest, cur_digest) != 0) {
+        snprintf(err_msg, err_msg_sz, "File content modified externally: expected digest '%s', current digest '%s'", lease->digest, cur_digest);
+        return 1;
+    }
+    return 0;
+}
+
+static int op_claim(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    char path[1024] = {0};
+    const char *kp = get_kw_arg(tokens, ntokens, "path");
+    if (!kp) kp = get_kw_arg(tokens, ntokens, "file");
+    if (!kp) kp = get_pos_arg(tokens, ntokens, 1);
+    if (kp) strncpy(path, kp, sizeof(path) - 1);
+
+    if (!path[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"claim\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Path required\")\n");
+        return 1;
+    }
+
+    if (!is_safe_path(ws_root, path)) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"claim\" :status \"rejected\" :error-code \":ERR_BOUNDARY_VIOLATION\" :message \"Path escapes workspace boundary: ");
+        sb_append_escaped(out, path);
+        sb_append(out, "\")\n");
+        return 1;
+    }
+
+    char session_id[128] = "default";
+    const char *ks = get_kw_arg(tokens, ntokens, "sessionId");
+    if (!ks) ks = get_kw_arg(tokens, ntokens, "session-id");
+    if (ks && ks[0]) strncpy(session_id, ks, sizeof(session_id) - 1);
+
+    double ttl_ms = 60000.0;
+    const char *kt = get_kw_arg(tokens, ntokens, "ttl-ms");
+    if (kt) {
+        double parsed = atof(kt);
+        if (parsed > 0) ttl_ms = parsed;
+    }
+
+    FileLease *existing = find_lease_for_path(path);
+    if (existing && strcmp(existing->session_id, session_id) != 0) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"claim\" :status \"rejected\" :error-code \":ERR_LEASE_CONFLICT\" :message \"Path lease currently held by another session: ");
+        sb_append_escaped(out, existing->session_id);
+        sb_append(out, "\")\n");
+        return 1;
+    }
+
+    char full_path[4096];
+    resolve_path(ws_root, path, full_path, sizeof(full_path));
+    char digest[64] = {0};
+    compute_file_digest(full_path, digest, sizeof(digest));
+
+    if (!existing) {
+        if (g_nleases < MAX_FILE_LEASES) {
+            existing = &g_file_leases[g_nleases++];
+        } else {
+            for (int i = 0; i < g_nleases; i++) {
+                if (!g_file_leases[i].active) {
+                    existing = &g_file_leases[i];
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!existing) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"claim\" :status \"rejected\" :error-code \":ERR_LIMIT_EXCEEDED\" :message \"Maximum active leases reached\")\n");
+        return 1;
+    }
+
+    strncpy(existing->rel_path, path, sizeof(existing->rel_path) - 1);
+    strncpy(existing->session_id, session_id, sizeof(existing->session_id) - 1);
+    strncpy(existing->digest, digest, sizeof(existing->digest) - 1);
+    existing->acquired_at_ms = get_monotonic_ms();
+    existing->ttl_ms = ttl_ms;
+    existing->active = 1;
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"claim\" :status \"ok\" :path \"");
+    sb_append_escaped(out, path);
+    sb_append(out, "\" :session-id \"");
+    sb_append_escaped(out, session_id);
+    sb_append(out, "\" :digest \"");
+    sb_append_escaped(out, digest);
+    sb_append(out, "\" :ttl-ms ");
+    sb_append_int(out, (long long)ttl_ms);
+    sb_append(out, ")\n");
+    return 0;
+}
+
+static int op_leases(int step_id, const char *ws_root, StrBuf *out) {
+    (void)ws_root;
+    double now = get_monotonic_ms();
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"leases\" :status \"ok\" :leases [");
+    int count = 0;
+    for (int i = 0; i < g_nleases; i++) {
+        if (!g_file_leases[i].active) continue;
+        double remaining = g_file_leases[i].ttl_ms - (now - g_file_leases[i].acquired_at_ms);
+        if (remaining <= 0) {
+            g_file_leases[i].active = 0;
+            continue;
+        }
+        sb_append(out, " (:lease :path \"");
+        sb_append_escaped(out, g_file_leases[i].rel_path);
+        sb_append(out, "\" :session-id \"");
+        sb_append_escaped(out, g_file_leases[i].session_id);
+        sb_append(out, "\" :digest \"");
+        sb_append_escaped(out, g_file_leases[i].digest);
+        sb_append(out, "\" :remaining-ms ");
+        sb_append_int(out, (long long)remaining);
+        sb_append(out, ")");
+        count++;
+    }
+    sb_append(out, " ] :active-count ");
+    sb_append_int(out, count);
+    sb_append(out, ")\n");
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -1504,6 +1701,31 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
+            char session_id[128] = {0};
+            const char *ksid = get_kw_arg(tokens, ntokens, "sessionId");
+            if (!ksid) ksid = get_kw_arg(tokens, ntokens, "session-id");
+            if (ksid) strncpy(session_id, ksid, sizeof(session_id) - 1);
+
+            char err_msg[512] = {0};
+            int st_err = check_lease_staleness(ws_root, file, session_id, err_msg, sizeof(err_msg));
+            if (st_err == 1) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_STALE_FILE\" :message \"");
+                sb_append_escaped(out, err_msg);
+                sb_append(out, "\")\n");
+                free_tokens(tokens, ntokens);
+                return 1;
+            } else if (st_err == 2) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_LEASE_CONFLICT\" :message \"");
+                sb_append_escaped(out, err_msg);
+                sb_append(out, "\")\n");
+                free_tokens(tokens, ntokens);
+                return 1;
+            }
+
             char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
             StagedBuffer *stb = find_staged_buffer(file);
@@ -1622,6 +1844,31 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             sb_append_escaped(out, file);
             sb_append(out, "\")\n");
         } else {
+            char session_id[128] = {0};
+            const char *ksid = get_kw_arg(tokens, ntokens, "sessionId");
+            if (!ksid) ksid = get_kw_arg(tokens, ntokens, "session-id");
+            if (ksid) strncpy(session_id, ksid, sizeof(session_id) - 1);
+
+            char err_msg[512] = {0};
+            int st_err = check_lease_staleness(ws_root, file, session_id, err_msg, sizeof(err_msg));
+            if (st_err == 1) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_STALE_FILE\" :message \"");
+                sb_append_escaped(out, err_msg);
+                sb_append(out, "\")\n");
+                free_tokens(tokens, ntokens);
+                return 1;
+            } else if (st_err == 2) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_LEASE_CONFLICT\" :message \"");
+                sb_append_escaped(out, err_msg);
+                sb_append(out, "\")\n");
+                free_tokens(tokens, ntokens);
+                return 1;
+            }
+
             char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
             char parent_dir[4096];
@@ -2118,6 +2365,10 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_compose(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "run") == 0) {
         op_run(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "claim") == 0) {
+        op_claim(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "leases") == 0) {
+        op_leases(step_id, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
