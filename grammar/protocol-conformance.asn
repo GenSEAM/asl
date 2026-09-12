@@ -40,4 +40,10 @@
         (:engine :id "native-host" :type "resident-bootstrap" :conformance :full)
         (:engine :id "portable-wasm" :type "autonomous-closure" :conformance :full)
       ])
+    (:contract :id decoderTool
+      :rule "A decoder renders any source, form or symbol into an expanded human-readable account on demand, including qualified prefixes, definitions and macro expansions; decoder output is strictly enforced under no-reentry as language source."
+      :modes ["human-readable" "audit-explanation"]
+      :invariants [
+        (:invariant :id "no-reentry" :rule "Decoder output cannot re-enter as executable source code")
+      ])
   ])
