@@ -1730,6 +1730,78 @@ static void append_session_trace(const char *ws_root, int step_id, const char *o
     fclose(fp);
 }
 
+typedef struct {
+    char line[2048];
+    long long timestamp;
+    long long causal_clock;
+    int seq;
+    char session_id[128];
+    char runtime_target[64];
+    char parent_digest[128];
+    char digest[128];
+    char op[64];
+    char target[512];
+    char status[64];
+} TraceRecord;
+
+static void extract_asn_kw_str(const char *src, const char *key1, const char *key2, char *dst, size_t dst_sz) {
+    dst[0] = '\0';
+    char pat[128];
+    snprintf(pat, sizeof(pat), ":%s \"", key1);
+    char *p = strstr(src, pat);
+    if (!p && key2) {
+        snprintf(pat, sizeof(pat), ":%s \"", key2);
+        p = strstr(src, pat);
+    }
+    if (p) {
+        p += strlen(pat);
+        char *q = strchr(p, '\"');
+        if (q) {
+            size_t len = (size_t)(q - p);
+            if (len >= dst_sz) len = dst_sz - 1;
+            strncpy(dst, p, len);
+            dst[len] = '\0';
+        }
+    }
+}
+
+static long long extract_asn_kw_i64(const char *src, const char *key1, const char *key2, long long def_val) {
+    char pat[128];
+    snprintf(pat, sizeof(pat), ":%s ", key1);
+    char *p = strstr(src, pat);
+    if (!p && key2) {
+        snprintf(pat, sizeof(pat), ":%s ", key2);
+        p = strstr(src, pat);
+    }
+    if (p) {
+        p += strlen(pat);
+        return atoll(p);
+    }
+    return def_val;
+}
+
+static int trace_record_causal_cmp(const void *va, const void *vb) {
+    const TraceRecord *a = (const TraceRecord *)va;
+    const TraceRecord *b = (const TraceRecord *)vb;
+
+    if (b->parent_digest[0] && a->digest[0] && strcmp(b->parent_digest, a->digest) == 0) return -1;
+    if (a->parent_digest[0] && b->digest[0] && strcmp(a->parent_digest, b->digest) == 0) return 1;
+
+    if (a->session_id[0] && b->session_id[0] && strcmp(a->session_id, b->session_id) == 0 &&
+        a->runtime_target[0] && b->runtime_target[0] && strcmp(a->runtime_target, b->runtime_target) == 0) {
+        if (a->seq != b->seq) return (a->seq < b->seq) ? -1 : 1;
+    }
+
+    if (a->causal_clock != b->causal_clock) {
+        return (a->causal_clock < b->causal_clock) ? -1 : 1;
+    }
+
+    if (a->timestamp != b->timestamp) {
+        return (a->timestamp < b->timestamp) ? -1 : 1;
+    }
+    return 0;
+}
+
 static int op_trace(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
     const char *ksince = get_kw_arg(tokens, ntokens, "since");
     long long since = ksince ? atoll(ksince) : 0;
@@ -1740,66 +1812,248 @@ static int op_trace(int step_id, StepToken *tokens, int ntokens, const char *ws_
     int limit = klimit ? atoi(klimit) : 20;
     if (limit <= 0) limit = 20;
 
-    char trace_path[4096];
-    snprintf(trace_path, sizeof(trace_path), "%s/.asl/mem/trace.asn", ws_root);
+    const char *kscope = get_kw_arg(tokens, ntokens, "scope");
+    int is_mesh = (kscope && (strcmp(kscope, "mesh") == 0 || strcmp(kscope, ":mesh") == 0));
 
-    FILE *fp = fopen(trace_path, "r");
-    if (!fp) {
+    if (!is_mesh) {
+        char trace_path[4096];
+        snprintf(trace_path, sizeof(trace_path), "%s/.asl/mem/trace.asn", ws_root);
+
+        FILE *fp = fopen(trace_path, "r");
+        if (!fp) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"trace\" :status \"ok\" :count 0 :records [])\n");
+            return 0;
+        }
+
+        char line[4096];
+        StrBuf rec_sb;
+        sb_init(&rec_sb);
+        int count = 0;
+
+        while (fgets(line, sizeof(line), fp)) {
+            char *p = strstr(line, "(:trace-entry");
+            if (!p) continue;
+
+            if (fop && fop[0]) {
+                char op_pat[128];
+                snprintf(op_pat, sizeof(op_pat), ":op \"%s\"", fop);
+                if (!strstr(p, op_pat)) continue;
+            }
+
+            if (since > 0) {
+                char *ts_ptr = strstr(p, ":timestamp ");
+                if (ts_ptr) {
+                    long long ts = atoll(ts_ptr + 11);
+                    if (ts < since) continue;
+                }
+            }
+
+            char *end = p + strlen(p) - 1;
+            while (end > p && (*end == '\n' || *end == '\r' || *end == ' ' || *end == '\t')) {
+                *end = '\0';
+                end--;
+            }
+
+            sb_append(&rec_sb, " ");
+            sb_append(&rec_sb, p);
+            count++;
+            if (count >= limit) break;
+        }
+        fclose(fp);
+
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"trace\" :status \"ok\" :count 0 :records [])\n");
+        sb_append(out, " :op \"trace\" :status \"ok\" :count ");
+        sb_append_int(out, count);
+        sb_append(out, " :records [");
+        if (rec_sb.data && rec_sb.data[0]) {
+            sb_append(out, rec_sb.data);
+            sb_append(out, " ");
+        }
+        sb_append(out, "])\n");
+        sb_free(&rec_sb);
         return 0;
     }
 
-    char line[4096];
-    StrBuf rec_sb;
-    sb_init(&rec_sb);
-    int count = 0;
+    /* Mesh scope: load multi-runtime records, order causally, report sequence gaps explicitly */
+    TraceRecord records[256];
+    int rec_count = 0;
 
-    while (fgets(line, sizeof(line), fp)) {
-        char *p = strstr(line, "(:trace-entry");
-        if (!p) continue;
+    const char *sources[2] = { ".asl/mem/telemetry/mesh-trace.asn", ".asl/mem/trace.asn" };
+    for (int s = 0; s < 2; s++) {
+        char path[4096];
+        snprintf(path, sizeof(path), "%s/%s", ws_root, sources[s]);
+        FILE *fp = fopen(path, "r");
+        if (!fp) continue;
 
-        if (fop && fop[0]) {
-            char op_pat[128];
-            snprintf(op_pat, sizeof(op_pat), ":op \"%s\"", fop);
-            if (!strstr(p, op_pat)) continue;
+        char line[4096];
+        while (fgets(line, sizeof(line), fp) && rec_count < 256) {
+            char *p = strstr(line, "(:trace-entry");
+            if (!p) continue;
+
+            if (fop && fop[0]) {
+                char op_pat[128];
+                snprintf(op_pat, sizeof(op_pat), ":op \"%s\"", fop);
+                if (!strstr(p, op_pat)) continue;
+            }
+
+            long long ts = extract_asn_kw_i64(p, "timestamp", NULL, 0);
+            if (since > 0 && ts > 0 && ts < since) continue;
+
+            TraceRecord *r = &records[rec_count];
+            memset(r, 0, sizeof(TraceRecord));
+
+            char *end = p + strlen(p) - 1;
+            while (end > p && (*end == '\n' || *end == '\r' || *end == ' ' || *end == '\t')) {
+                *end = '\0';
+                end--;
+            }
+            strncpy(r->line, p, sizeof(r->line) - 1);
+
+            r->timestamp = ts;
+            r->causal_clock = extract_asn_kw_i64(p, "causalClock", "causal-clock", ts);
+            r->seq = (int)extract_asn_kw_i64(p, "seq", "sequence", extract_asn_kw_i64(p, "step", NULL, 0));
+            extract_asn_kw_str(p, "sessionId", "session-id", r->session_id, sizeof(r->session_id));
+            extract_asn_kw_str(p, "runtimeTarget", "runtime-target", r->runtime_target, sizeof(r->runtime_target));
+            extract_asn_kw_str(p, "parentDigest", "parent-digest", r->parent_digest, sizeof(r->parent_digest));
+            extract_asn_kw_str(p, "digest", NULL, r->digest, sizeof(r->digest));
+            extract_asn_kw_str(p, "op", NULL, r->op, sizeof(r->op));
+            extract_asn_kw_str(p, "target", NULL, r->target, sizeof(r->target));
+            extract_asn_kw_str(p, "status", NULL, r->status, sizeof(r->status));
+
+            rec_count++;
         }
+        fclose(fp);
+    }
 
-        if (since > 0) {
-            char *ts_ptr = strstr(p, ":timestamp ");
-            if (ts_ptr) {
-                long long ts = atoll(ts_ptr + 11);
-                if (ts < since) continue;
+    if (rec_count > 1) {
+        qsort(records, rec_count, sizeof(TraceRecord), trace_record_causal_cmp);
+    }
+
+    StrBuf gap_sb;
+    sb_init(&gap_sb);
+    int gap_count = 0;
+
+    typedef struct {
+        char key[192];
+        int last_seq;
+    } SeqEntry;
+    SeqEntry seq_table[64];
+    int seq_entry_count = 0;
+
+    char seen_digests[256][128];
+    int seen_digest_count = 0;
+
+    for (int i = 0; i < rec_count; i++) {
+        TraceRecord *r = &records[i];
+
+        if (r->session_id[0] && r->runtime_target[0] && r->seq > 0) {
+            char key[192];
+            snprintf(key, sizeof(key), "%s::%s", r->session_id, r->runtime_target);
+
+            int found_idx = -1;
+            for (int k = 0; k < seq_entry_count; k++) {
+                if (strcmp(seq_table[k].key, key) == 0) {
+                    found_idx = k;
+                    break;
+                }
+            }
+
+            if (found_idx < 0) {
+                if (r->seq > 1) {
+                    sb_append(&gap_sb, " (:trace-gap :sessionId \"");
+                    sb_append(&gap_sb, r->session_id);
+                    sb_append(&gap_sb, "\" :runtimeTarget \"");
+                    sb_append(&gap_sb, r->runtime_target);
+                    sb_append(&gap_sb, "\" :expectedSeq 1 :foundSeq ");
+                    sb_append_int(&gap_sb, r->seq);
+                    sb_append(&gap_sb, " :reason \"sequence-gap-detected\")");
+                    gap_count++;
+                }
+                if (seq_entry_count < 64) {
+                    strncpy(seq_table[seq_entry_count].key, key, sizeof(seq_table[0].key) - 1);
+                    seq_table[seq_entry_count].last_seq = r->seq;
+                    seq_entry_count++;
+                }
+            } else {
+                int exp = seq_table[found_idx].last_seq + 1;
+                if (r->seq > exp) {
+                    sb_append(&gap_sb, " (:trace-gap :sessionId \"");
+                    sb_append(&gap_sb, r->session_id);
+                    sb_append(&gap_sb, "\" :runtimeTarget \"");
+                    sb_append(&gap_sb, r->runtime_target);
+                    sb_append(&gap_sb, "\" :expectedSeq ");
+                    sb_append_int(&gap_sb, exp);
+                    sb_append(&gap_sb, " :foundSeq ");
+                    sb_append_int(&gap_sb, r->seq);
+                    sb_append(&gap_sb, " :reason \"sequence-gap-detected\")");
+                    gap_count++;
+                }
+                seq_table[found_idx].last_seq = r->seq;
             }
         }
 
-        char *end = p + strlen(p) - 1;
-        while (end > p && (*end == '\n' || *end == '\r' || *end == ' ' || *end == '\t')) {
-            *end = '\0';
-            end--;
+        if (r->parent_digest[0]) {
+            int parent_seen = 0;
+            for (int d = 0; d < seen_digest_count; d++) {
+                if (strcmp(seen_digests[d], r->parent_digest) == 0) {
+                    parent_seen = 1;
+                    break;
+                }
+            }
+            if (!parent_seen) {
+                sb_append(&gap_sb, " (:trace-gap :sessionId \"");
+                sb_append(&gap_sb, r->session_id);
+                sb_append(&gap_sb, "\" :runtimeTarget \"");
+                sb_append(&gap_sb, r->runtime_target);
+                sb_append(&gap_sb, "\" :missingParentDigest \"");
+                sb_append(&gap_sb, r->parent_digest);
+                sb_append(&gap_sb, "\" :reason \"missing-parent-digest\")");
+                gap_count++;
+            }
         }
 
-        sb_append(&rec_sb, " ");
-        sb_append(&rec_sb, p);
-        count++;
-        if (count >= limit) break;
+        if (r->digest[0] && seen_digest_count < 256) {
+            strncpy(seen_digests[seen_digest_count], r->digest, sizeof(seen_digests[0]) - 1);
+            seen_digest_count++;
+        }
     }
-    fclose(fp);
+
+    StrBuf rec_sb;
+    sb_init(&rec_sb);
+    int emit_count = 0;
+    for (int i = 0; i < rec_count && emit_count < limit; i++) {
+        sb_append(&rec_sb, " ");
+        sb_append(&rec_sb, records[i].line);
+        emit_count++;
+    }
 
     sb_append(out, "  (:step :id ");
     sb_append_int(out, step_id);
-    sb_append(out, " :op \"trace\" :status \"ok\" :count ");
-    sb_append_int(out, count);
+    sb_append(out, " :op \"trace\" :status \"ok\" :scope \"mesh\" :count ");
+    sb_append_int(out, emit_count);
+    sb_append(out, " :gaps ");
+    sb_append_int(out, gap_count);
     sb_append(out, " :records [");
     if (rec_sb.data && rec_sb.data[0]) {
         sb_append(out, rec_sb.data);
         sb_append(out, " ");
     }
-    sb_append(out, "])\n");
+    sb_append(out, "]");
+    if (gap_count > 0 && gap_sb.data && gap_sb.data[0]) {
+        sb_append(out, " :gaps-reported [");
+        sb_append(out, gap_sb.data);
+        sb_append(out, " ]");
+    }
+    sb_append(out, ")\n");
+
     sb_free(&rec_sb);
+    sb_free(&gap_sb);
     return 0;
 }
+
 
 static char *read_file_alloc(const char *path, size_t *out_len);
 
@@ -7049,10 +7303,7 @@ static int audit_reflection(const char *ws_root, const char *task_id) {
         }
     }
 
-    char trace_path[4096];
-    snprintf(trace_path, sizeof(trace_path), "%s/.asl/mem/trace.asn", ws_root);
-    FILE *tfp = fopen(trace_path, "r");
-
+    const char *trace_sources[2] = { ".asl/mem/trace.asn", ".asl/mem/telemetry/mesh-trace.asn" };
     int out_of_owns_cnt = 0;
     int unfulfilled_cnt = 0;
     int stale_receipts_cnt = 0;
@@ -7073,7 +7324,12 @@ static int audit_reflection(const char *ws_root, const char *task_id) {
 
     printf("  :findings [\n");
 
-    if (tfp) {
+    for (int ti = 0; ti < 2; ti++) {
+        char trace_path[4096];
+        snprintf(trace_path, sizeof(trace_path), "%s/%s", ws_root, trace_sources[ti]);
+        FILE *tfp = fopen(trace_path, "r");
+        if (!tfp) continue;
+
         char line[4096];
         while (fgets(line, sizeof(line), tfp)) {
             if (strstr(line, ":op \"edit\"") || strstr(line, ":op \"write\"")) {
