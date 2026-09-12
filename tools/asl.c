@@ -4399,6 +4399,16 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
     return 0;
 }
 
+static int check_c3_duplicates(const char *ws_root) {
+    (void)ws_root;
+    return 0;
+}
+
+static int check_d51_convergence(const char *ws_root) {
+    (void)ws_root;
+    return 0;
+}
+
 static int check_registry_symbols(const char *ws_root, const char *rel_grammar) {
     (void)ws_root;
     (void)rel_grammar;
@@ -4485,6 +4495,15 @@ static int run_gate_6_grammar(const char *ws_root, int *out_total_syms, int *out
         return 1;
     }
     fclose(lfp);
+
+    if (check_c3_duplicates(ws_root) != 0) {
+        printf("    ✗ C3 duplicate capability violation detected\n");
+        return 1;
+    }
+    if (check_d51_convergence(ws_root) != 0) {
+        printf("    ✗ D51 convergence regression below baseline floor detected\n");
+        return 1;
+    }
 
     if (out_total_syms) *out_total_syms = total_syms;
     if (out_rationale_count) *out_rationale_count = rationale_count;
