@@ -53,7 +53,12 @@ export default {
         e3: '0 12px 24px hsl(var(--shadow-hue) / var(--shadow-strength))',
         e4: '0 20px 40px hsl(var(--shadow-hue) / var(--shadow-strength))',
       },
-      maxWidth: { prose: '68ch' },
+      maxWidth: {
+        prose: '68ch',
+        shell: '72rem',
+        wide: '80rem',
+        canvas: '80rem',
+      },
     },
   },
   plugins: [],

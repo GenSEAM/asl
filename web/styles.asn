@@ -1,5 +1,11 @@
 (:stylesheet
   :version "1.0.0"
+  :frame "Instrumented Editorial"
+  :widthPolicy [
+    (:primary-shell "72rem")
+    (:prose-measure "68ch")
+    (:wide-surface "80rem")
+  ]
   :tailwind [:base :components :utilities]
   :layers [
     (:layer
@@ -109,32 +115,10 @@
       :name "components"
       :rules [
         (:rule
-          :selector ".rule-fade"
+          :selector ".rule-hairline"
           :declarations [
             (:height "1px")
-            (:background "linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.4), transparent)")
-          ])
-        (:rule
-          :selector ".bg-dot-grid"
-          :declarations [
-            (:background-image "radial-gradient(rgb(var(--line-strong) / 0.18) 1px, transparent 1px)")
-            (:background-size "24px 24px")
-          ])
-        (:rule
-          :selector ".bg-blueprint-grid"
-          :declarations [
-            (:background-image "linear-gradient(to right, rgb(var(--line) / 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--line) / 0.4) 1px, transparent 1px)")
-            (:background-size "36px 36px")
-          ])
-        (:rule
-          :selector ".glow-purple"
-          :declarations [
-            (:box-shadow "0 0 50px -10px rgba(168, 85, 247, 0.25)")
-          ])
-        (:rule
-          :selector ".glow-purple-sm"
-          :declarations [
-            (:box-shadow "0 0 25px -5px rgba(168, 85, 247, 0.2)")
+            (:background "rgb(var(--line))")
           ])
       ])
   ]
@@ -155,4 +139,10 @@
             (:transition-duration "0.01ms !important")
           ])
       ])
-  ])
+  ]
+  :widthPolicy [
+    (:shell "72rem" "Primary reading shell")
+    (:canvas "80rem" "Wide data canvas opt-in")
+    (:prose "68ch" "Prose reading measure")
+  ]
+)

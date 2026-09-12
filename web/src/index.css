@@ -92,29 +92,20 @@
 }
 
 @layer components {
-  .rule-fade {
+  .rule-hairline {
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgb(var(--line-strong) / 0.4), transparent);
+    background-color: rgb(var(--line));
   }
-
-  .bg-dot-grid {
-    background-image: radial-gradient(rgb(var(--line-strong) / 0.18) 1px, transparent 1px);
-    background-size: 24px 24px;
+  .shell {
+    max-width: 72rem;
+    margin-left: auto;
+    margin-right: auto;
   }
-
-  .bg-blueprint-grid {
-    background-image: linear-gradient(to right, rgb(var(--line) / 0.4) 1px, transparent 1px), linear-gradient(to bottom, rgb(var(--line) / 0.4) 1px, transparent 1px);
-    background-size: 36px 36px;
+  .canvas-wide {
+    max-width: 80rem;
+    margin-left: auto;
+    margin-right: auto;
   }
-
-  .glow-purple {
-    box-shadow: 0 0 50px -10px rgba(168, 85, 247, 0.25);
-  }
-
-  .glow-purple-sm {
-    box-shadow: 0 0 25px -5px rgba(168, 85, 247, 0.2);
-  }
-
 }
 
 @media (prefers-reduced-motion: reduce) {
