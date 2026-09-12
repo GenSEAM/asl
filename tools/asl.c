@@ -6103,6 +6103,7 @@ int run_launch(int argc, char **argv, const char *ws_root) {
         printf("  --plan-model <m>           Alias for planning tier model\n");
         printf("  --execution-tier <m>       Model tier for execution subagents\n");
         printf("  --role-assignments <r>     Role-to-agent mesh mapping\n");
+        printf("  --profiles                 Output justified domain profiles from .asl/profiles.asn\n");
         printf("  --preset <preset>          Predefined orchestration preset\n");
         printf("  --permission-tier <tier>   Permission tier (e.g. dangerous-rescue)\n");
         printf("  --channel <channel>        Directive injection prompt channel\n");
