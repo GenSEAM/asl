@@ -161,5 +161,9 @@
       :rule "An extension declares the host capabilities it requires; loading against a host that lacks a declared capability fails at load-time, naming both extension and capability."
       :failureCode "ERR_UNSATISFIED_HOST_CAPABILITY"
       :exitCode 1)
+    (:semantic :id twoStrikesAdapterAdmission
+      :rule "Data and view adapters reside in extension packages; no shared interface is extracted before observing two concrete implementations with identical semantic contracts."
+      :failureCode "ERR_PREMATURE_GENERALIZATION"
+      :exitCode 1)
   ]
 )
