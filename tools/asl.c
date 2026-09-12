@@ -4032,13 +4032,48 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     if (!rules_payload) return 1;
     free(rules_payload);
 
-    if (is_agy) {
+    /* Client projections: :claude-mode "system-guided" :permission-tier "dangerous-rescue" :client "codex" */
+    if (is_claude) {
+        printf("(:launch-session :client \"claude\" :claude-mode \"system-guided\" :permission-tier \"safe\")\n");
+    } else if (is_agy) {
         printf("(:launch-session :client \"agy\" :permission-tier \"dangerous-rescue\" :auto-flags [\"--dangerously-skip-permissions\"] :channel \"<RULE[user_global]>\")\n");
+    } else if (strcmp(client, "codex") == 0) {
+        printf("(:launch-session :client \"codex\" :permission-tier \"safe\")\n");
     }
     if (dry_run) {
         printf("✓ Pre-flight validation successful (DRY-RUN).\n");
         return 0;
     }
+    return 0;
+}
+
+static int run_cmd_note(int argc, char **argv, const char *ws_root) {
+    (void)ws_root;
+    if (argc < 2) {
+        printf("Usage: asl note <write|query|list> [options]\n");
+        return 1;
+    }
+    printf("Usage: asl note <write|query|list> [options]\n");
+    return 0;
+}
+
+static int run_cmd_task(int argc, char **argv, const char *ws_root) {
+    (void)ws_root;
+    if (argc < 2) {
+        printf("Usage: asl task <claim|list|recover> [options]\n");
+        return 1;
+    }
+    printf("Usage: asl task <claim|list|recover> [options]\n");
+    return 0;
+}
+
+static int run_cmd_queue(int argc, char **argv, const char *ws_root) {
+    (void)ws_root;
+    if (argc < 2) {
+        printf("Usage: asl queue <enqueue|drain> [options]\n");
+        return 1;
+    }
+    printf("Usage: asl queue <enqueue|drain> [options]\n");
     return 0;
 }
 
@@ -4383,6 +4418,21 @@ int main(int argc, char **argv) {
     /* Subcommand: impact */
     if (argc >= 2 && strcmp(argv[1], "impact") == 0) {
         return run_cmd_impact(argc, argv, discovered_ws);
+    }
+
+    /* Subcommand: note */
+    if (argc >= 2 && strcmp(argv[1], "note") == 0) {
+        return run_cmd_note(argc, argv, discovered_ws);
+    }
+
+    /* Subcommand: task */
+    if (argc >= 2 && strcmp(argv[1], "task") == 0) {
+        return run_cmd_task(argc, argv, discovered_ws);
+    }
+
+    /* Subcommand: queue */
+    if (argc >= 2 && strcmp(argv[1], "queue") == 0) {
+        return run_cmd_queue(argc, argv, discovered_ws);
     }
 
     /* Subcommand: gate / gates */
