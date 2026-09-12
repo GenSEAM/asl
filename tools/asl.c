@@ -46,21 +46,21 @@ static void sb_free(StrBuf *sb) {
     sb->cap = 0;
 }
 
-static void sb_grow(StrBuf *sb, size_t needed) {
+static int sb_grow(StrBuf *sb, size_t needed) {
     if (sb->len + needed + 1 > sb->cap) {
         size_t new_cap = sb->cap * 2;
         if (new_cap < sb->len + needed + 1) new_cap = sb->len + needed + 4096;
         char *nd = (char *)realloc(sb->data, new_cap);
-        if (nd) {
-            sb->data = nd;
-            sb->cap = new_cap;
-        }
+        if (!nd) return 0;
+        sb->data = nd;
+        sb->cap = new_cap;
     }
+    return 1;
 }
 
 static void sb_append_len(StrBuf *sb, const char *s, size_t n) {
     if (!s || n == 0) return;
-    sb_grow(sb, n);
+    if (!sb_grow(sb, n)) return;
     memcpy(sb->data + sb->len, s, n);
     sb->len += n;
     sb->data[sb->len] = '\0';
@@ -1538,21 +1538,27 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             snprintf(search_base, sizeof(search_base), "%s", ws_root);
         }
 
-        StrBuf f_sb;
-        sb_init(&f_sb);
-        struct FindCbCtx fctx = { pat, is_ext, &f_sb, 0 };
-        walk_dir_recursive(search_base, "", find_walker_cb, &fctx);
+        if (!is_safe_path(ws_root, search_base)) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"find\" :status \"rejected\" :error-code \":ERR_BOUNDARY_VIOLATION\" :message \"Path escapes workspace boundary\")\n");
+        } else {
+            StrBuf f_sb;
+            sb_init(&f_sb);
+            struct FindCbCtx fctx = { pat, is_ext, &f_sb, 0 };
+            walk_dir_recursive(search_base, "", find_walker_cb, &fctx);
 
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"find\" :status \"ok\" :pattern \"");
-        sb_append_escaped(out, pat);
-        sb_append(out, "\" :count ");
-        sb_append_int(out, fctx.count);
-        sb_append(out, " :files [ ");
-        sb_append(out, f_sb.data ? f_sb.data : "");
-        sb_append(out, " ])\n");
-        sb_free(&f_sb);
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"find\" :status \"ok\" :pattern \"");
+            sb_append_escaped(out, pat);
+            sb_append(out, "\" :count ");
+            sb_append_int(out, fctx.count);
+            sb_append(out, " :files [ ");
+            sb_append(out, f_sb.data ? f_sb.data : "");
+            sb_append(out, " ])\n");
+            sb_free(&f_sb);
+        }
     } else if (strcmp(op, "grep") == 0) {
         /* op_grep */
         char pat[1024] = {0};
@@ -1596,6 +1602,15 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 else snprintf(search_target, sizeof(search_target), "%s/%s", ws_root, file);
             } else {
                 snprintf(search_target, sizeof(search_target), "%s", ws_root);
+            }
+
+            if (!is_safe_path(ws_root, search_target)) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"grep\" :status \"rejected\" :error-code \":ERR_BOUNDARY_VIOLATION\" :message \"Path escapes workspace boundary\")\n");
+                sb_free(&g_sb);
+                free_tokens(tokens, ntokens);
+                return 1;
             }
 
             struct stat st;
@@ -2175,6 +2190,15 @@ static JSValueRef js_performance_now(JSContextRef ctx, JSObjectRef function, JSO
     return JSValueMakeNumber(ctx, get_monotonic_ms() - start_time_ms);
 }
 
+static int js_fs_is_safe(const char *path) {
+    if (!path) return 0;
+    const char *ws_root = getenv("ASL_WORKSPACE_ROOT");
+    if (!ws_root || !ws_root[0]) {
+        ws_root = find_ws_root();
+    }
+    return is_safe_path(ws_root, path);
+}
+
 static JSValueRef js_fs_existsSync(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
                                    size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
     (void)function; (void)thisObject; (void)exception;
@@ -2186,6 +2210,10 @@ static JSValueRef js_fs_existsSync(JSContextRef ctx, JSObjectRef function, JSObj
     if (!path) { JSStringRelease(pStr); return JSValueMakeBoolean(ctx, false); }
     JSStringGetUTF8CString(pStr, path, max);
     JSStringRelease(pStr);
+    if (!js_fs_is_safe(path)) {
+        free(path);
+        return JSValueMakeBoolean(ctx, false);
+    }
     struct stat st;
     bool exists = (stat(path, &st) == 0);
     free(path);
@@ -2194,7 +2222,7 @@ static JSValueRef js_fs_existsSync(JSContextRef ctx, JSObjectRef function, JSObj
 
 static JSValueRef js_fs_readFileSync(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
                                      size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
-    (void)function; (void)thisObject; (void)exception;
+    (void)function; (void)thisObject;
     if (argumentCount < 1) return JSValueMakeUndefined(ctx);
     JSStringRef pStr = JSValueToStringCopy(ctx, arguments[0], NULL);
     if (!pStr) return JSValueMakeUndefined(ctx);
@@ -2203,6 +2231,16 @@ static JSValueRef js_fs_readFileSync(JSContextRef ctx, JSObjectRef function, JSO
     if (!path) { JSStringRelease(pStr); return JSValueMakeUndefined(ctx); }
     JSStringGetUTF8CString(pStr, path, max);
     JSStringRelease(pStr);
+
+    if (!js_fs_is_safe(path)) {
+        free(path);
+        if (exception) {
+            JSStringRef errMsg = JSStringCreateWithUTF8CString("EACCES: path escapes workspace boundary");
+            *exception = JSValueMakeString(ctx, errMsg);
+            JSStringRelease(errMsg);
+        }
+        return JSValueMakeUndefined(ctx);
+    }
 
     FILE* f = fopen(path, "rb");
     if (!f) {
@@ -2233,7 +2271,7 @@ static JSValueRef js_fs_readFileSync(JSContextRef ctx, JSObjectRef function, JSO
 
 static JSValueRef js_fs_writeFileSync(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
                                       size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
-    (void)function; (void)thisObject; (void)exception;
+    (void)function; (void)thisObject;
     if (argumentCount < 2) return JSValueMakeUndefined(ctx);
     JSStringRef pStr = JSValueToStringCopy(ctx, arguments[0], NULL);
     JSStringRef dStr = JSValueToStringCopy(ctx, arguments[1], NULL);
@@ -2249,10 +2287,18 @@ static JSValueRef js_fs_writeFileSync(JSContextRef ctx, JSObjectRef function, JS
     if (path && data) {
         JSStringGetUTF8CString(pStr, path, pMax);
         JSStringGetUTF8CString(dStr, data, dMax);
-        FILE* f = fopen(path, "wb");
-        if (f) {
-            fputs(data, f);
-            fclose(f);
+        if (!js_fs_is_safe(path)) {
+            if (exception) {
+                JSStringRef errMsg = JSStringCreateWithUTF8CString("EACCES: path escapes workspace boundary");
+                *exception = JSValueMakeString(ctx, errMsg);
+                JSStringRelease(errMsg);
+            }
+        } else {
+            FILE* f = fopen(path, "wb");
+            if (f) {
+                fputs(data, f);
+                fclose(f);
+            }
         }
     }
     if (path) free(path);
@@ -2292,6 +2338,16 @@ static JSValueRef js_fs_readdirSync(JSContextRef ctx, JSObjectRef function, JSOb
     if (!path) { JSStringRelease(pStr); return JSValueMakeUndefined(ctx); }
     JSStringGetUTF8CString(pStr, path, max);
     JSStringRelease(pStr);
+
+    if (!js_fs_is_safe(path)) {
+        free(path);
+        if (exception) {
+            JSStringRef errMsg = JSStringCreateWithUTF8CString("EACCES: path escapes workspace boundary");
+            *exception = JSValueMakeString(ctx, errMsg);
+            JSStringRelease(errMsg);
+        }
+        return JSValueMakeUndefined(ctx);
+    }
 
     bool withFileTypes = false;
     if (argumentCount >= 2 && JSValueIsObject(ctx, arguments[1])) {
@@ -4859,13 +4915,16 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Usage: asl eval <file|expr>\n");
             return 1;
         }
-        char *ev_args[16];
+        char **ev_args = (char **)malloc((argc + 1) * sizeof(char *));
+        if (!ev_args) return 1;
         ev_args[0] = (char *)"asl-eval";
-        for (int i = 2; i < argc && i < 15; i++) {
+        for (int i = 2; i < argc; i++) {
             ev_args[i - 1] = argv[i];
         }
         ev_args[argc - 1] = NULL;
-        return run_evaluator(argc - 1, ev_args);
+        int res = run_evaluator(argc - 1, ev_args);
+        free(ev_args);
+        return res;
     }
 
     /* Subcommand: rpc / --rpc */
