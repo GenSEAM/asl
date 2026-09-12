@@ -4341,6 +4341,292 @@ static char *load_rule_payload(const char *ws_root) {
     return content;
 }
 
+static int write_file_str(const char *path, const char *content) {
+    if (!path || !content) return -1;
+    FILE *fp = fopen(path, "w");
+    if (!fp) return -1;
+    fputs(content, fp);
+    fclose(fp);
+    return 0;
+}
+
+static int get_tier_rank(const char *tier) {
+    if (!tier || strcmp(tier, "full") == 0) return 6;
+    if (strcmp(tier, "essential") == 0) return 1;
+    if (strcmp(tier, "hot") == 0 || strcmp(tier, "affordance") == 0) return 2;
+    if (strcmp(tier, "orientation") == 0 || strcmp(tier, "t1") == 0) return 3;
+    if (strcmp(tier, "heuristic") == 0 || strcmp(tier, "t2") == 0) return 4;
+    if (strcmp(tier, "pack") == 0) return 5;
+    return 6;
+}
+
+static int get_force_rank(const char *fc) {
+    if (!fc) return 5;
+    if (strstr(fc, ":invariant")) return 1;
+    if (strstr(fc, ":affordance")) return 2;
+    if (strstr(fc, ":orientation")) return 3;
+    if (strstr(fc, ":heuristic")) return 4;
+    return 5;
+}
+
+static char *filter_rules_by_tier(const char *rules_src, const char *tier) {
+    if (!rules_src) return NULL;
+    int req = get_tier_rank(tier);
+    if (req >= 6) {
+        return strdup(rules_src);
+    }
+    
+    StrBuf sb;
+    sb_init(&sb);
+    
+    const char *p = rules_src;
+    while (*p) {
+        const char *line_start = p;
+        const char *line_end = strchr(p, '\n');
+        if (!line_end) line_end = p + strlen(p);
+        
+        int line_len = (int)(line_end - line_start);
+        char line[2048];
+        if (line_len < (int)sizeof(line)) {
+            memcpy(line, line_start, line_len);
+            line[line_len] = '\0';
+        } else {
+            memcpy(line, line_start, sizeof(line) - 1);
+            line[sizeof(line) - 1] = '\0';
+        }
+        
+        if (strncmp(line, "(:rules", 7) == 0) {
+            sb_append(&sb, line);
+            sb_append(&sb, "\n");
+        } else if (strncmp(line, "  (:rule :id ", 13) == 0) {
+            const char *fc = strstr(line, ":force :");
+            int frank = 5;
+            if (fc) frank = get_force_rank(fc);
+            if (frank <= req) {
+                sb_append(&sb, line);
+                sb_append(&sb, "\n");
+                const char *next = (*line_end) ? line_end + 1 : line_end;
+                while (*next && (strncmp(next, "  (:rule", 8) != 0 && strncmp(next, "  (:pack", 8) != 0 && *next != ')')) {
+                    const char *sub_end = strchr(next, '\n');
+                    if (!sub_end) sub_end = next + strlen(next);
+                    sb_append_len(&sb, next, sub_end - next);
+                    sb_append(&sb, "\n");
+                    next = (*sub_end) ? sub_end + 1 : sub_end;
+                }
+                p = next;
+                continue;
+            }
+        } else if (strncmp(line, "  (:pack", 8) == 0) {
+            if (req >= 5) {
+                sb_append(&sb, line);
+                sb_append(&sb, "\n");
+                const char *next = (*line_end) ? line_end + 1 : line_end;
+                while (*next && (strncmp(next, "  (:rule", 8) != 0 && strncmp(next, "  (:pack", 8) != 0 && *next != ')')) {
+                    const char *sub_end = strchr(next, '\n');
+                    if (!sub_end) sub_end = next + strlen(next);
+                    sb_append_len(&sb, next, sub_end - next);
+                    sb_append(&sb, "\n");
+                    next = (*sub_end) ? sub_end + 1 : sub_end;
+                }
+                p = next;
+                continue;
+            }
+        } else if (line[0] == ')') {
+            sb_append(&sb, ")\n");
+        }
+        p = (*line_end) ? line_end + 1 : line_end;
+    }
+    
+    if (sb.len > 0 && sb.data[sb.len - 1] != '\n') {
+        sb_append(&sb, "\n");
+    }
+    if (sb.len > 1 && sb.data[sb.len - 2] != ')') {
+        sb_append(&sb, ")\n");
+    }
+    
+    char *res = strdup(sb.data ? sb.data : "");
+    sb_free(&sb);
+    return res;
+}
+
+static char *project_content(const char *ws_root, const char *content_type, const char *shape, const char *dest) {
+    char *raw = NULL;
+    if (!content_type || strcmp(content_type, "rules") == 0 || strcmp(content_type, "full") == 0 ||
+        strcmp(content_type, "essential") == 0 || strcmp(content_type, "hot") == 0 ||
+        strcmp(content_type, "affordance") == 0 || strcmp(content_type, "orientation") == 0 ||
+        strcmp(content_type, "heuristic") == 0 || strcmp(content_type, "pack") == 0) {
+        char *all_rules = load_rule_payload(ws_root);
+        if (!all_rules) return NULL;
+        raw = filter_rules_by_tier(all_rules, content_type);
+        free(all_rules);
+    } else if (strcmp(content_type, "capabilities") == 0) {
+        char cpath[1024];
+        snprintf(cpath, sizeof(cpath), "%s/asl/grammar/capabilities.asn", ws_root);
+        size_t sz = 0;
+        raw = read_file_alloc(cpath, &sz);
+    } else if (strcmp(content_type, "lexicon") == 0) {
+        char lpath[1024];
+        snprintf(lpath, sizeof(lpath), "%s/asl/grammar/lexicon.asn", ws_root);
+        size_t sz = 0;
+        raw = read_file_alloc(lpath, &sz);
+    } else {
+        raw = strdup(content_type);
+    }
+    if (!raw) return NULL;
+    
+    StrBuf sb;
+    sb_init(&sb);
+    
+    if (shape && strcmp(shape, "delimited") == 0) {
+        sb_append(&sb, "<!-- ASL_RULES_START -->\n");
+        sb_append(&sb, raw);
+        if (raw[strlen(raw) - 1] != '\n') sb_append(&sb, "\n");
+        sb_append(&sb, "<!-- ASL_RULES_END -->\n");
+    } else if (shape && strcmp(shape, "fenced") == 0) {
+        sb_append(&sb, "```asn\n");
+        sb_append(&sb, raw);
+        if (raw[strlen(raw) - 1] != '\n') sb_append(&sb, "\n");
+        sb_append(&sb, "```\n");
+    } else {
+        sb_append(&sb, raw);
+        if (raw[strlen(raw) - 1] != '\n') sb_append(&sb, "\n");
+    }
+    free(raw);
+    
+    char *result = strdup(sb.data ? sb.data : "");
+    sb_free(&sb);
+    
+    if (dest && strlen(dest) > 0 && strcmp(dest, "-") != 0) {
+        size_t existing_sz = 0;
+        char *existing = read_file_alloc(dest, &existing_sz);
+        if (!existing) {
+            write_file_str(dest, result);
+        } else {
+            if (shape && strcmp(shape, "delimited") == 0) {
+                const char *s = strstr(existing, "<!-- ASL_RULES_START -->");
+                const char *e = strstr(existing, "<!-- ASL_RULES_END -->");
+                if (s && e && e > s) {
+                    e += strlen("<!-- ASL_RULES_END -->");
+                    if (*e == '\n') e++;
+                    StrBuf updated;
+                    sb_init(&updated);
+                    sb_append_len(&updated, existing, s - existing);
+                    sb_append(&updated, result);
+                    sb_append(&updated, e);
+                    write_file_str(dest, updated.data ? updated.data : "");
+                    sb_free(&updated);
+                } else {
+                    write_file_str(dest, result);
+                }
+            } else if (shape && strcmp(shape, "fenced") == 0) {
+                const char *s = strstr(existing, "```asn\n");
+                const char *e = s ? strstr(s + 7, "```") : NULL;
+                if (s && e && e > s) {
+                    e += 3;
+                    if (*e == '\n') e++;
+                    StrBuf updated;
+                    sb_init(&updated);
+                    sb_append_len(&updated, existing, s - existing);
+                    sb_append(&updated, result);
+                    sb_append(&updated, e);
+                    write_file_str(dest, updated.data ? updated.data : "");
+                    sb_free(&updated);
+                } else {
+                    write_file_str(dest, result);
+                }
+            } else {
+                write_file_str(dest, result);
+            }
+            free(existing);
+        }
+    }
+    return result;
+}
+
+int run_cmd_project(int argc, char **argv, const char *ws_root) {
+    const char *content_type = "full";
+    const char *shape = "record";
+    const char *dest = NULL;
+    int check_mode = 0;
+    
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "--content") == 0 && i + 1 < argc) {
+            content_type = argv[++i];
+        } else if (strcmp(argv[i], "--shape") == 0 && i + 1 < argc) {
+            shape = argv[++i];
+        } else if (strcmp(argv[i], "--dest") == 0 && i + 1 < argc) {
+            dest = argv[++i];
+        } else if (strcmp(argv[i], "--check") == 0) {
+            check_mode = 1;
+        } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            printf("Usage: asl project [options]\n");
+            printf("  --content <tier|capabilities|lexicon> (default: full)\n");
+            printf("  --shape <record|fenced|delimited>     (default: record)\n");
+            printf("  --dest <path>                         (default: stdout)\n");
+            printf("  --check                               Verify dest matches projection\n");
+            return 0;
+        }
+    }
+    
+    char *projected = project_content(ws_root, content_type, shape, check_mode ? NULL : dest);
+    if (!projected) {
+        fprintf(stderr, "Error: projection failed\n");
+        return 1;
+    }
+    
+    if (check_mode) {
+        if (!dest) {
+            fprintf(stderr, "Error: --check requires --dest <path>\n");
+            free(projected);
+            return 1;
+        }
+        size_t sz = 0;
+        char *existing = read_file_alloc(dest, &sz);
+        if (!existing) {
+            fprintf(stderr, "Error: dest file %s does not exist\n", dest);
+            free(projected);
+            return 1;
+        }
+        int match = 0;
+        if (shape && strcmp(shape, "delimited") == 0) {
+            const char *s = strstr(existing, "<!-- ASL_RULES_START -->");
+            const char *e = strstr(existing, "<!-- ASL_RULES_END -->");
+            if (s && e && e > s) {
+                e += strlen("<!-- ASL_RULES_END -->");
+                if (*e == '\n') e++;
+                int slice_len = (int)(e - s);
+                match = (strncmp(s, projected, slice_len) == 0);
+            }
+        } else if (shape && strcmp(shape, "fenced") == 0) {
+            const char *s = strstr(existing, "```asn\n");
+            const char *e = s ? strstr(s + 7, "```") : NULL;
+            if (s && e && e > s) {
+                e += 3;
+                if (*e == '\n') e++;
+                int slice_len = (int)(e - s);
+                match = (strncmp(s, projected, slice_len) == 0);
+            }
+        } else {
+            match = (strcmp(existing, projected) == 0);
+        }
+        free(existing);
+        free(projected);
+        if (match) {
+            printf("  ok   %s\n", dest);
+            return 0;
+        } else {
+            printf("  DRIFT %s\n", dest);
+            return 1;
+        }
+    }
+    
+    if (!dest || strcmp(dest, "-") == 0) {
+        fputs(projected, stdout);
+    }
+    free(projected);
+    return 0;
+}
+
 int run_launch(int argc, char **argv, const char *ws_root) {
     (void)ws_root;
     if (argc < 2 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
@@ -4753,6 +5039,11 @@ int main(int argc, char **argv) {
         }
     }
 
+
+    /* Subcommand: project */
+    if (argc >= 2 && strcmp(argv[1], "project") == 0) {
+        return run_cmd_project(argc, argv, discovered_ws);
+    }
 
     /* Subcommand: launch / launch-session */
     if (argc >= 2 && (strcmp(argv[1], "launch") == 0 || strcmp(argv[1], "launch-session") == 0)) {
