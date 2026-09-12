@@ -576,7 +576,7 @@ static void walk_dir_recursive(const char *base_dir, const char *sub_dir, WalkFi
         snprintf(full_entry, sizeof(full_entry), "%s/%s", base_dir, rel_entry);
 
         struct stat st;
-        if (stat(full_entry, &st) == 0) {
+        if (lstat(full_entry, &st) == 0) {
             if (S_ISDIR(st.st_mode)) {
                 walk_dir_recursive(base_dir, rel_entry, cb, user_data);
             } else if (S_ISREG(st.st_mode)) {
@@ -2298,6 +2298,10 @@ static JSValueRef js_fs_writeFileSync(JSContextRef ctx, JSObjectRef function, JS
             if (f) {
                 fputs(data, f);
                 fclose(f);
+            } else if (exception) {
+                JSStringRef errMsg = JSStringCreateWithUTF8CString("failed to open file for writing");
+                *exception = JSValueMakeString(ctx, errMsg);
+                JSStringRelease(errMsg);
             }
         }
     }
