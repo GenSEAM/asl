@@ -201,5 +201,9 @@
       :rule "A flattening form is admitted into the language grammar only on a measured double win: it must strictly reduce both nesting depth and measured token count on real corpus sites; forms that improve only one or none are rejected."
       :failureCode "ERR_FLATTENING_WITHOUT_DOUBLE_WIN"
       :exitCode 1)
+    (:semantic :id bindingToUseDistanceRule
+      :rule "Distance between a symbol binding and its uses is measured and bounded over the resolved module graph; uses beyond the bound must be self-describing so a sliced window is interpretable without reading its file."
+      :failureCode "ERR_UNBOUNDED_BINDING_DISTANCE"
+      :exitCode 1)
   ]
 )
