@@ -6,7 +6,7 @@
 (df render-agent-wire-protocol [] -> Str
   :d "Renders the Agent-to-Agent Mesh Protocol architecture and token comparison."
   "<section id=\"a2a-protocol\" aria-labelledby=\"a2a-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
-    <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
+    <div class=\"max-w-shell mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
       <header class=\"mb-16 sm:mb-20 max-w-3xl mx-auto text-center\">
         <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
           <span class=\"text-signal\">04</span>

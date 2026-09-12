@@ -9,7 +9,7 @@
 
 (df render-article-detail-view [] -> Str
   :d "Renders article detail view container."
-  "<main class=\"flex-1 max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full\" id=\"bv-article-view\"><div id=\"asl-article-content\" class=\"article-body text-ink\"></div></main>")
+  "<main class=\"flex-1 max-w-shell mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full\" id=\"bv-article-view\"><div id=\"asl-article-content\" class=\"article-body text-ink max-w-prose mx-auto\"></div></main>")
 
 (df article-detail-view [] -> Str
   :d "Alias for render-article-detail-view."

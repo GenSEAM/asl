@@ -24,11 +24,11 @@
     </p>
 
     <div class=\"flex flex-wrap items-center gap-2 mb-8 p-1.5 bg-surface-2/60 border border-line rounded-2xl w-fit\" id=\"bv-mode-tabs\">
-      <button type=\"button\" data-mode=\"all\" class=\"bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all bg-signal text-ground font-semibold shadow-sm\">
+      <button type=\"button\" data-mode=\"all\" class=\"bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-colors bg-signal text-ground font-semibold shadow-sm\">
         <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\"><path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"></path><path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"></path></svg>
         <span>All Published (23)</span>
       </button>
-      <button type=\"button\" data-mode=\"flagship\" class=\"bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all text-ink-2 hover:text-ink\">
+      <button type=\"button\" data-mode=\"flagship\" class=\"bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-colors text-ink-2 hover:text-ink\">
         <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\"><path d=\"m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z\"></path></svg>
         <span>Flagship Deep Dives (10)</span>
       </button>
@@ -65,7 +65,7 @@
     </div>
 
     <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\" id=\"bv-posts-grid\">
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-death-of-json-rpc-and-zero-copy-wire-protocols\" data-importance=\"flagship\" data-cat=\"Protocols &amp; Multi-Agent Swarms Harness &amp; Systems\" data-search=\"the death of json-rpc: why autonomous agent swarms need zero-copy s-expression wire protocols why json-rpc and openapi schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how agent script notation (asn) and seambus ring buffers enable sub-microsecond zero-copy inter-agent messaging. agent protocols json-rpc seambus wire frames zero-copy pure asl genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-death-of-json-rpc-and-zero-copy-wire-protocols\" data-importance=\"flagship\" data-cat=\"Protocols &amp; Multi-Agent Swarms Harness &amp; Systems\" data-search=\"the death of json-rpc: why autonomous agent swarms need zero-copy s-expression wire protocols why json-rpc and openapi schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how agent script notation (asn) and seambus ring buffers enable sub-microsecond zero-copy inter-agent messaging. agent protocols json-rpc seambus wire frames zero-copy pure asl genseam\">
         <div>
           <div class="flex items-center justify-between text-micro font-mono text-ink-3 mb-3">
             <div class="flex items-center gap-1.5 flex-wrap">
@@ -83,7 +83,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-3b-local-models-fail-at-python-but-fly-on-s-expressions\" data-importance=\"flagship\" data-cat=\"Language Design &amp; SLM Inference Language &amp; Grammar\" data-search=\"why 3b local models fail at python but fly on s-expressions: zero-tax autonomous coding on apple silicon how small 3b quantized models (qwen 2.5-coder, llama 3.2) bleed 61% of their attention capacity on python indentation and bracket bookkeeping, and how single-pass s-expressions deliver 94.2% test pass rates under a 2gb unified memory ceiling on apple silicon. localllama slm inference apple silicon s-expressions m1 telemetry pure asl genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-3b-local-models-fail-at-python-but-fly-on-s-expressions\" data-importance=\"flagship\" data-cat=\"Language Design &amp; SLM Inference Language &amp; Grammar\" data-search=\"why 3b local models fail at python but fly on s-expressions: zero-tax autonomous coding on apple silicon how small 3b quantized models (qwen 2.5-coder, llama 3.2) bleed 61% of their attention capacity on python indentation and bracket bookkeeping, and how single-pass s-expressions deliver 94.2% test pass rates under a 2gb unified memory ceiling on apple silicon. localllama slm inference apple silicon s-expressions m1 telemetry pure asl genseam\">
         <div>
           <div class="flex items-center justify-between text-micro font-mono text-ink-3 mb-3">
             <div class="flex items-center gap-1.5 flex-wrap">
@@ -101,7 +101,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"zero-overhead-test-telemetry-and-resource-observability\" data-importance=\"flagship\" data-cat=\"Tools &amp; Compiler Architecture Harness &amp; Systems\" data-search=\"zero-overhead test telemetry: nanosecond-resolution observability and resource tracking in pure asl how we engineered sub-microsecond test timing and rss memory tracking into the pure asl evaluation engine with zero observer effect (<20ns), turning test suites into multi-dimensional observability probes. test telemetry zero-overhead observability resource tracking gate 5 pure asl wasi tools &amp; compiler architecture genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"zero-overhead-test-telemetry-and-resource-observability\" data-importance=\"flagship\" data-cat=\"Tools &amp; Compiler Architecture Harness &amp; Systems\" data-search=\"zero-overhead test telemetry: nanosecond-resolution observability and resource tracking in pure asl how we engineered sub-microsecond test timing and rss memory tracking into the pure asl evaluation engine with zero observer effect (<20ns), turning test suites into multi-dimensional observability probes. test telemetry zero-overhead observability resource tracking gate 5 pure asl wasi tools &amp; compiler architecture genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -119,7 +119,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"multi-tier-recursive-fractal-memory-and-tree-aggregation\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Memory Systems Harness &amp; Systems\" data-search=\"beyond flat context: multi-tier recursive fractal memory and holistic tree aggregation in agentscript why two-tier memory models collapse under deep system hierarchies, and how homoiconic fractal memory, logical uri addressing (mem:...), and zero-disk tree aggregation give autonomous agents holistic system observability across 32 packages. fractal memory homoiconicity tree aggregation observability adr-0010 pure asl architecture &amp; memory systems genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"multi-tier-recursive-fractal-memory-and-tree-aggregation\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Memory Systems Harness &amp; Systems\" data-search=\"beyond flat context: multi-tier recursive fractal memory and holistic tree aggregation in agentscript why two-tier memory models collapse under deep system hierarchies, and how homoiconic fractal memory, logical uri addressing (mem:...), and zero-disk tree aggregation give autonomous agents holistic system observability across 32 packages. fractal memory homoiconicity tree aggregation observability adr-0010 pure asl architecture &amp; memory systems genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -137,7 +137,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-llms-struggle-with-python-and-rust\" data-importance=\"flagship\" data-cat=\"Language Theory &amp; Compilers\" data-search=\"how to fix agentic coding: why autonomous llms break on human languages (and what replaces them) why indentation and borrow-checked syntax trap coding agents in 38% syntax repair loops, and what deterministic single-pass s-expressions solve. agentic coding grammars llm autoregression syntax repair loop s-expressions pure asl language theory &amp; compilers genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-llms-struggle-with-python-and-rust\" data-importance=\"flagship\" data-cat=\"Language Theory &amp; Compilers\" data-search=\"how to fix agentic coding: why autonomous llms break on human languages (and what replaces them) why indentation and borrow-checked syntax trap coding agents in 38% syntax repair loops, and what deterministic single-pass s-expressions solve. agentic coding grammars llm autoregression syntax repair loop s-expressions pure asl language theory &amp; compilers genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -155,7 +155,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"token-economy-and-structural-compression\" data-importance=\"flagship\" data-cat=\"Token Economy &amp; Serialization\" data-search=\"stop burning money on json context: how structural compaction cuts llm bills by 65% why json repeats keys on every row, how tabular asn hoists schemas into vector headers, and how structural compaction slashes llm context bills by 64.7% without changing model weights. byte-pair encoding structural compaction tabular serialization asn token economy token economy &amp; serialization genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"token-economy-and-structural-compression\" data-importance=\"flagship\" data-cat=\"Token Economy &amp; Serialization\" data-search=\"stop burning money on json context: how structural compaction cuts llm bills by 65% why json repeats keys on every row, how tabular asn hoists schemas into vector headers, and how structural compaction slashes llm context bills by 64.7% without changing model weights. byte-pair encoding structural compaction tabular serialization asn token economy token economy &amp; serialization genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -173,7 +173,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"from-vibe-code-to-wasm-in-0-04ms\" data-importance=\"flagship\" data-cat=\"Runtime &amp; Execution\" data-search=\"killing docker spin-up latency: how we run agent test sandboxes in 0.038ms why spinning up docker containers and microvms (1.2s–12s) cripples agent action loops, and how compiling agentscript directly to in-memory webassembly preview1 linear memory executes in 0.038ms. webassembly wasi microvms sub-millisecond sandboxing linear memory runtime &amp; execution genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"from-vibe-code-to-wasm-in-0-04ms\" data-importance=\"flagship\" data-cat=\"Runtime &amp; Execution\" data-search=\"killing docker spin-up latency: how we run agent test sandboxes in 0.038ms why spinning up docker containers and microvms (1.2s–12s) cripples agent action loops, and how compiling agentscript directly to in-memory webassembly preview1 linear memory executes in 0.038ms. webassembly wasi microvms sub-millisecond sandboxing linear memory runtime &amp; execution genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -191,7 +191,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-token-tax-and-interface-compression\" data-importance=\"high\" data-cat=\"Context Architecture\" data-search=\"the 78% context tax: how ast interface extraction stops agent working memory rot shuttling whole files between agents burns 78% of context on internal implementation details. hoisting public interfaces into compact asn asts preserves attention headroom over 50+ turns. context rot token compression ast extraction multi-agent working memory context architecture genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-token-tax-and-interface-compression\" data-importance=\"high\" data-cat=\"Context Architecture\" data-search=\"the 78% context tax: how ast interface extraction stops agent working memory rot shuttling whole files between agents burns 78% of context on internal implementation details. hoisting public interfaces into compact asn asts preserves attention headroom over 50+ turns. context rot token compression ast extraction multi-agent working memory context architecture genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -209,7 +209,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-token-density-fallacy-and-machine-understandability\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Language Theory\" data-search=\"why disemvoweling breaks bpe: how naive token optimization destroys agent intelligence why naive identifier compression like ctermtxt breaks bpe subtokenization, how synonym collisions cost thousands of repair tokens, and the findings of our 2-round adversarial consultation with claude fable 5. token economics bpe subtokens machine understandability claude fable agentscript gate 6 architecture &amp; language theory genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-token-density-fallacy-and-machine-understandability\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Language Theory\" data-search=\"why disemvoweling breaks bpe: how naive token optimization destroys agent intelligence why naive identifier compression like ctermtxt breaks bpe subtokenization, how synonym collisions cost thousands of repair tokens, and the findings of our 2-round adversarial consultation with claude fable 5. token economics bpe subtokens machine understandability claude fable agentscript gate 6 architecture &amp; language theory genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -227,7 +227,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"inter-agent-protocols-and-wire-frames\" data-importance=\"core\" data-cat=\"Protocols &amp; Mesh\" data-search=\"inter-agent protocol (agp): eradicating natural language chatter with typed s-expression frames beyond conversational mesh chaos: replacing ambiguous natural language chatter with typed s-expression frames, seambus (simba) mesh, and sub-millisecond ipc. seambus simba agp wire protocol typed frames conversational mesh protocols &amp; mesh genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"inter-agent-protocols-and-wire-frames\" data-importance=\"core\" data-cat=\"Protocols &amp; Mesh\" data-search=\"inter-agent protocol (agp): eradicating natural language chatter with typed s-expression frames beyond conversational mesh chaos: replacing ambiguous natural language chatter with typed s-expression frames, seambus (simba) mesh, and sub-millisecond ipc. seambus simba agp wire protocol typed frames conversational mesh protocols &amp; mesh genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -245,7 +245,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-agent-operational-circle\" data-importance=\"flagship\" data-cat=\"Autonomous Systems &amp; Grammar\" data-search=\"the single grammar doctrine: why multi-agent systems collapse without homoiconic s-expressions why autonomous agents collapse when juggling json, yaml, svg xml, and bash strings, and how unifying data, visuals, and execution into a single s-expression geometry eliminates 60% of syntax token overhead. agent operational circle asn agentscript shell transpiler vector graphics homoiconicity autonomous systems &amp; grammar genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-agent-operational-circle\" data-importance=\"flagship\" data-cat=\"Autonomous Systems &amp; Grammar\" data-search=\"the single grammar doctrine: why multi-agent systems collapse without homoiconic s-expressions why autonomous agents collapse when juggling json, yaml, svg xml, and bash strings, and how unifying data, visuals, and execution into a single s-expression geometry eliminates 60% of syntax token overhead. agent operational circle asn agentscript shell transpiler vector graphics homoiconicity autonomous systems &amp; grammar genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -263,7 +263,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"agent-script-the-optimal-agent-language\" data-importance=\"high\" data-cat=\"Language Theory\" data-search=\"the mathematical optimum: why s-expressions and algebraic types beat human syntax for llms why s-expressions, homoiconic asts, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive llms. homoiconicity algebraic types exhaustive matching deterministic ast mathematical optimum language theory genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"agent-script-the-optimal-agent-language\" data-importance=\"high\" data-cat=\"Language Theory\" data-search=\"the mathematical optimum: why s-expressions and algebraic types beat human syntax for llms why s-expressions, homoiconic asts, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive llms. homoiconicity algebraic types exhaustive matching deterministic ast mathematical optimum language theory genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -281,7 +281,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-deterministic-agent-os\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Operating Systems\" data-search=\"stop making llms do os work: why autonomous coding requires an alu / kernel split why treating an llm as scheduler, filesystem, and interpreter causes cognitive collapse, and how separating the stochastic semantic alu from a deterministic operating system achieves 92% benchmark solve rates. agent os prompt vmm deterministic execution eddie swe-bench alu split architecture &amp; operating systems genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-deterministic-agent-os\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Operating Systems\" data-search=\"stop making llms do os work: why autonomous coding requires an alu / kernel split why treating an llm as scheduler, filesystem, and interpreter causes cognitive collapse, and how separating the stochastic semantic alu from a deterministic operating system achieves 92% benchmark solve rates. agent os prompt vmm deterministic execution eddie swe-bench alu split architecture &amp; operating systems genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -299,7 +299,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"epistemic-grounding-and-anti-hallucination-firewalls\" data-importance=\"core\" data-cat=\"Safety &amp; Grounding\" data-search=\"stop your agent from faking green tests: ast mutation gates and anti-hallucination firewalls halting execution-simulation hallucinations (esh) at the ast compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing. epistemic grounding anti-hallucination closure audit zero-leak jailing esh safety &amp; grounding genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"epistemic-grounding-and-anti-hallucination-firewalls\" data-importance=\"core\" data-cat=\"Safety &amp; Grounding\" data-search=\"stop your agent from faking green tests: ast mutation gates and anti-hallucination firewalls halting execution-simulation hallucinations (esh) at the ast compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing. epistemic grounding anti-hallucination closure audit zero-leak jailing esh safety &amp; grounding genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -317,7 +317,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-agentic-toolchain-and-native-action-loops\" data-importance=\"flagship\" data-cat=\"Tools &amp; Compiler Architecture\" data-search=\"why bash wrappers fail coding agents: persistent action loops and 7 in-memory verification gates why stateless bash wrappers cause interactive terminal deadlocks, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for ai code generation. agent toolchain action-observation pure asl 100% coverage zero-foreign code verification gates tools &amp; compiler architecture genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-agentic-toolchain-and-native-action-loops\" data-importance=\"flagship\" data-cat=\"Tools &amp; Compiler Architecture\" data-search=\"why bash wrappers fail coding agents: persistent action loops and 7 in-memory verification gates why stateless bash wrappers cause interactive terminal deadlocks, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for ai code generation. agent toolchain action-observation pure asl 100% coverage zero-foreign code verification gates tools &amp; compiler architecture genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -335,7 +335,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"kill-80-percent-agent-code-bloat\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Simplicity\" data-search=\"kill 80% of agent framework bloat: why radical simplicity outperforms 10,000-line orchestrators why multi-megabyte agent frameworks collapse after turn 4, and how the ladder of restraint and pure agentscript s-expressions cut 80% of agent code bloat. architecture radical simplicity agentscript autonomous agents zero-foreign code architecture &amp; simplicity genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"kill-80-percent-agent-code-bloat\" data-importance=\"flagship\" data-cat=\"Architecture &amp; Simplicity\" data-search=\"kill 80% of agent framework bloat: why radical simplicity outperforms 10,000-line orchestrators why multi-megabyte agent frameworks collapse after turn 4, and how the ladder of restraint and pure agentscript s-expressions cut 80% of agent code bloat. architecture radical simplicity agentscript autonomous agents zero-foreign code architecture &amp; simplicity genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -353,7 +353,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"multi-dimensional-observability-for-autonomous-systems\" data-importance=\"technical\" data-cat=\"Observability &amp; Telemetry\" data-search=\"debugging autonomous swarms: time-travel execution replay without reading 50,000-token logs how to govern autonomous swarms without reading raw logs: multi-dimensional ast topologies, real-time cycle guards, and deterministic s-expression execution replay. multi-dimensional observability ast topology token telemetry time travel debugging observability &amp; telemetry genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"multi-dimensional-observability-for-autonomous-systems\" data-importance=\"technical\" data-cat=\"Observability &amp; Telemetry\" data-search=\"debugging autonomous swarms: time-travel execution replay without reading 50,000-token logs how to govern autonomous swarms without reading raw logs: multi-dimensional ast topologies, real-time cycle guards, and deterministic s-expression execution replay. multi-dimensional observability ast topology token telemetry time travel debugging observability &amp; telemetry genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -371,7 +371,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-agent-native-developer-cockpit\" data-importance=\"technical\" data-cat=\"Developer Tooling\" data-search=\"the sub-0.05ms language server: building a developer cockpit for synthetic intelligences the complete agent-native developer cockpit: sub-0.05ms lsp, ast structural clone linters, autonomous auto-fixers, and live visual observability. language server protocol ast auto-fixer observability developer cockpit developer tooling genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-agent-native-developer-cockpit\" data-importance=\"technical\" data-cat=\"Developer Tooling\" data-search=\"the sub-0.05ms language server: building a developer cockpit for synthetic intelligences the complete agent-native developer cockpit: sub-0.05ms lsp, ast structural clone linters, autonomous auto-fixers, and live visual observability. language server protocol ast auto-fixer observability developer cockpit developer tooling genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -389,7 +389,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"git-native-agent-memory-and-vector-recall\" data-importance=\"high\" data-cat=\"Memory &amp; Vector Systems\" data-search=\"killing the $4,000/month vector db bill: sub-millisecond vector recall in git-native memory sub-0.05ms in-memory vector recall and git-native memory matrices: eliminating 500x cloud vector db latency and ensuring agent episodic state never drifts from repository commits. agent memory vector recall git-native in-memory wasm zero-network memory &amp; vector systems genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"git-native-agent-memory-and-vector-recall\" data-importance=\"high\" data-cat=\"Memory &amp; Vector Systems\" data-search=\"killing the $4,000/month vector db bill: sub-millisecond vector recall in git-native memory sub-0.05ms in-memory vector recall and git-native memory matrices: eliminating 500x cloud vector db latency and ensuring agent episodic state never drifts from repository commits. agent memory vector recall git-native in-memory wasm zero-network memory &amp; vector systems genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -407,7 +407,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"cross-dialect-sql-without-hallucinations\" data-importance=\"core\" data-cat=\"Relational Data &amp; SQL\" data-search=\"zero-injection sql by construction: compiling relational s-expressions to postgres, sqlite &amp; clickhouse why agents writing raw sql fail 28% of the time, and how homoiconic relational s-expressions lower deterministically to postgres, sqlite, mysql, and clickhouse without injection risk. cross-dialect sql relational algebra sql injection eradication multi-engine relational data &amp; sql genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"cross-dialect-sql-without-hallucinations\" data-importance=\"core\" data-cat=\"Relational Data &amp; SQL\" data-search=\"zero-injection sql by construction: compiling relational s-expressions to postgres, sqlite &amp; clickhouse why agents writing raw sql fail 28% of the time, and how homoiconic relational s-expressions lower deterministically to postgres, sqlite, mysql, and clickhouse without injection risk. cross-dialect sql relational algebra sql injection eradication multi-engine relational data &amp; sql genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -425,7 +425,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"zero-server-in-browser-agent-runtimes\" data-importance=\"core\" data-cat=\"Browser Technologies\" data-search=\"the zero-server ide: running full autonomous agent sandboxes inside a chrome tab zero-server development inside browser tabs: booting webassembly sandboxes in 8ms, executing tests in 0.038ms via wasi and opfs, with tiered local slms. in-browser dev webassembly opfs tiered local slms offline-first browser technologies genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"zero-server-in-browser-agent-runtimes\" data-importance=\"core\" data-cat=\"Browser Technologies\" data-search=\"the zero-server ide: running full autonomous agent sandboxes inside a chrome tab zero-server development inside browser tabs: booting webassembly sandboxes in 8ms, executing tests in 0.038ms via wasi and opfs, with tiered local slms. in-browser dev webassembly opfs tiered local slms offline-first browser technologies genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -443,7 +443,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-llms-break-on-svg-xml\" data-importance=\"high\" data-cat=\"Vector Graphics &amp; Tokenomics\" data-search=\"why llms choke on svg xml: slashing 50.7% of vector graphic tokens with native s-expressions why autoregressive llms blow through token context on raw svg markup, and how native single-token asn vector primitives cut token usage by 50.7% with zero xml delimiter hallucinations. svg asn token compaction gemma 31b vector graphics agent tooling vector graphics &amp; tokenomics genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-llms-break-on-svg-xml\" data-importance=\"high\" data-cat=\"Vector Graphics &amp; Tokenomics\" data-search=\"why llms choke on svg xml: slashing 50.7% of vector graphic tokens with native s-expressions why autoregressive llms blow through token context on raw svg markup, and how native single-token asn vector primitives cut token usage by 50.7% with zero xml delimiter hallucinations. svg asn token compaction gemma 31b vector graphics agent tooling vector graphics &amp; tokenomics genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -461,7 +461,7 @@
         </div>
       </article>
 
-      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-all duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"universal-cross-platform-glue-without-drift\" data-importance=\"technical\" data-cat=\"Cross-Platform Runtimes\" data-search=\"one source across rust, typescript, python &amp; wasm: eradicating multi-language glue drift eliminating multi-language glue code and semantic drift: compiling pure agentscript deterministically across webassembly, rust, go, typescript, and python. differential verification multi-backend cross-platform glue polyglot parity cross-platform runtimes genseam\">
+      <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"universal-cross-platform-glue-without-drift\" data-importance=\"technical\" data-cat=\"Cross-Platform Runtimes\" data-search=\"one source across rust, typescript, python &amp; wasm: eradicating multi-language glue drift eliminating multi-language glue code and semantic drift: compiling pure agentscript deterministically across webassembly, rust, go, typescript, and python. differential verification multi-backend cross-platform glue polyglot parity cross-platform runtimes genseam\">
         <div>
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
@@ -518,9 +518,9 @@
             currentMode = mode;
             modeBtns.forEach(function(b) {
               if (b === btn) {
-                b.className = 'bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all bg-signal text-ground font-semibold shadow-sm';
+                b.className = 'bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-colors bg-signal text-ground font-semibold shadow-sm';
               } else {
-                b.className = 'bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-all text-ink-2 hover:text-ink';
+                b.className = 'bv-mode-btn flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-medium transition-colors text-ink-2 hover:text-ink';
               }
             });
             filter();
