@@ -125,13 +125,74 @@ static int file_exists(const char *path) {
     return (stat(path, &st) == 0 && S_ISREG(st.st_mode));
 }
 
-static int is_safe_path(const char *ws_root, const char *path) {
-    if (!path || strstr(path, "..")) return 0;
-    if (path[0] == '/') {
-        size_t wlen = strlen(ws_root);
-        if (strncmp(path, ws_root, wlen) != 0) return 0;
-        if (path[wlen] != '\0' && path[wlen] != '/') return 0;
+static void normalize_path_components(const char *src, char *dst, size_t dst_len) {
+    char *tokens[256];
+    int ntokens = 0;
+    char temp[4096];
+    strncpy(temp, src, sizeof(temp) - 1);
+    temp[sizeof(temp) - 1] = '\0';
+    char *p = temp;
+    while (*p) {
+        while (*p == '/') p++;
+        if (!*p) break;
+        char *start = p;
+        while (*p && *p != '/') p++;
+        if (*p) *p++ = '\0';
+        if (strcmp(start, ".") == 0) {
+            continue;
+        } else if (strcmp(start, "..") == 0) {
+            if (ntokens > 0) ntokens--;
+        } else {
+            if (ntokens < 256) tokens[ntokens++] = start;
+        }
     }
+    dst[0] = '\0';
+    size_t cur = 0;
+    if (src[0] == '/') {
+        if (cur < dst_len - 1) dst[cur++] = '/';
+    }
+    for (int i = 0; i < ntokens; i++) {
+        size_t tlen = strlen(tokens[i]);
+        if (cur + tlen + 2 < dst_len) {
+            if (cur > 1 || (cur == 1 && dst[0] != '/')) dst[cur++] = '/';
+            memcpy(dst + cur, tokens[i], tlen);
+            cur += tlen;
+            dst[cur] = '\0';
+        }
+    }
+    if (cur == 0 && src[0] == '/') {
+        dst[0] = '/';
+        dst[1] = '\0';
+    }
+}
+
+static int is_safe_path(const char *ws_root, const char *path) {
+    if (!path || !ws_root) return 0;
+    char full[4096];
+    if (path[0] == '/') {
+        snprintf(full, sizeof(full), "%s", path);
+    } else {
+        snprintf(full, sizeof(full), "%s/%s", ws_root, path);
+    }
+
+    char real_ws[4096];
+    const char *target_ws = ws_root;
+    if (realpath(ws_root, real_ws) != NULL) {
+        target_ws = real_ws;
+    }
+    size_t wlen = strlen(target_ws);
+
+    char real_f[4096];
+    if (realpath(full, real_f) != NULL) {
+        if (strncmp(real_f, target_ws, wlen) != 0) return 0;
+        if (real_f[wlen] != '\0' && real_f[wlen] != '/') return 0;
+        return 1;
+    }
+
+    char norm[4096];
+    normalize_path_components(full, norm, sizeof(norm));
+    if (strncmp(norm, target_ws, wlen) != 0) return 0;
+    if (norm[wlen] != '\0' && norm[wlen] != '/') return 0;
     return 1;
 }
 
@@ -821,6 +882,77 @@ static int op_compose(int step_id, StepToken *tokens, int ntokens, const char *w
     return 0;
 }
 
+typedef struct {
+    const char *pat;
+    const char *base_dir;
+    StrBuf *sb;
+    int count;
+    int max_count;
+} GrepContext;
+
+static void grep_walker_cb(const char *rel_path, const char *full_path, void *user_data) {
+    GrepContext *ctx = (GrepContext *)user_data;
+    if (ctx->count >= ctx->max_count) return;
+    FILE *fp = fopen(full_path, "r");
+    if (!fp) return;
+    char line[4096];
+    int lnum = 0;
+    while (fgets(line, sizeof(line), fp)) {
+        lnum++;
+        if (strstr(line, ctx->pat)) {
+            char *nl = strchr(line, '\n');
+            if (nl) *nl = '\0';
+            sb_append(ctx->sb, " (:match :file \"");
+            sb_append_escaped(ctx->sb, rel_path);
+            sb_append(ctx->sb, "\" :line ");
+            sb_append_int(ctx->sb, lnum);
+            sb_append(ctx->sb, " :line-content \"");
+            sb_append_escaped(ctx->sb, line);
+            sb_append(ctx->sb, "\")");
+            ctx->count++;
+            if (ctx->count >= ctx->max_count) break;
+        }
+    }
+    fclose(fp);
+}
+
+typedef struct {
+    char rel_path[1024];
+    char full_path[4096];
+    char *orig_content;
+    size_t orig_sz;
+    char *staged_content;
+    size_t staged_sz;
+    int is_modified;
+} StagedBuffer;
+
+#define MAX_STAGED_BUFFERS 64
+static StagedBuffer g_staged_buffers[MAX_STAGED_BUFFERS];
+static int g_nstaged = 0;
+
+static StagedBuffer *find_staged_buffer(const char *rel_path) {
+    for (int i = 0; i < g_nstaged; i++) {
+        if (strcmp(g_staged_buffers[i].rel_path, rel_path) == 0) {
+            return &g_staged_buffers[i];
+        }
+    }
+    return NULL;
+}
+
+static void clear_staged_buffers(void) {
+    for (int i = 0; i < g_nstaged; i++) {
+        if (g_staged_buffers[i].orig_content) {
+            free(g_staged_buffers[i].orig_content);
+            g_staged_buffers[i].orig_content = NULL;
+        }
+        if (g_staged_buffers[i].staged_content) {
+            free(g_staged_buffers[i].staged_content);
+            g_staged_buffers[i].staged_content = NULL;
+        }
+    }
+    g_nstaged = 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -1040,12 +1172,49 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 sb_append(out, " ])\n");
             }
         }
-    } else if (strcmp(op, "diff") == 0 || strcmp(op, "flush") == 0 || strcmp(op, "discard") == 0) {
+    } else if (strcmp(op, "diff") == 0) {
+        /* op_diff */
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"");
-        sb_append_escaped(out, op);
-        sb_append(out, "\" :status \"rejected\" :error-code \":ERR_UNSUPPORTED\" :message \"Staging operations unsupported; edits write immediately to disk\")\n");
+        sb_append(out, " :op \"diff\" :status \"ok\" :staged-count ");
+        sb_append_int(out, g_nstaged);
+        sb_append(out, " :entries [");
+        for (int i = 0; i < g_nstaged; i++) {
+            sb_append(out, " (:file \"");
+            sb_append_escaped(out, g_staged_buffers[i].rel_path);
+            sb_append(out, "\" :modified ");
+            sb_append(out, g_staged_buffers[i].is_modified ? "true" : "false");
+            sb_append(out, ")");
+        }
+        sb_append(out, " ])\n");
+    } else if (strcmp(op, "flush") == 0) {
+        /* op_flush */
+        int flushed = 0;
+        for (int i = 0; i < g_nstaged; i++) {
+            if (g_staged_buffers[i].is_modified && g_staged_buffers[i].staged_content) {
+                FILE *wfp = fopen(g_staged_buffers[i].full_path, "w");
+                if (wfp) {
+                    fwrite(g_staged_buffers[i].staged_content, 1, g_staged_buffers[i].staged_sz, wfp);
+                    fclose(wfp);
+                    flushed++;
+                }
+            }
+        }
+        clear_staged_buffers();
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"flush\" :status \"ok\" :flushed-count ");
+        sb_append_int(out, flushed);
+        sb_append(out, ")\n");
+    } else if (strcmp(op, "discard") == 0) {
+        /* op_discard */
+        int count = g_nstaged;
+        clear_staged_buffers();
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"discard\" :status \"ok\" :discarded-count ");
+        sb_append_int(out, count);
+        sb_append(out, ")\n");
     } else if (strcmp(op, "edit") == 0) {
         char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
@@ -1057,6 +1226,9 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         const char *kn = get_kw_arg(tokens, ntokens, "new");
         if (!kn) kn = get_pos_arg(tokens, ntokens, 3);
         const char *new_txt = kn ? kn : "";
+        const char *ks = get_kw_arg(tokens, ntokens, "stage");
+        int stage_mode = (ks && (strcmp(ks, "true") == 0 || strcmp(ks, ":true") == 0)) ? 1 : 0;
+        if (!stage_mode && strstr(step_str, ":stage true")) stage_mode = 1;
 
         if (!is_safe_path(ws_root, file)) {
             sb_append(out, "  (:step :id ");
@@ -1067,40 +1239,85 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         } else {
             char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
-            FILE *fp = fopen(full_path, "r");
-            if (!fp) {
+            StagedBuffer *stb = find_staged_buffer(file);
+            char *cur_content = NULL;
+            size_t cur_sz = 0;
+            int free_cur = 0;
+
+            if (stb) {
+                cur_content = stb->staged_content;
+                cur_sz = stb->staged_sz;
+            } else {
+                FILE *fp = fopen(full_path, "r");
+                if (fp) {
+                    fseek(fp, 0, SEEK_END);
+                    long fsz = ftell(fp);
+                    fseek(fp, 0, SEEK_SET);
+                    cur_content = (char *)malloc(fsz + 1);
+                    if (cur_content && (long)fread(cur_content, 1, fsz, fp) == fsz) {
+                        cur_content[fsz] = '\0';
+                        cur_sz = (size_t)fsz;
+                        free_cur = 1;
+                    }
+                    fclose(fp);
+                }
+            }
+
+            if (!cur_content) {
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
                 sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_FILE_NOT_FOUND\" :message \"File not found: ");
                 sb_append_escaped(out, file);
                 sb_append(out, "\")\n");
             } else {
-                fseek(fp, 0, SEEK_END);
-                long fsz = ftell(fp);
-                fseek(fp, 0, SEEK_SET);
-                char *fbuf = (char *)malloc(fsz + 1);
-                if (fbuf && (long)fread(fbuf, 1, fsz, fp) == fsz) {
-                    fbuf[fsz] = '\0';
-                    fclose(fp);
-                    char *found = strstr(fbuf, old_txt);
-                    if (!found) {
-                        sb_append(out, "  (:step :id ");
-                        sb_append_int(out, step_id);
-                        sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_MATCH_NOT_FOUND\" :message \"Target content not found in ");
-                        sb_append_escaped(out, file);
-                        sb_append(out, "\")\n");
-                    } else {
-                        size_t prefix_len = found - fbuf;
-                        size_t old_len = strlen(old_txt);
-                        size_t new_len = strlen(new_txt);
-                        size_t suffix_len = fsz - (prefix_len + old_len);
-                        size_t nsz = prefix_len + new_len + suffix_len;
-                        char *nbuf = (char *)malloc(nsz + 1);
-                        if (nbuf) {
-                            memcpy(nbuf, fbuf, prefix_len);
-                            memcpy(nbuf + prefix_len, new_txt, new_len);
-                            memcpy(nbuf + prefix_len + new_len, found + old_len, suffix_len);
-                            nbuf[nsz] = '\0';
+                char *found = strstr(cur_content, old_txt);
+                if (!found) {
+                    sb_append(out, "  (:step :id ");
+                    sb_append_int(out, step_id);
+                    sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_MATCH_NOT_FOUND\" :message \"Target content not found in ");
+                    sb_append_escaped(out, file);
+                    sb_append(out, "\")\n");
+                } else {
+                    size_t prefix_len = found - cur_content;
+                    size_t old_len = strlen(old_txt);
+                    size_t new_len = strlen(new_txt);
+                    size_t suffix_len = cur_sz - (prefix_len + old_len);
+                    size_t nsz = prefix_len + new_len + suffix_len;
+                    char *nbuf = (char *)malloc(nsz + 1);
+                    if (nbuf) {
+                        memcpy(nbuf, cur_content, prefix_len);
+                        memcpy(nbuf + prefix_len, new_txt, new_len);
+                        memcpy(nbuf + prefix_len + new_len, found + old_len, suffix_len);
+                        nbuf[nsz] = '\0';
+
+                        if (stage_mode) {
+                            if (!stb) {
+                                if (g_nstaged < MAX_STAGED_BUFFERS) {
+                                    stb = &g_staged_buffers[g_nstaged++];
+                                    strncpy(stb->rel_path, file, sizeof(stb->rel_path) - 1);
+                                    strncpy(stb->full_path, full_path, sizeof(stb->full_path) - 1);
+                                    stb->orig_content = (char *)malloc(cur_sz + 1);
+                                    if (stb->orig_content) {
+                                        memcpy(stb->orig_content, cur_content, cur_sz);
+                                        stb->orig_content[cur_sz] = '\0';
+                                    }
+                                    stb->orig_sz = cur_sz;
+                                    stb->staged_content = nbuf;
+                                    stb->staged_sz = nsz;
+                                    stb->is_modified = 1;
+                                }
+                            } else {
+                                free(stb->staged_content);
+                                stb->staged_content = nbuf;
+                                stb->staged_sz = nsz;
+                                stb->is_modified = 1;
+                            }
+                            sb_append(out, "  (:step :id ");
+                            sb_append_int(out, step_id);
+                            sb_append(out, " :op \"edit\" :status \"ok\" :mode \"staged\" :file \"");
+                            sb_append_escaped(out, file);
+                            sb_append(out, "\" :modified true)\n");
+                        } else {
                             FILE *wfp = fopen(full_path, "w");
                             if (wfp) {
                                 fwrite(nbuf, 1, nsz, wfp);
@@ -1118,10 +1335,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                             free(nbuf);
                         }
                     }
-                } else {
-                    fclose(fp);
                 }
-                if (fbuf) free(fbuf);
+                if (free_cur && cur_content) free(cur_content);
             }
         }
     } else if (strcmp(op, "write") == 0) {
@@ -1310,11 +1525,25 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         sb_append(out, " ])\n");
         sb_free(&f_sb);
     } else if (strcmp(op, "grep") == 0) {
+        /* op_grep */
         char pat[1024] = {0};
         char file[4096] = {0};
         parse_string_arg(step_str, "pattern", pat, sizeof(pat));
         if (!pat[0]) parse_string_arg(step_str, "query", pat, sizeof(pat));
         parse_string_arg(step_str, "file", file, sizeof(file));
+        if (!file[0]) parse_string_arg(step_str, "path", file, sizeof(file));
+        if (!pat[0]) {
+            const char *kp = get_kw_arg(tokens, ntokens, "pattern");
+            if (!kp) kp = get_kw_arg(tokens, ntokens, "query");
+            if (!kp) kp = get_pos_arg(tokens, ntokens, 1);
+            if (kp) strncpy(pat, kp, sizeof(pat) - 1);
+        }
+        if (!file[0]) {
+            const char *kf = get_kw_arg(tokens, ntokens, "file");
+            if (!kf) kf = get_kw_arg(tokens, ntokens, "path");
+            if (!kf) kf = get_pos_arg(tokens, ntokens, 2);
+            if (kf) strncpy(file, kf, sizeof(file) - 1);
+        }
         if (!pat[0]) {
             const char *q = strstr(step_str, "grep");
             if (q) {
@@ -1336,27 +1565,39 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             if (file[0]) {
                 if (file[0] == '/') snprintf(search_target, sizeof(search_target), "%s", file);
                 else snprintf(search_target, sizeof(search_target), "%s/%s", ws_root, file);
-                FILE *fp = fopen(search_target, "r");
-                if (fp) {
-                    char line[4096];
-                    int lnum = 0;
-                    while (fgets(line, sizeof(line), fp)) {
-                        lnum++;
-                        if (strstr(line, pat)) {
-                            char *nl = strchr(line, '\n');
-                            if (nl) *nl = '\0';
-                            sb_append(&g_sb, " (:match :file \"");
-                            sb_append_escaped(&g_sb, file);
-                            sb_append(&g_sb, "\" :line ");
-                            sb_append_int(&g_sb, lnum);
-                            sb_append(&g_sb, " :line-content \"");
-                            sb_append_escaped(&g_sb, line);
-                            sb_append(&g_sb, "\")");
-                            gcount++;
-                            if (gcount >= 50) break;
+            } else {
+                snprintf(search_target, sizeof(search_target), "%s", ws_root);
+            }
+
+            struct stat st;
+            if (stat(search_target, &st) == 0) {
+                if (S_ISDIR(st.st_mode)) {
+                    GrepContext gctx = { pat, ws_root, &g_sb, 0, 50 };
+                    walk_dir_recursive(search_target, "", grep_walker_cb, &gctx);
+                    gcount = gctx.count;
+                } else {
+                    FILE *fp = fopen(search_target, "r");
+                    if (fp) {
+                        char line[4096];
+                        int lnum = 0;
+                        while (fgets(line, sizeof(line), fp)) {
+                            lnum++;
+                            if (strstr(line, pat)) {
+                                char *nl = strchr(line, '\n');
+                                if (nl) *nl = '\0';
+                                sb_append(&g_sb, " (:match :file \"");
+                                sb_append_escaped(&g_sb, file[0] ? file : search_target);
+                                sb_append(&g_sb, "\" :line ");
+                                sb_append_int(&g_sb, lnum);
+                                sb_append(&g_sb, " :line-content \"");
+                                sb_append_escaped(&g_sb, line);
+                                sb_append(&g_sb, "\")");
+                                gcount++;
+                                if (gcount >= 50) break;
+                            }
                         }
+                        fclose(fp);
                     }
-                    fclose(fp);
                 }
             }
         }
@@ -1628,11 +1869,18 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     sb_init(&steps_out);
     int step_count = 0;
     int failed_count = 0;
+    int seq_mode = 0;
 
     const char *cur = trimmed;
     if (strncmp(cur, "(:batch", 7) == 0) {
         cur += 7;
         while (*cur == ' ' || *cur == '\t' || *cur == '\n' || *cur == '\r') cur++;
+        if (strncmp(cur, ":seq true", 9) == 0 || strncmp(cur, ":seq :true", 10) == 0) {
+            seq_mode = 1;
+            cur += (strncmp(cur, ":seq :true", 10) == 0) ? 10 : 9;
+            while (*cur == ' ' || *cur == '\t' || *cur == '\n' || *cur == '\r') cur++;
+        }
+
         size_t len = strlen(cur);
         int depth = 0;
         int in_str = 0;
@@ -1666,8 +1914,14 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
                             memcpy(step_buf, step_start, slen);
                             step_buf[slen] = '\0';
                             step_count++;
-                            if (execute_single_step(step_count, step_buf, ws_root, &steps_out)) {
-                                failed_count++;
+                            if (seq_mode && failed_count > 0) {
+                                sb_append(&steps_out, "  (:step :id ");
+                                sb_append_int(&steps_out, step_count);
+                                sb_append(&steps_out, " :status \"aborted\" :reason \"prior step failed\")\n");
+                            } else {
+                                if (execute_single_step(step_count, step_buf, ws_root, &steps_out)) {
+                                    failed_count++;
+                                }
                             }
                             free(step_buf);
                         }
@@ -1683,22 +1937,26 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
         }
     }
 
+    const char *mode_flag = seq_mode ? " :parallel false :sequenced true" : " :parallel true";
     if (failed_count == 0) {
         sb_append(resp, "(:batch-res :status \"completed\" :items-count ");
         sb_append_int(resp, step_count);
-        sb_append(resp, " :parallel true :results [\n");
+        sb_append(resp, mode_flag);
+        sb_append(resp, " :results [\n");
     } else if (failed_count > 0 && failed_count < step_count) {
         sb_append(resp, "(:batch-res :status \"completed-with-errors\" :items-count ");
         sb_append_int(resp, step_count);
         sb_append(resp, " :failed-count ");
         sb_append_int(resp, failed_count);
-        sb_append(resp, " :parallel true :results [\n");
+        sb_append(resp, mode_flag);
+        sb_append(resp, " :results [\n");
     } else {
         sb_append(resp, "(:batch-res :status \"failed\" :items-count ");
         sb_append_int(resp, step_count);
         sb_append(resp, " :failed-count ");
         sb_append_int(resp, failed_count);
-        sb_append(resp, " :parallel true :results [\n");
+        sb_append(resp, mode_flag);
+        sb_append(resp, " :results [\n");
     }
     sb_append(resp, steps_out.data ? steps_out.data : "");
     sb_append(resp, "])\n");

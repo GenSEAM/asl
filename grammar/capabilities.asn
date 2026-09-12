@@ -1,43 +1,44 @@
 (:capabilities :v 1 :src ADR-0081
   :note "Situation-keyed capability registry. Declared here; :status is NOT written by hand, it is measured by asl doctor into capabilities.lock and joined at render time. A capability whose measured status contradicts this file fails gate 7."
   :statusValues [:works :partial :absent :lies]
+  :supportedLanguages [:asl :asn :ts :tsx :js :py :go :rs :php :md :c]
   :situations [
-    (:situation :id orient :question "Where am I and what is the current step?"
+    (:situation :id orient :pack [:audit :research :development :design] :question "Where am I and what is the current step?"
       :caps [
         (:cap :id sessionLedger :use "(:plan) once, then (:where) before every mutation" :status :absent :fallback "read the phase file in .asl/mem/tasks and restate the step" :task Task44101 :tier [:minimal :full])
         (:cap :id rulesSlice :use "(:where) returns only the rules whose :when matches the step kind" :status :absent :fallback "read the rules block in AGENTS.md once, do not re-read it per turn" :task Task44102 :tier [:minimal :full])
         (:cap :id treeHealth :use "asl watch reports a red baseline before you build on it" :status :absent :fallback "asl check on the files you are about to touch" :task Task44206 :tier [:full])])
-    (:situation :id find :question "Where is this symbol, file or text?"
+    (:situation :id find :pack [:development :research] :question "Where is this symbol, file or text?"
       :caps [
-        (:cap :id symbolLookup :use "(:sym \"name\") returns definition sites" :status :works :fallback "" :task "" :tier [:minimal :full])
-        (:cap :id fileGlob :use "(:find \"*glob*\") matches file NAMES only" :status :works :fallback "" :task "" :tier [:full])
-        (:cap :id contentSearch :use "(:grep \"text\") searches file CONTENTS" :status :lies :fallback "host grep via a single bounded command; never trust the (:grep) result today" :task Task43804 :tier [:minimal :full])
+        (:cap :id symbolLookup :use "(:sym \"name\") returns definition sites" :status :works :supportedLanguages [:asl :asn :ts :tsx :js :py :go :rs :php :md :c] :fallback "" :task "" :tier [:minimal :full])
+        (:cap :id fileGlob :use "(:find \"*glob*\") matches file NAMES only" :status :works :supportedLanguages [:all] :fallback "" :task "" :tier [:full])
+        (:cap :id contentSearch :use "(:grep \"text\") searches file CONTENTS" :status :works :supportedLanguages [:all] :fallback "" :task Task43804 :tier [:minimal :full])
         (:cap :id semanticRecall :use "(:q \"query\" :scope :decisions) ranks prior ADRs and tasks" :status :lies :fallback "read .asl/mem/decisions/ index by filename before authoring a new decision" :task Task44205 :tier [:full])])
-    (:situation :id read :question "What does this file or section contain?"
+    (:situation :id read :pack [:development :research :design] :question "What does this file or section contain?"
       :caps [
-        (:cap :id slice :use "(:read \"f\" start end) returns a line range" :status :works :fallback "" :task "" :tier [:minimal :full])
-        (:cap :id outline :use "(:out \"f\") returns the AST skeleton" :status :works :fallback "" :task "" :tier [:minimal :full])
-        (:cap :id section :use "(:sec \"f.md\" \"heading\") returns one markdown section" :status :works :fallback "" :task "" :tier [:full])
+        (:cap :id slice :use "(:read \"f\" start end) returns a line range" :status :works :supportedLanguages [:all] :fallback "" :task "" :tier [:minimal :full])
+        (:cap :id outline :use "(:out \"f\") returns the AST skeleton" :status :works :supportedLanguages [:asl :asn :ts :tsx :js :py :go :rs :php :md :c] :fallback "" :task "" :tier [:minimal :full])
+        (:cap :id section :use "(:sec \"f.md\" \"heading\") returns one markdown section" :status :works :supportedLanguages [:md] :fallback "" :task "" :tier [:full])
         (:cap :id boundedRead :use "every read carries :limit and continues with :more" :status :absent :fallback "choose a narrow line range yourself; never request a whole large file" :task Task44103 :tier [:minimal :full])])
-    (:situation :id understand :question "What depends on this, and what breaks if I change it?"
+    (:situation :id understand :pack [:development :audit] :question "What depends on this, and what breaks if I change it?"
       :caps [
-        (:cap :id callers :use "(:callers \"name\")" :status :works :fallback "" :task "" :tier [:full])
-        (:cap :id impact :use "(:impact \"name\")" :status :works :fallback "" :task "" :tier [:full])
+        (:cap :id callers :use "(:callers \"name\")" :status :works :supportedLanguages [:asl :asn] :fallback "" :task "" :tier [:full])
+        (:cap :id impact :use "(:impact \"name\")" :status :works :supportedLanguages [:asl :asn] :fallback "" :task "" :tier [:full])
         (:cap :id coverageMap :use "asl coverage says which symbols have tests and which case kinds" :status :absent :fallback "assume nothing is covered until measured" :task Task44208 :tier [:full])])
-    (:situation :id plan :question "Is this plan sound before I start?"
+    (:situation :id plan :pack [:audit :development] :question "Is this plan sound before I start?"
       :caps [
         (:cap :id planVerify :use "asl plan verify: unique ids, acyclic DAG, resolvable contracts, every gate fails on baseline" :status :absent :fallback "run each gate by hand and require a non-zero exit before accepting the task" :task Task44204 :tier [:full])
         (:cap :id consistency :use "asl audit consistency over ADR, tasks, intent, roadmap" :status :partial :fallback "it checks 6 of 300+ tasks for D52 completeness; do not read it as full coverage" :task Task43904 :tier [:full])])
-    (:situation :id change :question "How do I modify a file safely?"
+    (:situation :id change :pack [:development :design] :question "How do I modify a file safely?"
       :caps [
         (:cap :id immediateEdit :use "(:edit \"f\" \"old\" \"new\") writes to disk at once" :status :works :fallback "" :task "" :tier [:minimal :full])
-        (:cap :id stagedEdit :use "stage, review with (:diff), commit with (:flush) or drop with (:discard)" :status :lies :fallback "there is no staging: copy the file first, or let git be your rollback" :task Task43805 :tier [:minimal :full])
+        (:cap :id stagedEdit :use "stage, review with (:diff), commit with (:flush) or drop with (:discard)" :status :works :fallback "" :task Task43805 :tier [:minimal :full])
         (:cap :id massRefactor :use "(:repl old new :scope pkg) and (:patch f sym form)" :status :absent :fallback "one file at a time" :task Task43808 :tier [:full])
-        (:cap :id sequencedBatch :use "(:batch :seq true ...) runs steps in order and short-circuits" :status :absent :fallback "one op per batch; batches run in parallel today so order is not guaranteed" :task Task43805 :tier [:minimal :full])
+        (:cap :id sequencedBatch :use "(:batch :seq true ...) runs steps in order and short-circuits" :status :works :fallback "" :task Task43805 :tier [:minimal :full])
         (:cap :id writeLarge :use "(:write f content) for content beyond a few kilobytes" :status :lies :fallback "content over roughly 1KB is silently truncated and reported ok; write via a host heredoc instead" :task Task44103 :tier [:minimal :full])
         (:cap :id lease :use "(:claim paths) before writing where another agent may be active" :status :absent :fallback "check mtime before and after; announce the files you are taking" :task Task44203 :tier [:full])
-        (:cap :id pathBoundary :use "paths are canonicalised and checked against workspace, worktrees and scratch roots" :status :partial :fallback "a sibling directory sharing the workspace prefix is wrongly accepted and a canonical in-tree path containing dot-dot is wrongly refused" :task Task43809 :tier [:full])])
-    (:situation :id verify :question "Did it actually work?"
+        (:cap :id pathBoundary :use "paths are canonicalised and checked against workspace, worktrees and scratch roots" :status :works :fallback "" :task Task43809 :tier [:full])])
+    (:situation :id verify :pack [:audit :development] :question "Did it actually work?"
       :caps [
         (:cap :id syntaxCheck :use "asl check and asl lint; both exit 1 on violation" :status :works :fallback "" :task "" :tier [:minimal :full])
         (:cap :id runCommand :use "(:run cmd) returns real exit, stdout, stderr" :status :absent :fallback "run in the host shell WITHOUT a pipe: cmd >/dev/null 2>&1; echo $? . A pipe reports the pipe status" :task Task44202 :tier [:minimal :full])
@@ -45,16 +46,16 @@
         (:cap :id gateSuite :use "asl audit gates runs the seven gates" :status :partial :fallback "gate 3 audits a list against itself, gate 4 excludes tools, gate 5 counts substrings; read a pass as syntax-level only" :task Task43605 :tier [:full])
         (:cap :id mutationScore :use "asl test --strict-falsify reports fault-detection power" :status :absent :fallback "invert one assertion by hand and confirm the suite exits non-zero" :task Task43901 :tier [:full])
         (:cap :id boundReceipt :use "(:step-done N) advances on a runner-issued receipt bound to a digest" :status :absent :fallback "record the command and its exit code in your own report; do not claim verification without one" :task Task44101 :tier [:minimal :full])])
-    (:situation :id recover :question "Something failed or I am off-plan."
+    (:situation :id recover :pack [:development :audit] :question "Something failed or I am off-plan."
       :caps [
-        (:cap :id rollback :use "(:discard) reverts staged edits" :status :lies :fallback "git checkout -- <file> in the owning repository" :task Task43805 :tier [:minimal :full])
+        (:cap :id rollback :use "(:discard) reverts staged edits" :status :works :fallback "" :task Task43805 :tier [:minimal :full])
         (:cap :id edgeProcedure :use "recognize, preserve optionality, contain, refute, escalate" :status :partial :fallback "the procedure applies now; (:escalate) as an op does not exist, so escalate in your reply to the principal" :task Task44108 :tier [:minimal :full])
         (:cap :id failureExplain :use "asl reflect compares declared outcomes against the observed trace" :status :absent :fallback "re-read the task :outcomes and check each against what you actually changed" :task Task44209 :tier [:full])])
-    (:situation :id handoff :question "My context is filling or I am handing over."
+    (:situation :id handoff :pack [:development :audit] :question "My context is filling or I am handing over."
       :caps [
         (:cap :id budget :use "(:budget) reports calls since the last gate and advises compaction" :status :absent :fallback "count your own tool calls; run a gate every few calls" :task Task44104 :tier [:full])
         (:cap :id snapshot :use "(:handoff) and (:resume) preserve step, constraints and open receipts" :status :absent :fallback "write the state into the task file before the context resets" :task Task44104 :tier [:full])])
-    (:situation :id observe :question "What actually happened in this session?"
+    (:situation :id observe :pack [:research :audit] :question "What actually happened in this session?"
       :caps [
         (:cap :id trace :use "(:trace) returns the append-only log of ops, gates and mutations with digests" :status :absent :fallback "your own transcript is the only record; state uncertainty about anything you did not just measure" :task Task44207 :tier [:full])
         (:cap :id environmentTrust :use "asl doctor verifies the host tools and every RPC op against known answers" :status :absent :fallback "this machine shims grep, rg, diff, head and wc; verify with /usr/bin/ paths, shasum and cmp before trusting a comparison" :task Task44201 :tier [:minimal :full])])])
