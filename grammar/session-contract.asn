@@ -31,6 +31,9 @@
     (:rule :id explicitTunableThresholds
       :description "Compaction and verification thresholds are explicit tunable engineering hypotheses; relevant static verification is permitted for read-only work and no arbitrary fixed call-count gate is mandatory."
       :falsification "Hardcoded rigid step thresholds reject valid read-only static verification.")
+    (:rule :id protectedHiddenEvaluation
+      :description "Separate author-owned public development tests from verifier-owned hidden acceptance; enforce capability boundaries in execution so that implementers cannot read or modify hidden acceptance fixtures."
+      :falsification "Implementer session reads or modifies hidden acceptance fixtures or alters runner configuration.")
   ]
   :continuationSchema [
     (:field :id "cursor" :type "Str" :desc "Opaque session-bound snapshot continuation token")
@@ -81,5 +84,13 @@
     (:field :id "compactionThreshold" :type "I64" :desc "Threshold triggering observation masking or handoff")
     (:field :id "compact" :type "Bool" :desc "True if session compaction is requested")
     (:field :id "tunableHypothesis" :type "Str" :desc "Engineering rationale or tuning model")
+  ]
+  :roleProfileSchema [
+    (:field :id "roleId" :type "Str" :desc "Unique role profile identifier")
+    (:field :id "description" :type "Str" :desc "Teleological role description")
+    (:field :id "canReadPublicTests" :type "Bool" :desc "True if role can read public regression tests")
+    (:field :id "canReadHiddenAcceptance" :type "Bool" :desc "True if role can read verifier-owned hidden acceptance fixtures")
+    (:field :id "canWriteProduction" :type "Bool" :desc "True if role can modify production source within owned paths")
+    (:field :id "canExecuteGates" :type "Bool" :desc "True if role can run acceptance gates")
   ]
 )
