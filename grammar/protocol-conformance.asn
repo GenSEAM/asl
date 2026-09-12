@@ -7,6 +7,9 @@
     (:contract :id aggregateBatchStatus
       :rule "Batch aggregate status honestly reflects inner step results: completed, completed-with-errors, or failed."
       :statuses ["completed" "completed-with-errors" "failed"])
+    (:contract :id boundedRetrieval
+      :rule "Batch and operation retrieval are capped under explicit bounds; continuation tokens bind session and snapshot; truncation without explicit cursor is an error."
+      :limits [(:defaultPageLines 50) (:defaultOutlineLines 100) (:maxBatchBytes 65536)])
     (:contract :id engine
       :rule "Host engine residency and execution protocol contract across CLI and RPC sessions."
       :engine [

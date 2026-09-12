@@ -13,6 +13,16 @@
     (:rule :id durableStateRecovery
       :description "Crash recovery restores durable verified state from ledger, discarding uncommitted in-flight mutations."
       :falsification "Unverified mutations are discarded on recovery.")
+    (:rule :id boundedRetrieval
+      :description "Aggregate batch retrieval and child operations are capped under declared tunable budgets; pagination cursors bind session and snapshot."
+      :falsification "Child reads exceeding aggregate budget or using stale/cross-session cursors are rejected.")
+  ]
+  :continuationSchema [
+    (:field :id "cursor" :type "Str" :desc "Opaque session-bound snapshot continuation token")
+    (:field :id "sessionId" :type "Str" :desc "Active session binding for pagination")
+    (:field :id "snapshotDigest" :type "Str" :desc "Workspace snapshot hash ensuring no interleaved edits")
+    (:field :id "hasMore" :type "Bool" :desc "True if additional paged records exist")
+    (:field :id "budgetRemaining" :type "I64" :desc "Remaining token/character allowance for batch")
   ]
   :receiptSchema [
     (:field :id "receiptId" :type "Str" :desc "Unique runner-issued receipt identifier")
