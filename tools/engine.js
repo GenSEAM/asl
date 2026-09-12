@@ -2177,6 +2177,8 @@ function buildModuleNameIndex(startDir) {
   return moduleNameIndex;
 }
 
+const collectionRoots = ["asl/packages", "."];
+
 function resolveModulePath(currentFile, modName) {
   // Priority 1: Relative imports
   if (modName.startsWith('./') || modName.startsWith('../')) {
