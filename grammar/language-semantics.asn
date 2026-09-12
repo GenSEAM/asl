@@ -205,5 +205,10 @@
       :rule "Distance between a symbol binding and its uses is measured and bounded over the resolved module graph; uses beyond the bound must be self-describing so a sliced window is interpretable without reading its file."
       :failureCode "ERR_UNBOUNDED_BINDING_DISTANCE"
       :exitCode 1)
+    (:semantic :id measuredEmissionErrorRateRule
+      :rule "Language changes are evaluated by model generation against a versioned fixed task set, measuring the emission error rate of forms that fail to parse, bind, or assert; a change that lowers tokens while raising the error rate is rejected."
+      :failureCode "ERR_UNMEASURED_EMISSION_ERROR_RATE"
+      :exitCode 1)
   ]
 )
+
