@@ -800,7 +800,7 @@ static int op_run(int step_id, StepToken *tokens, int ntokens, const char *ws_ro
         sb_append_int(out, step_id);
         sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_TIMEOUT\" :message \"Process execution timed out after ");
         sb_append_int(out, timeout_ms);
-        sb_append(out, " ms\" :duration-ms ");
+        sb_append(out, " ms\" :durationMs ");
         sb_append_int(out, duration_ms);
         sb_append(out, ")\n");
         sb_free(&out_buf);
@@ -818,7 +818,7 @@ static int op_run(int step_id, StepToken *tokens, int ntokens, const char *ws_ro
     sb_append_escaped(out, out_buf.data ? out_buf.data : "");
     sb_append(out, "\" :stderr \"");
     sb_append_escaped(out, err_buf.data ? err_buf.data : "");
-    sb_append(out, "\" :duration-ms ");
+    sb_append(out, "\" :durationMs ");
     sb_append_int(out, duration_ms);
     sb_append(out, " :truncated ");
     sb_append(out, is_truncated ? "true" : "false");
@@ -1820,7 +1820,7 @@ static void append_session_trace(const char *ws_root, int step_id, const char *o
     FILE *fp = fopen(trace_path, "a");
     if (!fp) return;
 
-    fprintf(fp, "\n(:trace-entry :timestamp %lld :step %d :op \"%s\" :target \"%s\" :before-digest \"%s\" :after-digest \"%s\" :status \"%s\" :duration-ms %lld)",
+    fprintf(fp, "\n(:trace-entry :timestamp %lld :step %d :op \"%s\" :target \"%s\" :before-digest \"%s\" :after-digest \"%s\" :status \"%s\" :durationMs %lld)",
             now_ms, step_id, op ? op : "", target ? target : "", before_digest ? before_digest : "", after_digest ? after_digest : "", status ? status : "ok", duration_ms);
     fclose(fp);
 }
@@ -2554,7 +2554,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
     } else if (strcmp(op, "inspect") == 0) {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"inspect\" :status \"ok\" :daemon-status (:daemon-status :status \"active\" :active-op \":idle\"))\n");
+        sb_append(out, " :op \"inspect\" :status \"ok\" :daemon-status (:daemon-status :status \"active\" :activeOp \":idle\"))\n");
     } else if (strcmp(op, "read") == 0) {
         char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
@@ -2746,7 +2746,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         /* op_diff */
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"diff\" :status \"ok\" :staged-count ");
+        sb_append(out, " :op \"diff\" :status \"ok\" :stagedCount ");
         sb_append_int(out, g_nstaged);
         sb_append(out, " :entries [");
         for (int i = 0; i < g_nstaged; i++) {
@@ -2773,7 +2773,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         clear_staged_buffers();
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"flush\" :status \"ok\" :flushed-count ");
+        sb_append(out, " :op \"flush\" :status \"ok\" :flushedCount ");
         sb_append_int(out, flushed);
         sb_append(out, ")\n");
     } else if (strcmp(op, "discard") == 0) {
@@ -2782,7 +2782,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         clear_staged_buffers();
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"discard\" :status \"ok\" :discarded-count ");
+        sb_append(out, " :op \"discard\" :status \"ok\" :discardedCount ");
         sb_append_int(out, count);
         sb_append(out, ")\n");
     } else if (strcmp(op, "edit") == 0) {
@@ -3476,7 +3476,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
     } else if (strcmp(op, "gate") == 0 || strcmp(op, "chk") == 0) {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"gate\" :status \"ok\" :all-clean true :passed 7 :active 7 :total 7)\n");
+        sb_append(out, " :op \"gate\" :status \"ok\" :allClean true :passed 7 :active 7 :total 7)\n");
     } else if (strcmp(op, "compose") == 0 || strcmp(op, "pipe") == 0) {
         op_compose(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "run") == 0) {
@@ -3512,7 +3512,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
     }
 
     if (strcmp(op, "trace") != 0 && strcmp(op, "ping") != 0 && strcmp(op, "inspect") != 0) {
-        int is_rejected = (out->data && strstr(out->data + prev_len, ":status \"rejected\" :error-code") != NULL) ? 1 : 0;
+        int is_rejected = (out->data && (strstr(out->data + prev_len, ":status \"rejected\" :errorCode") != NULL || strstr(out->data + prev_len, ":status \"rejected\" :error-code") != NULL)) ? 1 : 0;
         const char *trace_status = is_rejected ? "rejected" : "ok";
         if ((strcmp(op, "edit") == 0 || strcmp(op, "write") == 0) && trace_target[0] && !is_rejected) {
             char full_p[4096];
@@ -3525,12 +3525,12 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
     }
 
     free_tokens(tokens, ntokens);
-    return (out->data && strstr(out->data + prev_len, ":status \"rejected\" :error-code") != NULL) ? 1 : 0;
+    return (out->data && (strstr(out->data + prev_len, ":status \"rejected\" :errorCode") != NULL || strstr(out->data + prev_len, ":status \"rejected\" :error-code") != NULL)) ? 1 : 0;
 }
 
 static void handle_payload(const char *payload, const char *ws_root, StrBuf *resp) {
     if (!payload || !payload[0]) {
-        sb_append(resp, "(:batch-res :status \"completed\" :items-count 0 :parallel true :results [])\n");
+        sb_append(resp, "(:batch-res :status \"completed\" :itemsCount 0 :parallel true :results [])\n");
         return;
     }
 
@@ -3542,7 +3542,7 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
         return;
     }
     if (strncmp(trimmed, "(:inspect)", 10) == 0) {
-        sb_append(resp, "(:daemon-status :status \"active\" :active-op \":idle\")\n");
+        sb_append(resp, "(:daemon-status :status \"active\" :activeOp \":idle\")\n");
         return;
     }
     if (strncmp(trimmed, "(:frame", 7) == 0) {
@@ -3716,23 +3716,23 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     const char *mode_flag = seq_mode ? " :parallel false :sequenced true" : " :parallel true";
     const char *invocation_flag = script_mode ? " :invocation \"asl\" :notation \"asn\"" : "";
     if (failed_count == 0) {
-        sb_append(resp, "(:batch-res :status \"completed\" :items-count ");
+        sb_append(resp, "(:batch-res :status \"completed\" :itemsCount ");
         sb_append_int(resp, step_count);
         sb_append(resp, mode_flag);
         sb_append(resp, invocation_flag);
         sb_append(resp, " :results [\n");
     } else if (failed_count > 0 && failed_count < step_count) {
-        sb_append(resp, "(:batch-res :status \"completed-with-errors\" :items-count ");
+        sb_append(resp, "(:batch-res :status \"completed-with-errors\" :itemsCount ");
         sb_append_int(resp, step_count);
-        sb_append(resp, " :failed-count ");
+        sb_append(resp, " :failedCount ");
         sb_append_int(resp, failed_count);
         sb_append(resp, mode_flag);
         sb_append(resp, invocation_flag);
         sb_append(resp, " :results [\n");
     } else {
-        sb_append(resp, "(:batch-res :status \"failed\" :items-count ");
+        sb_append(resp, "(:batch-res :status \"failed\" :itemsCount ");
         sb_append_int(resp, step_count);
-        sb_append(resp, " :failed-count ");
+        sb_append(resp, " :failedCount ");
         sb_append_int(resp, failed_count);
         sb_append(resp, mode_flag);
         sb_append(resp, invocation_flag);
@@ -4881,8 +4881,99 @@ static int check_c3_duplicates(const char *ws_root) {
     return 0;
 }
 
+static int is_forbidden_kebab_key(const char *key) {
+    if (!key) return 0;
+    static const char *forbidden[] = {
+        "exit-code", "latency-ms", "stdout-len", "tokens-out", "tokens-in",
+        "tok-sec", "duration-ms", "error-code", "session-id", "trace-id",
+        "run-id", "model-id", "budget-ceiling", "pass-rate", "ctrf-progress",
+        "avg-tokens", "amnesia-detected", "pareto-score", "case-id", "matched-intent",
+        "matched-tier", "predicted-intent", "predicted-tier", "target-url", "is-connected",
+        "mutated-paths", "continuous-progress", "entry-id", "timestamp-ms", "task-id",
+        "prompt-snippet", "entropy-score", "selected-tier", "executed-locally", "tokens-saved",
+        "gate-verdict", "before-digest", "after-digest", "parent-digest", "runtime-target",
+        "lost-writes", "raised-conflicts", "repeated-work-tokens", "completion-rate",
+        "mean-time-to-settlement-ms", "lost-writes-delta", "collision-reduction-factor",
+        "conflicts-reduction-factor", "token-overhead-saved", "confidence-interval",
+        "lost-writes-ci-low", "lost-writes-ci-high", "sample-iterations", "standard-error",
+        "orig-len", "staged-count", "flushed-count", "discarded-count", "items-count",
+        "failed-count", "all-clean", "line-content", "d52-errors", "tree-status", "checked-files",
+        NULL
+    };
+    for (int i = 0; forbidden[i]; i++) {
+        if (strcmp(key, forbidden[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+static int check_emitted_asn_string(const char *asn_str, char *out_violation, size_t out_violation_sz) {
+    if (!asn_str) return 0;
+    const char *p = asn_str;
+    while ((p = strstr(p, " :")) != NULL) {
+        p += 2;
+        if (*p >= 97 && *p <= 122) {
+            const char *end = p;
+            int has_hyphen = 0;
+            while ((*end >= 97 && *end <= 122) || (*end >= 48 && *end <= 57) || *end == 45) {
+                if (*end == 45) has_hyphen = 1;
+                end++;
+            }
+            if (has_hyphen && (isspace((unsigned char)*end) || *end == 41 || *end == 0)) {
+                int klen = (int)(end - p);
+                char key[128];
+                if (klen >= (int)sizeof(key)) klen = sizeof(key) - 1;
+                strncpy(key, p, klen);
+                key[klen] = 0;
+                if (is_forbidden_kebab_key(key) || has_hyphen) {
+                    if (out_violation && out_violation_sz > 0) {
+                        snprintf(out_violation, out_violation_sz, "%s", key);
+                    }
+                    return 1;
+                }
+            }
+            p = end;
+        }
+    }
+    return 0;
+}
+
 static int check_d51_convergence(const char *ws_root) {
-    (void)ws_root;
+    char mapping_path[1024];
+    snprintf(mapping_path, sizeof(mapping_path), "%s/.asl/mem/telemetry/key-mapping.asn", ws_root);
+    FILE *mfp = fopen(mapping_path, "r");
+    if (!mfp) {
+        printf("    ✗ D51 convergence failure: missing canonical key mapping %s\n", mapping_path);
+        return 1;
+    }
+    fclose(mfp);
+
+    char **telem_files = NULL;
+    int tcnt = 0, tcap = 0;
+    collect_tree_files(ws_root, ".asl/mem/telemetry", ".asn", NULL, &telem_files, &tcnt, &tcap);
+    for (int i = 0; i < tcnt; i++) {
+        if (strstr(telem_files[i], "key-mapping.asn") != NULL) {
+            free(telem_files[i]);
+            continue;
+        }
+        char full[1024];
+        snprintf(full, sizeof(full), "%s/%s", ws_root, telem_files[i]);
+        size_t sz = 0;
+        char *content = read_file_alloc(full, &sz);
+        if (content) {
+            char viol[128] = {0};
+            if (check_emitted_asn_string(content, viol, sizeof(viol)) != 0) {
+                printf("    ✗ D51 convergence failure: forbidden kebab-case key ':%s' in %s\n", viol, telem_files[i]);
+                free(content);
+                for (int k = i; k < tcnt; k++) free(telem_files[k]);
+                free(telem_files);
+                return 1;
+            }
+            free(content);
+        }
+        free(telem_files[i]);
+    }
+    free(telem_files);
+
     return 0;
 }
 
@@ -6124,7 +6215,7 @@ static int run_cmd_audit_plan(int argc, char **argv) {
 
     printf("--> [2/2] Dependency DAG Topology & Acyclicity:\n");
     printf("    • Cycle detection status:   %d cycle(s) detected\n", cycle_count);
-    printf("(:plan-audit-report :status \"%s\" :phases %d :tasks %d :cycles %d :d52-errors %d)\n",
+    printf("(:plan-audit-report :status \"%s\" :phases %d :tasks %d :cycles %d :d52Errors %d)\n",
            (d52_errors == 0 && cycle_count == 0) ? "clean" : "defective",
            phase_count, task_count, cycle_count, d52_errors);
 
@@ -6180,7 +6271,7 @@ static int run_cmd_watch(int argc, char **argv, const char *ws_root) {
     walk_dir_recursive(ws_root, "", watch_file_cb, &wctx);
 
     const char *status = (wctx.errors == 0) ? ":green" : ":red";
-    printf("(:watch-report :tree-status %s :checked-files %d :errors %d)\n",
+    printf("(:watch-report :treeStatus %s :checkedFiles %d :errors %d)\n",
            status, wctx.checked, wctx.errors);
 
     char inflight_path[4096];
@@ -8078,8 +8169,20 @@ int main(int argc, char **argv) {
             return run_cmd_gate(argc, argv, discovered_ws);
         } else if (argc >= 3 && strcmp(argv[2], "plan") == 0) {
             return run_cmd_audit_plan(argc, argv);
+        } else if (argc >= 3 && (strcmp(argv[2], "naming") == 0 || strcmp(argv[2], "d51") == 0 || strcmp(argv[2], "camel") == 0)) {
+            /* Subcommand: asl audit naming */
+            if (argc >= 4) {
+                char viol[256] = {0};
+                if (check_emitted_asn_string(argv[3], viol, sizeof(viol)) != 0) {
+                    printf("    ✗ D51 check failed: forbidden kebab-case key ':%s' in emitted ASN\n", viol);
+                    return 1;
+                }
+                printf("    ✓ D51 check passed: emitted ASN complies with camelCase naming\n");
+                return 0;
+            }
+            return check_d51_convergence(discovered_ws);
         } else {
-            printf("Usage: asl audit <consistency|gates|plan>\n");
+            printf("Usage: asl audit <consistency|gates|plan|naming>\n");
             return 1;
         }
     }
