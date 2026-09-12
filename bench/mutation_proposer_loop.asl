@@ -100,10 +100,11 @@
 
 (df CalculateProposerCost [(tokens-consumed I64) (rate-per-million I64)] -> Str
   :d "Calculates dollar cost of tokens consumed during LLM proposal loop"
-  (let [(micros (/ (* tokens-consumed rate-per-million) 1000))]
-    (let [(dollars (/ micros 1000))
-          (cents (/ (mod micros 1000) 10))]
-      (str-concat (str-concat (str-concat "$" (str dollars)) ".") (str cents)))))
+  (let [(cents (/ (* tokens-consumed rate-per-million) 10000))]
+    (let [(dollars (/ cents 100))
+          (c (mod cents 100))]
+      (let [(c-str (if (< c 10) (str-concat "0" (str c)) (str c)))]
+        (str-concat (str-concat (str-concat "$" (str dollars)) ".") c-str)))))
 
 (df RunTests [] -> Bool
   :d "Executes internal verification tests for mutation proposer feedback loop"
@@ -121,6 +122,6 @@
       (assert (= (.-disposition eval-dup) "discarded") "Duplicate case must be discarded")
       (assert (= (.-disposition eval-grader) "refused") "Attempt to write to grader path must be refused")
       (assert (= (.-disposition eval-mod) "refused") "Attempt to edit existing assertions must be refused")
-      (let [(cost (CalculateProposerCost 50000 3000))]
-        (assert (> (string-length cost) 0) "Must compute token cost string")
+      (let [(cost (CalculateProposerCost 50000 3))]
+        (assert (= cost "$0.15") "Must compute token cost string")
         true))))

@@ -1,0 +1,44 @@
+(:flakiness-corpus
+  :version "1.0"
+  :suites [
+    (:suite
+      :id "flaky-fixture"
+      :path "asl/bench/tasks/flaky_fixture.asl"
+      :behavior :alternating
+      :expectedStable false
+      :expectedGuaranteeEligible false
+      :justification "Planted unstable suite: outcome varies across repeated iterations; must not count toward guarantees")
+    (:suite
+      :id "gates-test"
+      :path "asl/packages/asl-gates/tests/gates_test.asl"
+      :behavior :deterministic-pass
+      :expectedStable true
+      :expectedGuaranteeEligible true
+      :justification "Deterministic passing suite across repeated iterations")
+    (:suite
+      :id "eval-test"
+      :path "asl/packages/asl-eval/tests/eval_test.asl"
+      :behavior :deterministic-pass
+      :expectedStable true
+      :expectedGuaranteeEligible true
+      :justification "Deterministic passing suite across repeated iterations")
+  ]
+  :repeatedRuns [
+    (:seed 42 :repetitions 5 :wallMs 45808)
+  ]
+  :bottlenecks [
+    (:rank 1 :path "asl/packages/asl-compiler/tests/compiler-test.asl" :meanMs 12012 :wallSharePct "26.2%")
+    (:rank 2 :path "asl/packages/asl-checker/tests/checker_test.asl" :meanMs 10392 :wallSharePct "22.7%")
+    (:rank 3 :path "asl/packages/asl-checker/tests/unify_test.asl" :meanMs 2526 :wallSharePct "5.5%")
+  ]
+  :regressions [
+    (:suite "asl/packages/asl-compiler/tests/compiler-test.asl"
+      :assertion "eval-lambda"
+      :previousReceipt "rc-task44403-verified-20260912"
+      :currentReceipt "rc-task44404-verified-20260913"
+      :previousAsserts 149
+      :currentAsserts 145
+      :delta 4
+      :regressionType "newly-unreached")
+  ]
+)
