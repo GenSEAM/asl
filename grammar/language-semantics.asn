@@ -197,5 +197,9 @@
       :rule "Nesting depth is tracked per file and form with a declared empirical ceiling; forms exceeding the ceiling are reported with path and line, and depth inside string literals is excluded from the count."
       :failureCode "ERR_EXCESSIVE_NESTING_DEPTH"
       :exitCode 1)
+    (:semantic :id flatteningFormDoubleWinRule
+      :rule "A flattening form is admitted into the language grammar only on a measured double win: it must strictly reduce both nesting depth and measured token count on real corpus sites; forms that improve only one or none are rejected."
+      :failureCode "ERR_FLATTENING_WITHOUT_DOUBLE_WIN"
+      :exitCode 1)
   ]
 )
