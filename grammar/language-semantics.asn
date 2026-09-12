@@ -133,5 +133,9 @@
       :rule "Compiler and runtime error diagnostics quote the exact source, line, and column of the responsible form rather than detached downstream call sites."
       :failureCode "ERR_UNLOCATED_DIAGNOSTIC"
       :exitCode 1)
+    (:semantic :id contractBlameAttribution
+      :rule "Function and module boundaries carry contracts with blame: a violated precondition blames the caller, a violated postcondition blames the definition, and deferred checks are reported as unchecked rather than satisfied."
+      :failureCode "ERR_CONTRACT_BLAME_VIOLATION"
+      :exitCode 1)
   ]
 )

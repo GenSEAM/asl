@@ -436,7 +436,7 @@ function invokeClosure(closure, evalArgs) {
   }
 }
 
-function parseAllSExprs(input) {
+function parseAllSExprs(input, sourcePath = "") {
   let i = 0;
   const lineOffsets = [0];
   for (let idx = 0; idx < input.length; idx++) {
@@ -450,6 +450,14 @@ function parseAllSExprs(input) {
       else high = mid - 1;
     }
     return high + 1;
+  }
+  function getCol(pos, line) {
+    return pos - lineOffsets[line - 1] + 1;
+  }
+  function loc(startPos, endPos) {
+    const line = getLine(startPos);
+    const col = getCol(startPos, line);
+    return { source: sourcePath, line, col, span: [startPos, endPos] };
   }
   function skipWhitespace() {
     while (i < input.length && (/\s/.test(input[i]) || input[i] === ";")) {
@@ -481,7 +489,7 @@ function parseAllSExprs(input) {
       skipWhitespace();
     }
     if (i < input.length && input[i] === "}") i++;
-    return { type: "map", items, line: getLine(startPos) };
+    return { type: "map", items, ...loc(startPos, i) };
   }
   function parseStr() {
     const startPos = i;
@@ -489,7 +497,7 @@ function parseAllSExprs(input) {
     let s = "";
     while (i < input.length) {
       const c = input[i++];
-      if (c === "\"") return { type: "str", value: s, line: getLine(startPos) };
+      if (c === "\"") return { type: "str", value: s, ...loc(startPos, i) };
       if (c === "\\") {
         const esc = input[i++];
         if (esc === "n") s += "\n";
@@ -507,7 +515,7 @@ function parseAllSExprs(input) {
         s += c;
       }
     }
-    return { type: "str", value: s, line: getLine(startPos) };
+    return { type: "str", value: s, ...loc(startPos, i) };
   }
   function parseAtom() {
     const startPos = i;
@@ -515,14 +523,14 @@ function parseAllSExprs(input) {
     while (i < input.length && !/\s|[()\[\]{}]/.test(input[i])) {
       atom += input[i++];
     }
-    const line = getLine(startPos);
-    if (atom === "true") return { type: "bool", value: true, line };
-    if (atom === "false") return { type: "bool", value: false, line };
-    if (atom === "null" || atom === "nil" || atom === "_") return { type: "null", value: null, line };
-    if (/^-?[0-9]+$/.test(atom)) return { type: "int", value: BigInt(atom), line };
-    if (/^-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?$/.test(atom)) return { type: "float", value: Number(atom), line };
-    if (atom.startsWith(":")) return { type: "kw", value: atom.slice(1), line };
-    return { type: "sym", value: atom, line };
+    const l = loc(startPos, i);
+    if (atom === "true") return { type: "bool", value: true, ...l };
+    if (atom === "false") return { type: "bool", value: false, ...l };
+    if (atom === "null" || atom === "nil" || atom === "_") return { type: "null", value: null, ...l };
+    if (/^-?[0-9]+$/.test(atom)) return { type: "int", value: BigInt(atom), ...l };
+    if (/^-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?$/.test(atom)) return { type: "float", value: Number(atom), ...l };
+    if (atom.startsWith(":")) return { type: "kw", value: atom.slice(1), ...l };
+    return { type: "sym", value: atom, ...l };
   }
   function parseVector() {
     const startPos = i;
@@ -535,7 +543,7 @@ function parseAllSExprs(input) {
       skipWhitespace();
     }
     if (i < input.length && input[i] === "]") i++;
-    return { type: "vec", items: arr, line: getLine(startPos) };
+    return { type: "vec", items: arr, ...loc(startPos, i) };
   }
   function parseList() {
     const startPos = i;
@@ -548,7 +556,7 @@ function parseAllSExprs(input) {
       skipWhitespace();
     }
     if (i < input.length && input[i] === ")") i++;
-    return { type: "list", items, line: getLine(startPos) };
+    return { type: "list", items, ...loc(startPos, i) };
   }
 
   const forms = [];
@@ -1925,7 +1933,7 @@ function getCheckerClosure() {
     }
     const env = new Map();
     const code = fs.readFileSync(checkPath, 'utf8');
-    const forms = parseAllSExprs(code);
+    const forms = parseAllSExprs(code, checkPath);
     loadModuleImports(forms, checkPath, env);
     for (const f of forms) {
       evalNode(f, env);
@@ -2283,7 +2291,7 @@ function loadModuleImports(forms, filePath, env, loading = new Set()) {
                   importedEnv = moduleCache.get(resolved);
                 } else {
                   const importedCode = fs.readFileSync(resolved, 'utf8');
-                  const importedForms = parseAllSExprs(importedCode);
+                  const importedForms = parseAllSExprs(importedCode, resolved);
                   importedEnv = new Map();
                   importedEnv.set('none', { _tag: 'none', value: null });
                   importedEnv.set('nil', null);
@@ -2316,7 +2324,7 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
   const filePath = cleanArgs[0];
   const code = fs.readFileSync(filePath, 'utf8');
   try {
-    const forms = parseAllSExprs(code);
+    const forms = parseAllSExprs(code, filePath);
     const rootEnv = new Map();
     rootEnv.set('none', { _tag: 'none', value: null });
     rootEnv.set('nil', null);
