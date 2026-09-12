@@ -72,7 +72,7 @@
 
           
           <div class=\"p-5 rounded-2xl border border-signal/40 bg-surface text-center flex flex-col items-center shadow-e2 relative\">
-            <div class=\"w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-700 to-indigo-600 text-white flex items-center justify-center mb-3 shadow-md\">
+            <div class=\"w-12 h-12 rounded-2xl bg-signal text-white flex items-center justify-center mb-3 shadow-md\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-6 h-6\">
                 <polygon points=\"12 2 2 7 12 12 22 7 12 2\"></polygon>
                 <polyline points=\"2 17 12 22 22 17\"></polyline>
@@ -104,7 +104,7 @@
       
       <div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6\">
         
-        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line group-hover:border-signal/30 transition-colors\">
@@ -141,7 +141,7 @@
         </div>
 
         
-        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line group-hover:border-signal/30 transition-colors\">
@@ -185,7 +185,7 @@
         </div>
 
         
-        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line group-hover:border-signal/30 transition-colors\">
@@ -223,7 +223,7 @@
         </div>
 
         
-        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line group-hover:border-signal/30 transition-colors\">
@@ -259,7 +259,7 @@
         </div>
 
         
-        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line group-hover:border-signal/30 transition-colors\">
@@ -298,7 +298,7 @@
         </div>
 
         
-        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between gap-3\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line group-hover:border-signal/30 transition-colors\">
@@ -336,7 +336,7 @@
       </div>
 
       
-      <div class=\"mt-14 p-6 sm:p-8 rounded-3xl border border-line bg-gradient-to-r from-surface via-surface/90 to-surface/60 backdrop-blur-2xl shadow-e3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6\">
+      <div class=\"mt-14 p-6 sm:p-8 rounded-3xl border border-line bg-surface/90 backdrop-blur-xl shadow-e3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6\">
         <div class=\"space-y-1.5 max-w-2xl\">
           <div class=\"flex items-center gap-2\">
             <span class=\"w-2 h-2 rounded-full bg-signal\"></span>
@@ -353,14 +353,14 @@
         </div>
 
         <div class=\"flex flex-wrap items-center gap-3 shrink-0\">
-          <a href=\"/llms.txt\" target=\"_blank\" rel=\"noreferrer\" class=\"inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-surface border border-line hover:border-signal/40 text-ink font-mono text-meta font-medium shadow-sm transition-all\">
+          <a href=\"/llms.txt\" target=\"_blank\" rel=\"noreferrer\" class=\"inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-surface border border-line hover:border-signal/40 text-ink font-mono text-meta font-medium shadow-sm transition-colors\">
             <span>/llms.txt</span>
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5 text-signal\">
               <line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line>
               <polyline points=\"12 5 19 12 12 19\"></polyline>
             </svg>
           </a>
-          <a href=\"/llms-full.txt\" target=\"_blank\" rel=\"noreferrer\" class=\"inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-700 to-indigo-600 text-white font-mono text-meta font-medium shadow-sm hover:opacity-95 transition-opacity\">
+          <a href=\"/llms-full.txt\" target=\"_blank\" rel=\"noreferrer\" class=\"inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-signal text-white font-mono text-meta font-medium shadow-sm hover:opacity-95 transition-opacity\">
             <span>Full Spec</span>
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">
               <line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line>

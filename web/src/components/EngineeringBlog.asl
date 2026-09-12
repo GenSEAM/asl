@@ -37,7 +37,7 @@
 
       <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-line pt-8\">
         
-        <article data-slug=\"why-llms-struggle-with-python-and-rust\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+        <article data-slug=\"why-llms-struggle-with-python-and-rust\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-colors duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
@@ -91,7 +91,7 @@
         </article>
 
         
-        <article data-slug=\"token-economy-and-structural-compression\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+        <article data-slug=\"token-economy-and-structural-compression\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-colors duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
@@ -145,7 +145,7 @@
         </article>
 
         
-        <article data-slug=\"from-vibe-code-to-wasm-in-0-04ms\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+        <article data-slug=\"from-vibe-code-to-wasm-in-0-04ms\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-colors duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
@@ -199,7 +199,7 @@
         </article>
 
         
-        <article data-slug=\"the-token-density-fallacy-and-machine-understandability\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-all duration-200 group flex flex-col justify-between\">
+        <article data-slug=\"the-token-density-fallacy-and-machine-understandability\" class=\"asl-blog-card p-6 rounded-xl border border-line bg-surface/60 hover:bg-surface/90 hover:border-signal/50 cursor-pointer transition-colors duration-200 group flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-2.5\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-semibold\">
@@ -254,7 +254,7 @@
       </div>
 
       <div class=\"mt-8 pt-6 border-t border-line flex justify-center\">
-        <a href=\"/blog\" class=\"asl-blog-nav inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-line bg-surface hover:border-signal text-sm font-mono text-ink hover:text-signal transition-all shadow-sm group\">
+        <a href=\"/blog\" class=\"asl-blog-nav inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-line bg-surface hover:border-signal text-sm font-mono text-ink hover:text-signal transition-colors shadow-sm group\">
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-signal\">
             <path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"></path>
             <path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"></path>

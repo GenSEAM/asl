@@ -19,16 +19,16 @@
 
       
       <div class=\"flex items-center bg-surface-2 p-1 rounded-xl border border-line\" id=\"ps-tabs\">
-        <button type=\"button\" data-target=\"react\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize bg-signal text-ground font-bold shadow-sm\">
+        <button type=\"button\" data-target=\"react\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors capitalize bg-signal text-ground font-bold shadow-sm\">
           React 19 (TSX)
         </button>
-        <button type=\"button\" data-target=\"vue\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize text-ink-muted hover:text-ink\">
+        <button type=\"button\" data-target=\"vue\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors capitalize text-ink-muted hover:text-ink\">
           Vue 3 (SFC)
         </button>
-        <button type=\"button\" data-target=\"svelte\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize text-ink-muted hover:text-ink\">
+        <button type=\"button\" data-target=\"svelte\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors capitalize text-ink-muted hover:text-ink\">
           Svelte 5 (Runes)
         </button>
-        <button type=\"button\" data-target=\"html\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize text-ink-muted hover:text-ink\">
+        <button type=\"button\" data-target=\"html\" class=\"ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors capitalize text-ink-muted hover:text-ink\">
           SSR HTML
         </button>
       </div>
@@ -43,7 +43,7 @@
         </div>
         <textarea
           id=\"ps-asl-source\"
-          class=\"w-full h-80 bg-black/80 border border-line/80 rounded-xl p-4 font-mono text-xs text-purple-200 leading-relaxed resize-none focus:outline-none focus:border-signal/70 focus:ring-1 focus:ring-signal/30 selection:bg-signal/40 shadow-inner\"
+          class=\"w-full h-80 bg-black/80 border border-line/80 rounded-xl p-4 font-mono text-xs text-signal-soft leading-relaxed resize-none focus:outline-none focus:border-signal/70 focus:ring-1 focus:ring-signal/30 selection:bg-signal/40 shadow-inner\"
           spellcheck=\"false\"
         >(div (:class \"p-6 rounded-2xl bg-surface border border-line shadow-lg\")
   (div (:class \"flex items-center gap-3 mb-4\")
@@ -226,9 +226,9 @@ const handleAction = () => {
           currentTarget = t;
           tabBtns.forEach(function(btn) {
             if (btn.getAttribute('data-target') === t) {
-              btn.className = 'ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize bg-signal text-ground font-bold shadow-sm';
+              btn.className = 'ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors capitalize bg-signal text-ground font-bold shadow-sm';
             } else {
-              btn.className = 'ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-all capitalize text-ink-muted hover:text-ink';
+              btn.className = 'ps-tab-btn px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors capitalize text-ink-muted hover:text-ink';
             }
           });
           if (targetLabel) targetLabel.textContent = 'Target Output: ' + t.toUpperCase();
