@@ -1,0 +1,46 @@
+(:mutation-corpus
+  :version "1.0"
+  :packages [
+    (:package :name "asl-gates" :tier :core :path "asl/packages/asl-gates")
+    (:package :name "asl-eval" :tier :core :path "asl/packages/asl-eval")
+    (:package :name "asl-bench" :tier :bench :path "asl/bench")
+  ]
+  :mutants [
+    (:mutant
+      :id "mut-kill-01"
+      :package "asl-gates"
+      :symbol "assert-equal"
+      :category :relational
+      :original "(= a b)"
+      :mutated "(!= a b)"
+      :expectedOutcome :killed
+      :testRef "asl/packages/asl-gates/tests/gates_test.asl")
+    (:mutant
+      :id "mut-kill-02"
+      :package "asl-eval"
+      :symbol "eval-add"
+      :category :arithmetic
+      :original "(+ x 1)"
+      :mutated "(- x 1)"
+      :expectedOutcome :killed
+      :testRef "asl/packages/asl-eval/tests/eval_test.asl")
+    (:mutant
+      :id "mut-equiv-01"
+      :package "asl-bench"
+      :symbol "is-under-budget?"
+      :category :equivalent
+      :original "(<= token-count budget)"
+      :mutated "(or (< token-count budget) (= token-count budget))"
+      :expectedOutcome :equivalent
+      :justification "Logical equivalence: (<= a b) is logically identical to (or (< a b) (= a b)) across all integers; leaves program semantics unchanged")
+    (:mutant
+      :id "mut-equiv-02"
+      :package "asl-eval"
+      :symbol "eval-identity"
+      :category :equivalent
+      :original "(+ x 0)"
+      :mutated "x"
+      :expectedOutcome :equivalent
+      :justification "Arithmetic identity: adding zero to integer x is identical to x; leaves evaluation semantics unchanged")
+  ]
+)
