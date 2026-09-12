@@ -35,4 +35,10 @@
       :enforcement "ast-audit"
       :failureCode "ERR_PREMATURE_GENERALIZATION")
   ]
+  :dependencyDirection [
+    (:rule :id unidirectionalFlow
+      :statement "Dependency flows strictly unidirectional from extensions toward core; core never depends on extensions or their presence."
+      :enforcement "module-graph-audit"
+      :failureCode "ERR_INVERTED_CORE_DEPENDENCY")
+  ]
 )

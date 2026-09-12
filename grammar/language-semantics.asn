@@ -165,5 +165,9 @@
       :rule "Data and view adapters reside in extension packages; no shared interface is extracted before observing two concrete implementations with identical semantic contracts."
       :failureCode "ERR_PREMATURE_GENERALIZATION"
       :exitCode 1)
+    (:semantic :id unidirectionalDependencyDirection
+      :rule "Dependency direction is strictly unidirectional: extensions depend on core surfaces, and core modules never depend on extensions or require specific extensions to be present."
+      :failureCode "ERR_INVERTED_CORE_DEPENDENCY"
+      :exitCode 1)
   ]
 )
