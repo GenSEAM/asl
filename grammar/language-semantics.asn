@@ -25,5 +25,17 @@
       :rule "Distinct assertion sites are accounted stably by AST node location separately from dynamic execution counts."
       :failureCode ""
       :exitCode 0)
+    (:semantic :id predicateNaming
+      :rule "A predicate ends in a question mark (?) and must never begin with is or is- (e.g. empty?, not is-empty or is-empty?)."
+      :failureCode "ERR_RETIRED_PREDICATE_FORM"
+      :exitCode 1)
+    (:semantic :id constructorNaming
+      :rule "A constructor is make followed by the type or construct name (e.g. make-node, not create-node, build-node, or new-node)."
+      :failureCode "ERR_RETIRED_CONSTRUCTOR_FORM"
+      :exitCode 1)
+    (:semantic :id conversionNaming
+      :rule "A type conversion is source-to-target (e.g. int-to-string, not int-from-string, to-string, or as-string)."
+      :failureCode "ERR_RETIRED_CONVERSION_FORM"
+      :exitCode 1)
   ]
 )
