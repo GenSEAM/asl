@@ -1,7 +1,7 @@
 (module asl-web/ecosystem-view
   :d "Declarative Ecosystem Showcase View in pure AgentScript"
   :x [describe-ecosystem render-ecosystem-view]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df describe-ecosystem [] -> Str
   :d "Returns structured metadata description of the 9 official GenSEAM packages"

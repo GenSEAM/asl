@@ -1,17 +1,19 @@
-(package :web-in-browser-companion
-  :doc "In-Browser WebLLM Companion and Multi-Pass SLM Execution Cockpit in pure AgentScript.")
+(module asl-web/InBrowserCompanion
+  :d "In-Browser WebLLM Companion and Multi-Pass SLM Execution Cockpit in pure AgentScript."
+  :x [render-studio-tabs render-prompt-picker render-telemetry-bar render-sandbox-cockpit render-in-browser-companion in-browser-companion]
+  :i [(asl-text/string :a s)])
 
 (df render-studio-tabs ()
   :d "Studio mode selector tabs: Vector SVG, 2D Retro Games, Mini-Websites."
   "<div class=\"flex flex-wrap items-center gap-2 p-1.5 bg-ground-2 dark:bg-ground-sunken rounded-xl border border-line-subtle mb-6\">
     <button class=\"companion-tab active px-4 py-2 text-xs font-mono font-medium rounded-lg bg-surface border border-line shadow-sm text-signal transition-all flex items-center gap-2\" data-studio=\"svg\">
-      <span>🎨</span><span>Vector SVG Studio</span>
+      <span></span><span>Vector SVG Studio</span>
     </button>
     <button class=\"companion-tab px-4 py-2 text-xs font-mono font-medium rounded-lg text-ink-3 hover:text-ink hover:bg-surface/50 transition-all flex items-center gap-2\" data-studio=\"games\">
-      <span>🕹️</span><span>Playable 2D Games</span>
+      <span></span><span>Playable 2D Games</span>
     </button>
     <button class=\"companion-tab px-4 py-2 text-xs font-mono font-medium rounded-lg text-ink-3 hover:text-ink hover:bg-surface/50 transition-all flex items-center gap-2\" data-studio=\"website\">
-      <span>🌐</span><span>Single-File Websites</span>
+      <span></span><span>Single-File Websites</span>
     </button>
   </div>")
 
@@ -19,11 +21,11 @@
   :d "Prompt template badges for 1-click execution."
   "<div class=\"flex flex-wrap items-center gap-2 mb-6\">
     <span class=\"text-micro font-mono uppercase text-ink-3 mr-1\">Quick Templates:</span>
-    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"gem\">💎 Neon Crystal</button>
-    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"rocket\">🚀 Rocket Icon</button>
-    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"tetris\">🕹️ Retro Tetris</button>
-    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"calculator\">🧮 Terminal Calc</button>
-    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"chameleon\">🦎 Mascot Badge</button>
+    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"gem\"> Neon Crystal</button>
+    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"rocket\"> Rocket Icon</button>
+    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"tetris\"> Retro Tetris</button>
+    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"calculator\"> Terminal Calc</button>
+    <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"chameleon\"> Mascot Badge</button>
   </div>")
 
 (df render-telemetry-bar ()
@@ -73,12 +75,12 @@
       <div class=\"flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-line-subtle\">
         <div class=\"flex items-center gap-3 text-xs font-mono text-ink-3\">
           <span>Verification: <strong class=\"text-emerald-400\">Balanced AST</strong></span>
-          <span>•</span>
+          <span>-</span>
           <span>Sandbox: <strong class=\"text-signal\">Isolated iframe</strong></span>
         </div>
         <div class=\"flex items-center gap-3\">
           <button class=\"px-5 py-2.5 rounded-xl bg-signal hover:bg-signal-strong text-white font-mono text-xs font-semibold shadow-lg shadow-signal/20 transition-all flex items-center gap-2\">
-            <span>⚡ Generate Artifact</span>
+            <span>[pulse] Generate Artifact</span>
           </button>
         </div>
       </div>

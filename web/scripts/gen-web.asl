@@ -5,7 +5,7 @@
 (df ! compile-web-models [(web-dir Str)] -> (Result Unit Str)
   :d "Compiles ASL model specifications into target static endpoints."
   (let [(u1 (println (str "=== [ASL Web Codegen] Compiling ASL models in " web-dir " ===")))
-        (u2 (println "✓ All web models and functions generated cleanly from pure AgentScript."))]
+        (u2 (println " All web models and functions generated cleanly from pure AgentScript."))]
     (ok ())))
 
 (df ! main [(args (List Str))] -> (Result Unit Str)

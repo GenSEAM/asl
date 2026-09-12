@@ -1,7 +1,7 @@
 (module asl-web/graph-showcase
   :d "Declarative Graph Reactor Showcase View in ASL"
   :x [describe-graph-showcase]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df describe-graph-showcase [] -> Str
   :d "Returns structured description of the 1M node graph showcase"

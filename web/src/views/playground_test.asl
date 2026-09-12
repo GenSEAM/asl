@@ -1,4 +1,4 @@
-(ns asl.web.views.playground.test)
+(module asl-web/views/playground-test)
 
 (df make-playground-sample-markup ()
   "<div class=\"p-4 bg-surface border border-line rounded-2xl\">Table</div>")

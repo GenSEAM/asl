@@ -1,7 +1,7 @@
 (module asl-web/graph-header
   :d "Declarative Graph Header Component in ASL"
   :x [render-graph-header]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df render-graph-header [(title Str) (subtitle Str)] -> Str
   :d "Renders header markup for graph reactor"

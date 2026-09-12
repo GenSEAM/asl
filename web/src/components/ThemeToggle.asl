@@ -1,7 +1,7 @@
 (module asl-web/theme-toggle
   :d "Declarative Theme Toggle Component with Sun and Moon SVGs in pure AgentScript"
   :x [render-theme-toggle theme-toggle]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df render-theme-toggle [] -> Str
   :d "Renders the theme toggle button with SVG icons and toggle click handler"

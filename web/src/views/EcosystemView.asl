@@ -1,14 +1,14 @@
 (module asl-web/ecosystem-view
   :d "Complete Ecosystem Architecture view in pure AgentScript."
   :x [ecosystem-view render-ecosystem-view]
-  :i [asl-web/ecosystem
+  :i [(asl-text/string :a s)
+      asl-web/ecosystem
       asl-web/unified-package-matrix])
 
 (df render-ecosystem-view [] -> Str
   :d "Renders the complete Ecosystem view with DAG progression, UnifiedPackageMatrix, and Multi-Runtime Engine."
   (s/concat
     "<div class=\"pt-24 sm:pt-28 pb-24\">
-      <!-- Top Hero / Header Section -->
       <section class=\"relative pt-8 sm:pt-12 pb-16 sm:pb-20\">
         <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">
           <div class=\"max-w-3xl\">
@@ -25,7 +25,6 @@
             </p>
           </div>
 
-          <!-- Architecture DAG Flow Banner -->
           <div class=\"mt-12 p-6 sm:p-8 rounded-3xl border border-line bg-surface/85 backdrop-blur-2xl shadow-e3\">
             <div class=\"flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-line\">
               <div>
@@ -42,9 +41,7 @@
               </div>
             </div>
 
-            <!-- Stages 1 -> 2 -> 3 DAG Graphic -->
             <div class=\"mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 relative\">
-              <!-- Stage 1 Card -->
               <div class=\"p-5 rounded-2xl border border-blue-500/30 bg-ground/80 flex flex-col justify-between space-y-4\">
                 <div>
                   <div class=\"flex items-center justify-between\">
@@ -64,7 +61,6 @@
                 </div>
               </div>
 
-              <!-- Stage 2 Card -->
               <div class=\"p-5 rounded-2xl border border-purple-500/40 bg-surface shadow-e2 flex flex-col justify-between space-y-4 relative\">
                 <div>
                   <div class=\"flex items-center justify-between\">
@@ -87,7 +83,6 @@
                 </div>
               </div>
 
-              <!-- Stage 3 Card -->
               <div class=\"p-5 rounded-2xl border border-emerald-500/30 bg-ground/80 flex flex-col justify-between space-y-4\">
                 <div>
                   <div class=\"flex items-center justify-between\">
@@ -111,7 +106,6 @@
         </div>
       </section>
 
-      <!-- Package Matrix Section -->
       <section id=\"package-matrix\" aria-labelledby=\"matrix-packages-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
         <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
           <header class=\"mb-16 sm:mb-20 max-w-3xl\">

@@ -343,18 +343,18 @@
               <span class=\"flex items-center gap-1 font-mono text-[10px] uppercase text-ink-3\"><span class=\"w-1.5 h-1.5 rounded-full bg-purple-400\"></span>Active</span>
             </div>
           </div>
-          <p class=\"text-meta text-ink-2 leading-relaxed\">Sub-millisecond inter-agent communication mesh with Model Context Protocol (MCP) bridge. Subagents stay warm in-memory, listening on local Unix domain sockets and Server-Sent Events (SSE) streams, exchanging compact ASL frames at &lt;0.04ms latency with zero cold-start delay.</p>
+          <p class=\"text-meta text-ink-2 leading-relaxed\">Sub-millisecond inter-agent communication mesh with Agent Wire Protocol (AWP) bridge. Subagents stay warm in-memory, listening on local Unix domain sockets and Server-Sent Events (SSE) streams, exchanging compact ASL frames at &lt;0.04ms latency with zero cold-start delay.</p>
           <ul class=\"space-y-1.5 pt-2 border-t border-line/60\">
             <li class=\"flex items-start gap-2 text-meta text-ink-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5 text-signal mt-0.5 shrink-0\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg><span>Sub-millisecond IPC over in-memory Unix domain sockets and SSE</span></li>
             <li class=\"flex items-start gap-2 text-meta text-ink-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5 text-signal mt-0.5 shrink-0\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg><span>Zero cold-start delay: subagents stay warm and resident in-memory</span></li>
-            <li class=\"flex items-start gap-2 text-meta text-ink-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5 text-signal mt-0.5 shrink-0\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg><span>Out-of-the-box Model Context Protocol (MCP) JSON-RPC bridge</span></li>
+            <li class=\"flex items-start gap-2 text-meta text-ink-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5 text-signal mt-0.5 shrink-0\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg><span>Out-of-the-box Agent Wire Protocol (AWP) JSON-RPC bridge</span></li>
             <li class=\"flex items-start gap-2 text-meta text-ink-2\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5 text-signal mt-0.5 shrink-0\"><circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path></svg><span>Replaces conversational chat bloat with typed S-expression frames</span></li>
           </ul>
           <div class=\"grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2\">
             <div class=\"p-2 rounded-xl bg-ground border border-line text-center\"><span class=\"block font-mono text-[9px] uppercase text-ink-3 leading-tight\">Socket Latency</span><span class=\"block font-mono text-micro font-semibold text-ink mt-0.5\">&lt;0.04ms</span></div>
             <div class=\"p-2 rounded-xl bg-ground border border-line text-center\"><span class=\"block font-mono text-[9px] uppercase text-ink-3 leading-tight\">Cold Start Delay</span><span class=\"block font-mono text-micro font-semibold text-ink mt-0.5\">0ms (Warm)</span></div>
             <div class=\"p-2 rounded-xl bg-ground border border-line text-center\"><span class=\"block font-mono text-[9px] uppercase text-ink-3 leading-tight\">Wire Reduction</span><span class=\"block font-mono text-micro font-semibold text-ink mt-0.5\">-78% vs Chat</span></div>
-            <div class=\"p-2 rounded-xl bg-ground border border-line text-center\"><span class=\"block font-mono text-[9px] uppercase text-ink-3 leading-tight\">Transports</span><span class=\"block font-mono text-micro font-semibold text-ink mt-0.5\">Unix Socket, SSE, MCP</span></div>
+            <div class=\"p-2 rounded-xl bg-ground border border-line text-center\"><span class=\"block font-mono text-[9px] uppercase text-ink-3 leading-tight\">Transports</span><span class=\"block font-mono text-micro font-semibold text-ink mt-0.5\">Unix Socket, SSE, AWP</span></div>
           </div>
           <div class=\"pt-2\">
             <span class=\"font-mono text-[10px] uppercase text-ink-3 block mb-1.5\">Exported Primitives &amp; Interfaces:</span>
@@ -562,11 +562,9 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
             </div>
             <div class=\"p-3.5 rounded-2xl bg-ground border border-line font-mono text-micro text-ink-2 overflow-x-auto leading-relaxed\"><pre>import { WasiPreview1Runner, DomExtractor } from '@genseam/asl-browser-plugin';
 
-// Run ASL Wasm preview1 directly inside browser service worker
 const runner = new WasiPreview1Runner({ wasmModule: compiledAslBytes });
 const compactFrame = await DomExtractor.extractAslFrame(activeTabId);
 
-// Stream compact S-expression frame to agent mesh bus
 await runner.dispatchA2AFrame(compactFrame);</pre></div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 (module asl-web/ui/logo
   :d "Chameleon Mark, Schematic Vectors & Brand Wordmark in pure AgentScript"
   :x [chameleon-a-logo logo chameleon-schematic chameleon-watermark emblem wordmark]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df chameleon-a-logo [] -> Str
   :d "ASL Curled 'a' Chameleon Mark with full gradients and glow filter"

@@ -1,7 +1,7 @@
 (module asl-web/hero
   :d "Declarative Hero Component in pure AgentScript"
   :x [describe-hero render-hero]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df describe-hero [] -> Str
   :d "Returns structured metadata description of the Hero section."

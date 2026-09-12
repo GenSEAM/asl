@@ -131,7 +131,7 @@
 
               <div class=\"pt-2 border-t border-line/40 flex items-center justify-between text-[10px] text-ink-3\">
                 <span>Target: wasm32 + native</span>
-                <span class=\"text-green-400\">✓ PASS (12/12)</span>
+                <span class=\"text-green-400\"> PASS (12/12)</span>
               </div>
 
             </div>

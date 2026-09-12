@@ -1,7 +1,8 @@
 (module asl-web/docs-view
   :d "Comprehensive documentation and interactive toolchain reference in pure AgentScript."
   :x [docs-view render-docs-view describe-docs-view]
-  :i [asl-web/unified-package-matrix
+  :i [(asl-text/string :a s)
+      asl-web/unified-package-matrix
       asl-web/ecosystem])
 
 (df describe-docs-view [] -> Str
@@ -27,7 +28,6 @@
           </p>
         </header>
 
-        <!-- Navigation Tabs Ribbon -->
         <div class=\"p-1.5 rounded-2xl bg-surface/90 border border-line backdrop-blur-xl shadow-e2 mb-8 flex flex-wrap gap-1.5\" id=\"dv-tabs\">
           <button type=\"button\" data-tab=\"cli\" class=\"dv-tab-btn px-3.5 py-2 rounded-xl font-mono text-micro font-semibold transition-all bg-signal text-white shadow-sm flex items-center gap-2\">
             <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"4 17 10 11 4 5\"></polyline><line x1=\"12\" y1=\"19\" x2=\"20\" y2=\"19\"></line></svg>
@@ -63,9 +63,7 @@
           </button>
         </div>
 
-        <!-- Panes Container -->
         <div id=\"dv-panes\">
-          <!-- 1. CLI Pane -->
           <div class=\"dv-pane block space-y-6\" id=\"dv-pane-cli\">
             <div class=\"grid grid-cols-1 md:grid-cols-2 gap-4\">
               <div class=\"p-5 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-3\">
@@ -136,7 +134,6 @@
             </div>
           </div>
 
-          <!-- 2. Mesh Pane -->
           <div class=\"dv-pane hidden space-y-6\" id=\"dv-pane-mesh\">
             <div class=\"p-6 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-4\">
               <div class=\"flex items-center justify-between\">
@@ -157,7 +154,6 @@
             </div>
           </div>
 
-          <!-- 3. Data / ASN Token Density Pane -->
           <div class=\"dv-pane hidden space-y-6\" id=\"dv-pane-data\">
             <div class=\"p-6 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-4\">
               <div class=\"flex items-center justify-between\">
@@ -190,7 +186,6 @@
             </div>
           </div>
 
-          <!-- 4. SQL Pane -->
           <div class=\"dv-pane hidden space-y-6\" id=\"dv-pane-sql\">
             <div class=\"p-6 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-4\">
               <div class=\"flex items-center justify-between\">
@@ -209,7 +204,6 @@
             </div>
           </div>
 
-          <!-- 5. Syntax Pane -->
           <div class=\"dv-pane hidden space-y-6\" id=\"dv-pane-syntax\">
             <div class=\"p-6 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-4\">
               <div class=\"flex items-center justify-between\">
@@ -226,7 +220,6 @@
             </div>
           </div>
 
-          <!-- 6. Control Flow Pane -->
           <div class=\"dv-pane hidden space-y-6\" id=\"dv-pane-control\">
             <div class=\"p-6 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-4\">
               <div class=\"flex items-center justify-between\">
@@ -241,7 +234,6 @@
             </div>
           </div>
 
-          <!-- 7. Stdlib Pane -->
           <div class=\"dv-pane hidden space-y-6\" id=\"dv-pane-stdlib\">
             <div class=\"p-6 rounded-2xl border border-line bg-surface/80 shadow-e1 space-y-4\">
               <div class=\"flex items-center justify-between\">
@@ -260,7 +252,6 @@
             </div>
           </div>
 
-          <!-- 8. Ecosystem Pane -->
           <div class=\"dv-pane hidden space-y-12\" id=\"dv-pane-ecosystem\">"
     (unified-package-matrix)
     (ecosystem)

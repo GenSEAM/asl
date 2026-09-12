@@ -1,9 +1,9 @@
 (module asl-web/navbar
   :d "Declarative Floating Navbar Toolbar Component in pure AgentScript"
   :x [render-navbar navbar-view navbar]
-  :i [(core/strings :a s)
-      (components/ui/Logo :a logo)
-      (components/ThemeToggle :a theme)])
+  :i [(asl-text/string :a s)
+      (ui/Logo :a logo)
+      (ThemeToggle :a theme)])
 
 (df render-navbar [] -> Str
   :d "Renders the complete floating navigation bar with Logo, links, search, GitHub and ThemeToggle"

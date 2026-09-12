@@ -26,7 +26,7 @@
       <div class=\"flex flex-wrap items-center justify-center gap-3 -mt-6 mb-12\">
         <span class=\"inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-mono text-micro font-semibold uppercase tracking-wider shadow-sm\">
           <span class=\"w-2 h-2 rounded-full bg-amber-400 animate-pulse\"></span>
-          In Active Development // Research Preview
+          In Active Development
         </span>
         <a href=\"/studio\" class=\"iba-route-link inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-signal hover:bg-signal-hover text-white font-mono text-micro font-bold tracking-wide shadow-md transition-all hover:scale-105\">
           <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-3.5 h-3.5\">

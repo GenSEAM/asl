@@ -4,7 +4,7 @@
       supported-browser-models default-browser-model
       detect-positional-tool extract-tool-payload
       validate-action-firewall balance-delimiters-fast]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (dfe BrowserAgentModel
   (:c qwen-3b-q4 [] "Qwen 2.5 Coder 3B Instruct (Quantized Q4_K_M, ~2.0GB download / 2.8GB VRAM, 25 tok/s)")

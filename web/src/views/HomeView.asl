@@ -1,7 +1,8 @@
 (module asl-web/home-view
   :d "Home landing page view composed entirely in pure AgentScript."
   :x [home-view render-home-view describe-home-view]
-  :i [asl-web/hero
+  :i [(asl-text/string :a s)
+      asl-web/hero
       asl-web/ecosystem
       asl-web/key-capabilities
       asl-web/the-agent-way

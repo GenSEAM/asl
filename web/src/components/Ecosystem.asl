@@ -345,7 +345,7 @@
             </span>
           </div>
           <h3 class=\"text-xl font-bold text-ink\">
-            Need full AST tables, grammar invariants, or MCP endpoints?
+            Need full AST tables, grammar invariants, or A2A endpoints?
           </h3>
           <p class=\"text-meta text-ink-2 leading-relaxed\">
             While humans explore visual concepts on this page, autonomous agents and LLMs consume our complete formal grammar and machine-readable specs directly via <code class=\"text-signal font-mono\">/llms.txt</code> and Model Context Protocol.

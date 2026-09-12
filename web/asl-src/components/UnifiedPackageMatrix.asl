@@ -1,7 +1,7 @@
 (module asl-web/unified-package-matrix
   :d "Declarative Unified Package Matrix Component in pure AgentScript"
   :x [describe-matrix render-package-matrix]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df describe-matrix [] -> Str
   :d "Returns package count and tier coverage of the GenSEAM matrix."

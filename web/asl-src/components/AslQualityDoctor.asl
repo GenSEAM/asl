@@ -1,7 +1,7 @@
 (module asl-web/asl-quality-doctor
   :d "Declarative Quality Doctor Diagnostic Component in pure AgentScript"
   :x [describe-doctor render-quality-doctor]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df describe-doctor [] -> Str
   :d "Returns quality gates metadata."

@@ -237,10 +237,10 @@
             <div class=\"flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 px-4 sm:px-5 py-3 sm:py-4 border-b border-line bg-surface\">
               <div class=\"flex items-center gap-2\">
                 <button type=\"button\" id=\"mgv-tab-arch\" class=\"text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors bg-signal/15 text-signal\">
-                  📐 Architecture
+                   Architecture
                 </button>
                 <button type=\"button\" id=\"mgv-tab-sandbox\" class=\"text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded transition-colors text-ink-3 hover:text-ink\">
-                  ⚡ Jailed Sandbox
+                  [pulse] Jailed Sandbox
                 </button>
               </div>
 
@@ -265,7 +265,7 @@
                 
                 <div>
                   <h4 class=\"text-xs font-bold uppercase tracking-wider text-ink-3 mb-3\">
-                    🏛 Defined Schemas (<span id=\"mgv-detail-schemas-count\">3</span>)
+                     Defined Schemas (<span id=\"mgv-detail-schemas-count\">3</span>)
                   </h4>
                   <div class=\"flex flex-wrap gap-2\" id=\"mgv-detail-schemas\">
                     <span class=\"px-3 py-1 text-xs font-mono rounded-lg bg-surface border border-line text-ink font-medium\">SqlJoin</span>
@@ -277,7 +277,7 @@
                 
                 <div>
                   <h4 class=\"text-xs font-bold uppercase tracking-wider text-ink-3 mb-3\">
-                    🏷 Algebraic Enums (<span id=\"mgv-detail-enums-count\">5</span>)
+                     Algebraic Enums (<span id=\"mgv-detail-enums-count\">5</span>)
                   </h4>
                   <div class=\"flex flex-wrap gap-2\" id=\"mgv-detail-enums\">
                     <span class=\"px-3 py-1 text-xs font-mono rounded-lg bg-surface border border-line text-purple-300 font-medium\">SqlDialect</span>
@@ -291,7 +291,7 @@
                 
                 <div>
                   <h4 class=\"text-xs font-bold uppercase tracking-wider text-ink-3 mb-3\">
-                    🔗 Direct Dependencies (<span id=\"mgv-detail-deps-count\">0</span>)
+                     Direct Dependencies (<span id=\"mgv-detail-deps-count\">0</span>)
                   </h4>
                   <div class=\"flex flex-wrap gap-2\" id=\"mgv-detail-deps\">
                     <p class=\"text-xs text-ink-3 italic\">Zero external module couplings (pure leaf module).</p>
@@ -340,7 +340,7 @@
 
                 <div class=\"flex items-center gap-3\">
                   <button type=\"button\" id=\"mgv-btn-sandbox\" class=\"px-4 py-2 text-xs font-bold rounded-lg bg-signal text-white hover:opacity-90 transition-all shadow-sm flex items-center gap-2\">
-                    <span>▶ Execute in Jailed Sandbox</span>
+                    <span> Execute in Jailed Sandbox</span>
                   </button>
                   <span class=\"text-[10px] font-mono text-ink-3\" id=\"mgv-sandbox-target\">
                     Target: asl-sql/core.asl
@@ -531,7 +531,7 @@
           btnSandbox.addEventListener('click', function() {
             btnSandbox.innerHTML = '<span class=\"inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin\"></span><span>Executing In-Memory...</span>';
             setTimeout(function() {
-              btnSandbox.innerHTML = '<span>▶ Execute in Jailed Sandbox</span>';
+              btnSandbox.innerHTML = '<span> Execute in Jailed Sandbox</span>';
               statusEl.textContent = '[STATUS: OK] Exit 0';
               durEl.textContent = '0.19 ms';
               memEl.textContent = '256 KB / 16,384 KB';

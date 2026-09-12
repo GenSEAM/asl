@@ -1,5 +1,7 @@
-(package :web-cosmic-background
-  :doc "Full-Document Cyclic Scattered & Tilted Aerospace Blueprint Background in pure ASL.")
+(module asl-web/CosmicLandscapeBackground
+  :d "Full-Document Cyclic Scattered & Tilted Aerospace Blueprint Background in pure ASL."
+  :x [render-blueprint-grid render-chameleon-perch render-left-deflecting-stream render-right-cyclic-stream render-cosmic-background cosmic-landscape-background]
+  :i [(asl-text/string :a s)])
 
 (df render-blueprint-grid ()
   :d "Fixed technical blueprint grid pattern."
@@ -233,3 +235,7 @@
     (render-left-deflecting-stream)
     (render-right-cyclic-stream)
     "</div>"))
+
+
+(df cosmic-landscape-background ()
+  (render-cosmic-background))

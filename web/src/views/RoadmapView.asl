@@ -23,7 +23,6 @@
         </header>
 
         <div class=\"space-y-8 max-w-4xl mx-auto\">
-          <!-- Milestone 1 -->
           <div class=\"p-6 sm:p-8 rounded-3xl border border-line bg-surface/70 transition-all\">
             <div class=\"flex items-center justify-between gap-4 pb-4 border-b border-line/60\">
               <div class=\"flex items-center gap-3\">
@@ -47,7 +46,6 @@
             </ul>
           </div>
 
-          <!-- Milestone 2 -->
           <div class=\"p-6 sm:p-8 rounded-3xl border border-line bg-surface/70 transition-all\">
             <div class=\"flex items-center justify-between gap-4 pb-4 border-b border-line/60\">
               <div class=\"flex items-center gap-3\">
@@ -71,7 +69,6 @@
             </ul>
           </div>
 
-          <!-- Milestone 3 -->
           <div class=\"p-6 sm:p-8 rounded-3xl border border-signal/50 bg-surface shadow-purple-500/10 shadow-e3 relative overflow-hidden transition-all\">
             <div class=\"absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-signal to-indigo-500\"></div>
             <div class=\"flex items-center justify-between gap-4 pb-4 border-b border-line/60\">
@@ -96,7 +93,6 @@
             </ul>
           </div>
 
-          <!-- Milestone 4 -->
           <div class=\"p-6 sm:p-8 rounded-3xl border border-line/60 bg-surface/40 transition-all\">
             <div class=\"flex items-center justify-between gap-4 pb-4 border-b border-line/60\">
               <div class=\"flex items-center gap-3\">

@@ -1,7 +1,7 @@
 (module asl-web/polyglot-banner
   :d "Declarative Polyglot Banner Component in ASL"
   :x [render-polyglot-banner]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df render-polyglot-banner [(framework Str) (speedup Str)] -> Str
   :d "Renders polyglot compilation status banner"

@@ -1,4 +1,4 @@
-(ns asl.web.views.playground.cards)
+(module asl-web/views/test-card)
 
 (df renderPlaygroundCards ()
   "<div>cards</div>")

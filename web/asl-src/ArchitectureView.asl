@@ -1,7 +1,7 @@
 (module asl-web/architecture-view
   :d "Declarative Architecture Showcase View in pure AgentScript"
   :x [describe-architecture render-architecture-view]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (df describe-architecture [] -> Str
   :d "Returns structured metadata description of the AgentScript compiler architecture"
