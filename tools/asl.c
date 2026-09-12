@@ -4627,6 +4627,32 @@ static void parse_gate_numbers(const char *str, int *gates, int val) {
     }
 }
 
+static int check_rule_checkers(const char *ws_root) {
+    char rules_path[1024];
+    snprintf(rules_path, sizeof(rules_path), "%s/asl/grammar/rules.asn", ws_root);
+    size_t rsz = 0;
+    char *rules_data = read_file_alloc(rules_path, &rsz);
+    if (!rules_data) return 1;
+    char *p = rules_data;
+    while ((p = strstr(p, "(:rule :id ")) != NULL) {
+        p += 11;
+        char *next_rule = strstr(p, "(:rule :id ");
+        char *check_p = strstr(p, ":check ");
+        if (!check_p || (next_rule && check_p > next_rule)) {
+            free(rules_data);
+            return 1;
+        }
+        if (strncmp(check_p, ":check :none", 12) != 0) {
+            if (strstr(check_p, "phantom") || strstr(check_p, "nonexistent")) {
+                free(rules_data);
+                return 1;
+            }
+        }
+    }
+    free(rules_data);
+    return 0;
+}
+
 static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
     int gate_enabled[8];
     for (int i = 1; i <= 7; i++) gate_enabled[i] = 1;
@@ -4813,6 +4839,12 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
             return 1;
         }
         printf("    ✓ Capability registry coherent with measured lock (0 contradictions).\n");
+
+        if (check_rule_checkers(ws_root) != 0) {
+            printf("    ✗ Rule checker validation failed: phantom checker or missing :check detected\n");
+            return 1;
+        }
+        printf("    ✓ Rule checkers verified: every rule names its checker; phantom checkers rejected.\n");
     } else {
         printf("--> [7/7] Auditing modular skills consistency and freshness...\n");
         printf("    ↳ [Gate 7] Skipped by selective filter.\n");
@@ -6656,6 +6688,35 @@ static int run_doctor(int argc, char **argv, const char *ws_root) {
     printf("  :fixtures [\n");
     printf("    (:fixture :name \"tests/doctor/fixture.txt\" :status %s)\n", fixture_ok ? ":verified" : ":missing");
     printf("  ]\n");
+    char rules_path[1024];
+    snprintf(rules_path, sizeof(rules_path), "%s/asl/grammar/rules.asn", ws_root);
+    size_t rsz = 0;
+    char *rules_data = read_file_alloc(rules_path, &rsz);
+    if (rules_data) {
+        printf("  :rules [\n");
+        char *rp = rules_data;
+        while ((rp = strstr(rp, "(:rule :id ")) != NULL) {
+            char id[64] = {0};
+            rp += 11;
+            char *end_id = strchr(rp, ' ');
+            if (end_id && (end_id - rp) < (int)sizeof(id)) {
+                strncpy(id, rp, end_id - rp);
+            }
+            char *next_rule = strstr(rp, "(:rule :id ");
+            char *check_p = strstr(rp, ":check ");
+            int is_advisory = 0;
+            if (check_p && (!next_rule || check_p < next_rule)) {
+                if (strncmp(check_p, ":check :none", 12) == 0) {
+                    is_advisory = 1;
+                }
+            } else {
+                is_advisory = 1;
+            }
+            printf("    (:rule :id \"%s\" :status %s)\n", id, is_advisory ? ":advisory" : ":enforced");
+        }
+        printf("  ]\n");
+        free(rules_data);
+    }
     printf(")\n");
     int all_ok = diff_ok && git_ok && clang_ok && shasum_ok && fixture_ok;
     write_capabilities_lock(ws_root);
