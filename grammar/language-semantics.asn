@@ -77,5 +77,13 @@
       :rule "Language telemetry inventories must report both total token count and distinct head symbol surface in a single run."
       :failureCode "ERR_MISSING_DUAL_INVENTORY"
       :exitCode 1)
+    (:semantic :id groundedNumericClaims
+      :rule "Every numeric claim in conventions, rules, and documentation must state its scope, method, and empirical measurement date; ungrounded or out-of-scope claims are rejected."
+      :failureCode "ERR_UNGROUNDED_NUMERIC_CLAIM"
+      :exitCode 1)
+    (:semantic :id dualScopeCompactionReport
+      :rule "Naming convention compaction figures must report both the per-long-identifier saving (44 to 50 percent) and the corpus-wide saving (3.06 percent on 888 files under cl100k)."
+      :failureCode "ERR_PARTIAL_SCOPE_CLAIM"
+      :exitCode 1)
   ]
 )
