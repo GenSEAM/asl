@@ -114,10 +114,10 @@
          :savings "85%")
 
     (:op :id "asl-mem-staging"
-         :cmd "asl rpc '(:batch (:diff) (:flush) (:discard))'"
+         :cmd "asl rpc '(:batch (:diff) (:stage \"...\") (:discard) (:flush))'"
          :category "editing"
          :status :active
-         :purpose "In-memory review staging allowing diff, flush, and discard before writing to disk"
+         :purpose "In-memory review staging allowing diff, stage, discard, and flush operations before writing to disk"
          :savings "90%")
 
     ;; === DAG Execution Combinators & Parallelism ===
