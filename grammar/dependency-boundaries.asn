@@ -29,4 +29,10 @@
       :allowed ["racket"]
       :constraint "Permitted as development-time boundary only; strictly forbidden as a deployment dependency.")
   ]
+  :adapterAdmission [
+    (:rule :id twoStrikesRule
+      :statement "No shared interface is admitted before two concrete adapters exist sharing the mathematical or semantic contract; data and view live entirely in extensions."
+      :enforcement "ast-audit"
+      :failureCode "ERR_PREMATURE_GENERALIZATION")
+  ]
 )
