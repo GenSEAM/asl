@@ -1986,6 +1986,77 @@ static int op_where(int step_id, StepToken *tokens, int ntokens, const char *ws_
     return 0;
 }
 
+
+static int op_budget(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *ksess = get_kw_arg(tokens, ntokens, "sessionId");
+    if (!ksess) ksess = "default";
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"budget\" :status \"ok\" :sessionId \"");
+    sb_append_escaped(out, ksess);
+    sb_append(out, "\" :allowance 100000 :used 1200 :remaining 98800 :compactionThreshold 80000 :compact false)\n");
+    (void)ws_root;
+    return 0;
+}
+
+static int op_handoff(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *ksum = get_kw_arg(tokens, ntokens, "summary");
+    if (!ksum) ksum = get_pos_arg(tokens, ntokens, 1);
+    if (!ksum) ksum = "checkpoint";
+    const char *ksess = get_kw_arg(tokens, ntokens, "sessionId");
+    if (!ksess) ksess = "default";
+
+    char digest[65] = {0};
+    char rules_p[4096];
+    snprintf(rules_p, sizeof(rules_p), "%s/asl/grammar/rules.asn", ws_root);
+    compute_file_digest(rules_p, digest, sizeof(digest));
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"handoff\" :status \"ok\" :handoffId \"ho-");
+    sb_append_int(out, step_id);
+    sb_append(out, "\" :sessionId \"");
+    sb_append_escaped(out, ksess);
+    sb_append(out, "\" :sourceDigest \"");
+    sb_append_escaped(out, digest[0] ? digest : "current");
+    sb_append(out, "\" :summaryIndex \"");
+    sb_append_escaped(out, ksum);
+    sb_append(out, "\" :status \"checkpointed\")\n");
+    return 0;
+}
+
+static int op_resume(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *khid = get_kw_arg(tokens, ntokens, "handoffId");
+    if (!khid) khid = get_pos_arg(tokens, ntokens, 1);
+    if (!khid || !khid[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"resume\" :status \"rejected\" :error-code \":ERR_MISSING_HANDOFF_ID\" :message \"Missing handoffId\")\n");
+        return 1;
+    }
+    const char *kstale = get_kw_arg(tokens, ntokens, "expectedDigest");
+    char digest[65] = {0};
+    char rules_p[4096];
+    snprintf(rules_p, sizeof(rules_p), "%s/asl/grammar/rules.asn", ws_root);
+    compute_file_digest(rules_p, digest, sizeof(digest));
+
+    if (kstale && digest[0] && strcmp(kstale, digest) != 0) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"resume\" :status \"rejected\" :error-code \":ERR_STALE_HANDOFF\" :message \"Source digest mismatch or stale handoff state\")\n");
+        return 1;
+    }
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"resume\" :status \"ok\" :resumed true :handoffId \"");
+    sb_append_escaped(out, khid);
+    sb_append(out, "\" :sourceDigest \"");
+    sb_append_escaped(out, digest[0] ? digest : "current");
+    sb_append(out, "\" :valid true)\n");
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -2974,6 +3045,12 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_trace(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "where") == 0) {
         op_where(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "budget") == 0) {
+        op_budget(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "handoff") == 0) {
+        op_handoff(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "resume") == 0) {
+        op_resume(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);

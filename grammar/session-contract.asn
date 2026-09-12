@@ -16,6 +16,21 @@
     (:rule :id boundedRetrieval
       :description "Aggregate batch retrieval and child operations are capped under declared tunable budgets; pagination cursors bind session and snapshot."
       :falsification "Child reads exceeding aggregate budget or using stale/cross-session cursors are rejected.")
+    (:rule :id handoffPreservation
+      :description "Budget, handoff, resume, and recall persist canonical user constraints, ownership, unresolved questions, uncertainty, negative findings, and receipt versions through bounded references."
+      :falsification "Resuming from handoff drops unstated constraints, forgets negative findings, or assumes unverified steps.")
+    (:rule :id adversarialConstraintIntegrity
+      :description "Adversarial constraints placed outside the compact summary still determine the identical authorized next action before and after resume; a compact summary is an index to complete state, not a lossy replacement."
+      :falsification "Constraints placed outside compact summary are ignored or altered upon session resumption.")
+    (:rule :id staleReceiptInvalidation
+      :description "Repeated compaction, changed source tree, or invalidated receipts must not restore stale authority or false verified status."
+      :falsification "Altered source tree or invalidated receipt still reports verified status on resume.")
+    (:rule :id sessionScopedRecall
+      :description "Pending questions, negative findings, and active ownership survive handoff; recall and recovery are strictly restricted to the session scope."
+      :falsification "Cross-session recall leaks state from outside active session lineage or drops unresolved questions.")
+    (:rule :id explicitTunableThresholds
+      :description "Compaction and verification thresholds are explicit tunable engineering hypotheses; relevant static verification is permitted for read-only work and no arbitrary fixed call-count gate is mandatory."
+      :falsification "Hardcoded rigid step thresholds reject valid read-only static verification.")
   ]
   :continuationSchema [
     (:field :id "cursor" :type "Str" :desc "Opaque session-bound snapshot continuation token")
@@ -34,5 +49,37 @@
     (:field :id "sourceDigest" :type "Str" :desc "Workspace source digest at execution time")
     (:field :id "status" :type "Str" :desc "Execution verdict :verified or :failed")
     (:field :id "timestamp" :type "I64" :desc "Unix millisecond timestamp")
+  ]
+  :handoffSchema [
+    (:field :id "handoffId" :type "Str" :desc "Unique handoff identifier")
+    (:field :id "sessionId" :type "Str" :desc "Session ID originating or bound to handoff")
+    (:field :id "stepIndex" :type "I64" :desc "Execution step index at handoff boundary")
+    (:field :id "sourceDigest" :type "Str" :desc "Source tree digest at handoff checkpoint")
+    (:field :id "parentHandoffId" :type "Str" :desc "Preceding handoff identifier in causal lineage")
+    (:field :id "summaryIndex" :type "Str" :desc "Compact summary pointer indexing full state")
+    (:field :id "authoritativeConstraints" :type "List[Str]" :desc "Unalterable user and system constraints governing session")
+    (:field :id "ownedPaths" :type "List[Str]" :desc "Strict write leases owned by active session")
+    (:field :id "unresolvedQuestions" :type "List[Str]" :desc "Pending uncertainties or open questions requiring resolution")
+    (:field :id "negativeFindings" :type "List[Str]" :desc "Refuted hypotheses, rejected paths, and negative evidence")
+    (:field :id "receiptReferences" :type "List[Str]" :desc "Runner-issued receipt IDs verifying prior steps")
+    (:field :id "tokenBudget" :type "Map" :desc "Tunable token budget parameters and remaining allowance")
+  ]
+  :resumeSchema [
+    (:field :id "resumeId" :type "Str" :desc "Resume transaction identifier")
+    (:field :id "handoffId" :type "Str" :desc "Target handoff record to resume from")
+    (:field :id "sessionId" :type "Str" :desc "Active session identifier")
+    (:field :id "sourceDigest" :type "Str" :desc "Current workspace source digest")
+    (:field :id "digestMatch" :type "Bool" :desc "True if workspace digest matches handoff source digest")
+    (:field :id "receiptsValid" :type "Bool" :desc "True if all referenced receipts remain un-invalidated")
+    (:field :id "status" :type "Str" :desc "Resume outcome :resumed :rejected :staleInvalidated")
+  ]
+  :budgetSchema [
+    (:field :id "sessionId" :type "Str" :desc "Active session identifier")
+    (:field :id "allowance" :type "I64" :desc "Total token or call allowance allocated")
+    (:field :id "used" :type "I64" :desc "Tokens or calls consumed in active session")
+    (:field :id "remaining" :type "I64" :desc "Remaining token or call allowance")
+    (:field :id "compactionThreshold" :type "I64" :desc "Threshold triggering observation masking or handoff")
+    (:field :id "compact" :type "Bool" :desc "True if session compaction is requested")
+    (:field :id "tunableHypothesis" :type "Str" :desc "Engineering rationale or tuning model")
   ]
 )

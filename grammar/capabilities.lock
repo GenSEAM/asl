@@ -1,7 +1,7 @@
 (:capabilities-lock
   :version "1.0.0"
   :source "asl/grammar/capabilities.asn"
-  :measuredAt 1789240253000
+  :measuredAt 1789241690000
   :summary (:total 36 :works 16 :lies 2 :partial 3 :absent 15)
   :capabilities [
     (:cap :id "sessionLedger" :status :absent)

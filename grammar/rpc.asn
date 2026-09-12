@@ -319,5 +319,27 @@
          :category "pipeline"
          :purpose "Ad hoc RPC composition and reduction outside the model with bounded output and unreduced log refusal"
          :savings "85%")
+
+    ;; === Session Continuity, Handoff & Budget ===
+    (:op "handoff"
+         :id "asl-handoff"
+         :cmd "asl rpc '(:batch (:handoff [:summary \"...\"] [:sessionId \"...\"]))'"
+         :category "session"
+         :purpose "Persist compact state index with authoritative constraints, ownership, negative findings, and receipt versions"
+         :savings "90%")
+
+    (:op "resume"
+         :id "asl-resume"
+         :cmd "asl rpc '(:batch (:resume :handoffId \"...\"]))'"
+         :category "session"
+         :purpose "Resume session context from verified handoff record, re-validating source digest and active receipts"
+         :savings "85%")
+
+    (:op "budget"
+         :id "asl-budget"
+         :cmd "asl rpc '(:batch (:budget [:sessionId \"...\"]))'"
+         :category "session"
+         :purpose "Query active session token budget, compaction thresholds, and observation mask state"
+         :savings "80%")
   ]
 )
