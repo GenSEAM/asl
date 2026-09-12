@@ -85,5 +85,13 @@
       :rule "Naming convention compaction figures must report both the per-long-identifier saving (44 to 50 percent) and the corpus-wide saving (3.06 percent on 888 files under cl100k)."
       :failureCode "ERR_PARTIAL_SCOPE_CLAIM"
       :exitCode 1)
+    (:semantic :id schemeCoreFormsAlignment
+      :rule "Core forms align with Scheme and Racket spellings where measured token cost is zero (define, struct, enum, lambda, match, begin, provide, require, field, string, null); abbreviated forms are retired."
+      :failureCode "ERR_RETIRED_ABBREVIATED_FORM"
+      :exitCode 1)
+    (:semantic :id zeroCostAbbreviationRetirement
+      :rule "Retired abbreviated core forms are removed cleanly with zero backward-compatibility aliases left behind."
+      :failureCode "ERR_ABBREVIATION_ALIAS_FORBIDDEN"
+      :exitCode 1)
   ]
 )
