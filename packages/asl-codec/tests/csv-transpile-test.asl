@@ -6,7 +6,7 @@
       test-csv-roundtrip
       test-csv-negative
       run-tests]
-  :i [(csv-transpile :a ct)])
+  :i [(asl-codec/csv-transpile :a ct)])
 
 (df test-csv-basic-table [] -> Bool
   :d "Verifies simple CSV document conversion to ASN table."

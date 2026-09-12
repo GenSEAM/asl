@@ -1,0 +1,29 @@
+(:languageSemantics :v 1 :src ADR-0081
+  :summary "Canonical language semantics contract for module imports, symbol resolution, and evaluator failures."
+  :semantics [
+    (:semantic :id moduleImportResolution
+      :rule "Module imports resolve relative to the outermost monorepo workspace root."
+      :failureCode "ERR_UNRESOLVED_IMPORT"
+      :exitCode 1)
+    (:semantic :id duplicateModule
+      :rule "Duplicate module declarations across multiple source files fail loudly."
+      :failureCode "ERR_DUPLICATE_MODULE"
+      :exitCode 1)
+    (:semantic :id unknownSymbolFailure
+      :rule "Evaluation of unbound symbols or missing definitions produces loud typed errors and non-zero exit code."
+      :failureCode "ERR_UNBOUND_SYMBOL"
+      :exitCode 1)
+    (:semantic :id aliasCollision
+      :rule "Duplicate module import aliases within a single module trigger loud failure."
+      :failureCode "ERR_ALIAS_COLLISION"
+      :exitCode 1)
+    (:semantic :id booleanTestResults
+      :rule "Test entry points (run-tests, run-wire-tests, main, test-*) must strictly return boolean true."
+      :failureCode "ERR_TEST_RESULT_NOT_TRUE"
+      :exitCode 1)
+    (:semantic :id assertionSiteAccounting
+      :rule "Distinct assertion sites are accounted stably by AST node location separately from dynamic execution counts."
+      :failureCode ""
+      :exitCode 0)
+  ]
+)

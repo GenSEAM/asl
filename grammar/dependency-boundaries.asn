@@ -1,0 +1,19 @@
+(:dependencyBoundaries :v 1 :src ADR-0081
+  :summary "Declared host boundaries and dependency classifications for the sovereign ASL runtime."
+  :hostAdapter (:path "asl/tools/asl.c" :boundary "host-adapter" :declared true :third-party false :reported true)
+  :substrate (:zero-substrate-claimed false :substrate-status "declared-host-substrate" :host-runtime "macOS/POSIX")
+  :tiers [
+    (:tier :id "bootstrap"
+      :purpose "Seed compiler and C host used to compile the resident engine"
+      :allowed ["asl/tools/asl.c" "clang" "gcc"])
+    (:tier :id "build"
+      :purpose "Generation and assembly scripts for headers and toolchain"
+      :allowed ["asl/tools/gen_engine_header.sh" "scripts/build-from-source.sh" "bash" "xxd"])
+    (:tier :id "test"
+      :purpose "Independent test runner and embedded execution substrate"
+      :allowed ["scripts/run-gate-tests.sh" "JavaScriptCore"])
+    (:tier :id "deployed"
+      :purpose "Autonomous sovereign native binary"
+      :constraint "Single binary (bin/asl) with zero host external runtime requirements (no Node, Python, or MCP).")
+  ]
+)

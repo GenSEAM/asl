@@ -11,7 +11,7 @@
       test-svg-malformed
       run-svg-tests
       run-tests]
-  :i [(svg-transpile :a svg)])
+  :i [(asl-codec/svg-transpile :a svg)])
 
 (df test-asn-svg [] -> Bool
   :d "Tests transpile from compact ASN vector S-expression into valid SVG XML"

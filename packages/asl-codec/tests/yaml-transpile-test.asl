@@ -8,7 +8,7 @@
       test-yaml-roundtrip
       test-yaml-negative
       run-tests]
-  :i [(yaml-transpile :a yt)])
+  :i [(asl-codec/yaml-transpile :a yt)])
 
 (df test-yaml-basic-mapping [] -> Bool
   :d "Verifies basic key-value YAML mapping conversion."

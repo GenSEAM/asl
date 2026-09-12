@@ -59,7 +59,7 @@
       ((ok _) (assert false "c-cli-neg-006: missing check arg should fail"))
       ((err msg) (assert (string-contains? msg "Usage: asl check") "c-cli-neg-006: usage returned")))
     (mt (c/dispatch-cmd "check" (list "test.asl"))
-      ((ok chk-msg) (assert (string-contains? chk-msg "verified cleanly") "c-cli-pos-006: check with arg handled"))
+      ((ok chk-msg) (assert (or (string-contains? chk-msg "passed cleanly") (string-contains? chk-msg "verified cleanly")) "c-cli-pos-006: check with arg handled"))
       ((err chk-err) (assert (not (string-empty? chk-err)) "c-cli-pos-006: check error reported")))
     true))
 

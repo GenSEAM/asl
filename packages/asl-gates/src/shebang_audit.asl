@@ -46,7 +46,9 @@
       (ShebangVerdict :path path :valid false :is-binary true :reason "Binary blob rejected")
       (if is-pkg-tree
           (if (is-valid-package-file ext)
-              (ShebangVerdict :path path :valid true :is-binary false :reason "Valid package file extension")
+              (if (and (string-starts-with? header "#!") (not (audit-shebang header)))
+                  (ShebangVerdict :path path :valid false :is-binary false :reason "Illegal package script content")
+                  (ShebangVerdict :path path :valid true :is-binary false :reason "Valid package file extension"))
               (ShebangVerdict :path path :valid false :is-binary false :reason "Illegal package extension"))
           (if (audit-shebang header)
               (ShebangVerdict :path path :valid true :is-binary false :reason "Approved script shebang")

@@ -17,8 +17,7 @@
         (sqt (sb/sqlalchemy-type "i64"))
         (rsq (sb/render-sqlalchemy-col (p/make-db-column "id" "i64" false true)))
         (set (sb/seaorm-type "i64"))
-        (rse (sb/render-seaorm-col (p/make-db-column "id" "i64" false true)))
-        (cap capitalize-word)]
+        (rse (sb/render-seaorm-col (p/make-db-column "id" "i64" false true)))]
     (assert (= pas "UserProfile") "PascalCase conversion must match")
     (assert (= cat "int") "Category must be int")
     (assert (= kt "number") "Kysely type must be number")

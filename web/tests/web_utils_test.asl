@@ -6,7 +6,7 @@
       test-web-lib-queries
       run-tests]
   :i [(utils/dom :a dom)
-      (posts :a blog)])
+      (../src/data/blog/posts :a blog)])
 
 (df test-dom-element [] -> Bool
   :d "Verifies DOM element construction and field access"

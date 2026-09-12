@@ -7,7 +7,7 @@
       make-vector-flowchart
       make-vector-icon
       measure-svg-compaction]
-  :i [(core/strings :a s)
+  :i [(asl-text/string :a s)
       (asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
       (asl-parser/ast :a ast)])

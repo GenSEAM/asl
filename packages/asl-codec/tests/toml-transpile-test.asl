@@ -8,7 +8,7 @@
       test-toml-roundtrip
       test-toml-negative
       run-tests]
-  :i [(toml-transpile :a tt)])
+  :i [(asl-codec/toml-transpile :a tt)])
 
 (df test-toml-basic-kv [] -> Bool
   :d "Verifies basic TOML key-value assignments."

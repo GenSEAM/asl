@@ -4,7 +4,7 @@
       test-yaml-to-asn test-asn-to-yaml test-html-to-vdom-asn
       test-vdom-asn-to-html test-measure-savings test-empty-and-malformed
       run-tests]
-  :i [(transpile :a tr)])
+  :i [(asl-codec/transpile :a tr)])
 
 (df test-json-to-asn-object [] -> Bool
   :d "Tests JSON object conversion into compact ASN"

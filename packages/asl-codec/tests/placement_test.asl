@@ -7,7 +7,7 @@
       test-token-savings-threshold
       test-optimize-placement-string
       run-tests]
-  :i [(placement :a p)
+  :i [(asl-codec/placement :a p)
       (core/asn :a a)])
 
 (df make-test-record [(id Str) (name Str) (role Str)] -> a/AsnValue

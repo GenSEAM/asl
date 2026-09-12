@@ -1,0 +1,10 @@
+(:protocolConformance :v 1 :src ADR-0081
+  :summary "Honest RPC capability and result contracts specification."
+  :contracts [
+    (:contract :id rpcRejection
+      :rule "Unrecognized or unimplemented operations return status rejected with error code :ERR_UNIMPLEMENTED."
+      :errorCode ":ERR_UNIMPLEMENTED")
+    (:contract :id aggregateBatchStatus
+      :rule "Batch aggregate status honestly reflects inner step results: completed, completed-with-errors, or failed."
+      :statuses ["completed" "completed-with-errors" "failed"])
+  ])

@@ -1,5 +1,3 @@
-;; AgentScript Published Benchmark Claims & Grounding Matrix (ASN)
-;; Conforms to DESIGN.md §5, ROADMAP.md §6 Item 3
 (:published-claims
   :version "1.0"
   :standards [

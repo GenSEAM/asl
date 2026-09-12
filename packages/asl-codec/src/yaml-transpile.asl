@@ -213,7 +213,7 @@
            (YamlParseState :stack (list frame) :roots (.-roots aligned)))
          (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
                (rest (option-or (list-tail (.-stack aligned)) (list)))]
-           (if (.-is-seq top)
+           (if (or (.-is-seq top) (> indent (.-indent top)))
              (let [(frame (YamlFrame :indent indent :is-seq false :pending-key "" :items (list v-atom k-atom)))]
                (YamlParseState :stack (list-cons frame (.-stack aligned)) :roots (.-roots aligned)))
              (let [(new-items (list-cons v-atom (list-cons k-atom (.-items top))))
@@ -247,7 +247,17 @@
            (k-atom (rd/make-atom (str ":" k)))
            (v-atom (parse-yaml-scalar v))
            (map-node (rd/make-list (list k-atom v-atom)))]
-       (emit-to-frame aligned map-node)))))
+       (if (list-empty? (.-stack aligned))
+         (let [(frame (YamlFrame :indent indent :is-seq true :pending-key "" :items (list map-node)))]
+           (YamlParseState :stack (list frame) :roots (.-roots aligned)))
+         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+               (rest (option-or (list-tail (.-stack aligned)) (list)))]
+           (if (.-is-seq top)
+             (let [(new-items (list-cons map-node (.-items top)))
+                   (new-top (YamlFrame :indent (.-indent top) :is-seq true :pending-key "" :items new-items))]
+               (YamlParseState :stack (list-cons new-top rest) :roots (.-roots aligned)))
+             (let [(frame (YamlFrame :indent indent :is-seq true :pending-key "" :items (list map-node)))]
+               (YamlParseState :stack (list-cons frame (.-stack aligned)) :roots (.-roots aligned))))))))))
 
 (df yaml-to-asn [(yaml-str Str)] -> YamlTranspileResult
   :d "Transpiles YAML key-value and sequence hierarchies into compact ASN S-expressions."

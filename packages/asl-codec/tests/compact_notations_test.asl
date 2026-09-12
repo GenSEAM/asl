@@ -7,7 +7,7 @@
       test-sparkline-ascii
       test-edge-cases
       run-tests]
-  :i [(compact_notations :a cn)])
+  :i [(asl-codec/compact-notations :a cn)])
 
 (df test-table-codec [] -> Bool
   :d "Verifies tabular ASN encoding, decoding, roundtrip, and markdown rendering."

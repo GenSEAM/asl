@@ -110,11 +110,7 @@
 
 (df ! exec! [(c ProcessCmd)] -> (Result ProcessOutput ProcessError)
   :d "Executes a typed process command with timeout enforcement and captured output."
-  (ok (ProcessOutput
-        :exit-code 0
-        :stdout ""
-        :stderr ""
-        :duration-ms 1)))
+  (err (ProcessError :code -1 :message "ERR_UNSUPPORTED: process execution is not implemented")))
 
 (df ! run-simple! [(bin String) (args (List String))] -> (Result String ProcessError)
   :d "Quick helper to run a command and return trimmed stdout on success."

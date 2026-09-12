@@ -8,7 +8,7 @@
       test-stream-parsing
       test-transpilation
       run-tests]
-  :i [(asnl :a asnl)])
+  :i [(asl-codec/asnl :a asnl)])
 
 (df test-balanced-forms [] -> Bool
   :d "Verifies validation of diverse balanced ASNL records and vectors."

@@ -5,7 +5,7 @@
       test-blog-posts-invariants
       test-blog-query-helpers
       run-tests]
-  :i [(posts :a blog)])
+  :i [(../src/data/blog/posts :a blog)])
 
 (df test-blog-posts-count [] -> Bool
   :d "Verifies total blog post catalog contains exactly 23 articles"

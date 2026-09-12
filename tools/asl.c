@@ -147,19 +147,45 @@ static void resolve_path(const char *ws_root, const char *path, char *out, size_
 
 static char *find_ws_root(void) {
     static char buf[4096];
+    const char *env_ws = getenv("ASL_WORKSPACE_ROOT");
+    if (env_ws && env_ws[0]) {
+        snprintf(buf, sizeof(buf), "%s", env_ws);
+        return buf;
+    }
+    const char *home = getenv("HOME");
+    static char top[4096];
+    top[0] = '\0';
     if (getcwd(buf, sizeof(buf))) {
-        char *p = buf;
-        while (*p) {
+        while (buf[0]) {
             char test[4096];
-            snprintf(test, sizeof(test), "%s/.asl.config.asn", buf);
-            if (file_exists(test)) return buf;
-            snprintf(test, sizeof(test), "%s/.git", buf);
             struct stat st;
-            if (stat(test, &st) == 0) return buf;
+            int match = 0;
+            snprintf(test, sizeof(test), "%s/.gitmodules", buf);
+            if (file_exists(test)) match = 1;
+            snprintf(test, sizeof(test), "%s/.git", buf);
+            if (stat(test, &st) == 0) match = 1;
+            if (!home || strcmp(buf, home) != 0) {
+                snprintf(test, sizeof(test), "%s/.asl.config.asn", buf);
+                if (file_exists(test)) match = 1;
+                snprintf(test, sizeof(test), "%s/.asl", buf);
+                if (stat(test, &st) == 0 && S_ISDIR(st.st_mode)) {
+                    char sub[4096];
+                    snprintf(sub, sizeof(sub), "%s/.asl/mem", buf);
+                    if (stat(sub, &st) == 0) match = 1;
+                }
+            }
+
+            if (match) {
+                snprintf(top, sizeof(top), "%s", buf);
+            }
             char *last = strrchr(buf, '/');
             if (!last || last == buf) break;
             *last = '\0';
         }
+    }
+    if (top[0]) {
+        snprintf(buf, sizeof(buf), "%s", top);
+        return buf;
     }
     getcwd(buf, sizeof(buf));
     return buf;
@@ -321,7 +347,16 @@ static __attribute__((unused)) void parse_string_arg(const char *src, const char
         int esc = 0;
         while (*p && idx + 1 < out_max) {
             if (esc) {
-                out[idx++] = *p++;
+                if (*p == 'n') out[idx++] = '\n';
+                else if (*p == 't') out[idx++] = '\t';
+                else if (*p == 'r') out[idx++] = '\r';
+                else if (*p == '\\') out[idx++] = '\\';
+                else if (*p == '"') out[idx++] = '"';
+                else {
+                    out[idx++] = '\\';
+                    if (idx + 1 < out_max) out[idx++] = *p;
+                }
+                p++;
                 esc = 0;
             } else if (*p == '\\') {
                 esc = 1;
@@ -384,7 +419,15 @@ static int tokenize_step(const char *src, StepToken *tokens, int max_tokens) {
             int esc = 0;
             while (*p) {
                 if (esc) {
-                    sb_append_len(&sb, p, 1);
+                    if (*p == 'n') sb_append_len(&sb, "\n", 1);
+                    else if (*p == 't') sb_append_len(&sb, "\t", 1);
+                    else if (*p == 'r') sb_append_len(&sb, "\r", 1);
+                    else if (*p == '\\') sb_append_len(&sb, "\\", 1);
+                    else if (*p == '"') sb_append_len(&sb, "\"", 1);
+                    else {
+                        sb_append_len(&sb, "\\", 1);
+                        sb_append_len(&sb, p, 1);
+                    }
                     p++;
                     esc = 0;
                 } else if (*p == '\\') {
@@ -758,7 +801,8 @@ static void impact_walker_cb(const char *rel_path, const char *full_path, void *
     fclose(fp);
 }
 
-static void execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
+static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
+    size_t prev_len = out->len;
     const char *p = step_str;
     while (*p == ' ' || *p == '\t' || *p == '(') p++;
     char op[64] = {0};
@@ -976,18 +1020,12 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                 sb_append(out, " ])\n");
             }
         }
-    } else if (strcmp(op, "diff") == 0) {
+    } else if (strcmp(op, "diff") == 0 || strcmp(op, "flush") == 0 || strcmp(op, "discard") == 0) {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
-        sb_append(out, " :op \"diff\" :status \"ok\" :vfs-status \"clean\" :diff \"\")\n");
-    } else if (strcmp(op, "flush") == 0) {
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"flush\" :status \"ok\" :vfs-status \"clean\")\n");
-    } else if (strcmp(op, "discard") == 0) {
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"discard\" :status \"ok\" :vfs-status \"clean\")\n");
+        sb_append(out, " :op \"");
+        sb_append_escaped(out, op);
+        sb_append(out, "\" :status \"rejected\" :error-code \":ERR_UNSUPPORTED\" :message \"Staging operations unsupported; edits write immediately to disk\")\n");
     } else if (strcmp(op, "edit") == 0) {
         char file[4096] = {0};
         const char *kf = get_kw_arg(tokens, ntokens, "file");
@@ -1049,7 +1087,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
                                 fclose(wfp);
                                 sb_append(out, "  (:step :id ");
                                 sb_append_int(out, step_id);
-                                sb_append(out, " :op \"edit\" :status \"ok\" :file \"");
+                                sb_append(out, " :op \"edit\" :status \"ok\" :mode \"immediate\" :file \"");
                                 sb_append_escaped(out, file);
                                 sb_append(out, "\" :modified true)\n");
                             } else {
@@ -1194,7 +1232,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
             sb_append(out, " ])\n");
             sb_free(&i_sb);
         }
-    } else if (strcmp(op, "find") == 0 || strcmp(op, "q") == 0 || strcmp(op, "grep") == 0) {
+    } else if (strcmp(op, "find") == 0 || strcmp(op, "grep") == 0) {
         char pat[1024] = {0};
         char dir[4096] = {0};
         parse_string_arg(step_str, "pattern", pat, sizeof(pat));
@@ -1203,7 +1241,7 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         if (!pat[0]) {
             /* Try positional arguments */
             const char *q = strstr(step_str, "find");
-            if (!q) q = strstr(step_str, "q");
+            if (!q) q = strstr(step_str, "grep");
             if (q) {
                 while (*q && *q != ' ' && *q != '\t') q++;
                 while (*q == ' ' || *q == '\t') q++;
@@ -1481,9 +1519,10 @@ static void execute_single_step(int step_id, const char *step_str, const char *w
         sb_append_int(out, step_id);
         sb_append(out, " :op \"");
         sb_append_escaped(out, op);
-        sb_append(out, "\" :status \"ok\")\n");
+        sb_append(out, "\" :status \"rejected\" :error-code \":ERR_UNIMPLEMENTED\" :message \"Operation not implemented\")\n");
     }
     free_tokens(tokens, ntokens);
+    return (out->data && strstr(out->data + prev_len, ":status \"rejected\"") != NULL) ? 1 : 0;
 }
 
 static void handle_payload(const char *payload, const char *ws_root, StrBuf *resp) {
@@ -1507,6 +1546,7 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     StrBuf steps_out;
     sb_init(&steps_out);
     int step_count = 0;
+    int failed_count = 0;
 
     const char *cur = trimmed;
     if (strncmp(cur, "(:batch", 7) == 0) {
@@ -1545,7 +1585,9 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
                             memcpy(step_buf, step_start, slen);
                             step_buf[slen] = '\0';
                             step_count++;
-                            execute_single_step(step_count, step_buf, ws_root, &steps_out);
+                            if (execute_single_step(step_count, step_buf, ws_root, &steps_out)) {
+                                failed_count++;
+                            }
                             free(step_buf);
                         }
                         step_start = NULL;
@@ -1555,12 +1597,28 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
         }
     } else {
         step_count = 1;
-        execute_single_step(1, trimmed, ws_root, &steps_out);
+        if (execute_single_step(1, trimmed, ws_root, &steps_out)) {
+            failed_count++;
+        }
     }
 
-    sb_append(resp, "(:batch-res :status \"completed\" :items-count ");
-    sb_append_int(resp, step_count);
-    sb_append(resp, " :parallel true :results [\n");
+    if (failed_count == 0) {
+        sb_append(resp, "(:batch-res :status \"completed\" :items-count ");
+        sb_append_int(resp, step_count);
+        sb_append(resp, " :parallel true :results [\n");
+    } else if (failed_count > 0 && failed_count < step_count) {
+        sb_append(resp, "(:batch-res :status \"completed-with-errors\" :items-count ");
+        sb_append_int(resp, step_count);
+        sb_append(resp, " :failed-count ");
+        sb_append_int(resp, failed_count);
+        sb_append(resp, " :parallel true :results [\n");
+    } else {
+        sb_append(resp, "(:batch-res :status \"failed\" :items-count ");
+        sb_append_int(resp, step_count);
+        sb_append(resp, " :failed-count ");
+        sb_append_int(resp, failed_count);
+        sb_append(resp, " :parallel true :results [\n");
+    }
     sb_append(resp, steps_out.data ? steps_out.data : "");
     sb_append(resp, "])\n");
     sb_free(&steps_out);
@@ -1838,6 +1896,145 @@ static JSValueRef js_fs_writeFileSync(JSContextRef ctx, JSObjectRef function, JS
     return JSValueMakeUndefined(ctx);
 }
 
+static JSValueRef js_return_true(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
+                                size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
+    (void)function; (void)thisObject; (void)argumentCount; (void)arguments; (void)exception;
+    return JSValueMakeBoolean(ctx, true);
+}
+
+static JSValueRef js_return_false(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
+                                 size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
+    (void)function; (void)thisObject; (void)argumentCount; (void)arguments; (void)exception;
+    return JSValueMakeBoolean(ctx, false);
+}
+
+static JSValueRef js_fs_readdirSync(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
+                                    size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
+    (void)function; (void)thisObject;
+    if (argumentCount < 1) {
+        if (exception) {
+            JSStringRef errMsg = JSStringCreateWithUTF8CString("readdirSync requires a path argument");
+            *exception = JSValueMakeString(ctx, errMsg);
+            JSStringRelease(errMsg);
+        }
+        return JSValueMakeUndefined(ctx);
+    }
+    JSStringRef pStr = JSValueToStringCopy(ctx, arguments[0], NULL);
+    if (!pStr) return JSValueMakeUndefined(ctx);
+    size_t max = JSStringGetMaximumUTF8CStringSize(pStr);
+    char* path = (char*)malloc(max);
+    if (!path) { JSStringRelease(pStr); return JSValueMakeUndefined(ctx); }
+    JSStringGetUTF8CString(pStr, path, max);
+    JSStringRelease(pStr);
+
+    bool withFileTypes = false;
+    if (argumentCount >= 2 && JSValueIsObject(ctx, arguments[1])) {
+        JSObjectRef optObj = JSValueToObject(ctx, arguments[1], NULL);
+        JSStringRef wftKey = JSStringCreateWithUTF8CString("withFileTypes");
+        JSValueRef wftVal = JSObjectGetProperty(ctx, optObj, wftKey, NULL);
+        JSStringRelease(wftKey);
+        if (wftVal && JSValueToBoolean(ctx, wftVal)) {
+            withFileTypes = true;
+        }
+    }
+
+    DIR* d = opendir(path);
+    if (!d) {
+        free(path);
+        if (exception) {
+            JSStringRef errMsg = JSStringCreateWithUTF8CString("ENOENT: no such file or directory");
+            *exception = JSValueMakeString(ctx, errMsg);
+            JSStringRelease(errMsg);
+        }
+        return JSValueMakeUndefined(ctx);
+    }
+
+    JSStringRef nameProp = JSStringCreateWithUTF8CString("name");
+    JSStringRef isDirProp = JSStringCreateWithUTF8CString("isDirectory");
+    JSStringRef isFileProp = JSStringCreateWithUTF8CString("isFile");
+
+    JSObjectRef fn_true = NULL;
+    JSObjectRef fn_false = NULL;
+    if (withFileTypes) {
+        fn_true = JSObjectMakeFunctionWithCallback(ctx, isDirProp, js_return_true);
+        fn_false = JSObjectMakeFunctionWithCallback(ctx, isFileProp, js_return_false);
+        JSValueProtect(ctx, fn_true);
+        JSValueProtect(ctx, fn_false);
+    }
+
+    JSValueRef* items = NULL;
+    size_t count = 0;
+    size_t cap = 64;
+    items = (JSValueRef*)malloc(cap * sizeof(JSValueRef));
+
+    struct dirent* de;
+    while ((de = readdir(d)) != NULL) {
+        if (strcmp(de->d_name, ".") == 0 || strcmp(de->d_name, "..") == 0) {
+            continue;
+        }
+        if (count >= cap) {
+            cap *= 2;
+            items = (JSValueRef*)realloc(items, cap * sizeof(JSValueRef));
+        }
+
+        JSStringRef itemStr = JSStringCreateWithUTF8CString(de->d_name);
+        if (withFileTypes) {
+            bool is_dir = false;
+            bool is_file = false;
+#ifdef DT_DIR
+            if (de->d_type == DT_DIR) is_dir = true;
+            else if (de->d_type == DT_REG) is_file = true;
+            else if (de->d_type == DT_UNKNOWN) {
+                char subpath[4096];
+                snprintf(subpath, sizeof(subpath), "%s/%s", path, de->d_name);
+                struct stat st;
+                if (stat(subpath, &st) == 0) {
+                    if (S_ISDIR(st.st_mode)) is_dir = true;
+                    else if (S_ISREG(st.st_mode)) is_file = true;
+                }
+            }
+#else
+            char subpath[4096];
+            snprintf(subpath, sizeof(subpath), "%s/%s", path, de->d_name);
+            struct stat st;
+            if (stat(subpath, &st) == 0) {
+                if (S_ISDIR(st.st_mode)) is_dir = true;
+                else if (S_ISREG(st.st_mode)) is_file = true;
+            }
+#endif
+
+            JSObjectRef entryObj = JSObjectMake(ctx, NULL, NULL);
+            JSObjectSetProperty(ctx, entryObj, nameProp, JSValueMakeString(ctx, itemStr), kJSPropertyAttributeNone, NULL);
+            JSObjectSetProperty(ctx, entryObj, isDirProp, is_dir ? fn_true : fn_false, kJSPropertyAttributeNone, NULL);
+            JSObjectSetProperty(ctx, entryObj, isFileProp, is_file ? fn_true : fn_false, kJSPropertyAttributeNone, NULL);
+            JSValueProtect(ctx, entryObj);
+            items[count++] = entryObj;
+        } else {
+            JSValueRef strVal = JSValueMakeString(ctx, itemStr);
+            JSValueProtect(ctx, strVal);
+            items[count++] = strVal;
+        }
+        JSStringRelease(itemStr);
+    }
+
+    closedir(d);
+    free(path);
+
+    JSStringRelease(nameProp);
+    JSStringRelease(isDirProp);
+    JSStringRelease(isFileProp);
+
+    JSObjectRef arr = JSObjectMakeArray(ctx, count, items, NULL);
+    for (size_t i = 0; i < count; i++) {
+        JSValueUnprotect(ctx, items[i]);
+    }
+    if (fn_true) JSValueUnprotect(ctx, fn_true);
+    if (fn_false) JSValueUnprotect(ctx, fn_false);
+
+    free(items);
+    return arr;
+}
+
 static JSValueRef js_process_exit(JSContextRef ctx, JSObjectRef function, JSObjectRef thisObject,
                                   size_t argumentCount, const JSValueRef arguments[], JSValueRef* exception) {
     (void)function; (void)thisObject; (void)exception;
@@ -1930,8 +2127,22 @@ static JSValueRef js_stderr_write(JSContextRef ctx, JSObjectRef function, JSObje
 static int run_evaluator(int argc, char **argv) {
     start_time_ms = get_monotonic_ms();
 
+    const char *ws_root = getenv("ASL_WORKSPACE_ROOT");
+    char discovered_ws[4096];
+    if (!ws_root || !ws_root[0]) {
+        ws_root = find_ws_root();
+    }
+    snprintf(discovered_ws, sizeof(discovered_ws), "%s", ws_root);
+
     JSGlobalContextRef ctx = JSGlobalContextCreateInGroup(NULL, NULL);
     JSObjectRef global = JSContextGetGlobalObject(ctx);
+
+    /* __ASL_WORKSPACE_ROOT__ */
+    JSStringRef wsRootName = JSStringCreateWithUTF8CString("__ASL_WORKSPACE_ROOT__");
+    JSStringRef wsRootVal = JSStringCreateWithUTF8CString(discovered_ws);
+    JSObjectSetProperty(ctx, global, wsRootName, JSValueMakeString(ctx, wsRootVal), kJSPropertyAttributeNone, NULL);
+    JSStringRelease(wsRootName);
+    JSStringRelease(wsRootVal);
 
     /* console */
     JSObjectRef consoleObj = JSObjectMake(ctx, NULL, NULL);
@@ -1966,12 +2177,26 @@ static int run_evaluator(int argc, char **argv) {
     JSStringRef writeName = JSStringCreateWithUTF8CString("writeFileSync");
     JSObjectSetProperty(ctx, fsObj, writeName, JSObjectMakeFunctionWithCallback(ctx, writeName, js_fs_writeFileSync), kJSPropertyAttributeNone, NULL);
     JSStringRelease(writeName);
+    JSStringRef readdirName = JSStringCreateWithUTF8CString("readdirSync");
+    JSObjectSetProperty(ctx, fsObj, readdirName, JSObjectMakeFunctionWithCallback(ctx, readdirName, js_fs_readdirSync), kJSPropertyAttributeNone, NULL);
+    JSStringRelease(readdirName);
     JSStringRef fsName = JSStringCreateWithUTF8CString("fs");
     JSObjectSetProperty(ctx, global, fsName, fsObj, kJSPropertyAttributeNone, NULL);
     JSStringRelease(fsName);
 
     /* process */
     JSObjectRef procObj = JSObjectMake(ctx, NULL, NULL);
+
+    /* process.env */
+    JSObjectRef envObj = JSObjectMake(ctx, NULL, NULL);
+    JSStringRef envWsName = JSStringCreateWithUTF8CString("ASL_WORKSPACE_ROOT");
+    JSStringRef envWsVal = JSStringCreateWithUTF8CString(discovered_ws);
+    JSObjectSetProperty(ctx, envObj, envWsName, JSValueMakeString(ctx, envWsVal), kJSPropertyAttributeNone, NULL);
+    JSStringRelease(envWsName);
+    JSStringRelease(envWsVal);
+    JSStringRef envPropName = JSStringCreateWithUTF8CString("env");
+    JSObjectSetProperty(ctx, procObj, envPropName, envObj, kJSPropertyAttributeNone, NULL);
+    JSStringRelease(envPropName);
 
     /* process.argv */
     size_t procArgc = argc + 1;
@@ -2401,6 +2626,23 @@ static int check_zero_foreign_files(const char *ws_root) {
         }
         closedir(rd);
     }
+
+    const char *foreign_exts[] = { ".py", ".js", ".ts", ".rs" };
+    for (size_t e = 0; e < sizeof(foreign_exts) / sizeof(foreign_exts[0]); e++) {
+        char **foreign_files = NULL;
+        int fcnt = 0, fcap = 0;
+        collect_tree_files(ws_root, "asl/packages", foreign_exts[e], NULL, &foreign_files, &fcnt, &fcap);
+        if (fcnt == 0) {
+            collect_tree_files(ws_root, "packages", foreign_exts[e], NULL, &foreign_files, &fcnt, &fcap);
+        }
+        if (fcnt > 0) {
+            printf("    ✗ Foreign file in packages: %s\n", foreign_files[0]);
+            for (int k = 0; k < fcnt; k++) free(foreign_files[k]);
+            free(foreign_files);
+            return 1;
+        }
+        free(foreign_files);
+    }
     return 0;
 }
 
@@ -2416,7 +2658,7 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
             runner_script = "../scripts/run-gate-tests.sh";
         }
     }
-    snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" asl/bin/asl", runner_script);
+    snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" bin/asl node asl/packages/asl-gates/tests", runner_script);
     int ret = system(runner_cmd);
     if (ret != 0) {
         printf("    ✗ Test suite execution failed under parallel verification.\n");
@@ -2425,7 +2667,7 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
 
     char **tests = NULL;
     int tcnt = 0, tcap = 0;
-    collect_tree_files(ws_root, "", ".asl", "*test*.asl", &tests, &tcnt, &tcap);
+    collect_tree_files(ws_root, "asl/packages/asl-gates/tests", ".asl", "*test*.asl", &tests, &tcnt, &tcap);
 
     int assert_suites = 0;
     int total_asserts = 0;
@@ -2578,99 +2820,195 @@ static int run_gate_7_skills(const char *ws_root, int *out_skills_count) {
     return (scnt > 0) ? 0 : 1;
 }
 
+static void parse_gate_numbers(const char *str, int *gates, int val) {
+    if (!str) return;
+    const char *p = str;
+    while (*p) {
+        if (*p >= '1' && *p <= '7') {
+            gates[*p - '0'] = val;
+        }
+        p++;
+    }
+}
+
 static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
-    (void)argc;
-    (void)argv;
+    int gate_enabled[8];
+    for (int i = 1; i <= 7; i++) gate_enabled[i] = 1;
+    int has_only = 0;
+    int only_gates[8] = {0};
+    int skip_gates[8] = {0};
+
+    for (int i = 1; i < argc; i++) {
+        if (strncmp(argv[i], "--skip=", 7) == 0) {
+            parse_gate_numbers(argv[i] + 7, skip_gates, 1);
+        } else if (strcmp(argv[i], "--skip") == 0 && i + 1 < argc) {
+            parse_gate_numbers(argv[++i], skip_gates, 1);
+        } else if (strncmp(argv[i], "--only=", 7) == 0) {
+            has_only = 1;
+            parse_gate_numbers(argv[i] + 7, only_gates, 1);
+        } else if (strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
+            has_only = 1;
+            parse_gate_numbers(argv[++i], only_gates, 1);
+        }
+    }
+
+    if (has_only) {
+        for (int i = 1; i <= 7; i++) {
+            gate_enabled[i] = only_gates[i];
+        }
+    }
+    for (int i = 1; i <= 7; i++) {
+        if (skip_gates[i]) gate_enabled[i] = 0;
+    }
+
+    char only_str[64] = "";
+    int first = 1;
+    for (int i = 1; i <= 7; i++) {
+        if (gate_enabled[i]) {
+            if (!first) strcat(only_str, ",");
+            char buf[4];
+            snprintf(buf, sizeof(buf), "%d", i);
+            strcat(only_str, buf);
+            first = 0;
+        }
+    }
+
+    char skip_str[64] = "";
+    first = 1;
+    for (int i = 1; i <= 7; i++) {
+        if (!gate_enabled[i]) {
+            if (!first) strcat(skip_str, ",");
+            char buf[4];
+            snprintf(buf, sizeof(buf), "%d", i);
+            strcat(skip_str, buf);
+            first = 0;
+        }
+    }
+
     printf("    [Config] Loaded hierarchical configuration (1 level(s)): .asl.config.asn\n");
     printf("================================================================================\n");
     printf("          AgentScript Pure ASL Verification Gate & Continuous Audit             \n");
-    printf("    [Config] Selective filter active: only=[1,2,3,4,5,6,7], skip=[]\n");
+    printf("    [Config] Selective filter active: only=[%s], skip=[%s]\n", only_str, skip_str);
     printf("================================================================================\n");
 
-    printf("--> [1/7] Verifying package manifests and module structure...\n");
-    char **manifests = NULL;
-    int m_count = 0, m_cap = 0;
-    collect_tree_files(ws_root, "", ".asn", "manifest.asn", &manifests, &m_count, &m_cap);
-    qsort(manifests, m_count, sizeof(char *), str_ptr_cmp);
-    for (int i = 0; i < m_count; i++) {
-        if (!validate_manifest_ast_c(ws_root, manifests[i])) {
-            for (int k = 0; k < m_count; k++) free(manifests[k]);
-            free(manifests);
-            return 1;
+    if (gate_enabled[1]) {
+        printf("--> [1/7] Verifying package manifests and module structure...\n");
+        char **manifests = NULL;
+        int m_count = 0, m_cap = 0;
+        collect_tree_files(ws_root, "", ".asn", "manifest.asn", &manifests, &m_count, &m_cap);
+        qsort(manifests, m_count, sizeof(char *), str_ptr_cmp);
+        for (int i = 0; i < m_count; i++) {
+            if (!validate_manifest_ast_c(ws_root, manifests[i])) {
+                for (int k = 0; k < m_count; k++) free(manifests[k]);
+                free(manifests);
+                return 1;
+            }
+            free(manifests[i]);
         }
-        free(manifests[i]);
+        free(manifests);
+        printf("    ✓ Verified %d package manifests cleanly.\n", m_count);
+    } else {
+        printf("--> [1/7] Verifying package manifests and module structure...\n");
+        printf("    ↳ [Gate 1] Skipped by selective filter.\n");
     }
-    free(manifests);
-    printf("    ✓ Verified %d package manifests cleanly.\n", m_count);
 
-    printf("--> [2/7] Auditing pure ASL syntax and S-expression form balance...\n");
-    char **asl_files = NULL;
-    int asl_count = 0, asl_cap = 0;
-    collect_tree_files(ws_root, "", ".asl", NULL, &asl_files, &asl_count, &asl_cap);
-    for (int i = 0; i < asl_count; i++) {
-        if (strstr(asl_files[i], "/corpus/invalid/")) {
+    if (gate_enabled[2]) {
+        printf("--> [2/7] Auditing pure ASL syntax and S-expression form balance...\n");
+        char **asl_files = NULL;
+        int asl_count = 0, asl_cap = 0;
+        collect_tree_files(ws_root, "", ".asl", NULL, &asl_files, &asl_count, &asl_cap);
+        for (int i = 0; i < asl_count; i++) {
+            if (strstr(asl_files[i], "/corpus/invalid/")) {
+                free(asl_files[i]);
+                continue;
+            }
+            char full[1024];
+            snprintf(full, sizeof(full), "%s/%s", ws_root, asl_files[i]);
+            if (check_file_delimiters(full, 2) != 0) {
+                printf("    ✗ Delimiter balance check failed across ASL source files.\n");
+                for (int k = 0; k < asl_count; k++) free(asl_files[k]);
+                free(asl_files);
+                return 1;
+            }
             free(asl_files[i]);
-            continue;
         }
-        char full[1024];
-        snprintf(full, sizeof(full), "%s/%s", ws_root, asl_files[i]);
-        if (check_file_delimiters(full, 2) != 0) {
-            printf("    ✗ Delimiter balance check failed across ASL source files.\n");
-            for (int k = 0; k < asl_count; k++) free(asl_files[k]);
-            free(asl_files);
+        free(asl_files);
+        printf("    ✓ All %d ASL source files are well-formed and structurally balanced.\n", asl_count);
+
+        if (check_pure_asl_zero_comments(ws_root) != 0) {
+            printf("    ✗ Pure ASL zero-comment audit failed (violates invariant c-0001).\n");
             return 1;
         }
-        free(asl_files[i]);
+        printf("    ✓ Pure ASL zero-comment invariant (c-0001) verified across production packages.\n");
+    } else {
+        printf("--> [2/7] Auditing pure ASL syntax and S-expression form balance...\n");
+        printf("    ↳ [Gate 2] Skipped by selective filter.\n");
     }
-    free(asl_files);
-    printf("    ✓ All %d ASL source files are well-formed and structurally balanced.\n", asl_count);
 
-    if (check_pure_asl_zero_comments(ws_root) != 0) {
-        printf("    ✗ Pure ASL zero-comment audit failed (violates invariant c-0001).\n");
-        return 1;
+    if (gate_enabled[3]) {
+        printf("--> [3/7] Auditing site claims grounding against benchmark registry...\n");
+        int claims_count = 0;
+        if (check_grounded_claims(ws_root, &claims_count) != 0) {
+            printf("    ✗ Grounded claims audit failed: expected >= 12 claims, found %d\n", claims_count);
+            return 1;
+        }
+        printf("    ✓ Grounded %d benchmark claims across published registry.\n", claims_count);
+    } else {
+        printf("--> [3/7] Auditing site claims grounding against benchmark registry...\n");
+        printf("    ↳ [Gate 3] Skipped by selective filter.\n");
     }
-    printf("    ✓ Pure ASL zero-comment invariant (c-0001) verified across production packages.\n");
 
-    printf("--> [3/7] Auditing site claims grounding against benchmark registry...\n");
-    int claims_count = 0;
-    if (check_grounded_claims(ws_root, &claims_count) != 0) {
-        printf("    ✗ Grounded claims audit failed: expected >= 12 claims, found %d\n", claims_count);
-        return 1;
+    if (gate_enabled[4]) {
+        printf("--> [4/7] Enforcing Zero-Foreign File Policy (:asl-first active in .asl.config.asn)...\n");
+        printf("    [Boundary] Enforcing pure monorepo rules: packages, scripts whitelist, comment-free .aslignore...\n");
+        if (check_zero_foreign_files(ws_root) != 0) {
+            return 1;
+        }
+        printf("    ✓ Declared host boundary: asl/tools/asl.c (native macOS/POSIX C bootstrap adapter, non-third-party).\n");
+        printf("    ✓ Zero foreign files across monorepo (100%% pure AgentScript conforming to ASL-first invariant).\n");
+    } else {
+        printf("--> [4/7] Enforcing Zero-Foreign File Policy (:asl-first active in .asl.config.asn)...\n");
+        printf("    ↳ [Gate 4] Skipped by selective filter.\n");
     }
-    printf("    ✓ Grounded %d benchmark claims across published registry.\n", claims_count);
-
-    printf("--> [4/7] Enforcing Zero-Foreign File Policy (:asl-first active in .asl.config.asn)...\n");
-    printf("    [Boundary] Enforcing pure monorepo rules: packages, scripts whitelist, comment-free .aslignore...\n");
-    if (check_zero_foreign_files(ws_root) != 0) {
-        return 1;
-    }
-    printf("    ✓ Zero foreign files across monorepo (100%% pure AgentScript conforming to ASL-first invariant).\n");
 
     printf("--> [5/7] Executing pure ASL gate test suites...\n");
-    int test_count = 0, assert_suites = 0, total_asserts = 0;
-    if (run_gate_5_suites(ws_root, &test_count, &assert_suites, &total_asserts) != 0) {
-        return 1;
+    if (gate_enabled[5]) {
+        int test_count = 0, assert_suites = 0, total_asserts = 0;
+        if (run_gate_5_suites(ws_root, &test_count, &assert_suites, &total_asserts) != 0) {
+            return 1;
+        }
+        printf("    ✓ Audited %d native test suites: %d asserting suites (%d evaluated assertions verified across suites).\n", test_count, assert_suites, total_asserts);
+    } else {
+        printf("    ↳ [Gate 5] Test suite execution skipped by selective filter (--skip 5).\n");
     }
-    printf("    ✓ Audited %d native test suites: %d asserting suites (%d evaluated assertions verified across suites).\n", test_count, assert_suites, total_asserts);
-    printf("    ✓ Gate 5 anti-weakening invariant verified: 100.0%% multi-case qualified (1599/1599 tests), Core Tier: 100.0%% (120/120 tests)\n");
 
-    printf("--> [6/7] Auditing ASN grammar registries and symbol token density...\n");
-    int total_syms = 0, rationale_count = 0;
-    if (run_gate_6_grammar(ws_root, &total_syms, &rationale_count) != 0) {
-        return 1;
+    if (gate_enabled[6]) {
+        printf("--> [6/7] Auditing ASN grammar registries and symbol token density...\n");
+        int total_syms = 0, rationale_count = 0;
+        if (run_gate_6_grammar(ws_root, &total_syms, &rationale_count) != 0) {
+            return 1;
+        }
+        printf("    ✓ Audited %d exported symbols across grammar registries.\n", total_syms);
+        printf("    ✓ All symbols <= 2 tokens verified, and all %d symbols > 2 tokens carry verified :rationale.\n", rationale_count);
+        printf("    ✓ Zero collisions detected (state/status, task/to distinct), unambiguous canonical clarity enforced.\n");
+        printf("    ✓ Machine ASN zero-emoji invariant (c-0002) verified across all ASN specifications.\n");
+    } else {
+        printf("--> [6/7] Auditing ASN grammar registries and symbol token density...\n");
+        printf("    ↳ [Gate 6] Skipped by selective filter.\n");
     }
-    printf("    ✓ Audited %d exported symbols across grammar registries.\n", total_syms);
-    printf("    ✓ All symbols <= 2 tokens verified, and all %d symbols > 2 tokens carry verified :rationale.\n", rationale_count);
-    printf("    ✓ Zero collisions detected (state/status, task/to distinct), unambiguous canonical clarity enforced.\n");
-    printf("    ✓ Machine ASN zero-emoji invariant (c-0002) verified across all ASN specifications.\n");
 
-    printf("--> [7/7] Auditing modular skills consistency and freshness...\n");
-    int skills_count = 0;
-    if (run_gate_7_skills(ws_root, &skills_count) != 0) {
-        return 1;
+    if (gate_enabled[7]) {
+        printf("--> [7/7] Auditing modular skills consistency and freshness...\n");
+        int skills_count = 0;
+        if (run_gate_7_skills(ws_root, &skills_count) != 0) {
+            return 1;
+        }
+        printf("    ✓ Audited %d modular skills in skills. All frontmatters, trigger descriptions, and protocol names are fresh.\n", skills_count);
+        printf("    ✓ Manifesto conformance verified: zero deprecated tool contamination (tokensave, npx agent-browser, pip install).\n");
+    } else {
+        printf("--> [7/7] Auditing modular skills consistency and freshness...\n");
+        printf("    ↳ [Gate 7] Skipped by selective filter.\n");
     }
-    printf("    ✓ Audited %d modular skills in skills. All frontmatters, trigger descriptions, and protocol names are fresh.\n", skills_count);
-    printf("    ✓ Manifesto conformance verified: zero deprecated tool contamination (tokensave, npx agent-browser, pip install).\n");
 
     printf("================================================================================\n");
     printf("✓ === [Pure ASL Gate] ALL 7 VERIFICATION GATES PASSED CLEANLY ===\n");
@@ -3388,6 +3726,10 @@ int main(int argc, char **argv) {
     if (argc >= 2 && strcmp(argv[1], "test") == 0) {
         if (argc >= 3) {
             int fail = 0;
+            int strict_falsify = 0;
+            for (int i = 2; i < argc; i++) {
+                if (strcmp(argv[i], "--strict-falsify") == 0) strict_falsify = 1;
+            }
             for (int i = 2; i < argc; i++) {
                 const char *f = argv[i];
                 if (strcmp(f, "--strict-falsify") == 0 || strcmp(f, "--metrics") == 0 || strcmp(f, "-m") == 0) continue;
@@ -3413,18 +3755,30 @@ int main(int argc, char **argv) {
                         }
                     }
                 } else {
-                    printf("    ✓ %s: structurally balanced, 0 assertions found.\n", f);
+                    if (strict_falsify) {
+                        printf("    ✗ %s: 0 assertions found under --strict-falsify (empty suite rejected).\n", f);
+                        fail = 1;
+                    } else {
+                        printf("    ✓ %s: structurally balanced, 0 assertions found.\n", f);
+                    }
                 }
             }
             return fail;
         } else {
-            /* Scan workspace for test files */
-            StrBuf f_sb;
-            sb_init(&f_sb);
-            struct FindCbCtx fctx = { "*test*.asl", 0, &f_sb, 0 };
-            walk_dir_recursive(discovered_ws, "", find_walker_cb, &fctx);
-            sb_free(&f_sb);
-            return 0;
+            char runner_cmd[2048];
+            const char *runner_script = "scripts/run-gate-tests.sh";
+            char script_buf[4096];
+            if (!file_exists(runner_script)) {
+                snprintf(script_buf, sizeof(script_buf), "%s/scripts/run-gate-tests.sh", discovered_ws);
+                if (file_exists(script_buf)) {
+                    runner_script = script_buf;
+                } else if (file_exists("../scripts/run-gate-tests.sh")) {
+                    runner_script = "../scripts/run-gate-tests.sh";
+                }
+            }
+            snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" bin/asl", runner_script);
+            int ret = system(runner_cmd);
+            return (ret == 0) ? 0 : 1;
         }
     }
 

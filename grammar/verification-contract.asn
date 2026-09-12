@@ -1,0 +1,23 @@
+(:verificationContract :v 1 :src ADR-0081
+  :summary "Verification contract for assertion reachability, runner failure preservation, and required site obligations."
+  :rules [
+    (:rule :id assertionReachability
+      :description "Assertion reachability distinguishes distinct AST assertion sites from dynamic execution counts. Loop executions do not inflate site count."
+      :falsification "Missing required assertion site fails gate regardless of execution count.")
+    (:rule :id failurePreservation
+      :description "Process exit codes and runner failures must be preserved without suppression or text masking. Non-zero exit code indicates failure regardless of string banner."
+      :falsification "Process exit != 0 or failed assertions count > 0 unconditionally fails gate.")
+    (:rule :id emptySuiteRejection
+      :description "Empty test suites with zero reached assertion sites cannot satisfy verification obligations."
+      :falsification "Suites with zero assertion sites are rejected.")
+    (:rule :id explicitCoverageObligations
+      :description "Coverage obligations are defined explicitly per branch and test suite; arbitrary aggregate allowances without branch accounting are prohibited."
+      :falsification "Unaccounted branches or unreached sites trigger gate failure.")
+    (:rule :id claimEvidenceGrounding
+      :description "Each published quantitative claim must identify a versioned source, fixture, digest or metric. Missing or mismatched evidence is rejected."
+      :falsification "Claims missing valid source, fixture digest, metric or lock value are rejected.")
+    (:rule :id emptyCatalogRejection
+      :description "Empty claims catalogs cannot satisfy verification and must fail."
+      :falsification "Empty catalog produces status FAIL and total > 0.")
+  ]
+)

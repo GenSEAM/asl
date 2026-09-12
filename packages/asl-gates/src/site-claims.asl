@@ -51,7 +51,9 @@
 
 (df run-claims-audit [(published (List Str)) (registry (List Str))] -> GateReport
   :d "Audits a collection of claims against the benchmark registry."
-  (let [(total (list-length published))
+  (let [(expected (list-length registry))
+        (pub-len (list-length published))
+        (total (if (> pub-len 0) pub-len expected))
         (passed (fold (fn [(count I64) (m Str)] -> I64
                         (if (is-known-metric m registry)
                             (+ count 1)
@@ -59,11 +61,12 @@
                       0
                       published))
         (failed (- total passed))
-        (status (if (= failed 0) "PASS" "FAIL"))]
+        (status (if (and (= failed 0) (> pub-len 0) (> passed 0)) "PASS" "FAIL"))]
     (GateReport :total total :passed passed :failed failed :status status)))
 
 (df verify-claims-grounding [] -> Bool
   :d "Verifies standard published claims are grounded."
   (let [(claims (standard-claims))
         (report (run-claims-audit claims claims))]
-    (= (.-failed report) 0)))
+    (and (= (.-failed report) 0)
+         (= (.-status report) "PASS"))))

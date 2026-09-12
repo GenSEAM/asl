@@ -8,7 +8,7 @@
       make-pipe
       make-script
       measure-sh-savings]
-  :i [(std/string :a s)
+  :i [(asl-text/string :a s)
       (asl-text/escape :a esc)
       (asl-text/text :a txt)])
 

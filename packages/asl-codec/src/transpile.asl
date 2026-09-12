@@ -676,8 +676,8 @@
              :asn-tokens (estimate-tokens trimmed)
              :savings-percent 0.0
              :success false)
-           (let [(root-node (option-or (list-head all-roots) (rd/make-atom "")))
-                 (compact (rd/render-sexpr root-node))
+           (let [(rendered (map (fn [(n rd/SexprNode)] -> Str (rd/render-sexpr n)) all-roots))
+                 (compact (string-join rendered " "))
                  (orig-tok (estimate-tokens trimmed))
                  (asn-tok (estimate-tokens compact))
                  (savings (calc-savings orig-tok asn-tok))]

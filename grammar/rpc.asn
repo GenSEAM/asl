@@ -1,6 +1,8 @@
 ;; Canonical Batch RPC Operations Registry (Single Source of Truth)
 (:rpc-registry
   :version "1.0.0"
+  :rejectionCode ":ERR_UNIMPLEMENTED"
+  :rejectionPolicy "Unrecognized or unimplemented operations (such as legacy :q) are rejected with status rejected and error-code :ERR_UNIMPLEMENTED."
   :operations [
     ;; === Reading & Progressive Disclosure ===
     (:op :id "asl-intel-ast"
@@ -41,16 +43,17 @@
          :savings "88%")
 
     (:op :id "asl-mem-search"
-         :cmd "asl rpc '(:batch (:find \"...\" [:ext \"...\"]) (:q \"...\"))'"
+         :cmd "asl rpc '(:batch (:find \"...\" [:ext \"...\"]))'"
          :category "search"
          :purpose "Instant resident-memory grep (<15ms) and vector semantic search across docstrings and comments"
          :savings "90%")
 
     ;; === Editing & Agentic IDE Refactoring ===
     (:op :id "asl-mem-edit"
-         :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\") (:diff) (:flush))'"
+         :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\"))'"
          :category "editing"
-         :purpose "In-memory atomic text replacement, staged diff inspection, and atomic filesystem flush"
+         :mode "immediate"
+         :purpose "Immediate text replacement writing directly to disk; returns :mode \"immediate\""
          :savings "85%")
 
     (:op :id "asl-mem-patch"
@@ -96,11 +99,13 @@
          :purpose "Direct virtual file creation and atomic overwrite in resident RAM VFS"
          :savings "85%")
 
-    (:op :id "asl-mem-discard"
-         :cmd "asl rpc '(:batch (:diff) (:discard))'"
+    (:op :id "asl-mem-staging"
+         :cmd "asl rpc '(:batch (:diff) (:flush) (:discard))'"
          :category "editing"
-         :purpose "Inspect staged buffer modifications and discard dirty in-memory buffers on error"
-         :savings "90%")
+         :status :unsupported
+         :rejectionCode ":ERR_UNSUPPORTED"
+         :purpose "Staging operations are unsupported; edits write immediately to disk"
+         :savings "0%")
 
     ;; === DAG Execution Combinators & Parallelism ===
     (:op :id "asl-batch-par"

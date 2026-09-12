@@ -4,7 +4,7 @@
       TestBashProcessSubstTranspile
       TestPosixStrictCompliance
       run-tests]
-  :i [(sh-transpile :a sh)])
+  :i [(asl-codec/sh-transpile :a sh)])
 
 (df TestShellDialectParity [] -> Bool
   :d "Verifies dialect parity across command and pipeline transpilation"

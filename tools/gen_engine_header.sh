@@ -2,6 +2,7 @@
 set -eo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$DIR/../.." && pwd)"
 SRC="${1:-$DIR/engine.js}"
 if [ ! -f "$SRC" ]; then
   SRC="/tmp/engine.js"
@@ -13,9 +14,21 @@ if [ ! -f "$SRC" ]; then
   exit 1
 fi
 
+TMP_GEN=$(mktemp /tmp/engine_combined.XXXXXX.js)
+trap 'rm -f "$TMP_GEN"' EXIT
+
+{
+  echo "const __EMBEDDED_ASL_FILES__ = ["
+  (cd "$ROOT_DIR" && find . -name "*.asl" -not -path "*/.*" -not -path "*/node_modules/*" -type f | sed 's|^\./||' | sort) | while read -r f; do
+    echo "  \"$f\","
+  done
+  echo "];"
+  cat "$SRC"
+} > "$TMP_GEN"
+
 {
   echo "const unsigned char engine_js[] = {"
-  (cat "$SRC"; printf '\0') | xxd -i
+  (cat "$TMP_GEN"; printf '\0') | xxd -i
   echo "};"
 } > "$DEST"
 

@@ -7,7 +7,7 @@
       test-format-computed-style
       run-css-tests
       run-tests]
-  :i [(css-cascade :a css)])
+  :i [(asl-codec/css-cascade :a css)])
 
 (df test-calc-specificity [] -> Bool
   :d "Tests calculation of CSS specificity tuples"

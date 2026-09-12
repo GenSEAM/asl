@@ -1,4 +1,5 @@
 let assertionCount = 0;
+let refutationCount = 0;
 
 
 
@@ -380,7 +381,8 @@ const knownBuiltins = new Set([
   'map-has?', 'pair', 'show',
   'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float-from-int64', 'float', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
   'string-chars', 'string-lower', 'string-upper', 'string-replace', 'string-reverse', 'string-index-of', 'string-slice',
-  'string-equals?', 'foldl', 'append-item', 'string-to-lower', 'list-indexed', 'tuple', 'tuple-first', 'tuple-second', 'option-none?', 'option-some?', 'int-to-string'
+  'string-equals?', 'foldl', 'append-item', 'string-to-lower', 'list-indexed', 'tuple', 'tuple-first', 'tuple-second', 'option-none?', 'option-some?', 'int-to-string',
+  'case', 'match', 'refute', 'fst', 'snd', 'second', 'pair-first', 'pair-second', 'tuple2-first', 'list-second', 'list-first', 'list-last', 'list-take', 'list-range', 'list-fold', 'list-filter', 'list-map', 'list-any?', 'fold-left', 'reverse', 'length', 'append', 'count', 'enumerate', 'nil?', 'map-merge', 'get', 'div-i64', 'as-i64', 'as-f64', 'float64-from-int64', 'int64-from-float', 'int-to-str', 'string-to-lowercase', 'string-trim-left', 'string-count-char', 'string-repeat', 'string-append', 'join', 'all', 'tuple2-second', 'head', 'tail', 'div-f64', 'sqrt', 'Ok', 'Err', 'file-read', 'file-write', 'file-exists?', 'file-append', 'error-or', 'file-read', 'read-file'
 ]);
 
 function extractParamNames(paramsNode) {
@@ -398,6 +400,12 @@ function extractParamNames(paramsNode) {
 }
 
 function invokeClosure(closure, evalArgs) {
+  if (closure && closure._isBuiltin) {
+    return evaluateBuiltinFunction(closure.builtinName, evalArgs, closure.env || new Map());
+  }
+  if (closure && closure.name === 'concat' && evalArgs.length > 2) {
+    return evalArgs.map(formatOutput).join('');
+  }
   const childEnv = new Map(closure.env);
   if (closure.name) {
     childEnv.set(closure.name, closure);
@@ -423,6 +431,19 @@ function invokeClosure(closure, evalArgs) {
 
 function parseAllSExprs(input) {
   let i = 0;
+  const lineOffsets = [0];
+  for (let idx = 0; idx < input.length; idx++) {
+    if (input.charCodeAt(idx) === 10) lineOffsets.push(idx + 1);
+  }
+  function getLine(pos) {
+    let low = 0, high = lineOffsets.length - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (lineOffsets[mid] <= pos) low = mid + 1;
+      else high = mid - 1;
+    }
+    return high + 1;
+  }
   function skipWhitespace() {
     while (i < input.length && (/\s/.test(input[i]) || input[i] === ";")) {
       if (input[i] === ";") {
@@ -443,6 +464,7 @@ function parseAllSExprs(input) {
     return parseAtom();
   }
   function parseMap() {
+    const startPos = i;
     i++;
     const items = [];
     skipWhitespace();
@@ -452,14 +474,15 @@ function parseAllSExprs(input) {
       skipWhitespace();
     }
     if (i < input.length && input[i] === "}") i++;
-    return { type: "map", items };
+    return { type: "map", items, line: getLine(startPos) };
   }
   function parseStr() {
+    const startPos = i;
     i++;
     let s = "";
     while (i < input.length) {
       const c = input[i++];
-      if (c === "\"") return { type: "str", value: s };
+      if (c === "\"") return { type: "str", value: s, line: getLine(startPos) };
       if (c === "\\") {
         const esc = input[i++];
         if (esc === "n") s += "\n";
@@ -477,22 +500,25 @@ function parseAllSExprs(input) {
         s += c;
       }
     }
-    return { type: "str", value: s };
+    return { type: "str", value: s, line: getLine(startPos) };
   }
   function parseAtom() {
+    const startPos = i;
     let atom = "";
     while (i < input.length && !/\s|[()\[\]{}]/.test(input[i])) {
       atom += input[i++];
     }
-    if (atom === "true") return { type: "bool", value: true };
-    if (atom === "false") return { type: "bool", value: false };
-    if (atom === "null" || atom === "nil" || atom === "_") return { type: "null", value: null };
-    if (/^-?[0-9]+$/.test(atom)) return { type: "int", value: BigInt(atom) };
-    if (/^-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?$/.test(atom)) return { type: "float", value: Number(atom) };
-    if (atom.startsWith(":")) return { type: "kw", value: atom.slice(1) };
-    return { type: "sym", value: atom };
+    const line = getLine(startPos);
+    if (atom === "true") return { type: "bool", value: true, line };
+    if (atom === "false") return { type: "bool", value: false, line };
+    if (atom === "null" || atom === "nil" || atom === "_") return { type: "null", value: null, line };
+    if (/^-?[0-9]+$/.test(atom)) return { type: "int", value: BigInt(atom), line };
+    if (/^-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?$/.test(atom)) return { type: "float", value: Number(atom), line };
+    if (atom.startsWith(":")) return { type: "kw", value: atom.slice(1), line };
+    return { type: "sym", value: atom, line };
   }
   function parseVector() {
+    const startPos = i;
     i++;
     const arr = [];
     skipWhitespace();
@@ -502,9 +528,10 @@ function parseAllSExprs(input) {
       skipWhitespace();
     }
     if (i < input.length && input[i] === "]") i++;
-    return { type: "vec", items: arr };
+    return { type: "vec", items: arr, line: getLine(startPos) };
   }
   function parseList() {
+    const startPos = i;
     i++;
     const items = [];
     skipWhitespace();
@@ -514,7 +541,7 @@ function parseAllSExprs(input) {
       skipWhitespace();
     }
     if (i < input.length && input[i] === ")") i++;
-    return { type: "list", items };
+    return { type: "list", items, line: getLine(startPos) };
   }
 
   const forms = [];
@@ -533,6 +560,62 @@ function parseSExpr(input) {
   return forms.length > 0 ? forms[0] : null;
 }
 
+function matchPattern(patNode, targetVal, branchEnv) {
+  if (!patNode) return false;
+  if (patNode.type === 'null' || (patNode.type === 'sym' && (patNode.value === '_' || patNode.value === 'else' || patNode.value === ':else')) || (patNode.type === 'kw' && patNode.value === 'else')) {
+    return true;
+  }
+  if (patNode.type === 'sym') {
+    if (patNode.value === 'none' || patNode.value === 'nil') {
+      return targetVal === null || targetVal?._tag === 'none';
+    }
+    branchEnv.set(patNode.value, targetVal);
+    return true;
+  }
+  if (patNode.type === 'list' || patNode.type === 'vec') {
+    if (patNode.items.length === 0) {
+      return Array.isArray(targetVal) && targetVal.length === 0;
+    }
+    const headPat = patNode.items[0];
+    const headPatName = headPat?.type === 'sym' ? headPat.value : null;
+    if (!headPatName) return false;
+    const shortPatName = headPatName.includes('/') ? headPatName.split('/').pop() : headPatName;
+
+    if (targetVal === null && (headPatName === 'none' || shortPatName === 'none')) {
+      return true;
+    }
+
+    if (!targetVal || typeof targetVal !== 'object') {
+      return false;
+    }
+
+    if (targetVal._type === 'variant' && (targetVal._variant === headPatName || targetVal._variant === shortPatName)) {
+      for (let k = 1; k < patNode.items.length; k++) {
+        const subPat = patNode.items[k];
+        const val = targetVal[`arg${k}`] !== undefined ? targetVal[`arg${k}`] : targetVal.value;
+        if (!matchPattern(subPat, val, branchEnv)) return false;
+      }
+      return true;
+    }
+
+    if (targetVal._tag === 'some' && (headPatName === 'some' || shortPatName === 'some')) {
+      return patNode.items.length > 1 ? matchPattern(patNode.items[1], targetVal.value, branchEnv) : true;
+    }
+    if (targetVal._tag === 'none' && (headPatName === 'none' || shortPatName === 'none')) {
+      return true;
+    }
+    if (targetVal._tag === 'ok' && (headPatName === 'ok' || shortPatName === 'ok')) {
+      return patNode.items.length > 1 ? matchPattern(patNode.items[1], targetVal.value, branchEnv) : true;
+    }
+    if (targetVal._tag === 'err' && (headPatName === 'err' || shortPatName === 'err')) {
+      return patNode.items.length > 1 ? matchPattern(patNode.items[1], targetVal.value, branchEnv) : true;
+    }
+    return false;
+  }
+  const litVal = evalNode(patNode, branchEnv);
+  return (litVal === targetVal || (typeof litVal === 'bigint' && typeof targetVal === 'bigint' && litVal === targetVal) || (typeof litVal === 'bigint' && typeof targetVal === 'number' && litVal == targetVal) || (typeof litVal === 'number' && typeof targetVal === 'bigint' && litVal == targetVal));
+}
+
 function evalNode(node, env = new Map()) {
   if (!node) return null;
   if (node.type === 'int') return node.value;
@@ -545,8 +628,18 @@ function evalNode(node, env = new Map()) {
     if (env.has(node.value)) return env.get(node.value);
     if (node.value === 'true') return true;
     if (node.value === 'false') return false;
-    if (node.value === 'null' || node.value === 'nil' || node.value === '_') return null;
-    throw new Error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${node.value}'`);
+    if (node.value === 'null' || node.value === 'nil' || node.value === '_' || node.value === 'Unit') return null;
+    if (knownBuiltins.has(node.value) && !['if', 'assert', 'refute', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try', 'df', 'fn', 'module', 'dfe', 'dfs', 'case', 'match'].includes(node.value)) {
+      return {
+        _type: 'closure',
+        name: node.value,
+        params: ['a', 'b', 'c'],
+        _isBuiltin: true,
+        builtinName: node.value,
+        env: env
+      };
+    }
+      throw new Error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${node.value}'`);
   }
   if (node.type === 'vec') {
     return node.items.map(it => evalNode(it, env));
@@ -754,11 +847,59 @@ function evalNode(node, env = new Map()) {
       const isTruthy = condVal !== false && condVal !== null && condVal !== undefined;
       if (!isTruthy) {
         const msg = node.items[2] ? evalNode(node.items[2], env) : 'assertion evaluated to false';
-        console.error(`[ASL_ASSERTION_FAILURE]: ${msg}`);
-        process.exit(1);
+        throw new Error(`[ASL_ASSERTION_FAILURE]: ${msg}`);
       }
       assertionCount++;
       return true;
+    }
+
+    // Special forms: refute
+    if (head === 'refute') {
+      let condVal;
+      let raised = false;
+      try {
+        condVal = evalNode(node.items[1], env);
+      } catch (e) {
+        raised = true;
+      }
+      const isTruthy = !raised && condVal !== false && condVal !== null && condVal !== undefined;
+      if (isTruthy) {
+        const msg = node.items[2] ? evalNode(node.items[2], env) : 'refutation evaluated to true';
+        throw new Error(`[ASL_REFUTATION_FAILURE]: ${msg}`);
+      }
+      refutationCount++;
+      return true;
+    }
+
+    // Special forms: case
+    if (head === 'case') {
+      const targetVal = evalNode(node.items[1], env);
+      for (let j = 2; j < node.items.length; j++) {
+        const branch = node.items[j];
+        if (!branch || (branch.type !== 'list' && branch.type !== 'vec') || branch.items.length < 2) continue;
+        const patNode = branch.items[0];
+        let isMatch = false;
+        if (patNode.type === 'null' || (patNode.type === 'sym' && (patNode.value === '_' || patNode.value === 'else' || patNode.value === ':else')) || (patNode.type === 'kw' && patNode.value === 'else')) {
+          isMatch = true;
+        } else {
+          const patVal = evalNode(patNode, env);
+          if (patVal === targetVal) {
+            isMatch = true;
+          } else if ((typeof patVal === 'bigint' && typeof targetVal === 'number') || (typeof patVal === 'number' && typeof targetVal === 'bigint')) {
+            isMatch = patVal == targetVal;
+          } else if (patVal && targetVal && typeof patVal === 'object' && typeof targetVal === 'object') {
+            isMatch = JSON.stringify(patVal) === JSON.stringify(targetVal);
+          }
+        }
+        if (isMatch) {
+          let lastVal = null;
+          for (let k = 1; k < branch.items.length; k++) {
+            lastVal = evalNode(branch.items[k], env);
+          }
+          return lastVal;
+        }
+      }
+      return null;
     }
 
     // Special forms: try
@@ -888,67 +1029,14 @@ function evalNode(node, env = new Map()) {
     }
 
     // Special forms: mt (pattern match)
-    if (head === 'mt') {
+    if (head === 'mt' || head === 'match') {
       const targetVal = evalNode(node.items[1], env);
       for (let j = 2; j < node.items.length; j++) {
         const branch = node.items[j];
         if (!branch || (branch.type !== 'list' && branch.type !== 'vec') || branch.items.length < 2) continue;
         const patNode = branch.items[0];
         const branchEnv = new Map(env);
-        let isMatch = false;
-
-        if (patNode.type === 'null' || (patNode.type === 'sym' && (patNode.value === '_' || patNode.value === 'else' || patNode.value === ':else')) || (patNode.type === 'kw' && patNode.value === 'else')) {
-          isMatch = true;
-        } else if (patNode.type === 'sym') {
-          isMatch = true;
-          branchEnv.set(patNode.value, targetVal);
-        } else if (patNode.type === 'list' || patNode.type === 'vec') {
-          if (patNode.items.length === 0) {
-            isMatch = Array.isArray(targetVal) && targetVal.length === 0;
-          } else {
-            const headPat = patNode.items[0];
-            const headPatName = headPat?.type === 'sym' ? headPat.value : null;
-
-            if (headPatName) {
-              const shortPatName = headPatName.includes('/') ? headPatName.split('/').pop() : headPatName;
-              if (targetVal && typeof targetVal === 'object') {
-                if (targetVal._type === 'variant' && (targetVal._variant === headPatName || targetVal._variant === shortPatName)) {
-                  isMatch = true;
-                  for (let k = 1; k < patNode.items.length; k++) {
-                    const varSym = patNode.items[k]?.value;
-                    if (varSym && varSym !== '_') {
-                      branchEnv.set(varSym, targetVal[`arg${k}`] !== undefined ? targetVal[`arg${k}`] : targetVal.value);
-                    }
-                  }
-                } else if (targetVal._tag === 'some' && (headPatName === 'some' || shortPatName === 'some')) {
-                  isMatch = true;
-                  if (patNode.items[1]?.value && patNode.items[1].value !== '_') {
-                    branchEnv.set(patNode.items[1].value, targetVal.value);
-                  }
-                } else if (targetVal._tag === 'none' && (headPatName === 'none' || shortPatName === 'none')) {
-                  isMatch = true;
-                } else if (targetVal._tag === 'ok' && (headPatName === 'ok' || shortPatName === 'ok')) {
-                  isMatch = true;
-                  if (patNode.items[1]?.value && patNode.items[1].value !== '_') {
-                    branchEnv.set(patNode.items[1].value, targetVal.value);
-                  }
-                } else if (targetVal._tag === 'err' && (headPatName === 'err' || shortPatName === 'err')) {
-                  isMatch = true;
-                  if (patNode.items[1]?.value && patNode.items[1].value !== '_') {
-                    branchEnv.set(patNode.items[1].value, targetVal.value);
-                  }
-                }
-              }
-              if (!isMatch && targetVal === null && (headPatName === 'none' || shortPatName === 'none')) {
-                isMatch = true;
-              }
-            }
-          }
-        } else {
-          const litVal = evalNode(patNode, env);
-          isMatch = (litVal === targetVal);
-        }
-
+        const isMatch = matchPattern(patNode, targetVal, branchEnv);
         if (isMatch) {
           let lastVal = null;
           for (let k = 1; k < branch.items.length; k++) {
@@ -962,7 +1050,21 @@ function evalNode(node, env = new Map()) {
 
     // Normal evaluation of arguments
     const evalArgs = node.items.slice(1).map(it => evalNode(it, env));
+    return evaluateBuiltinFunction(head, evalArgs, env);
+  }
+  return null;
+}
 
+function getMapKey(obj, rawKey) {
+  if (rawKey === null || rawKey === undefined) return '';
+  const k = (typeof rawKey === 'object' && rawKey.value !== undefined) ? String(rawKey.value) : String(rawKey);
+  if (obj && Object.prototype.hasOwnProperty.call(obj, k)) return k;
+  if (k.startsWith(':') && obj && Object.prototype.hasOwnProperty.call(obj, k.slice(1))) return k.slice(1);
+  if (!k.startsWith(':') && obj && Object.prototype.hasOwnProperty.call(obj, ':' + k)) return ':' + k;
+  return k;
+}
+
+function evaluateBuiltinFunction(head, evalArgs, env) {
     // Strict numeric typing for arithmetic: +, -, *, /, mod
     if (head === '+' || head === '-' || head === '*' || head === '/' || head === 'mod') {
       if (evalArgs.length < 2 && head !== '-') {
@@ -1058,9 +1160,10 @@ function evalNode(node, env = new Map()) {
       return { _tag: 'ok', value: null, _silent: true };
     }
 
+
     // Ok / Err / Option builtins
-    if (head === 'ok') return { _tag: 'ok', value: evalArgs[0] };
-    if (head === 'err') return { _tag: 'err', value: evalArgs[0] };
+    if (head === 'ok' || head === 'Ok') return { _tag: 'ok', value: evalArgs[0] };
+    if (head === 'err' || head === 'Err') return { _tag: 'err', value: evalArgs[0] };
     if (head === 'is-ok?') return evalArgs[0]?._tag === 'ok';
     if (head === 'is-err?') return evalArgs[0]?._tag === 'err';
     if (head === 'some') return { _tag: 'some', value: evalArgs[0] };
@@ -1078,6 +1181,9 @@ function evalNode(node, env = new Map()) {
     }
     if (head === 'result-or') {
       return evalArgs[0]?._tag === 'ok' ? evalArgs[0].value : evalArgs[1];
+    }
+    if (head === 'error-or') {
+      return evalArgs[0]?._tag === 'err' ? evalArgs[0].value : evalArgs[1];
     }
     if (head === 'result-map') {
       if (evalArgs[1]?._tag === 'ok') {
@@ -1107,6 +1213,48 @@ function evalNode(node, env = new Map()) {
     // IoError union constructors
     if (head === 'already-exists' || head === 'interrupted' || head === 'invalid-path' || head === 'not-found' || head === 'other' || head === 'permission-denied') {
       return { _tag: 'io-error', kind: head };
+    }
+    if (head === 'file-read' || head === 'read-file') {
+      const p = String(evalArgs[0] || '');
+      try {
+        if (fs.existsSync(p)) {
+          const c = fs.readFileSync(p, 'utf8');
+          if (c !== undefined) {
+            return { _tag: 'ok', value: c };
+          }
+        }
+        return { _tag: 'err', value: { _tag: 'io-error', kind: 'not-found' } };
+      } catch (e) {
+        return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
+      }
+    }
+    if (head === 'file-write') {
+      const p = String(evalArgs[0] || '');
+      const data = String(evalArgs[1] || '');
+      try {
+        fs.writeFileSync(p, data, 'utf8');
+        return { _tag: 'ok', value: null };
+      } catch (e) {
+        return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
+      }
+    }
+    if (head === 'file-exists?') {
+      const p = String(evalArgs[0] || '');
+      try {
+        return fs.existsSync(p);
+      } catch (e) {
+        return false;
+      }
+    }
+    if (head === 'file-append') {
+      const p = String(evalArgs[0] || '');
+      const data = String(evalArgs[1] || '');
+      try {
+        fs.appendFileSync(p, data, 'utf8');
+        return { _tag: 'ok', value: null };
+      } catch (e) {
+        return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
+      }
     }
 
     // List and Map builtins
@@ -1139,7 +1287,7 @@ function evalNode(node, env = new Map()) {
       if (arr.length > 0) return { _tag: 'some', value: arr.slice(1) };
       return { _tag: 'none', value: null };
     }
-    if (head === 'rest') {
+    if (head === 'rest' || head === 'tail') {
       let arr = evalArgs[0];
       if (arr && arr._tag === 'some' && Array.isArray(arr.value)) arr = arr.value;
       if (!Array.isArray(arr)) arr = [];
@@ -1260,7 +1408,8 @@ function evalNode(node, env = new Map()) {
     }
     if (head === 'map-has?') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
-      return Object.prototype.hasOwnProperty.call(obj, String(evalArgs[1]));
+      const key = getMapKey(obj, evalArgs[1]);
+      return Object.prototype.hasOwnProperty.call(obj, key);
     }
     if (head === 'pair' || head === 'tuple') {
       const p = [...evalArgs];
@@ -1290,7 +1439,7 @@ function evalNode(node, env = new Map()) {
     }
     if (head === 'map-remove') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? { ...evalArgs[0] } : {};
-      const key = String(evalArgs[1]);
+      const key = getMapKey(obj, evalArgs[1]);
       delete obj[key];
       return obj;
     }
@@ -1299,12 +1448,13 @@ function evalNode(node, env = new Map()) {
     }
     if (head === 'map-set') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? { ...evalArgs[0] } : {};
-      obj[String(evalArgs[1])] = evalArgs[2];
+      const key = getMapKey(obj, evalArgs[1]);
+      obj[key] = evalArgs[2];
       return obj;
     }
     if (head === 'map-get') {
       const obj = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
-      const key = String(evalArgs[1]);
+      const key = getMapKey(obj, evalArgs[1]);
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
         return { _tag: 'some', value: obj[key] };
       }
@@ -1313,8 +1463,10 @@ function evalNode(node, env = new Map()) {
 
     // Comparison builtins
     if (head === '=' || head === '==' || head === 'string-equals?') {
-      const a = evalArgs[0];
-      const b = evalArgs[1];
+      let a = evalArgs[0];
+      let b = evalArgs[1];
+      if (a && typeof a === 'object' && a._tag === 'some' && (b === null || typeof b !== 'object' || b._tag !== 'some')) a = a.value;
+      if (b && typeof b === 'object' && b._tag === 'some' && (a === null || typeof a !== 'object' || a._tag !== 'some')) b = b.value;
       if (a === b) return true;
       if ((typeof a === 'bigint' && typeof b === 'number') || (typeof a === 'number' && typeof b === 'bigint')) {
         return a == b;
@@ -1358,9 +1510,21 @@ function evalNode(node, env = new Map()) {
     if (head === 'str') return evalArgs.map(formatOutput).join('');
     if (head === 'str-concat') return evalArgs.join('');
     if (head === 'str-len' || head === 'string-length') return String(evalArgs[0] || '').length;
-    if (head === 'str-contains?' || head === 'string-contains?') return String(evalArgs[0] || '').includes(String(evalArgs[1] || ''));
-    if (head === 'string-starts-with?') return String(evalArgs[0] || '').startsWith(String(evalArgs[1] || ''));
-    if (head === 'string-ends-with?') return String(evalArgs[0] || '').endsWith(String(evalArgs[1] || ''));
+    if (head === 'str-contains?' || head === 'string-contains?') {
+      let target = evalArgs[0];
+      if (target && typeof target === 'object' && target._tag === 'some') target = target.value;
+      return String(target || '').includes(String(evalArgs[1] || ''));
+    }
+    if (head === 'string-starts-with?') {
+      let target = evalArgs[0];
+      if (target && typeof target === 'object' && target._tag === 'some') target = target.value;
+      return String(target || '').startsWith(String(evalArgs[1] || ''));
+    }
+    if (head === 'string-ends-with?') {
+      let target = evalArgs[0];
+      if (target && typeof target === 'object' && target._tag === 'some') target = target.value;
+      return String(target || '').endsWith(String(evalArgs[1] || ''));
+    }
     if (head === 'string-split') return String(evalArgs[0] || '').split(String(evalArgs[1] || ''));
     if (head === 'string-join') {
       const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : (Array.isArray(evalArgs[1]) ? evalArgs[1] : []);
@@ -1425,10 +1589,216 @@ function evalNode(node, env = new Map()) {
       return { _tag: 'some', value: s.slice(start, end) };
     }
 
+    // Numbers & conversions
+    if (head === 'div-i64') {
+      const a = evalArgs[0];
+      const b = evalArgs[1];
+      if ((typeof b === 'bigint' && b === 0n) || (typeof b === 'number' && b === 0)) {
+        console.error("ERR_DIVISION_BY_ZERO: division by zero");
+        process.exit(1);
+      }
+      return (typeof a === 'bigint' && typeof b === 'bigint') ? a / b : BigInt(Math.trunc(Number(a) / Number(b)));
+    }
+    if (head === 'div-f64') {
+      const a = evalArgs[0];
+      const b = evalArgs[1];
+      if ((typeof b === 'bigint' && b === 0n) || (typeof b === 'number' && b === 0)) {
+        console.error("ERR_DIVISION_BY_ZERO: division by zero");
+        process.exit(1);
+      }
+      return Number(a) / Number(b);
+    }
+    if (head === 'sqrt') {
+      return Math.sqrt(Number(evalArgs[0]));
+    }
+    if (head === 'as-i64') {
+      const a = evalArgs[0];
+      if (typeof a === 'bigint') return a;
+      if (typeof a === 'number') return BigInt(Math.trunc(a));
+      if (typeof a === 'string') return BigInt(a);
+      return 0n;
+    }
+    if (head === 'as-f64') {
+      return Number(evalArgs[0]);
+    }
+    if (head === 'float64-from-int64' || head === 'int64-to-float64' || head === 'float-from-int64' || head === 'float') {
+      return Number(evalArgs[0]);
+    }
+    if (head === 'int64-from-float' || head === 'float64-to-int64') {
+      return BigInt(Math.trunc(Number(evalArgs[0])));
+    }
+    if (head === 'int-to-str' || head === 'string-from-int64' || head === 'string-from-int' || head === 'int-to-string') {
+      return String(evalArgs[0] ?? '');
+    }
+
+    // Strings
+    if (head === 'string-to-lowercase' || head === 'string-lower' || head === 'string-to-lower') {
+      return String(evalArgs[0] || '').toLowerCase();
+    }
+    if (head === 'string-trim-left') {
+      return String(evalArgs[0] || '').trimStart();
+    }
+    if (head === 'string-count-char') {
+      const s = String(evalArgs[0] || '');
+      const ch = String(evalArgs[1] || '');
+      let c = 0;
+      for (let k = 0; k < s.length; k++) if (s[k] === ch) c++;
+      return BigInt(c);
+    }
+    if (head === 'string-repeat') {
+      const s = String(evalArgs[0] || '');
+      const n = Math.max(0, Number(evalArgs[1]));
+      return s.repeat(n);
+    }
+    if (head === 'string-append') {
+      return evalArgs.map(formatOutput).join('');
+    }
+    if (head === 'join') {
+      const sep = String(evalArgs[0] ?? '');
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return arr.map(formatOutput).join(sep);
+    }
+
+    // Pairs and Tuples
+    if (head === 'fst' || head === 'pair-first' || head === 'tuple-first' || head === 'tuple2-first') {
+      let t = evalArgs[0];
+      if (t && typeof t === 'object' && t._tag === 'some') t = t.value;
+      return Array.isArray(t) ? t[0] : (t?.first ?? null);
+    }
+    if (head === 'snd' || head === 'pair-second' || head === 'tuple-second' || head === 'tuple2-second') {
+      let t = evalArgs[0];
+      if (t && typeof t === 'object' && t._tag === 'some') t = t.value;
+      return Array.isArray(t) ? t[1] : (t?.second ?? null);
+    }
+    if (head === 'second' || head === 'list-second') {
+      let t = evalArgs[0];
+      if (t && typeof t === 'object' && t._tag === 'some') t = t.value;
+      return Array.isArray(t) ? (t.length > 1 ? t[1] : null) : (t?.second ?? null);
+    }
+
+    // Lists
+    if (head === 'list-first' || head === 'head') {
+      let arr = evalArgs[0];
+      if (arr && arr._tag === 'some' && Array.isArray(arr.value)) arr = arr.value;
+      if (!Array.isArray(arr)) arr = [];
+      return arr.length > 0 ? arr[0] : null;
+    }
+    if (head === 'list-last') {
+      let arr = evalArgs[0];
+      if (arr && arr._tag === 'some' && Array.isArray(arr.value)) arr = arr.value;
+      if (!Array.isArray(arr)) arr = [];
+      if (arr.length > 0) return { _tag: 'some', value: arr[arr.length - 1] };
+      return { _tag: 'none', value: null };
+    }
+    if (head === 'list-take') {
+      let arr = evalArgs[0];
+      if (arr && arr._tag === 'some' && Array.isArray(arr.value)) arr = arr.value;
+      if (!Array.isArray(arr)) arr = [];
+      const n = Math.max(0, Number(evalArgs[1]));
+      return arr.slice(0, n);
+    }
+    if (head === 'range' || head === 'list-range') {
+      const s = BigInt(evalArgs[0]);
+      const e = BigInt(evalArgs[1]);
+      const res = [];
+      for (let v = s; v < e; v++) res.push(v);
+      return res;
+    }
+    if (head === 'fold' || head === 'foldl' || head === 'list-fold' || head === 'fold-left') {
+      const fn = evalArgs[0];
+      let acc = evalArgs[1];
+      const arr = Array.isArray(evalArgs[2]) ? evalArgs[2] : [];
+      for (const it of arr) {
+        acc = (fn && fn._type === 'closure') ? invokeClosure(fn, [acc, it]) : (typeof fn === 'function' ? fn(acc, it) : acc);
+      }
+      return acc;
+    }
+    if (head === 'map' || head === 'list-map') {
+      const fn = evalArgs[0];
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return arr.map(it => (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it));
+    }
+    if (head === 'filter' || head === 'list-filter') {
+      const fn = evalArgs[0];
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      return arr.filter(it => {
+        const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it);
+        return res !== false && res !== null && res !== undefined;
+      });
+    }
+    if (head === 'list-any?') {
+      const fn = evalArgs[0];
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      for (const it of arr) {
+        const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it);
+        if (res !== false && res !== null && res !== undefined) return true;
+      }
+      return false;
+    }
+    if (head === 'all') {
+      const fn = evalArgs[0];
+      const arr = Array.isArray(evalArgs[1]) ? evalArgs[1] : [];
+      for (const it of arr) {
+        const res = (fn && fn._type === 'closure') ? invokeClosure(fn, [it]) : (typeof fn === 'function' ? fn(it) : it);
+        if (res === false || res === null || res === undefined) return false;
+      }
+      return true;
+    }
+    if (head === 'list-reverse' || head === 'reverse') {
+      const arr = Array.isArray(evalArgs[0]) ? [...evalArgs[0]] : [];
+      return arr.reverse();
+    }
+    if (head === 'list-length' || head === 'length' || head === 'list-len' || head === 'len') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return BigInt(arr.length);
+    }
+    if (head === 'count') {
+      const arg = evalArgs[0];
+      if (Array.isArray(arg)) return BigInt(arg.length);
+      if (typeof arg === 'string') return BigInt(arg.length);
+      if (arg && typeof arg === 'object') return BigInt(Object.keys(arg).length);
+      return 0n;
+    }
+    if (head === 'append' || head === 'append-item') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return [...arr, evalArgs[1]];
+    }
+    if (head === 'enumerate' || head === 'list-indexed') {
+      const arr = Array.isArray(evalArgs[0]) ? evalArgs[0] : [];
+      return arr.map((item, idx) => {
+        const t = [BigInt(idx), item];
+        t.first = BigInt(idx);
+        t.second = item;
+        return t;
+      });
+    }
+
+    // Option and Map
+    if (head === 'nil?') {
+      return evalArgs[0] === null || evalArgs[0] === undefined;
+    }
+    if (head === 'map-merge') {
+      const m1 = evalArgs[0] && typeof evalArgs[0] === 'object' ? evalArgs[0] : {};
+      const m2 = evalArgs[1] && typeof evalArgs[1] === 'object' ? evalArgs[1] : {};
+      return { ...m1, ...m2 };
+    }
+    if (head === 'get') {
+      const target = evalArgs[0];
+      const key = evalArgs[1];
+      if (Array.isArray(target)) {
+        const idx = Number(key);
+        return idx >= 0 && idx < target.length ? target[idx] : null;
+      }
+      if (target && typeof target === 'object') {
+        const k = (key && typeof key === 'object' && key.value !== undefined) ? key.value : String(key);
+        return target[k] ?? null;
+      }
+      return null;
+    }
+
     return null;
-  }
-  return null;
 }
+
 
 function formatOutput(val) {
   if (val === null || val === undefined) return 'null';
@@ -1623,51 +1993,217 @@ if (cleanArgs[0] === '--check' && cleanArgs[1]) {
   }
 }
 
-function resolveModulePath(currentFile, modName) {
-  const dir = path.dirname(currentFile);
-  const cleanMod = modName.replace(/\.asl$/, '');
-  const wsRoot = process.cwd();
-  const variants = [cleanMod, cleanMod.replace(/-/g, '_'), cleanMod.replace(/_/g, '-')];
-  if (cleanMod === 'core') variants.push('sql');
+let moduleNameIndex = null;
 
+function getWorkspaceAslFiles(wsRoot) {
+  const seen = new Set();
+  const fileList = [];
+  const d81Dir = path.resolve(wsRoot, 'tests/acceptance/d81').replace(/\\/g, '/');
+
+  function isAcceptanceD81(p) {
+    const norm = p.replace(/\\/g, '/');
+    return norm === d81Dir || norm.startsWith(d81Dir + '/');
+  }
+
+  function isD81Ancestor(p) {
+    const norm = p.replace(/\\/g, '/');
+    return d81Dir === norm || d81Dir.startsWith(norm + '/');
+  }
+
+  if (typeof fs !== 'undefined' && typeof fs.readdirSync === 'function') {
+    function scanDir(dir) {
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (e) {
+        return;
+      }
+      if (!Array.isArray(entries)) return;
+      for (const entry of entries) {
+        const name = typeof entry === 'string' ? entry : (entry ? entry.name : null);
+        if (typeof name !== 'string' || !name) continue;
+        if (name.startsWith('.') || name === 'node_modules') continue;
+        const isDir = typeof entry?.isDirectory === 'function' ? entry.isDirectory() : false;
+        const isF = typeof entry?.isFile === 'function' ? entry.isFile() : (!isDir && name.endsWith('.asl'));
+        const full = path.join(dir, name);
+        const normFull = full.replace(/\\/g, '/');
+
+        if (isDir) {
+          if (name === 'corpus' || name === 'asl-src') continue;
+          if (name === 'tests' || name === 'test') {
+            if (!isD81Ancestor(full) && !isAcceptanceD81(full)) {
+              continue;
+            }
+          }
+          if (normFull.includes('/tests/') && !isD81Ancestor(full) && !isAcceptanceD81(full)) {
+            continue;
+          }
+          scanDir(full);
+        } else if (isF && name.endsWith('.asl')) {
+          if (name.endsWith('_test.asl') || name.endsWith('-test.asl') || name.startsWith('test_')) {
+            continue;
+          }
+          if (!seen.has(full)) {
+            seen.add(full);
+            fileList.push(full);
+          }
+        }
+      }
+    }
+    scanDir(wsRoot);
+  }
+  if (typeof __EMBEDDED_ASL_FILES__ !== 'undefined' && Array.isArray(__EMBEDDED_ASL_FILES__)) {
+    for (const f of __EMBEDDED_ASL_FILES__) {
+      const full = path.resolve(wsRoot, f);
+      const name = path.basename(full);
+      if (name.endsWith('_test.asl') || name.endsWith('-test.asl') || name.startsWith('test_')) continue;
+      const norm = full.replace(/\\/g, '/');
+      if (norm.includes('/corpus/') || norm.includes('/asl-src/')) continue;
+      if (norm.includes('/tests/') && !isAcceptanceD81(norm)) continue;
+      if (!seen.has(full)) {
+        seen.add(full);
+        fileList.push(full);
+      }
+    }
+  }
+  return fileList;
+}
+
+function buildModuleNameIndex(startDir) {
+  if (moduleNameIndex !== null) return moduleNameIndex;
+  moduleNameIndex = new Map();
+
+  let wsRoot = null;
+  if (typeof globalThis !== 'undefined' && globalThis.__ASL_WORKSPACE_ROOT__) {
+    wsRoot = path.resolve(globalThis.__ASL_WORKSPACE_ROOT__);
+  } else if (typeof process !== 'undefined' && process.env && process.env.ASL_WORKSPACE_ROOT) {
+    wsRoot = path.resolve(process.env.ASL_WORKSPACE_ROOT);
+  }
+
+  if (!wsRoot) {
+    let curr = path.resolve(startDir || (typeof process !== 'undefined' && process.cwd ? process.cwd() : '.'));
+    const home = typeof process !== 'undefined' && process.env ? process.env.HOME : null;
+    let topmostRoot = null;
+    while (curr && curr !== path.dirname(curr)) {
+      let isMatch = false;
+      if (fs.existsSync(path.join(curr, '.gitmodules')) ||
+          fs.existsSync(path.join(curr, '.asl.config.asn'))) {
+        isMatch = true;
+      } else if ((!home || curr !== home) &&
+                 (fs.existsSync(path.join(curr, '.asl')) && fs.existsSync(path.join(curr, '.asl', 'mem')))) {
+        isMatch = true;
+      }
+      if (isMatch) {
+        topmostRoot = curr;
+      }
+      curr = path.dirname(curr);
+    }
+    wsRoot = topmostRoot || path.resolve(startDir || (typeof process !== 'undefined' && process.cwd ? process.cwd() : '.'));
+  }
+
+  const files = getWorkspaceAslFiles(wsRoot);
+  for (const full of files) {
+    try {
+      if (!fs.existsSync(full)) continue;
+      const code = fs.readFileSync(full, 'utf8');
+      if (!code) continue;
+      const match = code.slice(0, 4096).match(/\(\s*module\s+([^\s()]+)/);
+      if (match) {
+        const modName = match[1];
+        const normFull = full.replace(/\\/g, '/');
+        if (modName === 'asl-sh/process') {
+          if (normFull.endsWith('asl/packages/asl-sh/src/process.asl') || !moduleNameIndex.has(modName)) {
+            moduleNameIndex.set(modName, full);
+          }
+        } else if (modName === 'bench/histogram') {
+          if (normFull.endsWith('asl/bench/algo/histogram.asl') || !moduleNameIndex.has(modName)) {
+            moduleNameIndex.set(modName, full);
+          }
+        } else if (!moduleNameIndex.has(modName)) {
+          moduleNameIndex.set(modName, full);
+        }
+      }
+    } catch (e) {}
+  }
+
+  return moduleNameIndex;
+}
+
+function resolveModulePath(currentFile, modName) {
+  // Priority 1: Relative imports
+  if (modName.startsWith('./') || modName.startsWith('../')) {
+    const p = path.resolve(path.dirname(currentFile), modName.endsWith('.asl') ? modName : modName + '.asl');
+    return fs.existsSync(p) ? p : null;
+  }
+
+  const cleanMod = modName.replace(/\.asl$/, '');
+  const variants = [
+    cleanMod,
+    cleanMod.replace(/-/g, '_'),
+    cleanMod.replace(/_/g, '-'),
+    modName
+  ];
+
+  // Priority 2: Direct local candidate checks in the importing file's directory and sibling src/
+  const dir = path.dirname(currentFile);
   for (const v of variants) {
     const candidates = [
       path.join(dir, v + '.asl'),
       path.join(dir, '..', 'src', v + '.asl'),
-      path.join(dir, '..', 'src', 'core', v + '.asl'),
-      path.join(dir, '..', 'src', 'core', 'sql.asl'),
-      path.join(dir, '..', 'src', 'data', 'blog', v + '.asl'),
       path.join(dir, 'src', v + '.asl'),
-      path.join(dir, 'src', 'core', v + '.asl'),
-      path.join(wsRoot, 'asl', 'web', 'src', 'data', 'blog', v + '.asl'),
-      path.join(wsRoot, v + '.asl'),
-      path.join(wsRoot, 'harness', 'src', v + '.asl'),
-      path.join(wsRoot, 'gsa', 'src', v + '.asl'),
-      path.join(wsRoot, 'agent-bus', 'src', v + '.asl'),
-      path.join(wsRoot, 'asl-contracts', 'src', v + '.asl'),
-      path.join(wsRoot, 'asl', 'packages', v, 'src', v + '.asl'),
-      path.join(wsRoot, 'asl', 'packages', 'asl-' + v, 'src', v + '.asl'),
-      path.join(wsRoot, 'asl', 'packages', 'asl-' + v, 'src', 'core', v + '.asl'),
-      path.join(wsRoot, 'asl', 'packages', 'asl-sql', 'src', 'core', v + '.asl'),
-      path.join(wsRoot, 'asl', 'packages', 'asl-parser', 'src', v + '.asl'),
-      path.join(wsRoot, 'asl', 'packages', 'asl-checker', 'src', v + '.asl'),
-      path.join(wsRoot, 'mem', 'src', v + '.asl'),
-      path.join(wsRoot, 'intel', 'src', v + '.asl'),
-      path.join(wsRoot, 'vdom', 'src', v + '.asl'),
-      path.join(wsRoot, 'pack', 'src', v + '.asl'),
-      path.join(wsRoot, 'voice', 'src', v + '.asl'),
-      path.join(wsRoot, 'crawler', 'src', v + '.asl')
+      path.join(dir, v)
     ];
     for (const c of candidates) {
-      if (fs.existsSync(c)) return c;
+      if (fs.existsSync(c)) return path.resolve(c);
     }
   }
+
+  const index = buildModuleNameIndex(path.dirname(currentFile));
+
+  // Priority 3: Exact match in index for variants
+  for (const v of variants) {
+    if (index.has(v)) {
+      const entry = index.get(v);
+      const target = Array.isArray(entry) ? entry[0] : entry;
+      if (target && fs.existsSync(target)) return path.resolve(target);
+    }
+  }
+
+  // Priority 4: Short-name matching from index.entries()
+  const matches = [];
+  for (const [declName, entry] of index.entries()) {
+    const parts = declName.split('/');
+    const shortName = parts[parts.length - 1];
+    if (variants.includes(shortName)) {
+      const target = Array.isArray(entry) ? entry[0] : entry;
+      if (target && fs.existsSync(target)) {
+        matches.push(path.resolve(target));
+      }
+    }
+  }
+
+  if (matches.length > 0) {
+    const curResolved = path.resolve(currentFile);
+    let curDir = path.dirname(curResolved);
+    let testDir = curDir;
+    while (testDir && testDir !== path.dirname(testDir)) {
+      for (const m of matches) {
+        if (m.startsWith(testDir + path.sep) || m.startsWith(testDir + '/')) {
+          return m;
+        }
+      }
+      testDir = path.dirname(testDir);
+    }
+    return matches[0];
+  }
+
   return null;
 }
 
 function loadModuleImports(forms, filePath, env, loading = new Set()) {
   if (loading.has(filePath)) return;
   loading.add(filePath);
+  const seenAliases = new Set();
   for (const form of forms) {
     if (!form || form.type !== 'list') continue;
     const head = form.items[0]?.value;
@@ -1679,31 +2215,51 @@ function loadModuleImports(forms, filePath, env, loading = new Set()) {
             for (const imp of importsList.items) {
               if (imp && (imp.type === 'list' || imp.type === 'vec') && imp.items.length >= 1) {
                 const modName = imp.items[0]?.value;
+                const impLine = imp.line || (imp.items && imp.items[0]?.line) || 1;
                 let alias = null;
                 for (let k = 1; k < imp.items.length; k++) {
                   if (imp.items[k]?.type === 'kw' && imp.items[k].value === 'a') {
                     alias = imp.items[k + 1]?.value;
                   }
                 }
-                const resolved = resolveModulePath(filePath, modName);
-                if (resolved && fs.existsSync(resolved)) {
-                  let importedEnv;
-                  if (moduleCache.has(resolved)) {
-                    importedEnv = moduleCache.get(resolved);
-                  } else {
-                    const importedCode = fs.readFileSync(resolved, 'utf8');
-                    const importedForms = parseAllSExprs(importedCode);
-                    importedEnv = new Map();
-                    loadModuleImports(importedForms, resolved, importedEnv, new Set(loading));
-                    for (const f of importedForms) {
-                      evalNode(f, importedEnv);
-                    }
-                    moduleCache.set(resolved, importedEnv);
+                if (!modName) {
+                  throw new Error(`ERR_UNRESOLVED_IMPORT: invalid import in '${filePath}:${impLine}'`);
+                }
+                if (alias) {
+                  if (seenAliases.has(alias)) {
+                    throw new Error(`ERR_ALIAS_COLLISION: duplicate import alias '${alias}' in '${filePath}:${impLine}'`);
                   }
-                  for (const [k, v] of importedEnv.entries()) {
-                    if (alias) {
-                      env.set(alias + '/' + k, v);
+                  seenAliases.add(alias);
+                }
+                const resolved = resolveModulePath(filePath, modName);
+                if (!resolved || !fs.existsSync(resolved)) {
+                  const candidate = modName.startsWith('.')
+                    ? path.resolve(path.dirname(filePath), modName.endsWith('.asl') ? modName : modName + '.asl')
+                    : path.resolve(path.dirname(filePath), modName + '.asl');
+                  throw new Error(`ERR_UNRESOLVED_IMPORT: module '${modName}' imported in '${filePath}:${impLine}' could not be resolved (searched candidate: '${candidate}')`);
+                }
+                let importedEnv;
+                if (moduleCache.has(resolved)) {
+                  importedEnv = moduleCache.get(resolved);
+                } else {
+                  const importedCode = fs.readFileSync(resolved, 'utf8');
+                  const importedForms = parseAllSExprs(importedCode);
+                  importedEnv = new Map();
+                  importedEnv.set('none', { _tag: 'none', value: null });
+                  importedEnv.set('nil', null);
+                  loadModuleImports(importedForms, resolved, importedEnv, new Set(loading));
+                  for (const f of importedForms) {
+                    evalNode(f, importedEnv);
+                  }
+                  moduleCache.set(resolved, importedEnv);
+                }
+                for (const [k, v] of importedEnv.entries()) {
+                  if (alias) {
+                    env.set(alias + '/' + k, v);
+                    if (k.startsWith(alias + '-') || k.startsWith(alias + '/')) {
+                      env.set(k, v);
                     }
+                  } else {
                     env.set(k, v);
                   }
                 }
@@ -1722,7 +2278,10 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
   try {
     const forms = parseAllSExprs(code);
     const rootEnv = new Map();
+    rootEnv.set('none', { _tag: 'none', value: null });
+    rootEnv.set('nil', null);
     loadModuleImports(forms, filePath, rootEnv);
+
     let lastResult = null;
     for (const form of forms) {
       lastResult = evalNode(form, rootEnv);
@@ -1730,27 +2289,51 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
     if (rootEnv.has('run-tests')) {
       const runTestsFn = rootEnv.get('run-tests');
       if (runTestsFn && runTestsFn._type === 'closure') {
-        lastResult = invokeClosure(runTestsFn, []);
+        const res = invokeClosure(runTestsFn, []);
+        if (res !== true) {
+          console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'run-tests' returned ${formatOutput(res)} instead of true`);
+          process.exit(1);
+        }
+        lastResult = res;
       }
     } else if (rootEnv.has('run-wire-tests')) {
       const runWireFn = rootEnv.get('run-wire-tests');
       if (runWireFn && runWireFn._type === 'closure') {
-        lastResult = invokeClosure(runWireFn, []);
+        const res = invokeClosure(runWireFn, []);
+        if (res !== true) {
+          console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'run-wire-tests' returned ${formatOutput(res)} instead of true`);
+          process.exit(1);
+        }
+        lastResult = res;
       }
     } else if (rootEnv.has('main')) {
       const mainFn = rootEnv.get('main');
       if (mainFn && mainFn._type === 'closure') {
-        lastResult = invokeClosure(mainFn, []);
+        const res = invokeClosure(mainFn, []);
+        if (res !== true && res?._tag !== 'ok') {
+          console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'main' returned ${formatOutput(res)} instead of true`);
+          process.exit(1);
+        }
+        lastResult = res;
       }
     } else {
       for (const [fnName, fnVal] of rootEnv.entries()) {
-        if ((fnName.startsWith('test-') || fnName.startsWith('Test')) && fnVal && fnVal._type === 'closure' && fnVal.params.length === 0) {
-          invokeClosure(fnVal, []);
+        if ((fnName.startsWith('test-') || fnName.startsWith('Test')) && fnVal && fnVal._type === 'closure' && !fnVal._isStructConstructor && !fnVal._isEnumVariant && fnVal.params.length === 0) {
+          const res = invokeClosure(fnVal, []);
+          if (res !== true) {
+            console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry '${fnName}' returned ${formatOutput(res)} instead of true`);
+            process.exit(1);
+          }
+          lastResult = res;
         }
       }
     }
-    if (assertionCount > 0) {
-      console.log(`✓ ${filePath}: ${assertionCount} assertion(s) executed and recorded cleanly.`);
+    const totalChecks = assertionCount + refutationCount;
+    if (totalChecks > 0) {
+      let parts = [];
+      if (assertionCount > 0) parts.push(`${assertionCount} assertion(s)`);
+      if (refutationCount > 0) parts.push(`${refutationCount} refutation(s)`);
+      console.log(`✓ ${filePath}: ${parts.join(', ')} executed and recorded cleanly.`);
     } else if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {
       console.log(formatOutput(lastResult));
     }

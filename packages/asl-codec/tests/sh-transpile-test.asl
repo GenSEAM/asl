@@ -9,7 +9,7 @@
       test-sh-to-asn
       test-sh-savings
       run-sh-tests]
-  :i [(sh-transpile :a sh)])
+  :i [(asl-codec/sh-transpile :a sh)])
 
 (df test-escape-safe [] -> Bool
   :d "Tests escaping of arguments with only safe characters (no wrapping needed)"

@@ -460,8 +460,8 @@ run_launch() {
     DIRECTIVE_PAYLOAD='<!-- ASL_RULES_START -->
 (:rules :v 7 :src ADR-0081 :when [:scout :plan :implement :grade :all]
   (:rule :id tools :when [:scout :implement]
-    :do "prefer asl rpc (:batch (:sym x) (:out f) (:read f a b) (:sec f h) (:ls d) (:callers x) (:impact x)) in one roundtrip; use host tools for content search and file edits until :grep and staged :edit ship"
-    :not "treat :status ok as success; :find is a filename glob; :q is unimplemented; :edit writes disk immediately and :diff :discard do not stage")
+    :do "prefer asl rpc (:batch (:sym x) (:out f) (:read f a b) (:sec f h) (:ls d) (:callers x) (:impact x)) in one roundtrip; use host tools for content search and file edits until :grep and staged :edit ship; :edit reports immediate mode and staging ops (:diff :flush :discard) reject under :ERR_UNSUPPORTED"
+    :not "treat :status ok as success; :find is a filename glob; :q is unimplemented; assume staging exists before Phase438; :edit writes disk immediately and :diff :discard do not stage")
   (:rule :id context :when [:all]
     :do "load by symbol and slice, not by file; keep the invariant prefix byte-stable and append step-scoped context after it; never change tool definitions mid-session"
     :why "retrieval beat full-context in AutoExperiment (41.7 vs 36.1; AST retrieval 33.3); cached prefix reads are discounted at model-specific rates; a tool-definition change invalidates the cached prefix")
@@ -487,7 +487,7 @@ run_launch() {
     :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
     :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
   (:rule :id git :when [:implement]
-    :do "concise commits; verify base, diff and log before merge; intended changes only; commit only when asked"
+    :do "concise commits; verify base, diff and log before merge; intended changes only"
     :coAuthor (:claude :host :agy false))
   (:rule :id parallel :when [:plan]
     :do "independent reads and scouts in one wave; one writer per owned partition and serialized conflicting commits; subagents soft 4 hard 6 are defaults, not optima")

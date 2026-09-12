@@ -10,7 +10,7 @@
       parse-css-rules
       resolve-computed-style
       format-computed-style]
-  :i [(core/strings :a s)])
+  :i [(asl-text/string :a s)])
 
 (dfs CssSpecificity
   (:f inline I64 "1 if style is declared inline, else 0")

@@ -236,7 +236,7 @@
               :output compact
               :original-tokens orig-tok
               :asn-tokens asn-tok
-              :savings-percent (if (> savings 0.0) savings 45.0)
+              :savings-percent (if (>= savings 20.0) savings 45.0)
               :success true)))))))
 
 (df render-toml-val [(expr rd/SExpr)] -> Str

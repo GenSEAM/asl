@@ -7,7 +7,7 @@
       test-estimate-doc-token-savings
       run-doc-engine-tests
       run-tests]
-  :i [(doc-engine :a de)])
+  :i [(asl-codec/doc-engine :a de)])
 
 (df test-create-doc-module [] -> Bool
   :d "Tests initializing a DocModule with symbols and invariants."

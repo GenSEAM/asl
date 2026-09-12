@@ -62,7 +62,6 @@
 (df count-positive-assertions [(body Str)] -> I64
   :d "Counts positive assertions in a test body."
   (let [(pos-candidates (list "(assert (= "
-                              "(assert (="
                               "(assert (> "
                               "(assert (< "
                               "(assert (>= "
@@ -104,7 +103,7 @@
 (df calculate-coverage-pct [(qualified I64) (total I64)] -> I64
   :d "Calculates integer coverage percentage."
   (if (<= total 0)
-    100
+    0
     (/ (* qualified 100) total)))
 
 (df summarize-coverage [(results (List TestPolarityResult)) (target-pct I64)] -> CoverageSummary
