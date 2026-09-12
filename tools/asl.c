@@ -6146,39 +6146,162 @@ static int enforce_claude_strip_dangerous_permissions(const char *arg) {
     return 0;
 }
 
+static char *resolve_client_binary(const char *client, const char *ws_root) {
+    const char *home = getenv("HOME");
+    char path[1024];
+
+    if (strcmp(client, "agy") == 0) {
+        if (home) {
+            snprintf(path, sizeof(path), "%s/.local/bin/agy", home);
+            if (access(path, X_OK) == 0) return strdup(path);
+            snprintf(path, sizeof(path), "%s/.gemini/antigravity-cli/bin/agy", home);
+            if (access(path, X_OK) == 0) return strdup(path);
+            snprintf(path, sizeof(path), "%s/.gemini/bin/agy", home);
+            if (access(path, X_OK) == 0) return strdup(path);
+        }
+        if (access("/usr/local/bin/agy", X_OK) == 0) return strdup("/usr/local/bin/agy");
+        if (access("/opt/homebrew/bin/agy", X_OK) == 0) return strdup("/opt/homebrew/bin/agy");
+    } else if (strcmp(client, "claude") == 0) {
+        if (access("/usr/local/bin/claude", X_OK) == 0) return strdup("/usr/local/bin/claude");
+        if (access("/opt/homebrew/bin/claude", X_OK) == 0) return strdup("/opt/homebrew/bin/claude");
+        if (home) {
+            snprintf(path, sizeof(path), "%s/.local/bin/claude", home);
+            if (access(path, X_OK) == 0) return strdup(path);
+        }
+    } else if (strcmp(client, "codex") == 0) {
+        if (home) {
+            snprintf(path, sizeof(path), "%s/.local/bin/codex", home);
+            if (access(path, X_OK) == 0) return strdup(path);
+        }
+        if (access("/usr/local/bin/codex", X_OK) == 0) return strdup("/usr/local/bin/codex");
+        if (access("/opt/homebrew/bin/codex", X_OK) == 0) return strdup("/opt/homebrew/bin/codex");
+    } else if (strcmp(client, "addie") == 0 || strcmp(client, "eddie") == 0) {
+        if (ws_root) {
+            snprintf(path, sizeof(path), "%s/bin/%s", ws_root, client);
+            if (access(path, X_OK) == 0) return strdup(path);
+            snprintf(path, sizeof(path), "%s/asl/bin/%s", ws_root, client);
+            if (access(path, X_OK) == 0) return strdup(path);
+        }
+    }
+
+    const char *env_path = getenv("PATH");
+    if (env_path) {
+        char *path_copy = strdup(env_path);
+        if (path_copy) {
+            char *dir = strtok(path_copy, ":");
+            while (dir) {
+                snprintf(path, sizeof(path), "%s/%s", dir, client);
+                if (access(path, X_OK) == 0) {
+                    free(path_copy);
+                    return strdup(path);
+                }
+                if (strcmp(client, "agy") == 0) {
+                    snprintf(path, sizeof(path), "%s/antigravity", dir);
+                    if (access(path, X_OK) == 0) {
+                        free(path_copy);
+                        return strdup(path);
+                    }
+                }
+                dir = strtok(NULL, ":");
+            }
+            free(path_copy);
+        }
+    }
+    return NULL;
+}
+
 int run_launch(int argc, char **argv, const char *ws_root) {
     (void)ws_root;
-    if (argc < 2 || strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
-        printf("Usage: asl launch <agy|claude|codex|addie|eddie> [options]\n");
-        printf("   or: asl launch-session [options]\n\n");
-        printf("Options:\n");
-        printf("  --client <client>          Client target (agy, claude, codex, addie, eddie)\n");
-        printf("  --orchestrator             Enable orchestrator supervisor mode\n");
-        printf("  --supervisory-model <m>    Supervisory model for orchestration\n");
-        printf("  --reasoning-level <lvl>    Reasoning effort level (e.g. high, medium)\n");
-        printf("  --soft-limit <n>           Soft limit on concurrent subagents (default: 4)\n");
-        printf("  --hard-limit <n>           Hard limit on concurrent subagents (default: 6)\n");
-        printf("  --max-subagents <n>        Maximum subagents ceiling\n");
-        printf("  --scaling-condition <c>    Scaling condition description\n");
-        printf("  --multi-project            Enable multi-project workspace routing\n");
-        printf("  --code-execution           Enable supervised code execution and gate verification\n");
-        printf("  --separate-agents          Enable separate cross-process OS agents\n");
-        printf("  --minimal-orchestrator     Maintain minimal orchestrator context\n");
-        printf("  --research-tier <m>        Model tier for research subagents\n");
-        printf("  --planning-tier <m>        Model tier for planning subagents\n");
-        printf("  --plan-model <m>           Alias for planning tier model\n");
-        printf("  --execution-tier <m>       Model tier for execution subagents\n");
-        printf("  --role-assignments <r>     Role-to-agent mesh mapping\n");
-        printf("  --profiles                 Output justified domain profiles from .asl/profiles.asn\n");
-        printf("  --preset <preset>          Predefined orchestration preset\n");
-        printf("  --permission-tier <tier>   Permission tier (e.g. dangerous-rescue)\n");
-        printf("  --channel <channel>        Directive injection prompt channel\n");
-        printf("  --stash-agents-md          Stash inline AGENTS.md directives\n");
-        printf("  --consultative             Run in consultative mode\n");
-        printf("  --dry-run                  Output pre-flight validation and injection payload without starting process\n");
-        return 0;
+    const char *client = NULL;
+    int client_arg_idx = -1;
+
+    if (argc >= 2) {
+        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "help") == 0) {
+            printf("Usage: asl launch <agy|claude|codex|addie|eddie> [options]\n");
+            printf("   or: asl launch-session [options]\n\n");
+            printf("Options:\n");
+            printf("  --client <client>          Client target (agy, claude, codex, addie, eddie)\n");
+            printf("  --orchestrator             Enable orchestrator supervisor mode\n");
+            printf("  --supervisory-model <m>    Supervisory model for orchestration\n");
+            printf("  --reasoning-level <lvl>    Reasoning effort level (e.g. high, medium)\n");
+            printf("  --soft-limit <n>           Soft limit on concurrent subagents (default: 4)\n");
+            printf("  --hard-limit <n>           Hard limit on concurrent subagents (default: 6)\n");
+            printf("  --max-subagents <n>        Maximum subagents ceiling\n");
+            printf("  --scaling-condition <c>    Scaling condition description\n");
+            printf("  --multi-project            Enable multi-project workspace routing\n");
+            printf("  --code-execution           Enable supervised code execution and gate verification\n");
+            printf("  --separate-agents          Enable separate cross-process OS agents\n");
+            printf("  --minimal-orchestrator     Maintain minimal orchestrator context\n");
+            printf("  --research-tier <m>        Model tier for research subagents\n");
+            printf("  --planning-tier <m>        Model tier for planning subagents\n");
+            printf("  --plan-model <m>           Alias for planning tier model\n");
+            printf("  --execution-tier <m>       Model tier for execution subagents\n");
+            printf("  --role-assignments <r>     Role-to-agent mesh mapping\n");
+            printf("  --profiles                 Output justified domain profiles from .asl/profiles.asn\n");
+            printf("  --preset <preset>          Predefined orchestration preset\n");
+            printf("  --permission-tier <tier>   Permission tier (e.g. dangerous-rescue)\n");
+            printf("  --channel <channel>        Directive injection prompt channel\n");
+            printf("  --stash-agents-md          Stash inline AGENTS.md directives\n");
+            printf("  --consultative             Run in consultative mode\n");
+            printf("  --dry-run                  Output pre-flight validation and injection payload without starting process\n");
+            return 0;
+        }
+
+        if (strcmp(argv[1], "--client") == 0 && argc >= 3) {
+            client = argv[2];
+            client_arg_idx = 2;
+        } else if (argv[1][0] != '-') {
+            client = argv[1];
+            client_arg_idx = 1;
+        } else {
+            for (int i = 1; i + 1 < argc; i++) {
+                if (strcmp(argv[i], "--client") == 0) {
+                    client = argv[i + 1];
+                    client_arg_idx = i + 1;
+                    break;
+                }
+            }
+            if (!client) {
+                client = "agy";
+                client_arg_idx = -1;
+            }
+        }
+    } else {
+        if (argc >= 1 && strcmp(argv[0], "launch-session") == 0) {
+            client = "agy";
+            client_arg_idx = -1;
+        } else {
+            printf("Usage: asl launch <agy|claude|codex|addie|eddie> [options]\n");
+            printf("   or: asl launch-session [options]\n\n");
+            printf("Options:\n");
+            printf("  --client <client>          Client target (agy, claude, codex, addie, eddie)\n");
+            printf("  --orchestrator             Enable orchestrator supervisor mode\n");
+            printf("  --supervisory-model <m>    Supervisory model for orchestration\n");
+            printf("  --reasoning-level <lvl>    Reasoning effort level (e.g. high, medium)\n");
+            printf("  --soft-limit <n>           Soft limit on concurrent subagents (default: 4)\n");
+            printf("  --hard-limit <n>           Hard limit on concurrent subagents (default: 6)\n");
+            printf("  --max-subagents <n>        Maximum subagents ceiling\n");
+            printf("  --scaling-condition <c>    Scaling condition description\n");
+            printf("  --multi-project            Enable multi-project workspace routing\n");
+            printf("  --code-execution           Enable supervised code execution and gate verification\n");
+            printf("  --separate-agents          Enable separate cross-process OS agents\n");
+            printf("  --minimal-orchestrator     Maintain minimal orchestrator context\n");
+            printf("  --research-tier <m>        Model tier for research subagents\n");
+            printf("  --planning-tier <m>        Model tier for planning subagents\n");
+            printf("  --plan-model <m>           Alias for planning tier model\n");
+            printf("  --execution-tier <m>       Model tier for execution subagents\n");
+            printf("  --role-assignments <r>     Role-to-agent mesh mapping\n");
+            printf("  --profiles                 Output justified domain profiles from .asl/profiles.asn\n");
+            printf("  --preset <preset>          Predefined orchestration preset\n");
+            printf("  --permission-tier <tier>   Permission tier (e.g. dangerous-rescue)\n");
+            printf("  --channel <channel>        Directive injection prompt channel\n");
+            printf("  --stash-agents-md          Stash inline AGENTS.md directives\n");
+            printf("  --consultative             Run in consultative mode\n");
+            printf("  --dry-run                  Output pre-flight validation and injection payload without starting process\n");
+            return 0;
+        }
     }
-    const char *client = argv[1];
+
     const ClientTargetSpec *spec = lookup_client_spec(client);
     if (!spec || !spec->channel) {
         fprintf(stderr, "Error: Unknown or undeclared client '%s'. Must be declared with channel location in protocol-conformance.asn\n", client ? client : "(null)");
@@ -6187,7 +6310,7 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     int is_claude = (strcmp(client, "claude") == 0);
     int is_agy = (strcmp(client, "agy") == 0);
     int dry_run = 0;
-    for (int i = 2; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--dry-run") == 0) dry_run = 1;
         if (is_claude) {
             enforce_claude_system_prompt_append(argv[i]);
@@ -6206,11 +6329,74 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     } else {
         printf("(:launch-session :client \"%s\" :permission-tier \"%s\" :channel \"%s\")\n", spec->id, spec->permission_tier, spec->channel);
     }
+    fflush(stdout);
+
     if (dry_run) {
         printf("✓ Pre-flight validation successful (DRY-RUN).\n");
         return 0;
     }
-    return 0;
+
+    setenv("ASL_LAUNCHED", "1", 1);
+    setenv("ASL_CLIENT", client, 1);
+    setenv("ASL_TOOLBELT_ACTIVE", "1", 1);
+    if (is_agy) {
+        setenv("AGY_PERMISSION_TIER", "dangerous-rescue", 1);
+        setenv("AGY_RESCUE", "1", 1);
+        setenv("AGY_DANGEROUSLY_SKIP_PERMISSIONS", "1", 1);
+    } else if (is_claude) {
+        setenv("CLAUDE_AUTO", "0", 1);
+    } else if (strcmp(client, "codex") == 0) {
+        setenv("CODEX_APPROVAL_POLICY", "never", 1);
+        setenv("CODEX_SANDBOX", "workspace-write", 1);
+    }
+
+    char *bin_path = resolve_client_binary(client, ws_root);
+    if (!bin_path) {
+        fprintf(stderr, "Notice: '%s' binary was not detected in PATH or standard installation paths.\n", client);
+        return 1;
+    }
+
+    char *child_argv[256];
+    int c_argc = 0;
+    child_argv[c_argc++] = bin_path;
+
+    if (is_agy) {
+        int has_skip = 0;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--dangerously-skip-permissions") == 0) {
+                has_skip = 1;
+                break;
+            }
+        }
+        if (!has_skip) {
+            child_argv[c_argc++] = "--dangerously-skip-permissions";
+        }
+    }
+
+    for (int i = 1; i < argc && c_argc + 2 < 255; i++) {
+        if (i == client_arg_idx) continue;
+        if (strcmp(argv[i], "--client") == 0) {
+            i++;
+            continue;
+        }
+        if (strcmp(argv[i], "--dry-run") == 0) continue;
+        if (is_claude) {
+            if (strcmp(argv[i], "--dangerously-skip-permissions") == 0) {
+                continue;
+            }
+            if (strcmp(argv[i], "--system-prompt") == 0 || strcmp(argv[i], "-s") == 0) {
+                child_argv[c_argc++] = "--append-system-prompt";
+                continue;
+            }
+        }
+        child_argv[c_argc++] = argv[i];
+    }
+    child_argv[c_argc] = NULL;
+
+    execvp(bin_path, child_argv);
+    perror("asl: execvp failed");
+    free(bin_path);
+    return 1;
 }
 
 static int run_cmd_note(int argc, char **argv, const char *ws_root) {
