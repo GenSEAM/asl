@@ -25,9 +25,9 @@
         </button>
       </div>
 
-      <div id=\"sm-results-list\" class=\"max-h-80 overflow-y-auto p-2 divide-y divide-line/40\">
+      <div id=\"sm-live-region\" class=\"sr-only\" aria-live=\"polite\" aria-atomic=\"true\"></div>\n      <div id=\"sm-results-list\" class=\"max-h-80 overflow-y-auto p-2 divide-y divide-line/40\">
         
-        <a href=\"/#agent-way\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"the agent way why languages designed for typing hands fail autonomous agents docs\">
+        <a href=\"/#agent-way\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"the agent way why languages designed for typing hands fail autonomous agents docs\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"></path><path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"></path></svg>
@@ -40,11 +40,11 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">Why languages designed for typing hands fail autonomous agents.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
         
-        <a href=\"/ecosystem\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"multi-runtime ecosystem wasm rust typescript python sql cross-compilation toolchain\">
+        <a href=\"/ecosystem\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"multi-runtime ecosystem wasm rust typescript python sql cross-compilation toolchain\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"2\"></rect><rect x=\"9\" y=\"9\" width=\"6\" height=\"6\"></rect><line x1=\"9\" y1=\"1\" x2=\"9\" y2=\"4\"></line><line x1=\"15\" y1=\"1\" x2=\"15\" y2=\"4\"></line><line x1=\"9\" y1=\"20\" x2=\"9\" y2=\"23\"></line><line x1=\"15\" y1=\"20\" x2=\"15\" y2=\"23\"></line><line x1=\"20\" y1=\"9\" x2=\"23\" y2=\"9\"></line><line x1=\"20\" y1=\"14\" x2=\"23\" y2=\"14\"></line><line x1=\"1\" y1=\"9\" x2=\"4\" y2=\"9\"></line><line x1=\"1\" y1=\"14\" x2=\"4\" y2=\"14\"></line></svg>
@@ -57,11 +57,11 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">Wasm, Rust, TypeScript, Python, and SQL cross-compilation.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
         
-        <a href=\"/roadmap\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"canons roadmap strategic trajectory agent meshes self-hosted runtimes grammar\">
+        <a href=\"/roadmap\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"canons roadmap strategic trajectory agent meshes self-hosted runtimes grammar\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><path d=\"m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z\"></path></svg>
@@ -74,11 +74,11 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">Strategic trajectory, agent meshes, and self-hosted runtimes.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
         
-        <a href=\"/docs\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"documentation cli reference toolchain commands grammar invariants quick start guides docs\">
+        <a href=\"/docs\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"documentation cli reference toolchain commands grammar invariants quick start guides docs\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><polyline points=\"4 17 10 11 4 5\"></polyline><line x1=\"12\" y1=\"19\" x2=\"20\" y2=\"19\"></line></svg>
@@ -91,11 +91,11 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">Toolchain commands, grammar invariants, and quick start guides.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
         
-        <a href=\"/#a2a-protocol\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"a2a wire protocol low-latency agent-to-agent s-expression frame serialization protocol\">
+        <a href=\"/#a2a-protocol\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"a2a wire protocol low-latency agent-to-agent s-expression frame serialization protocol\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><polyline points=\"16 18 22 12 16 6\"></polyline><polyline points=\"8 6 2 12 8 18\"></polyline></svg>
@@ -108,11 +108,11 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">Low-latency agent-to-agent S-expression frame serialization.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
         
-        <a href=\"/llms.txt\" target=\"_blank\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"agent specification /llms.txt machine-readable formal grammar invariant tables for ai agents grammar\">
+        <a href=\"/llms.txt\" target=\"_blank\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"agent specification /llms.txt machine-readable formal grammar invariant tables for ai agents grammar\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><path d=\"M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z\"></path><path d=\"M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z\"></path></svg>
@@ -125,11 +125,11 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">Machine-readable formal grammar and invariant tables for AI agents.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
 
         
-        <a href=\"/blog/manifesto\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-all\" data-search=\"manifesto dual-projection principle pure agentscript token compaction blog\">
+        <a href=\"/blog/manifesto\" class=\"sm-item group flex items-center justify-between p-3 rounded-xl hover:bg-inset transition-colors\" data-search=\"manifesto dual-projection principle pure agentscript token compaction blog\">
           <div class=\"flex items-center gap-3\">
             <div class=\"p-2 rounded-lg bg-surface border border-line group-hover:border-signal/40 transition-colors text-signal\">
               <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4\"><path d=\"M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2M18 14h-8M15 18h-5M10 6h8v4h-8z\"></path></svg>
@@ -142,7 +142,7 @@
               <p class=\"text-meta text-ink-3 mt-0.5 line-clamp-1\">The dual-projection principle and why agents need native notation.</p>
             </div>
           </div>
-          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
+          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"w-4 h-4 text-ink-3 group-hover:text-signal opacity-0 group-hover:opacity-100 transition-colors -translate-x-1 group-hover:translate-x-0\"><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"></line><polyline points=\"12 5 19 12 12 19\"></polyline></svg>
         </a>
       </div>
 

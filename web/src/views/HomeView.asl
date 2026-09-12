@@ -19,7 +19,7 @@
 (df render-home-view [] -> Str
   :d "Renders the full showcase home landing page."
   (s/concat
-    "<main class=\"flex-1 max-w-shell mx-auto w-full\">"
+    "<main id=\"main-content\" class=\"flex-1 max-w-shell mx-auto w-full\">"
     (s/concat (hero)
     (s/concat (ecosystem)
     (s/concat (key-capabilities)
