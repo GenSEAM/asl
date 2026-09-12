@@ -31,7 +31,7 @@
 
       <div class=\"max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6\">
         
-        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line text-signal\">
@@ -63,7 +63,7 @@
         </div>
 
         
-        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line text-signal\">
@@ -103,7 +103,7 @@
         </div>
 
         
-        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line text-signal\">
@@ -138,7 +138,7 @@
         </div>
 
         
-        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"p-6 sm:p-7 rounded-3xl border border-line bg-surface/80 backdrop-blur-xl shadow-e1 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <div class=\"flex items-center justify-between pb-4 border-b border-line/60\">
               <div class=\"p-3 rounded-2xl bg-inset border border-line text-signal\">

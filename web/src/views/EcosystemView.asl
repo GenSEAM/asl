@@ -61,10 +61,10 @@
                 </div>
               </div>
 
-              <div class=\"p-5 rounded-2xl border border-purple-500/40 bg-surface shadow-e2 flex flex-col justify-between space-y-4 relative\">
+              <div class=\"p-5 rounded-2xl border border-signal/40 bg-surface shadow-e2 flex flex-col justify-between space-y-4 relative\">
                 <div>
                   <div class=\"flex items-center justify-between\">
-                    <span class=\"font-mono text-micro font-bold text-signal px-2 py-0.5 rounded-md bg-purple-500/10 border border-signal/30\">
+                    <span class=\"font-mono text-micro font-bold text-signal px-2 py-0.5 rounded-md bg-signal/10 border border-signal/30\">
                       Stage 2: HARNESS
                     </span>
                     <span class=\"font-mono text-[10px] text-signal uppercase font-semibold\">Autonomous Core</span>
@@ -75,11 +75,11 @@
                   </p>
                 </div>
                 <div class=\"pt-3 border-t border-line/60 space-y-1 font-mono text-micro\">
-                  <div class=\"text-purple-300 font-semibold\">&bull; @genseam/asl-agent-core</div>
-                  <div class=\"text-purple-300 font-semibold\">&bull; @genseam/asl-eddie</div>
-                  <div class=\"text-purple-300 font-semibold\">&bull; @genseam/asl-agent-bus</div>
-                  <div class=\"text-purple-300 font-semibold\">&bull; @genseam/asl-mem</div>
-                  <div class=\"text-purple-300 font-semibold\">&bull; @genseam/asl-web-search</div>
+                  <div class=\"text-signal-soft font-semibold\">&bull; @genseam/asl-agent-core</div>
+                  <div class=\"text-signal-soft font-semibold\">&bull; @genseam/asl-eddie</div>
+                  <div class=\"text-signal-soft font-semibold\">&bull; @genseam/asl-agent-bus</div>
+                  <div class=\"text-signal-soft font-semibold\">&bull; @genseam/asl-mem</div>
+                  <div class=\"text-signal-soft font-semibold\">&bull; @genseam/asl-web-search</div>
                 </div>
               </div>
 

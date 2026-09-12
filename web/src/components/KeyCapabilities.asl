@@ -26,7 +26,7 @@
       <div class=\"grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8\">
         
         
-        <div class=\"group rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-6 sm:p-7 shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-6 sm:p-7 shadow-e2 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <h3 class=\"text-xl font-bold text-ink tracking-tight\">
               Architect-First Observability
@@ -88,7 +88,7 @@
         </div>
 
         
-        <div class=\"group rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-6 sm:p-7 shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-6 sm:p-7 shadow-e2 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <h3 class=\"text-xl font-bold text-ink tracking-tight\">
               Accelerate Development Flow
@@ -124,7 +124,7 @@
                 </div>
                 <div class=\"flex items-center gap-2\">
                   <span class=\"text-signal font-semibold\">$</span>
-                  <span class=\"text-purple-300\">asl test --all</span>
+                  <span class=\"text-signal-soft\">asl test --all</span>
                   <span class=\"inline-block w-1.5 h-3.5 bg-signal animate-pulse\"></span>
                 </div>
               </div>
@@ -143,7 +143,7 @@
         </div>
 
         
-        <div class=\"group rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-6 sm:p-7 shadow-e2 hover:shadow-purple-500/10 hover:border-signal/40 transition-all flex flex-col justify-between\">
+        <div class=\"group rounded-3xl border border-line bg-surface/90 backdrop-blur-xl p-6 sm:p-7 shadow-e2 hover:shadow-e2 hover:border-signal/40 transition-colors flex flex-col justify-between\">
           <div>
             <h3 class=\"text-xl font-bold text-ink tracking-tight\">
               Built-in Ecosystem Tools
