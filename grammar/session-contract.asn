@@ -34,6 +34,9 @@
     (:rule :id protectedHiddenEvaluation
       :description "Separate author-owned public development tests from verifier-owned hidden acceptance; enforce capability boundaries in execution so that implementers cannot read or modify hidden acceptance fixtures."
       :falsification "Implementer session reads or modifies hidden acceptance fixtures or alters runner configuration.")
+    (:rule :id empiricalAttentionPolicyEvaluation
+      :description "Attention policies must be empirically evaluated with repeated paired trials across baseline, ledger-only, observation masking, relevant retrieval, and summary arms; thresholds are frozen before held-out evaluation."
+      :falsification "Unmeasured claims of universal optimum or single unrepeated runs are rejected.")
   ]
   :continuationSchema [
     (:field :id "cursor" :type "Str" :desc "Opaque session-bound snapshot continuation token")
@@ -92,5 +95,14 @@
     (:field :id "canReadHiddenAcceptance" :type "Bool" :desc "True if role can read verifier-owned hidden acceptance fixtures")
     (:field :id "canWriteProduction" :type "Bool" :desc "True if role can modify production source within owned paths")
     (:field :id "canExecuteGates" :type "Bool" :desc "True if role can run acceptance gates")
+  ]
+  :attentionBenchmarkSchema [
+    (:field :id "taskId" :type "Str" :desc "Unique task benchmark identifier")
+    (:field :id "policyArm" :type "Str" :desc "Evaluated attention policy arm")
+    (:field :id "trialCount" :type "I64" :desc "Number of repeated trial runs")
+    (:field :id "passRate" :type "Float" :desc "Observed correct task pass rate")
+    (:field :id "meanCostUsd" :type "Float" :desc "Mean dollar cost per trial")
+    (:field :id "constraintPreservationRate" :type "Float" :desc "Ratio of trials preserving constraints")
+    (:field :id "observationRecoveryRate" :type "Float" :desc "Ratio of trials successfully recovering observations")
   ]
 )

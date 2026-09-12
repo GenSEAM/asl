@@ -1,0 +1,21 @@
+(:manifest asl-bench-attention-fixtures
+  :version "1.0.0"
+  :source "ADR-0081"
+  :description "Preregistered task arms, evaluation configurations, and seeds for attention policy evaluation"
+  :arms [
+    (:arm :id "baseline" :desc "Unconstrained baseline agent execution without context management")
+    (:arm :id "ledger-only" :desc "Session ledger anchoring with persistent InFlight state")
+    (:arm :id "observation-masking" :desc "Recoverable observation masking for intermediate tool outputs")
+    (:arm :id "relevant-retrieval" :desc "Selective bounded AST slice and symbol retrieval")
+    (:arm :id "summary" :desc "Constraint-preserving summary index over full state")
+  ]
+  :evaluationMetrics [
+    (:metric :id "passRate" :desc "Correct outcome ratio across repeated trials")
+    (:metric :id "consistency" :desc "Outcome agreement across repeated identical task runs")
+    (:metric :id "costPerTask" :desc "Computed dollar cost based on per-million pricing")
+    (:metric :id "latency" :desc "Observed trial wall clock duration")
+    (:metric :id "cacheEfficiency" :desc "Ratio of prompt tokens served from prefix cache")
+    (:metric :id "constraintPreservation" :desc "Maintenance of critical constraints across compaction")
+    (:metric :id "observationRecoverability" :desc "Ability to restore masked observation via pointer")
+  ]
+)

@@ -4655,7 +4655,7 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
         qsort(manifests, m_count, sizeof(char *), str_ptr_cmp);
         for (int i = 0; i < m_count; i++) {
             if (!validate_manifest_ast_c(ws_root, manifests[i])) {
-                for (int k = 0; k < m_count; k++) free(manifests[k]);
+                for (int k = i; k < m_count; k++) free(manifests[k]);
                 free(manifests);
                 return 1;
             }
