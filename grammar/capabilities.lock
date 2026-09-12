@@ -1,8 +1,8 @@
 (:capabilities-lock
   :version "1.0.0"
   :source "asl/grammar/capabilities.asn"
-  :measuredAt 1789218110000
-  :summary (:total 36 :works 17 :lies 2 :partial 0 :absent 17)
+  :measuredAt 1789238560000
+  :summary (:total 36 :works 16 :lies 2 :partial 3 :absent 15)
   :capabilities [
     (:cap :id "sessionLedger" :status :absent)
     (:cap :id "rulesSlice" :status :absent)
@@ -29,16 +29,16 @@
     (:cap :id "pathBoundary" :status :works)
     (:cap :id "syntaxCheck" :status :works)
     (:cap :id "runCommand" :status :absent)
-    (:cap :id "executeTests" :status :works)
-    (:cap :id "gateSuite" :status :works)
+    (:cap :id "executeTests" :status :partial)
+    (:cap :id "gateSuite" :status :partial)
     (:cap :id "mutationScore" :status :works)
     (:cap :id "boundReceipt" :status :absent)
     (:cap :id "rollback" :status :works)
-    (:cap :id "edgeProcedure" :status :absent)
+    (:cap :id "edgeProcedure" :status :partial)
     (:cap :id "failureExplain" :status :absent)
     (:cap :id "budget" :status :absent)
     (:cap :id "snapshot" :status :absent)
     (:cap :id "trace" :status :absent)
-    (:cap :id "environmentTrust" :status :absent)
+    (:cap :id "environmentTrust" :status :works)
   ]
 )

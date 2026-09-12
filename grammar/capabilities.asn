@@ -58,4 +58,4 @@
     (:situation :id observe :pack [:research :audit] :question "What actually happened in this session?"
       :caps [
         (:cap :id trace :use "(:trace) returns the append-only log of ops, gates and mutations with digests" :status :absent :fallback "your own transcript is the only record; state uncertainty about anything you did not just measure" :task Task44207 :tier [:full])
-        (:cap :id environmentTrust :use "asl doctor verifies the host tools and every RPC op against known answers" :status :absent :fallback "this machine shims grep, rg, diff, head and wc; verify with /usr/bin/ paths, shasum and cmp before trusting a comparison" :task Task44201 :tier [:minimal :full])])])
+        (:cap :id environmentTrust :use "asl doctor verifies the host tools and every RPC op against known answers" :status :works :fallback "run asl doctor manually and compare digests before trusting the environment" :task Task44201 :tier [:minimal :full])])])

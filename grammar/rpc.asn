@@ -289,13 +289,13 @@
          :purpose "Task session claim, recovery, and listing via InFlight.asn and tasks.asl"
          :savings "85%")
 
-    ;; === Session Trace ===
-    (:op "trace"
-         :id "asl-trace"
-         :cmd "asl rpc '(:batch (:trace [:since <ms>] [:op \"...\"] [:limit <n>]))'"
-         :category "memory"
-         :purpose "Inspect append-only session trace of operations, mutations, and before/after digests"
-         :savings "85%")
+    ;; === Context Orientation & Slicing ===
+    (:op "where"
+         :id "asl-where"
+         :cmd "asl rpc '(:batch (:where [:kind \"...\"] [:tier \"...\"]))'"
+         :category "orientation"
+         :purpose "Deliver context slice, active task, and situation-specific capability subset"
+         :savings "90%")
 
     ;; === Post Action Queue ===
     (:op "queue"

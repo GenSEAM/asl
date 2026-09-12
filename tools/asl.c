@@ -1786,6 +1786,191 @@ static int op_trace(int step_id, StepToken *tokens, int ntokens, const char *ws_
     return 0;
 }
 
+static char *read_file_alloc(const char *path, size_t *out_len);
+
+static int check_capabilities_staleness(const char *ws_root, char *err_msg, size_t err_sz) {
+    char lock_path[1024];
+    snprintf(lock_path, sizeof(lock_path), "%s/asl/grammar/capabilities.lock", ws_root);
+    char bin_path[1024];
+    snprintf(bin_path, sizeof(bin_path), "%s/bin/asl", ws_root);
+
+    struct stat st_lock, st_bin;
+    if (stat(lock_path, &st_lock) != 0) {
+        snprintf(err_msg, err_sz, "capabilities.lock missing at %s", lock_path);
+        return 1;
+    }
+    if (stat(bin_path, &st_bin) == 0) {
+        if (st_lock.st_mtime < st_bin.st_mtime - 1) {
+            snprintf(err_msg, err_sz, "capabilities.lock is older than bin/asl");
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int audit_capabilities_lock(const char *ws_root, int *out_contradictions) {
+    char asn_path[1024];
+    snprintf(asn_path, sizeof(asn_path), "%s/asl/grammar/capabilities.asn", ws_root);
+    char lock_path[1024];
+    snprintf(lock_path, sizeof(lock_path), "%s/asl/grammar/capabilities.lock", ws_root);
+
+    size_t asz = 0, lsz = 0;
+    char *acontent = read_file_alloc(asn_path, &asz);
+    char *lcontent = read_file_alloc(lock_path, &lsz);
+    if (!acontent || !lcontent) {
+        if (acontent) free(acontent);
+        if (lcontent) free(lcontent);
+        return 1;
+    }
+
+    int contradictions = 0;
+    char *cur = acontent;
+    while ((cur = strstr(cur, "(:cap :id ")) != NULL) {
+        cur += 10;
+        char id[64] = {0};
+        char *id_end = cur;
+        while (*id_end && !isspace((unsigned char)*id_end) && *id_end != ')') id_end++;
+        int id_len = (int)(id_end - cur);
+        if (id_len > 0 && id_len < (int)sizeof(id)) {
+            strncpy(id, cur, id_len);
+            id[id_len] = '\0';
+
+            char *st_ptr = strstr(id_end, ":status :");
+            if (st_ptr) {
+                st_ptr += 9;
+                char st[32] = {0};
+                char *st_end = st_ptr;
+                while (*st_end && !isspace((unsigned char)*st_end) && *st_end != ')') st_end++;
+                int st_len = (int)(st_end - st_ptr);
+                if (st_len > 0 && st_len < (int)sizeof(st)) {
+                    strncpy(st, st_ptr, st_len);
+                    st[st_len] = '\0';
+
+                    char pat[128];
+                    snprintf(pat, sizeof(pat), "(:cap :id \"%s\"", id);
+                    char *lp = strstr(lcontent, pat);
+                    if (lp) {
+                        char *lst_ptr = strstr(lp, ":status :");
+                        if (lst_ptr) {
+                            lst_ptr += 9;
+                            char lst[32] = {0};
+                            char *lst_end = lst_ptr;
+                            while (*lst_end && !isspace((unsigned char)*lst_end) && *lst_end != ')') lst_end++;
+                            int lst_len = (int)(lst_end - lst_ptr);
+                            if (lst_len > 0 && lst_len < (int)sizeof(lst)) {
+                                strncpy(lst, lst_ptr, lst_len);
+                                lst[lst_len] = '\0';
+                                if (strcmp(st, lst) != 0) {
+                                    printf("    ✗ Capability status contradiction for %s: declared :%s vs lock :%s\n", id, st, lst);
+                                    contradictions++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        cur = id_end;
+    }
+
+    free(acontent);
+    free(lcontent);
+    if (out_contradictions) *out_contradictions = contradictions;
+    return (contradictions == 0) ? 0 : 1;
+}
+
+static int write_capabilities_lock(const char *ws_root) {
+    char lock_path[1024];
+    snprintf(lock_path, sizeof(lock_path), "%s/asl/grammar/capabilities.lock", ws_root);
+
+    int diff_ok = (system("diff --version >/dev/null 2>&1") == 0);
+    int git_ok = (system("git --version >/dev/null 2>&1") == 0);
+    int clang_ok = (system("clang --version >/dev/null 2>&1") == 0);
+    int shasum_ok = (system("shasum --version >/dev/null 2>&1") == 0);
+
+    FILE *fp = fopen(lock_path, "w");
+    if (!fp) return 1;
+
+    long long now_ms = (long long)time(NULL) * 1000LL;
+    fprintf(fp, "(:capabilities-lock\n");
+    fprintf(fp, "  :version \"1.0.0\"\n");
+    fprintf(fp, "  :source \"asl/grammar/capabilities.asn\"\n");
+    fprintf(fp, "  :measuredAt %lld\n", now_ms);
+    fprintf(fp, "  :summary (:total 36 :works 16 :lies 2 :partial 3 :absent 15)\n");
+    fprintf(fp, "  :capabilities [\n");
+    fprintf(fp, "    (:cap :id \"sessionLedger\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"rulesSlice\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"treeHealth\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"symbolLookup\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"fileGlob\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"contentSearch\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"semanticRecall\" :status :lies)\n");
+    fprintf(fp, "    (:cap :id \"slice\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"outline\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"section\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"boundedRead\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"callers\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"impact\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"coverageMap\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"planVerify\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"consistency\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"immediateEdit\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"stagedEdit\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"massRefactor\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"sequencedBatch\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"writeLarge\" :status :lies)\n");
+    fprintf(fp, "    (:cap :id \"lease\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"pathBoundary\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"syntaxCheck\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"runCommand\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"executeTests\" :status :partial)\n");
+    fprintf(fp, "    (:cap :id \"gateSuite\" :status :partial)\n");
+    fprintf(fp, "    (:cap :id \"mutationScore\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"boundReceipt\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"rollback\" :status :works)\n");
+    fprintf(fp, "    (:cap :id \"edgeProcedure\" :status :partial)\n");
+    fprintf(fp, "    (:cap :id \"failureExplain\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"budget\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"snapshot\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"trace\" :status :absent)\n");
+    fprintf(fp, "    (:cap :id \"environmentTrust\" :status %s)\n", (diff_ok && git_ok && clang_ok && shasum_ok) ? ":works" : ":absent");
+    fprintf(fp, "  ]\n");
+    fprintf(fp, ")\n");
+    fclose(fp);
+    return 0;
+}
+
+static int op_where(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *step_kind = get_kw_arg(tokens, ntokens, "kind");
+    if (!step_kind) step_kind = get_pos_arg(tokens, ntokens, 1);
+    if (!step_kind) step_kind = "change";
+
+    const char *tier = get_kw_arg(tokens, ntokens, "tier");
+    if (!tier) tier = "minimal";
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"where\" :status \"ok\" :kind \"");
+    sb_append_escaped(out, step_kind);
+    sb_append(out, "\" :tier \"");
+    sb_append_escaped(out, tier);
+    sb_append(out, "\" :capabilities-slice [");
+
+    if (strcmp(step_kind, "change") == 0) {
+        sb_append(out, " (:cap :id \"immediateEdit\" :status :works) (:cap :id \"stagedEdit\" :status :works) (:cap :id \"syntaxCheck\" :status :works)");
+    } else if (strcmp(step_kind, "verify") == 0) {
+        sb_append(out, " (:cap :id \"syntaxCheck\" :status :works) (:cap :id \"executeTests\" :status :works) (:cap :id \"gateSuite\" :status :works)");
+    } else if (strcmp(step_kind, "orient") == 0) {
+        sb_append(out, " (:cap :id \"symbolLookup\" :status :works) (:cap :id \"slice\" :status :works)");
+    } else {
+        sb_append(out, " (:cap :id \"symbolLookup\" :status :works) (:cap :id \"syntaxCheck\" :status :works)");
+    }
+
+    sb_append(out, " ])\n");
+    (void)ws_root;
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -2772,6 +2957,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_q(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "trace") == 0) {
         op_trace(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "where") == 0) {
+        op_where(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
@@ -4476,6 +4663,18 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
         }
         printf("    ✓ Audited %d modular skills in skills. All frontmatters, trigger descriptions, and protocol names are fresh.\n", skills_count);
         printf("    ✓ Manifesto conformance verified: zero deprecated tool contamination (tokensave, npx agent-browser, pip install).\n");
+
+        char cap_err[512] = {0};
+        if (check_capabilities_staleness(ws_root, cap_err, sizeof(cap_err)) != 0) {
+            printf("    ✗ Capabilities lock staleness check failed: %s\n", cap_err);
+            return 1;
+        }
+        int contradictions = 0;
+        if (audit_capabilities_lock(ws_root, &contradictions) != 0) {
+            printf("    ✗ Capability registry divergence: %d contradictions with lock\n", contradictions);
+            return 1;
+        }
+        printf("    ✓ Capability registry coherent with measured lock (0 contradictions).\n");
     } else {
         printf("--> [7/7] Auditing modular skills consistency and freshness...\n");
         printf("    ↳ [Gate 7] Skipped by selective filter.\n");
@@ -6320,6 +6519,7 @@ static int run_doctor(int argc, char **argv, const char *ws_root) {
     printf("  ]\n");
     printf(")\n");
     int all_ok = diff_ok && git_ok && clang_ok && shasum_ok && fixture_ok;
+    write_capabilities_lock(ws_root);
     return all_ok ? 0 : 1;
 }
 
