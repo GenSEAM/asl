@@ -157,5 +157,9 @@
       :rule "The language specification names zero concrete engines; execution relies on one host interface satisfied by at least two conforming engines running one unchanged suite."
       :failureCode "ERR_CONCRETE_ENGINE_COUPLING"
       :exitCode 1)
+    (:semantic :id extensionDeclaredCapabilities
+      :rule "An extension declares the host capabilities it requires; loading against a host that lacks a declared capability fails at load-time, naming both extension and capability."
+      :failureCode "ERR_UNSATISFIED_HOST_CAPABILITY"
+      :exitCode 1)
   ]
 )
