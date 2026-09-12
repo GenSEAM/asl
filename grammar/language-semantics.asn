@@ -53,5 +53,17 @@
       :rule "Mechanical identifier renames and CamelCase transformations must strictly preserve string literals without rewriting substrings within quotes."
       :failureCode "ERR_MUTATED_STRING_LITERAL"
       :exitCode 1)
+    (:semantic :id legibleAliasLength
+      :rule "Module import aliases must be legible and at least three characters in length; single- and two-character aliases are rejected."
+      :failureCode "ERR_OPAQUE_ALIAS"
+      :exitCode 1)
+    (:semantic :id globalPrefixUniqueness
+      :rule "A qualified prefix must unambiguously map to exactly one module across the whole monorepo; binding one prefix to two different modules is rejected."
+      :failureCode "ERR_AMBIGUOUS_PREFIX"
+      :exitCode 1)
+    (:semantic :id selfContainedSliceResolution
+      :rule "Qualified uses in retrieved slices must resolve unambiguously from the prefix without requiring file headers to be read."
+      :failureCode "ERR_UNRESOLVED_QUALIFIED_USE"
+      :exitCode 1)
   ]
 )
