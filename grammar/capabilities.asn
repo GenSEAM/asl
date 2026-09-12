@@ -58,4 +58,14 @@
     (:situation :id observe :pack [:research :audit] :question "What actually happened in this session?"
       :caps [
         (:cap :id trace :use "(:trace) returns the append-only log of ops, gates and mutations with digests" :status :absent :fallback "your own transcript is the only record; state uncertainty about anything you did not just measure" :task Task44207 :tier [:full])
-        (:cap :id environmentTrust :use "asl doctor verifies the host tools and every RPC op against known answers" :status :works :fallback "run asl doctor manually and compare digests before trusting the environment" :task Task44201 :tier [:minimal :full])])])
+        (:cap :id environmentTrust :use "asl doctor verifies the host tools and every RPC op against known answers" :status :works :fallback "run asl doctor manually and compare digests before trusting the environment" :task Task44201 :tier [:minimal :full])])
+  :extensionCapabilities [
+    (:contract :id declaredRequirements
+      :rule "An extension declares the host capabilities it requires; loading against a host that lacks a declared capability fails at load-time, naming both extension and capability."
+      :enforcement "load-time"
+      :failureCode "ERR_UNSATISFIED_HOST_CAPABILITY")
+    (:contract :id actualUsageVerification
+      :rule "Extension capability declarations are verified bidirectionally against actual AST form usage; undeclared capability use is rejected and superfluous declarations are flagged."
+      :enforcement "bidirectional-verification"
+      :failureCode "ERR_UNDECLARED_CAPABILITY_USE")
+  ]])
