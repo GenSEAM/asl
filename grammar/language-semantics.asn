@@ -101,5 +101,17 @@
       :rule "Flat vector-style Clojure bindings (let [a 1 b 2] body) are rejected despite saving 0.69 percent tokens, maintaining single-reference alignment with Scheme/Racket."
       :failureCode "ERR_UNALIGNED_BINDING_SHAPE"
       :exitCode 1)
+    (:semantic :id racketModuleResolution
+      :rule "A module path denotes a module resolved by a module name resolver against declared collection roots with zero positional guessing; resolution failure is a compile-time error at the requiring site."
+      :failureCode "ERR_MODULE_NOT_FOUND"
+      :exitCode 1)
+    (:semantic :id moduleCycleDetection
+      :rule "Cyclic require dependencies are detected and reported as a fatal cycle naming the offending path, rather than being silently truncated by a loading set."
+      :failureCode "ERR_MODULE_CYCLE_DETECTED"
+      :exitCode 1)
+    (:semantic :id singleModuleInstantiation
+      :rule "A module is instantiated exactly once per resolved path and cached across requiring sites, ensuring consistent binding sharing."
+      :failureCode "ERR_MULTIPLE_INSTANTIATION"
+      :exitCode 1)
   ]
 )

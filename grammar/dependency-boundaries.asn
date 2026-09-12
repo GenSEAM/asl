@@ -2,6 +2,7 @@
   :summary "Declared host boundaries and dependency classifications for the sovereign ASL runtime."
   :hostAdapter (:path "asl/tools/asl.c" :boundary "host-adapter" :declared true :third-party false :reported true)
   :substrate (:zero-substrate-claimed false :substrate-status "declared-host-substrate" :host-runtime "macOS/POSIX")
+  :collectionRoots ["asl/packages" "."]
   :tiers [
     (:tier :id "bootstrap"
       :purpose "Seed compiler and C host used to compile the resident engine"
