@@ -177,5 +177,9 @@
       :rule "No symbol enters the grammar unmeasured: every symbol record must declare measured token count and considered alternatives; checks recompute counts rather than trusting declarations."
       :failureCode "ERR_UNMEASURED_SYMBOL_ADMISSION"
       :exitCode 1)
+    (:semantic :id closedSetSingleTokenKeywordRule
+      :rule "The closed set of core forms and keywords must measure one token throughout under the production tokenizer; the open set of compound names adopts the measured minimum CamelCase spelling."
+      :failureCode "ERR_MULTI_TOKEN_CLOSED_KEYWORD"
+      :exitCode 1)
   ]
 )
