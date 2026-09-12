@@ -141,5 +141,9 @@
       :rule "Racket is an architectural and semantic reference design and optional development-time differential oracle, but is strictly excluded from deployed runtime dependencies."
       :failureCode "ERR_FORBIDDEN_DEPLOYMENT_DEPENDENCY"
       :exitCode 1)
+    (:semantic :id zeroExtensionKnowledgeInCore
+      :rule "The core reader, evaluator, and host contain zero names of any extension package, product, directory, or domain; resolution occurs strictly via the declared module graph."
+      :failureCode "ERR_CORE_EXTENSION_CONTAMINATION"
+      :exitCode 1)
   ]
 )
