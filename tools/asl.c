@@ -4207,6 +4207,12 @@ static int check_zero_foreign_files(const char *ws_root) {
 }
 
 static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_assert_suites, int *out_assert_count) {
+    const char *target_scope = getenv("ASL_GATE_SCOPE");
+    if (!target_scope || !target_scope[0]) {
+        target_scope = "asl/packages/asl-gates/tests";
+    }
+    printf("    [scope: %s]\n", target_scope);
+
     char runner_cmd[2048];
     const char *runner_script = "scripts/run-gate-tests.sh";
     char script_buf[4096];
@@ -4218,7 +4224,7 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
             runner_script = "../scripts/run-gate-tests.sh";
         }
     }
-    snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" bin/asl node asl/packages/asl-gates/tests", runner_script);
+    snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" bin/asl node %s", runner_script, target_scope);
     int ret = system(runner_cmd);
     if (ret != 0) {
         printf("    ✗ Test suite execution failed under parallel verification.\n");
@@ -4227,7 +4233,7 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
 
     char **tests = NULL;
     int tcnt = 0, tcap = 0;
-    collect_tree_files(ws_root, "asl/packages/asl-gates/tests", ".asl", "*test*.asl", &tests, &tcnt, &tcap);
+    collect_tree_files(ws_root, target_scope, ".asl", "*test*.asl", &tests, &tcnt, &tcap);
 
     int assert_suites = 0;
     int total_asserts = 0;
