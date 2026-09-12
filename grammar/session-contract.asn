@@ -37,6 +37,9 @@
     (:rule :id empiricalAttentionPolicyEvaluation
       :description "Attention policies must be empirically evaluated with repeated paired trials across baseline, ledger-only, observation masking, relevant retrieval, and summary arms; thresholds are frozen before held-out evaluation."
       :falsification "Unmeasured claims of universal optimum or single unrepeated runs are rejected.")
+    (:rule :id edgeEscalation
+      :description "When no plan step covers the situation or action is unauthorized, escalate at once; otherwise preserve optionality, contain inside owns, run the cheapest refutation, and escalate to principal."
+      :falsification "Uncovered step continues execution, unauthorized mutation executes, or escalation marks task completed.")
   ]
   :continuationSchema [
     (:field :id "cursor" :type "Str" :desc "Opaque session-bound snapshot continuation token")
@@ -104,5 +107,13 @@
     (:field :id "meanCostUsd" :type "Float" :desc "Mean dollar cost per trial")
     (:field :id "constraintPreservationRate" :type "Float" :desc "Ratio of trials preserving constraints")
     (:field :id "observationRecoveryRate" :type "Float" :desc "Ratio of trials successfully recovering observations")
+  ]
+  :escalationSchema [
+    (:field :id "escalationId" :type "Str" :desc "Unique escalation record identifier")
+    (:field :id "seen" :type "Str" :desc "Empirical situation or divergence observed")
+    (:field :id "tried" :type "Str" :desc "Cheapest refutation or contained probe attempted")
+    (:field :id "fork" :type "Str" :desc "Explicit decision branch or options requiring principal input")
+    (:field :id "resolves" :type "Str" :desc "Conditions under which escalation is resolved")
+    (:field :id "marksCompleted" :type "Bool" :desc "Must be false; escalation never marks task completed")
   ]
 )

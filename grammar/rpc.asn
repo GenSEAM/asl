@@ -341,5 +341,12 @@
          :category "session"
          :purpose "Query active session token budget, compaction thresholds, and observation mask state"
          :savings "80%")
+
+    (:op "escalate"
+         :id "asl-escalate"
+         :cmd "asl rpc '(:batch (:escalate [:seen \"...\"] [:tried \"...\"] [:fork \"...\"] [:resolves \"...\"]))'"
+         :category "session"
+         :purpose "Record structured escalation receipt when uncovered step or unauthorized action occurs"
+         :savings "80%")
   ]
 )

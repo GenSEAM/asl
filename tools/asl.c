@@ -2057,6 +2057,34 @@ static int op_resume(int step_id, StepToken *tokens, int ntokens, const char *ws
     return 0;
 }
 
+static int op_escalate(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *kseen = get_kw_arg(tokens, ntokens, "seen");
+    if (!kseen) kseen = get_pos_arg(tokens, ntokens, 1);
+    if (!kseen) kseen = "uncovered condition";
+    const char *ktried = get_kw_arg(tokens, ntokens, "tried");
+    if (!ktried) ktried = "minimal refutation probe";
+    const char *kfork = get_kw_arg(tokens, ntokens, "fork");
+    if (!kfork) kfork = "request principal guidance";
+    const char *kresolves = get_kw_arg(tokens, ntokens, "resolves");
+    if (!kresolves) kresolves = "principal instruction received";
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"escalate\" :status \"ok\" :escalationId \"esc-");
+    sb_append_int(out, step_id);
+    sb_append(out, "\" :seen \"");
+    sb_append_escaped(out, kseen);
+    sb_append(out, "\" :tried \"");
+    sb_append_escaped(out, ktried);
+    sb_append(out, "\" :fork \"");
+    sb_append_escaped(out, kfork);
+    sb_append(out, "\" :resolves \"");
+    sb_append_escaped(out, kresolves);
+    sb_append(out, "\" :marksCompleted false)\n");
+    (void)ws_root;
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -3051,6 +3079,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_handoff(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "resume") == 0) {
         op_resume(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "escalate") == 0) {
+        op_escalate(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
