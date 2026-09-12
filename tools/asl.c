@@ -4477,6 +4477,15 @@ static int run_gate_6_grammar(const char *ws_root, int *out_total_syms, int *out
     }
     free(asns);
 
+    char lex_path[1024];
+    snprintf(lex_path, sizeof(lex_path), "%s/asl/grammar/lexicon.asn", ws_root);
+    FILE *lfp = fopen(lex_path, "r");
+    if (!lfp) {
+        printf("    ✗ Lexicon audit failed: missing canonical source %s\n", lex_path);
+        return 1;
+    }
+    fclose(lfp);
+
     if (out_total_syms) *out_total_syms = total_syms;
     if (out_rationale_count) *out_rationale_count = rationale_count;
     return 0;
