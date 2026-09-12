@@ -1290,9 +1290,28 @@ static FileLease *find_lease_for_path(const char *rel_path) {
     return NULL;
 }
 
-static int check_lease_staleness(const char *ws_root, const char *rel_path, const char *session_id, char *err_msg, size_t err_msg_sz) {
+static FileLease *find_raw_lease_for_path(const char *rel_path) {
+    for (int i = 0; i < g_nleases; i++) {
+        if (strcmp(g_file_leases[i].rel_path, rel_path) == 0) {
+            return &g_file_leases[i];
+        }
+    }
+    return NULL;
+}
+static int check_lease_staleness(const char *ws_root, const char *rel_path, const char *session_id, int require_lease, char *err_msg, size_t err_msg_sz) {
     FileLease *lease = find_lease_for_path(rel_path);
-    if (!lease) return 0;
+    if (!lease) {
+        FileLease *raw = find_raw_lease_for_path(rel_path);
+        if (raw && (!raw->active || (get_monotonic_ms() - raw->acquired_at_ms > raw->ttl_ms))) {
+            snprintf(err_msg, err_msg_sz, "Lease on path '%s' is expired or stale", rel_path);
+            return 3;
+        }
+        if (require_lease) {
+            snprintf(err_msg, err_msg_sz, "No active lease held by session '%s' on path '%s'", session_id ? session_id : "default", rel_path);
+            return 3;
+        }
+        return 0;
+    }
 
     if (session_id && session_id[0] && strcmp(lease->session_id, session_id) != 0) {
         snprintf(err_msg, err_msg_sz, "Active lease held by session '%s'", lease->session_id);
@@ -2718,7 +2737,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             if (ksid) strncpy(session_id, ksid, sizeof(session_id) - 1);
 
             char err_msg[512] = {0};
-            int st_err = check_lease_staleness(ws_root, file, session_id, err_msg, sizeof(err_msg));
+            int req_l = (get_kw_arg(tokens, ntokens, "require-lease") != NULL || get_kw_arg(tokens, ntokens, "relay") != NULL);
+            int st_err = check_lease_staleness(ws_root, file, session_id, req_l, err_msg, sizeof(err_msg));
             if (st_err == 1) {
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
@@ -2730,7 +2750,15 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             } else if (st_err == 2) {
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
-                sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_LEASE_CONFLICT\" :message \"");
+                sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_STALE_LEASE\" :message \"");
+                sb_append_escaped(out, err_msg);
+                sb_append(out, "\")\n");
+                free_tokens(tokens, ntokens);
+                return 1;
+            } else if (st_err == 3) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"edit\" :status \"rejected\" :error-code \":ERR_STALE_LEASE\" :message \"");
                 sb_append_escaped(out, err_msg);
                 sb_append(out, "\")\n");
                 free_tokens(tokens, ntokens);
@@ -2861,7 +2889,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             if (ksid) strncpy(session_id, ksid, sizeof(session_id) - 1);
 
             char err_msg[512] = {0};
-            int st_err = check_lease_staleness(ws_root, file, session_id, err_msg, sizeof(err_msg));
+            int req_l = (get_kw_arg(tokens, ntokens, "require-lease") != NULL || get_kw_arg(tokens, ntokens, "relay") != NULL);
+            int st_err = check_lease_staleness(ws_root, file, session_id, req_l, err_msg, sizeof(err_msg));
             if (st_err == 1) {
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
