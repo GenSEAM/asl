@@ -6,7 +6,8 @@
       measure-toml-savings]
   :i [(asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
-      (asl-parser/ast :a ast)])
+      (asl-parser/ast :a ast)
+      (asl-text/text :a txt)])
 
 (dfs TomlTranspileResult
   (:f output Str "Transpiled TOML or ASN S-expression")
@@ -14,37 +15,6 @@
   (:f asn-tokens I64 "Token count in ASN representation")
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
-
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE token count estimation."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token compaction percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
-
-(df strip-quotes [(val Str)] -> Str
-  :d "Strips outer quotes from string values."
-  (let [(len (string-length val))]
-    (if (and (>= len 2) (or (and (string-starts-with? val "\"") (string-ends-with? val "\""))
-                            (and (string-starts-with? val "'") (string-ends-with? val "'"))))
-      (option-or (string-slice val 1 (- len 1)) "")
-      val)))
-
-(df strip-colon [(val Str)] -> Str
-  :d "Strips leading colon from keywords."
-  (if (string-starts-with? val ":")
-    (option-or (string-slice val 1 (string-length val)) val)
-    val))
 
 (df strip-toml-comment [(line Str)] -> Str
   :d "Strips '#' comments outside quotes from a line."
@@ -101,7 +71,7 @@
       ((= clean "true") (rd/make-atom "true"))
       ((= clean "false") (rd/make-atom "false"))
       ((or (string-starts-with? clean "\"") (string-starts-with? clean "'"))
-       (rd/make-atom (str "\"" (strip-quotes clean) "\"")))
+       (rd/make-atom (str "\"" (txt/strip-quotes clean) "\"")))
       ((is-numeric clean) (rd/make-atom clean))
       (:else
        (rd/make-atom (str "\"" clean "\""))))))
@@ -223,15 +193,15 @@
         (if (list-empty? sections)
           (TomlTranspileResult
             :output "Syntax error: empty or invalid TOML document"
-            :original-tokens (estimate-tokens trimmed)
-            :asn-tokens (estimate-tokens trimmed)
+            :original-tokens (txt/estimate-tokens trimmed)
+            :asn-tokens (txt/estimate-tokens trimmed)
             :savings-percent 0.0
             :success false)
           (let [(ast-node (build-toml-ast sections))
                 (compact (rd/render-sexpr ast-node))
-                (orig-tok (estimate-tokens trimmed))
-                (asn-tok (estimate-tokens compact))
-                (savings (calc-savings orig-tok asn-tok))]
+                (orig-tok (txt/estimate-tokens trimmed))
+                (asn-tok (txt/estimate-tokens compact))
+                (savings (txt/calc-savings orig-tok asn-tok))]
             (TomlTranspileResult
               :output compact
               :original-tokens orig-tok
@@ -276,7 +246,7 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
+       (let [(orig-tok (txt/estimate-tokens trimmed))
              (toks (lx/tokenize trimmed))
              (forms-res (ast/read-forms toks))]
          (mt forms-res
@@ -301,7 +271,7 @@
                   ((rd/sexpr-list items)
                    (let [(toml-lines (sexpr-to-toml-sections items))
                          (toml-out (string-join toml-lines "\n"))
-                         (toml-tok (estimate-tokens toml-out))]
+                         (toml-tok (txt/estimate-tokens toml-out))]
                      (TomlTranspileResult
                        :output toml-out
                        :original-tokens orig-tok
@@ -322,7 +292,7 @@
         (fin (fold (fn [(st TomlGenState) (it rd/SExpr)] -> TomlGenState
                      (if (string-empty? (.-pending-key st))
                        (mt it
-                         ((rd/sexpr-atom k) (TomlGenState :lines (.-lines st) :pending-key (strip-colon (strip-quotes k))))
+                         ((rd/sexpr-atom k) (TomlGenState :lines (.-lines st) :pending-key (txt/strip-colon (txt/strip-quotes k))))
                          (_ st))
                        (let [(key (.-pending-key st))]
                          (mt it
@@ -370,7 +340,7 @@
         (fin (fold (fn [(st TomlGenState) (it rd/SExpr)] -> TomlGenState
                      (if (string-empty? (.-pending-key st))
                        (mt it
-                         ((rd/sexpr-atom k) (TomlGenState :lines (.-lines st) :pending-key (strip-colon (strip-quotes k))))
+                         ((rd/sexpr-atom k) (TomlGenState :lines (.-lines st) :pending-key (txt/strip-colon (txt/strip-quotes k))))
                          (_ st))
                        (let [(key (.-pending-key st))
                              (line (str key " = " (render-toml-val it)))]

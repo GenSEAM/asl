@@ -1,7 +1,6 @@
 (module asl-codec/sh-transpile
   :d "AgentScript Shell Command Codec: Bidirectional conversion between compact ASN S-expressions and safe POSIX/Bash scripts."
   :x [ShTranspileResult
-      escape-sh-arg
       asn-to-sh
       sh-to-asn
       make-cmd
@@ -18,19 +17,6 @@
   (:f asn-tokens I64 "Token count in compact ASN S-expression syntax")
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if transpilation succeeded"))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token savings percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
-
-(df escape-sh-arg [(arg Str)] -> Str
-  :d "Safely escapes an argument string for POSIX shell using canonical asl-text/escape."
-  (esc/escape-sh-compact arg))
 
 (df make-cmd [(bin Str) (args (List Str))] -> Str
   :d "Constructs an ASN command S-expression from binary name and argument list."
@@ -98,7 +84,7 @@
                      s8))
              (cleaned (string-trim s9))
              (raw-tok (txt/estimate-tokens cleaned))
-             (savings (calc-savings raw-tok asn-tok))]
+             (savings (txt/calc-savings raw-tok asn-tok))]
          (ShTranspileResult
            :output cleaned
            :original-tokens raw-tok
@@ -121,7 +107,7 @@
        (let [(raw-tok (txt/estimate-tokens trimmed))
              (asn-out (s/concat (s/concat "(:cmd \"" trimmed) "\")"))
              (asn-tok (txt/estimate-tokens asn-out))
-             (savings (calc-savings raw-tok asn-tok))]
+             (savings (txt/calc-savings raw-tok asn-tok))]
          (ShTranspileResult
            :output asn-out
            :original-tokens raw-tok

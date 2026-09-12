@@ -232,8 +232,6 @@
     (:sym :name "make-cmd" :kind :fn :tokens 2)
     (:sym :name "make-pipe" :kind :fn :tokens 2)
     (:sym :name "make-script" :kind :fn :tokens 2)
-    (:sym :name "escape-sh-arg" :kind :fn :tokens 3
-          :rationale "Safely escapes shell argument using single-quote wrapping")
     (:sym :name "asn-to-sh" :kind :fn :tokens 3
           :rationale "Transpiles ASN shell S-expressions to safe POSIX command strings")
     (:sym :name "sh-to-asn" :kind :fn :tokens 3

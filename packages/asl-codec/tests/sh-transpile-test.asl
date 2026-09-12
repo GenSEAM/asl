@@ -9,13 +9,14 @@
       test-sh-to-asn
       test-sh-savings
       run-sh-tests]
-  :i [(asl-codec/sh-transpile :a sh)])
+  :i [(asl-codec/sh-transpile :a sh)
+      (asl-text/escape :a esc)])
 
 (df test-escape-safe [] -> Bool
   :d "Tests escaping of arguments with only safe characters (no wrapping needed)"
-  (let [(r1 (sh/escape-sh-arg "status"))
-        (r2 (sh/escape-sh-arg "--depth=1"))
-        (r3 (sh/escape-sh-arg "packages/asl-codec"))]
+  (let [(r1 (esc/escape-sh-compact "status"))
+        (r2 (esc/escape-sh-compact "--depth=1"))
+        (r3 (esc/escape-sh-compact "packages/asl-codec"))]
     (assert (= r1 "status") "Safe status arg must remain bare")
     (assert (= r2 "--depth=1") "Safe flag arg must remain bare")
     (assert (= r3 "packages/asl-codec") "Safe path arg must remain bare")
@@ -23,8 +24,8 @@
 
 (df test-escape-special [] -> Bool
   :d "Tests escaping of arguments with spaces, dollar signs, and quotes"
-  (let [(r1 (sh/escape-sh-arg "hello world"))
-        (r2 (sh/escape-sh-arg "val with $VAR and 'quotes'"))]
+  (let [(r1 (esc/escape-sh-compact "hello world"))
+        (r2 (esc/escape-sh-compact "val with $VAR and 'quotes'"))]
     (assert (= r1 "'hello world'") "Spaces must be wrapped in single quotes")
     (assert (string-contains? r2 "'\\''quotes'\\''") "Embedded single quotes must be escaped")
     true))

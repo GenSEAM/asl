@@ -112,6 +112,10 @@
           :rationale "Strips leading colon from keyword or symbol string")
     (:sym :name "estimate-tokens" :kind :fn :tokens 2
           :rationale "Deterministic BPE token count estimation based on character length")
+    (:sym :name "calc-savings" :kind :fn :tokens 2
+          :rationale "Calculates token savings percentage between original and ASN representation")
+    (:sym :name "extract-between" :kind :fn :tokens 2
+          :rationale "Extracts substring between prefix and subsequent suffix")
     (:sym :name "concat" :kind :fn :tokens 1)
     (:sym :name "join" :kind :fn :tokens 1)
   ])

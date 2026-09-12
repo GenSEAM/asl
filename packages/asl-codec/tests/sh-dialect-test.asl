@@ -4,7 +4,8 @@
       TestBashProcessSubstTranspile
       TestPosixStrictCompliance
       run-tests]
-  :i [(asl-codec/sh-transpile :a sh)])
+  :i [(asl-codec/sh-transpile :a sh)
+      (asl-text/escape :a esc)])
 
 (df TestShellDialectParity [] -> Bool
   :d "Verifies dialect parity across command and pipeline transpilation"
@@ -22,8 +23,8 @@
 
 (df TestBashProcessSubstTranspile [] -> Bool
   :d "Verifies bash argument escaping and process pipeline construction"
-  (let [(arg1 (sh/escape-sh-arg "<(cat file.txt)"))
-        (arg2 (sh/escape-sh-arg "arg with spaces"))
+  (let [(arg1 (esc/escape-sh-compact "<(cat file.txt)"))
+        (arg2 (esc/escape-sh-compact "arg with spaces"))
         (c1 (sh/make-cmd "diff" (list "<(sort a.txt)" "<(sort b.txt)")))]
     (assert (string-starts-with? arg1 "'") "Special process substitution character must be wrapped in quotes")
     (assert (= arg2 "'arg with spaces'") "Spaced argument must be single-quoted")
@@ -37,7 +38,7 @@
         (c2 (sh/make-cmd "cp" (list "src/main.asl" "build/")))
         (scr (sh/make-script (list c1 c2) true))
         (res (sh/asn-to-sh scr))
-        (safe (sh/escape-sh-arg "var_name_123"))]
+        (safe (esc/escape-sh-compact "var_name_123"))]
     (assert (string-contains? scr ":strict true") "Script must have strict true declaration")
     (assert (.-success res) "Strict script transpilation must succeed")
     (assert (string-contains? (.-output res) "set -euo pipefail") "Strict script must prepend set -euo pipefail")
