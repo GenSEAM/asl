@@ -181,5 +181,9 @@
       :rule "The closed set of core forms and keywords must measure one token throughout under the production tokenizer; the open set of compound names adopts the measured minimum CamelCase spelling."
       :failureCode "ERR_MULTI_TOKEN_CLOSED_KEYWORD"
       :exitCode 1)
+    (:semantic :id humanDecoderSeparation
+      :rule "Human legibility is provided strictly via out-of-band decoders and never paid for as language source bloat; decoder output is strictly rejected if submitted as source code."
+      :failureCode "ERR_DECODER_OUTPUT_REENTRY"
+      :exitCode 1)
   ]
 )
