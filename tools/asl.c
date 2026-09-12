@@ -1432,6 +1432,7 @@ typedef struct {
 } Bm25FileList;
 
 static void bm25_collector_cb(const char *rel_path, const char *full_path, void *user_data) {
+    (void)rel_path;
     Bm25FileList *list = (Bm25FileList *)user_data;
     if (list->count >= list->cap) return;
     size_t len = strlen(full_path);
@@ -1692,6 +1693,99 @@ static int op_q(int step_id, StepToken *tokens, int ntokens, const char *ws_root
     return 0;
 }
 
+static void append_session_trace(const char *ws_root, int step_id, const char *op, const char *target, const char *before_digest, const char *after_digest, const char *status, long long duration_ms) {
+    if (!ws_root || !ws_root[0]) return;
+    char trace_path[4096];
+    snprintf(trace_path, sizeof(trace_path), "%s/.asl/mem/trace.asn", ws_root);
+
+    long long now_ms = (long long)time(NULL) * 1000LL;
+
+    struct stat st;
+    if (stat(trace_path, &st) == 0 && st.st_size > 500000) {
+        char rot_path[4096];
+        snprintf(rot_path, sizeof(rot_path), "%s/.asl/mem/trace.asn.1", ws_root);
+        rename(trace_path, rot_path);
+    }
+
+    FILE *fp = fopen(trace_path, "a");
+    if (!fp) return;
+
+    fprintf(fp, "\n(:trace-entry :timestamp %lld :step %d :op \"%s\" :target \"%s\" :before-digest \"%s\" :after-digest \"%s\" :status \"%s\" :duration-ms %lld)",
+            now_ms, step_id, op ? op : "", target ? target : "", before_digest ? before_digest : "", after_digest ? after_digest : "", status ? status : "ok", duration_ms);
+    fclose(fp);
+}
+
+static int op_trace(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *ksince = get_kw_arg(tokens, ntokens, "since");
+    long long since = ksince ? atoll(ksince) : 0;
+
+    const char *fop = get_kw_arg(tokens, ntokens, "op");
+
+    const char *klimit = get_kw_arg(tokens, ntokens, "limit");
+    int limit = klimit ? atoi(klimit) : 20;
+    if (limit <= 0) limit = 20;
+
+    char trace_path[4096];
+    snprintf(trace_path, sizeof(trace_path), "%s/.asl/mem/trace.asn", ws_root);
+
+    FILE *fp = fopen(trace_path, "r");
+    if (!fp) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"trace\" :status \"ok\" :count 0 :records [])\n");
+        return 0;
+    }
+
+    char line[4096];
+    StrBuf rec_sb;
+    sb_init(&rec_sb);
+    int count = 0;
+
+    while (fgets(line, sizeof(line), fp)) {
+        char *p = strstr(line, "(:trace-entry");
+        if (!p) continue;
+
+        if (fop && fop[0]) {
+            char op_pat[128];
+            snprintf(op_pat, sizeof(op_pat), ":op \"%s\"", fop);
+            if (!strstr(p, op_pat)) continue;
+        }
+
+        if (since > 0) {
+            char *ts_ptr = strstr(p, ":timestamp ");
+            if (ts_ptr) {
+                long long ts = atoll(ts_ptr + 11);
+                if (ts < since) continue;
+            }
+        }
+
+        char *end = p + strlen(p) - 1;
+        while (end > p && (*end == '\n' || *end == '\r' || *end == ' ' || *end == '\t')) {
+            *end = '\0';
+            end--;
+        }
+
+        sb_append(&rec_sb, " ");
+        sb_append(&rec_sb, p);
+        count++;
+        if (count >= limit) break;
+    }
+    fclose(fp);
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"trace\" :status \"ok\" :count ");
+    sb_append_int(out, count);
+    sb_append(out, " :records [");
+    if (rec_sb.data && rec_sb.data[0]) {
+        sb_append(out, rec_sb.data);
+        sb_append(out, " ");
+    }
+    sb_append(out, "])\n");
+    sb_free(&rec_sb);
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -1706,6 +1800,36 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
 
     StepToken tokens[64];
     int ntokens = tokenize_step(step_str, tokens, 64);
+
+    long long step_start_ms = get_monotonic_ms();
+    char before_digest[65] = {0};
+    char after_digest[65] = {0};
+    char trace_target[1024] = {0};
+
+    if (strcmp(op, "edit") == 0 || strcmp(op, "write") == 0) {
+        const char *kf = get_kw_arg(tokens, ntokens, "file");
+        if (!kf) kf = get_kw_arg(tokens, ntokens, "path");
+        if (!kf) kf = get_pos_arg(tokens, ntokens, 1);
+        if (kf) {
+            strncpy(trace_target, kf, sizeof(trace_target) - 1);
+            char full_p[4096];
+            if (kf[0] == '/') snprintf(full_p, sizeof(full_p), "%s", kf);
+            else snprintf(full_p, sizeof(full_p), "%s/%s", ws_root, kf);
+            compute_file_digest(full_p, before_digest, sizeof(before_digest));
+        }
+    } else if (strcmp(op, "run") == 0) {
+        const char *kc = get_kw_arg(tokens, ntokens, "cmd");
+        if (!kc) kc = get_pos_arg(tokens, ntokens, 1);
+        if (kc) strncpy(trace_target, kc, sizeof(trace_target) - 1);
+    } else if (strcmp(op, "claim") == 0) {
+        const char *kp = get_kw_arg(tokens, ntokens, "path");
+        if (!kp) kp = get_pos_arg(tokens, ntokens, 1);
+        if (kp) strncpy(trace_target, kp, sizeof(trace_target) - 1);
+    } else if (strcmp(op, "q") == 0) {
+        const char *kq = get_kw_arg(tokens, ntokens, "query");
+        if (!kq) kq = get_pos_arg(tokens, ntokens, 1);
+        if (kq) strncpy(trace_target, kq, sizeof(trace_target) - 1);
+    }
 
     if (strcmp(op, "ping") == 0) {
         sb_append(out, "  (:step :id ");
@@ -2646,6 +2770,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_leases(step_id, ws_root, out);
     } else if (strcmp(op, "q") == 0) {
         op_q(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "trace") == 0) {
+        op_trace(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
@@ -2653,6 +2779,20 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         sb_append_escaped(out, op);
         sb_append(out, "\" :status \"rejected\" :error-code \":ERR_UNIMPLEMENTED\" :message \"Operation not implemented\")\n");
     }
+
+    if (strcmp(op, "trace") != 0 && strcmp(op, "ping") != 0 && strcmp(op, "inspect") != 0) {
+        int is_rejected = (out->data && strstr(out->data + prev_len, ":status \"rejected\"") != NULL) ? 1 : 0;
+        const char *trace_status = is_rejected ? "rejected" : "ok";
+        if ((strcmp(op, "edit") == 0 || strcmp(op, "write") == 0) && trace_target[0] && !is_rejected) {
+            char full_p[4096];
+            if (trace_target[0] == '/') snprintf(full_p, sizeof(full_p), "%s", trace_target);
+            else snprintf(full_p, sizeof(full_p), "%s/%s", ws_root, trace_target);
+            compute_file_digest(full_p, after_digest, sizeof(after_digest));
+        }
+        long long duration_ms = get_monotonic_ms() - step_start_ms;
+        append_session_trace(ws_root, step_id, op, trace_target, before_digest, after_digest, trace_status, duration_ms);
+    }
+
     free_tokens(tokens, ntokens);
     return (out->data && strstr(out->data + prev_len, ":status \"rejected\"") != NULL) ? 1 : 0;
 }
