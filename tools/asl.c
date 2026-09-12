@@ -173,6 +173,41 @@ static void normalize_path_components(const char *src, char *dst, size_t dst_len
 
 static int is_safe_path(const char *ws_root, const char *path) {
     if (!path || !ws_root) return 0;
+
+    if (strncmp(ws_root, "opfs://", 7) == 0) {
+        if (path[0] == '/') return 0;
+        const char *subpath = path;
+        if (strncmp(path, "opfs://", 7) == 0) {
+            size_t wslen = strlen(ws_root);
+            if (strncmp(path, ws_root, wslen) != 0) return 0;
+            if (path[wslen] != '\0' && path[wslen] != '/') return 0;
+            subpath = path + wslen;
+            while (*subpath == '/') subpath++;
+        }
+        int depth = 0;
+        const char *p = subpath;
+        while (*p) {
+            while (*p == '/') p++;
+            if (!*p) break;
+            const char *seg_start = p;
+            while (*p && *p != '/') p++;
+            size_t seg_len = p - seg_start;
+            if (seg_len == 1 && seg_start[0] == '.') {
+                continue;
+            } else if (seg_len == 2 && seg_start[0] == '.' && seg_start[1] == '.') {
+                if (depth <= 0) return 0;
+                depth--;
+            } else {
+                depth++;
+            }
+        }
+        return 1;
+    }
+
+    if (strncmp(path, "opfs://", 7) == 0) {
+        return 0;
+    }
+
     char full[4096];
     if (path[0] == '/') {
         snprintf(full, sizeof(full), "%s", path);
@@ -215,6 +250,8 @@ static int is_safe_path(const char *ws_root, const char *path) {
 static void resolve_path(const char *ws_root, const char *path, char *out, size_t out_len) {
     if (!path || !path[0]) {
         snprintf(out, out_len, "%s", ws_root);
+    } else if (strncmp(path, "opfs://", 7) == 0) {
+        snprintf(out, out_len, "%s", path);
     } else if (path[0] == '/') {
         snprintf(out, out_len, "%s", path);
     } else {
@@ -7562,8 +7599,38 @@ static int run_cmd_impact(int argc, char **argv, const char *ws_root) {
 }
 
 static int run_doctor(int argc, char **argv, const char *ws_root) {
-    (void)argc;
-    (void)argv;
+    int is_browser = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--runtime=browser") == 0 ||
+            (strcmp(argv[i], "--runtime") == 0 && i + 1 < argc && strcmp(argv[i+1], "browser") == 0) ||
+            (strcmp(argv[i], "--target") == 0 && i + 1 < argc && strcmp(argv[i+1], "browser") == 0)) {
+            is_browser = 1;
+            break;
+        }
+    }
+    const char *env_rt = getenv("ASL_RUNTIME");
+    if (env_rt && strcmp(env_rt, "browser") == 0) is_browser = 1;
+
+    if (is_browser) {
+        printf("(:capabilities\n");
+        printf("  :runtime \"browser\"\n");
+        printf("  :engine \"wasm32\"\n");
+        printf("  :workspace \"opfs\"\n");
+        printf("  :boundaryPolicy :works\n");
+        printf("  :capabilities [\n");
+        printf("    (:cap :id \"pathBoundary\" :status :works :boundary \"opfs\")\n");
+        printf("    (:cap :id \"wasmBatchRpc\" :status :works :zeroSocket true)\n");
+        printf("    (:cap :id \"vdomRender\" :status :works)\n");
+        printf("    (:cap :id \"astParse\" :status :works)\n");
+        printf("    (:cap :id \"runCommand\" :status :absent :fallback \"delegate to local or relay runtime via agent-bus\")\n");
+        printf("    (:cap :id \"procSpawn\" :status :absent :fallback \"delegate to local or relay runtime via agent-bus\")\n");
+        printf("    (:cap :id \"netSocket\" :status :absent :fallback \"use fetch or WebSockets via browser-bridge\")\n");
+        printf("    (:cap :id \"nativeFs\" :status :absent :fallback \"use OPFS workspace\")\n");
+        printf("  ]\n");
+        printf(")\n");
+        return 0;
+    }
+
     printf("(:capabilities\n");
     printf("  :environment [\n");
     int diff_ok = (system("diff --version >/dev/null 2>&1") == 0);
@@ -7587,6 +7654,14 @@ static int run_doctor(int argc, char **argv, const char *ws_root) {
     printf("    (:op :name \"edit\" :status :works :purpose \"in-place file editing\")\n");
     printf("    (:op :name \"grep\" :status :works :purpose \"ripgrep content search\")\n");
     printf("    (:op :name \"q\" :status :planned :fallback \"host grep\")\n");
+    printf("  ]\n");
+    printf("  :browserCapabilities [\n");
+    printf("    (:cap :id \"pathBoundary\" :status :works :boundary \"opfs\")\n");
+    printf("    (:cap :id \"wasmBatchRpc\" :status :works :zeroSocket true)\n");
+    printf("    (:cap :id \"runCommand\" :status :absent :fallback \"delegate to local or relay runtime via agent-bus\")\n");
+    printf("    (:cap :id \"procSpawn\" :status :absent :fallback \"delegate to local or relay runtime via agent-bus\")\n");
+    printf("    (:cap :id \"netSocket\" :status :absent :fallback \"use fetch or WebSockets via browser-bridge\")\n");
+    printf("    (:cap :id \"nativeFs\" :status :absent :fallback \"use OPFS workspace\")\n");
     printf("  ]\n");
     char fix_path[1024];
     snprintf(fix_path, sizeof(fix_path), "%s/tests/doctor/fixture.txt", ws_root);
