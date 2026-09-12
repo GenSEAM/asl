@@ -33,4 +33,11 @@
         (:client :id "addie" :channel "native" :permissionTier "safe")
         (:client :id "eddie" :channel "native" :permissionTier "safe")
       ])
+    (:contract :id hostInterface
+      :rule "Single declared host interface covering evaluation, filesystem, network, time, and randomness, naming zero concrete engines; at least two conforming engines satisfy the interface."
+      :surfaces ["evaluation" "filesystem" "network" "time" "randomness"]
+      :conformingEngines [
+        (:engine :id "native-host" :type "resident-bootstrap" :conformance :full)
+        (:engine :id "portable-wasm" :type "autonomous-closure" :conformance :full)
+      ])
   ])
