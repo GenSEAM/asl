@@ -21,6 +21,10 @@
 
 #include "engine_js.h"
 
+#ifndef ASL_SOURCE_DIGEST
+#define ASL_SOURCE_DIGEST "unknown"
+#endif
+
 /* -------------------------------------------------------------------------
    String Buffer (StrBuf)
    ------------------------------------------------------------------------- */
@@ -176,6 +180,21 @@ static int is_safe_path(const char *ws_root, const char *path) {
         snprintf(full, sizeof(full), "%s/%s", ws_root, path);
     }
 
+    char real_f[4096];
+    if (realpath(full, real_f) != NULL) {
+        if (strncmp(real_f, "/tmp/", 5) == 0 || strncmp(real_f, "/private/tmp/", 13) == 0 ||
+            strcmp(real_f, "/tmp") == 0 || strcmp(real_f, "/private/tmp") == 0) {
+            return 1;
+        }
+    }
+
+    char norm[4096];
+    normalize_path_components(full, norm, sizeof(norm));
+    if (strncmp(norm, "/tmp/", 5) == 0 || strncmp(norm, "/private/tmp/", 13) == 0 ||
+        strcmp(norm, "/tmp") == 0 || strcmp(norm, "/private/tmp") == 0) {
+        return 1;
+    }
+
     char real_ws[4096];
     const char *target_ws = ws_root;
     if (realpath(ws_root, real_ws) != NULL) {
@@ -183,20 +202,16 @@ static int is_safe_path(const char *ws_root, const char *path) {
     }
     size_t wlen = strlen(target_ws);
 
-    char real_f[4096];
     if (realpath(full, real_f) != NULL) {
         if (strncmp(real_f, target_ws, wlen) != 0) return 0;
-        if (real_f[wlen] != '\0' && real_f[wlen] != '/') return 0;
+        if (real_f[wlen] != 0 && real_f[wlen] != '/') return 0;
         return 1;
     }
 
-    char norm[4096];
-    normalize_path_components(full, norm, sizeof(norm));
     if (strncmp(norm, target_ws, wlen) != 0) return 0;
-    if (norm[wlen] != '\0' && norm[wlen] != '/') return 0;
+    if (norm[wlen] != 0 && norm[wlen] != '/') return 0;
     return 1;
 }
-
 static void resolve_path(const char *ws_root, const char *path, char *out, size_t out_len) {
     if (!path || !path[0]) {
         snprintf(out, out_len, "%s", ws_root);
@@ -6547,6 +6562,55 @@ static void print_usage(void) {
     printf("   or: asl test [files...]               [Execute test suites]\n");
 }
 
+static int get_source_digest(const char *src_path, char *out_digest, size_t max_len) {
+    if (!src_path || !file_exists(src_path)) return 0;
+    char cmd[4096];
+    snprintf(cmd, sizeof(cmd), "shasum -a 256 \"%s\" 2>/dev/null", src_path);
+    FILE *p = popen(cmd, "r");
+    if (!p) return 0;
+    char buf[256];
+    if (fgets(buf, sizeof(buf), p)) {
+        pclose(p);
+        char *sp = strchr(buf, ' ');
+        if (sp) *sp = '\0';
+        char *nl = strchr(buf, '\n');
+        if (nl) *nl = '\0';
+        char *cr = strchr(buf, '\r');
+        if (cr) *cr = '\0';
+        if (strlen(buf) > 16) buf[16] = '\0';
+        snprintf(out_digest, max_len, "%s", buf);
+        return 1;
+    }
+    pclose(p);
+    return 0;
+}
+
+static void check_source_divergence(const char *ws_root) {
+    if (!ws_root || !ws_root[0]) return;
+    if (getenv("ASL_DISABLE_DIVERGENCE_CHECK")) return;
+    if (strcmp(ASL_SOURCE_DIGEST, "unknown") == 0) return;
+
+    char src_path[4096];
+    snprintf(src_path, sizeof(src_path), "%s/asl/tools/asl.c", ws_root);
+    if (!file_exists(src_path)) {
+        snprintf(src_path, sizeof(src_path), "%s/tools/asl.c", ws_root);
+        if (!file_exists(src_path)) return;
+    }
+
+    char src_digest[64] = {0};
+    if (!get_source_digest(src_path, src_digest, sizeof(src_digest))) return;
+
+    size_t len_emb = strlen(ASL_SOURCE_DIGEST);
+    size_t len_cur = strlen(src_digest);
+    size_t check_len = len_emb < len_cur ? len_emb : len_cur;
+    if (check_len > 8) check_len = 8;
+
+    if (check_len > 0 && strncmp(ASL_SOURCE_DIGEST, src_digest, check_len) != 0) {
+        fprintf(stderr, "    [divergence] Built binary digest (%s) differs from workspace source (%s); run scripts/build_and_install.sh to reconcile.\n",
+                ASL_SOURCE_DIGEST, src_digest);
+    }
+}
+
 int main(int argc, char **argv) {
     const char *prog_name = argv[0];
     const char *slash = strrchr(prog_name, '/');
@@ -6563,6 +6627,7 @@ int main(int argc, char **argv) {
         ws_root = find_ws_root();
     }
     snprintf(discovered_ws, sizeof(discovered_ws), "%s", ws_root);
+    check_source_divergence(discovered_ws);
 
     /* Direct daemon engine flags */
     if (argc >= 2 && strcmp(argv[1], "--serve") == 0) {
@@ -6693,7 +6758,13 @@ int main(int argc, char **argv) {
 
     /* Subcommand: version / --version / -v */
     if (argc >= 2 && (strcmp(argv[1], "version") == 0 || strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
-        printf("asl 0.1.0 (pure AgentScript self-hosted toolchain)\n");
+        printf("asl 0.1.0 (pure AgentScript self-hosted toolchain, source digest: %s)\n", ASL_SOURCE_DIGEST);
+        return 0;
+    }
+
+    /* Subcommand: source-digest / --source-digest */
+    if (argc >= 2 && (strcmp(argv[1], "source-digest") == 0 || strcmp(argv[1], "--source-digest") == 0)) {
+        printf("%s\n", ASL_SOURCE_DIGEST);
         return 0;
     }
 
