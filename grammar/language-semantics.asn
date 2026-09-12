@@ -153,5 +153,9 @@
       :rule "Database, view, and query syntax constructs are authored as libraries over core syntax extension rather than embedded in the core evaluator."
       :failureCode "ERR_DOMAIN_VOCABULARY_IN_CORE"
       :exitCode 1)
+    (:semantic :id interchangeableEngineInterface
+      :rule "The language specification names zero concrete engines; execution relies on one host interface satisfied by at least two conforming engines running one unchanged suite."
+      :failureCode "ERR_CONCRETE_ENGINE_COUPLING"
+      :exitCode 1)
   ]
 )
