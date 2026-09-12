@@ -29,7 +29,7 @@
       render-receipt
       estimate-tokens
       receipt-tokens]
-  :i [(core/process :a cp)
+  :i [(asl-sh/core-process :a cp)
       (apm :a apm)])
 
 (df status [(elapsed-ms I64) (deadline-ms I64) (op-name Str)] -> apm/SupervisorVerdict

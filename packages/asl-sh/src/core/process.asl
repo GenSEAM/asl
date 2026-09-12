@@ -1,4 +1,4 @@
-(module asl-sh/process
+(module asl-sh/core-process
   :d "Native AgentScript Process Execution and Typed Command Builder (@pcp:d-446d)."
   :x [ProcessCmd
       ProcessOutput

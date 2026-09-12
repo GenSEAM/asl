@@ -7,7 +7,7 @@
       test-rewrite-preserves-literals
       test-rewrite-idempotency
       run-tests]
-  :i [(compact_rewrite :a cr)])
+  :i [(asl-compiler/compact-rewrite :a cr)])
 
 (df test-compact-rule-creation [] -> Bool
   :d "Verifies construction and property access of compaction rules."

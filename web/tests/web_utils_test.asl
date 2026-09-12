@@ -5,8 +5,8 @@
       test-format-vdom-node
       test-web-lib-queries
       run-tests]
-  :i [(utils/dom :a dom)
-      (../src/data/blog/posts :a blog)])
+  :i [(asl-web/dom :a dom)
+      (asl-web/blog-posts :a blog)])
 
 (df test-dom-element [] -> Bool
   :d "Verifies DOM element construction and field access"

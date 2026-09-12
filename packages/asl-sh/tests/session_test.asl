@@ -1,7 +1,7 @@
 (module asl-sh/session-test
   :d "Verification test suite for interactive process sessions and streaming stdin."
   :x [run-tests]
-  :i [(core/process :a proc)])
+  :i [(asl-sh/core-process :a proc)])
 
 (df test-session-spawn [] -> Bool
   :d "Verifies initial session state after spawning."

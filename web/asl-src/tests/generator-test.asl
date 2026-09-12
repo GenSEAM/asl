@@ -1,11 +1,11 @@
 (module asl-web/generator-test
   :d "Unit verification test suite for Web API and installer ASL models"
   :x [test-packages-catalog test-plugins-catalog test-skills-catalog test-version-info test-installer-config test-installer-script-generation run-tests]
-  :i [(../api/packages :a pkg)
-      (../api/plugins :a plg)
-      (../api/skills :a skl)
-      (../api/version :a ver)
-      (../scripts/installer :a inst)])
+  :i [(asl-web/api-packages :a pkg)
+      (asl-web/api-plugins :a plg)
+      (asl-web/api-skills :a skl)
+      (asl-web/api-version :a ver)
+      (asl-web/installer :a inst)])
 
 (df test-packages-catalog [] -> Bool
   :d "Validates packages catalog structure and count"

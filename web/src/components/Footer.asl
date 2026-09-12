@@ -2,7 +2,7 @@
   :d "Declarative High-Fidelity Footer Component in pure AgentScript"
   :x [render-footer footer-view footer]
   :i [(asl-text/string :a s)
-      (ui/Logo :a logo)])
+      (asl-web/ui/logo :a logo)])
 
 (df render-footer [] -> Str
   :d "Renders the complete footer with Leon the Chameleon, navigation links, and brand wordmark"

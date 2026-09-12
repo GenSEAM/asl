@@ -1,7 +1,7 @@
 (module asl-sh/rpc-proc-test
   :d "Verification suite for interactive process Batch RPC operations and protocol lifecycle."
   :x [run-tests]
-  :i [(core/process :a proc)
+  :i [(asl-sh/core-process :a proc)
       (reducer :a red)])
 
 (df test-proc-spawn-operation [] -> Bool

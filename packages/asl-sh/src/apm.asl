@@ -21,7 +21,7 @@
       oob-demux-finish]
   :i [(watchdog     :a wd)
       (spool        :a spool)
-      (core/process :a proc)])
+      (asl-sh/core-process :a proc)])
 
 (dfs LockVerdict
   (:f acquired Bool "True if singleton advisory lock was successfully acquired")
