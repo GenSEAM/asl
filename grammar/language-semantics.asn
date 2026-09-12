@@ -189,5 +189,9 @@
       :rule "Conversion between language forms and ASN records is total and lossless in both directions, preserving positions and escaping; non round tripping constructs are defects."
       :failureCode "ERR_LOSSY_SUBSTRATE_CONVERSION"
       :exitCode 1)
+    (:semantic :id standaloneInterpretableStructureRule
+      :rule "A structure is interpretable standalone by a receiver holding only the structure and declared vocabulary; prefixes carry unambiguous meanings across processes, eliminating preamble explanations."
+      :failureCode "ERR_NON_PORTABLE_STRUCTURE"
+      :exitCode 1)
   ]
 )
