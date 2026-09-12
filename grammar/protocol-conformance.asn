@@ -46,4 +46,10 @@
       :invariants [
         (:invariant :id "no-reentry" :rule "Decoder output cannot re-enter as executable source code")
       ])
+    (:contract :id portableStructures
+      :rule "Structures emitted across agents, channels, and models are standalone interpretable without requiring sender context or session preamble; prefixes map to unambiguous globally registered definitions."
+      :modes ["standalone" "zero-preamble"]
+      :invariants [
+        (:invariant :id "unambiguousPrefixMapping" :rule "Prefixes carry one meaning across every agent and channel")
+      ])
   ])
