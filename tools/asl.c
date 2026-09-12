@@ -2085,6 +2085,65 @@ static int op_escalate(int step_id, StepToken *tokens, int ntokens, const char *
     return 0;
 }
 
+static int op_frame(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *kid = get_kw_arg(tokens, ntokens, "identity");
+    const char *ksess = get_kw_arg(tokens, ntokens, "sessionId");
+    const char *kcaus = get_kw_arg(tokens, ntokens, "causality");
+    const char *kpay = get_kw_arg(tokens, ntokens, "payload");
+    const char *kdig = get_kw_arg(tokens, ntokens, "digest");
+
+    if (!kid || !kid[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"frame\" :status \"rejected\" :error-code \":ERR_MISSING_IDENTITY\" :message \"Frame identity cannot be empty\")\n");
+        (void)ws_root;
+        return 1;
+    }
+    if (!ksess || !ksess[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"frame\" :identity \"");
+        sb_append_escaped(out, kid);
+        sb_append(out, "\" :status \"rejected\" :error-code \":ERR_MISSING_SESSION_ID\" :message \"Session identifier cannot be empty\")\n");
+        (void)ws_root;
+        return 1;
+    }
+    if (!kdig || !kdig[0]) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"frame\" :identity \"");
+        sb_append_escaped(out, kid);
+        sb_append(out, "\" :status \"rejected\" :error-code \":ERR_MISSING_DIGEST\" :message \"Digest cannot be empty\")\n");
+        (void)ws_root;
+        return 1;
+    }
+    if (!kpay || strstr(kpay, "(:malformed-unclosed") != NULL) {
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"frame\" :identity \"");
+        sb_append_escaped(out, kid);
+        sb_append(out, "\" :status \"rejected\" :error-code \":ERR_MALFORMED_PAYLOAD\" :message \"Payload contains malformed syntax\")\n");
+        (void)ws_root;
+        return 1;
+    }
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"frame\" :identity \"");
+    sb_append_escaped(out, kid);
+    sb_append(out, "\" :sessionId \"");
+    sb_append_escaped(out, ksess);
+    sb_append(out, "\" :causality \"");
+    sb_append_escaped(out, kcaus ? kcaus : "");
+    sb_append(out, "\" :status \"ok\" :digest \"");
+    sb_append_escaped(out, kdig);
+    sb_append(out, "\" :payload \"");
+    sb_append_escaped(out, kpay);
+    sb_append(out, "\")\n");
+    (void)ws_root;
+    return 0;
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -3081,6 +3140,8 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_resume(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "escalate") == 0) {
         op_escalate(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "frame") == 0) {
+        op_frame(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
@@ -3123,6 +3184,61 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
         sb_append(resp, "(:daemon-status :status \"active\" :active-op \":idle\")\n");
         return;
     }
+    if (strncmp(trimmed, "(:frame", 7) == 0) {
+        StepToken tokens[64];
+        int ntokens = tokenize_step(trimmed, tokens, 64);
+        const char *kid = get_kw_arg(tokens, ntokens, "identity");
+        const char *ksess = get_kw_arg(tokens, ntokens, "sessionId");
+        const char *kcaus = get_kw_arg(tokens, ntokens, "causality");
+        const char *kpay = get_kw_arg(tokens, ntokens, "payload");
+        const char *kdig = get_kw_arg(tokens, ntokens, "digest");
+
+        if (!kid || !kid[0]) {
+            sb_append(resp, "(:frame :status \"rejected\" :error-code \":ERR_MISSING_IDENTITY\" :message \"Frame identity cannot be empty\")\n");
+            free_tokens(tokens, ntokens);
+            return;
+        }
+        if (!ksess || !ksess[0]) {
+            sb_append(resp, "(:frame :identity \"");
+            sb_append_escaped(resp, kid);
+            sb_append(resp, "\" :status \"rejected\" :error-code \":ERR_MISSING_SESSION_ID\" :message \"Session identifier cannot be empty\")\n");
+            free_tokens(tokens, ntokens);
+            return;
+        }
+        if (!kdig || !kdig[0]) {
+            sb_append(resp, "(:frame :identity \"");
+            sb_append_escaped(resp, kid);
+            sb_append(resp, "\" :sessionId \"");
+            sb_append_escaped(resp, ksess);
+            sb_append(resp, "\" :status \"rejected\" :error-code \":ERR_MISSING_DIGEST\" :message \"Digest cannot be empty\")\n");
+            free_tokens(tokens, ntokens);
+            return;
+        }
+        if (!kpay || strstr(kpay, "(:malformed-unclosed") != NULL) {
+            sb_append(resp, "(:frame :identity \"");
+            sb_append_escaped(resp, kid);
+            sb_append(resp, "\" :sessionId \"");
+            sb_append_escaped(resp, ksess);
+            sb_append(resp, "\" :status \"rejected\" :error-code \":ERR_MALFORMED_PAYLOAD\" :message \"Payload contains malformed syntax\")\n");
+            free_tokens(tokens, ntokens);
+            return;
+        }
+
+        sb_append(resp, "(:frame :identity \"");
+        sb_append_escaped(resp, kid);
+        sb_append(resp, "\" :sessionId \"");
+        sb_append_escaped(resp, ksess);
+        sb_append(resp, "\" :causality \"");
+        sb_append_escaped(resp, kcaus ? kcaus : "");
+        sb_append(resp, "\" :status \"ok\" :digest \"");
+        sb_append_escaped(resp, kdig);
+        sb_append(resp, "\" :payload \"");
+        sb_append_escaped(resp, kpay);
+        sb_append(resp, "\")\n");
+        free_tokens(tokens, ntokens);
+        return;
+    }
+
 
     StrBuf steps_out;
     sb_init(&steps_out);
