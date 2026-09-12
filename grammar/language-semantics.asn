@@ -145,5 +145,13 @@
       :rule "The core reader, evaluator, and host contain zero names of any extension package, product, directory, or domain; resolution occurs strictly via the declared module graph."
       :failureCode "ERR_CORE_EXTENSION_CONTAMINATION"
       :exitCode 1)
+    (:semantic :id syntaxExtensionHygienic
+      :rule "Libraries define domain syntactic forms hygienically without engine modification; macro expansion preserves source positions and prevents accidental binding capture."
+      :failureCode "ERR_UNHYGIENIC_EXPANSION"
+      :exitCode 1)
+    (:semantic :id domainAsLibrary
+      :rule "Database, view, and query syntax constructs are authored as libraries over core syntax extension rather than embedded in the core evaluator."
+      :failureCode "ERR_DOMAIN_VOCABULARY_IN_CORE"
+      :exitCode 1)
   ]
 )
