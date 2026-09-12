@@ -7,7 +7,7 @@
       asnl-decode-stream
       jsonl-to-asnl
       asnl-to-jsonl]
-  :i [])
+  :i [(asl-text/text :a txt)])
 
 (dfs TranspileResult
   (:f output Str "Transpiled representation or diagnostic message")
@@ -29,23 +29,6 @@
   (:f escape Bool "Escape active")
   (:f last-space Bool "Last character written was a space")
   (:f pieces (List Str) "Accumulated characters or tokens"))
-
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE-proxy token count estimation based on atom and delimiter density."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token compaction percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (int64-to-float64 diff) 100.0) (int64-to-float64 orig))))))
 
 (df asnl-step [(st AsnlScanState) (c Str)] -> AsnlScanState
   :d "Processes one character during single-pass ASNL delimiter and escaping scan."
@@ -326,9 +309,9 @@
           :success false)
         (let [(asnl-lines (map (fn [(l Str)] -> Str (json-line-to-asnl l)) cleaned))
               (result-text (string-join asnl-lines "\n"))
-              (orig-tok (estimate-tokens jsonl-str))
-              (asn-tok (estimate-tokens result-text))
-              (savings (calc-savings orig-tok asn-tok))]
+              (orig-tok (txt/estimate-tokens jsonl-str))
+              (asn-tok (txt/estimate-tokens result-text))
+              (savings (txt/calc-savings orig-tok asn-tok))]
           (TranspileResult
             :output result-text
             :original-tokens orig-tok
@@ -348,8 +331,8 @@
           :success false)
         (let [(json-lines (map (fn [(l Str)] -> Str (asnl-line-to-json l)) lines))
               (result-text (string-join json-lines "\n"))
-              (orig-tok (estimate-tokens asnl-str))
-              (json-tok (estimate-tokens result-text))]
+              (orig-tok (txt/estimate-tokens asnl-str))
+              (json-tok (txt/estimate-tokens result-text))]
           (TranspileResult
             :output result-text
             :original-tokens orig-tok

@@ -12,7 +12,8 @@
       decode-dag-pyramid
       encode-sparkline-metric
       decode-sparkline-metric
-      render-sparkline-ascii])
+      render-sparkline-ascii]
+  :i [(asl-text/text :a txt)])
 
 (dfs TableData
   (:f cols (List Str) "Column header names")
@@ -247,18 +248,6 @@
            (some (.-content final))
            (none))))))
 
-(df extract-between [(text Str) (prefix Str) (suffix Str)] -> (Option Str)
-  :d "Extracts substring between prefix and subsequent suffix."
-  (mt (string-index-of text prefix)
-    ((none) (none))
-    ((some start-idx)
-     (let [(start-pos (+ start-idx (string-length prefix)))
-           (remaining (option-or (string-slice text start-pos (string-length text)) ""))]
-       (mt (string-index-of remaining suffix)
-         ((none) (none))
-         ((some end-idx)
-          (string-slice remaining 0 end-idx)))))))
-
 (df quote-string [(s Str)] -> Str
   :d "Wraps string in double quotes with standard escaping."
   (let [(escaped (string-replace (string-replace s "\\" "\\\\") "\"" "\\\""))]
@@ -341,7 +330,7 @@
   (let [(trimmed (string-trim piece))]
     (if (string-empty? trimmed)
         (none)
-        (let [(id-opt (extract-between trimmed ":id \"" "\""))
+        (let [(id-opt (txt/extract-between trimmed ":id \"" "\""))
               (deps-opt (extract-bracketed trimmed ":deps ["))]
           (mt id-opt
             ((none) (none))
@@ -357,7 +346,7 @@
     (if (or (not (string-starts-with? trimmed "(:dag"))
             (not (string-ends-with? trimmed ")")))
         (err "Invalid DAG pyramid ASN: missing (:dag header or closing delimiter")
-        (let [(root-opt (extract-between trimmed ":root \"" "\""))
+        (let [(root-opt (txt/extract-between trimmed ":root \"" "\""))
               (deps-opt (extract-bracketed trimmed ":deps ["))]
           (mt root-opt
             ((none) (err "Invalid DAG pyramid ASN: missing :root identifier"))
@@ -388,7 +377,7 @@
     (if (or (not (string-starts-with? trimmed "(:spark"))
             (not (string-ends-with? trimmed ")")))
         (err "Invalid sparkline ASN: missing (:spark header or closing delimiter")
-        (let [(metric-opt (extract-between trimmed ":metric \"" "\""))
+        (let [(metric-opt (txt/extract-between trimmed ":metric \"" "\""))
               (vals-opt (extract-bracketed trimmed ":vals ["))]
           (mt metric-opt
             ((none) (err "Invalid sparkline ASN: missing :metric identifier"))

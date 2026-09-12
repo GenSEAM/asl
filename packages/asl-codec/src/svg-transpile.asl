@@ -10,7 +10,8 @@
   :i [(asl-text/string :a s)
       (asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
-      (asl-parser/ast :a ast)])
+      (asl-parser/ast :a ast)
+      (asl-text/text :a txt)])
 
 (dfs SvgTranspileResult
   (:f output Str "Transpiled SVG XML or ASN S-expression")
@@ -18,30 +19,6 @@
   (:f asn-tokens I64 "Token count in compact ASN representation")
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
-
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE-proxy token count estimation based on byte length."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token compaction percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
-
-(df strip-quotes [(val Str)] -> Str
-  :d "Strips outer double quotes from string values."
-  (let [(len (string-length val))]
-    (if (and (>= len 2) (and (string-starts-with? val "\"") (string-ends-with? val "\"")))
-      (option-or (string-slice val 1 (- len 1)) "")
-      val)))
 
 (df norm-tag [(raw Str)] -> Str
   :d "Normalizes ASN tag to canonical SVG XML element name."
@@ -110,7 +87,7 @@
 (df render-sexpr-node [(expr rd/SExpr)] -> Str
   :d "Recursively renders an SExpr AST node to well-formed SVG XML."
   (mt expr
-    ((rd/sexpr-atom v) (strip-quotes v))
+    ((rd/sexpr-atom v) (txt/strip-quotes v))
     ((rd/sexpr-vect _) "")
     ((rd/sexpr-list items)
      (if (list-empty? items)
@@ -130,7 +107,7 @@
                                              :pending-key (norm-attr v))
                                   (ParseScan :attrs (.-attrs st)
                                              :children (.-children st)
-                                             :text (s/concat (.-text st) (strip-quotes v))
+                                             :text (s/concat (.-text st) (txt/strip-quotes v))
                                              :pending-key "")))
                                ((rd/sexpr-list _)
                                 (ParseScan :attrs (.-attrs st)
@@ -147,7 +124,7 @@
                                                  :children (.-children st)
                                                  :text (.-text st)
                                                  :pending-key (norm-attr v)))
-                                    (let [(attr-chunk (s/concat " " key "=\"" (strip-quotes v) "\""))]
+                                    (let [(attr-chunk (s/concat " " key "=\"" (txt/strip-quotes v) "\""))]
                                       (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
                                                  :children (.-children st)
                                                  :text (.-text st)
@@ -214,9 +191,9 @@
                 :success false)
               (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
                     (xml (render-sexpr-node (.-expr pf)))
-                    (asn-tok (estimate-tokens trimmed))
-                    (orig-tok (estimate-tokens xml))
-                    (savings (calc-savings orig-tok asn-tok))]
+                    (asn-tok (txt/estimate-tokens trimmed))
+                    (orig-tok (txt/estimate-tokens xml))
+                    (savings (txt/calc-savings orig-tok asn-tok))]
                 (SvgTranspileResult
                   :output xml
                   :original-tokens orig-tok
@@ -244,7 +221,7 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
+       (let [(orig-tok (txt/estimate-tokens trimmed))
              (s1 (string-replace trimmed "<svg" "(:svg"))
              (s2 (string-replace s1 "xmlns=\"http://www.w3.org/2000/svg\"" ""))
              (s3 (string-replace s2 "<defs>" "(:defs"))
@@ -284,8 +261,8 @@
              (s37 (string-replace s36 "d=" ":d "))
              (s38 (string-replace s37 "/>" ")"))
              (final-asn (string-trim s38))
-             (asn-tok (estimate-tokens final-asn))
-             (savings (calc-savings orig-tok asn-tok))]
+             (asn-tok (txt/estimate-tokens final-asn))
+             (savings (txt/calc-savings orig-tok asn-tok))]
          (SvgTranspileResult
            :output final-asn
            :original-tokens orig-tok

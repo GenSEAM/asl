@@ -13,7 +13,8 @@
       (asl-parser/ast :a ast)
       (yaml-transpile :a yt)
       (csv-transpile :a ct)
-      (toml-transpile :a tt)])
+      (toml-transpile :a tt)
+      (asl-text/text :a txt)])
 
 (dfs TranspileResult
   (:f output Str "Transpiled representation or diagnostic message")
@@ -21,36 +22,6 @@
   (:f asn-tokens I64 "Token count in compact ASN representation")
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if parsing and transpilation succeeded"))
-
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE-proxy token count estimation based on atom and delimiter density."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token compaction percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
-
-(df strip-quotes [(val Str)] -> Str
-  :d "Strips outer double quotes from string values."
-  (let [(len (string-length val))]
-    (if (and (>= len 2) (and (string-starts-with? val "\"") (string-ends-with? val "\"")))
-      (option-or (string-slice val 1 (- len 1)) "")
-      val)))
-
-(df strip-colon [(val Str)] -> Str
-  :d "Strips leading colon from keyword strings."
-  (if (string-starts-with? val ":")
-    (option-or (string-slice val 1 (string-length val)) val)
-    val))
 
 (df is-digit [(c Str)] -> Bool
   :d "Returns true if char is decimal digit."
@@ -268,8 +239,8 @@
             (not (string-starts-with? trimmed "[")))
        (TranspileResult
          :output "Syntax error: invalid JSON root"
-         :original-tokens (estimate-tokens trimmed)
-         :asn-tokens (estimate-tokens trimmed)
+         :original-tokens (txt/estimate-tokens trimmed)
+         :asn-tokens (txt/estimate-tokens trimmed)
          :savings-percent 0.0
          :success false))
       (:else
@@ -278,8 +249,8 @@
            ((err msg)
             (TranspileResult
               :output msg
-              :original-tokens (estimate-tokens trimmed)
-              :asn-tokens (estimate-tokens trimmed)
+              :original-tokens (txt/estimate-tokens trimmed)
+              :asn-tokens (txt/estimate-tokens trimmed)
               :savings-percent 0.0
               :success false))
            ((ok tokens)
@@ -290,15 +261,15 @@
               (if (or (.-has-err fin-ps) (list-empty? (.-done fin-ps)))
                 (TranspileResult
                   :output (if (string-empty? (.-err-msg fin-ps)) "Parse error" (.-err-msg fin-ps))
-                  :original-tokens (estimate-tokens trimmed)
-                  :asn-tokens (estimate-tokens trimmed)
+                  :original-tokens (txt/estimate-tokens trimmed)
+                  :asn-tokens (txt/estimate-tokens trimmed)
                   :savings-percent 0.0
                   :success false)
                 (let [(root-expr (option-or (list-head (.-done fin-ps)) (rd/make-atom "")))
                       (compact (rd/render-sexpr root-expr))
-                      (orig-tok (estimate-tokens trimmed))
-                      (asn-tok (estimate-tokens compact))
-                      (savings (calc-savings orig-tok asn-tok))]
+                      (orig-tok (txt/estimate-tokens trimmed))
+                      (asn-tok (txt/estimate-tokens compact))
+                      (savings (txt/calc-savings orig-tok asn-tok))]
                   (TranspileResult
                     :output compact
                     :original-tokens orig-tok
@@ -318,7 +289,7 @@
        ((= v "_") "null")
        ((or (= v "true") (= v "false")) v)
        ((string-starts-with? v "\"") v)
-       ((string-starts-with? v ":") (str "\"" (strip-colon v) "\""))
+       ((string-starts-with? v ":") (str "\"" (txt/strip-colon v) "\""))
        (:else v)))
     ((rd/sexpr-vect items)
      (let [(rendered (map (fn [(it rd/SExpr)] -> Str (sexpr-to-json it)) items))]
@@ -329,7 +300,7 @@
                         (if (string-empty? (.-pending-key st))
                           (mt it
                             ((rd/sexpr-atom k)
-                             (JsonGenState :entries (.-entries st) :pending-key (strip-colon (strip-quotes k))))
+                             (JsonGenState :entries (.-entries st) :pending-key (txt/strip-colon (txt/strip-quotes k))))
                             (_ st))
                           (let [(key (.-pending-key st))
                                 (val-json (sexpr-to-json it))
@@ -359,7 +330,7 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
+       (let [(orig-tok (txt/estimate-tokens trimmed))
              (toks (lx/tokenize trimmed))
              (forms-res (ast/read-forms toks))]
          (mt forms-res
@@ -380,7 +351,7 @@
                 :success false)
               (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
                     (json-out (sexpr-to-json (.-expr pf)))
-                    (json-tok (estimate-tokens json-out))]
+                    (json-tok (txt/estimate-tokens json-out))]
                 (TranspileResult
                   :output json-out
                   :original-tokens orig-tok
@@ -672,15 +643,15 @@
          (if (list-empty? all-roots)
            (TranspileResult
              :output "Syntax error: could not parse HTML"
-             :original-tokens (estimate-tokens trimmed)
-             :asn-tokens (estimate-tokens trimmed)
+             :original-tokens (txt/estimate-tokens trimmed)
+             :asn-tokens (txt/estimate-tokens trimmed)
              :savings-percent 0.0
              :success false)
            (let [(rendered (map (fn [(n rd/SexprNode)] -> Str (rd/render-sexpr n)) all-roots))
                  (compact (string-join rendered " "))
-                 (orig-tok (estimate-tokens trimmed))
-                 (asn-tok (estimate-tokens compact))
-                 (savings (calc-savings orig-tok asn-tok))]
+                 (orig-tok (txt/estimate-tokens trimmed))
+                 (asn-tok (txt/estimate-tokens compact))
+                 (savings (txt/calc-savings orig-tok asn-tok))]
              (TranspileResult
                :output compact
                :original-tokens orig-tok
@@ -696,7 +667,7 @@
 (df vdom-node-to-html [(expr rd/SExpr)] -> Str
   :d "Recursively transforms a Virtual DOM S-expression AST into HTML5 markup."
   (mt expr
-    ((rd/sexpr-atom v) (strip-quotes v))
+    ((rd/sexpr-atom v) (txt/strip-quotes v))
     ((rd/sexpr-vect items)
      (string-join (map (fn [(it rd/SExpr)] -> Str (vdom-node-to-html it)) items) ""))
     ((rd/sexpr-list items)
@@ -720,17 +691,17 @@
                               (if (string-starts-with? v ":")
                                 (VdomGenState :attrs (.-attrs st)
                                               :children (.-children st)
-                                              :pending-attr (strip-colon v))
+                                              :pending-attr (txt/strip-colon v))
                                 (if (string-empty? (.-pending-attr st))
                                   (VdomGenState :attrs (.-attrs st)
-                                                :children (list-append (.-children st) (list (strip-quotes v)))
+                                                :children (list-append (.-children st) (list (txt/strip-quotes v)))
                                                 :pending-attr "")
                                   (let [(attr-name (.-pending-attr st))]
                                     (if (= v "true")
                                       (VdomGenState :attrs (str (.-attrs st) " " attr-name)
                                                     :children (.-children st)
                                                     :pending-attr "")
-                                      (VdomGenState :attrs (str (.-attrs st) " " attr-name "=\"" (strip-quotes v) "\"")
+                                      (VdomGenState :attrs (str (.-attrs st) " " attr-name "=\"" (txt/strip-quotes v) "\"")
                                                     :children (.-children st)
                                                     :pending-attr ""))))))
                              ((rd/sexpr-vect _)
@@ -753,14 +724,14 @@
         (fin (fold (fn [(st VdomGenState) (it rd/SExpr)] -> VdomGenState
                      (if (string-empty? (.-pending-attr st))
                        (mt it
-                         ((rd/sexpr-atom k) (VdomGenState :attrs (.-attrs st) :children (list) :pending-attr (strip-colon k)))
+                         ((rd/sexpr-atom k) (VdomGenState :attrs (.-attrs st) :children (list) :pending-attr (txt/strip-colon k)))
                          (_ st))
                        (let [(key (.-pending-attr st))]
                          (mt it
                            ((rd/sexpr-atom v)
                             (if (= v "true")
                               (VdomGenState :attrs (str (.-attrs st) " " key) :children (list) :pending-attr "")
-                              (VdomGenState :attrs (str (.-attrs st) " " key "=\"" (strip-quotes v) "\"") :children (list) :pending-attr "")))
+                              (VdomGenState :attrs (str (.-attrs st) " " key "=\"" (txt/strip-quotes v) "\"") :children (list) :pending-attr "")))
                            (_ (VdomGenState :attrs (str (.-attrs st) " " key "=\"true\"") :children (list) :pending-attr ""))))))
                    init
                    items))]
@@ -785,7 +756,7 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
+       (let [(orig-tok (txt/estimate-tokens trimmed))
              (toks (lx/tokenize trimmed))
              (forms-res (ast/read-forms toks))]
          (mt forms-res
@@ -806,7 +777,7 @@
                 :success false)
               (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
                     (html-out (vdom-node-to-html (.-expr pf)))
-                    (html-tok (estimate-tokens html-out))]
+                    (html-tok (txt/estimate-tokens html-out))]
                 (TranspileResult
                   :output html-out
                   :original-tokens orig-tok
@@ -826,7 +797,7 @@
     (:else
      (TranspileResult
        :output "Unsupported kind"
-       :original-tokens (estimate-tokens input)
-       :asn-tokens (estimate-tokens input)
+       :original-tokens (txt/estimate-tokens input)
+       :asn-tokens (txt/estimate-tokens input)
        :savings-percent 0.0
        :success false))))

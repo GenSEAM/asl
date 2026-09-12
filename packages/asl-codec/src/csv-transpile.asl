@@ -8,7 +8,8 @@
       measure-csv-savings]
   :i [(asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
-      (asl-parser/ast :a ast)])
+      (asl-parser/ast :a ast)
+      (asl-text/text :a txt)])
 
 (dfs CsvTranspileResult
   (:f output Str "Transpiled CSV or ASN S-expression")
@@ -16,36 +17,6 @@
   (:f asn-tokens I64 "Token count in ASN representation")
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
-
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE token count estimation."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token compaction percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
-
-(df strip-quotes [(val Str)] -> Str
-  :d "Strips outer quotes from string values."
-  (let [(len (string-length val))]
-    (if (and (>= len 2) (and (string-starts-with? val "\"") (string-ends-with? val "\"")))
-      (option-or (string-slice val 1 (- len 1)) "")
-      val)))
-
-(df strip-colon [(val Str)] -> Str
-  :d "Strips leading colon from keywords."
-  (if (string-starts-with? val ":")
-    (option-or (string-slice val 1 (string-length val)) val)
-    val))
 
 (dfs CsvScanState
   (:f in-quote Bool "Inside quoted field")
@@ -171,7 +142,7 @@
     ((none) (none))
     ((some header-row)
      (let [(header-atoms (map (fn [(h Str)] -> rd/SExpr
-                                (let [(clean (strip-quotes (string-trim h)))]
+                                (let [(clean (txt/strip-quotes (string-trim h)))]
                                   (rd/make-atom (str ":" clean))))
                               header-row))
            (headers-vect (rd/make-vect header-atoms))
@@ -188,16 +159,16 @@
   :d "Auto-detects whether document uses tab or comma delimiter."
   (let [(lines (string-split src "\n"))
         (first-line (option-or (list-head lines) ""))]
-    (if (and (string-contains? first-line "\t") (not (string-contains? first-line ",")))
+    (if (string-contains? first-line "\t")
       "\t"
       ",")))
 
 (df csv-to-asn [(csv-str Str)] -> CsvTranspileResult
-  :d "Transpiles RFC 4180 CSV document into compact ASN table representation."
+  :d "Transpiles CSV tabular document into compact ASN row-group table."
   (let [(trimmed (string-trim csv-str))]
     (if (string-empty? trimmed)
       (CsvTranspileResult
-        :output "Empty input"
+        :output ""
         :original-tokens 0
         :asn-tokens 0
         :savings-percent 0.0
@@ -209,15 +180,15 @@
           ((none)
            (CsvTranspileResult
              :output "Syntax error: empty table"
-             :original-tokens (estimate-tokens trimmed)
-             :asn-tokens (estimate-tokens trimmed)
+             :original-tokens (txt/estimate-tokens trimmed)
+             :asn-tokens (txt/estimate-tokens trimmed)
              :savings-percent 0.0
              :success false))
           ((some table-node)
            (let [(compact (rd/render-sexpr table-node))
-                 (orig-tok (estimate-tokens trimmed))
-                 (asn-tok (estimate-tokens compact))
-                 (savings (calc-savings orig-tok asn-tok))]
+                 (orig-tok (txt/estimate-tokens trimmed))
+                 (asn-tok (txt/estimate-tokens compact))
+                 (savings (txt/calc-savings orig-tok asn-tok))]
              (CsvTranspileResult
                :output compact
                :original-tokens orig-tok
@@ -258,7 +229,7 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
+       (let [(orig-tok (txt/estimate-tokens trimmed))
              (toks (lx/tokenize trimmed))
              (forms-res (ast/read-forms toks))]
          (mt forms-res
@@ -293,7 +264,7 @@
                            (header-strs (mt headers-expr
                                           ((rd/sexpr-vect h-atoms)
                                            (map (fn [(h rd/SExpr)] -> Str
-                                                  (escape-csv-field (strip-colon (strip-quotes (rd/sexpr-head h))) delim))
+                                                  (escape-csv-field (txt/strip-colon (txt/strip-quotes (rd/sexpr-head h))) delim))
                                                 h-atoms))
                                           (_ (list))))
                            (header-line (string-join header-strs delim))
@@ -306,7 +277,7 @@
                                                                        (let [(v (rd/sexpr-head c))]
                                                                          (if (= v "_")
                                                                            ""
-                                                                           (escape-csv-field (strip-quotes v) delim))))
+                                                                           (escape-csv-field (txt/strip-quotes v) delim))))
                                                                      cell-atoms))]
                                                      (string-join cells delim)))
                                                   (_ "")))
@@ -314,7 +285,7 @@
                                         (_ (list))))
                            (all-lines (list-cons header-line row-lines))
                            (dsv-out (string-join all-lines "\n"))
-                           (dsv-tok (estimate-tokens dsv-out))]
+                           (dsv-tok (txt/estimate-tokens dsv-out))]
                        (CsvTranspileResult
                          :output dsv-out
                          :original-tokens orig-tok

@@ -6,7 +6,8 @@
       measure-yaml-savings]
   :i [(asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
-      (asl-parser/ast :a ast)])
+      (asl-parser/ast :a ast)
+      (asl-text/text :a txt)])
 
 (dfs YamlTranspileResult
   (:f output Str "Transpiled YAML or ASN S-expression")
@@ -14,37 +15,6 @@
   (:f asn-tokens I64 "Token count in ASN representation")
   (:f savings-percent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
-
-(df estimate-tokens [(text Str)] -> I64
-  :d "Deterministic BPE token count estimation."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
-(df calc-savings [(orig I64) (asn I64)] -> F64
-  :d "Calculates token compaction percentage."
-  (if (<= orig 0)
-      0.0
-      (let [(diff (- orig asn))]
-        (if (<= diff 0)
-            0.0
-            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
-
-(df strip-quotes [(val Str)] -> Str
-  :d "Strips outer quotes from string values."
-  (let [(len (string-length val))]
-    (if (and (>= len 2) (or (and (string-starts-with? val "\"") (string-ends-with? val "\""))
-                            (and (string-starts-with? val "'") (string-ends-with? val "'"))))
-      (option-or (string-slice val 1 (- len 1)) "")
-      val)))
-
-(df strip-colon [(val Str)] -> Str
-  :d "Strips leading colon from keywords."
-  (if (string-starts-with? val ":")
-    (option-or (string-slice val 1 (string-length val)) val)
-    val))
 
 (df count-leading-spaces [(line Str)] -> I64
   :d "Counts number of leading space characters on a line."
@@ -86,7 +56,7 @@
       ((or (= clean "false") (= clean "no")) (rd/make-atom "false"))
       ((or (= clean "null") (or (= clean "~") (= clean "_"))) (rd/make-atom "_"))
       ((or (string-starts-with? clean "\"") (string-starts-with? clean "'"))
-       (rd/make-atom (str "\"" (strip-quotes clean) "\"")))
+       (rd/make-atom (str "\"" (txt/strip-quotes clean) "\"")))
       ((string-contains? clean " ")
        (rd/make-atom (str "\"" clean "\"")))
       (:else
@@ -282,15 +252,15 @@
          (if (list-empty? roots)
            (YamlTranspileResult
              :output "Syntax error: empty or invalid YAML document"
-             :original-tokens (estimate-tokens trimmed)
-             :asn-tokens (estimate-tokens trimmed)
+             :original-tokens (txt/estimate-tokens trimmed)
+             :asn-tokens (txt/estimate-tokens trimmed)
              :savings-percent 0.0
              :success false)
            (let [(root-node (option-or (list-head roots) (rd/make-atom "")))
                  (compact (rd/render-sexpr root-node))
-                 (orig-tok (estimate-tokens trimmed))
-                 (asn-tok (estimate-tokens compact))
-                 (savings (calc-savings orig-tok asn-tok))]
+                 (orig-tok (txt/estimate-tokens trimmed))
+                 (asn-tok (txt/estimate-tokens compact))
+                 (savings (txt/calc-savings orig-tok asn-tok))]
              (YamlTranspileResult
                :output compact
                :original-tokens orig-tok
@@ -318,12 +288,12 @@
   :d "Recursively formats an SExpr tree into indented YAML lines."
   (mt expr
     ((rd/sexpr-atom v)
-     (list (str (make-indent depth) (strip-quotes v))))
+     (list (str (make-indent depth) (txt/strip-quotes v))))
     ((rd/sexpr-vect items)
      (let [(rendered (fold (fn [(acc (List Str)) (it rd/SExpr)] -> (List Str)
                              (mt it
                                ((rd/sexpr-atom v)
-                                (list-append acc (list (str (make-indent depth) "- " (strip-quotes v)))))
+                                (list-append acc (list (str (make-indent depth) "- " (txt/strip-quotes v)))))
                                ((rd/sexpr-list sub-items)
                                 (let [(sub-lines (sexpr-to-yaml-lines it (+ depth 1)))]
                                   (mt (list-head sub-lines)
@@ -343,12 +313,12 @@
                         (if (string-empty? (.-pending-key st))
                           (mt it
                             ((rd/sexpr-atom k)
-                             (YamlGenState :lines (.-lines st) :pending-key (strip-colon (strip-quotes k))))
+                             (YamlGenState :lines (.-lines st) :pending-key (txt/strip-colon (txt/strip-quotes k))))
                             (_ st))
                           (let [(key (.-pending-key st))]
                             (mt it
                               ((rd/sexpr-atom v)
-                               (let [(line (str (make-indent depth) key ": " (strip-quotes v)))]
+                               (let [(line (str (make-indent depth) key ": " (txt/strip-quotes v)))]
                                  (YamlGenState :lines (list-append (.-lines st) (list line)) :pending-key "")))
                               ((rd/sexpr-list _)
                                (let [(header (str (make-indent depth) key ":"))
@@ -382,7 +352,7 @@
          :savings-percent 0.0
          :success false))
       (:else
-       (let [(orig-tok (estimate-tokens trimmed))
+       (let [(orig-tok (txt/estimate-tokens trimmed))
              (toks (lx/tokenize trimmed))
              (forms-res (ast/read-forms toks))]
          (mt forms-res
@@ -404,7 +374,7 @@
               (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
                     (lines (sexpr-to-yaml-lines (.-expr pf) 0))
                     (yaml-out (string-join lines "\n"))
-                    (yaml-tok (estimate-tokens yaml-out))]
+                    (yaml-tok (txt/estimate-tokens yaml-out))]
                 (YamlTranspileResult
                   :output yaml-out
                   :original-tokens orig-tok

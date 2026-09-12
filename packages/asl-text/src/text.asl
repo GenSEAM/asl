@@ -1,6 +1,6 @@
 (module asl-text/text
   :d "Pure AgentScript text engine: HTML parsing, entity decoding, multi-format text extraction, chunking, and ASN structuring."
-  :x [ExtractedDoc ContextChunk ContextualClause decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag format-clause-breadcrumb format-contextual-clause extract-clauses extract-contextual-clauses doc-to-asn chunk-to-asn clause-to-asn strip-quotes strip-colon estimate-tokens])
+  :x [ExtractedDoc ContextChunk ContextualClause decode-html-entities strip-enclosed clean-html extract-html extract-markdown extract-plaintext extract-json-kv extract-xml-atom extract-context chunk-text chunk-doc format-chunk-markdown format-context-rag format-docs-rag format-clause-breadcrumb format-contextual-clause extract-clauses extract-contextual-clauses doc-to-asn chunk-to-asn clause-to-asn strip-quotes strip-colon estimate-tokens calc-savings extract-between])
 
 (dfs ExtractedDoc
   (:f title Str "Document title or headline")
@@ -416,9 +416,10 @@
 
 
 (df strip-quotes [(val Str)] -> Str
-  :d "Strips outer double quotes from string values if present."
+  :d "Strips outer double or single quotes from string values if present."
   (let [(len (string-length val))]
-    (if (and (>= len 2) (and (string-starts-with? val "\"") (string-ends-with? val "\"")))
+    (if (and (>= len 2) (or (and (string-starts-with? val "\"") (string-ends-with? val "\""))
+                            (and (string-starts-with? val "'") (string-ends-with? val "'"))))
       (option-or (string-slice val 1 (- len 1)) "")
       val)))
 
@@ -435,3 +436,24 @@
       ((<= len 0) 0)
       ((<= len 4) 1)
       (:else (/ (+ len 3) 4)))))
+
+(df calc-savings [(orig I64) (asn I64)] -> F64
+  :d "Calculates token savings percentage between original and ASN representation."
+  (if (<= orig 0)
+      0.0
+      (let [(diff (- orig asn))]
+        (if (<= diff 0)
+            0.0
+            (/ (* (float-from-int64 diff) 100.0) (float-from-int64 orig))))))
+
+(df extract-between [(text Str) (prefix Str) (suffix Str)] -> (Option Str)
+  :d "Extracts substring between prefix and subsequent suffix."
+  (mt (string-index-of text prefix)
+    ((none) (none))
+    ((some start-idx)
+     (let [(start-pos (+ start-idx (string-length prefix)))
+           (remaining (option-or (string-slice text start-pos (string-length text)) ""))]
+       (mt (string-index-of remaining suffix)
+         ((none) (none))
+         ((some end-idx)
+          (string-slice remaining 0 end-idx)))))))
