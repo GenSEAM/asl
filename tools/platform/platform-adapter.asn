@@ -1,0 +1,15 @@
+(:platformAdapter :v 1 :src ADR-0081
+  :summary "Declared host and platform OS adapter boundary specifications for native compilation."
+  :targets [
+    (:target :os "darwin" :arch "arm64" :format "Mach-O" :adapter "asl/tools/asl.c" :abi "sysv-arm64")
+    (:target :os "darwin" :arch "x86_64" :format "Mach-O" :adapter "asl/tools/asl.c" :abi "sysv-x86_64")
+    (:target :os "linux" :arch "x86_64" :format "ELF" :adapter "asl/tools/asl.c" :abi "sysv-elf")
+    (:target :os "windows" :arch "x86_64" :format "PE" :adapter "asl/tools/asl.c" :abi "win64")
+    (:target :os "wasi" :arch "wasm32" :format "WASM" :adapter "wasm32-wasi" :abi "wasi-preview1")
+  ]
+  :capabilities [
+    :fs-read :fs-write :fs-stat :fs-readdir
+    :proc-spawn :proc-wait :proc-signal
+    :net-socket :time-monotonic :mem-alloc
+  ]
+)
