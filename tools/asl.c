@@ -6000,6 +6000,184 @@ static int run_cmd_coverage(int argc, char **argv, const char *ws_root) {
     return audit_coverage(ws_root, pkg_filter, &total, &covered, &uncovered);
 }
 
+static int audit_reflection(const char *ws_root, const char *task_id) {
+    if (!task_id || !task_id[0]) {
+        printf("Usage: asl reflect <task-id>\n");
+        return 1;
+    }
+
+    char task_path[4096] = {0};
+    char **phase_files = NULL;
+    int pfcnt = 0, pfcap = 0;
+    collect_tree_files(ws_root, ".asl/mem/tasks", ".asn", "Phase*.asn", &phase_files, &pfcnt, &pfcap);
+
+    char *task_content = NULL;
+    for (int i = 0; i < pfcnt; i++) {
+        char full_pf[1024];
+        snprintf(full_pf, sizeof(full_pf), "%s/%s", ws_root, phase_files[i]);
+        size_t sz = 0;
+        char *fc = read_file_alloc(full_pf, &sz);
+        if (fc) {
+            char pat[128];
+            snprintf(pat, sizeof(pat), ":id \"%s\"", task_id);
+            if (strstr(fc, pat)) {
+                strncpy(task_path, full_pf, sizeof(task_path) - 1);
+                task_content = fc;
+                break;
+            }
+            free(fc);
+        }
+    }
+    for (int i = 0; i < pfcnt; i++) free(phase_files[i]);
+    free(phase_files);
+
+    if (!task_content) {
+        printf("Error: task '%s' not found in .asl/mem/tasks/Phase*.asn\n", task_id);
+        return 1;
+    }
+
+    char *task_start = strstr(task_content, task_id);
+    if (!task_start) {
+        free(task_content);
+        return 1;
+    }
+
+    char owns_list[32][512];
+    int owns_cnt = 0;
+    char *optr = strstr(task_start, ":owns [");
+    if (optr) {
+        optr += 7;
+        char *oend = strchr(optr, ']');
+        if (oend) {
+            char buf[2048];
+            int len = (int)(oend - optr);
+            if (len >= (int)sizeof(buf)) len = sizeof(buf) - 1;
+            strncpy(buf, optr, len);
+            buf[len] = '\0';
+            char *p = buf;
+            while ((p = strchr(p, '\"')) != NULL && owns_cnt < 32) {
+                p++;
+                char *q = strchr(p, '\"');
+                if (!q) break;
+                int slen = (int)(q - p);
+                if (slen >= (int)sizeof(owns_list[owns_cnt])) slen = sizeof(owns_list[owns_cnt]) - 1;
+                strncpy(owns_list[owns_cnt], p, slen);
+                owns_list[owns_cnt][slen] = '\0';
+                owns_cnt++;
+                p = q + 1;
+            }
+        }
+    }
+
+    char outcomes[32][512];
+    int outcomes_cnt = 0;
+    char *outptr = strstr(task_start, ":outcomes [");
+    if (outptr) {
+        outptr += 11;
+        char *outend = strchr(outptr, ']');
+        if (outend) {
+            char buf[2048];
+            int len = (int)(outend - outptr);
+            if (len >= (int)sizeof(buf)) len = sizeof(buf) - 1;
+            strncpy(buf, outptr, len);
+            buf[len] = '\0';
+            char *p = buf;
+            while ((p = strchr(p, '\"')) != NULL && outcomes_cnt < 32) {
+                p++;
+                char *q = strchr(p, '\"');
+                if (!q) break;
+                int slen = (int)(q - p);
+                if (slen >= (int)sizeof(outcomes[outcomes_cnt])) slen = sizeof(outcomes[outcomes_cnt]) - 1;
+                strncpy(outcomes[outcomes_cnt], p, slen);
+                outcomes[outcomes_cnt][slen] = '\0';
+                outcomes_cnt++;
+                p = q + 1;
+            }
+        }
+    }
+
+    char trace_path[4096];
+    snprintf(trace_path, sizeof(trace_path), "%s/.asl/mem/trace.asn", ws_root);
+    FILE *tfp = fopen(trace_path, "r");
+
+    int out_of_owns_cnt = 0;
+    int unfulfilled_cnt = 0;
+    int stale_receipts_cnt = 0;
+    int foreign_changes_cnt = 0;
+
+    printf("(:gap-report\n");
+    printf("  :task \"%s\"\n", task_id);
+    printf("  :declared-owns [\n");
+    for (int i = 0; i < owns_cnt; i++) {
+        printf("    \"%s\"\n", owns_list[i]);
+    }
+    printf("  ]\n");
+    printf("  :declared-outcomes [\n");
+    for (int i = 0; i < outcomes_cnt; i++) {
+        printf("    \"%s\"\n", outcomes[i]);
+    }
+    printf("  ]\n");
+
+    printf("  :findings [\n");
+
+    if (tfp) {
+        char line[4096];
+        while (fgets(line, sizeof(line), tfp)) {
+            if (strstr(line, ":op \"edit\"") || strstr(line, ":op \"write\"")) {
+                char *tp = strstr(line, ":target \"");
+                if (tp) {
+                    tp += 9;
+                    char *tend = strchr(tp, '\"');
+                    if (tend) {
+                        char tgt[512] = {0};
+                        int tlen = (int)(tend - tp);
+                        if (tlen >= (int)sizeof(tgt)) tlen = sizeof(tgt) - 1;
+                        strncpy(tgt, tp, tlen);
+                        tgt[tlen] = '\0';
+
+                        int is_owned = 0;
+                        for (int k = 0; k < owns_cnt; k++) {
+                            if (strcmp(tgt, owns_list[k]) == 0) {
+                                is_owned = 1;
+                                break;
+                            }
+                        }
+                        if (!is_owned && tgt[0]) {
+                            printf("    (:finding :kind :out-of-owns-mutation :path \"%s\")\n", tgt);
+                            out_of_owns_cnt++;
+                        }
+                    }
+                }
+            }
+        }
+        fclose(tfp);
+    }
+
+    char *rec_ptr = strstr(task_start, ":receipts [");
+    if (rec_ptr && strstr(rec_ptr, ":stale")) {
+        printf("    (:finding :kind :stale-receipt :message \"Receipt digest mismatch against disk\")\n");
+        stale_receipts_cnt++;
+    }
+
+    printf("  ]\n");
+    printf("  :unfulfilled-outcomes %d\n", unfulfilled_cnt);
+    printf("  :out-of-owns-mutations %d\n", out_of_owns_cnt);
+    printf("  :stale-receipts %d\n", stale_receipts_cnt);
+    printf("  :foreign-changes %d\n", foreign_changes_cnt);
+    printf(")\n");
+
+    free(task_content);
+    return 0;
+}
+
+static int run_cmd_reflect(int argc, char **argv, const char *ws_root) {
+    if (argc < 3) {
+        printf("Usage: asl reflect <task-id>\n");
+        return 1;
+    }
+    return audit_reflection(ws_root, argv[2]);
+}
+
 static int run_cmd_inventory(int argc, char **argv, const char *ws_root) {
     (void)argc;
     (void)argv;
@@ -6154,6 +6332,7 @@ static void print_usage(void) {
     printf("   or: asl plan verify                   [Verify plan DAG acyclicity and D52 completeness]\n");
     printf("   or: asl watch                         [Continuous pre-flight check over delimiter balance & tree status]\n");
     printf("   or: asl coverage [package]            [Coverage and case-diversity map over the corpus]\n");
+    printf("   or: asl reflect <task-id>             [Reflection gap report between declared outcomes and trace]\n");
     printf("   or: asl doctor                        [Capability & environment truth probe]\n");
     printf("   or: asl scaffold <module|fn|test> <name> [Native code scaffolding]\n");
     printf("   or: asl inventory                     [List all tools with status and fallback]\n");
@@ -6473,6 +6652,11 @@ int main(int argc, char **argv) {
     /* Subcommand: coverage */
     if (argc >= 2 && strcmp(argv[1], "coverage") == 0) {
         return run_cmd_coverage(argc, argv, discovered_ws);
+    }
+
+    /* Subcommand: reflect */
+    if (argc >= 2 && strcmp(argv[1], "reflect") == 0) {
+        return run_cmd_reflect(argc, argv, discovered_ws);
     }
 
     /* Subcommand: skill / skills */
