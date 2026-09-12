@@ -3405,7 +3405,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
     }
 
     if (strcmp(op, "trace") != 0 && strcmp(op, "ping") != 0 && strcmp(op, "inspect") != 0) {
-        int is_rejected = (out->data && strstr(out->data + prev_len, ":status \"rejected\"") != NULL) ? 1 : 0;
+        int is_rejected = (out->data && strstr(out->data + prev_len, ":status \"rejected\" :error-code") != NULL) ? 1 : 0;
         const char *trace_status = is_rejected ? "rejected" : "ok";
         if ((strcmp(op, "edit") == 0 || strcmp(op, "write") == 0) && trace_target[0] && !is_rejected) {
             char full_p[4096];
@@ -3418,7 +3418,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
     }
 
     free_tokens(tokens, ntokens);
-    return (out->data && strstr(out->data + prev_len, ":status \"rejected\"") != NULL) ? 1 : 0;
+    return (out->data && strstr(out->data + prev_len, ":status \"rejected\" :error-code") != NULL) ? 1 : 0;
 }
 
 static void handle_payload(const char *payload, const char *ws_root, StrBuf *resp) {
