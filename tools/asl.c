@@ -4482,6 +4482,7 @@ static int run_gate_6_grammar(const char *ws_root, int *out_total_syms, int *out
     return 0;
 }
 
+#define DIRECTIVE_PAYLOAD "(:directive :maxTokens 1000 :tier \"essential\")"
 static char *load_rule_payload(const char *ws_root);
 static char *project_content(const char *ws_root, const char *content_type, const char *shape, const char *dest);
 

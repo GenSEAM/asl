@@ -6,24 +6,28 @@
   :operations [
     ;; === Reading & Progressive Disclosure ===
     (:op :id "asl-intel-ast"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:out \"...\") (:sym \"...\"))'"
          :category "reading"
          :purpose "Polyglot AST outline extraction and precise symbol definition lookup without reading full files"
          :savings "94%")
 
     (:op :id "asl-intel-read"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:read \"...\" <start> <end>))'"
          :category "reading"
          :purpose "Targeted line-range slice read avoiding full-file dumps and context bloat"
          :savings "90%")
 
     (:op :id "asl-intel-sec"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:sec \"...\" \"<heading>\"))'"
          :category "reading"
          :purpose "Targeted markdown section extraction without whole-file dump"
          :savings "92%")
 
     (:op :id "asl-intel-ls"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:ls \"...\"))'"
          :category "reading"
          :purpose "Fast directory listing and file sizing metadata in resident memory"
@@ -31,18 +35,21 @@
 
     ;; === Search & Code Intelligence ===
     (:op :id "asl-engine"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:engine :query \"...\" [:tier \"all\"|\"tier-0-ast\"|\"tier-1-mem\"|\"tier-2-web\"]))'"
          :category "search"
          :purpose "Unified tripartite engine gateway dispatching across AST (Tier 0), Resident Memory (Tier 1), and Web (Tier 2)"
          :savings "90%")
 
     (:op :id "asl-intel-impact"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:callers \"...\") (:impact \"...\"))'"
          :category "search"
          :purpose "Call graph tracing and blast-radius impact analysis across workspace before code changes"
          :savings "88%")
 
     (:op :id "asl-mem-search"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:find \"...\" [:ext \"...\"]))'"
          :category "search"
          :purpose "Instant resident-memory grep (<15ms) and vector semantic search across docstrings and comments"
@@ -50,6 +57,7 @@
 
     (:op "grep"
          :id "asl-grep"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:grep \"...\" [:file \"...\" | :dir \"...\"]))' or asl grep <pattern> [path]"
          :category "search"
          :purpose "Substring line search across text files returning 1-indexed line numbers, file paths, and line text"
@@ -57,6 +65,7 @@
 
     (:op "q"
          :id "asl-q"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:q :query \"...\" [:scope \"decisions\"|\"tasks\"|\"code\"] [:limit <n>]))'"
          :category "search"
          :purpose "Semantic recall and ranked Okapi BM25 retrieval over .asl/mem ledgers and codebase"
@@ -64,6 +73,7 @@
 
     ;; === Editing & Agentic IDE Refactoring ===
     (:op :id "asl-mem-edit"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\"))'"
          :category "editing"
          :mode "immediate"
@@ -71,12 +81,14 @@
          :savings "85%")
 
     (:op :id "asl-mem-patch"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:patch \"...\" \"<sym>\" \"new\") (:diff) (:flush))'"
          :category "editing"
          :purpose "AST-level function/struct form replacement: scoped refactoring in resident memory"
          :savings "88%")
 
     (:op :id "asl-mem-repl"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:repl \"old\" \"new\" [:ext \"...\"]) (:diff) (:flush))'"
          :category "editing"
          :purpose "In-memory mass refactoring and symbol replacement across repository files"
@@ -85,42 +97,49 @@
     ;; === Git-Native Memory & Trajectory Continuity ===
     (:op "mem"
          :id "asl-mem"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:mem :query \"...\") | (:mem :write :kind \"...\" :content \"...\" :closure \"...\") | (:mem :promote :id \"...\" :to \"...\"))' or asl mem <query|write|promote>"
          :category "memory"
          :purpose "Unified memory query and write surface across intents, goals, practices and notes with path-independent search and lineage preservation"
          :savings "92%")
 
     (:op :id "asl-mem-intent"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:sec \".asl/mem/intent.asn\" \"<section>\"))'"
          :category "memory"
          :purpose "Query Git-native intent, axioms, constraints, and architecture decisions"
          :savings "95%")
 
     (:op :id "asl-mem-task"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:read \".asl/mem/tasks/<task-id>.asn\" 1 50))'"
          :category "memory"
          :purpose "Inspect task execution state, baseline gates, and physical verification receipts"
          :savings "90%")
 
     (:op :id "asl-mem-roadmap"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:read \".asl/mem/roadmap.asn\" 1 60))'"
          :category "memory"
          :purpose "Inspect active waves, dependency ordering, and phase completion roadmap"
          :savings "92%")
 
     (:op :id "asl-storage"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:storage :mode \"git-native\"|\"ephemeral\" [:path \"...\"]))'"
          :category "memory"
          :purpose "Configures memory storage tier: default Git-native (.asl/mem/), 100% ephemeral in-RAM, or external custom path"
          :savings "92%")
 
     (:op :id "asl-mem-write"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:write \"...\" \"content\") (:flush))'"
          :category "editing"
          :purpose "Direct virtual file creation and atomic overwrite in resident RAM VFS"
          :savings "85%")
 
     (:op :id "asl-mem-staging"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:diff) (:stage \"...\") (:discard) (:flush))'"
          :category "editing"
          :status :active
@@ -129,30 +148,35 @@
 
     ;; === DAG Execution Combinators & Parallelism ===
     (:op :id "asl-batch-par"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:par (:read \"...\") (:sym \"...\")))'"
          :category "concurrency"
          :purpose "Parallel execution block running child operations concurrently across thread pool without graph bookkeeping"
          :savings "80%")
 
     (:op :id "asl-batch-seq"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:seq (:edit \"...\") (:flush) (:chk)))'"
          :category "concurrency"
          :purpose "Sequential execution block with fail-fast abort on error preventing corrupted dirty flushes"
          :savings "85%")
 
     (:op :id "asl-batch-wave"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:wave (:read \"a\") (:read \"b\")) (:wave (:edit \"a\" ...) (:flush)))'"
          :category "concurrency"
          :purpose "Topological wave execution: atomic parallel phases where subsequent waves wait or skip on failure"
          :savings "90%")
 
     (:op :id "asl-claim"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:claim :path \"...\" [:sessionId \"...\"] [:ttl-ms <ms>]))'"
          :category "concurrency"
          :purpose "Acquire path lease with on-disk digest preventing concurrent writer collision and dirty overwrites"
          :savings "85%")
 
     (:op :id "asl-leases"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:leases))'"
          :category "concurrency"
          :purpose "Inspect active writer claims and path digests in resident memory ledger"
@@ -160,18 +184,21 @@
 
     ;; === Supervised Execution & Git ===
     (:op :id "asl-run"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:run :cmd \"...\" [:cwd \"...\"] [:timeout-ms <ms>] [:limit <bytes>]))'"
          :category "execution"
          :purpose "Structured supervised execution under watchdog with exit code, duration, separated stdout/stderr, and bounded output"
          :savings "85%")
 
     (:op :id "asl-git"
+         :tier [:affordance :full]
          :cmd "asl git <subcmd> or asl rpc '(:batch (:git :op \"where\"|\"branches\"|\"compare\"|\"search\"|\"show\"|\"log\"|\"worktrees\"|\"diff\"))'"
          :category "git"
          :purpose "Git topology orientation, branch tracking, token-compacted compare, cross-branch search without checkout, and worktree steering"
          :savings "95%")
 
     (:op :id "asl-github"
+         :tier [:affordance :full]
          :cmd "asl github <subcmd> or asl rpc '(:batch (:github :op \"pr\"|\"issue\"|\"ci\"|\"diff\"))'"
          :category "github"
          :purpose "GitHub PR and issue projections, aggregate CI rollup verdicts, and token-compacted PR diffs"
@@ -179,18 +206,21 @@
 
     ;; === Codec, Pointers & Zero-JSON ===
     (:op :id "asl-toolcall"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:call :tool \"...\" ...))'"
          :category "codec"
          :purpose "Zero-JSON S-expression tool invocation and transpilation with strict schema validation"
          :savings "75%")
 
     (:op :id "asl-codec"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:codec :from \"json\" :to \"asn\" :data \"...\"))'"
          :category "codec"
          :purpose "Universal bidirectional format transpiler between JSON, YAML, HTML, and compact ASN S-expressions"
          :savings "70%")
 
     (:op :id "asl-pointer"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:ptr :action \"offload\" :data \"...\"))'"
          :category "codec"
          :purpose "Perceptual pointer offloading to store heavy data in memory and retain context economy"
@@ -198,42 +228,49 @@
 
     ;; === Interactive Process & Spool Navigation ===
     (:op :id "asl-proc-spawn"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-spawn :cmd \"...\" [:args [...]] [:timeout-ms <ms>] [:daemon true]))'"
          :category "process"
          :purpose "Spawns an interactive managed process session in resident memory with streaming channels, 15m autonomous default, and daemon mode"
          :savings "80%")
 
     (:op :id "asl-proc-input"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-input :id \"...\" :data \"...\"))'"
          :category "process"
          :purpose "Injects streaming input into an active process stdin channel without hanging on prompts"
          :savings "85%")
 
     (:op :id "asl-proc-timeout"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-timeout :id \"...\" :extend-ms <ms>))' or (:batch (:proc-timeout :id \"...\" :timeout-ms <ms>))"
          :category "process"
          :purpose "Dynamically extends or updates process watchdog timeout when observing active forward progress"
          :savings "88%")
 
     (:op :id "asl-proc-skeleton"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-skeleton :id \"...\"))'"
          :category "process"
          :purpose "Extracts compact structural output skeleton and error coordinates (<80 tokens) before whole-log dumps"
          :savings "92%")
 
     (:op :id "asl-proc-read"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-read :id \"...\" :start <start> :end <end>))'"
          :category "process"
          :purpose "Reads narrow line range from process spool buffer without loading full log"
          :savings "90%")
 
     (:op :id "asl-proc-find"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-find :id \"...\" :query \"...\" [:top-k <k>]))'"
          :category "process"
          :purpose "Executes sub-millisecond in-memory BM25 query over process spool to retrieve ranked matching lines"
          :savings "94%")
 
     (:op :id "asl-proc-signal"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-signal :id \"...\" :sig \"KILL\"))'"
          :category "process"
          :purpose "Dispatches POSIX signal to terminate or interrupt running process session"
@@ -241,12 +278,14 @@
 
     ;; === Verification & Onboarding ===
     (:op :id "asl-gate-chk"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:chk))' or asl gate"
          :category "verification"
          :purpose "Complete 7-tier verification gate across all packages, manifests, forms, tests, and skills"
          :savings "95%")
 
     (:op :id "asl-onboard"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:onboard))' or asl gate"
          :category "verification"
          :purpose "Instant workspace onboarding, topology discovery, active wave inspection, and gate verification"
@@ -254,6 +293,7 @@
 
     ;; === Token Economy & Lexical Profiling ===
     (:op :id "asl-tokens"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:tokens :input \"...\" [:top <n>]))' or asl tokens <input>"
          :category "token-economy"
          :purpose "Hierarchical token counting, category breakdown, SNR calculation, and ranked frequency decomposition"
@@ -261,6 +301,7 @@
 
     ;; === Architectural Decisions & Governance ===
     (:op :id "asl-adr"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:adr [:id \"...\"] [:shortcode \"...\"] [:cluster \"...\"] [:format \"asn\"|\"md\"]))' or asl adr show <id>"
          :category "governance"
          :purpose "Deterministic architectural decision querying, sub-200 token AST retrieval, and dual-projection Markdown export"
@@ -269,6 +310,7 @@
     ;; === Machine Notes & Observations ===
     (:op "note"
          :id "asl-note"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:note :write \"...\" | :query \"...\" | :list))' or asl note list"
          :category "memory"
          :purpose "Deterministic machine-native notes querying, keyword search, and dual-projection Markdown export"
@@ -276,6 +318,7 @@
 
     (:op "trace"
          :id "asl-trace"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:trace [:since <timestamp>] [:op <op>] [:limit <n>]))'"
          :category "observability"
          :purpose "Append-only session trace querying over RPC operations, mutations and gate runs with before/after digests"
@@ -284,6 +327,7 @@
     ;; === Task Management & Lifecycle ===
     (:op "task"
          :id "asl-task"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:task :claim \"...\" | :recover \"...\" | :list))' or asl task list"
          :category "memory"
          :purpose "Task session claim, recovery, and listing via InFlight.asn and tasks.asl"
@@ -292,6 +336,7 @@
     ;; === Context Orientation & Slicing ===
     (:op "where"
          :id "asl-where"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:where [:kind \"...\"] [:tier \"...\"]))'"
          :category "orientation"
          :purpose "Deliver context slice, active task, and situation-specific capability subset"
@@ -300,6 +345,7 @@
     ;; === Post Action Queue ===
     (:op "queue"
          :id "asl-queue"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:queue :enqueue \"...\" | :drain))' or asl queue drain"
          :category "memory"
          :purpose "Post action queue enqueue and drain"
@@ -307,6 +353,7 @@
 
     ;; === Resident Prompt Translation & Multilingual Normalization ===
     (:op :id "asl-translate"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:translate :input \"...\" [:model \"...\"] [:formalize true]))' or asl translate <input>"
          :category "translation"
          :purpose "Resident ASN Prompt Translator: converts user prompts into structured ASN with formal reasoning and safe fallback"
@@ -315,6 +362,7 @@
     ;; === Ad Hoc Composition & Pipeline Reduction ===
     (:op "compose"
          :id "asl-rpc-compose"
+         :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:compose [:bound <bytes>] ...))'"
          :category "pipeline"
          :purpose "Ad hoc RPC composition and reduction outside the model with bounded output and unreduced log refusal"
@@ -323,6 +371,7 @@
     ;; === Session Continuity, Handoff & Budget ===
     (:op "handoff"
          :id "asl-handoff"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:handoff [:summary \"...\"] [:sessionId \"...\"]))'"
          :category "session"
          :purpose "Persist compact state index with authoritative constraints, ownership, negative findings, and receipt versions"
@@ -330,6 +379,7 @@
 
     (:op "resume"
          :id "asl-resume"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:resume :handoffId \"...\"]))'"
          :category "session"
          :purpose "Resume session context from verified handoff record, re-validating source digest and active receipts"
@@ -337,6 +387,7 @@
 
     (:op "budget"
          :id "asl-budget"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:budget [:sessionId \"...\"]))'"
          :category "session"
          :purpose "Query active session token budget, compaction thresholds, and observation mask state"
@@ -344,6 +395,7 @@
 
     (:op "escalate"
          :id "asl-escalate"
+         :tier [:essential :full]
          :cmd "asl rpc '(:batch (:escalate [:seen \"...\"] [:tried \"...\"] [:fork \"...\"] [:resolves \"...\"]))'"
          :category "session"
          :purpose "Record structured escalation receipt when uncovered step or unauthorized action occurs"
