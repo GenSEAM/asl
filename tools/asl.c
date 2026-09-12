@@ -5848,6 +5848,158 @@ static int run_cmd_queue(int argc, char **argv, const char *ws_root) {
     return 0;
 }
 
+static int audit_coverage(const char *ws_root, const char *pkg_filter, int *out_total_syms, int *out_covered, int *out_uncovered) {
+    char **grammars = NULL;
+    int gcnt = 0, gcap = 0;
+    collect_tree_files(ws_root, "", ".asn", "grammar.asn", &grammars, &gcnt, &gcap);
+    qsort(grammars, gcnt, sizeof(char *), str_ptr_cmp);
+
+    char **test_files = NULL;
+    int tcnt = 0, tcap = 0;
+    collect_tree_files(ws_root, "", ".asl", "*test*.asl", &test_files, &tcnt, &tcap);
+
+    int total_symbols = 0;
+    int covered_symbols = 0;
+    int uncovered_symbols = 0;
+
+    printf("(:coverage-map\n");
+    printf("  :catalog \"docs/TEST_CASE_CATALOG.md\"\n");
+    printf("  :packages [\n");
+
+    for (int i = 0; i < gcnt; i++) {
+        char full_g[1024];
+        snprintf(full_g, sizeof(full_g), "%s/%s", ws_root, grammars[i]);
+        size_t gsz = 0;
+        char *gcontent = read_file_alloc(full_g, &gsz);
+        if (!gcontent) {
+            free(grammars[i]);
+            continue;
+        }
+
+        char pkg_name[128] = "unknown";
+        char *pkp = strstr(gcontent, ":package ");
+        if (pkp) {
+            pkp += 9;
+            while (*pkp == ' ' || *pkp == '\t') pkp++;
+            int pl = 0;
+            while (pkp[pl] && !isspace((unsigned char)pkp[pl]) && pkp[pl] != ')' && pl + 1 < (int)sizeof(pkg_name)) {
+                pkg_name[pl] = pkp[pl];
+                pl++;
+            }
+            pkg_name[pl] = '\0';
+        }
+
+        if (pkg_filter && pkg_filter[0] && strcmp(pkg_name, pkg_filter) != 0) {
+            free(gcontent);
+            free(grammars[i]);
+            continue;
+        }
+
+        printf("    (:package-coverage :package \"%s\" :grammar \"%s\" :symbols [\n", pkg_name, grammars[i]);
+
+        int pkg_syms = 0;
+        int pkg_cov = 0;
+
+        char *cur = gcontent;
+        while ((cur = strstr(cur, "(:sym")) != NULL) {
+            cur += 5;
+            char sym_name[128] = {0};
+            char *np = strstr(cur, ":name \"");
+            if (np) {
+                np += 7;
+                char *nend = strchr(np, '\"');
+                if (nend && (nend - np) < (int)sizeof(sym_name)) {
+                    int nlen = (int)(nend - np);
+                    strncpy(sym_name, np, nlen);
+                    sym_name[nlen] = '\0';
+                }
+            }
+
+            if (sym_name[0]) {
+                pkg_syms++;
+                total_symbols++;
+
+                int has_ref = 0;
+                int has_happy = 0;
+                int has_boundary = 0;
+                int has_empty = 0;
+                int has_error = 0;
+                int has_negative = 0;
+
+                for (int t = 0; t < tcnt; t++) {
+                    char full_t[1024];
+                    snprintf(full_t, sizeof(full_t), "%s/%s", ws_root, test_files[t]);
+                    FILE *tf = fopen(full_t, "r");
+                    if (tf) {
+                        char tline[2048];
+                        int in_test_for_sym = 0;
+                        while (fgets(tline, sizeof(tline), tf)) {
+                            if (strstr(tline, sym_name)) {
+                                has_ref = 1;
+                                in_test_for_sym = 1;
+                            }
+                            if (in_test_for_sym) {
+                                if (strstr(tline, "Test") || strstr(tline, "Happy") || strstr(tline, "Baseline")) has_happy = 1;
+                                if (strstr(tline, "Empty") || strstr(tline, "Absent")) has_empty = 1;
+                                if (strstr(tline, "Boundary") || strstr(tline, "Max") || strstr(tline, "Zero")) has_boundary = 1;
+                                if (strstr(tline, "Error") || strstr(tline, "Fail") || strstr(tline, "Reject")) has_error = 1;
+                                if (strstr(tline, "Negative") || strstr(tline, "reject") || strstr(tline, "not")) has_negative = 1;
+                                if (strstr(tline, "(df ") && !strstr(tline, sym_name)) in_test_for_sym = 0;
+                            }
+                        }
+                        fclose(tf);
+                    }
+                }
+
+                StrBuf kinds_sb;
+                sb_init(&kinds_sb);
+                if (has_happy) sb_append(&kinds_sb, " :happyPath");
+                if (has_boundary) sb_append(&kinds_sb, " :boundary");
+                if (has_empty) sb_append(&kinds_sb, " :emptyAndAbsent");
+                if (has_error) sb_append(&kinds_sb, " :errorPropagation");
+                if (has_negative) sb_append(&kinds_sb, " :negativeControl");
+
+                if (has_ref) {
+                    pkg_cov++;
+                    covered_symbols++;
+                } else {
+                    uncovered_symbols++;
+                }
+
+                printf("      (:symbol-coverage :name \"%s\" :covered %s :case-kinds [%s ] :executed %s)\n",
+                       sym_name, has_ref ? "true" : "false", kinds_sb.data ? kinds_sb.data : "", has_ref ? "true" : "false");
+                sb_free(&kinds_sb);
+            }
+        }
+        printf("    ] :total-symbols %d :covered %d :uncovered %d)\n", pkg_syms, pkg_cov, pkg_syms - pkg_cov);
+        free(gcontent);
+        free(grammars[i]);
+    }
+    free(grammars);
+
+    for (int t = 0; t < tcnt; t++) free(test_files[t]);
+    free(test_files);
+
+    double pct = (total_symbols > 0) ? ((double)covered_symbols / (double)total_symbols * 100.0) : 100.0;
+    printf("  ]\n");
+    printf("  :total-symbols %d\n", total_symbols);
+    printf("  :covered-count %d\n", covered_symbols);
+    printf("  :uncovered-count %d\n", uncovered_symbols);
+    printf("  :coverage-pct %.2f\n", pct);
+    printf(")\n");
+
+    if (out_total_syms) *out_total_syms = total_symbols;
+    if (out_covered) *out_covered = covered_symbols;
+    if (out_uncovered) *out_uncovered = uncovered_symbols;
+    return 0;
+}
+
+static int run_cmd_coverage(int argc, char **argv, const char *ws_root) {
+    const char *pkg_filter = (argc > 2) ? argv[2] : NULL;
+    int total = 0, covered = 0, uncovered = 0;
+    return audit_coverage(ws_root, pkg_filter, &total, &covered, &uncovered);
+}
+
 static int run_cmd_inventory(int argc, char **argv, const char *ws_root) {
     (void)argc;
     (void)argv;
@@ -6001,6 +6153,7 @@ static void print_usage(void) {
     printf("   or: asl audit <consistency|gates|plan> [Repository & plan integrity audit]\n");
     printf("   or: asl plan verify                   [Verify plan DAG acyclicity and D52 completeness]\n");
     printf("   or: asl watch                         [Continuous pre-flight check over delimiter balance & tree status]\n");
+    printf("   or: asl coverage [package]            [Coverage and case-diversity map over the corpus]\n");
     printf("   or: asl doctor                        [Capability & environment truth probe]\n");
     printf("   or: asl scaffold <module|fn|test> <name> [Native code scaffolding]\n");
     printf("   or: asl inventory                     [List all tools with status and fallback]\n");
@@ -6319,11 +6472,7 @@ int main(int argc, char **argv) {
 
     /* Subcommand: coverage */
     if (argc >= 2 && strcmp(argv[1], "coverage") == 0) {
-        printf("================================================================================\n");
-        printf("                     AgentScript Subsystem Coverage Audit                       \n");
-        printf("================================================================================\n");
-        printf("✓ Coverage audit completed cleanly: 90%% baseline execution across core suites.\n");
-        return 0;
+        return run_cmd_coverage(argc, argv, discovered_ws);
     }
 
     /* Subcommand: skill / skills */
