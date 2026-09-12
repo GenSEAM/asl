@@ -591,6 +591,35 @@ static void walk_dir_recursive(const char *base_dir, const char *sub_dir, WalkFi
    Delimiter Balance & Syntax Integrity Checker (check / lint)
    ------------------------------------------------------------------------- */
 
+static int run_git_commit_safe(const char *ws_root, const char *msg) {
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+        char *args[] = {
+            (char *)"git",
+            (char *)"-C",
+            (char *)ws_root,
+            (char *)"commit",
+            (char *)"-m",
+            (char *)msg,
+            NULL
+        };
+        execvp("git", args);
+        _exit(127);
+    }
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR) return -1;
+    }
+    if (WIFEXITED(status)) return WEXITSTATUS(status);
+    return -1;
+}
+
 static int check_file_delimiters(const char *path, int is_lint) {
     FILE *fp = fopen(path, "r");
     if (!fp) {
@@ -1797,9 +1826,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 sb_append_int(out, step_id);
                 sb_append(out, " :op \"git\" :subop \"commit\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Commit message required\")\n");
             } else {
-                char cmd[4096];
-                snprintf(cmd, sizeof(cmd), "git -C \"%s\" commit -m \"%s\" 2>/dev/null", ws_root, msg);
-                int ret = system(cmd);
+                int ret = run_git_commit_safe(ws_root, msg);
                 if (ret == 0) {
                     char rev_cmd[4096];
                     snprintf(rev_cmd, sizeof(rev_cmd), "git -C \"%s\" rev-parse --short HEAD 2>/dev/null", ws_root);
