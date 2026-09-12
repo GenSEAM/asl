@@ -65,5 +65,17 @@
       :rule "Qualified uses in retrieved slices must resolve unambiguously from the prefix without requiring file headers to be read."
       :failureCode "ERR_UNRESOLVED_QUALIFIED_USE"
       :exitCode 1)
+    (:semantic :id symbolSurfaceTracking
+      :rule "Distinct symbol surface is tracked in the same inventory alongside token count; proposals reducing tokens while increasing distinct symbol surface or distance between binding and uses are rejected without measured accuracy evidence."
+      :failureCode "ERR_SURFACE_EXPANSION_WITHOUT_EVIDENCE"
+      :exitCode 1)
+    (:semantic :id symbolSurfaceRatchet
+      :rule "Adding a synonym or duplicate spelling for an existing primitive expands the distinct symbol surface and fails the ratchet check."
+      :failureCode "ERR_SYMBOL_SURFACE_RATCHET_VIOLATION"
+      :exitCode 1)
+    (:semantic :id dualQuantityInventory
+      :rule "Language telemetry inventories must report both total token count and distinct head symbol surface in a single run."
+      :failureCode "ERR_MISSING_DUAL_INVENTORY"
+      :exitCode 1)
   ]
 )
