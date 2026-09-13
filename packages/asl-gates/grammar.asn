@@ -63,6 +63,8 @@
           :rationale "Runs full audit of published benchmark claims")
     (:sym :name "verify-claims-grounding" :kind :fn :tokens 3
           :rationale "Validates site claims grounding matrix")
+    (:sym :name "load-published-claims" :kind :fn :tokens 3
+          :rationale "Loads published benchmark claims from filesystem disk registry")
     (:sym :name "make-symbol-entry" :kind :fn :tokens 3
           :rationale "Constructs SymbolEntry descriptor with token count and rationale")
     (:sym :name "count-kebab-tokens" :kind :fn :tokens 3

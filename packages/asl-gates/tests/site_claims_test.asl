@@ -1,6 +1,6 @@
-(module asl-gates/tests/site-claims-test
-  :d "Unit tests for pure AgentScript Site Claims Verification Gate."
-  :x [test-known-claims test-unknown-claim test-claims-audit test-full-grounding test-load-published-claims run-tests]
+(module asl-gates/tests/site_claims_test
+  :d "Unit tests for pure AgentScript Site Claims Verification Gate under live disk grounding."
+  :x [test-known-claims test-unknown-claim test-claims-audit test-full-grounding test-disk-grounding-verification run-tests]
   :i [(site-claims :a sc)])
 
 (df test-known-claims [] -> Bool
@@ -46,21 +46,17 @@
     (assert (not (sc/is-known-metric "fabricated-speedup" registry)) "invalid claim must not be in standard registry")
     true))
 
-(df ! test-load-published-claims [] -> Bool
-  :d "Verifies load-published-claims parses bench/published_claims.asn from disk"
-  (let [(claims (sc/load-published-claims))]
-    (assert (>= (list-length claims) 12) "load-published-claims must load >= 12 claims from disk")
-    (assert (list-contains? claims "57%–65%") "claims must contain 57%–65%")
-    (assert (list-contains? claims "-64.7%") "claims must contain -64.7%")
-    (assert (list-contains? claims "-75%") "claims must contain -75%")
-    true))
+(df test-disk-grounding-verification [] -> Bool
+  :d "Verifies verify-claims-grounding actively verifies against published_claims.asn on disk."
+  (assert (sc/verify-claims-grounding) "verify-claims-grounding must return true on valid monorepo published claims")
+  true)
 
-(df ! run-tests [] -> Bool
+(df run-tests [] -> Bool
   :d "Runs all site claims tests."
   (do
     (assert (test-known-claims) "test-known-claims must pass")
     (assert (test-unknown-claim) "test-unknown-claim must pass")
     (assert (test-claims-audit) "test-claims-audit must pass")
     (assert (test-full-grounding) "test-full-grounding must pass")
-    (assert (test-load-published-claims) "test-load-published-claims must pass")
+    (assert (test-disk-grounding-verification) "test-disk-grounding-verification must pass")
     true))

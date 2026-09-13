@@ -1,6 +1,6 @@
 (module asl-gates/site-claims
   :d "Pure AgentScript Site Claims Verification Gate & Grounding Audit Engine."
-  :x [ClaimRecord AuditResult GateReport is-known-metric audit-claim run-claims-audit verify-claims-grounding standard-claims]
+  :x [ClaimRecord AuditResult GateReport is-known-metric audit-claim run-claims-audit verify-claims-grounding standard-claims load-published-claims]
   :i [])
 
 (dfs ClaimRecord
@@ -64,9 +64,33 @@
         (status (if (and (= failed 0) (> pub-len 0) (> passed 0)) "PASS" "FAIL"))]
     (GateReport :total total :passed passed :failed failed :status status)))
 
-(df verify-claims-grounding [] -> Bool
-  :d "Verifies standard published claims are grounded."
-  (let [(claims (standard-claims))
-        (report (run-claims-audit claims claims))]
-    (and (= (.-failed report) 0)
-         (= (.-status report) "PASS"))))
+(df load-published-claims [] -> (List Str)
+  :d "Reads bench/published_claims.asn from disk and extracts registered claims."
+  (let [(candidates (list "asl/bench/published_claims.asn" "bench/published_claims.asn"))
+        (target (fold (fn [(acc Str) (p Str)] -> Str
+                        (if (> (string-length acc) 0) acc (if (file-exists? p) p "")))
+                      ""
+                      candidates))]
+    (if (string-empty? target)
+        (list)
+        (let [(res (file-read target))]
+          (if (!= (.-_tag res) "ok")
+              (list)
+              (let [(content (.-value res))
+                    (chunks (string-split content "(:claim :metric \""))
+                    (rest (option-or (list-tail chunks) (list)))]
+                (map (fn [(chunk Str)] -> Str
+                       (let [(opt (string-index-of chunk "\""))
+                             (idx (option-or opt 0))]
+                         (option-or (string-slice chunk 0 idx) "")))
+                     rest)))))))
+
+(df ! verify-claims-grounding [] -> Bool
+  :d "Verifies published claims from disk are grounded against standard claims registry."
+  (let [(published (load-published-claims))
+        (registry (standard-claims))]
+    (if (or (list-empty? published) (< (list-length published) 12))
+        false
+        (let [(report (run-claims-audit published registry))]
+          (and (= (.-failed report) 0)
+               (= (.-status report) "PASS"))))))
