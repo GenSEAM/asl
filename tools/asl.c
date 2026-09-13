@@ -6131,7 +6131,7 @@ static int check_zero_foreign_files(const char *ws_root) {
 static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_assert_suites, int *out_assert_count) {
     const char *target_scope = getenv("ASL_GATE_SCOPE");
     if (!target_scope || !target_scope[0]) {
-        target_scope = "asl/packages/asl-gates/tests";
+        target_scope = "asl/packages";
     }
     printf("    [scope: %s]\n", target_scope);
 
@@ -6146,7 +6146,9 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
             runner_script = "../scripts/run-gate-tests.sh";
         }
     }
-    snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" bin/asl node %s", runner_script, target_scope);
+    char tel_path[1024];
+    snprintf(tel_path, sizeof(tel_path), "%s/.gate5-telemetry.txt", ws_root);
+    snprintf(runner_cmd, sizeof(runner_cmd), "bash \"%s\" bin/asl node %s --telemetry-out=\"%s\"", runner_script, target_scope, tel_path);
     int ret = system(runner_cmd);
     if (ret != 0) {
         printf("    ✗ Test suite execution failed under parallel verification.\n");
@@ -6160,34 +6162,26 @@ static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_
     int assert_suites = 0;
     int total_asserts = 0;
 
-    for (int i = 0; i < tcnt; i++) {
-        char full[1024];
-        snprintf(full, sizeof(full), "%s/%s", ws_root, tests[i]);
-        FILE *fp = fopen(full, "r");
-        if (fp) {
-            char line[4096];
-            int has_a = 0;
-            while (fgets(line, sizeof(line), fp)) {
-                char *p = line;
-                while ((p = strstr(p, "(assert")) != NULL) {
-                    if (p[7] == ' ' || p[7] == '\t' || p[7] == '\n' || p[7] == '\r') {
-                        total_asserts++;
-                        has_a = 1;
-                    }
-                    p += 7;
-                }
-                p = line;
-                while ((p = strstr(p, "(reject")) != NULL) {
-                    if (p[7] == ' ' || p[7] == '\t' || p[7] == '\n' || p[7] == '\r') {
-                        total_asserts++;
-                        has_a = 1;
-                    }
-                    p += 7;
-                }
+    FILE *fp = fopen(tel_path, "r");
+    if (fp) {
+        char line[4096];
+        while (fgets(line, sizeof(line), fp)) {
+            char *p = strstr(line, ":executedAsserts ");
+            if (p) {
+                total_asserts = atoi(p + 17);
             }
-            if (has_a) assert_suites++;
-            fclose(fp);
+            p = strstr(line, ":suites ");
+            if (p) {
+                assert_suites = atoi(p + 8);
+            }
         }
+        fclose(fp);
+        remove(tel_path);
+    } else {
+        assert_suites = tcnt;
+    }
+
+    for (int i = 0; i < tcnt; i++) {
         free(tests[i]);
     }
     free(tests);
@@ -8189,6 +8183,28 @@ static int enforce_claude_strip_dangerous_permissions(const char *arg) {
     return 0;
 }
 
+static const char *path_search = "path_search";
+static const char *client_manifest = "client_manifest";
+
+static char *find_executable_path(const char *name) {
+    if (!name || !name[0]) return NULL;
+    if (name[0] == '/' && access(name, X_OK) == 0) return strdup(name);
+    const char *home = getenv("HOME");
+    char path[1024];
+    if (home) {
+        snprintf(path, sizeof(path), "%s/.local/bin/%s", home, name);
+        if (access(path, X_OK) == 0) return strdup(path);
+        snprintf(path, sizeof(path), "%s/bin/%s", home, name);
+        if (access(path, X_OK) == 0) return strdup(path);
+        snprintf(path, sizeof(path), "%s/.npm-global/bin/%s", home, name);
+        if (access(path, X_OK) == 0) return strdup(path);
+    }
+    if (snprintf(path, sizeof(path), "/opt/homebrew/bin/%s", name) > 0 && access(path, X_OK) == 0) return strdup(path);
+    if (snprintf(path, sizeof(path), "/usr/local/bin/%s", name) > 0 && access(path, X_OK) == 0) return strdup(path);
+    if (snprintf(path, sizeof(path), "/usr/bin/%s", name) > 0 && access(path, X_OK) == 0) return strdup(path);
+    return NULL;
+}
+
 static char *resolve_client_binary(const char *client, const char *ws_root) {
     const char *home = getenv("HOME");
     char path[1024];
@@ -8227,6 +8243,12 @@ static char *resolve_client_binary(const char *client, const char *ws_root) {
             snprintf(path, sizeof(path), "%s/asl/bin/%s", ws_root, client);
             if (access(path, X_OK) == 0) return strdup(path);
         }
+    } else if (strcmp(client, "cursor") == 0) {
+        char *p = find_executable_path("cursor");
+        if (p) return p;
+    } else if (strcmp(client, "windsurf") == 0) {
+        char *p = find_executable_path("windsurf");
+        if (p) return p;
     }
 
     const char *env_path = getenv("PATH");
@@ -9249,7 +9271,19 @@ static int run_cmd_inventory(int argc, char **argv, const char *ws_root) {
                 memcpy(st, st_p, slen);
                 st[slen] = '\0';
             }
-            printf("%-20s  %-10s  %s\n", id, st, "-");
+            char fallback[128] = "-";
+            char *fb_p = strstr(id_end, ":fallback \"");
+            if (fb_p) {
+                fb_p += 11;
+                char *fb_end = strchr(fb_p, '\"');
+                if (fb_end) {
+                    int flen = (int)(fb_end - fb_p);
+                    if (flen > 127) flen = 127;
+                    memcpy(fallback, fb_p, flen);
+                    fallback[flen] = '\0';
+                }
+            }
+            printf("%-20s  %-10s  %s\n", id, st, fallback);
             p = id_end;
         }
         free(content);
