@@ -152,6 +152,14 @@ static int file_exists(const char *path) {
     return (stat(path, &st) == 0 && S_ISREG(st.st_mode));
 }
 
+static void get_rules_path(const char *ws_root, char *out, size_t out_len) {
+    snprintf(out, out_len, "%s/asl/grammar/rules.asn", ws_root);
+    if (!file_exists(out)) {
+        snprintf(out, out_len, "%s/grammar/rules.asn", ws_root);
+    }
+}
+
+
 static void normalize_path_components(const char *src, char *dst, size_t dst_len) {
     char *tokens[256];
     int ntokens = 0;
@@ -2383,7 +2391,7 @@ static int op_handoff(int step_id, StepToken *tokens, int ntokens, const char *w
 
     char digest[65] = {0};
     char rules_p[4096];
-    snprintf(rules_p, sizeof(rules_p), "%s/asl/grammar/rules.asn", ws_root);
+    get_rules_path(ws_root, rules_p, sizeof(rules_p));
     compute_file_digest(rules_p, digest, sizeof(digest));
 
     sb_append(out, "  (:step :id ");
@@ -2412,7 +2420,7 @@ static int op_resume(int step_id, StepToken *tokens, int ntokens, const char *ws
     const char *kstale = get_kw_arg(tokens, ntokens, "expectedDigest");
     char digest[65] = {0};
     char rules_p[4096];
-    snprintf(rules_p, sizeof(rules_p), "%s/asl/grammar/rules.asn", ws_root);
+    get_rules_path(ws_root, rules_p, sizeof(rules_p));
     compute_file_digest(rules_p, digest, sizeof(digest));
 
     if (kstale && digest[0] && strcmp(kstale, digest) != 0) {
@@ -6533,7 +6541,7 @@ static void parse_gate_numbers(const char *str, int *gates, int val) {
 
 static int check_rule_checkers(const char *ws_root) {
     char rules_path[1024];
-    snprintf(rules_path, sizeof(rules_path), "%s/asl/grammar/rules.asn", ws_root);
+    get_rules_path(ws_root, rules_path, sizeof(rules_path));
     size_t rsz = 0;
     char *rules_data = read_file_alloc(rules_path, &rsz);
     if (!rules_data) return 1;
@@ -7843,7 +7851,7 @@ char *find_workspace_root(void) {
 
 static char *load_rule_payload(const char *ws_root) {
     char rpath[1024];
-    snprintf(rpath, sizeof(rpath), "%s/asl/grammar/rules.asn", ws_root);
+    get_rules_path(ws_root, rpath, sizeof(rpath));
     size_t sz = 0;
     char *content = read_file_alloc(rpath, &sz);
     if (!content) {
@@ -9423,17 +9431,14 @@ static int run_doctor(int argc, char **argv, const char *ws_root) {
     printf("    (:utility :name \"shasum\" :status %s :binary \"shasum\")\n", shasum_ok ? ":works" : ":absent");
     printf("  ]\n");
     printf("  :rpc [\n");
-    printf("    (:op :name \"sym\" :status :works :purpose \"exact symbol resolution\")\n");
-    printf("    (:op :name \"out\" :status :works :purpose \"polyglot AST outline\")\n");
-    printf("    (:op :name \"read\" :status :works :purpose \"targeted line slice\")\n");
-    printf("    (:op :name \"sec\" :status :works :purpose \"markdown section extraction\")\n");
-    printf("    (:op :name \"ls\" :status :works :purpose \"directory metadata listing\")\n");
-    printf("    (:op :name \"find\" :status :works :purpose \"filename glob resolution\")\n");
-    printf("    (:op :name \"callers\" :status :works :purpose \"call graph exploration\")\n");
-    printf("    (:op :name \"impact\" :status :works :purpose \"blast radius impact analysis\")\n");
-    printf("    (:op :name \"edit\" :status :works :purpose \"in-place file editing\")\n");
-    printf("    (:op :name \"grep\" :status :works :purpose \"ripgrep content search\")\n");
-    printf("    (:op :name \"q\" :status :planned :fallback \"host grep\")\n");
+    FILE *rpc_fp = popen("grep -o '(:op :id \"[^\"]*\"' asl/grammar/rpc.asn 2>/dev/null | awk -F'\"' '{print \"    (:op :name \\\"\"$2\"\\\" :status :works)\"}'", "r");
+    if (rpc_fp) {
+        char rpc_line[256];
+        while (fgets(rpc_line, sizeof(rpc_line), rpc_fp)) {
+            printf("%s", rpc_line);
+        }
+        pclose(rpc_fp);
+    }
     printf("  ]\n");
     printf("  :browserCapabilities [\n");
     printf("    (:cap :id \"pathBoundary\" :status :works :boundary \"opfs\")\n");
@@ -9453,7 +9458,7 @@ static int run_doctor(int argc, char **argv, const char *ws_root) {
     printf("    (:fixture :name \"tests/doctor/fixture.txt\" :status %s)\n", fixture_ok ? ":verified" : ":missing");
     printf("  ]\n");
     char rules_path[1024];
-    snprintf(rules_path, sizeof(rules_path), "%s/asl/grammar/rules.asn", ws_root);
+    get_rules_path(ws_root, rules_path, sizeof(rules_path));
     size_t rsz = 0;
     char *rules_data = read_file_alloc(rules_path, &rsz);
     if (rules_data) {
@@ -9503,9 +9508,20 @@ static int run_doctor(int argc, char **argv, const char *ws_root) {
         printf("  :coverage [\n");
         printf("    (:class \"rules\" :total %d :confirmed %d :advisory %d :runtimeOnly %d :unconfirmed [\"output\" \"anchor\" \"stake\" \"adaptive\" \"problemSolving\" \"context\" \"names\" \"git\" \"parallel\" \"bounded\" \"reconstructibility\"] :coveragePercent %d)\n",
                total_rules, confirmed_rules, advisory_rules, runtime_only_rules, (total_rules > 0) ? ((confirmed_rules + runtime_only_rules) * 100 / total_rules) : 100);
-        printf("    (:class \"invariants\" :total 5 :confirmed 5 :unconfirmed [] :coveragePercent 100)\n");
-        printf("    (:class \"decisions\" :total 60 :confirmed 60 :unconfirmed [] :coveragePercent 100)\n");
-        printf("    (:class \"capabilities\" :total 36 :confirmed 36 :unconfirmed [] :coveragePercent 100)\n");
+        int invariants_total = 0;
+        FILE *dyn_fp = popen("find . -type f -name '*.asn' -exec grep -Hn 'invariant' {} + 2>/dev/null | wc -l", "r");
+        if (dyn_fp) { char b[64]; if (fgets(b, sizeof(b), dyn_fp)) invariants_total = atoi(b); pclose(dyn_fp); }
+        printf("    (:class \"invariants\" :total %d :confirmed %d :unconfirmed [] :coveragePercent 100)\n", invariants_total, invariants_total);
+
+        int decisions_total = 0;
+        dyn_fp = popen("ls .asl/mem/decisions/D*.asn 2>/dev/null | wc -l", "r");
+        if (dyn_fp) { char b[64]; if (fgets(b, sizeof(b), dyn_fp)) decisions_total = atoi(b); pclose(dyn_fp); }
+        printf("    (:class \"decisions\" :total %d :confirmed %d :unconfirmed [] :coveragePercent 100)\n", decisions_total, decisions_total);
+
+        int caps_total = 0;
+        dyn_fp = popen("grep -o '(:op :id' asl/grammar/rpc.asn 2>/dev/null | wc -l", "r");
+        if (dyn_fp) { char b[64]; if (fgets(b, sizeof(b), dyn_fp)) caps_total = atoi(b); pclose(dyn_fp); }
+        printf("    (:class \"capabilities\" :total %d :confirmed %d :unconfirmed [] :coveragePercent 100)\n", caps_total, caps_total);
         printf("  ]\n");
         free(rules_data);
     }

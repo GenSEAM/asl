@@ -57,16 +57,8 @@
 
 (df verify-foreign-ext [(ext Str)] -> Bool
   :d "Returns true if file extension complies with pure ASL zero-foreign policy."
-  (not (or (= ext ".py")
-           (or (= ext ".js")
-               (or (= ext ".mjs")
-                   (or (= ext ".ts")
-                       (or (= ext ".tsx")
-                           (or (= ext ".rs")
-                               (or (= ext ".c")
-                                   (or (= ext ".cpp")
-                                       (or (= ext ".h")
-                                           (= ext ".json"))))))))))))
+  (or (= ext ".asl")
+      (= ext ".asn")))
 
 (df ! run-suite [(paths (List Str))] -> (Result I64 Str)
   :d "Executes semantic verification gate across a collection of ASL source paths."
