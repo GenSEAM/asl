@@ -1,0 +1,261 @@
+(:records :v 1 :src D83 :shortcode D83
+  :note "Formal ASN record schemas for all 11 monorepo record categories and blamed rejection error taxonomy under D83."
+  :tiers [
+    (:tier :id alpha :name "Frictionless Working Memory (<80 tokens)"
+      :records [
+        (:schema :id note :category :workingMemory
+          :description "Transient working memory observations, facts, and volatile state."
+          :required [:id :topic :session :tags :fact :reconstructibility :status]
+          :optional [:retireReason :source]
+          :fields [
+            (:field :name :id :type :string :pattern "^note-[0-9a-fA-F-]+$")
+            (:field :name :topic :type :string)
+            (:field :name :session :type :string)
+            (:field :name :tags :type :vector :items :string)
+            (:field :name :fact :type :string)
+            (:field :name :reconstructibility :type :boolean)
+            (:field :name :status :type :keyword :allowed [:active :retired :promoted])
+            (:field :name :retireReason :type :string)
+            (:field :name :source :type :string)])
+
+        (:schema :id receipt :category :evidence
+          :description "Immutable execution evidence emitted by runner tools."
+          :required [:id :taskId :gate :exitCode :status :timestamp :digest :executedAsserts :durationMs]
+          :optional [:session :lane :stdoutDigest]
+          :fields [
+            (:field :name :id :type :string :pattern "^receipt-[0-9a-fA-F-]+$")
+            (:field :name :taskId :type :string :pattern "^(Task[0-9]{5}|Task-F[0-9]{2})$")
+            (:field :name :gate :type :string)
+            (:field :name :exitCode :type :integer)
+            (:field :name :status :type :keyword :allowed [:passed :failed :error])
+            (:field :name :timestamp :type :integer)
+            (:field :name :digest :type :string)
+            (:field :name :executedAsserts :type :integer)
+            (:field :name :durationMs :type :integer)
+            (:field :name :session :type :string)
+            (:field :name :lane :type :string)
+            (:field :name :stdoutDigest :type :string)])
+
+        (:schema :id telemetry :category :metrics
+          :description "Micro-benchmarks, token counts, and step execution timings."
+          :required [:series :timestamp :host :metric :value :tags]
+          :optional [:unit :context]
+          :fields [
+            (:field :name :series :type :string)
+            (:field :name :timestamp :type :integer)
+            (:field :name :host :type :string)
+            (:field :name :metric :type :string)
+            (:field :name :value :type :number)
+            (:field :name :tags :type :vector :items :string)
+            (:field :name :unit :type :string)
+            (:field :name :context :type :string)])])
+
+    (:tier :id beta :name "Normative Architecture & Knowledge Base"
+      :records [
+        (:schema :id decision :category :adr
+          :description "Architectural decision records under D81 canonical format."
+          :required [:id :shortcode :title :status :date :cluster :deciders :problem :drivers :decision :invariants :tasks :outcomes :consequences]
+          :optional [:summary :context]
+          :fields [
+            (:field :name :id :type :string :pattern "^D[0-9]+$")
+            (:field :name :shortcode :type :string :pattern "^D[0-9]+$")
+            (:field :name :title :type :string)
+            (:field :name :status :type :keyword :allowed [:proposed :accepted :deprecated :superseded])
+            (:field :name :date :type :string)
+            (:field :name :cluster :type :string)
+            (:field :name :deciders :type :vector :items :string)
+            (:field :name :problem :type :string)
+            (:field :name :drivers :type :vector :items :string)
+            (:field :name :decision :type :string)
+            (:field :name :invariants :type :vector :items :string)
+            (:field :name :tasks :type :vector :items :string)
+            (:field :name :outcomes :type :vector :items :string)
+            (:field :name :consequences :type :vector :items :form)])
+
+        (:schema :id intent :category :teleology
+          :description "Architectural teleology vectors and long-term invariants."
+          :required [:id :sym :title :intent :outcome :whyNot :adr :tasks :closure :status]
+          :optional [:lane]
+          :fields [
+            (:field :name :id :type :string :pattern "^d[0-9]+$")
+            (:field :name :sym :type :string)
+            (:field :name :title :type :string)
+            (:field :name :intent :type :string)
+            (:field :name :outcome :type :string)
+            (:field :name :whyNot :type :vector :items :string)
+            (:field :name :adr :type :string :pattern "^D[0-9]+$")
+            (:field :name :tasks :type :vector :items :string)
+            (:field :name :closure :type :string)
+            (:field :name :status :type :keyword :allowed [:draft :active :closed :retired])
+            (:field :name :lane :type :string)])
+
+        (:schema :id principle :category :governance
+          :description "Monorepo governance axioms and empirical constraints."
+          :required [:id :normativeOrEmpirical :name :statement :invariants :checkCommand :gateCommand :why]
+          :optional [:scope :uncertainty]
+          :fields [
+            (:field :name :id :type :string)
+            (:field :name :normativeOrEmpirical :type :keyword :allowed [:normative :empirical])
+            (:field :name :name :type :string)
+            (:field :name :statement :type :string)
+            (:field :name :invariants :type :vector :items :string)
+            (:field :name :checkCommand :type :string)
+            (:field :name :gateCommand :type :string)
+            (:field :name :why :type :string)
+            (:field :name :scope :type :string)
+            (:field :name :uncertainty :type :string)])
+
+        (:schema :id recipe :category :operations
+          :description "Standard operating procedures, diagnostic playbooks, and recovery guides."
+          :required [:id :name :goal :prerequisites :steps :pitfalls :recovery]
+          :optional [:tools :verification]
+          :fields [
+            (:field :name :id :type :string)
+            (:field :name :name :type :string)
+            (:field :name :goal :type :string)
+            (:field :name :prerequisites :type :vector :items :string)
+            (:field :name :steps :type :vector :items :string)
+            (:field :name :pitfalls :type :vector :items :string)
+            (:field :name :recovery :type :string)
+            (:field :name :tools :type :vector :items :string)
+            (:field :name :verification :type :string)])
+
+        (:schema :id component :category :interface
+          :description "Subsystem interface manifests, typestate definitions, and boundary contracts."
+          :required [:id :package :module :typestates :invariants :exports :contracts :dependencies]
+          :optional [:version :description]
+          :fields [
+            (:field :name :id :type :string)
+            (:field :name :package :type :string)
+            (:field :name :module :type :string)
+            (:field :name :typestates :type :vector :items :string)
+            (:field :name :invariants :type :vector :items :string)
+            (:field :name :exports :type :vector :items :string)
+            (:field :name :contracts :type :vector :items :string)
+            (:field :name :dependencies :type :vector :items :string)
+            (:field :name :version :type :string)
+            (:field :name :description :type :string)])])
+
+    (:tier :id gamma :name "Execution DAG & Formal Verification"
+      :records [
+        (:schema :id task :category :execution
+          :description "Atomic work item specification under D52 enriched context schema."
+          :required [:id :phase :title :kind :lane :state :priority :ownerRole :motivation :purpose :context :outcomes :owns :targetSymbols :relatedSymbols :invariants :adr :decision :dependsOn :gate :actionDag :acceptanceCriteria :contractRefs :verificationRole :verificationOwns :verificationCases :gateReadiness :baselineProbe :reviewStatus :stepIndex :receipts]
+          :optional [:parentId :createdAt :updatedAt :variations :failureModes :additionalRequirements]
+          :fields [
+            (:field :name :id :type :string :pattern "^(Task[0-9]{5}|Task-F[0-9]{2})$")
+            (:field :name :parentId :type :string)
+            (:field :name :phase :type :string)
+            (:field :name :title :type :string)
+            (:field :name :kind :type :keyword)
+            (:field :name :lane :type :string)
+            (:field :name :state :type :keyword :allowed [:ready :in-progress :blocked :completed :failed :review :accepted])
+            (:field :name :priority :type :keyword :allowed [:critical :high :medium :low])
+            (:field :name :ownerRole :type :string)
+            (:field :name :motivation :type :string)
+            (:field :name :purpose :type :string)
+            (:field :name :context :type :form)
+            (:field :name :outcomes :type :vector :items :string)
+            (:field :name :owns :type :vector :items :string)
+            (:field :name :targetSymbols :type :vector :items :string)
+            (:field :name :relatedSymbols :type :vector :items :string)
+            (:field :name :invariants :type :vector :items :string)
+            (:field :name :adr :type :string :pattern "^D[0-9]+$")
+            (:field :name :decision :type :string :pattern "^d[0-9]+$")
+            (:field :name :dependsOn :type :vector :items :string)
+            (:field :name :gate :type :string)
+            (:field :name :actionDag :type :vector :items :string)
+            (:field :name :acceptanceCriteria :type :form)
+            (:field :name :contractRefs :type :vector :items :symbol)
+            (:field :name :verificationRole :type :string)
+            (:field :name :verificationOwns :type :vector :items :string)
+            (:field :name :verificationCases :type :vector :items :string)
+            (:field :name :gateReadiness :type :keyword)
+            (:field :name :baselineProbe :type :form)
+            (:field :name :reviewStatus :type :keyword)
+            (:field :name :stepIndex :type :integer)
+            (:field :name :receipts :type :vector :items :form)])
+
+        (:schema :id phase :category :roadmap
+          :description "Roadmap phase collections, wave placement, and acceptance gates."
+          :required [:id :title :status :wave :gate :tasks :dependencies]
+          :optional [:summary :baseline :priorityOrder]
+          :fields [
+            (:field :name :id :type :string :pattern "^(Phase[0-9]+[A-Za-z0-9]*|phase-[0-9a-zA-Z-]+)$")
+            (:field :name :title :type :string)
+            (:field :name :status :type :keyword :allowed [:planned :in-progress :done :deferred])
+            (:field :name :wave :type :string)
+            (:field :name :gate :type :string)
+            (:field :name :tasks :type :vector :items :string)
+            (:field :name :dependencies :type :vector :items :string)
+            (:field :name :summary :type :string)
+            (:field :name :baseline :type :string)
+            (:field :name :priorityOrder :type :integer)])
+
+        (:schema :id plan :category :architecture
+          :description "Master roadmap plan specifications and execution DAGs."
+          :required [:id :phase :title :status :clusters :items :verdict]
+          :optional [:summary :motivation :invariants]
+          :fields [
+            (:field :name :id :type :string)
+            (:field :name :phase :type :string)
+            (:field :name :title :type :string)
+            (:field :name :status :type :keyword :allowed [:draft :review :approved :in-progress :completed :rejected])
+            (:field :name :clusters :type :vector :items :form)
+            (:field :name :items :type :vector :items :form)
+            (:field :name :verdict :type :keyword :allowed [:approved :rejected :pending])
+            (:field :name :summary :type :string)
+            (:field :name :motivation :type :string)
+            (:field :name :invariants :type :vector :items :string)])])]
+
+  :errorTaxonomy [
+    (:errorGroup :id schemaValidation :name "Schema Contract Violations"
+      :errors [
+        (:err :code "E_SCHEMA_MISSING_FIELD" :status 400 :severity :fatal
+              :description "Required field missing from record payload"
+              :template "(:error :code \"E_SCHEMA_MISSING_FIELD\" :field \"%s\" :expected \"%s\" :got :nil)")
+        (:err :code "E_SCHEMA_TYPE_MISMATCH" :status 400 :severity :fatal
+              :description "Field value does not conform to declared type"
+              :template "(:error :code \"E_SCHEMA_TYPE_MISMATCH\" :field \"%s\" :expected \"%s\" :got \"%s\")")
+        (:err :code "E_SCHEMA_PATTERN_MISMATCH" :status 400 :severity :fatal
+              :description "String field does not match required regex pattern"
+              :template "(:error :code \"E_SCHEMA_PATTERN_MISMATCH\" :field \"%s\" :expected \"%s\" :got \"%s\")")
+        (:err :code "E_SCHEMA_INVALID_KEYWORD" :status 400 :severity :fatal
+              :description "Keyword value not in allowed enumeration"
+              :template "(:error :code \"E_SCHEMA_INVALID_KEYWORD\" :field \"%s\" :allowed [%s] :got \"%s\")")
+        (:err :code "E_SCHEMA_UNKNOWN_FIELD" :status 400 :severity :warning
+              :description "Undeclared field in closed-schema record"
+              :template "(:error :code \"E_SCHEMA_UNKNOWN_FIELD\" :field \"%s\" :record \"%s\")")])
+
+    (:errorGroup :id concurrencyAndStorage :name "Concurrency and Storage Failures"
+      :errors [
+        (:err :code "E_STORE_LOCK_TIMEOUT" :status 503 :severity :transient
+              :description "Storage flock acquisition timed out after bounded 2000ms"
+              :template "(:error :code \"E_STORE_LOCK_TIMEOUT\" :path \"%s\" :timeoutMs 2000)")
+        (:err :code "E_STORE_ATOMIC_RENAME" :status 500 :severity :fatal
+              :description "Atomic rename from temporary write buffer failed"
+              :template "(:error :code \"E_STORE_ATOMIC_RENAME\" :source \"%s\" :target \"%s\")")
+        (:err :code "E_STORE_PERMISSION_DENIED" :status 403 :severity :fatal
+              :description "Filesystem permission denied writing store record"
+              :template "(:error :code \"E_STORE_PERMISSION_DENIED\" :path \"%s\")")])
+
+    (:errorGroup :id integrityAndInvariants :name "Semantic and Invariant Violations"
+      :errors [
+        (:err :code "E_INTEGRITY_IMMUTABLE_FIELD" :status 409 :severity :fatal
+              :description "Attempted modification of immutable field on existing record"
+              :template "(:error :code \"E_INTEGRITY_IMMUTABLE_FIELD\" :field \"%s\" :existing \"%s\" :got \"%s\")")
+        (:err :code "E_INTEGRITY_DAG_CYCLE" :status 409 :severity :fatal
+              :description "Cyclic dependency detected in task or phase DAG"
+              :template "(:error :code \"E_INTEGRITY_DAG_CYCLE\" :entity \"%s\" :cycle [%s])")
+        (:err :code "E_INTEGRITY_UNRESOLVED_REF" :status 422 :severity :fatal
+              :description "Reference target does not exist in store"
+              :template "(:error :code \"E_INTEGRITY_UNRESOLVED_REF\" :field \"%s\" :ref \"%s\")")
+        (:err :code "E_INTEGRITY_QUARANTINE_VIOLATION" :status 403 :severity :fatal
+              :description "Direct filesystem write attempted outside RPC record store gate"
+              :template "(:error :code \"E_INTEGRITY_QUARANTINE_VIOLATION\" :path \"%s\" :reason \"use asl rpc or cli\")")])]
+
+  :blamedReceiptSchema (:schema :id blamedReceipt
+    :required [:status :code :field :expected :got :summary]
+    :tokensBaseline 40
+    :tokensCap 80
+    :format "(:reject :code <str> :field <sym> :expected <sym> :got <val> :summary <str>)"))
