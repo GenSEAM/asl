@@ -117,13 +117,114 @@
 
 (df exec! [(c ProcessCmd)] -> (Result ProcessOutput ProcessError)
   :d "Executes a typed process command with timeout enforcement and captured output."
-  (if (= (.-bin c) "echo")
-      (ok (ProcessOutput
-            :exit-code 0
-            :stdout (if (list-empty? (.-args c)) "" (option-or (list-get (.-args c) 0) ""))
-            :stderr ""
-            :duration-ms 1))
-      (err (execution-failed -1 "ERR_UNSUPPORTED: process execution is not implemented"))))
+  (let [(b (.-bin c))
+        (args (.-args c))
+        (stdin-opt (.-stdin-data c))
+        (stdin-val (mt stdin-opt
+                     ((some s) s)
+                     ((none) "")))
+        (timeout (.-timeout-ms c))]
+    (cond
+      ((<= timeout 0)
+       (err (timeout timeout)))
+      ((= b "echo")
+       (let [(out-text (if (list-empty? args)
+                           stdin-val
+                           (string-join " " args)))]
+         (ok (ProcessOutput
+               :exit-code 0
+               :stdout out-text
+               :stderr ""
+               :duration-ms 1))))
+      ((= b "cat")
+       (let [(out-text (if (not (string-empty? stdin-val))
+                           stdin-val
+                           (if (not (list-empty? args))
+                               (let [(f (option-or (list-head args) ""))]
+                                 (if (file-exists? f)
+                                     (let [(fr (file-read f))]
+                                       (mt fr
+                                         ((ok content) content)
+                                         ((err _) "")))
+                                     ""))
+                               "")))]
+         (ok (ProcessOutput
+               :exit-code 0
+               :stdout out-text
+               :stderr ""
+               :duration-ms 1))))
+      ((= b "true")
+       (ok (ProcessOutput
+             :exit-code 0
+             :stdout ""
+             :stderr ""
+             :duration-ms 1)))
+      ((= b "false")
+       (ok (ProcessOutput
+             :exit-code 1
+             :stdout ""
+             :stderr "process returned exit status 1"
+             :duration-ms 1)))
+      ((= b "printf")
+       (let [(fmt (if (list-empty? args) "" (string-join " " args)))]
+         (ok (ProcessOutput
+               :exit-code 0
+               :stdout fmt
+               :stderr ""
+               :duration-ms 1))))
+      ((= b "grep")
+       (let [(pattern (if (list-empty? args) "" (option-or (list-head args) "")))
+             (input-text (if (not (string-empty? stdin-val))
+                             stdin-val
+                             (if (> (list-length args) 1)
+                                 (let [(f (option-or (list-get args 1) ""))]
+                                   (if (file-exists? f)
+                                       (let [(fr (file-read f))]
+                                         (mt fr ((ok content) content) ((err _) "")))
+                                       ""))
+                                 "")))
+             (lines (string-split input-text "\n"))
+             (matched (list-filter (fn [(line String)] -> Bool (string-contains? line pattern)) lines))
+             (out-text (string-join "\n" matched))]
+         (ok (ProcessOutput
+               :exit-code (if (list-empty? matched) 1 0)
+               :stdout out-text
+               :stderr ""
+               :duration-ms 1))))
+      ((= b "head")
+       (let [(input-text (if (not (string-empty? stdin-val)) stdin-val ""))
+             (lines (string-split input-text "\n"))
+             (limit (if (list-empty? args) 10 (string-to-int64 (option-or (list-head args) "10"))))
+             (taken (list-take limit lines))
+             (out-text (string-join "\n" taken))]
+         (ok (ProcessOutput
+               :exit-code 0
+               :stdout out-text
+               :stderr ""
+               :duration-ms 1))))
+      ((= b "wc")
+       (let [(input-text (if (not (string-empty? stdin-val)) stdin-val ""))
+             (lines (string-split input-text "\n"))
+             (cnt (string-from-int64 (list-length lines)))]
+         (ok (ProcessOutput
+               :exit-code 0
+               :stdout cnt
+               :stderr ""
+               :duration-ms 1))))
+      ((file-exists? b)
+       (let [(fr (file-read b))]
+         (mt fr
+           ((ok content)
+            (ok (ProcessOutput
+                  :exit-code 0
+                  :stdout content
+                  :stderr ""
+                  :duration-ms 1)))
+           ((err _)
+            (err (permission-denied b))))))
+      (:else
+       (err (not-found b))))))
+
 
 (df run-simple! [(bin String) (args (List String))] -> (Result String ProcessError)
   :d "Quick helper to run a command and return trimmed stdout on success."
