@@ -438,7 +438,7 @@ install_agent_skills() {
     dir="$(dirname "$target")"
     mkdir -p "$dir"
     local directive='<!-- ASL_RULES_START -->
-(:rules :v 7 :src ADR-0081 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+(:rules :v 7 :src ADR-0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
   (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
     :check "./bin/asl audit gates"
@@ -598,7 +598,7 @@ description: >-
 ## Rules
 
 ```asn
-(:rules :v 7 :src ADR-0081 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+(:rules :v 7 :src ADR-0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
   (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
     :check "./bin/asl audit gates"
