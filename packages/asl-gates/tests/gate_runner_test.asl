@@ -113,13 +113,17 @@
     (assert (g/verify-manifests real-paths) "Real package manifests must pass verification")
     true))
 
-(df test-run-all [] -> Bool
+(df ! test-run-all [] -> Bool
   :d "Asserts run-all convenience function forwards to all 7 gates."
   (let [(s-clean (gr/run-all 34 673 12 0 212 3223 29))
-        (s-fail (gr/run-all 0 673 12 0 212 3223 29))]
+        (s-fail (gr/run-all 0 673 12 0 212 3223 29))
+        (s-live (gr/run-live-gate-audit))]
     (assert (.-all-clean s-clean) "gr/run-all clean must pass all 7 gates")
     (assert (= (.-passed-gates s-clean) 7) "gr/run-all clean passed count must be 7")
     (assert (not (.-all-clean s-fail)) "gr/run-all with 0 manifests must fail")
+    (assert (= (.-total-gates s-live) 7) "gr/run-live-gate-audit total gates must be 7")
+    (assert (.-all-clean s-live) "gr/run-live-gate-audit must pass all 7 gates on live disk")
+    (assert (= (.-passed-gates s-live) 7) "gr/run-live-gate-audit passed count must be 7")
     true))
 
 (df ! run-tests [] -> Bool

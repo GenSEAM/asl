@@ -96,6 +96,8 @@
           :rationale "Validates manifest record compliance")
     (:sym :name "run-all-seven-gates" :kind :fn :tokens 4
           :rationale "Orchestrates execution across all 7 verification gates")
+    (:sym :name "run-live-gate-audit" :kind :fn :tokens 4
+          :rationale "Independently inspects filesystem truth across all 7 verification gates")
     (:sym :name "format-gate-summary" :kind :fn :tokens 3
           :rationale "Formats 7-gate summary into terminal verification report")
     (:sym :name "test-syntax-valid" :kind :fn :tokens 3
