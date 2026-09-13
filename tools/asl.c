@@ -4662,7 +4662,24 @@ typedef struct {
 typedef struct {
     char path[256];
     char name[128];
+    int num;
 } ConsistencyAdr;
+
+static int parse_adr_num(const char *s) {
+    if (!s || !*s) return -1;
+    const char *slash = strrchr(s, '/');
+    if (slash) s = slash + 1;
+    while (*s == ' ' || *s == '\t' || *s == '"' || *s == '.') s++;
+    if (strncmp(s, "ADR-", 4) == 0 || strncmp(s, "adr-", 4) == 0) {
+        s += 4;
+    } else if (strncmp(s, "Adr", 3) == 0 || strncmp(s, "adr", 3) == 0) {
+        s += 3;
+    } else if (*s == 'D' || *s == 'd') {
+        s += 1;
+    }
+    if (!isdigit((unsigned char)*s)) return -1;
+    return atoi(s);
+}
 
 static char *read_file_alloc(const char *path, size_t *out_len) {
     FILE *fp = fopen(path, "rb");
@@ -5888,12 +5905,32 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
 
     if (d) {
         while ((ent = readdir(d)) != NULL) {
-            if (strncmp(ent->d_name, "Adr", 3) != 0 && strncmp(ent->d_name, "ADR-", 4) != 0) continue;
+            int is_adr_file = 0;
+            if (strncmp(ent->d_name, "Adr", 3) == 0 || strncmp(ent->d_name, "ADR-", 4) == 0) {
+                is_adr_file = 1;
+            } else if ((ent->d_name[0] == 'D' || ent->d_name[0] == 'd') && isdigit((unsigned char)ent->d_name[1])) {
+                is_adr_file = 1;
+            }
+            if (!is_adr_file) continue;
             size_t nlen = strlen(ent->d_name);
             if (nlen < 4 || strcmp(ent->d_name + nlen - 4, ".asn") != 0) continue;
+            int num = parse_adr_num(ent->d_name);
+            int already = 0;
+            for (int a = 0; a < adr_count; a++) {
+                if (adrs[a].num == num && num > 0) {
+                    already = 1;
+                    if ((ent->d_name[0] == 'D' || ent->d_name[0] == 'd') && strncmp(adrs[a].name, "Adr", 3) == 0) {
+                        snprintf(adrs[a].name, sizeof(adrs[a].name), "%s", ent->d_name);
+                        snprintf(adrs[a].path, sizeof(adrs[a].path), "%s/%s", path, ent->d_name);
+                    }
+                    break;
+                }
+            }
+            if (already) continue;
             if (adr_count < 256) {
                 snprintf(adrs[adr_count].name, sizeof(adrs[adr_count].name), "%s", ent->d_name);
                 snprintf(adrs[adr_count].path, sizeof(adrs[adr_count].path), "%s/%s", path, ent->d_name);
+                adrs[adr_count].num = num;
                 adr_count++;
             }
         }
@@ -5945,7 +5982,11 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
         if (tasks[k].adr[0]) {
             const char *aref = tasks[k].adr;
             int found = 0;
+            int tnum = parse_adr_num(aref);
             for (int i = 0; i < adr_count; i++) {
+                if (tnum > 0 && adrs[i].num == tnum) {
+                    found = 1; break;
+                }
                 if (strstr(adrs[i].name, aref) != NULL) {
                     found = 1; break;
                 }
@@ -6003,6 +6044,14 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
                             for (int i = 0; i < adr_count; i++) {
                                 if (strstr(adr_path, adrs[i].name) || strstr(adrs[i].name, adr_path)) {
                                     exists = 1; break;
+                                }
+                            }
+                        }
+                        if (!exists) {
+                            int inum = parse_adr_num(adr_path);
+                            if (inum > 0) {
+                                for (int i = 0; i < adr_count; i++) {
+                                    if (adrs[i].num == inum) { exists = 1; break; }
                                 }
                             }
                         }
