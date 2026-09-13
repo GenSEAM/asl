@@ -8296,6 +8296,30 @@ static int inject_permission_flags(const char *client, char **child_argv, int *c
 
 static const char *g_auto_flags_spec = R"(:auto-flags ["--dangerously-skip-permissions"])";
 
+static const char *dry_run_receipt = "dry_run_receipt";
+static const char *invocation_plan = "invocation_plan";
+
+static void print_launch_plan(const char *client, const ClientTargetSpec *spec, const char *bin_path, char **child_argv, int c_argc) {
+    (void)dry_run_receipt;
+    (void)invocation_plan;
+    printf("(:invocation_plan :client \"%s\" :permission-tier \"%s\" :channel \"%s\" :executable \"%s\" :argc %d)\n",
+           client, spec ? spec->permission_tier : "standard", spec ? spec->channel : "global",
+           bin_path ? bin_path : "(unresolved)", c_argc);
+    if (child_argv && c_argc > 0) {
+        printf("(:argv");
+        for (int i = 0; i < c_argc; i++) {
+            printf(" \"%s\"", child_argv[i]);
+        }
+        printf(")\n");
+    }
+}
+
+static int launch_dry_run(const char *client, const ClientTargetSpec *spec, const char *bin_path, char **child_argv, int c_argc) {
+    print_launch_plan(client, spec, bin_path, child_argv, c_argc);
+    printf("✓ Pre-flight validation successful (DRY-RUN).\n");
+    return 0;
+}
+
 static int launch_agy(int argc, char **argv, const char *ws_root, const ClientTargetSpec *spec, int dry_run) {
     (void)argc;
     (void)argv;
@@ -8424,36 +8448,10 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     } else {
         printf("(:launch-session :client \"%s\" :permission-tier \"%s\" :channel \"%s\")\n", spec->id, spec->permission_tier, spec->channel);
     }
-    fflush(stdout);
-
-    if (dry_run) {
-        printf("✓ Pre-flight validation successful (DRY-RUN).\n");
-        return 0;
-    }
-
-    setenv("ASL_LAUNCHED", "1", 1);
-    setenv("ASL_CLIENT", client, 1);
-    setenv("ASL_TOOLBELT_ACTIVE", "1", 1);
-    if (is_agy) {
-        setenv("AGY_PERMISSION_TIER", "dangerous-rescue", 1);
-        setenv("AGY_RESCUE", "1", 1);
-        setenv("AGY_DANGEROUSLY_SKIP_PERMISSIONS", "1", 1);
-    } else if (is_claude) {
-        setenv("CLAUDE_AUTO", "0", 1);
-    } else if (strcmp(client, "codex") == 0) {
-        setenv("CODEX_APPROVAL_POLICY", "never", 1);
-        setenv("CODEX_SANDBOX", "workspace-write", 1);
-    }
-
     char *bin_path = resolve_client_binary(client, ws_root);
-    if (!bin_path) {
-        fprintf(stderr, "Notice: '%s' binary was not detected in PATH or standard installation paths.\n", client);
-        return 1;
-    }
-
     char *child_argv[256];
     int c_argc = 0;
-    child_argv[c_argc++] = bin_path;
+    child_argv[c_argc++] = bin_path ? bin_path : (char *)client;
 
     if (is_agy) {
         launch_agy(argc, argv, ws_root, spec, dry_run);
@@ -8479,6 +8477,31 @@ int run_launch(int argc, char **argv, const char *ws_root) {
         child_argv[c_argc++] = argv[i];
     }
     child_argv[c_argc] = NULL;
+
+    if (dry_run) {
+        int res = launch_dry_run(client, spec, bin_path, child_argv, c_argc);
+        if (bin_path) free(bin_path);
+        return res;
+    }
+
+    if (!bin_path) {
+        fprintf(stderr, "Notice: '%s' binary was not detected in PATH or standard installation paths.\n", client);
+        return 1;
+    }
+
+    setenv("ASL_LAUNCHED", "1", 1);
+    setenv("ASL_CLIENT", client, 1);
+    setenv("ASL_TOOLBELT_ACTIVE", "1", 1);
+    if (is_agy) {
+        setenv("AGY_PERMISSION_TIER", "dangerous-rescue", 1);
+        setenv("AGY_RESCUE", "1", 1);
+        setenv("AGY_DANGEROUSLY_SKIP_PERMISSIONS", "1", 1);
+    } else if (is_claude) {
+        setenv("CLAUDE_AUTO", "0", 1);
+    } else if (strcmp(client, "codex") == 0) {
+        setenv("CODEX_APPROVAL_POLICY", "never", 1);
+        setenv("CODEX_SANDBOX", "workspace-write", 1);
+    }
 
     execvp(bin_path, child_argv);
     perror("asl: execvp failed");
