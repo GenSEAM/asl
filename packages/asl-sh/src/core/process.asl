@@ -26,10 +26,9 @@
       session-set-timeout
       make-process-receipt
       render-receipt
-      estimate-tokens
       receipt-tokens
 ]
-  :i [])
+  :i [(asl-text/text :a txt)])
 
 (dfs ProcessCmd
   (:f bin        String              "Executable binary path or system command")
@@ -252,17 +251,9 @@
        " :spool-path \"" (.-spool-path r) "\""
        " :summary \"" (.-summary r) "\")"))
 
-(df estimate-tokens [(text String)] -> Int64
-  :d "Deterministic BPE proxy token count estimation based on character length."
-  (let [(len (string-length text))]
-    (cond
-      ((<= len 0) 0)
-      ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
-
 (df receipt-tokens [(r ProcessReceipt)] -> Int64
   :d "Estimates total BPE tokens for a rendered ProcessReceipt."
-  (estimate-tokens (render-receipt r)))
+  (txt/estimate-tokens (render-receipt r)))
 
 (df session-spawn! [(id String) (c ProcessCmd)] -> ProcessSession
   :d "Initializes an interactive process session bound to a ProcessCmd."

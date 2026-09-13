@@ -4,8 +4,8 @@
       base-tools empty-plane create-param create-tool create-domain domain-loaded?
       has-tool? lookup-tool tool-count active-domains load-domain unload-domain
       reset-turn mount-receipt unmount-receipt format-graph render-param
-      render-tool render-landscape active-landscape estimate-tokens base-landscape?]
-  :i [])
+      render-tool render-landscape active-landscape base-landscape?]
+  :i [(asl-text/text :a txt)])
 
 (dfs ToolParam
   (:f name Str "Parameter identifier")
@@ -179,16 +179,6 @@
         (all-items (list-append base-items mounted-items))]
     (str "(:tools [\n  " (string-join all-items "\n  ") "\n])")))
 
-(df estimate-tokens [(landscape-text Str)] -> Int
-  :d "Estimates token footprint of formatted tool landscape using word and punctuation splitting."
-  (let [(words (string-split landscape-text " "))]
-    (fold (fn [(acc Int) (w Str)] -> Int
-            (if (string-empty? (string-trim w))
-                acc
-                (+ acc 1)))
-          0
-          words)))
-
 (df base-landscape? [(plane ToolPlane)] -> Bool
   :d "Verifies that the tool plane contains strictly base meta-tools and token count is <= 200."
   (and (= (list-length (.-active-domains plane)) 0)
@@ -202,7 +192,7 @@
         (tot-count (list-length all-names))
         (is-base (= (map-size (.-mounted-tools plane)) 0))
         (rendered (render-landscape plane))
-        (toks (estimate-tokens rendered))]
+        (toks (txt/estimate-tokens rendered))]
     (ActiveLandscape :domains (.-active-domains plane)
                      :tool-names all-names
                      :total-count tot-count

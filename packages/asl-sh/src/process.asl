@@ -27,7 +27,6 @@
       session-set-timeout
       make-process-receipt
       render-receipt
-      estimate-tokens
       receipt-tokens]
   :i [(asl-sh/core-process :a cp)
       (apm :a apm)])
@@ -174,10 +173,6 @@
 (df render-receipt [(r cp/ProcessReceipt)] -> String
   :d "Renders a ProcessReceipt as a compact S-expression string."
   (cp/render-receipt r))
-
-(df estimate-tokens [(text String)] -> Int64
-  :d "Deterministic BPE proxy token count estimation based on character length."
-  (cp/estimate-tokens text))
 
 (df receipt-tokens [(r cp/ProcessReceipt)] -> Int64
   :d "Estimates total BPE tokens for a rendered ProcessReceipt."
