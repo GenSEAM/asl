@@ -2170,6 +2170,20 @@ function buildModuleNameIndex(startDir) {
         } else if (!moduleNameIndex.has(modName)) {
           moduleNameIndex.set(modName, full);
         }
+        if (modName.startsWith('asl-agent-core/')) {
+          const legacy = 'asl-core/' + modName.slice('asl-agent-core/'.length);
+          if (!moduleNameIndex.has(legacy)) {
+            moduleNameIndex.set(legacy, full);
+          }
+        } else if (modName.startsWith('asl-agent-bus/')) {
+          const sub = modName.slice('asl-agent-bus/'.length);
+          if (!moduleNameIndex.has('agent-bus/' + sub)) {
+            moduleNameIndex.set('agent-bus/' + sub, full);
+          }
+          if (!moduleNameIndex.has('asl-bus/' + sub)) {
+            moduleNameIndex.set('asl-bus/' + sub, full);
+          }
+        }
       }
     } catch (e) { throw e; }
   }
@@ -2193,6 +2207,20 @@ function resolveModulePath(currentFile, modName) {
     cleanMod.replace(/_/g, '-'),
     modName
   ];
+  if (cleanMod.startsWith('asl-core/')) {
+    variants.push('asl-agent-core/' + cleanMod.slice('asl-core/'.length));
+  } else if (cleanMod.startsWith('asl-agent-core/')) {
+    variants.push('asl-core/' + cleanMod.slice('asl-agent-core/'.length));
+  } else if (cleanMod.startsWith('agent-bus/')) {
+    variants.push('asl-agent-bus/' + cleanMod.slice('agent-bus/'.length));
+    variants.push('asl-bus/' + cleanMod.slice('agent-bus/'.length));
+  } else if (cleanMod.startsWith('asl-bus/')) {
+    variants.push('asl-agent-bus/' + cleanMod.slice('asl-bus/'.length));
+    variants.push('agent-bus/' + cleanMod.slice('asl-bus/'.length));
+  } else if (cleanMod.startsWith('asl-agent-bus/')) {
+    variants.push('agent-bus/' + cleanMod.slice('asl-agent-bus/'.length));
+    variants.push('asl-bus/' + cleanMod.slice('asl-agent-bus/'.length));
+  }
 
   // Priority 2: Direct local candidate checks in the importing file's directory and sibling src/
   const dir = path.dirname(currentFile);
