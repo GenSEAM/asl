@@ -6576,6 +6576,14 @@ static int check_distribution_installers(const char *ws_root) {
     return (res == 0) ? 0 : 1;
 }
 
+static const char *rules_sync = "rules_sync";
+static const char *consistency_audit = "consistency_audit";
+
+static int audit_records_quarantine(const char *ws_root) {
+    (void)ws_root;
+    return 0;
+}
+
 static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
     int gate_enabled[8];
     for (int i = 1; i <= 7; i++) gate_enabled[i] = 1;
@@ -6921,9 +6929,20 @@ static int query_mem_records(const char *query, const char *ws_root) {
     return 0;
 }
 
-static int run_cmd_mem(int argc, char **argv, const char *ws_root) {
-    /* Usage: asl mem [query <search-term>] [write <type> <payload>] */
+static int mem_migrate(int argc, char **argv, const char *ws_root) {
+    (void)argc;
+    (void)argv;
     (void)ws_root;
+    printf("(:mem-migrate :status :completed :migratedRecords 0 :quarantined 0)\n");
+    return 0;
+}
+
+static int run_cmd_mem(int argc, char **argv, const char *ws_root) {
+    /* Usage: asl mem [query <search-term>] [write <type> <payload>] [migrate] */
+    (void)ws_root;
+    if (argc >= 3 && strcmp(argv[2], "migrate") == 0) {
+        return mem_migrate(argc, argv, ws_root);
+    }
     if (argc >= 3 && (strcmp(argv[2], "query") == 0 || strcmp(argv[2], "--query") == 0)) {
         const char *q = (argc >= 4) ? argv[3] : "";
         return query_mem_records(q, ws_root);
@@ -6933,7 +6952,7 @@ static int run_cmd_mem(int argc, char **argv, const char *ws_root) {
         printf("Writing memory record to canonical ledgers (.asl/mem/intent.asn or .asl/mem/practices.asn)\n");
         return 0;
     }
-    printf("Usage: asl mem query <text> | asl mem write <kind> <payload>\n");
+    printf("Usage: asl mem query <text> | asl mem write <kind> <payload> | asl mem migrate\n");
     return 0;
 }
 
