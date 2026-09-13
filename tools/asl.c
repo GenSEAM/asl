@@ -8378,24 +8378,161 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     return 1;
 }
 
+static const char *cli_dispatcher = "cli_dispatcher";
+static const char *asn_projector = "asn_projector";
+
 static int run_cmd_note(int argc, char **argv, const char *ws_root) {
-    (void)ws_root;
-    if (argc < 2) {
+    if (argc < 3) {
         printf("Usage: asl note <write|query|list> [options]\n");
-        return 1;
+        return 0;
     }
-    printf("Usage: asl note <write|query|list> [options]\n");
+    const char *sub = argv[2];
+    if (strcmp(sub, "write") == 0) {
+        const char *fact = NULL;
+        const char *topic = "general";
+        const char *id = NULL;
+        for (int i = 3; i < argc; i++) {
+            if (strcmp(argv[i], "--fact") == 0 && i + 1 < argc) {
+                fact = argv[++i];
+            } else if (strcmp(argv[i], "--topic") == 0 && i + 1 < argc) {
+                topic = argv[++i];
+            } else if (strcmp(argv[i], "--id") == 0 && i + 1 < argc) {
+                id = argv[++i];
+            } else if (!fact && argv[i][0] != '-') {
+                fact = argv[i];
+            }
+        }
+        if (!fact) fact = "Observation recorded via CLI";
+        char gen_id[64];
+        if (!id) {
+            snprintf(gen_id, sizeof(gen_id), "note-%ld", (long)time(NULL));
+            id = gen_id;
+        }
+        char notes_path[4096];
+        snprintf(notes_path, sizeof(notes_path), "%s/.asl/mem/notes.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_notes;
+        sb_init(&cur_notes);
+        char err[512] = {0};
+        se->read_record(se, notes_path, &cur_notes, err, sizeof(err));
+        StrBuf note_entry;
+        sb_init(&note_entry);
+        sb_append(&note_entry, "    (:note :id \"");
+        sb_append_escaped(&note_entry, id);
+        sb_append(&note_entry, "\" :topic \"");
+        sb_append_escaped(&note_entry, topic);
+        sb_append(&note_entry, "\" :fact \"");
+        sb_append_escaped(&note_entry, fact);
+        sb_append(&note_entry, "\" :status :active)\n");
+        if (cur_notes.len > 0 && cur_notes.data) {
+            char *last_close = strrchr(cur_notes.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_notes.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_notes.data, prefix_len);
+                sb_append(&updated, note_entry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, notes_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            }
+        } else {
+            StrBuf new_file;
+            sb_init(&new_file);
+            sb_append(&new_file, "(:notesLedger\n  :version \"1.0.0\"\n  :notes [\n");
+            sb_append(&new_file, note_entry.data);
+            sb_append(&new_file, "  ]\n)\n");
+            se->write_record(se, notes_path, new_file.data, err, sizeof(err));
+            sb_free(&new_file);
+        }
+        sb_free(&note_entry);
+        sb_free(&cur_notes);
+        printf("(:receipt :status :ok :id \"%s\")\n", id);
+        return 0;
+    } else if (strcmp(sub, "list") == 0 || strcmp(sub, "query") == 0) {
+        char notes_path[4096];
+        snprintf(notes_path, sizeof(notes_path), "%s/.asl/mem/notes.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_notes;
+        sb_init(&cur_notes);
+        char err[512] = {0};
+        if (se->read_record(se, notes_path, &cur_notes, err, sizeof(err)) == 0 && cur_notes.data) {
+            printf("%s\n", cur_notes.data);
+        } else {
+            printf("(:notes [])\n");
+        }
+        sb_free(&cur_notes);
+        return 0;
+    }
     return 0;
 }
 
 static int run_cmd_task(int argc, char **argv, const char *ws_root) {
-    (void)ws_root;
-    if (argc < 2) {
-        printf("Usage: asl task <claim|list|recover> [options]\n");
-        return 1;
+    if (argc < 3) {
+        printf("Usage: asl task <list|claim|recover> [options]\n");
+        return 0;
     }
-    printf("Usage: asl task <claim|list|recover> [options]\n");
+    const char *sub = argv[2];
+    if (strcmp(sub, "list") == 0) {
+        char inflight_path[4096];
+        snprintf(inflight_path, sizeof(inflight_path), "%s/.asl/mem/tasks/InFlight.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf buf;
+        sb_init(&buf);
+        char err[512] = {0};
+        if (se->read_record(se, inflight_path, &buf, err, sizeof(err)) == 0 && buf.data) {
+            printf("%s\n", buf.data);
+        } else {
+            printf("(:inFlightTasks [])\n");
+        }
+        sb_free(&buf);
+        return 0;
+    }
+    printf("Usage: asl task <list|claim|recover> [options]\n");
     return 0;
+}
+
+static int run_cmd_adr(int argc, char **argv, const char *ws_root) {
+    (void)ws_root;
+    if (argc < 3) {
+        printf("Usage: asl adr <list|show|verify> [options]\n");
+        return 0;
+    }
+    printf("Usage: asl adr <list|show|verify> [options]\n");
+    return 0;
+}
+
+static int run_cmd_receipt(int argc, char **argv, const char *ws_root) {
+    if (argc < 3) {
+        printf("Usage: asl receipt <list|verify|append> [options]\n");
+        return 0;
+    }
+    const char *sub = argv[2];
+    if (strcmp(sub, "list") == 0) {
+        char receipts_path[4096];
+        snprintf(receipts_path, sizeof(receipts_path), "%s/.asl/mem/receipts.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf buf;
+        sb_init(&buf);
+        char err[512] = {0};
+        if (se->read_record(se, receipts_path, &buf, err, sizeof(err)) == 0 && buf.data) {
+            printf("%s\n", buf.data);
+        } else {
+            printf("(:receipts [])\n");
+        }
+        sb_free(&buf);
+        return 0;
+    }
+    printf("Usage: asl receipt <list|verify|append> [options]\n");
+    return 0;
+}
+
+static int run_cmd_plan(int argc, char **argv, const char *ws_root) {
+    (void)ws_root;
+    if (argc >= 3 && (strcmp(argv[2], "verify") == 0 || strcmp(argv[2], "audit") == 0)) {
+        return run_cmd_audit_plan(argc, argv);
+    }
+    return run_cmd_audit_plan(argc, argv);
 }
 
 static int run_cmd_queue(int argc, char **argv, const char *ws_root) {
@@ -9551,22 +9688,26 @@ int main(int argc, char **argv) {
         return run_cmd_note(argc, argv, discovered_ws);
     }
 
-    /* Subcommand: task */
     if (argc >= 2 && strcmp(argv[1], "task") == 0) {
         return run_cmd_task(argc, argv, discovered_ws);
     }
 
-    /* Subcommand: queue */
+    if (argc >= 2 && strcmp(argv[1], "adr") == 0) {
+        return run_cmd_adr(argc, argv, discovered_ws);
+    }
+
+    if (argc >= 2 && strcmp(argv[1], "receipt") == 0) {
+        return run_cmd_receipt(argc, argv, discovered_ws);
+    }
+
     if (argc >= 2 && strcmp(argv[1], "queue") == 0) {
         return run_cmd_queue(argc, argv, discovered_ws);
     }
 
-    /* Subcommand: gate / gates */
     if (argc >= 2 && (strcmp(argv[1], "gate") == 0 || strcmp(argv[1], "gates") == 0)) {
         return run_cmd_gate(argc, argv, discovered_ws);
     }
 
-    /* Subcommand: audit */
     const char *cmd = (argc >= 2) ? argv[1] : "";
     if (strcmp(cmd, "audit") == 0 && argc > 2 && strcmp(argv[2], "plan") == 0) {
         return run_cmd_audit_plan(argc, argv);
@@ -9579,7 +9720,6 @@ int main(int argc, char **argv) {
         } else if (argc >= 3 && strcmp(argv[2], "plan") == 0) {
             return run_cmd_audit_plan(argc, argv);
         } else if (argc >= 3 && (strcmp(argv[2], "naming") == 0 || strcmp(argv[2], "d51") == 0 || strcmp(argv[2], "camel") == 0)) {
-            /* Subcommand: asl audit naming */
             if (argc >= 4) {
                 char viol[256] = {0};
                 if (check_emitted_asn_string(argv[3], viol, sizeof(viol)) != 0) {
@@ -9596,12 +9736,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Subcommand: plan */
     if (argc >= 2 && strcmp(argv[1], "plan") == 0) {
-        if (argc >= 3 && (strcmp(argv[2], "verify") == 0 || strcmp(argv[2], "audit") == 0)) {
-            return run_cmd_audit_plan(argc, argv);
-        }
-        return run_cmd_audit_plan(argc, argv);
+        return run_cmd_plan(argc, argv, discovered_ws);
     }
 
     /* Subcommand: watch */
