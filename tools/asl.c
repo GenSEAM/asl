@@ -6716,7 +6716,7 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
             snprintf(full, sizeof(full), "%s/%s", ws_root, asl_files[i]);
             if (check_file_delimiters(full, 2) != 0) {
                 printf("    ✗ Delimiter balance check failed across ASL source files.\n");
-                for (int k = 0; k < asl_count; k++) free(asl_files[k]);
+                for (int k = i; k < asl_count; k++) free(asl_files[k]);
                 free(asl_files);
                 return 1;
             }

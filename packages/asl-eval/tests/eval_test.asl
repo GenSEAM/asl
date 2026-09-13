@@ -1,13 +1,13 @@
 (module asl-eval/eval-test
   :d "Unit test suite for the pure ASL AST evaluator."
   :x [run-tests
-      Testeval-literals
-      Testeval-unknown-symbol
-      Testclosure-invocation
-      Testmodule-loader]
+      test-eval-literals
+      test-eval-unknown-symbol
+      test-closure-invocation
+      test-module-loader]
   :i [(eval :a ev)])
 
-(df Testeval-literals [] -> Bool
+(df test-eval-literals [] -> Bool
   :d "Verifies evaluation of primitive literals."
   (let [(env (ev/make-eval-env))
         (r-true (ev/eval-node env "true"))
@@ -21,7 +21,7 @@
     (assert (= (.-value r-num) "42") "eval number returns 42")
     true))
 
-(df Testeval-unknown-symbol [] -> Bool
+(df test-eval-unknown-symbol [] -> Bool
   :d "Verifies that unknown symbol returns ERR_UNBOUND_SYMBOL."
   (let [(env (ev/make-eval-env))
         (r (ev/eval-node env "undefined-identifier"))]
@@ -29,7 +29,7 @@
     (assert (= (.-err-code r) "ERR_UNBOUND_SYMBOL") "unknown symbol produces ERR_UNBOUND_SYMBOL")
     true))
 
-(df Testclosure-invocation [] -> Bool
+(df test-closure-invocation [] -> Bool
   :d "Verifies closure creation and invocation."
   (let [(env (ev/make-eval-env))
         (c (ev/Closure :params ["x"] :body "x" :env env))
@@ -38,7 +38,7 @@
     (assert (= (.-value r) "x") "closure body returned")
     true))
 
-(df Testmodule-loader [] -> Bool
+(df test-module-loader [] -> Bool
   :d "Verifies module loading and resolution error handling."
   (let [(r-missing (ev/load-module "non-existent" "non/existent/path.asl"))
         (r-real (ev/load-module "asl-eval" "asl/packages/asl-eval/src/eval.asl"))]
@@ -51,8 +51,8 @@
 (df run-tests [] -> Bool
   :d "Executes all unit tests for asl-eval."
   (do
-    (assert (Testeval-literals) "Testeval-literals must pass")
-    (assert (Testeval-unknown-symbol) "Testeval-unknown-symbol must pass")
-    (assert (Testclosure-invocation) "Testclosure-invocation must pass")
-    (assert (Testmodule-loader) "Testmodule-loader must pass")
+    (assert (test-eval-literals) "test-eval-literals must pass")
+    (assert (test-eval-unknown-symbol) "test-eval-unknown-symbol must pass")
+    (assert (test-closure-invocation) "test-closure-invocation must pass")
+    (assert (test-module-loader) "test-module-loader must pass")
     true))
