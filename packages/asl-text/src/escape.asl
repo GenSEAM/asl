@@ -1,6 +1,33 @@
 (module asl-text/escape
   :d "Canonical Pure AgentScript String Escaping and Wire Serialization Engine."
-  :x [escape-asn-str unescape-asn-str escape-json-str unescape-json-str escape-sh-arg is-sh-safe-arg escape-sh-compact])
+  :x [UnescapeState escape-asn-str unescape-asn-str escape-json-str unescape-json-str escape-sh-arg is-sh-safe-arg escape-sh-compact])
+
+(dfs UnescapeState
+  (:f out Str "Accumulated unescaped string buffer")
+  (:f esc Bool "True if previous character was escape backslash"))
+
+(df unescape-string-scanner [(s Str)] -> Str
+  :d "Single-pass character scanner for unambiguous string unescaping."
+  (let [(chars (string-chars s))
+        (init (UnescapeState :out "" :esc false))
+        (st (fold (fn [(acc UnescapeState) (c Str)] -> UnescapeState
+                    (if (.-esc acc)
+                      (let [(emitted (cond
+                                       ((= c "n") "\n")
+                                       ((= c "r") "\r")
+                                       ((= c "t") "\t")
+                                       ((= c "\"") "\"")
+                                       ((= c "\\") "\\")
+                                       (:else (str "\\" c))))]
+                        (UnescapeState :out (str (.-out acc) emitted) :esc false))
+                      (if (= c "\\")
+                        (UnescapeState :out (.-out acc) :esc true)
+                        (UnescapeState :out (str (.-out acc) c) :esc false))))
+                  init
+                  chars))]
+    (if (.-esc st)
+      (str (.-out st) "\\")
+      (.-out st))))
 
 (df escape-asn-str [(s Str)] -> Str
   :d "Escapes backslashes, double quotes, and control characters for ASN literals."
@@ -11,12 +38,8 @@
     (string-replace s4 "\t" "\\t")))
 
 (df unescape-asn-str [(s Str)] -> Str
-  :d "Inverts ASN string escaping."
-  (let [(s1 (string-replace s "\\n" "\n"))
-        (s2 (string-replace s1 "\\r" "\r"))
-        (s3 (string-replace s2 "\\t" "\t"))
-        (s4 (string-replace s3 "\\\"" "\""))]
-    (string-replace s4 "\\\\" "\\")))
+  :d "Inverts ASN string escaping via single-pass scanner preventing premature control code substitution."
+  (unescape-string-scanner s))
 
 (df escape-json-str [(s Str)] -> Str
   :d "Escapes backslashes, double quotes, and control characters for RFC 8259 JSON literals."
@@ -27,12 +50,8 @@
     (string-replace s4 "\t" "\\t")))
 
 (df unescape-json-str [(s Str)] -> Str
-  :d "Inverts JSON string escaping."
-  (let [(s1 (string-replace s "\\n" "\n"))
-        (s2 (string-replace s1 "\\r" "\r"))
-        (s3 (string-replace s2 "\\t" "\t"))
-        (s4 (string-replace s3 "\\\"" "\""))]
-    (string-replace s4 "\\\\" "\\")))
+  :d "Inverts JSON string escaping via single-pass scanner preventing premature control code substitution."
+  (unescape-string-scanner s))
 
 (df escape-sh-arg [(arg Str)] -> Str
   :d "Wraps an argument in POSIX single quotes escaping interior single quotes."

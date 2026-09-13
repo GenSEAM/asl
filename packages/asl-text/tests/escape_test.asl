@@ -34,8 +34,23 @@
     (assert (string-contains? complex-arg "'\\''") "Embedded single quote must be safely escaped")
     true))
 
+(df test-unescape-order-of-operations [] -> Bool
+  :d "Verifies that escaped backslash followed by n is not prematurely unescaped to newline."
+  (let [(escaped "\\\\n")
+        (unescaped-asn (esc/unescape-asn-str escaped))
+        (unescaped-json (esc/unescape-json-str escaped))]
+    (assert (not (string-contains? unescaped-asn "\n")) "ASN unescaping must not produce newline from \\\\n")
+    (assert (string-contains? unescaped-asn "\\n") "ASN unescaping must preserve \\n")
+    (assert (= unescaped-asn "\\n") "ASN unescaped string must equal literal \\n")
+    (assert (not (string-contains? unescaped-json "\n")) "JSON unescaping must not produce newline from \\\\n")
+    (assert (string-contains? unescaped-json "\\n") "JSON unescaping must preserve \\n")
+    (assert (= unescaped-json "\\n") "JSON unescaped string must equal literal \\n")
+    true))
+
 (df run-tests [] -> Bool
   :d "Runs all asl-text escape unit tests."
   (and (test-escape-asn)
        (and (test-escape-json)
-            (test-escape-sh-arg))))
+            (and (test-escape-sh-arg)
+                 (test-unescape-order-of-operations)))))
+
