@@ -101,6 +101,27 @@ static void sb_append_int(StrBuf *sb, long long val) {
     sb_append(sb, buf);
 }
 
+static void escape_sh_arg(const char *src, char *dst, size_t dst_size) {
+    if (!src || dst_size < 3) {
+        if (dst_size > 0) dst[0] = '\0';
+        return;
+    }
+    size_t d = 0;
+    dst[d++] = '\'';
+    for (size_t s = 0; src[s] && d + 5 < dst_size; s++) {
+        if (src[s] == '\'') {
+            dst[d++] = '\'';
+            dst[d++] = '\\';
+            dst[d++] = '\'';
+            dst[d++] = '\'';
+        } else {
+            dst[d++] = src[s];
+        }
+    }
+    dst[d++] = '\'';
+    dst[d] = '\0';
+}
+
 /* -------------------------------------------------------------------------
    Signal Handling & Server Globals
    ------------------------------------------------------------------------- */
@@ -2792,7 +2813,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         const char *kd = get_kw_arg(tokens, ntokens, "dir");
         if (!kd) kd = get_pos_arg(tokens, ntokens, 1);
         if (kd && kd[0]) strncpy(dir, kd, sizeof(dir) - 1);
-        else strcpy(dir, ".");
+        else snprintf(dir, sizeof(dir), ".");
 
         if (!is_safe_path(ws_root, dir)) {
             sb_append(out, "  (:step :id ");
@@ -3224,7 +3245,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 }
             }
         }
-        if (!pat[0]) strcpy(pat, "*test*.asl");
+        if (!pat[0]) snprintf(pat, sizeof(pat), "*test*.asl");
 
         char search_base[4096];
         int is_ext = 0;
@@ -3362,11 +3383,14 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         if (!ks) ks = get_kw_arg(tokens, ntokens, "op");
         if (!ks && ntokens > 0) ks = tokens[0].str;
         if (ks) strncpy(subop, ks, sizeof(subop) - 1);
-        if (!subop[0]) strcpy(subop, "status");
+        if (!subop[0]) snprintf(subop, sizeof(subop), "status");
+
+        char safe_ws[4096];
+        escape_sh_arg(ws_root, safe_ws, sizeof(safe_ws));
 
         if (strcmp(subop, "status") == 0) {
             char cmd[4096];
-            snprintf(cmd, sizeof(cmd), "git -C \"%s\" status --porcelain=v1 -b 2>/dev/null", ws_root);
+            snprintf(cmd, sizeof(cmd), "git -C %s status --porcelain=v1 -b 2>/dev/null", safe_ws);
             FILE *p = popen(cmd, "r");
             if (!p) {
                 sb_append(out, "  (:step :id ");
@@ -3454,7 +3478,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             if (cnt > 50) cnt = 50;
 
             char cmd[4096];
-            snprintf(cmd, sizeof(cmd), "git -C \"%s\" log -n %lld --format=\"(:commit :hash \\\"%%h\\\" :author \\\"%%an\\\" :msg \\\"%%s\\\")\" 2>/dev/null", ws_root, cnt);
+            snprintf(cmd, sizeof(cmd), "git -C %s log -n %lld --format=\"(:commit :hash \\\"%%h\\\" :author \\\"%%an\\\" :msg \\\"%%s\\\")\" 2>/dev/null", safe_ws, cnt);
             FILE *p = popen(cmd, "r");
             if (!p) {
                 sb_append(out, "  (:step :id ");
@@ -3489,9 +3513,11 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
 
             char cmd[4096];
             if (target_file[0]) {
-                snprintf(cmd, sizeof(cmd), "git -C \"%s\" diff --stat -- \"%s\" 2>/dev/null", ws_root, target_file);
+                char safe_file[4096];
+                escape_sh_arg(target_file, safe_file, sizeof(safe_file));
+                snprintf(cmd, sizeof(cmd), "git -C %s diff --stat -- %s 2>/dev/null", safe_ws, safe_file);
             } else {
-                snprintf(cmd, sizeof(cmd), "git -C \"%s\" diff --stat 2>/dev/null", ws_root);
+                snprintf(cmd, sizeof(cmd), "git -C %s diff --stat 2>/dev/null", safe_ws);
             }
             FILE *p = popen(cmd, "r");
             if (!p) {
@@ -3515,7 +3541,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             }
         } else if (strcmp(subop, "branch") == 0) {
             char cmd[4096];
-            snprintf(cmd, sizeof(cmd), "git -C \"%s\" branch --show-current 2>/dev/null", ws_root);
+            snprintf(cmd, sizeof(cmd), "git -C %s branch --show-current 2>/dev/null", safe_ws);
             FILE *p = popen(cmd, "r");
             char br[128] = "unknown";
             if (p) {
@@ -3545,7 +3571,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 int ret = run_git_commit_safe(ws_root, msg);
                 if (ret == 0) {
                     char rev_cmd[4096];
-                    snprintf(rev_cmd, sizeof(rev_cmd), "git -C \"%s\" rev-parse --short HEAD 2>/dev/null", ws_root);
+                    snprintf(rev_cmd, sizeof(rev_cmd), "git -C %s rev-parse --short HEAD 2>/dev/null", safe_ws);
                     FILE *rp = popen(rev_cmd, "r");
                     char hash[64] = "unknown";
                     if (rp) {
@@ -5197,7 +5223,7 @@ static int verify_skill_projection_currency(const char *ws_root, const char *ski
             if (strncmp(decl, "rules:", 6) == 0) {
                 strncpy(tier, decl + 6, sizeof(tier) - 1);
             } else if (strcmp(decl, "rules") == 0) {
-                strcpy(tier, "full");
+                snprintf(tier, sizeof(tier), "full");
             }
         }
     }
@@ -5962,7 +5988,7 @@ static int run_cmd_consistency(int argc, char **argv, const char *ws_root) {
                             char asn_cand[1024];
                             snprintf(asn_cand, sizeof(asn_cand), "%s", full_adr);
                             char *ext = strstr(asn_cand, ".md");
-                            if (ext) strcpy(ext, ".asn");
+                            if (ext) memcpy(ext, ".asn", 5);
                             if (stat(asn_cand, &st) == 0) exists = 1;
                         }
                         if (!exists) {
