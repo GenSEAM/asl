@@ -1,19 +1,19 @@
 (module asl-gates/tests/gate-runner-test
   :d "Falsifiable verification and test suite for pure ASL gate runner and extensionless audit."
-  :x [test-all-gates-pass
-      test-gate-fail-fast
-      test-extensionless-audit
-      test-dead-code-audit
-      test-summary-formatting
-      test-verify-balance
-      test-verify-manifests
-      test-run-all
+  :x [Testall-gates-pass
+      Testgate-fail-fast
+      Testextensionless-audit
+      Testdead-code-audit
+      Testsummary-formatting
+      Testverify-balance
+      Testverify-manifests
+      Testrun-all
       run-tests]
   :i [(gate-runner :a gr)
       (shebang-audit :a sa)
       (gates :a g)])
 
-(df test-all-gates-pass [] -> Bool
+(df Testall-gates-pass [] -> Bool
   :d "Asserts all 7 gates passing verdict aggregation and clean report."
   (let [(summary (gr/run-all-gates 34 673 12 0 212 3223 29))]
     (assert (.-all-clean summary) "All 7 gates clean must report all-clean true")
@@ -25,7 +25,7 @@
       (assert (= (.-passed-gates s7) 7) "run-all-seven-gates passed gates must be 7"))
     true))
 
-(df test-gate-fail-fast [] -> Bool
+(df Testgate-fail-fast [] -> Bool
   :d "Asserts fail-fast rejection for each individual gate failure mode."
   (let [(s-no-manifests (gr/run-all-gates 0 673 12 0 212 3223 29))
         (s-no-asl (gr/run-all-gates 34 0 12 0 212 3223 29))
@@ -45,7 +45,7 @@
     (assert (not (.-all-clean s-few-skills)) "<10 skills must fail gate 7")
     true))
 
-(df test-extensionless-audit [] -> Bool
+(df Testextensionless-audit [] -> Bool
   :d "Asserts extensionless binary blob detection and approved forwarder filtering."
   (let [(approved (list "asl" "agent" "gsa" "lens"))
         (elf-header "\u007fELF\u0002\u0001\u0001\u0000")
@@ -69,7 +69,7 @@
       (assert (list-contains? unapproved "bin/eddie") "eddie must be in unapproved list"))
     true))
 
-(df test-dead-code-audit [] -> Bool
+(df Testdead-code-audit [] -> Bool
   :d "Asserts detection of dead code and orphan symbol exports."
   (let [(exports (list "live-fn" "orphan-fn" "unused-helper"))
         (callers (list "live-fn" "other-fn"))
@@ -80,7 +80,7 @@
     (assert (not (list-contains? orphans "live-fn")) "live-fn must not be in orphan list")
     true))
 
-(df test-summary-formatting [] -> Bool
+(df Testsummary-formatting [] -> Bool
   :d "Asserts formatting of clean and failed gate summaries."
   (let [(s-clean (gr/run-all-gates 34 673 12 0 212 3223 29))
         (s-fail (gr/run-all-gates 0 0 0 1 0 0 0))
