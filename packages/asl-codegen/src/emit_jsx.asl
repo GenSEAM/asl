@@ -106,6 +106,5 @@
 
 (df emit-tsx-module [(component-name Str) (props-type Str) (root-node VNode)] -> Str
   :d "Emits a complete TSX module with React imports and exported component"
-  (str "// @ts-nocheck\n"
-       "import React from \"react\";\n\n"
+  (str "import React from \"react\";\n\n"
        (emit-component component-name props-type root-node)))

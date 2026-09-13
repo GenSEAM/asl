@@ -1,17 +1,13 @@
-;; AgentScript Core Language Grammar & Built-in Symbol Registry (ASN)
-;; Single Source of Truth for Core Syntax, Forms, and Primitive Token Budgets
 (:grammar
   :package asl-core
   :version "0.1.0"
   :tokens-baseline 2
   :symbols [
-    ;; Core Declaration Forms (1 token)
     (:sym :name "module" :kind :form :tokens 1)
     (:sym :name "df" :kind :form :tokens 1)
     (:sym :name "dfs" :kind :form :tokens 1)
     (:sym :name "dfe" :kind :form :tokens 1)
     
-    ;; Core Expression Forms (1 token)
     (:sym :name "fn" :kind :form :tokens 1)
     (:sym :name "let" :kind :form :tokens 1)
     (:sym :name "if" :kind :form :tokens 1)
@@ -19,7 +15,6 @@
     (:sym :name "mt" :kind :form :tokens 1)
     (:sym :name "try" :kind :form :tokens 1)
 
-    ;; Constructors & ADT Variants (1 token)
     (:sym :name "ok" :kind :ctor :tokens 1)
     (:sym :name "err" :kind :ctor :tokens 1)
     (:sym :name "some" :kind :ctor :tokens 1)
@@ -27,7 +22,6 @@
     (:sym :name "list" :kind :ctor :tokens 1)
     (:sym :name "pair" :kind :ctor :tokens 1)
 
-    ;; Logical & Arithmetic Operators (1 token)
     (:sym :name "and" :kind :op :tokens 1)
     (:sym :name "or" :kind :op :tokens 1)
     (:sym :name "not" :kind :op :tokens 1)
@@ -42,7 +36,6 @@
     (:sym :name "*" :kind :op :tokens 1)
     (:sym :name "/" :kind :op :tokens 1)
 
-    ;; Standard Collections & String Operations (2 tokens — standard baseline)
     (:sym :name "list-length" :kind :fn :tokens 2)
     (:sym :name "list-empty?" :kind :fn :tokens 2)
     (:sym :name "map-get" :kind :fn :tokens 2)
@@ -57,7 +50,6 @@
     (:sym :name "string-from-int64" :kind :fn :tokens 3
           :rationale "Explicit typed scalar formatting distinguishing I64 conversion")
 
-    ;; Falsification & Test Polarity Forms (1-2 tokens)
     (:sym :name "assert" :kind :form :tokens 1)
     (:sym :name "reject" :kind :form :tokens 1)
     (:sym :name "refute" :kind :form :tokens 1)
