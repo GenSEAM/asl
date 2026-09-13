@@ -2234,6 +2234,14 @@ function buildModuleNameIndex(startDir) {
         } else if (!moduleNameIndex.has(modName)) {
           moduleNameIndex.set(modName, full);
         }
+        const kebabMod = modName.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+        if (!moduleNameIndex.has(kebabMod)) {
+          moduleNameIndex.set(kebabMod, full);
+        }
+        const camelMod = modName.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+        if (!moduleNameIndex.has(camelMod)) {
+          moduleNameIndex.set(camelMod, full);
+        }
         if (modName.startsWith('asl-agent-core/')) {
           const legacy = 'asl-core/' + modName.slice('asl-agent-core/'.length);
           if (!moduleNameIndex.has(legacy)) {
@@ -2246,6 +2254,30 @@ function buildModuleNameIndex(startDir) {
           }
           if (!moduleNameIndex.has('asl-bus/' + sub)) {
             moduleNameIndex.set('asl-bus/' + sub, full);
+          }
+        } else if (modName.startsWith('asl-mem/')) {
+          const sub = modName.slice('asl-mem/'.length);
+          if (!moduleNameIndex.has('aslMem/' + sub)) {
+            moduleNameIndex.set('aslMem/' + sub, full);
+          }
+          if (!moduleNameIndex.has('mem/' + sub)) {
+            moduleNameIndex.set('mem/' + sub, full);
+          }
+        } else if (modName.startsWith('aslMem/')) {
+          const sub = modName.slice('aslMem/'.length);
+          if (!moduleNameIndex.has('asl-mem/' + sub)) {
+            moduleNameIndex.set('asl-mem/' + sub, full);
+          }
+          if (!moduleNameIndex.has('mem/' + sub)) {
+            moduleNameIndex.set('mem/' + sub, full);
+          }
+        } else if (modName.startsWith('mem/')) {
+          const sub = modName.slice('mem/'.length);
+          if (!moduleNameIndex.has('asl-mem/' + sub)) {
+            moduleNameIndex.set('asl-mem/' + sub, full);
+          }
+          if (!moduleNameIndex.has('aslMem/' + sub)) {
+            moduleNameIndex.set('aslMem/' + sub, full);
           }
         }
       }
@@ -2265,8 +2297,12 @@ function resolveModulePath(currentFile, modName) {
   }
 
   const cleanMod = modName.replace(/\.asl$/, '');
+  const kebabMod = cleanMod.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+  const camelMod = cleanMod.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
   const variants = [
     cleanMod,
+    kebabMod,
+    camelMod,
     cleanMod.replace(/-/g, '_'),
     cleanMod.replace(/_/g, '-'),
     modName
@@ -2284,6 +2320,15 @@ function resolveModulePath(currentFile, modName) {
   } else if (cleanMod.startsWith('asl-agent-bus/')) {
     variants.push('agent-bus/' + cleanMod.slice('asl-agent-bus/'.length));
     variants.push('asl-bus/' + cleanMod.slice('asl-agent-bus/'.length));
+  } else if (cleanMod.startsWith('asl-mem/')) {
+    variants.push('aslMem/' + cleanMod.slice('asl-mem/'.length));
+    variants.push('mem/' + cleanMod.slice('asl-mem/'.length));
+  } else if (cleanMod.startsWith('aslMem/')) {
+    variants.push('asl-mem/' + cleanMod.slice('aslMem/'.length));
+    variants.push('mem/' + cleanMod.slice('aslMem/'.length));
+  } else if (cleanMod.startsWith('mem/')) {
+    variants.push('asl-mem/' + cleanMod.slice('mem/'.length));
+    variants.push('aslMem/' + cleanMod.slice('mem/'.length));
   }
 
   // Priority 2: Direct local candidate checks in the importing file's directory and sibling src/
@@ -2316,7 +2361,9 @@ function resolveModulePath(currentFile, modName) {
   for (const [declName, entry] of index.entries()) {
     const parts = declName.split('/');
     const shortName = parts[parts.length - 1];
-    if (variants.includes(shortName)) {
+    const kebabShort = shortName.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    const camelShort = shortName.replace(/-([a-z0-9])/g, (_, c) => c.toUpperCase());
+    if (variants.includes(shortName) || variants.includes(kebabShort) || variants.includes(camelShort)) {
       const target = Array.isArray(entry) ? entry[0] : entry;
       if (target && fs.existsSync(target)) {
         matches.push(path.resolve(target));

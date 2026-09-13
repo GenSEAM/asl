@@ -22,8 +22,8 @@
 (df makeEvalEnv [] -> EvalEnv
   :d "Initializes an empty root evaluation environment."
   (EvalEnv
-    :bindings ["dirList" "execCmd" "fileStat" "pathCanonicalize" "fileRead" "fileWrite" "fileExists"]
-    :values ["<builtin dirList>" "<builtin execCmd>" "<builtin fileStat>" "<builtin pathCanonicalize>" "<builtin fileRead>" "<builtin fileWrite>" "<builtin fileExists>"]
+    :bindings []
+    :values []
     :parentId "root"))
 
 (df evalNode [(env EvalEnv) (node Str)] -> EvalResult
@@ -49,7 +49,11 @@
                                                 (or (string-starts-with? node "8")
                                                     (string-starts-with? node "9"))))))))))
               (EvalResult :value node :ok true :errCode "")
-              (EvalResult :value "" :ok false :errCode "ERR_UNBOUND_SYMBOL"))))))))
+              (mt (list-index-of (.-bindings env) node)
+                ((some idx)
+                 (EvalResult :value (option-or (list-get (.-values env) idx) "") :ok true :errCode ""))
+                ((none)
+                 (EvalResult :value "" :ok false :errCode "ERR_UNBOUND_SYMBOL"))))))))))
 
 (df invokeClosure [(c Closure) (args [Str])] -> EvalResult
   :d "Invokes a closure with provided string arguments."

@@ -168,47 +168,170 @@
            ((err _)
             (some (map-set (map-set (map-empty) "size" 0) "filetype" 3))))))))
 
+(df wasiReadFdLines [] -> (List Str)
+  :d "Reads existing FD table lines from ephemeral storage."
+  (let [(path "/tmp/.asl_wasi_fd_table")]
+    (if (not (file-exists? path))
+        (list)
+        (mt (file-read path)
+          ((ok content)
+           (filter (fn [(line Str)] -> Bool (not (string-empty? line)))
+                   (string-split content "\n")))
+          ((err _) (list))))))
+
+(df wasiWriteFdLines [(lines (List Str))] -> Bool
+  :d "Writes FD table lines to ephemeral storage."
+  (let [(path "/tmp/.asl_wasi_fd_table")
+        (content (str (string-join lines "\n") "\n"))]
+    (mt (file-write path content)
+      ((ok _) true)
+      ((err _) false))))
+
+(df wasiParseFdEntry [(line Str)] -> (Map Str Str)
+  :d "Parses single pipe-delimited FD table entry."
+  (let [(parts (string-split line "|"))]
+    (if (< (list-length parts) 5)
+        (map-empty)
+        (map-set
+          (map-set
+            (map-set
+              (map-set
+                (map-set (map-empty) "fd" (option-or (list-get parts 0) ""))
+                "path" (option-or (list-get parts 1) ""))
+              "oflags" (option-or (list-get parts 2) "0"))
+            "offset" (option-or (list-get parts 3) "0"))
+          "status" (option-or (list-get parts 4) "closed")))))
+
+(df wasiFormatFdEntry [(fd Int64) (path Str) (oflags Int64) (offset Int64) (status Str)] -> Str
+  :d "Formats single pipe-delimited FD table entry."
+  (str (string-from-int64 fd) "|" path "|" (string-from-int64 oflags) "|" (string-from-int64 offset) "|" status))
+
 (df wasiPathOpen [(dirFd Int64) (path Str) (oflags Int64)] -> (Result Int64 Str)
   :d "Resolves and opens a path relative to directory descriptor."
   (if (< dirFd 3)
       (err "EBADF")
-      (if (not (file-exists? path))
-          (if (= (mod oflags 2) 1)
-              (mt (file-write path "")
-                ((ok _) (ok 4))
-                ((err _) (err "EIO")))
-              (err "ENOENT"))
-          (ok 4))))
+      (let [(exists (file-exists? path))
+            (isCreat (= (mod oflags 2) 1))]
+        (if (and (not exists) (not isCreat))
+            (err "ENOENT")
+            (let [(createRes (if (not exists) (file-write path "") (ok ())))]
+              (mt createRes
+                ((ok _)
+                 (let [(lines (wasiReadFdLines))
+                       (maxFd (fold (fn [(acc Int64) (l Str)] -> Int64
+                                      (let [(entry (wasiParseFdEntry l))
+                                            (fdNum (option-or (string-to-int64 (option-or (map-get entry "fd") "0")) 0))]
+                                        (max acc fdNum)))
+                                    3
+                                    lines))
+                       (nextFd (+ maxFd 1))
+                       (newEntry (wasiFormatFdEntry nextFd path oflags 0 "open"))
+                       (newLines (list-append lines (list newEntry)))]
+                   (wasiWriteFdLines newLines)
+                   (ok nextFd)))
+                ((err _) (err "EIO"))))))))
 
 (df wasiFdWrite [(fd Int64) (content Str)] -> (Result Int64 Str)
   :d "Writes string to file descriptor."
-  (if (or (< fd 0) (= fd 0))
+  (if (or (or (< fd 0) (= fd 0)) (= fd 3))
       (err "EBADF")
       (if (or (= fd 1) (= fd 2))
           (ok (string-length content))
-          (if (= fd 4)
-              (ok (string-length content))
-              (err "EBADF")))))
+          (let [(lines (wasiReadFdLines))
+                (fdStr (string-from-int64 fd))
+                (matches (filter (fn [(l Str)] -> Bool
+                                   (let [(entry (wasiParseFdEntry l))]
+                                     (= (option-or (map-get entry "fd") "") fdStr)))
+                                 lines))]
+            (if (list-empty? matches)
+                (err "EBADF")
+                (let [(l (option-or (list-get matches 0) ""))
+                      (entry (wasiParseFdEntry l))
+                      (st (option-or (map-get entry "status") ""))
+                      (path (option-or (map-get entry "path") ""))
+                      (oflags (option-or (string-to-int64 (option-or (map-get entry "oflags") "0")) 0))
+                      (offset (option-or (string-to-int64 (option-or (map-get entry "offset") "0")) 0))]
+                  (if (!= st "open")
+                      (err "EBADF")
+                      (let [(existing (option-or (mt (file-read path) ((ok c) (some c)) ((err _) (none))) ""))
+                            (writeRes (file-write path (str existing content)))]
+                        (mt writeRes
+                          ((ok _)
+                           (let [(newOffset (+ offset (string-length content)))
+                                 (updatedLine (wasiFormatFdEntry fd path oflags newOffset "open"))
+                                 (newLines (map (fn [(item Str)] -> Str
+                                                  (if (= item l) updatedLine item))
+                                                lines))]
+                             (wasiWriteFdLines newLines)
+                             (ok (string-length content))))
+                          ((err _) (err "EIO")))))))))))
 
 (df wasiFdRead [(fd Int64) (maxLen Int64)] -> (Result Str Str)
   :d "Reads from file descriptor up to max length."
-  (if (< fd 0)
+  (if (or (or (or (< fd 0) (= fd 1)) (= fd 2)) (= fd 3))
       (err "EBADF")
       (if (= fd 0)
           (ok "")
-          (if (or (= fd 1) (= fd 2))
-              (err "EBADF")
-              (if (= fd 4)
-                  (ok "")
-                  (err "EBADF"))))))
+          (let [(lines (wasiReadFdLines))
+                (fdStr (string-from-int64 fd))
+                (matches (filter (fn [(l Str)] -> Bool
+                                   (let [(entry (wasiParseFdEntry l))]
+                                     (= (option-or (map-get entry "fd") "") fdStr)))
+                                 lines))]
+            (if (list-empty? matches)
+                (err "EBADF")
+                (let [(l (option-or (list-get matches 0) ""))
+                      (entry (wasiParseFdEntry l))
+                      (st (option-or (map-get entry "status") ""))
+                      (path (option-or (map-get entry "path") ""))
+                      (oflags (option-or (string-to-int64 (option-or (map-get entry "oflags") "0")) 0))
+                      (offset (option-or (string-to-int64 (option-or (map-get entry "offset") "0")) 0))]
+                  (if (!= st "open")
+                      (err "EBADF")
+                      (let [(readRes (file-read path))]
+                        (mt readRes
+                          ((ok fullText)
+                           (let [(fullLen (string-length fullText))]
+                             (if (>= offset fullLen)
+                                 (ok "")
+                                 (let [(available (- fullLen offset))
+                                       (take (min maxLen available))
+                                       (chunk (option-or (string-slice fullText offset (+ offset take)) ""))
+                                       (newOffset (+ offset take))
+                                       (updatedLine (wasiFormatFdEntry fd path oflags newOffset "open"))
+                                       (newLines (map (fn [(item Str)] -> Str
+                                                        (if (= item l) updatedLine item))
+                                                      lines))]
+                                   (wasiWriteFdLines newLines)
+                                   (ok chunk)))))
+                          ((err _) (err "EIO")))))))))))
 
 (df wasiFdClose [(fd Int64)] -> (Result Unit Str)
   :d "Closes open file descriptor."
   (if (< fd 3)
       (err "EBADF")
-      (if (= fd 4)
-          (ok ())
-          (err "EBADF"))))
+      (let [(lines (wasiReadFdLines))
+            (fdStr (string-from-int64 fd))
+            (matches (filter (fn [(l Str)] -> Bool
+                               (let [(entry (wasiParseFdEntry l))]
+                                 (= (option-or (map-get entry "fd") "") fdStr)))
+                             lines))]
+        (if (list-empty? matches)
+            (err "EBADF")
+            (let [(l (option-or (list-get matches 0) ""))
+                  (entry (wasiParseFdEntry l))
+                  (st (option-or (map-get entry "status") ""))
+                  (path (option-or (map-get entry "path") ""))
+                  (oflags (option-or (string-to-int64 (option-or (map-get entry "oflags") "0")) 0))
+                  (offset (option-or (string-to-int64 (option-or (map-get entry "offset") "0")) 0))]
+              (if (!= st "open")
+                  (err "EBADF")
+                  (let [(closedLine (wasiFormatFdEntry fd path oflags offset "closed"))
+                        (newLines (map (fn [(item Str)] -> Str
+                                         (if (= item l) closedLine item))
+                                       lines))]
+                    (wasiWriteFdLines newLines)
+                    (ok ()))))))))
 
 (df wasiPathFilestatGet [(dirFd Int64) (path Str)] -> (Result (Map Str Int64) Str)
   :d "Retrieves file statistics relative to directory descriptor."

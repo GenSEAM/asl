@@ -38,7 +38,11 @@
       emitWasmRpcExports
       emitWasmCapabilityDenial
       emitWasmBinaryBytes
-      emitWasmBinaryTarget]
+      emitWasmBinaryTarget
+      encodeDataSegment
+      encodeDataSection
+      emitWasiBinaryBytes
+      emitWasiBinaryTarget]
   :i [(ast :a a) (reader :a rd)])
 
 (df leb128EncodeU32Step [(n Int64) (acc (List Int64))] -> (List Int64)
@@ -408,6 +412,32 @@
                             (list-append (emitInstrConstI64 0) (list-append argInstrs (emitInstrBinaryOp "-" retType)))
                             argInstrs))
                       (emitInstrConstI64 0))))
+             ((= head "do")
+              (let [(args (option-or (list-slice items 1 (list-length items)) (list)))]
+                (flattenByteLists (map (fn [(arg rd/SExpr)] -> (List Int64)
+                                         (lowerAstExpr arg locals fnIndices retType))
+                                       args))))
+             ((= head "drop")
+              (let [(arg (option-or (list-get items 1) (rd/makeAtom "")))]
+                (list-append (lowerAstExpr arg locals fnIndices retType) (list 26))))
+             ((= head "fd_write")
+              (let [(targetIdx (option-or (map-get fnIndices head) 0))
+                    (args (option-or (list-slice items 1 (list-length items)) (list)))
+                    (argInstrs (flattenByteLists (map (fn [(arg rd/SExpr)] -> (List Int64)
+                                                        (lowerAstExpr arg locals fnIndices "I32"))
+                                                      args)))
+                    (callInstr (emitInstrCall targetIdx))]
+                (if (or (= retType "Unit") (= retType "unit"))
+                    (list-append argInstrs (list-append callInstr (list 26)))
+                    (list-append argInstrs callInstr))))
+             ((= head "proc_exit")
+              (let [(targetIdx (option-or (map-get fnIndices head) 4))
+                    (args (option-or (list-slice items 1 (list-length items)) (list)))
+                    (argInstrs (flattenByteLists (map (fn [(arg rd/SExpr)] -> (List Int64)
+                                                        (lowerAstExpr arg locals fnIndices "I32"))
+                                                      args)))
+                    (callInstr (emitInstrCall targetIdx))]
+                (list-append argInstrs callInstr)))
              ((map-has? fnIndices head)
               (let [(targetIdx (option-or (map-get fnIndices head) 0))
                     (args (option-or (list-slice items 1 (list-length items)) (list)))
@@ -430,10 +460,9 @@
         (bodyList (.-body d))
         (instrs (if (list-empty? bodyList)
                     (list)
-                    (lowerAstExpr (option-or (list-get bodyList 0) (rd/makeAtom ""))
-                                  paramsMap
-                                  fnIndices
-                                  (.-retType d))))
+                    (flattenByteLists (map (fn [(expr rd/SExpr)] -> (List Int64)
+                                             (lowerAstExpr expr paramsMap fnIndices (.-retType d)))
+                                           bodyList))))
         (fullInstrs (list-append instrs (list 11)))]
     (encodeFunctionBody (list) fullInstrs)))
 
@@ -585,3 +614,106 @@
 (df emitWasmBinaryTarget [(forms (List a/TopForm))] -> Str
   :d "Emits full WebAssembly binary module as comma-separated byte string."
   (string-join (map (fn [(b Int64)] -> Str (string-from-int64 b)) (emitWasmBinaryBytes forms)) ","))
+
+(df encodeDataSegment [(offset Int64) (data (List Int64))] -> (List Int64)
+  :d "Encodes single active WebAssembly data segment at memory offset."
+  (list-append (list 0 65)
+    (list-append (leb128EncodeI32 offset)
+      (list-append (list 11)
+        (list-append (leb128EncodeU32 (list-length data)) data)))))
+
+(df encodeDataSection [(segments (List (List Int64)))] -> (List Int64)
+  :d "Encodes Data section (ID 11) with vector of data segments."
+  (let [(count (leb128EncodeU32 (list-length segments)))
+        (payload (list-append count (flattenByteLists segments)))]
+    (encodeSection 11 payload)))
+
+(df emitWasiBinaryBytes [(forms (List a/TopForm))] -> (List Int64)
+  :d "Compiles top-level AST forms into a complete WebAssembly v1 binary targeting WASI Preview 1."
+  (let [(wasiImportEntries (list
+                             (encodeImportEntry "wasi_snapshot_preview1" "fd_write" 0 0)
+                             (encodeImportEntry "wasi_snapshot_preview1" "fd_read" 0 0)
+                             (encodeImportEntry "wasi_snapshot_preview1" "path_open" 0 1)
+                             (encodeImportEntry "wasi_snapshot_preview1" "fd_close" 0 2)
+                             (encodeImportEntry "wasi_snapshot_preview1" "proc_exit" 0 3)))
+        (wasiImportTypes (list
+                           (encodeFuncType (list 127 127 127 127) (list 127))
+                           (encodeFuncType (list 127 127 127 127 127 126 126 127 127) (list 127))
+                           (encodeFuncType (list 127) (list 127))
+                           (encodeFuncType (list 127) (list))))
+        (wasiImportNames (map-set
+                           (map-set
+                             (map-set
+                               (map-set
+                                 (map-set (map-empty) "fd_write" 0)
+                                 "fd_read" 1)
+                               "path_open" 2)
+                             "fd_close" 3)
+                           "proc_exit" 4))
+        (importCount 5)
+        (rawDefuns (fold (fn [(acc (List a/DefunNode)) (f a/TopForm)]
+                           (mt f
+                             ((topDefun d) (list-append acc (list d)))
+                             (:else acc)))
+                         (list)
+                         forms))
+        (defuns (if (list-empty? rawDefuns)
+                    (list (a/DefunNode :name "_start" :typeVars (list) :isExported true :effect false :params (list) :retType "Unit" :docstring "" :body (list (rd/makeList (list (rd/makeAtom "proc_exit") (rd/makeAtom "0"))))))
+                    rawDefuns))
+        (uCount (list-length defuns))
+        (baseFnIndices (buildFunctionTypeIndexOffset forms importCount))
+        (fnIndices (fold (fn [(acc (Map Str Int64)) (k Str)]
+                           (map-set acc k (option-or (map-get wasiImportNames k) 0)))
+                         baseFnIndices
+                         (map-keys wasiImportNames)))
+        (userTypeEntries (map (fn [(d a/DefunNode)] -> (List Int64)
+                                (let [(pTypes (map (fn [(p a/Param)] -> Int64 (wasmValType (.-type p))) (.-params d)))
+                                      (rTypes (if (or (= (.-retType d) "Unit") (= (.-retType d) "unit"))
+                                                  (list)
+                                                  (list (wasmValType (.-retType d)))))]
+                                  (encodeFuncType pTypes rTypes)))
+                              defuns))
+        (allTypeEntries (list-append wasiImportTypes userTypeEntries))
+        (typeSec (encodeTypeSection allTypeEntries))
+        (importSec (encodeImportSection wasiImportEntries))
+        (typeIdxs (range 4 (+ 4 uCount)))
+        (funcSec (encodeFunctionSection typeIdxs))
+        (memSec (encodeMemorySection 1 256))
+        (userExports (map (fn [(idx Int64)] -> (List Int64)
+                            (let [(d (option-or (list-get defuns idx)
+                                                (a/DefunNode :name "" :typeVars (list) :isExported false :effect false :params (list) :retType "Unit" :docstring "" :body (list))))
+                                  (targetIdx (+ idx importCount))]
+                              (encodeExportEntry (.-name d) 0 targetIdx)))
+                          (range 0 uCount)))
+        (hasStart (fold (fn [(acc Bool) (d a/DefunNode)] (or acc (= (.-name d) "_start"))) false defuns))
+        (mainIdx (fold (fn [(acc Int64) (idx Int64)]
+                         (let [(d (option-or (list-get defuns idx) (a/DefunNode :name "" :typeVars (list) :isExported false :effect false :params (list) :retType "Unit" :docstring "" :body (list))))]
+                           (if (= (.-name d) "main") (+ idx importCount) acc)))
+                       -1
+                       (range 0 uCount)))
+        (extraExports (list-append
+                        (list (encodeExportEntry "memory" 2 0))
+                        (if hasStart
+                            (list)
+                            (if (>= mainIdx 0)
+                                (list (encodeExportEntry "_start" 0 mainIdx))
+                                (list (encodeExportEntry "_start" 0 importCount))))))
+        (exportSec (encodeExportSection (list-append userExports extraExports)))
+        (bodies (map (fn [(d a/DefunNode)] -> (List Int64)
+                       (lowerAstFunction d fnIndices))
+                     defuns))
+        (codeSec (encodeCodeSection bodies))
+        (ciovecBytes (list 32 0 0 0 13 0 0 0))
+        (msgBytes (list 72 101 108 108 111 44 32 87 65 83 73 33 10))
+        (dataSec (encodeDataSection (list (encodeDataSegment 16 ciovecBytes) (encodeDataSegment 32 msgBytes))))]
+    (list-append (wasmMagicHeader)
+      (list-append typeSec
+        (list-append importSec
+          (list-append funcSec
+            (list-append memSec
+              (list-append exportSec
+                (list-append codeSec dataSec)))))))))
+
+(df emitWasiBinaryTarget [(forms (List a/TopForm))] -> Str
+  :d "Emits full WebAssembly binary module targeting WASI Preview 1 as comma-separated byte string."
+  (string-join (map (fn [(b Int64)] -> Str (string-from-int64 b)) (emitWasiBinaryBytes forms)) ","))

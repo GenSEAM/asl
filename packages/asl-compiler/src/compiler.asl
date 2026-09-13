@@ -208,5 +208,5 @@
 
 (df emitWasiBinaryTarget [(forms (List a/TopForm))] -> Str
   :d "Lowers top-level forms to WebAssembly binary target string for WASI."
-  (w/emitWasmBinaryTarget forms))
+  (w/emitWasiBinaryTarget forms))
 

@@ -106,6 +106,32 @@
            true))
         ((none) false)))))
 
+(df testWasiFdTableLifecycle [] -> Bool
+  :d "Verifies dynamic allocation, I/O, and closure of descriptors in the real FD table."
+  (let [(filePath "/tmp/test_wasi_fd_lifecycle.txt")
+        (openRes (wasi/wasiPathOpen 3 filePath 1))]
+    (assert (= (.-_tag openRes) "ok") "wasiPathOpen with O_CREAT must succeed")
+    (refute (!= (.-_tag openRes) "ok") "wasiPathOpen must not fail")
+    (mt openRes
+      ((ok fd)
+       (do
+         (assert (>= fd 4) "Allocated file descriptor must be >= 4")
+         (refute (< fd 4) "Allocated descriptor must not collide with standard descriptors")
+         (let [(wRes (wasi/wasiFdWrite fd "Dynamic FD Table Data\n"))]
+           (assert (= (.-_tag wRes) "ok") "wasiFdWrite must succeed on open descriptor")
+           (refute (!= (.-_tag wRes) "ok") "wasiFdWrite must not fail")
+           (let [(closeRes (wasi/wasiFdClose fd))]
+             (assert (= (.-_tag closeRes) "ok") "wasiFdClose must succeed on open descriptor")
+             (refute (!= (.-_tag closeRes) "ok") "wasiFdClose must not fail")
+             (let [(postCloseWrite (wasi/wasiFdWrite fd "after close"))
+                   (postCloseClose (wasi/wasiFdClose fd))]
+               (assert (= (.-_tag postCloseWrite) "err") "wasiFdWrite must reject closed descriptor")
+               (refute (= (.-_tag postCloseWrite) "ok") "Closed descriptor must not permit writes")
+               (assert (= (.-_tag postCloseClose) "err") "wasiFdClose must reject already closed descriptor")
+               (refute (= (.-_tag postCloseClose) "ok") "Already closed descriptor must not close twice")
+               true)))))
+      ((err _) false))))
+
 (df runTests [] -> Bool
   :d "Runs all WASI I/O unit tests."
   (do
@@ -115,4 +141,5 @@
     (assert (testWasiPathOpenOflags) "testWasiPathOpenOflags must pass")
     (assert (testWasiFdWriteValidation) "testWasiFdWriteValidation must pass")
     (assert (testWasiDirListAndStat) "testWasiDirListAndStat must pass")
+    (assert (testWasiFdTableLifecycle) "testWasiFdTableLifecycle must pass")
     true))
