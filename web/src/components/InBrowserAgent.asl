@@ -1,9 +1,9 @@
-(module asl-web/in-browser-agent
+(module aslWeb/inBrowserAgent
   :d "In-Browser Autonomous Companion showcase component in pure AgentScript."
-  :x [in-browser-agent render-in-browser-agent browser-agent-view]
+  :x [inBrowserAgent renderInBrowserAgent browserAgentView]
   :i [])
 
-(df render-in-browser-agent [] -> Str
+(df renderInBrowserAgent [] -> Str
   :d "Renders the in-browser companion visualizer cockpit with live tab switching and three execution modes."
   "<section id=\"browser-agent\" aria-labelledby=\"browser-agent-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -269,10 +269,10 @@
     })();
   </script>")
 
-(df in-browser-agent [] -> Str
+(df inBrowserAgent [] -> Str
   :d "Alias for render-in-browser-agent."
-  (render-in-browser-agent))
+  (renderInBrowserAgent))
 
-(df browser-agent-view [] -> Str
+(df browserAgentView [] -> Str
   :d "Alias for render-in-browser-agent."
-  (render-in-browser-agent))
+  (renderInBrowserAgent))

@@ -1,9 +1,9 @@
-(module asl-web/skills-marketplace
+(module aslWeb/skillsMarketplace
   :d "Skills and packages manifest component in pure AgentScript."
-  :x [skills-marketplace render-skills-marketplace]
+  :x [skillsMarketplace renderSkillsMarketplace]
   :i [])
 
-(df render-skills-marketplace [] -> Str
+(df renderSkillsMarketplace [] -> Str
   :d "Renders the package and skills hub manifest table."
   "<section id=\"packages\" aria-labelledby=\"packages-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -79,6 +79,6 @@
     </div>
   </section>")
 
-(df skills-marketplace [] -> Str
+(df skillsMarketplace [] -> Str
   :d "Alias for render-skills-marketplace."
-  (render-skills-marketplace))
+  (renderSkillsMarketplace))

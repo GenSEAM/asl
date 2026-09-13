@@ -1,15 +1,15 @@
-(module asl-parser/ast-driver
+(module asl-parser/astDriver
   :d "Driver for the typed-AST nodes: construct each and project its fields."
-  :x [proj-module proj-schema proj-enum proj-defun proj-topform]
+  :x [projModule projSchema projEnum projDefun projTopform]
   :i [(ast :a a) (reader :a rd)])
 
-(df show-opt [(o (Option String))] -> String
+(df showOpt [(o (Option String))] -> String
   :d "Renders an optional string as some-value or none."
   (mt o
     ((some v) (str "some " v))
     ((none)   "none")))
 
-(df proj-module [] -> String
+(df projModule [] -> String
   :d "Project path, doc, export/import arity and defs arity of a module node."
   (let [(m (a/ModuleNode :path "demo/mod"
                          :docstring "\"module docs\""
@@ -21,22 +21,22 @@
          "|" (string-from-int64 (list-length (.-imports m)))
          "|" (string-from-int64 (list-length (.-defs m))))))
 
-(df proj-schema [] -> String
+(df projSchema [] -> String
   :d "Project name, type-vars, first field name and json-case of a schema node."
   (let [(f (a/AstField :name "x" :type "Int64" :docstring "\"d\""
                        :default (some "3") :json (none)))
-        (s (a/SchemaNode :name "Point" :type-vars (list "T")
-                         :fields (list f) :json-case (some "camel")))]
-    (str (.-name s) "|" (string-from-int64 (list-length (.-type-vars s)))
+        (s (a/SchemaNode :name "Point" :typeVars (list "T")
+                         :fields (list f) :jsonCase (some "camel")))]
+    (str (.-name s) "|" (string-from-int64 (list-length (.-typeVars s)))
          "|" (mt (list-head (.-fields s))
                ((some h) (.-name h))
                ((none)   "no-head"))
-         "|" (show-opt (.-json-case s)))))
+         "|" (showOpt (.-jsonCase s)))))
 
-(df proj-enum [] -> String
+(df projEnum [] -> String
   :d "Project name, first case name and its doc of an enum node."
   (let [(c (a/EnumCase :name "point" :fields (list) :docstring "\"a dot\""))
-        (e (a/EnumNode :name "Shape" :type-vars (list) :cases (list c)))]
+        (e (a/EnumNode :name "Shape" :typeVars (list) :cases (list c)))]
     (str (.-name e)
          "|" (mt (list-head (.-cases e))
                ((some h) (.-name h))
@@ -45,28 +45,28 @@
                ((some h) (.-docstring h))
                ((none)   "no-doc")))))
 
-(df proj-defun [] -> String
+(df projDefun [] -> String
   :d "Project name, exported/effect flags, param arity, ret-type and body arity."
   (let [(p (a/Param :name "n" :type "Int64"))
-        (d (a/DefunNode :name "twice" :type-vars (list)
-                        :is-exported true :effect false
-                        :params (list p) :ret-type "Int64" :docstring "\"d\""
-                        :body (list (rd/sexpr-atom "n"))))]
-    (str (.-name d) "|" (if (.-is-exported d) "T" "F")
+        (d (a/DefunNode :name "twice" :typeVars (list)
+                        :isExported true :effect false
+                        :params (list p) :retType "Int64" :docstring "\"d\""
+                        :body (list (rd/sexprAtom "n"))))]
+    (str (.-name d) "|" (if (.-isExported d) "T" "F")
          "|" (if (.-effect d) "T" "F")
          "|" (string-from-int64 (list-length (.-params d)))
-         "|" (.-ret-type d) "|" (string-from-int64 (list-length (.-body d))))))
+         "|" (.-retType d) "|" (string-from-int64 (list-length (.-body d))))))
 
-(df proj-topform [] -> String
+(df projTopform [] -> String
   :d "Wrap a defun node in TopForm and unwrap it by matching the payload."
   (let [(p (a/Param :name "x" :type "Float64"))
-        (d (a/DefunNode :name "id" :type-vars (list)
-                        :is-exported false :effect false
-                        :params (list p) :ret-type "Float64" :docstring ""
-                        :body (list (rd/sexpr-atom "x"))))
-        (t (a/top-defun d))]
+        (d (a/DefunNode :name "id" :typeVars (list)
+                        :isExported false :effect false
+                        :params (list p) :retType "Float64" :docstring ""
+                        :body (list (rd/sexprAtom "x"))))
+        (t (a/topDefun d))]
     (mt t
-      ((a/top-defun inner) (.-name inner))
-      ((a/top-module _)    "module")
-      ((a/top-schema _)    "schema")
-      ((a/top-enum _)      "enum"))))
+      ((a/topDefun inner) (.-name inner))
+      ((a/topModule _)    "module")
+      ((a/topSchema _)    "schema")
+      ((a/topEnum _)      "enum"))))

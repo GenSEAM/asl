@@ -1,13 +1,13 @@
-(module asl-web/asl-quality-doctor
+(module aslWeb/aslQualityDoctor
   :d "Declarative Quality Doctor Diagnostic Component in pure AgentScript"
-  :x [describe-doctor render-quality-doctor]
+  :x [describeDoctor renderQualityDoctor]
   :i [(asl-text/string :a s)])
 
-(df describe-doctor [] -> Str
+(df describeDoctor [] -> Str
   :d "Returns quality gates metadata."
   "(doctor :gates 19 :conformance 100 :redundancy_ceiling 0.18)")
 
-(df render-quality-doctor [] -> Str
+(df renderQualityDoctor [] -> Str
   :d "Renders the Quality Doctor diagnostic dashboard."
   (s/concat
     "<section class=\"py-16 max-w-4xl mx-auto px-4\">"

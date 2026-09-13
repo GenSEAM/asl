@@ -1,9 +1,9 @@
-(module asl-web/polyglot-studio
+(module aslWeb/polyglotStudio
   :d "Universal Polyglot UI Transpiler Studio in pure AgentScript."
-  :x [polyglot-studio render-polyglot-studio]
+  :x [polyglotStudio renderPolyglotStudio]
   :i [])
 
-(df render-polyglot-studio [] -> Str
+(df renderPolyglotStudio [] -> Str
   :d "Renders the interactive polyglot studio transpiler interface."
   "<div class=\"w-full flex flex-col gap-6 bg-surface border border-line rounded-2xl p-6 shadow-xl\" id=\"polyglot-studio-root\">
     <div class=\"flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4\">
@@ -264,6 +264,6 @@ const handleAction = () => {
     })();
   </script>")
 
-(df polyglot-studio [] -> Str
+(df polyglotStudio [] -> Str
   :d "Alias for render-polyglot-studio."
-  (render-polyglot-studio))
+  (renderPolyglotStudio))

@@ -1,4 +1,4 @@
-(:verificationContract :v 1 :src ADR-0081
+(:verificationContract :v 1 :src ADR0081
   :summary "Verification contract for assertion reachability, runner failure preservation, and required site obligations."
   :rules [
     (:rule :id assertionReachability

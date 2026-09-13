@@ -2,15 +2,15 @@
   :version "0.1.0"
   :name "asl"
   :channel "stable"
-  :published-at "2026-09-01T11:25:00Z"
-  :min-cli-version "0.1.0"
-  :download-urls (
-    :darwin-arm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-darwin-arm64.tar.gz"
-    :darwin-x64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-darwin-x64.tar.gz"
-    :linux-x64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-x64.tar.gz"
-    :linux-arm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-arm64.tar.gz"
-    :windows-x64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-windows-x64.zip"
-    :windows-arm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-windows-arm64.zip"
+  :publishedAt "2026-09-01T11:25:00Z"
+  :minCliVersion "0.1.0"
+  :downloadUrls (
+    :darwinArm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-darwin-arm64.tar.gz"
+    :darwinX64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-darwin-x64.tar.gz"
+    :linuxX64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-x64.tar.gz"
+    :linuxArm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-linux-arm64.tar.gz"
+    :windowsX64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-windows-x64.zip"
+    :windowsArm64 "https://github.com/GenSEAM/asl/releases/latest/download/asl-windows-arm64.zip"
   )
-  :release-notes "ASL (df, dfs, dfe, F64, I64, Str, Bool) v0.3 release with in-memory WebAssembly execution and Universal Agent Skills Hub."
+  :releaseNotes "ASL (df, dfs, dfe, F64, I64, Str, Bool) v0.3 release with in-memory WebAssembly execution and Universal Agent Skills Hub."
 )

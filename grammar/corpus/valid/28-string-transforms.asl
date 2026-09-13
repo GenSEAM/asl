@@ -7,7 +7,7 @@
   :doc "Report every string transformation over one line."
   :export [transform])
 
-(df show-int [(o (Option Int64))] -> String
+(df showInt [(o (Option Int64))] -> String
   :doc "An optional integer, so a parsed zero is not read as a failure."
   (match o
     ((some n) (str "some " (string-from-int64 n)))
@@ -22,6 +22,6 @@
                      (string-replace line "X" "-")
                      (string-join (string-split line " ") "+")
                      (str "n=" (string-from-int64 (string-length line)))
-                     (show-int (string-to-int64 line))
+                     (showInt (string-to-int64 line))
                      (string-from-float64 (option-or (string-to-float64 line) 0.0)))
                "|"))

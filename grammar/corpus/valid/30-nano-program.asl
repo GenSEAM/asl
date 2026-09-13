@@ -5,7 +5,7 @@
 "every import a Nano module declared was dropped in silence, leaving the alias"
 "unbound at its use site while all four transpilers were green."
 
-(module sensor/nano-program
+(module sensor/nanoProgram
   :d "Grade the reading named on the command line and print the verdict."
   :x [Reading Verdict judge show]
   :i [(core/strings :a s)])

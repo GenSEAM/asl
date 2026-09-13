@@ -1,9 +1,9 @@
-(module asl-web/agent-observability-studio
+(module aslWeb/agentObservabilityStudio
   :d "Agent observability studio component in pure AgentScript."
-  :x [agent-observability-studio render-agent-observability-studio]
+  :x [agentObservabilityStudio renderAgentObservabilityStudio]
   :i [])
 
-(df render-agent-observability-studio [] -> Str
+(df renderAgentObservabilityStudio [] -> Str
   :d "Renders the 4-layer agent observability architecture section."
   "<section id=\"observability\" aria-labelledby=\"observability-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -62,6 +62,6 @@
     </div>
   </section>")
 
-(df agent-observability-studio [] -> Str
+(df agentObservabilityStudio [] -> Str
   :d "Alias for render-agent-observability-studio."
-  (render-agent-observability-studio))
+  (renderAgentObservabilityStudio))

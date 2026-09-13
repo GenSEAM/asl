@@ -1,9 +1,9 @@
-(module asl-web/InBrowserCompanion
+(module aslWeb/InBrowserCompanion
   :d "In-Browser WebLLM Companion and Multi-Pass SLM Execution Cockpit in pure AgentScript."
-  :x [render-studio-tabs render-prompt-picker render-telemetry-bar render-sandbox-cockpit render-in-browser-companion in-browser-companion]
+  :x [renderStudioTabs renderPromptPicker renderTelemetryBar renderSandboxCockpit renderInBrowserCompanion inBrowserCompanion]
   :i [(asl-text/string :a s)])
 
-(df render-studio-tabs ()
+(df renderStudioTabs ()
   :d "Studio mode selector tabs: Vector SVG, 2D Retro Games, Mini-Websites."
   "<div class=\"flex flex-wrap items-center gap-2 p-1.5 bg-ground-2 dark:bg-ground-sunken rounded-xl border border-line-subtle mb-6\">
     <button class=\"companion-tab active px-4 py-2 text-xs font-mono font-medium rounded-lg bg-surface border border-line shadow-sm text-signal transition-all flex items-center gap-2\" data-studio=\"svg\">
@@ -17,7 +17,7 @@
     </button>
   </div>")
 
-(df render-prompt-picker ()
+(df renderPromptPicker ()
   :d "Prompt template badges for 1-click execution."
   "<div class=\"flex flex-wrap items-center gap-2 mb-6\">
     <span class=\"text-micro font-mono uppercase text-ink-3 mr-1\">Quick Templates:</span>
@@ -28,7 +28,7 @@
     <button class=\"px-3 py-1.5 text-xs font-mono rounded-lg bg-surface border border-line text-ink-2 hover:text-signal hover:border-signal/50 transition-all\" data-prompt=\"chameleon\"> Mascot Badge</button>
   </div>")
 
-(df render-telemetry-bar ()
+(df renderTelemetryBar ()
   :d "In-Browser WebGPU & WebLLM hardware acceleration telemetry bar."
   "<div class=\"grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6\">
     <div class=\"p-3 rounded-xl bg-surface border border-line flex flex-col gap-1\">
@@ -51,7 +51,7 @@
     </div>
   </div>")
 
-(df render-sandbox-cockpit ()
+(df renderSandboxCockpit ()
   :d "Preview sandbox container and terminal inspection tabs."
   "<div class=\"rounded-2xl border border-line bg-ground-2 dark:bg-ground-sunken overflow-hidden shadow-2xl\">
     <div class=\"px-4 py-3 border-b border-line bg-surface/50 flex flex-wrap items-center justify-between gap-3\">
@@ -87,15 +87,15 @@
     </div>
   </div>")
 
-(df render-in-browser-companion ()
+(df renderInBrowserCompanion ()
   :d "Complete InBrowserCompanion cockpit section."
   (s/concat
     "<section id=\"in-browser-companion\" class=\"py-12 relative z-10 w-full\">"
-    (render-telemetry-bar)
-    (render-studio-tabs)
-    (render-prompt-picker)
-    (render-sandbox-cockpit)
+    (renderTelemetryBar)
+    (renderStudioTabs)
+    (renderPromptPicker)
+    (renderSandboxCockpit)
     "</section>"))
 
-(df in-browser-companion ()
-  (render-in-browser-companion))
+(df inBrowserCompanion ()
+  (renderInBrowserCompanion))

@@ -4,6 +4,6 @@
 "pattern never reaches a call node, so excusing every builtin cost a silent"
 "wrong answer: this checked clean and the Python backend emitted `(a and b)`,"
 "dropping the third operand with nothing reported."
-(df all-three? [(a Bool) (b Bool) (c Bool)] -> Bool
+(df allThree? [(a Bool) (b Bool) (c Bool)] -> Bool
   :doc "Three-way conjunction, written as if `and` were variadic."
   (and a b c))

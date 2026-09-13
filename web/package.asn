@@ -11,9 +11,9 @@
     :preview "vite preview"
   )
   :dependencies (
-    :lucide-react "^1.16.0"
+    :lucideReact "^1.16.0"
     :react "^19.0.0"
-    :react-dom "^19.0.0"
+    :reactDom "^19.0.0"
   )
   :devDependencies (
     "@vitejs/plugin-react" "^4.3.4"

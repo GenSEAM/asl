@@ -1,11 +1,11 @@
 (module asl-codegen/builtins
   :d "Builtin lowering templates and rendering for the 107 Core ASL builtins."
-  :x [builtin-template
-      render-template
-      render-builtin]
+  :x [builtinTemplate
+      renderTemplate
+      renderBuiltin]
   :i [])
 
-(df builtin-template [(name String)] -> (Option String)
+(df builtinTemplate [(name String)] -> (Option String)
   :d "Returns the Rust lowering template for a Core builtin."
   (cond
     ((= name "!=") (some "({0} != {1})"))
@@ -117,15 +117,15 @@
     ((= name "zip") (some "rt::zip({0}, {1})"))
     (:else (none))))
 
-(df render-template [(tmpl String) (args (List String))] -> String
+(df renderTemplate [(tmpl String) (args (List String))] -> String
   :d "Substitutes {*}, {0}, {1}, {2} placeholders in a lowering template."
-  (let [(t-star (if (string-contains? tmpl "{*}")
+  (let [(tStar (if (string-contains? tmpl "{*}")
                     (string-replace tmpl "{*}" (string-join args ", "))
                     tmpl))
         (a0 (option-or (list-get args 0) ""))
-        (t0 (if (string-contains? t-star "{0}")
-                (string-replace t-star "{0}" a0)
-                t-star))
+        (t0 (if (string-contains? tStar "{0}")
+                (string-replace tStar "{0}" a0)
+                tStar))
         (a1 (option-or (list-get args 1) ""))
         (t1 (if (string-contains? t0 "{1}")
                 (string-replace t0 "{1}" a1)
@@ -136,8 +136,8 @@
                 t1))]
     t2))
 
-(df render-builtin [(bname String) (args (List String))] -> (Option String)
+(df renderBuiltin [(bname String) (args (List String))] -> (Option String)
   :d "Renders a builtin call into Rust expression syntax."
-  (mt (builtin-template bname)
+  (mt (builtinTemplate bname)
     ((none) (none))
-    ((some tmpl) (some (render-template tmpl args)))))
+    ((some tmpl) (some (renderTemplate tmpl args)))))

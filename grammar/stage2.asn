@@ -7,7 +7,7 @@
     (:concept "binary_section" :role "Executable binary container segment and section header specifications")
   ]
   :stage2Architecture [
-    (:schema :id ssaForm :category :compiler-ir
+    (:schema :id ssaForm :category :compilerIr
       :description "Declarative representation of an SSA basic block and register instructions."
       :required [:blockId :predecessors :successors :instructions :terminator]
       :optional [:phiNodes :variableMap]
@@ -20,7 +20,7 @@
         (:field :name :phiNodes :type :list)
         (:field :name :variableMap :type :map)])
 
-    (:schema :id binarySection :category :binary-format
+    (:schema :id binarySection :category :binaryFormat
       :description "Specification of an emitted binary segment or section."
       :required [:sectionName :segmentName :address :size :alignment :flags]
       :optional [:relocations :contentDigest]
@@ -34,7 +34,7 @@
         (:field :name :relocations :type :list)
         (:field :name :contentDigest :type :string)])
 
-    (:schema :id targetAbiSpec :category :platform-abi
+    (:schema :id targetAbiSpec :category :platformAbi
       :description "Platform ABI specification for native machine code lowering."
       :targets [
         (:target :id "darwin-arm64"

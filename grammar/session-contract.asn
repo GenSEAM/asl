@@ -1,4 +1,4 @@
-(:sessionContract :v 1 :src ADR-0081
+(:sessionContract :v 1 :src ADR0081
   :summary "Session progression, runner-issued receipts, and lease invariants for autonomous agent harnesses."
   :rules [
     (:rule :id trustedRunnerReceipt

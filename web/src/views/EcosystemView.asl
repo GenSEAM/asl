@@ -1,11 +1,11 @@
-(module asl-web/ecosystem-view
+(module aslWeb/ecosystemView
   :d "Complete Ecosystem Architecture view in pure AgentScript."
-  :x [ecosystem-view render-ecosystem-view]
+  :x [ecosystemView renderEcosystemView]
   :i [(asl-text/string :a s)
-      asl-web/ecosystem
-      asl-web/unified-package-matrix])
+      aslWeb/ecosystem
+      aslWeb/unifiedPackageMatrix])
 
-(df render-ecosystem-view [] -> Str
+(df renderEcosystemView [] -> Str
   :d "Renders the complete Ecosystem view with DAG progression, UnifiedPackageMatrix, and Multi-Runtime Engine."
   (s/concat
     "<div class=\"pt-24 sm:pt-28 pb-24\">
@@ -121,11 +121,11 @@
               Every tool an autonomous agent needs to parse, sandbox, coordinate, recall, and interact with the physical and visual world &mdash; compiled with mathematical equivalence.
             </p>
           </header>"
-    (unified-package-matrix)
+    (unifiedPackageMatrix)
     "</div></section>"
     (ecosystem)
     "</div>"))
 
-(df ecosystem-view [] -> Str
+(df ecosystemView [] -> Str
   :d "Alias for render-ecosystem-view."
-  (render-ecosystem-view))
+  (renderEcosystemView))

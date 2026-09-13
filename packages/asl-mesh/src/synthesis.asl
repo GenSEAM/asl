@@ -1,4 +1,4 @@
-(module asl-mesh/synthesis
+(module aslMesh/synthesis
   :d "Dialectical triangulation and cross-model synthesis engine under D85."
   :x [synthesize_defects
       triangulate_findings
@@ -14,16 +14,16 @@
   :d "Evaluates defect finding against test reproduction"
   {:finding finding :reproduced true :status :verified})
 
-(df triangulate_findings [opus-findings pro-findings flash-findings] -> List
+(df triangulate_findings [opusFindings proFindings flashFindings] -> List
   :d "Triangulates defect observations across three independent model tiers"
-  (let [(all-findings (concat (concat opus-findings pro-findings) flash-findings))]
-    all-findings))
+  (let [(allFindings (concat (concat opusFindings proFindings) flashFindings))]
+    allFindings))
 
-(df synthesize_defects [partition findings-list] -> Map
+(df synthesize_defects [partition findingsList] -> Map
   :d "Synthesizes multi-model defect findings into formal consensus receipt"
   {:consensusId "rc-mesh-consensus"
    :partition partition
    :agreementRate 1.0
-   :verifiedDefects findings-list
+   :verifiedDefects findingsList
    :status :consensus
    :timestamp 1789463400000})

@@ -1,13 +1,13 @@
-(module asl-web/architecture-view
+(module aslWeb/architectureView
   :d "Declarative Architecture Showcase View in pure AgentScript"
-  :x [describe-architecture render-architecture-view]
+  :x [describeArchitecture renderArchitectureView]
   :i [(asl-text/string :a s)])
 
-(df describe-architecture [] -> Str
+(df describeArchitecture [] -> Str
   :d "Returns structured metadata description of the AgentScript compiler architecture"
   "(architecture :pipeline [\"lexer\" \"parser\" \"checker\" \"monomorphizer\" \"codegen\"] :targets [\"wasm\" \"c\" \"typescript\" \"tsx\"] :isolation \"linear-memory-sandbox\")")
 
-(df render-architecture-view [] -> Str
+(df renderArchitectureView [] -> Str
   :d "Renders the architecture overview markup"
   (s/concat
     "<div class=\"pt-24 sm:pt-28 pb-24 max-w-6xl mx-auto px-4\">"

@@ -1,98 +1,166 @@
 (:grammar
   :package asl-compiler
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "CompileResult" :kind :type :tokens 1)
     (:sym :name "EvalValue" :kind :type :tokens 1)
     (:sym :name "EvalEnv" :kind :type :tokens 1)
 
-    (:sym :name "compile-source" :kind :fn :tokens 2)
-    (:sym :name "format-diagnostic" :kind :fn :tokens 2)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "env-lookup" :kind :fn :tokens 2)
-    (:sym :name "env-bind" :kind :fn :tokens 2)
-    (:sym :name "eval-atom" :kind :fn :tokens 2)
-    (:sym :name "eval-sexpr" :kind :fn :tokens 2)
-    (:sym :name "eval-assert" :kind :fn :tokens 2)
-    (:sym :name "is-truthy?" :kind :fn :tokens 2)
-    (:sym :name "format-val" :kind :fn :tokens 2)
+    (:sym :name "compileSource" :kind :fn :tokens 2)
+    (:sym :name "formatDiagnostic" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "envLookup" :kind :fn :tokens 2)
+    (:sym :name "envBind" :kind :fn :tokens 2)
+    (:sym :name "evalAtom" :kind :fn :tokens 2)
+    (:sym :name "evalSexpr" :kind :fn :tokens 2)
+    (:sym :name "evalAssert" :kind :fn :tokens 2)
+    (:sym :name "isTruthy?" :kind :fn :tokens 2)
+    (:sym :name "formatVal" :kind :fn :tokens 2)
 
-    (:sym :name "compile-source-target" :kind :fn :tokens 3
+    (:sym :name "compileSourceTarget" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compile-target': 'source' component is mandatory to distinguish in-memory string compilation from disk file compilation")
-    (:sym :name "compile-standalone-source" :kind :fn :tokens 3
+    (:sym :name "compileStandaloneSource" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compile-source': 'standalone' qualifier indicates an isolated compilation pipeline without workspace dependency resolution")
-    (:sym :name "compile-standalone-target" :kind :fn :tokens 3
+    (:sym :name "compileStandaloneTarget" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compile-target': 'standalone' qualifier indicates isolated target backend emission without global project manifests")
-    (:sym :name "make-root-env" :kind :fn :tokens 3
+    (:sym :name "emitWasmBinaryTarget" :kind :fn :tokens 4
+          :rationale "Compiles parsed AST forms into standalone WebAssembly v1 MVP binary buffer string")
+    (:sym :name "emitWasmMemorySection" :kind :fn :tokens 4
+          :rationale "Emits standard WebAssembly linear memory section frame with initial and maximum page bounds")
+    (:sym :name "emitWasmRpcExports" :kind :fn :tokens 4
+          :rationale "Emits Batch RPC memory bridge and allocator export descriptors for sovereign execution")
+    (:sym :name "makeRootEnv" :kind :fn :tokens 3
           :rationale "Distinguishes root evaluation environment with empty frames from nested child scopes")
-    (:sym :name "make-child-env" :kind :fn :tokens 3
+    (:sym :name "makeChildEnv" :kind :fn :tokens 3
           :rationale "Distinguishes child nested evaluation frame creation from unparented root scope initialization")
-    (:sym :name "eval-builtin-arithmetic" :kind :fn :tokens 3
+    (:sym :name "evalBuiltinArithmetic" :kind :fn :tokens 3
           :rationale "Isolates binary arithmetic evaluation dispatcher from logic, string, and comparison evaluators")
-    (:sym :name "eval-builtin-comparison" :kind :fn :tokens 3
+    (:sym :name "evalBuiltinComparison" :kind :fn :tokens 3
           :rationale "Isolates structural and relational comparison evaluator from arithmetic and logic operations")
-    (:sym :name "eval-builtin-logic" :kind :fn :tokens 3
+    (:sym :name "evalBuiltinLogic" :kind :fn :tokens 3
           :rationale "Isolates boolean logic evaluator from arithmetic, comparison, and string operation dispatchers")
-    (:sym :name "eval-builtin-string" :kind :fn :tokens 3
+    (:sym :name "evalBuiltinString" :kind :fn :tokens 3
           :rationale "Isolates string operations (concatenation, length, containment) from list and arithmetic operations")
-    (:sym :name "eval-builtin-list" :kind :fn :tokens 3
+    (:sym :name "evalBuiltinList" :kind :fn :tokens 3
           :rationale "Isolates list operations (cons, head, tail, emptiness) from string and arithmetic dispatchers")
-    (:sym :name "eval-special-form" :kind :fn :tokens 3
+    (:sym :name "evalSpecialForm" :kind :fn :tokens 3
           :rationale "Distinguishes non-strict special form evaluation (if, assert, do) from standard eager argument evaluation")
-    (:sym :name "eval-result-is-ok?" :kind :fn :tokens 4
+    (:sym :name "evalResultIsOk?" :kind :fn :tokens 4
           :rationale "Verifies whether an EvalValue is a successful evaluated outcome versus an explicit val-error")
-    (:sym :name "test-compile-clean-function" :kind :fn :tokens 4
+    (:sym :name "testCompileCleanFunction" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-clean-fn': scopes end-to-end compiler test specifically to valid function ASTs, preventing collision with parser tests")
-    (:sym :name "test-compile-clean-schema" :kind :fn :tokens 4
+    (:sym :name "testCompileCleanSchema" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-clean-schema': scopes compiler verification to struct/union schema lowering, avoiding parser test overlap")
-    (:sym :name "test-compile-embedded-target" :kind :fn :tokens 4
+    (:sym :name "testCompileEmbeddedTarget" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-embedded': scopes compiler test specifically to embedded C/Arduino backend generation")
-    (:sym :name "test-compile-go-target" :kind :fn :tokens 4
+    (:sym :name "testCompileGoTarget" :kind :fn :tokens 4
           :rationale "Scopes compiler test specifically to Go cloud-native platform leaf generation")
-    (:sym :name "test-compile-parse-error" :kind :fn :tokens 4
+    (:sym :name "testCompileParseError" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-parse-error': distinguishes compiler-level diagnostic reporting from raw lexer/parser error generation")
-    (:sym :name "test-compile-type-error" :kind :fn :tokens 4
+    (:sym :name "testCompileTypeError" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-type-error': distinguishes full compilation failure reporting from isolated typechecker tests")
-    (:sym :name "test-compile-wasm-target" :kind :fn :tokens 4
+    (:sym :name "testCompileWasmTarget" :kind :fn :tokens 4
           :rationale "Scopes compiler test specifically to WebAssembly universal core target lowering")
-    (:sym :name "test-eval-literals" :kind :fn :tokens 3
+    (:sym :name "testEvalLiterals" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to evaluator primitive literal decoding, avoiding parser overlap")
-    (:sym :name "test-eval-arithmetic" :kind :fn :tokens 3
+    (:sym :name "testEvalArithmetic" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to evaluator arithmetic operators (+, -, *, /, mod)")
-    (:sym :name "test-eval-comparison" :kind :fn :tokens 3
+    (:sym :name "testEvalComparison" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to evaluator comparison operators (=, !=, <, >=)")
-    (:sym :name "test-eval-logic" :kind :fn :tokens 3
+    (:sym :name "testEvalLogic" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to evaluator boolean logic operators (and, or)")
-    (:sym :name "test-eval-strings" :kind :fn :tokens 3
+    (:sym :name "testEvalStrings" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to evaluator string builtins (str-concat, str-len, str-contains?)")
-    (:sym :name "test-eval-env-binding" :kind :fn :tokens 4
+    (:sym :name "testEvalEnvBinding" :kind :fn :tokens 4
           :rationale "Scopes unit test suite specifically to lexical environment binding and parent frame resolution")
-    (:sym :name "test-eval-assert" :kind :fn :tokens 3
+    (:sym :name "testEvalAssert" :kind :fn :tokens 3
           :rationale "Scopes unit test suite specifically to falsifiable assertion execution and error propagation")
-    (:sym :name "test-eval-if-branch" :kind :fn :tokens 4
+    (:sym :name "testEvalIfBranch" :kind :fn :tokens 4
           :rationale "Scopes unit test suite specifically to evaluator conditional if-branch execution")
 
     (:sym :name "CompactionRule" :kind :type :tokens 1)
-    (:sym :name "make-compaction-rule" :kind :fn :tokens 3
+    (:sym :name "makeCompactionRule" :kind :fn :tokens 3
           :rationale "Constructs a compaction rule with verbose symbol, compact alias, and estimated token savings")
-    (:sym :name "rewrite-ast-tokens" :kind :fn :tokens 3
+    (:sym :name "rewriteAstTokens" :kind :fn :tokens 3
           :rationale "AST rewriter pass transforming verbose symbol tokens into 1-to-2 token modular aliases")
-    (:sym :name "is-compaction-target?" :kind :fn :tokens 3
+    (:sym :name "isCompactionTarget?" :kind :fn :tokens 3
           :rationale "Checks whether a symbol is a candidate for compaction rewrite")
-    (:sym :name "default-compaction-rules" :kind :fn :tokens 3
+    (:sym :name "defaultCompactionRules" :kind :fn :tokens 3
           :rationale "Provides standard catalog of canonical token shrinking compaction rules")
 
-    (:sym :name "test-compact-rule-creation" :kind :fn :tokens 4
+    (:sym :name "testCompactRuleCreation" :kind :fn :tokens 4
           :rationale "Verifies construction and property access of compaction rules")
-    (:sym :name "test-is-compaction-target" :kind :fn :tokens 4
+    (:sym :name "testIsCompactionTarget" :kind :fn :tokens 4
           :rationale "Verifies symbol matching against compaction target list")
-    (:sym :name "test-default-compaction-rules" :kind :fn :tokens 4
+    (:sym :name "testDefaultCompactionRules" :kind :fn :tokens 4
           :rationale "Verifies default rules count and presence of required canonical rules")
-    (:sym :name "test-rewrite-ast-tokens-basic" :kind :fn :tokens 4
+    (:sym :name "testRewriteAstTokensBasic" :kind :fn :tokens 4
           :rationale "Verifies single and multi-symbol rewriting of verbose identifiers")
-    (:sym :name "test-rewrite-preserves-literals" :kind :fn :tokens 4
+    (:sym :name "testRewritePreservesLiterals" :kind :fn :tokens 4
           :rationale "Verifies that string literals and comments are not mutated during AST token rewrite")
-    (:sym :name "test-rewrite-idempotency" :kind :fn :tokens 3
+    (:sym :name "testRewriteIdempotency" :kind :fn :tokens 3
           :rationale "Verifies that rewriting already compact code is idempotent")
+
+    (:sym :name "evalBuiltinIo" :kind :fn :tokens 3
+          :rationale "Evaluates filesystem I/O operations (file-read, file-write, file-exists?, dir-list) in self-hosted evaluator")
+    (:sym :name "evalBuiltinSys" :kind :fn :tokens 3
+          :rationale "Evaluates subprocess execution and sandboxed capability boundaries in self-hosted evaluator")
+    (:sym :name "emitWasiBinaryTarget" :kind :fn :tokens 4
+          :rationale "Compiles parsed AST forms into standalone WebAssembly binary module targeting WASI Preview 1")
+
+    (:sym :name "encodeImportEntry" :kind :fn :tokens 3
+          :rationale "Encodes WebAssembly Section 2 host import entry descriptor with module and field identifiers")
+    (:sym :name "encodeImportSection" :kind :fn :tokens 3
+          :rationale "Encodes standard WebAssembly Section 2 import section framing")
+    (:sym :name "wasiErrnoName" :kind :fn :tokens 3
+          :rationale "Maps numeric WASI Preview 1 error codes to canonical errno identifiers")
+    (:sym :name "wasiOpenFlags" :kind :fn :tokens 3
+          :rationale "Maps standard WASI open flags to numeric bitmask constants")
+    (:sym :name "wasiFileType" :kind :fn :tokens 3
+          :rationale "Maps WASI file types to canonical integer descriptors")
+    (:sym :name "wasiStandardImports" :kind :fn :tokens 3
+          :rationale "Provides catalog of standard WASI Preview 1 host import symbol names")
+
+    (:sym :name "encodeCiovec" :kind :fn :tokens 2)
+    (:sym :name "wasiFdWrite" :kind :fn :tokens 3
+          :rationale "Performs vectorized file descriptor write operation in pure ASL WASI runtime")
+    (:sym :name "wasiFdRead" :kind :fn :tokens 3
+          :rationale "Performs vectorized file descriptor read operation in pure ASL WASI runtime")
+    (:sym :name "wasiPathOpen" :kind :fn :tokens 3
+          :rationale "Resolves and opens a path relative to preopened directory descriptor")
+    (:sym :name "wasiFdClose" :kind :fn :tokens 3
+          :rationale "Closes active WASI file descriptor in pure ASL runtime")
+    (:sym :name "wasiPathFilestatGet" :kind :fn :tokens 4
+          :rationale "Retrieves filesystem status metadata for path relative to directory descriptor")
+    (:sym :name "wasiFileRead" :kind :fn :tokens 3
+          :rationale "Reads full text content from file path in pure ASL WASI runtime")
+    (:sym :name "wasiFileWrite" :kind :fn :tokens 3
+          :rationale "Writes full text content to file path in pure ASL WASI runtime")
+    (:sym :name "wasiFileExists?" :kind :fn :tokens 3
+          :rationale "Checks if file or directory exists at specified path in pure ASL WASI runtime")
+    (:sym :name "wasiDirList" :kind :fn :tokens 3
+          :rationale "Lists directory entries in pure ASL WASI runtime")
+
+    (:sym :name "wasiCapabilityCheck" :kind :fn :tokens 3
+          :rationale "Verifies whether a named capability is granted within active security policy")
+    (:sym :name "wasiSysExec" :kind :fn :tokens 3
+          :rationale "Executes command if granted capability or returns structured capability denial receipt")
+    (:sym :name "sandboxedWasiCapabilities" :kind :fn :tokens 3
+          :rationale "Constructs standard capability envelope denying OS process execution in sandboxed WASI")
+    (:sym :name "makeCapabilityRefusalReceipt" :kind :fn :tokens 4
+          :rationale "Constructs typed structured receipt with exit code 126 for denied capabilities")
+
+    (:sym :name "gitReadHead" :kind :fn :tokens 3
+          :rationale "Reads Git HEAD file to determine current ref or detached state")
+    (:sym :name "gitCurrentBranch" :kind :fn :tokens 3
+          :rationale "Resolves active Git branch name from HEAD ref without external subprocesses")
+    (:sym :name "gitHeadCommit" :kind :fn :tokens 3
+          :rationale "Resolves active Git 40-character commit SHA without spawning external git")
+    (:sym :name "gitParsePackedRefs" :kind :fn :tokens 4
+          :rationale "Parses Git packed-refs format mapping ref names to commit SHAs")
+    (:sym :name "gitParseConfig" :kind :fn :tokens 3
+          :rationale "Parses Git repository configuration format from .git/config")
+    (:sym :name "gitInspectRepoStatus" :kind :fn :tokens 4
+          :rationale "Inspects Git repository status returning branch, commit SHA, and clean status without subprocesses")
   ])

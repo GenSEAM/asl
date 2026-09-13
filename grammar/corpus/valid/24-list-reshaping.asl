@@ -7,32 +7,32 @@
   :doc "Reshape a range and report every result."
   :export [reshape window pairs])
 
-(df show-list [(xs (List Int64))] -> String
+(df showList [(xs (List Int64))] -> String
   :doc "A list of integers, bracketed and comma separated."
   (str "[" (string-join (map (fn [v] (string-from-int64 v)) xs) ",") "]"))
 
-(df show-opt [(o (Option Int64))] -> String
+(df showOpt [(o (Option Int64))] -> String
   :doc "An optional integer, so `none` is distinguishable from zero."
   (match o
     ((some n) (str "some " (string-from-int64 n)))
     ((none)   "none")))
 
-(df show-opt-list [(o (Option (List Int64)))] -> String
+(df showOptList [(o (Option (List Int64)))] -> String
   :doc "An optional list, so `none` is distinguishable from the empty list."
   (match o
-    ((some xs) (str "some " (show-list xs)))
+    ((some xs) (str "some " (showList xs)))
     ((none)    "none")))
 
 (df reshape [(n Int64)] -> String
   :doc "cons, append, reverse, tail, head and an indexed read of (range 0 n)."
   (let [(xs (range 0 n))
         (ys (list 100 200 300))]
-    (string-join (list (show-list (list-cons 9 xs))
-                       (show-list (list-append xs ys))
-                       (show-list (list-reverse xs))
-                       (show-opt-list (list-tail xs))
-                       (show-opt (list-head xs))
-                       (show-opt (list-get xs 1)))
+    (string-join (list (showList (list-cons 9 xs))
+                       (showList (list-append xs ys))
+                       (showList (list-reverse xs))
+                       (showOptList (list-tail xs))
+                       (showOpt (list-head xs))
+                       (showOpt (list-get xs 1)))
                  "|")))
 
 (df window [(n Int64) (a Int64) (b Int64)] -> (Option (List Int64))

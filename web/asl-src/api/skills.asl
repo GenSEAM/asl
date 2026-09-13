@@ -1,8 +1,8 @@
-(module asl-web/api-skills
+(module aslWeb/apiSkills
   :d "Canonical Skills Hub metadata model for AgentScript web endpoints"
-  :x [skill-catalog])
+  :x [skillCatalog])
 
-(df skill-catalog [] -> (List Any)
+(df skillCatalog [] -> (List Any)
   :d "Returns list of modular skills"
   [
     (:id "asl-core" :name "AgentScript Language Core" :category "Code Generation & Wasm"

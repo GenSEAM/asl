@@ -1,9 +1,9 @@
-(module asl-web/unified-package-matrix
+(module aslWeb/unifiedPackageMatrix
   :d "Unified Package Matrix showcase component in pure AgentScript."
-  :x [unified-package-matrix render-unified-package-matrix package-matrix-view]
+  :x [unifiedPackageMatrix renderUnifiedPackageMatrix packageMatrixView]
   :i [])
 
-(df render-unified-package-matrix [] -> Str
+(df renderUnifiedPackageMatrix [] -> Str
   :d "Renders the 8 official AgentScript packages matrix with stage filters, search bar, and interactive code inspect."
   "<div class=\"space-y-10\" id=\"upm-container\">
     
@@ -676,10 +676,10 @@ await runner.dispatchA2AFrame(compactFrame);</pre></div>
     })();
   </script>")
 
-(df unified-package-matrix [] -> Str
+(df unifiedPackageMatrix [] -> Str
   :d "Alias for render-unified-package-matrix."
-  (render-unified-package-matrix))
+  (renderUnifiedPackageMatrix))
 
-(df package-matrix-view [] -> Str
+(df packageMatrixView [] -> Str
   :d "Alias for render-unified-package-matrix."
-  (render-unified-package-matrix))
+  (renderUnifiedPackageMatrix))

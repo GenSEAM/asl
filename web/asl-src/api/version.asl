@@ -1,8 +1,8 @@
-(module asl-web/api-version
+(module aslWeb/apiVersion
   :d "Canonical Version and Release metadata model for AgentScript web endpoints"
-  :x [version-info])
+  :x [versionInfo])
 
-(df version-info [] -> Any
+(df versionInfo [] -> Any
   :d "Returns version metadata"
   (:version "0.1.0"
    :name "asl"

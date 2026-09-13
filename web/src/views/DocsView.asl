@@ -1,15 +1,15 @@
-(module asl-web/docs-view
+(module aslWeb/docsView
   :d "Comprehensive documentation and interactive toolchain reference in pure AgentScript."
-  :x [docs-view render-docs-view describe-docs-view]
+  :x [docsView renderDocsView describeDocsView]
   :i [(asl-text/string :a s)
-      asl-web/unified-package-matrix
-      asl-web/ecosystem])
+      aslWeb/unifiedPackageMatrix
+      aslWeb/ecosystem])
 
-(df describe-docs-view [] -> Str
+(df describeDocsView [] -> Str
   :d "Returns structural metadata for the Docs view."
   "(view :id \"docs\" :sections [\"cli\" \"mesh\" \"data\" \"sql\" \"syntax\" \"control\" \"stdlib\" \"ecosystem\"])")
 
-(df render-docs-view [] -> Str
+(df renderDocsView [] -> Str
   :d "Renders the complete documentation cockpit in pure AgentScript."
   (s/concat
     "<div class=\"pt-24 sm:pt-28 pb-24\" id=\"dv-container\">
@@ -253,7 +253,7 @@
           </div>
 
           <div class=\"dv-pane hidden space-y-12\" id=\"dv-pane-ecosystem\">"
-    (unified-package-matrix)
+    (unifiedPackageMatrix)
     (ecosystem)
     "</div>
         </div>
@@ -312,6 +312,6 @@
       })();
     </script>"))
 
-(df docs-view [] -> Str
+(df docsView [] -> Str
   :d "Alias for render-docs-view."
-  (render-docs-view))
+  (renderDocsView))

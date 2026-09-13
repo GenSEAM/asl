@@ -1,9 +1,9 @@
-(module asl-web/navbar
+(module aslWeb/navbar
   :d "Declarative navigation header component in pure AgentScript."
-  :x [navbar-view]
+  :x [navbarView]
   :i [])
 
-(df navbar-view [] -> Str
+(df navbarView [] -> Str
   :d "Renders responsive navigation header with ecosystem links."
   "(nav (:class \"sticky top-0 z-50 backdrop-blur-md bg-surface/80 border-b border-line px-6 py-4 flex items-center justify-between\")
     (div (:class \"flex items-center gap-3\")

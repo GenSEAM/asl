@@ -1,13 +1,13 @@
-(module asl-web/unified-package-matrix
+(module aslWeb/unifiedPackageMatrix
   :d "Declarative Unified Package Matrix Component in pure AgentScript"
-  :x [describe-matrix render-package-matrix]
+  :x [describeMatrix renderPackageMatrix]
   :i [(asl-text/string :a s)])
 
-(df describe-matrix [] -> Str
+(df describeMatrix [] -> Str
   :d "Returns package count and tier coverage of the GenSEAM matrix."
   "(matrix :tiers [\"core\" \"harness\" \"visual\" \"quantum\" \"embedded\"] :packages 11)")
 
-(df render-package-matrix [] -> Str
+(df renderPackageMatrix [] -> Str
   :d "Renders the interactive unified package matrix grid."
   (s/concat
     "<section class=\"py-16 max-w-6xl mx-auto px-4\" id=\"matrix\">"

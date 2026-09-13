@@ -1,9 +1,9 @@
-(module asl-web/agent-wire-protocol
+(module aslWeb/agentWireProtocol
   :d "Agent-to-Agent Mesh Protocol showcase component in pure AgentScript."
-  :x [agent-wire-protocol render-agent-wire-protocol wire-protocol-view render-wire-protocol]
+  :x [agentWireProtocol renderAgentWireProtocol wireProtocolView renderWireProtocol]
   :i [])
 
-(df render-agent-wire-protocol [] -> Str
+(df renderAgentWireProtocol [] -> Str
   :d "Renders the Agent-to-Agent Mesh Protocol architecture and token comparison."
   "<section id=\"a2a-protocol\" aria-labelledby=\"a2a-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
     <div class=\"max-w-shell mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -174,14 +174,14 @@
     </div>
   </section>")
 
-(df agent-wire-protocol [] -> Str
+(df agentWireProtocol [] -> Str
   :d "Alias for render-agent-wire-protocol."
-  (render-agent-wire-protocol))
+  (renderAgentWireProtocol))
 
-(df wire-protocol-view [] -> Str
+(df wireProtocolView [] -> Str
   :d "Alias for render-agent-wire-protocol."
-  (render-agent-wire-protocol))
+  (renderAgentWireProtocol))
 
-(df render-wire-protocol [] -> Str
+(df renderWireProtocol [] -> Str
   :d "Alias for render-agent-wire-protocol."
-  (render-agent-wire-protocol))
+  (renderAgentWireProtocol))

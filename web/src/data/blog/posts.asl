@@ -1,9 +1,9 @@
-(module asl-web/blog-posts
+(module aslWeb/blogPosts
   :d "Canonical Blog Posts Catalog and Query Helpers in pure AgentScript"
-  :x [blog-posts get-all-posts get-post-by-slug filter-by-tag get-posts-by-tag filter-by-category get-flagship-posts get-published-posts]
+  :x [blogPosts getAllPosts getPostBySlug filterByTag getPostsByTag filterByCategory getFlagshipPosts getPublishedPosts]
   :i [])
 
-(df blog-posts [] -> (List Any)
+(df blogPosts [] -> (List Any)
   :d "Returns catalog of engineering and architecture blog posts"
   [
     (:slug "why-3b-local-models-fail-at-python-but-fly-on-s-expressions"
@@ -11,7 +11,7 @@
      :date "2026-09-10"
      :author "GenSEAM"
      :category "Language Design & SLM Inference"
-     :read-time "10 min read"
+     :readTime "10 min read"
      :excerpt "How small 3B quantized models (Qwen 2.5-Coder, Llama 3.2) bleed 61% of their attention capacity on Python indentation and bracket bookkeeping, and how single-pass S-expressions deliver 94.2% test pass rates under a 2GB unified memory ceiling on Apple Silicon."
      :tags ["LocalLLaMA" "SLM Inference" "Apple Silicon" "S-Expressions" "M1 Telemetry" "Pure ASL"]
      :order 23
@@ -26,7 +26,7 @@
      :date "2026-09-10"
      :author "GenSEAM"
      :category "Protocols & Multi-Agent Swarms"
-     :read-time "9 min read"
+     :readTime "9 min read"
      :excerpt "Why JSON-RPC and OpenAPI schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how Agent Script Notation (ASN) and SeamBus ring buffers enable sub-microsecond zero-copy inter-agent messaging."
      :tags ["Agent Protocols" "JSON-RPC" "SeamBus" "Wire Frames" "Zero-Copy" "Pure ASL"]
      :order 22
@@ -41,7 +41,7 @@
      :date "2026-09-08"
      :author "GenSEAM"
      :category "Tools & Compiler Architecture"
-     :read-time "9 min read"
+     :readTime "9 min read"
      :excerpt "How we engineered sub-microsecond test timing and RSS memory tracking into the pure ASL evaluation engine with zero observer effect (<20ns), turning test suites into multi-dimensional observability probes."
      :tags ["Test Telemetry" "Zero-Overhead" "Observability" "Resource Tracking" "Gate 5" "Pure ASL" "WASI"]
      :order 21
@@ -55,7 +55,7 @@
      :date "2026-09-08"
      :author "GenSEAM"
      :category "Architecture & Memory Systems"
-     :read-time "11 min read"
+     :readTime "11 min read"
      :excerpt "Why two-tier memory models collapse under deep system hierarchies, and how homoiconic fractal memory, logical URI addressing (mem:...), and zero-disk tree aggregation give autonomous agents holistic system observability across 32 packages."
      :tags ["Fractal Memory" "Homoiconicity" "Tree Aggregation" "Observability" "ADR-0010" "Pure ASL"]
      :order 20
@@ -69,7 +69,7 @@
      :date "2026-09-07"
      :author "GenSEAM"
      :category "Tools & Compiler Architecture"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "Why standard bash wrappers fail autonomous agents, and how persistent execution sessions, 7 in-memory verification gates, and 100% test coverage create a deterministic toolchain for AI code generation."
      :tags ["Agent Toolchain" "Action-Observation" "Pure ASL" "100% Coverage" "Zero-Foreign Code" "Verification Gates" "ASL CLI"]
      :order 19
@@ -83,7 +83,7 @@
      :date "2026-09-07"
      :author "GenSEAM"
      :category "Architecture & Language Theory"
-     :read-time "9 min read"
+     :readTime "9 min read"
      :excerpt "Why naive identifier compression like ctermtxt breaks BPE subtokenization, how synonym collisions cost thousands of repair tokens, and the findings of our 2-round adversarial consultation with Claude Fable 5."
      :tags ["Token Economics" "BPE Subtokens" "Machine Understandability" "Claude Fable" "AgentScript" "Gate 6" "Grammar"]
      :order 18
@@ -97,7 +97,7 @@
      :date "2026-09-06"
      :author "GenSEAM"
      :category "Architecture & Operating Systems"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "Why treating an LLM as both a scheduler, file system, and interpreter causes autonomous agents to collapse, and how separating the stochastic semantic ALU from a deterministic operating system achieves 92% benchmark solve rates."
      :tags ["Agent OS" "Prompt VMM" "Deterministic Execution" "EDDIE" "AgentScript" "Terminal Bench" "SWE-bench"]
      :order 17
@@ -111,7 +111,7 @@
      :date "2026-09-06"
      :author "GenSEAM"
      :category "Autonomous Systems & Grammar"
-     :read-time "7 min read"
+     :readTime "7 min read"
      :excerpt "Why autonomous agents collapse when juggling JSON, YAML, SVG XML, and Bash strings, and how unifying data, visuals, and execution into a single S-expression geometry eliminates 60% of syntax token overhead."
      :tags ["Agent Operational Circle" "ASN" "AgentScript" "Shell Transpiler" "Vector Graphics" "Gemma 31B" "Autonomous Agents"]
      :order 16
@@ -125,7 +125,7 @@
      :date "2026-09-05"
      :author "GenSEAM"
      :category "Architecture & Simplicity"
-     :read-time "5 min read"
+     :readTime "5 min read"
      :excerpt "Why multi-megabyte orchestration frameworks collapse after turn 4, and how the Ladder of Restraint and pure AgentScript S-expressions cut 80% of agent code bloat."
      :tags ["Architecture" "Radical Simplicity" "AgentScript" "Autonomous Agents" "Zero-Foreign Code"]
      :order 15
@@ -139,7 +139,7 @@
      :date "2026-09-05"
      :author "GenSEAM"
      :category "Vector Graphics & Tokenomics"
-     :read-time "6 min read"
+     :readTime "6 min read"
      :excerpt "Why autoregressive LLMs blow through token context on raw SVG markup, and how native single-token ASN vector primitives cut token usage by 50.7% with zero XML delimiter hallucinations."
      :tags ["SVG" "ASN" "Token Compaction" "Gemma 31B" "Vector Graphics" "Agent Tooling"]
      :order 14
@@ -153,7 +153,7 @@
      :date "2026-09-05"
      :author "GenSEAM"
      :category "Memory & Vector Systems"
-     :read-time "7 min read"
+     :readTime "7 min read"
      :excerpt "Sub-0.05ms in-memory vector recall and Git-native memory matrices: eliminating 500x cloud vector DB latency and ensuring agent episodic state never drifts from repository commits."
      :tags ["Agent Memory" "Vector Recall" "Git-Native" "In-Memory Wasm" "Zero-Network"]
      :order 13
@@ -167,7 +167,7 @@
      :date "2026-09-04"
      :author "GenSEAM"
      :category "Relational Data & SQL"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "Why agents writing raw SQL fail 28% of the time, and how homoiconic relational S-expressions lower deterministically to Postgres, SQLite, MySQL, and Oracle without injection risk."
      :tags ["Cross-Dialect SQL" "Relational Algebra" "SQL Injection Eradication" "Multi-Engine"]
      :order 12
@@ -181,7 +181,7 @@
      :date "2026-09-04"
      :author "GenSEAM"
      :category "Browser Technologies"
-     :read-time "7 min read"
+     :readTime "7 min read"
      :excerpt "Zero-server development inside browser tabs: booting WebAssembly sandboxes in 8ms, executing tests in 0.038ms via WASI and OPFS, with tiered local SLMs."
      :tags ["In-Browser Dev" "WebAssembly" "OPFS" "Tiered Local SLMs" "Offline-First"]
      :order 11
@@ -195,7 +195,7 @@
      :date "2026-09-04"
      :author "GenSEAM"
      :category "Safety & Grounding"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "Halting agent hallucinations at the AST compiler boundary with lexical closure audits, deterministic quote verification, and hardware-enforced path jailing."
      :tags ["Epistemic Grounding" "Anti-Hallucination" "Closure Audit" "Zero-Leak Jailing"]
      :order 10
@@ -209,7 +209,7 @@
      :date "2026-09-03"
      :author "GenSEAM"
      :category "Cross-Platform Runtimes"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "Eliminating multi-language glue code and semantic drift: compiling pure AgentScript deterministically across WebAssembly, Rust, Go, TypeScript, and Python."
      :tags ["Differential Verification" "Multi-Backend" "Cross-Platform Glue" "Polyglot Parity"]
      :order 9
@@ -223,7 +223,7 @@
      :date "2026-09-03"
      :author "GenSEAM"
      :category "Observability & Telemetry"
-     :read-time "7 min read"
+     :readTime "7 min read"
      :excerpt "How to govern autonomous swarms without reading raw logs: multi-dimensional AST topologies, real-time cycle guards, and jailed capability traces."
      :tags ["Multi-Dimensional Observability" "AST Topology" "Token Telemetry" "Capability Tracing"]
      :order 8
@@ -237,7 +237,7 @@
      :date "2026-09-03"
      :author "GenSEAM"
      :category "Developer Tooling"
-     :read-time "9 min read"
+     :readTime "9 min read"
      :excerpt "The complete agent-native developer cockpit: sub-0.05ms LSP, AST structural clone linters, autonomous auto-fixers, and live visual observability."
      :tags ["Language Server Protocol" "AST Auto-Fixer" "Observability" "Sandboxing"]
      :order 7
@@ -251,7 +251,7 @@
      :date "2026-09-02"
      :author "GenSEAM"
      :category "Protocols & Mesh"
-     :read-time "7 min read"
+     :readTime "7 min read"
      :excerpt "Beyond conversational mesh chaos: replacing natural language chatter with typed S-expression frames, SeamBus (Simba) mesh, and zero-drift delegations."
      :tags ["SeamBus" "Simba" "AgP Wire Protocol" "Typed Frames" "Conversational Mesh"]
      :order 6
@@ -265,7 +265,7 @@
      :date "2026-09-02"
      :author "GenSEAM"
      :category "Token Economy"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "The abbreviation fallacy under BPE tokenizers, why keyword shortening saves 0.00% tokens, and how structural compaction cuts prompt overhead by 65%."
      :tags ["Byte-Pair Encoding" "Structural Compaction" "Tabular Serialization" "Token Ceiling"]
      :order 5
@@ -279,7 +279,7 @@
      :date "2026-09-02"
      :author "GenSEAM"
      :category "Language Theory"
-     :read-time "8 min read"
+     :readTime "8 min read"
      :excerpt "Why S-expressions, homoiconic ASTs, exhaustive pattern matching, and explicit effect boundaries are mathematically optimal for autoregressive LLMs."
      :tags ["Homoiconicity" "Algebraic Types" "Exhaustive Matching" "Deterministic AST"]
      :order 4
@@ -293,7 +293,7 @@
      :date "2026-09-09"
      :author "GenSEAM"
      :category "Runtime & Execution"
-     :read-time "5 min read"
+     :readTime "5 min read"
      :excerpt "Replacing heavy Docker containers and microVMs with zero-overhead in-memory WebAssembly sandboxes running test suites in 0.038ms."
      :tags ["WebAssembly" "WASI" "MicroVMs" "Sub-millisecond Sandboxing"]
      :order 3
@@ -307,7 +307,7 @@
      :date "2026-09-01"
      :author "GenSEAM"
      :category "Context Architecture"
-     :read-time "5 min read"
+     :readTime "5 min read"
      :excerpt "How AST interface extraction slashes multi-agent token consumption by 78.2% and eliminates context rot across distributed agent handoffs."
      :tags ["Context Rot" "Token Compression" "AST Extraction" "Multi-Agent"]
      :order 2
@@ -321,7 +321,7 @@
      :date "2026-09-09"
      :author "GenSEAM"
      :category "Language Design"
-     :read-time "6 min read"
+     :readTime "6 min read"
      :excerpt "Why indentation and borrow-checked syntax cost LLMs 25% to 40% of their compute in repair loops, and what deterministic single-pass S-expressions solve."
      :tags ["Grammars" "LLM Autoregression" "Syntax Repair Loop" "S-Expressions"]
      :order 1
@@ -332,30 +332,30 @@
      :content "# Why LLMs Struggle with Python & Rust: The Case for Single-Pass S-Expressions\n*By GenSEAM | September 2026*\n\nModern autonomous coding agents (Devin, Claude Code, Cursor, Codex derivatives) spend between **32% and 41% of their inference compute and context budgets** trapped in a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. \n\nIn compiler engineering, this is known as the **Syntax Repair Tax**. It is not an artifact of model parameter size or pre-training dataset scale. It is a fundamental information-theoretic mismatch between **left-to-right autoregressive token generation** and **20th-century human-centric grammar designs**.\n\nPython and Rust represent two dominant paradigms of modern systems and application programming. Both, for radically different architectural reasons, are hostile to the computational geometry of transformer attention heads.\n\n---\n\n## 1. Python’s Invisible Lexer State: The Off-Side Rule vs. Forward Attention\n\nPython’s syntax relies on Peter Landin’s 1966 \"off-side rule\": block boundaries are determined by indentation whitespace rather than explicit closing delimiters. To parse Python, a lexer maintains an internal state machine—an explicit LIFO stack of column indentation levels—emitting synthetic `INDENT` and `DEDENT` tokens.\n\n```python\ndef process_transactions(batches):\n    for batch in batches:\n        if not batch.is_valid():\n            logger.warn(\"Corrupt batch encountered\")\n            continue\n        for tx in batch.items:\n            apply_tx(tx)\n    # Question for an autoregressive LLM: Which block just closed?\n    # A single whitespace difference here shifts parent scope completely.\n```\n\n### The Autoregressive Failure Mode\n\nWhen an autoregressive transformer generates code, it predicts the next subword token $P(t_k \\mid t_1, \\dots, t_{k-1})$ in a strictly causal sequence.\n\n1. **No Explicit Closure Tokens:** In Python, closing three nested blocks (an `if`, an inner `for`, and an outer `for`) requires emitting zero characters on disk for the closures themselves. Closure is signaled entirely by where the *next* substantive token begins on the next line.\n2. **Column Misalignment Cascades:** If the tokenizer splits four spaces into `[ĠĠ, ĠĠ]` or a tab into an uneven byte sequence, an off-by-one column error silently re-parents the entire AST subtree. The model cannot output an explicit `end` or `}` to anchor its structural intent.\n3. **Left-to-Right Blindness on Block Termination:** When generating the end of a block, an attention head must simultaneously infer whether the parent loop should continue or terminate, without any preceding delimiter token acting as a causal sink.\n\nThe result is the classic \"wandering indent\" bug, where an agent indents a clean-up handler one level too deep, executing it inside an inner loop instead of after it.\n\n---\n\n## 2. Rust’s Non-Local Constraint Graph: Why Forward Generation Breaks the Borrow Checker\n\nIf Python fails on lexical ambiguity, Rust fails on non-local constraint satisfaction.\n\nRust’s ownership model is governed by affine logic and region-based type systems. Validity is not decided by local AST syntax; it is decided by `rustc`’s borrow checker (`polonius`), which constructs a directed graph of lifetimes, liveness sets, and mutability constraints across entire functions and modules.\n\n```rust\nstruct SessionManager<'a> {\n    cache: &'a mut HashMap<String, Buffer>,\n    active_id: Option<String>,\n}\n\nimpl<'a> SessionManager<'a> {\n    pub fn get_or_create(&'a mut self, id: &str) -> &'a mut Buffer {\n        if let Some(buf) = self.cache.get_mut(id) {\n            return buf; \n        }\n        \n        self.cache.insert(id.to_string(), Buffer::new());\n        self.cache.get_mut(id).unwrap()\n    }\n}\n```\n\n### The Bidirectional Constraint Trap\n\nAn LLM generating token $t_{450}$ cannot \"look ahead\" to see the lifetime variables it will introduce at token $t_{600}$. Nor can it backpropagate constraint conflicts backward to line 12 during forward inference.\n\n* **Non-Local Lifetimes:** A reference taken in line 4 may remain active until line 85 depending on drop order, temporary scopes, and lexical lifetimes.\n* **Forward Generation vs. Backward Solvers:** Transformer generation is unidirectional feedforward ($O(1)$ per token step relative to forward context). The Rust borrow checker is an iterative, whole-function constraint solver operating over control-flow graphs (CFGs).\n* **The Repair Paradox:** When `rustc` outputs an error:\n  ```text\n  error[E0499]: cannot borrow `*self` as mutable more than once at a time\n  ```\n  an agent will instinctively attempt local fixes: adding `clone()`, wrapping in `Rc<RefCell<T>>`, or introducing explicit lifetime parameters (`'a`, `'b`). In 68% of observed agent debugging sessions, these local patches introduce secondary lifetime contaminations across callers, causing the agent to thrash until context window exhaustion.\n\n---\n\n## 3. The Geometry of Attention: S-Expressions as Serialized ASTs\n\nAgentScript (ASL) rejects both indentation-based scoping and implicit operator precedence. Instead, it adopts **Single-Pass S-Expressions**.\n\n```agentscript\n(module math/geometry\n  :d \"Geometric primitives with compile-time validation.\"\n  :x [Shape area])\n\n(dfe Shape\n  (:c circle [(radius F64)] \"Circle with radius\")\n  (:c rect [(width F64) (height F64)] \"Rectangle with width and height\"))\n\n(df area [(s Shape)] -> F64\n  :d \"Calculate area across all shape variants.\"\n  (mt s\n    ((circle r) (* 3.141592653589793 (* r r)))\n    ((rect w h) (* w h))))\n```\n\n### Why S-Expressions Eliminate Hallucination in Attention Heads\n\n1. **Homoiconic 1:1 Mapping:** The textual representation of an S-expression is an isomorphic serialization of the Abstract Syntax Tree. There is no intermediate lowering step between grammar and AST.\n2. **Balanced Delimiters as Causal Anchors:** Every subtree begins with `(` and ends with `)`. When an attention head generates `)`, it does not compute whitespace heuristics; it resolves an exact, unambiguous closing operator corresponding to a specific opening node.\n3. **Zero Operator Precedence Ambiguity:** In C, JavaScript, or Python, an expression like:\n   ```python\n   result = a + b * c > d and e or f\n   ```\n   requires the model to evaluate 6 distinct layers of operator precedence tables. In ASL, prefix notation makes the order of evaluation explicit by construction:\n   \n   ```agentscript\n   (or (and (> (+ a (* b c)) d) e) f)\n   ```\n4. **Single-Pass LL(1) Parsing:** The parser requires zero backtracking and zero lookahead buffers. If a token stream is well-formed, it constructs the tree in a single linear scan of $O(N)$ time and space.\n\n---\n\n## 4. Algebraic Contracts and Explicit Effect Boundaries\n\nBeyond syntax parsing, models generate broken code when type invariants are implicit. ASL enforces two architectural boundaries directly in the core language:\n\n### Exhaustive Pattern Matching Without Runtime Nulls\n\nNull pointers and unhandled enum variants account for over 50% of runtime exceptions in agent-generated Python (`AttributeError: 'NoneType' object has no attribute 'x'`).\n\nIn ASL, enumerations are algebraic data types (`dfe`, or `defenum` in ASL Verbose), and pattern matching (`mt`, or `match`) is verified for exhaustiveness by the compiler (`asl-checker`). If an agent adds a new variant to a data model and fails to handle it in an existing function, compilation halts immediately with a deterministic compiler diagnostic:\n\n```text\nsemantic/non-exhaustive-match: case 'rect' not covered in match over Shape\n```\n\n### Explicit Effect Boundaries (`!`)\n\nIn traditional languages, any function can secretly perform network requests, disk mutations, or environment reads. Autonomous agents frequently introduce unwanted side effects inside pure calculation routines.\n\nASL segregates pure computation from effectful operations:\n* Functions that perform filesystem I/O, network communication, or system mutations must be declared with an exclamation sigil (`!`) or within explicit capability envelopes.\n* Pure functions are guaranteed to be deterministic, sandbox-safe, and free of side effects. A coordinator agent can execute pure subagent routines with zero risk of filesystem leakage.\n\n---\n\n## 5. Differential Benchmarks: The First-Run Pass Rate\n\nTo measure the impact of syntax design on agent efficiency, we ran 500 algorithmic and data-transformation synthesis tasks across leading LLMs (Claude, GPT, and Llama), asking each model to implement the specification in Python, Rust, and AgentScript.\n\n| Metric | Python 3.12 | Rust 1.80 | AgentScript (ASL) |\n|---|---|---|---|\n| **First-Run Parse Success** | 81.4% | 72.6% | **99.8%** |\n| **First-Run Semantic/Type Pass** | 64.2% | 38.1% | **94.6%** |\n| **Mean Repair Iterations to Green** | 2.4 cycles | 4.8 cycles | **0.08 cycles** |\n| **Tokens Burned in Syntax Repair** | 34.2% | 46.5% | **1.2%** |\n| **Syntax-Induced Regressions** | 18.3% | 29.7% | **0.0%** |\n\n*Methodology: Benchmark tasks sampled from data restructuring, mathematical validation, and state machine transitions. All runs evaluated against automated compiler gates (`mypy --strict`, `rustc --check`, and `asl-checker`).*\n\n### The Systems Takeaway\n\nLanguage design is not aesthetic; for artificial intelligence, **syntax is an interface contract with a probability distribution**.\n\nHuman developers tolerate indentation heuristics and complex compiler error messages because our visual cortex processes 2D spatial layouts instantly and our working memory operates out-of-band. Autoregressive transformers possess neither. By aligning the language's serialized form with the mathematical structure of syntax trees, AgentScript eliminates the syntax repair loop at its root.\n\n")
   ])
 
-(df get-all-posts [] -> (List Any)
+(df getAllPosts [] -> (List Any)
   :d "Returns all posts in catalog"
-  (blog-posts))
+  (blogPosts))
 
-(df get-post-by-slug [(slug Str)] -> (Option Any)
+(df getPostBySlug [(slug Str)] -> (Option Any)
   :d "Finds a blog post by its slug, or nil if not found"
-  (option-or (list-head (filter (fn [p] (= (.-slug p) slug)) (blog-posts))) nil))
+  (option-or (list-head (filter (fn [p] (= (.-slug p) slug)) (blogPosts))) nil))
 
-(df filter-by-tag [(tag Str)] -> (List Any)
+(df filterByTag [(tag Str)] -> (List Any)
   :d "Filters posts by tag name"
-  (filter (fn [p] (list-contains? (.-tags p) tag)) (blog-posts)))
+  (filter (fn [p] (list-contains? (.-tags p) tag)) (blogPosts)))
 
-(df get-posts-by-tag [(tag Str)] -> (List Any)
+(df getPostsByTag [(tag Str)] -> (List Any)
   :d "Returns posts tagged with given tag string"
-  (filter-by-tag tag))
+  (filterByTag tag))
 
-(df filter-by-category [(cat Str)] -> (List Any)
+(df filterByCategory [(cat Str)] -> (List Any)
   :d "Filters posts by category name"
-  (filter (fn [p] (= (.-category p) cat)) (blog-posts)))
+  (filter (fn [p] (= (.-category p) cat)) (blogPosts)))
 
-(df get-flagship-posts [] -> (List Any)
+(df getFlagshipPosts [] -> (List Any)
   :d "Returns posts with flagship importance"
-  (filter (fn [p] (= (.-importance p) "flagship")) (blog-posts)))
+  (filter (fn [p] (= (.-importance p) "flagship")) (blogPosts)))
 
-(df get-published-posts [] -> (List Any)
+(df getPublishedPosts [] -> (List Any)
   :d "Returns posts with published status"
-  (filter (fn [p] (= (.-status p) "published")) (blog-posts)))
+  (filter (fn [p] (= (.-status p) "published")) (blogPosts)))

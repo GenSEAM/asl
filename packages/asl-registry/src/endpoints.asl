@@ -1,55 +1,55 @@
 (module asl-registry/endpoints
   :d "URL and HTTP request header builders for multi-ecosystem package registries."
-  :x [build-package-url build-search-url build-headers default-asl-catalog-url]
+  :x [buildPackageUrl buildSearchUrl buildHeaders defaultAslCatalogUrl]
   :i [(regtypes :a ty)])
 
-(df default-asl-catalog-url [] -> Str
+(df defaultAslCatalogUrl [] -> Str
   :d "Returns canonical URI for the Git-native AgentScript package catalog index."
   "https://raw.githubusercontent.com/GenSEAM/asl/main/registry.asn")
 
-(df build-package-url [(eco ty/EcosystemKind) (pkg-name Str)] -> Str
+(df buildPackageUrl [(eco ty/EcosystemKind) (pkgName Str)] -> Str
   :d "Constructs exact metadata API endpoint for a package in target registry."
   (mt eco
-    ((ty/eco-asl)
-     (str "https://api.github.com/repos/" pkg-name "/releases?per_page=5"))
-    ((ty/eco-npm)
-     (str "https://registry.npmjs.org/" pkg-name))
-    ((ty/eco-pypi)
-     (str "https://pypi.org/pypi/" pkg-name "/json"))
-    ((ty/eco-crates)
-     (str "https://crates.io/api/v1/crates/" pkg-name))
-    ((ty/eco-go)
-     (str "https://proxy.golang.org/" pkg-name "/@latest"))
-    ((ty/eco-github)
-     (str "https://api.github.com/repos/" pkg-name "/releases?per_page=5"))))
+    ((ty/ecoAsl)
+     (str "https://api.github.com/repos/" pkgName "/releases?per_page=5"))
+    ((ty/ecoNpm)
+     (str "https://registry.npmjs.org/" pkgName))
+    ((ty/ecoPypi)
+     (str "https://pypi.org/pypi/" pkgName "/json"))
+    ((ty/ecoCrates)
+     (str "https://crates.io/api/v1/crates/" pkgName))
+    ((ty/ecoGo)
+     (str "https://proxy.golang.org/" pkgName "/@latest"))
+    ((ty/ecoGithub)
+     (str "https://api.github.com/repos/" pkgName "/releases?per_page=5"))))
 
-(df build-search-url [(eco ty/EcosystemKind) (query Str) (limit I64)] -> Str
+(df buildSearchUrl [(eco ty/EcosystemKind) (query Str) (limit I64)] -> Str
   :d "Constructs search endpoint for finding packages matching a text query."
-  (let [(clean-q (string-replace query " " "+"))
-        (lim-str (string-from-int64 limit))]
+  (let [(cleanQ (string-replace query " " "+"))
+        (limStr (string-from-int64 limit))]
     (mt eco
-      ((ty/eco-asl)
-       (str "https://api.github.com/search/repositories?q=" clean-q "+topic:asl-package&per_page=" lim-str))
-      ((ty/eco-npm)
-       (str "https://registry.npmjs.org/-/v1/search?text=" clean-q "&size=" lim-str))
-      ((ty/eco-pypi)
-       (str "https://pypi.org/search/?q=" clean-q))
-      ((ty/eco-crates)
-       (str "https://crates.io/api/v1/crates?q=" clean-q "&per_page=" lim-str))
-      ((ty/eco-go)
-       (str "https://pkg.go.dev/search?q=" clean-q))
-      ((ty/eco-github)
-       (str "https://api.github.com/search/repositories?q=" clean-q "&per_page=" lim-str)))))
+      ((ty/ecoAsl)
+       (str "https://api.github.com/search/repositories?q=" cleanQ "+topic:asl-package&per_page=" limStr))
+      ((ty/ecoNpm)
+       (str "https://registry.npmjs.org/-/v1/search?text=" cleanQ "&size=" limStr))
+      ((ty/ecoPypi)
+       (str "https://pypi.org/search/?q=" cleanQ))
+      ((ty/ecoCrates)
+       (str "https://crates.io/api/v1/crates?q=" cleanQ "&per_page=" limStr))
+      ((ty/ecoGo)
+       (str "https://pkg.go.dev/search?q=" cleanQ))
+      ((ty/ecoGithub)
+       (str "https://api.github.com/search/repositories?q=" cleanQ "&per_page=" limStr)))))
 
-(df build-headers [(eco ty/EcosystemKind)] -> (List (Pair Str Str))
+(df buildHeaders [(eco ty/EcosystemKind)] -> (List (Pair Str Str))
   :d "Constructs HTTP header list with user agents and registry-appropriate content negotiation."
-  (let [(std-ua (pair "User-Agent" "ASL-Registry/0.1.0 (+https://aslang.dev)"))]
+  (let [(stdUa (pair "User-Agent" "ASL-Registry/0.1.0 (+https://aslang.dev)"))]
     (mt eco
-      ((ty/eco-npm)
-       (list std-ua (pair "Accept" "application/vnd.npm.install-v1+json")))
-      ((ty/eco-github)
-       (list std-ua (pair "Accept" "application/vnd.github.v3+json")))
-      ((ty/eco-asl)
-       (list std-ua (pair "Accept" "application/vnd.github.v3+json")))
+      ((ty/ecoNpm)
+       (list stdUa (pair "Accept" "application/vnd.npm.install-v1+json")))
+      ((ty/ecoGithub)
+       (list stdUa (pair "Accept" "application/vnd.github.v3+json")))
+      ((ty/ecoAsl)
+       (list stdUa (pair "Accept" "application/vnd.github.v3+json")))
       (_
-       (list std-ua (pair "Accept" "application/json"))))))
+       (list stdUa (pair "Accept" "application/json"))))))

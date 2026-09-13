@@ -13,8 +13,8 @@
 
 (module sensor/nano
   :d "Grade a run of sensor readings against a window, spelled in Nano."
-  :x [Sample Window Grade Trend readings mean-of sample-of grade-of label-of
-      trend-of trend-label summarise widen blank]
+  :x [Sample Window Grade Trend readings meanOf sampleOf gradeOf labelOf
+      trendOf trendLabel summarise widen blank]
   :i [(core/strings :a s)])
 
 (dfs Sample
@@ -31,7 +31,7 @@
 (dfe Grade
   (:c steady [] "Mean inside the window, spread small.")
   (:c drifting [(by F32)] "Mean inside the window, spread too large.")
-  (:c out-of-range [(mean Num)] "Mean outside the window."))
+  (:c outOfRange [(mean Num)] "Mean outside the window."))
 
 (enum Trend
   (:c rising [] "The last reading exceeds the first.")
@@ -45,38 +45,38 @@
        (filter (fn [t] (is-some? (string-to-float64 t)))
                (string-split csv ","))))
 
-(df mean-of [(xs (List Num))] -> Num
+(df meanOf [(xs (List Num))] -> Num
   :d "Arithmetic mean. An empty run has a mean of zero by convention, which is
       what lets every caller below take a total function."
   (if (= (list-length xs) 0)
       0.0
       (/ (list-sum xs) (int64-to-float64 (list-length xs)))))
 
-(df sample-of [(id Str) (xs (List F64))] -> Sample
+(df sampleOf [(id Str) (xs (List F64))] -> Sample
   :d "Summarise a run of readings into one sample."
-  (let [(m (mean-of xs))]
+  (let [(m (meanOf xs))]
     (Sample :id (s/upper id)
             :count (list-length xs)
             :mean m
             :drift (- (option-or (list-max xs) m) (option-or (list-min xs) m))
             :settled (not (list-empty? xs)))))
 
-(df grade-of [(w Window) (sm Sample)] -> Grade
+(df gradeOf [(w Window) (sm Sample)] -> Grade
   :d "Grade a sample against a window."
   (cond
     ((or (< (.-mean sm) (.-low w)) (> (.-mean sm) (.-high w)))
-     (out-of-range (.-mean sm)))
+     (outOfRange (.-mean sm)))
     ((> (.-drift sm) 1.0) (drifting (.-drift sm)))
     (:else (steady))))
 
-(df label-of [(g Grade)] -> Str
+(df labelOf [(g Grade)] -> Str
   :d "A one-word label for a grade, with the offending magnitude where there is one."
   (mt g
     ((steady)         "steady")
     ((drifting by)    (s/concat "drifting:" (string-from-float64 by)))
-    ((out-of-range m) (s/concat "out:" (string-from-float64 m)))))
+    ((outOfRange m) (s/concat "out:" (string-from-float64 m)))))
 
-(def trend-of [(xs (List Float))] -> Trend
+(def trendOf [(xs (List Float))] -> Trend
   :d "Compare the first reading with the last."
   (let [(head (option-or (list-head xs) 0.0))
         (tail (option-or (list-head (list-reverse xs)) 0.0))]
@@ -85,7 +85,7 @@
       ((< tail head) (falling))
       (:else (flat)))))
 
-(def trend-label [(t Trend)] -> Str
+(def trendLabel [(t Trend)] -> Str
   :d "A one-word label for a trend."
   (mt t
     ((rising)  "rising")
@@ -96,13 +96,13 @@
   :d "The whole pipeline over one feed: parse, summarise, grade, label, and name
       the trend."
   (let [(xs (readings csv))
-        (sm (sample-of id xs))
+        (sm (sampleOf id xs))
         (w (Window :low 0.0 :high 100.0))]
     (string-join (list (.-id sm)
                        (string-from-int64 (.-count sm))
                        (string-from-float64 (.-mean sm))
-                       (label-of (grade-of w sm))
-                       (trend-label (trend-of xs)))
+                       (labelOf (gradeOf w sm))
+                       (trendLabel (trendOf xs)))
                  "|")))
 
 (df widen [(n I32)] -> I64

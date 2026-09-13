@@ -3,14 +3,14 @@
 
 (module text/sizes
   :doc "Measurements over trees declared in another module."
-  :export [depth-of unwrap]
+  :export [depthOf unwrap]
   :import [(core/trees :as t)])
 
-(df depth-of [(tr (t/Tree Int64))] -> Int64
+(df depthOf [(tr (t/Tree Int64))] -> Int64
   :doc "Depth of an imported tree."
   (match tr
     ((t/leaf)       0)
-    ((t/node v l r) (+ 1 (max (depth-of l) (depth-of r))))))
+    ((t/node v l r) (+ 1 (max (depthOf l) (depthOf r))))))
 
 (df unwrap [] -> Int64
   :doc "Read the field of an imported record."

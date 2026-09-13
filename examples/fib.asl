@@ -1,4 +1,4 @@
-(module asl-examples/fib
+(module aslExamples/fib
   :d "Fibonacci calculation in pure AgentScript."
   :x [fib main]
   :i [])

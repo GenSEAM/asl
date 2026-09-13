@@ -1,28 +1,28 @@
 (module asl-codec/test
   :d "Unit tests for native JSON codec."
-  :x [run-tests]
+  :x [runTests]
   :i [(asl-codec/core :a c)])
 
-(df test-primitives [] -> Bool
+(df testPrimitives [] -> Bool
   :d "Verifies primitive JSON serialization"
   (do
-    (assert (= (c/render-json (c/json-null)) "null") "null render")
-    (assert (= (c/render-json (c/json-bool true)) "true") "true render")
-    (assert (= (c/render-json (c/json-bool false)) "false") "false render")
-    (assert (= (c/render-json (c/json-str "hello")) "\"hello\"") "str render")
+    (assert (= (c/renderJson (c/jsonNull)) "null") "null render")
+    (assert (= (c/renderJson (c/jsonBool true)) "true") "true render")
+    (assert (= (c/renderJson (c/jsonBool false)) "false") "false render")
+    (assert (= (c/renderJson (c/jsonStr "hello")) "\"hello\"") "str render")
     true))
 
-(df test-collections [] -> Bool
+(df testCollections [] -> Bool
   :d "Verifies composite JSON array and object serialization"
-  (let [(arr (c/json-arr (list (c/json-int 1) (c/json-str "two"))))
-        (obj (c/json-obj (list (c/make-kv "key" (c/json-str "val")))))]
-    (assert (= (c/render-json arr) "[1,\"two\"]") "array render")
-    (assert (= (c/render-json obj) "{\"key\":\"val\"}") "object render")
+  (let [(arr (c/jsonArr (list (c/jsonInt 1) (c/jsonStr "two"))))
+        (obj (c/jsonObj (list (c/makeKv "key" (c/jsonStr "val")))))]
+    (assert (= (c/renderJson arr) "[1,\"two\"]") "array render")
+    (assert (= (c/renderJson obj) "{\"key\":\"val\"}") "object render")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Executes basic verification of codec types"
   (do
-    (assert (test-primitives) "test-primitives must pass")
-    (assert (test-collections) "test-collections must pass")
+    (assert (testPrimitives) "test-primitives must pass")
+    (assert (testCollections) "test-collections must pass")
     true))

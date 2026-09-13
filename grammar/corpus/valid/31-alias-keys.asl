@@ -5,9 +5,9 @@
 "rewrites `:x` by pattern-matching on the text rather than on the position turns"
 "`(P :x 1)` into `(P :export 1)` and every field below stops resolving."
 
-(module t/alias-keys
+(module t/aliasKeys
   :d "A record keyed by the six Nano option letters."
-  :x [P read-back probe])
+  :x [P readBack probe])
 
 (dfs P
   (:f x Int "A field named for the :export alias.")
@@ -17,7 +17,7 @@
   (:f f Int "A field named for the :field alias.")
   (:f c Int "A field named for the :case alias."))
 
-(df read-back [(p P)] -> Str
+(df readBack [(p P)] -> Str
   :d "Read every field back, in declaration order, so a key that resolved to the
       wrong field shows up as a transposition rather than as a type error."
   (string-join (list (string-from-int64 (.-x p))
@@ -30,4 +30,4 @@
 
 (df probe [] -> Str
   :d "Construct the record with the six keyword arguments and read it back."
-  (read-back (P :x 1 :d 2 :a 3 :i 4 :f 5 :c 6)))
+  (readBack (P :x 1 :d 2 :a 3 :i 4 :f 5 :c 6)))

@@ -2,7 +2,7 @@
   :$comment "SINGLE SOURCE OF TRUTH for the AgentScript vocabulary. The specification tables, both grammars, the agent handbook, the closure gate and the backends are all GENERATED from this file. Never edit those by hand; edit here and run prelude/generate.py."
   :version "0.2"
   :runtime (:py "_agentscript" :js "_agentscript")
-  :special-forms (
+  :specialForms (
     :declarations [
       "module"
       "defschema"
@@ -83,7 +83,7 @@
       :Bool "Bool"
       :Unit "Unit"
     )
-    :reserved-widths (
+    :reservedWidths (
       :$comment "A width alias Core does not actually have. Accepted, resolved to the type named here, and carrying none of that width's semantics -- no narrowing, no wrap, no trap at the narrower boundary. Groundwork for host interop (C, C++, Rust) where a real fixed-width type will land later."
       :F32 "Float64"
     )
@@ -1388,6 +1388,54 @@
       :effect true
       :ts "RT.ok(RT.fileExists({0}))"
       :go "FileExistsRes({0})"
+    )
+    (
+      :name "dirList"
+      :sec "I/O"
+      :type "String -> (Result (List String) IoError)"
+      :doc "List entries in directory, excluding . and .., sorted lexicographically."
+      :py "_agentscript.dir_list({0})"
+      :js "_agentscript.dirList({0})"
+      :rs "rt::dir_list(&{0})"
+      :effect true
+      :ts "RT.dirList({0})"
+      :go "DirList({0})"
+    )
+    (
+      :name "execCmd"
+      :sec "I/O"
+      :type "String -> ProcessOutput"
+      :doc "Execute a shell command with isolated stdout and stderr."
+      :py "_agentscript.exec_cmd({0})"
+      :js "_agentscript.execCmd({0})"
+      :rs "rt::exec_cmd(&{0})"
+      :effect true
+      :ts "RT.execCmd({0})"
+      :go "ExecCmd({0})"
+    )
+    (
+      :name "fileStat"
+      :sec "I/O"
+      :type "String -> (Result FileStat IoError)"
+      :doc "Inspect file metadata (size, mode, mtime, isDir, isFile, isSymlink)."
+      :py "_agentscript.file_stat({0})"
+      :js "_agentscript.fileStat({0})"
+      :rs "rt::file_stat(&{0})"
+      :effect true
+      :ts "RT.fileStat({0})"
+      :go "FileStat({0})"
+    )
+    (
+      :name "pathCanonicalize"
+      :sec "I/O"
+      :type "String -> (Result String IoError)"
+      :doc "Resolve canonical absolute realpath."
+      :py "_agentscript.path_canonicalize({0})"
+      :js "_agentscript.pathCanonicalize({0})"
+      :rs "rt::path_canonicalize(&{0})"
+      :effect true
+      :ts "RT.pathCanonicalize({0})"
+      :go "PathCanonicalize({0})"
     )
   ]
 )

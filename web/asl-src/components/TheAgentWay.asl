@@ -1,9 +1,9 @@
-(module asl-web/the-agent-way
+(module aslWeb/theAgentWay
   :d "The Agent Way philosophy showcase component in pure AgentScript."
-  :x [the-agent-way render-the-agent-way agent-way-view]
+  :x [theAgentWay renderTheAgentWay agentWayView]
   :i [])
 
-(df render-the-agent-way [] -> Str
+(df renderTheAgentWay [] -> Str
   :d "Renders the 4 language epochs comparison and balance thesis."
   "<section id=\"agent-way\" aria-labelledby=\"agent-way-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -87,10 +87,10 @@
     </div>
   </section>")
 
-(df the-agent-way [] -> Str
+(df theAgentWay [] -> Str
   :d "Alias for render-the-agent-way."
-  (render-the-agent-way))
+  (renderTheAgentWay))
 
-(df agent-way-view [] -> Str
+(df agentWayView [] -> Str
   :d "Alias for render-the-agent-way."
-  (render-the-agent-way))
+  (renderTheAgentWay))

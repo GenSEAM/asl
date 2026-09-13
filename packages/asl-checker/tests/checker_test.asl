@@ -1,91 +1,98 @@
-(module asl-checker/checker-test
+(module asl-checker/checkerTest
   :d "Comprehensive falsifiable test suite for Hindley-Milner type inference and checker."
-  :x [check-source
-      check-file!
-      test-corpus-smoke
-      run-tests]
+  :x [checkSource
+      checkFile!
+      testCorpusSmoke
+      runTests
+      RunTests]
   :i [(types :a ty) (resolve :a r) (check :a c) (unify :a u)])
 
-(df check-source [(src String) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
+(df checkSource [(src String) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
   :d "Check source string"
-  (c/check-source src deps path))
+  (c/checkSource src deps path))
 
-(df ! check-file! [(path String) (roots (List String))] -> (Result (List ty/Diagnostic) IoError)
+(df ! checkFile! [(path String) (roots (List String))] -> (Result (List ty/Diagnostic) IoError)
   :d "Check file on disk"
-  (c/check-file! path roots))
+  (c/checkFile! path roots))
 
-(df test-corpus-smoke [] -> Bool
+(df testCorpusSmoke [] -> Bool
   :d "Smoke test"
-  (let [(d-ok (c/check-source "(module m :d \"d\" :x [f]) (df f [] -> Int64 42)" (map-empty) "m.asl"))
-        (d-bad (c/check-source "(module m :d \"d\" :x [f]) (df f [] -> Int64 \"fail\")" (map-empty) "m.asl"))]
-    (assert (list-empty? d-ok) "Smoke test well-typed produces zero diagnostics")
-    (assert (not (list-empty? d-bad)) "Smoke test ill-typed produces diagnostics")
+  (let [(dOk (c/checkSource "(module m :d \"d\" :x [f]) (df f [] -> Int64 :d \"doc\" 42)" (map-empty) "m.asl"))
+        (d-bad (c/checkSource "(module m :d \"d\" :x [f]) (df f [] -> Int64 :d \"doc\" \"fail\")" (map-empty) "m.asl"))]
+    (assert (list-empty? dOk) "Smoke test well-typed produces zero diagnostics")
+    (refute (list-empty? d-bad) "Smoke test ill-typed produces diagnostics")
     true))
 
-(df test-unification [] -> Bool
+(df testUnification [] -> Bool
   :d "Verifies Hindley-Milner type unification and metavariable substitution."
-  (let [(i64 (ty/ty-con "Int64" (list) (none) (none)))
-        (str-ty (ty/ty-con "String" (list) (none) (none)))
-        (v1 (ty/ty-var 1 "any"))
-        (fn1 (ty/ty-fun (list v1) v1))
-        (fn2 (ty/ty-fun (list i64) i64))]
-    (assert (u/type-equal? i64 i64) "Concrete type equality")
-    (assert (not (u/type-equal? i64 str-ty)) "Distinct primitive inequality")
+  (let [(i64 (ty/tyCon "Int64" (list) (none) (none)))
+        (strTy (ty/tyCon "String" (list) (none) (none)))
+        (v1 (ty/tyVar 1 "any"))
+        (fn1 (ty/tyFun (list v1) v1))
+        (fn2 (ty/tyFun (list i64) i64))]
+    (assert (u/typeEqual? i64 i64) "Concrete type equality")
+    (refute (u/typeEqual? i64 strTy) "Distinct primitive inequality")
     (mt (u/unify v1 i64 (map-empty))
-      ((u/u-ok s1)
-       (assert (u/type-equal? (u/apply-subst s1 v1) i64) "Metavariable substituted to concrete type"))
-      ((u/u-err _ _)
+      ((u/uOk s1)
+       (assert (u/typeEqual? (u/applySubst s1 v1) i64) "Metavariable substituted to concrete type"))
+      ((u/uErr _ _)
        (assert false "Metavariable unification should succeed")))
     (mt (u/unify fn1 fn2 (map-empty))
-      ((u/u-ok s2)
-       (assert (u/type-equal? (u/apply-subst s2 v1) i64) "HOF parameter type inferred"))
-      ((u/u-err _ _)
+      ((u/uOk s2)
+       (assert (u/typeEqual? (u/applySubst s2 v1) i64) "HOF parameter type inferred"))
+      ((u/uErr _ _)
        (assert false "HOF unification should succeed")))
-    (mt (u/unify i64 str-ty (map-empty))
-      ((u/u-ok _)
+    (mt (u/unify i64 strTy (map-empty))
+      ((u/uOk _)
        (assert false "Unifying Int64 and String must fail"))
-      ((u/u-err msg _)
+      ((u/uErr msg _)
        (assert (string-contains? msg "expected") "Type error message contains expected")))
     true))
 
-(df test-occurs [] -> Bool
+(df testOccurs [] -> Bool
   :d "Verifies occurs-check rejection of recursive and self-referential types."
-  (let [(v1 (ty/ty-var 1 "any"))
-        (i64 (ty/ty-con "Int64" (list) (none) (none)))
-        (list-v1 (ty/ty-con "List" (list v1) (none) (none)))
-        (fn-v1 (ty/ty-fun (list v1) i64))]
-    (assert (u/occurs-in? 1 list-v1 (map-empty)) "Metavariable occurs in constructed list")
-    (assert (not (u/occurs-in? 1 i64 (map-empty))) "Metavariable does not occur in primitive Int64")
-    (mt (u/unify v1 list-v1 (map-empty))
-      ((u/u-ok _)
+  (let [(v1 (ty/tyVar 1 "any"))
+        (i64 (ty/tyCon "Int64" (list) (none) (none)))
+        (listV1 (ty/tyCon "List" (list v1) (none) (none)))
+        (fnV1 (ty/tyFun (list v1) i64))]
+    (assert (u/occursIn? 1 listV1 (map-empty)) "Metavariable occurs in constructed list")
+    (refute (u/occursIn? 1 i64 (map-empty)) "Metavariable does not occur in primitive Int64")
+    (mt (u/unify v1 listV1 (map-empty))
+      ((u/uOk _)
        (assert false "Occurs check must reject v1 = List[v1]"))
-      ((u/u-err msg _)
+      ((u/uErr msg _)
        (assert (string-contains? msg "occurs check") "Error message reports occurs check failure")))
-    (mt (u/unify v1 fn-v1 (map-empty))
-      ((u/u-ok _)
+    (mt (u/unify v1 fnV1 (map-empty))
+      ((u/uOk _)
        (assert false "Occurs check must reject v1 = (fn [v1] -> Int64)"))
-      ((u/u-err msg _)
+      ((u/uErr msg _)
        (assert (string-contains? msg "occurs check") "Function occurs check failure reported")))
     true))
 
-(df test-check-source [] -> Bool
+(df testCheckSource [] -> Bool
   :d "Verifies full pipeline source checking on well-typed and ill-typed ASL modules."
-  (let [(well-typed "(module m :d \"d\" :x [id f]) (df id [(x Int64)] -> Int64 x) (df f [] -> Int64 (id 42))")
-        (d-ok (c/check-source well-typed (map-empty) "m.asl"))
-        (ill-typed "(module m :d \"d\" :x [helper g]) (df helper [] -> String \"mismatch\") (df g [] -> Int64 (helper))")
-        (d-err (c/check-source ill-typed (map-empty) "m.asl"))
-        (lit-err "(module m :d \"d\" :x [f]) (df f [] -> Int64 \"bad\")")
-        (d-lit (c/check-source lit-err (map-empty) "m.asl"))]
-    (assert (list-empty? d-ok) "Well-typed source produces zero diagnostics")
-    (assert (not (list-empty? d-err)) "Call return mismatch produces diagnostics")
-    (assert (> (list-length d-err) 0) "Diagnostic count >= 1 for mismatch")
-    (assert (not (list-empty? d-lit)) "Literal type mismatch produces diagnostics")
+  (let [(wellTyped "(module m :d \"d\" :x [id f]) (df id [(x Int64)] -> Int64 :d \"id\" x) (df f [] -> Int64 :d \"f\" (id 42))")
+        (dOk (c/checkSource wellTyped (map-empty) "m.asl"))
+        (illTyped "(module m :d \"d\" :x [helper g]) (df helper [] -> String :d \"h\" \"mismatch\") (df g [] -> Int64 :d \"g\" (helper))")
+        (dErr (c/checkSource illTyped (map-empty) "m.asl"))
+        (litErr "(module m :d \"d\" :x [f]) (df f [] -> Int64 :d \"f\" \"bad\")")
+        (dLit (c/checkSource litErr (map-empty) "m.asl"))
+        (docErr (c/checkSource "(module m :d \"d\" :x [f]) (df f [] -> Int64 42)" (map-empty) "m.asl"))]
+    (assert (list-empty? dOk) "Well-typed source produces zero diagnostics")
+    (refute (list-empty? dErr) "Call return mismatch produces diagnostics")
+    (assert (> (list-length dErr) 0) "Diagnostic count >= 1 for mismatch")
+    (refute (list-empty? dLit) "Literal type mismatch produces diagnostics")
+    (refute (list-empty? docErr) "m.asl exported function without doc must produce diagnostics")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Verifies Hindley-Milner type inference, unification, occurs-check, and source checking."
-  (assert (test-corpus-smoke) "Smoke test passes")
-  (assert (test-unification) "HM unification tests pass")
-  (assert (test-occurs) "Occurs-check tests pass")
-  (assert (test-check-source) "Source checking tests pass")
+  (assert (testCorpusSmoke) "Smoke test passes")
+  (assert (testUnification) "HM unification tests pass")
+  (assert (testOccurs) "Occurs-check tests pass")
+  (assert (testCheckSource) "Source checking tests pass")
   true)
+
+(df RunTests [] -> Bool
+  :d "Test runner entry for checker test suite"
+  (runTests))

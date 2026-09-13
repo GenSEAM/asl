@@ -2,9 +2,9 @@
   :version "1.0.0"
   :frame "Instrumented Editorial"
   :widthPolicy [
-    (:primary-shell "72rem")
-    (:prose-measure "68ch")
-    (:wide-surface "80rem")
+    (:primaryShell "72rem")
+    (:proseMeasure "68ch")
+    (:wideSurface "80rem")
   ]
   :tailwind [:base :components :utilities]
   :layers [
@@ -19,14 +19,14 @@
             (:surface "255 255 255")
             (:inset "244 242 248")
             (:line "225 219 236")
-            (:line-strong "146 128 176")
+            (:lineStrong "146 128 176")
             (:ink "24 18 36")
-            (:ink-2 "76 64 96")
-            (:ink-3 "112 98 134")
+            (:ink2 "76 64 96")
+            (:ink3 "112 98 134")
             (:signal "126 34 206")
-            (:signal-soft "147 51 234")
-            (:shadow-hue "270 25% 10%")
-            (:shadow-strength "0.08")
+            (:signalSoft "147 51 234")
+            (:shadowHue "270 25% 10%")
+            (:shadowStrength "0.08")
           ])
         (:theme
           :selector ".dark"
@@ -36,51 +36,51 @@
             (:surface "24 19 39")
             (:inset "17 13 29")
             (:line "48 38 72")
-            (:line-strong "136 102 198")
+            (:lineStrong "136 102 198")
             (:ink "246 244 255")
-            (:ink-2 "198 183 253")
-            (:ink-3 "152 140 175")
+            (:ink2 "198 183 253")
+            (:ink3 "152 140 175")
             (:signal "176 96 255")
-            (:signal-soft "198 142 255")
-            (:shadow-hue "270 50% 5%")
-            (:shadow-strength "0.65")
+            (:signalSoft "198 142 255")
+            (:shadowHue "270 50% 5%")
+            (:shadowStrength "0.65")
           ])
       ]
       :rules [
         (:rule
           :selector "html"
           :declarations [
-            (:scroll-behavior "smooth")
-            (:scroll-padding-top "6rem")
+            (:scrollBehavior "smooth")
+            (:scrollPaddingTop "6rem")
             (:width "100%")
-            (:max-width "100vw")
-            (:overflow-x "hidden")
+            (:maxWidth "100vw")
+            (:overflowX "hidden")
           ])
         (:rule
           :selector "body"
           :declarations [
             (:margin "0")
             (:width "100%")
-            (:max-width "100vw")
-            (:background-color "rgb(var(--ground))")
+            (:maxWidth "100vw")
+            (:backgroundColor "rgb(var(--ground))")
             (:color "rgb(var(--ink))")
-            (:font-family "'Inter', system-ui, -apple-system, sans-serif")
-            (:overflow-x "hidden")
-            (:-webkit-font-smoothing "antialiased")
-            (:text-rendering "optimizeLegibility")
+            (:fontFamily "'Inter', system-ui, -apple-system, sans-serif")
+            (:overflowX "hidden")
+            (:-webkitFontSmoothing "antialiased")
+            (:textRendering "optimizeLegibility")
           ])
         (:rule
           :selector "code, pre, .font-mono"
           :declarations [
-            (:font-family "'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace")
-            (:font-variant-ligatures "none")
+            (:fontFamily "'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace")
+            (:fontVariantLigatures "none")
           ])
         (:rule
           :selector ":focus-visible"
           :declarations [
             (:outline "2px solid rgb(var(--signal))")
-            (:outline-offset "3px")
-            (:border-radius "4px")
+            (:outlineOffset "3px")
+            (:borderRadius "4px")
           ])
         (:rule
           :selector "::selection"
@@ -103,7 +103,7 @@
           :selector "::-webkit-scrollbar-thumb"
           :declarations [
             (:background "rgb(var(--line-strong) / 0.35)")
-            (:border-radius "999px")
+            (:borderRadius "999px")
           ])
         (:rule
           :selector "::-webkit-scrollbar-thumb:hover"
@@ -123,20 +123,20 @@
       ])
   ]
   :media [
-    (:media-query
+    (:mediaQuery
       :condition "(prefers-reduced-motion: reduce)"
       :rules [
         (:rule
           :selector "html"
           :declarations [
-            (:scroll-behavior "auto")
+            (:scrollBehavior "auto")
           ])
         (:rule
           :selector "*, *::before, *::after"
           :declarations [
-            (:animation-duration "0.01ms !important")
-            (:animation-iteration-count "1 !important")
-            (:transition-duration "0.01ms !important")
+            (:animationDuration "0.01ms !important")
+            (:animationIterationCount "1 !important")
+            (:transitionDuration "0.01ms !important")
           ])
       ])
   ]

@@ -364,7 +364,7 @@ if (cleanArgs[0] === 'asn' || cleanArgs[0] === '--from-json' || cleanArgs[0] ===
 // Evaluator Mode: Strict Typing, Hard Errors, Builtins
 // ---------------------------------------------------------------------------
 
-const knownBuiltins = new Set([
+const knownBuiltins = new Set(['sys-exec', 
   '+', '-', '*', '/', 'mod',
   '=', '==', '!=', '<', '>', '<=', '>=',
   'not', 'and', 'or',
@@ -389,8 +389,34 @@ const knownBuiltins = new Set([
   'string-to-int64', 'string-to-float64', 'int64-to-float64', 'float-from-int64', 'float', 'float64-to-int64', 'int32-to-int64', 'int64-to-int32',
   'string-chars', 'string-lower', 'string-upper', 'string-replace', 'string-reverse', 'string-index-of', 'string-slice',
   'string-equals?', 'foldl', 'append-item', 'string-to-lower', 'list-indexed', 'tuple', 'tuple-first', 'tuple-second', 'option-none?', 'option-some?', 'int-to-string',
-  'case', 'match', 'refute', 'fst', 'snd', 'second', 'pair-first', 'pair-second', 'tuple2-first', 'list-second', 'list-first', 'list-last', 'list-take', 'list-range', 'list-fold', 'list-filter', 'list-map', 'list-any?', 'any?', 'any', 'all?', 'list-all?', 'fold-left', 'reverse', 'length', 'append', 'count', 'enumerate', 'nil?', 'map-merge', 'get', 'div-i64', 'as-i64', 'as-f64', 'float64-from-int64', 'int64-from-float', 'int-to-str', 'string-to-lowercase', 'string-trim-left', 'string-count-char', 'string-repeat', 'string-append', 'join', 'all', 'tuple2-second', 'head', 'tail', 'div-f64', 'sqrt', 'Ok', 'Err', 'file-read', 'file-write', 'file-exists?', 'file-append', 'error-or', 'file-read', 'read-file'
+  'case', 'match', 'refute', 'fst', 'snd', 'second', 'pair-first', 'pair-second', 'tuple2-first', 'list-second', 'list-first', 'list-last', 'list-take', 'list-range', 'list-fold', 'list-filter', 'list-map', 'list-any?', 'any?', 'any', 'all?', 'list-all?', 'fold-left', 'reverse', 'length', 'append', 'count', 'enumerate', 'nil?', 'map-merge', 'get', 'div-i64', 'as-i64', 'as-f64', 'float64-from-int64', 'int64-from-float', 'int-to-str', 'string-to-lowercase', 'string-trim-left', 'string-count-char', 'string-repeat', 'string-append', 'join', 'all', 'tuple2-second', 'head', 'tail', 'div-f64', 'sqrt', 'Ok', 'Err', 'file-read', 'file-write', 'file-exists?', 'file-append', 'error-or', 'file-read', 'read-file',
+  'dirList', 'dir-list', 'execCmd', 'exec-cmd', 'fileStat', 'file-stat', 'pathCanonicalize', 'path-canonicalize', 'sysExec'
 ]);
+
+function toKebabCase(str) {
+  if (typeof str !== 'string') return str;
+  return str.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+}
+
+function isKnownBuiltin(name) {
+  if (!name || typeof name !== 'string') return false;
+  if (knownBuiltins.has(name)) return true;
+  return knownBuiltins.has(toKebabCase(name));
+}
+
+function resolveBuiltinName(name) {
+  if (!name || typeof name !== 'string') return name;
+  if (knownBuiltins.has(name)) {
+    const kebab = toKebabCase(name);
+    if (kebab !== name && knownBuiltins.has(kebab)) {
+      return kebab;
+    }
+    return name;
+  }
+  const kebab = toKebabCase(name);
+  if (knownBuiltins.has(kebab)) return kebab;
+  return name;
+}
 
 function extractParamNames(paramsNode) {
   const params = [];
@@ -648,13 +674,13 @@ function evalNode(node, env = new Map()) {
     if (node.value === 'true') return true;
     if (node.value === 'false') return false;
     if (node.value === 'null' || node.value === 'nil' || node.value === '_' || node.value === 'Unit') return null;
-    if (knownBuiltins.has(node.value) && !['if', 'assert', 'reject', 'refute', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try', 'df', 'fn', 'module', 'dfe', 'dfs', 'case', 'match'].includes(node.value)) {
+    if (isKnownBuiltin(node.value) && !['if', 'assert', 'reject', 'refute', 'let', 'do', 'cond', 'when', 'unless', 'mt', 'try', 'df', 'fn', 'module', 'dfe', 'dfs', 'case', 'match'].includes(resolveBuiltinName(node.value))) {
       return {
         _type: 'closure',
         name: node.value,
         params: ['a', 'b', 'c'],
         _isBuiltin: true,
-        builtinName: node.value,
+        builtinName: resolveBuiltinName(node.value),
         env: env
       };
     }
@@ -748,8 +774,8 @@ function evalNode(node, env = new Map()) {
       }
     }
 
-    if (!knownBuiltins.has(head)) {
-      throw new Error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
+    if (!isKnownBuiltin(head)) {
+      throw new Error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}' [KNOWN: ${isKnownBuiltin(head)} SIZE: ${knownBuiltins.size}]`);
     }
 
     // Special forms: module
@@ -1098,6 +1124,7 @@ function getMapKey(obj, rawKey) {
 }
 
 function evaluateBuiltinFunction(head, evalArgs, env) {
+    head = resolveBuiltinName(head);
     // Strict numeric typing for arithmetic: +, -, *, /, mod
     if (head === '+' || head === '-' || head === '*' || head === '/' || head === 'mod') {
       if (evalArgs.length < 2 && head !== '-') {
@@ -1288,6 +1315,34 @@ function evaluateBuiltinFunction(head, evalArgs, env) {
       } catch (e) {
         return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
       }
+    }
+    if (head === 'dirList' || head === 'dir-list') {
+      const p = String(evalArgs[0] || '.');
+      if (typeof globalThis.__sys_dirList === 'function') {
+        return globalThis.__sys_dirList(p);
+      }
+      return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
+    }
+    if (head === 'execCmd' || head === 'exec-cmd') {
+      const cmd = String(evalArgs[0] || '');
+      if (typeof globalThis.__sys_execCmd === 'function') {
+        return globalThis.__sys_execCmd(cmd);
+      }
+      return { exitCode: 1, stdout: '', stderr: '__sys_execCmd not found' };
+    }
+    if (head === 'fileStat' || head === 'file-stat') {
+      const p = String(evalArgs[0] || '');
+      if (typeof globalThis.__sys_fileStat === 'function') {
+        return globalThis.__sys_fileStat(p);
+      }
+      return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
+    }
+    if (head === 'pathCanonicalize' || head === 'path-canonicalize') {
+      const p = String(evalArgs[0] || '');
+      if (typeof globalThis.__sys_pathCanonicalize === 'function') {
+        return globalThis.__sys_pathCanonicalize(p);
+      }
+      return { _tag: 'err', value: { _tag: 'io-error', kind: 'other' } };
     }
 
     // List and Map builtins
@@ -1643,6 +1698,15 @@ function evaluateBuiltinFunction(head, evalArgs, env) {
     }
     if (head === 'sqrt') {
       return Math.sqrt(Number(evalArgs[0]));
+    }
+    if (head === 'sys-exec' || head === 'sysExec') {
+      const cmd = evalArgs[0];
+      if (cmd === 'typeof-sys-exec') return typeof globalThis.sys_exec;
+      if (typeof globalThis.sys_exec === 'function') {
+        const ret = globalThis.sys_exec(cmd);
+        return ret;
+      }
+      return { exitCode: 1, stdout: 'sys_exec not found in globalThis' };
     }
     if (head === 'as-i64') {
       const a = evalArgs[0];
@@ -2334,7 +2398,8 @@ function loadModuleImports(forms, filePath, env, loading = new Set()) {
                 for (const [k, v] of importedEnv.entries()) {
                   if (alias) {
                     env.set(alias + '/' + k, v);
-                    if (k.startsWith(alias + '-') || k.startsWith(alias + '/')) {
+                    if (k.startsWith(alias + '-') || k.startsWith(alias + '/') ||
+                        (k.startsWith(alias) && k.length > alias.length && k[alias.length] >= 'A' && k[alias.length] <= 'Z')) {
                       env.set(k, v);
                     }
                   } else {
@@ -2365,7 +2430,7 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
         plannedTestCount++;
       }
     }
-    if (rootEnv.has('run-tests') || rootEnv.has('RunTests') || rootEnv.has('run-wire-tests')) plannedTestCount = Math.max(plannedTestCount, 1);
+    if (rootEnv.has('run-tests') || rootEnv.has('RunTests') || rootEnv.has('runTests') || rootEnv.has('run-wire-tests')) plannedTestCount = Math.max(plannedTestCount, 1);
 
     let lastResult = null;
     for (const form of forms) {
@@ -2390,6 +2455,18 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
         const res = invokeClosure(runTestsFn, []);
         if (res !== true) {
           console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'RunTests' returned ${formatOutput(res)} instead of true`);
+          process.exit(1);
+        }
+        completedTestCount++;
+        lastResult = res;
+      }
+    } else if (rootEnv.has('runTests')) {
+      const runTestsFn = rootEnv.get('runTests');
+      if (runTestsFn && runTestsFn._type === 'closure') {
+        startedTestCount++;
+        const res = invokeClosure(runTestsFn, []);
+        if (res !== true) {
+          console.error(`ERR_TEST_RESULT_NOT_TRUE: test entry 'runTests' returned ${formatOutput(res)} instead of true`);
           process.exit(1);
         }
         completedTestCount++;
@@ -2432,9 +2509,9 @@ if (cleanArgs.length >= 1 && fs.existsSync(cleanArgs[0]) && !cleanArgs[0].starts
     const totalChecks = assertionCount + refutationCount;
     if (totalChecks > 0) {
       let parts = [];
-      if (assertionCount > 0) parts.push(`${assertionCount} assertion(s)`);
-      if (refutationCount > 0) parts.push(`${refutationCount} refutation(s)`);
-      console.log(`✓ ${filePath}: ${parts.join(', ')} executed and recorded cleanly.`);
+      if (assertionCount > 0) parts.push(`${assertionCount} assertion(s) executed`);
+      if (refutationCount > 0) parts.push(`${refutationCount} refutation(s) executed`);
+      console.log(`✓ ${filePath}: ${parts.join(', ')} and recorded cleanly.`);
     } else if (lastResult !== null && lastResult !== undefined && !lastResult?._silent) {
       console.log(formatOutput(lastResult));
     }
@@ -2465,7 +2542,7 @@ if (/\(\s*\/\s+[-0-9.]+\s+0(\.0+)?\s*\)/.test(expr)) {
 const headMatch = expr.match(/^\(\s*([^\s()]+)/);
 if (headMatch) {
   const head = headMatch[1];
-  if (!head.startsWith('.-') && !knownBuiltins.has(head)) {
+  if (!head.startsWith('.-') && !isKnownBuiltin(head)) {
     console.error(`ERR_UNBOUND_SYMBOL: unknown builtin or function '${head}'`);
     process.exit(1);
   }

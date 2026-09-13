@@ -1,9 +1,9 @@
-(module asl-web/ecosystem
+(module aslWeb/ecosystem
   :d "Multi-Runtime Interoperability ecosystem section in pure AgentScript."
-  :x [ecosystem render-ecosystem ecosystem-view]
+  :x [ecosystem renderEcosystem ecosystemView]
   :i [])
 
-(df render-ecosystem [] -> Str
+(df renderEcosystem [] -> Str
   :d "Renders multi-runtime ecosystem targets, differential verification flow, and agent specs."
   "<section id=\"toolchain\" aria-labelledby=\"toolchain-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -375,8 +375,8 @@
 
 (df ecosystem [] -> Str
   :d "Alias for render-ecosystem."
-  (render-ecosystem))
+  (renderEcosystem))
 
-(df ecosystem-view [] -> Str
+(df ecosystemView [] -> Str
   :d "Alias for render-ecosystem."
-  (render-ecosystem))
+  (renderEcosystem))

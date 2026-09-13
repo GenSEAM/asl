@@ -1,8 +1,8 @@
-(:package migration-geometry
+(:package migrationGeometry
  :version "0.1.0"
  :entry "geometry.asl"
  :description "Polyglot migration example: Python point distance kernel ported to pure AgentScript"
- :target (:python-native-ffi
-   :host-module "geometry_native"
-   :glue-engine :ctypes)
+ :target (:pythonNativeFfi
+   :hostModule "geometry_native"
+   :glueEngine :ctypes)
  :dependencies [])

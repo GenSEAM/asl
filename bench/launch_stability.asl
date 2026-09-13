@@ -1,75 +1,75 @@
-(module asl-bench/launch-stability
+(module aslBench/launchStability
   :d "Launch prefix stability measurement, provider cache use, and token budget tracking."
   :x [PrefixRecord ModelPricing CacheReceipt
-      make-prefix-record compare-prefix-stability
-      make-model-pricing compute-cache-receipt
-      estimate-session-cost is-cache-eligible?]
+      makePrefixRecord comparePrefixStability
+      makeModelPricing computeCacheReceipt
+      estimateSessionCost isCacheEligible?]
   :i [])
 
 (dfs PrefixRecord
   (:f prefix Str "Prompt prefix text")
-  (:f byte-count I64 "Length of prefix in bytes")
-  (:f token-count I64 "Estimated or tokenizer count of prefix tokens"))
+  (:f byteCount I64 "Length of prefix in bytes")
+  (:f tokenCount I64 "Estimated or tokenizer count of prefix tokens"))
 
 (dfs ModelPricing
-  (:f prompt-rate Float "Dollars per million uncached prompt tokens")
-  (:f cached-rate Float "Dollars per million cached prompt tokens")
-  (:f completion-rate Float "Dollars per million completion tokens"))
+  (:f promptRate Float "Dollars per million uncached prompt tokens")
+  (:f cachedRate Float "Dollars per million cached prompt tokens")
+  (:f completionRate Float "Dollars per million completion tokens"))
 
 (dfs CacheReceipt
   (:f provider Str "Provider or model identifier")
-  (:f prompt-tokens I64 "Total prompt tokens in session")
-  (:f cached-tokens I64 "Tokens served from provider prefix cache")
-  (:f completion-tokens I64 "Tokens generated in completion")
-  (:f hit-ratio Float "Ratio of cached tokens to total prompt tokens")
-  (:f cost-usd Float "Actual computed dollar cost")
-  (:f latency-ms I64 "Observed response latency in milliseconds")
-  (:f has-receipt Bool "True if backed by provider receipt"))
+  (:f promptTokens I64 "Total prompt tokens in session")
+  (:f cachedTokens I64 "Tokens served from provider prefix cache")
+  (:f completionTokens I64 "Tokens generated in completion")
+  (:f hitRatio Float "Ratio of cached tokens to total prompt tokens")
+  (:f costUsd Float "Actual computed dollar cost")
+  (:f latencyMs I64 "Observed response latency in milliseconds")
+  (:f hasReceipt Bool "True if backed by provider receipt"))
 
-(df make-prefix-record [(prefix Str) (tokens I64)] -> PrefixRecord
+(df makePrefixRecord [(prefix Str) (tokens I64)] -> PrefixRecord
   :d "Constructs a prefix record with byte and token counts."
   (PrefixRecord
     :prefix prefix
-    :byte-count (string-length prefix)
-    :token-count tokens))
+    :byteCount (string-length prefix)
+    :tokenCount tokens))
 
-(df compare-prefix-stability [(r1 PrefixRecord) (r2 PrefixRecord)] -> Bool
+(df comparePrefixStability [(r1 PrefixRecord) (r2 PrefixRecord)] -> Bool
   :d "Compares two prefix records for byte-exact and token stability."
   (and (= (.-prefix r1) (.-prefix r2))
-       (and (= (.-byte-count r1) (.-byte-count r2))
-            (= (.-token-count r1) (.-token-count r2)))))
+       (and (= (.-byteCount r1) (.-byteCount r2))
+            (= (.-tokenCount r1) (.-tokenCount r2)))))
 
-(df make-model-pricing [(prompt-rate Float) (cached-rate Float) (completion-rate Float)] -> ModelPricing
+(df makeModelPricing [(promptRate Float) (cachedRate Float) (completionRate Float)] -> ModelPricing
   :d "Creates a model pricing specification with per-million rates."
   (ModelPricing
-    :prompt-rate prompt-rate
-    :cached-rate cached-rate
-    :completion-rate completion-rate))
+    :promptRate promptRate
+    :cachedRate cachedRate
+    :completionRate completionRate))
 
-(df estimate-session-cost [(prompt-tokens I64) (cached-tokens I64) (completion-tokens I64) (pricing ModelPricing)] -> Float
+(df estimateSessionCost [(promptTokens I64) (cachedTokens I64) (completionTokens I64) (pricing ModelPricing)] -> Float
   :d "Calculates explicit dollar cost based on per-million token pricing."
-  (let [(uncached-prompt (- prompt-tokens cached-tokens))
-        (uncached-cost (/ (* (* 1.0 uncached-prompt) (.-prompt-rate pricing)) 1000000.0))
-        (cached-cost (/ (* (* 1.0 cached-tokens) (.-cached-rate pricing)) 1000000.0))
-        (comp-cost (/ (* (* 1.0 completion-tokens) (.-completion-rate pricing)) 1000000.0))]
-    (+ uncached-cost (+ cached-cost comp-cost))))
+  (let [(uncachedPrompt (- promptTokens cachedTokens))
+        (uncachedCost (/ (* (* 1.0 uncachedPrompt) (.-promptRate pricing)) 1000000.0))
+        (cachedCost (/ (* (* 1.0 cachedTokens) (.-cachedRate pricing)) 1000000.0))
+        (compCost (/ (* (* 1.0 completionTokens) (.-completionRate pricing)) 1000000.0))]
+    (+ uncachedCost (+ cachedCost compCost))))
 
-(df compute-cache-receipt [(provider Str) (prompt-tokens I64) (cached-tokens I64) (completion-tokens I64) (pricing ModelPricing) (latency-ms I64) (has-receipt Bool)] -> CacheReceipt
+(df computeCacheReceipt [(provider Str) (promptTokens I64) (cachedTokens I64) (completionTokens I64) (pricing ModelPricing) (latencyMs I64) (hasReceipt Bool)] -> CacheReceipt
   :d "Computes a cache receipt with explicit hit ratio and cost calculation."
-  (let [(hit-ratio (if (> prompt-tokens 0)
-                     (/ (* 1.0 cached-tokens) (* 1.0 prompt-tokens))
+  (let [(hitRatio (if (> promptTokens 0)
+                     (/ (* 1.0 cachedTokens) (* 1.0 promptTokens))
                      0.0))
-        (cost (estimate-session-cost prompt-tokens cached-tokens completion-tokens pricing))]
+        (cost (estimateSessionCost promptTokens cachedTokens completionTokens pricing))]
     (CacheReceipt
       :provider provider
-      :prompt-tokens prompt-tokens
-      :cached-tokens cached-tokens
-      :completion-tokens completion-tokens
-      :hit-ratio hit-ratio
-      :cost-usd cost
-      :latency-ms latency-ms
-      :has-receipt has-receipt)))
+      :promptTokens promptTokens
+      :cachedTokens cachedTokens
+      :completionTokens completionTokens
+      :hitRatio hitRatio
+      :costUsd cost
+      :latencyMs latencyMs
+      :hasReceipt hasReceipt)))
 
-(df is-cache-eligible? [(tokens I64) (threshold I64)] -> Bool
+(df isCacheEligible? [(tokens I64) (threshold I64)] -> Bool
   :d "Determines whether prompt tokens meet provider cache eligibility threshold."
   (>= tokens threshold))

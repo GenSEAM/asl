@@ -3,12 +3,12 @@
 "`map` compiles, type-checks and runs on both targets while calling the wrong"
 "function, so only a written-down expected output catches it."
 
-(module shadow-demo
+(module shadowDemo
   :doc "Reads names an imported module both defines and rebinds."
-  :export [main string-from-shadow]
+  :export [main stringFromShadow]
   :import [(core/shadow :as sh)])
 
-(df string-from-shadow [] -> String
+(df stringFromShadow [] -> String
   :doc "Every reading in one string, so the fixture asserts a value too."
   (string-join
     (list (string-from-int64 (sh/g 7))
@@ -19,4 +19,4 @@
 
 (df ! main [(args (List String))] -> (Result Unit IoError)
   :doc "Print it, so the differential gate compares an output and not a return."
-  (println (string-from-shadow)))
+  (println (stringFromShadow)))

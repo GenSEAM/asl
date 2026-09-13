@@ -1,9 +1,9 @@
-(module asl-web/harness-toolkit
+(module aslWeb/harnessToolkit
   :d "AgentScript Harness Toolkit showcase component in pure AgentScript."
-  :x [harness-toolkit render-harness-toolkit harness-view]
+  :x [harnessToolkit renderHarnessToolkit harnessView]
   :i [])
 
-(df render-harness-toolkit [] -> Str
+(df renderHarnessToolkit [] -> Str
   :d "Renders the Harness Toolkit dynamic orchestration capabilities."
   "<section id=\"harness-toolkit\" aria-labelledby=\"harness-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -172,10 +172,10 @@
     </div>
   </section>")
 
-(df harness-toolkit [] -> Str
+(df harnessToolkit [] -> Str
   :d "Alias for render-harness-toolkit."
-  (render-harness-toolkit))
+  (renderHarnessToolkit))
 
-(df harness-view [] -> Str
+(df harnessView [] -> Str
   :d "Alias for render-harness-toolkit."
-  (render-harness-toolkit))
+  (renderHarnessToolkit))

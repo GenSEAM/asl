@@ -2,10 +2,9 @@
  :version "0.1.0"
  :entry "src/cli.asl"
  :description "Pure AgentScript Native CLI Toolchain"
- :asl-first true
+ :aslFirst true
  :dependencies ["asl-parser"
                 "asl-checker"
                 "asl-codegen"
                 "asl-compiler"
-                "asl-lint"
-                "asl-codec"])
+                "asl-lint"])

@@ -1,153 +1,188 @@
 (module asl-sql/ddl
   :d "Native AgentScript SQL DDL (Schema & Migrations) and DML (Insert, Update, Delete, Upsert) Generator."
   :x [SqlColumnType ColumnDef TableDef InsertQuery UpdateQuery UpsertQuery
-           type-to-sql-string render-column-def render-create-table
-           render-insert render-update render-delete render-upsert
-           make-column make-column-custom make-table make-insert make-update make-upsert
-           col-int64 col-float64 col-text col-boolean col-bool col-timestamp])
+           typeToSqlString renderColumnDef renderCreateTable
+           renderInsert renderUpdate renderDelete renderUpsert
+           makeColumn makeColumnCustom makeTable makeInsert makeUpdate makeUpsert
+           colInt64 colFloat64 colText colBoolean colBool colTimestamp]
+  :i [(sql :a sql)])
 
 (dfe SqlColumnType
-  (:c col-int64     [] "64-bit integer (BIGINT)")
-  (:c col-float64   [] "64-bit floating point (DOUBLE PRECISION or REAL)")
-  (:c col-text      [] "Variable length character string (TEXT)")
-  (:c col-boolean   [] "Boolean flag (BOOLEAN or INTEGER)")
-  (:c col-timestamp [] "Timestamp with timezone (TIMESTAMPTZ or TEXT)"))
+  (:c colInt64     [] "64-bit integer (BIGINT)")
+  (:c colFloat64   [] "64-bit floating point (DOUBLE PRECISION or REAL)")
+  (:c colText      [] "Variable length character string (TEXT)")
+  (:c colBoolean   [] "Boolean flag (BOOLEAN or INTEGER)")
+  (:c colTimestamp [] "Timestamp with timezone (TIMESTAMPTZ or TEXT)"))
 
-(df col-bool [] -> SqlColumnType
+(df colBool [] -> SqlColumnType
   :d "Alias for col-boolean column type."
-  (col-boolean))
+  (colBoolean))
 
 (dfs ColumnDef
   (:f name String "Column identifier name")
-  (:f col-type SqlColumnType "Data type of the column")
-  (:f is-primary Bool "True if column is PRIMARY KEY")
-  (:f is-nullable Bool "True if column allows NULL values")
-  (:f extra-sql String "Custom vendor-specific SQL clauses (e.g. REFERENCES, COLLATE, DEFAULT)"))
+  (:f colType SqlColumnType "Data type of the column")
+  (:f isPrimary Bool "True if column is PRIMARY KEY")
+  (:f isNullable Bool "True if column allows NULL values")
+  (:f extraSql String "Custom vendor-specific SQL clauses (e.g. REFERENCES, COLLATE, DEFAULT)"))
 
 (dfs TableDef
-  (:f table-name String "Target database table name")
+  (:f tableName String "Target database table name")
   (:f columns (List ColumnDef) "List of column definitions"))
 
 (dfs InsertQuery
-  (:f table-name String "Target table to insert into")
+  (:f tableName String "Target table to insert into")
   (:f columns (List String) "Column identifiers")
   (:f values (List String) "Parameter placeholder strings"))
 
 (dfs UpdateQuery
-  (:f table-name String "Target table to update")
-  (:f set-assignments (List String) "Column assignments (col = val)")
-  (:f where-clause String "Update predicate condition"))
+  (:f tableName String "Target table to update")
+  (:f setAssignments (List String) "Column assignments (col = val)")
+  (:f whereClause String "Update predicate condition"))
 
 (dfs UpsertQuery
-  (:f table-name String "Target table to upsert into")
+  (:f tableName String "Target table to upsert into")
   (:f columns (List String) "Column identifiers")
   (:f values (List String) "Parameter placeholder strings")
-  (:f conflict-cols (List String) "Conflict target columns for ON CONFLICT")
-  (:f update-cols (List String) "Columns to update on conflict"))
+  (:f conflictCols (List String) "Conflict target columns for ON CONFLICT")
+  (:f updateCols (List String) "Columns to update on conflict"))
 
-(df make-column [(col-name String) (t SqlColumnType) (pk Bool) (nullable Bool)] -> ColumnDef
+(df makeColumn [(colName String) (t SqlColumnType) (pk Bool) (nullable Bool)] -> ColumnDef
   :d "Constructs a standard ColumnDef record."
-  (ColumnDef :name col-name :col-type t :is-primary pk :is-nullable nullable :extra-sql ""))
+  (ColumnDef :name colName :colType t :isPrimary pk :isNullable nullable :extraSql ""))
 
-(df make-column-custom [(col-name String) (t SqlColumnType) (pk Bool) (nullable Bool) (extra String)] -> ColumnDef
+(df makeColumnCustom [(colName String) (t SqlColumnType) (pk Bool) (nullable Bool) (extra String)] -> ColumnDef
   :d "Constructs a ColumnDef record with custom vendor extra SQL clause."
-  (ColumnDef :name col-name :col-type t :is-primary pk :is-nullable nullable :extra-sql extra))
+  (ColumnDef :name colName :colType t :isPrimary pk :isNullable nullable :extraSql extra))
 
-(df make-table [(name String) (cols (List ColumnDef))] -> TableDef
+(df makeTable [(name String) (cols (List ColumnDef))] -> TableDef
   :d "Constructs a TableDef record."
-  (TableDef :table-name name :columns cols))
+  (TableDef :tableName name :columns cols))
 
-(df make-insert [(tbl String) (cols (List String)) (vals (List String))] -> InsertQuery
+(df makeInsert [(tbl String) (cols (List String)) (vals (List String))] -> InsertQuery
   :d "Constructs an InsertQuery record."
-  (InsertQuery :table-name tbl :columns cols :values vals))
+  (InsertQuery :tableName tbl :columns cols :values vals))
 
-(df make-update [(tbl String) (assigns (List String)) (where-sql String)] -> UpdateQuery
+(df makeUpdate [(tbl String) (assigns (List String)) (whereSql String)] -> UpdateQuery
   :d "Constructs an UpdateQuery record."
-  (UpdateQuery :table-name tbl :set-assignments assigns :where-clause where-sql))
+  (UpdateQuery :tableName tbl :setAssignments assigns :whereClause whereSql))
 
-(df make-upsert [(tbl String) (cols (List String)) (vals (List String)) (conflicts (List String)) (updates (List String))] -> UpsertQuery
+(df makeUpsert [(tbl String) (cols (List String)) (vals (List String)) (conflicts (List String)) (updates (List String))] -> UpsertQuery
   :d "Constructs an UpsertQuery record."
-  (UpsertQuery :table-name tbl :columns cols :values vals :conflict-cols conflicts :update-cols updates))
+  (UpsertQuery :tableName tbl :columns cols :values vals :conflictCols conflicts :updateCols updates))
 
-(df pg-or-alt [(is-pg Bool) (pg-type String) (alt-type String)] -> String
-  :d "Returns pg-type when is-pg is true, otherwise alt-type."
-  (if is-pg pg-type alt-type))
+(df normalizeDialect [(dialect sql/SqlDialect)] -> sql/SqlDialect
+  :d "Normalizes dialect variant or legacy boolean flag to canonical SqlDialect."
+  (if (= dialect true)
+    (sql/postgres)
+    (if (= dialect false)
+      (sql/sqlite)
+      dialect)))
 
-(df type-to-sql-string [(t SqlColumnType) (is-pg Bool)] -> String
+(df typeToSqlString [(t SqlColumnType) (dialect sql/SqlDialect)] -> String
   :d "Maps abstract column type to target dialect data type keyword."
-  (mt t
-    ((col-int64)     "BIGINT")
-    ((col-float64)   (pg-or-alt is-pg "DOUBLE PRECISION" "REAL"))
-    ((col-text)      "TEXT")
-    ((col-boolean)   (pg-or-alt is-pg "BOOLEAN" "INTEGER"))
-    ((col-timestamp) (pg-or-alt is-pg "TIMESTAMPTZ" "TEXT"))))
+  (let [(d (normalizeDialect dialect))]
+    (mt t
+      ((colInt64)
+        (mt d
+          ((clickhouse) "Int64")
+          (_ "BIGINT")))
+      ((colFloat64)
+        (mt d
+          ((postgres) "DOUBLE PRECISION")
+          ((mysql) "DOUBLE")
+          ((clickhouse) "Float64")
+          (_ "REAL")))
+      ((colText)
+        (mt d
+          ((clickhouse) "String")
+          (_ "TEXT")))
+      ((colBoolean)
+        (mt d
+          ((postgres) "BOOLEAN")
+          ((mysql) "BOOLEAN")
+          ((clickhouse) "Bool")
+          (_ "INTEGER")))
+      ((colTimestamp)
+        (mt d
+          ((postgres) "TIMESTAMPTZ")
+          ((mysql) "DATETIME")
+          ((clickhouse) "DateTime64")
+          (_ "TEXT"))))))
 
-(df render-column-def [(col ColumnDef) (is-pg Bool)] -> String
+(df renderColumnDef [(col ColumnDef) (dialect sql/SqlDialect)] -> String
   :d "Renders a single column definition line for CREATE TABLE."
-  (let [(t-str (type-to-sql-string (.-col-type col) is-pg))
-        (base (str (.-name col) " " t-str))
-        (with-pk (if (.-is-primary col) (str base " PRIMARY KEY") base))
-        (with-null (if (.-is-nullable col) with-pk (str with-pk " NOT NULL")))]
-    (if (> (string-length (.-extra-sql col)) 0)
-      (str with-null " " (.-extra-sql col))
-      with-null)))
+  (let [(d (normalizeDialect dialect))
+        (tStr (typeToSqlString (.-colType col) d))
+        (base (str (.-name col) " " tStr))
+        (withPk (if (.-isPrimary col) (str base " PRIMARY KEY") base))
+        (withNull (if (.-isNullable col) withPk (str withPk " NOT NULL")))]
+    (if (> (string-length (.-extraSql col)) 0)
+      (str withNull " " (.-extraSql col))
+      withNull)))
 
-(df format-assignments [(cols (List String)) (prefix String) (suffix String)] -> String
+(df formatAssignments [(cols (List String)) (prefix String) (suffix String)] -> String
   :d "Helper to format assignment pairs."
   (string-join (map (fn [c] (str c " = " prefix c suffix)) cols) ", "))
 
-(df render-placeholder-item [(idx Int64) (is-pg Bool)] -> String
+(df renderPlaceholderItem [(idx Int64) (dialect sql/SqlDialect)] -> String
   :d "Renders a single parameter placeholder."
-  (if is-pg
-    (str "$" (string-from-int64 idx))
-    "?"))
+  (let [(d (normalizeDialect dialect))]
+    (mt d
+      ((postgres) (str "$" (string-from-int64 idx)))
+      (_ "?"))))
 
-(df render-placeholders [(count Int64) (is-pg Bool)] -> (List String)
+(df renderPlaceholders [(count Int64) (dialect sql/SqlDialect)] -> (List String)
   :d "Generates list of parameter placeholders for query binding."
   (if (<= count 0)
     (list)
-    (map (fn [idx] (render-placeholder-item idx is-pg)) (range 1 (+ count 1)))))
+    (let [(d (normalizeDialect dialect))]
+      (map (fn [idx] (renderPlaceholderItem idx d)) (range 1 (+ count 1))))))
 
-(df count-columns [(cols (List String)) (vals (List String))] -> Int64
+(df countColumns [(cols (List String)) (vals (List String))] -> Int64
   :d "Determines placeholder count from columns or values list."
-  (let [(c-len (list-length cols))]
-    (if (> c-len 0)
-      c-len
+  (let [(cLen (list-length cols))]
+    (if (> cLen 0)
+      cLen
       (list-length vals))))
 
-(df render-upsert [(q UpsertQuery) (is-pg Bool)] -> String
+(df renderUpsert [(q UpsertQuery) (dialect sql/SqlDialect)] -> String
   :d "Renders cross-dialect UPSERT query (Postgres/SQLite ON CONFLICT vs MySQL ON DUPLICATE KEY)."
-  (let [(c-len (count-columns (.-columns q) (.-values q)))
-        (ph-list (render-placeholders c-len is-pg))
-        (base (str "INSERT INTO " (.-table-name q) " (" (string-join (.-columns q) ", ") ") VALUES (" (string-join ph-list ", ") ") "))]
-    (if is-pg
-      (let [(upd (format-assignments (.-update-cols q) "EXCLUDED." ""))]
-        (str base "ON CONFLICT (" (string-join (.-conflict-cols q) ", ") ") DO UPDATE SET " upd ";"))
-      (let [(upd (format-assignments (.-update-cols q) "VALUES(" ")"))]
-        (str base "ON DUPLICATE KEY UPDATE " upd ";")))))
+  (let [(d (normalizeDialect dialect))
+        (cLen (countColumns (.-columns q) (.-values q)))
+        (phList (renderPlaceholders cLen d))
+        (base (str "INSERT INTO " (.-tableName q) " (" (string-join (.-columns q) ", ") ") VALUES (" (string-join phList ", ") ") "))]
+    (mt d
+      ((mysql)
+        (let [(upd (formatAssignments (.-updateCols q) "VALUES(" ")"))]
+          (str base "ON DUPLICATE KEY UPDATE " upd ";")))
+      (_
+        (let [(upd (formatAssignments (.-updateCols q) "EXCLUDED." ""))]
+          (str base "ON CONFLICT (" (string-join (.-conflictCols q) ", ") ") DO UPDATE SET " upd ";"))))))
 
-(df render-create-table [(tbl TableDef) (is-pg Bool)] -> String
+(df renderCreateTable [(tbl TableDef) (dialect sql/SqlDialect)] -> String
   :d "Renders a complete SQL CREATE TABLE DDL statement."
-  (let [(rendered-cols (map (fn [c] (render-column-def c is-pg)) (.-columns tbl)))
-        (cols-body (string-join rendered-cols ", "))]
-    (str "CREATE TABLE " (.-table-name tbl) " (" cols-body ");")))
+  (let [(d (normalizeDialect dialect))
+        (renderedCols (map (fn [c] (renderColumnDef c d)) (.-columns tbl)))
+        (colsBody (string-join renderedCols ", "))]
+    (str "CREATE TABLE " (.-tableName tbl) " (" colsBody ");")))
 
-(df render-insert [(q InsertQuery) (is-pg Bool)] -> String
+(df renderInsert [(q InsertQuery) (dialect sql/SqlDialect)] -> String
   :d "Renders a parameterized SQL INSERT statement."
-  (let [(cols (string-join (.-columns q) ", "))
-        (c-len (count-columns (.-columns q) (.-values q)))
-        (ph-list (render-placeholders c-len is-pg))
-        (vals (string-join ph-list ", "))]
-    (str "INSERT INTO " (.-table-name q) " (" cols ") VALUES (" vals ");")))
+  (let [(d (normalizeDialect dialect))
+        (cols (string-join (.-columns q) ", "))
+        (cLen (countColumns (.-columns q) (.-values q)))
+        (phList (renderPlaceholders cLen d))
+        (vals (string-join phList ", "))]
+    (str "INSERT INTO " (.-tableName q) " (" cols ") VALUES (" vals ");")))
 
-(df render-update [(q UpdateQuery)] -> String
+(df renderUpdate [(q UpdateQuery)] -> String
   :d "Renders a parameterized SQL UPDATE statement."
-  (str "UPDATE " (.-table-name q) " SET " (string-join (.-set-assignments q) ", ") " WHERE " (.-where-clause q) ";"))
+  (str "UPDATE " (.-tableName q) " SET " (string-join (.-setAssignments q) ", ") " WHERE " (.-whereClause q) ";"))
 
-(df where-clause-suffix [(w String)] -> String
+(df whereClauseSuffix [(w String)] -> String
   :d "Helper to format WHERE clause suffix."
   (str " WHERE " w ";"))
 
-(df render-delete [(tbl String) (where-clause String)] -> String
+(df renderDelete [(tbl String) (whereClause String)] -> String
   :d "Renders a parameterized SQL DELETE statement."
-  (str "DELETE FROM " tbl (where-clause-suffix where-clause)))
+  (str "DELETE FROM " tbl (whereClauseSuffix whereClause)))

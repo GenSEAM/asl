@@ -1,9 +1,9 @@
-(module asl-codec/yaml-transpile
+(module asl-codec/yamlTranspile
   :d "Bidirectional Indentation-Aware YAML <-> Compact ASN S-Expression Transpiler"
   :x [YamlTranspileResult
-      yaml-to-asn
-      asn-to-yaml
-      measure-yaml-savings]
+      yamlToAsn
+      asnToYaml
+      measureYamlSavings]
   :i [(asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
       (asl-parser/ast :a ast)
@@ -11,377 +11,377 @@
 
 (dfs YamlTranspileResult
   (:f output Str "Transpiled YAML or ASN S-expression")
-  (:f original-tokens I64 "Token count in source representation")
-  (:f asn-tokens I64 "Token count in ASN representation")
-  (:f savings-percent F64 "Token compaction percentage")
+  (:f originalTokens I64 "Token count in source representation")
+  (:f asnTokens I64 "Token count in ASN representation")
+  (:f savingsPercent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
 
-(df count-leading-spaces [(line Str)] -> I64
+(df countLeadingSpaces [(line Str)] -> I64
   :d "Counts number of leading space characters on a line."
-  (count-spaces-helper (string-chars line) 0))
+  (countSpacesHelper (string-chars line) 0))
 
-(df count-spaces-helper [(chars (List Str)) (acc I64)] -> I64
+(df countSpacesHelper [(chars (List Str)) (acc I64)] -> I64
   :d "Helper loop for leading space count."
   (mt (list-head chars)
     ((none) acc)
     ((some c)
      (if (= c " ")
-       (count-spaces-helper (option-or (list-tail chars) (list)) (+ acc 1))
+       (countSpacesHelper (option-or (list-tail chars) (list)) (+ acc 1))
        acc))))
 
-(df find-colon-space [(line Str)] -> I64
+(df findColonSpace [(line Str)] -> I64
   :d "Finds character index of ': ' delimiter or -1."
   (let [(chars (string-chars line))]
-    (find-colon-space-loop chars 0)))
+    (findColonSpaceLoop chars 0)))
 
-(df find-colon-space-loop [(chars (List Str)) (idx I64)] -> I64
+(df findColonSpaceLoop [(chars (List Str)) (idx I64)] -> I64
   :d "Helper loop for finding ': ' in line."
   (mt (list-head chars)
     ((none) -1)
     ((some c)
      (if (= c ":")
        (mt (list-head (option-or (list-tail chars) (list)))
-         ((some next-c)
-          (if (= next-c " ")
+         ((some nextC)
+          (if (= nextC " ")
             idx
-            (find-colon-space-loop (option-or (list-tail chars) (list)) (+ idx 1))))
+            (findColonSpaceLoop (option-or (list-tail chars) (list)) (+ idx 1))))
          ((none) idx))
-       (find-colon-space-loop (option-or (list-tail chars) (list)) (+ idx 1))))))
+       (findColonSpaceLoop (option-or (list-tail chars) (list)) (+ idx 1))))))
 
-(df parse-yaml-scalar [(raw Str)] -> rd/SExpr
+(df parseYamlScalar [(raw Str)] -> rd/SExpr
   :d "Parses a scalar YAML string into an SExpr atom."
   (let [(clean (string-trim raw))]
     (cond
-      ((or (= clean "true") (= clean "yes")) (rd/make-atom "true"))
-      ((or (= clean "false") (= clean "no")) (rd/make-atom "false"))
-      ((or (= clean "null") (or (= clean "~") (= clean "_"))) (rd/make-atom "_"))
+      ((or (= clean "true") (= clean "yes")) (rd/makeAtom "true"))
+      ((or (= clean "false") (= clean "no")) (rd/makeAtom "false"))
+      ((or (= clean "null") (or (= clean "~") (= clean "_"))) (rd/makeAtom "_"))
       ((or (string-starts-with? clean "\"") (string-starts-with? clean "'"))
-       (rd/make-atom (str "\"" (txt/strip-quotes clean) "\"")))
+       (rd/makeAtom (str "\"" (txt/stripQuotes clean) "\"")))
       ((string-contains? clean " ")
-       (rd/make-atom (str "\"" clean "\"")))
+       (rd/makeAtom (str "\"" clean "\"")))
       (:else
-       (rd/make-atom clean)))))
+       (rd/makeAtom clean)))))
 
 (dfe YamlLineKind
-  (:c ylk-blank [])
-  (:c ylk-comment [])
-  (:c ylk-seq-val [(indent I64) (val Str)])
-  (:c ylk-seq-map [(indent I64) (key Str) (val Str)])
-  (:c ylk-map-val [(indent I64) (key Str) (val Str)])
-  (:c ylk-map-block [(indent I64) (key Str)]))
+  (:c ylkBlank [])
+  (:c ylkComment [])
+  (:c ylkSeqVal [(indent I64) (val Str)])
+  (:c ylkSeqMap [(indent I64) (key Str) (val Str)])
+  (:c ylkMapVal [(indent I64) (key Str) (val Str)])
+  (:c ylkMapBlock [(indent I64) (key Str)]))
 
-(df classify-yaml-line [(line Str)] -> YamlLineKind
+(df classifyYamlLine [(line Str)] -> YamlLineKind
   :d "Classifies a single YAML line by structure and indentation."
-  (let [(clean-line (strip-yaml-comment line))
-        (trimmed (string-trim clean-line))]
+  (let [(cleanLine (stripYamlComment line))
+        (trimmed (string-trim cleanLine))]
     (if (string-empty? trimmed)
-      (ylk-blank)
-      (let [(indent (count-leading-spaces clean-line))]
+      (ylkBlank)
+      (let [(indent (countLeadingSpaces cleanLine))]
         (if (string-starts-with? trimmed "- ")
           (let [(rest (string-trim (option-or (string-slice trimmed 2 (string-length trimmed)) "")))]
-            (let [(c-idx (find-colon-space rest))]
-              (if (> c-idx 0)
-                (let [(k (string-trim (option-or (string-slice rest 0 c-idx) "")))
-                      (v (string-trim (option-or (string-slice rest (+ c-idx 2) (string-length rest)) "")))]
-                  (ylk-seq-map indent k v))
-                (ylk-seq-val indent rest))))
+            (let [(cIdx (findColonSpace rest))]
+              (if (> cIdx 0)
+                (let [(k (string-trim (option-or (string-slice rest 0 cIdx) "")))
+                      (v (string-trim (option-or (string-slice rest (+ cIdx 2) (string-length rest)) "")))]
+                  (ylkSeqMap indent k v))
+                (ylkSeqVal indent rest))))
           (if (string-ends-with? trimmed ":")
             (let [(k (string-trim (option-or (string-slice trimmed 0 (- (string-length trimmed) 1)) "")))]
-              (ylk-map-block indent k))
-            (let [(c-idx (find-colon-space trimmed))]
-              (if (> c-idx 0)
-                (let [(k (string-trim (option-or (string-slice trimmed 0 c-idx) "")))
-                      (v (string-trim (option-or (string-slice trimmed (+ c-idx 2) (string-length trimmed)) "")))]
-                  (ylk-map-val indent k v))
-                (ylk-blank)))))))))
+              (ylkMapBlock indent k))
+            (let [(cIdx (findColonSpace trimmed))]
+              (if (> cIdx 0)
+                (let [(k (string-trim (option-or (string-slice trimmed 0 cIdx) "")))
+                      (v (string-trim (option-or (string-slice trimmed (+ cIdx 2) (string-length trimmed)) "")))]
+                  (ylkMapVal indent k v))
+                (ylkBlank)))))))))
 
-(df strip-yaml-comment [(line Str)] -> Str
+(df stripYamlComment [(line Str)] -> Str
   :d "Strips comment starting with '#' outside quotes."
   (let [(chars (string-chars line))]
-    (strip-comment-loop chars false "")))
+    (stripCommentLoop chars false "")))
 
-(df strip-comment-loop [(chars (List Str)) (in-quote Bool) (acc Str)] -> Str
+(df stripCommentLoop [(chars (List Str)) (inQuote Bool) (acc Str)] -> Str
   :d "Helper loop for stripping trailing comments."
   (mt (list-head chars)
     ((none) acc)
     ((some c)
-     (if in-quote
+     (if inQuote
        (if (or (= c "\"") (= c "'"))
-         (strip-comment-loop (option-or (list-tail chars) (list)) false (str acc c))
-         (strip-comment-loop (option-or (list-tail chars) (list)) true (str acc c)))
+         (stripCommentLoop (option-or (list-tail chars) (list)) false (str acc c))
+         (stripCommentLoop (option-or (list-tail chars) (list)) true (str acc c)))
        (if (or (= c "\"") (= c "'"))
-         (strip-comment-loop (option-or (list-tail chars) (list)) true (str acc c))
+         (stripCommentLoop (option-or (list-tail chars) (list)) true (str acc c))
          (if (= c "#")
            acc
-           (strip-comment-loop (option-or (list-tail chars) (list)) false (str acc c))))))))
+           (stripCommentLoop (option-or (list-tail chars) (list)) false (str acc c))))))))
 
 (dfs YamlFrame
   (:f indent I64 "Indentation in spaces")
-  (:f is-seq Bool "True if sequence list, false if record")
-  (:f pending-key Str "Key awaiting child node")
+  (:f isSeq Bool "True if sequence list, false if record")
+  (:f pendingKey Str "Key awaiting child node")
   (:f items (List rd/SExpr) "Reversed S-expression items"))
 
 (dfs YamlParseState
   (:f stack (List YamlFrame) "Frame stack")
   (:f roots (List rd/SExpr) "Completed root expressions"))
 
-(df emit-to-frame [(st YamlParseState) (node rd/SExpr)] -> YamlParseState
+(df emitToFrame [(st YamlParseState) (node rd/SExpr)] -> YamlParseState
   :d "Emits completed node to top frame or roots."
   (if (list-empty? (.-stack st))
     (YamlParseState :stack (list) :roots (list-cons node (.-roots st)))
-    (let [(top (option-or (list-head (.-stack st)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+    (let [(top (option-or (list-head (.-stack st)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))
           (rest (option-or (list-tail (.-stack st)) (list)))]
-      (if (.-is-seq top)
-        (let [(new-items (list-cons node (.-items top)))
-              (new-top (YamlFrame :indent (.-indent top) :is-seq true :pending-key "" :items new-items))]
-          (YamlParseState :stack (list-cons new-top rest) :roots (.-roots st)))
-        (let [(key (.-pending-key top))]
+      (if (.-isSeq top)
+        (let [(newItems (list-cons node (.-items top)))
+              (newTop (YamlFrame :indent (.-indent top) :isSeq true :pendingKey "" :items newItems))]
+          (YamlParseState :stack (list-cons newTop rest) :roots (.-roots st)))
+        (let [(key (.-pendingKey top))]
           (if (string-empty? key)
-            (let [(new-items (list-cons node (.-items top)))
-                  (new-top (YamlFrame :indent (.-indent top) :is-seq false :pending-key "" :items new-items))]
-              (YamlParseState :stack (list-cons new-top rest) :roots (.-roots st)))
-            (let [(k-atom (rd/make-atom (str ":" key)))
-                  (new-items (list-cons node (list-cons k-atom (.-items top))))
-                  (new-top (YamlFrame :indent (.-indent top) :is-seq false :pending-key "" :items new-items))]
-              (YamlParseState :stack (list-cons new-top rest) :roots (.-roots st)))))))))
+            (let [(newItems (list-cons node (.-items top)))
+                  (newTop (YamlFrame :indent (.-indent top) :isSeq false :pendingKey "" :items newItems))]
+              (YamlParseState :stack (list-cons newTop rest) :roots (.-roots st)))
+            (let [(kAtom (rd/makeAtom (str ":" key)))
+                  (newItems (list-cons node (list-cons kAtom (.-items top))))
+                  (newTop (YamlFrame :indent (.-indent top) :isSeq false :pendingKey "" :items newItems))]
+              (YamlParseState :stack (list-cons newTop rest) :roots (.-roots st)))))))))
 
-(df close-yaml-frames-to-indent [(st YamlParseState) (target-indent I64)] -> YamlParseState
+(df closeYamlFramesToIndent [(st YamlParseState) (targetIndent I64)] -> YamlParseState
   :d "Pops frames whose indent is greater than target indent."
   (if (list-empty? (.-stack st))
     st
-    (let [(top (option-or (list-head (.-stack st)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))]
-      (if (> (.-indent top) target-indent)
+    (let [(top (option-or (list-head (.-stack st)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))]
+      (if (> (.-indent top) targetIndent)
         (let [(rest (option-or (list-tail (.-stack st)) (list)))
-              (closed-items (list-reverse (.-items top)))
-              (node (if (.-is-seq top) (rd/make-vect closed-items) (rd/make-list closed-items)))
-              (popped-st (YamlParseState :stack rest :roots (.-roots st)))]
-          (close-yaml-frames-to-indent (emit-to-frame popped-st node) target-indent))
+              (closedItems (list-reverse (.-items top)))
+              (node (if (.-isSeq top) (rd/makeVect closedItems) (rd/makeList closedItems)))
+              (poppedSt (YamlParseState :stack rest :roots (.-roots st)))]
+          (closeYamlFramesToIndent (emitToFrame poppedSt node) targetIndent))
         st))))
 
-(df close-all-yaml-frames [(st YamlParseState)] -> YamlParseState
+(df closeAllYamlFrames [(st YamlParseState)] -> YamlParseState
   :d "Drains the entire frame stack at end of input."
   (if (list-empty? (.-stack st))
     st
-    (let [(top (option-or (list-head (.-stack st)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+    (let [(top (option-or (list-head (.-stack st)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))
           (rest (option-or (list-tail (.-stack st)) (list)))
-          (closed-items (list-reverse (.-items top)))
-          (node (if (.-is-seq top) (rd/make-vect closed-items) (rd/make-list closed-items)))
-          (popped-st (YamlParseState :stack rest :roots (.-roots st)))]
-      (close-all-yaml-frames (emit-to-frame popped-st node)))))
+          (closedItems (list-reverse (.-items top)))
+          (node (if (.-isSeq top) (rd/makeVect closedItems) (rd/makeList closedItems)))
+          (poppedSt (YamlParseState :stack rest :roots (.-roots st)))]
+      (closeAllYamlFrames (emitToFrame poppedSt node)))))
 
-(df process-yaml-line [(st YamlParseState) (line-kind YamlLineKind)] -> YamlParseState
+(df processYamlLine [(st YamlParseState) (lineKind YamlLineKind)] -> YamlParseState
   :d "Applies one classified YAML line to the parse state."
-  (mt line-kind
-    ((ylk-blank) st)
-    ((ylk-comment) st)
-    ((ylk-map-val indent k v)
-     (let [(aligned (close-yaml-frames-to-indent st indent))
-           (k-atom (rd/make-atom (str ":" k)))
-           (v-atom (parse-yaml-scalar v))]
+  (mt lineKind
+    ((ylkBlank) st)
+    ((ylkComment) st)
+    ((ylkMapVal indent k v)
+     (let [(aligned (closeYamlFramesToIndent st indent))
+           (kAtom (rd/makeAtom (str ":" k)))
+           (vAtom (parseYamlScalar v))]
        (if (list-empty? (.-stack aligned))
-         (let [(frame (YamlFrame :indent indent :is-seq false :pending-key "" :items (list v-atom k-atom)))]
+         (let [(frame (YamlFrame :indent indent :isSeq false :pendingKey "" :items (list vAtom kAtom)))]
            (YamlParseState :stack (list frame) :roots (.-roots aligned)))
-         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))
                (rest (option-or (list-tail (.-stack aligned)) (list)))]
-           (if (or (.-is-seq top) (> indent (.-indent top)))
-             (let [(frame (YamlFrame :indent indent :is-seq false :pending-key "" :items (list v-atom k-atom)))]
+           (if (or (.-isSeq top) (> indent (.-indent top)))
+             (let [(frame (YamlFrame :indent indent :isSeq false :pendingKey "" :items (list vAtom kAtom)))]
                (YamlParseState :stack (list-cons frame (.-stack aligned)) :roots (.-roots aligned)))
-             (let [(new-items (list-cons v-atom (list-cons k-atom (.-items top))))
-                   (new-top (YamlFrame :indent (.-indent top) :is-seq false :pending-key "" :items new-items))]
-               (YamlParseState :stack (list-cons new-top rest) :roots (.-roots aligned))))))))
-    ((ylk-map-block indent k)
-     (let [(aligned (close-yaml-frames-to-indent st indent))]
+             (let [(newItems (list-cons vAtom (list-cons kAtom (.-items top))))
+                   (newTop (YamlFrame :indent (.-indent top) :isSeq false :pendingKey "" :items newItems))]
+               (YamlParseState :stack (list-cons newTop rest) :roots (.-roots aligned))))))))
+    ((ylkMapBlock indent k)
+     (let [(aligned (closeYamlFramesToIndent st indent))]
        (if (list-empty? (.-stack aligned))
-         (let [(frame (YamlFrame :indent indent :is-seq false :pending-key k :items (list)))]
+         (let [(frame (YamlFrame :indent indent :isSeq false :pendingKey k :items (list)))]
            (YamlParseState :stack (list frame) :roots (.-roots aligned)))
-         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))
                (rest (option-or (list-tail (.-stack aligned)) (list)))
-               (new-top (YamlFrame :indent (.-indent top) :is-seq (.-is-seq top) :pending-key k :items (.-items top)))]
-           (YamlParseState :stack (list-cons new-top rest) :roots (.-roots aligned))))))
-    ((ylk-seq-val indent v)
-     (let [(aligned (close-yaml-frames-to-indent st indent))
-           (v-atom (parse-yaml-scalar v))]
+               (newTop (YamlFrame :indent (.-indent top) :isSeq (.-isSeq top) :pendingKey k :items (.-items top)))]
+           (YamlParseState :stack (list-cons newTop rest) :roots (.-roots aligned))))))
+    ((ylkSeqVal indent v)
+     (let [(aligned (closeYamlFramesToIndent st indent))
+           (vAtom (parseYamlScalar v))]
        (if (list-empty? (.-stack aligned))
-         (let [(frame (YamlFrame :indent indent :is-seq true :pending-key "" :items (list v-atom)))]
+         (let [(frame (YamlFrame :indent indent :isSeq true :pendingKey "" :items (list vAtom)))]
            (YamlParseState :stack (list frame) :roots (.-roots aligned)))
-         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))
                (rest (option-or (list-tail (.-stack aligned)) (list)))]
-           (if (.-is-seq top)
-             (let [(new-items (list-cons v-atom (.-items top)))
-                   (new-top (YamlFrame :indent (.-indent top) :is-seq true :pending-key "" :items new-items))]
-               (YamlParseState :stack (list-cons new-top rest) :roots (.-roots aligned)))
-             (let [(frame (YamlFrame :indent indent :is-seq true :pending-key "" :items (list v-atom)))]
+           (if (.-isSeq top)
+             (let [(newItems (list-cons vAtom (.-items top)))
+                   (newTop (YamlFrame :indent (.-indent top) :isSeq true :pendingKey "" :items newItems))]
+               (YamlParseState :stack (list-cons newTop rest) :roots (.-roots aligned)))
+             (let [(frame (YamlFrame :indent indent :isSeq true :pendingKey "" :items (list vAtom)))]
                (YamlParseState :stack (list-cons frame (.-stack aligned)) :roots (.-roots aligned))))))))
-    ((ylk-seq-map indent k v)
-     (let [(aligned (close-yaml-frames-to-indent st indent))
-           (k-atom (rd/make-atom (str ":" k)))
-           (v-atom (parse-yaml-scalar v))
-           (map-node (rd/make-list (list k-atom v-atom)))]
+    ((ylkSeqMap indent k v)
+     (let [(aligned (closeYamlFramesToIndent st indent))
+           (kAtom (rd/makeAtom (str ":" k)))
+           (vAtom (parseYamlScalar v))
+           (mapNode (rd/makeList (list kAtom vAtom)))]
        (if (list-empty? (.-stack aligned))
-         (let [(frame (YamlFrame :indent indent :is-seq true :pending-key "" :items (list map-node)))]
+         (let [(frame (YamlFrame :indent indent :isSeq true :pendingKey "" :items (list mapNode)))]
            (YamlParseState :stack (list frame) :roots (.-roots aligned)))
-         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :is-seq false :pending-key "" :items (list))))
+         (let [(top (option-or (list-head (.-stack aligned)) (YamlFrame :indent 0 :isSeq false :pendingKey "" :items (list))))
                (rest (option-or (list-tail (.-stack aligned)) (list)))]
-           (if (.-is-seq top)
-             (let [(new-items (list-cons map-node (.-items top)))
-                   (new-top (YamlFrame :indent (.-indent top) :is-seq true :pending-key "" :items new-items))]
-               (YamlParseState :stack (list-cons new-top rest) :roots (.-roots aligned)))
-             (let [(frame (YamlFrame :indent indent :is-seq true :pending-key "" :items (list map-node)))]
+           (if (.-isSeq top)
+             (let [(newItems (list-cons mapNode (.-items top)))
+                   (newTop (YamlFrame :indent (.-indent top) :isSeq true :pendingKey "" :items newItems))]
+               (YamlParseState :stack (list-cons newTop rest) :roots (.-roots aligned)))
+             (let [(frame (YamlFrame :indent indent :isSeq true :pendingKey "" :items (list mapNode)))]
                (YamlParseState :stack (list-cons frame (.-stack aligned)) :roots (.-roots aligned))))))))))
 
-(df yaml-to-asn [(yaml-str Str)] -> YamlTranspileResult
+(df yamlToAsn [(yamlStr Str)] -> YamlTranspileResult
   :d "Transpiles YAML key-value and sequence hierarchies into compact ASN S-expressions."
-  (let [(trimmed (string-trim yaml-str))]
+  (let [(trimmed (string-trim yamlStr))]
     (cond
       ((string-empty? trimmed)
        (YamlTranspileResult
          :output "Empty input"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       (:else
        (let [(lines (string-split trimmed "\n"))
-             (kinds (map (fn [(l Str)] -> YamlLineKind (classify-yaml-line l)) lines))
-             (init-st (YamlParseState :stack (list) :roots (list)))
-             (fin-st (fold (fn [(st YamlParseState) (k YamlLineKind)] -> YamlParseState (process-yaml-line st k))
-                           init-st
+             (kinds (map (fn [(l Str)] -> YamlLineKind (classifyYamlLine l)) lines))
+             (initSt (YamlParseState :stack (list) :roots (list)))
+             (finSt (fold (fn [(st YamlParseState) (k YamlLineKind)] -> YamlParseState (processYamlLine st k))
+                           initSt
                            kinds))
-             (drained (close-all-yaml-frames fin-st))
+             (drained (closeAllYamlFrames finSt))
              (roots (list-reverse (.-roots drained)))]
          (if (list-empty? roots)
            (YamlTranspileResult
              :output "Syntax error: empty or invalid YAML document"
-             :original-tokens (txt/estimate-tokens trimmed)
-             :asn-tokens (txt/estimate-tokens trimmed)
-             :savings-percent 0.0
+             :originalTokens (txt/estimateTokens trimmed)
+             :asnTokens (txt/estimateTokens trimmed)
+             :savingsPercent 0.0
              :success false)
-           (let [(root-node (option-or (list-head roots) (rd/make-atom "")))
-                 (compact (rd/render-sexpr root-node))
-                 (orig-tok (txt/estimate-tokens trimmed))
-                 (asn-tok (txt/estimate-tokens compact))
-                 (savings (txt/calc-savings orig-tok asn-tok))]
+           (let [(rootNode (option-or (list-head roots) (rd/makeAtom "")))
+                 (compact (rd/renderSexpr rootNode))
+                 (origTok (txt/estimateTokens trimmed))
+                 (asnTok (txt/estimateTokens compact))
+                 (savings (txt/calcSavings origTok asnTok))]
              (YamlTranspileResult
                :output compact
-               :original-tokens orig-tok
-               :asn-tokens asn-tok
-               :savings-percent (if (> savings 0.0) savings 54.0)
+               :originalTokens origTok
+               :asnTokens asnTok
+               :savingsPercent (if (> savings 0.0) savings 54.0)
                :success true))))))))
 
-(df make-indent [(depth I64)] -> Str
+(df makeIndent [(depth I64)] -> Str
   :d "Generates spaces for given indentation depth."
   (if (<= depth 0)
     ""
-    (string-repeat "  " depth)))
+    (stringRepeat "  " depth)))
 
-(df string-repeat [(s Str) (n I64)] -> Str
+(df stringRepeat [(s Str) (n I64)] -> Str
   :d "Repeats string n times."
   (if (<= n 0)
     ""
-    (str s (string-repeat s (- n 1)))))
+    (str s (stringRepeat s (- n 1)))))
 
 (dfs YamlGenState
   (:f lines (List Str) "Accumulated YAML lines")
-  (:f pending-key Str "Object key waiting for value"))
+  (:f pendingKey Str "Object key waiting for value"))
 
-(df sexpr-to-yaml-lines [(expr rd/SExpr) (depth I64)] -> (List Str)
+(df sexprToYamlLines [(expr rd/SExpr) (depth I64)] -> (List Str)
   :d "Recursively formats an SExpr tree into indented YAML lines."
   (mt expr
-    ((rd/sexpr-atom v)
-     (list (str (make-indent depth) (txt/strip-quotes v))))
-    ((rd/sexpr-vect items)
+    ((rd/sexprAtom v)
+     (list (str (makeIndent depth) (txt/stripQuotes v))))
+    ((rd/sexprVect items)
      (let [(rendered (fold (fn [(acc (List Str)) (it rd/SExpr)] -> (List Str)
                              (mt it
-                               ((rd/sexpr-atom v)
-                                (list-append acc (list (str (make-indent depth) "- " (txt/strip-quotes v)))))
-                               ((rd/sexpr-list sub-items)
-                                (let [(sub-lines (sexpr-to-yaml-lines it (+ depth 1)))]
-                                  (mt (list-head sub-lines)
+                               ((rd/sexprAtom v)
+                                (list-append acc (list (str (makeIndent depth) "- " (txt/stripQuotes v)))))
+                               ((rd/sexprList subItems)
+                                (let [(subLines (sexprToYamlLines it (+ depth 1)))]
+                                  (mt (list-head subLines)
                                     ((none) acc)
-                                    ((some first-l)
-                                     (let [(item-line (str (make-indent depth) "- " (string-trim first-l)))
-                                           (tail-lines (option-or (list-tail sub-lines) (list)))]
-                                       (list-append acc (list-cons item-line tail-lines)))))))
-                               ((rd/sexpr-vect _)
-                                (list-append acc (list-cons (str (make-indent depth) "-") (sexpr-to-yaml-lines it (+ depth 1)))))))
+                                    ((some firstL)
+                                     (let [(itemLine (str (makeIndent depth) "- " (string-trim firstL)))
+                                           (tailLines (option-or (list-tail subLines) (list)))]
+                                       (list-append acc (list-cons itemLine tailLines)))))))
+                               ((rd/sexprVect _)
+                                (list-append acc (list-cons (str (makeIndent depth) "-") (sexprToYamlLines it (+ depth 1)))))))
                            (list)
                            items))]
        rendered))
-    ((rd/sexpr-list items)
-     (let [(init (YamlGenState :lines (list) :pending-key ""))
+    ((rd/sexprList items)
+     (let [(init (YamlGenState :lines (list) :pendingKey ""))
            (fin (fold (fn [(st YamlGenState) (it rd/SExpr)] -> YamlGenState
-                        (if (string-empty? (.-pending-key st))
+                        (if (string-empty? (.-pendingKey st))
                           (mt it
-                            ((rd/sexpr-atom k)
-                             (YamlGenState :lines (.-lines st) :pending-key (txt/strip-colon (txt/strip-quotes k))))
+                            ((rd/sexprAtom k)
+                             (YamlGenState :lines (.-lines st) :pendingKey (txt/stripColon (txt/stripQuotes k))))
                             (_ st))
-                          (let [(key (.-pending-key st))]
+                          (let [(key (.-pendingKey st))]
                             (mt it
-                              ((rd/sexpr-atom v)
-                               (let [(line (str (make-indent depth) key ": " (txt/strip-quotes v)))]
-                                 (YamlGenState :lines (list-append (.-lines st) (list line)) :pending-key "")))
-                              ((rd/sexpr-list _)
-                               (let [(header (str (make-indent depth) key ":"))
-                                     (child-lines (sexpr-to-yaml-lines it (+ depth 1)))]
-                                 (YamlGenState :lines (list-append (list-append (.-lines st) (list header)) child-lines) :pending-key "")))
-                              ((rd/sexpr-vect _)
-                               (let [(header (str (make-indent depth) key ":"))
-                                     (child-lines (sexpr-to-yaml-lines it (+ depth 1)))]
-                                 (YamlGenState :lines (list-append (list-append (.-lines st) (list header)) child-lines) :pending-key "")))))))
+                              ((rd/sexprAtom v)
+                               (let [(line (str (makeIndent depth) key ": " (txt/stripQuotes v)))]
+                                 (YamlGenState :lines (list-append (.-lines st) (list line)) :pendingKey "")))
+                              ((rd/sexprList _)
+                               (let [(header (str (makeIndent depth) key ":"))
+                                     (childLines (sexprToYamlLines it (+ depth 1)))]
+                                 (YamlGenState :lines (list-append (list-append (.-lines st) (list header)) childLines) :pendingKey "")))
+                              ((rd/sexprVect _)
+                               (let [(header (str (makeIndent depth) key ":"))
+                                     (childLines (sexprToYamlLines it (+ depth 1)))]
+                                 (YamlGenState :lines (list-append (list-append (.-lines st) (list header)) childLines) :pendingKey "")))))))
                       init
                       items))]
        (.-lines fin)))))
 
-(df asn-to-yaml [(asn-str Str)] -> YamlTranspileResult
+(df asnToYaml [(asnStr Str)] -> YamlTranspileResult
   :d "Transpiles ASN S-expressions into structured YAML."
-  (let [(trimmed (string-trim asn-str))]
+  (let [(trimmed (string-trim asnStr))]
     (cond
       ((string-empty? trimmed)
        (YamlTranspileResult
          :output "Empty input"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       ((and (not (string-starts-with? trimmed "("))
             (not (string-starts-with? trimmed "[")))
        (YamlTranspileResult
          :output "Syntax error: invalid ASN root"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       (:else
-       (let [(orig-tok (txt/estimate-tokens trimmed))
+       (let [(origTok (txt/estimateTokens trimmed))
              (toks (lx/tokenize trimmed))
-             (forms-res (ast/read-forms toks))]
-         (mt forms-res
+             (formsRes (ast/readForms toks))]
+         (mt formsRes
            ((err _)
             (YamlTranspileResult
               :output "Syntax error: invalid ASN root"
-              :original-tokens 0
-              :asn-tokens 0
-              :savings-percent 0.0
+              :originalTokens 0
+              :asnTokens 0
+              :savingsPercent 0.0
               :success false))
            ((ok forms)
             (if (list-empty? forms)
               (YamlTranspileResult
                 :output "Empty forms"
-                :original-tokens 0
-                :asn-tokens 0
-                :savings-percent 0.0
+                :originalTokens 0
+                :asnTokens 0
+                :savingsPercent 0.0
                 :success false)
-              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
-                    (lines (sexpr-to-yaml-lines (.-expr pf) 0))
-                    (yaml-out (string-join lines "\n"))
-                    (yaml-tok (txt/estimate-tokens yaml-out))]
+              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)))
+                    (lines (sexprToYamlLines (.-expr pf) 0))
+                    (yamlOut (string-join lines "\n"))
+                    (yamlTok (txt/estimateTokens yamlOut))]
                 (YamlTranspileResult
-                  :output yaml-out
-                  :original-tokens orig-tok
-                  :asn-tokens yaml-tok
-                  :savings-percent 0.0
+                  :output yamlOut
+                  :originalTokens origTok
+                  :asnTokens yamlTok
+                  :savingsPercent 0.0
                   :success true))))))))))
 
-(df measure-yaml-savings [(input Str)] -> YamlTranspileResult
+(df measureYamlSavings [(input Str)] -> YamlTranspileResult
   :d "Measures empirical token reduction for YAML input."
-  (yaml-to-asn input))
+  (yamlToAsn input))

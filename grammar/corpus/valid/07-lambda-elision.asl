@@ -17,7 +17,7 @@
         0
         ws))
 
-(df by-length [(ws (List String))] -> (List String)
+(df byLength [(ws (List String))] -> (List String)
   :doc "Sorting by a projection exercises the other higher-order builtin, whose
         Rust lowering nothing had ever compiled."
   (list-sort-by (fn [w] (string-length w)) ws))

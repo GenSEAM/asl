@@ -1,8 +1,8 @@
-(:asl-config
+(:aslConfig
   :workspace "asl"
   :version "0.1.0"
-  :pure-asl true
-  :asl-first true
+  :pureAsl true
+  :aslFirst true
   :projections [
     (:proj :from "package.asn" :to "package.json" :format "json" :doc "Root ASL NPM manifest")
     (:proj :from "web/package.asn" :to "web/package.json" :format "json" :doc "Web showcase package manifest")
@@ -25,16 +25,16 @@
     "web/dist/**"
   ]
   :gates [1 2 3 4 5 6 7]
-  :token-baseline 2
-  :telemetry (:target-turn-ms 100 :max-token-ceiling 150)
-  :daemon (:resident true :memory-index true :max-files 2000)
+  :tokenBaseline 2
+  :telemetry (:targetTurnMs 100 :maxTokenCeiling 150)
+  :daemon (:resident true :memoryIndex true :maxFiles 2000)
   :coverage (
     :desired 75.0
-    :min-assertions 2
-    :strict-polarity false
-    :discount-zero-asserts true
-    :core-desired 100.0
-    :core-packages ["packages/asl-compiler" "packages/asl-parser" "packages/asl-codec" "packages/asl-lint" "packages/asl-gates"]
+    :minAssertions 2
+    :strictPolarity false
+    :discountZeroAsserts true
+    :coreDesired 100.0
+    :corePackages ["packages/asl-compiler" "packages/asl-parser" "packages/asl-codec" "packages/asl-lint" "packages/asl-gates"]
     :exclude ["examples/**" "asl-arduino/**" "asl-quantum/**"]
   )
   :tasks [

@@ -3,9 +3,9 @@
 "why this fixture is a directory: a flat glob would never see it."
 (module a
   :doc "Imports b, which imports a."
-  :export [from-a]
+  :export [fromA]
   :import [(b :as b)])
 
-(df from-a [] -> Int64
+(df fromA [] -> Int64
   :doc "Exists so the module has a surface."
   1)

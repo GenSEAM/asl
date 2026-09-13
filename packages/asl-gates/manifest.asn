@@ -2,7 +2,7 @@
  :version "0.1.0"
  :entry "src/gates.asl"
  :description "Pure AgentScript Verification Gate Runners & Continuous Audit Engine"
- :asl-first true
+ :aslFirst true
  :modules ["asl-gates/annotation-lint"
            "asl-gates/gate-runner"
            "asl-gates/gates"

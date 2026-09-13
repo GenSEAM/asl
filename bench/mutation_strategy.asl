@@ -1,4 +1,4 @@
-(module asl-bench/mutation-strategy
+(module aslBench/mutationStrategy
   :d "Deterministic mutation selection, equivalent mutant triage, and incremental digest caching under ADR-0081."
   :x [MutantRecord
       TriageRecord
@@ -43,30 +43,30 @@
 
 (df RecordSeed [(seedVal I64)] -> I64
   :d "Returns recorded seed for deterministic selection"
-  (let [(record-seed seedVal)]
-    record-seed))
+  (let [(recordSeed seedVal)]
+    recordSeed))
 
 (df NextLcg [(seed I64)] -> I64
   :d "Linear congruential pseudo-random step for reproducible seed sampling"
-  (let [(next-val (mod (+ (* seed 1103515245) 12345) 2147483648))]
-    (if (< next-val 0)
-        (- 0 next-val)
-        next-val)))
+  (let [(nextVal (mod (+ (* seed 1103515245) 12345) 2147483648))]
+    (if (< nextVal 0)
+        (- 0 nextVal)
+        nextVal)))
 
 (df SelectMutants [(candidates (List MutantRecord))
                    (seed I64)
                    (coreTierOnly Bool)
                    (sampleRate I64)] -> (List MutantRecord)
   :d "Applies selection rule: core-tier package assertions, changed symbols, plus seed-sampled sample"
-  (let [(rec-seed (RecordSeed seed))]
-    (let [(result (list-filter
+  (let [(recSeed (RecordSeed seed))]
+    (let [(result (listFilter
                     (fn [(m MutantRecord)]
                       (let [(tier (.-tier m))]
                         (if (= tier "core-tier")
                             true
                             (if coreTierOnly
                                 false
-                                (let [(h (NextLcg (+ rec-seed (string-length (.-id m)))))]
+                                (let [(h (NextLcg (+ recSeed (string-length (.-id m)))))]
                                   (= (mod h 100) 0))))))
                     candidates))]
       result)))
@@ -97,7 +97,7 @@
         (let [(pct (/ (* killed 1000) effective))]
           (let [(whole (/ pct 1000))
                 (frac (mod pct 1000))]
-            (str-concat (str-concat (str whole) ".") (str frac)))))))
+            (strConcat (strConcat (str whole) ".") (str frac)))))))
 
 (df DigestCacheLookup [(cachedDigest Str) (currentDigest Str)] -> Bool
   :d "Determines whether execution can complete from incremental cache"
@@ -126,7 +126,7 @@
               :mutated "(- x 1)"
               :expectedOutcome "killed"
               :justification ""))
-        (m-eq (MutantRecord
+        (mEq (MutantRecord
                 :id "meq1"
                 :package "asl-bench"
                 :symbol "is-under-budget?"
@@ -136,16 +136,16 @@
                 :mutated "(or (< a b) (= a b))"
                 :expectedOutcome ":equivalent"
                 :justification "Logical equivalence: <= is identical to < or ="))]
-    (let [(pool [m1 m2 m-eq])]
+    (let [(pool [m1 m2 mEq])]
       (let [(sel1 (SelectMutants pool 42 true 10))
             (sel2 (SelectMutants pool 42 true 10))]
-        (assert (= (list-len sel1) (list-len sel2)) "Same seed must reproduce identical selection count")
-        (assert (= (list-len sel1) 2) "Core-tier selection must select exactly 2 core mutants")
-        (let [(triage-killed (TriageMutant m1 true))
-              (triage-equiv (TriageMutant m-eq false))]
-          (assert (= (.-status triage-killed) "killed") "Failed assertion must triage as killed")
-          (assert (= (.-status triage-equiv) ":equivalent") "Equivalent mutant must triage as :equivalent")
-          (assert (> (string-length (.-justification triage-equiv)) 0) "Equivalent triage must carry written justification")
+        (assert (= (listLen sel1) (listLen sel2)) "Same seed must reproduce identical selection count")
+        (assert (= (listLen sel1) 2) "Core-tier selection must select exactly 2 core mutants")
+        (let [(triageKilled (TriageMutant m1 true))
+              (triageEquiv (TriageMutant mEq false))]
+          (assert (= (.-status triageKilled) "killed") "Failed assertion must triage as killed")
+          (assert (= (.-status triageEquiv) ":equivalent") "Equivalent mutant must triage as :equivalent")
+          (assert (> (string-length (.-justification triageEquiv)) 0) "Equivalent triage must carry written justification")
           (let [(score (CalculateMutationScore 2 3 1))]
             (assert (= score "1.0") "2 killed out of 3 total with 1 equivalent must yield score 1.0")
             (assert (DigestCacheLookup "abcdef12" "abcdef12") "Matching digest must hit cache")

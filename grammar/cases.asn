@@ -1,5 +1,5 @@
 (:schema
-  :package @genseam/asl-core
+  :package @genseam/aslCore
   :version "1.0.0"
   :types [
     (:type :name "CasePolarity" :kind :enum

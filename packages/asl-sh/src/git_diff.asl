@@ -1,50 +1,50 @@
-(module asl-sh/git-diff
+(module asl-sh/gitDiff
   :d "Pure AgentScript unified diff parser and token-optimized ASN diff summary codec."
   :x [GitDiffHunk
       GitDiffFile
       GitNumstatEntry
       GitBranchCompare
-      git-diff-parse
-      git-diff-summary
-      git-numstat-parse
-      git-compare-format])
+      gitDiffParse
+      gitDiffSummary
+      gitNumstatParse
+      gitCompareFormat])
 
 (dfs GitDiffHunk
-  (:f old-start Int64 "Hunk line start in old file")
-  (:f old-count Int64 "Hunk line count in old file")
-  (:f new-start Int64 "Hunk line start in new file")
-  (:f new-count Int64 "Hunk line count in new file")
+  (:f oldStart Int64 "Hunk line start in old file")
+  (:f oldCount Int64 "Hunk line count in old file")
+  (:f newStart Int64 "Hunk line start in new file")
+  (:f newCount Int64 "Hunk line count in new file")
   (:f lines (List String) "Hunk diff lines including context and changes"))
 
 (dfs GitDiffFile
-  (:f old-path String "Path to old file or empty string")
-  (:f new-path String "Path to new file or empty string")
+  (:f oldPath String "Path to old file or empty string")
+  (:f newPath String "Path to new file or empty string")
   (:f hunks (List GitDiffHunk) "List of hunks in this file diff")
   (:f additions Int64 "Total additions in this file diff")
   (:f deletions Int64 "Total deletions in this file diff"))
 
 (dfs ParseState
   (:f files (List GitDiffFile) "Accumulated completed files in reverse order")
-  (:f cur-old-path String "Current file old path")
-  (:f cur-new-path String "Current file new path")
-  (:f cur-hunks (List GitDiffHunk) "Accumulated hunks for current file in reverse order")
-  (:f cur-additions Int64 "Additions count for current file")
-  (:f cur-deletions Int64 "Deletions count for current file")
-  (:f cur-hunk (Option GitDiffHunk) "Active hunk being collected")
-  (:f has-file Bool "True if a file boundary has been seen"))
+  (:f curOldPath String "Current file old path")
+  (:f curNewPath String "Current file new path")
+  (:f curHunks (List GitDiffHunk) "Accumulated hunks for current file in reverse order")
+  (:f curAdditions Int64 "Additions count for current file")
+  (:f curDeletions Int64 "Deletions count for current file")
+  (:f curHunk (Option GitDiffHunk) "Active hunk being collected")
+  (:f hasFile Bool "True if a file boundary has been seen"))
 
-(df clean-diff-path [(raw String)] -> String
+(df cleanDiffPath [(raw String)] -> String
   :d "Cleans trailing tab metadata and whitespace from a diff file path."
-  (let [(no-tab (if (string-contains? raw "\t")
+  (let [(noTab (if (string-contains? raw "\t")
                     (option-or (list-get (string-split raw "\t") 0) raw)
                     raw))]
-    (string-trim no-tab)))
+    (string-trim noTab)))
 
-(df extract-diff-path [(line String) (prefix String)] -> String
+(df extractDiffPath [(line String) (prefix String)] -> String
   :d "Extracts and normalizes target file path from a diff header line."
-  (let [(p-len (string-length prefix))
-        (raw-tail (option-or (string-slice line p-len (string-length line)) ""))
-        (trimmed (clean-diff-path raw-tail))]
+  (let [(pLen (string-length prefix))
+        (rawTail (option-or (string-slice line pLen (string-length line)) ""))
+        (trimmed (cleanDiffPath rawTail))]
     (cond
       ((string-starts-with? trimmed "a/")
        (option-or (string-slice trimmed 2 (string-length trimmed)) ""))
@@ -52,20 +52,20 @@
        (option-or (string-slice trimmed 2 (string-length trimmed)) ""))
       (:else trimmed))))
 
-(df parse-range-token [(tok String) (prefix String)] -> (Pair Int64 Int64)
+(df parseRangeToken [(tok String) (prefix String)] -> (Pair Int64 Int64)
   :d "Parses start and count from a diff range token such as -1,5 or +1."
-  (let [(p-len (string-length prefix))
-        (clean-tok (option-or (string-slice tok p-len (string-length tok)) ""))
-        (nums (string-split clean-tok ","))
-        (start-str (string-trim (option-or (list-get nums 0) "0")))
-        (start-val (option-or (string-to-int64 start-str) 0))]
+  (let [(pLen (string-length prefix))
+        (cleanTok (option-or (string-slice tok pLen (string-length tok)) ""))
+        (nums (string-split cleanTok ","))
+        (startStr (string-trim (option-or (list-get nums 0) "0")))
+        (startVal (option-or (string-to-int64 startStr) 0))]
     (if (> (list-length nums) 1)
-        (let [(count-str (string-trim (option-or (list-get nums 1) "0")))
-              (count-val (option-or (string-to-int64 count-str) 0))]
-          (pair start-val count-val))
-        (pair start-val 1))))
+        (let [(countStr (string-trim (option-or (list-get nums 1) "0")))
+              (countVal (option-or (string-to-int64 countStr) 0))]
+          (pair startVal countVal))
+        (pair startVal 1))))
 
-(df find-token-with-prefix [(toks (List String)) (prefix String)] -> String
+(df findTokenWithPrefix [(toks (List String)) (prefix String)] -> String
   :d "Finds the first token in a list starting with a specific prefix."
   (fold (fn [(acc String) (tok String)] -> String
           (if (string-empty? acc)
@@ -75,74 +75,74 @@
         ""
         toks))
 
-(df parse-hunk-header [(line String)] -> (Option GitDiffHunk)
+(df parseHunkHeader [(line String)] -> (Option GitDiffHunk)
   :d "Parses a unified diff hunk header into a GitDiffHunk structure."
   (if (string-starts-with? line "@@ ")
-      (let [(after-prefix (option-or (string-slice line 3 (string-length line)) ""))
-            (parts (string-split after-prefix "@@"))]
+      (let [(afterPrefix (option-or (string-slice line 3 (string-length line)) ""))
+            (parts (string-split afterPrefix "@@"))]
         (if (>= (list-length parts) 2)
-            (let [(range-str (string-trim (option-or (list-get parts 0) "")))
-                  (toks (string-split range-str " "))
-                  (old-tok (find-token-with-prefix toks "-"))
-                  (new-tok (find-token-with-prefix toks "+"))]
-              (if (and (not (string-empty? old-tok)) (not (string-empty? new-tok)))
-                  (let [(old-range (parse-range-token old-tok "-"))
-                        (new-range (parse-range-token new-tok "+"))]
+            (let [(rangeStr (string-trim (option-or (list-get parts 0) "")))
+                  (toks (string-split rangeStr " "))
+                  (oldTok (findTokenWithPrefix toks "-"))
+                  (newTok (findTokenWithPrefix toks "+"))]
+              (if (and (not (string-empty? oldTok)) (not (string-empty? newTok)))
+                  (let [(oldRange (parseRangeToken oldTok "-"))
+                        (newRange (parseRangeToken newTok "+"))]
                     (some (GitDiffHunk
-                            :old-start (.-first old-range)
-                            :old-count (.-second old-range)
-                            :new-start (.-first new-range)
-                            :new-count (.-second new-range)
+                            :oldStart (.-first oldRange)
+                            :oldCount (.-second oldRange)
+                            :newStart (.-first newRange)
+                            :newCount (.-second newRange)
                             :lines (list))))
                   (none)))
             (none)))
       (none)))
 
-(df close-active-hunk [(h-opt (Option GitDiffHunk)) (hunks (List GitDiffHunk))] -> (List GitDiffHunk)
+(df closeActiveHunk [(hOpt (Option GitDiffHunk)) (hunks (List GitDiffHunk))] -> (List GitDiffHunk)
   :d "Closes currently active hunk by reversing accumulated lines and appending to hunk list."
-  (mt h-opt
+  (mt hOpt
     ((some h)
-     (let [(final-h (GitDiffHunk
-                      :old-start (.-old-start h)
-                      :old-count (.-old-count h)
-                      :new-start (.-new-start h)
-                      :new-count (.-new-count h)
+     (let [(finalH (GitDiffHunk
+                      :oldStart (.-oldStart h)
+                      :oldCount (.-oldCount h)
+                      :newStart (.-newStart h)
+                      :newCount (.-newCount h)
                       :lines (list-reverse (.-lines h))))]
-       (list-cons final-h hunks)))
+       (list-cons finalH hunks)))
     ((none) hunks)))
 
-(df close-active-file [(st ParseState)] -> ParseState
+(df closeActiveFile [(st ParseState)] -> ParseState
   :d "Closes currently active file if present and adds it to accumulated file list."
-  (if (.-has-file st)
-      (let [(final-hunks (list-reverse (close-active-hunk (.-cur-hunk st) (.-cur-hunks st))))
+  (if (.-hasFile st)
+      (let [(finalHunks (list-reverse (closeActiveHunk (.-curHunk st) (.-curHunks st))))
             (f (GitDiffFile
-                 :old-path (.-cur-old-path st)
-                 :new-path (.-cur-new-path st)
-                 :hunks final-hunks
-                 :additions (.-cur-additions st)
-                 :deletions (.-cur-deletions st)))]
+                 :oldPath (.-curOldPath st)
+                 :newPath (.-curNewPath st)
+                 :hunks finalHunks
+                 :additions (.-curAdditions st)
+                 :deletions (.-curDeletions st)))]
         (ParseState
           :files (list-cons f (.-files st))
-          :cur-old-path ""
-          :cur-new-path ""
-          :cur-hunks (list)
-          :cur-additions 0
-          :cur-deletions 0
-          :cur-hunk (none)
-          :has-file false))
+          :curOldPath ""
+          :curNewPath ""
+          :curHunks (list)
+          :curAdditions 0
+          :curDeletions 0
+          :curHunk (none)
+          :hasFile false))
       st))
 
-(df handle-diff-git [(st ParseState) (line String)] -> ParseState
+(df handleDiffGit [(st ParseState) (line String)] -> ParseState
   :d "Handles diff git header line starting a new file."
-  (let [(s0 (close-active-file st))
+  (let [(s0 (closeActiveFile st))
         (parts (string-split line " "))
-        (p-old (if (>= (list-length parts) 4)
+        (pOld (if (>= (list-length parts) 4)
                    (let [(raw (option-or (list-get parts 2) ""))]
                      (if (string-starts-with? raw "a/")
                          (option-or (string-slice raw 2 (string-length raw)) "")
                          raw))
                    ""))
-        (p-new (if (>= (list-length parts) 4)
+        (pNew (if (>= (list-length parts) 4)
                    (let [(raw (option-or (list-get parts 3) ""))]
                      (if (string-starts-with? raw "b/")
                          (option-or (string-slice raw 2 (string-length raw)) "")
@@ -150,137 +150,137 @@
                    ""))]
     (ParseState
       :files (.-files s0)
-      :cur-old-path p-old
-      :cur-new-path p-new
-      :cur-hunks (list)
-      :cur-additions 0
-      :cur-deletions 0
-      :cur-hunk (none)
-      :has-file true)))
+      :curOldPath pOld
+      :curNewPath pNew
+      :curHunks (list)
+      :curAdditions 0
+      :curDeletions 0
+      :curHunk (none)
+      :hasFile true)))
 
-(df handle-old-path [(st ParseState) (line String)] -> ParseState
+(df handleOldPath [(st ParseState) (line String)] -> ParseState
   :d "Handles old file path line."
-  (let [(needs-close (and (.-has-file st)
-                          (or (not (list-empty? (.-cur-hunks st)))
-                              (mt (.-cur-hunk st) ((some _) true) ((none) false)))))
-        (s0 (if needs-close (close-active-file st) st))
-        (old-p (extract-diff-path line "--- "))]
+  (let [(needsClose (and (.-hasFile st)
+                          (or (not (list-empty? (.-curHunks st)))
+                              (mt (.-curHunk st) ((some _) true) ((none) false)))))
+        (s0 (if needsClose (closeActiveFile st) st))
+        (oldP (extractDiffPath line "--- "))]
     (ParseState
       :files (.-files s0)
-      :cur-old-path old-p
-      :cur-new-path (.-cur-new-path s0)
-      :cur-hunks (.-cur-hunks s0)
-      :cur-additions (.-cur-additions s0)
-      :cur-deletions (.-cur-deletions s0)
-      :cur-hunk (.-cur-hunk s0)
-      :has-file true)))
+      :curOldPath oldP
+      :curNewPath (.-curNewPath s0)
+      :curHunks (.-curHunks s0)
+      :curAdditions (.-curAdditions s0)
+      :curDeletions (.-curDeletions s0)
+      :curHunk (.-curHunk s0)
+      :hasFile true)))
 
-(df handle-new-path [(st ParseState) (line String)] -> ParseState
+(df handleNewPath [(st ParseState) (line String)] -> ParseState
   :d "Handles new file path line."
-  (let [(new-p (extract-diff-path line "+++ "))]
+  (let [(newP (extractDiffPath line "+++ "))]
     (ParseState
       :files (.-files st)
-      :cur-old-path (.-cur-old-path st)
-      :cur-new-path new-p
-      :cur-hunks (.-cur-hunks st)
-      :cur-additions (.-cur-additions st)
-      :cur-deletions (.-cur-deletions st)
-      :cur-hunk (.-cur-hunk st)
-      :has-file true)))
+      :curOldPath (.-curOldPath st)
+      :curNewPath newP
+      :curHunks (.-curHunks st)
+      :curAdditions (.-curAdditions st)
+      :curDeletions (.-curDeletions st)
+      :curHunk (.-curHunk st)
+      :hasFile true)))
 
-(df handle-hunk-head [(st ParseState) (line String)] -> ParseState
+(df handleHunkHead [(st ParseState) (line String)] -> ParseState
   :d "Handles hunk header line starting a new hunk."
-  (let [(hunks1 (close-active-hunk (.-cur-hunk st) (.-cur-hunks st)))
-        (new-hunk (parse-hunk-header line))]
+  (let [(hunks1 (closeActiveHunk (.-curHunk st) (.-curHunks st)))
+        (newHunk (parseHunkHeader line))]
     (ParseState
       :files (.-files st)
-      :cur-old-path (.-cur-old-path st)
-      :cur-new-path (.-cur-new-path st)
-      :cur-hunks hunks1
-      :cur-additions (.-cur-additions st)
-      :cur-deletions (.-cur-deletions st)
-      :cur-hunk new-hunk
-      :has-file true)))
+      :curOldPath (.-curOldPath st)
+      :curNewPath (.-curNewPath st)
+      :curHunks hunks1
+      :curAdditions (.-curAdditions st)
+      :curDeletions (.-curDeletions st)
+      :curHunk newHunk
+      :hasFile true)))
 
-(df handle-hunk-line [(st ParseState) (line String) (h GitDiffHunk)] -> ParseState
+(df handleHunkLine [(st ParseState) (line String) (h GitDiffHunk)] -> ParseState
   :d "Appends a line into the active hunk updating additions and deletions counts."
-  (let [(is-add (and (string-starts-with? line "+") (not (string-starts-with? line "+++"))))
-        (is-del (and (string-starts-with? line "-") (not (string-starts-with? line "---"))))
+  (let [(isAdd (and (string-starts-with? line "+") (not (string-starts-with? line "+++"))))
+        (isDel (and (string-starts-with? line "-") (not (string-starts-with? line "---"))))
         (h2 (GitDiffHunk
-              :old-start (.-old-start h)
-              :old-count (.-old-count h)
-              :new-start (.-new-start h)
-              :new-count (.-new-count h)
+              :oldStart (.-oldStart h)
+              :oldCount (.-oldCount h)
+              :newStart (.-newStart h)
+              :newCount (.-newCount h)
               :lines (list-cons line (.-lines h))))
-        (add-inc (if is-add 1 0))
-        (del-inc (if is-del 1 0))]
+        (addInc (if isAdd 1 0))
+        (delInc (if isDel 1 0))]
     (ParseState
       :files (.-files st)
-      :cur-old-path (.-cur-old-path st)
-      :cur-new-path (.-cur-new-path st)
-      :cur-hunks (.-cur-hunks st)
-      :cur-additions (+ (.-cur-additions st) add-inc)
-      :cur-deletions (+ (.-cur-deletions st) del-inc)
-      :cur-hunk (some h2)
-      :has-file (.-has-file st))))
+      :curOldPath (.-curOldPath st)
+      :curNewPath (.-curNewPath st)
+      :curHunks (.-curHunks st)
+      :curAdditions (+ (.-curAdditions st) addInc)
+      :curDeletions (+ (.-curDeletions st) delInc)
+      :curHunk (some h2)
+      :hasFile (.-hasFile st))))
 
-(df step-diff-line [(st ParseState) (line String)] -> ParseState
+(df stepDiffLine [(st ParseState) (line String)] -> ParseState
   :d "Processes one line of unified diff input updating parse state."
   (cond
-    ((string-starts-with? line "diff --git ") (handle-diff-git st line))
-    ((string-starts-with? line "--- ") (handle-old-path st line))
-    ((string-starts-with? line "+++ ") (handle-new-path st line))
-    ((string-starts-with? line "@@ ") (handle-hunk-head st line))
+    ((string-starts-with? line "diff --git ") (handleDiffGit st line))
+    ((string-starts-with? line "--- ") (handleOldPath st line))
+    ((string-starts-with? line "+++ ") (handleNewPath st line))
+    ((string-starts-with? line "@@ ") (handleHunkHead st line))
     (:else
-     (mt (.-cur-hunk st)
-       ((some h) (handle-hunk-line st line h))
+     (mt (.-curHunk st)
+       ((some h) (handleHunkLine st line h))
        ((none) st)))))
 
-(df git-diff-parse [(diff-text String)] -> (List GitDiffFile)
+(df gitDiffParse [(diffText String)] -> (List GitDiffFile)
   :d "Parses unified diff text into a list of GitDiffFile records."
-  (let [(trimmed (string-trim diff-text))]
+  (let [(trimmed (string-trim diffText))]
     (if (string-empty? trimmed)
         (list)
-        (let [(clean-text (string-replace diff-text "\r" ""))
-              (lines (string-split clean-text "\n"))
-              (init-st (ParseState
+        (let [(cleanText (string-replace diffText "\r" ""))
+              (lines (string-split cleanText "\n"))
+              (initSt (ParseState
                          :files (list)
-                         :cur-old-path ""
-                         :cur-new-path ""
-                         :cur-hunks (list)
-                         :cur-additions 0
-                         :cur-deletions 0
-                         :cur-hunk (none)
-                         :has-file false))
-              (final-st (fold (fn [(s ParseState) (ln String)] -> ParseState
-                                (step-diff-line s ln))
-                              init-st
+                         :curOldPath ""
+                         :curNewPath ""
+                         :curHunks (list)
+                         :curAdditions 0
+                         :curDeletions 0
+                         :curHunk (none)
+                         :hasFile false))
+              (finalSt (fold (fn [(s ParseState) (ln String)] -> ParseState
+                                (stepDiffLine s ln))
+                              initSt
                               lines))
-              (closed-st (close-active-file final-st))]
-          (list-reverse (.-files closed-st))))))
+              (closedSt (closeActiveFile finalSt))]
+          (list-reverse (.-files closedSt))))))
 
-(df sum-additions [(files (List GitDiffFile))] -> Int64
+(df sumAdditions [(files (List GitDiffFile))] -> Int64
   :d "Sums all additions across a list of file diffs."
   (fold (fn [(acc Int64) (f GitDiffFile)] -> Int64 (+ acc (.-additions f))) 0 files))
 
-(df sum-deletions [(files (List GitDiffFile))] -> Int64
+(df sumDeletions [(files (List GitDiffFile))] -> Int64
   :d "Sums all deletions across a list of file diffs."
   (fold (fn [(acc Int64) (f GitDiffFile)] -> Int64 (+ acc (.-deletions f))) 0 files))
 
-(df sum-hunks [(files (List GitDiffFile))] -> Int64
+(df sumHunks [(files (List GitDiffFile))] -> Int64
   :d "Sums all hunk counts across a list of file diffs."
   (fold (fn [(acc Int64) (f GitDiffFile)] -> Int64 (+ acc (list-length (.-hunks f)))) 0 files))
 
-(df git-diff-summary [(files (List GitDiffFile))] -> String
+(df gitDiffSummary [(files (List GitDiffFile))] -> String
   :d "Formats a list of GitDiffFile records into a compact ASN summary string."
-  (let [(total-files (list-length files))
-        (total-additions (sum-additions files))
-        (total-deletions (sum-deletions files))
-        (total-hunks (sum-hunks files))]
-    (str "(:diff-summary :files " (string-from-int64 total-files)
-         " :additions " (string-from-int64 total-additions)
-         " :deletions " (string-from-int64 total-deletions)
-         " :hunks " (string-from-int64 total-hunks) ")")))
+  (let [(totalFiles (list-length files))
+        (totalAdditions (sumAdditions files))
+        (totalDeletions (sumDeletions files))
+        (totalHunks (sumHunks files))]
+    (str "(:diff-summary :files " (string-from-int64 totalFiles)
+         " :additions " (string-from-int64 totalAdditions)
+         " :deletions " (string-from-int64 totalDeletions)
+         " :hunks " (string-from-int64 totalHunks) ")")))
 
 (dfs GitNumstatEntry
   (:f path String "Target file path")
@@ -291,75 +291,75 @@
 (dfs GitBranchCompare
   (:f base String "Base branch or reference")
   (:f target String "Target branch or reference")
-  (:f merge-base String "Common ancestor commit hash")
+  (:f mergeBase String "Common ancestor commit hash")
   (:f ahead Int64 "Commits ahead of base")
   (:f behind Int64 "Commits behind base")
   (:f files (List GitNumstatEntry) "List of changed file records")
-  (:f total-additions Int64 "Total lines added across all files")
-  (:f total-deletions Int64 "Total lines deleted across all files"))
+  (:f totalAdditions Int64 "Total lines added across all files")
+  (:f totalDeletions Int64 "Total lines deleted across all files"))
 
-(df parse-numstat-line [(line String)] -> (Option GitNumstatEntry)
+(df parseNumstatLine [(line String)] -> (Option GitNumstatEntry)
   :d "Parses a single git diff --numstat line into a GitNumstatEntry record."
   (let [(clean (string-trim line))]
     (if (string-empty? clean)
         (none)
         (let [(parts (string-split clean "\t"))]
           (if (>= (list-length parts) 3)
-              (let [(add-raw (string-trim (option-or (list-get parts 0) "0")))
-                    (del-raw (string-trim (option-or (list-get parts 1) "0")))
-                    (path-raw (string-trim (option-or (list-get parts 2) "")))
-                    (is-bin (or (= add-raw "-") (= del-raw "-")))
-                    (adds (if is-bin 0 (option-or (string-to-int64 add-raw) 0)))
-                    (dels (if is-bin 0 (option-or (string-to-int64 del-raw) 0)))
+              (let [(addRaw (string-trim (option-or (list-get parts 0) "0")))
+                    (delRaw (string-trim (option-or (list-get parts 1) "0")))
+                    (pathRaw (string-trim (option-or (list-get parts 2) "")))
+                    (isBin (or (= addRaw "-") (= delRaw "-")))
+                    (adds (if isBin 0 (option-or (string-to-int64 addRaw) 0)))
+                    (dels (if isBin 0 (option-or (string-to-int64 delRaw) 0)))
                     (st (cond
-                          (is-bin "binary")
+                          (isBin "binary")
                           ((and (= dels 0) (> adds 0)) "added")
                           ((and (= adds 0) (> dels 0)) "deleted")
                           (:else "modified")))]
-                (some (GitNumstatEntry :path path-raw :additions adds :deletions dels :status st)))
+                (some (GitNumstatEntry :path pathRaw :additions adds :deletions dels :status st)))
               (none))))))
 
-(df git-numstat-parse [(raw-numstat String)] -> (List GitNumstatEntry)
+(df gitNumstatParse [(rawNumstat String)] -> (List GitNumstatEntry)
   :d "Parses multi-line git diff --numstat output into a list of GitNumstatEntry records."
-  (let [(clean (string-replace raw-numstat "\r" ""))
+  (let [(clean (string-replace rawNumstat "\r" ""))
         (lines (string-split clean "\n"))
         (reversed (fold (fn [(acc (List GitNumstatEntry)) (ln String)] -> (List GitNumstatEntry)
-                          (mt (parse-numstat-line ln)
+                          (mt (parseNumstatLine ln)
                             ((some e) (list-cons e acc))
                             ((none) acc)))
                         (list)
                         lines))]
     (list-reverse reversed)))
 
-(df format-numstat-entry [(e GitNumstatEntry)] -> String
+(df formatNumstatEntry [(e GitNumstatEntry)] -> String
   :d "Formats a single GitNumstatEntry into an ASN file delta item."
   (str "(:file :path \"" (.-path e) "\""
        " :status \"" (.-status e) "\""
        " :+ " (string-from-int64 (.-additions e))
        " :- " (string-from-int64 (.-deletions e)) ")"))
 
-(df git-compare-format [(cmp GitBranchCompare) (limit Int64)] -> String
+(df gitCompareFormat [(cmp GitBranchCompare) (limit Int64)] -> String
   :d "Formats a GitBranchCompare record into a compact token-bounded :git-compare ASN envelope."
-  (let [(all-files (.-files cmp))
-        (total-cnt (list-length all-files))
-        (take-cnt (if (or (<= limit 0) (> limit total-cnt)) total-cnt limit))
-        (is-trunc (< take-cnt total-cnt))
-        (truncated-files (list-take all-files take-cnt))
-        (file-items (fold (fn [(acc String) (f GitNumstatEntry)] -> String
-                            (let [(item (format-numstat-entry f))]
+  (let [(allFiles (.-files cmp))
+        (totalCnt (list-length allFiles))
+        (takeCnt (if (or (<= limit 0) (> limit totalCnt)) totalCnt limit))
+        (isTrunc (< takeCnt totalCnt))
+        (truncatedFiles (list-take allFiles takeCnt))
+        (fileItems (fold (fn [(acc String) (f GitNumstatEntry)] -> String
+                            (let [(item (formatNumstatEntry f))]
                               (if (string-empty? acc)
                                   item
                                   (str acc " " item))))
                           ""
-                          truncated-files))
-        (trunc-part (if is-trunc (str " :truncated true :total-files " (string-from-int64 total-cnt)) ""))]
+                          truncatedFiles))
+        (truncPart (if isTrunc (str " :truncated true :total-files " (string-from-int64 totalCnt)) ""))]
     (str "(:git-compare :base \"" (.-base cmp) "\""
          " :target \"" (.-target cmp) "\""
-         " :merge-base \"" (.-merge-base cmp) "\""
+         " :merge-base \"" (.-mergeBase cmp) "\""
          " :ahead " (string-from-int64 (.-ahead cmp))
          " :behind " (string-from-int64 (.-behind cmp))
-         " :files-count " (string-from-int64 take-cnt)
-         " :+ " (string-from-int64 (.-total-additions cmp))
-         " :- " (string-from-int64 (.-total-deletions cmp))
-         trunc-part
-         " :files (" file-items "))")))
+         " :files-count " (string-from-int64 takeCnt)
+         " :+ " (string-from-int64 (.-totalAdditions cmp))
+         " :- " (string-from-int64 (.-totalDeletions cmp))
+         truncPart
+         " :files (" fileItems "))")))

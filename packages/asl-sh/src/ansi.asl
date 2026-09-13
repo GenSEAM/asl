@@ -1,12 +1,12 @@
 (module asl-sh/ansi
   :d "Pure ASL terminal emulation helpers: ANSI escape sequence stripping and carriage return collapsing."
-  :x [strip-ansi collapse-cr-segment collapse-cr-line collapse-cr clean-terminal-text])
+  :x [stripAnsi collapseCrSegment collapseCrLine collapseCr cleanTerminalText])
 
 (dfs AnsiState
   (:f state Int64 "State machine state: 0=normal, 1=esc, 2=csi, 3=osc, 4=charset, 5=osc-esc")
   (:f acc (List String) "Reversed accumulated characters"))
 
-(df ansi-step [(st AnsiState) (ch String)] -> AnsiState
+(df ansiStep [(st AnsiState) (ch String)] -> AnsiState
   :d "Transitions the ANSI state machine for a single character."
   (let [(s (.-state st))
         (acc (.-acc st))]
@@ -43,39 +43,39 @@
       (:else
        (AnsiState :state 0 :acc (list-cons ch acc))))))
 
-(df strip-ansi [(s String)] -> String
+(df stripAnsi [(s String)] -> String
   :d "Strips ANSI escape sequences from a string."
   (if (not (string-contains? s "\u001b"))
       s
       (let [(init (AnsiState :state 0 :acc (list)))
-            (fin (fold ansi-step init (string-chars s)))]
+            (fin (fold ansiStep init (string-chars s)))]
         (string-join (list-reverse (.-acc fin)) ""))))
 
-(df collapse-cr-segment [(prev String) (curr String)] -> String
+(df collapseCrSegment [(prev String) (curr String)] -> String
   :d "Overwrites previous line content with current segment following carriage return."
-  (let [(l-prev (string-length prev))
-        (l-curr (string-length curr))]
-    (if (>= l-curr l-prev)
+  (let [(lPrev (string-length prev))
+        (lCurr (string-length curr))]
+    (if (>= lCurr lPrev)
         curr
-        (let [(tail (option-or (string-slice prev l-curr l-prev) ""))]
+        (let [(tail (option-or (string-slice prev lCurr lPrev) ""))]
           (str curr tail)))))
 
-(df collapse-cr-line [(line String)] -> String
+(df collapseCrLine [(line String)] -> String
   :d "Collapses all carriage returns in a single line, simulating terminal overwriting."
   (if (not (string-contains? line "\r"))
       line
       (let [(segments (string-split line "\r"))]
-        (fold collapse-cr-segment "" segments))))
+        (fold collapseCrSegment "" segments))))
 
-(df collapse-cr [(text String)] -> String
+(df collapseCr [(text String)] -> String
   :d "Collapses terminal carriage returns across multiline text, normalizing CRLF to LF."
   (let [(norm (string-replace text "\r\n" "\n"))]
     (if (not (string-contains? norm "\r"))
         norm
         (let [(lines (string-split norm "\n"))
-              (collapsed (map collapse-cr-line lines))]
+              (collapsed (map collapseCrLine lines))]
           (string-join collapsed "\n")))))
 
-(df clean-terminal-text [(text String)] -> String
+(df cleanTerminalText [(text String)] -> String
   :d "Strips ANSI sequences and collapses carriage returns for clean terminal stream output."
-  (collapse-cr (strip-ansi text)))
+  (collapseCr (stripAnsi text)))

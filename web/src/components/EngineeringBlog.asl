@@ -1,9 +1,9 @@
-(module asl-web/engineering-blog
+(module aslWeb/engineeringBlog
   :d "Engineering Blog preview component in pure AgentScript."
-  :x [engineering-blog render-engineering-blog blog-preview-view]
+  :x [engineeringBlog renderEngineeringBlog blogPreviewView]
   :i [])
 
-(df render-engineering-blog [] -> Str
+(df renderEngineeringBlog [] -> Str
   :d "Renders the engineering blog teaser section with top essays, metadata, and router navigation."
   "<section id=\"writing\" aria-labelledby=\"writing-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -308,10 +308,10 @@
     })();
   </script>")
 
-(df engineering-blog [] -> Str
+(df engineeringBlog [] -> Str
   :d "Alias for render-engineering-blog."
-  (render-engineering-blog))
+  (renderEngineeringBlog))
 
-(df blog-preview-view [] -> Str
+(df blogPreviewView [] -> Str
   :d "Alias for render-engineering-blog."
-  (render-engineering-blog))
+  (renderEngineeringBlog))

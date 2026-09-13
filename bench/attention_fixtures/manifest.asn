@@ -1,4 +1,4 @@
-(:manifest asl-bench-attention-fixtures
+(:manifest aslBenchAttentionFixtures
   :version "1.0.0"
   :source "ADR-0081"
   :description "Preregistered task arms, evaluation configurations, and seeds for attention policy evaluation"

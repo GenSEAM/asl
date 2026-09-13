@@ -5,6 +5,6 @@
 ; canonical: (:pool ["https://api.internal.invalid/v2/telemetry/nodes" {:region :us-east :env :prod}] :data [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok) (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :warn)])
 
 (:pool ["https://api.internal.invalid/v2/telemetry/nodes"
-        {:region :us-east :env :prod}]
+        {:region :usEast :env :prod}]
  :data [(:ts 1714829100 :url (:ref 0) :ctx (:ref 1) :status :ok)
         (:ts 1714829105 :url (:ref 0) :ctx (:ref 1) :status :warn)])

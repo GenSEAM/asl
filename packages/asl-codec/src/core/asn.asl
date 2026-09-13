@@ -8,8 +8,8 @@
   to its verbose spelling: right for a program, wrong for data, because an ASN key
   spelled :f is a field called f and must survive as one."
   :x [AsnValue AsnEntry AsnField
-           asn-read asn-write value-ok? is-vec? is-kw? vec-items
-           asn-int-value asn-float-value asn-string-value]
+           asnRead asnWrite valueOk? isVec? isKw? vecItems
+           asnIntValue asnFloatValue asnStringValue]
   :i [(lexer :a lx)])
 
 (dfs AsnField
@@ -22,52 +22,52 @@
   (:f paren Bool "True when the source wrote the parenthesised entry form"))
 
 (dfe AsnValue
-  (:c asn-nil   []                "The nil sentinel `_`")
-  (:c asn-bool  [(b Bool)]        "true or false")
-  (:c asn-unit  []                "The unit literal `()`")
-  (:c asn-int   [(lex String)]    "Integer literal, held as its source lexeme")
-  (:c asn-float [(lex String)]    "Float literal, held as its source lexeme")
-  (:c asn-str   [(lex String)]    "String literal, held as its source lexeme with quotes")
-  (:c asn-kw    [(k String)]      "Keyword scalar, including its leading colon")
-  (:c asn-sym   [(name String)]   "A bare name. Legal as a head, never as a value")
-  (:c asn-vec   [(items (List AsnValue))] "A bracketed vector")
-  (:c asn-map   [(entries (List AsnEntry))] "A brace map")
-  (:c asn-rec   [(fields (List AsnField))] "An anonymous record `(:k v ...)`")
-  (:c asn-ctor  [(name String) (fields (List AsnField))] "Named construction `(Name :k v ...)`")
-  (:c asn-rows  [(name String) (rows (List AsnValue))] "Schema-grouped rows `(Name [..] ..)`")
-  (:c asn-table [(cols (List AsnValue)) (rows (List AsnValue))] "Ad-hoc table `([:c ..] [[..]])`")
-  (:c asn-case  [(name String) (args (List AsnValue))] "Union case value `(name v ..)`")
-  (:c asn-pair  [(key AsnValue) (val AsnValue)] "A parenthesised map entry, legal only in a map"))
+  (:c asnNil   []                "The nil sentinel `_`")
+  (:c asnBool  [(b Bool)]        "true or false")
+  (:c asnUnit  []                "The unit literal `()`")
+  (:c asnInt   [(lex String)]    "Integer literal, held as its source lexeme")
+  (:c asnFloat [(lex String)]    "Float literal, held as its source lexeme")
+  (:c asnStr   [(lex String)]    "String literal, held as its source lexeme with quotes")
+  (:c asnKw    [(k String)]      "Keyword scalar, including its leading colon")
+  (:c asnSym   [(name String)]   "A bare name. Legal as a head, never as a value")
+  (:c asnVec   [(items (List AsnValue))] "A bracketed vector")
+  (:c asnMap   [(entries (List AsnEntry))] "A brace map")
+  (:c asnRec   [(fields (List AsnField))] "An anonymous record `(:k v ...)`")
+  (:c asnCtor  [(name String) (fields (List AsnField))] "Named construction `(Name :k v ...)`")
+  (:c asnRows  [(name String) (rows (List AsnValue))] "Schema-grouped rows `(Name [..] ..)`")
+  (:c asnTable [(cols (List AsnValue)) (rows (List AsnValue))] "Ad-hoc table `([:c ..] [[..]])`")
+  (:c asnCase  [(name String) (args (List AsnValue))] "Union case value `(name v ..)`")
+  (:c asnPair  [(key AsnValue) (val AsnValue)] "A parenthesised map entry, legal only in a map"))
 
-(df value-ok? [(v AsnValue)] -> Bool
+(df valueOk? [(v AsnValue)] -> Bool
   :d "False for the two forms that may appear during reading but never as a value:
       a bare name, which is only ever a head, and a parenthesised map entry,
       which is only ever a direct child of a brace map."
   (mt v
-    ((asn-sym _)    false)
-    ((asn-pair _ _) false)
+    ((asnSym _)    false)
+    ((asnPair _ _) false)
     (_              true)))
 
-(df asn-int-value [(v AsnValue)] -> (Option Int64)
+(df asnIntValue [(v AsnValue)] -> (Option Int64)
   :d "The integer an `asn-int` denotes, or none for any other value."
   (mt v
-    ((asn-int lex) (string-to-int64 lex))
+    ((asnInt lex) (string-to-int64 lex))
     (_             (none))))
 
-(df asn-float-value [(v AsnValue)] -> (Option Float64)
+(df asnFloatValue [(v AsnValue)] -> (Option Float64)
   :d "The float an `asn-float` denotes, or none for any other value."
   (mt v
-    ((asn-float lex) (string-to-float64 lex))
+    ((asnFloat lex) (string-to-float64 lex))
     (_               (none))))
 
-(df asn-string-value [(v AsnValue)] -> (Option String)
+(df asnStringValue [(v AsnValue)] -> (Option String)
   :d "The characters an `asn-str` denotes, with quotes stripped and Core §2's
       five escapes decoded; none for any other value."
   (mt v
-    ((asn-str lex) (some (unescape (strip-quotes lex))))
+    ((asnStr lex) (some (unescape (stripQuotes lex))))
     (_             (none))))
 
-(df strip-quotes [(lex String)] -> String
+(df stripQuotes [(lex String)] -> String
   :d "A string lexeme without its delimiting quotes."
   (mt (string-slice lex 1 (- (string-length lex) 1))
     ((some s) s)
@@ -77,7 +77,7 @@
   (:f out (List String) "Decoded characters, most recent first")
   (:f esc Bool "True when the previous character was a backslash"))
 
-(df escape-char [(c String)] -> String
+(df escapeChar [(c String)] -> String
   :d "The character an escape letter denotes. Core §2 defines exactly five."
   (cond
     ((= c "n") "\n")
@@ -86,10 +86,10 @@
     ((= c "0") "\0")
     (:else     c)))
 
-(df un-step [(st UnState) (c String)] -> UnState
+(df unStep [(st UnState) (c String)] -> UnState
   :d "One fold step of escape decoding."
   (if (.-esc st)
-    (UnState :out (list-cons (escape-char c) (.-out st)) :esc false)
+    (UnState :out (list-cons (escapeChar c) (.-out st)) :esc false)
     (if (= c "\\")
       (UnState :out (.-out st) :esc true)
       (UnState :out (list-cons c (.-out st)) :esc false))))
@@ -99,7 +99,7 @@
       `string-replace` cannot do this: whatever sentinel it picked to stand for a
       decoded backslash could itself occur in the payload."
   (string-join
-    (list-reverse (.-out (fold un-step (UnState :out (list) :esc false)
+    (list-reverse (.-out (fold unStep (UnState :out (list) :esc false)
                                (string-chars body))))
     ""))
 
@@ -120,15 +120,15 @@
   :d "Constructs a ReadState."
   (ReadState :toks toks :stack stack :done done :code code))
 
-(df tok-tail [(toks (List lx/Token))] -> (List lx/Token)
+(df tokTail [(toks (List lx/Token))] -> (List lx/Token)
   :d "The token list without its head; empty when absent."
   (option-or (list-tail toks) (list)))
 
-(df frame-tail [(fs (List Frame))] -> (List Frame)
+(df frameTail [(fs (List Frame))] -> (List Frame)
   :d "The frame stack without its head; empty when absent."
   (option-or (list-tail fs) (list)))
 
-(df item-tail [(items (List AsnValue))] -> (List AsnValue)
+(df itemTail [(items (List AsnValue))] -> (List AsnValue)
   :d "The value list without its head; empty when absent."
   (option-or (list-tail items) (list)))
 
@@ -137,11 +137,11 @@
       driving loop terminates on the next tick."
   (rst (list) (list) (list) code))
 
-(df is-open? [(raw String)] -> Bool
+(df isOpen? [(raw String)] -> Bool
   :d "True for the three opening delimiters."
   (or (= raw "(") (or (= raw "[") (= raw "{"))))
 
-(df is-close? [(raw String)] -> Bool
+(df isClose? [(raw String)] -> Bool
   :d "True for the three closing delimiters."
   (or (= raw ")") (or (= raw "]") (= raw "}"))))
 
@@ -152,26 +152,26 @@
     ((= close "]") "[")
     (:else         "{")))
 
-(df is-upper? [(c String)] -> Bool
+(df isUpper? [(c String)] -> Bool
   :d "True for an ASCII capital, which is what makes a head a type name."
   (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" c))
 
-(df is-lower? [(c String)] -> Bool
+(df isLower? [(c String)] -> Bool
   :d "True for an ASCII lower-case letter, which is what makes a head a case name."
   (string-contains? "abcdefghijklmnopqrstuvwxyz" c))
 
 (dfe HeadKind
-  (:c head-type [] "A PascalCase head: named construction or row groups")
-  (:c head-case [] "A kebab-case head: a union case value")
-  (:c head-bad  [] "Not a head shape Core §2 can produce"))
+  (:c headType [] "A PascalCase head: named construction or row groups")
+  (:c headCase [] "A kebab-case head: a union case value")
+  (:c headBad  [] "Not a head shape Core §2 can produce"))
 
-(df all-chars-in? [(s String) (allowed String)] -> Bool
+(df allCharsIn? [(s String) (allowed String)] -> Bool
   :d "True when every character of a non-empty string is in the allowed set."
   (and (not (string-empty? s))
        (list-empty? (filter (fn [(c String)] -> Bool (not (string-contains? allowed c)))
                             (string-chars s)))))
 
-(df kebab-ok? [(s String)] -> Bool
+(df kebabOk? [(s String)] -> Bool
   :d "Core §2's `[a-z][a-z0-9]*(-[a-z0-9]+)*`, without the `?!` suffix.
 
   Stated as four conditions rather than a regex, which the language has none of:
@@ -179,40 +179,40 @@
   no doubled hyphen and no trailing one. That is exactly the set the pattern
   generates."
   (and (not (string-empty? s))
-       (and (is-lower? (first-char s))
+       (and (isLower? (firstChar s))
             (and (not (string-contains? s "--"))
                  (and (not (string-ends-with? s "-"))
-                      (all-chars-in? s "abcdefghijklmnopqrstuvwxyz0123456789-"))))))
+                      (allCharsIn? s "abcdefghijklmnopqrstuvwxyz0123456789-"))))))
 
-(df strip-ident-suffix [(s String)] -> String
+(df stripIdentSuffix [(s String)] -> String
   :d "One trailing `?` or `!`, removed. Core §2 admits at most one."
   (if (or (string-ends-with? s "?") (string-ends-with? s "!"))
     (option-or (string-slice s 0 (- (string-length s) 1)) "")
     s))
 
-(df ident-ok? [(s String)] -> Bool
+(df identOk? [(s String)] -> Bool
   :d "Core §2's `ident`: a kebab-case name with an optional `?` or `!`."
-  (kebab-ok? (strip-ident-suffix s)))
+  (kebabOk? (stripIdentSuffix s)))
 
-(df type-name-ok? [(s String)] -> Bool
+(df typeNameOk? [(s String)] -> Bool
   :d "Core §2's `type-name`: `[A-Z][A-Za-z0-9]*`."
   (and (not (string-empty? s))
-       (and (is-upper? (first-char s))
-            (all-chars-in? s
+       (and (isUpper? (firstChar s))
+            (allCharsIn? s
               "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"))))
 
-(df bare-head-kind [(s String)] -> HeadKind
+(df bareHeadKind [(s String)] -> HeadKind
   :d "The kind of an unqualified head."
   (cond
-    ((type-name-ok? s) (head-type))
-    ((ident-ok? s)     (head-case))
-    (:else             (head-bad))))
+    ((typeNameOk? s) (headType))
+    ((identOk? s)     (headCase))
+    (:else             (headBad))))
 
-(df part-at [(parts (List String)) (i Int64)] -> String
+(df partAt [(parts (List String)) (i Int64)] -> String
   :d "The i-th slash-separated part, or the empty string."
   (mt (list-get parts i) ((some p) p) ((none) "")))
 
-(df head-kind [(name String)] -> HeadKind
+(df headKind [(name String)] -> HeadKind
   :d "The kind of a head, validated as a whole rather than by its first letter.
 
   Checking only the member let `S/x` and `a/b/c` through: Core §2 gives an alias
@@ -220,66 +220,66 @@
   the grammar is a reader that accepts payloads no other implementation will."
   (let [(parts (string-split name "/"))]
     (cond
-      ((= (list-length parts) 1) (bare-head-kind name))
+      ((= (list-length parts) 1) (bareHeadKind name))
       ((= (list-length parts) 2)
-       (if (kebab-ok? (part-at parts 0)) (bare-head-kind (part-at parts 1)) (head-bad)))
-      (:else (head-bad)))))
+       (if (kebabOk? (partAt parts 0)) (bareHeadKind (partAt parts 1)) (headBad)))
+      (:else (headBad)))))
 
-(df first-char [(s String)] -> String
+(df firstChar [(s String)] -> String
   :d "The leading character, or the empty string."
   (mt (string-slice s 0 1) ((some c) c) ((none) "")))
 
-(df sym-value [(s String)] -> AsnValue
+(df symValue [(s String)] -> AsnValue
   :d "The value a bare atom denotes. `true`, `false` and `_` are literals; every
       other bare atom is a head and is rejected wherever a value is required."
   (cond
-    ((= s "true")  (asn-bool true))
-    ((= s "false") (asn-bool false))
-    ((= s "_")     (asn-nil))
-    (:else         (asn-sym s))))
+    ((= s "true")  (asnBool true))
+    ((= s "false") (asnBool false))
+    ((= s "_")     (asnNil))
+    (:else         (asnSym s))))
 
-(df atom-value [(t lx/Token)] -> (Result AsnValue String)
+(df atomValue [(t lx/Token)] -> (Result AsnValue String)
   :d "The value one non-delimiter token denotes. A lexical error becomes the
       `parse` code rather than its own message, so every failure a decoder can
       report is one docs/ASN_SPEC.md §11 names."
   (mt (.-kind t)
-    ((lx/tok-int _)     (ok (asn-int (.-raw-text t))))
-    ((lx/tok-float _)   (ok (asn-float (.-raw-text t))))
-    ((lx/tok-string _)  (ok (asn-str (.-raw-text t))))
-    ((lx/tok-keyword _) (ok (asn-kw (.-raw-text t))))
-    ((lx/tok-symbol s)  (ok (sym-value s)))
-    ((lx/tok-error _)   (err "parse"))
-    ((lx/tok-eof)       (err "parse"))
-    ((lx/tok-lparen)    (err "parse"))
-    ((lx/tok-rparen)    (err "parse"))
-    ((lx/tok-lbracket)  (err "parse"))
-    ((lx/tok-rbracket)  (err "parse"))))
+    ((lx/tokInt _)     (ok (asnInt (.-rawText t))))
+    ((lx/tokFloat _)   (ok (asnFloat (.-rawText t))))
+    ((lx/tokString _)  (ok (asnStr (.-rawText t))))
+    ((lx/tokKeyword _) (ok (asnKw (.-rawText t))))
+    ((lx/tokSymbol s)  (ok (symValue s)))
+    ((lx/tokError _)   (err "parse"))
+    ((lx/tokEof)       (err "parse"))
+    ((lx/tokLparen)    (err "parse"))
+    ((lx/tokRparen)    (err "parse"))
+    ((lx/tokLbracket)  (err "parse"))
+    ((lx/tokRbracket)  (err "parse"))))
 
-(df all-values? [(items (List AsnValue))] -> Bool
+(df allValues? [(items (List AsnValue))] -> Bool
   :d "True when every element may stand as a value."
-  (list-empty? (filter (fn [(v AsnValue)] -> Bool (not (value-ok? v))) items)))
+  (list-empty? (filter (fn [(v AsnValue)] -> Bool (not (valueOk? v))) items)))
 
-(df all-vectors? [(items (List AsnValue))] -> Bool
+(df allVectors? [(items (List AsnValue))] -> Bool
   :d "True when every element is a bracketed vector."
-  (list-empty? (filter (fn [(v AsnValue)] -> Bool (not (is-vec? v))) items)))
+  (list-empty? (filter (fn [(v AsnValue)] -> Bool (not (isVec? v))) items)))
 
-(df is-vec? [(v AsnValue)] -> Bool
+(df isVec? [(v AsnValue)] -> Bool
   :d "True for a bracketed vector."
-  (mt v ((asn-vec _) true) (_ false)))
+  (mt v ((asnVec _) true) (_ false)))
 
-(df all-keywords? [(items (List AsnValue))] -> Bool
+(df allKeywords? [(items (List AsnValue))] -> Bool
   :d "True when every element is a keyword scalar."
-  (list-empty? (filter (fn [(v AsnValue)] -> Bool (not (is-kw? v))) items)))
+  (list-empty? (filter (fn [(v AsnValue)] -> Bool (not (isKw? v))) items)))
 
-(df is-kw? [(v AsnValue)] -> Bool
+(df isKw? [(v AsnValue)] -> Bool
   :d "True for a keyword scalar."
-  (mt v ((asn-kw _) true) (_ false)))
+  (mt v ((asnKw _) true) (_ false)))
 
-(df vec-items [(v AsnValue)] -> (List AsnValue)
+(df vecItems [(v AsnValue)] -> (List AsnValue)
   :d "The elements of a vector; empty for anything else."
-  (mt v ((asn-vec items) items) (_ (list))))
+  (mt v ((asnVec items) items) (_ (list))))
 
-(df fields-of [(items (List AsnValue)) (acc (List AsnField))]
+(df fieldsOf [(items (List AsnValue)) (acc (List AsnField))]
     -> (Result (List AsnField) String)
   :d "Pair a flat item list into keyword/value fields, failing on an odd length,
       a non-keyword in key position, or a value that cannot stand alone."
@@ -287,91 +287,91 @@
     ((none) (ok (list-reverse acc)))
     ((some k)
      (mt k
-       ((asn-kw key)
-        (mt (list-head (item-tail items))
+       ((asnKw key)
+        (mt (list-head (itemTail items))
           ((some v)
-           (if (value-ok? v)
-             (fields-of (item-tail (item-tail items))
+           (if (valueOk? v)
+             (fieldsOf (itemTail (itemTail items))
                         (list-cons (AsnField :key key :val v) acc))
              (err "parse")))
           ((none) (err "parse"))))
        (_ (err "parse"))))))
 
-(df build-record [(items (List AsnValue))] -> (Result AsnValue String)
+(df buildRecord [(items (List AsnValue))] -> (Result AsnValue String)
   :d "A parenthesised form whose head is a keyword: an anonymous record."
-  (mt (fields-of items (list))
-    ((ok fs)  (if (list-empty? fs) (err "parse") (ok (asn-rec fs))))
+  (mt (fieldsOf items (list))
+    ((ok fs)  (if (list-empty? fs) (err "parse") (ok (asnRec fs))))
     ((err c)  (err c))))
 
-(df build-named [(name String) (rest (List AsnValue))] -> (Result AsnValue String)
+(df buildNamed [(name String) (rest (List AsnValue))] -> (Result AsnValue String)
   :d "A parenthesised form whose head is a name: a schema head or a union case."
-  (mt (head-kind name)
-    ((head-type) (build-schema-head name rest))
-    ((head-case) (if (all-values? rest) (ok (asn-case name rest)) (err "parse")))
-    ((head-bad)  (err "parse"))))
+  (mt (headKind name)
+    ((headType) (buildSchemaHead name rest))
+    ((headCase) (if (allValues? rest) (ok (asnCase name rest)) (err "parse")))
+    ((headBad)  (err "parse"))))
 
-(df build-schema-head [(name String) (rest (List AsnValue))] -> (Result AsnValue String)
+(df buildSchemaHead [(name String) (rest (List AsnValue))] -> (Result AsnValue String)
   :d "The one place ASN needs a second token of context: after a type name, a
       keyword opens named construction and a vector opens row groups. Mixing
       them has no reading, so it is a parse failure rather than a warning."
   (mt (list-head rest)
-    ((none) (ok (asn-ctor name (list))))
+    ((none) (ok (asnCtor name (list))))
     ((some h)
      (mt h
-       ((asn-vec _) (if (all-vectors? rest)
-                      (ok (asn-rows name rest))
+       ((asnVec _) (if (allVectors? rest)
+                      (ok (asnRows name rest))
                       (err "parse")))
-       ((asn-kw _)  (mt (fields-of rest (list))
-                      ((ok fs)  (ok (asn-ctor name fs)))
+       ((asnKw _)  (mt (fieldsOf rest (list))
+                      ((ok fs)  (ok (asnCtor name fs)))
                       ((err c)  (err c))))
        (_ (err "parse"))))))
 
-(df build-table [(items (List AsnValue))] -> (Result AsnValue String)
+(df buildTable [(items (List AsnValue))] -> (Result AsnValue String)
   :d "A parenthesised form whose head is a vector: the ad-hoc table, which is
       exactly a header vector and a vector of row vectors."
   (if (= (list-length items) 2)
-    (let [(cols (vec-items (nth-value items 0)))
-          (rows (vec-items (nth-value items 1)))]
-      (if (and (is-vec? (nth-value items 1))
-               (and (all-keywords? cols) (all-vectors? rows)))
-        (ok (asn-table cols rows))
+    (let [(cols (vecItems (nthValue items 0)))
+          (rows (vecItems (nthValue items 1)))]
+      (if (and (isVec? (nthValue items 1))
+               (and (allKeywords? cols) (allVectors? rows)))
+        (ok (asnTable cols rows))
         (err "parse")))
     (err "parse")))
 
-(df nth-value [(items (List AsnValue)) (i Int64)] -> AsnValue
+(df nthValue [(items (List AsnValue)) (i Int64)] -> AsnValue
   :d "The i-th element, or nil when absent."
-  (mt (list-get items i) ((some v) v) ((none) (asn-nil))))
+  (mt (list-get items i) ((some v) v) ((none) (asnNil))))
 
-(df build-pair [(items (List AsnValue))] -> (Result AsnValue String)
+(df buildPair [(items (List AsnValue))] -> (Result AsnValue String)
   :d "A parenthesised map entry `(key value)`. Legal only as a direct child of a
       brace map, which `value-ok?` enforces everywhere else."
   (if (= (list-length items) 2)
-    (let [(v (nth-value items 1))]
-      (if (value-ok? v)
-        (ok (asn-pair (nth-value items 0) v))
+    (let [(v (nthValue items 1))]
+      (if (valueOk? v)
+        (ok (asnPair (nthValue items 0) v))
         (err "parse")))
     (err "parse")))
 
-(df build-paren [(fr Frame) (items (List AsnValue)) (t lx/Token)]
+(df buildParen [(fr Frame) (items (List AsnValue)) (t lx/Token)]
     -> (Result AsnValue String)
   :d "Dispatch a closed `( ... )` on its first item alone, in one token of
       lookahead. An empty form is unit only when the two delimiters are
       adjacent: Core §2 spells unit `()` as one lexeme, so `( )` is not one."
   (mt (list-head items)
     ((none) (if (and (= (.-line fr) (.-line t)) (= (+ (.-col fr) 1) (.-col t)))
-              (ok (asn-unit))
+              (ok (asnUnit))
               (err "parse")))
     ((some h)
      (mt h
-       ((asn-kw _)    (build-record items))
-       ((asn-sym s)   (build-named s (item-tail items)))
-       ((asn-vec _)   (build-table items))
-       ((asn-str _)   (build-pair items))
-       ((asn-int _)   (build-pair items))
-       ((asn-bool _)  (build-pair items))
+       ((asnKw _)    (buildRecord items))
+       ((asnSym s)   (buildNamed s (itemTail items)))
+       ((asnVec _)   (buildTable items))
+       ((asnStr _)   (buildPair items))
+       ((asnInt _)   (buildPair items))
+       ((asnBool _)  (buildPair items))
        (_             (err "parse"))))))
 
-(df entries-of [(items (List AsnValue)) (acc (List AsnEntry))]
+(df entriesOf [(items (List AsnValue)) (acc (List AsnEntry))]
     -> (Result (List AsnEntry) String)
   :d "Read a brace map's items into entries. A keyword takes the next item as its
       value; a parenthesised entry stands alone; a one-field record is the
@@ -380,46 +380,46 @@
     ((none) (ok (list-reverse acc)))
     ((some h)
      (mt h
-       ((asn-kw key)
-        (mt (list-head (item-tail items))
+       ((asnKw key)
+        (mt (list-head (itemTail items))
           ((some v)
-           (if (value-ok? v)
-             (entries-of (item-tail (item-tail items))
-                         (list-cons (AsnEntry :key (asn-kw key) :val v :paren false) acc))
+           (if (valueOk? v)
+             (entriesOf (itemTail (itemTail items))
+                         (list-cons (AsnEntry :key (asnKw key) :val v :paren false) acc))
              (err "parse")))
           ((none) (err "parse"))))
-       ((asn-pair k v)
-        (entries-of (item-tail items)
+       ((asnPair k v)
+        (entriesOf (itemTail items)
                     (list-cons (AsnEntry :key k :val v :paren true) acc)))
-       ((asn-rec fs)
+       ((asnRec fs)
         (if (= (list-length fs) 1)
-          (entries-of (item-tail items)
-                      (list-cons (AsnEntry :key (asn-kw (field-key fs))
-                                           :val (field-val fs) :paren true) acc))
+          (entriesOf (itemTail items)
+                      (list-cons (AsnEntry :key (asnKw (fieldKey fs))
+                                           :val (fieldVal fs) :paren true) acc))
           (err "parse")))
        (_ (err "parse"))))))
 
-(df field-key [(fs (List AsnField))] -> String
+(df fieldKey [(fs (List AsnField))] -> String
   :d "The single field's key, or the empty string."
   (mt (list-head fs) ((some f) (.-key f)) ((none) "")))
 
-(df field-val [(fs (List AsnField))] -> AsnValue
+(df fieldVal [(fs (List AsnField))] -> AsnValue
   :d "The single field's value, or nil."
-  (mt (list-head fs) ((some f) (.-val f)) ((none) (asn-nil))))
+  (mt (list-head fs) ((some f) (.-val f)) ((none) (asnNil))))
 
-(df build-map [(items (List AsnValue))] -> (Result AsnValue String)
+(df buildMap [(items (List AsnValue))] -> (Result AsnValue String)
   :d "A closed `{ ... }`."
-  (mt (entries-of items (list))
-    ((ok es)  (ok (asn-map es)))
+  (mt (entriesOf items (list))
+    ((ok es)  (ok (asnMap es)))
     ((err c)  (err c))))
 
-(df build-form [(fr Frame) (t lx/Token)] -> (Result AsnValue String)
+(df buildForm [(fr Frame) (t lx/Token)] -> (Result AsnValue String)
   :d "The value a closed frame denotes."
   (let [(items (list-reverse (.-items fr)))]
     (cond
-      ((= (.-open fr) "[") (if (all-values? items) (ok (asn-vec items)) (err "parse")))
-      ((= (.-open fr) "{") (build-map items))
-      (:else               (build-paren fr items t)))))
+      ((= (.-open fr) "[") (if (allValues? items) (ok (asnVec items)) (err "parse")))
+      ((= (.-open fr) "{") (buildMap items))
+      (:else               (buildParen fr items t)))))
 
 (df emit [(st ReadState) (v AsnValue)] -> ReadState
   :d "Place a closed value into the innermost open frame, or at top level."
@@ -428,113 +428,113 @@
      (rst (.-toks st)
           (list-cons (Frame :open (.-open fr) :line (.-line fr) :col (.-col fr)
                             :items (list-cons v (.-items fr)))
-                     (frame-tail (.-stack st)))
+                     (frameTail (.-stack st)))
           (.-done st) (.-code st)))
     ((none) (rst (.-toks st) (.-stack st) (list-cons v (.-done st)) (.-code st)))))
 
-(df push-frame [(st ReadState) (raw String) (t lx/Token)] -> ReadState
+(df pushFrame [(st ReadState) (raw String) (t lx/Token)] -> ReadState
   :d "Open a frame at a delimiter, remembering where it opened."
   (rst (.-toks st)
        (list-cons (Frame :open raw :line (.-line t) :col (.-col t) :items (list))
                   (.-stack st))
        (.-done st) (.-code st)))
 
-(df close-frame [(st ReadState) (raw String) (t lx/Token)] -> ReadState
+(df closeFrame [(st ReadState) (raw String) (t lx/Token)] -> ReadState
   :d "Close the innermost frame, building the value it denotes."
   (mt (list-head (.-stack st))
     ((some fr)
      (if (= (.-open fr) (opener raw))
-       (mt (build-form fr t)
-         ((ok v)  (emit (rst (.-toks st) (frame-tail (.-stack st))
+       (mt (buildForm fr t)
+         ((ok v)  (emit (rst (.-toks st) (frameTail (.-stack st))
                              (.-done st) (.-code st)) v))
          ((err c) (fail st c)))
        (fail st "parse")))
     ((none) (fail st "parse"))))
 
-(df read-token [(st ReadState) (t lx/Token)] -> ReadState
+(df readToken [(st ReadState) (t lx/Token)] -> ReadState
   :d "One token consumed. Delimiters are recognised by their text because the
       lexer hands `{` and `}` back as ordinary symbols — they are the type-binder
       braces there, and the map delimiters here."
-  (let [(raw (.-raw-text t))
-        (advanced (rst (tok-tail (.-toks st)) (.-stack st) (.-done st) (.-code st)))]
+  (let [(raw (.-rawText t))
+        (advanced (rst (tokTail (.-toks st)) (.-stack st) (.-done st) (.-code st)))]
     (cond
       ((string-empty? raw) (rst (list) (.-stack st) (.-done st) (.-code st)))
-      ((is-open? raw)      (push-frame advanced raw t))
-      ((is-close? raw)     (close-frame advanced raw t))
-      (:else (mt (atom-value t)
+      ((isOpen? raw)      (pushFrame advanced raw t))
+      ((isClose? raw)     (closeFrame advanced raw t))
+      (:else (mt (atomValue t)
                ((ok v)  (emit advanced v))
                ((err c) (fail st c)))))))
 
-(df read-tick [(st ReadState) (tick Int64)] -> ReadState
+(df readTick [(st ReadState) (tick Int64)] -> ReadState
   :d "One fold step: consume the next token, or stand still once the input is
       drained or a code has been recorded."
   (if (string-empty? (.-code st))
     (mt (list-head (.-toks st))
-      ((some t) (read-token st t))
+      ((some t) (readToken st t))
       ((none)   st))
     st))
 
-(df read-run [(st ReadState) (budget Int64)] -> ReadState
+(df readRun [(st ReadState) (budget Int64)] -> ReadState
   :d "Run ticks in doubling batches until the token list drains.
 
   `fold` needs its step count up front and the token count is not known without
   walking it, so the batch doubles: recursion is O(log n) in the token count
   rather than O(n), which is the shape that overflowed the host stack when the
   scanner was written the other way."
-  (let [(next (fold read-tick st (range 0 budget)))]
+  (let [(next (fold readTick st (range 0 budget)))]
     (if (list-empty? (.-toks next))
       next
-      (read-run next (* budget 2)))))
+      (readRun next (* budget 2)))))
 
 (dfs CommentState
-  (:f in-string Bool "True when inside double quotes")
-  (:f in-escape Bool "True when preceded by backslash inside string")
-  (:f in-comment Bool "True when inside comment until newline")
+  (:f inString Bool "True when inside double quotes")
+  (:f inEscape Bool "True when preceded by backslash inside string")
+  (:f inComment Bool "True when inside comment until newline")
   (:f out (List String) "Reversed list of output characters"))
 
-(df comment-step [(st CommentState) (c String)] -> CommentState
-  (if (.-in-comment st)
+(df commentStep [(st CommentState) (c String)] -> CommentState
+  (if (.-inComment st)
     (if (= c "\n")
-      (CommentState :in-string false :in-escape false :in-comment false
+      (CommentState :inString false :inEscape false :inComment false
                     :out (list-cons "\n" (.-out st)))
-      (CommentState :in-string false :in-escape false :in-comment true
+      (CommentState :inString false :inEscape false :inComment true
                     :out (list-cons " " (.-out st))))
-    (if (.-in-string st)
-      (if (.-in-escape st)
-        (CommentState :in-string true :in-escape false :in-comment false
+    (if (.-inString st)
+      (if (.-inEscape st)
+        (CommentState :inString true :inEscape false :inComment false
                       :out (list-cons c (.-out st)))
         (if (= c "\\")
-          (CommentState :in-string true :in-escape true :in-comment false
+          (CommentState :inString true :inEscape true :inComment false
                         :out (list-cons c (.-out st)))
           (if (= c "\"")
-            (CommentState :in-string false :in-escape false :in-comment false
+            (CommentState :inString false :inEscape false :inComment false
                           :out (list-cons c (.-out st)))
-            (CommentState :in-string true :in-escape false :in-comment false
+            (CommentState :inString true :inEscape false :inComment false
                           :out (list-cons c (.-out st))))))
       (if (= c "\"")
-        (CommentState :in-string true :in-escape false :in-comment false
+        (CommentState :inString true :inEscape false :inComment false
                       :out (list-cons c (.-out st)))
         (if (= c ";")
-          (CommentState :in-string false :in-escape false :in-comment true
+          (CommentState :inString false :inEscape false :inComment true
                         :out (list-cons " " (.-out st)))
-          (CommentState :in-string false :in-escape false :in-comment false
+          (CommentState :inString false :inEscape false :inComment false
                         :out (list-cons c (.-out st))))))))
 
-(df strip-comments [(src String)] -> String
+(df stripComments [(src String)] -> String
   :d "Core §2 comments are insignificant except as separators: replace them with
       spaces so token positions and separators are preserved without the lexer
       stumbling over unexpected semicolons."
   (string-join
     (list-reverse
-      (.-out (fold comment-step
-                   (CommentState :in-string false :in-escape false :in-comment false :out (list))
+      (.-out (fold commentStep
+                   (CommentState :inString false :inEscape false :inComment false :out (list))
                    (string-chars src))))
     ""))
 
-(df asn-read [(src String)] -> (Result AsnValue String)
+(df asnRead [(src String)] -> (Result AsnValue String)
   :d "Read one ASN document. A document is exactly one balanced value: framing a
       sequence of them belongs to docs/AGENTIC_PROTOCOL.md, not here."
-  (finish (read-run (rst (lx/tokenize (strip-comments src)) (list) (list) "") 64)))
+  (finish (readRun (rst (lx/tokenize (stripComments src)) (list) (list) "") 64)))
 
 (df finish [(st ReadState)] -> (Result AsnValue String)
   :d "The document a finished read denotes, or the code it failed under."
@@ -543,137 +543,137 @@
     ((not (list-empty? (.-stack st)))  (err "parse"))
     ((not (= (list-length (.-done st)) 1)) (err "parse"))
     (:else (mt (list-head (.-done st))
-             ((some v) (if (value-ok? v) (ok v) (err "parse")))
+             ((some v) (if (valueOk? v) (ok v) (err "parse")))
              ((none)   (err "parse"))))))
 
 (dfe WItem
-  (:c w-text [(t String)] "Literal output text, already final")
-  (:c w-val  [(v AsnValue)] "A value still to expand"))
+  (:c wText [(t String)] "Literal output text, already final")
+  (:c wVal  [(v AsnValue)] "A value still to expand"))
 
 (dfs WState
   (:f work (List WItem) "Pending items, head first")
   (:f out (List String) "Emitted pieces, reversed"))
 
-(df w-tail [(items (List WItem))] -> (List WItem)
+(df wTail [(items (List WItem))] -> (List WItem)
   :d "The work list without its head; empty when absent."
   (option-or (list-tail items) (list)))
 
-(df w-atom? [(v AsnValue)] -> Bool
+(df wAtom? [(v AsnValue)] -> Bool
   :d "True for a value that renders without delimiters of its own."
   (mt v
-    ((asn-nil)     true)
-    ((asn-bool _)  true)
-    ((asn-unit)    true)
-    ((asn-int _)   true)
-    ((asn-float _) true)
-    ((asn-str _)   true)
-    ((asn-kw _)    true)
-    ((asn-sym _)   true)
+    ((asnNil)     true)
+    ((asnBool _)  true)
+    ((asnUnit)    true)
+    ((asnInt _)   true)
+    ((asnFloat _) true)
+    ((asnStr _)   true)
+    ((asnKw _)    true)
+    ((asnSym _)   true)
     (_             false)))
 
-(df w-atom [(v AsnValue)] -> String
+(df wAtom [(v AsnValue)] -> String
   :d "The text a scalar renders to: its source lexeme, unchanged."
   (mt v
-    ((asn-nil)       "_")
-    ((asn-bool b)    (if b "true" "false"))
-    ((asn-unit)      "()")
-    ((asn-int lex)   lex)
-    ((asn-float lex) lex)
-    ((asn-str lex)   lex)
-    ((asn-kw k)      k)
-    ((asn-sym s)     s)
+    ((asnNil)       "_")
+    ((asnBool b)    (if b "true" "false"))
+    ((asnUnit)      "()")
+    ((asnInt lex)   lex)
+    ((asnFloat lex) lex)
+    ((asnStr lex)   lex)
+    ((asnKw k)      k)
+    ((asnSym s)     s)
     (_               "")))
 
-(df w-open [(v AsnValue)] -> String
+(df wOpen [(v AsnValue)] -> String
   :d "The opening delimiter a compound value renders with."
   (mt v
-    ((asn-vec _)     "[")
-    ((asn-map _)     "{")
+    ((asnVec _)     "[")
+    ((asnMap _)     "{")
     (_               "(")))
 
-(df w-close [(v AsnValue)] -> String
+(df wClose [(v AsnValue)] -> String
   :d "The closing delimiter a compound value renders with."
   (mt v
-    ((asn-vec _)     "]")
-    ((asn-map _)     "}")
+    ((asnVec _)     "]")
+    ((asnMap _)     "}")
     (_               ")")))
 
-(df w-fields [(fs (List AsnField))] -> (List WItem)
+(df wFields [(fs (List AsnField))] -> (List WItem)
   :d "A field list flattened to alternating key and value work items."
   (fold (fn [(acc (List WItem)) (f AsnField)] -> (List WItem)
-          (list-append acc (list (w-text (.-key f)) (w-val (.-val f)))))
+          (list-append acc (list (wText (.-key f)) (wVal (.-val f)))))
         (list) fs))
 
-(df w-entries [(es (List AsnEntry))] -> (List WItem)
+(df wEntries [(es (List AsnEntry))] -> (List WItem)
   :d "A map's entries flattened. The parenthesised form is rebuilt as it was
       written, because which spelling the source used is part of the document."
   (fold (fn [(acc (List WItem)) (e AsnEntry)] -> (List WItem)
           (list-append acc
             (if (.-paren e)
-              (list (w-val (asn-pair (.-key e) (.-val e))))
-              (list (w-val (.-key e)) (w-val (.-val e))))))
+              (list (wVal (asnPair (.-key e) (.-val e))))
+              (list (wVal (.-key e)) (wVal (.-val e))))))
         (list) es))
 
-(df w-vals [(vs (List AsnValue))] -> (List WItem)
+(df wVals [(vs (List AsnValue))] -> (List WItem)
   :d "A value list as work items."
-  (map (fn [(v AsnValue)] -> WItem (w-val v)) vs))
+  (map (fn [(v AsnValue)] -> WItem (wVal v)) vs))
 
-(df w-children [(v AsnValue)] -> (List WItem)
+(df wChildren [(v AsnValue)] -> (List WItem)
   :d "The work items a compound value's inside renders from, before separators."
   (mt v
-    ((asn-vec items)    (w-vals items))
-    ((asn-map es)       (w-entries es))
-    ((asn-rec fs)       (w-fields fs))
-    ((asn-ctor n fs)    (list-cons (w-text n) (w-fields fs)))
-    ((asn-rows n rows)  (list-cons (w-text n) (w-vals rows)))
-    ((asn-table cs rs)  (list (w-val (asn-vec cs)) (w-val (asn-vec rs))))
-    ((asn-case n args)  (list-cons (w-text n) (w-vals args)))
-    ((asn-pair k val)   (list (w-val k) (w-val val)))
+    ((asnVec items)    (wVals items))
+    ((asnMap es)       (wEntries es))
+    ((asnRec fs)       (wFields fs))
+    ((asnCtor n fs)    (list-cons (wText n) (wFields fs)))
+    ((asnRows n rows)  (list-cons (wText n) (wVals rows)))
+    ((asnTable cs rs)  (list (wVal (asnVec cs)) (wVal (asnVec rs))))
+    ((asnCase n args)  (list-cons (wText n) (wVals args)))
+    ((asnPair k val)   (list (wVal k) (wVal val)))
     (_                  (list))))
 
-(df w-separated [(items (List WItem))] -> (List WItem)
+(df wSeparated [(items (List WItem))] -> (List WItem)
   :d "One space between neighbours, and none against either delimiter."
   (mt (list-head items)
     ((some h)
      (list-cons h
                 (list-reverse
                   (fold (fn [(acc (List WItem)) (x WItem)] -> (List WItem)
-                          (list-cons x (list-cons (w-text " ") acc)))
+                          (list-cons x (list-cons (wText " ") acc)))
                         (list)
-                        (w-tail items)))))
+                        (wTail items)))))
     ((none) (list))))
 
-(df w-wrap [(v AsnValue)] -> (List WItem)
+(df wWrap [(v AsnValue)] -> (List WItem)
   :d "One compound value pushed onto the work list, outermost piece first."
-  (list-cons (w-text (w-open v))
-             (list-append (w-separated (w-children v))
-                          (list (w-text (w-close v))))))
+  (list-cons (wText (wOpen v))
+             (list-append (wSeparated (wChildren v))
+                          (list (wText (wClose v))))))
 
-(df w-tick [(st WState) (tick Int64)] -> WState
+(df wTick [(st WState) (tick Int64)] -> WState
   :d "One work-list step: emit a piece, or expand one value in place."
   (mt (list-head (.-work st))
     ((some it)
-     (let [(rest (w-tail (.-work st)))]
+     (let [(rest (wTail (.-work st)))]
        (mt it
-         ((w-text t) (WState :work rest :out (list-cons t (.-out st))))
-         ((w-val v)
-          (if (w-atom? v)
-            (WState :work rest :out (list-cons (w-atom v) (.-out st)))
-            (WState :work (list-append (w-wrap v) rest) :out (.-out st)))))))
+         ((wText t) (WState :work rest :out (list-cons t (.-out st))))
+         ((wVal v)
+          (if (wAtom? v)
+            (WState :work rest :out (list-cons (wAtom v) (.-out st)))
+            (WState :work (list-append (wWrap v) rest) :out (.-out st)))))))
     ((none) st)))
 
-(df w-run [(st WState) (budget Int64)] -> WState
+(df wRun [(st WState) (budget Int64)] -> WState
   :d "Run work-list steps in doubling batches until the work list drains, for the
       reason `read-run` gives."
   (let [(limit budget)
-        (next (fold w-tick st (range 0 limit)))]
+        (next (fold wTick st (range 0 limit)))]
     (cond
       ((list-empty? (.-work next)) next)
-      (:else (w-run next (+ budget budget))))))
+      (:else (wRun next (+ budget budget))))))
 
-(df asn-write [(v AsnValue)] -> String
+(df asnWrite [(v AsnValue)] -> String
   :d "The canonical text of a value: one space between siblings, none against a
       delimiter, no comments, no line breaks, every scalar as its source lexeme.
       For canonical text t, `(asn-write (asn-read t))` is t byte for byte."
-  (string-join (list-reverse (.-out (w-run (WState :work (list (w-val v)) :out (list)) 64)))
+  (string-join (list-reverse (.-out (wRun (WState :work (list (wVal v)) :out (list)) 64)))
                ""))

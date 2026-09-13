@@ -1,85 +1,85 @@
-(module asl-parser/tests/balance-test
+(module asl-parser/tests/balanceTest
   :d "Unit tests for pure AgentScript delimiter balance and structural verification engine."
-  :x [run-tests]
+  :x [runTests]
   :i [(balance :a bal)])
 
-(df test-balanced-forms [] -> Bool
+(df testBalancedForms [] -> Bool
   :d "Verifies properly balanced parentheses, brackets, and braces."
-  (let [(code-sexpr "(defn foo [x y] (+ x (* y 2)))")
-        (code-mixed "let arr = [{ id: 1, val: (x + y) }];")
-        (res-sexpr (bal/check-delimiter-balance code-sexpr))
-        (res-mixed (bal/check-delimiter-balance code-mixed))]
-    (assert (.-balanced res-sexpr) "S-expression code must be balanced")
-    (assert (= (.-open-parens res-sexpr) 0) "Open parens must be zero")
-    (assert (= (.-open-brackets res-sexpr) 0) "Open brackets must be zero")
-    (assert (.-balanced res-mixed) "Mixed syntax code must be balanced")
+  (let [(codeSexpr "(defn foo [x y] (+ x (* y 2)))")
+        (codeMixed "let arr = [{ id: 1, val: (x + y) }];")
+        (resSexpr (bal/checkDelimiterBalance codeSexpr))
+        (resMixed (bal/checkDelimiterBalance codeMixed))]
+    (assert (.-balanced resSexpr) "S-expression code must be balanced")
+    (assert (= (.-openParens resSexpr) 0) "Open parens must be zero")
+    (assert (= (.-openBrackets resSexpr) 0) "Open brackets must be zero")
+    (assert (.-balanced resMixed) "Mixed syntax code must be balanced")
     true))
 
-(df test-unbalanced-forms [] -> Bool
+(df testUnbalancedForms [] -> Bool
   :d "Verifies detection of unclosed or inverted delimiters."
   (let [(unclosed "(defn bar [x] (+ x 1)")
         (inverted "][")
-        (inverted-parens ")(")
-        (res-unclosed (bal/check-delimiter-balance unclosed))
-        (res-inverted (bal/check-delimiter-balance inverted))
-        (res-inverted-p (bal/check-delimiter-balance inverted-parens))]
-    (assert (not (.-balanced res-unclosed)) "Unclosed parens must be flagged unbalanced")
-    (assert (= (.-open-parens res-unclosed) 1) "Unclosed parens count must be 1")
-    (assert (not (.-balanced res-inverted)) "Inverted brackets must be flagged unbalanced")
-    (assert (not (.-balanced res-inverted-p)) "Inverted parens must be flagged unbalanced")
-    (assert (not (bal/is-delimiter-balanced? unclosed)) "is-delimiter-balanced? must return false for unclosed")
-    (assert (not (bal/is-delimiter-balanced? inverted)) "is-delimiter-balanced? must return false for inverted")
+        (invertedParens ")(")
+        (resUnclosed (bal/checkDelimiterBalance unclosed))
+        (resInverted (bal/checkDelimiterBalance inverted))
+        (resInvertedP (bal/checkDelimiterBalance invertedParens))]
+    (assert (not (.-balanced resUnclosed)) "Unclosed parens must be flagged unbalanced")
+    (assert (= (.-openParens resUnclosed) 1) "Unclosed parens count must be 1")
+    (assert (not (.-balanced resInverted)) "Inverted brackets must be flagged unbalanced")
+    (assert (not (.-balanced resInvertedP)) "Inverted parens must be flagged unbalanced")
+    (assert (not (bal/isDelimiterBalanced? unclosed)) "is-delimiter-balanced? must return false for unclosed")
+    (assert (not (bal/isDelimiterBalanced? inverted)) "is-delimiter-balanced? must return false for inverted")
     true))
 
-(df test-delimiters-in-strings [] -> Bool
+(df testDelimitersInStrings [] -> Bool
   :d "Verifies that delimiters inside string literals do not affect balance."
-  (let [(code-str "(println \")\")")
-        (code-escaped "(println \"(\\\"foo\\\")\")")
-        (res-str (bal/check-delimiter-balance code-str))
-        (res-escaped (bal/check-delimiter-balance code-escaped))]
-    (assert (.-balanced res-str) "Parens inside string literals must be ignored")
-    (assert (.-balanced res-escaped) "Escaped quotes inside strings must be handled correctly")
+  (let [(codeStr "(println \")\")")
+        (codeEscaped "(println \"(\\\"foo\\\")\")")
+        (resStr (bal/checkDelimiterBalance codeStr))
+        (resEscaped (bal/checkDelimiterBalance codeEscaped))]
+    (assert (.-balanced resStr) "Parens inside string literals must be ignored")
+    (assert (.-balanced resEscaped) "Escaped quotes inside strings must be handled correctly")
     true))
 
-(df test-count-unclosed-parens [] -> Bool
+(df testCountUnclosedParens [] -> Bool
   :d "Verifies count-unclosed-parens returns exact count of unclosed open parentheses."
-  (let [(code-two "((+ 1 2) (+ 3 4")
-        (code-one "(println \"(\") (+ 1 2")
-        (code-bal "(defn foo [] (+ 1 2))")]
-    (assert (= (bal/count-unclosed-parens code-two) 2) "Open parens count must be 2")
-    (assert (= (bal/count-unclosed-parens code-one) 1) "Open parens count must be 1")
-    (assert (= (bal/count-unclosed-parens code-bal) 0) "Balanced code unclosed count must be 0")
+  (let [(codeTwo "((+ 1 2) (+ 3 4")
+        (codeOne "(println \"(\") (+ 1 2")
+        (codeBal "(defn foo [] (+ 1 2))")]
+    (assert (= (bal/countUnclosedParens codeTwo) 2) "Open parens count must be 2")
+    (assert (= (bal/countUnclosedParens codeOne) 1) "Open parens count must be 1")
+    (assert (= (bal/countUnclosedParens codeBal) 0) "Balanced code unclosed count must be 0")
     true))
 
-(df test-balance-delimiters [] -> Bool
+(df testBalanceDelimiters [] -> Bool
   :d "Verifies balance-delimiters appends closing parentheses to unclosed S-expressions."
   (let [(unclosed "(defn foo [x] (+ x 1")
-        (balanced (bal/balance-delimiters unclosed))
-        (already-bal "(defn bar [] 42)")
-        (unchanged (bal/balance-delimiters already-bal))]
+        (balanced (bal/balanceDelimiters unclosed))
+        (alreadyBal "(defn bar [] 42)")
+        (unchanged (bal/balanceDelimiters alreadyBal))]
     (assert (= balanced "(defn foo [x] (+ x 1))") "Must append 1 closing paren")
-    (assert (= unchanged already-bal) "Must leave balanced code unchanged")
+    (assert (= unchanged alreadyBal) "Must leave balanced code unchanged")
     true))
 
-(df test-interleaved-delimiters [] -> Bool
+(df testInterleavedDelimiters [] -> Bool
   :d "Verifies that interleaved delimiters like ([)] and {[(])} are correctly flagged as unbalanced."
-  (let [(r1 (bal/check-delimiter-balance "([)]"))
-        (r2 (bal/check-delimiter-balance "[(])"))
-        (r3 (bal/check-delimiter-balance "{(})"))
-        (r4 (bal/check-delimiter-balance "{[(])}"))]
+  (let [(r1 (bal/checkDelimiterBalance "([)]"))
+        (r2 (bal/checkDelimiterBalance "[(])"))
+        (r3 (bal/checkDelimiterBalance "{(})"))
+        (r4 (bal/checkDelimiterBalance "{[(])}"))]
     (assert (not (.-balanced r1)) "([)] must be unbalanced")
     (assert (not (.-balanced r2)) "[(]) must be unbalanced")
     (assert (not (.-balanced r3)) "{(}) must be unbalanced")
     (assert (not (.-balanced r4)) "{[(])} must be unbalanced")
-    (assert (not (bal/is-delimiter-balanced? "([)]")) "is-delimiter-balanced? must reject ([)]")
+    (assert (not (bal/isDelimiterBalanced? "([)]")) "is-delimiter-balanced? must reject ([)]")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Executes all delimiter balance unit tests."
-  (and (test-balanced-forms)
-       (and (test-unbalanced-forms)
-            (and (test-delimiters-in-strings)
-                 (and (test-count-unclosed-parens)
-                      (and (test-balance-delimiters)
-                           (test-interleaved-delimiters)))))))
+  (and (testBalancedForms)
+       (and (testUnbalancedForms)
+            (and (testDelimitersInStrings)
+                 (and (testCountUnclosedParens)
+                      (and (testBalanceDelimiters)
+                           (testInterleavedDelimiters)))))))
 

@@ -1,9 +1,9 @@
-(module asl-web/blog-view
+(module aslWeb/blogView
   :d "Engineering Blog & Technical Insights view in pure AgentScript."
-  :x [blog-view render-blog-view]
+  :x [blogView renderBlogView]
   :i [])
 
-(df render-blog-view [] -> Str
+(df renderBlogView [] -> Str
   :d "Renders the complete engineering blog listing with interactive category filters, search, and article cards."
   "<main class=\"flex-1 max-w-shell mx-auto px-4 sm:px-6 py-12 sm:py-16 w-full\" id=\"bv-main\">
     <header class=\"mb-16 sm:mb-20 max-w-3xl\">
@@ -67,37 +67,37 @@
     <div class=\"grid grid-cols-1 md:grid-cols-2 gap-6\" id=\"bv-posts-grid\">
       <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"the-death-of-json-rpc-and-zero-copy-wire-protocols\" data-importance=\"flagship\" data-cat=\"Protocols &amp; Multi-Agent Swarms Harness &amp; Systems\" data-search=\"the death of json-rpc: why autonomous agent swarms need zero-copy s-expression wire protocols why json-rpc and openapi schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how agent script notation (asn) and seambus ring buffers enable sub-microsecond zero-copy inter-agent messaging. agent protocols json-rpc seambus wire frames zero-copy pure asl genseam\">
         <div>
-          <div class="flex items-center justify-between text-micro font-mono text-ink-3 mb-3">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <span class="px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium">Protocols &amp; Wire Frames</span>
-              <span class="px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]">★ Flagship</span>
+          <div class="flex itemsCenter justifyBetween textMicro fontMono textInk3 mb3">
+            <div class="flex itemsCenter gap1.5 flexWrap">
+              <span class="px2 py0.5 rounded border borderSignal/30 bgSignal/5 textSignal uppercase trackingWider fontMedium">Protocols &amp; Wire Frames</span>
+              <span class="px1.5 py0.5 rounded border borderCyan400/40 bgCyan400/10 textCyan300 fontSemibold text-[10px]">★ Flagship</span>
             </div>
             <span>9 min read</span>
           </div>
-          <h3 class="text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2 line-clamp-2">The Death of JSON-RPC: Why Autonomous Agent Swarms Need Zero-Copy S-Expression Wire Protocols</h3>
-          <p class="text-meta text-ink-2 line-clamp-3 mb-4">Why JSON-RPC and OpenAPI schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how Agent Script Notation (ASN) and SeamBus ring buffers enable sub-microsecond zero-copy inter-agent messaging.</p>
+          <h3 class="textLg fontBold textInk groupHover:textSignal transitionColors mb2 lineClamp2">The Death of JSON-RPC: Why Autonomous Agent Swarms Need Zero-Copy S-Expression Wire Protocols</h3>
+          <p class="textMeta textInk2 lineClamp3 mb4">Why JSON-RPC and OpenAPI schemas burn 78% of multi-agent context in delimiter overhead and string escaping, and how Agent Script Notation (ASN) and SeamBus ring buffers enable sub-microsecond zero-copy inter-agent messaging.</p>
         </div>
-        <div class="flex items-center justify-between pt-4 border-t border-line/60 text-micro font-mono text-ink-3">
+        <div class="flex itemsCenter justifyBetween pt4 borderT borderLine/60 textMicro fontMono textInk3">
           <span>2026-09-10 • GenSEAM</span>
-          <span class="text-signal font-semibold group-hover:translate-x-0.5 transition-transform">&rarr;</span>
+          <span class="textSignal fontSemibold groupHover:translateX0.5 transitionTransform">&rarr;</span>
         </div>
       </article>
 
       <article class=\"bv-post-card p-6 sm:p-7 rounded-2xl border border-line bg-surface/70 hover:bg-surface hover:border-signal/60 cursor-pointer transition-colors duration-200 group flex flex-col justify-between shadow-e1 hover:shadow-e2\" data-slug=\"why-3b-local-models-fail-at-python-but-fly-on-s-expressions\" data-importance=\"flagship\" data-cat=\"Language Design &amp; SLM Inference Language &amp; Grammar\" data-search=\"why 3b local models fail at python but fly on s-expressions: zero-tax autonomous coding on apple silicon how small 3b quantized models (qwen 2.5-coder, llama 3.2) bleed 61% of their attention capacity on python indentation and bracket bookkeeping, and how single-pass s-expressions deliver 94.2% test pass rates under a 2gb unified memory ceiling on apple silicon. localllama slm inference apple silicon s-expressions m1 telemetry pure asl genseam\">
         <div>
-          <div class="flex items-center justify-between text-micro font-mono text-ink-3 mb-3">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <span class="px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium">Language &amp; SLM Inference</span>
-              <span class="px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]">★ Flagship</span>
+          <div class="flex itemsCenter justifyBetween textMicro fontMono textInk3 mb3">
+            <div class="flex itemsCenter gap1.5 flexWrap">
+              <span class="px2 py0.5 rounded border borderSignal/30 bgSignal/5 textSignal uppercase trackingWider fontMedium">Language &amp; SLM Inference</span>
+              <span class="px1.5 py0.5 rounded border borderCyan400/40 bgCyan400/10 textCyan300 fontSemibold text-[10px]">★ Flagship</span>
             </div>
             <span>10 min read</span>
           </div>
-          <h3 class="text-lg font-bold text-ink group-hover:text-signal transition-colors mb-2 line-clamp-2">Why 3B Local Models Fail at Python but Fly on S-Expressions: Zero-Tax Autonomous Coding on Apple Silicon</h3>
-          <p class="text-meta text-ink-2 line-clamp-3 mb-4">How small 3B quantized models (Qwen 2.5-Coder, Llama 3.2) bleed 61% of their attention capacity on Python indentation and bracket bookkeeping, and how single-pass S-expressions deliver 94.2% test pass rates under a 2GB unified memory ceiling on Apple Silicon.</p>
+          <h3 class="textLg fontBold textInk groupHover:textSignal transitionColors mb2 lineClamp2">Why 3B Local Models Fail at Python but Fly on S-Expressions: Zero-Tax Autonomous Coding on Apple Silicon</h3>
+          <p class="textMeta textInk2 lineClamp3 mb4">How small 3B quantized models (Qwen 2.5-Coder, Llama 3.2) bleed 61% of their attention capacity on Python indentation and bracket bookkeeping, and how single-pass S-expressions deliver 94.2% test pass rates under a 2GB unified memory ceiling on Apple Silicon.</p>
         </div>
-        <div class="flex items-center justify-between pt-4 border-t border-line/60 text-micro font-mono text-ink-3">
+        <div class="flex itemsCenter justifyBetween pt4 borderT borderLine/60 textMicro fontMono textInk3">
           <span>2026-09-10 • GenSEAM</span>
-          <span class="text-signal font-semibold group-hover:translate-x-0.5 transition-transform">&rarr;</span>
+          <span class="textSignal fontSemibold groupHover:translateX0.5 transitionTransform">&rarr;</span>
         </div>
       </article>
 
@@ -570,6 +570,6 @@
     })();
   </script>")
 
-(df blog-view [] -> Str
+(df blogView [] -> Str
   :d "Alias for render-blog-view."
-  (render-blog-view))
+  (renderBlogView))

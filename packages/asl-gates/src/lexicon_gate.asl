@@ -1,8 +1,8 @@
-(module asl-gates/lexicon-gate
+(module asl-gates/lexiconGate
   :d "Pure AgentScript canonical lexicon audit and drift verification gate."
   :x [LexiconTerm LexiconRegistry
-      make-lexicon-term audit-lexicon-terms check-local-alias-tables
-      verify-canonical-referents is-spoken-mishearing?]
+      makeLexiconTerm auditLexiconTerms checkLocalAliasTables
+      verifyCanonicalReferents isSpokenMishearing?]
   :i [])
 
 (dfs LexiconTerm
@@ -15,19 +15,19 @@
   (:f version Str "Lexicon schema semantic version")
   (:f terms (List LexiconTerm) "Registered canonical lexicon entries"))
 
-(df make-lexicon-term [(canonical Str) (spoken (List Str)) (scope Str) (why Str)] -> LexiconTerm
+(df makeLexiconTerm [(canonical Str) (spoken (List Str)) (scope Str) (why Str)] -> LexiconTerm
   (LexiconTerm
     :canonical canonical
     :spoken spoken
     :scope scope
     :why why))
 
-(df is-spoken-mishearing? [(term Str) (spoken (List Str))] -> Bool
+(df isSpokenMishearing? [(term Str) (spoken (List Str))] -> Bool
   :d "Checks if a given term matches any known spoken mishearing form."
   (let [(matches (filter (fn [(s Str)] -> Bool (= s term)) spoken))]
     (not (list-empty? matches))))
 
-(df audit-lexicon-terms [(registry LexiconRegistry)] -> Bool
+(df auditLexiconTerms [(registry LexiconRegistry)] -> Bool
   :d "Verifies each lexicon term has non-empty canonical, scope, why, and spoken list."
   (let [(terms (.-terms registry))]
     (if (list-empty? terms)
@@ -40,7 +40,7 @@
                                terms))]
           (list-empty? invalid)))))
 
-(df check-local-alias-tables [(files (List Str))] -> Bool
+(df checkLocalAliasTables [(files (List Str))] -> Bool
   :d "Verifies no unauthorized local alias tables exist outside canonical lexicon."
   (let [(forbidden (filter (fn [(f Str)] -> Bool
                              (and (string-contains? f "alias_table")
@@ -48,7 +48,7 @@
                            files))]
     (list-empty? forbidden)))
 
-(df verify-canonical-referents [(terms (List LexiconTerm)) (corpus Str)] -> Bool
+(df verifyCanonicalReferents [(terms (List LexiconTerm)) (corpus Str)] -> Bool
   :d "Verifies that every canonical term has at least one active referent in the repository."
   (let [(unreferenced (filter (fn [(t LexiconTerm)] -> Bool
                                 (not (string-contains? corpus (.-canonical t))))

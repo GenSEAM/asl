@@ -1,4 +1,4 @@
-(:bootstrapContract :v 1 :src ADR-0081
+(:bootstrapContract :v 1 :src ADR0081
   :summary "Bootstrap generations, toolchain progression, and closure invariants for autonomous self-hosted ASL."
   :stages [
     (:stage :id 0 :name "seed" :toolchain "asl/tools/asl.c" :output "bin/asl" :desc "Owned C bootstrap interpreter seed")

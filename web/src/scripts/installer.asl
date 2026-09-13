@@ -1,8 +1,8 @@
-(module asl-web/installer
+(module aslWeb/installer
   :d "Canonical installer configuration and code generation model for AgentScript CLI distribution"
-  :x [installer-config generate-install-script])
+  :x [installerConfig generateInstallScript])
 
-(df installer-config [] -> Any
+(df installerConfig [] -> Any
   :d "Returns installation configuration parameters"
   (:cli_name "asl"
    :repo_url "https://github.com/GenSEAM/asl.git"
@@ -11,22 +11,22 @@
    :binary_rel "asl"
    :bin_links ["asl" "agentscript"]))
 
-(df generate-install-script [] -> Str
+(df generateInstallScript [] -> Str
   :d "Generates canonical POSIX Bash installer script with automatic PATH configuration"
-  (let [(cfg (installer-config))
+  (let [(cfg (installerConfig))
         (cli (.-cli_name cfg))
         (repo (.-repo_url cfg))
-        (inst-dir (.-install_dir cfg))
-        (clone-dir (.-clone_dir cfg))
-        (bin-rel (.-binary_rel cfg))]
+        (instDir (.-install_dir cfg))
+        (cloneDir (.-clone_dir cfg))
+        (binRel (.-binary_rel cfg))]
     (str "#!/bin/bash\n"
          "# GENERATED FROM AGENTSCRIPT (ASL). DO NOT EDIT MANUALLY.\n"
          "set -e\n\n"
          "echo \" Installing ASL (AgentScript Language) CLI...\"\n"
-         "INSTALL_DIR=\"" inst-dir "\"\n"
+         "INSTALL_DIR=\"" instDir "\"\n"
          "mkdir -p \"${INSTALL_DIR}\"\n\n"
          "REPO_URL=\"" repo "\"\n"
-         "CLONE_DIR=\"" clone-dir "\"\n\n"
+         "CLONE_DIR=\"" cloneDir "\"\n\n"
          "if [ -d \"${CLONE_DIR}\" ]; then\n"
          "  echo \" Updating existing ASL repository...\"\n"
          "  git -C \"${CLONE_DIR}\" pull --ff-only\n"
@@ -34,11 +34,11 @@
          "  echo \" Cloning ASL repository...\"\n"
          "  git clone \"${REPO_URL}\" \"${CLONE_DIR}\"\n"
          "fi\n\n"
-         "ln -sf \"${CLONE_DIR}/" bin-rel "\" \"${INSTALL_DIR}/asl\"\n"
-         "ln -sf \"${CLONE_DIR}/" bin-rel "\" \"${INSTALL_DIR}/agentscript\"\n\n"
+         "ln -sf \"${CLONE_DIR}/" binRel "\" \"${INSTALL_DIR}/asl\"\n"
+         "ln -sf \"${CLONE_DIR}/" binRel "\" \"${INSTALL_DIR}/agentscript\"\n\n"
          "# Also symlink to ~/.local/bin if directory exists and is writable\n"
          "if [ -d \"${HOME}/.local/bin\" ] && [ -w \"${HOME}/.local/bin\" ]; then\n"
-         "  ln -sf \"${CLONE_DIR}/" bin-rel "\" \"${HOME}/.local/bin/asl\"\n"
+         "  ln -sf \"${CLONE_DIR}/" binRel "\" \"${HOME}/.local/bin/asl\"\n"
          "  echo \" Symlinked to ${HOME}/.local/bin/asl\"\n"
          "fi\n\n"
          "# Automatically add to user shell configuration files if not already present\n"

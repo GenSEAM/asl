@@ -1,4 +1,4 @@
-(:flakiness-corpus
+(:flakinessCorpus
   :version "1.0"
   :suites [
     (:suite
@@ -11,14 +11,14 @@
     (:suite
       :id "gates-test"
       :path "asl/packages/asl-gates/tests/gates_test.asl"
-      :behavior :deterministic-pass
+      :behavior :deterministicPass
       :expectedStable true
       :expectedGuaranteeEligible true
       :justification "Deterministic passing suite across repeated iterations")
     (:suite
       :id "eval-test"
       :path "asl/packages/asl-eval/tests/eval_test.asl"
-      :behavior :deterministic-pass
+      :behavior :deterministicPass
       :expectedStable true
       :expectedGuaranteeEligible true
       :justification "Deterministic passing suite across repeated iterations")
