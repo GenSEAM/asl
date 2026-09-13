@@ -1,0 +1,61 @@
+(:stage2 :v 1 :src D86 :shortcode D86
+  :note "Formal ASN specification of Pure ASL Stage-2 Bootstrap Compiler Architecture, SSA Intermediate Representation, and Native ABI Contracts under D86."
+  :concepts [
+    (:concept :name "stage2_ir_schema" :role "Formal specification of SSA intermediate representation instructions and basic blocks")
+    (:concept :name "target_abi_spec" :role "Platform Application Binary Interface specification for Darwin ARM64 and Linux x86_64")
+    (:concept "ssa_form" :role "Static Single Assignment representation of expressions and control flow")
+    (:concept "binary_section" :role "Executable binary container segment and section header specifications")
+  ]
+  :stage2Architecture [
+    (:schema :id ssaForm :category :compiler-ir
+      :description "Declarative representation of an SSA basic block and register instructions."
+      :required [:blockId :predecessors :successors :instructions :terminator]
+      :optional [:phiNodes :variableMap]
+      :fields [
+        (:field :name :blockId :type :string :pattern "^bb-[0-9a-zA-Z-]+$")
+        (:field :name :predecessors :type :list)
+        (:field :name :successors :type :list)
+        (:field :name :instructions :type :list)
+        (:field :name :terminator :type :map)
+        (:field :name :phiNodes :type :list)
+        (:field :name :variableMap :type :map)])
+
+    (:schema :id binarySection :category :binary-format
+      :description "Specification of an emitted binary segment or section."
+      :required [:sectionName :segmentName :address :size :alignment :flags]
+      :optional [:relocations :contentDigest]
+      :fields [
+        (:field :name :sectionName :type :string)
+        (:field :name :segmentName :type :string)
+        (:field :name :address :type :integer)
+        (:field :name :size :type :integer)
+        (:field :name :alignment :type :integer)
+        (:field :name :flags :type :integer)
+        (:field :name :relocations :type :list)
+        (:field :name :contentDigest :type :string)])
+
+    (:schema :id targetAbiSpec :category :platform-abi
+      :description "Platform ABI specification for native machine code lowering."
+      :targets [
+        (:target :id "darwin-arm64"
+          :arch "arm64"
+          :os "darwin"
+          :fileFormat "Mach-O"
+          :pageZero (:size 4294967296 :vmAddress 0)
+          :textSegment (:vmAddress 4294967296 :flags 5)
+          :dataSegment (:vmAddress 8589934592 :flags 3)
+          :callingConvention (:intArgs ["x0" "x1" "x2" "x3" "x4" "x5" "x6" "x7"]
+                              :retReg "x0"
+                              :stackAlignment 16))
+        (:target :id "linux-x86_64"
+          :arch "x86_64"
+          :os "linux"
+          :fileFormat "ELF"
+          :pageZero (:size 65536 :vmAddress 0)
+          :textSegment (:vmAddress 4194304 :flags 5)
+          :dataSegment (:vmAddress 6291456 :flags 3)
+          :callingConvention (:intArgs ["rdi" "rsi" "rdx" "rcx" "r8" "r9"]
+                              :retReg "rax"
+                              :stackAlignment 16))])
+  ]
+)
