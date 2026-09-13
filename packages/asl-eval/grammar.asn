@@ -11,5 +11,7 @@
     (:sym :name "invokeClosure" :kind :fn :tokens 2)
     (:sym :name "loadModule" :kind :fn :tokens 2)
     (:sym :name "makeEvalEnv" :kind :fn :tokens 2)
+    (:sym :name "evalArithmetic" :kind :fn :tokens 2)
+    (:sym :name "clamp" :kind :fn :tokens 1)
   ]
 )
