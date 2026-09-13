@@ -179,15 +179,15 @@
   :d "Formats the verification gate summary into a terminal report."
   (let [(header "================================================================================\n          AgentScript Pure ASL Verification Gate & Continuous Audit             \n================================================================================\n")
         (body (fold (fn [(acc Str) (v GateVerdict)] -> Str
-                      (let [(mark (if (.-passed v) "✓" "✗"))
+                      (let [(mark (if (.-passed v) ":ok" ":fail"))
                             (line (str "--> [" (string-from-int64 (.-gate-num v)) "/7] "
                                        (.-gate-name v) "...\n    " mark " " (.-message v) "\n"))]
                         (str acc line)))
                     ""
                     (.-verdicts summary)))
         (footer (if (.-all-clean summary)
-                    "================================================================================\n✓ === [Pure ASL Gate] ALL VERIFICATION GATES PASSED CLEANLY ===               \n================================================================================\n"
-                    "================================================================================\n✗ === [Pure ASL Gate] GATES FAILED ===                                          \n================================================================================\n"))]
+                    "================================================================================\n:ok === [Pure ASL Gate] ALL VERIFICATION GATES PASSED CLEANLY ===               \n================================================================================\n"
+                    "================================================================================\n:fail === [Pure ASL Gate] GATES FAILED ===                                          \n================================================================================\n"))]
     (str header body footer)))
 
 (df audit-dead-code [(exports (List Str)) (callers (List Str))] -> (List Str)
