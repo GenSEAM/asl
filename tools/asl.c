@@ -3386,6 +3386,242 @@ static int handle_rpc_component(int step_id, StepToken *tokens, int ntokens, con
     return emit_blamed_rejection(out, step_id, "component", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported component action");
 }
 
+static int validate_d52_schema(int step_id, StepToken *tokens, int ntokens, StrBuf *out) {
+    const char *id = get_kw_arg(tokens, ntokens, "id");
+    const char *phase = get_kw_arg(tokens, ntokens, "phase");
+    const char *title = get_kw_arg(tokens, ntokens, "title");
+    const char *gate = get_kw_arg(tokens, ntokens, "gate");
+    const char *action_dag = get_kw_arg(tokens, ntokens, "actionDag");
+
+    if (!id || !id[0]) {
+        return emit_blamed_rejection(out, step_id, "task", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Task id is required");
+    }
+    if (!phase || !phase[0]) {
+        return emit_blamed_rejection(out, step_id, "task", "E_SCHEMA_MISSING_FIELD", "phase", "string", ":nil", "Task phase is required");
+    }
+    if (!title || !title[0]) {
+        return emit_blamed_rejection(out, step_id, "task", "E_SCHEMA_MISSING_FIELD", "title", "string", ":nil", "Task title is required");
+    }
+    if (!gate || !gate[0]) {
+        return emit_blamed_rejection(out, step_id, "task", "E_SCHEMA_MISSING_FIELD", "gate", "string", ":nil", "Task must define verification gate (:gate)");
+    }
+    if (!action_dag || !action_dag[0]) {
+        return emit_blamed_rejection(out, step_id, "task", "E_SCHEMA_MISSING_FIELD", "actionDag", "vector", ":nil", "Task must define action DAG (:actionDag)");
+    }
+    return 0;
+}
+
+static int handle_rpc_task(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "create";
+
+    if (strcmp(action, "create") == 0 || strcmp(action, "write") == 0) {
+        int vrc = validate_d52_schema(step_id, tokens, ntokens, out);
+        if (vrc != 0) return vrc;
+
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *phase = get_kw_arg(tokens, ntokens, "phase");
+        const char *title = get_kw_arg(tokens, ntokens, "title");
+        const char *gate = get_kw_arg(tokens, ntokens, "gate");
+        const char *action_dag = get_kw_arg(tokens, ntokens, "actionDag");
+        const char *lane = get_kw_arg(tokens, ntokens, "lane");
+        if (!lane) lane = "engine";
+        const char *state = get_kw_arg(tokens, ntokens, "state");
+        if (!state) state = "ready";
+        const char *priority = get_kw_arg(tokens, ntokens, "priority");
+        if (!priority) priority = "critical";
+        const char *owner_role = get_kw_arg(tokens, ntokens, "ownerRole");
+        if (!owner_role) owner_role = "implementer";
+        const char *motivation = get_kw_arg(tokens, ntokens, "motivation");
+        const char *purpose = get_kw_arg(tokens, ntokens, "purpose");
+        const char *owns = get_kw_arg(tokens, ntokens, "owns");
+        const char *invariants = get_kw_arg(tokens, ntokens, "invariants");
+        const char *adr = get_kw_arg(tokens, ntokens, "adr");
+        const char *decision = get_kw_arg(tokens, ntokens, "decision");
+        const char *depends_on = get_kw_arg(tokens, ntokens, "dependsOn");
+
+        char phase_path[4096];
+        snprintf(phase_path, sizeof(phase_path), "%s/.asl/mem/tasks/%s.asn", ws_root, phase);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_phase;
+        sb_init(&cur_phase);
+        char err[512] = {0};
+        se->read_record(se, phase_path, &cur_phase, err, sizeof(err));
+
+        StrBuf tentry;
+        sb_init(&tentry);
+        sb_append(&tentry, "    (:task\n      :id \"");
+        sb_append_escaped(&tentry, id);
+        sb_append(&tentry, "\"\n      :parentId \"\"\n      :phase \"");
+        sb_append_escaped(&tentry, phase);
+        sb_append(&tentry, "\"\n      :title \"");
+        sb_append_escaped(&tentry, title);
+        sb_append(&tentry, "\"\n      :kind :engine\n      :lane \"");
+        sb_append_escaped(&tentry, lane);
+        sb_append(&tentry, "\"\n      :state :");
+        sb_append(&tentry, state);
+        sb_append(&tentry, "\n      :priority :");
+        sb_append(&tentry, priority);
+        sb_append(&tentry, "\n      :ownerRole \"");
+        sb_append_escaped(&tentry, owner_role);
+        sb_append(&tentry, "\"\n      :createdAt 1789452000000\n      :updatedAt 1789452000000\n      :motivation \"");
+        sb_append_escaped(&tentry, motivation ? motivation : title);
+        sb_append(&tentry, "\"\n      :purpose \"");
+        sb_append_escaped(&tentry, purpose ? purpose : title);
+        sb_append(&tentry, "\"\n      :context (:contractRef D81PlanContext)\n      :outcomes [\"");
+        sb_append_escaped(&tentry, title);
+        sb_append(&tentry, " verified\"]\n      :owns ");
+        sb_append(&tentry, owns ? owns : "[]");
+        sb_append(&tentry, "\n      :targetSymbols []\n      :relatedSymbols []\n      :invariants ");
+        sb_append(&tentry, invariants ? invariants : "[\"D81\" \"D83\" \"C1\" \"C2\"]");
+        sb_append(&tentry, "\n      :adr \"");
+        sb_append_escaped(&tentry, adr ? adr : "D83");
+        sb_append(&tentry, "\"\n      :decision \"");
+        sb_append_escaped(&tentry, decision ? decision : "d83");
+        sb_append(&tentry, "\"\n      :dependsOn ");
+        sb_append(&tentry, depends_on ? depends_on : "[]");
+        sb_append(&tentry, "\n      :gate \"");
+        sb_append_escaped(&tentry, gate);
+        sb_append(&tentry, "\"\n      :actionDag ");
+        sb_append(&tentry, action_dag);
+        sb_append(&tentry, "\n      :acceptanceCriteria (:contractRef D81BehavioralAcceptance)\n      :contractRefs [D81PlanContext D81SettledChoices D81TaskFailureModes D81BehavioralAcceptance D81Baseline D81Ownership D81Receipts]\n      :verificationRole \"independentVerifier\"\n      :verificationOwns []\n      :verificationCases [\"Gate passes\"]\n      :gateReadiness :requiresIndependentBaseline\n      :baselineProbe (:command \"");
+        sb_append_escaped(&tentry, gate);
+        sb_append(&tentry, "\" :status :notEstablished :contract D81Baseline)\n      :reviewStatus :planApproved\n      :stepIndex 1\n      :receipts [])\n");
+
+        if (cur_phase.len > 0 && cur_phase.data) {
+            char *last_close = strrchr(cur_phase.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_phase.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_phase.data, prefix_len);
+                sb_append(&updated, tentry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, phase_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            }
+        } else {
+            StrBuf new_file;
+            sb_init(&new_file);
+            sb_append(&new_file, "(:taskCollection\n  :id \"");
+            sb_append_escaped(&new_file, phase);
+            sb_append(&new_file, "\"\n  :createdAt 1789452000000\n  :status \"planned\"\n  :priorityOrder 1\n  :summary \"");
+            sb_append_escaped(&new_file, title);
+            sb_append(&new_file, "\"\n  :phase \"");
+            sb_append_escaped(&new_file, phase);
+            sb_append(&new_file, "\"\n  :baseline \"Initialized via RPC dispatcher\"\n  :tasks [\n");
+            sb_append(&new_file, tentry.data);
+            sb_append(&new_file, "  ]\n)\n");
+            se->write_record(se, phase_path, new_file.data, err, sizeof(err));
+            sb_free(&new_file);
+        }
+        sb_free(&tentry);
+        sb_free(&cur_phase);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"task\" :action \"create\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\" :phase \"");
+        sb_append_escaped(out, phase);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"task\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "task", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported task action");
+}
+
+static int handle_rpc_phase(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    (void)ws_root;
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "create";
+
+    if (strcmp(action, "create") == 0 || strcmp(action, "write") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *title = get_kw_arg(tokens, ntokens, "title");
+        const char *gate = get_kw_arg(tokens, ntokens, "gate");
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "phase", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Phase id is required");
+        }
+        if (!title || !title[0]) {
+            return emit_blamed_rejection(out, step_id, "phase", "E_SCHEMA_MISSING_FIELD", "title", "string", ":nil", "Phase title is required");
+        }
+        if (!gate || !gate[0]) {
+            return emit_blamed_rejection(out, step_id, "phase", "E_SCHEMA_MISSING_FIELD", "gate", "string", ":nil", "Phase gate is required");
+        }
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"phase\" :action \"create\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"phase\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "phase", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported phase action");
+}
+
+static int handle_rpc_plan(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    (void)ws_root;
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "create";
+
+    if (strcmp(action, "create") == 0 || strcmp(action, "write") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *phase = get_kw_arg(tokens, ntokens, "phase");
+        const char *title = get_kw_arg(tokens, ntokens, "title");
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "plan", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Plan id is required");
+        }
+        if (!phase || !phase[0]) {
+            return emit_blamed_rejection(out, step_id, "plan", "E_SCHEMA_MISSING_FIELD", "phase", "string", ":nil", "Plan phase is required");
+        }
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"plan\" :action \"create\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\" :phase \"");
+        sb_append_escaped(out, phase);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"plan\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "plan", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported plan action");
+}
+
 static int validate_manifest_ast_c(const char *ws_root, const char *rel_path);
 static int check_pure_asl_zero_comments(const char *ws_root);
 static int check_grounded_claims(const char *ws_root, int *out_claims_count);
@@ -4516,6 +4752,12 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         handle_rpc_recipe(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "component") == 0) {
         handle_rpc_component(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "task") == 0) {
+        handle_rpc_task(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "phase") == 0) {
+        handle_rpc_phase(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "plan") == 0) {
+        handle_rpc_plan(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
