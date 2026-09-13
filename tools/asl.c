@@ -5259,8 +5259,12 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
     int has_only = 0;
     int only_gates[8] = {0};
     int skip_gates[8] = {0};
+    int file_args_count = 0;
 
     for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "gate") == 0 || strcmp(argv[i], "gates") == 0 || strcmp(argv[i], "audit") == 0) {
+            continue;
+        }
         if (strncmp(argv[i], "--skip=", 7) == 0) {
             parse_gate_numbers(argv[i] + 7, skip_gates, 1);
         } else if (strcmp(argv[i], "--skip") == 0 && i + 1 < argc) {
@@ -5271,7 +5275,46 @@ static int run_cmd_gate(int argc, char **argv, const char *ws_root) {
         } else if (strcmp(argv[i], "--only") == 0 && i + 1 < argc) {
             has_only = 1;
             parse_gate_numbers(argv[++i], only_gates, 1);
+        } else if (argv[i][0] != 45) {
+            file_args_count++;
+            const char *target_path = argv[i];
+            char resolved_path[1024];
+            if (target_path[0] == 47) {
+                snprintf(resolved_path, sizeof(resolved_path), "%s", target_path);
+            } else {
+                snprintf(resolved_path, sizeof(resolved_path), "%s/%s", ws_root, target_path);
+            }
+            if (access(target_path, F_OK) != 0 && access(resolved_path, F_OK) != 0) {
+                fprintf(stderr, "Error: Target file not found: %s\n", target_path);
+                return 1;
+            }
         }
+    }
+
+    if (file_args_count > 0) {
+        int target_fail = 0;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "gate") == 0 || strcmp(argv[i], "gates") == 0 || strcmp(argv[i], "audit") == 0) continue;
+            if (argv[i][0] != 45) {
+                const char *target_path = argv[i];
+                char resolved_path[1024];
+                if (target_path[0] == 47) {
+                    snprintf(resolved_path, sizeof(resolved_path), "%s", target_path);
+                } else {
+                    snprintf(resolved_path, sizeof(resolved_path), "%s/%s", ws_root, target_path);
+                }
+                const char *chk_file = (access(target_path, F_OK) == 0) ? target_path : resolved_path;
+                if (check_file_delimiters(chk_file, 0) != 0) {
+                    target_fail = 1;
+                }
+            }
+        }
+        if (target_fail) {
+            fprintf(stderr, "    ✗ [Pure ASL Gate] Delimiter/syntax check failed for specified targets\n");
+            return 1;
+        }
+        printf("✓ [Pure ASL Gate] %d file(s) verified cleanly.\n", file_args_count);
+        return 0;
     }
 
     if (has_only) {

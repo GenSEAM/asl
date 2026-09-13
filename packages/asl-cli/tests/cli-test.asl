@@ -33,9 +33,12 @@
 (df ! test-dispatch-gate [] -> Bool
   :d "Verifies dispatch-cmd gate processes file list."
   (do
-    (mt (c/dispatch-cmd "gate" (list "test.asl"))
+    (mt (c/dispatch-cmd "gate" (list "asl/packages/asl-cli/src/cli.asl"))
       ((ok msg) (assert (string-contains? msg "verified cleanly") "c-cli-pos-004: gate dispatch ok"))
       ((err _) (assert false "c-cli-neg-004: gate dispatch failed")))
+    (mt (c/dispatch-cmd "gate" (list "non-existent-gate-file-xyz.asl"))
+      ((ok _) (assert false "c-cli-neg-004: missing gate file should fail"))
+      ((err msg) (assert (string-contains? msg "Failed to read gate target file") "c-cli-neg-004: missing file rejected")))
     (mt (c/dispatch-cmd "gate" (list))
       ((ok _) (assert false "c-cli-neg-004: empty gate args should fail"))
       ((err err-msg) (assert (string-contains? err-msg "Usage: asl gate") "c-cli-neg-004: empty gate rejected")))

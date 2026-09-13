@@ -1,6 +1,6 @@
 (module asl-cli/cli
   :d "Pure AgentScript native command-line interface toolchain."
-  :x [format-version format-help dispatch-cmd execute-cli main]
+  :x [format-version format-help check-gate-files dispatch-cmd execute-cli main]
   :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk) (evaluator :a ev) (reader :a rd)])
 
 (df format-version [] -> Str
@@ -100,6 +100,30 @@
           (ok 0)
           asserts)))
 
+(df ! check-gate-files [(files (List Str))] -> (Result Str Str)
+  :d "Validates and gates each provided target file."
+  (if (list-empty? files)
+      (err "Usage: asl gate <file1.asl> [file2.asl ...]")
+      (let [(fold-res
+             (fold (fn [(acc (Result I64 Str)) (path Str)] -> (Result I64 Str)
+                     (mt acc
+                       ((err e) (err e))
+                       ((ok count)
+                        (let [(src-res (file-read path))]
+                          (mt src-res
+                            ((err _) (err (str "Failed to read gate target file: " path)))
+                            ((ok src)
+                             (mt (a/parse src)
+                               ((err pe)
+                                (err (str path ":" (string-from-int64 (.-line pe)) ":" (string-from-int64 (.-col pe)) ": [parse-error] " (.-msg pe))))
+                               ((ok _)
+                                (ok (+ count 1))))))))))
+                   (ok 0)
+                   files))]
+        (mt fold-res
+          ((err e) (err e))
+          ((ok count) (ok (str "✓ [Pure ASL Gate] " (string-from-int64 count) " file(s) verified cleanly.")))))))
+
 (df ! dispatch-cmd [(cmd Str) (args (List Str))] -> (Result Str Str)
   :d "Dispatches a CLI command to the corresponding pure ASL compiler or checker package."
   (cond
@@ -108,10 +132,7 @@
     ((or (= cmd "help") (or (= cmd "-h") (= cmd "--help")))
      (ok (format-help)))
     ((= cmd "gate")
-     (if (list-empty? args)
-         (err "Usage: asl gate <file1.asl> [file2.asl ...]")
-         (let [(count (list-length args))]
-           (ok (str "✓ [Pure ASL Gate] " (string-from-int64 count) " file(s) verified cleanly.")))))
+     (check-gate-files args))
     ((= cmd "check")
      (if (list-empty? args)
          (err "Usage: asl check <file.asl>")

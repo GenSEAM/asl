@@ -18,6 +18,8 @@
 
     (:sym :name "asn-to-json-value" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'to-json': explicitly bounds transformation from ASN AST to JSON value types without string serialization")
+    (:sym :name "check-gate-files" :kind :fn :tokens 3
+          :rationale "Validates and gates each provided target file before dispatching gate verification")
     (:sym :name "format-asn-help" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-help': disambiguates ASN grammar-aware CLI usage help from standard UNIX man-style formatting")
     (:sym :name "run-from-json" :kind :fn :tokens 3
