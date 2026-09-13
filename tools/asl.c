@@ -821,7 +821,9 @@ static int op_run(int step_id, StepToken *tokens, int ntokens, const char *ws_ro
         sb_append_int(out, step_id);
         sb_append(out, " :op \"run\" :status \"rejected\" :error-code \":ERR_TIMEOUT\" :message \"Process execution timed out after ");
         sb_append_int(out, timeout_ms);
-        sb_append(out, " ms\" :durationMs ");
+        sb_append(out, " ms\" :duration-ms ");
+        sb_append_int(out, duration_ms);
+        sb_append(out, " :durationMs ");
         sb_append_int(out, duration_ms);
         sb_append(out, ")\n");
         sb_free(&out_buf);
@@ -839,7 +841,9 @@ static int op_run(int step_id, StepToken *tokens, int ntokens, const char *ws_ro
     sb_append_escaped(out, out_buf.data ? out_buf.data : "");
     sb_append(out, "\" :stderr \"");
     sb_append_escaped(out, err_buf.data ? err_buf.data : "");
-    sb_append(out, "\" :durationMs ");
+    sb_append(out, "\" :duration-ms ");
+    sb_append_int(out, duration_ms);
+    sb_append(out, " :durationMs ");
     sb_append_int(out, duration_ms);
     sb_append(out, " :truncated ");
     sb_append(out, is_truncated ? "true" : "false");
@@ -1841,8 +1845,8 @@ static void append_session_trace(const char *ws_root, int step_id, const char *o
     FILE *fp = fopen(trace_path, "a");
     if (!fp) return;
 
-    fprintf(fp, "\n(:trace-entry :timestamp %lld :step %d :op \"%s\" :target \"%s\" :before-digest \"%s\" :after-digest \"%s\" :status \"%s\" :durationMs %lld)",
-            now_ms, step_id, op ? op : "", target ? target : "", before_digest ? before_digest : "", after_digest ? after_digest : "", status ? status : "ok", duration_ms);
+    fprintf(fp, "\n(:trace-entry :timestamp %lld :step %d :op \"%s\" :target \"%s\" :before-digest \"%s\" :after-digest \"%s\" :status \"%s\" :duration-ms %lld :durationMs %lld)",
+            now_ms, step_id, op ? op : "", target ? target : "", before_digest ? before_digest : "", after_digest ? after_digest : "", status ? status : "ok", duration_ms, duration_ms);
     fclose(fp);
 }
 
@@ -3848,6 +3852,8 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     } else if (failed_count > 0 && failed_count < step_count) {
         sb_append(resp, "(:batch-res :status \"completed-with-errors\" :itemsCount ");
         sb_append_int(resp, step_count);
+        sb_append(resp, " :failed-count ");
+        sb_append_int(resp, failed_count);
         sb_append(resp, " :failedCount ");
         sb_append_int(resp, failed_count);
         sb_append(resp, mode_flag);
@@ -3856,6 +3862,8 @@ static void handle_payload(const char *payload, const char *ws_root, StrBuf *res
     } else {
         sb_append(resp, "(:batch-res :status \"failed\" :itemsCount ");
         sb_append_int(resp, step_count);
+        sb_append(resp, " :failed-count ");
+        sb_append_int(resp, failed_count);
         sb_append(resp, " :failedCount ");
         sb_append_int(resp, failed_count);
         sb_append(resp, mode_flag);
@@ -6395,9 +6403,9 @@ static int run_cmd_audit_plan(int argc, char **argv) {
 
     printf("--> [2/2] Dependency DAG Topology & Acyclicity:\n");
     printf("    • Cycle detection status:   %d cycle(s) detected\n", cycle_count);
-    printf("(:plan-audit-report :status \"%s\" :phases %d :tasks %d :cycles %d :d52Errors %d)\n",
+    printf("(:plan-audit-report :status \"%s\" :phases %d :tasks %d :cycles %d :d52-errors %d :d52Errors %d)\n",
            (d52_errors == 0 && cycle_count == 0) ? "clean" : "defective",
-           phase_count, task_count, cycle_count, d52_errors);
+           phase_count, task_count, cycle_count, d52_errors, d52_errors);
 
     if (d52_errors == 0 && cycle_count == 0) {
         printf("================================================================================\n");
@@ -8405,8 +8413,11 @@ int main(int argc, char **argv) {
         return run_cmd_mutate(argc, argv, discovered_ws);
     }
 
-    /* Subcommand: coverage */
+    /* Subcommand: coverage - Subsystem Coverage Audit */
     if (argc >= 2 && strcmp(argv[1], "coverage") == 0) {
+        printf("================================================================================\n");
+        printf("                     Subsystem Coverage Audit                                   \n");
+        printf("================================================================================\n");
         return run_cmd_coverage(argc, argv, discovered_ws);
     }
 
