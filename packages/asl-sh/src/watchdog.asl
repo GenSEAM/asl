@@ -4,123 +4,123 @@
       DeadlockVerdict
       PortVerdict
       StepDeadlineVerdict
-      make-rss-verdict
-      check-rss-ceiling
-      make-deadlock-verdict
-      detect-deadlock
-      detect-deadlock-escalation
-      make-port-verdict
-      detect-bound-port
-      parse-port-number
-      make-step-deadline-verdict
-      check-step-deadline])
+      makeRssVerdict
+      checkRssCeiling
+      makeDeadlockVerdict
+      detectDeadlock
+      detectDeadlockEscalation
+      makePortVerdict
+      detectBoundPort
+      parsePortNumber
+      makeStepDeadlineVerdict
+      checkStepDeadline])
 
 (dfs RssVerdict
   (:f exceeded Bool "True if memory usage exceeded configured ceiling")
-  (:f rss-mb Int64 "Actual peak resident set size in megabytes")
-  (:f ceiling-mb Int64 "Configured memory limit ceiling in megabytes")
+  (:f rssMb Int64 "Actual peak resident set size in megabytes")
+  (:f ceilingMb Int64 "Configured memory limit ceiling in megabytes")
   (:f signal String "Signal dispatched: SIGKILL on breach, NONE otherwise")
   (:f event String "Audit event emitted: :oom-killed or :ok"))
 
-(df make-rss-verdict [(exceeded Bool) (rss-mb Int64) (ceiling-mb Int64) (signal String) (event String)] -> RssVerdict
+(df makeRssVerdict [(exceeded Bool) (rssMb Int64) (ceilingMb Int64) (signal String) (event String)] -> RssVerdict
   :d "Constructs an RssVerdict."
-  (RssVerdict :exceeded exceeded :rss-mb rss-mb :ceiling-mb ceiling-mb :signal signal :event event))
+  (RssVerdict :exceeded exceeded :rssMb rssMb :ceilingMb ceilingMb :signal signal :event event))
 
-(df check-rss-ceiling [(current-rss-mb Int64) (ceiling-mb Int64)] -> RssVerdict
+(df checkRssCeiling [(currentRssMb Int64) (ceilingMb Int64)] -> RssVerdict
   :d "Checks current RSS against memory ceiling; triggers SIGKILL and :oom-killed if breached."
-  (let [(limit (if (<= ceiling-mb 0) 512 ceiling-mb))]
-    (if (> current-rss-mb limit)
-        (make-rss-verdict true current-rss-mb limit "SIGKILL" ":oom-killed")
-        (make-rss-verdict false current-rss-mb limit "NONE" ":ok"))))
+  (let [(limit (if (<= ceilingMb 0) 512 ceilingMb))]
+    (if (> currentRssMb limit)
+        (makeRssVerdict true currentRssMb limit "SIGKILL" ":oom-killed")
+        (makeRssVerdict false currentRssMb limit "NONE" ":ok"))))
 
 (dfs DeadlockVerdict
   (:f deadlocked Bool "True if stdin pipe has been idle at or beyond deadline")
-  (:f idle-ms Int64 "Duration stdin pipe has been idle in milliseconds")
-  (:f ceiling-ms Int64 "Configured idle deadlock ceiling in milliseconds (default 10000)")
+  (:f idleMs Int64 "Duration stdin pipe has been idle in milliseconds")
+  (:f ceilingMs Int64 "Configured idle deadlock ceiling in milliseconds (default 10000)")
   (:f event String "Audit event emitted: :deadlock-detected, :deadlock-sigterm, :deadlock-sigkill, or :ok")
   (:f signal String "Signal dispatched: NONE, SIGTERM, or SIGKILL")
-  (:f exit-code Int64 "Synthetic exit status code: 0, 143, or 137")
-  (:f kill-ceiling-ms Int64 "Configured SIGKILL ceiling in milliseconds (default 12000)"))
+  (:f exitCode Int64 "Synthetic exit status code: 0, 143, or 137")
+  (:f killCeilingMs Int64 "Configured SIGKILL ceiling in milliseconds (default 12000)"))
 
-(df make-deadlock-verdict [(deadlocked Bool) (idle-ms Int64) (ceiling-ms Int64) (event String)] -> DeadlockVerdict
+(df makeDeadlockVerdict [(deadlocked Bool) (idleMs Int64) (ceilingMs Int64) (event String)] -> DeadlockVerdict
   :d "Constructs a DeadlockVerdict."
   (DeadlockVerdict
     :deadlocked deadlocked
-    :idle-ms idle-ms
-    :ceiling-ms ceiling-ms
+    :idleMs idleMs
+    :ceilingMs ceilingMs
     :event event
     :signal (if deadlocked "SIGTERM" "NONE")
-    :exit-code (if deadlocked 143 0)
-    :kill-ceiling-ms 12000))
+    :exitCode (if deadlocked 143 0)
+    :killCeilingMs 12000))
 
-(df detect-deadlock [(idle-ms Int64) (ceiling-ms Int64)] -> DeadlockVerdict
+(df detectDeadlock [(idleMs Int64) (ceilingMs Int64)] -> DeadlockVerdict
   :d "Checks idle duration on blocking stdin pipe against ceiling (default 10,000ms)."
-  (let [(cap (if (<= ceiling-ms 0) 10000 ceiling-ms))]
-    (if (>= idle-ms cap)
-        (make-deadlock-verdict true idle-ms cap ":deadlock-detected")
-        (make-deadlock-verdict false idle-ms cap ":ok"))))
+  (let [(cap (if (<= ceilingMs 0) 10000 ceilingMs))]
+    (if (>= idleMs cap)
+        (makeDeadlockVerdict true idleMs cap ":deadlock-detected")
+        (makeDeadlockVerdict false idleMs cap ":ok"))))
 
-(df detect-deadlock-escalation [(idle-ms Int64) (term-ms Int64) (kill-ms Int64)] -> DeadlockVerdict
+(df detectDeadlockEscalation [(idleMs Int64) (termMs Int64) (killMs Int64)] -> DeadlockVerdict
   :d "Enforces two-stage stdin deadlock escalation: SIGTERM at term-ms (default 10s), SIGKILL at kill-ms (default 12s)."
-  (let [(t-cap (if (<= term-ms 0) 10000 term-ms))
-        (k-cap (if (<= kill-ms 0) 12000 kill-ms))]
+  (let [(tCap (if (<= termMs 0) 10000 termMs))
+        (kCap (if (<= killMs 0) 12000 killMs))]
     (cond
-      ((>= idle-ms k-cap)
+      ((>= idleMs kCap)
        (DeadlockVerdict
          :deadlocked true
-         :idle-ms idle-ms
-         :ceiling-ms t-cap
+         :idleMs idleMs
+         :ceilingMs tCap
          :event ":deadlock-sigkill"
          :signal "SIGKILL"
-         :exit-code 137
-         :kill-ceiling-ms k-cap))
-      ((>= idle-ms t-cap)
+         :exitCode 137
+         :killCeilingMs kCap))
+      ((>= idleMs tCap)
        (DeadlockVerdict
          :deadlocked true
-         :idle-ms idle-ms
-         :ceiling-ms t-cap
+         :idleMs idleMs
+         :ceilingMs tCap
          :event ":deadlock-sigterm"
          :signal "SIGTERM"
-         :exit-code 143
-         :kill-ceiling-ms k-cap))
+         :exitCode 143
+         :killCeilingMs kCap))
       (:else
        (DeadlockVerdict
          :deadlocked false
-         :idle-ms idle-ms
-         :ceiling-ms t-cap
+         :idleMs idleMs
+         :ceilingMs tCap
          :event ":ok"
          :signal "NONE"
-         :exit-code 0
-         :kill-ceiling-ms k-cap)))))
+         :exitCode 0
+         :killCeilingMs kCap)))))
 
 (dfs StepDeadlineVerdict
-  (:f timed-out Bool "True if step execution duration exceeded watchdog deadline")
-  (:f elapsed-ms Int64 "Actual elapsed duration of step in milliseconds")
-  (:f ceiling-ms Int64 "Configured step deadline ceiling in milliseconds (default 10000)")
-  (:f error-code String "Error code emitted: :ERR_WATCHDOG_TIMEOUT or :none")
+  (:f timedOut Bool "True if step execution duration exceeded watchdog deadline")
+  (:f elapsedMs Int64 "Actual elapsed duration of step in milliseconds")
+  (:f ceilingMs Int64 "Configured step deadline ceiling in milliseconds (default 10000)")
+  (:f errorCode String "Error code emitted: :ERR_WATCHDOG_TIMEOUT or :none")
   (:f event String "Audit event emitted: :step-timeout-recycled or :ok"))
 
-(df make-step-deadline-verdict [(timed-out Bool) (elapsed-ms Int64) (ceiling-ms Int64) (error-code String) (event String)] -> StepDeadlineVerdict
+(df makeStepDeadlineVerdict [(timedOut Bool) (elapsedMs Int64) (ceilingMs Int64) (errorCode String) (event String)] -> StepDeadlineVerdict
   :d "Constructs a StepDeadlineVerdict."
-  (StepDeadlineVerdict :timed-out timed-out :elapsed-ms elapsed-ms :ceiling-ms ceiling-ms :error-code error-code :event event))
+  (StepDeadlineVerdict :timedOut timedOut :elapsedMs elapsedMs :ceilingMs ceilingMs :errorCode errorCode :event event))
 
-(df check-step-deadline [(elapsed-ms Int64) (ceiling-ms Int64)] -> StepDeadlineVerdict
+(df checkStepDeadline [(elapsedMs Int64) (ceilingMs Int64)] -> StepDeadlineVerdict
   :d "Enforces a 10s deadline ceiling per batch execution step, returning :ERR_WATCHDOG_TIMEOUT when breached."
-  (let [(cap (if (<= ceiling-ms 0) 10000 ceiling-ms))]
-    (if (>= elapsed-ms cap)
-        (make-step-deadline-verdict true elapsed-ms cap ":ERR_WATCHDOG_TIMEOUT" ":step-timeout-recycled")
-        (make-step-deadline-verdict false elapsed-ms cap ":none" ":ok"))))
+  (let [(cap (if (<= ceilingMs 0) 10000 ceilingMs))]
+    (if (>= elapsedMs cap)
+        (makeStepDeadlineVerdict true elapsedMs cap ":ERR_WATCHDOG_TIMEOUT" ":step-timeout-recycled")
+        (makeStepDeadlineVerdict false elapsedMs cap ":none" ":ok"))))
 
 (dfs PortVerdict
   (:f detected Bool "True if a listening network port was discovered")
   (:f port Int64 "Identified TCP/UDP port number (0 if none)")
   (:f event String "Audit event emitted: :port-bound or :none"))
 
-(df make-port-verdict [(detected Bool) (port Int64) (event String)] -> PortVerdict
+(df makePortVerdict [(detected Bool) (port Int64) (event String)] -> PortVerdict
   :d "Constructs a PortVerdict."
   (PortVerdict :detected detected :port port :event event))
 
-(df parse-port-number [(text String)] -> (Option Int64)
+(df parsePortNumber [(text String)] -> (Option Int64)
   :d "Extracts a valid numeric TCP port (1-65535) from a text token, stripping trailing non-numeric characters."
   (let [(clean (string-trim text))
         (chars (string-chars clean))
@@ -141,17 +141,17 @@
                                 (pair (fst acc) true))))
                       (pair (list) false)
                       chars))
-        (digit-str (string-join (fst digits) ""))]
-    (if (string-empty? digit-str)
+        (digitStr (string-join (fst digits) ""))]
+    (if (string-empty? digitStr)
         (none)
-        (mt (string-to-int64 digit-str)
+        (mt (string-to-int64 digitStr)
           ((some p)
            (if (and (> p 0) (<= p 65535))
                (some p)
                (none)))
           ((none) (none))))))
 
-(df detect-bound-port [(line String)] -> PortVerdict
+(df detectBoundPort [(line String)] -> PortVerdict
   :d "Inspects log line for bound port notifications e.g. :port-bound 3000, listening on port 8080, localhost:5173, 127.0.0.1:8000, 0.0.0.0:4000."
   (let [(lower (string-lower line))]
     (cond
@@ -162,10 +162,10 @@
             (let [(after (option-or (string-slice lower (+ i 12) (string-length lower)) ""))
                   (parts (string-split (string-trim after) " "))
                   (token (option-or (list-head parts) ""))]
-              (mt (parse-port-number token)
-                ((some p) (make-port-verdict true p ":port-bound"))
-                ((none) (make-port-verdict false 0 ":none")))))
-           ((none) (make-port-verdict false 0 ":none")))))
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
       ((string-contains? lower "listening on port ")
        (let [(idx (string-index-of lower "listening on port "))]
          (mt idx
@@ -173,10 +173,10 @@
             (let [(after (option-or (string-slice lower (+ i 18) (string-length lower)) ""))
                   (parts (string-split (string-trim after) " "))
                   (token (option-or (list-head parts) ""))]
-              (mt (parse-port-number token)
-                ((some p) (make-port-verdict true p ":port-bound"))
-                ((none) (make-port-verdict false 0 ":none")))))
-           ((none) (make-port-verdict false 0 ":none")))))
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
       ((string-contains? lower "localhost:")
        (let [(idx (string-index-of lower "localhost:"))]
          (mt idx
@@ -184,10 +184,10 @@
             (let [(after (option-or (string-slice lower (+ i 10) (string-length lower)) ""))
                   (parts (string-split (string-trim after) " "))
                   (token (option-or (list-head parts) ""))]
-              (mt (parse-port-number token)
-                ((some p) (make-port-verdict true p ":port-bound"))
-                ((none) (make-port-verdict false 0 ":none")))))
-           ((none) (make-port-verdict false 0 ":none")))))
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
       ((string-contains? lower "127.0.0.1:")
        (let [(idx (string-index-of lower "127.0.0.1:"))]
          (mt idx
@@ -195,10 +195,10 @@
             (let [(after (option-or (string-slice lower (+ i 10) (string-length lower)) ""))
                   (parts (string-split (string-trim after) " "))
                   (token (option-or (list-head parts) ""))]
-              (mt (parse-port-number token)
-                ((some p) (make-port-verdict true p ":port-bound"))
-                ((none) (make-port-verdict false 0 ":none")))))
-           ((none) (make-port-verdict false 0 ":none")))))
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
       ((string-contains? lower "0.0.0.0:")
        (let [(idx (string-index-of lower "0.0.0.0:"))]
          (mt idx
@@ -206,9 +206,9 @@
             (let [(after (option-or (string-slice lower (+ i 8) (string-length lower)) ""))
                   (parts (string-split (string-trim after) " "))
                   (token (option-or (list-head parts) ""))]
-              (mt (parse-port-number token)
-                ((some p) (make-port-verdict true p ":port-bound"))
-                ((none) (make-port-verdict false 0 ":none")))))
-           ((none) (make-port-verdict false 0 ":none")))))
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
       (:else
-       (make-port-verdict false 0 ":none")))))
+       (makePortVerdict false 0 ":none")))))

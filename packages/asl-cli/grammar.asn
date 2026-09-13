@@ -1,51 +1,43 @@
 (:grammar
   :package asl-cli
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
 
     (:sym :name "dispatch" :kind :fn :tokens 1)
-    (:sym :name "dispatch-asn" :kind :fn :tokens 2)
-    (:sym :name "dispatch-cmd" :kind :fn :tokens 2)
-    (:sym :name "execute-cli" :kind :fn :tokens 2)
-    (:sym :name "format-help" :kind :fn :tokens 2)
-    (:sym :name "format-version" :kind :fn :tokens 2)
+    (:sym :name "dispatchCmd" :kind :fn :tokens 2)
+    (:sym :name "dispatchRpc" :kind :fn :tokens 2)
+    (:sym :name "evalBatch" :kind :fn :tokens 2)
+    (:sym :name "executeCli" :kind :fn :tokens 2)
+    (:sym :name "formatHelp" :kind :fn :tokens 2)
+    (:sym :name "formatVersion" :kind :fn :tokens 2)
     (:sym :name "main" :kind :fn :tokens 1)
-    (:sym :name "run-check" :kind :fn :tokens 2)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "test-help" :kind :fn :tokens 2)
-    (:sym :name "test-version" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "testHelp" :kind :fn :tokens 2)
+    (:sym :name "testVersion" :kind :fn :tokens 2)
 
-    (:sym :name "asn-to-json-value" :kind :fn :tokens 4
-          :rationale "Cannot be reduced to 'to-json': explicitly bounds transformation from ASN AST to JSON value types without string serialization")
-    (:sym :name "check-gate-files" :kind :fn :tokens 3
+    (:sym :name "checkGateFiles" :kind :fn :tokens 3
           :rationale "Validates and gates each provided target file before dispatching gate verification")
-    (:sym :name "format-asn-help" :kind :fn :tokens 3
-          :rationale "Cannot be reduced to 'format-help': disambiguates ASN grammar-aware CLI usage help from standard UNIX man-style formatting")
-    (:sym :name "run-from-json" :kind :fn :tokens 3
-          :rationale "Cannot be reduced to 'run-json': distinguishes consuming stdin JSON payloads from executing JSON-formatted ASL source files")
-    (:sym :name "run-to-json" :kind :fn :tokens 3
-          :rationale "Cannot be reduced to 'run-json': distinguishes emitting JSON output from accepting JSON input")
-    (:sym :name "test-dispatch-eval" :kind :fn :tokens 3
+    (:sym :name "testDispatchEval" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-eval': scopes test to CLI dispatcher handling of inline expression evaluation")
-    (:sym :name "test-dispatch-gate" :kind :fn :tokens 3
+    (:sym :name "testDispatchGate" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-gate': tests the CLI command-line dispatcher specifically rather than running the verification gates themselves")
-    (:sym :name "test-dispatch-missing" :kind :fn :tokens 3
+    (:sym :name "testDispatchMissing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-missing': scopes test to CLI dispatcher argument validation rather than missing file lookups")
-    (:sym :name "test-dispatch-test" :kind :fn :tokens 3
+    (:sym :name "testDispatchTest" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-test': scopes test to CLI dispatcher test suite execution rather than recursive test runner")
-    (:sym :name "test-dispatch-unknown" :kind :fn :tokens 3
+    (:sym :name "testDispatchUnknown" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-unknown': scopes test to CLI subcommand dispatch fallback for invalid flags")
-    (:sym :name "test-dispatch-version" :kind :fn :tokens 3
+    (:sym :name "testDispatchVersion" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-version': scopes test to CLI version command dispatch rather than package semver parsing")
-    (:sym :name "test-main-dispatch" :kind :fn :tokens 3
+    (:sym :name "testMainDispatch" :kind :fn :tokens 3
           :rationale "Asserts command line argument dispatching through main module")
-    (:sym :name "test-version-output" :kind :fn :tokens 3
+    (:sym :name "testVersionOutput" :kind :fn :tokens 3
           :rationale "Asserts canonical version string output formatting")
-    (:sym :name "test-help-output" :kind :fn :tokens 3
+    (:sym :name "testHelpOutput" :kind :fn :tokens 3
           :rationale "Asserts command line help manual formatting and options")
-    (:sym :name "test-subcommands-dispatch" :kind :fn :tokens 3
+    (:sym :name "testSubcommandsDispatch" :kind :fn :tokens 3
           :rationale "Asserts dispatching of language toolchain subcommands")
-    (:sym :name "test-eval-dispatch" :kind :fn :tokens 3
+    (:sym :name "testEvalDispatch" :kind :fn :tokens 3
           :rationale "Asserts inline expression evaluation dispatch and math results")
   ])

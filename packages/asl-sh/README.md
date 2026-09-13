@@ -1,6 +1,6 @@
 # @genseam/asl-sh
 
-**Native AgentScript System & Process Automation Toolkit** (@pcp:d-446d).
+**Native AgentScript System & Process Automation Toolkit** (d-446d).
 
 ## Why AgentScript for System Scripting?
 

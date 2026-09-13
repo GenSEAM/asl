@@ -1,34 +1,34 @@
 (module asl-parser/smoke
   :d "Smoke driver for the asl-parser execution harness."
-  :x [run-smoke len-list]
+  :x [runSmoke lenList]
   :i [(lexer :a lex)])
 
-(df bool-yes [(b Bool)] -> String
+(df boolYes [(b Bool)] -> String
   :d "A Bool as the letters T or F."
   (if b "T" "F"))
 
-(df kind-of [(s String)] -> String
+(df kindOf [(s String)] -> String
   :d "Tag name of the kind of the first token of a string."
-  (mt (lex/token-kind s)
-    ((lex/tok-lparen)   "LPAREN")
-    ((lex/tok-rparen)   "RPAREN")
-    ((lex/tok-lbracket) "LBRACKET")
-    ((lex/tok-rbracket) "RBRACKET")
-    ((lex/tok-symbol _) "SYMBOL")
-    ((lex/tok-keyword _) "KEYWORD")
-    ((lex/tok-string _) "STRING")
-    ((lex/tok-int _)    "INT")
-    ((lex/tok-float _)  "FLOAT")
-    ((lex/tok-error _)  "ERROR")
-    ((lex/tok-eof)      "EOF")))
+  (mt (lex/tokenKind s)
+    ((lex/tokLparen)   "LPAREN")
+    ((lex/tokRparen)   "RPAREN")
+    ((lex/tokLbracket) "LBRACKET")
+    ((lex/tokRbracket) "RBRACKET")
+    ((lex/tokSymbol _) "SYMBOL")
+    ((lex/tokKeyword _) "KEYWORD")
+    ((lex/tokString _) "STRING")
+    ((lex/tokInt _)    "INT")
+    ((lex/tokFloat _)  "FLOAT")
+    ((lex/tokError _)  "ERROR")
+    ((lex/tokEof)      "EOF")))
 
-(df len-list [(xs (List Int64))] -> Int64
+(df lenList [(xs (List Int64))] -> Int64
   :d "Structural list length, by recursion."
   (mt xs
     ((list)     0)
-    ((cons _ t) (+ 1 (len-list t)))))
+    ((cons _ t) (+ 1 (lenList t)))))
 
-(df run-smoke [] -> String
+(df runSmoke [] -> String
   :d "Exercise every verified builtin plus match, let, recursion and pair."
   (let [(l  (string-length "hello"))
         (sl (mt (string-slice "hello" 1 3) ((some v) v) ((none) "")))
@@ -49,10 +49,10 @@
         (rv (list-reverse (list 1 2 3)))
         (mp (map (fn [(x Int64)] -> Int64 (+ x 1)) (list 1 2)))
         (pr (pair "k" 1))]
-    (str (kind-of "(") "|"
+    (str (kindOf "(") "|"
          (string-from-int64 l) "|" sl "|" (string-from-int64 io) "|"
-         (bool-yes ct) "|" (bool-yes sw) "|" jn "|" ch "|" fs "|" cc "|"
-         (string-from-int64 (len-list cs)) "|" (string-from-int64 (len-list ap)) "|"
-         (string-from-int64 hd) "|" (string-from-int64 (len-list tl)) "|"
-         (bool-yes em) "|" (string-from-int64 (len-list rv)) "|"
-         (string-from-int64 (len-list mp)) "|" (.-first pr))))
+         (boolYes ct) "|" (boolYes sw) "|" jn "|" ch "|" fs "|" cc "|"
+         (string-from-int64 (lenList cs)) "|" (string-from-int64 (lenList ap)) "|"
+         (string-from-int64 hd) "|" (string-from-int64 (lenList tl)) "|"
+         (boolYes em) "|" (string-from-int64 (lenList rv)) "|"
+         (string-from-int64 (lenList mp)) "|" (.-first pr))))

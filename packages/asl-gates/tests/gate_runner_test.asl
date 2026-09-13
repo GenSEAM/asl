@@ -1,138 +1,151 @@
-(module asl-gates/tests/gate-runner-test
+(module asl-gates/tests/gateRunnerTest
   :d "Falsifiable verification and test suite for pure ASL gate runner and extensionless audit."
-  :x [test-all-gates-pass
-      test-gate-fail-fast
-      test-extensionless-audit
-      test-dead-code-audit
-      test-summary-formatting
-      test-verify-balance
-      test-verify-manifests
-      test-run-all
-      run-tests]
-  :i [(gate-runner :a gr)
-      (shebang-audit :a sa)
+  :x [testAllGatesPass
+      testGateFailFast
+      testExtensionlessAudit
+      testDeadCodeAudit
+      testSummaryFormatting
+      testVerifyBalance
+      testVerifyManifests
+      testRunAll
+      testFaultInjectionGate4
+      runTests]
+  :i [(gateRunner :a gr)
+      (shebangAudit :a sa)
       (gates :a g)])
 
-(df test-all-gates-pass [] -> Bool
+(df testAllGatesPass [] -> Bool
   :d "Asserts all 7 gates passing verdict aggregation and clean report."
-  (let [(summary (gr/run-all-gates 34 673 12 0 212 3223 29))]
-    (assert (.-all-clean summary) "All 7 gates clean must report all-clean true")
-    (assert (= (.-total-gates summary) 7) "Total gates count must equal 7")
-    (assert (= (.-passed-gates summary) 7) "Passed gates count must equal 7")
+  (let [(summary (gr/runAllGates 34 673 12 0 212 3223 29))]
+    (assert (.-allClean summary) "All 7 gates clean must report all-clean true")
+    (assert (= (.-totalGates summary) 7) "Total gates count must equal 7")
+    (assert (= (.-passedGates summary) 7) "Passed gates count must equal 7")
     (assert (= (list-length (.-verdicts summary)) 7) "Verdicts list length must equal 7")
-    (let [(s7 (gr/run-all-seven-gates 10 100 15 0 50 1500 20))]
-      (assert (.-all-clean s7) "run-all-seven-gates must pass when all criteria met")
-      (assert (= (.-passed-gates s7) 7) "run-all-seven-gates passed gates must be 7"))
+    (let [(s7 (gr/runAllSevenGates 10 100 15 0 50 1500 20))]
+      (assert (.-allClean s7) "run-all-seven-gates must pass when all criteria met")
+      (assert (= (.-passedGates s7) 7) "run-all-seven-gates passed gates must be 7"))
     true))
 
-(df test-gate-fail-fast [] -> Bool
+(df testGateFailFast [] -> Bool
   :d "Asserts fail-fast rejection for each individual gate failure mode."
-  (let [(s-no-manifests (gr/run-all-gates 0 673 12 0 212 3223 29))
-        (s-no-asl (gr/run-all-gates 34 0 12 0 212 3223 29))
-        (s-few-claims (gr/run-all-gates 34 673 5 0 212 3223 29))
-        (s-foreign-files (gr/run-all-gates 34 673 12 3 212 3223 29))
-        (s-no-tests (gr/run-all-gates 34 673 12 0 0 3223 29))
-        (s-few-grammar (gr/run-all-gates 34 673 12 0 212 500 29))
-        (s-few-skills (gr/run-all-gates 34 673 12 0 212 3223 4))]
-    (assert (not (.-all-clean s-no-manifests)) "0 manifests must fail gate 1")
-    (assert (= (.-passed-gates s-no-manifests) 6) "0 manifests must leave 6 passed gates")
-    (assert (not (.-all-clean s-no-asl)) "0 ASL files must fail gate 2")
-    (assert (= (.-passed-gates s-no-asl) 6) "0 ASL files must leave 6 passed gates")
-    (assert (not (.-all-clean s-few-claims)) "<12 claims must fail gate 3")
-    (assert (not (.-all-clean s-foreign-files)) "Foreign files > 0 must fail gate 4")
-    (assert (not (.-all-clean s-no-tests)) "0 tests must fail gate 5")
-    (assert (not (.-all-clean s-few-grammar)) "<= 1000 grammar symbols must fail gate 6")
-    (assert (not (.-all-clean s-few-skills)) "<10 skills must fail gate 7")
+  (let [(sNoManifests (gr/runAllGates 0 673 12 0 212 3223 29))
+        (sNoAsl (gr/runAllGates 34 0 12 0 212 3223 29))
+        (sFewClaims (gr/runAllGates 34 673 5 0 212 3223 29))
+        (sForeignFiles (gr/runAllGates 34 673 12 3 212 3223 29))
+        (sNoTests (gr/runAllGates 34 673 12 0 0 3223 29))
+        (sFewGrammar (gr/runAllGates 34 673 12 0 212 500 29))
+        (sFewSkills (gr/runAllGates 34 673 12 0 212 3223 4))]
+    (assert (not (.-allClean sNoManifests)) "0 manifests must fail gate 1")
+    (assert (= (.-passedGates sNoManifests) 6) "0 manifests must leave 6 passed gates")
+    (assert (not (.-allClean sNoAsl)) "0 ASL files must fail gate 2")
+    (assert (= (.-passedGates sNoAsl) 6) "0 ASL files must leave 6 passed gates")
+    (assert (not (.-allClean sFewClaims)) "<12 claims must fail gate 3")
+    (assert (not (.-allClean sForeignFiles)) "Foreign files > 0 must fail gate 4")
+    (assert (not (.-allClean sNoTests)) "0 tests must fail gate 5")
+    (assert (not (.-allClean sFewGrammar)) "<= 1000 grammar symbols must fail gate 6")
+    (assert (not (.-allClean sFewSkills)) "<10 skills must fail gate 7")
     true))
 
-(df test-extensionless-audit [] -> Bool
+(df testExtensionlessAudit [] -> Bool
   :d "Asserts extensionless binary blob detection and approved forwarder filtering."
   (let [(approved (list "asl" "agent" "gsa" "lens"))
-        (elf-header "\u007fELF\u0002\u0001\u0001\u0000")
-        (pe-header "MZ\u0090\u0000\u0003\u0000")
-        (sh-header "#!/usr/bin/env bash\nexec asl \"$@\"")
-        (asl-sh-header "#!/usr/bin/env asl\n(println 1)")
-        (bad-sh-header "#!/usr/bin/python3\nimport os")]
-    (assert (sa/is-binary-blob elf-header) "ELF header must be detected as binary blob")
-    (assert (sa/is-binary-blob pe-header) "PE MZ header must be detected as binary blob")
-    (assert (not (sa/is-binary-blob sh-header)) "Bash script must not be detected as binary blob")
-    (assert (sa/audit-shebang sh-header) "Approved bash shebang must pass audit")
-    (assert (sa/audit-shebang asl-sh-header) "Approved asl shebang must pass audit")
-    (assert (not (sa/audit-shebang bad-sh-header)) "Python shebang must fail audit")
-    (assert (sa/is-approved-forwarder "asl" approved) "asl must be approved forwarder")
-    (assert (sa/is-approved-forwarder "agent" approved) "agent must be approved forwarder")
-    (assert (not (sa/is-approved-forwarder "claude-standalone" approved)) "claude-standalone must be rejected")
-    (assert (not (sa/is-approved-forwarder "eddie" approved)) "eddie must be rejected")
-    (let [(unapproved (gr/audit-extensionless-binaries (list "asl" "rogue" "bin/eddie") approved))]
+        (elfHeader "\u007fELF\u0002\u0001\u0001\u0000")
+        (peHeader "MZ\u0090\u0000\u0003\u0000")
+        (shHeader "#!/usr/bin/env bash\nexec asl \"$@\"")
+        (aslShHeader "#!/usr/bin/env asl\n(println 1)")
+        (badShHeader "#!/usr/bin/python3\nimport os")]
+    (assert (sa/isBinaryBlob elfHeader) "ELF header must be detected as binary blob")
+    (assert (sa/isBinaryBlob peHeader) "PE MZ header must be detected as binary blob")
+    (assert (not (sa/isBinaryBlob shHeader)) "Bash script must not be detected as binary blob")
+    (assert (sa/auditShebang shHeader) "Approved bash shebang must pass audit")
+    (assert (sa/auditShebang aslShHeader) "Approved asl shebang must pass audit")
+    (assert (not (sa/auditShebang badShHeader)) "Python shebang must fail audit")
+    (assert (sa/isApprovedForwarder "asl" approved) "asl must be approved forwarder")
+    (assert (sa/isApprovedForwarder "agent" approved) "agent must be approved forwarder")
+    (assert (not (sa/isApprovedForwarder "claude-standalone" approved)) "claude-standalone must be rejected")
+    (assert (not (sa/isApprovedForwarder "eddie" approved)) "eddie must be rejected")
+    (let [(unapproved (gr/auditExtensionlessBinaries (list "asl" "rogue" "bin/eddie") approved))]
       (assert (= (list-length unapproved) 2) "Two unapproved binaries must be flagged")
       (assert (list-contains? unapproved "rogue") "rogue binary must be in unapproved list")
       (assert (list-contains? unapproved "bin/eddie") "eddie must be in unapproved list"))
     true))
 
-(df test-dead-code-audit [] -> Bool
+(df testDeadCodeAudit [] -> Bool
   :d "Asserts detection of dead code and orphan symbol exports."
   (let [(exports (list "live-fn" "orphan-fn" "unused-helper"))
         (callers (list "live-fn" "other-fn"))
-        (orphans (gr/audit-dead-code exports callers))]
+        (orphans (gr/auditDeadCode exports callers))]
     (assert (= (list-length orphans) 2) "Two orphan functions must be detected")
     (assert (list-contains? orphans "orphan-fn") "orphan-fn must be detected")
     (assert (list-contains? orphans "unused-helper") "unused-helper must be detected")
     (assert (not (list-contains? orphans "live-fn")) "live-fn must not be in orphan list")
     true))
 
-(df test-summary-formatting [] -> Bool
+(df testSummaryFormatting [] -> Bool
   :d "Asserts formatting of clean and failed gate summaries."
-  (let [(s-clean (gr/run-all-gates 34 673 12 0 212 3223 29))
-        (s-fail (gr/run-all-gates 0 0 0 1 0 0 0))
-        (rep-clean (gr/format-gate-summary s-clean))
-        (rep-fail (gr/format-gate-summary s-fail))]
-    (assert (string-contains? rep-clean "ALL VERIFICATION GATES PASSED CLEANLY") "Clean report must contain success header")
-    (assert (string-contains? rep-fail "GATES FAILED") "Failed report must contain failure header")
-    (assert (> (string-length rep-clean) 100) "Report length must be substantial")
+  (let [(sClean (gr/runAllGates 34 673 12 0 212 3223 29))
+        (sFail (gr/runAllGates 0 0 0 1 0 0 0))
+        (repClean (gr/formatGateSummary sClean))
+        (repFail (gr/formatGateSummary sFail))]
+    (assert (string-contains? repClean "ALL VERIFICATION GATES PASSED CLEANLY") "Clean report must contain success header")
+    (assert (string-contains? repFail "GATES FAILED") "Failed report must contain failure header")
+    (assert (> (string-length repClean) 100) "Report length must be substantial")
     true))
 
-(df test-verify-balance [] -> Bool
+(df testVerifyBalance [] -> Bool
   :d "Asserts verification of S-expression delimiter balance and sigil prohibition."
-  (let [(valid-src "(df test-fn [] -> I64 42)")
-        (unclosed-src "(df test-fn [] -> I64 (+ 1 2)")
-        (sigil-src "(df test-fn [] -> Str @bad)")]
-    (assert (g/verify-balance valid-src) "Valid balanced ASL source must pass")
-    (assert (not (g/verify-balance unclosed-src)) "Unclosed delimiter must fail")
-    (assert (not (g/verify-balance sigil-src)) "Forbidden sigil @ must fail")
+  (let [(validSrc "(df test-fn [] -> I64 42)")
+        (unclosedSrc "(df test-fn [] -> I64 (+ 1 2)")
+        (sigilSrc "(df test-fn [] -> Str @bad)")]
+    (assert (g/verifyBalance validSrc) "Valid balanced ASL source must pass")
+    (assert (not (g/verifyBalance unclosedSrc)) "Unclosed delimiter must fail")
+    (assert (not (g/verifyBalance sigilSrc)) "Forbidden sigil @ must fail")
     true))
 
-(df ! test-verify-manifests [] -> Bool
+(df ! testVerifyManifests [] -> Bool
   :d "Asserts verification of package manifest structure and sigil hygiene."
-  (let [(valid-mf "(:package asl-codec :version \"0.1.0\" :entry \"src/main.asl\")")
-        (sigil-mf "(:package @asl-codec :version \"0.1.0\" :entry \"src/main.asl\")")
-        (invalid-mf "(:not-a-package 123)")
-        (real-paths (list "asl/packages/asl-gates/manifest.asn"))]
-    (assert (g/verify-manifest-string valid-mf) "Valid manifest string must pass")
-    (assert (not (g/verify-manifest-string sigil-mf)) "Manifest with sigil must fail")
-    (assert (not (g/verify-manifest-string invalid-mf)) "Malformed manifest must fail")
-    (assert (g/verify-manifests real-paths) "Real package manifests must pass verification")
+  (let [(validMf "(:package asl-codec :version \"0.1.0\" :entry \"src/main.asl\")")
+        (sigilMf "(:package @asl-codec :version \"0.1.0\" :entry \"src/main.asl\")")
+        (invalidMf "(:not-a-package 123)")
+        (realPaths (list "asl/packages/asl-gates/manifest.asn"))]
+    (assert (g/verifyManifestString validMf) "Valid manifest string must pass")
+    (assert (not (g/verifyManifestString sigilMf)) "Manifest with sigil must fail")
+    (assert (not (g/verifyManifestString invalidMf)) "Malformed manifest must fail")
+    (assert (g/verifyManifests realPaths) "Real package manifests must pass verification")
     true))
 
-(df ! test-run-all [] -> Bool
+(df ! testRunAll [] -> Bool
   :d "Asserts run-all convenience function forwards to all 7 gates."
-  (let [(s-clean (gr/run-all 34 673 12 0 212 3223 29))
-        (s-fail (gr/run-all 0 673 12 0 212 3223 29))
-        (s-live (gr/run-live-gate-audit))]
-    (assert (.-all-clean s-clean) "gr/run-all clean must pass all 7 gates")
-    (assert (= (.-passed-gates s-clean) 7) "gr/run-all clean passed count must be 7")
-    (assert (not (.-all-clean s-fail)) "gr/run-all with 0 manifests must fail")
-    (assert (= (.-total-gates s-live) 7) "gr/run-live-gate-audit total gates must be 7")
-    (assert (.-all-clean s-live) "gr/run-live-gate-audit must pass all 7 gates on live disk")
-    (assert (= (.-passed-gates s-live) 7) "gr/run-live-gate-audit passed count must be 7")
+  (let [(sClean (gr/runAll 34 673 12 0 212 3223 29))
+        (sFail (gr/runAll 0 673 12 0 212 3223 29))
+        (sLive (gr/runLiveGateAudit))]
+    (assert (.-allClean sClean) "gr/run-all clean must pass all 7 gates")
+    (assert (= (.-passedGates sClean) 7) "gr/run-all clean passed count must be 7")
+    (assert (not (.-allClean sFail)) "gr/run-all with 0 manifests must fail")
+    (assert (= (.-totalGates sLive) 7) "gr/run-live-gate-audit total gates must be 7")
+    (assert (.-allClean sLive) "gr/run-live-gate-audit must pass all 7 gates on live disk")
+    (assert (= (.-passedGates sLive) 7) "gr/run-live-gate-audit passed count must be 7")
     true))
 
-(df ! run-tests [] -> Bool
+(df ! testFaultInjectionGate4 [] -> Bool
+  :d "Asserts fault injection: foreign file detection in path list causes Gate 4 rejection."
+  (let [(mixed (list "asl/packages/asl-gates/src/gates.asl" "asl/packages/asl-gates/src/bad.py"))
+        (detected (g/findForeignFilesInPaths mixed))]
+    (assert (= (list-length detected) 1) "Foreign detector must detect simulated injected foreign file")
+    (assert (list-contains? detected "asl/packages/asl-gates/src/bad.py") "bad.py must be detected")
+    (refute (list-contains? detected "asl/packages/asl-gates/src/gates.asl") "gates.asl must not be flagged")
+    true))
+
+(df ! runTests [] -> Bool
   :d "Master test runner executing all gate runner assertion suites."
-  (and (test-all-gates-pass)
-       (and (test-gate-fail-fast)
-            (and (test-extensionless-audit)
-                 (and (test-dead-code-audit)
-                      (and (test-summary-formatting)
-                           (and (test-verify-balance)
-                                (and (test-verify-manifests)
-                                     (test-run-all)))))))))
+  (and (testAllGatesPass)
+       (and (testGateFailFast)
+            (and (testExtensionlessAudit)
+                 (and (testDeadCodeAudit)
+                      (and (testSummaryFormatting)
+                           (and (testVerifyBalance)
+                                (and (testVerifyManifests)
+                                     (and (testRunAll)
+                                          (testFaultInjectionGate4))))))))))
+
+(runTests)

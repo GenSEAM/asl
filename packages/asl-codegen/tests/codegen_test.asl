@@ -1,38 +1,38 @@
-(module asl-codegen/codegen-test
+(module asl-codegen/codegenTest
   :d "Unit tests for asl-codegen/emit"
-  :x [test-codegen run-tests]
+  :x [testCodegen runTests]
   :i [(emit :a em) (ast :a a) (reader :a rd)])
 
-(df test-codegen [] -> Bool
+(df testCodegen [] -> Bool
   :d "Verifies top-level forms emission and program assembly."
   (let [(f1 (a/AstField :name "x" :type "Int" :docstring "" :default (none) :json (none)))
         (f2 (a/AstField :name "y" :type "Int" :docstring "" :default (none) :json (none)))
-        (s-node (a/SchemaNode :name "Point" :type-vars (list) :fields (list f1 f2) :json-case (none)))
-        (s-out (em/emit-defschema s-node))
+        (sNode (a/SchemaNode :name "Point" :typeVars (list) :fields (list f1 f2) :jsonCase (none)))
+        (sOut (em/emitDefschema sNode))
         (c1 (a/EnumCase :name "active" :fields (list) :docstring ""))
         (c2 (a/EnumCase :name "inactive" :fields (list) :docstring ""))
-        (en (a/EnumNode :name "Status" :type-vars (list) :cases (list c1 c2)))
-        (e-out (em/emit-defenum en))
+        (en (a/EnumNode :name "Status" :typeVars (list) :cases (list c1 c2)))
+        (eOut (em/emitDefenum en))
         (p1 (a/Param :name "x" :type "Int"))
         (p2 (a/Param :name "y" :type "Int"))
-        (body (list (rd/sexpr-list (list (rd/sexpr-atom "+") (rd/sexpr-atom "x") (rd/sexpr-atom "y")))))
-        (defun-node (a/DefunNode :name "add" :type-vars (list) :is-exported true :effect false :params (list p1 p2) :ret-type "Int" :docstring "" :body body))
+        (body (list (rd/sexprList (list (rd/sexprAtom "+") (rd/sexprAtom "x") (rd/sexprAtom "y")))))
+        (defunNode (a/DefunNode :name "add" :typeVars (list) :isExported true :effect false :params (list p1 p2) :retType "Int" :docstring "" :body body))
         (aliases (map-empty))
-        (d-out (em/emit-defun defun-node aliases))
-        (forms (list (a/top-schema s-node) (a/top-enum en) (a/top-defun defun-node)))
-        (prog-out (em/emit-rust-program forms (list)))]
-    (assert (string-contains? s-out "pub struct Point") "struct name")
-    (assert (string-contains? s-out "pub x: i64,") "struct field x")
-    (assert (string-contains? e-out "pub enum Status") "enum name")
-    (assert (string-contains? e-out "Active,") "enum case active")
-    (assert (string-contains? d-out "pub fn add(x: i64, y: i64) -> i64") "fn signature")
-    (assert (string-contains? prog-out "mod rt;") "runtime link")
-    (assert (string-contains? prog-out "pub struct Point") "prog struct")
-    (assert (string-contains? prog-out "pub fn add") "prog fn")
+        (dOut (em/emitDefun defunNode aliases))
+        (forms (list (a/topSchema sNode) (a/topEnum en) (a/topDefun defunNode)))
+        (progOut (em/emitRustProgram forms (list)))]
+    (assert (string-contains? sOut "pub struct Point") "struct name")
+    (assert (string-contains? sOut "pub x: i64,") "struct field x")
+    (assert (string-contains? eOut "pub enum Status") "enum name")
+    (assert (string-contains? eOut "Active,") "enum case active")
+    (assert (string-contains? dOut "pub fn add(x: i64, y: i64) -> i64") "fn signature")
+    (assert (string-contains? progOut "mod rt;") "runtime link")
+    (assert (string-contains? progOut "pub struct Point") "prog struct")
+    (assert (string-contains? progOut "pub fn add") "prog fn")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Runs codegen test suite"
   (do
-    (assert (test-codegen) "test-codegen must pass")
+    (assert (testCodegen) "test-codegen must pass")
     true))

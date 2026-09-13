@@ -5,42 +5,42 @@
       SupervisorVerdict
       DaemonEntry
       OobDemuxer
-      make-lock-verdict
-      resolve-lock
-      make-stream-frame
-      count-paren-balance
-      is-balanced-frame?
-      extract-content-length
-      parse-stream-frame
-      make-supervisor-verdict
-      supervise-step
-      make-daemon-entry
-      format-daemon-table
-      make-oob-demuxer
-      oob-demux-chunk
-      oob-demux-finish]
+      makeLockVerdict
+      resolveLock
+      makeStreamFrame
+      countParenBalance
+      isBalancedFrame?
+      extractContentLength
+      parseStreamFrame
+      makeSupervisorVerdict
+      superviseStep
+      makeDaemonEntry
+      formatDaemonTable
+      makeOobDemuxer
+      oobDemuxChunk
+      oobDemuxFinish]
   :i [(watchdog     :a wd)
       (spool        :a spool)
-      (asl-sh/core-process :a proc)])
+      (asl-sh/coreProcess :a proc)])
 
 (dfs LockVerdict
   (:f acquired Bool "True if singleton advisory lock was successfully acquired")
-  (:f lock-path String "File system path of the advisory lock")
-  (:f holder-pid Int64 "Process ID of the lock holder (0 if acquired or stale)")
+  (:f lockPath String "File system path of the advisory lock")
+  (:f holderPid Int64 "Process ID of the lock holder (0 if acquired or stale)")
   (:f status String "Lock resolution status: :acquired, :collision, or :stale")
   (:f event String "Audit event emitted: :lock-acquired, :lock-refused, or :lock-reclaimed"))
 
-(df make-lock-verdict [(acquired Bool) (lock-path String) (holder-pid Int64) (status String) (event String)] -> LockVerdict
+(df makeLockVerdict [(acquired Bool) (lockPath String) (holderPid Int64) (status String) (event String)] -> LockVerdict
   :d "Constructs a LockVerdict."
-  (LockVerdict :acquired acquired :lock-path lock-path :holder-pid holder-pid :status status :event event))
+  (LockVerdict :acquired acquired :lockPath lockPath :holderPid holderPid :status status :event event))
 
-(df resolve-lock [(lock-path String) (current-pid Int64) (holder-pid Int64) (holder-alive Bool)] -> LockVerdict
+(df resolveLock [(lockPath String) (currentPid Int64) (holderPid Int64) (holderAlive Bool)] -> LockVerdict
   :d "Resolves singleton advisory lock acquisition; refuses duplicate spawn on active collision and reclaims on stale PID."
-  (if (or (= holder-pid 0) (= holder-pid current-pid))
-      (make-lock-verdict true lock-path current-pid ":acquired" ":lock-acquired")
-      (if holder-alive
-          (make-lock-verdict false lock-path holder-pid ":collision" ":lock-refused")
-          (make-lock-verdict true lock-path current-pid ":stale" ":lock-reclaimed"))))
+  (if (or (= holderPid 0) (= holderPid currentPid))
+      (makeLockVerdict true lockPath currentPid ":acquired" ":lock-acquired")
+      (if holderAlive
+          (makeLockVerdict false lockPath holderPid ":collision" ":lock-refused")
+          (makeLockVerdict true lockPath currentPid ":stale" ":lock-reclaimed"))))
 
 (dfs StreamFrame
   (:f kind String "Framing protocol kind: newline or content-length")
@@ -48,44 +48,44 @@
   (:f length Int64 "Length in bytes of payload")
   (:f valid Bool "True if frame was cleanly delineated without packet tearing"))
 
-(df make-stream-frame [(kind String) (payload String) (length Int64) (valid Bool)] -> StreamFrame
+(df makeStreamFrame [(kind String) (payload String) (length Int64) (valid Bool)] -> StreamFrame
   :d "Constructs a StreamFrame."
   (StreamFrame :kind kind :payload payload :length length :valid valid))
 
-(df count-paren-balance [(text String)] -> Int64
+(df countParenBalance [(text String)] -> Int64
   :d "Computes net parenthesis balance (+1 for '(', -1 for ')'), ignoring characters inside double quotes."
   (let [(chars (string-chars text))
         (st (fold (fn [(acc (Pair Int64 (Pair Bool Bool))) (c String)] -> (Pair Int64 (Pair Bool Bool))
                     (let [(depth (fst acc))
-                          (in-str (fst (snd acc)))
+                          (inStr (fst (snd acc)))
                           (esc (snd (snd acc)))]
                       (if esc
-                          (pair depth (pair in-str false))
+                          (pair depth (pair inStr false))
                           (if (= c "\\")
-                              (if in-str
-                                  (pair depth (pair in-str true))
-                                  (pair depth (pair in-str false)))
+                              (if inStr
+                                  (pair depth (pair inStr true))
+                                  (pair depth (pair inStr false)))
                               (if (= c "\"")
-                                  (pair depth (pair (not in-str) false))
-                                  (if in-str
+                                  (pair depth (pair (not inStr) false))
+                                  (if inStr
                                       acc
                                       (if (= c "(")
-                                          (pair (+ depth 1) (pair in-str false))
+                                          (pair (+ depth 1) (pair inStr false))
                                           (if (= c ")")
-                                              (pair (- depth 1) (pair in-str false))
+                                              (pair (- depth 1) (pair inStr false))
                                               acc))))))))
                   (pair 0 (pair false false))
                   chars))]
     (fst st)))
 
-(df is-balanced-frame? [(text String)] -> Bool
+(df isBalancedFrame? [(text String)] -> Bool
   :d "Returns true if text is non-empty and has zero net parenthesis balance."
   (let [(clean (string-trim text))]
     (if (string-empty? clean)
         false
-        (= (count-paren-balance clean) 0))))
+        (= (countParenBalance clean) 0))))
 
-(df extract-content-length [(header String)] -> (Option Int64)
+(df extractContentLength [(header String)] -> (Option Int64)
   :d "Parses Content-Length integer value from header prefix."
   (let [(lower (string-lower header))]
     (if (string-starts-with? lower "content-length:")
@@ -94,145 +94,145 @@
           (string-to-int64 clean))
         (none))))
 
-(df parse-stream-frame [(buffer String)] -> (Pair (Option StreamFrame) String)
+(df parseStreamFrame [(buffer String)] -> (Pair (Option StreamFrame) String)
   :d "Delineates stream frame using Content-Length headers or newline-delimited ASNL s-expressions."
   (let [(trimmed (string-trim-left buffer))]
     (if (string-starts-with? (string-lower trimmed) "content-length:")
-        (let [(hdr-end (string-index-of trimmed "\n\n"))
-              (hdr-delim (if (option-is-some? hdr-end) hdr-end (string-index-of trimmed "\r\n\r\n")))]
-          (mt hdr-delim
+        (let [(hdrEnd (string-index-of trimmed "\n\n"))
+              (hdrDelim (if (is-some? hdrEnd) hdrEnd (string-index-of trimmed "\r\n\r\n")))]
+          (mt hdrDelim
             ((some idx)
-             (let [(hdr-len (if (string-contains? trimmed "\r\n\r\n") (+ idx 4) (+ idx 2)))
-                   (hdr-part (option-or (string-slice trimmed 0 idx) ""))
-                   (val-opt (extract-content-length hdr-part))]
-               (mt val-opt
+             (let [(hdrLen (if (string-contains? trimmed "\r\n\r\n") (+ idx 4) (+ idx 2)))
+                   (hdrPart (option-or (string-slice trimmed 0 idx) ""))
+                   (valOpt (extractContentLength hdrPart))]
+               (mt valOpt
                  ((some cl)
-                  (let [(body-start hdr-len)
-                        (total-need (+ body-start cl))
-                        (buf-len (int32-to-int64 (string-length trimmed)))]
-                    (if (>= buf-len total-need)
-                        (let [(payload (option-or (string-slice trimmed body-start total-need) ""))
-                              (rem (option-or (string-slice trimmed total-need buf-len) ""))
-                              (frame (make-stream-frame "content-length" payload cl true))]
+                  (let [(bodyStart hdrLen)
+                        (totalNeed (+ bodyStart cl))
+                        (bufLen (int32-to-int64 (string-length trimmed)))]
+                    (if (>= bufLen totalNeed)
+                        (let [(payload (option-or (string-slice trimmed bodyStart totalNeed) ""))
+                              (rem (option-or (string-slice trimmed totalNeed bufLen) ""))
+                              (frame (makeStreamFrame "content-length" payload cl true))]
                           (pair (some frame) rem))
                         (pair (none) buffer))))
                  ((none) (pair (none) buffer)))))
             ((none) (pair (none) buffer))))
-        (let [(nl-idx (string-index-of buffer "\n"))]
-          (mt nl-idx
+        (let [(nlIdx (string-index-of buffer "\n"))]
+          (mt nlIdx
             ((some i)
              (let [(candidate (option-or (string-slice buffer 0 i) ""))
                    (rem (option-or (string-slice buffer (+ i 1) (string-length buffer)) ""))]
-               (if (= (count-paren-balance candidate) 0)
+               (if (= (countParenBalance candidate) 0)
                    (let [(payload (string-trim candidate))]
                      (if (string-empty? payload)
                          (pair (none) rem)
-                         (let [(frame (make-stream-frame "newline" payload (int32-to-int64 (string-length payload)) true))]
+                         (let [(frame (makeStreamFrame "newline" payload (int32-to-int64 (string-length payload)) true))]
                            (pair (some frame) rem))))
                    (pair (none) buffer))))
             ((none) (pair (none) buffer)))))))
 
 (dfs SupervisorVerdict
   (:f status String "Execution status: :ok or :recycled")
-  (:f exit-code Int64 "Resulting code: 0 on success, 124 on watchdog timeout")
-  (:f error-code String "Error symbol: :OK or :ERR_WATCHDOG_TIMEOUT")
-  (:f worker-recycled Bool "True if hanging execution worker was recycled without socket teardown")
+  (:f exitCode Int64 "Resulting code: 0 on success, 124 on watchdog timeout")
+  (:f errorCode String "Error symbol: :OK or :ERR_WATCHDOG_TIMEOUT")
+  (:f workerRecycled Bool "True if hanging execution worker was recycled without socket teardown")
   (:f summary String "Execution summary or timeout verdict"))
 
-(df make-supervisor-verdict [(status String) (exit-code Int64) (error-code String) (worker-recycled Bool) (summary String)] -> SupervisorVerdict
+(df makeSupervisorVerdict [(status String) (exitCode Int64) (errorCode String) (workerRecycled Bool) (summary String)] -> SupervisorVerdict
   :d "Constructs a SupervisorVerdict."
-  (SupervisorVerdict :status status :exit-code exit-code :error-code error-code :worker-recycled worker-recycled :summary summary))
+  (SupervisorVerdict :status status :exitCode exitCode :errorCode errorCode :workerRecycled workerRecycled :summary summary))
 
-(df supervise-step [(elapsed-ms Int64) (deadline-ms Int64) (op-name String)] -> SupervisorVerdict
+(df superviseStep [(elapsedMs Int64) (deadlineMs Int64) (opName String)] -> SupervisorVerdict
   :d "Supervises an execution worker step with a 10s ceiling; on deadline expiry recycles worker and emits :ERR_WATCHDOG_TIMEOUT."
-  (let [(ceiling (if (<= deadline-ms 0) 10000 deadline-ms))
-        (verdict (wd/check-step-deadline elapsed-ms ceiling))]
-    (if (.-timed-out verdict)
-        (make-supervisor-verdict ":recycled" 124 ":ERR_WATCHDOG_TIMEOUT" true (str "Watchdog deadline exceeded (10s) on step: " op-name))
-        (make-supervisor-verdict ":ok" 0 ":OK" false (str "Step completed within deadline: " op-name)))))
+  (let [(ceiling (if (<= deadlineMs 0) 10000 deadlineMs))
+        (verdict (wd/checkStepDeadline elapsedMs ceiling))]
+    (if (.-timedOut verdict)
+        (makeSupervisorVerdict ":recycled" 124 ":ERR_WATCHDOG_TIMEOUT" true (str "Watchdog deadline exceeded (10s) on step: " opName))
+        (makeSupervisorVerdict ":ok" 0 ":OK" false (str "Step completed within deadline: " opName)))))
 
 (dfs DaemonEntry
-  (:f daemon-id String "Short hash identifier of daemon")
+  (:f daemonId String "Short hash identifier of daemon")
   (:f pid Int64 "Process ID of the daemon host")
-  (:f rss-mb Int64 "Memory usage in megabytes")
+  (:f rssMb Int64 "Memory usage in megabytes")
   (:f status String "Daemon operational status: :active, :idle, :hung")
-  (:f active-op String "Currently running batch step or :idle"))
+  (:f activeOp String "Currently running batch step or :idle"))
 
-(df make-daemon-entry [(daemon-id String) (pid Int64) (rss-mb Int64) (status String) (active-op String)] -> DaemonEntry
+(df makeDaemonEntry [(daemonId String) (pid Int64) (rssMb Int64) (status String) (activeOp String)] -> DaemonEntry
   :d "Constructs a DaemonEntry."
-  (DaemonEntry :daemon-id daemon-id :pid pid :rss-mb rss-mb :status status :active-op active-op))
+  (DaemonEntry :daemonId daemonId :pid pid :rssMb rssMb :status status :activeOp activeOp))
 
-(df format-daemon-table [(entries (List DaemonEntry))] -> String
+(df formatDaemonTable [(entries (List DaemonEntry))] -> String
   :d "Renders introspection process table for active daemons with DAEMON ID header."
   (let [(header "DAEMON ID  PID     STATUS   RSS(MB)  ACTIVE OP\n---------  ------  -------  -------  ---------")
         (rows (map (fn [(e DaemonEntry)] -> String
-                     (str (.-daemon-id e) "  "
+                     (str (.-daemonId e) "  "
                           (string-from-int64 (.-pid e)) "  "
                           (.-status e) "  "
-                          (string-from-int64 (.-rss-mb e)) "MB  "
-                          (.-active-op e)))
+                          (string-from-int64 (.-rssMb e)) "MB  "
+                          (.-activeOp e)))
                    entries))]
     (string-join (list-append (list header) rows) "\n")))
 
 (dfs OobDemuxer
-  (:f max-buffer-bytes Int64 "Hard memory buffer ceiling in bytes (default 64MB: 67108864)")
-  (:f buffer-bytes Int64 "Current active in-flight buffer size in bytes")
-  (:f total-bytes Int64 "Cumulative byte count processed across stream")
+  (:f maxBufferBytes Int64 "Hard memory buffer ceiling in bytes (default 64MB: 67108864)")
+  (:f bufferBytes Int64 "Current active in-flight buffer size in bytes")
+  (:f totalBytes Int64 "Cumulative byte count processed across stream")
   (:f spool spool/TwoTierSpool "Integrated two-tier spool (RAM ring + circular disk)")
-  (:f is-terminated Bool "True if stream was terminated due to memory/stream boundary breach")
-  (:f termination-reason String "Reason for stream termination: :none, :buffer-overflow, or :sigkill"))
+  (:f isTerminated Bool "True if stream was terminated due to memory/stream boundary breach")
+  (:f terminationReason String "Reason for stream termination: :none, :buffer-overflow, or :sigkill"))
 
-(df make-oob-demuxer [(spool-path String) (max-buffer-bytes Int64)] -> OobDemuxer
+(df makeOobDemuxer [(spoolPath String) (maxBufferBytes Int64)] -> OobDemuxer
   :d "Constructs an OobDemuxer with bounded memory buffer ceiling and two-tier spool."
-  (let [(limit (if (<= max-buffer-bytes 0) 67108864 max-buffer-bytes))
-        (tt (spool/make-two-tier-spool spool-path 200 10485760))]
+  (let [(limit (if (<= maxBufferBytes 0) 67108864 maxBufferBytes))
+        (tt (spool/makeTwoTierSpool spoolPath 200 10485760))]
     (OobDemuxer
-      :max-buffer-bytes limit
-      :buffer-bytes 0
-      :total-bytes 0
+      :maxBufferBytes limit
+      :bufferBytes 0
+      :totalBytes 0
       :spool tt
-      :is-terminated false
-      :termination-reason ":none")))
+      :isTerminated false
+      :terminationReason ":none")))
 
-(df oob-demux-chunk [(demuxer OobDemuxer) (chunk String)] -> OobDemuxer
+(df oobDemuxChunk [(demuxer OobDemuxer) (chunk String)] -> OobDemuxer
   :d "Streams a chunk into the two-tier spool while bounding active buffer memory strictly under max-buffer-bytes."
-  (let [(chunk-len (int32-to-int64 (string-length chunk)))
-        (new-total (+ (.-total-bytes demuxer) chunk-len))
-        (max-buf (.-max-buffer-bytes demuxer))]
-    (if (.-is-terminated demuxer)
+  (let [(chunkLen (int32-to-int64 (string-length chunk)))
+        (newTotal (+ (.-totalBytes demuxer) chunkLen))
+        (maxBuf (.-maxBufferBytes demuxer))]
+    (if (.-isTerminated demuxer)
         (OobDemuxer
-          :max-buffer-bytes max-buf
-          :buffer-bytes (.-buffer-bytes demuxer)
-          :total-bytes new-total
+          :maxBufferBytes maxBuf
+          :bufferBytes (.-bufferBytes demuxer)
+          :totalBytes newTotal
           :spool (.-spool demuxer)
-          :is-terminated true
-          :termination-reason (.-termination-reason demuxer))
-        (let [(new-buf (+ (.-buffer-bytes demuxer) chunk-len))]
-          (if (> new-buf max-buf)
+          :isTerminated true
+          :terminationReason (.-terminationReason demuxer))
+        (let [(newBuf (+ (.-bufferBytes demuxer) chunkLen))]
+          (if (> newBuf maxBuf)
               (OobDemuxer
-                :max-buffer-bytes max-buf
-                :buffer-bytes (.-buffer-bytes demuxer)
-                :total-bytes new-total
+                :maxBufferBytes maxBuf
+                :bufferBytes (.-bufferBytes demuxer)
+                :totalBytes newTotal
                 :spool (.-spool demuxer)
-                :is-terminated true
-                :termination-reason ":buffer-overflow")
-              (let [(updated-spool (spool/two-tier-push (.-spool demuxer) chunk))]
+                :isTerminated true
+                :terminationReason ":buffer-overflow")
+              (let [(updatedSpool (spool/twoTierPush (.-spool demuxer) chunk))]
                 (OobDemuxer
-                  :max-buffer-bytes max-buf
-                  :buffer-bytes new-buf
-                  :total-bytes new-total
-                  :spool updated-spool
-                  :is-terminated false
-                  :termination-reason ":none")))))))
+                  :maxBufferBytes maxBuf
+                  :bufferBytes newBuf
+                  :totalBytes newTotal
+                  :spool updatedSpool
+                  :isTerminated false
+                  :terminationReason ":none")))))))
 
-(df oob-demux-finish [(demuxer OobDemuxer) (exit-code Int64) (duration-ms Int64)] -> proc/ProcessReceipt
+(df oobDemuxFinish [(demuxer OobDemuxer) (exitCode Int64) (durationMs Int64)] -> proc/ProcessReceipt
   :d "Finalizes two-tier spool and returns a compact ProcessReceipt (<80 tokens)."
-  (let [(closed-spool (spool/two-tier-close (.-spool demuxer)))
-        (spool-path (.-path (.-disk closed-spool)))
-        (final-exit (if (.-is-terminated demuxer) 137 exit-code))
-        (final-summary (if (.-is-terminated demuxer)
+  (let [(closedSpool (spool/twoTierClose (.-spool demuxer)))
+        (spoolPath (.-path (.-disk closedSpool)))
+        (finalExit (if (.-isTerminated demuxer) 137 exitCode))
+        (finalSummary (if (.-isTerminated demuxer)
                            "OOB stream terminated: memory bound < 64MB exceeded"
-                           (if (= exit-code 0)
+                           (if (= exitCode 0)
                                "Command succeeded"
-                               (str "Process failed with exit code " (string-from-int64 exit-code)))))]
-    (proc/make-process-receipt final-exit duration-ms 32 spool-path final-summary)))
+                               (str "Process failed with exit code " (string-from-int64 exitCode)))))]
+    (proc/makeProcessReceipt finalExit durationMs 32 spoolPath finalSummary)))

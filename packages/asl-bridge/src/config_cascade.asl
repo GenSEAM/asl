@@ -1,9 +1,9 @@
-(module asl-bridge/config-cascade
+(module asl-bridge/configCascade
   :d "AgentScript Hierarchical Configuration Cascading and Dynamic Secret Resolution Engine."
   :x [ConfigCascadeEntry ResolvedTool
-      make-cascade-entry make-resolved-tool
-      cascade-merge resolve-secret-value mask-secret
-      resolve-env-binding is-level-higher?]
+      makeCascadeEntry makeResolvedTool
+      cascadeMerge resolveSecretValue maskSecret
+      resolveEnvBinding isLevelHigher?]
   :i [])
 
 (dfs ConfigCascadeEntry
@@ -21,14 +21,14 @@
   (:f guidance Str "Operational guidance for agents")
   (:f redacted Bool "True if secrets are masked"))
 
-(df make-cascade-entry [(path Str) (level Str) (params (Map Str Str))] -> ConfigCascadeEntry
+(df makeCascadeEntry [(path Str) (level Str) (params (Map Str Str))] -> ConfigCascadeEntry
   :d "Constructs a configuration cascade entry."
   (ConfigCascadeEntry
     :path path
     :level level
     :params params))
 
-(df make-resolved-tool [(id Str)
+(df makeResolvedTool [(id Str)
                         (name Str)
                         (cmd Str)
                         (args (List Str))
@@ -47,7 +47,7 @@
     :guidance guidance
     :redacted redacted))
 
-(df is-level-higher? [(a Str) (b Str)] -> Bool
+(df isLevelHigher? [(a Str) (b Str)] -> Bool
   :d "Returns true if hierarchy level a has higher precedence than b (local > subproject > workspace > user)."
   (if (= a "local")
       true
@@ -57,11 +57,11 @@
               true
               false))))
 
-(df cascade-merge [(parent (Map Str Str)) (leaf (Map Str Str))] -> (Map Str Str)
+(df cascadeMerge [(parent (Map Str Str)) (leaf (Map Str Str))] -> (Map Str Str)
   :d "Merges parent and leaf configuration maps where leaf overrides parent keys."
-  (map-merge parent leaf))
+  (mapMerge parent leaf))
 
-(df resolve-secret-value [(source Str) (ref Str) (fallback Str) (env (Map Str Str))] -> Str
+(df resolveSecretValue [(source Str) (ref Str) (fallback Str) (env (Map Str Str))] -> Str
   :d "Resolves a secret or environment reference with fallback support."
   (if (= source "literal")
       ref
@@ -76,12 +76,12 @@
                   fallback)
               fallback))))
 
-(df mask-secret [(secret Str)] -> Str
+(df maskSecret [(secret Str)] -> Str
   :d "Masks sensitive credential strings to prevent accidental leakage in telemetry."
   (if (= secret "")
       ""
       "[REDACTED]"))
 
-(df resolve-env-binding [(key Str) (raw-val Str) (source Str) (env (Map Str Str))] -> Str
+(df resolveEnvBinding [(key Str) (rawVal Str) (source Str) (env (Map Str Str))] -> Str
   :d "Resolves an environment binding key-value pair."
-  (resolve-secret-value source raw-val "" env))
+  (resolveSecretValue source rawVal "" env))

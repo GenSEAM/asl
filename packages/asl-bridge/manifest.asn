@@ -2,5 +2,5 @@
  :version "0.1.0"
  :entry "src/ports.asl"
  :description "AgentScript Polyglot Bridge: capability ports, universal multi-ORM transpilation matrix, and workload routing"
- :asl-first true
+ :aslFirst true
  :dependencies [])

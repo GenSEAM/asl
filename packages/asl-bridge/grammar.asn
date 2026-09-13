@@ -1,7 +1,7 @@
 (:grammar
   :package asl-bridge
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "DbColumn" :kind :type :tokens 1)
     (:sym :name "DbResult" :kind :type :tokens 1)
@@ -11,109 +11,109 @@
     (:sym :name "TableDef" :kind :type :tokens 1)
     (:sym :name "TierKind" :kind :type :tokens 1)
 
-    (:sym :name "col-category" :kind :fn :tokens 2)
-    (:sym :name "driver-tier" :kind :fn :tokens 2)
-    (:sym :name "kysely-type" :kind :fn :tokens 2)
-    (:sym :name "plan-custom" :kind :fn :tokens 2)
-    (:sym :name "plan-query" :kind :fn :tokens 2)
-    (:sym :name "route-workload" :kind :fn :tokens 2)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "sample-table" :kind :fn :tokens 2)
-    (:sym :name "seaorm-type" :kind :fn :tokens 2)
-    (:sym :name "sqlalchemy-type" :kind :fn :tokens 2)
+    (:sym :name "colCategory" :kind :fn :tokens 2)
+    (:sym :name "driverTier" :kind :fn :tokens 2)
+    (:sym :name "kyselyType" :kind :fn :tokens 2)
+    (:sym :name "planCustom" :kind :fn :tokens 2)
+    (:sym :name "planQuery" :kind :fn :tokens 2)
+    (:sym :name "routeWorkload" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "sampleTable" :kind :fn :tokens 2)
+    (:sym :name "seaormType" :kind :fn :tokens 2)
+    (:sym :name "sqlalchemyType" :kind :fn :tokens 2)
 
-    (:sym :name "driver-kind-to-str" :kind :fn :tokens 4
+    (:sym :name "driverKindToStr" :kind :fn :tokens 4
           :rationale "Converts DriverKind enum variant into canonical driver string identifier")
-    (:sym :name "drizzle-col-builder" :kind :fn :tokens 3
+    (:sym :name "drizzleColBuilder" :kind :fn :tokens 3
           :rationale "Builds TypeScript Drizzle ORM column builder expression with dialect-specific constraints")
-    (:sym :name "drizzle-type-fn" :kind :fn :tokens 3
+    (:sym :name "drizzleTypeFn" :kind :fn :tokens 3
           :rationale "Maps ASL primitive column type to corresponding Drizzle column builder function")
-    (:sym :name "is-host-tier?" :kind :fn :tokens 3
+    (:sym :name "isHostTier?" :kind :fn :tokens 3
           :rationale "Predicate testing whether target workload requires host IPC execution tier")
-    (:sym :name "is-microvm-tier?" :kind :fn :tokens 3
+    (:sym :name "isMicrovmTier?" :kind :fn :tokens 3
           :rationale "Predicate testing whether target workload requires isolated microVM execution tier")
-    (:sym :name "is-valid-frontmatter-desc?" :kind :fn :tokens 4
+    (:sym :name "isValidFrontmatterDesc?" :kind :fn :tokens 4
           :rationale "Ensures description in skill frontmatter conforms to valid YAML syntax")
-    (:sym :name "is-wasm-tier?" :kind :fn :tokens 3
+    (:sym :name "isWasmTier?" :kind :fn :tokens 3
           :rationale "Predicate testing whether target workload executes in sandboxed WebAssembly tier")
-    (:sym :name "make-db-column" :kind :fn :tokens 3
+    (:sym :name "makeDbColumn" :kind :fn :tokens 3
           :rationale "Constructs DbColumn record specifying name, type, nullability, and primary key status")
-    (:sym :name "make-db-result" :kind :fn :tokens 3
+    (:sym :name "makeDbResult" :kind :fn :tokens 3
           :rationale "Encapsulates database execution output containing returned row maps and affected row count")
-    (:sym :name "make-query-plan" :kind :fn :tokens 3
+    (:sym :name "makeQueryPlan" :kind :fn :tokens 3
           :rationale "Builds execution plan binding SQL statement, target execution tier, and query parameters")
-    (:sym :name "make-skill-manifest" :kind :fn :tokens 3
+    (:sym :name "makeSkillManifest" :kind :fn :tokens 3
           :rationale "Constructs SkillManifest record binding name, description, filesystem path, and verification status")
-    (:sym :name "make-table-def" :kind :fn :tokens 3
+    (:sym :name "makeTableDef" :kind :fn :tokens 3
           :rationale "Constructs entity table schema definition binding table name with typed column schema list")
-    (:sym :name "render-kysely-col" :kind :fn :tokens 3
+    (:sym :name "renderKyselyCol" :kind :fn :tokens 3
           :rationale "Transpiles DbColumn schema definition into TypeScript Kysely interface field declaration")
-    (:sym :name "render-seaorm-col" :kind :fn :tokens 3
+    (:sym :name "renderSeaormCol" :kind :fn :tokens 3
           :rationale "Transpiles DbColumn schema definition into Rust SeaORM entity struct field with derive annotations")
-    (:sym :name "render-sqlalchemy-col" :kind :fn :tokens 3
+    (:sym :name "renderSqlalchemyCol" :kind :fn :tokens 3
           :rationale "Transpiles DbColumn schema definition into Python SQLAlchemy Column attribute assignment")
-    (:sym :name "resolve-skill-manifest" :kind :fn :tokens 3
+    (:sym :name "resolveSkillManifest" :kind :fn :tokens 3
           :rationale "Resolves and constructs a SkillManifest record given a skill name identifier and directory path")
-    (:sym :name "str-to-driver-kind" :kind :fn :tokens 4
+    (:sym :name "strToDriverKind" :kind :fn :tokens 4
           :rationale "Parses canonical driver string identifier into typed DriverKind enum variant")
-    (:sym :name "str-to-tier-kind" :kind :fn :tokens 4
+    (:sym :name "strToTierKind" :kind :fn :tokens 4
           :rationale "Parses execution tier name string into typed TierKind enum variant")
-    (:sym :name "table-to-drizzle" :kind :fn :tokens 3
+    (:sym :name "tableToDrizzle" :kind :fn :tokens 3
           :rationale "Generates complete TypeScript Drizzle ORM schema table definition from TableDef record")
-    (:sym :name "table-to-kysely" :kind :fn :tokens 3
+    (:sym :name "tableToKysely" :kind :fn :tokens 3
           :rationale "Generates complete TypeScript Kysely database interface definition from TableDef record")
-    (:sym :name "table-to-seaorm" :kind :fn :tokens 3
+    (:sym :name "tableToSeaorm" :kind :fn :tokens 3
           :rationale "Generates complete Rust SeaORM entity struct and Model/ActiveModel definitions from TableDef")
-    (:sym :name "table-to-sqlalchemy" :kind :fn :tokens 3
+    (:sym :name "tableToSqlalchemy" :kind :fn :tokens 3
           :rationale "Generates complete Python SQLAlchemy declarative base model class from TableDef record")
-    (:sym :name "test-ports-and-types" :kind :fn :tokens 4
+    (:sym :name "testPortsAndTypes" :kind :fn :tokens 4
           :rationale "Test suite verifying DbColumn, TableDef, QueryPlan, and DriverKind/TierKind conversions")
-    (:sym :name "test-resolve-manifest" :kind :fn :tokens 3
+    (:sym :name "testResolveManifest" :kind :fn :tokens 3
           :rationale "Test suite verifying skill manifest resolution and record construction")
-    (:sym :name "test-router-planning" :kind :fn :tokens 3
+    (:sym :name "testRouterPlanning" :kind :fn :tokens 3
           :rationale "Test suite validating query planning defaults and tier selection per driver kind")
-    (:sym :name "test-router-workload" :kind :fn :tokens 3
+    (:sym :name "testRouterWorkload" :kind :fn :tokens 3
           :rationale "Test suite validating workload tier routing based on socket and GPU requirements")
-    (:sym :name "test-schema-drizzle" :kind :fn :tokens 3
+    (:sym :name "testSchemaDrizzle" :kind :fn :tokens 3
           :rationale "Test suite validating TypeScript Drizzle ORM schema transpilation")
-    (:sym :name "test-schema-kysely" :kind :fn :tokens 3
+    (:sym :name "testSchemaKysely" :kind :fn :tokens 3
           :rationale "Test suite validating TypeScript Kysely interface transpilation")
-    (:sym :name "test-schema-seaorm" :kind :fn :tokens 3
+    (:sym :name "testSchemaSeaorm" :kind :fn :tokens 3
           :rationale "Test suite validating Rust SeaORM entity struct transpilation")
-    (:sym :name "test-schema-sqlalchemy" :kind :fn :tokens 3
+    (:sym :name "testSchemaSqlalchemy" :kind :fn :tokens 3
           :rationale "Test suite validating Python SQLAlchemy declarative model transpilation")
-    (:sym :name "test-validate-frontmatter" :kind :fn :tokens 3
+    (:sym :name "testValidateFrontmatter" :kind :fn :tokens 3
           :rationale "Test suite verifying skill YAML frontmatter delimiter and metadata validation")
-    (:sym :name "tier-kind-to-str" :kind :fn :tokens 4
+    (:sym :name "tierKindToStr" :kind :fn :tokens 4
           :rationale "Converts TierKind enum variant into canonical execution tier name string")
-    (:sym :name "to-pascal-case" :kind :fn :tokens 3
+    (:sym :name "toPascalCase" :kind :fn :tokens 3
           :rationale "Converts snake_case and kebab-case identifiers to PascalCase for type and struct names")
-    (:sym :name "validate-skill-frontmatter" :kind :fn :tokens 3
+    (:sym :name "validateSkillFrontmatter" :kind :fn :tokens 3
           :rationale "Validates that skill markdown content contains valid YAML frontmatter delimiters and required metadata")
 
     (:sym :name "ConfigCascadeEntry" :kind :type :tokens 2)
     (:sym :name "ResolvedTool" :kind :type :tokens 2)
-    (:sym :name "cascade-merge" :kind :fn :tokens 2)
-    (:sym :name "mask-secret" :kind :fn :tokens 2)
-    (:sym :name "make-cascade-entry" :kind :fn :tokens 3
+    (:sym :name "cascadeMerge" :kind :fn :tokens 2)
+    (:sym :name "maskSecret" :kind :fn :tokens 2)
+    (:sym :name "makeCascadeEntry" :kind :fn :tokens 3
           :rationale "Constructs config cascade entry binding level and parameter map")
-    (:sym :name "make-resolved-tool" :kind :fn :tokens 3
+    (:sym :name "makeResolvedTool" :kind :fn :tokens 3
           :rationale "Constructs fully resolved tool descriptor ready for execution")
-    (:sym :name "is-level-higher?" :kind :fn :tokens 3
+    (:sym :name "isLevelHigher?" :kind :fn :tokens 3
           :rationale "Predicate testing precedence ordering between configuration hierarchy levels")
-    (:sym :name "resolve-secret-value" :kind :fn :tokens 3
+    (:sym :name "resolveSecretValue" :kind :fn :tokens 3
           :rationale "Dynamically resolves secret references from environment or fallback values")
-    (:sym :name "resolve-env-binding" :kind :fn :tokens 3
+    (:sym :name "resolveEnvBinding" :kind :fn :tokens 3
           :rationale "Resolves dynamic environment variable binding with fallback")
-    (:sym :name "test-cascade-entry-creation" :kind :fn :tokens 4
+    (:sym :name "testCascadeEntryCreation" :kind :fn :tokens 4
           :rationale "Unit test suite verifying config cascade entry constructor")
-    (:sym :name "test-precedence-hierarchy" :kind :fn :tokens 4
+    (:sym :name "testPrecedenceHierarchy" :kind :fn :tokens 4
           :rationale "Unit test suite verifying hierarchy precedence ordering rules")
-    (:sym :name "test-cascade-merge" :kind :fn :tokens 3
+    (:sym :name "testCascadeMerge" :kind :fn :tokens 3
           :rationale "Unit test suite verifying leaf-over-parent parameter map merging")
-    (:sym :name "test-secret-env-resolution" :kind :fn :tokens 4
+    (:sym :name "testSecretEnvResolution" :kind :fn :tokens 4
           :rationale "Unit test suite verifying dynamic secret environment resolution")
-    (:sym :name "test-secret-masking" :kind :fn :tokens 3
+    (:sym :name "testSecretMasking" :kind :fn :tokens 3
           :rationale "Unit test suite verifying credential masking for telemetry safety")
   ])
 

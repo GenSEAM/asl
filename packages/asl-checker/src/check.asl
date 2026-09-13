@@ -1,221 +1,221 @@
 (module asl-checker/check
   :d "Pass 3 Hindley-Milner Type Inference and Unified Checker Entry Points"
   :x [InferState
-      check-module
-      check-source
-      check-file!]
+      checkModule
+      checkSource
+      checkFile!]
   :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd)])
 
 (dfs InferState
   (:f subst (Map Int64 ty/Type) "Defun-scoped substitution map")
-  (:f next-var Int64 "Defun-scoped next fresh metavar id")
-  (:f int-sites (List (Pair String Int64)) "Integer literals with metavar id")
-  (:f map-sites (List (Pair ty/Type String)) "Inferred types with scope label")
+  (:f nextVar Int64 "Defun-scoped next fresh metavar id")
+  (:f intSites (List (Pair String Int64)) "Integer literals with metavar id")
+  (:f mapSites (List (Pair ty/Type String)) "Inferred types with scope label")
   (:f lambdas (List (Pair (List ty/Type) ty/Type)) "Lambda parameter and return types")
   (:f diags (List ty/Diagnostic) "Pass 3 diagnostics"))
 
-(df make-infer-state [] -> InferState
+(df makeInferState [] -> InferState
   (InferState :subst (map-empty)
-              :next-var 1
-              :int-sites (list)
-              :map-sites (list)
+              :nextVar 1
+              :intSites (list)
+              :mapSites (list)
               :lambdas (list)
               :diags (list)))
 
-(df fresh-var [(st InferState) (kind String)] -> (Pair ty/Type InferState)
-  (let [(nid (.-next-var st))]
-    (pair (ty/ty-var nid kind)
+(df freshVar [(st InferState) (kind String)] -> (Pair ty/Type InferState)
+  (let [(nid (.-nextVar st))]
+    (pair (ty/tyVar nid kind)
           (InferState :subst (.-subst st)
-                      :next-var (+ nid 1)
-                      :int-sites (.-int-sites st)
-                      :map-sites (.-map-sites st)
+                      :nextVar (+ nid 1)
+                      :intSites (.-intSites st)
+                      :mapSites (.-mapSites st)
                       :lambdas (.-lambdas st)
                       :diags (.-diags st)))))
 
-(df add-diag [(st InferState) (code String) (msg String) (path String)] -> InferState
+(df addDiag [(st InferState) (code String) (msg String) (path String)] -> InferState
   (InferState :subst (.-subst st)
-              :next-var (.-next-var st)
-              :int-sites (.-int-sites st)
-              :map-sites (.-map-sites st)
+              :nextVar (.-nextVar st)
+              :intSites (.-intSites st)
+              :mapSites (.-mapSites st)
               :lambdas (.-lambdas st)
               :diags (list-cons (ty/Diagnostic :code code :message msg :line 1 :col 1 :path path)
                                 (.-diags st))))
 
-(df note-map-type [(st InferState) (t ty/Type) (scope String)] -> InferState
+(df noteMapType [(st InferState) (t ty/Type) (scope String)] -> InferState
   (InferState :subst (.-subst st)
-              :next-var (.-next-var st)
-              :int-sites (.-int-sites st)
-              :map-sites (list-cons (pair t scope) (.-map-sites st))
+              :nextVar (.-nextVar st)
+              :intSites (.-intSites st)
+              :mapSites (list-cons (pair t scope) (.-mapSites st))
               :lambdas (.-lambdas st)
               :diags (.-diags st)))
 
-(df note-int-literal [(st InferState) (tok String) (vid Int64)] -> InferState
+(df noteIntLiteral [(st InferState) (tok String) (vid Int64)] -> InferState
   (InferState :subst (.-subst st)
-              :next-var (.-next-var st)
-              :int-sites (list-cons (pair tok vid) (.-int-sites st))
-              :map-sites (.-map-sites st)
+              :nextVar (.-nextVar st)
+              :intSites (list-cons (pair tok vid) (.-intSites st))
+              :mapSites (.-mapSites st)
               :lambdas (.-lambdas st)
               :diags (.-diags st)))
 
-(df note-lambda [(st InferState) (params (List ty/Type)) (ret ty/Type)] -> InferState
+(df noteLambda [(st InferState) (params (List ty/Type)) (ret ty/Type)] -> InferState
   (InferState :subst (.-subst st)
-              :next-var (.-next-var st)
-              :int-sites (.-int-sites st)
-              :map-sites (.-map-sites st)
+              :nextVar (.-nextVar st)
+              :intSites (.-intSites st)
+              :mapSites (.-mapSites st)
               :lambdas (list-cons (pair params ret) (.-lambdas st))
               :diags (.-diags st)))
 
-(df set-subst [(st InferState) (s (Map Int64 ty/Type))] -> InferState
+(df setSubst [(st InferState) (s (Map Int64 ty/Type))] -> InferState
   (InferState :subst s
-              :next-var (.-next-var st)
-              :int-sites (.-int-sites st)
-              :map-sites (.-map-sites st)
+              :nextVar (.-nextVar st)
+              :intSites (.-intSites st)
+              :mapSites (.-mapSites st)
               :lambdas (.-lambdas st)
               :diags (.-diags st)))
 
-(df expect-type [(st InferState) (have ty/Type) (want ty/Type) (where String) (path String)] -> InferState
-  (let [(st1 (note-map-type (note-map-type st have where) want where))]
+(df expectType [(st InferState) (have ty/Type) (want ty/Type) (where String) (path String)] -> InferState
+  (let [(st1 (noteMapType (noteMapType st have where) want where))]
     (mt (u/unify have want (.-subst st1))
-      ((u/u-ok next-subst) (set-subst st1 next-subst))
-      ((u/u-err msg is-num)
-       (let [(code (if is-num "rule-6" "type"))]
-         (add-diag st1 code (str where ": " msg) path))))))
+      ((u/uOk nextSubst) (setSubst st1 nextSubst))
+      ((u/uErr msg isNum)
+       (let [(code (if isNum "rule-6" "type"))]
+         (addDiag st1 code (str where ": " msg) path))))))
 
-(df qualify-type-with-mod [(t ty/Type) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> ty/Type
+(df qualifyTypeWithMod [(t ty/Type) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> ty/Type
   (mt t
-    ((ty/ty-var _ _) t)
-    ((ty/ty-con name args opt-mod opt-shown)
-     (let [(is-local (and (not (string-empty? (.-name mod)))
-                          (or (mt (r/mod-schema mod name) ((some _) true) ((none) false))
-                              (mt (r/mod-enum mod name) ((some _) true) ((none) false)))))
-           (next-mod (mt opt-mod
+    ((ty/tyVar _ _) t)
+    ((ty/tyCon name args optMod optShown)
+     (let [(isLocal (and (not (string-empty? (.-name mod)))
+                          (or (mt (r/modSchema mod name) ((some _) true) ((none) false))
+                              (mt (r/modEnum mod name) ((some _) true) ((none) false)))))
+           (nextMod (mt optMod
                        ((some alias)
-                        (mt (r/mod-import mod alias)
+                        (mt (r/modImport mod alias)
                           ((some mpath)
                            (mt (map-get deps mpath)
                              ((some target) (some (.-name target)))
                              ((none) (some mpath))))
-                          ((none) opt-mod)))
+                          ((none) optMod)))
                        ((none)
-                        (if is-local
+                        (if isLocal
                           (some (.-name mod))
                           (none)))))]
-        (ty/ty-con name (map (fn [(a ty/Type)] -> ty/Type (qualify-type-with-mod a mod deps)) args) next-mod opt-shown)))
-    ((ty/ty-fun params ret)
-     (ty/ty-fun (map (fn [(p ty/Type)] -> ty/Type (qualify-type-with-mod p mod deps)) params)
-                (qualify-type-with-mod ret mod deps)))))
+        (ty/tyCon name (map (fn [(a ty/Type)] -> ty/Type (qualifyTypeWithMod a mod deps)) args) nextMod optShown)))
+    ((ty/tyFun params ret)
+     (ty/tyFun (map (fn [(p ty/Type)] -> ty/Type (qualifyTypeWithMod p mod deps)) params)
+                (qualifyTypeWithMod ret mod deps)))))
 
-(df instantiate-sig [(params (List String)) (ret String) (typevars (List String)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair (Pair (List ty/Type) ty/Type) InferState)
-  (let [(v-res (fold (fn [(acc (Pair (Map String ty/Type) InferState)) (vname String)] -> (Pair (Map String ty/Type) InferState)
+(df instantiateSig [(params (List String)) (ret String) (typevars (List String)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair (Pair (List ty/Type) ty/Type) InferState)
+  (let [(vRes (fold (fn [(acc (Pair (Map String ty/Type) InferState)) (vname String)] -> (Pair (Map String ty/Type) InferState)
                        (let [(kind (if (= vname "N") "num" (if (= vname "I") "int" "any")))
-                             (f-res (fresh-var (.-second acc) kind))]
-                         (pair (map-set (.-first acc) vname (.-first f-res))
-                               (.-second f-res))))
+                             (fRes (freshVar (.-second acc) kind))]
+                         (pair (map-set (.-first acc) vname (.-first fRes))
+                               (.-second fRes))))
                      (pair (map-empty) st)
                      typevars))]
-    (let [(vmap (.-first v-res))
-          (st1 (.-second v-res))
-          (inst-p (map (fn [(p String)] -> ty/Type
-                         (qualify-type-with-mod (subst-parsed-type (ty/parse-type-str p (list)) vmap) mod deps))
+    (let [(vmap (.-first vRes))
+          (st1 (.-second vRes))
+          (instP (map (fn [(p String)] -> ty/Type
+                         (qualifyTypeWithMod (substParsedType (ty/parseTypeStr p (list)) vmap) mod deps))
                        params))
-          (inst-r (qualify-type-with-mod (subst-parsed-type (ty/parse-type-str ret (list)) vmap) mod deps))]
-      (pair (pair inst-p inst-r) st1))))
+          (instR (qualifyTypeWithMod (substParsedType (ty/parseTypeStr ret (list)) vmap) mod deps))]
+      (pair (pair instP instR) st1))))
 
-(df subst-parsed-types [(ts (List ty/Type)) (vmap (Map String ty/Type))] -> (List ty/Type)
+(df substParsedTypes [(ts (List ty/Type)) (vmap (Map String ty/Type))] -> (List ty/Type)
   :d "Applies type variable mapping to a list of parsed types."
-  (map (fn [(item ty/Type)] -> ty/Type (subst-parsed-type item vmap)) ts))
+  (map (fn [(item ty/Type)] -> ty/Type (substParsedType item vmap)) ts))
 
-(df subst-parsed-type [(t ty/Type) (vmap (Map String ty/Type))] -> ty/Type
+(df substParsedType [(t ty/Type) (vmap (Map String ty/Type))] -> ty/Type
   :d "Substitutes concrete type variables in parsed types with fresh metavariables."
   (mt t
-    ((ty/ty-var _ _) t)
-    ((ty/ty-con name args opt-mod opt-shown)
+    ((ty/tyVar _ _) t)
+    ((ty/tyCon name args optMod optShown)
      (mt (map-get vmap name)
        ((some mapped) mapped)
        ((none)
-        (ty/ty-con name
-                   (subst-parsed-types args vmap)
-                   opt-mod
-                   opt-shown))))
-    ((ty/ty-fun params ret)
-     (ty/ty-fun (subst-parsed-types params vmap)
-                (subst-parsed-type ret vmap)))))
+        (ty/tyCon name
+                   (substParsedTypes args vmap)
+                   optMod
+                   optShown))))
+    ((ty/tyFun params ret)
+     (ty/tyFun (substParsedTypes params vmap)
+                (substParsedType ret vmap)))))
 
-(df sig-res-to-fun [(res (Pair (Pair (List ty/Type) ty/Type) InferState))] -> (Option (Pair ty/Type InferState))
-  (some (pair (ty/ty-fun (.-first (.-first res)) (.-second (.-first res))) (.-second res))))
+(df sigResToFun [(res (Pair (Pair (List ty/Type) ty/Type) InferState))] -> (Option (Pair ty/Type InferState))
+  (some (pair (ty/tyFun (.-first (.-first res)) (.-second (.-first res))) (.-second res))))
 
-(df param-types-to-strs [(params (List (Pair String String)))] -> (List String)
+(df paramTypesToStrs [(params (List (Pair String String)))] -> (List String)
   (map (fn [(p (Pair String String))] -> String (.-second p)) params))
 
-(df lookup-local-fun [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
-  (mt (r/mod-fun mod sym)
+(df lookupLocalFun [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
+  (mt (r/modFun mod sym)
     ((some f)
-     (let [(p-strs (param-types-to-strs (.-params f)))
-           (res (instantiate-sig p-strs (.-ret f) (.-typevars f) mod deps st))]
-       (sig-res-to-fun res)))
+     (let [(pStrs (paramTypesToStrs (.-params f)))
+           (res (instantiateSig pStrs (.-ret f) (.-typevars f) mod deps st))]
+       (sigResToFun res)))
     ((none) (none))))
 
-(df lookup-builtin-sig [(sym String) (mod r/ModuleSummary) (st InferState)] -> (Option (Pair ty/Type InferState))
-  (mt (ty/builtin-sig sym)
+(df lookupBuiltinSig [(sym String) (mod r/ModuleSummary) (st InferState)] -> (Option (Pair ty/Type InferState))
+  (mt (ty/builtinSig sym)
     ((some bsig)
      (let [(params (.-first bsig))
            (ret (.-second (.-second bsig)))
-           (tvars (collect-tvars params ret))
-           (res (instantiate-sig params ret tvars mod (map-empty) st))]
-       (sig-res-to-fun res)))
+           (tvars (collectTvars params ret))
+           (res (instantiateSig params ret tvars mod (map-empty) st))]
+       (sigResToFun res)))
     ((none) (none))))
 
-(df lookup-local-case [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
-  (mt (map-get (.-case-owner mod) sym)
+(df lookupLocalCase [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
+  (mt (map-get (.-caseOwner mod) sym)
     ((some ename)
-     (mt (r/mod-enum mod ename)
+     (mt (r/modEnum mod ename)
        ((some esum)
         (let [(matching (filter (fn [(c r/CaseSummary)] -> Bool (= (.-name c) sym)) (.-cases esum)))]
           (mt (list-head matching)
             ((some c)
-             (let [(p-strs (param-types-to-strs (.-params c)))
+             (let [(pStrs (paramTypesToStrs (.-params c)))
                    (tvars (.-typevars esum))
-                   (ret-str (if (list-empty? tvars)
+                   (retStr (if (list-empty? tvars)
                                 ename
                                 (str "(" ename " " (string-join tvars " ") ")")))
-                   (res (instantiate-sig p-strs ret-str tvars mod deps st))]
-               (sig-res-to-fun res)))
+                   (res (instantiateSig pStrs retStr tvars mod deps st))]
+               (sigResToFun res)))
             ((none) (none)))))
        ((none) (none))))
     ((none) (none))))
 
-(df lookup-local-symbol [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
-  (mt (lookup-local-fun sym mod deps st)
+(df lookupLocalSymbol [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
+  (mt (lookupLocalFun sym mod deps st)
     ((some res) (some res))
-    ((none) (lookup-local-case sym mod deps st))))
+    ((none) (lookupLocalCase sym mod deps st))))
 
-(df lookup-imported-symbol [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
+(df lookupImportedSymbol [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
   (let [(parts (string-split sym "/"))
         (alias (mt (list-get parts 0) ((some a) a) ((none) "")))
         (member (mt (list-get parts 1) ((some m) m) ((none) "")))]
-    (mt (r/mod-import mod alias)
+    (mt (r/modImport mod alias)
       ((some mpath)
        (mt (map-get deps mpath)
-         ((some target) (lookup-local-symbol member target deps st))
+         ((some target) (lookupLocalSymbol member target deps st))
          ((none) (none))))
       ((none) (none)))))
 
-(df lookup-symbol-type [(sym String) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
+(df lookupSymbolType [(sym String) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
   (mt (map-get env sym)
     ((some t) (some (pair t st)))
     ((none)
-     (mt (lookup-local-symbol sym mod deps st)
+     (mt (lookupLocalSymbol sym mod deps st)
        ((some res) (some res))
        ((none)
-        (mt (lookup-builtin-sig sym mod st)
+        (mt (lookupBuiltinSig sym mod st)
           ((some res) (some res))
           ((none)
            (if (string-contains? sym "/")
-             (lookup-imported-symbol sym mod deps st)
+             (lookupImportedSymbol sym mod deps st)
              (none)))))))))
 
-(df collect-tvars [(params (List String)) (ret String)] -> (List String)
-  (let [(all-strs (list-cons ret params))]
+(df collectTvars [(params (List String)) (ret String)] -> (List String)
+  (let [(allStrs (list-cons ret params))]
     (fold (fn [(acc (List String)) (s String)] -> (List String)
             (fold (fn [(aacc (List String)) (w String)] -> (List String)
                     (if (and (= (string-length w) 1) (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" w))
@@ -224,58 +224,58 @@
                   acc
                   (string-split (string-replace (string-replace (string-replace (string-replace s "(" " ") ")" " ") "[" " ") "]" " ") " ")))
           (list)
-          all-strs)))
+          allStrs)))
 
-(df is-float-lit? [(v String)] -> Bool
-  (let [(s (r/clean-num-sign v))]
+(df isFloatLit? [(v String)] -> Bool
+  (let [(s (r/cleanNumSign v))]
     (if (string-contains? s ".")
       (let [(parts (string-split s "."))]
         (and (= (list-length parts) 2)
-             (and (is-all-digits (mt (list-get parts 0) ((some d) d) ((none) "")))
-                  (is-all-digits (mt (list-get parts 1) ((some d) d) ((none) ""))))))
+             (and (isAllDigits (mt (list-get parts 0) ((some d) d) ((none) "")))
+                  (isAllDigits (mt (list-get parts 1) ((some d) d) ((none) ""))))))
       false)))
 
-(df is-int-lit? [(v String)] -> Bool
-  (let [(s (r/clean-num-sign v))]
-    (and (not (string-empty? s)) (is-all-digits s))))
+(df isIntLit? [(v String)] -> Bool
+  (let [(s (r/cleanNumSign v))]
+    (and (not (string-empty? s)) (isAllDigits s))))
 
-(df unit-type [] -> ty/Type
-  (ty/ty-con "Unit" (list) (none) (none)))
+(df unitType [] -> ty/Type
+  (ty/tyCon "Unit" (list) (none) (none)))
 
-(df last-expr-unit [(l (List rd/SExpr))] -> rd/SExpr
+(df lastExprUnit [(l (List rd/SExpr))] -> rd/SExpr
   (mt (list-head (list-reverse l))
     ((some e) e)
-    ((none) (rd/make-atom "()"))))
+    ((none) (rd/makeAtom "()"))))
 
-(df infer-atom [(v String) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (scope String) (path String) (st InferState)] -> (Pair ty/Type InferState)
+(df inferAtom [(v String) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (scope String) (path String) (st InferState)] -> (Pair ty/Type InferState)
   (cond
     ((string-starts-with? v "\"")
-     (pair (ty/ty-con "String" (list) (none) (none)) st))
+     (pair (ty/tyCon "String" (list) (none) (none)) st))
     ((or (= v "true") (= v "false"))
-     (pair (ty/ty-con "Bool" (list) (none) (none)) st))
+     (pair (ty/tyCon "Bool" (list) (none) (none)) st))
     ((or (= v "()") (= v "nil"))
-     (pair (unit-type) st))
-    ((is-float-lit? v)
-     (pair (ty/ty-con "Float64" (list) (none) (none)) st))
-    ((is-int-lit? v)
-     (let [(vid (.-next-var st))
-           (f-res (fresh-var st "int"))
-           (vty (.-first f-res))
-           (st1 (.-second f-res))
-           (st2 (note-int-literal st1 v vid))]
+     (pair (unitType) st))
+    ((isFloatLit? v)
+     (pair (ty/tyCon "Float64" (list) (none) (none)) st))
+    ((isIntLit? v)
+     (let [(vid (.-nextVar st))
+           (fRes (freshVar st "int"))
+           (vty (.-first fRes))
+           (st1 (.-second fRes))
+           (st2 (noteIntLiteral st1 v vid))]
        (pair vty st2)))
     (:else
-     (mt (lookup-symbol-type v env mod deps st)
+     (mt (lookupSymbolType v env mod deps st)
        ((some found) found)
-       ((none) (fresh-var st "any"))))))
+       ((none) (freshVar st "any"))))))
 
-(df infer-atom-fm [(fm FrameMachine) (v String) (st InferState)] -> (Pair ty/Type InferState)
-  (infer-atom v (.-env fm) (.-mod fm) (.-deps fm) (.-scope fm) (.-path fm) st))
+(df inferAtomFm [(fm FrameMachine) (v String) (st InferState)] -> (Pair ty/Type InferState)
+  (inferAtom v (.-env fm) (.-mod fm) (.-deps fm) (.-scope fm) (.-path fm) st))
 
-(df as-ty-var [(t ty/Type)] -> ty/Type
+(df asTyVar [(t ty/Type)] -> ty/Type
   t)
 
-(df is-all-digits [(s String)] -> Bool
+(df isAllDigits [(s String)] -> Bool
   (if (string-empty? s)
     false
     (fold (fn [(acc Bool) (c String)] -> Bool
@@ -283,771 +283,771 @@
           true
           (string-chars s))))
 
-(df parse-param-parts [(parts (List rd/SExpr)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Pair String (Option ty/Type))
-  (let [(h (r/first-head-ident parts))
-        (sub (r/safe-tail parts))]
+(df parseParamParts [(parts (List rd/SExpr)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Pair String (Option ty/Type))
+  (let [(h (r/firstHeadIdent parts))
+        (sub (r/safeTail parts))]
     (mt (list-head sub)
-      ((some ty-node)
-       (pair h (some (qualify-type-with-mod (ty/parse-type-str (rd/render-sexpr ty-node) (list)) mod deps))))
+      ((some tyNode)
+       (pair h (some (qualifyTypeWithMod (ty/parseTypeStr (rd/renderSexpr tyNode) (list)) mod deps))))
       ((none) (pair h (none))))))
 
-(df parse-param-ann [(p rd/SExpr) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Pair String (Option ty/Type))
+(df parseParamAnn [(p rd/SExpr) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Pair String (Option ty/Type))
   (mt p
-    ((rd/sexpr-atom n) (pair n (none)))
-    ((rd/sexpr-list parts) (parse-param-parts parts mod deps))
-    ((rd/sexpr-vect parts) (parse-param-parts parts mod deps))))
+    ((rd/sexprAtom n) (pair n (none)))
+    ((rd/sexprList parts) (parseParamParts parts mod deps))
+    ((rd/sexprVect parts) (parseParamParts parts mod deps))))
 
 (dfe InferFrame
-  (:c f-eval [(expr rd/SExpr)] "Evaluate expression next")
-  (:c f-call [(callee-name String) (callee-ty ty/Type) (args-done (List ty/Type)) (args-pending (List rd/SExpr)) (env (Map String ty/Type))] "Call evaluation continuation")
-  (:c f-let-val [(bname String) (bindings-rest (List rd/SExpr)) (tail-exprs (List rd/SExpr)) (env (Map String ty/Type))] "Let binding evaluation continuation")
-  (:c f-if-cond [(then-e rd/SExpr) (else-e rd/SExpr) (env (Map String ty/Type))] "If condition continuation")
-  (:c f-if-then [(else-e rd/SExpr) (then-ty ty/Type) (env (Map String ty/Type))] "If branches continuation")
-  (:c f-try-inner [(val-var ty/Type)] "Try continuation"))
+  (:c fEval [(expr rd/SExpr)] "Evaluate expression next")
+  (:c fCall [(calleeName String) (calleeTy ty/Type) (argsDone (List ty/Type)) (argsPending (List rd/SExpr)) (env (Map String ty/Type))] "Call evaluation continuation")
+  (:c fLetVal [(bname String) (bindingsRest (List rd/SExpr)) (tailExprs (List rd/SExpr)) (env (Map String ty/Type))] "Let binding evaluation continuation")
+  (:c fIfCond [(thenE rd/SExpr) (elseE rd/SExpr) (env (Map String ty/Type))] "If condition continuation")
+  (:c fIfThen [(elseE rd/SExpr) (thenTy ty/Type) (env (Map String ty/Type))] "If branches continuation")
+  (:c fTryInner [(valVar ty/Type)] "Try continuation"))
 
 (dfs FrameMachine
   (:f frames (List InferFrame) "Pending evaluation frame stack")
   (:f values (List ty/Type) "Evaluated type values stack")
   (:f env (Map String ty/Type) "Current lexical type environment")
-  (:f ret-type (Option ty/Type) "Enclosing defun return type")
-  (:f in-lambda Bool "True when evaluating inside fn")
+  (:f retType (Option ty/Type) "Enclosing defun return type")
+  (:f inLambda Bool "True when evaluating inside fn")
   (:f scope String "Current scope label")
   (:f path String "Source file path")
   (:f mod r/ModuleSummary "Module summary")
   (:f deps (Map String r/ModuleSummary) "Dependency summaries")
   (:f state InferState "Inference state carrying substitution"))
 
-(df fm-push-fresh [(fm FrameMachine) (rest-frames (List InferFrame)) (st InferState)] -> FrameMachine
-  (let [(f-res (fresh-var st "any"))]
-    (FrameMachine :frames rest-frames
-                  :values (list-cons (.-first f-res) (.-values fm))
+(df fmPushFresh [(fm FrameMachine) (restFrames (List InferFrame)) (st InferState)] -> FrameMachine
+  (let [(fRes (freshVar st "any"))]
+    (FrameMachine :frames restFrames
+                  :values (list-cons (.-first fRes) (.-values fm))
                   :env (.-env fm)
-                  :ret-type (.-ret-type fm)
-                  :in-lambda (.-in-lambda fm)
+                  :retType (.-retType fm)
+                  :inLambda (.-inLambda fm)
                   :scope (.-scope fm)
                   :path (.-path fm)
                   :mod (.-mod fm)
                   :deps (.-deps fm)
-                  :state (.-second f-res))))
+                  :state (.-second fRes))))
 
-(df pop-value [(fm FrameMachine)] -> (Pair ty/Type (List ty/Type))
-  (pair (mt (list-head (.-values fm)) ((some v) v) ((none) (unit-type)))
-        (r/safe-tail (.-values fm))))
+(df popValue [(fm FrameMachine)] -> (Pair ty/Type (List ty/Type))
+  (pair (mt (list-head (.-values fm)) ((some v) v) ((none) (unitType)))
+        (r/safeTail (.-values fm))))
 
-(df fm-tick [(fm FrameMachine) (tick-idx Int64)] -> FrameMachine
+(df fmTick [(fm FrameMachine) (tickIdx Int64)] -> FrameMachine
   (mt (list-head (.-frames fm))
     ((none) fm)
-    ((some top-frame)
-     (let [(rest-frames (r/safe-tail (.-frames fm)))]
-       (mt top-frame
-         ((f-eval expr)
-          (fm-eval-step expr rest-frames fm))
-         ((f-call cname cty args-done args-pending cenv)
-          (fm-call-step cname cty args-done args-pending cenv rest-frames fm))
-         ((f-let-val bname brest tails lenv)
-          (fm-let-val-step bname brest tails lenv rest-frames fm))
-         ((f-if-cond then-e else-e ienv)
-          (fm-if-cond-step then-e else-e ienv rest-frames fm))
-         ((f-if-then else-e then-ty ienv)
-          (fm-if-then-step else-e then-ty ienv rest-frames fm))
-         ((f-try-inner val-var)
-          (fm-try-step val-var rest-frames fm)))))))
+    ((some topFrame)
+     (let [(restFrames (r/safeTail (.-frames fm)))]
+       (mt topFrame
+         ((fEval expr)
+          (fmEvalStep expr restFrames fm))
+         ((fCall cname cty argsDone argsPending cenv)
+          (fmCallStep cname cty argsDone argsPending cenv restFrames fm))
+         ((fLetVal bname brest tails lenv)
+          (fmLetValStep bname brest tails lenv restFrames fm))
+         ((fIfCond thenE elseE ienv)
+          (fmIfCondStep thenE elseE ienv restFrames fm))
+         ((fIfThen elseE thenTy ienv)
+          (fmIfThenStep elseE thenTy ienv restFrames fm))
+         ((fTryInner valVar)
+          (fmTryStep valVar restFrames fm)))))))
 
-(df bind-match-pattern [(pat rd/SExpr) (scrut-ty ty/Type) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair (Map String ty/Type) InferState)
+(df bindMatchPattern [(pat rd/SExpr) (scrutTy ty/Type) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair (Map String ty/Type) InferState)
   (mt pat
-    ((rd/sexpr-atom name)
-     (if (or (= name "_") (r/is-literal-atom? name))
+    ((rd/sexprAtom name)
+     (if (or (= name "_") (r/isLiteralAtom? name))
        (pair env st)
-       (pair (map-set env name scrut-ty) st)))
-    ((rd/sexpr-vect _)
+       (pair (map-set env name scrutTy) st)))
+    ((rd/sexprVect _)
      (pair env st))
-    ((rd/sexpr-list parts)
+    ((rd/sexprList parts)
      (mt (list-head parts)
        ((none) (pair env st))
        ((some h)
-        (let [(cname (rd/sexpr-head h))
-              (sub-pats (r/safe-tail parts))
-              (ctor-opt (lookup-symbol-type cname env mod deps st))]
-          (mt ctor-opt
+        (let [(cname (rd/sexprHead h))
+              (subPats (r/safeTail parts))
+              (ctorOpt (lookupSymbolType cname env mod deps st))]
+          (mt ctorOpt
             ((none) (pair env st))
-            ((some ctor-res)
-             (let [(ctor-ty (.-first ctor-res))
-                   (st1 (.-second ctor-res))]
-               (mt (u/apply-subst (.-subst st1) ctor-ty)
-                 ((ty/ty-fun cparams cret)
-                  (let [(st2 (expect-type st1 scrut-ty cret (str "pattern " cname) (.-path mod)))]
-                    (fold (fn [(acc (Pair (Map String ty/Type) InferState)) (pair-item (Pair rd/SExpr ty/Type))] -> (Pair (Map String ty/Type) InferState)
-                            (bind-match-pattern (.-first pair-item)
-                                                (u/apply-subst (.-subst (.-second acc)) (.-second pair-item))
+            ((some ctorRes)
+             (let [(ctorTy (.-first ctorRes))
+                   (st1 (.-second ctorRes))]
+               (mt (u/applySubst (.-subst st1) ctorTy)
+                 ((ty/tyFun cparams cret)
+                  (let [(st2 (expectType st1 scrutTy cret (str "pattern " cname) (.-path mod)))]
+                    (fold (fn [(acc (Pair (Map String ty/Type) InferState)) (pairItem (Pair rd/SExpr ty/Type))] -> (Pair (Map String ty/Type) InferState)
+                            (bindMatchPattern (.-first pairItem)
+                                                (u/applySubst (.-subst (.-second acc)) (.-second pairItem))
                                                 (.-first acc)
                                                 mod
                                                 deps
                                                 (.-second acc)))
                           (pair env st2)
-                          (zip sub-pats cparams))))
+                          (zip subPats cparams))))
                  (_ (pair env st1))))))))))))
 
-(df fm-try-outside-error [(fm FrameMachine) (inner-e rd/SExpr) (rest-frames (List InferFrame))] -> FrameMachine
-  (let [(st1 (add-diag (.-state fm) "rule-5" "try outside a defun returning (Result _ E)" (.-path fm)))]
-    (FrameMachine :frames (list-cons (f-eval inner-e) rest-frames)
+(df fmTryOutsideError [(fm FrameMachine) (innerE rd/SExpr) (restFrames (List InferFrame))] -> FrameMachine
+  (let [(st1 (addDiag (.-state fm) "rule-5" "try outside a defun returning (Result _ E)" (.-path fm)))]
+    (FrameMachine :frames (list-cons (fEval innerE) restFrames)
                   :values (.-values fm)
                   :env (.-env fm)
-                  :ret-type (.-ret-type fm)
-                  :in-lambda (.-in-lambda fm)
+                  :retType (.-retType fm)
+                  :inLambda (.-inLambda fm)
                   :scope (.-scope fm)
                   :path (.-path fm)
                   :mod (.-mod fm)
                   :deps (.-deps fm)
                   :state st1)))
 
-(df fm-eval-step [(expr rd/SExpr) (rest-frames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
+(df fmEvalStep [(expr rd/SExpr) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
   (mt expr
-    ((rd/sexpr-atom v)
-     (let [(res (infer-atom-fm fm v (.-state fm)))]
-       (FrameMachine :frames rest-frames
+    ((rd/sexprAtom v)
+     (let [(res (inferAtomFm fm v (.-state fm)))]
+       (FrameMachine :frames restFrames
                      :values (list-cons (.-first res) (.-values fm))
                      :env (.-env fm)
-                     :ret-type (.-ret-type fm)
-                     :in-lambda (.-in-lambda fm)
+                     :retType (.-retType fm)
+                     :inLambda (.-inLambda fm)
                      :scope (.-scope fm)
                      :path (.-path fm)
                      :mod (.-mod fm)
                      :deps (.-deps fm)
-                     :state (note-map-type (.-second res) (.-first res) (.-scope fm)))))
-    ((rd/sexpr-vect items)
-     (let [(f-res (fresh-var (.-state fm) "any"))
-           (elem-ty (.-first f-res))
-           (st1 (.-second f-res))]
-       (FrameMachine :frames rest-frames
-                     :values (list-cons (ty/ty-con "List" (list elem-ty) (none) (none)) (.-values fm))
+                     :state (noteMapType (.-second res) (.-first res) (.-scope fm)))))
+    ((rd/sexprVect items)
+     (let [(fRes (freshVar (.-state fm) "any"))
+           (elemTy (.-first fRes))
+           (st1 (.-second fRes))]
+       (FrameMachine :frames restFrames
+                     :values (list-cons (ty/tyCon "List" (list elemTy) (none) (none)) (.-values fm))
                      :env (.-env fm)
-                     :ret-type (.-ret-type fm)
-                     :in-lambda (.-in-lambda fm)
+                     :retType (.-retType fm)
+                     :inLambda (.-inLambda fm)
                      :scope (.-scope fm)
                      :path (.-path fm)
                      :mod (.-mod fm)
                      :deps (.-deps fm)
                      :state st1)))
-    ((rd/sexpr-list items)
+    ((rd/sexprList items)
      (mt (list-head items)
        ((none)
-        (FrameMachine :frames rest-frames
-                      :values (list-cons (unit-type) (.-values fm))
+        (FrameMachine :frames restFrames
+                      :values (list-cons (unitType) (.-values fm))
                       :env (.-env fm)
-                      :ret-type (.-ret-type fm)
-                      :in-lambda (.-in-lambda fm)
+                      :retType (.-retType fm)
+                      :inLambda (.-inLambda fm)
                       :scope (.-scope fm)
                       :path (.-path fm)
                       :mod (.-mod fm)
                       :deps (.-deps fm)
                       :state (.-state fm)))
        ((some h)
-        (let [(head-tok (rd/sexpr-head h))
-              (tail-args (r/safe-tail items))]
+        (let [(headTok (rd/sexprHead h))
+              (tailArgs (r/safeTail items))]
           (cond
-            ((= head-tok "let")
-             (let [(bitems (r/first-vect-items tail-args))
-                   (tails (r/safe-tail tail-args))]
+            ((= headTok "let")
+             (let [(bitems (r/firstVectItems tailArgs))
+                   (tails (r/safeTail tailArgs))]
                (if (list-empty? bitems)
-                 (let [(last-e (last-expr-unit tails))]
-                   (FrameMachine :frames (list-cons (f-eval last-e) rest-frames)
+                 (let [(lastE (lastExprUnit tails))]
+                   (FrameMachine :frames (list-cons (fEval lastE) restFrames)
                                  :values (.-values fm)
                                  :env (.-env fm)
-                                 :ret-type (.-ret-type fm)
-                                 :in-lambda (.-in-lambda fm)
+                                 :retType (.-retType fm)
+                                 :inLambda (.-inLambda fm)
                                  :scope (.-scope fm)
                                  :path (.-path fm)
                                  :mod (.-mod fm)
                                  :deps (.-deps fm)
                                  :state (.-state fm)))
-                 (let [(first-b (r/first-expr-empty bitems))
-                       (brest (r/safe-tail bitems))
-                       (bparts (mt first-b ((rd/sexpr-list bp) bp) ((rd/sexpr-vect bp) bp) (_ (list))))
-                       (bname (r/first-head-ident bparts))
-                       (bval (r/second-expr-empty bparts))]
-                   (FrameMachine :frames (list-cons (f-eval bval) (list-cons (f-let-val bname brest tails (.-env fm)) rest-frames))
+                 (let [(firstB (r/firstExprEmpty bitems))
+                       (brest (r/safeTail bitems))
+                       (bparts (mt firstB ((rd/sexprList bp) bp) ((rd/sexprVect bp) bp) (_ (list))))
+                       (bname (r/firstHeadIdent bparts))
+                       (bval (r/secondExprEmpty bparts))]
+                   (FrameMachine :frames (list-cons (fEval bval) (list-cons (fLetVal bname brest tails (.-env fm)) restFrames))
                                  :values (.-values fm)
                                  :env (.-env fm)
-                                 :ret-type (.-ret-type fm)
-                                 :in-lambda (.-in-lambda fm)
+                                 :retType (.-retType fm)
+                                 :inLambda (.-inLambda fm)
                                  :scope (.-scope fm)
                                  :path (.-path fm)
                                  :mod (.-mod fm)
                                  :deps (.-deps fm)
                                  :state (.-state fm))))))
 
-            ((= head-tok "if")
-             (let [(cond-e (mt (list-get tail-args 0) ((some c) c) ((none) (rd/make-atom "true"))))
-                   (then-e (mt (list-get tail-args 1) ((some t) t) ((none) (rd/make-atom "()"))))
-                   (else-e (mt (list-get tail-args 2) ((some e) e) ((none) (rd/make-atom "()"))))]
-               (FrameMachine :frames (list-cons (f-eval cond-e) (list-cons (f-if-cond then-e else-e (.-env fm)) rest-frames))
+            ((= headTok "if")
+             (let [(condE (mt (list-get tailArgs 0) ((some c) c) ((none) (rd/makeAtom "true"))))
+                   (thenE (mt (list-get tailArgs 1) ((some t) t) ((none) (rd/makeAtom "()"))))
+                   (elseE (mt (list-get tailArgs 2) ((some e) e) ((none) (rd/makeAtom "()"))))]
+               (FrameMachine :frames (list-cons (fEval condE) (list-cons (fIfCond thenE elseE (.-env fm)) restFrames))
                              :values (.-values fm)
                              :env (.-env fm)
-                             :ret-type (.-ret-type fm)
-                             :in-lambda (.-in-lambda fm)
+                             :retType (.-retType fm)
+                             :inLambda (.-inLambda fm)
                              :scope (.-scope fm)
                              :path (.-path fm)
                              :mod (.-mod fm)
                              :deps (.-deps fm)
                              :state (.-state fm))))
 
-            ((= head-tok "cond")
-             (let [(f-res (fresh-var (.-state fm) "any"))
-                   (out-var (.-first f-res))
-                   (st-out (.-second f-res))
-                   (st-final (fold (fn [(st-acc InferState) (clause rd/SExpr)] -> InferState
+            ((= headTok "cond")
+             (let [(fRes (freshVar (.-state fm) "any"))
+                   (outVar (.-first fRes))
+                   (stOut (.-second fRes))
+                   (stFinal (fold (fn [(stAcc InferState) (clause rd/SExpr)] -> InferState
                                      (mt clause
-                                       ((rd/sexpr-list cparts)
-                                        (let [(chead-expr (r/first-expr-empty cparts))
-                                               (chead (rd/sexpr-head chead-expr))
-                                               (cbodies (r/safe-tail cparts))
-                                               (last-b (last-expr-unit cbodies))]
+                                       ((rd/sexprList cparts)
+                                        (let [(cheadExpr (r/firstExprEmpty cparts))
+                                               (chead (rd/sexprHead cheadExpr))
+                                               (cbodies (r/safeTail cparts))
+                                               (lastB (lastExprUnit cbodies))]
                                            (if (= chead ":else")
-                                             (let [(bres (eval-fm fm last-b st-acc))]
-                                               (expect-type (.-second bres) (.-first bres) out-var "cond else clause" (.-path fm)))
-                                             (let [(cres (eval-fm fm chead-expr st-acc))
-                                                   (st-c (expect-type (.-second cres) (.-first cres) (ty/ty-con "Bool" (list) (none) (none)) "cond test" (.-path fm)))
-                                                   (bres (eval-fm fm last-b st-c))]
-                                               (expect-type (.-second bres) (.-first bres) out-var "cond clause" (.-path fm))))))
-                                        (_ st-acc)))
-                                   st-out
-                                   tail-args))]
-               (FrameMachine :frames rest-frames
-                             :values (list-cons (u/apply-subst (.-subst st-final) out-var) (.-values fm))
+                                             (let [(bres (evalFm fm lastB stAcc))]
+                                               (expectType (.-second bres) (.-first bres) outVar "cond else clause" (.-path fm)))
+                                             (let [(cres (evalFm fm cheadExpr stAcc))
+                                                   (stC (expectType (.-second cres) (.-first cres) (ty/tyCon "Bool" (list) (none) (none)) "cond test" (.-path fm)))
+                                                   (bres (evalFm fm lastB stC))]
+                                               (expectType (.-second bres) (.-first bres) outVar "cond clause" (.-path fm))))))
+                                        (_ stAcc)))
+                                   stOut
+                                   tailArgs))]
+               (FrameMachine :frames restFrames
+                             :values (list-cons (u/applySubst (.-subst stFinal) outVar) (.-values fm))
                              :env (.-env fm)
-                             :ret-type (.-ret-type fm)
-                             :in-lambda (.-in-lambda fm)
+                             :retType (.-retType fm)
+                             :inLambda (.-inLambda fm)
                              :scope (.-scope fm)
                              :path (.-path fm)
                              :mod (.-mod fm)
                              :deps (.-deps fm)
-                             :state st-final)))
+                             :state stFinal)))
 
-            ((or (= head-tok "match") (= head-tok "mt"))
-             (let [(scrutinee (r/first-expr-unit tail-args))
-                   (arms (r/safe-tail tail-args))
-                   (scrut-res (eval-fm fm scrutinee (.-state fm)))
-                   (scrut-ty (.-first scrut-res))
-                   (st-scrut (.-second scrut-res))
-                   (f-res (fresh-var st-scrut "any"))
-                   (out-var (.-first f-res))
-                   (st-out (.-second f-res))
-                   (st-final (fold (fn [(st-acc InferState) (arm rd/SExpr)] -> InferState
+            ((or (= headTok "match") (= headTok "mt"))
+             (let [(scrutinee (r/firstExprUnit tailArgs))
+                   (arms (r/safeTail tailArgs))
+                   (scrutRes (evalFm fm scrutinee (.-state fm)))
+                   (scrutTy (.-first scrutRes))
+                   (stScrut (.-second scrutRes))
+                   (fRes (freshVar stScrut "any"))
+                   (outVar (.-first fRes))
+                   (stOut (.-second fRes))
+                   (stFinal (fold (fn [(stAcc InferState) (arm rd/SExpr)] -> InferState
                                      (mt arm
-                                       ((rd/sexpr-list arm-parts)
-                                        (let [(pat (mt (list-head arm-parts) ((some p) p) ((none) (rd/make-atom "_"))))
-                                              (body-exprs (r/safe-tail arm-parts))
-                                              (bind-res (bind-match-pattern pat (u/apply-subst (.-subst st-acc) scrut-ty) (.-env fm) (.-mod fm) (.-deps fm) st-acc))
-                                              (arm-env (.-first bind-res))
-                                              (st-arm (.-second bind-res))
-                                              (last-body (last-expr-unit body-exprs))
-                                              (body-res (eval-with-env fm last-body arm-env st-arm))
-                                              (body-ty (.-first body-res))
-                                              (st-b (.-second body-res))]
-                                          (expect-type st-b body-ty out-var "match arm" (.-path fm))))
-                                       (_ st-acc)))
-                                   st-out
+                                       ((rd/sexprList armParts)
+                                        (let [(pat (mt (list-head armParts) ((some p) p) ((none) (rd/makeAtom "_"))))
+                                              (bodyExprs (r/safeTail armParts))
+                                              (bindRes (bindMatchPattern pat (u/applySubst (.-subst stAcc) scrutTy) (.-env fm) (.-mod fm) (.-deps fm) stAcc))
+                                              (armEnv (.-first bindRes))
+                                              (stArm (.-second bindRes))
+                                              (lastBody (lastExprUnit bodyExprs))
+                                              (bodyRes (evalWithEnv fm lastBody armEnv stArm))
+                                              (bodyTy (.-first bodyRes))
+                                              (stB (.-second bodyRes))]
+                                          (expectType stB bodyTy outVar "match arm" (.-path fm))))
+                                       (_ stAcc)))
+                                   stOut
                                    arms))]
-               (FrameMachine :frames rest-frames
-                             :values (list-cons (u/apply-subst (.-subst st-final) out-var) (.-values fm))
+               (FrameMachine :frames restFrames
+                             :values (list-cons (u/applySubst (.-subst stFinal) outVar) (.-values fm))
                              :env (.-env fm)
-                             :ret-type (.-ret-type fm)
-                             :in-lambda (.-in-lambda fm)
+                             :retType (.-retType fm)
+                             :inLambda (.-inLambda fm)
                              :scope (.-scope fm)
                              :path (.-path fm)
                              :mod (.-mod fm)
                              :deps (.-deps fm)
-                             :state st-final)))
+                             :state stFinal)))
 
-            ((= head-tok "try")
-             (let [(inner-e (r/first-expr-unit tail-args))]
-               (if (.-in-lambda fm)
-                 (let [(st1 (add-diag (.-state fm) "rule-5" "try inside fn: it would return from the enclosing defun, not from the lambda" (.-path fm)))]
-                   (FrameMachine :frames (list-cons (f-eval inner-e) rest-frames)
+            ((= headTok "try")
+             (let [(innerE (r/firstExprUnit tailArgs))]
+               (if (.-inLambda fm)
+                 (let [(st1 (addDiag (.-state fm) "rule-5" "try inside fn: it would return from the enclosing defun, not from the lambda" (.-path fm)))]
+                   (FrameMachine :frames (list-cons (fEval innerE) restFrames)
                                  :values (.-values fm)
                                  :env (.-env fm)
-                                 :ret-type (.-ret-type fm)
-                                 :in-lambda (.-in-lambda fm)
+                                 :retType (.-retType fm)
+                                 :inLambda (.-inLambda fm)
                                  :scope (.-scope fm)
                                  :path (.-path fm)
                                  :mod (.-mod fm)
                                  :deps (.-deps fm)
                                  :state st1))
-                 (let [(enclosing (mt (.-ret-type fm)
-                                    ((some r) (u/apply-subst (.-subst (.-state fm)) r))
-                                    ((none) (unit-type))))]
+                 (let [(enclosing (mt (.-retType fm)
+                                    ((some r) (u/applySubst (.-subst (.-state fm)) r))
+                                    ((none) (unitType))))]
                    (mt enclosing
-                     ((ty/ty-con rname rargs _ _)
+                     ((ty/tyCon rname rargs _ _)
                       (if (and (= rname "Result") (= (list-length rargs) 2))
-                        (let [(f-res (fresh-var (.-state fm) "any"))
-                              (vty (.-first f-res))
-                              (st1 (.-second f-res))]
-                          (FrameMachine :frames (list-cons (f-eval inner-e) (list-cons (f-try-inner vty) rest-frames))
+                        (let [(fRes (freshVar (.-state fm) "any"))
+                              (vty (.-first fRes))
+                              (st1 (.-second fRes))]
+                          (FrameMachine :frames (list-cons (fEval innerE) (list-cons (fTryInner vty) restFrames))
                                         :values (.-values fm)
                                         :env (.-env fm)
-                                        :ret-type (.-ret-type fm)
-                                        :in-lambda (.-in-lambda fm)
+                                        :retType (.-retType fm)
+                                        :inLambda (.-inLambda fm)
                                         :scope (.-scope fm)
                                         :path (.-path fm)
                                         :mod (.-mod fm)
                                         :deps (.-deps fm)
                                         :state st1))
-                        (fm-try-outside-error fm inner-e rest-frames)))
+                        (fmTryOutsideError fm innerE restFrames)))
                      (_
-                      (fm-try-outside-error fm inner-e rest-frames)))))))
+                      (fmTryOutsideError fm innerE restFrames)))))))
 
-            ((= head-tok "fn")
-             (let [(is-bang (and (not (list-empty? tail-args))
-                                 (= (r/first-head-ident tail-args) "!")))
-                   (rem-args (if is-bang (r/safe-tail tail-args) tail-args))
-                   (after-params (r/safe-tail rem-args))
-                   (has-ret-ann (and (not (list-empty? after-params))
-                                     (= (r/first-head-ident after-params) "->")))
-                   (body-nodes (if has-ret-ann
-                                 (r/safe-tail (r/safe-tail after-params))
-                                 after-params))
-                   (param-items (r/first-vect-items rem-args))
-                   (p-res (fold (fn [(acc (Pair (Pair (List ty/Type) (Map String ty/Type)) (Pair InferState Bool))) (p rd/SExpr)] -> (Pair (Pair (List ty/Type) (Map String ty/Type)) (Pair InferState Bool))
-                                  (let [(pann (parse-param-ann p (.-mod fm) (.-deps fm)))
+            ((= headTok "fn")
+             (let [(isBang (and (not (list-empty? tailArgs))
+                                 (= (r/firstHeadIdent tailArgs) "!")))
+                   (remArgs (if isBang (r/safeTail tailArgs) tailArgs))
+                   (afterParams (r/safeTail remArgs))
+                   (hasRetAnn (and (not (list-empty? afterParams))
+                                     (= (r/firstHeadIdent afterParams) "->")))
+                   (bodyNodes (if hasRetAnn
+                                 (r/safeTail (r/safeTail afterParams))
+                                 afterParams))
+                   (paramItems (r/firstVectItems remArgs))
+                   (pRes (fold (fn [(acc (Pair (Pair (List ty/Type) (Map String ty/Type)) (Pair InferState Bool))) (p rd/SExpr)] -> (Pair (Pair (List ty/Type) (Map String ty/Type)) (Pair InferState Bool))
+                                  (let [(pann (parseParamAnn p (.-mod fm) (.-deps fm)))
                                         (pname (.-first pann))
-                                        (opt-ty (.-second pann))]
-                                    (mt opt-ty
+                                        (optTy (.-second pann))]
+                                    (mt optTy
                                       ((some pty)
                                        (pair (pair (list-cons pty (.-first (.-first acc)))
                                                    (map-set (.-second (.-first acc)) pname pty))
                                              (pair (.-first (.-second acc)) (.-second (.-second acc)))))
                                       ((none)
-                                       (let [(f-res (fresh-var (.-first (.-second acc)) "any"))
-                                             (pty (.-first f-res))
-                                             (st1 (.-second f-res))]
+                                       (let [(fRes (freshVar (.-first (.-second acc)) "any"))
+                                             (pty (.-first fRes))
+                                             (st1 (.-second fRes))]
                                          (pair (pair (list-cons pty (.-first (.-first acc)))
                                                      (map-set (.-second (.-first acc)) pname pty))
                                                (pair st1 true)))))))
                                 (pair (pair (list) (.-env fm)) (pair (.-state fm) false))
-                                param-items))
-                    (params-ty (list-reverse (.-first (.-first p-res))))
-                    (fn-env (.-second (.-first p-res)))
-                    (st1 (.-first (.-second p-res)))
-                    (has-p-elided (.-second (.-second p-res)))
-                    (after-arrow (if has-ret-ann (r/safe-tail after-params) (list)))
-                    (ret-node-opt (list-head after-arrow))
-                    (ret-info (mt ret-node-opt
+                                paramItems))
+                    (paramsTy (list-reverse (.-first (.-first pRes))))
+                    (fnEnv (.-second (.-first pRes)))
+                    (st1 (.-first (.-second pRes)))
+                    (hasPElided (.-second (.-second pRes)))
+                    (afterArrow (if hasRetAnn (r/safeTail afterParams) (list)))
+                    (retNodeOpt (list-head afterArrow))
+                    (retInfo (mt retNodeOpt
                                 ((some rnode)
-                                 (pair (qualify-type-with-mod (ty/parse-type-str (rd/render-sexpr rnode) (list)) (.-mod fm) (.-deps fm))
-                                       (pair st1 has-p-elided)))
+                                 (pair (qualifyTypeWithMod (ty/parseTypeStr (rd/renderSexpr rnode) (list)) (.-mod fm) (.-deps fm))
+                                       (pair st1 hasPElided)))
                                 ((none)
-                                 (let [(f-ret (fresh-var st1 "any"))]
-                                   (pair (.-first f-ret) (pair (.-second f-ret) true))))))
-                    (ret-ty (.-first ret-info))
-                    (st2 (.-first (.-second ret-info)))
-                    (has-elided (.-second (.-second ret-info)))
-                    (last-body (last-expr-unit body-nodes))
-                    (body-res (run-expr-direct last-body fn-env (some ret-ty) true (.-scope fm) (.-path fm) (.-mod fm) (.-deps fm) st2))
-                    (body-ty (.-first body-res))
-                    (st3 (expect-type (.-second body-res) body-ty ret-ty "lambda body" (.-path fm)))
-                    (st4 (if has-elided (note-lambda st3 params-ty ret-ty) st3))
-                    (fn-ty (ty/ty-fun params-ty ret-ty))]
-               (FrameMachine :frames rest-frames
-                             :values (list-cons fn-ty (.-values fm))
+                                 (let [(fRet (freshVar st1 "any"))]
+                                   (pair (.-first fRet) (pair (.-second fRet) true))))))
+                    (retTy (.-first retInfo))
+                    (st2 (.-first (.-second retInfo)))
+                    (hasElided (.-second (.-second retInfo)))
+                    (lastBody (lastExprUnit bodyNodes))
+                    (bodyRes (runExprDirect lastBody fnEnv (some retTy) true (.-scope fm) (.-path fm) (.-mod fm) (.-deps fm) st2))
+                    (bodyTy (.-first bodyRes))
+                    (st3 (expectType (.-second bodyRes) bodyTy retTy "lambda body" (.-path fm)))
+                    (st4 (if hasElided (noteLambda st3 paramsTy retTy) st3))
+                    (fnTy (ty/tyFun paramsTy retTy))]
+               (FrameMachine :frames restFrames
+                             :values (list-cons fnTy (.-values fm))
                              :env (.-env fm)
-                             :ret-type (.-ret-type fm)
-                             :in-lambda (.-in-lambda fm)
+                             :retType (.-retType fm)
+                             :inLambda (.-inLambda fm)
                              :scope (.-scope fm)
                              :path (.-path fm)
                              :mod (.-mod fm)
                              :deps (.-deps fm)
                              :state st4)))
 
-            ((string-starts-with? head-tok ".-")
-             (let [(fname (r/slice-from head-tok 2))
-                   (tgt-e (r/first-expr-unit tail-args))
-                   (tgt-res (eval-fm fm tgt-e (.-state fm)))
-                   (tgt-ty (u/apply-subst (.-subst (.-second tgt-res)) (.-first tgt-res)))
-                   (st1 (.-second tgt-res))]
-               (mt tgt-ty
-                 ((ty/ty-con tname targs topt-mod _)
+            ((string-starts-with? headTok ".-")
+             (let [(fname (r/sliceFrom headTok 2))
+                   (tgtE (r/firstExprUnit tailArgs))
+                   (tgtRes (evalFm fm tgtE (.-state fm)))
+                   (tgtTy (u/applySubst (.-subst (.-second tgtRes)) (.-first tgtRes)))
+                   (st1 (.-second tgtRes))]
+               (mt tgtTy
+                 ((ty/tyCon tname targs toptMod _)
                   (if (and (= tname "Pair") (= (list-length targs) 2))
-                    (let [(out-ty (if (= fname "first")
-                                    (mt (list-get targs 0) ((some f) f) ((none) (unit-type)))
-                                    (mt (list-get targs 1) ((some s) s) ((none) (unit-type)))))]
-                      (FrameMachine :frames rest-frames
-                                    :values (list-cons out-ty (.-values fm))
+                    (let [(outTy (if (= fname "first")
+                                    (mt (list-get targs 0) ((some f) f) ((none) (unitType)))
+                                    (mt (list-get targs 1) ((some s) s) ((none) (unitType)))))]
+                      (FrameMachine :frames restFrames
+                                    :values (list-cons outTy (.-values fm))
                                     :env (.-env fm)
-                                    :ret-type (.-ret-type fm)
-                                    :in-lambda (.-in-lambda fm)
+                                    :retType (.-retType fm)
+                                    :inLambda (.-inLambda fm)
                                     :scope (.-scope fm)
                                     :path (.-path fm)
                                     :mod (.-mod fm)
                                     :deps (.-deps fm)
                                     :state st1))
-                    (let [(target-mod (mt topt-mod
+                    (let [(targetMod (mt toptMod
                                         ((some alias)
-                                         (mt (r/mod-import (.-mod fm) alias)
+                                         (mt (r/modImport (.-mod fm) alias)
                                            ((some mpath) (map-get (.-deps fm) mpath))
                                            ((none) (none))))
                                         ((none) (some (.-mod fm)))))]
-                      (mt target-mod
+                      (mt targetMod
                         ((none)
-                         (fm-push-fresh fm rest-frames st1))
+                         (fmPushFresh fm restFrames st1))
                         ((some smod)
-                         (mt (r/mod-schema smod tname)
+                         (mt (r/modSchema smod tname)
                            ((some ssum)
-                            (let [(f-match (filter (fn [(f r/FieldSummary)] -> Bool (= (.-name f) fname)) (.-fields ssum)))]
-                              (mt (list-head f-match)
+                            (let [(fMatch (filter (fn [(f r/FieldSummary)] -> Bool (= (.-name f) fname)) (.-fields ssum)))]
+                              (mt (list-head fMatch)
                                 ((some fdef)
-                                 (let [(field-ty (ty/parse-type-str (.-type fdef) (list)))
-                                       (subst-map (fold (fn [(acc (Map String ty/Type)) (p (Pair String ty/Type))] -> (Map String ty/Type)
+                                 (let [(fieldTy (ty/parseTypeStr (.-type fdef) (list)))
+                                       (substMap (fold (fn [(acc (Map String ty/Type)) (p (Pair String ty/Type))] -> (Map String ty/Type)
                                                           (map-set acc (.-first p) (.-second p)))
                                                         (map-empty)
                                                         (zip (.-typevars ssum) targs)))
-                                       (inst-field (subst-parsed-type field-ty subst-map))]
-                                   (FrameMachine :frames rest-frames
-                                                 :values (list-cons inst-field (.-values fm))
+                                       (instField (substParsedType fieldTy substMap))]
+                                   (FrameMachine :frames restFrames
+                                                 :values (list-cons instField (.-values fm))
                                                  :env (.-env fm)
-                                                 :ret-type (.-ret-type fm)
-                                                 :in-lambda (.-in-lambda fm)
+                                                 :retType (.-retType fm)
+                                                 :inLambda (.-inLambda fm)
                                                  :scope (.-scope fm)
                                                  :path (.-path fm)
                                                  :mod (.-mod fm)
                                                  :deps (.-deps fm)
                                                  :state st1)))
                                 ((none)
-                                 (let [(st2 (add-diag st1 "type" (str (ty/show-type tgt-ty) " has no field " fname) (.-path fm)))]
-                                   (fm-push-fresh fm rest-frames st2))))))
+                                 (let [(st2 (addDiag st1 "type" (str (ty/showType tgtTy) " has no field " fname) (.-path fm)))]
+                                   (fmPushFresh fm restFrames st2))))))
                            ((none)
-                            (fm-push-fresh fm rest-frames st1))))))))
+                            (fmPushFresh fm restFrames st1))))))))
                  (_
-                  (fm-push-fresh fm rest-frames st1)))))
+                  (fmPushFresh fm restFrames st1)))))
 
             (:else
-             (let [(callee-res (infer-atom-fm fm head-tok (.-state fm)))
-                   (callee-ty (.-first callee-res))
-                   (st1 (.-second callee-res))]
-               (if (list-empty? tail-args)
-                 (mt (u/apply-subst (.-subst st1) callee-ty)
-                   ((ty/ty-fun p r)
-                    (FrameMachine :frames rest-frames
+             (let [(calleeRes (inferAtomFm fm headTok (.-state fm)))
+                   (calleeTy (.-first calleeRes))
+                   (st1 (.-second calleeRes))]
+               (if (list-empty? tailArgs)
+                 (mt (u/applySubst (.-subst st1) calleeTy)
+                   ((ty/tyFun p r)
+                    (FrameMachine :frames restFrames
                                   :values (list-cons r (.-values fm))
                                   :env (.-env fm)
-                                  :ret-type (.-ret-type fm)
-                                  :in-lambda (.-in-lambda fm)
+                                  :retType (.-retType fm)
+                                  :inLambda (.-inLambda fm)
                                   :scope (.-scope fm)
                                   :path (.-path fm)
                                   :mod (.-mod fm)
                                   :deps (.-deps fm)
                                   :state st1))
                    (_
-                    (FrameMachine :frames rest-frames
-                                  :values (list-cons callee-ty (.-values fm))
+                    (FrameMachine :frames restFrames
+                                  :values (list-cons calleeTy (.-values fm))
                                   :env (.-env fm)
-                                  :ret-type (.-ret-type fm)
-                                  :in-lambda (.-in-lambda fm)
+                                  :retType (.-retType fm)
+                                  :inLambda (.-inLambda fm)
                                   :scope (.-scope fm)
                                   :path (.-path fm)
                                   :mod (.-mod fm)
                                   :deps (.-deps fm)
                                   :state st1)))
-                 (let [(first-arg (r/first-expr-unit tail-args))
-                       (pending-args (r/safe-tail tail-args))]
-                   (FrameMachine :frames (list-cons (f-eval first-arg) (list-cons (f-call head-tok callee-ty (list) pending-args (.-env fm)) rest-frames))
+                 (let [(firstArg (r/firstExprUnit tailArgs))
+                       (pendingArgs (r/safeTail tailArgs))]
+                   (FrameMachine :frames (list-cons (fEval firstArg) (list-cons (fCall headTok calleeTy (list) pendingArgs (.-env fm)) restFrames))
                                  :values (.-values fm)
                                  :env (.-env fm)
-                                 :ret-type (.-ret-type fm)
-                                 :in-lambda (.-in-lambda fm)
+                                 :retType (.-retType fm)
+                                 :inLambda (.-inLambda fm)
                                  :scope (.-scope fm)
                                  :path (.-path fm)
                                  :mod (.-mod fm)
                                  :deps (.-deps fm)
                                  :state st1))))))))))))
 
-(df fm-call-step [(cname String) (cty ty/Type) (args-done (List ty/Type)) (args-pending (List rd/SExpr)) (cenv (Map String ty/Type)) (rest-frames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
-  (let [(pv (pop-value fm))
+(df fmCallStep [(cname String) (cty ty/Type) (argsDone (List ty/Type)) (argsPending (List rd/SExpr)) (cenv (Map String ty/Type)) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
+  (let [(pv (popValue fm))
         (val (.-first pv))
-        (rem-values (.-second pv))
-        (next-done (r/list-append-one args-done val))]
-    (if (list-empty? args-pending)
-      (let [(pruned-callee (u/apply-subst (.-subst (.-state fm)) cty))]
-        (mt pruned-callee
-          ((ty/ty-fun params ret)
-           (let [(st-unify (fold-expect-args next-done params cname (.-path fm) (.-state fm)))]
-             (FrameMachine :frames rest-frames
-                           :values (list-cons (u/apply-subst (.-subst st-unify) ret) rem-values)
+        (remValues (.-second pv))
+        (nextDone (r/listAppendOne argsDone val))]
+    (if (list-empty? argsPending)
+      (let [(prunedCallee (u/applySubst (.-subst (.-state fm)) cty))]
+        (mt prunedCallee
+          ((ty/tyFun params ret)
+           (let [(stUnify (foldExpectArgs nextDone params cname (.-path fm) (.-state fm)))]
+             (FrameMachine :frames restFrames
+                           :values (list-cons (u/applySubst (.-subst stUnify) ret) remValues)
                            :env (.-env fm)
-                           :ret-type (.-ret-type fm)
-                           :in-lambda (.-in-lambda fm)
+                           :retType (.-retType fm)
+                           :inLambda (.-inLambda fm)
                            :scope (.-scope fm)
                            :path (.-path fm)
                            :mod (.-mod fm)
                            :deps (.-deps fm)
-                           :state st-unify)))
+                           :state stUnify)))
           (_
-           (let [(f-res (fresh-var (.-state fm) "any"))]
-             (FrameMachine :frames rest-frames
-                           :values (list-cons (.-first f-res) rem-values)
+           (let [(fRes (freshVar (.-state fm) "any"))]
+             (FrameMachine :frames restFrames
+                           :values (list-cons (.-first fRes) remValues)
                            :env (.-env fm)
-                           :ret-type (.-ret-type fm)
-                           :in-lambda (.-in-lambda fm)
+                           :retType (.-retType fm)
+                           :inLambda (.-inLambda fm)
                            :scope (.-scope fm)
                            :path (.-path fm)
                            :mod (.-mod fm)
                            :deps (.-deps fm)
-                           :state (.-second f-res))))))
-      (let [(next-arg (r/first-expr-unit args-pending))
-            (rem-pending (r/safe-tail args-pending))]
-        (FrameMachine :frames (list-cons (f-eval next-arg) (list-cons (f-call cname cty next-done rem-pending cenv) rest-frames))
-                      :values rem-values
+                           :state (.-second fRes))))))
+      (let [(nextArg (r/firstExprUnit argsPending))
+            (remPending (r/safeTail argsPending))]
+        (FrameMachine :frames (list-cons (fEval nextArg) (list-cons (fCall cname cty nextDone remPending cenv) restFrames))
+                      :values remValues
                       :env (.-env fm)
-                      :ret-type (.-ret-type fm)
-                      :in-lambda (.-in-lambda fm)
+                      :retType (.-retType fm)
+                      :inLambda (.-inLambda fm)
                       :scope (.-scope fm)
                       :path (.-path fm)
                       :mod (.-mod fm)
                       :deps (.-deps fm)
                       :state (.-state fm))))))
 
-(df fold-expect-args [(args (List ty/Type)) (params (List ty/Type)) (cname String) (path String) (st InferState)] -> InferState
+(df foldExpectArgs [(args (List ty/Type)) (params (List ty/Type)) (cname String) (path String) (st InferState)] -> InferState
   (mt (list-head args)
     ((none) st)
     ((some a)
      (mt (list-head params)
        ((none) st)
        ((some p)
-        (let [(st1 (expect-type st a p (str "argument to " cname) path))]
-          (fold-expect-args (r/safe-tail args)
-                            (r/safe-tail params)
+        (let [(st1 (expectType st a p (str "argument to " cname) path))]
+          (foldExpectArgs (r/safeTail args)
+                            (r/safeTail params)
                             cname
                             path
                             st1)))))))
 
-(df fm-let-val-step [(bname String) (brest (List rd/SExpr)) (tails (List rd/SExpr)) (lenv (Map String ty/Type)) (rest-frames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
-  (let [(pv (pop-value fm))
+(df fmLetValStep [(bname String) (brest (List rd/SExpr)) (tails (List rd/SExpr)) (lenv (Map String ty/Type)) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
+  (let [(pv (popValue fm))
         (val (.-first pv))
-        (rem-values (.-second pv))
-        (next-env (map-set lenv bname val))]
+        (remValues (.-second pv))
+        (nextEnv (map-set lenv bname val))]
     (if (list-empty? brest)
-      (let [(last-e (last-expr-unit tails))]
-        (FrameMachine :frames (list-cons (f-eval last-e) rest-frames)
-                      :values rem-values
-                      :env next-env
-                      :ret-type (.-ret-type fm)
-                      :in-lambda (.-in-lambda fm)
+      (let [(lastE (lastExprUnit tails))]
+        (FrameMachine :frames (list-cons (fEval lastE) restFrames)
+                      :values remValues
+                      :env nextEnv
+                      :retType (.-retType fm)
+                      :inLambda (.-inLambda fm)
                       :scope (.-scope fm)
                       :path (.-path fm)
                       :mod (.-mod fm)
                       :deps (.-deps fm)
                       :state (.-state fm)))
-      (let [(next-b (r/first-expr-empty brest))
-            (rem-brest (r/safe-tail brest))
-            (bparts (mt next-b ((rd/sexpr-list bp) bp) ((rd/sexpr-vect bp) bp) (_ (list))))
-            (next-bname (r/first-head-ident bparts))
-            (next-bval (r/second-expr-empty bparts))]
-        (FrameMachine :frames (list-cons (f-eval next-bval) (list-cons (f-let-val next-bname rem-brest tails next-env) rest-frames))
-                      :values rem-values
-                      :env next-env
-                      :ret-type (.-ret-type fm)
-                      :in-lambda (.-in-lambda fm)
+      (let [(nextB (r/firstExprEmpty brest))
+            (remBrest (r/safeTail brest))
+            (bparts (mt nextB ((rd/sexprList bp) bp) ((rd/sexprVect bp) bp) (_ (list))))
+            (nextBname (r/firstHeadIdent bparts))
+            (nextBval (r/secondExprEmpty bparts))]
+        (FrameMachine :frames (list-cons (fEval nextBval) (list-cons (fLetVal nextBname remBrest tails nextEnv) restFrames))
+                      :values remValues
+                      :env nextEnv
+                      :retType (.-retType fm)
+                      :inLambda (.-inLambda fm)
                       :scope (.-scope fm)
                       :path (.-path fm)
                       :mod (.-mod fm)
                       :deps (.-deps fm)
                       :state (.-state fm))))))
 
-(df fm-if-cond-step [(then-e rd/SExpr) (else-e rd/SExpr) (ienv (Map String ty/Type)) (rest-frames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
-  (let [(pv (pop-value fm))
-        (cond-ty (.-first pv))
-        (rem-values (.-second pv))
-        (st1 (expect-type (.-state fm) cond-ty (ty/ty-con "Bool" (list) (none) (none)) "if condition" (.-path fm)))]
-    (FrameMachine :frames (list-cons (f-eval then-e) (list-cons (f-if-then else-e cond-ty ienv) rest-frames))
-                  :values rem-values
+(df fmIfCondStep [(thenE rd/SExpr) (elseE rd/SExpr) (ienv (Map String ty/Type)) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
+  (let [(pv (popValue fm))
+        (condTy (.-first pv))
+        (remValues (.-second pv))
+        (st1 (expectType (.-state fm) condTy (ty/tyCon "Bool" (list) (none) (none)) "if condition" (.-path fm)))]
+    (FrameMachine :frames (list-cons (fEval thenE) (list-cons (fIfThen elseE condTy ienv) restFrames))
+                  :values remValues
                   :env ienv
-                  :ret-type (.-ret-type fm)
-                  :in-lambda (.-in-lambda fm)
+                  :retType (.-retType fm)
+                  :inLambda (.-inLambda fm)
                   :scope (.-scope fm)
                   :path (.-path fm)
                   :mod (.-mod fm)
                   :deps (.-deps fm)
                   :state st1)))
 
-(df fm-if-then-step [(else-e rd/SExpr) (then-ty ty/Type) (ienv (Map String ty/Type)) (rest-frames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
-  (let [(pv (pop-value fm))
-        (actual-then (.-first pv))
-        (rem-values (.-second pv))
-        (else-res (eval-with-env fm else-e ienv (.-state fm)))
-        (else-ty (.-first else-res))
-        (st1 (expect-type (.-second else-res) else-ty actual-then "if branches" (.-path fm)))]
-    (FrameMachine :frames rest-frames
-                  :values (list-cons actual-then rem-values)
+(df fmIfThenStep [(elseE rd/SExpr) (thenTy ty/Type) (ienv (Map String ty/Type)) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
+  (let [(pv (popValue fm))
+        (actualThen (.-first pv))
+        (remValues (.-second pv))
+        (elseRes (evalWithEnv fm elseE ienv (.-state fm)))
+        (elseTy (.-first elseRes))
+        (st1 (expectType (.-second elseRes) elseTy actualThen "if branches" (.-path fm)))]
+    (FrameMachine :frames restFrames
+                  :values (list-cons actualThen remValues)
                   :env ienv
-                  :ret-type (.-ret-type fm)
-                  :in-lambda (.-in-lambda fm)
+                  :retType (.-retType fm)
+                  :inLambda (.-inLambda fm)
                   :scope (.-scope fm)
                   :path (.-path fm)
                   :mod (.-mod fm)
                   :deps (.-deps fm)
                   :state st1)))
 
-(df fm-try-step [(val-var ty/Type) (rest-frames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
-  (let [(pv (pop-value fm))
-        (inner-ty (.-first pv))
-        (rem-values (.-second pv))
-        (enclosing (mt (.-ret-type fm)
-                     ((some r) (u/apply-subst (.-subst (.-state fm)) r))
-                     ((none) (ty/ty-con "Result" (list val-var (unit-type)) (none) (none)))))
-        (err-ty (mt enclosing
-                  ((ty/ty-con _ rargs _ _)
-                   (mt (list-get rargs 1) ((some e) e) ((none) (unit-type))))
-                  (_ (unit-type))))
-        (want-res (ty/ty-con "Result" (list val-var err-ty) (none) (none)))
-        (st1 (expect-type (.-state fm) inner-ty want-res "try" (.-path fm)))]
-    (FrameMachine :frames rest-frames
-                  :values (list-cons val-var rem-values)
+(df fmTryStep [(valVar ty/Type) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
+  (let [(pv (popValue fm))
+        (innerTy (.-first pv))
+        (remValues (.-second pv))
+        (enclosing (mt (.-retType fm)
+                     ((some r) (u/applySubst (.-subst (.-state fm)) r))
+                     ((none) (ty/tyCon "Result" (list valVar (unitType)) (none) (none)))))
+        (errTy (mt enclosing
+                  ((ty/tyCon _ rargs _ _)
+                   (mt (list-get rargs 1) ((some e) e) ((none) (unitType))))
+                  (_ (unitType))))
+        (wantRes (ty/tyCon "Result" (list valVar errTy) (none) (none)))
+        (st1 (expectType (.-state fm) innerTy wantRes "try" (.-path fm)))]
+    (FrameMachine :frames restFrames
+                  :values (list-cons valVar remValues)
                   :env (.-env fm)
-                  :ret-type (.-ret-type fm)
-                  :in-lambda (.-in-lambda fm)
+                  :retType (.-retType fm)
+                  :inLambda (.-inLambda fm)
                   :scope (.-scope fm)
                   :path (.-path fm)
                   :mod (.-mod fm)
                   :deps (.-deps fm)
                   :state st1)))
 
-(df fm-run [(fm FrameMachine) (budget Int64)] -> FrameMachine
+(df fmRun [(fm FrameMachine) (budget Int64)] -> FrameMachine
   :d "Iterative doubling budget worklist execution loop."
-  (let [(next-fm (fold fm-tick fm (range 0 budget)))]
-    (if (list-empty? (.-frames next-fm))
-      next-fm
-      (fm-run next-fm (* budget 2)))))
+  (let [(nextFm (fold fmTick fm (range 0 budget)))]
+    (if (list-empty? (.-frames nextFm))
+      nextFm
+      (fmRun nextFm (* budget 2)))))
 
-(df run-expr-direct [(expr rd/SExpr) (env (Map String ty/Type)) (ret-type (Option ty/Type)) (in-lambda Bool) (scope String) (path String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair ty/Type InferState)
-  (let [(init-fm (FrameMachine :frames (list (f-eval expr))
+(df runExprDirect [(expr rd/SExpr) (env (Map String ty/Type)) (retType (Option ty/Type)) (inLambda Bool) (scope String) (path String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair ty/Type InferState)
+  (let [(initFm (FrameMachine :frames (list (fEval expr))
                                :values (list)
                                :env env
-                               :ret-type ret-type
-                               :in-lambda in-lambda
+                               :retType retType
+                               :inLambda inLambda
                                :scope scope
                                :path path
                                :mod mod
                                :deps deps
                                :state st))]
-    (let [(final-fm (fm-run init-fm 64))]
-      (let [(out-ty (mt (list-head (.-values final-fm))
+    (let [(finalFm (fmRun initFm 64))]
+      (let [(outTy (mt (list-head (.-values finalFm))
                       ((some t) t)
-                      ((none) (unit-type))))
-            (st-noted (note-map-type (.-state final-fm) out-ty scope))]
-        (pair out-ty st-noted)))))
+                      ((none) (unitType))))
+            (stNoted (noteMapType (.-state finalFm) outTy scope))]
+        (pair outTy stNoted)))))
 
-(df eval-with-env [(fm FrameMachine) (e rd/SExpr) (env (Map String ty/Type)) (st InferState)] -> (Pair ty/Type InferState)
-  (run-expr-direct e env (.-ret-type fm) (.-in-lambda fm) (.-scope fm) (.-path fm) (.-mod fm) (.-deps fm) st))
+(df evalWithEnv [(fm FrameMachine) (e rd/SExpr) (env (Map String ty/Type)) (st InferState)] -> (Pair ty/Type InferState)
+  (runExprDirect e env (.-retType fm) (.-inLambda fm) (.-scope fm) (.-path fm) (.-mod fm) (.-deps fm) st))
 
-(df eval-fm [(fm FrameMachine) (e rd/SExpr) (st InferState)] -> (Pair ty/Type InferState)
-  (eval-with-env fm e (.-env fm) st))
+(df evalFm [(fm FrameMachine) (e rd/SExpr) (st InferState)] -> (Pair ty/Type InferState)
+  (evalWithEnv fm e (.-env fm) st))
 
-(df check-undetermined-lambdas [(lambdas (List (Pair (List ty/Type) ty/Type))) (subst (Map Int64 ty/Type)) (path String) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
+(df checkUndeterminedLambdas [(lambdas (List (Pair (List ty/Type) ty/Type))) (subst (Map Int64 ty/Type)) (path String) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
   (fold (fn [(a (List ty/Diagnostic)) (lam (Pair (List ty/Type) ty/Type))] -> (List ty/Diagnostic)
           (let [(params (.-first lam))
                 (ret (.-second lam))
-                (all-tys (list-cons ret params))
-                (has-unbound (fold (fn [(acc-u Bool) (t ty/Type)] -> Bool
-                                     (or acc-u
-                                         (let [(pruned (u/apply-subst subst t))]
+                (allTys (list-cons ret params))
+                (hasUnbound (fold (fn [(accU Bool) (t ty/Type)] -> Bool
+                                     (or accU
+                                         (let [(pruned (u/applySubst subst t))]
                                            (mt pruned
-                                             ((ty/ty-var _ _) true)
+                                             ((ty/tyVar _ _) true)
                                              (_ false)))))
                                    false
-                                   all-tys))]
-            (if has-unbound
+                                   allTys))]
+            (if hasUnbound
               (list-cons (ty/Diagnostic :code "annotation" :message "nothing in this position determines the lambda's types; write them" :line 1 :col 1 :path path) a)
               a)))
         acc
         lambdas))
 
-(df check-literal-ranges [(int-sites (List (Pair String Int64))) (subst (Map Int64 ty/Type)) (path String) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
+(df checkLiteralRanges [(intSites (List (Pair String Int64))) (subst (Map Int64 ty/Type)) (path String) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
   (fold (fn [(a (List ty/Diagnostic)) (site (Pair String Int64))] -> (List ty/Diagnostic)
-          (let [(tok-str (.-first site))
+          (let [(tokStr (.-first site))
                 (vid (.-second site))
-                (wty (u/apply-subst subst (ty/ty-var vid "int")))
+                (wty (u/applySubst subst (ty/tyVar vid "int")))
                 (tname (mt wty
-                         ((ty/ty-con n _ _ _) n)
+                         ((ty/tyCon n _ _ _) n)
                          (_ "Int64")))]
-            (mt (ty/int-range-bounds tname)
+            (mt (ty/intRangeBounds tname)
               ((none) a)
               ((some b)
                (let [(low (.-first b))
                      (high (.-second b))
-                     (num-opt (string-to-int64 tok-str))
-                     (bad-lit? (mt num-opt ((none) true) ((some n) (or (< n low) (> n high)))))]
-                 (if bad-lit?
-                   (list-cons (ty/Diagnostic :code "literal-range" :message (str "the literal " tok-str " does not fit " tname " (" (string-from-int64 low) ".." (string-from-int64 high) ")") :line 1 :col 1 :path path) a)
+                     (numOpt (string-to-int64 tokStr))
+                     (badLit? (mt numOpt ((none) true) ((some n) (or (< n low) (> n high)))))]
+                 (if badLit?
+                   (list-cons (ty/Diagnostic :code "literal-range" :message (str "the literal " tokStr " does not fit " tname " (" (string-from-int64 low) ".." (string-from-int64 high) ")") :line 1 :col 1 :path path) a)
                    a))))))
         acc
-        int-sites))
+        intSites))
 
-(df map-has-key? [(m (Map String Bool)) (k String)] -> Bool
+(df mapHasKey? [(m (Map String Bool)) (k String)] -> Bool
   (mt (map-get m k)
     ((some _) true)
     ((none) false)))
 
-(df extract-map-keys-list [(types (List ty/Type)) (subst (Map Int64 ty/Type))] -> (List ty/Type)
+(df extractMapKeysList [(types (List ty/Type)) (subst (Map Int64 ty/Type))] -> (List ty/Type)
   (fold (fn [(acc (List ty/Type)) (t ty/Type)] -> (List ty/Type)
-          (list-append (extract-map-keys t subst) acc))
+          (list-append (extractMapKeys t subst) acc))
         (list)
         types))
 
-(df extract-map-keys [(t ty/Type) (subst (Map Int64 ty/Type))] -> (List ty/Type)
-  (let [(pruned (u/apply-subst subst t))]
+(df extractMapKeys [(t ty/Type) (subst (Map Int64 ty/Type))] -> (List ty/Type)
+  (let [(pruned (u/applySubst subst t))]
     (mt pruned
-      ((ty/ty-con name args _ _)
-       (let [(sub-keys (extract-map-keys-list args subst))]
+      ((ty/tyCon name args _ _)
+       (let [(subKeys (extractMapKeysList args subst))]
          (if (and (= name "Map") (>= (list-length args) 1))
-           (list-cons (mt (list-head args) ((some k) k) ((none) pruned)) sub-keys)
-           sub-keys)))
-      ((ty/ty-fun params ret)
-       (list-append (extract-map-keys ret subst) (extract-map-keys-list params subst)))
-      ((ty/ty-var _ _) (list)))))
+           (list-cons (mt (list-head args) ((some k) k) ((none) pruned)) subKeys)
+           subKeys)))
+      ((ty/tyFun params ret)
+       (list-append (extractMapKeys ret subst) (extractMapKeysList params subst)))
+      ((ty/tyVar _ _) (list)))))
 
-(df check-type-unordered [(t ty/Type) (subst (Map Int64 ty/Type)) (visited (Map String Bool)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Option String)
-  (let [(pruned (u/apply-subst subst t))]
+(df checkTypeUnordered [(t ty/Type) (subst (Map Int64 ty/Type)) (visited (Map String Bool)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Option String)
+  (let [(pruned (u/applySubst subst t))]
     (mt pruned
-      ((ty/ty-var _ _) (none))
-      ((ty/ty-fun _ _) (none))
-      ((ty/ty-con name args opt-mod _)
-       (if (ty/unordered-type? name)
+      ((ty/tyVar _ _) (none))
+      ((ty/tyFun _ _) (none))
+      ((ty/tyCon name args optMod _)
+       (if (ty/unorderedType? name)
          (some name)
-         (let [(bad-arg (fold (fn [(acc (Option String)) (a ty/Type)] -> (Option String)
+         (let [(badArg (fold (fn [(acc (Option String)) (a ty/Type)] -> (Option String)
                                 (mt acc
                                   ((some _) acc)
-                                  ((none) (check-type-unordered a subst visited mod deps))))
+                                  ((none) (checkTypeUnordered a subst visited mod deps))))
                               (none)
                               args))]
-           (mt bad-arg
+           (mt badArg
              ((some b) (some b))
              ((none)
-              (let [(type-key (str (mt opt-mod ((some m) m) ((none) (.-name mod))) "/" name))]
-                (if (map-has-key? visited type-key)
+              (let [(typeKey (str (mt optMod ((some m) m) ((none) (.-name mod))) "/" name))]
+                (if (mapHasKey? visited typeKey)
                   (none)
-                  (let [(next-vis (map-set visited type-key true))
-                        (target-mod (mt opt-mod
+                  (let [(nextVis (map-set visited typeKey true))
+                        (targetMod (mt optMod
                                       ((some m)
                                         (if (= m (.-name mod))
                                           (some mod)
-                                          (mt (r/mod-import mod m)
+                                          (mt (r/modImport mod m)
                                             ((some mpath) (map-get deps mpath))
                                             ((none) (map-get deps m)))))
                                        ((none) (some mod))))]
-                    (mt target-mod
+                    (mt targetMod
                       ((none) (none))
                       ((some tmod)
-                       (mt (r/mod-schema tmod name)
+                       (mt (r/modSchema tmod name)
                          ((some ssum)
                           (fold (fn [(acc (Option String)) (f r/FieldSummary)] -> (Option String)
                                   (mt acc
                                     ((some _) acc)
                                     ((none)
-                                     (let [(fty (ty/parse-type-str (.-type f) (list)))]
-                                       (check-type-unordered fty subst next-vis tmod deps)))))
+                                     (let [(fty (ty/parseTypeStr (.-type f) (list)))]
+                                       (checkTypeUnordered fty subst nextVis tmod deps)))))
                                 (none)
                                 (.-fields ssum)))
                          ((none)
-                          (mt (r/mod-enum tmod name)
+                          (mt (r/modEnum tmod name)
                             ((some esum)
                              (fold (fn [(acc (Option String)) (c r/CaseSummary)] -> (Option String)
                                      (mt acc
@@ -1057,24 +1057,24 @@
                                                 (mt cacc
                                                   ((some _) cacc)
                                                   ((none)
-                                                   (let [(pty (qualify-type-with-mod (ty/parse-type-str (.-second p) (list)) mod deps))]
-                                                     (check-type-unordered pty subst next-vis tmod deps)))))
+                                                   (let [(pty (qualifyTypeWithMod (ty/parseTypeStr (.-second p) (list)) mod deps))]
+                                                     (checkTypeUnordered pty subst nextVis tmod deps)))))
                                               acc
                                               (.-params c)))))
                                    (none)
                                    (.-cases esum)))
                             ((none) (none))))))))))))))))))
 
-(df check-map-key-rules [(map-sites (List (Pair ty/Type String))) (subst (Map Int64 ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (path String) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
+(df checkMapKeyRules [(mapSites (List (Pair ty/Type String))) (subst (Map Int64 ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (path String) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
   (fold (fn [(a (List ty/Diagnostic)) (site (Pair ty/Type String))] -> (List ty/Diagnostic)
-          (let [(ty-site (.-first site))
-                (scope-lbl (.-second site))
-                (mkeys (extract-map-keys ty-site subst))]
+          (let [(tySite (.-first site))
+                (scopeLbl (.-second site))
+                (mkeys (extractMapKeys tySite subst))]
             (fold (fn [(ka (List ty/Diagnostic)) (k ty/Type)] -> (List ty/Diagnostic)
-                    (mt (check-type-unordered k subst (map-empty) mod deps)
+                    (mt (checkTypeUnordered k subst (map-empty) mod deps)
                       ((none) ka)
                       ((some bad)
-                       (let [(shown (ty/show-type k))
+                       (let [(shown (ty/showType k))
                              (msg (if (= shown bad)
                                     (str shown " as a Map key has no total order; map-keys is specified to return keys sorted")
                                     (str "the Map key " shown " reaches " bad ", which has no total order; map-keys is specified to return keys sorted")))]
@@ -1082,72 +1082,72 @@
                   a
                   mkeys)))
         acc
-        map-sites))
+        mapSites))
 
-(df check-module [(forms (List a/TopForm)) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
+(df checkModule [(forms (List a/TopForm)) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
   :d "Purely functional semantic type checker for an AST module."
-  (let [(summary (r/collect-summary forms path))
-        (p12-diags (r/resolve-module summary forms deps))]
-    (if (not (list-empty? p12-diags))
-      p12-diags
-      (let [(defun-diags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic)
+  (let [(summary (r/collectSummary forms path))
+        (p12Diags (r/resolveModule summary forms deps))]
+    (if (not (list-empty? p12Diags))
+      p12Diags
+      (let [(defunDiags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic)
                                  (mt form
-                                   ((a/top-defun d)
-                                    (let [(st0 (make-infer-state))
+                                   ((a/topDefun d)
+                                    (let [(st0 (makeInferState))
                                           (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type)
-                                                        (map-set e (.-name p) (qualify-type-with-mod (ty/parse-type-str (.-type p) (list)) summary deps)))
+                                                        (map-set e (.-name p) (qualifyTypeWithMod (ty/parseTypeStr (.-type p) (list)) summary deps)))
                                                       (map-empty)
                                                       (.-params d)))
-                                          (ret-ty (qualify-type-with-mod (ty/parse-type-str (.-ret-type d) (list)) summary deps))
-                                          (scope-name (str "function " (.-name d)))
-                                          (st-params (fold (fn [(s InferState) (p a/Param)] -> InferState
-                                                             (note-map-type s (qualify-type-with-mod (ty/parse-type-str (.-type p) (list)) summary deps) scope-name))
+                                          (retTy (qualifyTypeWithMod (ty/parseTypeStr (.-retType d) (list)) summary deps))
+                                          (scopeName (str "function " (.-name d)))
+                                          (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState
+                                                             (noteMapType s (qualifyTypeWithMod (ty/parseTypeStr (.-type p) (list)) summary deps) scopeName))
                                                            st0
                                                            (.-params d)))
-                                          (st-note (note-map-type st-params ret-ty scope-name))
-                                          (body-nodes (.-body d))]
-                                      (if (list-empty? body-nodes)
+                                          (stNote (noteMapType stParams retTy scopeName))
+                                          (bodyNodes (.-body d))]
+                                      (if (list-empty? bodyNodes)
                                         acc
-                                        (let [(last-e (last-expr-unit body-nodes))
-                                              (res (run-expr-direct last-e env0 (some ret-ty) false scope-name path summary deps st-note))
-                                              (last-ty (.-first res))
+                                        (let [(lastE (lastExprUnit bodyNodes))
+                                              (res (runExprDirect lastE env0 (some retTy) false scopeName path summary deps stNote))
+                                              (lastTy (.-first res))
                                               (st1 (.-second res))
-                                              (st2 (expect-type st1 last-ty ret-ty (str "return of " (.-name d)) path))
-                                              (st3-subst (.-subst st2))
-                                              (d-lam (check-undetermined-lambdas (.-lambdas st2) st3-subst path (.-diags st2)))
-                                              (d-lit (check-literal-ranges (.-int-sites st2) st3-subst path d-lam))
-                                              (d-map (check-map-key-rules (.-map-sites st2) st3-subst summary deps path d-lit))]
-                                          (list-append d-map acc)))))
+                                              (st2 (expectType st1 lastTy retTy (str "return of " (.-name d)) path))
+                                              (st3Subst (.-subst st2))
+                                              (dLam (checkUndeterminedLambdas (.-lambdas st2) st3Subst path (.-diags st2)))
+                                              (dLit (checkLiteralRanges (.-intSites st2) st3Subst path dLam))
+                                              (dMap (checkMapKeyRules (.-mapSites st2) st3Subst summary deps path dLit))]
+                                          (list-append dMap acc)))))
                                    (_ acc)))
                                (list)
                                forms))]
-        defun-diags))))
+        defunDiags))))
 
-(df parse-err-diag [(pe a/ParseError) (path String)] -> (List ty/Diagnostic)
+(df parseErrDiag [(pe a/ParseError) (path String)] -> (List ty/Diagnostic)
   (list (ty/Diagnostic :code "parse" :message (.-msg pe) :line (.-line pe) :col (.-col pe) :path path)))
 
-(df check-source [(src String) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
+(df checkSource [(src String) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
   :d "Parses and semantically checks an AgentScript source string."
   (mt (a/parse src)
-    ((ok forms) (check-module forms deps path))
-    ((err pe) (parse-err-diag pe path))))
+    ((ok forms) (checkModule forms deps path))
+    ((err pe) (parseErrDiag pe path))))
 
-(df ! check-file! [(path String) (roots (List String))] -> (Result (List ty/Diagnostic) IoError)
+(df ! checkFile! [(path String) (roots (List String))] -> (Result (List ty/Diagnostic) IoError)
   :d "Effectful entry point: loads source and dependencies from filesystem and checks."
   (let [(src (try (file-read path)))]
     (mt (a/parse src)
-      ((err pe) (ok (parse-err-diag pe path)))
+      ((err pe) (ok (parseErrDiag pe path)))
       ((ok forms)
-       (let [(summary (r/collect-summary forms path))
-             (import-paths (r/map-values-list (.-imports summary)))
-             (all-roots (list-cons (mt (parent-dir path) ((some p) p) ((none) ".")) roots))
-             (deps (try (r/load-module-deps! all-roots import-paths)))]
-         (ok (check-module forms deps path)))))))
+       (let [(summary (r/collectSummary forms path))
+             (importPaths (r/mapValuesList (.-imports summary)))
+             (allRoots (list-cons (mt (parentDir path) ((some p) p) ((none) ".")) roots))
+             (deps (try (r/loadModuleDeps! allRoots importPaths)))]
+         (ok (checkModule forms deps path)))))))
 
-(df parent-dir [(p String)] -> (Option String)
+(df parentDir [(p String)] -> (Option String)
   (if (string-contains? p "/")
     (let [(parts (string-split p "/"))
-          (segs (list-reverse (r/safe-tail (list-reverse parts))))]
+          (segs (list-reverse (r/safeTail (list-reverse parts))))]
       (if (list-empty? segs)
         (some ".")
         (some (string-join segs "/"))))

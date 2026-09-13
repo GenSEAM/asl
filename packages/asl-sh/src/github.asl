@@ -3,14 +3,14 @@
   :x [GitHubPrSummary
       GitHubIssue
       GitHubCiCheck
-      github-pr-parse
-      github-issue-parse
-      github-diff-compact
-      github-ci-parse
-      github-ci-rollup
-      github-prs-format
-      github-issues-format
-      github-ci-format])
+      githubPrParse
+      githubIssueParse
+      githubDiffCompact
+      githubCiParse
+      githubCiRollup
+      githubPrsFormat
+      githubIssuesFormat
+      githubCiFormat])
 
 (dfs GitHubPrSummary
   (:f number Int64 "Pull request number")
@@ -30,21 +30,21 @@
   (:f state String "Issue state: OPEN, CLOSED")
   (:f labels (List String) "List of issue label names")
   (:f assignees (List String) "List of assignee login handles")
-  (:f comments-count Int64 "Total number of comments on the issue")
+  (:f commentsCount Int64 "Total number of comments on the issue")
   (:f body String "Issue description body markdown"))
 
 (dfs GitHubCiCheck
   (:f name String "Check or workflow job name")
   (:f status String "Check execution status: COMPLETED, IN_PROGRESS, QUEUED")
   (:f conclusion String "Check conclusion: SUCCESS, FAILURE, NEUTRAL, CANCELLED")
-  (:f target-url String "URL pointing to check run details"))
+  (:f targetUrl String "URL pointing to check run details"))
 
 (dfs ObjScanState
   (:f objects (List String) "Accumulated completed JSON objects in reverse order")
-  (:f start-idx Int64 "Start character index of current object")
-  (:f cur-idx Int64 "Current character index in scan")
+  (:f startIdx Int64 "Start character index of current object")
+  (:f curIdx Int64 "Current character index in scan")
   (:f depth Int64 "Brace nesting depth")
-  (:f in-str Bool "True if inside double quoted string")
+  (:f inStr Bool "True if inside double quoted string")
   (:f esc Bool "True if previous character was escape backslash"))
 
 (dfs QuoteScanState
@@ -76,122 +76,122 @@
 
 (dfs DiffScanState
   (:f files (List CompactFile) "Completed files in reverse order")
-  (:f cur-path String "Current file path")
-  (:f cur-adds Int64 "Current file additions count")
-  (:f cur-dels Int64 "Current file deletions count")
-  (:f cur-hunks (List CompactHunk) "Current file hunks in reverse order")
-  (:f cur-range String "Current hunk range")
-  (:f cur-deltas (List String) "Current hunk delta lines in reverse order")
-  (:f in-hunk Bool "True if currently inside a hunk")
-  (:f in-file Bool "True if currently inside a file"))
+  (:f curPath String "Current file path")
+  (:f curAdds Int64 "Current file additions count")
+  (:f curDels Int64 "Current file deletions count")
+  (:f curHunks (List CompactHunk) "Current file hunks in reverse order")
+  (:f curRange String "Current hunk range")
+  (:f curDeltas (List String) "Current hunk delta lines in reverse order")
+  (:f inHunk Bool "True if currently inside a hunk")
+  (:f inFile Bool "True if currently inside a file"))
 
-(df split-json-objects [(text String)] -> (List String)
+(df splitJsonObjects [(text String)] -> (List String)
   :d "Splits a JSON string containing an array of objects or a single object into individual object strings."
   (let [(trimmed (string-trim text))]
     (if (or (string-empty? trimmed) (or (= trimmed "[]") (= trimmed "{}")))
         (list)
         (let [(chars (string-chars trimmed))
-              (init-st (ObjScanState
+              (initSt (ObjScanState
                          :objects (list)
-                         :start-idx 0
-                         :cur-idx 0
+                         :startIdx 0
+                         :curIdx 0
                          :depth 0
-                         :in-str false
+                         :inStr false
                          :esc false))
-              (final-st (fold (fn [(st ObjScanState) (c String)] -> ObjScanState
-                                (let [(cur (.-cur-idx st))
-                                      (next-idx (+ cur 1))]
+              (finalSt (fold (fn [(st ObjScanState) (c String)] -> ObjScanState
+                                (let [(cur (.-curIdx st))
+                                      (nextIdx (+ cur 1))]
                                   (cond
                                     ((.-esc st)
                                      (ObjScanState
                                        :objects (.-objects st)
-                                       :start-idx (.-start-idx st)
-                                       :cur-idx next-idx
+                                       :startIdx (.-startIdx st)
+                                       :curIdx nextIdx
                                        :depth (.-depth st)
-                                       :in-str (.-in-str st)
+                                       :inStr (.-inStr st)
                                        :esc false))
                                     ((= c "\\")
                                      (ObjScanState
                                        :objects (.-objects st)
-                                       :start-idx (.-start-idx st)
-                                       :cur-idx next-idx
+                                       :startIdx (.-startIdx st)
+                                       :curIdx nextIdx
                                        :depth (.-depth st)
-                                       :in-str (.-in-str st)
-                                       :esc (.-in-str st)))
+                                       :inStr (.-inStr st)
+                                       :esc (.-inStr st)))
                                     ((= c "\"")
                                      (ObjScanState
                                        :objects (.-objects st)
-                                       :start-idx (.-start-idx st)
-                                       :cur-idx next-idx
+                                       :startIdx (.-startIdx st)
+                                       :curIdx nextIdx
                                        :depth (.-depth st)
-                                       :in-str (not (.-in-str st))
+                                       :inStr (not (.-inStr st))
                                        :esc false))
-                                    ((.-in-str st)
+                                    ((.-inStr st)
                                      (ObjScanState
                                        :objects (.-objects st)
-                                       :start-idx (.-start-idx st)
-                                       :cur-idx next-idx
+                                       :startIdx (.-startIdx st)
+                                       :curIdx nextIdx
                                        :depth (.-depth st)
-                                       :in-str true
+                                       :inStr true
                                        :esc false))
                                     ((= c "{")
                                      (let [(d (+ (.-depth st) 1))
-                                           (s-idx (if (= (.-depth st) 0) cur (.-start-idx st)))]
+                                           (sIdx (if (= (.-depth st) 0) cur (.-startIdx st)))]
                                        (ObjScanState
                                          :objects (.-objects st)
-                                         :start-idx s-idx
-                                         :cur-idx next-idx
+                                         :startIdx sIdx
+                                         :curIdx nextIdx
                                          :depth d
-                                         :in-str false
+                                         :inStr false
                                          :esc false)))
                                     ((= c "}")
                                      (let [(d (- (.-depth st) 1))]
                                        (if (= d 0)
-                                           (let [(obj-str (option-or (string-slice trimmed (.-start-idx st) next-idx) ""))]
+                                           (let [(objStr (option-or (string-slice trimmed (.-startIdx st) nextIdx) ""))]
                                              (ObjScanState
-                                               :objects (list-cons obj-str (.-objects st))
-                                               :start-idx 0
-                                               :cur-idx next-idx
+                                               :objects (list-cons objStr (.-objects st))
+                                               :startIdx 0
+                                               :curIdx nextIdx
                                                :depth 0
-                                               :in-str false
+                                               :inStr false
                                                :esc false))
                                            (ObjScanState
                                              :objects (.-objects st)
-                                             :start-idx (.-start-idx st)
-                                             :cur-idx next-idx
+                                             :startIdx (.-startIdx st)
+                                             :curIdx nextIdx
                                              :depth d
-                                             :in-str false
+                                             :inStr false
                                              :esc false))))
                                     (:else
                                      (ObjScanState
                                        :objects (.-objects st)
-                                       :start-idx (.-start-idx st)
-                                       :cur-idx next-idx
+                                       :startIdx (.-startIdx st)
+                                       :curIdx nextIdx
                                        :depth (.-depth st)
-                                       :in-str false
+                                       :inStr false
                                        :esc false)))))
-                              init-st
+                              initSt
                               chars))]
-          (if (= (.-depth final-st) 0)
-              (list-reverse (.-objects final-st))
+          (if (= (.-depth finalSt) 0)
+              (list-reverse (.-objects finalSt))
               (list))))))
 
-(df json-find-key-tail [(obj String) (key String)] -> String
+(df jsonFindKeyTail [(obj String) (key String)] -> String
   :d "Finds the substring immediately following the colon for a specified JSON key."
   (let [(needle (str "\"" key "\""))]
     (mt (string-index-of obj needle)
       ((none) "")
       ((some idx)
-       (let [(tail-pos (+ idx (string-length needle)))
-             (tail (option-or (string-slice obj tail-pos (string-length obj)) ""))]
+       (let [(tailPos (+ idx (string-length needle)))
+             (tail (option-or (string-slice obj tailPos (string-length obj)) ""))]
          (mt (string-index-of tail ":")
            ((none) "")
-           ((some c-idx)
-            (option-or (string-slice tail (+ c-idx 1) (string-length tail)) ""))))))))
+           ((some cIdx)
+            (option-or (string-slice tail (+ cIdx 1) (string-length tail)) ""))))))))
 
-(df find-unescaped-quote [(chars (List String))] -> (Option Int64)
+(df findUnescapedQuote [(chars (List String))] -> (Option Int64)
   :d "Finds the first unescaped double quote character index in a list of characters."
-  (let [(final-st (fold (fn [(st QuoteScanState) (c String)] -> QuoteScanState
+  (let [(finalSt (fold (fn [(st QuoteScanState) (c String)] -> QuoteScanState
                           (mt (.-found st)
                             ((some _) st)
                             ((none)
@@ -206,22 +206,22 @@
                                            (QuoteScanState :found (none) :idx next :esc false))))))))
                         (QuoteScanState :found (none) :idx 0 :esc false)
                         chars))]
-    (.-found final-st)))
+    (.-found finalSt)))
 
-(df json-extract-str [(obj String) (key String)] -> String
+(df jsonExtractStr [(obj String) (key String)] -> String
   :d "Extracts a string property value by key from a JSON object string."
-  (let [(tail (string-trim (json-find-key-tail obj key)))]
+  (let [(tail (string-trim (jsonFindKeyTail obj key)))]
     (if (string-starts-with? tail "\"")
         (let [(inner (option-or (string-slice tail 1 (string-length tail)) ""))
               (chars (string-chars inner))]
-          (mt (find-unescaped-quote chars)
-            ((some q-idx)
-             (let [(raw-val (option-or (string-slice inner 0 q-idx) ""))]
-               (string-replace (string-replace raw-val "\\\"" "\"") "\\n" "\n")))
+          (mt (findUnescapedQuote chars)
+            ((some qIdx)
+             (let [(rawVal (option-or (string-slice inner 0 qIdx) ""))]
+               (string-replace (string-replace rawVal "\\\"" "\"") "\\n" "\n")))
             ((none) "")))
         "")))
 
-(df is-digit-char? [(c String)] -> Bool
+(df isDigitChar? [(c String)] -> Bool
   :d "Returns true if character is a digit or minus sign."
   (or (= c "0")
       (or (= c "1")
@@ -235,72 +235,72 @@
                                       (or (= c "9")
                                           (= c "-"))))))))))))
 
-(df extract-digits [(chars (List String))] -> String
+(df extractDigits [(chars (List String))] -> String
   :d "Extracts leading digit sequence from character list."
-  (let [(final-st (fold (fn [(st DigitScanState) (c String)] -> DigitScanState
+  (let [(finalSt (fold (fn [(st DigitScanState) (c String)] -> DigitScanState
                           (if (.-done st)
                               st
-                              (if (is-digit-char? c)
+                              (if (isDigitChar? c)
                                   (DigitScanState :digits (list-cons c (.-digits st)) :done false)
                                   (DigitScanState :digits (.-digits st) :done true))))
                         (DigitScanState :digits (list) :done false)
                         chars))]
-    (string-join (list-reverse (.-digits final-st)) "")))
+    (string-join (list-reverse (.-digits finalSt)) "")))
 
-(df json-extract-int [(obj String) (key String)] -> Int64
+(df jsonExtractInt [(obj String) (key String)] -> Int64
   :d "Extracts an integer property value by key from a JSON object string."
-  (let [(tail (string-trim (json-find-key-tail obj key)))]
+  (let [(tail (string-trim (jsonFindKeyTail obj key)))]
     (if (string-empty? tail)
         0
         (let [(chars (string-chars tail))
-              (digits (extract-digits chars))]
+              (digits (extractDigits chars))]
           (if (string-empty? digits)
               0
               (option-or (string-to-int64 digits) 0))))))
 
-(df json-extract-author [(obj String)] -> String
+(df jsonExtractAuthor [(obj String)] -> String
   :d "Extracts author login handle from JSON object supporting nested author or user objects."
-  (let [(tail (string-trim (json-find-key-tail obj "author")))]
+  (let [(tail (string-trim (jsonFindKeyTail obj "author")))]
     (if (string-starts-with? tail "{")
-        (let [(login (json-extract-str tail "login"))]
+        (let [(login (jsonExtractStr tail "login"))]
           (if (string-empty? login)
-              (json-extract-str tail "name")
+              (jsonExtractStr tail "name")
               login))
         (if (string-starts-with? tail "\"")
-            (json-extract-str obj "author")
-            (let [(user-tail (string-trim (json-find-key-tail obj "user")))]
-              (if (string-starts-with? user-tail "{")
-                  (json-extract-str user-tail "login")
-                  (if (string-starts-with? user-tail "\"")
-                      (json-extract-str obj "user")
+            (jsonExtractStr obj "author")
+            (let [(userTail (string-trim (jsonFindKeyTail obj "user")))]
+              (if (string-starts-with? userTail "{")
+                  (jsonExtractStr userTail "login")
+                  (if (string-starts-with? userTail "\"")
+                      (jsonExtractStr obj "user")
                       "")))))))
 
-(df json-extract-ref [(obj String) (ref-key String) (fallback-key String)] -> String
+(df jsonExtractRef [(obj String) (refKey String) (fallbackKey String)] -> String
   :d "Extracts branch reference name with fallback to nested branch ref object."
-  (let [(v1 (json-extract-str obj ref-key))]
+  (let [(v1 (jsonExtractStr obj refKey))]
     (if (not (string-empty? v1))
         v1
-        (let [(tail (string-trim (json-find-key-tail obj fallback-key)))]
+        (let [(tail (string-trim (jsonFindKeyTail obj fallbackKey)))]
           (if (string-starts-with? tail "{")
-              (json-extract-str tail "ref")
+              (jsonExtractStr tail "ref")
               (if (string-starts-with? tail "\"")
-                  (json-extract-str obj fallback-key)
+                  (jsonExtractStr obj fallbackKey)
                   ""))))))
 
-(df extract-labels-from-array-inner [(inner String)] -> (List String)
+(df extractLabelsFromArrayInner [(inner String)] -> (List String)
   :d "Extracts label name strings from inside a labels JSON array block."
   (if (string-contains? inner "\"name\"")
       (let [(parts (string-split inner "\"name\""))
-            (labels-rev (fold (fn [(acc (List String)) (part String)] -> (List String)
+            (labelsRev (fold (fn [(acc (List String)) (part String)] -> (List String)
                                 (let [(tail (string-trim part))]
                                   (mt (string-index-of tail ":")
                                     ((none) acc)
-                                    ((some c-idx)
-                                     (let [(after-colon (string-trim (option-or (string-slice tail (+ c-idx 1) (string-length tail)) "")))]
-                                       (if (string-starts-with? after-colon "\"")
-                                           (let [(raw (option-or (string-slice after-colon 1 (string-length after-colon)) ""))
-                                                 (q-idx (string-index-of raw "\""))]
-                                             (mt q-idx
+                                    ((some cIdx)
+                                     (let [(afterColon (string-trim (option-or (string-slice tail (+ cIdx 1) (string-length tail)) "")))]
+                                       (if (string-starts-with? afterColon "\"")
+                                           (let [(raw (option-or (string-slice afterColon 1 (string-length afterColon)) ""))
+                                                 (qIdx (string-index-of raw "\""))]
+                                             (mt qIdx
                                                ((some idx)
                                                 (let [(label (option-or (string-slice raw 0 idx) ""))]
                                                   (if (string-empty? label) acc (list-cons label acc))))
@@ -308,9 +308,9 @@
                                            acc))))))
                               (list)
                               parts))]
-        (list-reverse labels-rev))
+        (list-reverse labelsRev))
       (let [(parts (string-split inner "\""))
-            (labels-rev (fold (fn [(acc LabelsScanState) (part String)] -> LabelsScanState
+            (labelsRev (fold (fn [(acc LabelsScanState) (part String)] -> LabelsScanState
                                 (let [(idx (.-idx acc))
                                       (lst (.-labels acc))]
                                   (if (= (mod idx 2) 1)
@@ -321,34 +321,34 @@
                                       (LabelsScanState :idx (+ idx 1) :labels lst))))
                               (LabelsScanState :idx 0 :labels (list))
                               parts))]
-        (list-reverse (.-labels labels-rev)))))
+        (list-reverse (.-labels labelsRev)))))
 
-(df json-extract-labels [(obj String)] -> (List String)
+(df jsonExtractLabels [(obj String)] -> (List String)
   :d "Extracts list of label names from a JSON object."
-  (let [(tail (string-trim (json-find-key-tail obj "labels")))]
+  (let [(tail (string-trim (jsonFindKeyTail obj "labels")))]
     (if (string-starts-with? tail "[")
-        (let [(after-bracket (option-or (string-slice tail 1 (string-length tail)) ""))]
-          (mt (string-index-of after-bracket "]")
-            ((some end-idx)
-             (let [(inner (option-or (string-slice after-bracket 0 end-idx) ""))]
-               (extract-labels-from-array-inner inner)))
+        (let [(afterBracket (option-or (string-slice tail 1 (string-length tail)) ""))]
+          (mt (string-index-of afterBracket "]")
+            ((some endIdx)
+             (let [(inner (option-or (string-slice afterBracket 0 endIdx) ""))]
+               (extractLabelsFromArrayInner inner)))
             ((none) (list))))
         (list))))
 
-(df extract-assignees-from-array-inner [(inner String)] -> (List String)
+(df extractAssigneesFromArrayInner [(inner String)] -> (List String)
   :d "Extracts assignee login strings from inside an assignees JSON array block."
   (if (string-contains? inner "\"login\"")
       (let [(parts (string-split inner "\"login\""))
-            (assignees-rev (fold (fn [(acc (List String)) (part String)] -> (List String)
+            (assigneesRev (fold (fn [(acc (List String)) (part String)] -> (List String)
                                    (let [(tail (string-trim part))]
                                      (mt (string-index-of tail ":")
                                        ((none) acc)
-                                       ((some c-idx)
-                                        (let [(after-colon (string-trim (option-or (string-slice tail (+ c-idx 1) (string-length tail)) "")))]
-                                          (if (string-starts-with? after-colon "\"")
-                                              (let [(raw (option-or (string-slice after-colon 1 (string-length after-colon)) ""))
-                                                    (q-idx (string-index-of raw "\""))]
-                                                (mt q-idx
+                                       ((some cIdx)
+                                        (let [(afterColon (string-trim (option-or (string-slice tail (+ cIdx 1) (string-length tail)) "")))]
+                                          (if (string-starts-with? afterColon "\"")
+                                              (let [(raw (option-or (string-slice afterColon 1 (string-length afterColon)) ""))
+                                                    (qIdx (string-index-of raw "\""))]
+                                                (mt qIdx
                                                   ((some idx)
                                                    (let [(login (option-or (string-slice raw 0 idx) ""))]
                                                      (if (string-empty? login) acc (list-cons login acc))))
@@ -356,9 +356,9 @@
                                               acc))))))
                                  (list)
                                  parts))]
-        (list-reverse assignees-rev))
+        (list-reverse assigneesRev))
       (let [(parts (string-split inner "\""))
-            (assignees-rev (fold (fn [(acc AssigneesScanState) (part String)] -> AssigneesScanState
+            (assigneesRev (fold (fn [(acc AssigneesScanState) (part String)] -> AssigneesScanState
                                    (let [(idx (.-idx acc))
                                          (lst (.-assignees acc))]
                                      (if (= (mod idx 2) 1)
@@ -369,115 +369,115 @@
                                          (AssigneesScanState :idx (+ idx 1) :assignees lst))))
                                  (AssigneesScanState :idx 0 :assignees (list))
                                  parts))]
-        (list-reverse (.-assignees assignees-rev)))))
+        (list-reverse (.-assignees assigneesRev)))))
 
-(df json-extract-assignees [(obj String)] -> (List String)
+(df jsonExtractAssignees [(obj String)] -> (List String)
   :d "Extracts list of assignee login handles from a JSON object."
-  (let [(tail (string-trim (json-find-key-tail obj "assignees")))]
+  (let [(tail (string-trim (jsonFindKeyTail obj "assignees")))]
     (if (string-starts-with? tail "[")
-        (let [(after-bracket (option-or (string-slice tail 1 (string-length tail)) ""))]
-          (mt (string-index-of after-bracket "]")
-            ((some end-idx)
-             (let [(inner (option-or (string-slice after-bracket 0 end-idx) ""))]
-               (extract-assignees-from-array-inner inner)))
+        (let [(afterBracket (option-or (string-slice tail 1 (string-length tail)) ""))]
+          (mt (string-index-of afterBracket "]")
+            ((some endIdx)
+             (let [(inner (option-or (string-slice afterBracket 0 endIdx) ""))]
+               (extractAssigneesFromArrayInner inner)))
             ((none) (list))))
         (list))))
 
-(df json-extract-comments-count [(obj String)] -> Int64
+(df jsonExtractCommentsCount [(obj String)] -> Int64
   :d "Extracts total comments count from issue JSON object."
-  (let [(c1 (json-extract-int obj "commentsCount"))]
+  (let [(c1 (jsonExtractInt obj "commentsCount"))]
     (if (> c1 0)
         c1
-        (let [(c2 (json-extract-int obj "comments_count"))]
+        (let [(c2 (jsonExtractInt obj "comments_count"))]
           (if (> c2 0)
               c2
-              (let [(tail (string-trim (json-find-key-tail obj "comments")))]
+              (let [(tail (string-trim (jsonFindKeyTail obj "comments")))]
                 (if (string-starts-with? tail "[")
-                    (let [(after-bracket (option-or (string-slice tail 1 (string-length tail)) ""))]
-                      (mt (string-index-of after-bracket "]")
-                        ((some end-idx)
-                         (let [(inner (option-or (string-slice after-bracket 0 end-idx) ""))
-                               (objs (split-json-objects inner))]
+                    (let [(afterBracket (option-or (string-slice tail 1 (string-length tail)) ""))]
+                      (mt (string-index-of afterBracket "]")
+                        ((some endIdx)
+                         (let [(inner (option-or (string-slice afterBracket 0 endIdx) ""))
+                               (objs (splitJsonObjects inner))]
                            (list-length objs)))
                         ((none) 0)))
                     0)))))))
 
-(df truncate-body-lines [(body String) (max-lines Int64)] -> String
+(df truncateBodyLines [(body String) (maxLines Int64)] -> String
   :d "Truncates body text if it exceeds max-lines appending a truncation pointer notice."
   (let [(lines (string-split body "\n"))
         (total (list-length lines))]
-    (if (> total max-lines)
-        (let [(kept (option-or (list-slice lines 0 max-lines) (list)))
+    (if (> total maxLines)
+        (let [(kept (option-or (list-slice lines 0 maxLines) (list)))
               (joined (string-join kept "\n"))]
           (str joined "\n... [truncated, " (string-from-int64 total) " lines total] ..."))
         body)))
 
-(df parse-pr-summary [(obj String)] -> GitHubPrSummary
+(df parsePrSummary [(obj String)] -> GitHubPrSummary
   :d "Parses a single JSON object string into a GitHubPrSummary record."
   (GitHubPrSummary
-    :number (json-extract-int obj "number")
-    :title (json-extract-str obj "title")
-    :author (json-extract-author obj)
-    :head (json-extract-ref obj "headRefName" "head")
-    :base (json-extract-ref obj "baseRefName" "base")
-    :state (json-extract-str obj "state")
-    :labels (json-extract-labels obj)
-    :additions (json-extract-int obj "additions")
-    :deletions (json-extract-int obj "deletions")))
+    :number (jsonExtractInt obj "number")
+    :title (jsonExtractStr obj "title")
+    :author (jsonExtractAuthor obj)
+    :head (jsonExtractRef obj "headRefName" "head")
+    :base (jsonExtractRef obj "baseRefName" "base")
+    :state (jsonExtractStr obj "state")
+    :labels (jsonExtractLabels obj)
+    :additions (jsonExtractInt obj "additions")
+    :deletions (jsonExtractInt obj "deletions")))
 
-(df github-pr-parse [(json-str String)] -> (List GitHubPrSummary)
+(df githubPrParse [(jsonStr String)] -> (List GitHubPrSummary)
   :d "Parses GitHub PR list or view JSON into compact GitHubPrSummary records."
-  (let [(objs (split-json-objects json-str))]
-    (map (fn [(obj String)] -> GitHubPrSummary (parse-pr-summary obj)) objs)))
+  (let [(objs (splitJsonObjects jsonStr))]
+    (map (fn [(obj String)] -> GitHubPrSummary (parsePrSummary obj)) objs)))
 
-(df parse-issue [(obj String)] -> GitHubIssue
+(df parseIssue [(obj String)] -> GitHubIssue
   :d "Parses a single JSON object string into a GitHubIssue record."
-  (let [(raw-body (json-extract-str obj "body"))
-        (capped-body (truncate-body-lines raw-body 1000))]
+  (let [(rawBody (jsonExtractStr obj "body"))
+        (cappedBody (truncateBodyLines rawBody 1000))]
     (GitHubIssue
-      :number (json-extract-int obj "number")
-      :title (json-extract-str obj "title")
-      :author (json-extract-author obj)
-      :state (json-extract-str obj "state")
-      :labels (json-extract-labels obj)
-      :assignees (json-extract-assignees obj)
-      :comments-count (json-extract-comments-count obj)
-      :body capped-body)))
+      :number (jsonExtractInt obj "number")
+      :title (jsonExtractStr obj "title")
+      :author (jsonExtractAuthor obj)
+      :state (jsonExtractStr obj "state")
+      :labels (jsonExtractLabels obj)
+      :assignees (jsonExtractAssignees obj)
+      :commentsCount (jsonExtractCommentsCount obj)
+      :body cappedBody)))
 
-(df github-issue-parse [(json-str String)] -> (List GitHubIssue)
+(df githubIssueParse [(jsonStr String)] -> (List GitHubIssue)
   :d "Parses GitHub issue list or view JSON into compact GitHubIssue records."
-  (let [(objs (split-json-objects json-str))]
-    (map (fn [(obj String)] -> GitHubIssue (parse-issue obj)) objs)))
+  (let [(objs (splitJsonObjects jsonStr))]
+    (map (fn [(obj String)] -> GitHubIssue (parseIssue obj)) objs)))
 
-(df extract-target-url [(obj String)] -> String
+(df extractTargetUrl [(obj String)] -> String
   :d "Extracts target or details URL from check run JSON object."
-  (let [(u1 (json-extract-str obj "targetUrl"))]
+  (let [(u1 (jsonExtractStr obj "targetUrl"))]
     (if (not (string-empty? u1))
         u1
-        (let [(u2 (json-extract-str obj "target_url"))]
+        (let [(u2 (jsonExtractStr obj "target_url"))]
           (if (not (string-empty? u2))
               u2
-              (let [(u3 (json-extract-str obj "details_url"))]
+              (let [(u3 (jsonExtractStr obj "details_url"))]
                 (if (not (string-empty? u3))
                     u3
-                    (json-extract-str obj "url"))))))))
+                    (jsonExtractStr obj "url"))))))))
 
-(df parse-ci-check [(obj String)] -> GitHubCiCheck
+(df parseCiCheck [(obj String)] -> GitHubCiCheck
   :d "Parses a single JSON object string into a GitHubCiCheck record."
-  (let [(conc (json-extract-str obj "conclusion"))
-        (final-conc (if (string-empty? conc) (json-extract-str obj "state") conc))]
+  (let [(conc (jsonExtractStr obj "conclusion"))
+        (finalConc (if (string-empty? conc) (jsonExtractStr obj "state") conc))]
     (GitHubCiCheck
-      :name (json-extract-str obj "name")
-      :status (json-extract-str obj "status")
-      :conclusion final-conc
-      :target-url (extract-target-url obj))))
+      :name (jsonExtractStr obj "name")
+      :status (jsonExtractStr obj "status")
+      :conclusion finalConc
+      :targetUrl (extractTargetUrl obj))))
 
-(df github-ci-parse [(json-str String)] -> (List GitHubCiCheck)
+(df githubCiParse [(jsonStr String)] -> (List GitHubCiCheck)
   :d "Parses GitHub CI check runs JSON into compact GitHubCiCheck records."
-  (let [(objs (split-json-objects json-str))]
-    (map (fn [(obj String)] -> GitHubCiCheck (parse-ci-check obj)) objs)))
+  (let [(objs (splitJsonObjects jsonStr))]
+    (map (fn [(obj String)] -> GitHubCiCheck (parseCiCheck obj)) objs)))
 
-(df is-failure-check? [(c GitHubCiCheck)] -> Bool
+(df isFailureCheck? [(c GitHubCiCheck)] -> Bool
   :d "Returns true if a CI check has failed or timed out."
   (let [(conc (string-upper (.-conclusion c)))
         (st (string-upper (.-status c)))]
@@ -487,7 +487,7 @@
                 (or (= conc "ACTION_REQUIRED")
                     (= st "FAILURE")))))))
 
-(df is-pending-check? [(c GitHubCiCheck)] -> Bool
+(df isPendingCheck? [(c GitHubCiCheck)] -> Bool
   :d "Returns true if a CI check is currently in progress or queued."
   (let [(st (string-upper (.-status c)))
         (conc (string-upper (.-conclusion c)))]
@@ -496,19 +496,19 @@
             (or (= st "PENDING")
                 (and (= st "COMPLETED") (string-empty? conc)))))))
 
-(df github-ci-rollup [(checks (List GitHubCiCheck))] -> String
+(df githubCiRollup [(checks (List GitHubCiCheck))] -> String
   :d "Computes aggregate CI status rollup verdict: :success, :failure, :pending."
   (if (list-empty? checks)
       ":success"
-      (let [(has-fail (fold (fn [(acc Bool) (c GitHubCiCheck)] -> Bool (or acc (is-failure-check? c))) false checks))]
-        (if has-fail
+      (let [(hasFail (fold (fn [(acc Bool) (c GitHubCiCheck)] -> Bool (or acc (isFailureCheck? c))) false checks))]
+        (if hasFail
             ":failure"
-            (let [(has-pend (fold (fn [(acc Bool) (c GitHubCiCheck)] -> Bool (or acc (is-pending-check? c))) false checks))]
-              (if has-pend
+            (let [(hasPend (fold (fn [(acc Bool) (c GitHubCiCheck)] -> Bool (or acc (isPendingCheck? c))) false checks))]
+              (if hasPend
                   ":pending"
                   ":success"))))))
 
-(df clean-diff-path [(raw String)] -> String
+(df cleanDiffPath [(raw String)] -> String
   :d "Cleans file path prefixes and trailing tabs from diff lines."
   (let [(t (string-trim raw))]
     (if (string-starts-with? t "a/")
@@ -517,255 +517,255 @@
             (option-or (string-slice t 2 (string-length t)) "")
             t))))
 
-(df extract-hunk-range [(line String)] -> String
+(df extractHunkRange [(line String)] -> String
   :d "Extracts the @@ -start,count +start,count @@ range token from a hunk header line."
   (if (string-starts-with? line "@@ ")
-      (let [(after-prefix (option-or (string-slice line 3 (string-length line)) ""))]
-        (mt (string-index-of after-prefix "@@")
+      (let [(afterPrefix (option-or (string-slice line 3 (string-length line)) ""))]
+        (mt (string-index-of afterPrefix "@@")
           ((some idx)
-           (let [(range-inner (string-trim (option-or (string-slice after-prefix 0 idx) "")))]
-             (str "@@ " range-inner " @@")))
+           (let [(rangeInner (string-trim (option-or (string-slice afterPrefix 0 idx) "")))]
+             (str "@@ " rangeInner " @@")))
           ((none) (string-trim line))))
       (string-trim line)))
 
-(df close-active-hunk-state [(st DiffScanState)] -> DiffScanState
+(df closeActiveHunkState [(st DiffScanState)] -> DiffScanState
   :d "Closes active hunk if open and accumulates into cur-hunks."
-  (if (.-in-hunk st)
+  (if (.-inHunk st)
       (let [(h (CompactHunk
-                 :range (.-cur-range st)
-                 :deltas (list-reverse (.-cur-deltas st))))]
+                 :range (.-curRange st)
+                 :deltas (list-reverse (.-curDeltas st))))]
         (DiffScanState
           :files (.-files st)
-          :cur-path (.-cur-path st)
-          :cur-adds (.-cur-adds st)
-          :cur-dels (.-cur-dels st)
-          :cur-hunks (list-cons h (.-cur-hunks st))
-          :cur-range ""
-          :cur-deltas (list)
-          :in-hunk false
-          :in-file (.-in-file st)))
+          :curPath (.-curPath st)
+          :curAdds (.-curAdds st)
+          :curDels (.-curDels st)
+          :curHunks (list-cons h (.-curHunks st))
+          :curRange ""
+          :curDeltas (list)
+          :inHunk false
+          :inFile (.-inFile st)))
       st))
 
-(df close-active-file-state [(st DiffScanState)] -> DiffScanState
+(df closeActiveFileState [(st DiffScanState)] -> DiffScanState
   :d "Closes active file if open and accumulates into files."
-  (let [(s0 (close-active-hunk-state st))]
-    (if (.-in-file s0)
+  (let [(s0 (closeActiveHunkState st))]
+    (if (.-inFile s0)
         (let [(f (CompactFile
-                   :path (.-cur-path s0)
-                   :additions (.-cur-adds s0)
-                   :deletions (.-cur-dels s0)
-                   :hunks (list-reverse (.-cur-hunks s0))))]
+                   :path (.-curPath s0)
+                   :additions (.-curAdds s0)
+                   :deletions (.-curDels s0)
+                   :hunks (list-reverse (.-curHunks s0))))]
           (DiffScanState
             :files (list-cons f (.-files s0))
-            :cur-path ""
-            :cur-adds 0
-            :cur-dels 0
-            :cur-hunks (list)
-            :cur-range ""
-            :cur-deltas (list)
-            :in-hunk false
-            :in-file false))
+            :curPath ""
+            :curAdds 0
+            :curDels 0
+            :curHunks (list)
+            :curRange ""
+            :curDeltas (list)
+            :inHunk false
+            :inFile false))
         s0)))
 
-(df step-diff-line [(st DiffScanState) (line String)] -> DiffScanState
+(df stepDiffLine [(st DiffScanState) (line String)] -> DiffScanState
   :d "Processes a single line of unified diff input updating DiffScanState."
   (cond
     ((string-starts-with? line "diff --git ")
-     (let [(s0 (close-active-file-state st))
+     (let [(s0 (closeActiveFileState st))
            (parts (string-split line " "))
-           (raw-path (if (>= (list-length parts) 4)
+           (rawPath (if (>= (list-length parts) 4)
                          (option-or (list-get parts 3) "")
                          ""))
-           (p (clean-diff-path raw-path))]
+           (p (cleanDiffPath rawPath))]
        (DiffScanState
          :files (.-files s0)
-         :cur-path p
-         :cur-adds 0
-         :cur-dels 0
-         :cur-hunks (list)
-         :cur-range ""
-         :cur-deltas (list)
-         :in-hunk false
-         :in-file true)))
+         :curPath p
+         :curAdds 0
+         :curDels 0
+         :curHunks (list)
+         :curRange ""
+         :curDeltas (list)
+         :inHunk false
+         :inFile true)))
     ((string-starts-with? line "--- ")
      (let [(raw (string-trim (option-or (string-slice line 4 (string-length line)) "")))]
-       (if (and (not (.-in-file st)) (not (string-empty? raw)))
-           (let [(p (clean-diff-path raw))]
+       (if (and (not (.-inFile st)) (not (string-empty? raw)))
+           (let [(p (cleanDiffPath raw))]
              (DiffScanState
                :files (.-files st)
-               :cur-path p
-               :cur-adds 0
-               :cur-dels 0
-               :cur-hunks (list)
-               :cur-range ""
-               :cur-deltas (list)
-               :in-hunk false
-               :in-file true))
+               :curPath p
+               :curAdds 0
+               :curDels 0
+               :curHunks (list)
+               :curRange ""
+               :curDeltas (list)
+               :inHunk false
+               :inFile true))
            st)))
     ((string-starts-with? line "+++ ")
      (let [(raw (string-trim (option-or (string-slice line 4 (string-length line)) "")))]
        (if (and (not (string-empty? raw)) (not (= raw "/dev/null")))
-           (let [(p (clean-diff-path raw))]
+           (let [(p (cleanDiffPath raw))]
              (DiffScanState
                :files (.-files st)
-               :cur-path p
-               :cur-adds (.-cur-adds st)
-               :cur-dels (.-cur-dels st)
-               :cur-hunks (.-cur-hunks st)
-               :cur-range (.-cur-range st)
-               :cur-deltas (.-cur-deltas st)
-               :in-hunk (.-in-hunk st)
-               :in-file true))
+               :curPath p
+               :curAdds (.-curAdds st)
+               :curDels (.-curDels st)
+               :curHunks (.-curHunks st)
+               :curRange (.-curRange st)
+               :curDeltas (.-curDeltas st)
+               :inHunk (.-inHunk st)
+               :inFile true))
            st)))
     ((string-starts-with? line "@@ ")
-     (let [(s0 (close-active-hunk-state st))
-           (rng (extract-hunk-range line))]
+     (let [(s0 (closeActiveHunkState st))
+           (rng (extractHunkRange line))]
        (DiffScanState
          :files (.-files s0)
-         :cur-path (.-cur-path s0)
-         :cur-adds (.-cur-adds s0)
-         :cur-dels (.-cur-dels s0)
-         :cur-hunks (.-cur-hunks s0)
-         :cur-range rng
-         :cur-deltas (list)
-         :in-hunk true
-         :in-file true)))
+         :curPath (.-curPath s0)
+         :curAdds (.-curAdds s0)
+         :curDels (.-curDels s0)
+         :curHunks (.-curHunks s0)
+         :curRange rng
+         :curDeltas (list)
+         :inHunk true
+         :inFile true)))
     (:else
-     (if (.-in-hunk st)
-         (let [(is-add (and (string-starts-with? line "+") (not (string-starts-with? line "+++"))))
-               (is-del (and (string-starts-with? line "-") (not (string-starts-with? line "---"))))]
-           (if (or is-add is-del)
-               (let [(add-inc (if is-add 1 0))
-                     (del-inc (if is-del 1 0))]
+     (if (.-inHunk st)
+         (let [(isAdd (and (string-starts-with? line "+") (not (string-starts-with? line "+++"))))
+               (isDel (and (string-starts-with? line "-") (not (string-starts-with? line "---"))))]
+           (if (or isAdd isDel)
+               (let [(addInc (if isAdd 1 0))
+                     (delInc (if isDel 1 0))]
                  (DiffScanState
                    :files (.-files st)
-                   :cur-path (.-cur-path st)
-                   :cur-adds (+ (.-cur-adds st) add-inc)
-                   :cur-dels (+ (.-cur-dels st) del-inc)
-                   :cur-hunks (.-cur-hunks st)
-                   :cur-range (.-cur-range st)
-                   :cur-deltas (list-cons line (.-cur-deltas st))
-                   :in-hunk true
-                   :in-file true))
+                   :curPath (.-curPath st)
+                   :curAdds (+ (.-curAdds st) addInc)
+                   :curDels (+ (.-curDels st) delInc)
+                   :curHunks (.-curHunks st)
+                   :curRange (.-curRange st)
+                   :curDeltas (list-cons line (.-curDeltas st))
+                   :inHunk true
+                   :inFile true))
                st))
          st))))
 
-(df format-compact-hunk [(h CompactHunk)] -> String
+(df formatCompactHunk [(h CompactHunk)] -> String
   :d "Formats a CompactHunk record into compact ASN hunk representation."
-  (let [(quoted-deltas (map (fn [(d String)] -> String (str "\"" d "\"")) (.-deltas h)))
-        (deltas-str (string-join quoted-deltas " "))]
-    (str "(:hunk :range \"" (.-range h) "\" :deltas (" deltas-str "))")))
+  (let [(quotedDeltas (map (fn [(d String)] -> String (str "\"" d "\"")) (.-deltas h)))
+        (deltasStr (string-join quotedDeltas " "))]
+    (str "(:hunk :range \"" (.-range h) "\" :deltas (" deltasStr "))")))
 
-(df format-compact-file [(f CompactFile)] -> String
+(df formatCompactFile [(f CompactFile)] -> String
   :d "Formats a CompactFile record into compact ASN file diff representation."
-  (let [(hunk-strs (map (fn [(h CompactHunk)] -> String (format-compact-hunk h)) (.-hunks f)))
-        (hunks-body (string-join hunk-strs " "))]
+  (let [(hunkStrs (map (fn [(h CompactHunk)] -> String (formatCompactHunk h)) (.-hunks f)))
+        (hunksBody (string-join hunkStrs " "))]
     (str "(:file \"" (.-path f) "\" :+ " (string-from-int64 (.-additions f))
          " :- " (string-from-int64 (.-deletions f))
-         " :hunks (" hunks-body "))")))
+         " :hunks (" hunksBody "))")))
 
-(df parse-compact-diff [(raw-diff String)] -> (List CompactFile)
+(df parseCompactDiff [(rawDiff String)] -> (List CompactFile)
   :d "Parses raw unified diff text into a list of CompactFile records."
-  (let [(trimmed (string-trim raw-diff))]
+  (let [(trimmed (string-trim rawDiff))]
     (if (string-empty? trimmed)
         (list)
-        (let [(clean-text (string-replace raw-diff "\r" ""))
-              (lines (string-split clean-text "\n"))
-              (init-st (DiffScanState
+        (let [(cleanText (string-replace rawDiff "\r" ""))
+              (lines (string-split cleanText "\n"))
+              (initSt (DiffScanState
                          :files (list)
-                         :cur-path ""
-                         :cur-adds 0
-                         :cur-dels 0
-                         :cur-hunks (list)
-                         :cur-range ""
-                         :cur-deltas (list)
-                         :in-hunk false
-                         :in-file false))
-              (final-st (fold (fn [(s DiffScanState) (ln String)] -> DiffScanState
-                                (step-diff-line s ln))
-                              init-st
+                         :curPath ""
+                         :curAdds 0
+                         :curDels 0
+                         :curHunks (list)
+                         :curRange ""
+                         :curDeltas (list)
+                         :inHunk false
+                         :inFile false))
+              (finalSt (fold (fn [(s DiffScanState) (ln String)] -> DiffScanState
+                                (stepDiffLine s ln))
+                              initSt
                               lines))
-              (closed-st (close-active-file-state final-st))]
-          (list-reverse (.-files closed-st))))))
+              (closedSt (closeActiveFileState finalSt))]
+          (list-reverse (.-files closedSt))))))
 
-(df github-diff-compact [(raw-diff String)] -> String
+(df githubDiffCompact [(rawDiff String)] -> String
   :d "Compacts a raw unified diff by stripping index hashes and context lines into an ASN projection."
-  (let [(files (parse-compact-diff raw-diff))]
+  (let [(files (parseCompactDiff rawDiff))]
     (if (list-empty? files)
         "(:pr-diff :files ())"
-        (let [(file-strs (map (fn [(f CompactFile)] -> String (format-compact-file f)) files))
-              (files-body (string-join file-strs " "))]
-          (str "(:pr-diff :files (" files-body "))")))))
+        (let [(fileStrs (map (fn [(f CompactFile)] -> String (formatCompactFile f)) files))
+              (filesBody (string-join fileStrs " "))]
+          (str "(:pr-diff :files (" filesBody "))")))))
 
-(df format-pr-item [(pr GitHubPrSummary)] -> String
+(df formatPrItem [(pr GitHubPrSummary)] -> String
   :d "Formats a single GitHubPrSummary record into an ASN PR item."
-  (let [(labels-str (fold (fn [(acc String) (lbl String)] -> String
-                            (let [(esc-l (string-replace lbl "\"" "\\\""))]
+  (let [(labelsStr (fold (fn [(acc String) (lbl String)] -> String
+                            (let [(escL (string-replace lbl "\"" "\\\""))]
                               (if (string-empty? acc)
-                                  (str "\"" esc-l "\"")
-                                  (str acc " \"" esc-l "\""))))
+                                  (str "\"" escL "\"")
+                                  (str acc " \"" escL "\""))))
                           ""
                           (.-labels pr)))
-        (esc-title (string-replace (.-title pr) "\"" "\\\""))]
+        (escTitle (string-replace (.-title pr) "\"" "\\\""))]
     (str "(:pr :number " (string-from-int64 (.-number pr))
-         " :title \"" esc-title "\""
+         " :title \"" escTitle "\""
          " :author \"" (.-author pr) "\""
          " :head \"" (.-head pr) "\""
          " :base \"" (.-base pr) "\""
          " :state \"" (.-state pr) "\""
          " :additions " (string-from-int64 (.-additions pr))
          " :deletions " (string-from-int64 (.-deletions pr))
-         " :labels (" labels-str "))")))
+         " :labels (" labelsStr "))")))
 
-(df github-prs-format [(prs (List GitHubPrSummary))] -> String
+(df githubPrsFormat [(prs (List GitHubPrSummary))] -> String
   :d "Formats a list of GitHubPrSummary records into a compact :github-prs ASN envelope."
   (let [(items (fold (fn [(acc String) (pr GitHubPrSummary)] -> String
-                       (let [(item (format-pr-item pr))]
+                       (let [(item (formatPrItem pr))]
                          (if (string-empty? acc) item (str acc " " item))))
                      ""
                      prs))]
     (str "(:github-prs :count " (string-from-int64 (list-length prs)) " :prs (" items "))")))
 
-(df format-issue-item [(issue GitHubIssue)] -> String
+(df formatIssueItem [(issue GitHubIssue)] -> String
   :d "Formats a single GitHubIssue record into an ASN issue item."
-  (let [(labels-str (fold (fn [(acc String) (lbl String)] -> String
-                            (let [(esc-l (string-replace lbl "\"" "\\\""))]
+  (let [(labelsStr (fold (fn [(acc String) (lbl String)] -> String
+                            (let [(escL (string-replace lbl "\"" "\\\""))]
                               (if (string-empty? acc)
-                                  (str "\"" esc-l "\"")
-                                  (str acc " \"" esc-l "\""))))
+                                  (str "\"" escL "\"")
+                                  (str acc " \"" escL "\""))))
                           ""
                           (.-labels issue)))
-        (esc-title (string-replace (.-title issue) "\"" "\\\""))]
+        (escTitle (string-replace (.-title issue) "\"" "\\\""))]
     (str "(:issue :number " (string-from-int64 (.-number issue))
-         " :title \"" esc-title "\""
+         " :title \"" escTitle "\""
          " :author \"" (.-author issue) "\""
          " :state \"" (.-state issue) "\""
-         " :comments " (string-from-int64 (.-comments-count issue))
-         " :labels (" labels-str "))")))
+         " :comments " (string-from-int64 (.-commentsCount issue))
+         " :labels (" labelsStr "))")))
 
-(df github-issues-format [(issues (List GitHubIssue))] -> String
+(df githubIssuesFormat [(issues (List GitHubIssue))] -> String
   :d "Formats a list of GitHubIssue records into a compact :github-issues ASN envelope."
   (let [(items (fold (fn [(acc String) (issue GitHubIssue)] -> String
-                       (let [(item (format-issue-item issue))]
+                       (let [(item (formatIssueItem issue))]
                          (if (string-empty? acc) item (str acc " " item))))
                      ""
                      issues))]
     (str "(:github-issues :count " (string-from-int64 (list-length issues)) " :issues (" items "))")))
 
-(df format-ci-item [(c GitHubCiCheck)] -> String
+(df formatCiItem [(c GitHubCiCheck)] -> String
   :d "Formats a single GitHubCiCheck record into an ASN check item."
-  (let [(esc-name (string-replace (.-name c) "\"" "\\\""))]
-    (str "(:check :name \"" esc-name "\""
+  (let [(escName (string-replace (.-name c) "\"" "\\\""))]
+    (str "(:check :name \"" escName "\""
          " :status \"" (.-status c) "\""
          " :conclusion \"" (.-conclusion c) "\""
-         (if (string-empty? (.-target-url c)) "" (str " :url \"" (.-target-url c) "\""))
+         (if (string-empty? (.-targetUrl c)) "" (str " :url \"" (.-targetUrl c) "\""))
          ")")))
 
-(df github-ci-format [(checks (List GitHubCiCheck))] -> String
+(df githubCiFormat [(checks (List GitHubCiCheck))] -> String
   :d "Formats a list of GitHubCiCheck records and their rollup verdict into a compact :github-ci ASN envelope."
-  (let [(verdict (github-ci-rollup checks))
+  (let [(verdict (githubCiRollup checks))
         (items (fold (fn [(acc String) (c GitHubCiCheck)] -> String
-                       (let [(item (format-ci-item c))]
+                       (let [(item (formatCiItem c))]
                          (if (string-empty? acc) item (str acc " " item))))
                      ""
                      checks))]

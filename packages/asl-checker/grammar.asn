@@ -1,7 +1,7 @@
 (:grammar
   :package asl-checker
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "CaseSummary" :kind :type :tokens 1)
     (:sym :name "Diagnostic" :kind :type :tokens 1)
@@ -14,69 +14,69 @@
     (:sym :name "Type" :kind :type :tokens 1)
     (:sym :name "UnifyOutcome" :kind :type :tokens 1)
 
-    (:sym :name "apply-subst" :kind :fn :tokens 2)
-    (:sym :name "builtin-sig" :kind :fn :tokens 2)
-    (:sym :name "check-file!" :kind :fn :tokens 2)
-    (:sym :name "check-module" :kind :fn :tokens 2)
-    (:sym :name "check-source" :kind :fn :tokens 2)
-    (:sym :name "collect-summary" :kind :fn :tokens 2)
-    (:sym :name "kind-narrow" :kind :fn :tokens 2)
-    (:sym :name "mod-enum" :kind :fn :tokens 2)
-    (:sym :name "mod-fun" :kind :fn :tokens 2)
-    (:sym :name "mod-import" :kind :fn :tokens 2)
-    (:sym :name "mod-schema" :kind :fn :tokens 2)
-    (:sym :name "occurs-in?" :kind :fn :tokens 2)
-    (:sym :name "resolve-module" :kind :fn :tokens 2)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "safe-tail" :kind :fn :tokens 2)
-    (:sym :name "show-type" :kind :fn :tokens 2)
-    (:sym :name "show-types" :kind :fn :tokens 2)
-    (:sym :name "slice-from" :kind :fn :tokens 2)
-    (:sym :name "test-resolve" :kind :fn :tokens 2)
-    (:sym :name "test-types" :kind :fn :tokens 2)
-    (:sym :name "test-unify" :kind :fn :tokens 2)
-    (:sym :name "type-equal?" :kind :fn :tokens 2)
+    (:sym :name "applySubst" :kind :fn :tokens 2)
+    (:sym :name "builtinSig" :kind :fn :tokens 2)
+    (:sym :name "checkFile!" :kind :fn :tokens 2)
+    (:sym :name "checkModule" :kind :fn :tokens 2)
+    (:sym :name "checkSource" :kind :fn :tokens 2)
+    (:sym :name "collectSummary" :kind :fn :tokens 2)
+    (:sym :name "kindNarrow" :kind :fn :tokens 2)
+    (:sym :name "modEnum" :kind :fn :tokens 2)
+    (:sym :name "modFun" :kind :fn :tokens 2)
+    (:sym :name "modImport" :kind :fn :tokens 2)
+    (:sym :name "modSchema" :kind :fn :tokens 2)
+    (:sym :name "occursIn?" :kind :fn :tokens 2)
+    (:sym :name "resolveModule" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "safeTail" :kind :fn :tokens 2)
+    (:sym :name "showType" :kind :fn :tokens 2)
+    (:sym :name "showTypes" :kind :fn :tokens 2)
+    (:sym :name "sliceFrom" :kind :fn :tokens 2)
+    (:sym :name "testResolve" :kind :fn :tokens 2)
+    (:sym :name "testTypes" :kind :fn :tokens 2)
+    (:sym :name "testUnify" :kind :fn :tokens 2)
+    (:sym :name "typeEqual?" :kind :fn :tokens 2)
     (:sym :name "unify" :kind :fn :tokens 1)
-    (:sym :name "unordered-type?" :kind :fn :tokens 2)
+    (:sym :name "unorderedType?" :kind :fn :tokens 2)
 
-    (:sym :name "clean-num-sign" :kind :fn :tokens 3
+    (:sym :name "cleanNumSign" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'clean-sign': explicitly bounds stripping to numeric literals, preventing collision with operator symbols")
-    (:sym :name "first-char-str" :kind :fn :tokens 3
+    (:sym :name "firstCharStr" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'first-char': disambiguates safe string-slice character extraction from list/sequence indexing")
-    (:sym :name "first-expr-empty" :kind :fn :tokens 3
+    (:sym :name "firstExprEmpty" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'expr-empty': positional distinction (first vs second) is essential for lowering conditional branches")
-    (:sym :name "first-expr-unit" :kind :fn :tokens 3
+    (:sym :name "firstExprUnit" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'expr-unit': specifies initial branch synthesis to distinguish from secondary void expressions")
-    (:sym :name "first-expr-vect" :kind :fn :tokens 3
+    (:sym :name "firstExprVect" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'expr-vect': positional prefix is mandatory to separate initial vector lowering from body expressions")
-    (:sym :name "first-head-ident" :kind :fn :tokens 3
+    (:sym :name "firstHeadIdent" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'head-ident': disambiguates primary operator extraction from nested sub-form heads")
-    (:sym :name "first-vect-items" :kind :fn :tokens 3
+    (:sym :name "firstVectItems" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'vect-items': specifies primary slice extraction during tuple and vector pattern matching")
-    (:sym :name "int-range-bounds" :kind :fn :tokens 3
+    (:sym :name "intRangeBounds" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'range-bounds': explicitly scopes scalar boundary calculation to integer type constraints")
-    (:sym :name "is-integral-type?" :kind :fn :tokens 3
+    (:sym :name "isIntegralType?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'integral?': distinguishes static AST type descriptors from runtime numeric values")
-    (:sym :name "is-literal-atom?" :kind :fn :tokens 3
+    (:sym :name "isLiteralAtom?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'atom?': scopes check specifically to literal AST tokens (bool/num/str), excluding symbols")
-    (:sym :name "is-numeric-type?" :kind :fn :tokens 3
+    (:sym :name "isNumericType?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'numeric?': distinguishes static type AST nodes from runtime numeric evaluations")
-    (:sym :name "list-append-one" :kind :fn :tokens 3
+    (:sym :name "listAppendOne" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'append-one': preserves list container type qualification, avoiding collision with vector appends")
-    (:sym :name "load-module-deps!" :kind :fn :tokens 3
+    (:sym :name "loadModuleDeps!" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'load-deps!': distinguishes module-level type dependency loading from general package resolution")
-    (:sym :name "map-values-list" :kind :fn :tokens 3
+    (:sym :name "mapValuesList" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'map-values': explicitly denotes conversion of AST map expressions to an evaluation list")
-    (:sym :name "parse-type-str" :kind :fn :tokens 3
+    (:sym :name "parseTypeStr" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-type': specifies string-to-AST parsing, distinguishing from S-expression type extraction")
-    (:sym :name "prelude-union-cases" :kind :fn :tokens 3
+    (:sym :name "preludeUnionCases" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'union-cases': explicitly scopes retrieval to built-in ASL prelude sum types")
-    (:sym :name "resolve-type-alias" :kind :fn :tokens 3
+    (:sym :name "resolveTypeAlias" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'resolve-alias': explicitly bounds alias resolution to type definitions, avoiding import alias collisions")
-    (:sym :name "second-expr-empty" :kind :fn :tokens 3
+    (:sym :name "secondExprEmpty" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'expr-empty': positional distinction is essential to separate else-branch from then-branch")
-    (:sym :name "sexpr-to-list" :kind :fn :tokens 3
+    (:sym :name "sexprToList" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'to-list': explicitly qualifies the conversion from linked S-expression AST to iterable list")
-    (:sym :name "test-corpus-smoke" :kind :fn :tokens 3
+    (:sym :name "testCorpusSmoke" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-smoke': disambiguates full language corpus smoke verification from unit test runners")
   ])

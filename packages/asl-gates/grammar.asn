@@ -1,7 +1,7 @@
 (:grammar
   :package asl-gates
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "main" :kind :fn :tokens 1)
     (:sym :name "ClaimRecord" :kind :type :tokens 1)
@@ -20,141 +20,141 @@
     (:sym :name "LexiconRegistry" :kind :type :tokens 1)
     (:sym :name "RuleCheckResult" :kind :type :tokens 1)
 
-    (:sym :name "run-suite" :kind :fn :tokens 2
+    (:sym :name "runSuite" :kind :fn :tokens 2
           :rationale "Executes semantic verification across list of paths")
-    (:sym :name "audit-claim" :kind :fn :tokens 2
+    (:sym :name "auditClaim" :kind :fn :tokens 2
           :rationale "Audits individual performance metric against published registry")
-    (:sym :name "standard-claims" :kind :fn :tokens 2
+    (:sym :name "standardClaims" :kind :fn :tokens 2
           :rationale "Returns canonical grounded benchmark metric list")
-    (:sym :name "sym-fn" :kind :fn :tokens 2
+    (:sym :name "symFn" :kind :fn :tokens 2
           :rationale "Constructor tag for function symbol kind")
-    (:sym :name "sym-type" :kind :fn :tokens 2
+    (:sym :name "symType" :kind :fn :tokens 2
           :rationale "Constructor tag for struct/enum type symbol kind")
-    (:sym :name "sym-val" :kind :fn :tokens 2
+    (:sym :name "symVal" :kind :fn :tokens 2
           :rationale "Constructor tag for constant value symbol kind")
-    (:sym :name "sym-macro" :kind :fn :tokens 2
+    (:sym :name "symMacro" :kind :fn :tokens 2
           :rationale "Constructor tag for syntactic macro symbol kind")
-    (:sym :name "is-registered?" :kind :fn :tokens 2
+    (:sym :name "isRegistered?" :kind :fn :tokens 2
           :rationale "Predicate testing if symbol is present in grammar registry")
-    (:sym :name "run-tests" :kind :fn :tokens 2
+    (:sym :name "runTests" :kind :fn :tokens 2
           :rationale "Standard test suite runner entrypoint")
-    (:sym :name "module-layer" :kind :fn :tokens 2
+    (:sym :name "moduleLayer" :kind :fn :tokens 2
           :rationale "Maps package or module identifier to architectural layer tier")
-    (:sym :name "audit-stratification" :kind :fn :tokens 2
+    (:sym :name "auditStratification" :kind :fn :tokens 2
           :rationale "Evaluates dependency edge between two modules and produces a StratificationReport")
-    (:sym :name "test-stratification" :kind :fn :tokens 2
+    (:sym :name "testStratification" :kind :fn :tokens 2
           :rationale "Asserts correct 4-tier layer mappings, boundary enforcement, and kernel hygiene")
-    (:sym :name "run-all" :kind :fn :tokens 2
+    (:sym :name "runAll" :kind :fn :tokens 2
           :rationale "Executes pure ASL 7-gate verification suite")
-    (:sym :name "verify-balance" :kind :fn :tokens 2
+    (:sym :name "verifyBalance" :kind :fn :tokens 2
           :rationale "Audits S-expression delimiter balance and sigil prohibition")
-    (:sym :name "verify-manifests" :kind :fn :tokens 2
+    (:sym :name "verifyManifests" :kind :fn :tokens 2
           :rationale "Verifies package manifest structure across packages")
 
-    (:sym :name "verify-source-syntax" :kind :fn :tokens 3
+    (:sym :name "verifySourceSyntax" :kind :fn :tokens 3
           :rationale "Verifies pure ASL AST parse without errors")
-    (:sym :name "verify-file-semantic" :kind :fn :tokens 3
+    (:sym :name "verifyFileSemantic" :kind :fn :tokens 3
           :rationale "Executes type and semantic checker on file AST")
-    (:sym :name "verify-foreign-ext" :kind :fn :tokens 3
+    (:sym :name "verifyForeignExt" :kind :fn :tokens 3
           :rationale "Enforces zero-foreign file policy (.py, .ts, .js, .rs, .c)")
-    (:sym :name "is-known-metric" :kind :fn :tokens 3
+    (:sym :name "isKnownMetric" :kind :fn :tokens 3
           :rationale "Predicate testing if metric is in published lockfile")
-    (:sym :name "run-claims-audit" :kind :fn :tokens 3
+    (:sym :name "runClaimsAudit" :kind :fn :tokens 3
           :rationale "Runs full audit of published benchmark claims")
-    (:sym :name "verify-claims-grounding" :kind :fn :tokens 3
+    (:sym :name "verifyClaimsGrounding" :kind :fn :tokens 3
           :rationale "Validates site claims grounding matrix")
-    (:sym :name "load-published-claims" :kind :fn :tokens 3
+    (:sym :name "loadPublishedClaims" :kind :fn :tokens 3
           :rationale "Loads published benchmark claims from filesystem disk registry")
-    (:sym :name "make-symbol-entry" :kind :fn :tokens 3
+    (:sym :name "makeSymbolEntry" :kind :fn :tokens 3
           :rationale "Constructs SymbolEntry descriptor with token count and rationale")
-    (:sym :name "count-kebab-tokens" :kind :fn :tokens 3
+    (:sym :name "countKebabTokens" :kind :fn :tokens 3
           :rationale "Calculates token density from hyphen segments")
-    (:sym :name "audit-symbol-density" :kind :fn :tokens 3
+    (:sym :name "auditSymbolDensity" :kind :fn :tokens 3
           :rationale "Enforces 1-token baseline policy on symbol entry")
-    (:sym :name "get-registered-symbol" :kind :fn :tokens 3
+    (:sym :name "getRegisteredSymbol" :kind :fn :tokens 3
           :rationale "Retrieves symbol entry by name from grammar registry")
-    (:sym :name "make-skill-record" :kind :fn :tokens 3
+    (:sym :name "makeSkillRecord" :kind :fn :tokens 3
           :rationale "Constructs SkillRecord from parsed frontmatter")
-    (:sym :name "parse-frontmatter-field" :kind :fn :tokens 3
+    (:sym :name "parseFrontmatterField" :kind :fn :tokens 3
           :rationale "Extracts scalar field value from YAML frontmatter header")
-    (:sym :name "verify-skill-record" :kind :fn :tokens 3
+    (:sym :name "verifySkillRecord" :kind :fn :tokens 3
           :rationale "Validates skill record frontmatter and description freshness")
     (:sym :name "AsnSkillSpec" :kind :type :tokens 2)
-    (:sym :name "make-asn-skill-spec" :kind :fn :tokens 3
+    (:sym :name "makeAsnSkillSpec" :kind :fn :tokens 3
           :rationale "Constructs AsnSkillSpec descriptor for co-located ASN skills")
-    (:sym :name "verify-asn-skill-spec" :kind :fn :tokens 3
+    (:sym :name "verifyAsnSkillSpec" :kind :fn :tokens 3
           :rationale "Validates that a co-located ASN skill spec has non-empty metadata, rules, and tools")
-    (:sym :name "is-clean-of-legacy?" :kind :fn :tokens 4
+    (:sym :name "isCleanOfLegacy?" :kind :fn :tokens 4
           :rationale "Enforces modern naming without unaliased legacy terms")
-    (:sym :name "is-valid-yaml-description?" :kind :fn :tokens 4
+    (:sym :name "isValidYamlDescription?" :kind :fn :tokens 4
           :rationale "Enforces valid YAML syntax on skill descriptions")
-    (:sym :name "is-valid-pkg-name?" :kind :fn :tokens 4
+    (:sym :name "isValidPkgName?" :kind :fn :tokens 4
           :rationale "Validates native package symbol format without sigils")
-    (:sym :name "make-manifest-record" :kind :fn :tokens 3
+    (:sym :name "makeManifestRecord" :kind :fn :tokens 3
           :rationale "Constructs ManifestRecord descriptor")
-    (:sym :name "parse-package-id" :kind :fn :tokens 3
+    (:sym :name "parsePackageId" :kind :fn :tokens 3
           :rationale "Extracts package identifier from manifest S-expression")
-    (:sym :name "verify-manifest-record" :kind :fn :tokens 3
+    (:sym :name "verifyManifestRecord" :kind :fn :tokens 3
           :rationale "Validates manifest record compliance")
-    (:sym :name "run-all-seven-gates" :kind :fn :tokens 4
+    (:sym :name "runAllSevenGates" :kind :fn :tokens 4
           :rationale "Orchestrates execution across all 7 verification gates")
-    (:sym :name "run-live-gate-audit" :kind :fn :tokens 4
+    (:sym :name "runLiveGateAudit" :kind :fn :tokens 4
           :rationale "Independently inspects filesystem truth across all 7 verification gates")
-    (:sym :name "format-gate-summary" :kind :fn :tokens 3
+    (:sym :name "formatGateSummary" :kind :fn :tokens 3
           :rationale "Formats 7-gate summary into terminal verification report")
-    (:sym :name "test-syntax-valid" :kind :fn :tokens 3
+    (:sym :name "testSyntaxValid" :kind :fn :tokens 3
           :rationale "Verifies clean syntax passes gate parser check")
-    (:sym :name "test-syntax-invalid" :kind :fn :tokens 3
+    (:sym :name "testSyntaxInvalid" :kind :fn :tokens 3
           :rationale "Verifies invalid syntax is rejected by gate parser")
-    (:sym :name "test-foreign-ext" :kind :fn :tokens 3
+    (:sym :name "testForeignExt" :kind :fn :tokens 3
           :rationale "Verifies foreign extension rejection policy")
-    (:sym :name "test-grammar-gate" :kind :fn :tokens 3
+    (:sym :name "testGrammarGate" :kind :fn :tokens 3
           :rationale "Verifies ASN grammar token density audit")
-    (:sym :name "test-skills-gate" :kind :fn :tokens 3
+    (:sym :name "testSkillsGate" :kind :fn :tokens 3
           :rationale "Verifies skills frontmatter parser and validation")
-    (:sym :name "test-manifest-gate" :kind :fn :tokens 3
+    (:sym :name "testManifestGate" :kind :fn :tokens 3
           :rationale "Verifies package manifest structure verification")
-    (:sym :name "test-runner" :kind :fn :tokens 2
+    (:sym :name "testRunner" :kind :fn :tokens 2
           :rationale "Verifies 7-gate orchestration runner")
-    (:sym :name "test-known-claims" :kind :fn :tokens 3
+    (:sym :name "testKnownClaims" :kind :fn :tokens 3
           :rationale "Verifies known benchmark claims recognition")
-    (:sym :name "test-unknown-claim" :kind :fn :tokens 3
+    (:sym :name "testUnknownClaim" :kind :fn :tokens 3
           :rationale "Verifies unknown claim rejection")
-    (:sym :name "test-claims-audit" :kind :fn :tokens 3
+    (:sym :name "testClaimsAudit" :kind :fn :tokens 3
           :rationale "Verifies claims audit reporting")
-    (:sym :name "test-full-grounding" :kind :fn :tokens 3
+    (:sym :name "testFullGrounding" :kind :fn :tokens 3
           :rationale "Verifies full claims grounding matrix")
-    (:sym :name "verify-layer-boundary" :kind :fn :tokens 3
+    (:sym :name "verifyLayerBoundary" :kind :fn :tokens 3
           :rationale "Enforces downward-only dependency invariant Layer(u) >= Layer(v)")
-    (:sym :name "is-kernel-clean?" :kind :fn :tokens 3
+    (:sym :name "isKernelClean?" :kind :fn :tokens 3
           :rationale "Audits Layer 0 source code to guarantee zero agent identity or bridge leakage")
-    (:sym :name "test-vacuity-rejection" :kind :fn :tokens 3
+    (:sym :name "testVacuityRejection" :kind :fn :tokens 3
           :rationale "Asserts non-vacuous assertion execution under Gate 5 falsification")
-    (:sym :name "verify-manifest-string" :kind :fn :tokens 3
+    (:sym :name "verifyManifestString" :kind :fn :tokens 3
           :rationale "Verifies that manifest content string has a valid package id without sigils")
-    (:sym :name "test-verify-balance" :kind :fn :tokens 3
+    (:sym :name "testVerifyBalance" :kind :fn :tokens 3
           :rationale "Verifies delimiter balance audit and sigil prohibition")
-    (:sym :name "test-verify-manifests" :kind :fn :tokens 3
+    (:sym :name "testVerifyManifests" :kind :fn :tokens 3
           :rationale "Verifies package manifest structure audit and sigil hygiene")
-    (:sym :name "test-run-all" :kind :fn :tokens 3
+    (:sym :name "testRunAll" :kind :fn :tokens 3
           :rationale "Verifies run-all convenience function forwards to all 7 gates")
     (:sym :name "TestPolarityResult" :kind :type :tokens 2
           :rationale "Outcome record of dual-polarity assertion audit")
     (:sym :name "CoverageSummary" :kind :type :tokens 2
           :rationale "Coverage percentage and qualification status across test suites")
-    (:sym :name "is-test-symbol?" :kind :fn :tokens 2
+    (:sym :name "isTestSymbol?" :kind :fn :tokens 2
           :rationale "Predicate testing if symbol is an executable test case")
-    (:sym :name "is-negative-assertion?" :kind :fn :tokens 3
+    (:sym :name "isNegativeAssertion?" :kind :fn :tokens 3
           :rationale "Predicate detecting negative, refute, or rejection assertions")
-    (:sym :name "count-negative-assertions" :kind :fn :tokens 3
+    (:sym :name "countNegativeAssertions" :kind :fn :tokens 3
           :rationale "Counts negative and refutation assertions in test body")
-    (:sym :name "count-positive-assertions" :kind :fn :tokens 3
+    (:sym :name "countPositiveAssertions" :kind :fn :tokens 3
           :rationale "Counts positive assertions in test body")
-    (:sym :name "audit-test-polarity" :kind :fn :tokens 3
+    (:sym :name "auditTestPolarity" :kind :fn :tokens 3
           :rationale "Audits dual-case assertion balance for a test function")
-    (:sym :name "calculate-coverage-pct" :kind :fn :tokens 3
+    (:sym :name "calculateCoveragePct" :kind :fn :tokens 3
           :rationale "Calculates integer coverage percentage")
-    (:sym :name "summarize-coverage" :kind :fn :tokens 2
+    (:sym :name "summarizeCoverage" :kind :fn :tokens 2
           :rationale "Aggregates test polarity results into overall coverage summary")
     (:sym :name "TestIsTestSymbolIdentification" :kind :fn :tokens 3
           :rationale "Verifies test symbol naming convention pattern matching")
@@ -166,34 +166,34 @@
           :rationale "Verifies dual-polarity qualification under strict and lenient modes")
     (:sym :name "TestCoverageSummaryCalculation" :kind :fn :tokens 3
           :rationale "Verifies coverage percentage and threshold passing status")
-    (:sym :name "make-lexicon-term" :kind :fn :tokens 3
+    (:sym :name "makeLexiconTerm" :kind :fn :tokens 3
           :rationale "Constructs canonical lexicon term entry with spoken forms")
-    (:sym :name "audit-lexicon-terms" :kind :fn :tokens 3
+    (:sym :name "auditLexiconTerms" :kind :fn :tokens 3
           :rationale "Audits canonical lexicon registry entries for complete metadata")
-    (:sym :name "check-local-alias-tables" :kind :fn :tokens 4
+    (:sym :name "checkLocalAliasTables" :kind :fn :tokens 4
           :rationale "Verifies absence of unauthorized local alias tables outside canonical lexicon")
-    (:sym :name "verify-canonical-referents" :kind :fn :tokens 3
+    (:sym :name "verifyCanonicalReferents" :kind :fn :tokens 3
           :rationale "Verifies canonical terms have active referents in codebase")
-    (:sym :name "is-spoken-mishearing?" :kind :fn :tokens 3
+    (:sym :name "isSpokenMishearing?" :kind :fn :tokens 3
           :rationale "Predicate testing if term matches known acoustic mishearing")
-    (:sym :name "make-rule-check-result" :kind :fn :tokens 4
+    (:sym :name "makeRuleCheckResult" :kind :fn :tokens 4
           :rationale "Constructs static rule verification result record")
-    (:sym :name "audit-grading-rule" :kind :fn :tokens 3
+    (:sym :name "auditGradingRule" :kind :fn :tokens 3
           :rationale "Verifies grading separation between author and reviewer roles and paths")
-    (:sym :name "audit-concepts-rule" :kind :fn :tokens 3
+    (:sym :name "auditConceptsRule" :kind :fn :tokens 3
           :rationale "Verifies numeric claims in principles and rules cite grounded sources")
-    (:sym :name "audit-ownership-disjointness" :kind :fn :tokens 3
+    (:sym :name "auditOwnershipDisjointness" :kind :fn :tokens 3
           :rationale "Verifies disjointness of owns boundaries across concurrent in-flight tasks")
-    (:sym :name "audit-hidden-tests-rule" :kind :fn :tokens 4
+    (:sym :name "auditHiddenTestsRule" :kind :fn :tokens 4
           :rationale "Verifies implementer owns boundaries exclude grader acceptance test paths")
-    (:sym :name "audit-bounded-rule" :kind :fn :tokens 3
+    (:sym :name "auditBoundedRule" :kind :fn :tokens 3
           :rationale "Verifies read call sites carry explicit bounded limits")
-    (:sym :name "audit-output-rule" :kind :fn :tokens 3
+    (:sym :name "auditOutputRule" :kind :fn :tokens 3
           :rationale "Verifies emitted receipts retain path and line evidence")
-    (:sym :name "audit-runtime-only-rules" :kind :fn :tokens 4
+    (:sym :name "auditRuntimeOnlyRules" :kind :fn :tokens 4
           :rationale "Verifies runtime-only rules declare explicit architectural reason")
-    (:sym :name "audit-c3-duplicates" :kind :fn :tokens 3
+    (:sym :name "auditC3Duplicates" :kind :fn :tokens 3
           :rationale "Audits duplicate capabilities and symbol definitions outside allowlist")
-    (:sym :name "audit-d51-convergence" :kind :fn :tokens 3
+    (:sym :name "auditD51Convergence" :kind :fn :tokens 3
           :rationale "Audits per-package CamelCase test functions and camelCase keys convergence")
   ])

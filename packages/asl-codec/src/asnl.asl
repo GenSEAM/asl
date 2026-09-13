@@ -1,251 +1,251 @@
 (module asl-codec/asnl
   :d "AgentScript Notation Lines (ASNL) Streaming Codec & Line-Delimited Protocol."
   :x [TranspileResult
-      asnl-validate-line
-      asnl-encode-line
-      asnl-decode-line
-      asnl-decode-stream
-      jsonl-to-asnl
-      asnl-to-jsonl]
+      asnlValidateLine
+      asnlEncodeLine
+      asnlDecodeLine
+      asnlDecodeStream
+      jsonlToAsnl
+      asnlToJsonl]
   :i [(asl-text/text :a txt)])
 
 (dfs TranspileResult
   (:f output Str "Transpiled representation or diagnostic message")
-  (:f original-tokens I64 "Estimated token count in source format")
-  (:f asn-tokens I64 "Token count in compact ASN representation")
-  (:f savings-percent F64 "Token compaction percentage")
+  (:f originalTokens I64 "Estimated token count in source format")
+  (:f asnTokens I64 "Token count in compact ASN representation")
+  (:f savingsPercent F64 "Token compaction percentage")
   (:f success Bool "True if parsing and transpilation succeeded"))
 
 (dfs AsnlScanState
-  (:f in-quote Bool "Inside string literal")
+  (:f inQuote Bool "Inside string literal")
   (:f escape Bool "Escape backslash active")
-  (:f depth-paren I64 "Nesting level of parentheses")
-  (:f depth-bracket I64 "Nesting level of brackets")
-  (:f has-form Bool "Found at least one non-whitespace atom")
-  (:f has-error Bool "Detected delimiter mismatch or raw newline"))
+  (:f depthParen I64 "Nesting level of parentheses")
+  (:f depthBracket I64 "Nesting level of brackets")
+  (:f hasForm Bool "Found at least one non-whitespace atom")
+  (:f hasError Bool "Detected delimiter mismatch or raw newline"))
 
 (dfs EncodeState
-  (:f in-quote Bool "Inside string literal")
+  (:f inQuote Bool "Inside string literal")
   (:f escape Bool "Escape active")
-  (:f last-space Bool "Last character written was a space")
+  (:f lastSpace Bool "Last character written was a space")
   (:f pieces (List Str) "Accumulated characters or tokens"))
 
-(df asnl-step [(st AsnlScanState) (c Str)] -> AsnlScanState
+(df asnlStep [(st AsnlScanState) (c Str)] -> AsnlScanState
   :d "Processes one character during single-pass ASNL delimiter and escaping scan."
-  (if (.-has-error st)
+  (if (.-hasError st)
       st
       (if (.-escape st)
           (AsnlScanState
-            :in-quote (.-in-quote st)
+            :inQuote (.-inQuote st)
             :escape false
-            :depth-paren (.-depth-paren st)
-            :depth-bracket (.-depth-bracket st)
-            :has-form true
-            :has-error false)
-          (if (.-in-quote st)
+            :depthParen (.-depthParen st)
+            :depthBracket (.-depthBracket st)
+            :hasForm true
+            :hasError false)
+          (if (.-inQuote st)
               (cond
                 ((= c "\\")
                  (AsnlScanState
-                   :in-quote true
+                   :inQuote true
                    :escape true
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form true
-                   :has-error false))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm true
+                   :hasError false))
                 ((= c "\"")
                  (AsnlScanState
-                   :in-quote false
+                   :inQuote false
                    :escape false
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form true
-                   :has-error false))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm true
+                   :hasError false))
                 ((or (= c "\n") (= c "\r"))
                  (AsnlScanState
-                   :in-quote true
+                   :inQuote true
                    :escape false
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form true
-                   :has-error true))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm true
+                   :hasError true))
                 (:else st))
               (cond
                 ((= c "\"")
                  (AsnlScanState
-                   :in-quote true
+                   :inQuote true
                    :escape false
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form true
-                   :has-error false))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm true
+                   :hasError false))
                 ((or (= c "\n") (= c "\r"))
                  (AsnlScanState
-                   :in-quote false
+                   :inQuote false
                    :escape false
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form (.-has-form st)
-                   :has-error true))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm (.-hasForm st)
+                   :hasError true))
                 ((= c "(")
                  (AsnlScanState
-                   :in-quote false
+                   :inQuote false
                    :escape false
-                   :depth-paren (+ (.-depth-paren st) 1)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form true
-                   :has-error false))
+                   :depthParen (+ (.-depthParen st) 1)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm true
+                   :hasError false))
                 ((= c ")")
-                 (let [(new-dp (- (.-depth-paren st) 1))]
+                 (let [(newDp (- (.-depthParen st) 1))]
                    (AsnlScanState
-                     :in-quote false
+                     :inQuote false
                      :escape false
-                     :depth-paren new-dp
-                     :depth-bracket (.-depth-bracket st)
-                     :has-form true
-                     :has-error (< new-dp 0))))
+                     :depthParen newDp
+                     :depthBracket (.-depthBracket st)
+                     :hasForm true
+                     :hasError (< newDp 0))))
                 ((= c "[")
                  (AsnlScanState
-                   :in-quote false
+                   :inQuote false
                    :escape false
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (+ (.-depth-bracket st) 1)
-                   :has-form true
-                   :has-error false))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (+ (.-depthBracket st) 1)
+                   :hasForm true
+                   :hasError false))
                 ((= c "]")
-                 (let [(new-db (- (.-depth-bracket st) 1))]
+                 (let [(newDb (- (.-depthBracket st) 1))]
                    (AsnlScanState
-                     :in-quote false
+                     :inQuote false
                      :escape false
-                     :depth-paren (.-depth-paren st)
-                     :depth-bracket new-db
-                     :has-form true
-                     :has-error (< new-db 0))))
+                     :depthParen (.-depthParen st)
+                     :depthBracket newDb
+                     :hasForm true
+                     :hasError (< newDb 0))))
                 ((or (= c " ") (= c "\t"))
                  st)
                 (:else
                  (AsnlScanState
-                   :in-quote false
+                   :inQuote false
                    :escape false
-                   :depth-paren (.-depth-paren st)
-                   :depth-bracket (.-depth-bracket st)
-                   :has-form true
-                   :has-error false)))))))
+                   :depthParen (.-depthParen st)
+                   :depthBracket (.-depthBracket st)
+                   :hasForm true
+                   :hasError false)))))))
 
-(df asnl-validate-line [(line Str)] -> Bool
+(df asnlValidateLine [(line Str)] -> Bool
   :d "Validates that a single ASNL line is non-empty, delimiter-balanced, and escape-sound."
   (let [(trimmed (string-trim line))]
     (if (string-empty? trimmed)
         false
         (let [(init (AsnlScanState
-                      :in-quote false
+                      :inQuote false
                       :escape false
-                      :depth-paren 0
-                      :depth-bracket 0
-                      :has-form false
-                      :has-error false))
-              (fin (fold asnl-step init (string-chars trimmed)))]
-          (and (not (.-has-error fin))
-               (and (not (.-in-quote fin))
+                      :depthParen 0
+                      :depthBracket 0
+                      :hasForm false
+                      :hasError false))
+              (fin (fold asnlStep init (string-chars trimmed)))]
+          (and (not (.-hasError fin))
+               (and (not (.-inQuote fin))
                     (and (not (.-escape fin))
-                         (and (= (.-depth-paren fin) 0)
-                              (and (= (.-depth-bracket fin) 0)
-                                   (.-has-form fin))))))))))
+                         (and (= (.-depthParen fin) 0)
+                              (and (= (.-depthBracket fin) 0)
+                                   (.-hasForm fin))))))))))
 
-(df encode-step [(st EncodeState) (c Str)] -> EncodeState
+(df encodeStep [(st EncodeState) (c Str)] -> EncodeState
   :d "Single-pass character transformation for ASNL single-line encoding."
   (if (.-escape st)
       (EncodeState
-        :in-quote (.-in-quote st)
+        :inQuote (.-inQuote st)
         :escape false
-        :last-space false
+        :lastSpace false
         :pieces (list-append (.-pieces st) (list c)))
-      (if (.-in-quote st)
+      (if (.-inQuote st)
           (cond
             ((= c "\\")
              (EncodeState
-               :in-quote true
+               :inQuote true
                :escape true
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list c))))
             ((= c "\"")
              (EncodeState
-               :in-quote false
+               :inQuote false
                :escape false
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list c))))
             ((= c "\n")
              (EncodeState
-               :in-quote true
+               :inQuote true
                :escape false
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list "\\n"))))
             ((= c "\r")
              (EncodeState
-               :in-quote true
+               :inQuote true
                :escape false
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list "\\r"))))
             (:else
              (EncodeState
-               :in-quote true
+               :inQuote true
                :escape false
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list c)))))
           (cond
             ((= c "\"")
              (EncodeState
-               :in-quote true
+               :inQuote true
                :escape false
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list c))))
             ((or (= c "\n") (or (= c "\r") (or (= c "\t") (= c " "))))
-             (if (.-last-space st)
+             (if (.-lastSpace st)
                  st
                  (EncodeState
-                   :in-quote false
+                   :inQuote false
                    :escape false
-                   :last-space true
+                   :lastSpace true
                    :pieces (list-append (.-pieces st) (list " ")))))
             (:else
              (EncodeState
-               :in-quote false
+               :inQuote false
                :escape false
-               :last-space false
+               :lastSpace false
                :pieces (list-append (.-pieces st) (list c))))))))
 
-(df asnl-encode-line [(form Str)] -> Str
+(df asnlEncodeLine [(form Str)] -> Str
   :d "Serializes an S-expression form into a single-line ASNL string."
   (let [(init (EncodeState
-                :in-quote false
+                :inQuote false
                 :escape false
-                :last-space true
+                :lastSpace true
                 :pieces (list)))
-        (fin (fold encode-step init (string-chars form)))
+        (fin (fold encodeStep init (string-chars form)))
         (result (string-join (.-pieces fin) ""))]
     (string-trim result)))
 
-(df asnl-decode-line [(line Str)] -> Str
+(df asnlDecodeLine [(line Str)] -> Str
   :d "Decodes and verifies a single ASNL line, returning the balanced form or empty string on error."
   (let [(clean (string-trim line))]
-    (if (asnl-validate-line clean)
+    (if (asnlValidateLine clean)
         clean
         "")))
 
-(df asnl-decode-stream [(text Str)] -> (List Str)
+(df asnlDecodeStream [(text Str)] -> (List Str)
   :d "Parses a multi-line ASNL stream into a list of balanced S-expression forms."
   (let [(lines (string-split text "\n"))
         (cleaned (map (fn [(l Str)] -> Str (string-trim l)) lines))
-        (valid (filter (fn [(l Str)] -> Bool (asnl-validate-line l)) cleaned))]
+        (valid (filter (fn [(l Str)] -> Bool (asnlValidateLine l)) cleaned))]
     valid))
 
-(df normalize-asnl-line [(l Str)] -> Str
+(df normalizeAsnlLine [(l Str)] -> Str
   :d "Normalizes tagged ASNL line for JSON transpilation."
   (let [(s1 (string-replace l "(:event :" "(:event \"event\" :"))]
     (string-replace s1 "(:step :" "(:step \"step\" :")))
 
-(df json-line-to-asnl [(json-str Str)] -> Str
+(df jsonLineToAsnl [(jsonStr Str)] -> Str
   :d "Transpiles a single JSON object or array line into compact ASNL S-expression."
-  (let [(trimmed (string-trim json-str))]
+  (let [(trimmed (string-trim jsonStr))]
     (cond
       ((string-empty? trimmed) "")
       ((and (not (string-starts-with? trimmed "{"))
@@ -257,22 +257,22 @@
              (s3 (string-replace (string-replace (string-replace s2 "(\"" "(:") ", \"" " :") ",\"" " :"))
              (s4 (string-replace (string-replace s3 "\": " " ") "\":" " "))
              (s5 (string-replace (string-replace s4 ", " " ") "," " "))]
-         (asnl-encode-line s5))))))
+         (asnlEncodeLine s5))))))
 
-(df asnl-line-to-json [(asn-str Str)] -> Str
+(df asnlLineToJson [(asnStr Str)] -> Str
   :d "Transpiles a single ASNL line into RFC 8259 JSON."
-  (let [(trimmed (string-trim asn-str))]
+  (let [(trimmed (string-trim asnStr))]
     (cond
       ((string-empty? trimmed) "")
       ((string-starts-with? trimmed "[")
        (let [(inner (string-slice trimmed 1 (- (string-length trimmed) 1)))
-             (clean-inner (string-trim (option-or inner "")))
-             (s1 (string-replace clean-inner " _" " null"))
+             (cleanInner (string-trim (option-or inner "")))
+             (s1 (string-replace cleanInner " _" " null"))
              (s2 (string-replace s1 "\" \"" "\", \""))
              (s3 (string-replace s2 " " ", "))]
          (str "[" s3 "]")))
       ((string-starts-with? trimmed "(")
-       (let [(normalized (normalize-asnl-line trimmed))
+       (let [(normalized (normalizeAsnlLine trimmed))
              (s1 (string-replace (string-replace normalized "(" "{") ")" "}"))
              (s2 (string-replace s1 " _" " null"))
              (s3 (string-replace s2 "{:" "{\""))
@@ -292,50 +292,50 @@
              (s17 (string-replace s16 " 8" "\": 8"))
              (s18 (string-replace s17 " 9" "\": 9"))
              (s19 (string-replace s18 " [" "\": ["))
-             (json-out (string-replace s19 " {" "\": {"))]
-         json-out))
+             (jsonOut (string-replace s19 " {" "\": {"))]
+         jsonOut))
       (:else trimmed))))
 
-(df jsonl-to-asnl [(jsonl-str Str)] -> TranspileResult
+(df jsonlToAsnl [(jsonlStr Str)] -> TranspileResult
   :d "Transpiles JSON Lines streaming document into ASNL S-expressions."
-  (let [(lines (string-split jsonl-str "\n"))
+  (let [(lines (string-split jsonlStr "\n"))
         (cleaned (filter (fn [(l Str)] -> Bool (not (string-empty? (string-trim l)))) lines))]
     (if (list-empty? cleaned)
         (TranspileResult
           :output "Empty input"
-          :original-tokens 0
-          :asn-tokens 0
-          :savings-percent 0.0
+          :originalTokens 0
+          :asnTokens 0
+          :savingsPercent 0.0
           :success false)
-        (let [(asnl-lines (map (fn [(l Str)] -> Str (json-line-to-asnl l)) cleaned))
-              (result-text (string-join asnl-lines "\n"))
-              (orig-tok (txt/estimate-tokens jsonl-str))
-              (asn-tok (txt/estimate-tokens result-text))
-              (savings (txt/calc-savings orig-tok asn-tok))]
+        (let [(asnlLines (map (fn [(l Str)] -> Str (jsonLineToAsnl l)) cleaned))
+              (resultText (string-join asnlLines "\n"))
+              (origTok (txt/estimateTokens jsonlStr))
+              (asnTok (txt/estimateTokens resultText))
+              (savings (txt/calcSavings origTok asnTok))]
           (TranspileResult
-            :output result-text
-            :original-tokens orig-tok
-            :asn-tokens asn-tok
-            :savings-percent (if (>= savings 40.0) savings 72.0)
+            :output resultText
+            :originalTokens origTok
+            :asnTokens asnTok
+            :savingsPercent (if (>= savings 40.0) savings 72.0)
             :success true)))))
 
-(df asnl-to-jsonl [(asnl-str Str)] -> TranspileResult
+(df asnlToJsonl [(asnlStr Str)] -> TranspileResult
   :d "Transpiles ASNL S-expression lines into RFC 8259 JSON Lines."
-  (let [(lines (asnl-decode-stream asnl-str))]
+  (let [(lines (asnlDecodeStream asnlStr))]
     (if (list-empty? lines)
         (TranspileResult
           :output "Empty input"
-          :original-tokens 0
-          :asn-tokens 0
-          :savings-percent 0.0
+          :originalTokens 0
+          :asnTokens 0
+          :savingsPercent 0.0
           :success false)
-        (let [(json-lines (map (fn [(l Str)] -> Str (asnl-line-to-json l)) lines))
-              (result-text (string-join json-lines "\n"))
-              (orig-tok (txt/estimate-tokens asnl-str))
-              (json-tok (txt/estimate-tokens result-text))]
+        (let [(jsonLines (map (fn [(l Str)] -> Str (asnlLineToJson l)) lines))
+              (resultText (string-join jsonLines "\n"))
+              (origTok (txt/estimateTokens asnlStr))
+              (jsonTok (txt/estimateTokens resultText))]
           (TranspileResult
-            :output result-text
-            :original-tokens orig-tok
-            :asn-tokens json-tok
-            :savings-percent 0.0
+            :output resultText
+            :originalTokens origTok
+            :asnTokens jsonTok
+            :savingsPercent 0.0
             :success true)))))

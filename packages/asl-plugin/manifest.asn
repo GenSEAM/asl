@@ -2,6 +2,6 @@
  :version "0.1.0"
  :entry "src/plugin.asl"
  :description "Modular Plugin Architecture & Foreign Capability Interface for AgentScript Core"
- :asl-first true
- :modules ["asl-plugin/plugin" "asl-plugin/dynamic_tool"]
- :dependencies [])
+ :aslFirst true
+ :modules ["asl-plugin/plugin" "asl-plugin/dynamicTool"]
+ :dependencies ["asl-text"])

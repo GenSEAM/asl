@@ -5,7 +5,7 @@
 
 (df ! dispatch [(args (List Str))] -> (Result Unit Str)
   :d "Dispatches command-line arguments to the pure AgentScript CLI."
-  (c/execute-cli args))
+  (c/executeCli args))
 
 (df ! main [(args (List Str))] -> (Result Unit IoError)
   :d "Top-level main entrypoint for compiled pure ASL CLI."

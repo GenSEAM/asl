@@ -2,5 +2,5 @@
  :version "0.1.0"
  :entry "src/check.asl"
  :description "100% Self-Hosted Pure AgentScript Semantic Type Checker"
- :asl-first true
+ :aslFirst true
  :dependencies ["asl-parser"])

@@ -1,4 +1,4 @@
-(module asl-sh/core-process
+(module asl-sh/coreProcess
   :d "Native AgentScript Process Execution and Typed Command Builder (d-446d)."
   :x [ProcessCmd
       ProcessOutput
@@ -6,27 +6,27 @@
       ProcessReceipt
       ProcessSession
       cmd
-      with-cwd
-      with-timeout
-      with-stdin
+      withCwd
+      withTimeout
+      withStdin
       exec!
-      run-simple!
-      session-spawn!
-      session-send-input!
-      session-input!
-      session-poll-tail!
-      session-tail!
-      session-emit-stdout!
-      session-emit-stderr!
-      session-kill!
-      session-check-deadlock
-      session-step-watchdog!
-      session-tick-idle
-      session-extend-timeout
-      session-set-timeout
-      make-process-receipt
-      render-receipt
-      receipt-tokens
+      runSimple!
+      sessionSpawn!
+      sessionSendInput!
+      sessionInput!
+      sessionPollTail!
+      sessionTail!
+      sessionEmitStdout!
+      sessionEmitStderr!
+      sessionKill!
+      sessionCheckDeadlock
+      sessionStepWatchdog!
+      sessionTickIdle
+      sessionExtendTimeout
+      sessionSetTimeout
+      makeProcessReceipt
+      renderReceipt
+      receiptTokens
 ]
   :i [(asl-text/text :a txt)])
 
@@ -35,20 +35,20 @@
   (:f args       (List String)       "Explicit argument vector preventing shell injection")
   (:f env        (Map String String) "Environment variable overrides")
   (:f cwd        (Option String)     "Working directory for process execution")
-  (:f timeout-ms Int64               "Execution timeout deadline in milliseconds" :default 5000)
-  (:f stdin-data (Option String)     "Optional input string piped to process stdin"))
+  (:f timeoutMs Int64               "Execution timeout deadline in milliseconds" :default 5000)
+  (:f stdinData (Option String)     "Optional input string piped to process stdin"))
 
 (dfs ProcessOutput
-  (:f exit-code   Int64  "Process exit status (0 = success)")
+  (:f exitCode   Int64  "Process exit status (0 = success)")
   (:f stdout      String "Captured standard output stream")
   (:f stderr      String "Captured standard error stream")
-  (:f duration-ms Int64  "Execution elapsed time in milliseconds"))
+  (:f durationMs Int64  "Execution elapsed time in milliseconds"))
 
 (dfs ProcessReceipt
-  (:f exit-code   Int64  "Process return code (0 = success)")
-  (:f duration-ms Int64  "Execution duration in milliseconds")
-  (:f peak-rss-mb Int64  "Peak memory resident set size in megabytes")
-  (:f spool-path  String "Filesystem path to ephemeral disk spool")
+  (:f exitCode   Int64  "Process return code (0 = success)")
+  (:f durationMs Int64  "Execution duration in milliseconds")
+  (:f peakRssMb Int64  "Peak memory resident set size in megabytes")
+  (:f spoolPath  String "Filesystem path to ephemeral disk spool")
   (:f summary     String "Compact diagnostic string (<100 tokens, errors only)"))
 
 (dfs ProcessSession
@@ -56,23 +56,23 @@
   (:f pid Int64 "Operating system process identifier")
   (:f state String "Session lifecycle state: active, idle, or terminated")
   (:f cmd ProcessCmd "Underlying command specification")
-  (:f stdin-buffer (List String) "Pending or injected standard input lines")
-  (:f stdout-buffer (List String) "Captured standard output lines in FIFO order")
-  (:f stderr-buffer (List String) "Captured standard error lines in FIFO order")
-  (:f exit-code (Option Int64) "Termination exit status code if finished")
-  (:f idle-ms Int64 "Milliseconds elapsed since last stdin or stdout event")
-  (:f timeout-ms Int64 "Configurable watchdog timeout ceiling in milliseconds")
-  (:f deadlock-detected Bool "True if process reached idle deadlock threshold")
+  (:f stdinBuffer (List String) "Pending or injected standard input lines")
+  (:f stdoutBuffer (List String) "Captured standard output lines in FIFO order")
+  (:f stderrBuffer (List String) "Captured standard error lines in FIFO order")
+  (:f exitCode (Option Int64) "Termination exit status code if finished")
+  (:f idleMs Int64 "Milliseconds elapsed since last stdin or stdout event")
+  (:f timeoutMs Int64 "Configurable watchdog timeout ceiling in milliseconds")
+  (:f deadlockDetected Bool "True if process reached idle deadlock threshold")
   (:f deadlocked Bool "Alias for deadlock-detected")
-  (:f term-deadline-ms Int64 "Configured SIGTERM deadlock ceiling in milliseconds (default 10000)")
-  (:f kill-deadline-ms Int64 "Configured SIGKILL deadlock ceiling in milliseconds (default 12000)")
-  (:f termination-receipt (Option ProcessReceipt) "Structured teardown receipt on watchdog termination"))
+  (:f termDeadlineMs Int64 "Configured SIGTERM deadlock ceiling in milliseconds (default 10000)")
+  (:f killDeadlineMs Int64 "Configured SIGKILL deadlock ceiling in milliseconds (default 12000)")
+  (:f terminationReceipt (Option ProcessReceipt) "Structured teardown receipt on watchdog termination"))
 
 (dfe ProcessError
   (:c not-found         [(bin String)]              "Command binary was not found")
   (:c timeout           [(ms Int64)]                "Command execution timed out")
   (:c permission-denied [(path String)]             "Access permission denied to executable")
-  (:c execution-failed  [(code Int64) (msg String)] "Process exited with non-zero status"))
+  (:c executionFailed  [(code Int64) (msg String)] "Process exited with non-zero status"))
 
 (df cmd [(bin String) (args (List String))] -> ProcessCmd
   :d "Constructs a safe, typed command with an argument vector."
@@ -81,200 +81,135 @@
     :args args
     :env (map-empty)
     :cwd (none)
-    :timeout-ms 5000
-    :stdin-data (none)))
+    :timeoutMs 5000
+    :stdinData (none)))
 
-(df with-cwd [(c ProcessCmd) (dir String)] -> ProcessCmd
+(df withCwd [(c ProcessCmd) (dir String)] -> ProcessCmd
   :d "Sets the execution working directory."
   (ProcessCmd
     :bin (.-bin c)
     :args (.-args c)
     :env (.-env c)
     :cwd (some dir)
-    :timeout-ms (.-timeout-ms c)
-    :stdin-data (.-stdin-data c)))
+    :timeoutMs (.-timeoutMs c)
+    :stdinData (.-stdinData c)))
 
-(df with-timeout [(c ProcessCmd) (ms Int64)] -> ProcessCmd
+(df withTimeout [(c ProcessCmd) (ms Int64)] -> ProcessCmd
   :d "Sets the execution timeout in milliseconds."
   (ProcessCmd
     :bin (.-bin c)
     :args (.-args c)
     :env (.-env c)
     :cwd (.-cwd c)
-    :timeout-ms ms
-    :stdin-data (.-stdin-data c)))
+    :timeoutMs ms
+    :stdinData (.-stdinData c)))
 
-(df with-stdin [(c ProcessCmd) (input String)] -> ProcessCmd
+(df withStdin [(c ProcessCmd) (input String)] -> ProcessCmd
   :d "Sets standard input data for the process."
   (ProcessCmd
     :bin (.-bin c)
     :args (.-args c)
     :env (.-env c)
     :cwd (.-cwd c)
-    :timeout-ms (.-timeout-ms c)
-    :stdin-data (some input)))
+    :timeoutMs (.-timeoutMs c)
+    :stdinData (some input)))
+
+(df quoteShellArg [(arg String)] -> String
+  (str "'" (string-replace arg "'" "'\\''") "'"))
+
+(df stripTrailingNewline [(s String)] -> String
+  (if (string-ends-with? s "\n")
+    (option-or (string-slice s 0 (- (string-length s) 1)) s)
+    s))
+
+(df buildShellCmd [(b String) (args (List String)) (stdinVal String)] -> String
+  (let [(quotedArgs (map quoteShellArg args))
+        (baseCmd (if (list-empty? quotedArgs)
+                   b
+                   (str b " " (string-join " " quotedArgs))))]
+    (if (string-empty? stdinVal)
+      (str baseCmd " < /dev/null")
+      (str "printf '%s' " (quoteShellArg stdinVal) " | " baseCmd))))
 
 (df exec! [(c ProcessCmd)] -> (Result ProcessOutput ProcessError)
   :d "Executes a typed process command with timeout enforcement and captured output."
   (let [(b (.-bin c))
         (args (.-args c))
-        (stdin-opt (.-stdin-data c))
-        (stdin-val (mt stdin-opt
+        (stdinOpt (.-stdinData c))
+        (stdinVal (mt stdinOpt
                      ((some s) s)
                      ((none) "")))
-        (timeout (.-timeout-ms c))]
+        (timeout (.-timeoutMs c))]
     (cond
       ((<= timeout 0)
        (err (timeout timeout)))
-      ((= b "echo")
-       (let [(out-text (if (list-empty? args)
-                           stdin-val
-                           (string-join " " args)))]
-         (ok (ProcessOutput
-               :exit-code 0
-               :stdout out-text
-               :stderr ""
-               :duration-ms 1))))
-      ((= b "cat")
-       (let [(out-text (if (not (string-empty? stdin-val))
-                           stdin-val
-                           (if (not (list-empty? args))
-                               (let [(f (option-or (list-head args) ""))]
-                                 (if (file-exists? f)
-                                     (let [(fr (file-read f))]
-                                       (mt fr
-                                         ((ok content) content)
-                                         ((err _) "")))
-                                     ""))
-                               "")))]
-         (ok (ProcessOutput
-               :exit-code 0
-               :stdout out-text
-               :stderr ""
-               :duration-ms 1))))
-      ((= b "true")
-       (ok (ProcessOutput
-             :exit-code 0
-             :stdout ""
-             :stderr ""
-             :duration-ms 1)))
-      ((= b "false")
-       (ok (ProcessOutput
-             :exit-code 1
-             :stdout ""
-             :stderr "process returned exit status 1"
-             :duration-ms 1)))
-      ((= b "printf")
-       (let [(fmt (if (list-empty? args) "" (string-join " " args)))]
-         (ok (ProcessOutput
-               :exit-code 0
-               :stdout fmt
-               :stderr ""
-               :duration-ms 1))))
-      ((= b "grep")
-       (let [(pattern (if (list-empty? args) "" (option-or (list-head args) "")))
-             (input-text (if (not (string-empty? stdin-val))
-                             stdin-val
-                             (if (> (list-length args) 1)
-                                 (let [(f (option-or (list-get args 1) ""))]
-                                   (if (file-exists? f)
-                                       (let [(fr (file-read f))]
-                                         (mt fr ((ok content) content) ((err _) "")))
-                                       ""))
-                                 "")))
-             (lines (string-split input-text "\n"))
-             (matched (list-filter (fn [(line String)] -> Bool (string-contains? line pattern)) lines))
-             (out-text (string-join "\n" matched))]
-         (ok (ProcessOutput
-               :exit-code (if (list-empty? matched) 1 0)
-               :stdout out-text
-               :stderr ""
-               :duration-ms 1))))
-      ((= b "head")
-       (let [(input-text (if (not (string-empty? stdin-val)) stdin-val ""))
-             (lines (string-split input-text "\n"))
-             (limit (if (list-empty? args) 10 (string-to-int64 (option-or (list-head args) "10"))))
-             (taken (list-take limit lines))
-             (out-text (string-join "\n" taken))]
-         (ok (ProcessOutput
-               :exit-code 0
-               :stdout out-text
-               :stderr ""
-               :duration-ms 1))))
-      ((= b "wc")
-       (let [(input-text (if (not (string-empty? stdin-val)) stdin-val ""))
-             (lines (string-split input-text "\n"))
-             (cnt (string-from-int64 (list-length lines)))]
-         (ok (ProcessOutput
-               :exit-code 0
-               :stdout cnt
-               :stderr ""
-               :duration-ms 1))))
-      ((file-exists? b)
-       (let [(fr (file-read b))]
-         (mt fr
-           ((ok content)
-            (ok (ProcessOutput
-                  :exit-code 0
-                  :stdout content
-                  :stderr ""
-                  :duration-ms 1)))
-           ((err _)
-            (err (permission-denied b))))))
       (:else
-       (err (not-found b))))))
+       (let [(fullCmd (buildShellCmd b args stdinVal))
+             (res (execCmd fullCmd))
+             (code (.-exitCode res))]
+         (cond
+           ((= code 127)
+            (err (not-found b)))
+           ((= code 126)
+            (err (permission-denied b)))
+           (:else
+            (ok (ProcessOutput
+                  :exitCode code
+                  :stdout (stripTrailingNewline (.-stdout res))
+                  :stderr (stripTrailingNewline (.-stderr res))
+                  :durationMs 1)))))))))
 
 
-(df run-simple! [(bin String) (args (List String))] -> (Result String ProcessError)
+(df runSimple! [(bin String) (args (List String))] -> (Result String ProcessError)
   :d "Quick helper to run a command and return trimmed stdout on success."
   (mt (exec! (cmd bin args))
     ((ok out)
-     (if (= (.-exit-code out) 0)
+     (if (= (.-exitCode out) 0)
          (ok (.-stdout out))
-         (err (execution-failed (.-exit-code out) (.-stderr out)))))
+         (err (executionFailed (.-exitCode out) (.-stderr out)))))
     ((err e) (err e))))
 
-(df make-process-receipt [(exit-code Int64) (duration-ms Int64) (peak-rss-mb Int64) (spool-path String) (summary String)] -> ProcessReceipt
+(df makeProcessReceipt [(exitCode Int64) (durationMs Int64) (peakRssMb Int64) (spoolPath String) (summary String)] -> ProcessReceipt
   :d "Constructs a compact ProcessReceipt."
   (ProcessReceipt
-    :exit-code exit-code
-    :duration-ms duration-ms
-    :peak-rss-mb peak-rss-mb
-    :spool-path spool-path
+    :exitCode exitCode
+    :durationMs durationMs
+    :peakRssMb peakRssMb
+    :spoolPath spoolPath
     :summary summary))
 
-(df render-receipt [(r ProcessReceipt)] -> String
+(df renderReceipt [(r ProcessReceipt)] -> String
   :d "Renders a ProcessReceipt as a compact S-expression string."
-  (str "(:proc-receipt :exit " (string-from-int64 (.-exit-code r))
-       " :duration-ms " (string-from-int64 (.-duration-ms r))
-       " :peak-rss-mb " (string-from-int64 (.-peak-rss-mb r))
-       " :spool-path \"" (.-spool-path r) "\""
+  (str "(:proc-receipt :exit " (string-from-int64 (.-exitCode r))
+       " :duration-ms " (string-from-int64 (.-durationMs r))
+       " :peak-rss-mb " (string-from-int64 (.-peakRssMb r))
+       " :spool-path \"" (.-spoolPath r) "\""
        " :summary \"" (.-summary r) "\")"))
 
-(df receipt-tokens [(r ProcessReceipt)] -> Int64
+(df receiptTokens [(r ProcessReceipt)] -> Int64
   :d "Estimates total BPE tokens for a rendered ProcessReceipt."
-  (txt/estimate-tokens (render-receipt r)))
+  (txt/estimateTokens (renderReceipt r)))
 
-(df session-spawn! [(id String) (c ProcessCmd)] -> ProcessSession
+(df sessionSpawn! [(id String) (c ProcessCmd)] -> ProcessSession
   :d "Initializes an interactive process session bound to a ProcessCmd."
   (ProcessSession
     :id id
     :pid 1001
     :state "active"
     :cmd c
-    :stdin-buffer (list)
-    :stdout-buffer (list)
-    :stderr-buffer (list)
-    :exit-code (none)
-    :idle-ms 0
-    :timeout-ms (.-timeout-ms c)
-    :deadlock-detected false
+    :stdinBuffer (list)
+    :stdoutBuffer (list)
+    :stderrBuffer (list)
+    :exitCode (none)
+    :idleMs 0
+    :timeoutMs (.-timeoutMs c)
+    :deadlockDetected false
     :deadlocked false
-    :term-deadline-ms 10000
-    :kill-deadline-ms 12000
-    :termination-receipt (none)))
+    :termDeadlineMs 10000
+    :killDeadlineMs 12000
+    :terminationReceipt (none)))
 
-(df session-send-input! [(s ProcessSession) (input String)] -> ProcessSession
+(df sessionSendInput! [(s ProcessSession) (input String)] -> ProcessSession
   :d "Injects standard input data into an active session resetting idle timer."
   (if (= (.-state s) "terminated")
       s
@@ -283,71 +218,71 @@
         :pid (.-pid s)
         :state "active"
         :cmd (.-cmd s)
-        :stdin-buffer (list-append (.-stdin-buffer s) (list input))
-        :stdout-buffer (.-stdout-buffer s)
-        :stderr-buffer (.-stderr-buffer s)
-        :exit-code (.-exit-code s)
-        :idle-ms 0
-        :timeout-ms (.-timeout-ms s)
-        :deadlock-detected false
-        :term-deadline-ms (.-term-deadline-ms s)
-        :kill-deadline-ms (.-kill-deadline-ms s)
-        :termination-receipt (.-termination-receipt s))))
+        :stdinBuffer (list-append (.-stdinBuffer s) (list input))
+        :stdoutBuffer (.-stdoutBuffer s)
+        :stderrBuffer (.-stderrBuffer s)
+        :exitCode (.-exitCode s)
+        :idleMs 0
+        :timeoutMs (.-timeoutMs s)
+        :deadlockDetected false
+        :termDeadlineMs (.-termDeadlineMs s)
+        :killDeadlineMs (.-killDeadlineMs s)
+        :terminationReceipt (.-terminationReceipt s))))
 
-(df session-input! [(s ProcessSession) (input String)] -> ProcessSession
+(df sessionInput! [(s ProcessSession) (input String)] -> ProcessSession
   :d "Short alias for session-send-input!."
-  (session-send-input! s input))
+  (sessionSendInput! s input))
 
-(df session-emit-stdout! [(s ProcessSession) (line String)] -> ProcessSession
+(df sessionEmitStdout! [(s ProcessSession) (line String)] -> ProcessSession
   :d "Appends a line of captured stdout to session buffer and resets idle timer."
   (ProcessSession
     :id (.-id s)
     :pid (.-pid s)
     :state (.-state s)
     :cmd (.-cmd s)
-    :stdin-buffer (.-stdin-buffer s)
-    :stdout-buffer (list-append (.-stdout-buffer s) (list line))
-    :stderr-buffer (.-stderr-buffer s)
-    :exit-code (.-exit-code s)
-    :idle-ms 0
-    :timeout-ms (.-timeout-ms s)
-    :deadlock-detected false
-    :term-deadline-ms (.-term-deadline-ms s)
-    :kill-deadline-ms (.-kill-deadline-ms s)
-    :termination-receipt (.-termination-receipt s)))
+    :stdinBuffer (.-stdinBuffer s)
+    :stdoutBuffer (list-append (.-stdoutBuffer s) (list line))
+    :stderrBuffer (.-stderrBuffer s)
+    :exitCode (.-exitCode s)
+    :idleMs 0
+    :timeoutMs (.-timeoutMs s)
+    :deadlockDetected false
+    :termDeadlineMs (.-termDeadlineMs s)
+    :killDeadlineMs (.-killDeadlineMs s)
+    :terminationReceipt (.-terminationReceipt s)))
 
-(df session-emit-stderr! [(s ProcessSession) (line String)] -> ProcessSession
+(df sessionEmitStderr! [(s ProcessSession) (line String)] -> ProcessSession
   :d "Appends a line of captured stderr to session buffer."
   (ProcessSession
     :id (.-id s)
     :pid (.-pid s)
     :state (.-state s)
     :cmd (.-cmd s)
-    :stdin-buffer (.-stdin-buffer s)
-    :stdout-buffer (.-stdout-buffer s)
-    :stderr-buffer (list-append (.-stderr-buffer s) (list line))
-    :exit-code (.-exit-code s)
-    :idle-ms 0
-    :timeout-ms (.-timeout-ms s)
-    :deadlock-detected false
-    :term-deadline-ms (.-term-deadline-ms s)
-    :kill-deadline-ms (.-kill-deadline-ms s)
-    :termination-receipt (.-termination-receipt s)))
+    :stdinBuffer (.-stdinBuffer s)
+    :stdoutBuffer (.-stdoutBuffer s)
+    :stderrBuffer (list-append (.-stderrBuffer s) (list line))
+    :exitCode (.-exitCode s)
+    :idleMs 0
+    :timeoutMs (.-timeoutMs s)
+    :deadlockDetected false
+    :termDeadlineMs (.-termDeadlineMs s)
+    :killDeadlineMs (.-killDeadlineMs s)
+    :terminationReceipt (.-terminationReceipt s)))
 
-(df session-poll-tail! [(s ProcessSession) (n Int64)] -> (List String)
+(df sessionPollTail! [(s ProcessSession) (n Int64)] -> (List String)
   :d "Retrieves the trailing n lines from the session stdout buffer."
-  (let [(buf (.-stdout-buffer s))
+  (let [(buf (.-stdoutBuffer s))
         (cnt (list-length buf))]
     (cond
       ((<= n 0) (list))
       ((>= n cnt) buf)
       (:else (option-or (list-slice buf (- cnt n) cnt) (list))))))
 
-(df session-tail! [(s ProcessSession) (n Int64)] -> (List String)
+(df sessionTail! [(s ProcessSession) (n Int64)] -> (List String)
   :d "Short alias for session-poll-tail!."
-  (session-poll-tail! s n))
+  (sessionPollTail! s n))
 
-(df session-kill! [(s ProcessSession) (sig String)] -> ProcessSession
+(df sessionKill! [(s ProcessSession) (sig String)] -> ProcessSession
   :d "Terminates an interactive session with the specified signal."
   (let [(code (if (= sig "SIGTERM") 143 137))]
     (ProcessSession
@@ -355,151 +290,151 @@
       :pid (.-pid s)
       :state "terminated"
       :cmd (.-cmd s)
-      :stdin-buffer (.-stdin-buffer s)
-      :stdout-buffer (.-stdout-buffer s)
-      :stderr-buffer (.-stderr-buffer s)
-      :exit-code (some code)
-      :idle-ms (.-idle-ms s)
-      :timeout-ms (.-timeout-ms s)
-      :deadlock-detected false
-      :term-deadline-ms (.-term-deadline-ms s)
-      :kill-deadline-ms (.-kill-deadline-ms s)
-      :termination-receipt (.-termination-receipt s))))
+      :stdinBuffer (.-stdinBuffer s)
+      :stdoutBuffer (.-stdoutBuffer s)
+      :stderrBuffer (.-stderrBuffer s)
+      :exitCode (some code)
+      :idleMs (.-idleMs s)
+      :timeoutMs (.-timeoutMs s)
+      :deadlockDetected false
+      :termDeadlineMs (.-termDeadlineMs s)
+      :killDeadlineMs (.-killDeadlineMs s)
+      :terminationReceipt (.-terminationReceipt s))))
 
-(df session-check-deadlock [(s ProcessSession) (idle-ceiling Int64)] -> ProcessSession
+(df sessionCheckDeadlock [(s ProcessSession) (idleCeiling Int64)] -> ProcessSession
   :d "Audits session idle duration against deadlock ceiling setting deadlock flag if breached."
-  (let [(cap (if (<= idle-ceiling 0)
-               (if (<= (.-timeout-ms s) 0) 10000 (.-timeout-ms s))
-               idle-ceiling))
-        (breached (>= (.-idle-ms s) cap))]
+  (let [(cap (if (<= idleCeiling 0)
+               (if (<= (.-timeoutMs s) 0) 10000 (.-timeoutMs s))
+               idleCeiling))
+        (breached (>= (.-idleMs s) cap))]
     (ProcessSession
       :id (.-id s)
       :pid (.-pid s)
       :state (if breached "idle" (.-state s))
       :cmd (.-cmd s)
-      :stdin-buffer (.-stdin-buffer s)
-      :stdout-buffer (.-stdout-buffer s)
-      :stderr-buffer (.-stderr-buffer s)
-      :exit-code (.-exit-code s)
-      :idle-ms (.-idle-ms s)
-      :timeout-ms (.-timeout-ms s)
-      :deadlock-detected breached
+      :stdinBuffer (.-stdinBuffer s)
+      :stdoutBuffer (.-stdoutBuffer s)
+      :stderrBuffer (.-stderrBuffer s)
+      :exitCode (.-exitCode s)
+      :idleMs (.-idleMs s)
+      :timeoutMs (.-timeoutMs s)
+      :deadlockDetected breached
       :deadlocked breached
-      :term-deadline-ms (.-term-deadline-ms s)
-      :kill-deadline-ms (.-kill-deadline-ms s)
-      :termination-receipt (.-termination-receipt s))))
+      :termDeadlineMs (.-termDeadlineMs s)
+      :killDeadlineMs (.-killDeadlineMs s)
+      :terminationReceipt (.-terminationReceipt s))))
 
-(df session-tick-idle [(s ProcessSession) (delta-ms Int64)] -> ProcessSession
+(df sessionTickIdle [(s ProcessSession) (deltaMs Int64)] -> ProcessSession
   :d "Advances session idle duration counter by elapsed milliseconds."
-  (let [(new-idle (+ (.-idle-ms s) delta-ms))
-        (ceiling (if (> (.-timeout-ms s) 10000) (.-timeout-ms s) 10000))
-        (is-deadlocked (>= new-idle ceiling))]
+  (let [(newIdle (+ (.-idleMs s) deltaMs))
+        (ceiling (if (> (.-timeoutMs s) 10000) (.-timeoutMs s) 10000))
+        (isDeadlocked (>= newIdle ceiling))]
     (ProcessSession
       :id (.-id s)
       :pid (.-pid s)
-      :state (if is-deadlocked "idle" (.-state s))
+      :state (if isDeadlocked "idle" (.-state s))
       :cmd (.-cmd s)
-      :stdin-buffer (.-stdin-buffer s)
-      :stdout-buffer (.-stdout-buffer s)
-      :stderr-buffer (.-stderr-buffer s)
-      :exit-code (.-exit-code s)
-      :idle-ms new-idle
-      :timeout-ms (.-timeout-ms s)
-      :deadlock-detected is-deadlocked
-      :deadlocked is-deadlocked
-      :term-deadline-ms (.-term-deadline-ms s)
-      :kill-deadline-ms (.-kill-deadline-ms s)
-      :termination-receipt (.-termination-receipt s))))
+      :stdinBuffer (.-stdinBuffer s)
+      :stdoutBuffer (.-stdoutBuffer s)
+      :stderrBuffer (.-stderrBuffer s)
+      :exitCode (.-exitCode s)
+      :idleMs newIdle
+      :timeoutMs (.-timeoutMs s)
+      :deadlockDetected isDeadlocked
+      :deadlocked isDeadlocked
+      :termDeadlineMs (.-termDeadlineMs s)
+      :killDeadlineMs (.-killDeadlineMs s)
+      :terminationReceipt (.-terminationReceipt s))))
 
-(df session-extend-timeout [(s ProcessSession) (extend-ms Int64)] -> ProcessSession
+(df sessionExtendTimeout [(s ProcessSession) (extendMs Int64)] -> ProcessSession
   :d "Dynamically extends watchdog timeout ceiling on active session resetting idle timer."
   (ProcessSession
     :id (.-id s)
     :pid (.-pid s)
     :state (.-state s)
     :cmd (.-cmd s)
-    :stdin-buffer (.-stdin-buffer s)
-    :stdout-buffer (.-stdout-buffer s)
-    :stderr-buffer (.-stderr-buffer s)
-    :exit-code (.-exit-code s)
-    :idle-ms 0
-    :timeout-ms (+ (.-timeout-ms s) extend-ms)
-    :deadlock-detected false
-    :term-deadline-ms (.-term-deadline-ms s)
-    :kill-deadline-ms (.-kill-deadline-ms s)
-    :termination-receipt (.-termination-receipt s)))
+    :stdinBuffer (.-stdinBuffer s)
+    :stdoutBuffer (.-stdoutBuffer s)
+    :stderrBuffer (.-stderrBuffer s)
+    :exitCode (.-exitCode s)
+    :idleMs 0
+    :timeoutMs (+ (.-timeoutMs s) extendMs)
+    :deadlockDetected false
+    :termDeadlineMs (.-termDeadlineMs s)
+    :killDeadlineMs (.-killDeadlineMs s)
+    :terminationReceipt (.-terminationReceipt s)))
 
-(df session-set-timeout [(s ProcessSession) (new-ms Int64)] -> ProcessSession
+(df sessionSetTimeout [(s ProcessSession) (newMs Int64)] -> ProcessSession
   :d "Explicitly updates watchdog timeout ceiling on active session resetting idle timer."
   (ProcessSession
     :id (.-id s)
     :pid (.-pid s)
     :state (.-state s)
     :cmd (.-cmd s)
-    :stdin-buffer (.-stdin-buffer s)
-    :stdout-buffer (.-stdout-buffer s)
-    :stderr-buffer (.-stderr-buffer s)
-    :exit-code (.-exit-code s)
-    :idle-ms 0
-    :timeout-ms new-ms
-    :deadlock-detected false
-    :term-deadline-ms (.-term-deadline-ms s)
-    :kill-deadline-ms (.-kill-deadline-ms s)
-    :termination-receipt (.-termination-receipt s)))
+    :stdinBuffer (.-stdinBuffer s)
+    :stdoutBuffer (.-stdoutBuffer s)
+    :stderrBuffer (.-stderrBuffer s)
+    :exitCode (.-exitCode s)
+    :idleMs 0
+    :timeoutMs newMs
+    :deadlockDetected false
+    :termDeadlineMs (.-termDeadlineMs s)
+    :killDeadlineMs (.-killDeadlineMs s)
+    :terminationReceipt (.-terminationReceipt s)))
 
-(df session-step-watchdog! [(s ProcessSession) (delta-ms Int64) (spool-path String)] -> ProcessSession
+(df sessionStepWatchdog! [(s ProcessSession) (deltaMs Int64) (spoolPath String)] -> ProcessSession
   :d "Advances idle timer and enforces two-stage stdin deadlock watchdog escalation (SIGTERM at 10s, SIGKILL at 12s)."
-  (let [(new-idle (+ (.-idle-ms s) delta-ms))
-        (term-limit (.-term-deadline-ms s))
-        (kill-limit (.-kill-deadline-ms s))]
+  (let [(newIdle (+ (.-idleMs s) deltaMs))
+        (termLimit (.-termDeadlineMs s))
+        (killLimit (.-killDeadlineMs s))]
     (cond
-      ((>= new-idle kill-limit)
-       (let [(receipt (make-process-receipt 137 new-idle 0 spool-path "Stdin deadlock watchdog: SIGKILL dispatched at 12s"))]
+      ((>= newIdle killLimit)
+       (let [(receipt (makeProcessReceipt 137 newIdle 0 spoolPath "Stdin deadlock watchdog: SIGKILL dispatched at 12s"))]
          (ProcessSession
            :id (.-id s)
            :pid (.-pid s)
            :state "terminated"
            :cmd (.-cmd s)
-           :stdin-buffer (.-stdin-buffer s)
-           :stdout-buffer (.-stdout-buffer s)
-           :stderr-buffer (.-stderr-buffer s)
-           :exit-code (some 137)
-           :idle-ms new-idle
-           :timeout-ms (.-timeout-ms s)
-           :deadlock-detected true
-           :term-deadline-ms term-limit
-           :kill-deadline-ms kill-limit
-           :termination-receipt (some receipt))))
-      ((>= new-idle term-limit)
-       (let [(receipt (make-process-receipt 143 new-idle 0 spool-path "Stdin deadlock watchdog: SIGTERM dispatched at 10s"))]
+           :stdinBuffer (.-stdinBuffer s)
+           :stdoutBuffer (.-stdoutBuffer s)
+           :stderrBuffer (.-stderrBuffer s)
+           :exitCode (some 137)
+           :idleMs newIdle
+           :timeoutMs (.-timeoutMs s)
+           :deadlockDetected true
+           :termDeadlineMs termLimit
+           :killDeadlineMs killLimit
+           :terminationReceipt (some receipt))))
+      ((>= newIdle termLimit)
+       (let [(receipt (makeProcessReceipt 143 newIdle 0 spoolPath "Stdin deadlock watchdog: SIGTERM dispatched at 10s"))]
          (ProcessSession
            :id (.-id s)
            :pid (.-pid s)
            :state "terminating"
            :cmd (.-cmd s)
-           :stdin-buffer (.-stdin-buffer s)
-           :stdout-buffer (.-stdout-buffer s)
-           :stderr-buffer (.-stderr-buffer s)
-           :exit-code (some 143)
-           :idle-ms new-idle
-           :timeout-ms (.-timeout-ms s)
-           :deadlock-detected true
-           :term-deadline-ms term-limit
-           :kill-deadline-ms kill-limit
-           :termination-receipt (some receipt))))
+           :stdinBuffer (.-stdinBuffer s)
+           :stdoutBuffer (.-stdoutBuffer s)
+           :stderrBuffer (.-stderrBuffer s)
+           :exitCode (some 143)
+           :idleMs newIdle
+           :timeoutMs (.-timeoutMs s)
+           :deadlockDetected true
+           :termDeadlineMs termLimit
+           :killDeadlineMs killLimit
+           :terminationReceipt (some receipt))))
       (:else
        (ProcessSession
          :id (.-id s)
          :pid (.-pid s)
          :state "active"
          :cmd (.-cmd s)
-         :stdin-buffer (.-stdin-buffer s)
-         :stdout-buffer (.-stdout-buffer s)
-         :stderr-buffer (.-stderr-buffer s)
-         :exit-code (.-exit-code s)
-         :idle-ms new-idle
-         :timeout-ms (.-timeout-ms s)
-         :deadlock-detected false
-         :term-deadline-ms term-limit
-         :kill-deadline-ms kill-limit
-         :termination-receipt (.-termination-receipt s))))))
+         :stdinBuffer (.-stdinBuffer s)
+         :stdoutBuffer (.-stdoutBuffer s)
+         :stderrBuffer (.-stderrBuffer s)
+         :exitCode (.-exitCode s)
+         :idleMs newIdle
+         :timeoutMs (.-timeoutMs s)
+         :deadlockDetected false
+         :termDeadlineMs termLimit
+         :killDeadlineMs killLimit
+         :terminationReceipt (.-terminationReceipt s))))))
