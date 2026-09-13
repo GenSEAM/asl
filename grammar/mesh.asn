@@ -1,0 +1,65 @@
+(:mesh :v 1 :src D85 :shortcode D85
+  :note "Formal ASN multi-model mesh orchestrator protocol, worker allocation, defect taxonomy, and consensus receipt schema under D85."
+  :concepts [
+    (:concept :name "mesh_protocol_schema" :role "Formal specification of worker allocation, task partition DAG, and consensus receipts")
+    (:concept :name "defect_taxonomy" :role "Seven-category classification taxonomy for AST and invariant defects")
+    (:concept :name "consensus_receipt" :role "Cryptographically bound verification receipt emitted upon dialectical agreement")
+    (:concept :name "worker_spec" :role "Specification of an isolated subagent worker process anchored to a worktree partition")
+  ]
+  :meshProtocol [
+    (:schema :id meshWorker :category :worker
+      :description "Declarative allocation specification for an isolated worker subagent."
+      :required [:workerId :model :tier :partitionScope :allocatedWorktree :status]
+      :optional [:resourceLimits :assignedTasks :activeDigest]
+      :fields [
+        (:field :name :workerId :type :string :pattern "^worker-[0-9a-zA-Z-]+$")
+        (:field :name :model :type :string)
+        (:field :name :tier :type :keyword :allowed [:opus :pro :flash :sonnet :haiku])
+        (:field :name :partitionScope :type :string)
+        (:field :name :allocatedWorktree :type :string)
+        (:field :name :status :type :keyword :allowed [:idle :assigned :auditing :synthesizing :completed :failed])
+        (:field :name :resourceLimits :type :map)
+        (:field :name :assignedTasks :type :list)
+        (:field :name :activeDigest :type :string)])
+
+    (:schema :id defectRecord :category :defect
+      :description "Structured AST and invariant defect observation identified during partition audit."
+      :required [:defectId :path :lineNumber :kind :severity :blameSymbol :rationale]
+      :optional [:suggestedFix :remediationStep]
+      :fields [
+        (:field :name :defectId :type :string :pattern "^def-[0-9a-fA-F-]+$")
+        (:field :name :path :type :string)
+        (:field :name :lineNumber :type :integer)
+        (:field :name :kind :type :keyword :allowed [:syntax-malformation :tautological-assertion :unbound-symbol :comment-leak :emoji-contamination :concurrency-hazard :boundary-violation])
+        (:field :name :severity :type :keyword :allowed [:critical :high :medium :low :advisory])
+        (:field :name :blameSymbol :type :string)
+        (:field :name :rationale :type :string)
+        (:field :name :suggestedFix :type :string)
+        (:field :name :remediationStep :type :string)])
+
+    (:schema :id consensusReceipt :category :receipt
+      :description "Consensus receipt emitted when cross-model debate reaches agreement threshold on defects."
+      :required [:consensusId :partition :agreementRate :verifiedDefects :status :timestamp]
+      :optional [:disputedDefects :participatingWorkers]
+      :fields [
+        (:field :name :consensusId :type :string :pattern "^rc-mesh-[0-9a-zA-Z-]+$")
+        (:field :name :partition :type :string)
+        (:field :name :agreementRate :type :float)
+        (:field :name :verifiedDefects :type :list)
+        (:field :name :status :type :keyword :allowed [:consensus :split :unresolved])
+        (:field :name :timestamp :type :integer)
+        (:field :name :disputedDefects :type :list)
+        (:field :name :participatingWorkers :type :list)])
+
+    (:schema :id defectTaxonomy :category :taxonomy
+      :description "Defect taxonomy categorization rules."
+      :categories [
+        (:category :id :syntax-malformation :description "Unbalanced S-expressions, missing delimiters, or invalid AST forms.")
+        (:category :id :tautological-assertion :description "Vacuous assertions such as (= 1 1) or trivial constant comparisons that fail to test reality.")
+        (:category :id :unbound-symbol :description "Calls to unresolved symbols or missing imports in module headers.")
+        (:category :id :comment-leak :description "Violations of pure ASL zero-comment invariant C1.")
+        (:category :id :emoji-contamination :description "Violations of machine ASN zero-emoji invariant C2.")
+        (:category :id :concurrency-hazard :description "Unprotected concurrent file writes or missing flock locks in record stores.")
+        (:category :id :boundary-violation :description "Unauthorized file ownership writes or foreign ecosystem imports.")])
+  ]
+)
