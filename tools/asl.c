@@ -2493,6 +2493,106 @@ static int op_frame(int step_id, StepToken *tokens, int ntokens, const char *ws_
     return 0;
 }
 
+static int validate_manifest_ast_c(const char *ws_root, const char *rel_path);
+static int check_pure_asl_zero_comments(const char *ws_root);
+static int check_grounded_claims(const char *ws_root, int *out_claims_count);
+static int check_zero_foreign_files(const char *ws_root);
+static int run_gate_5_suites(const char *ws_root, int *out_test_count, int *out_assert_suites, int *out_assert_count);
+static int run_gate_6_grammar(const char *ws_root, int *out_total_syms, int *out_rationale_count);
+static int run_gate_7_skills(const char *ws_root, int *out_skills_count);
+static int check_capabilities_staleness(const char *ws_root, char *err_buf, size_t err_size);
+static void collect_tree_files(const char *base, const char *rel, const char *ext, const char *pattern, char ***out_list, int *count, int *cap);
+static int str_ptr_cmp(const void *a, const void *b);
+
+static void op_gate(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *kfile = get_kw_arg(tokens, ntokens, "file");
+    if (!kfile && ntokens > 1 && tokens[1].str && tokens[1].str[0] != ':') {
+        kfile = tokens[1].str;
+    }
+    if (kfile) {
+        char resolved_path[1024];
+        if (kfile[0] == '/') {
+            snprintf(resolved_path, sizeof(resolved_path), "%s", kfile);
+        } else {
+            snprintf(resolved_path, sizeof(resolved_path), "%s/%s", ws_root, kfile);
+        }
+        const char *chk_file = (access(kfile, F_OK) == 0) ? kfile : (access(resolved_path, F_OK) == 0 ? resolved_path : NULL);
+        if (!chk_file) {
+            sb_append(out, "  (:step :id ");
+            sb_append_int(out, step_id);
+            sb_append(out, " :op \"gate\" :status \"rejected\" :error-code \":ERR_FILE_NOT_FOUND\" :message \"Target file not found\")\n");
+            return;
+        }
+        int d_err = check_file_delimiters(chk_file, 0);
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        if (d_err == 0) {
+            sb_append(out, " :op \"gate\" :status \"ok\" :allClean true :dynamic true :passed 1 :active 1 :total 1)\n");
+        } else {
+            sb_append(out, " :op \"gate\" :status \"failed\" :allClean false :dynamic true :passed 0 :active 1 :total 1)\n");
+        }
+        return;
+    }
+
+    int g1_pass = 1;
+    char **manifests = NULL;
+    int m_count = 0, m_cap = 0;
+    collect_tree_files(ws_root, "", ".asn", "manifest.asn", &manifests, &m_count, &m_cap);
+    if (m_count > 0 && manifests) {
+        qsort(manifests, m_count, sizeof(char *), str_ptr_cmp);
+        for (int i = 0; i < m_count; i++) {
+            if (!validate_manifest_ast_c(ws_root, manifests[i])) g1_pass = 0;
+            free(manifests[i]);
+        }
+        free(manifests);
+    } else {
+        g1_pass = 0;
+    }
+
+    int g2_pass = (check_pure_asl_zero_comments(ws_root) == 0) ? 1 : 0;
+    int claims_cnt = 0;
+    int g3_pass = (check_grounded_claims(ws_root, &claims_cnt) == 0) ? 1 : 0;
+    int g4_pass = (check_zero_foreign_files(ws_root) == 0) ? 1 : 0;
+    int tc = 0, as = 0, ta = 0;
+    int g5_pass = (run_gate_5_suites(ws_root, &tc, &as, &ta) == 0) ? 1 : 0;
+    int ts = 0, rc = 0;
+    int g6_pass = (run_gate_6_grammar(ws_root, &ts, &rc) == 0) ? 1 : 0;
+    int sc = 0;
+    int g7_pass = (run_gate_7_skills(ws_root, &sc) == 0) ? 1 : 0;
+    char cap_err[256] = {0};
+    if (check_capabilities_staleness(ws_root, cap_err, sizeof(cap_err)) != 0) {
+        g7_pass = 0;
+    }
+
+    int passed = g1_pass + g2_pass + g3_pass + g4_pass + g5_pass + g6_pass + g7_pass;
+    int all_clean = (passed == 7);
+
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"gate\" :status \"");
+    sb_append(out, all_clean ? "ok" : "failed");
+    sb_append(out, "\" :allClean ");
+    sb_append(out, all_clean ? "true" : "false");
+    sb_append(out, " :dynamic true :passedGates ");
+    sb_append_int(out, passed);
+    sb_append(out, " :activeGates 7 :totalGates 7 :verdicts [\n");
+    sb_append(out, "    (:verdict :gate 1 :name \"manifests\" :passed ");
+    sb_append(out, g1_pass ? "true" : "false");
+    sb_append(out, ")\n    (:verdict :gate 2 :name \"syntax\" :passed ");
+    sb_append(out, g2_pass ? "true" : "false");
+    sb_append(out, ")\n    (:verdict :gate 3 :name \"claims\" :passed ");
+    sb_append(out, g3_pass ? "true" : "false");
+    sb_append(out, ")\n    (:verdict :gate 4 :name \"zeroForeign\" :passed ");
+    sb_append(out, g4_pass ? "true" : "false");
+    sb_append(out, ")\n    (:verdict :gate 5 :name \"testSuites\" :passed ");
+    sb_append(out, g5_pass ? "true" : "false");
+    sb_append(out, ")\n    (:verdict :gate 6 :name \"grammar\" :passed ");
+    sb_append(out, g6_pass ? "true" : "false");
+    sb_append(out, ")\n    (:verdict :gate 7 :name \"skills\" :passed ");
+    sb_append(out, g7_pass ? "true" : "false");
+    sb_append(out, ")\n  ])\n");
+}
+
 static int execute_single_step(int step_id, const char *step_str, const char *ws_root, StrBuf *out) {
     size_t prev_len = out->len;
     const char *p = step_str;
@@ -3474,9 +3574,7 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
             sb_append(out, " :op \"git\" :status \"rejected\" :error-code \":ERR_UNKNOWN_SUBOP\" :message \"Unknown git subop\")\n");
         }
     } else if (strcmp(op, "gate") == 0 || strcmp(op, "chk") == 0) {
-        sb_append(out, "  (:step :id ");
-        sb_append_int(out, step_id);
-        sb_append(out, " :op \"gate\" :status \"ok\" :allClean true :passed 7 :active 7 :total 7)\n");
+        op_gate(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "compose") == 0 || strcmp(op, "pipe") == 0) {
         op_compose(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "run") == 0) {
