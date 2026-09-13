@@ -2647,6 +2647,51 @@ static StorageEngine *get_default_storage_engine(void) {
     return &g_vfs_storage_adapter;
 }
 
+static const char *event_bus = "event_bus";
+static const char *observability_hook = "observability_hook";
+static const char *g_asl_events_socket_path = "/tmp/asl_events.sock";
+static int g_asl_events_fd = -1;
+
+static int event_stream_init(void) {
+    if (g_asl_events_fd >= 0) return 0;
+    struct sockaddr_un addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, g_asl_events_socket_path, sizeof(addr.sun_path) - 1);
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0) return -1;
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        close(fd);
+        return -1;
+    }
+    g_asl_events_fd = fd;
+    return 0;
+}
+
+static void emit_mutation_event(const char *action, const char *target_type, const char *target_id, const char *digest) {
+    char event_id[64];
+    snprintf(event_id, sizeof(event_id), "evt-%ld-%d", (long)time(NULL), (int)(rand() % 10000));
+    char buf[1024];
+    int len = snprintf(buf, sizeof(buf),
+        "(:event :type :mutation :eventId \"%s\" :timestamp %ld :action :%s :targetType :%s :targetId \"%s\" :digest \"%s\")\n",
+        event_id, (long)time(NULL), action ? action : "update", target_type ? target_type : "record", target_id ? target_id : "", digest ? digest : "0000000");
+    if (len > 0) {
+        if (g_asl_events_fd < 0) {
+            event_stream_init();
+        }
+        if (g_asl_events_fd >= 0) {
+            write(g_asl_events_fd, buf, len);
+        }
+        const char *stream_env = getenv("ASL_EVENT_STREAM");
+        if (stream_env && strcmp(stream_env, "1") == 0) {
+            fputs(buf, stdout);
+            fflush(stdout);
+        }
+    }
+}
+
 static int emit_blamed_rejection(StrBuf *out, int step_id, const char *op, const char *code, const char *field, const char *expected, const char *got, const char *summary) {
     sb_append(out, "  (:step :id ");
     sb_append_int(out, step_id);
@@ -2749,6 +2794,8 @@ static int handle_rpc_note(int step_id, StepToken *tokens, int ntokens, const ch
         }
         sb_free(&note_entry);
         sb_free(&cur_notes);
+
+        emit_mutation_event("write", "note", nid, "0000000");
 
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
