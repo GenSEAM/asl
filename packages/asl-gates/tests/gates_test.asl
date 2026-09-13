@@ -5,7 +5,7 @@
       (grammar-gate :a gg)
       (skills-gate :a sg)
       (manifest-gate :a mg)
-      (runner :a rn)])
+      (gate-runner :a rn)])
 
 (df test-syntax-valid [] -> Bool
   :d "Verifies clean syntax passes gate parser check."

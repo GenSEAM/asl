@@ -10,7 +10,6 @@
            "asl-gates/lexicon-gate"
            "asl-gates/manifest-gate"
            "asl-gates/polarity"
-           "asl-gates/runner"
            "asl-gates/rule-checkers"
            "asl-gates/shebang-audit"
            "asl-gates/site-claims"
