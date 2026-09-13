@@ -1,16 +1,18 @@
 (module grammar/corpus-test
   :d "Automated assertion test suite for grammar corpus"
-  :x [test-corpus-integrity])
+  :x [Testcorpus-integrity])
 
-(df test-corpus-integrity []
-  (assert (> (count [1 2 3]) 0) "corpus files loaded cleanly")
-  (assert (= (+ 1 1) 2) "arithmetic verified")
-  (assert (string-contains? "pure-asl" "asl") "asl dialect canonical")
-  (assert (not (string-empty? "asl")) "boolean polarity verified")
-  (assert (= (count [1 2 3]) 3) "collection counting verified")
-  (assert (= (head [10 20]) 10) "head element access verified")
-  (assert (= (tail [10 20]) [20]) "tail slicing verified")
-  (assert (= (get {:a 1} :a) 1) "map lookup verified")
-  (assert (= (str "pure-" "asl") "pure-asl") "string concatenation verified"))
+(df Testcorpus-integrity [] -> Bool
+  (let [(f1 (file-read "asl/grammar/corpus/valid/01-basics.asl"))
+        (f1b (if (.-ok f1) f1 (file-read "../corpus/valid/01-basics.asl")))
+        (f1c (if (.-ok f1b) f1b (file-read "grammar/corpus/valid/01-basics.asl")))]
+    (assert (.-ok f1c) "basics corpus file loaded cleanly")
+    (assert (> (string-length (.-value f1c)) 0) "corpus file is not empty")
+    (let [(f2 (file-read "asl/grammar/corpus/valid/02-match.asl"))
+          (f2b (if (.-ok f2) f2 (file-read "../corpus/valid/02-match.asl")))
+          (f2c (if (.-ok f2b) f2b (file-read "grammar/corpus/valid/02-match.asl")))]
+      (assert (.-ok f2c) "match corpus file loaded cleanly")
+      (assert (> (string-length (.-value f2c)) 0) "corpus file is not empty")
+      true)))
 
-(test-corpus-integrity)
+(Testcorpus-integrity)
