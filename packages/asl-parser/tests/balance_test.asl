@@ -61,9 +61,25 @@
     (assert (= unchanged already-bal) "Must leave balanced code unchanged")
     true))
 
+(df test-interleaved-delimiters [] -> Bool
+  :d "Verifies that interleaved delimiters like ([)] and {[(])} are correctly flagged as unbalanced."
+  (let [(r1 (bal/check-delimiter-balance "([)]"))
+        (r2 (bal/check-delimiter-balance "[(])"))
+        (r3 (bal/check-delimiter-balance "{(})"))
+        (r4 (bal/check-delimiter-balance "{[(])}"))]
+    (assert (not (.-balanced r1)) "([)] must be unbalanced")
+    (assert (not (.-balanced r2)) "[(]) must be unbalanced")
+    (assert (not (.-balanced r3)) "{(}) must be unbalanced")
+    (assert (not (.-balanced r4)) "{[(])} must be unbalanced")
+    (assert (not (bal/is-delimiter-balanced? "([)]")) "is-delimiter-balanced? must reject ([)]")
+    true))
+
 (df run-tests [] -> Bool
   :d "Executes all delimiter balance unit tests."
   (and (test-balanced-forms)
        (and (test-unbalanced-forms)
             (and (test-delimiters-in-strings)
-                 (and (test-count-unclosed-parens) (test-balance-delimiters))))))
+                 (and (test-count-unclosed-parens)
+                      (and (test-balance-delimiters)
+                           (test-interleaved-delimiters)))))))
+

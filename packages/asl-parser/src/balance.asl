@@ -8,13 +8,21 @@
   (:f open-brackets I64 "Remaining unclosed square brackets")
   (:f open-braces I64 "Remaining unclosed curly braces"))
 
-(df check-balance-step [(chars (List Str)) (p I64) (b I64) (br I64) (in-quote Bool) (escape Bool)] -> BalanceResult
-  :d "Recursive string-aware and escape-aware delimiter balance scanner."
+(df stack-count-symbol [(stack (List Str)) (sym Str)] -> I64
+  :d "Counts occurrences of a delimiter in the LIFO stack"
+  (fold (fn [(acc I64) (item Str)] -> I64 (if (string-equals? item sym) (+ acc 1) acc)) 0 stack))
+
+(df check-balance-step [(chars (List Str)) (stack (List Str)) (in-quote Bool) (escape Bool)] -> BalanceResult
+  :d "Recursive string-aware and escape-aware delimiter balance scanner with LIFO delimiter stack."
   (if (list-empty? chars)
-    (let [(is-bal (and (= p 0)
+    (let [(p (stack-count-symbol stack "("))
+          (b (stack-count-symbol stack "["))
+          (br (stack-count-symbol stack "{"))
+          (is-bal (and (= p 0)
                        (and (= b 0)
                             (and (= br 0)
-                                 (not in-quote)))))]
+                                 (and (list-empty? stack)
+                                      (not in-quote))))))]
       (BalanceResult
         :balanced is-bal
         :open-parens p
@@ -24,26 +32,60 @@
           (rst (option-or (list-tail chars) (list)))]
       (if in-quote
         (if escape
-          (check-balance-step rst p b br true false)
+          (check-balance-step rst stack true false)
           (if (= c "\\")
-            (check-balance-step rst p b br true true)
+            (check-balance-step rst stack true true)
             (if (= c "\"")
-              (check-balance-step rst p b br false false)
-              (check-balance-step rst p b br true false))))
+              (check-balance-step rst stack false false)
+              (check-balance-step rst stack true false))))
         (if (= c "\"")
-          (check-balance-step rst p b br true false)
+          (check-balance-step rst stack true false)
           (cond
-            ((= c "(") (check-balance-step rst (+ p 1) b br false false))
-            ((= c ")") (if (<= p 0) (BalanceResult :balanced false :open-parens -1 :open-brackets b :open-braces br) (check-balance-step rst (- p 1) b br false false)))
-            ((= c "[") (check-balance-step rst p (+ b 1) br false false))
-            ((= c "]") (if (<= b 0) (BalanceResult :balanced false :open-parens p :open-brackets -1 :open-braces br) (check-balance-step rst p (- b 1) br false false)))
-            ((= c "{") (check-balance-step rst p b (+ br 1) false false))
-            ((= c "}") (if (<= br 0) (BalanceResult :balanced false :open-parens p :open-brackets b :open-braces -1) (check-balance-step rst p b (- br 1) false false)))
-            (:else (check-balance-step rst p b br false false))))))))
+            ((= c "(")
+             (check-balance-step rst (cons "(" stack) false false))
+            ((= c ")")
+             (if (list-empty? stack)
+               (BalanceResult :balanced false :open-parens -1 :open-brackets 0 :open-braces 0)
+               (let [(top (option-or (list-head stack) ""))
+                     (stk-rst (option-or (list-tail stack) (list)))]
+                 (if (= top "(")
+                   (check-balance-step rst stk-rst false false)
+                   (let [(p (stack-count-symbol stack "("))
+                         (b (stack-count-symbol stack "["))
+                         (br (stack-count-symbol stack "{"))]
+                     (BalanceResult :balanced false :open-parens p :open-brackets b :open-braces br))))))
+            ((= c "[")
+             (check-balance-step rst (cons "[" stack) false false))
+            ((= c "]")
+             (if (list-empty? stack)
+               (BalanceResult :balanced false :open-parens 0 :open-brackets -1 :open-braces 0)
+               (let [(top (option-or (list-head stack) ""))
+                     (stk-rst (option-or (list-tail stack) (list)))]
+                 (if (= top "[")
+                   (check-balance-step rst stk-rst false false)
+                   (let [(p (stack-count-symbol stack "("))
+                         (b (stack-count-symbol stack "["))
+                         (br (stack-count-symbol stack "{"))]
+                     (BalanceResult :balanced false :open-parens p :open-brackets b :open-braces br))))))
+            ((= c "{")
+             (check-balance-step rst (cons "{" stack) false false))
+            ((= c "}")
+             (if (list-empty? stack)
+               (BalanceResult :balanced false :open-parens 0 :open-brackets 0 :open-braces -1)
+               (let [(top (option-or (list-head stack) ""))
+                     (stk-rst (option-or (list-tail stack) (list)))]
+                 (if (= top "{")
+                   (check-balance-step rst stk-rst false false)
+                   (let [(p (stack-count-symbol stack "("))
+                         (b (stack-count-symbol stack "["))
+                         (br (stack-count-symbol stack "{"))]
+                     (BalanceResult :balanced false :open-parens p :open-brackets b :open-braces br))))))
+            (:else
+             (check-balance-step rst stack false false))))))))
 
 (df check-delimiter-balance [(code Str)] -> BalanceResult
   :d "Computes structural delimiter balance across parentheses, square brackets, and curly braces with string literal awareness."
-  (check-balance-step (string-chars code) 0 0 0 false false))
+  (check-balance-step (string-chars code) (list) false false))
 
 (df is-delimiter-balanced? [(code Str)] -> Bool
   :d "Convenience predicate returning true if code has perfectly balanced delimiters."
@@ -55,7 +97,6 @@
     (if (and (not (.-balanced res)) (> (.-open-parens res) 0))
       (.-open-parens res)
       0)))
-
 
 (df balance-delimiters [(raw Str)] -> Str
   :d "Balances unclosed parentheses in S-expressions with quote and escape awareness."
