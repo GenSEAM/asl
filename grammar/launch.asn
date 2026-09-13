@@ -1,0 +1,35 @@
+(:launch :v 1 :src D84 :shortcode D84
+  :note "Formal ASN launch session and client channel protocol schema under D84."
+  :launchSession [
+    (:schema :id launchSession :category :protocol
+      :description "Declarative launch form for autonomous client orchestration."
+      :required [:client :channel :orchestratorMode :permissionTier]
+      :optional [:sessionId :targetWorkspace :launchFlags]
+      :fields [
+        (:field :name :client :type :keyword :allowed [:agy :claude :codex :cursor :windsurf])
+        (:field :name :channel :type :keyword :allowed [:global :isolated :workspace])
+        (:field :name :orchestratorMode :type :boolean)
+        (:field :name :permissionTier :type :keyword :allowed [:read-only :sandboxed-write :dangerous-rescue])
+        (:field :name :sessionId :type :string)
+        (:field :name :targetWorkspace :type :string)
+        (:field :name :launchFlags :type :vector :items :string)])
+  ]
+  :permissionTiers [
+    (:schema :id permissionTier :category :security
+      :description "Autonomous permission elevation tiers for unattended loops."
+      :tiers [
+        (:tier :id :read-only :description "Strict perceptual mode; writes and modifications prohibited")
+        (:tier :id :sandboxed-write :description "Local isolated mutations within owned paths only")
+        (:tier :id :dangerous-rescue :description "Full autonomous elevation injecting dangerous-rescue flags to prevent interactive prompt stalls")])
+  ]
+  :clientChannels [
+    (:schema :id clientChannel :category :transport
+      :description "Channel handshake protocol between asl supervisor and external agent clients."
+      :required [:client :protocolVersion :capabilities :launchFlags]
+      :fields [
+        (:field :name :client :type :keyword)
+        (:field :name :protocolVersion :type :string)
+        (:field :name :capabilities :type :vector :items :keyword)
+        (:field :name :launchFlags :type :vector :items :string)])
+  ]
+)
