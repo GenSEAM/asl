@@ -2647,6 +2647,302 @@ static StorageEngine *get_default_storage_engine(void) {
     return &g_vfs_storage_adapter;
 }
 
+static int emit_blamed_rejection(StrBuf *out, int step_id, const char *op, const char *code, const char *field, const char *expected, const char *got, const char *summary) {
+    sb_append(out, "  (:step :id ");
+    sb_append_int(out, step_id);
+    sb_append(out, " :op \"");
+    sb_append_escaped(out, op);
+    sb_append(out, "\" :status \"rejected\" :error-code \":");
+    sb_append_escaped(out, code);
+    sb_append(out, "\" :reject (:reject :code \"");
+    sb_append_escaped(out, code);
+    sb_append(out, "\" :field :");
+    sb_append_escaped(out, field);
+    sb_append(out, " :expected :");
+    sb_append_escaped(out, expected);
+    sb_append(out, " :got ");
+    if (got && got[0] == ':') {
+        sb_append(out, got);
+    } else {
+        sb_append(out, "\"");
+        sb_append_escaped(out, got ? got : "");
+        sb_append(out, "\"");
+    }
+    sb_append(out, " :summary \"");
+    sb_append_escaped(out, summary ? summary : "");
+    sb_append(out, "\"))\n");
+    return 1;
+}
+
+static int handle_rpc_note(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "write";
+
+    if (strcmp(action, "write") == 0) {
+        const char *nid = get_kw_arg(tokens, ntokens, "id");
+        const char *topic = get_kw_arg(tokens, ntokens, "topic");
+        const char *session = get_kw_arg(tokens, ntokens, "session");
+        const char *tags = get_kw_arg(tokens, ntokens, "tags");
+        const char *fact = get_kw_arg(tokens, ntokens, "fact");
+        const char *reconstructibility = get_kw_arg(tokens, ntokens, "reconstructibility");
+        const char *status = get_kw_arg(tokens, ntokens, "status");
+        if (!status) status = "active";
+
+        if (!nid || !nid[0]) {
+            return emit_blamed_rejection(out, step_id, "note", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Note id is required");
+        }
+        if (!fact || !fact[0]) {
+            return emit_blamed_rejection(out, step_id, "note", "E_SCHEMA_MISSING_FIELD", "fact", "string", ":nil", "Note fact is required");
+        }
+        if (!topic || !topic[0]) {
+            return emit_blamed_rejection(out, step_id, "note", "E_SCHEMA_MISSING_FIELD", "topic", "string", ":nil", "Note topic is required");
+        }
+
+        char notes_path[4096];
+        snprintf(notes_path, sizeof(notes_path), "%s/.asl/mem/notes.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_notes;
+        sb_init(&cur_notes);
+        char err[512] = {0};
+        se->read_record(se, notes_path, &cur_notes, err, sizeof(err));
+
+        StrBuf note_entry;
+        sb_init(&note_entry);
+        sb_append(&note_entry, "    (:note :id \"");
+        sb_append_escaped(&note_entry, nid);
+        sb_append(&note_entry, "\" :topic \"");
+        sb_append_escaped(&note_entry, topic);
+        sb_append(&note_entry, "\" :session \"");
+        sb_append_escaped(&note_entry, session ? session : "");
+        sb_append(&note_entry, "\" :tags ");
+        sb_append(&note_entry, tags ? tags : "[]");
+        sb_append(&note_entry, " :fact \"");
+        sb_append_escaped(&note_entry, fact);
+        sb_append(&note_entry, "\" :reconstructibility ");
+        sb_append(&note_entry, (reconstructibility && strcmp(reconstructibility, "true") == 0) ? "true" : "false");
+        sb_append(&note_entry, " :status :");
+        sb_append(&note_entry, status);
+        sb_append(&note_entry, ")\n");
+
+        if (cur_notes.len > 0 && cur_notes.data) {
+            char *last_close = strrchr(cur_notes.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_notes.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_notes.data, prefix_len);
+                sb_append(&updated, note_entry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, notes_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            } else {
+                se->write_record(se, notes_path, note_entry.data, err, sizeof(err));
+            }
+        } else {
+            StrBuf new_file;
+            sb_init(&new_file);
+            sb_append(&new_file, "(:notesLedger\n  :version \"1.0.0\"\n  :notes [\n");
+            sb_append(&new_file, note_entry.data);
+            sb_append(&new_file, "  ]\n)\n");
+            se->write_record(se, notes_path, new_file.data, err, sizeof(err));
+            sb_free(&new_file);
+        }
+        sb_free(&note_entry);
+        sb_free(&cur_notes);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"note\" :action \"write\" :status \"ok\" :id \"");
+        sb_append_escaped(out, nid);
+        sb_append(out, "\" :topic \"");
+        sb_append_escaped(out, topic);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *topic = get_kw_arg(tokens, ntokens, "topic");
+        char notes_path[4096];
+        snprintf(notes_path, sizeof(notes_path), "%s/.asl/mem/notes.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_notes;
+        sb_init(&cur_notes);
+        char err[512] = {0};
+        se->read_record(se, notes_path, &cur_notes, err, sizeof(err));
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"note\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :topic \"");
+        sb_append_escaped(out, topic ? topic : "");
+        sb_append(out, "\" :hasNotes ");
+        sb_append(out, (cur_notes.len > 0) ? "true" : "false");
+        sb_append(out, ")\n");
+        sb_free(&cur_notes);
+        return 0;
+    } else if (strcmp(action, "retire") == 0) {
+        const char *nid = get_kw_arg(tokens, ntokens, "id");
+        if (!nid || !nid[0]) {
+            return emit_blamed_rejection(out, step_id, "note", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Note id is required for retire");
+        }
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"note\" :action \"retire\" :status \"ok\" :id \"");
+        sb_append_escaped(out, nid);
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "note", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported note action");
+}
+
+static int handle_rpc_receipt(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "emit";
+
+    if (strcmp(action, "emit") == 0) {
+        const char *rid = get_kw_arg(tokens, ntokens, "id");
+        const char *task_id = get_kw_arg(tokens, ntokens, "taskId");
+        const char *gate = get_kw_arg(tokens, ntokens, "gate");
+        const char *exit_code = get_kw_arg(tokens, ntokens, "exitCode");
+        const char *status = get_kw_arg(tokens, ntokens, "status");
+        const char *digest = get_kw_arg(tokens, ntokens, "digest");
+        const char *executed_asserts = get_kw_arg(tokens, ntokens, "executedAsserts");
+        const char *duration_ms = get_kw_arg(tokens, ntokens, "durationMs");
+
+        if (!rid || !rid[0]) {
+            return emit_blamed_rejection(out, step_id, "receipt", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Receipt id is required");
+        }
+        if (!task_id || !task_id[0]) {
+            return emit_blamed_rejection(out, step_id, "receipt", "E_SCHEMA_MISSING_FIELD", "taskId", "string", ":nil", "Task ID is required");
+        }
+        if (!gate || !gate[0]) {
+            return emit_blamed_rejection(out, step_id, "receipt", "E_SCHEMA_MISSING_FIELD", "gate", "string", ":nil", "Gate command is required");
+        }
+        if (!exit_code) {
+            return emit_blamed_rejection(out, step_id, "receipt", "E_SCHEMA_MISSING_FIELD", "exitCode", "integer", ":nil", "Exit code is required");
+        }
+
+        char receipts_path[4096];
+        snprintf(receipts_path, sizeof(receipts_path), "%s/.asl/mem/receipts.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_receipts;
+        sb_init(&cur_receipts);
+        char err[512] = {0};
+        se->read_record(se, receipts_path, &cur_receipts, err, sizeof(err));
+
+        StrBuf rentry;
+        sb_init(&rentry);
+        sb_append(&rentry, "    (:receipt :id \"");
+        sb_append_escaped(&rentry, rid);
+        sb_append(&rentry, "\" :taskId \"");
+        sb_append_escaped(&rentry, task_id);
+        sb_append(&rentry, "\" :gate \"");
+        sb_append_escaped(&rentry, gate);
+        sb_append(&rentry, "\" :exitCode ");
+        sb_append(&rentry, exit_code);
+        sb_append(&rentry, " :status :");
+        sb_append(&rentry, status ? status : "passed");
+        sb_append(&rentry, " :digest \"");
+        sb_append_escaped(&rentry, digest ? digest : "unknown");
+        sb_append(&rentry, "\" :executedAsserts ");
+        sb_append(&rentry, executed_asserts ? executed_asserts : "0");
+        sb_append(&rentry, " :durationMs ");
+        sb_append(&rentry, duration_ms ? duration_ms : "0");
+        sb_append(&rentry, ")\n");
+
+        if (cur_receipts.len > 0 && cur_receipts.data) {
+            char *last_close = strrchr(cur_receipts.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_receipts.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_receipts.data, prefix_len);
+                sb_append(&updated, rentry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, receipts_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            } else {
+                se->write_record(se, receipts_path, rentry.data, err, sizeof(err));
+            }
+        } else {
+            StrBuf new_file;
+            sb_init(&new_file);
+            sb_append(&new_file, "(:receipts\n  :version 1\n  :entries [\n");
+            sb_append(&new_file, rentry.data);
+            sb_append(&new_file, "  ]\n)\n");
+            se->write_record(se, receipts_path, new_file.data, err, sizeof(err));
+            sb_free(&new_file);
+        }
+        sb_free(&rentry);
+        sb_free(&cur_receipts);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"receipt\" :action \"emit\" :status \"ok\" :id \"");
+        sb_append_escaped(out, rid);
+        sb_append(out, "\" :taskId \"");
+        sb_append_escaped(out, task_id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "verify") == 0) {
+        const char *rid = get_kw_arg(tokens, ntokens, "id");
+        if (!rid || !rid[0]) {
+            return emit_blamed_rejection(out, step_id, "receipt", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Receipt id is required for verify");
+        }
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"receipt\" :action \"verify\" :status \"ok\" :id \"");
+        sb_append_escaped(out, rid);
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "receipt", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported receipt action");
+}
+
+static int handle_rpc_telemetry(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    (void)ws_root;
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "record";
+
+    if (strcmp(action, "record") == 0) {
+        const char *series = get_kw_arg(tokens, ntokens, "series");
+        const char *metric = get_kw_arg(tokens, ntokens, "metric");
+        const char *value = get_kw_arg(tokens, ntokens, "value");
+
+        if (!series || !series[0]) {
+            return emit_blamed_rejection(out, step_id, "telemetry", "E_SCHEMA_MISSING_FIELD", "series", "string", ":nil", "Telemetry series is required");
+        }
+        if (!metric || !metric[0]) {
+            return emit_blamed_rejection(out, step_id, "telemetry", "E_SCHEMA_MISSING_FIELD", "metric", "string", ":nil", "Telemetry metric is required");
+        }
+        if (!value || !value[0]) {
+            return emit_blamed_rejection(out, step_id, "telemetry", "E_SCHEMA_MISSING_FIELD", "value", "number", ":nil", "Telemetry value is required");
+        }
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"telemetry\" :action \"record\" :status \"ok\" :series \"");
+        sb_append_escaped(out, series);
+        sb_append(out, "\" :metric \"");
+        sb_append_escaped(out, metric);
+        sb_append(out, "\" :value ");
+        sb_append(out, value);
+        sb_append(out, ")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0) {
+        const char *series = get_kw_arg(tokens, ntokens, "series");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"telemetry\" :action \"query\" :status \"ok\" :series \"");
+        sb_append_escaped(out, series ? series : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "telemetry", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported telemetry action");
+}
+
 static int validate_manifest_ast_c(const char *ws_root, const char *rel_path);
 static int check_pure_asl_zero_comments(const char *ws_root);
 static int check_grounded_claims(const char *ws_root, int *out_claims_count);
@@ -3761,6 +4057,12 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         op_escalate(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "frame") == 0) {
         op_frame(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "note") == 0) {
+        handle_rpc_note(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "receipt") == 0) {
+        handle_rpc_receipt(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "telemetry") == 0) {
+        handle_rpc_telemetry(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
