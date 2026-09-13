@@ -3,5 +3,5 @@
  :entry "src/scheduler.asl"
  :description "Autonomous Multi-Model Mesh Orchestrator and Parallel Partition Scheduler"
  :asl-first true
- :modules ["asl-mesh/scheduler" "asl-mesh/scanner"]
+ :modules ["asl-mesh/scheduler" "asl-mesh/scanner" "asl-mesh/synthesis"]
  :dependencies [])
