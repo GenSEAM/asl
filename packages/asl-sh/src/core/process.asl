@@ -1,5 +1,5 @@
 (module asl-sh/core-process
-  :d "Native AgentScript Process Execution and Typed Command Builder (@pcp:d-446d)."
+  :d "Native AgentScript Process Execution and Typed Command Builder (d-446d)."
   :x [ProcessCmd
       ProcessOutput
       ProcessError
