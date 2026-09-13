@@ -435,7 +435,7 @@
     (cond
       ((<= len 0) 0)
       ((<= len 4) 1)
-      (:else (/ (+ len 3) 4)))))
+      (:else (int64-from-float (/ (+ len 3) 4))))))
 
 (df calc-savings [(orig I64) (asn I64)] -> F64
   :d "Calculates token savings percentage between original and ASN representation."
