@@ -8,6 +8,7 @@
 #include <sys/un.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/file.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <dirent.h>
@@ -2518,6 +2519,134 @@ static int op_frame(int step_id, StepToken *tokens, int ntokens, const char *ws_
     return 0;
 }
 
+typedef struct StorageEngine {
+    const char *name;
+    int (*read_record)(struct StorageEngine *self, const char *path, StrBuf *out, char *err_buf, size_t err_size);
+    int (*write_record)(struct StorageEngine *self, const char *path, const char *content, char *err_buf, size_t err_size);
+    int (*exists)(struct StorageEngine *self, const char *path);
+    void *user_data;
+} StorageEngine;
+
+static int vfs_storage_read_record(StorageEngine *self, const char *path, StrBuf *out, char *err_buf, size_t err_size) {
+    (void)self;
+    if (!path || !out) {
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "invalid arguments");
+        return -1;
+    }
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "cannot open file for reading: %s", strerror(errno));
+        return -1;
+    }
+    int fd = fileno(fp);
+    if (flock(fd, LOCK_SH) != 0) {
+        fclose(fp);
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "flock shared failed: %s", strerror(errno));
+        return -1;
+    }
+    char buf[4096];
+    size_t nr;
+    while ((nr = fread(buf, 1, sizeof(buf), fp)) > 0) {
+        sb_append_len(out, buf, nr);
+    }
+    flock(fd, LOCK_UN);
+    fclose(fp);
+    return 0;
+}
+
+static int vfs_storage_write_record(StorageEngine *self, const char *path, const char *content, char *err_buf, size_t err_size) {
+    (void)self;
+    if (!path || !content) {
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "invalid arguments");
+        return -1;
+    }
+    char parent_dir[4096];
+    snprintf(parent_dir, sizeof(parent_dir), "%s", path);
+    char *last_slash = strrchr(parent_dir, '/');
+    if (last_slash) {
+        *last_slash = '\0';
+        mkdir_p(parent_dir);
+    }
+    unsigned long hash = 5381;
+    for (const char *hp = path; *hp; hp++) {
+        hash = ((hash << 5) + hash) + (unsigned char)(*hp);
+    }
+    char lock_path[4096];
+    snprintf(lock_path, sizeof(lock_path), "/tmp/asl_store_%lx.lock", hash);
+    int lock_fd = open(lock_path, O_CREAT | O_RDWR, 0666);
+    if (lock_fd < 0) {
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "cannot create lockfile: %s", strerror(errno));
+        return -1;
+    }
+    long long start_ms = get_monotonic_ms();
+    int lock_acquired = 0;
+    while (get_monotonic_ms() - start_ms < 2000) {
+        if (flock(lock_fd, LOCK_EX | LOCK_NB) == 0) {
+            lock_acquired = 1;
+            break;
+        }
+        usleep(10000);
+    }
+    if (!lock_acquired) {
+        close(lock_fd);
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "flock timed out after 2000ms on %s", path);
+        return -2;
+    }
+    char tmp_path[4096];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp.%d.%lld", path, (int)getpid(), (long long)get_monotonic_ms());
+    FILE *tmp_fp = fopen(tmp_path, "wb");
+    if (!tmp_fp) {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "cannot open temp file: %s", strerror(errno));
+        return -1;
+    }
+    size_t clen = strlen(content);
+    if (clen > 0) {
+        size_t nw = fwrite(content, 1, clen, tmp_fp);
+        if (nw != clen) {
+            fclose(tmp_fp);
+            unlink(tmp_path);
+            flock(lock_fd, LOCK_UN);
+            close(lock_fd);
+            if (err_buf && err_size > 0) snprintf(err_buf, err_size, "write failure to temp file");
+            return -1;
+        }
+    }
+    fflush(tmp_fp);
+    int tmp_fd = fileno(tmp_fp);
+    fsync(tmp_fd);
+    fclose(tmp_fp);
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+        if (err_buf && err_size > 0) snprintf(err_buf, err_size, "atomic rename failed: %s", strerror(errno));
+        return -3;
+    }
+    flock(lock_fd, LOCK_UN);
+    close(lock_fd);
+    return 0;
+}
+
+static int vfs_storage_exists(StorageEngine *self, const char *path) {
+    (void)self;
+    if (!path) return 0;
+    return (access(path, F_OK) == 0) ? 1 : 0;
+}
+
+static StorageEngine g_vfs_storage_adapter = {
+    .name = "vfs",
+    .read_record = vfs_storage_read_record,
+    .write_record = vfs_storage_write_record,
+    .exists = vfs_storage_exists,
+    .user_data = NULL
+};
+
+static StorageEngine *get_default_storage_engine(void) {
+    return &g_vfs_storage_adapter;
+}
+
 static int validate_manifest_ast_c(const char *ws_root, const char *rel_path);
 static int check_pure_asl_zero_comments(const char *ws_root);
 static int check_grounded_claims(const char *ws_root, int *out_claims_count);
@@ -3112,18 +3241,11 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
 
             char full_path[4096];
             resolve_path(ws_root, file, full_path, sizeof(full_path));
-            char parent_dir[4096];
-            snprintf(parent_dir, sizeof(parent_dir), "%s", full_path);
-            char *last_slash = strrchr(parent_dir, '/');
-            if (last_slash) {
-                *last_slash = '\0';
-                mkdir_p(parent_dir);
-            }
-            FILE *fp = fopen(full_path, "w");
-            if (fp) {
+            StorageEngine *se = get_default_storage_engine();
+            char store_err[512] = {0};
+            int wrc = se->write_record(se, full_path, content, store_err, sizeof(store_err));
+            if (wrc == 0) {
                 size_t clen = strlen(content);
-                fwrite(content, 1, clen, fp);
-                fclose(fp);
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
                 sb_append(out, " :op \"write\" :status \"ok\" :file \"");
@@ -3131,10 +3253,18 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
                 sb_append(out, "\" :bytes ");
                 sb_append_int(out, clen);
                 sb_append(out, ")\n");
+            } else if (wrc == -2) {
+                sb_append(out, "  (:step :id ");
+                sb_append_int(out, step_id);
+                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_STORE_LOCK_TIMEOUT\" :message \"");
+                sb_append_escaped(out, store_err[0] ? store_err : "Lock timeout");
+                sb_append(out, "\")\n");
             } else {
                 sb_append(out, "  (:step :id ");
                 sb_append_int(out, step_id);
-                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_WRITE_FAILED\" :message \"Write failed\")\n");
+                sb_append(out, " :op \"write\" :status \"rejected\" :error-code \":ERR_WRITE_FAILED\" :message \"");
+                sb_append_escaped(out, store_err[0] ? store_err : "Write failed");
+                sb_append(out, "\")\n");
             }
         }
     } else if (strcmp(op, "sym") == 0) {
@@ -5760,6 +5890,51 @@ static int run_cmd_mem(int argc, char **argv, const char *ws_root) {
         return 0;
     }
     printf("Usage: asl mem query <text> | asl mem write <kind> <payload>\n");
+    return 0;
+}
+
+static int run_cmd_store(int argc, char **argv, const char *ws_root) {
+    if (argc >= 3 && strcmp(argv[2], "engine") == 0) {
+        StorageEngine *se = get_default_storage_engine();
+        printf("(:storage-engine :name \"%s\" :status :active)\n", se ? se->name : "none");
+        return 0;
+    }
+    if (argc >= 4 && strcmp(argv[2], "read") == 0) {
+        const char *rel = argv[3];
+        char full[4096];
+        resolve_path(ws_root, rel, full, sizeof(full));
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf buf;
+        sb_init(&buf);
+        char err[512] = {0};
+        int rc = se->read_record(se, full, &buf, err, sizeof(err));
+        if (rc == 0) {
+            if (buf.data) fputs(buf.data, stdout);
+            sb_free(&buf);
+            return 0;
+        } else {
+            fprintf(stderr, "Error reading record: %s\n", err[0] ? err : "unknown");
+            sb_free(&buf);
+            return 1;
+        }
+    }
+    if (argc >= 5 && strcmp(argv[2], "write") == 0) {
+        const char *rel = argv[3];
+        const char *content = argv[4];
+        char full[4096];
+        resolve_path(ws_root, rel, full, sizeof(full));
+        StorageEngine *se = get_default_storage_engine();
+        char err[512] = {0};
+        int rc = se->write_record(se, full, content, err, sizeof(err));
+        if (rc == 0) {
+            printf("(:store-write :status \"ok\" :path \"%s\")\n", rel);
+            return 0;
+        } else {
+            fprintf(stderr, "Error writing record: %s\n", err[0] ? err : "unknown");
+            return 1;
+        }
+    }
+    printf("Usage: asl store engine | asl store read <path> | asl store write <path> <content>\n");
     return 0;
 }
 
@@ -8455,6 +8630,11 @@ int main(int argc, char **argv) {
     /* Subcommand: mem */
     if (argc >= 2 && strcmp(argv[1], "mem") == 0) {
         return run_cmd_mem(argc, argv, discovered_ws);
+    }
+
+    /* Subcommand: store */
+    if (argc >= 2 && strcmp(argv[1], "store") == 0) {
+        return run_cmd_store(argc, argv, discovered_ws);
     }
 
     /* Subcommand: mutate / mutation */
