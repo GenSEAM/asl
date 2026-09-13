@@ -1,10 +1,8 @@
-;; Canonical Batch RPC Operations Registry (Single Source of Truth)
 (:rpc-registry
   :version "1.0.0"
   :rejectionCode ":ERR_UNIMPLEMENTED"
   :rejectionPolicy "Unrecognized or unimplemented operations are rejected with status rejected and error-code :ERR_UNIMPLEMENTED."
   :operations [
-    ;; === Reading & Progressive Disclosure ===
     (:op :id "asl-intel-ast"
          :tier [:essential :full]
          :cmd "asl rpc '(:batch (:out \"...\") (:sym \"...\"))'"
@@ -33,7 +31,6 @@
          :purpose "Fast directory listing and file sizing metadata in resident memory"
          :savings "85%")
 
-    ;; === Search & Code Intelligence ===
     (:op :id "asl-engine"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:engine :query \"...\" [:tier \"all\"|\"tier-0-ast\"|\"tier-1-mem\"|\"tier-2-web\"]))'"
@@ -71,7 +68,6 @@
          :purpose "Semantic recall and ranked Okapi BM25 retrieval over .asl/mem ledgers and codebase"
          :savings "90%")
 
-    ;; === Editing & Agentic IDE Refactoring ===
     (:op :id "asl-mem-edit"
          :tier [:essential :full]
          :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\"))'"
@@ -94,7 +90,6 @@
          :purpose "In-memory mass refactoring and symbol replacement across repository files"
          :savings "90%")
 
-    ;; === Git-Native Memory & Trajectory Continuity ===
     (:op "mem"
          :id "asl-mem"
          :tier [:affordance :full]
@@ -146,7 +141,6 @@
          :purpose "In-memory review staging allowing diff, stage, discard, and flush operations before writing to disk"
          :savings "90%")
 
-    ;; === DAG Execution Combinators & Parallelism ===
     (:op :id "asl-batch-par"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:par (:read \"...\") (:sym \"...\")))'"
@@ -189,7 +183,6 @@
          :purpose "Explicitly release an active path lease held by session"
          :savings "85%")
 
-    ;; === Supervised Execution & Git ===
     (:op :id "asl-run"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:run :cmd \"...\" [:cwd \"...\"] [:timeout-ms <ms>] [:limit <bytes>]))'"
@@ -211,7 +204,6 @@
          :purpose "GitHub PR and issue projections, aggregate CI rollup verdicts, and token-compacted PR diffs"
          :savings "85%")
 
-    ;; === Codec, Pointers & Zero-JSON ===
     (:op :id "asl-toolcall"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:call :tool \"...\" ...))'"
@@ -233,7 +225,6 @@
          :purpose "Perceptual pointer offloading to store heavy data in memory and retain context economy"
          :savings "95%")
 
-    ;; === Interactive Process & Spool Navigation ===
     (:op :id "asl-proc-spawn"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:proc-spawn :cmd \"...\" [:args [...]] [:timeout-ms <ms>] [:daemon true]))'"
@@ -283,7 +274,6 @@
          :purpose "Dispatches POSIX signal to terminate or interrupt running process session"
          :savings "80%")
 
-    ;; === Verification & Onboarding ===
     (:op :id "asl-gate-chk"
          :tier [:essential :full]
          :cmd "asl rpc '(:batch (:chk))' or asl gate"
@@ -298,7 +288,6 @@
          :purpose "Instant workspace onboarding, topology discovery, active wave inspection, and gate verification"
          :savings "95%")
 
-    ;; === Token Economy & Lexical Profiling ===
     (:op :id "asl-tokens"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:tokens :input \"...\" [:top <n>]))' or asl tokens <input>"
@@ -306,7 +295,6 @@
          :purpose "Hierarchical token counting, category breakdown, SNR calculation, and ranked frequency decomposition"
          :savings "90%")
 
-    ;; === Architectural Decisions & Governance ===
     (:op :id "asl-adr"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:adr [:id \"...\"] [:shortcode \"...\"] [:cluster \"...\"] [:format \"asn\"|\"md\"]))' or asl adr show <id>"
@@ -314,7 +302,6 @@
          :purpose "Deterministic architectural decision querying, sub-200 token AST retrieval, and dual-projection Markdown export"
          :savings "80%")
 
-    ;; === Machine Notes & Observations ===
     (:op "note"
          :id "asl-note"
          :tier [:affordance :full]
@@ -331,7 +318,6 @@
          :purpose "Append-only session trace querying over RPC operations, mutations and gate runs with before/after digests"
          :savings "88%")
 
-    ;; === Task Management & Lifecycle ===
     (:op "task"
          :id "asl-task"
          :tier [:affordance :full]
@@ -340,7 +326,6 @@
          :purpose "Task session claim, recovery, and listing via InFlight.asn and tasks.asl"
          :savings "85%")
 
-    ;; === Context Orientation & Slicing ===
     (:op "where"
          :id "asl-where"
          :tier [:essential :full]
@@ -349,7 +334,6 @@
          :purpose "Deliver context slice, active task, and situation-specific capability subset"
          :savings "90%")
 
-    ;; === Post Action Queue ===
     (:op "queue"
          :id "asl-queue"
          :tier [:affordance :full]
@@ -358,7 +342,6 @@
          :purpose "Post action queue enqueue and drain"
          :savings "80%")
 
-    ;; === Resident Prompt Translation & Multilingual Normalization ===
     (:op :id "asl-translate"
          :tier [:affordance :full]
          :cmd "asl rpc '(:batch (:translate :input \"...\" [:model \"...\"] [:formalize true]))' or asl translate <input>"
@@ -366,7 +349,6 @@
          :purpose "Resident ASN Prompt Translator: converts user prompts into structured ASN with formal reasoning and safe fallback"
          :savings "40%")
 
-    ;; === Ad Hoc Composition & Pipeline Reduction ===
     (:op "compose"
          :id "asl-rpc-compose"
          :tier [:affordance :full]
@@ -375,7 +357,6 @@
          :purpose "Ad hoc RPC composition and reduction outside the model with bounded output and unreduced log refusal"
          :savings "85%")
 
-    ;; === Session Continuity, Handoff & Budget ===
     (:op "handoff"
          :id "asl-handoff"
          :tier [:essential :full]

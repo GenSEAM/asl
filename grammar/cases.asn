@@ -1,5 +1,3 @@
-;; AgentScript Declarative Case Store & Test Specification Schema (ASN)
-;; Single Source of Truth for Positive, Negative, Edge, and Fuzzing Test Cases
 (:schema
   :package @genseam/asl-core
   :version "1.0.0"
