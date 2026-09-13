@@ -6,32 +6,32 @@
       TableDef
       QueryPlan
       DbResult
-      make-db-column
-      make-table-def
-      make-query-plan
-      make-db-result
-      driver-kind-to-str
-      tier-kind-to-str
-      str-to-driver-kind
-      str-to-tier-kind]
+      makeDbColumn
+      makeTableDef
+      makeQueryPlan
+      makeDbResult
+      driverKindToStr
+      tierKindToStr
+      strToDriverKind
+      strToTierKind]
   :i [])
 
 (dfe DriverKind
-  (:c drv-sqlite-wasm [] "In-memory WebAssembly SQLite execution driver")
-  (:c drv-pg-socket   [] "Host network socket Postgres connection pool driver")
-  (:c drv-mysql       [] "Host network socket MySQL connection pool driver")
-  (:c drv-agentbus-ipc [] "Agent-Bus IPC transport channel driver"))
+  (:c drvSqliteWasm [] "In-memory WebAssembly SQLite execution driver")
+  (:c drvPgSocket   [] "Host network socket Postgres connection pool driver")
+  (:c drvMysql       [] "Host network socket MySQL connection pool driver")
+  (:c drvAgentbusIpc [] "Agent-Bus IPC transport channel driver"))
 
 (dfe TierKind
-  (:c tier-wasm-sandbox [] "Tier 1: Sub-millisecond in-memory Wasm sandbox")
-  (:c tier-host-ipc     [] "Tier 2: Host process / streaming sockets / system tools")
-  (:c tier-microvm      [] "Tier 3: MicroVM / Firecracker / GPU / CUDA workload"))
+  (:c tierWasmSandbox [] "Tier 1: Sub-millisecond in-memory Wasm sandbox")
+  (:c tierHostIpc     [] "Tier 2: Host process / streaming sockets / system tools")
+  (:c tierMicrovm      [] "Tier 3: MicroVM / Firecracker / GPU / CUDA workload"))
 
 (dfs DbColumn
   (:f name Str "Column identifier name")
-  (:f col-type Str "Abstract data type: text, i64, f64, bool, timestamp")
+  (:f colType Str "Abstract data type: text, i64, f64, bool, timestamp")
   (:f nullable Bool "True if column permits NULL values")
-  (:f is-pk Bool "True if column is part of PRIMARY KEY"))
+  (:f isPk Bool "True if column is part of PRIMARY KEY"))
 
 (dfs TableDef
   (:f name Str "Target database table name")
@@ -46,68 +46,68 @@
   (:f rows (List (Map Str Str)) "Tabular row results as list of column-value maps")
   (:f affected I64 "Number of affected rows by mutation"))
 
-(df make-db-column [(name Str) (col-type Str) (nullable Bool) (is-pk Bool)] -> DbColumn
+(df makeDbColumn [(name Str) (colType Str) (nullable Bool) (isPk Bool)] -> DbColumn
   :d "Constructs a DbColumn record."
   (DbColumn
     :name name
-    :col-type col-type
+    :colType colType
     :nullable nullable
-    :is-pk is-pk))
+    :isPk isPk))
 
-(df make-table-def [(name Str) (columns (List DbColumn))] -> TableDef
+(df makeTableDef [(name Str) (columns (List DbColumn))] -> TableDef
   :d "Constructs a TableDef record."
   (TableDef
     :name name
     :columns columns))
 
-(df make-query-plan [(sql Str) (tier TierKind) (params (List Str))] -> QueryPlan
+(df makeQueryPlan [(sql Str) (tier TierKind) (params (List Str))] -> QueryPlan
   :d "Constructs a QueryPlan record."
   (QueryPlan
     :sql sql
     :tier tier
     :params params))
 
-(df make-db-result [(rows (List (Map Str Str))) (affected I64)] -> DbResult
+(df makeDbResult [(rows (List (Map Str Str))) (affected I64)] -> DbResult
   :d "Constructs a DbResult record."
   (DbResult
     :rows rows
     :affected affected))
 
-(df driver-kind-to-str [(dk DriverKind)] -> Str
+(df driverKindToStr [(dk DriverKind)] -> Str
   :d "Converts DriverKind to canonical string identifier."
   (mt dk
-    ((drv-sqlite-wasm) "drv-sqlite-wasm")
-    ((drv-pg-socket) "drv-pg-socket")
-    ((drv-mysql) "drv-mysql")
-    ((drv-agentbus-ipc) "drv-agentbus-ipc")))
+    ((drvSqliteWasm) "drv-sqlite-wasm")
+    ((drvPgSocket) "drv-pg-socket")
+    ((drvMysql) "drv-mysql")
+    ((drvAgentbusIpc) "drv-agentbus-ipc")))
 
-(df tier-kind-to-str [(tk TierKind)] -> Str
+(df tierKindToStr [(tk TierKind)] -> Str
   :d "Converts TierKind to canonical string identifier."
   (mt tk
-    ((tier-wasm-sandbox) "tier-wasm-sandbox")
-    ((tier-host-ipc) "tier-host-ipc")
-    ((tier-microvm) "tier-microvm")))
+    ((tierWasmSandbox) "tier-wasm-sandbox")
+    ((tierHostIpc) "tier-host-ipc")
+    ((tierMicrovm) "tier-microvm")))
 
-(df str-to-driver-kind [(s Str)] -> (Option DriverKind)
+(df strToDriverKind [(s Str)] -> (Option DriverKind)
   :d "Parses string into DriverKind enum variant."
   (cond
-    ((= s "drv-sqlite-wasm") (some (drv-sqlite-wasm)))
-    ((= s "drv-pg-socket") (some (drv-pg-socket)))
-    ((= s "drv-mysql") (some (drv-mysql)))
-    ((= s "drv-agentbus-ipc") (some (drv-agentbus-ipc)))
-    ((= s "sqlite") (some (drv-sqlite-wasm)))
-    ((= s "postgres") (some (drv-pg-socket)))
-    ((= s "mysql") (some (drv-mysql)))
-    ((= s "agentbus") (some (drv-agentbus-ipc)))
+    ((= s "drv-sqlite-wasm") (some (drvSqliteWasm)))
+    ((= s "drv-pg-socket") (some (drvPgSocket)))
+    ((= s "drv-mysql") (some (drvMysql)))
+    ((= s "drv-agentbus-ipc") (some (drvAgentbusIpc)))
+    ((= s "sqlite") (some (drvSqliteWasm)))
+    ((= s "postgres") (some (drvPgSocket)))
+    ((= s "mysql") (some (drvMysql)))
+    ((= s "agentbus") (some (drvAgentbusIpc)))
     (:else (none))))
 
-(df str-to-tier-kind [(s Str)] -> (Option TierKind)
+(df strToTierKind [(s Str)] -> (Option TierKind)
   :d "Parses string into TierKind enum variant."
   (cond
-    ((= s "tier-wasm-sandbox") (some (tier-wasm-sandbox)))
-    ((= s "tier-host-ipc") (some (tier-host-ipc)))
-    ((= s "tier-microvm") (some (tier-microvm)))
-    ((= s "wasm") (some (tier-wasm-sandbox)))
-    ((= s "host") (some (tier-host-ipc)))
-    ((= s "microvm") (some (tier-microvm)))
+    ((= s "tier-wasm-sandbox") (some (tierWasmSandbox)))
+    ((= s "tier-host-ipc") (some (tierHostIpc)))
+    ((= s "tier-microvm") (some (tierMicrovm)))
+    ((= s "wasm") (some (tierWasmSandbox)))
+    ((= s "host") (some (tierHostIpc)))
+    ((= s "microvm") (some (tierMicrovm)))
     (:else (none))))

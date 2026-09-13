@@ -1,12 +1,12 @@
 (module asl-text/escape
   :d "Canonical Pure AgentScript String Escaping and Wire Serialization Engine."
-  :x [UnescapeState escape-asn-str unescape-asn-str escape-json-str unescape-json-str escape-sh-arg is-sh-safe-arg escape-sh-compact])
+  :x [UnescapeState escapeAsnStr unescapeAsnStr escapeJsonStr unescapeJsonStr escapeShArg isShSafeArg escapeShCompact])
 
 (dfs UnescapeState
   (:f out Str "Accumulated unescaped string buffer")
   (:f esc Bool "True if previous character was escape backslash"))
 
-(df unescape-string-scanner [(s Str)] -> Str
+(df unescapeStringScanner [(s Str)] -> Str
   :d "Single-pass character scanner for unambiguous string unescaping."
   (let [(chars (string-chars s))
         (init (UnescapeState :out "" :esc false))
@@ -29,7 +29,7 @@
       (str (.-out st) "\\")
       (.-out st))))
 
-(df escape-asn-str [(s Str)] -> Str
+(df escapeAsnStr [(s Str)] -> Str
   :d "Escapes backslashes, double quotes, and control characters for ASN literals."
   (let [(s1 (string-replace s "\\" "\\\\"))
         (s2 (string-replace s1 "\"" "\\\""))
@@ -37,11 +37,11 @@
         (s4 (string-replace s3 "\r" "\\r"))]
     (string-replace s4 "\t" "\\t")))
 
-(df unescape-asn-str [(s Str)] -> Str
+(df unescapeAsnStr [(s Str)] -> Str
   :d "Inverts ASN string escaping via single-pass scanner preventing premature control code substitution."
-  (unescape-string-scanner s))
+  (unescapeStringScanner s))
 
-(df escape-json-str [(s Str)] -> Str
+(df escapeJsonStr [(s Str)] -> Str
   :d "Escapes backslashes, double quotes, and control characters for RFC 8259 JSON literals."
   (let [(s1 (string-replace s "\\" "\\\\"))
         (s2 (string-replace s1 "\"" "\\\""))
@@ -49,11 +49,11 @@
         (s4 (string-replace s3 "\r" "\\r"))]
     (string-replace s4 "\t" "\\t")))
 
-(df unescape-json-str [(s Str)] -> Str
+(df unescapeJsonStr [(s Str)] -> Str
   :d "Inverts JSON string escaping via single-pass scanner preventing premature control code substitution."
-  (unescape-string-scanner s))
+  (unescapeStringScanner s))
 
-(df escape-sh-arg [(arg Str)] -> Str
+(df escapeShArg [(arg Str)] -> Str
   :d "Wraps an argument in POSIX single quotes escaping interior single quotes."
   (if (string-empty? arg)
     "''"
@@ -62,7 +62,7 @@
       (let [(escaped (string-replace arg "'" "'\\''"))]
         (str "'" escaped "'")))))
 
-(df is-sh-safe-arg [(arg Str)] -> Bool
+(df isShSafeArg [(arg Str)] -> Bool
   :d "Returns true if argument contains only safe shell characters requiring no quotes."
   (let [(trimmed (string-trim arg))]
     (if (string-empty? trimmed)
@@ -85,9 +85,9 @@
                                                                                  (and (not (string-contains? trimmed "~"))
                                                                                       (not (string-contains? trimmed "!")))))))))))))))))))))
 
-(df escape-sh-compact [(arg Str)] -> Str
+(df escapeShCompact [(arg Str)] -> Str
   :d "Escapes shell argument, omitting quotes when argument contains only safe characters."
   (let [(trimmed (string-trim arg))]
-    (if (is-sh-safe-arg trimmed)
+    (if (isShSafeArg trimmed)
       trimmed
-      (escape-sh-arg trimmed))))
+      (escapeShArg trimmed))))

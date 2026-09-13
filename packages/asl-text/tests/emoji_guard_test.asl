@@ -1,57 +1,68 @@
-(module asl-text/tests/emoji-guard-test
+(module asl-text/tests/emojiGuardTest
   :d "Comprehensive falsifiable test suite for pure AgentScript emoji guard per C2."
-  :x [run-tests
-      test-clean-line-passes
-      test-emoji-detection-fails
-      test-scan-file-accumulation
-      test-audit-asn-emojis]
-  :i [(emoji-guard :a eg)])
+  :x [runTests
+      testCleanLinePasses
+      testEmojiDetectionFails
+      testScanFileAccumulation
+      testAuditAsnEmojis]
+  :i [(emojiGuard :a eg)])
 
-(df test-clean-line-passes [] -> Bool
+(df testCleanLinePasses [] -> Bool
   :d "Verifies that clean text lines without emojis pass inspection."
   (let [(line1 "(:task :id \"Task43201\" :status :done)")
         (line2 "This is a clean ASCII string.")
         (line3 "Русский текст без эмодзи.")]
-    (assert (not (eg/has-raw-emoji? line1)) "Clean ASN task line must not trigger emoji guard")
-    (assert (not (eg/has-raw-emoji? line2)) "Clean ASCII text must not trigger emoji guard")
-    (assert (not (eg/has-raw-emoji? line3)) "Clean Cyrillic text must not trigger emoji guard")
-    (assert (option-none? (eg/scan-line-emoji "test.asn" 1 line1)) "Clean line scan must return none")
+    (refute (eg/hasRawEmoji? line1) "Clean ASN task line must not trigger emoji guard")
+    (refute (eg/hasRawEmoji? line2) "Clean ASCII text must not trigger emoji guard")
+    (refute (eg/hasRawEmoji? line3) "Clean Cyrillic text must not trigger emoji guard")
+    (assert (optionNone? (eg/scanLineEmoji "test.asn" 1 line1)) "Clean line scan must return none")
     true))
 
-(df test-emoji-detection-fails [] -> Bool
+(df testEmojiDetectionFails [] -> Bool
   :d "Verifies that lines containing raw emoji bytes are detected."
-  (let [(bad-line "(:task :title \"Bad \xf0\x9f\x9a\x80 Task\")")
-        (viol (eg/scan-line-emoji "test.asn" 5 bad-line))]
-    (assert (eg/has-raw-emoji? bad-line) "Line with rocket emoji byte must be flagged")
-    (assert (not (option-none? viol)) "Violation record must be present")
-    (assert (option-some? viol) "Option must be some for flagged line")
+  (let [(badLine "(:task :title \"Bad \xf0\x9f\x9a\x80 Task\")")
+        (viol (eg/scanLineEmoji "test.asn" 5 badLine))]
+    (assert (eg/hasRawEmoji? badLine) "Line with rocket emoji byte must be flagged")
+    (refute (optionNone? viol) "Violation record must be present")
+    (assert (optionSome? viol) "Option must be some for flagged line")
     true))
 
-(df test-scan-file-accumulation [] -> Bool
+(df testScanFileAccumulation [] -> Bool
   :d "Verifies file-level line accumulation and clean report generation."
-  (let [(clean-lines (list "line 1" "line 2" "line 3"))
-        (res-clean (eg/scan-file-emoji "clean.asn" clean-lines))
-        (dirty-lines (list "line 1" "bad \xf0\x9f\x98\x80 line" "line 3"))
-        (res-dirty (eg/scan-file-emoji "dirty.asn" dirty-lines))]
-    (assert (.-clean res-clean) "Clean file scan must report clean true")
-    (assert (= (list-length (.-violations res-clean)) 0) "Clean file must have zero violations")
-    (assert (not (.-clean res-dirty)) "Dirty file scan must report clean false")
-    (assert (not (= (list-length (.-violations res-dirty)) 0)) "Dirty file must have non-zero violations")
+  (let [(cleanLines (list "line 1" "line 2" "line 3"))
+        (resClean (eg/scanFileEmoji "clean.asn" cleanLines))
+        (dirtyLines (list "clean line 1"
+                          "line 2 bad \xf0\x9f\x98\x80 smile"
+                          "clean line 3"
+                          "line 4 bad \xf0\x9f\x9a\x80 rocket"
+                          "clean line 5"))
+        (resDirty (eg/scanFileEmoji "dirty.asn" dirtyLines))]
+    (assert (.-clean resClean) "Clean file scan must report clean true")
+    (assert (= (list-length (.-violations resClean)) 0) "Clean file must have zero violations")
+    (refute (.-clean resDirty) "Dirty file scan must report clean false")
+    (assert (= (list-length (.-violations resDirty)) 2) "Dirty file must have two violations")
+    (let [(v1 (option-or (list-head (.-violations resDirty)) (eg/EmojiViolation :file "" :lineNum 0 :text "")))
+          (tail1 (option-or (list-tail (.-violations resDirty)) (list)))
+          (v2 (option-or (list-head tail1) (eg/EmojiViolation :file "" :lineNum 0 :text "")))]
+      (assert (= (.-lineNum v1) 2) "Violation line number must be 2")
+      (refute (= (.-lineNum v1) 1) "Violation line number must not be 1")
+      (assert (= (.-lineNum v2) 4) "Second violation line number must be 4")
+      (refute (= (.-lineNum v2) 2) "Second violation line number must not be 2"))
     true))
 
-(df test-audit-asn-emojis [] -> Bool
+(df testAuditAsnEmojis [] -> Bool
   :d "Verifies multi-file bulk audit logic with both positive and negative cases."
-  (let [(good-entries (list "entry 1" "entry 2" "entry 3"))
-        (bad-entries (list "entry 1" "violating \xf0\x9f\x92\xa1" "entry 3"))]
-    (assert (eg/audit-asn-emojis good-entries) "Clean entries list must pass audit")
-    (assert (not (eg/audit-asn-emojis bad-entries)) "Dirty entries list must fail audit")
+  (let [(goodEntries (list "entry 1" "entry 2" "entry 3"))
+        (badEntries (list "entry 1" "violating \xf0\x9f\x92\xa1" "entry 3"))]
+    (assert (eg/auditAsnEmojis goodEntries) "Clean entries list must pass audit")
+    (refute (eg/auditAsnEmojis badEntries) "Dirty entries list must fail audit")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Runs all test cases in the emoji guard test suite."
   (do
-    (test-clean-line-passes)
-    (test-emoji-detection-fails)
-    (test-scan-file-accumulation)
-    (test-audit-asn-emojis)
+    (testCleanLinePasses)
+    (testEmojiDetectionFails)
+    (testScanFileAccumulation)
+    (testAuditAsnEmojis)
     true))

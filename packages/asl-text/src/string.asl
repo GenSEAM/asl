@@ -6,10 +6,10 @@
       split
       concat
       join
-      txt-starts?
-      txt-ends?
-      txt-has?
-      txt-split
+      txtStarts?
+      txtEnds?
+      txtHas?
+      txtSplit
       txt/starts?
       txt/ends?
       txt/has?
@@ -37,19 +37,19 @@
   :d "Splits string by delimiter into list of substrings."
   (string-split s delim))
 
-(df txt-starts? [(s Str) (prefix Str)] -> Bool
+(df txtStarts? [(s Str) (prefix Str)] -> Bool
   :d "Hyphen compatibility alias for starts?."
   (starts? s prefix))
 
-(df txt-ends? [(s Str) (suffix Str)] -> Bool
+(df txtEnds? [(s Str) (suffix Str)] -> Bool
   :d "Hyphen compatibility alias for ends?."
   (ends? s suffix))
 
-(df txt-has? [(s Str) (sub Str)] -> Bool
+(df txtHas? [(s Str) (sub Str)] -> Bool
   :d "Hyphen compatibility alias for has?."
   (has? s sub))
 
-(df txt-split [(s Str) (delim Str)] -> (List Str)
+(df txtSplit [(s Str) (delim Str)] -> (List Str)
   :d "Hyphen compatibility alias for split."
   (split s delim))
 

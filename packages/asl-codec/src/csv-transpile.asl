@@ -1,11 +1,11 @@
-(module asl-codec/csv-transpile
+(module asl-codec/csvTranspile
   :d "RFC 4180 CSV / TSV <-> Token-Dense ASN Tabular Row-Group Transpiler"
   :x [CsvTranspileResult
-      csv-to-asn
-      asn-to-csv
-      tsv-to-asn
-      asn-to-tsv
-      measure-csv-savings]
+      csvToAsn
+      asnToCsv
+      tsvToAsn
+      asnToTsv
+      measureCsvSavings]
   :i [(asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
       (asl-parser/ast :a ast)
@@ -13,301 +13,301 @@
 
 (dfs CsvTranspileResult
   (:f output Str "Transpiled CSV or ASN S-expression")
-  (:f original-tokens I64 "Token count in source representation")
-  (:f asn-tokens I64 "Token count in ASN representation")
-  (:f savings-percent F64 "Token compaction percentage")
+  (:f originalTokens I64 "Token count in source representation")
+  (:f asnTokens I64 "Token count in ASN representation")
+  (:f savingsPercent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
 
 (dfs CsvScanState
-  (:f in-quote Bool "Inside quoted field")
-  (:f prev-quote Bool "Previous character was a quote")
-  (:f current-field Str "Accumulated field content")
-  (:f current-row (List Str) "Reversed fields in current row")
+  (:f inQuote Bool "Inside quoted field")
+  (:f prevQuote Bool "Previous character was a quote")
+  (:f currentField Str "Accumulated field content")
+  (:f currentRow (List Str) "Reversed fields in current row")
   (:f rows (List (List Str)) "Reversed rows"))
 
-(df csv-scan-step [(delim Str) (st CsvScanState) (c Str)] -> CsvScanState
+(df csvScanStep [(delim Str) (st CsvScanState) (c Str)] -> CsvScanState
   :d "Processes one character during RFC 4180 CSV scan."
-  (if (.-prev-quote st)
+  (if (.-prevQuote st)
     (if (= c "\"")
-      (CsvScanState :in-quote true :prev-quote false
-                    :current-field (str (.-current-field st) "\"")
-                    :current-row (.-current-row st)
+      (CsvScanState :inQuote true :prevQuote false
+                    :currentField (str (.-currentField st) "\"")
+                    :currentRow (.-currentRow st)
                     :rows (.-rows st))
-      (let [(field-val (.-current-field st))]
+      (let [(fieldVal (.-currentField st))]
         (cond
           ((= c delim)
-           (CsvScanState :in-quote false :prev-quote false
-                         :current-field ""
-                         :current-row (list-cons field-val (.-current-row st))
+           (CsvScanState :inQuote false :prevQuote false
+                         :currentField ""
+                         :currentRow (list-cons fieldVal (.-currentRow st))
                          :rows (.-rows st)))
           ((= c "\n")
-           (let [(row (list-reverse (list-cons field-val (.-current-row st))))]
-             (CsvScanState :in-quote false :prev-quote false
-                           :current-field ""
-                           :current-row (list)
+           (let [(row (list-reverse (list-cons fieldVal (.-currentRow st))))]
+             (CsvScanState :inQuote false :prevQuote false
+                           :currentField ""
+                           :currentRow (list)
                            :rows (list-cons row (.-rows st)))))
           ((= c "\r")
-           (CsvScanState :in-quote false :prev-quote false
-                         :current-field field-val
-                         :current-row (.-current-row st)
+           (CsvScanState :inQuote false :prevQuote false
+                         :currentField fieldVal
+                         :currentRow (.-currentRow st)
                          :rows (.-rows st)))
           (:else
-           (CsvScanState :in-quote false :prev-quote false
-                         :current-field (str field-val c)
-                         :current-row (.-current-row st)
+           (CsvScanState :inQuote false :prevQuote false
+                         :currentField (str fieldVal c)
+                         :currentRow (.-currentRow st)
                          :rows (.-rows st))))))
-    (if (.-in-quote st)
+    (if (.-inQuote st)
       (if (= c "\"")
-        (CsvScanState :in-quote true :prev-quote true
-                      :current-field (.-current-field st)
-                      :current-row (.-current-row st)
+        (CsvScanState :inQuote true :prevQuote true
+                      :currentField (.-currentField st)
+                      :currentRow (.-currentRow st)
                       :rows (.-rows st))
-        (CsvScanState :in-quote true :prev-quote false
-                      :current-field (str (.-current-field st) c)
-                      :current-row (.-current-row st)
+        (CsvScanState :inQuote true :prevQuote false
+                      :currentField (str (.-currentField st) c)
+                      :currentRow (.-currentRow st)
                       :rows (.-rows st)))
       (cond
         ((= c "\"")
-         (CsvScanState :in-quote true :prev-quote false
-                       :current-field (.-current-field st)
-                       :current-row (.-current-row st)
+         (CsvScanState :inQuote true :prevQuote false
+                       :currentField (.-currentField st)
+                       :currentRow (.-currentRow st)
                        :rows (.-rows st)))
         ((= c delim)
-         (CsvScanState :in-quote false :prev-quote false
-                       :current-field ""
-                       :current-row (list-cons (.-current-field st) (.-current-row st))
+         (CsvScanState :inQuote false :prevQuote false
+                       :currentField ""
+                       :currentRow (list-cons (.-currentField st) (.-currentRow st))
                        :rows (.-rows st)))
         ((= c "\n")
-         (let [(row (list-reverse (list-cons (.-current-field st) (.-current-row st))))]
-           (CsvScanState :in-quote false :prev-quote false
-                         :current-field ""
-                         :current-row (list)
+         (let [(row (list-reverse (list-cons (.-currentField st) (.-currentRow st))))]
+           (CsvScanState :inQuote false :prevQuote false
+                         :currentField ""
+                         :currentRow (list)
                          :rows (list-cons row (.-rows st)))))
         ((= c "\r") st)
         (:else
-         (CsvScanState :in-quote false :prev-quote false
-                       :current-field (str (.-current-field st) c)
-                       :current-row (.-current-row st)
+         (CsvScanState :inQuote false :prevQuote false
+                       :currentField (str (.-currentField st) c)
+                       :currentRow (.-currentRow st)
                        :rows (.-rows st)))))))
 
-(df parse-csv-rows [(src Str) (delim Str)] -> (List (List Str))
+(df parseCsvRows [(src Str) (delim Str)] -> (List (List Str))
   :d "Parses raw CSV or TSV text into matrix of row strings."
-  (let [(init (CsvScanState :in-quote false :prev-quote false :current-field "" :current-row (list) :rows (list)))
-        (fin (fold (fn [(st CsvScanState) (c Str)] -> CsvScanState (csv-scan-step delim st c))
+  (let [(init (CsvScanState :inQuote false :prevQuote false :currentField "" :currentRow (list) :rows (list)))
+        (fin (fold (fn [(st CsvScanState) (c Str)] -> CsvScanState (csvScanStep delim st c))
                    init
                    (string-chars src)))]
-    (let [(last-f (.-current-field fin))
-          (last-row (.-current-row fin))
-          (all-rows (.-rows fin))]
-      (if (or (not (string-empty? last-f)) (not (list-empty? last-row)))
-        (let [(final-row (list-reverse (list-cons last-f last-row)))]
-          (list-reverse (list-cons final-row all-rows)))
-        (list-reverse all-rows)))))
+    (let [(lastF (.-currentField fin))
+          (lastRow (.-currentRow fin))
+          (allRows (.-rows fin))]
+      (if (or (not (string-empty? lastF)) (not (list-empty? lastRow)))
+        (let [(finalRow (list-reverse (list-cons lastF lastRow)))]
+          (list-reverse (list-cons finalRow allRows)))
+        (list-reverse allRows)))))
 
-(df parse-cell-scalar [(cell Str)] -> rd/SExpr
+(df parseCellScalar [(cell Str)] -> rd/SExpr
   :d "Parses a tabular cell string into a typed SExpr atom."
   (let [(clean (string-trim cell))]
     (cond
-      ((string-empty? clean) (rd/make-atom "_"))
-      ((= clean "true") (rd/make-atom "true"))
-      ((= clean "false") (rd/make-atom "false"))
-      ((= clean "null") (rd/make-atom "_"))
-      ((is-numeric clean) (rd/make-atom clean))
+      ((string-empty? clean) (rd/makeAtom "_"))
+      ((= clean "true") (rd/makeAtom "true"))
+      ((= clean "false") (rd/makeAtom "false"))
+      ((= clean "null") (rd/makeAtom "_"))
+      ((isNumeric clean) (rd/makeAtom clean))
       (:else
-       (rd/make-atom (str "\"" clean "\""))))))
+       (rd/makeAtom (str "\"" clean "\""))))))
 
-(df is-numeric [(s Str)] -> Bool
+(df isNumeric [(s Str)] -> Bool
   :d "Returns true if string represents integer or float."
   (let [(chars (string-chars s))]
     (if (list-empty? chars)
       false
-      (numeric-loop chars true false))))
+      (numericLoop chars true false))))
 
-(df numeric-loop [(chars (List Str)) (is-first Bool) (has-dot Bool)] -> Bool
+(df numericLoop [(chars (List Str)) (isFirst Bool) (hasDot Bool)] -> Bool
   :d "Helper loop for numeric validation."
   (mt (list-head chars)
     ((none) true)
     ((some c)
      (if (string-contains? "0123456789" c)
-       (numeric-loop (option-or (list-tail chars) (list)) false has-dot)
-       (if (and is-first (= c "-"))
-         (numeric-loop (option-or (list-tail chars) (list)) false has-dot)
-         (if (and (not has-dot) (= c "."))
-           (numeric-loop (option-or (list-tail chars) (list)) false true)
+       (numericLoop (option-or (list-tail chars) (list)) false hasDot)
+       (if (and isFirst (= c "-"))
+         (numericLoop (option-or (list-tail chars) (list)) false hasDot)
+         (if (and (not hasDot) (= c "."))
+           (numericLoop (option-or (list-tail chars) (list)) false true)
            false))))))
 
-(df rows-to-asn-table [(rows (List (List Str)))] -> (Option rd/SExpr)
+(df rowsToAsnTable [(rows (List (List Str)))] -> (Option rd/SExpr)
   :d "Transforms a matrix of string cells into canonical ASN table SExpr."
   (mt (list-head rows)
     ((none) (none))
-    ((some header-row)
-     (let [(header-atoms (map (fn [(h Str)] -> rd/SExpr
-                                (let [(clean (txt/strip-quotes (string-trim h)))]
-                                  (rd/make-atom (str ":" clean))))
-                              header-row))
-           (headers-vect (rd/make-vect header-atoms))
-           (data-rows (option-or (list-tail rows) (list)))
-           (row-vects (map (fn [(r (List Str))] -> rd/SExpr
-                             (let [(cell-atoms (map (fn [(c Str)] -> rd/SExpr (parse-cell-scalar c)) r))]
-                               (rd/make-vect cell-atoms)))
-                           data-rows))
-           (rows-vect (rd/make-vect row-vects))
-           (table-node (rd/make-list (list headers-vect rows-vect)))]
-       (some table-node)))))
+    ((some headerRow)
+     (let [(headerAtoms (map (fn [(h Str)] -> rd/SExpr
+                                (let [(clean (txt/stripQuotes (string-trim h)))]
+                                  (rd/makeAtom (str ":" clean))))
+                              headerRow))
+           (headersVect (rd/makeVect headerAtoms))
+           (dataRows (option-or (list-tail rows) (list)))
+           (rowVects (map (fn [(r (List Str))] -> rd/SExpr
+                             (let [(cellAtoms (map (fn [(c Str)] -> rd/SExpr (parseCellScalar c)) r))]
+                               (rd/makeVect cellAtoms)))
+                           dataRows))
+           (rowsVect (rd/makeVect rowVects))
+           (tableNode (rd/makeList (list headersVect rowsVect)))]
+       (some tableNode)))))
 
-(df detect-delimiter [(src Str)] -> Str
+(df detectDelimiter [(src Str)] -> Str
   :d "Auto-detects whether document uses tab or comma delimiter."
   (let [(lines (string-split src "\n"))
-        (first-line (option-or (list-head lines) ""))]
-    (if (string-contains? first-line "\t")
+        (firstLine (option-or (list-head lines) ""))]
+    (if (string-contains? firstLine "\t")
       "\t"
       ",")))
 
-(df csv-to-asn [(csv-str Str)] -> CsvTranspileResult
+(df csvToAsn [(csvStr Str)] -> CsvTranspileResult
   :d "Transpiles CSV tabular document into compact ASN row-group table."
-  (let [(trimmed (string-trim csv-str))]
+  (let [(trimmed (string-trim csvStr))]
     (if (string-empty? trimmed)
       (CsvTranspileResult
         :output ""
-        :original-tokens 0
-        :asn-tokens 0
-        :savings-percent 0.0
+        :originalTokens 0
+        :asnTokens 0
+        :savingsPercent 0.0
         :success false)
-      (let [(delim (detect-delimiter trimmed))
-            (rows (parse-csv-rows trimmed delim))
-            (table-opt (rows-to-asn-table rows))]
-        (mt table-opt
+      (let [(delim (detectDelimiter trimmed))
+            (rows (parseCsvRows trimmed delim))
+            (tableOpt (rowsToAsnTable rows))]
+        (mt tableOpt
           ((none)
            (CsvTranspileResult
              :output "Syntax error: empty table"
-             :original-tokens (txt/estimate-tokens trimmed)
-             :asn-tokens (txt/estimate-tokens trimmed)
-             :savings-percent 0.0
+             :originalTokens (txt/estimateTokens trimmed)
+             :asnTokens (txt/estimateTokens trimmed)
+             :savingsPercent 0.0
              :success false))
-          ((some table-node)
-           (let [(compact (rd/render-sexpr table-node))
-                 (orig-tok (txt/estimate-tokens trimmed))
-                 (asn-tok (txt/estimate-tokens compact))
-                 (savings (txt/calc-savings orig-tok asn-tok))]
+          ((some tableNode)
+           (let [(compact (rd/renderSexpr tableNode))
+                 (origTok (txt/estimateTokens trimmed))
+                 (asnTok (txt/estimateTokens compact))
+                 (savings (txt/calcSavings origTok asnTok))]
              (CsvTranspileResult
                :output compact
-               :original-tokens orig-tok
-               :asn-tokens asn-tok
-               :savings-percent (if (> savings 0.0) savings 45.0)
+               :originalTokens origTok
+               :asnTokens asnTok
+               :savingsPercent (if (> savings 0.0) savings 45.0)
                :success true))))))))
 
-(df tsv-to-asn [(tsv-str Str)] -> CsvTranspileResult
+(df tsvToAsn [(tsvStr Str)] -> CsvTranspileResult
   :d "Transpiles TSV tab-delimited document into compact ASN table."
-  (csv-to-asn tsv-str))
+  (csvToAsn tsvStr))
 
-(df escape-csv-field [(field Str) (delim Str)] -> Str
+(df escapeCsvField [(field Str) (delim Str)] -> Str
   :d "Escapes field containing quotes, commas, or newlines per RFC 4180."
-  (let [(needs-quotes (or (string-contains? field delim)
+  (let [(needsQuotes (or (string-contains? field delim)
                           (or (string-contains? field "\"")
                               (string-contains? field "\n"))))]
-    (if needs-quotes
+    (if needsQuotes
       (let [(escaped (string-replace field "\"" "\"\""))]
         (str "\"" escaped "\""))
       field)))
 
-(df asn-table-to-dsv [(asn-str Str) (delim Str)] -> CsvTranspileResult
+(df asnTableToDsv [(asnStr Str) (delim Str)] -> CsvTranspileResult
   :d "Serializes ASN table SExpr back to delimited text format."
-  (let [(trimmed (string-trim asn-str))]
+  (let [(trimmed (string-trim asnStr))]
     (cond
       ((string-empty? trimmed)
        (CsvTranspileResult
          :output "Empty input"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       ((not (string-starts-with? trimmed "("))
        (CsvTranspileResult
          :output "Syntax error: invalid ASN table root"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       (:else
-       (let [(orig-tok (txt/estimate-tokens trimmed))
+       (let [(origTok (txt/estimateTokens trimmed))
              (toks (lx/tokenize trimmed))
-             (forms-res (ast/read-forms toks))]
-         (mt forms-res
+             (formsRes (ast/readForms toks))]
+         (mt formsRes
            ((err _)
             (CsvTranspileResult
               :output "Syntax error: invalid ASN table root"
-              :original-tokens 0
-              :asn-tokens 0
-              :savings-percent 0.0
+              :originalTokens 0
+              :asnTokens 0
+              :savingsPercent 0.0
               :success false))
            ((ok forms)
             (if (list-empty? forms)
               (CsvTranspileResult
                 :output "Empty forms"
-                :original-tokens 0
-                :asn-tokens 0
-                :savings-percent 0.0
+                :originalTokens 0
+                :asnTokens 0
+                :savingsPercent 0.0
                 :success false)
-              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
+              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)))
                     (expr (.-expr pf))]
                 (mt expr
-                  ((rd/sexpr-list items)
+                  ((rd/sexprList items)
                    (if (< (list-length items) 2)
                      (CsvTranspileResult
                        :output "Syntax error: incomplete table"
-                       :original-tokens 0
-                       :asn-tokens 0
-                       :savings-percent 0.0
+                       :originalTokens 0
+                       :asnTokens 0
+                       :savingsPercent 0.0
                        :success false)
-                     (let [(headers-expr (option-or (list-head items) (rd/make-atom "")))
-                           (rows-expr (option-or (list-head (option-or (list-tail items) (list))) (rd/make-atom "")))
-                           (header-strs (mt headers-expr
-                                          ((rd/sexpr-vect h-atoms)
+                     (let [(headersExpr (option-or (list-head items) (rd/makeAtom "")))
+                           (rowsExpr (option-or (list-head (option-or (list-tail items) (list))) (rd/makeAtom "")))
+                           (headerStrs (mt headersExpr
+                                          ((rd/sexprVect hAtoms)
                                            (map (fn [(h rd/SExpr)] -> Str
-                                                  (escape-csv-field (txt/strip-colon (txt/strip-quotes (rd/sexpr-head h))) delim))
-                                                h-atoms))
+                                                  (escapeCsvField (txt/stripColon (txt/stripQuotes (rd/sexprHead h))) delim))
+                                                hAtoms))
                                           (_ (list))))
-                           (header-line (string-join header-strs delim))
-                           (row-lines (mt rows-expr
-                                        ((rd/sexpr-vect r-nodes)
+                           (headerLine (string-join headerStrs delim))
+                           (rowLines (mt rowsExpr
+                                        ((rd/sexprVect rNodes)
                                          (map (fn [(r rd/SExpr)] -> Str
                                                 (mt r
-                                                  ((rd/sexpr-vect cell-atoms)
+                                                  ((rd/sexprVect cellAtoms)
                                                    (let [(cells (map (fn [(c rd/SExpr)] -> Str
-                                                                       (let [(v (rd/sexpr-head c))]
+                                                                       (let [(v (rd/sexprHead c))]
                                                                          (if (= v "_")
                                                                            ""
-                                                                           (escape-csv-field (txt/strip-quotes v) delim))))
-                                                                     cell-atoms))]
+                                                                           (escapeCsvField (txt/stripQuotes v) delim))))
+                                                                     cellAtoms))]
                                                      (string-join cells delim)))
                                                   (_ "")))
-                                              r-nodes))
+                                              rNodes))
                                         (_ (list))))
-                           (all-lines (list-cons header-line row-lines))
-                           (dsv-out (string-join all-lines "\n"))
-                           (dsv-tok (txt/estimate-tokens dsv-out))]
+                           (allLines (list-cons headerLine rowLines))
+                           (dsvOut (string-join allLines "\n"))
+                           (dsvTok (txt/estimateTokens dsvOut))]
                        (CsvTranspileResult
-                         :output dsv-out
-                         :original-tokens orig-tok
-                         :asn-tokens dsv-tok
-                         :savings-percent 0.0
+                         :output dsvOut
+                         :originalTokens origTok
+                         :asnTokens dsvTok
+                         :savingsPercent 0.0
                          :success true))))
                   (_
                    (CsvTranspileResult
                      :output "Syntax error: root must be table list"
-                     :original-tokens 0
-                     :asn-tokens 0
-                     :savings-percent 0.0
+                     :originalTokens 0
+                     :asnTokens 0
+                     :savingsPercent 0.0
                      :success false))))))))))))
 
-(df asn-to-csv [(asn-str Str)] -> CsvTranspileResult
+(df asnToCsv [(asnStr Str)] -> CsvTranspileResult
   :d "Serializes ASN table SExpr back to RFC 4180 CSV."
-  (asn-table-to-dsv asn-str ","))
+  (asnTableToDsv asnStr ","))
 
-(df asn-to-tsv [(asn-str Str)] -> CsvTranspileResult
+(df asnToTsv [(asnStr Str)] -> CsvTranspileResult
   :d "Serializes ASN table SExpr back to TSV format."
-  (asn-table-to-dsv asn-str "\t"))
+  (asnTableToDsv asnStr "\t"))
 
-(df measure-csv-savings [(input Str)] -> CsvTranspileResult
+(df measureCsvSavings [(input Str)] -> CsvTranspileResult
   :d "Measures empirical token reduction for CSV input."
-  (csv-to-asn input))
+  (csvToAsn input))

@@ -1,20 +1,20 @@
-(module asl-codegen/expr-test
+(module asl-codegen/exprTest
   :d "Unit tests for asl-codegen/expr"
-  :x [test-expr run-tests]
+  :x [testExpr runTests]
   :i [(expr :a ex) (reader :a rd)])
 
-(df test-expr [] -> Bool
+(df testExpr [] -> Bool
   :d "Verifies expression and special forms emission."
   (let [(aliases (map-empty))
-        (e1 (ex/emit-expr (rd/sexpr-atom "123") aliases))
-        (e2 (ex/emit-expr (rd/sexpr-atom "\"hello\"") aliases))
-        (e3 (ex/emit-expr (rd/sexpr-list (list (rd/sexpr-atom "+") (rd/sexpr-atom "1") (rd/sexpr-atom "2"))) aliases))
-        (e4 (ex/emit-expr (rd/sexpr-list (list (rd/sexpr-atom "if") (rd/sexpr-atom "true") (rd/sexpr-atom "1") (rd/sexpr-atom "0"))) aliases))
-        (b-pair (rd/sexpr-vect (list (rd/sexpr-atom "x") (rd/sexpr-atom "10"))))
-        (bindings (rd/sexpr-vect (list b-pair)))
-        (e5 (ex/emit-expr (rd/sexpr-list (list (rd/sexpr-atom "let") bindings (rd/sexpr-atom "x"))) aliases))
-        (e6 (ex/emit-expr (rd/sexpr-list (list (rd/sexpr-atom "try") (rd/sexpr-atom "res"))) aliases))
-        (e7 (ex/emit-expr (rd/sexpr-list (list (rd/sexpr-atom ".-first") (rd/sexpr-atom "p"))) aliases))]
+        (e1 (ex/emitExpr (rd/sexprAtom "123") aliases))
+        (e2 (ex/emitExpr (rd/sexprAtom "\"hello\"") aliases))
+        (e3 (ex/emitExpr (rd/sexprList (list (rd/sexprAtom "+") (rd/sexprAtom "1") (rd/sexprAtom "2"))) aliases))
+        (e4 (ex/emitExpr (rd/sexprList (list (rd/sexprAtom "if") (rd/sexprAtom "true") (rd/sexprAtom "1") (rd/sexprAtom "0"))) aliases))
+        (bPair (rd/sexprVect (list (rd/sexprAtom "x") (rd/sexprAtom "10"))))
+        (bindings (rd/sexprVect (list bPair)))
+        (e5 (ex/emitExpr (rd/sexprList (list (rd/sexprAtom "let") bindings (rd/sexprAtom "x"))) aliases))
+        (e6 (ex/emitExpr (rd/sexprList (list (rd/sexprAtom "try") (rd/sexprAtom "res"))) aliases))
+        (e7 (ex/emitExpr (rd/sexprList (list (rd/sexprAtom ".-first") (rd/sexprAtom "p"))) aliases))]
     (assert (= e1 "123") "e1 atom")
     (assert (= e2 "\"hello\".to_string()") "e2 string")
     (assert (= e3 "rt::add(1, 2)") "e3 add")
@@ -24,8 +24,8 @@
     (assert (= e7 "p.clone().0.clone()") "e7 .-first")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Runs expr test suite"
   (do
-    (assert (test-expr) "test-expr must pass")
+    (assert (testExpr) "test-expr must pass")
     true))

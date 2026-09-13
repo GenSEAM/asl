@@ -1,149 +1,149 @@
 (:grammar
   :package asl-codegen
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "VNode" :kind :type :tokens 1)
 
-    (:sym :name "any-true?" :kind :fn :tokens 2)
-    (:sym :name "builtin-template" :kind :fn :tokens 2)
-    (:sym :name "capitalize-seg" :kind :fn :tokens 2)
-    (:sym :name "emit-atom" :kind :fn :tokens 2)
-    (:sym :name "emit-component" :kind :fn :tokens 2)
-    (:sym :name "emit-defenum" :kind :fn :tokens 2)
-    (:sym :name "emit-defschema" :kind :fn :tokens 2)
-    (:sym :name "emit-defun" :kind :fn :tokens 2)
-    (:sym :name "emit-derives" :kind :fn :tokens 2)
-    (:sym :name "emit-expr" :kind :fn :tokens 2)
-    (:sym :name "emit-go-enum" :kind :fn :tokens 2)
-    (:sym :name "emit-go-fn" :kind :fn :tokens 2)
-    (:sym :name "emit-go-header" :kind :fn :tokens 2)
-    (:sym :name "emit-go-program" :kind :fn :tokens 2)
-    (:sym :name "emit-go-struct" :kind :fn :tokens 2)
-    (:sym :name "emit-go-type" :kind :fn :tokens 2)
-    (:sym :name "emit-pattern" :kind :fn :tokens 2)
-    (:sym :name "emit-type" :kind :fn :tokens 2)
-    (:sym :name "indent-spaces" :kind :fn :tokens 2)
-    (:sym :name "is-ident?" :kind :fn :tokens 2)
-    (:sym :name "mangle-ident" :kind :fn :tokens 2)
-    (:sym :name "merge-maps" :kind :fn :tokens 2)
-    (:sym :name "pascal-ident" :kind :fn :tokens 2)
-    (:sym :name "render-builtin" :kind :fn :tokens 2)
-    (:sym :name "render-template" :kind :fn :tokens 2)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "slice-or" :kind :fn :tokens 2)
-    (:sym :name "test-builtins" :kind :fn :tokens 2)
-    (:sym :name "test-codegen" :kind :fn :tokens 2)
-    (:sym :name "test-expr" :kind :fn :tokens 2)
-    (:sym :name "test-go-enum" :kind :fn :tokens 2)
-    (:sym :name "test-go-fn" :kind :fn :tokens 2)
-    (:sym :name "test-go-program" :kind :fn :tokens 2)
-    (:sym :name "test-go-struct" :kind :fn :tokens 2)
-    (:sym :name "test-go-type" :kind :fn :tokens 2)
-    (:sym :name "test-mangle" :kind :fn :tokens 2)
-    (:sym :name "test-rtypes" :kind :fn :tokens 2)
-    (:sym :name "test-wat-op" :kind :fn :tokens 2)
-    (:sym :name "test-wat-type" :kind :fn :tokens 2)
-    (:sym :name "wat-call" :kind :fn :tokens 2)
-    (:sym :name "wat-const" :kind :fn :tokens 2)
-    (:sym :name "wat-emit" :kind :fn :tokens 2)
-    (:sym :name "wat-fn" :kind :fn :tokens 2)
-    (:sym :name "wat-get" :kind :fn :tokens 2)
-    (:sym :name "wat-if" :kind :fn :tokens 2)
-    (:sym :name "wat-mod" :kind :fn :tokens 2)
-    (:sym :name "wat-op" :kind :fn :tokens 2)
-    (:sym :name "wat-set" :kind :fn :tokens 2)
-    (:sym :name "wat-type" :kind :fn :tokens 2)
+    (:sym :name "anyTrue?" :kind :fn :tokens 2)
+    (:sym :name "builtinTemplate" :kind :fn :tokens 2)
+    (:sym :name "capitalizeSeg" :kind :fn :tokens 2)
+    (:sym :name "emitAtom" :kind :fn :tokens 2)
+    (:sym :name "emitComponent" :kind :fn :tokens 2)
+    (:sym :name "emitDefenum" :kind :fn :tokens 2)
+    (:sym :name "emitDefschema" :kind :fn :tokens 2)
+    (:sym :name "emitDefun" :kind :fn :tokens 2)
+    (:sym :name "emitDerives" :kind :fn :tokens 2)
+    (:sym :name "emitExpr" :kind :fn :tokens 2)
+    (:sym :name "emitGoEnum" :kind :fn :tokens 2)
+    (:sym :name "emitGoFn" :kind :fn :tokens 2)
+    (:sym :name "emitGoHeader" :kind :fn :tokens 2)
+    (:sym :name "emitGoProgram" :kind :fn :tokens 2)
+    (:sym :name "emitGoStruct" :kind :fn :tokens 2)
+    (:sym :name "emitGoType" :kind :fn :tokens 2)
+    (:sym :name "emitPattern" :kind :fn :tokens 2)
+    (:sym :name "emitType" :kind :fn :tokens 2)
+    (:sym :name "indentSpaces" :kind :fn :tokens 2)
+    (:sym :name "isIdent?" :kind :fn :tokens 2)
+    (:sym :name "mangleIdent" :kind :fn :tokens 2)
+    (:sym :name "mergeMaps" :kind :fn :tokens 2)
+    (:sym :name "pascalIdent" :kind :fn :tokens 2)
+    (:sym :name "renderBuiltin" :kind :fn :tokens 2)
+    (:sym :name "renderTemplate" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "sliceOr" :kind :fn :tokens 2)
+    (:sym :name "testBuiltins" :kind :fn :tokens 2)
+    (:sym :name "testCodegen" :kind :fn :tokens 2)
+    (:sym :name "testExpr" :kind :fn :tokens 2)
+    (:sym :name "testGoEnum" :kind :fn :tokens 2)
+    (:sym :name "testGoFn" :kind :fn :tokens 2)
+    (:sym :name "testGoProgram" :kind :fn :tokens 2)
+    (:sym :name "testGoStruct" :kind :fn :tokens 2)
+    (:sym :name "testGoType" :kind :fn :tokens 2)
+    (:sym :name "testMangle" :kind :fn :tokens 2)
+    (:sym :name "testRtypes" :kind :fn :tokens 2)
+    (:sym :name "testWatOp" :kind :fn :tokens 2)
+    (:sym :name "testWatType" :kind :fn :tokens 2)
+    (:sym :name "watCall" :kind :fn :tokens 2)
+    (:sym :name "watConst" :kind :fn :tokens 2)
+    (:sym :name "watEmit" :kind :fn :tokens 2)
+    (:sym :name "watFn" :kind :fn :tokens 2)
+    (:sym :name "watGet" :kind :fn :tokens 2)
+    (:sym :name "watIf" :kind :fn :tokens 2)
+    (:sym :name "watMod" :kind :fn :tokens 2)
+    (:sym :name "watOp" :kind :fn :tokens 2)
+    (:sym :name "watSet" :kind :fn :tokens 2)
+    (:sym :name "watType" :kind :fn :tokens 2)
 
-    (:sym :name "boxed-type-if-recursive" :kind :fn :tokens 4
+    (:sym :name "boxedTypeIfRecursive" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'boxed-type': the 'if-recursive' condition is mandatory to prevent unconditional heap allocation of non-recursive types in Rust")
-    (:sym :name "clone-if-ident" :kind :fn :tokens 3
+    (:sym :name "cloneIfIdent" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'clone-ident': conditional qualifier 'if-ident' is critical to avoid emitting superfluous .clone() on literal values or borrowing contexts")
-    (:sym :name "emit-arduino-header" :kind :fn :tokens 3
+    (:sym :name "emitArduinoHeader" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-header': targets microcontroller C/C++ hardware headers, distinguishing from ANSI C emit-c-header")
-    (:sym :name "emit-arduino-sketch" :kind :fn :tokens 3
+    (:sym :name "emitArduinoSketch" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-sketch': explicitly specifies Arduino target platform emission with setup() and loop() bindings")
-    (:sym :name "emit-body-seq" :kind :fn :tokens 3
+    (:sym :name "emitBodySeq" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-seq': disambiguates statement-block body lowering from top-level declaration sequences")
-    (:sym :name "emit-c-fn" :kind :fn :tokens 3
+    (:sym :name "emitCFn" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-fn': language qualifier 'c' is mandatory to separate ANSI C function transpilation from Rust/TSX emission")
-    (:sym :name "emit-c-header" :kind :fn :tokens 3
+    (:sym :name "emitCHeader" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-header': distinguishes ANSI C header guards and prototypes from Arduino and C++ headers")
-    (:sym :name "emit-c-type" :kind :fn :tokens 3
+    (:sym :name "emitCType" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-type': language qualifier 'c' is mandatory to separate ANSI C type formatting from Rust/TSX")
-    (:sym :name "emit-jsx-attrs" :kind :fn :tokens 3
+    (:sym :name "emitJsxAttrs" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-attrs': distinguishes React JSX key={val} prop formatting from HTML string attribute rendering")
-    (:sym :name "emit-rust-program" :kind :fn :tokens 3
+    (:sym :name "emitRustProgram" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-program': language qualifier 'rust' is required to isolate Rust crate compilation output")
-    (:sym :name "emit-top-forms" :kind :fn :tokens 3
+    (:sym :name "emitTopForms" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-forms': disambiguates top-level module declarations from scoped inner expressions")
-    (:sym :name "emit-tsx-module" :kind :fn :tokens 3
+    (:sym :name "emitTsxModule" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-module': language qualifier 'tsx' is required to distinguish React TypeScript modules from ASL manifests")
-    (:sym :name "emit-type-str" :kind :fn :tokens 3
+    (:sym :name "emitTypeStr" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-type': specifies stringification of AST type descriptors, avoiding collision with emit-c-type")
-    (:sym :name "emit-vnode-jsx" :kind :fn :tokens 3
+    (:sym :name "emitVnodeJsx" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-vnode': target format 'jsx' is mandatory to distinguish JSX syntax from direct VNode tree emission")
-    (:sym :name "emit-wat-expr" :kind :fn :tokens 3
+    (:sym :name "emitWatExpr" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-expr': language qualifier 'wat' is required to isolate WebAssembly Text expression lowering from Rust and JSX expression generators")
-    (:sym :name "emit-wat-module" :kind :fn :tokens 3
+    (:sym :name "emitWatModule" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'emit-wat': language and envelope qualifier 'module' is required to distinguish whole-module WAT emission from individual WAT expression or function helpers")
-    (:sym :name "format-delay-call" :kind :fn :tokens 3
+    (:sym :name "formatDelayCall" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-delay': specifies codegen lowering into target-specific delay timer API syntax")
-    (:sym :name "format-gpio-call" :kind :fn :tokens 3
+    (:sym :name "formatGpioCall" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-gpio': specifies codegen lowering into microcontroller pin manipulation statements")
-    (:sym :name "has-main-fn?" :kind :fn :tokens 3
+    (:sym :name "hasMainFn?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'has-main?': explicitly checks for an executable function definition rather than module configuration")
-    (:sym :name "is-component-tag?" :kind :fn :tokens 3
+    (:sym :name "isComponentTag?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-component?': restricts predicate check to string tag names, preventing collision with VNode checks")
-    (:sym :name "is-rust-keyword?" :kind :fn :tokens 3
+    (:sym :name "isRustKeyword?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-keyword?': scopes reservation check to Rust grammar keywords to drive identifier mangling")
-    (:sym :name "is-void-tag?" :kind :fn :tokens 3
+    (:sym :name "isVoidTag?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-void?': restricts check to self-closing HTML void elements without children")
-    (:sym :name "jsx-attr-key" :kind :fn :tokens 3
+    (:sym :name "jsxAttrKey" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'attr-key': distinguishes React JSX prop name mapping (className, htmlFor) from raw HTML attributes")
-    (:sym :name "primitive-rust-type" :kind :fn :tokens 3
+    (:sym :name "primitiveRustType" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'rust-type': scopes mapping strictly to Rust primitive scalar types (i64, f64, bool, String)")
-    (:sym :name "resolve-qualified-case" :kind :fn :tokens 3
+    (:sym :name "resolveQualifiedCase" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'resolve-case': distinguishes module-namespaced enum variants from simple pattern-match arms")
-    (:sym :name "rust-mod-name" :kind :fn :tokens 3
+    (:sym :name "rustModName" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'mod-name': scopes identifier sanitization strictly to snake_case Rust crate module paths")
-    (:sym :name "short-mod-name" :kind :fn :tokens 3
+    (:sym :name "shortModName" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'mod-name': specifies terminal path component extraction, distinguishing from full module identifiers")
-    (:sym :name "slice-str-or" :kind :fn :tokens 3
+    (:sym :name "sliceStrOr" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'slice-str': 'or' suffix is essential to indicate safe fallback return on out-of-bounds indices")
-    (:sym :name "test-arduino-sketch" :kind :fn :tokens 3
+    (:sym :name "testArduinoSketch" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-sketch': disambiguates Arduino codegen unit tests from generic compiler sketches")
-    (:sym :name "test-c-header" :kind :fn :tokens 3
+    (:sym :name "testCHeader" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-header': isolates ANSI C header emission tests from Arduino headers")
-    (:sym :name "test-c-type" :kind :fn :tokens 3
+    (:sym :name "testCType" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-type': isolates ANSI C struct and enum type mapping tests from Rust and TSX")
-    (:sym :name "test-gpio-calls" :kind :fn :tokens 3
+    (:sym :name "testGpioCalls" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-gpio': isolates pin read/write codegen assertions from hardware simulator logic")
-    (:sym :name "test-wat-const" :kind :fn :tokens 3
+    (:sym :name "testWatConst" :kind :fn :tokens 3
           :rationale "Unit test verifying WebAssembly linear constant instruction formatting")
-    (:sym :name "test-wat-emit" :kind :fn :tokens 3
+    (:sym :name "testWatEmit" :kind :fn :tokens 3
           :rationale "Unit test verifying complete binary arithmetic WebAssembly module emission")
-    (:sym :name "test-wat-fn" :kind :fn :tokens 3
+    (:sym :name "testWatFn" :kind :fn :tokens 3
           :rationale "Unit test verifying WebAssembly function declaration and signature emission")
-    (:sym :name "test-wat-mod" :kind :fn :tokens 3
+    (:sym :name "testWatMod" :kind :fn :tokens 3
           :rationale "Unit test verifying WebAssembly module envelope and memory export emission")
-    (:sym :name "type-mentions-float?" :kind :fn :tokens 3
+    (:sym :name "typeMentionsFloat?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'mentions-float?': scopes AST type inspection to numeric float descriptors")
-    (:sym :name "type-mentions-io-error?" :kind :fn :tokens 4
+    (:sym :name "typeMentionsIoError?" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'mentions-error?': explicitly scopes search to I/O error sum variants, preventing false positives on generic errors")
-    (:sym :name "emit-wasi-imports" :kind :fn :tokens 3
+    (:sym :name "emitWasiImports" :kind :fn :tokens 3
           :rationale "Emits WASI snapshot preview 1 host function import declarations for wasm32-wasip1 runtime linking")
-    (:sym :name "emit-wasi-fd-write" :kind :fn :tokens 4
+    (:sym :name "emitWasiFdWrite" :kind :fn :tokens 4
           :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 fd_write invocation with iovec buffer arguments")
-    (:sym :name "emit-wasi-proc-exit" :kind :fn :tokens 4
+    (:sym :name "emitWasiProcExit" :kind :fn :tokens 4
           :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 proc_exit invocation terminating process execution")
-    (:sym :name "emit-wasi-clock-time-get" :kind :fn :tokens 5
+    (:sym :name "emitWasiClockTimeGet" :kind :fn :tokens 5
           :rationale "Emits WebAssembly Text lowering for wasi_snapshot_preview1 clock_time_get high-resolution timestamp queries")
-    (:sym :name "emit-wasm-memory-model" :kind :fn :tokens 4
+    (:sym :name "emitWasmMemoryModel" :kind :fn :tokens 4
           :rationale "Emits WebAssembly linear memory export declaration with initial and maximum page bounds")
-    (:sym :name "emit-wasm-export-dispatch" :kind :fn :tokens 4
+    (:sym :name "emitWasmExportDispatch" :kind :fn :tokens 4
           :rationale "Emits sovereign in-browser Batch RPC dispatcher export signatures for WebAssembly linear memory")
-    (:sym :name "emit-asl-core-wasm-module" :kind :fn :tokens 5
+    (:sym :name "emitAslCoreWasmModule" :kind :fn :tokens 5
           :rationale "Emits complete standalone asl-core.wasm module envelope with WASI preview 1 imports and Batch RPC exports")
   ])
 

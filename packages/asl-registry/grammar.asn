@@ -1,7 +1,7 @@
 (:grammar
   :package asl-registry
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "AslRegistryEntry" :kind :type :tokens 1)
     (:sym :name "EcosystemKind" :kind :type :tokens 1)
@@ -13,72 +13,72 @@
     (:sym :name "ReleaseArtifact" :kind :type :tokens 1)
     (:sym :name "ReleaseItem" :kind :type :tokens 1)
 
-    (:sym :name "build-headers" :kind :fn :tokens 2)
-    (:sym :name "clean-version" :kind :fn :tokens 2)
-    (:sym :name "compare-semver" :kind :fn :tokens 2)
-    (:sym :name "evaluate-outdated" :kind :fn :tokens 2)
+    (:sym :name "buildHeaders" :kind :fn :tokens 2)
+    (:sym :name "cleanVersion" :kind :fn :tokens 2)
+    (:sym :name "compareSemver" :kind :fn :tokens 2)
+    (:sym :name "evaluateOutdated" :kind :fn :tokens 2)
     (:sym :name "main" :kind :fn :tokens 1)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "test-formatting" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "testFormatting" :kind :fn :tokens 2)
 
-    (:sym :name "build-package-url" :kind :fn :tokens 3
+    (:sym :name "buildPackageUrl" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'package-url': distinguishes dynamic URL construction for specific versions from static package homepage URLs")
-    (:sym :name "build-search-url" :kind :fn :tokens 3
+    (:sym :name "buildSearchUrl" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'search-url': disambiguates API query endpoint construction from user search UI links")
-    (:sym :name "check-package-outdated" :kind :fn :tokens 3
+    (:sym :name "checkPackageOutdated" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'check-outdated': explicitly qualifies package version inspection to prevent collision with cache freshness checks")
-    (:sym :name "create-publish-spec" :kind :fn :tokens 3
+    (:sym :name "createPublishSpec" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'publish-spec': separates the specification builder function from the resulting manifest record")
-    (:sym :name "create-release-artifact" :kind :fn :tokens 3
+    (:sym :name "createReleaseArtifact" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'release-artifact': distinguishes archive creation logic from static artifact path references")
-    (:sym :name "default-asl-catalog-url" :kind :fn :tokens 4
+    (:sym :name "defaultAslCatalogUrl" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'catalog-url': specifies default central registry endpoint specifically for native AgentScript ecosystem")
-    (:sym :name "eco-to-string" :kind :fn :tokens 3
+    (:sym :name "ecoToString" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'to-string': preserves ecosystem keyword domain typing, preventing collision with general stringification")
-    (:sym :name "format-asl-registry-table" :kind :fn :tokens 4
+    (:sym :name "formatAslRegistryTable" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'format-table': specializes terminal tabular view for registry search and package metadata")
-    (:sym :name "format-outdated-report" :kind :fn :tokens 3
+    (:sym :name "formatOutdatedReport" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-report': specializes formatting specifically to dependency semver obsolescence comparisons")
-    (:sym :name "format-package-summary" :kind :fn :tokens 3
+    (:sym :name "formatPackageSummary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-summary': specializes formatting to single-package metadata cards (author, license, semver)")
-    (:sym :name "format-release-manifest" :kind :fn :tokens 3
+    (:sym :name "formatReleaseManifest" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-manifest': specializes ASN S-expression serialization for release artifacts")
-    (:sym :name "index-package-release" :kind :fn :tokens 3
+    (:sym :name "indexPackageRelease" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'index-release': specifies local registry catalog indexing rather than VCS tag lookups")
-    (:sym :name "make-eco-asl" :kind :fn :tokens 3
+    (:sym :name "makeEcoAsl" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-eco': target ecosystem identifier 'asl' is mandatory to instantiate the native AgentScript ecosystem descriptor")
-    (:sym :name "make-eco-crates" :kind :fn :tokens 3
+    (:sym :name "makeEcoCrates" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-eco': target ecosystem identifier 'crates' is mandatory to instantiate the Rust ecosystem descriptor")
-    (:sym :name "make-eco-github" :kind :fn :tokens 3
+    (:sym :name "makeEcoGithub" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-eco': target ecosystem identifier 'github' is mandatory to instantiate the GitHub release descriptor")
-    (:sym :name "make-eco-go" :kind :fn :tokens 3
+    (:sym :name "makeEcoGo" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-eco': target ecosystem identifier 'go' is mandatory to instantiate the Go module proxy descriptor")
-    (:sym :name "make-eco-npm" :kind :fn :tokens 3
+    (:sym :name "makeEcoNpm" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-eco': target ecosystem identifier 'npm' is mandatory to instantiate the npm ecosystem descriptor")
-    (:sym :name "make-eco-pypi" :kind :fn :tokens 3
+    (:sym :name "makeEcoPypi" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-eco': target ecosystem identifier 'pypi' is mandatory to instantiate the Python PyPI descriptor")
-    (:sym :name "make-package-info" :kind :fn :tokens 3
+    (:sym :name "makePackageInfo" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'package-info': separates the record constructor function from the PackageInfo type itself")
-    (:sym :name "parse-package-specifier" :kind :fn :tokens 3
+    (:sym :name "parsePackageSpecifier" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-spec': distinguishes dependency requirement strings (pkg^1.0) from compiler specs")
-    (:sym :name "parse-semver-triplet" :kind :fn :tokens 3
+    (:sym :name "parseSemverTriplet" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-semver': explicitly bounds parsing to the three numeric components (major.minor.patch)")
-    (:sym :name "resolve-git-clone-cmd" :kind :fn :tokens 4
+    (:sym :name "resolveGitCloneCmd" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'git-clone': distinguishes reproducible shell command array generation from actual process execution")
-    (:sym :name "string-to-eco" :kind :fn :tokens 3
+    (:sym :name "stringToEco" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'to-eco': specifies string parsing into validated EcosystemTarget enum variants")
-    (:sym :name "test-create-artifact" :kind :fn :tokens 3
+    (:sym :name "testCreateArtifact" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-artifact': isolates package archive creation tests from registry network tests")
-    (:sym :name "test-create-spec" :kind :fn :tokens 3
+    (:sym :name "testCreateSpec" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-spec': isolates publication manifest validation from package installation logic")
-    (:sym :name "test-format-manifest" :kind :fn :tokens 3
+    (:sym :name "testFormatManifest" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-manifest': scopes test specifically to release manifest ASN serialization")
-    (:sym :name "test-index-release" :kind :fn :tokens 3
+    (:sym :name "testIndexRelease" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-index': isolates search index insertion assertions from HTTP request tests")
-    (:sym :name "test-outdated-evaluation" :kind :fn :tokens 3
+    (:sym :name "testOutdatedEvaluation" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-outdated': verifies version comparison logic without invoking remote network registries")
-    (:sym :name "test-parse-specifier" :kind :fn :tokens 3
+    (:sym :name "testParseSpecifier" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-parser': scopes verification to scoped and versioned dependency strings")
-    (:sym :name "test-semver-comparison" :kind :fn :tokens 3
+    (:sym :name "testSemverComparison" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-semver': isolates semver ordering and breaking boundary rules from string parsing")
   ])

@@ -1,7 +1,7 @@
 (:grammar
   :package asl-sh
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "BatchDagPlan" :kind :type :tokens 1)
     (:sym :name "BatchDagStep" :kind :type :tokens 1)
@@ -46,84 +46,85 @@
 
     (:sym :name ":diff-summary" :kind :type :tokens 2)
     (:sym :name "cmd" :kind :fn :tokens 1)
-    (:sym :name "collapse-cr" :kind :fn :tokens 2)
-    (:sym :name "dedup-lines" :kind :fn :tokens 2)
-    (:sym :name "default-config" :kind :fn :tokens 2)
-    (:sym :name "demux-stream" :kind :fn :tokens 2)
-    (:sym :name "detect-deadlock" :kind :fn :tokens 2)
+    (:sym :name "collapseCr" :kind :fn :tokens 2)
+    (:sym :name "dedupLines" :kind :fn :tokens 2)
+    (:sym :name "defaultConfig" :kind :fn :tokens 2)
+    (:sym :name "demuxStream" :kind :fn :tokens 2)
+    (:sym :name "detectDeadlock" :kind :fn :tokens 2)
     (:sym :name "err!" :kind :fn :tokens 1)
-    (:sym :name "estimate-tokens" :kind :fn :tokens 2)
     (:sym :name "exec!" :kind :fn :tokens 1)
-    (:sym :name "exec-receipt!" :kind :fn :tokens 2)
-    (:sym :name "extract-diagnostics" :kind :fn :tokens 2)
-    (:sym :name "format-entry" :kind :fn :tokens 2)
+    (:sym :name "execReceipt!" :kind :fn :tokens 2)
+    (:sym :name "extractDiagnostics" :kind :fn :tokens 2)
+    (:sym :name "formatEntry" :kind :fn :tokens 2)
     (:sym :name "info!" :kind :fn :tokens 1)
-    (:sym :name "log-err!" :kind :fn :tokens 2)
-    (:sym :name "log-info!" :kind :fn :tokens 2)
-    (:sym :name "log-warn!" :kind :fn :tokens 2)
-    (:sym :name "make-pipeline" :kind :fn :tokens 2)
+    (:sym :name "logErr!" :kind :fn :tokens 2)
+    (:sym :name "logInfo!" :kind :fn :tokens 2)
+    (:sym :name "logWarn!" :kind :fn :tokens 2)
+    (:sym :name "makePipeline" :kind :fn :tokens 2)
     (:sym :name "pipe!" :kind :fn :tokens 1)
-    (:sym :name "receipt-tokens" :kind :fn :tokens 2)
-    (:sym :name "reduce-lines" :kind :fn :tokens 2)
-    (:sym :name "reduce-stream" :kind :fn :tokens 2)
-    (:sym :name "reduce-text" :kind :fn :tokens 2)
-    (:sym :name "render-receipt" :kind :fn :tokens 2)
-    (:sym :name "resolve-lock" :kind :fn :tokens 2)
-    (:sym :name "ring-push" :kind :fn :tokens 2)
-    (:sym :name "ring-size" :kind :fn :tokens 2)
-    (:sym :name "ring-tail" :kind :fn :tokens 2)
-    (:sym :name "run-cmd!" :kind :fn :tokens 2)
-    (:sym :name "run-pipeline!" :kind :fn :tokens 2)
-    (:sym :name "run-simple!" :kind :fn :tokens 2)
-    (:sym :name "run-tests" :kind :fn :tokens 2)
-    (:sym :name "run-tests!" :kind :fn :tokens 2)
-    (:sym :name "session-input!" :kind :fn :tokens 2)
-    (:sym :name "session-kill!" :kind :fn :tokens 2)
-    (:sym :name "session-spawn!" :kind :fn :tokens 2)
-    (:sym :name "session-tail!" :kind :fn :tokens 2)
-    (:sym :name "spool-sync!" :kind :fn :tokens 2)
-    (:sym :name "spool-truncate" :kind :fn :tokens 2)
-    (:sym :name "spool-unlink" :kind :fn :tokens 2)
-    (:sym :name "spool-write" :kind :fn :tokens 2)
-    (:sym :name "strip-ansi" :kind :fn :tokens 2)
-    (:sym :name "summarize-diagnostics" :kind :fn :tokens 2)
-    (:sym :name "supervise-step" :kind :fn :tokens 2)
-    (:sym :name "truncate-summary" :kind :fn :tokens 2)
+    (:sym :name "procList" :kind :fn :tokens 2)
+    (:sym :name "procStatus" :kind :fn :tokens 2)
+    (:sym :name "receiptTokens" :kind :fn :tokens 2)
+    (:sym :name "reduceLines" :kind :fn :tokens 2)
+    (:sym :name "reduceStream" :kind :fn :tokens 2)
+    (:sym :name "reduceText" :kind :fn :tokens 2)
+    (:sym :name "renderReceipt" :kind :fn :tokens 2)
+    (:sym :name "resolveLock" :kind :fn :tokens 2)
+    (:sym :name "ringPush" :kind :fn :tokens 2)
+    (:sym :name "ringSize" :kind :fn :tokens 2)
+    (:sym :name "ringTail" :kind :fn :tokens 2)
+    (:sym :name "runCmd!" :kind :fn :tokens 2)
+    (:sym :name "runPipeline!" :kind :fn :tokens 2)
+    (:sym :name "runSimple!" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "runTests!" :kind :fn :tokens 2)
+    (:sym :name "sessionInput!" :kind :fn :tokens 2)
+    (:sym :name "sessionKill!" :kind :fn :tokens 2)
+    (:sym :name "sessionSpawn!" :kind :fn :tokens 2)
+    (:sym :name "sessionTail!" :kind :fn :tokens 2)
+    (:sym :name "spoolSync!" :kind :fn :tokens 2)
+    (:sym :name "spoolTruncate" :kind :fn :tokens 2)
+    (:sym :name "spoolUnlink" :kind :fn :tokens 2)
+    (:sym :name "spoolWrite" :kind :fn :tokens 2)
+    (:sym :name "stripAnsi" :kind :fn :tokens 2)
+    (:sym :name "summarizeDiagnostics" :kind :fn :tokens 2)
+    (:sym :name "superviseStep" :kind :fn :tokens 2)
+    (:sym :name "truncateSummary" :kind :fn :tokens 2)
     (:sym :name "warn!" :kind :fn :tokens 1)
-    (:sym :name "window-lines" :kind :fn :tokens 2)
-    (:sym :name "with-cwd" :kind :fn :tokens 2)
-    (:sym :name "with-stdin" :kind :fn :tokens 2)
-    (:sym :name "with-timeout" :kind :fn :tokens 2)
+    (:sym :name "windowLines" :kind :fn :tokens 2)
+    (:sym :name "withCwd" :kind :fn :tokens 2)
+    (:sym :name "withStdin" :kind :fn :tokens 2)
+    (:sym :name "withTimeout" :kind :fn :tokens 2)
 
-    (:sym :name "check-rss-ceiling" :kind :fn :tokens 3
+    (:sym :name "checkRssCeiling" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'check-rss': scopes check specifically against configured memory ceiling threshold")
-    (:sym :name "check-step-deadline" :kind :fn :tokens 3
+    (:sym :name "checkStepDeadline" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'check-deadline': scopes execution timeout evaluation specifically to APM batch steps")
-    (:sym :name "clean-terminal-text" :kind :fn :tokens 3
+    (:sym :name "cleanTerminalText" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'clean-text': preserves terminal ANSI and CR sanitization domain, preventing collision with general string trimming")
-    (:sym :name "collapse-cr-line" :kind :fn :tokens 3
+    (:sym :name "collapseCrLine" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes terminal carriage-return overwrite emulation across an entire line from segment-level processing")
-    (:sym :name "collapse-cr-segment" :kind :fn :tokens 3
+    (:sym :name "collapseCrSegment" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'collapse-cr': distinguishes progress-bar segment overwrite processing from line-level collapsing")
-    (:sym :name "count-paren-balance" :kind :fn :tokens 3
+    (:sym :name "countParenBalance" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'count-balance': distinguishes AST parenthesis balance calculation from general bracket or token counting")
-    (:sym :name "detect-bound-port" :kind :fn :tokens 3
+    (:sym :name "detectBoundPort" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'detect-port': distinguishes network listening port detection from device port queries")
-    (:sym :name "detect-deadlock-escalation" :kind :fn :tokens 3
+    (:sym :name "detectDeadlockEscalation" :kind :fn :tokens 3
           :rationale "Enforces two-stage stdin deadlock escalation with SIGTERM and SIGKILL thresholds")
-    (:sym :name "extract-content-length" :kind :fn :tokens 3
+    (:sym :name "extractContentLength" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-length': explicitly scopes integer extraction to Content-Length protocol headers")
-    (:sym :name "extract-error-summary" :kind :fn :tokens 3
+    (:sym :name "extractErrorSummary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-summary': scopes extraction specifically to diagnostic errors and failure frames")
-    (:sym :name "extract-output-skeleton" :kind :fn :tokens 3
+    (:sym :name "extractOutputSkeleton" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'output-skeleton': parses stream lines into section outlines and diagnostics")
-    (:sym :name "extract-python-frame" :kind :fn :tokens 3
+    (:sym :name "extractPythonFrame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extract-frame': explicitly scopes stack frame extraction to Python traceback syntax")
-    (:sym :name "format-daemon-table" :kind :fn :tokens 3
+    (:sym :name "formatDaemonTable" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-table': distinguishes APM daemon process inspection table rendering from general text tables")
-    (:sym :name "format-output-skeleton" :kind :fn :tokens 3
+    (:sym :name "formatOutputSkeleton" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'format-skeleton': renders structural ASCII outline table from OutputSkeleton")
-    (:sym :name "generate-spool-path" :kind :fn :tokens 3
+    (:sym :name "generateSpoolPath" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-path': distinguishes canonical ephemeral disk spool path generation from raw path strings")
     (:sym :name ":git-branches" :kind :type :tokens 2
           :rationale "Cannot be reduced to ':branches': distinguishes git branch catalog envelope from general graph branches")
@@ -141,161 +142,171 @@
           :rationale "Cannot be reduced to ':worktrees': distinguishes git worktree roster envelope from general tree collections")
     (:sym :name ":where-am-i" :kind :type :tokens 3
           :rationale "Cannot be reduced to ':where': standard 3-token orientation query tag for agent context bootstrap")
-    (:sym :name "git-branches-format" :kind :fn :tokens 3
+    (:sym :name "gitBranchesFormat" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'branches-format': distinguishes git branch roster ASN formatter from tree formatters")
-    (:sym :name "git-branches-parse" :kind :fn :tokens 3
+    (:sym :name "gitBranchesParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'branches-parse': distinguishes git branch listing parser from syntax tree branch parsers")
-    (:sym :name "git-compare-format" :kind :fn :tokens 3
+    (:sym :name "gitCompareFormat" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compare-format': distinguishes git cross-branch comparison ASN formatter from general diff formatters")
-    (:sym :name "git-diff-parse" :kind :fn :tokens 3
+    (:sym :name "gitDiffParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'diff-parse': distinguishes git unified diff parser from general AST or text diffing")
-    (:sym :name "git-diff-summary" :kind :fn :tokens 3
+    (:sym :name "gitDiffSummary" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'diff-summary': distinguishes git repository diff compaction statistics from diagnostic or log summaries")
-    (:sym :name "git-log-format" :kind :fn :tokens 3
+    (:sym :name "gitLogFormat" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'log-format': distinguishes git linearized commit log ASN formatter from general log formatters")
-    (:sym :name "git-log-parse" :kind :fn :tokens 3
+    (:sym :name "gitLogParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'log-parse': distinguishes git linearized commit history parser from general application log parsers")
-    (:sym :name "git-numstat-parse" :kind :fn :tokens 3
+    (:sym :name "gitNumstatParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'numstat-parse': distinguishes git numstat diff parser from general numeric statistics parsers")
-    (:sym :name "git-search-format" :kind :fn :tokens 3
+    (:sym :name "gitSearchFormat" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'search-format': distinguishes git cross-branch search ASN formatter from general engine formatters")
-    (:sym :name "git-search-parse" :kind :fn :tokens 3
+    (:sym :name "gitSearchParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'search-parse': distinguishes git grep search output parser from general text search parsers")
-    (:sym :name "git-topo-format" :kind :fn :tokens 3
+    (:sym :name "gitTopoFormat" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'topo-format': distinguishes git topology orientation ASN formatter from general topology formatters")
-    (:sym :name "git-topo-parse" :kind :fn :tokens 3
+    (:sym :name "gitTopoParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'topo-parse': distinguishes git repository topology parser from general AST or network topology")
-    (:sym :name "git-worktree-parse" :kind :fn :tokens 3
+    (:sym :name "gitWorktreeParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'worktree-parse': distinguishes git worktree porcelain parser from general directory tree parsers")
-    (:sym :name "git-worktrees-format" :kind :fn :tokens 3
+    (:sym :name "gitWorktreesFormat" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'worktrees-format': distinguishes git worktree roster ASN formatter from general tree formatters")
-    (:sym :name "github-diff-compact" :kind :fn :tokens 3
+    (:sym :name "githubCiFormat" :kind :fn :tokens 3
+          :rationale "Formats GitHub CI check rollup results into compact representation")
+    (:sym :name "githubCiParse" :kind :fn :tokens 3
+          :rationale "Parses GitHub CI check runs and commit status payloads")
+    (:sym :name "githubCiRollup" :kind :fn :tokens 3
+          :rationale "Rolls up multiple GitHub CI check results into summary status")
+    (:sym :name "githubDiffCompact" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'diff-compact': explicitly scopes diff compaction to GitHub PR patch and review payloads")
-    (:sym :name "github-issue-parse" :kind :fn :tokens 3
+    (:sym :name "githubIssueParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'issue-parse': scopes issue and comment parser specifically to GitHub issue JSON representations")
-    (:sym :name "github-pr-parse" :kind :fn :tokens 3
+    (:sym :name "githubIssuesFormat" :kind :fn :tokens 3
+          :rationale "Formats list of GitHub issues into compact ASN representation")
+    (:sym :name "githubPrParse" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'pr-parse': distinguishes GitHub pull request payload parser from general patch or review tools")
-    (:sym :name "is-balanced-frame?" :kind :fn :tokens 3
+    (:sym :name "githubPrsFormat" :kind :fn :tokens 3
+          :rationale "Formats list of GitHub pull requests into compact ASN representation")
+    (:sym :name "isBalancedFrame?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-balanced?': scopes balance validation specifically to stream frame delineation")
-    (:sym :name "make-daemon-entry" :kind :fn :tokens 3
+    (:sym :name "makeDaemonEntry" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-entry': unambiguously scopes constructor to daemon process table records")
-    (:sym :name "make-deadlock-verdict" :kind :fn :tokens 3
+    (:sym :name "makeDeadlockVerdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to pipe deadlock evaluation")
-    (:sym :name "make-disk-spool" :kind :fn :tokens 3
+    (:sym :name "makeDiskSpool" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to disk storage allocation with byte capping")
-    (:sym :name "make-lock-verdict" :kind :fn :tokens 3
+    (:sym :name "makeLockVerdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to singleton advisory lock evaluation")
-    (:sym :name "make-oob-demuxer" :kind :fn :tokens 3
+    (:sym :name "makeOobDemuxer" :kind :fn :tokens 3
           :rationale "Constructs an OobDemuxer with bounded memory buffer ceiling and two-tier spool")
-    (:sym :name "make-port-verdict" :kind :fn :tokens 3
+    (:sym :name "makePortVerdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to bound network port evaluation")
-    (:sym :name "make-process-receipt" :kind :fn :tokens 3
+    (:sym :name "makeProcessReceipt" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-receipt': scopes constructor unambiguously to APM process receipting")
-    (:sym :name "make-ring-buffer" :kind :fn :tokens 3
+    (:sym :name "makeRingBuffer" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-buffer': unambiguously scopes constructor to FIFO ring buffer semantics")
-    (:sym :name "make-rss-verdict" :kind :fn :tokens 3
+    (:sym :name "makeRssVerdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to memory RSS watchdog evaluation")
-    (:sym :name "make-step-deadline-verdict" :kind :fn :tokens 4
+    (:sym :name "makeStepDeadlineVerdict" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'make-verdict': explicitly scopes constructor to step execution deadline evaluation")
-    (:sym :name "make-stream-frame" :kind :fn :tokens 3
+    (:sym :name "makeStreamFrame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-frame': unambiguously scopes constructor to streaming protocol frame delineation")
-    (:sym :name "make-supervisor-verdict" :kind :fn :tokens 3
+    (:sym :name "makeSupervisorVerdict" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'make-verdict': unambiguously scopes constructor to split-loop worker supervisor evaluation")
-    (:sym :name "make-two-tier-spool" :kind :fn :tokens 4
+    (:sym :name "makeTwoTierSpool" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'make-spool': explicitly scopes constructor to RAM ring plus disk spool coordination")
-    (:sym :name "oob-demux-chunk" :kind :fn :tokens 3
+    (:sym :name "oobDemuxChunk" :kind :fn :tokens 3
           :rationale "Streams a chunk into the two-tier spool while bounding active memory under 64MB")
-    (:sym :name "oob-demux-finish" :kind :fn :tokens 3
+    (:sym :name "oobDemuxFinish" :kind :fn :tokens 3
           :rationale "Finalizes two-tier spool and returns a compact ProcessReceipt (<80 tokens)")
-    (:sym :name "parse-file-loc" :kind :fn :tokens 3
+    (:sym :name "parseFileLoc" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-loc': distinguishes compiler diagnostic file:line:col parsing from memory or URL location strings")
-    (:sym :name "parse-port-number" :kind :fn :tokens 3
+    (:sym :name "parsePortNumber" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-port': distinguishes integer network port parsing from hardware port strings")
-    (:sym :name "parse-pytest-diagnostic" :kind :fn :tokens 3
+    (:sym :name "parsePytestDiagnostic" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to pytest assertion failures and summary blocks")
-    (:sym :name "parse-stream-frame" :kind :fn :tokens 3
+    (:sym :name "parseStreamFrame" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-frame': scopes parsing specifically to streaming multi-client socket frames")
-    (:sym :name "parse-tsc-diagnostic" :kind :fn :tokens 3
+    (:sym :name "parseTscDiagnostic" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'parse-diagnostic': scopes parser specifically to TypeScript tsc compiler diagnostic outputs")
-    (:sym :name "ring-to-string" :kind :fn :tokens 3
+    (:sym :name "ringToString" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'ring-string': distinguishes string rendering from ring buffer identifier")
-    (:sym :name "scan-stream-diagnostics" :kind :fn :tokens 3
+    (:sym :name "scanStreamDiagnostics" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'scan-stream': distinguishes diagnostic scanning from general stream reading or byte windowing")
-    (:sym :name "session-check-deadlock" :kind :fn :tokens 3
+    (:sym :name "sessionCheckDeadlock" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'check-deadlock': evaluates deadlock specifically for an interactive session instance")
-    (:sym :name "session-emit-stderr!" :kind :fn :tokens 3
+    (:sym :name "sessionEmitStderr!" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'session-stderr': appends streaming standard error chunks to session buffer")
-    (:sym :name "session-emit-stdout!" :kind :fn :tokens 3
+    (:sym :name "sessionEmitStdout!" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'session-stdout': appends streaming standard output chunks to session buffer")
-    (:sym :name "session-poll-tail!" :kind :fn :tokens 3
+    (:sym :name "sessionPollTail!" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'session-tail': drains unconsumed output delta lines since last cursor poll")
-    (:sym :name "session-send-input!" :kind :fn :tokens 3
+    (:sym :name "sessionSendInput!" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'session-input': injects streaming stdin input into active running process session")
-    (:sym :name "session-tick-idle" :kind :fn :tokens 3
+    (:sym :name "sessionTickIdle" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'session-tick': advances idle timeout clock on quiet interactive session")
-    (:sym :name "session-extend-timeout" :kind :fn :tokens 3
+    (:sym :name "sessionExtendTimeout" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'extend-timeout': dynamically pushes watchdog ceiling on active session")
-    (:sym :name "session-set-timeout" :kind :fn :tokens 3
+    (:sym :name "sessionSetTimeout" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'set-timeout': explicitly updates watchdog ceiling on active session")
-    (:sym :name "session-step-watchdog!" :kind :fn :tokens 3
+    (:sym :name "sessionStepWatchdog!" :kind :fn :tokens 3
           :rationale "Advances session idle timer and enforces two-stage watchdog deadlock escalation")
-    (:sym :name "skeleton-has-errors?" :kind :fn :tokens 3
+    (:sym :name "skeletonHasErrors?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'has-errors?': evaluates error predicates specifically on OutputSkeleton records")
-    (:sym :name "spool-is-unlinked?" :kind :fn :tokens 3
+    (:sym :name "spoolIsUnlinked?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'is-unlinked?': disambiguates disk spool auto-unlink predicate from general file unlinking")
-    (:sym :name "test-ansi-stripping" :kind :fn :tokens 3
+    (:sym :name "testAnsiStripping" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-stripping': isolates ANSI sequence removal assertions from general string trimming tests")
-    (:sym :name "test-cr-collapsing" :kind :fn :tokens 3
+    (:sym :name "testCrCollapsing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-collapsing': isolates terminal carriage return overwrite tests from whitespace collapsing")
-    (:sym :name "spool-write-sync!" :kind :fn :tokens 3
+    (:sym :name "spoolWriteSync!" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'write-sync': distinguishes disk spool atomic circular write-and-flush operation")
-    (:sym :name "test-diagnostic-extraction" :kind :fn :tokens 3
+    (:sym :name "testDiagnosticExtraction" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-extraction': scopes test specifically to multi-compiler diagnostic parsing")
-    (:sym :name "test-disk-spool-50mb-hard-cap" :kind :fn :tokens 6
+    (:sym :name "testDiskSpool50mbHardCap" :kind :fn :tokens 6
           :rationale "Cannot be reduced to 'test-spool-cap': explicitly verifies 50MB stream data bounded strictly within 10MB hard cap in RAM and on disk")
-    (:sym :name "test-disk-spool-auto-unlink" :kind :fn :tokens 5
+    (:sym :name "testDiskSpoolAutoUnlink" :kind :fn :tokens 5
           :rationale "Cannot be reduced to 'test-unlink': isolates auto-unlink file descriptor lifecycle guarantee")
-    (:sym :name "test-disk-spool-circular-cap" :kind :fn :tokens 5
+    (:sym :name "testDiskSpoolCircularCap" :kind :fn :tokens 5
           :rationale "Cannot be reduced to 'test-spool': isolates 10MB circular truncation boundary verification")
-    (:sym :name "test-line-dedup" :kind :fn :tokens 3
+    (:sym :name "testLineDedup" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-dedup': scopes test specifically to stream log line deduplication algorithms")
-    (:sym :name "test-oob-stream-demux-memory-bound" :kind :fn :tokens 6
+    (:sym :name "testOobStreamDemuxMemoryBound" :kind :fn :tokens 6
           :rationale "Verifies 100MB synthetic stream bounded strictly < 64MB with clean termination")
-    (:sym :name "test-reduce-stream-integration" :kind :fn :tokens 4
+    (:sym :name "testReduceStreamIntegration" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-reduce': scopes test to the integrated ANSI stripping, windowing, and parsing pipeline")
-    (:sym :name "test-retention-windowing" :kind :fn :tokens 3
+    (:sym :name "testRetentionWindowing" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-windowing': scopes test specifically to head/tail line retention during stream truncation")
-    (:sym :name "test-ring-buffer-capacity" :kind :fn :tokens 4
+    (:sym :name "testRingBufferCapacity" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-ring': isolates 200-line capacity wrap verification")
-    (:sym :name "test-sh-lifecycle-wiring" :kind :fn :tokens 4
+    (:sym :name "testShLifecycleWiring" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-sh': isolates command lifecycle spooling and watchdog wiring")
-    (:sym :name "test-session-deadlock-detection" :kind :fn :tokens 4
+    (:sym :name "testSessionDeadlockDetection" :kind :fn :tokens 4
           :rationale "Verifies idle deadlock auditing and flag transitions")
-    (:sym :name "test-two-tier-spool-integration" :kind :fn :tokens 5
+    (:sym :name "testTwoTierSpoolIntegration" :kind :fn :tokens 5
           :rationale "Cannot be reduced to 'test-spool': tests integrated RAM ring and disk spool execution")
-    (:sym :name "test-watchdog-deadlock" :kind :fn :tokens 3
+    (:sym :name "testWatchdogDeadlock" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'test-deadlock': isolates 10s idle stdin deadlock watchdog assertions")
-    (:sym :name "test-watchdog-port-detection" :kind :fn :tokens 4
+    (:sym :name "testWatchdogPortDetection" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-port': isolates automated port binding regex and string parsing assertions")
-    (:sym :name "test-watchdog-rss-ceiling" :kind :fn :tokens 4
+    (:sym :name "testWatchdogRssCeiling" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'test-rss': isolates memory limit and SIGKILL event assertions")
-    (:sym :name "two-tier-close" :kind :fn :tokens 3
+    (:sym :name "twoTierClose" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-close': indicates two-tier cleanup guaranteeing disk spool auto-unlink")
-    (:sym :name "two-tier-push" :kind :fn :tokens 3
+    (:sym :name "twoTierPush" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'spool-push': indicates dual write to RAM ring buffer and disk spool simultaneously")
-    (:sym :name "dag-step-create" :kind :fn :tokens 3
+    (:sym :name "dagStepCreate" :kind :fn :tokens 3
           :rationale "Constructs a new pending BatchDagStep with initialized empty skip reason")
-    (:sym :name "dag-plan-create" :kind :fn :tokens 3
+    (:sym :name "dagPlanCreate" :kind :fn :tokens 3
           :rationale "Constructs a BatchDagPlan from execution mode and step sequence")
-    (:sym :name "dag-find-step" :kind :fn :tokens 3
+    (:sym :name "dagFindStep" :kind :fn :tokens 3
           :rationale "Locates a step in a batch DAG plan by logical name or numeric string identifier")
-    (:sym :name "dag-validate-deps" :kind :fn :tokens 3
+    (:sym :name "dagValidateDeps" :kind :fn :tokens 3
           :rationale "Validates acyclic dependency graph references across all declared DAG steps")
-    (:sym :name "dag-skip-on-prior-failure" :kind :fn :tokens 5
+    (:sym :name "dagSkipOnPriorFailure" :kind :fn :tokens 5
           :rationale "Simulates sequential fail-fast execution by marking subsequent steps skipped upon error")
-    (:sym :name "dag-skip-wave-on-failure" :kind :fn :tokens 5
+    (:sym :name "dagSkipWaveOnFailure" :kind :fn :tokens 5
           :rationale "Simulates cascading wave execution abort by marking subsequent wave steps skipped")
-    (:sym :name "dag-format-summary" :kind :fn :tokens 3
+    (:sym :name "dagFormatSummary" :kind :fn :tokens 3
           :rationale "Formats standard ASN summary string of batch execution status tallies")
 
     (:sym :name "proc/status" :kind :fn :tokens 2

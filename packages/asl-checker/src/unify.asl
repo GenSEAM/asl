@@ -1,64 +1,72 @@
 (module asl-checker/unify
   :d "Hindley-Milner Functional Type Unification for AgentScript"
   :x [UnifyOutcome
-      apply-subst
-      occurs-in?
-      kind-narrow
-      type-equal?
-      unify]
+      applySubst
+      occursIn?
+      kindNarrow
+      typeEqual?
+      unify
+      resolveVarSubst
+      resolveVarSubstRec]
   :i [(types :a ty)])
 
 (dfe UnifyOutcome
-  (:c u-ok [(subst (Map Int64 ty/Type))] "Unification succeeded with updated substitution")
-  (:c u-err [(msg String) (numeric Bool)] "Unification failed with message and numeric mismatch flag"))
+  (:c uOk [(subst (Map Int64 ty/Type))] "Unification succeeded with updated substitution")
+  (:c uErr [(msg String) (numeric Bool)] "Unification failed with message and numeric mismatch flag"))
 
-(df resolve-var-subst [(subst (Map Int64 ty/Type)) (cur ty/Type)] -> ty/Type
-  :d "Iteratively follows metavariable chains in Python for loop to avoid stack overflow."
-  (fold (fn [(t ty/Type) (step-idx Int64)] -> ty/Type
-          (mt t
-            ((ty/ty-var id _)
-             (mt (map-get subst id)
-               ((some nxt)
-                (mt nxt
-                  ((ty/ty-var nid _) (if (= nid id) t nxt))
-                  (_ nxt)))
-               ((none) t)))
-            (_ t)))
-        cur
-        (range 0 5000)))
+(df resolveVarSubstRec [(subst (Map Int64 ty/Type)) (cur ty/Type) (fuel Int64)] -> ty/Type
+  :d "Recursively follows metavariable substitution chains with fuel bound to prevent cycles."
+  (if (<= fuel 0)
+    cur
+    (mt cur
+      ((ty/tyVar id _)
+       (mt (map-get subst id)
+         ((some nxt)
+          (mt nxt
+            ((ty/tyVar nid _)
+             (if (= nid id)
+               cur
+               (resolveVarSubstRec subst nxt (- fuel 1))))
+            (_ nxt)))
+         ((none) cur)))
+      (_ cur))))
 
-(df apply-subst-list [(subst (Map Int64 ty/Type)) (ts (List ty/Type))] -> (List ty/Type)
+(df resolveVarSubst [(subst (Map Int64 ty/Type)) (cur ty/Type)] -> ty/Type
+  :d "Resolves metavariable chains using bounded recursion."
+  (resolveVarSubstRec subst cur 100))
+
+(df applySubstList [(subst (Map Int64 ty/Type)) (ts (List ty/Type))] -> (List ty/Type)
   :d "Applies substitution to a list of types."
-  (map (fn [(item ty/Type)] -> ty/Type (apply-subst subst item)) ts))
+  (map (fn [(item ty/Type)] -> ty/Type (applySubst subst item)) ts))
 
-(df apply-subst [(subst (Map Int64 ty/Type)) (t ty/Type)] -> ty/Type
+(df applySubst [(subst (Map Int64 ty/Type)) (t ty/Type)] -> ty/Type
   :d "Resolves metavariable chains in t until a fixed point is reached."
-  (let [(root (resolve-var-subst subst t))]
+  (let [(root (resolveVarSubst subst t))]
     (mt root
-      ((ty/ty-var _ _) root)
-      ((ty/ty-con name args mod shown)
-       (ty/ty-con name (apply-subst-list subst args) mod shown))
-      ((ty/ty-fun params ret)
-       (ty/ty-fun (apply-subst-list subst params) (apply-subst subst ret))))))
+      ((ty/tyVar _ _) root)
+      ((ty/tyCon name args mod shown)
+       (ty/tyCon name (applySubstList subst args) mod shown))
+      ((ty/tyFun params ret)
+       (ty/tyFun (applySubstList subst params) (applySubst subst ret))))))
 
-(df occurs-in? [(id Int64) (t ty/Type) (subst (Map Int64 ty/Type))] -> Bool
+(df occursIn? [(id Int64) (t ty/Type) (subst (Map Int64 ty/Type))] -> Bool
   :d "Occurs check: returns true if metavar id occurs free in t after pruning."
-  (let [(pruned (apply-subst subst t))]
+  (let [(pruned (applySubst subst t))]
     (mt pruned
-      ((ty/ty-var id2 _) (= id id2))
-      ((ty/ty-con _ args _ _)
+      ((ty/tyVar id2 _) (= id id2))
+      ((ty/tyCon _ args _ _)
        (fold (fn [(acc Bool) (arg ty/Type)] -> Bool
-               (or acc (occurs-in? id arg subst)))
+               (or acc (occursIn? id arg subst)))
              false
              args))
-      ((ty/ty-fun params ret)
+      ((ty/tyFun params ret)
        (or (fold (fn [(acc Bool) (p ty/Type)] -> Bool
-                   (or acc (occurs-in? id p subst)))
+                   (or acc (occursIn? id p subst)))
                  false
                  params)
-           (occurs-in? id ret subst))))))
+           (occursIn? id ret subst))))))
 
-(df kind-narrow [(k1 String) (k2 String)] -> (Option String)
+(df kindNarrow [(k1 String) (k2 String)] -> (Option String)
   :d "Lattice narrowing for type variable kinds: any < num < int."
   (cond
     ((= k1 "any") (some k2))
@@ -69,20 +77,20 @@
      (if (or (= k2 "num") (= k2 "int")) (some "int") (none)))
     (:else (none))))
 
-(df same-length? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
+(df sameLength? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
   (= (list-length l1) (list-length l2)))
 
-(df diff-length? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
+(df diffLength? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
   (not (= (list-length l1) (list-length l2))))
 
-(df type-list-equal? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
-  (and (same-length? l1 l2)
+(df typeListEqual? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
+  (and (sameLength? l1 l2)
        (fold (fn [(acc Bool) (p (Pair ty/Type ty/Type))] -> Bool
-               (and acc (type-equal? (.-first p) (.-second p))))
+               (and acc (typeEqual? (.-first p) (.-second p))))
              true
              (zip l1 l2))))
 
-(df mod-differs? [(m1 (Option String)) (m2 (Option String))] -> Bool
+(df modDiffers? [(m1 (Option String)) (m2 (Option String))] -> Bool
   (mt m1
     ((none) false)
     ((some s1)
@@ -90,7 +98,7 @@
        ((none) false)
        ((some s2) (not (= s1 s2)))))))
 
-(df mod-compatible? [(m1 (Option String)) (m2 (Option String))] -> Bool
+(df modCompatible? [(m1 (Option String)) (m2 (Option String))] -> Bool
   (mt m1
     ((none) true)
     ((some s1)
@@ -98,102 +106,102 @@
        ((none) true)
        ((some s2) (= s1 s2))))))
 
-(df type-equal? [(t1 ty/Type) (t2 ty/Type)] -> Bool
+(df typeEqual? [(t1 ty/Type) (t2 ty/Type)] -> Bool
   :d "Structural equality on Type trees."
   (mt t1
-    ((ty/ty-var id1 _)
+    ((ty/tyVar id1 _)
      (mt t2
-       ((ty/ty-var id2 _) (= id1 id2))
+       ((ty/tyVar id2 _) (= id1 id2))
        (_ false)))
-    ((ty/ty-con n1 a1 m1 _)
+    ((ty/tyCon n1 a1 m1 _)
      (mt t2
-       ((ty/ty-con n2 a2 m2 _)
+       ((ty/tyCon n2 a2 m2 _)
         (and (= n1 n2)
-             (and (mod-compatible? m1 m2)
-                  (and (same-length? a1 a2)
-                       (type-list-equal? a1 a2)))))
+             (and (modCompatible? m1 m2)
+                  (and (sameLength? a1 a2)
+                       (typeListEqual? a1 a2)))))
        (_ false)))
-    ((ty/ty-fun p1 r1)
+    ((ty/tyFun p1 r1)
      (mt t2
-       ((ty/ty-fun p2 r2)
-        (and (same-length? p1 p2)
-             (and (type-list-equal? p1 p2)
-                  (type-equal? r1 r2))))
+       ((ty/tyFun p2 r2)
+        (and (sameLength? p1 p2)
+             (and (typeListEqual? p1 p2)
+                  (typeEqual? r1 r2))))
        (_ false)))))
 
-(df unify-lists [(l1 (List ty/Type)) (l2 (List ty/Type)) (subst (Map Int64 ty/Type))] -> UnifyOutcome
-  (if (diff-length? l1 l2)
-    (u-err "type argument arity mismatch" false)
+(df unifyLists [(l1 (List ty/Type)) (l2 (List ty/Type)) (subst (Map Int64 ty/Type))] -> UnifyOutcome
+  (if (diffLength? l1 l2)
+    (uErr "type argument arity mismatch" false)
     (fold (fn [(res UnifyOutcome) (p (Pair ty/Type ty/Type))] -> UnifyOutcome
             (mt res
-              ((u-ok cur-subst) (unify (.-first p) (.-second p) cur-subst))
-              ((u-err _ _) res)))
-          (u-ok subst)
+              ((uOk curSubst) (unify (.-first p) (.-second p) curSubst))
+              ((uErr _ _) res)))
+          (uOk subst)
           (zip l1 l2))))
 
-(df bind-var-checked [(id Int64) (target ty/Type) (subst (Map Int64 ty/Type))] -> UnifyOutcome
-  (if (occurs-in? id target subst)
-    (u-err "occurs check failed: cyclic substitution" false)
-    (u-ok (map-set subst id target))))
+(df bindVarChecked [(id Int64) (target ty/Type) (subst (Map Int64 ty/Type))] -> UnifyOutcome
+  (if (occursIn? id target subst)
+    (uErr "occurs check failed: cyclic substitution" false)
+    (uOk (map-set subst id target))))
 
-(df bind-var-con [(id Int64) (k String) (c-ty ty/Type) (c-name String) (subst (Map Int64 ty/Type))] -> UnifyOutcome
-  (if (and (= k "num") (not (ty/is-numeric-type? c-name)))
-    (u-err (str "expected a number, found " (ty/show-type c-ty)) (ty/is-numeric-type? c-name))
-    (if (and (= k "int") (not (ty/is-integral-type? c-name)))
-      (u-err (str "expected an integer, found " (ty/show-type c-ty)) (ty/is-numeric-type? c-name))
-      (bind-var-checked id c-ty subst))))
+(df bindVarCon [(id Int64) (k String) (cTy ty/Type) (cName String) (subst (Map Int64 ty/Type))] -> UnifyOutcome
+  (if (and (= k "num") (not (ty/isNumericType? cName)))
+    (uErr (str "expected a number, found " (ty/showType cTy)) (ty/isNumericType? cName))
+    (if (and (= k "int") (not (ty/isIntegralType? cName)))
+      (uErr (str "expected an integer, found " (ty/showType cTy)) (ty/isNumericType? cName))
+      (bindVarChecked id cTy subst))))
 
-(df bind-var-fun [(id Int64) (k String) (fun-ty ty/Type) (subst (Map Int64 ty/Type))] -> UnifyOutcome
+(df bindVarFun [(id Int64) (k String) (funTy ty/Type) (subst (Map Int64 ty/Type))] -> UnifyOutcome
   (if (= k "any")
-    (bind-var-checked id fun-ty subst)
-    (u-err "cannot unify function with numeric kind" false)))
+    (bindVarChecked id funTy subst)
+    (uErr "cannot unify function with numeric kind" false)))
 
-(df err-expected-found [(a ty/Type) (b ty/Type) (num-mismatch Bool)] -> UnifyOutcome
-  (u-err (str "expected " (ty/show-type a) ", found " (ty/show-type b)) num-mismatch))
+(df errExpectedFound [(a ty/Type) (b ty/Type) (numMismatch Bool)] -> UnifyOutcome
+  (uErr (str "expected " (ty/showType a) ", found " (ty/showType b)) numMismatch))
 
 (df unify [(t1 ty/Type) (t2 ty/Type) (subst (Map Int64 ty/Type))] -> UnifyOutcome
   :d "Unifies two types under an immutable substitution, returning u-ok or u-err."
-  (let [(a (apply-subst subst t1))
-        (b (apply-subst subst t2))]
-    (if (type-equal? a b)
-      (u-ok subst)
+  (let [(a (applySubst subst t1))
+        (b (applySubst subst t2))]
+    (if (typeEqual? a b)
+      (uOk subst)
       (mt a
-        ((ty/ty-var id1 k1)
+        ((ty/tyVar id1 k1)
          (mt b
-           ((ty/ty-var id2 k2)
-            (mt (kind-narrow k1 k2)
+           ((ty/tyVar id2 k2)
+            (mt (kindNarrow k1 k2)
               ((some nk)
                (if (= id1 id2)
-                 (u-ok subst)
-                 (let [(s1 (map-set subst id1 (ty/ty-var id2 nk)))]
-                   (u-ok (map-set s1 id2 (ty/ty-var id2 nk))))))
-              ((none) (u-err "kind mismatch" false))))
-           ((ty/ty-con b-name _ _ _)
-            (bind-var-con id1 k1 b b-name subst))
-           ((ty/ty-fun _ _)
-            (bind-var-fun id1 k1 b subst))))
-        ((ty/ty-con a-name a-args a-mod a-shown)
+                 (uOk subst)
+                 (let [(s1 (map-set subst id1 (ty/tyVar id2 nk)))]
+                   (uOk (map-set s1 id2 (ty/tyVar id2 nk))))))
+              ((none) (uErr "kind mismatch" false))))
+           ((ty/tyCon bName _ _ _)
+            (bindVarCon id1 k1 b bName subst))
+           ((ty/tyFun _ _)
+            (bindVarFun id1 k1 b subst))))
+        ((ty/tyCon aName aArgs aMod aShown)
          (mt b
-           ((ty/ty-var _ _)
+           ((ty/tyVar _ _)
             (unify b a subst))
-           ((ty/ty-con b-name b-args b-mod b-shown)
-            (if (or (not (= a-name b-name))
-                    (or (mod-differs? a-mod b-mod)
-                        (diff-length? a-args b-args)))
-              (let [(num-mismatch (and (ty/is-numeric-type? a-name) (ty/is-numeric-type? b-name)))]
-                (err-expected-found a b num-mismatch))
-              (unify-lists a-args b-args subst)))
-           ((ty/ty-fun _ _)
-            (err-expected-found a b false))))
-        ((ty/ty-fun a-params a-ret)
+           ((ty/tyCon bName bArgs bMod bShown)
+            (if (or (not (= aName bName))
+                    (or (modDiffers? aMod bMod)
+                        (diffLength? aArgs bArgs)))
+              (let [(numMismatch (and (ty/isNumericType? aName) (ty/isNumericType? bName)))]
+                (errExpectedFound a b numMismatch))
+              (unifyLists aArgs bArgs subst)))
+           ((ty/tyFun _ _)
+            (errExpectedFound a b false))))
+        ((ty/tyFun aParams aRet)
          (mt b
-           ((ty/ty-var _ _)
+           ((ty/tyVar _ _)
             (unify b a subst))
-           ((ty/ty-con _ _ _ _)
-            (err-expected-found a b false))
-           ((ty/ty-fun b-params b-ret)
-            (if (diff-length? a-params b-params)
-              (err-expected-found a b false)
-              (mt (unify-lists a-params b-params subst)
-                ((u-ok next-subst) (unify a-ret b-ret next-subst))
-                ((u-err msg num) (u-err msg num)))))))))))
+           ((ty/tyCon _ _ _ _)
+            (errExpectedFound a b false))
+           ((ty/tyFun bParams bRet)
+            (if (diffLength? aParams bParams)
+              (errExpectedFound a b false)
+              (mt (unifyLists aParams bParams subst)
+                ((uOk nextSubst) (unify aRet bRet nextSubst))
+                ((uErr msg num) (uErr msg num)))))))))))

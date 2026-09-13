@@ -1,54 +1,54 @@
 (module asl-plugin/test
   :d "Unit tests for modular plugin architecture and registry."
-  :x [run-tests]
+  :x [runTests]
   :i [(plugin :a pl)])
 
-(df test-registry-and-lookup [] -> Bool
+(df testRegistryAndLookup [] -> Bool
   :d "Tests registering and looking up a plugin."
-  (let [(reg (pl/empty-registry))
+  (let [(reg (pl/emptyRegistry))
         (cap (pl/PluginCapability :name "cap-db" :version "1.0.0" :doc "SQL database access"))
-        (exp (pl/PluginExport :symbol-name "query" :signature "(query Str (List Str)) -> (Result Str Str)" :doc "Executes SQL query"))
+        (exp (pl/PluginExport :symbolName "query" :signature "(query Str (List Str)) -> (Result Str Str)" :doc "Executes SQL query"))
         (manifest (pl/PluginManifest :id "plugin-sqlite"
                                      :name "SQLite Embedded Driver"
                                      :version "0.1.0"
-                                     :kind (pl/kind-wasm)
+                                     :kind (pl/kindWasm)
                                      :capabilities (list cap)
                                      :exports (list exp)
                                      :entrypoint "dist/sqlite.wasm"))
-        (updated-reg (pl/register-plugin reg manifest))
-        (found (pl/lookup-plugin updated-reg "plugin-sqlite"))
-        (by-cap (pl/find-plugins-by-capability updated-reg "cap-db"))]
+        (updatedReg (pl/registerPlugin reg manifest))
+        (found (pl/lookupPlugin updatedReg "plugin-sqlite"))
+        (byCap (pl/findPluginsByCapability updatedReg "cap-db"))]
     (assert (is-some? found) "plugin found")
-    (assert (= (list-length by-cap) 1) "cap-db plugins count")
-    (assert (pl/has-capability? manifest "cap-db") "has capability")
+    (assert (= (list-length byCap) 1) "cap-db plugins count")
+    (assert (pl/hasCapability? manifest "cap-db") "has capability")
     true))
 
-(df test-validate-manifest [] -> Bool
+(df testValidateManifest [] -> Bool
   :d "Tests manifest validation checks."
-  (let [(valid (pl/PluginManifest :id "p1" :name "Plugin One" :version "1.0.0" :kind (pl/kind-wasm) :capabilities (list) :exports (list) :entrypoint "main.wasm"))
-        (invalid (pl/PluginManifest :id "" :name "Invalid" :version "1.0.0" :kind (pl/kind-wasm) :capabilities (list) :exports (list) :entrypoint "main.wasm"))]
-    (assert (is-ok? (pl/validate-manifest valid)) "valid manifest ok")
-    (assert (is-err? (pl/validate-manifest invalid)) "invalid manifest err")
+  (let [(valid (pl/PluginManifest :id "p1" :name "Plugin One" :version "1.0.0" :kind (pl/kindWasm) :capabilities (list) :exports (list) :entrypoint "main.wasm"))
+        (invalid (pl/PluginManifest :id "" :name "Invalid" :version "1.0.0" :kind (pl/kindWasm) :capabilities (list) :exports (list) :entrypoint "main.wasm"))]
+    (assert (is-ok? (pl/validateManifest valid)) "valid manifest ok")
+    (assert (is-err? (pl/validateManifest invalid)) "invalid manifest err")
     true))
 
-(df test-dispatch-call [] -> Bool
+(df testDispatchCall [] -> Bool
   :d "Tests plugin call dispatch validation."
-  (let [(reg (pl/empty-registry))
-        (exp (pl/PluginExport :symbol-name "exec" :signature "() -> Unit" :doc "Executes"))
-        (m (pl/PluginManifest :id "p-sh" :name "Shell Driver" :version "0.1.0" :kind (pl/kind-host-driver) :capabilities (list) :exports (list exp) :entrypoint "sh"))
-        (reg2 (pl/register-plugin reg m))
-        (res-ok (pl/dispatch-call reg2 (pl/PluginCall :plugin-id "p-sh" :symbol-name "exec" :payload "ls")))
-        (res-missing-sym (pl/dispatch-call reg2 (pl/PluginCall :plugin-id "p-sh" :symbol-name "non-existent" :payload "")))
-        (res-missing-plugin (pl/dispatch-call reg2 (pl/PluginCall :plugin-id "unknown" :symbol-name "exec" :payload "")))]
-    (assert (.-success res-ok) "res-ok success")
-    (assert (not (.-success res-missing-sym)) "missing-sym fails")
-    (assert (not (.-success res-missing-plugin)) "missing-plugin fails")
+  (let [(reg (pl/emptyRegistry))
+        (exp (pl/PluginExport :symbolName "exec" :signature "() -> Unit" :doc "Executes"))
+        (m (pl/PluginManifest :id "p-sh" :name "Shell Driver" :version "0.1.0" :kind (pl/kindHostDriver) :capabilities (list) :exports (list exp) :entrypoint "sh"))
+        (reg2 (pl/registerPlugin reg m))
+        (resOk (pl/dispatchCall reg2 (pl/PluginCall :pluginId "p-sh" :symbolName "exec" :payload "ls")))
+        (resMissingSym (pl/dispatchCall reg2 (pl/PluginCall :pluginId "p-sh" :symbolName "non-existent" :payload "")))
+        (resMissingPlugin (pl/dispatchCall reg2 (pl/PluginCall :pluginId "unknown" :symbolName "exec" :payload "")))]
+    (assert (.-success resOk) "res-ok success")
+    (refute (.-success resMissingSym) "missing-sym fails")
+    (refute (.-success resMissingPlugin) "missing-plugin fails")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Runs all plugin test suites."
   (do
-    (assert (test-registry-and-lookup) "test-registry-and-lookup must pass")
-    (assert (test-validate-manifest) "test-validate-manifest must pass")
-    (assert (test-dispatch-call) "test-dispatch-call must pass")
+    (assert (testRegistryAndLookup) "test-registry-and-lookup must pass")
+    (assert (testValidateManifest) "test-validate-manifest must pass")
+    (assert (testDispatchCall) "test-dispatch-call must pass")
     true))

@@ -1,102 +1,102 @@
 (module asl-sql/test
   :d "Unit tests for native ASL cross-dialect SQL query builder and DDL generator."
-  :x [test-sql-select test-sql-join-params test-sql-dialects test-sql-ddl run-tests]
+  :x [testSqlSelect testSqlJoinParams testSqlDialects testSqlDdl runTests]
   :i [(core :a sql)
       (ddl :a ddl)])
 
-(df test-sql-select [] -> Bool
+(df testSqlSelect [] -> Bool
   :d "Verifies SQL SELECT query generation and parameter rendering."
-  (let [(sel (sql/make-select (list "id" "name") "users" (none)))
-        (rendered (sql/render-select sel (sql/sqlite)))
-        (where-cond (sql/binary (sql/eq) (sql/col-expr "id") (sql/int-expr 42)))
-        (sel-where (sql/make-select (list "id" "name") "users" (some where-cond)))
-        (rendered-where (sql/render-select sel-where (sql/postgres)))
-        (j-cond (sql/binary (sql/eq) (sql/col-expr "users.id") (sql/col-expr "orders.user_id")))
-        (j (sql/make-join (sql/inner-join) "orders" j-cond))
-        (sel-full (sql/SelectQuery :columns (list "id")
-                                   :from-table "users"
+  (let [(sel (sql/makeSelect (list "id" "name") "users" (none)))
+        (rendered (sql/renderSelect sel (sql/sqlite)))
+        (whereCond (sql/binary (sql/eq) (sql/colExpr "id") (sql/intExpr 42)))
+        (selWhere (sql/makeSelect (list "id" "name") "users" (some whereCond)))
+        (renderedWhere (sql/renderSelect selWhere (sql/postgres)))
+        (jCond (sql/binary (sql/eq) (sql/colExpr "users.id") (sql/colExpr "orders.user_id")))
+        (j (sql/makeJoin (sql/innerJoin) "orders" jCond))
+        (selFull (sql/SelectQuery :columns (list "id")
+                                   :fromTable "users"
                                    :joins (list j)
-                                   :where-clause (none)
-                                   :order-column (some "id")
-                                   :order-dir (sql/desc)
-                                   :limit-count (some 10)
-                                   :offset-count (some 5)
-                                   :for-update-skip-locked true
-                                   :returning-columns (list "id")))
-        (rendered-full (sql/render-select sel-full (sql/postgres)))
-        (full-sql (.-sql rendered-full))]
+                                   :whereClause (none)
+                                   :orderColumn (some "id")
+                                   :orderDir (sql/desc)
+                                   :limitCount (some 10)
+                                   :offsetCount (some 5)
+                                   :forUpdateSkipLocked true
+                                   :returningColumns (list "id")))
+        (renderedFull (sql/renderSelect selFull (sql/postgres)))
+        (fullSql (.-sql renderedFull))]
     (do
       (assert (> (string-length (.-sql rendered)) 0) "rendered select length > 0")
       (assert (= (list-length (.-params rendered)) 0) "rendered params count is 0")
-      (assert (= (list-length (.-params rendered-where)) 1) "rendered where params count is 1")
-      (assert (string-contains? full-sql "INNER JOIN orders ON") "full sql contains INNER JOIN")
-      (assert (not (string-contains? full-sql "DELETE FROM")) "full sql must not contain DELETE")
+      (assert (= (list-length (.-params renderedWhere)) 1) "rendered where params count is 1")
+      (assert (string-contains? fullSql "INNER JOIN orders ON") "full sql contains INNER JOIN")
+      (refute (string-contains? fullSql "DELETE FROM") "full sql must not contain DELETE")
       true)))
 
-(df test-sql-join-params [] -> Bool
+(df testSqlJoinParams [] -> Bool
   :d "Verifies SQL JOIN ON parameter collection and placeholder numbering."
-  (let [(j-cond1 (sql/binary (sql/eq) (sql/col-expr "orders.status") (sql/str-expr "completed")))
-        (j1 (sql/make-join (sql/inner-join) "orders" j-cond1))
-        (j-cond2 (sql/binary (sql/gt) (sql/col-expr "items.price") (sql/int-expr 100)))
-        (j2 (sql/make-join (sql/left-join) "items" j-cond2))
-        (where-cond (sql/binary (sql/eq) (sql/col-expr "users.active") (sql/bool-expr true)))
+  (let [(jCond1 (sql/binary (sql/eq) (sql/colExpr "orders.status") (sql/strExpr "completed")))
+        (j1 (sql/makeJoin (sql/innerJoin) "orders" jCond1))
+        (jCond2 (sql/binary (sql/gt) (sql/colExpr "items.price") (sql/intExpr 100)))
+        (j2 (sql/makeJoin (sql/leftJoin) "items" jCond2))
+        (whereCond (sql/binary (sql/eq) (sql/colExpr "users.active") (sql/boolExpr true)))
         (q (sql/SelectQuery :columns (list "users.id" "orders.total")
-                            :from-table "users"
+                            :fromTable "users"
                             :joins (list j1 j2)
-                            :where-clause (some where-cond)
-                            :order-column (none)
-                            :order-dir (sql/asc)
-                            :limit-count (none)
-                            :offset-count (none)
-                            :for-update-skip-locked false
-                            :returning-columns (list)))
-        (res-pg (sql/render-select q (sql/postgres)))
-        (res-sq (sql/render-select q (sql/sqlite)))
-        (sql-pg (.-sql res-pg))
-        (sql-sq (.-sql res-sq))]
+                            :whereClause (some whereCond)
+                            :orderColumn (none)
+                            :orderDir (sql/asc)
+                            :limitCount (none)
+                            :offsetCount (none)
+                            :forUpdateSkipLocked false
+                            :returningColumns (list)))
+        (resPg (sql/renderSelect q (sql/postgres)))
+        (resSq (sql/renderSelect q (sql/sqlite)))
+        (sqlPg (.-sql resPg))
+        (sqlSq (.-sql resSq))]
     (do
-      (assert (= (.-param-count res-pg) 3) "param count must be 3")
-      (assert (= (list-length (.-params res-pg)) 3) "params list length must be 3")
-      (assert (string-contains? sql-pg "INNER JOIN orders ON orders.status = $1") "pg inner join")
-      (assert (string-contains? sql-sq "INNER JOIN orders ON orders.status = ?") "sqlite inner join")
-      (assert (not (string-contains? sql-pg "DROP")) "must not contain drop")
+      (assert (= (.-paramCount resPg) 3) "param count must be 3")
+      (assert (= (list-length (.-params resPg)) 3) "params list length must be 3")
+      (assert (string-contains? sqlPg "INNER JOIN orders ON orders.status = $1") "pg inner join")
+      (assert (string-contains? sqlSq "INNER JOIN orders ON orders.status = ?") "sqlite inner join")
+      (refute (string-contains? sqlPg "DROP") "must not contain drop")
       true)))
 
-(df test-sql-dialects [] -> Bool
+(df testSqlDialects [] -> Bool
   :d "Verifies dialect quoting and default dialects."
-  (let [(q-pg (sql/dialect-quote-char (sql/postgres)))
-        (q-my (sql/dialect-quote-char (sql/mysql)))
-        (q-sq (sql/dialect-quote-char (sql/sqlite)))]
+  (let [(qPg (sql/dialectQuoteChar (sql/postgres)))
+        (qMy (sql/dialectQuoteChar (sql/mysql)))
+        (qSq (sql/dialectQuoteChar (sql/sqlite)))]
     (do
-      (assert (= q-pg "\"") "pg quote char is double quote")
-      (assert (= q-my "`") "mysql quote char is backtick")
-      (assert (= q-sq "\"") "sqlite quote char is double quote")
-      (assert (not (= q-pg "`")) "pg quote char is not backtick")
+      (assert (= qPg "\"") "pg quote char is double quote")
+      (assert (= qMy "`") "mysql quote char is backtick")
+      (assert (= qSq "\"") "sqlite quote char is double quote")
+      (refute (= qPg "`") "pg quote char is not backtick")
       true)))
 
-(df test-sql-ddl [] -> Bool
+(df testSqlDdl [] -> Bool
   :d "Verifies DDL CREATE TABLE, parameterized INSERT and UPSERT rendering."
-  (let [(col-id (ddl/make-column "id" (ddl/col-int64) true false))
-        (col-name (ddl/make-column "username" (ddl/col-text) false false))
-        (tbl (ddl/make-table "accounts" (list col-id col-name)))
-        (create-sql (ddl/render-create-table tbl false))
-        (ins (ddl/make-insert "accounts" (list "id" "username") (list "1" "'eddie'")))
-        (ins-sql-sqlite (ddl/render-insert ins false))
-        (ins-sql-pg (ddl/render-insert ins true))
-        (ups (ddl/make-upsert "accounts" (list "id" "username") (list "1" "'eddie'") (list "id") (list "username")))
-        (ups-sql-pg (ddl/render-upsert ups true))
-        (ups-sql-sq (ddl/render-upsert ups false))]
+  (let [(colId (ddl/makeColumn "id" (ddl/colInt64) true false))
+        (colName (ddl/makeColumn "username" (ddl/colText) false false))
+        (tbl (ddl/makeTable "accounts" (list colId colName)))
+        (createSql (ddl/renderCreateTable tbl false))
+        (ins (ddl/makeInsert "accounts" (list "id" "username") (list "1" "'eddie'")))
+        (insSqlSqlite (ddl/renderInsert ins false))
+        (insSqlPg (ddl/renderInsert ins true))
+        (ups (ddl/makeUpsert "accounts" (list "id" "username") (list "1" "'eddie'") (list "id") (list "username")))
+        (upsSqlPg (ddl/renderUpsert ups true))
+        (upsSqlSq (ddl/renderUpsert ups false))]
     (do
-      (assert (> (string-length create-sql) 0) "create table sql length > 0")
-      (assert (string-contains? ins-sql-sqlite "VALUES (?, ?);") "sqlite insert values")
-      (assert (string-contains? ins-sql-pg "VALUES ($1, $2);") "pg insert values")
-      (assert (not (string-contains? create-sql "DROP TABLE")) "create table must not contain drop")
+      (assert (> (string-length createSql) 0) "create table sql length > 0")
+      (assert (string-contains? insSqlSqlite "VALUES (?, ?);") "sqlite insert values")
+      (assert (string-contains? insSqlPg "VALUES ($1, $2);") "pg insert values")
+      (refute (string-contains? createSql "DROP TABLE") "create table must not contain drop")
       true)))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Executes all SQL test assertions."
   (do
-    (assert (test-sql-select))
-    (assert (test-sql-join-params))
-    (assert (test-sql-dialects))
-    (assert (test-sql-ddl))))
+    (assert (testSqlSelect))
+    (assert (testSqlJoinParams))
+    (assert (testSqlDialects))
+    (assert (testSqlDdl))))

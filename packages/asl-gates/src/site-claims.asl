@@ -1,6 +1,6 @@
-(module asl-gates/site-claims
+(module asl-gates/siteClaims
   :d "Pure AgentScript Site Claims Verification Gate & Grounding Audit Engine."
-  :x [ClaimRecord AuditResult GateReport is-known-metric audit-claim run-claims-audit verify-claims-grounding standard-claims load-published-claims]
+  :x [ClaimRecord AuditResult GateReport isKnownMetric auditClaim runClaimsAudit verifyClaimsGrounding standardClaims loadPublishedClaims]
   :i [])
 
 (dfs ClaimRecord
@@ -20,7 +20,7 @@
   (:f failed I64 "Total failed checks")
   (:f status Str "Overall audit verdict"))
 
-(df standard-claims [] -> (List Str)
+(df standardClaims [] -> (List Str)
   :d "Returns canonical list of grounded performance metrics and published claims."
   (list
     "57%–65%"
@@ -36,35 +36,35 @@
     "64KB"
     "-75%"))
 
-(df is-known-metric [(metric Str) (known (List Str))] -> Bool
+(df isKnownMetric [(metric Str) (known (List Str))] -> Bool
   :d "Checks whether a published metric is registered in the grounding matrix."
   (fold (fn [(acc Bool) (item Str)] -> Bool
           (or acc (= metric item)))
         false
         known))
 
-(df audit-claim [(metric Str) (registry (List Str))] -> AuditResult
+(df auditClaim [(metric Str) (registry (List Str))] -> AuditResult
   :d "Audits a single claim against the benchmark registry."
-  (if (is-known-metric metric registry)
+  (if (isKnownMetric metric registry)
       (AuditResult :metric metric :grounded true :source "bench/published_claims.asn")
       (AuditResult :metric metric :grounded false :source "UNGROUNDED")))
 
-(df run-claims-audit [(published (List Str)) (registry (List Str))] -> GateReport
+(df runClaimsAudit [(published (List Str)) (registry (List Str))] -> GateReport
   :d "Audits a collection of claims against the benchmark registry."
   (let [(expected (list-length registry))
-        (pub-len (list-length published))
-        (total (if (> pub-len 0) pub-len expected))
+        (pubLen (list-length published))
+        (total (if (> pubLen 0) pubLen expected))
         (passed (fold (fn [(count I64) (m Str)] -> I64
-                        (if (is-known-metric m registry)
+                        (if (isKnownMetric m registry)
                             (+ count 1)
                             count))
                       0
                       published))
         (failed (- total passed))
-        (status (if (and (= failed 0) (> pub-len 0) (> passed 0)) "PASS" "FAIL"))]
+        (status (if (and (= failed 0) (> pubLen 0) (> passed 0)) "PASS" "FAIL"))]
     (GateReport :total total :passed passed :failed failed :status status)))
 
-(df load-published-claims [] -> (List Str)
+(df loadPublishedClaims [] -> (List Str)
   :d "Reads bench/published_claims.asn from disk and extracts registered claims."
   (let [(candidates (list "asl/bench/published_claims.asn" "bench/published_claims.asn"))
         (target (fold (fn [(acc Str) (p Str)] -> Str
@@ -85,12 +85,12 @@
                          (option-or (string-slice chunk 0 idx) "")))
                      rest)))))))
 
-(df ! verify-claims-grounding [] -> Bool
+(df ! verifyClaimsGrounding [] -> Bool
   :d "Verifies published claims from disk are grounded against standard claims registry."
-  (let [(published (load-published-claims))
-        (registry (standard-claims))]
+  (let [(published (loadPublishedClaims))
+        (registry (standardClaims))]
     (if (or (list-empty? published) (< (list-length published) 12))
         false
-        (let [(report (run-claims-audit published registry))]
+        (let [(report (runClaimsAudit published registry))]
           (and (= (.-failed report) 0)
                (= (.-status report) "PASS"))))))

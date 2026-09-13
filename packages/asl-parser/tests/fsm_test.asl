@@ -1,22 +1,22 @@
-(module asl-parser/tests/fsm-test
+(module asl-parser/tests/fsmTest
   :d "Unit tests for polyglot streaming FSM outline scanner under strict falsification"
-  :x [test-asl-outline
-      test-asn-outline
-      test-python-outline
-      test-ts-outline
-      test-go-outline
-      test-rust-outline
-      test-comment-masking
-      test-string-masking
-      test-detect-lang
-      test-format-outline
-      run-tests]
+  :x [testAslOutline
+      testAsnOutline
+      testPythonOutline
+      testTsOutline
+      testGoOutline
+      testRustOutline
+      testCommentMasking
+      testStringMasking
+      testDetectLang
+      testFormatOutline
+      runTests]
   :i [(fsm_outline :a fsm)])
 
-(df test-asl-outline [] -> Bool
+(df testAslOutline [] -> Bool
   :d "Verifies ASL top-level form extraction"
   (let [(code "(module demo/sample :d \"demo\")\n\n(dfs Point\n  (:f x Int64 \"x\")\n  (:f y Int64 \"y\"))\n\n(df add-pts [(p1 Point) (p2 Point)] -> Point\n  :d \"add\")\n")
-        (items (fsm/scan-outline code "asl"))]
+        (items (fsm/scanOutline code "asl"))]
     (assert (= (list-length items) 3) "ASL snippet must yield exactly 3 outline items")
     (let [(m (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (s (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
@@ -32,10 +32,10 @@
       (assert (= (.-line f) 7) "Function line must be 7"))
     true))
 
-(df test-asn-outline [] -> Bool
+(df testAsnOutline [] -> Bool
   :d "Verifies ASN registry and module extraction"
   (let [(code "(:grammar :package my/parser :version \"0.1.0\")\n\n(module my/parser :d \"desc\")\n")
-        (items (fsm/scan-outline code "asl"))]
+        (items (fsm/scanOutline code "asl"))]
     (assert (= (list-length items) 2) "ASN snippet must yield exactly 2 items")
     (let [(g (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (m (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))]
@@ -47,10 +47,10 @@
       (assert (= (.-line m) 3) "Module line must be 3"))
     true))
 
-(df test-python-outline [] -> Bool
+(df testPythonOutline [] -> Bool
   :d "Verifies Python class, def, and async def extraction ignoring docstrings"
   (let [(code "\"\"\"\nModule docstring\ndef ignored_inside_docstring():\n    pass\n\"\"\"\n\nclass AgentRunner:\n    def run(self):\n        pass\n\ndef execute_task(task_id):\n    return 42\n\nasync def fetch_async(url):\n    return url\n")
-        (items (fsm/scan-outline code "py"))]
+        (items (fsm/scanOutline code "py"))]
     (assert (= (list-length items) 4) "Python snippet must yield 4 items")
     (let [(c (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (m (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
@@ -69,10 +69,10 @@
       (assert (= (.-line f2) 14) "Async function line must be 14"))
     true))
 
-(df test-ts-outline [] -> Bool
+(df testTsOutline [] -> Bool
   :d "Verifies TypeScript export modifiers and type forms"
   (let [(code "export interface Config {\n  port: number;\n}\n\nexport class Server {\n  start() {}\n}\n\nexport async function listen(port: number) {\n  return port;\n}\n\nexport type Handler = (req: any) => void;\n\nexport enum Status {\n  Ready,\n  Busy\n}\n")
-        (items (fsm/scan-outline code "ts"))]
+        (items (fsm/scanOutline code "ts"))]
     (assert (= (list-length items) 5) "TypeScript snippet must yield 5 items")
     (let [(it0 (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (it1 (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
@@ -91,10 +91,10 @@
       (assert (= (.-name it4) "Status") "Enum name must be Status"))
     true))
 
-(df test-go-outline [] -> Bool
+(df testGoOutline [] -> Bool
   :d "Verifies Go package, func with receiver, and type struct forms"
   (let [(code "package worker\n\ntype TaskQueue struct {\n  capacity int\n}\n\nfunc (q *TaskQueue) Push(id string) error {\n  return nil\n}\n\nfunc NewQueue(cap int) *TaskQueue {\n  return &TaskQueue{capacity: cap}\n}\n")
-        (items (fsm/scan-outline code "go"))]
+        (items (fsm/scanOutline code "go"))]
     (assert (= (list-length items) 4) "Go snippet must yield 4 items")
     (let [(p (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (t (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
@@ -110,10 +110,10 @@
       (assert (= (.-name f) "NewQueue") "Function name must be NewQueue"))
     true))
 
-(df test-rust-outline [] -> Bool
+(df testRustOutline [] -> Bool
   :d "Verifies Rust pub fn, struct, enum, and trait forms"
   (let [(code "pub mod parser;\n\npub struct Scanner {\n  pos: usize,\n}\n\npub enum TokenKind {\n  Ident,\n  Eof,\n}\n\npub trait TokenStream {\n  fn next_token(&mut self);\n}\n\npub async fn tokenize_all(src: &str) -> Vec<TokenKind> {\n  Vec::new()\n}\n")
-        (items (fsm/scan-outline code "rs"))]
+        (items (fsm/scanOutline code "rs"))]
     (assert (= (list-length items) 5) "Rust snippet must yield 5 items")
     (let [(m (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
           (s (mt (list-get items 1) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))
@@ -132,53 +132,53 @@
       (assert (= (.-name f) "tokenize_all") "Function name must be tokenize_all"))
     true))
 
-(df test-comment-masking [] -> Bool
+(df testCommentMasking [] -> Bool
   :d "Verifies that declarations inside comments are ignored"
   (let [(code "// export function fake1() {}\n/*\nexport class Fake2 {}\n*/\n# def fake3():\n; (df fake4)\nexport function realFn() {\n  return 1;\n}\n")
-        (items (fsm/scan-outline code "ts"))]
+        (items (fsm/scanOutline code "ts"))]
     (assert (= (list-length items) 1) "Only realFn should be extracted, comments must be masked")
-    (let [(first-it (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))]
-      (assert (= (.-name first-it) "realFn") "Extracted item must be realFn"))
+    (let [(firstIt (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))]
+      (assert (= (.-name firstIt) "realFn") "Extracted item must be realFn"))
     true))
 
-(df test-string-masking [] -> Bool
+(df testStringMasking [] -> Bool
   :d "Verifies that declarations inside string literals are ignored"
   (let [(code "const script = \"export function fakeString() {}\";\nexport function actualTarget() {\n  return 1;\n}\n")
-        (items (fsm/scan-outline code "ts"))]
+        (items (fsm/scanOutline code "ts"))]
     (assert (= (list-length items) 1) "Only actualTarget should be extracted")
-    (let [(first-it (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))]
-      (assert (= (.-name first-it) "actualTarget") "Extracted item must be actualTarget"))
+    (let [(firstIt (mt (list-get items 0) ((some it) it) ((none) (fsm/OutlineItem :kind "" :name "" :line 0))))]
+      (assert (= (.-name firstIt) "actualTarget") "Extracted item must be actualTarget"))
     true))
 
-(df test-detect-lang [] -> Bool
+(df testDetectLang [] -> Bool
   :d "Verifies language extension detection"
-  (assert (= (fsm/detect-lang "src/compiler.asl") "asl") "asl file extension must map to asl")
-  (assert (= (fsm/detect-lang "grammar.asn") "asl") "asn file extension must map to asl")
-  (assert (= (fsm/detect-lang "scripts/harbor.py") "py") "py file extension must map to py")
-  (assert (= (fsm/detect-lang "src/index.ts") "ts") "ts file extension must map to ts")
-  (assert (= (fsm/detect-lang "src/app.tsx") "ts") "tsx file extension must map to ts")
-  (assert (= (fsm/detect-lang "main.go") "go") "go file extension must map to go")
-  (assert (= (fsm/detect-lang "lib.rs") "rs") "rs file extension must map to rs")
+  (assert (= (fsm/detectLang "src/compiler.asl") "asl") "asl file extension must map to asl")
+  (assert (= (fsm/detectLang "grammar.asn") "asl") "asn file extension must map to asl")
+  (assert (= (fsm/detectLang "scripts/harbor.py") "py") "py file extension must map to py")
+  (assert (= (fsm/detectLang "src/index.ts") "ts") "ts file extension must map to ts")
+  (assert (= (fsm/detectLang "src/app.tsx") "ts") "tsx file extension must map to ts")
+  (assert (= (fsm/detectLang "main.go") "go") "go file extension must map to go")
+  (assert (= (fsm/detectLang "lib.rs") "rs") "rs file extension must map to rs")
   true)
 
-(df test-format-outline [] -> Bool
+(df testFormatOutline [] -> Bool
   :d "Verifies outline canonical wire formatting"
   (let [(items (list (fsm/OutlineItem :kind "fn" :name "demo" :line 10)))
-        (fmt (fsm/format-outline items))]
+        (fmt (fsm/formatOutline items))]
     (assert (string-contains? fmt "(:outline [") "Format must contain (:outline [")
     (assert (string-contains? fmt "(:item :kind \"fn\" :name \"demo\" :line 10)") "Format must contain canonical item")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Executes all unit tests in test suite"
-  (assert (test-asl-outline) "test-asl-outline must pass")
-  (assert (test-asn-outline) "test-asn-outline must pass")
-  (assert (test-python-outline) "test-python-outline must pass")
-  (assert (test-ts-outline) "test-ts-outline must pass")
-  (assert (test-go-outline) "test-go-outline must pass")
-  (assert (test-rust-outline) "test-rust-outline must pass")
-  (assert (test-comment-masking) "test-comment-masking must pass")
-  (assert (test-string-masking) "test-string-masking must pass")
-  (assert (test-detect-lang) "test-detect-lang must pass")
-  (assert (test-format-outline) "test-format-outline must pass")
+  (assert (testAslOutline) "test-asl-outline must pass")
+  (assert (testAsnOutline) "test-asn-outline must pass")
+  (assert (testPythonOutline) "test-python-outline must pass")
+  (assert (testTsOutline) "test-ts-outline must pass")
+  (assert (testGoOutline) "test-go-outline must pass")
+  (assert (testRustOutline) "test-rust-outline must pass")
+  (assert (testCommentMasking) "test-comment-masking must pass")
+  (assert (testStringMasking) "test-string-masking must pass")
+  (assert (testDetectLang) "test-detect-lang must pass")
+  (assert (testFormatOutline) "test-format-outline must pass")
   true)

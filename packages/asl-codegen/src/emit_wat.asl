@@ -1,27 +1,27 @@
-(module asl-codegen/emit-wat
+(module asl-codegen/emitWat
   :d "WebAssembly Text (WAT) and linear memory bytecode generator for AgentScript."
-  :x [wat-type
-      wat-op
-      wat-const
-      wat-get
-      wat-set
-      wat-call
-      wat-if
-      wat-fn
-      wat-mod
-      wat-emit
-      emit-wat-expr
-      emit-wat-module
-      emit-wasi-imports
-      emit-wasi-fd-write
-      emit-wasi-proc-exit
-      emit-wasi-clock-time-get
-      emit-wasm-memory-model
-      emit-wasm-export-dispatch
-      emit-asl-core-wasm-module]
+  :x [watType
+      watOp
+      watConst
+      watGet
+      watSet
+      watCall
+      watIf
+      watFn
+      watMod
+      watEmit
+      emitWatExpr
+      emitWatModule
+      emitWasiImports
+      emitWasiFdWrite
+      emitWasiProcExit
+      emitWasiClockTimeGet
+      emitWasmMemoryModel
+      emitWasmExportDispatch
+      emitAslCoreWasmModule]
   :i [])
 
-(df wat-type [(ty Str)] -> Str
+(df watType [(ty Str)] -> Str
   :d "Maps AgentScript type to WebAssembly value type (i32, i64, f64)."
   (cond
     ((= ty "I64") "i64")
@@ -34,9 +34,9 @@
     ((= ty "Unit") "void")
     (:else "i64")))
 
-(df wat-op [(op Str) (ty Str)] -> Str
+(df watOp [(op Str) (ty Str)] -> Str
   :d "Maps binary or comparison operator to WebAssembly instruction."
-  (let [(prefix (wat-type ty))]
+  (let [(prefix (watType ty))]
     (cond
       ((= op "+") (str prefix ".add"))
       ((= op "-") (str prefix ".sub"))
@@ -54,101 +54,101 @@
       ((= op "or") "i32.or")
       (:else (str prefix ".add")))))
 
-(df wat-const [(val Str) (ty Str)] -> Str
+(df watConst [(val Str) (ty Str)] -> Str
   :d "Emits a WebAssembly constant instruction."
-  (let [(w-ty (wat-type ty))]
-    (str "(" w-ty ".const " val ")")))
+  (let [(wTy (watType ty))]
+    (str "(" wTy ".const " val ")")))
 
-(df wat-get [(var-name Str)] -> Str
+(df watGet [(varName Str)] -> Str
   :d "Emits local.get instruction for variable."
-  (str "(local.get $" var-name ")"))
+  (str "(local.get $" varName ")"))
 
-(df wat-set [(var-name Str) (val-expr Str)] -> Str
+(df watSet [(varName Str) (valExpr Str)] -> Str
   :d "Emits local.set instruction for variable."
-  (str "(local.set $" var-name " " val-expr ")"))
+  (str "(local.set $" varName " " valExpr ")"))
 
-(df wat-call [(fn-name Str) (args-str Str)] -> Str
+(df watCall [(fnName Str) (argsStr Str)] -> Str
   :d "Emits function call instruction."
-  (if (= args-str "")
-      (str "(call $" fn-name ")")
-      (str "(call $" fn-name " " args-str ")")))
+  (if (= argsStr "")
+      (str "(call $" fnName ")")
+      (str "(call $" fnName " " argsStr ")")))
 
-(df wat-if [(cond-expr Str) (then-expr Str) (else-expr Str) (ret-ty Str)] -> Str
+(df watIf [(condExpr Str) (thenExpr Str) (elseExpr Str) (retTy Str)] -> Str
   :d "Emits structured if-then-else expression in WAT."
-  (let [(w-ret (wat-type ret-ty))]
-    (if (= w-ret "void")
-        (str "(if " cond-expr " (then " then-expr ") (else " else-expr "))")
-        (str "(if (result " w-ret ") " cond-expr " (then " then-expr ") (else " else-expr "))"))))
+  (let [(wRet (watType retTy))]
+    (if (= wRet "void")
+        (str "(if " condExpr " (then " thenExpr ") (else " elseExpr "))")
+        (str "(if (result " wRet ") " condExpr " (then " thenExpr ") (else " elseExpr "))"))))
 
-(df wat-fn [(name Str) (params-wat Str) (ret-ty Str) (body Str) (export-fn Bool)] -> Str
+(df watFn [(name Str) (paramsWat Str) (retTy Str) (body Str) (exportFn Bool)] -> Str
   :d "Emits a complete WebAssembly function declaration with optional export."
-  (let [(w-ret (wat-type ret-ty))
-        (res-clause (if (= w-ret "void") "" (str " (result " w-ret ")")))
-        (export-attr (if export-fn (str " (export \"" name "\")") ""))
-        (p-clause (if (= params-wat "") "" (str " " params-wat)))]
-    (str "(func $" name export-attr p-clause res-clause "\n  " body ")")))
+  (let [(wRet (watType retTy))
+        (resClause (if (= wRet "void") "" (str " (result " wRet ")")))
+        (exportAttr (if exportFn (str " (export \"" name "\")") ""))
+        (pClause (if (= paramsWat "") "" (str " " paramsWat)))]
+    (str "(func $" name exportAttr pClause resClause "\n  " body ")")))
 
-(df wat-mod [(funcs-wat Str) (use-mem Bool)] -> Str
+(df watMod [(funcsWat Str) (useMem Bool)] -> Str
   :d "Wraps WebAssembly function definitions inside a module envelope."
-  (let [(mem-decl (if use-mem "  (memory (export \"memory\") 1)\n" ""))]
-    (str "(module\n" mem-decl funcs-wat "\n)")))
+  (let [(memDecl (if useMem "  (memory (export \"memory\") 1)\n" ""))]
+    (str "(module\n" memDecl funcsWat "\n)")))
 
-(df wat-operand [(operand Str) (ty Str)] -> Str
+(df watOperand [(operand Str) (ty Str)] -> Str
   :d "Formats an expression operand as subexpression, constant, or local variable."
   (cond
     ((string-starts-with? operand "(") operand)
     ((or (string-starts-with? operand "-")
          (and (>= (option-or (string-slice operand 0 1) "") "0")
               (<= (option-or (string-slice operand 0 1) "") "9")))
-     (wat-const operand ty))
-    (:else (wat-get operand))))
+     (watConst operand ty))
+    (:else (watGet operand))))
 
-(df emit-wat-expr [(op Str) (lhs Str) (rhs Str) (ty Str)] -> Str
+(df emitWatExpr [(op Str) (lhs Str) (rhs Str) (ty Str)] -> Str
   :d "Lowers a binary arithmetic, relational, or logical expression into WebAssembly Text format."
-  (let [(instr (wat-op op ty))
-        (left (wat-operand lhs ty))
-        (right (wat-operand rhs ty))]
+  (let [(instr (watOp op ty))
+        (left (watOperand lhs ty))
+        (right (watOperand rhs ty))]
     (str "(" instr " " left " " right ")")))
 
-(df emit-wat-module [(funcs-wat Str) (use-mem Bool)] -> Str
+(df emitWatModule [(funcsWat Str) (useMem Bool)] -> Str
   :d "Lowers WebAssembly function definitions into a complete module envelope."
-  (wat-mod funcs-wat use-mem))
+  (watMod funcsWat useMem))
 
-(df wat-emit [(fn-name Str) (arg-a Str) (arg-b Str) (op Str) (ret-ty Str)] -> Str
+(df watEmit [(fnName Str) (argA Str) (argB Str) (op Str) (retTy Str)] -> Str
   :d "Helper to emit a two-argument binary arithmetic function in WAT."
-  (let [(w-ty (wat-type ret-ty))
-        (params (str "(param $" arg-a " " w-ty ") (param $" arg-b " " w-ty ")"))
-        (instr (wat-op op ret-ty))
-        (body (str instr " " (wat-get arg-a) " " (wat-get arg-b)))
-        (fn-def (wat-fn fn-name params ret-ty body true))]
-    (emit-wat-module (str "  " fn-def) false)))
+  (let [(wTy (watType retTy))
+        (params (str "(param $" argA " " wTy ") (param $" argB " " wTy ")"))
+        (instr (watOp op retTy))
+        (body (str instr " " (watGet argA) " " (watGet argB)))
+        (fnDef (watFn fnName params retTy body true))]
+    (emitWatModule (str "  " fnDef) false)))
 
-(df emit-wasi-imports [] -> Str
+(df emitWasiImports [] -> Str
   :d "Emits WASI snapshot preview 1 host function import declarations for wasm32-wasip1 runtime linking."
   (str "  (import \"wasi_snapshot_preview1\" \"fd_write\" (func $fd_write (param i32 i32 i32 i32) (result i32)))\n"
        "  (import \"wasi_snapshot_preview1\" \"fd_read\" (func $fd_read (param i32 i32 i32 i32) (result i32)))\n"
        "  (import \"wasi_snapshot_preview1\" \"proc_exit\" (func $proc_exit (param i32)))\n"
        "  (import \"wasi_snapshot_preview1\" \"clock_time_get\" (func $clock_time_get (param i32 i64 i32) (result i32)))"))
 
-(df emit-wasi-fd-write [(fd I64) (iovs-offset I64) (iovs-len I64) (nwritten-offset I64)] -> Str
+(df emitWasiFdWrite [(fd I64) (iovsOffset I64) (iovsLen I64) (nwrittenOffset I64)] -> Str
   :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 fd_write invocation with iovec buffer arguments."
-  (str "(call $fd_write (i32.const " fd ") (i32.const " iovs-offset ") (i32.const " iovs-len ") (i32.const " nwritten-offset "))"))
+  (str "(call $fd_write (i32.const " fd ") (i32.const " iovsOffset ") (i32.const " iovsLen ") (i32.const " nwrittenOffset "))"))
 
-(df emit-wasi-proc-exit [(exit-code I64)] -> Str
+(df emitWasiProcExit [(exitCode I64)] -> Str
   :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 proc_exit invocation terminating process execution."
-  (str "(call $proc_exit (i32.const " exit-code "))"))
+  (str "(call $proc_exit (i32.const " exitCode "))"))
 
-(df emit-wasi-clock-time-get [(clock-id I64) (precision I64) (time-offset I64)] -> Str
+(df emitWasiClockTimeGet [(clockId I64) (precision I64) (timeOffset I64)] -> Str
   :d "Emits WebAssembly Text lowering for wasi_snapshot_preview1 clock_time_get high-resolution timestamp queries."
-  (str "(call $clock_time_get (i32.const " clock-id ") (i64.const " precision ") (i32.const " time-offset "))"))
+  (str "(call $clock_time_get (i32.const " clockId ") (i64.const " precision ") (i32.const " timeOffset "))"))
 
-(df emit-wasm-memory-model [(initial-pages I64) (max-pages I64)] -> Str
+(df emitWasmMemoryModel [(initialPages I64) (maxPages I64)] -> Str
   :d "Emits WebAssembly linear memory export declaration with initial and maximum page bounds."
-  (if (> max-pages 0)
-      (str "  (memory (export \"memory\") " initial-pages " " max-pages ")\n")
-      (str "  (memory (export \"memory\") " initial-pages ")\n")))
+  (if (> maxPages 0)
+      (str "  (memory (export \"memory\") " initialPages " " maxPages ")\n")
+      (str "  (memory (export \"memory\") " initialPages ")\n")))
 
-(df emit-wasm-export-dispatch [(module-name Str)] -> Str
+(df emitWasmExportDispatch [(moduleName Str)] -> Str
   :d "Emits sovereign in-browser Batch RPC dispatcher export signatures for WebAssembly linear memory."
   (str "  (func $asl_alloc (export \"asl_alloc\") (param $size i32) (result i32)\n"
        "    (i32.const 65536))\n"
@@ -156,12 +156,12 @@
        "  (func $asl_rpc_dispatch (export \"asl_rpc_dispatch\") (param $in_ptr i32) (param $in_len i32) (param $out_ptr i32) (result i32)\n"
        "    (i32.const 0))\n"))
 
-(df emit-asl-core-wasm-module [(funcs-wat Str)] -> Str
+(df emitAslCoreWasmModule [(funcsWat Str)] -> Str
   :d "Emits complete standalone asl-core.wasm module envelope with WASI preview 1 imports and Batch RPC exports."
   (str "(module\n"
-       (emit-wasi-imports) "\n"
-       (emit-wasm-memory-model 1 256)
-       (emit-wasm-export-dispatch "asl-core")
-       funcs-wat "\n"
+       (emitWasiImports) "\n"
+       (emitWasmMemoryModel 1 256)
+       (emitWasmExportDispatch "asl-core")
+       funcsWat "\n"
        ")"))
 

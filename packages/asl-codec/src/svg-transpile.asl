@@ -1,12 +1,12 @@
-(module asl-codec/svg-transpile
+(module asl-codec/svgTranspile
   :d "Bidirectional ASN <-> SVG Vector Graphics Transpiler & Generative Primitives"
   :x [SvgTranspileResult
-      asn-to-svg
-      svg-to-asn
-      make-vector-card
-      make-vector-flowchart
-      make-vector-icon
-      measure-svg-compaction]
+      asnToSvg
+      svgToAsn
+      makeVectorCard
+      makeVectorFlowchart
+      makeVectorIcon
+      measureSvgCompaction]
   :i [(asl-text/string :a s)
       (asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
@@ -15,12 +15,12 @@
 
 (dfs SvgTranspileResult
   (:f output Str "Transpiled SVG XML or ASN S-expression")
-  (:f original-tokens I64 "Token count in verbose XML format")
-  (:f asn-tokens I64 "Token count in compact ASN representation")
-  (:f savings-percent F64 "Token compaction percentage")
+  (:f originalTokens I64 "Token count in verbose XML format")
+  (:f asnTokens I64 "Token count in compact ASN representation")
+  (:f savingsPercent F64 "Token compaction percentage")
   (:f success Bool "True if parsing succeeded"))
 
-(df norm-tag [(raw Str)] -> Str
+(df normTag [(raw Str)] -> Str
   :d "Normalizes ASN tag to canonical SVG XML element name."
   (cond
     ((= raw ":svg") "svg")
@@ -47,7 +47,7 @@
     ((string-starts-with? raw ":") (option-or (string-slice raw 1 (string-length raw)) raw))
     (:else raw)))
 
-(df norm-attr [(raw Str)] -> Str
+(df normAttr [(raw Str)] -> Str
   :d "Normalizes ASN attribute keyword to canonical SVG XML attribute name."
   (cond
     ((= raw ":w") "width")
@@ -66,7 +66,7 @@
     ((string-starts-with? raw ":") (option-or (string-slice raw 1 (string-length raw)) raw))
     (:else raw)))
 
-(df is-container? [(tag Str)] -> Bool
+(df isContainer? [(tag Str)] -> Bool
   :d "Returns true if tag is a container element requiring paired closing tags."
   (or (= tag "svg")
   (or (= tag "g")
@@ -82,146 +82,146 @@
   (:f attrs Str "Accumulated XML attributes")
   (:f children (List rd/SExpr) "Child S-expression forms")
   (:f text Str "Inner text content")
-  (:f pending-key Str "Attribute key awaiting its value"))
+  (:f pendingKey Str "Attribute key awaiting its value"))
 
-(df render-sexpr-node [(expr rd/SExpr)] -> Str
+(df renderSexprNode [(expr rd/SExpr)] -> Str
   :d "Recursively renders an SExpr AST node to well-formed SVG XML."
   (mt expr
-    ((rd/sexpr-atom v) (txt/strip-quotes v))
-    ((rd/sexpr-vect _) "")
-    ((rd/sexpr-list items)
+    ((rd/sexprAtom v) (txt/stripQuotes v))
+    ((rd/sexprVect _) "")
+    ((rd/sexprList items)
      (if (list-empty? items)
        ""
-       (let [(head-expr (option-or (list-head items) (rd/make-atom "")))
-             (raw-tag (rd/sexpr-head head-expr))
-             (tag (norm-tag raw-tag))
+       (let [(headExpr (option-or (list-head items) (rd/makeAtom "")))
+             (rawTag (rd/sexprHead headExpr))
+             (tag (normTag rawTag))
              (rest (option-or (list-tail items) (list)))
              (scan (fold (fn [(st ParseScan) (it rd/SExpr)] -> ParseScan
-                           (if (string-empty? (.-pending-key st))
+                           (if (string-empty? (.-pendingKey st))
                              (mt it
-                               ((rd/sexpr-atom v)
+                               ((rd/sexprAtom v)
                                 (if (string-starts-with? v ":")
                                   (ParseScan :attrs (.-attrs st)
                                              :children (.-children st)
                                              :text (.-text st)
-                                             :pending-key (norm-attr v))
+                                             :pendingKey (normAttr v))
                                   (ParseScan :attrs (.-attrs st)
                                              :children (.-children st)
-                                             :text (s/concat (.-text st) (txt/strip-quotes v))
-                                             :pending-key "")))
-                               ((rd/sexpr-list _)
+                                             :text (s/concat (.-text st) (txt/stripQuotes v))
+                                             :pendingKey "")))
+                               ((rd/sexprList _)
                                 (ParseScan :attrs (.-attrs st)
                                            :children (list-append (.-children st) (list it))
                                            :text (.-text st)
-                                           :pending-key ""))
-                               ((rd/sexpr-vect _) st))
-                             (let [(key (.-pending-key st))]
+                                           :pendingKey ""))
+                               ((rd/sexprVect _) st))
+                             (let [(key (.-pendingKey st))]
                                (mt it
-                                 ((rd/sexpr-atom v)
+                                 ((rd/sexprAtom v)
                                   (if (string-starts-with? v ":")
-                                    (let [(attr-chunk (s/concat " " key "=\"true\""))]
-                                      (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
+                                    (let [(attrChunk (s/concat " " key "=\"true\""))]
+                                      (ParseScan :attrs (s/concat (.-attrs st) attrChunk)
                                                  :children (.-children st)
                                                  :text (.-text st)
-                                                 :pending-key (norm-attr v)))
-                                    (let [(attr-chunk (s/concat " " key "=\"" (txt/strip-quotes v) "\""))]
-                                      (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
+                                                 :pendingKey (normAttr v)))
+                                    (let [(attrChunk (s/concat " " key "=\"" (txt/stripQuotes v) "\""))]
+                                      (ParseScan :attrs (s/concat (.-attrs st) attrChunk)
                                                  :children (.-children st)
                                                  :text (.-text st)
-                                                 :pending-key ""))))
-                                 ((rd/sexpr-list _)
-                                  (let [(attr-chunk (s/concat " " key "=\"true\""))]
-                                    (ParseScan :attrs (s/concat (.-attrs st) attr-chunk)
+                                                 :pendingKey ""))))
+                                 ((rd/sexprList _)
+                                  (let [(attrChunk (s/concat " " key "=\"true\""))]
+                                    (ParseScan :attrs (s/concat (.-attrs st) attrChunk)
                                                :children (list-append (.-children st) (list it))
                                                :text (.-text st)
-                                               :pending-key "")))
-                                 ((rd/sexpr-vect _) st)))))
+                                               :pendingKey "")))
+                                 ((rd/sexprVect _) st)))))
                          (ParseScan :attrs (if (= tag "svg") " xmlns=\"http://www.w3.org/2000/svg\"" "")
                                     :children (list)
                                     :text ""
-                                    :pending-key "")
+                                    :pendingKey "")
                          rest))
-             (final-attrs (if (string-empty? (.-pending-key scan))
+             (finalAttrs (if (string-empty? (.-pendingKey scan))
                             (.-attrs scan)
-                            (s/concat (.-attrs scan) " " (.-pending-key scan) "=\"true\"")))
-             (children-rendered (string-join (list-map (fn [(c rd/SExpr)] -> Str (render-sexpr-node c))
+                            (s/concat (.-attrs scan) " " (.-pendingKey scan) "=\"true\"")))
+             (childrenRendered (string-join (listMap (fn [(c rd/SExpr)] -> Str (renderSexprNode c))
                                                        (.-children scan)) ""))
-             (body (s/concat children-rendered (.-text scan)))]
-         (if (is-container? tag)
-           (s/concat "<" tag final-attrs ">" body "</" tag ">")
-           (s/concat "<" tag final-attrs "/>")))))))
+             (body (s/concat childrenRendered (.-text scan)))]
+         (if (isContainer? tag)
+           (s/concat "<" tag finalAttrs ">" body "</" tag ">")
+           (s/concat "<" tag finalAttrs "/>")))))))
 
-(df asn-to-svg [(asn-str Str)] -> SvgTranspileResult
+(df asnToSvg [(asnStr Str)] -> SvgTranspileResult
   :d "Transpiles compact ASN vector S-expressions into valid SVG XML."
-  (let [(trimmed (string-trim asn-str))]
+  (let [(trimmed (string-trim asnStr))]
     (cond
       ((string-empty? trimmed)
        (SvgTranspileResult
          :output "Empty input"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       ((not (or (string-starts-with? trimmed "(:svg")
                 (string-starts-with? trimmed "(")))
        (SvgTranspileResult
          :output "Syntax error: invalid ASN vector root"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       (:else
        (let [(toks (lx/tokenize trimmed))
-             (forms-res (ast/read-forms toks))]
-         (mt forms-res
+             (formsRes (ast/readForms toks))]
+         (mt formsRes
            ((err _)
             (SvgTranspileResult
               :output "Syntax error: unclosed delimiter"
-              :original-tokens 0
-              :asn-tokens 0
-              :savings-percent 0.0
+              :originalTokens 0
+              :asnTokens 0
+              :savingsPercent 0.0
               :success false))
            ((ok forms)
             (if (list-empty? forms)
               (SvgTranspileResult
                 :output "Empty forms"
-                :original-tokens 0
-                :asn-tokens 0
-                :savings-percent 0.0
+                :originalTokens 0
+                :asnTokens 0
+                :savingsPercent 0.0
                 :success false)
-              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/make-atom "") :line 0 :col 0)))
-                    (xml (render-sexpr-node (.-expr pf)))
-                    (asn-tok (txt/estimate-tokens trimmed))
-                    (orig-tok (txt/estimate-tokens xml))
-                    (savings (txt/calc-savings orig-tok asn-tok))]
+              (let [(pf (option-or (list-head forms) (ast/PosForm :expr (rd/makeAtom "") :line 0 :col 0)))
+                    (xml (renderSexprNode (.-expr pf)))
+                    (asnTok (txt/estimateTokens trimmed))
+                    (origTok (txt/estimateTokens xml))
+                    (savings (txt/calcSavings origTok asnTok))]
                 (SvgTranspileResult
                   :output xml
-                  :original-tokens orig-tok
-                  :asn-tokens asn-tok
-                  :savings-percent savings
+                  :originalTokens origTok
+                  :asnTokens asnTok
+                  :savingsPercent savings
                   :success true))))))))))
 
-(df svg-to-asn [(svg-str Str)] -> SvgTranspileResult
+(df svgToAsn [(svgStr Str)] -> SvgTranspileResult
   :d "Parses raw SVG XML into compact ASN vector S-expressions."
-  (let [(trimmed (string-trim svg-str))]
+  (let [(trimmed (string-trim svgStr))]
     (cond
       ((string-empty? trimmed)
        (SvgTranspileResult
          :output "Empty input"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       ((not (or (string-starts-with? trimmed "<svg")
                 (string-starts-with? trimmed "<")))
        (SvgTranspileResult
          :output "Syntax error: invalid SVG XML root"
-         :original-tokens 0
-         :asn-tokens 0
-         :savings-percent 0.0
+         :originalTokens 0
+         :asnTokens 0
+         :savingsPercent 0.0
          :success false))
       (:else
-       (let [(orig-tok (txt/estimate-tokens trimmed))
+       (let [(origTok (txt/estimateTokens trimmed))
              (s1 (string-replace trimmed "<svg" "(:svg"))
              (s2 (string-replace s1 "xmlns=\"http://www.w3.org/2000/svg\"" ""))
              (s3 (string-replace s2 "<defs>" "(:defs"))
@@ -260,45 +260,45 @@
              (s36 (string-replace s35 "id=" ":id "))
              (s37 (string-replace s36 "d=" ":d "))
              (s38 (string-replace s37 "/>" ")"))
-             (final-asn (string-trim s38))
-             (asn-tok (txt/estimate-tokens final-asn))
-             (savings (txt/calc-savings orig-tok asn-tok))]
+             (finalAsn (string-trim s38))
+             (asnTok (txt/estimateTokens finalAsn))
+             (savings (txt/calcSavings origTok asnTok))]
          (SvgTranspileResult
-           :output final-asn
-           :original-tokens orig-tok
-           :asn-tokens asn-tok
-           :savings-percent savings
+           :output finalAsn
+           :originalTokens origTok
+           :asnTokens asnTok
+           :savingsPercent savings
            :success true))))))
 
-(df make-vector-card [(title Str) (subtitle Str) (accent-color Str)] -> SvgTranspileResult
+(df makeVectorCard [(title Str) (subtitle Str) (accentColor Str)] -> SvgTranspileResult
   :d "Generates responsive UI card vector graphic with rounded gradient rect and typography."
-  (let [(asn-card (s/concat "(:svg :w \"400\" :h \"250\" :view \"0 0 400 250\" "
-                            (s/concat "(:defs (:grad :id \"card-g\" :fill \"" accent-color "\")) ")
-                            (s/concat "(:rect :x \"0\" :y \"0\" :w \"400\" :h \"250\" :rx \"16\" :fill \"#0f172a\" :stroke \"" accent-color "\") ")
+  (let [(asnCard (s/concat "(:svg :w \"400\" :h \"250\" :view \"0 0 400 250\" "
+                            (s/concat "(:defs (:grad :id \"card-g\" :fill \"" accentColor "\")) ")
+                            (s/concat "(:rect :x \"0\" :y \"0\" :w \"400\" :h \"250\" :rx \"16\" :fill \"#0f172a\" :stroke \"" accentColor "\") ")
                             (s/concat "(:text :x \"24\" :y \"60\" :fill \"#ffffff\" :size \"22\" \"" title "\") ")
                             (s/concat "(:text :x \"24\" :y \"100\" :fill \"#94a3b8\" :size \"14\" \"" subtitle "\"))")))]
-    (asn-to-svg asn-card)))
+    (asnToSvg asnCard)))
 
-(df make-vector-flowchart [(node-a Str) (node-b Str) (node-c Str)] -> SvgTranspileResult
+(df makeVectorFlowchart [(nodeA Str) (nodeB Str) (nodeC Str)] -> SvgTranspileResult
   :d "Generates sequential node-and-arrow flowchart vector graphic."
-  (let [(asn-flow (s/concat "(:svg :w \"600\" :h \"150\" :view \"0 0 600 150\" "
+  (let [(asnFlow (s/concat "(:svg :w \"600\" :h \"150\" :view \"0 0 600 150\" "
                             (s/concat "(:rect :x \"20\" :y \"40\" :w \"140\" :h \"60\" :rx \"8\" :fill \"#1e293b\" :stroke \"#38bdf8\") ")
-                            (s/concat "(:text :x \"90\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" node-a "\") ")
+                            (s/concat "(:text :x \"90\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" nodeA "\") ")
                             (s/concat "(:path :d \"M 160 70 L 220 70\" :stroke \"#64748b\" :stroke-width \"2\") ")
                             (s/concat "(:rect :x \"230\" :y \"40\" :w \"140\" :h \"60\" :rx \"8\" :fill \"#1e293b\" :stroke \"#818cf8\") ")
-                            (s/concat "(:text :x \"300\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" node-b "\") ")
+                            (s/concat "(:text :x \"300\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" nodeB "\") ")
                             (s/concat "(:path :d \"M 370 70 L 430 70\" :stroke \"#64748b\" :stroke-width \"2\") ")
                             (s/concat "(:rect :x \"440\" :y \"40\" :w \"140\" :h \"60\" :rx \"8\" :fill \"#1e293b\" :stroke \"#34d399\") ")
-                            (s/concat "(:text :x \"510\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" node-c "\"))")))]
-    (asn-to-svg asn-flow)))
+                            (s/concat "(:text :x \"510\" :y \"75\" :fill \"#f8fafc\" :size \"14\" \"" nodeC "\"))")))]
+    (asnToSvg asnFlow)))
 
-(df make-vector-icon [(name Str) (path-d Str) (color Str)] -> SvgTranspileResult
+(df makeVectorIcon [(name Str) (pathD Str) (color Str)] -> SvgTranspileResult
   :d "Generates standalone 24x24 vector icon graphic from path and color."
-  (let [(asn-icon (s/concat "(:svg :w \"24\" :h \"24\" :view \"0 0 24 24\" "
-                            (s/concat "(:path :d \"" path-d "\" :fill \"" color "\" :id \"" name "\"))")))]
-    (asn-to-svg asn-icon)))
+  (let [(asnIcon (s/concat "(:svg :w \"24\" :h \"24\" :view \"0 0 24 24\" "
+                            (s/concat "(:path :d \"" pathD "\" :fill \"" color "\" :id \"" name "\"))")))]
+    (asnToSvg asnIcon)))
 
-(df measure-svg-compaction [(svg-xml Str)] -> SvgTranspileResult
+(df measureSvgCompaction [(svgXml Str)] -> SvgTranspileResult
   :d "Computes token delta between raw SVG XML and compact ASN vector representation."
-  (let [(asn-res (svg-to-asn svg-xml))]
-    asn-res))
+  (let [(asnRes (svgToAsn svgXml))]
+    asnRes))
