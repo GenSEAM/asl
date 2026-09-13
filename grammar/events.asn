@@ -1,0 +1,29 @@
+(:events :v 1 :src D83 :shortcode D83
+  :note "Formal ASN event bus schema for reactive memory mutations and observability stream under D83 and D71."
+  :eventBus [
+    (:schema :id mutationEvent :category :event
+      :description "Typed S-expression emitted on atomic record store mutation."
+      :required [:id :type :timestamp :path :digest :status]
+      :optional [:session :lane :blame :diff]
+      :fields [
+        (:field :name :id :type :string :pattern "^evt-[0-9a-fA-F-]+$")
+        (:field :name :type :type :keyword :allowed [:write :patch :append :retire :discard])
+        (:field :name :timestamp :type :integer)
+        (:field :name :path :type :string)
+        (:field :name :digest :type :string)
+        (:field :name :status :type :keyword :allowed [:ok :failed :rejected])
+        (:field :name :session :type :string)
+        (:field :name :lane :type :string)
+        (:field :name :blame :type :string)
+        (:field :name :diff :type :string)])
+
+    (:schema :id eventStreamConfig :category :configuration
+      :description "Configuration for socket or stdout event stream output."
+      :required [:target :format :bufferCapacity]
+      :fields [
+        (:field :name :target :type :keyword :allowed [:stdout :socket :fifo :disabled])
+        (:field :name :socketPath :type :string)
+        (:field :name :format :type :keyword :allowed [:asn :ndjson])
+        (:field :name :bufferCapacity :type :integer)])
+  ]
+)
