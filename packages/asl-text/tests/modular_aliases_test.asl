@@ -9,7 +9,7 @@
       testVResolve
       testVReadWrite]
   :i [(string :a txt)
-      (aslMem/vfs :a v)])
+      (asl-mem/vfs :a v)])
 
 (df testTxtStarts [] -> Bool
   :d "Verifies txt/starts? positive and negative cases."
