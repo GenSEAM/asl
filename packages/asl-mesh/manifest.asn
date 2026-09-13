@@ -1,0 +1,7 @@
+(:package asl-mesh
+ :version "0.1.0"
+ :entry "src/scheduler.asl"
+ :description "Autonomous Multi-Model Mesh Orchestrator and Parallel Partition Scheduler"
+ :asl-first true
+ :modules ["asl-mesh/scheduler"]
+ :dependencies [])
