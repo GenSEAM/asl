@@ -59,9 +59,15 @@
 (df test-asn-to-sh [] -> Bool
   :d "Tests transpilation from ASN command to executable shell string"
   (let [(cmd-asn "(:cmd \"git\" :args [\"status\" \"-s\"])")
-        (res (sh/asn-to-sh cmd-asn))]
+        (res (sh/asn-to-sh cmd-asn))
+        (res-sh (sh/asn-to-sh "(:sh \"echo \\\"hello world\\\"\")"))
+        (res-quoted (sh/asn-to-sh "(:cmd \"echo\" :args [\"\\\"hello world\\\"\"])"))]
     (assert (.-success res) "Transpilation must succeed")
     (assert (string-contains? (.-output res) "git") "Output must contain git")
+    (assert (.-success res-sh) "Transpilation of :sh form must succeed")
+    (assert (string-contains? (.-output res-sh) "\"hello world\"") "Sh form must preserve quotes")
+    (assert (.-success res-quoted) "Transpilation of :cmd form with quotes must succeed")
+    (assert (string-contains? (.-output res-quoted) "\"hello world\"") "Cmd form must preserve quotes")
     true))
 
 (df test-sh-to-asn [] -> Bool
