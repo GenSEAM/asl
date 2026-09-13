@@ -2943,6 +2943,449 @@ static int handle_rpc_telemetry(int step_id, StepToken *tokens, int ntokens, con
     return emit_blamed_rejection(out, step_id, "telemetry", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported telemetry action");
 }
 
+static int is_valid_decision_shortcode(const char *sc) {
+    if (!sc || sc[0] != 'D' || !isdigit((unsigned char)sc[1])) return 0;
+    for (int i = 1; sc[i]; i++) {
+        if (!isdigit((unsigned char)sc[i])) return 0;
+    }
+    return 1;
+}
+
+static int is_valid_intent_id(const char *id) {
+    if (!id || id[0] != 'd' || !isdigit((unsigned char)id[1])) return 0;
+    for (int i = 1; id[i]; i++) {
+        if (!isdigit((unsigned char)id[i])) return 0;
+    }
+    return 1;
+}
+
+static int handle_rpc_decision(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "record";
+
+    if (strcmp(action, "record") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *shortcode = get_kw_arg(tokens, ntokens, "shortcode");
+        const char *title = get_kw_arg(tokens, ntokens, "title");
+        const char *problem = get_kw_arg(tokens, ntokens, "problem");
+        const char *drivers = get_kw_arg(tokens, ntokens, "drivers");
+        const char *decision = get_kw_arg(tokens, ntokens, "decision");
+        const char *status = get_kw_arg(tokens, ntokens, "status");
+        if (!status) status = "active";
+        const char *date = get_kw_arg(tokens, ntokens, "date");
+        if (!date) date = "2026-09-13";
+        const char *cluster = get_kw_arg(tokens, ntokens, "cluster");
+        if (!cluster) cluster = "architecture";
+        const char *deciders = get_kw_arg(tokens, ntokens, "deciders");
+        if (!deciders) deciders = "[\"architect\" \"implementer\" \"auditor\"]";
+        const char *invariants = get_kw_arg(tokens, ntokens, "invariants");
+        if (!invariants) invariants = "[\"D81\" \"D83\" \"C1\" \"C2\"]";
+        const char *tasks = get_kw_arg(tokens, ntokens, "tasks");
+        if (!tasks) tasks = "[]";
+        const char *outcomes = get_kw_arg(tokens, ntokens, "outcomes");
+        if (!outcomes) outcomes = "[]";
+        const char *consequences = get_kw_arg(tokens, ntokens, "consequences");
+        if (!consequences) consequences = "[]";
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Decision id is required");
+        }
+        if (!is_valid_decision_shortcode(id)) {
+            return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_INVALID_SHORTCODE", "id", "string", id, "Decision id must match ^D[0-9]+$");
+        }
+        if (shortcode && !is_valid_decision_shortcode(shortcode)) {
+            return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_INVALID_SHORTCODE", "shortcode", "string", shortcode, "Decision shortcode must match ^D[0-9]+$");
+        }
+        if (!title || !title[0]) {
+            return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_MISSING_FIELD", "title", "string", ":nil", "Decision title is required");
+        }
+        if (!problem || !problem[0]) {
+            return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_MISSING_FIELD", "problem", "string", ":nil", "Decision problem is required");
+        }
+        if (!decision || !decision[0]) {
+            return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_MISSING_FIELD", "decision", "string", ":nil", "Decision statement is required");
+        }
+
+        char dec_path[4096];
+        snprintf(dec_path, sizeof(dec_path), "%s/.asl/mem/decisions/%s.asn", ws_root, id);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf dec_buf;
+        sb_init(&dec_buf);
+        sb_append(&dec_buf, "(:adr\n  :id \"");
+        sb_append_escaped(&dec_buf, id);
+        sb_append(&dec_buf, "\"\n  :shortcode \"");
+        sb_append_escaped(&dec_buf, shortcode ? shortcode : id);
+        sb_append(&dec_buf, "\"\n  :title \"");
+        sb_append_escaped(&dec_buf, title);
+        sb_append(&dec_buf, "\"\n  :status :");
+        sb_append(&dec_buf, status);
+        sb_append(&dec_buf, "\n  :planStatus :approved\n  :date \"");
+        sb_append_escaped(&dec_buf, date);
+        sb_append(&dec_buf, "\"\n  :cluster \"");
+        sb_append_escaped(&dec_buf, cluster);
+        sb_append(&dec_buf, "\"\n  :deciders ");
+        sb_append(&dec_buf, deciders);
+        sb_append(&dec_buf, "\n  :problem \"");
+        sb_append_escaped(&dec_buf, problem);
+        sb_append(&dec_buf, "\"\n  :drivers ");
+        sb_append(&dec_buf, drivers ? drivers : "[]");
+        sb_append(&dec_buf, "\n  :decision \"");
+        sb_append_escaped(&dec_buf, decision);
+        sb_append(&dec_buf, "\"\n  :invariants ");
+        sb_append(&dec_buf, invariants);
+        sb_append(&dec_buf, "\n  :tasks ");
+        sb_append(&dec_buf, tasks);
+        sb_append(&dec_buf, "\n  :outcomes ");
+        sb_append(&dec_buf, outcomes);
+        sb_append(&dec_buf, "\n  :consequences ");
+        sb_append(&dec_buf, consequences);
+        sb_append(&dec_buf, ")\n");
+
+        char err[512] = {0};
+        se->write_record(se, dec_path, dec_buf.data, err, sizeof(err));
+        sb_free(&dec_buf);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"decision\" :action \"record\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"decision\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "decision", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported decision action");
+}
+
+static int handle_rpc_intent(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "record";
+
+    if (strcmp(action, "record") == 0 || strcmp(action, "write") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *sym = get_kw_arg(tokens, ntokens, "sym");
+        const char *title = get_kw_arg(tokens, ntokens, "title");
+        const char *intent_text = get_kw_arg(tokens, ntokens, "intent");
+        const char *outcome = get_kw_arg(tokens, ntokens, "outcome");
+        const char *why_not = get_kw_arg(tokens, ntokens, "whyNot");
+        const char *adr = get_kw_arg(tokens, ntokens, "adr");
+        const char *tasks = get_kw_arg(tokens, ntokens, "tasks");
+        const char *closure = get_kw_arg(tokens, ntokens, "closure");
+        const char *status = get_kw_arg(tokens, ntokens, "status");
+        if (!status) status = "active";
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "intent", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Intent id is required");
+        }
+        if (!is_valid_intent_id(id)) {
+            return emit_blamed_rejection(out, step_id, "intent", "E_SCHEMA_INVALID_SHORTCODE", "id", "string", id, "Intent id must match ^d[0-9]+$");
+        }
+        if (!title || !title[0]) {
+            return emit_blamed_rejection(out, step_id, "intent", "E_SCHEMA_MISSING_FIELD", "title", "string", ":nil", "Intent title is required");
+        }
+        if (!intent_text || !intent_text[0]) {
+            return emit_blamed_rejection(out, step_id, "intent", "E_SCHEMA_MISSING_FIELD", "intent", "string", ":nil", "Intent statement is required");
+        }
+
+        char intent_path[4096];
+        snprintf(intent_path, sizeof(intent_path), "%s/.asl/mem/intent.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_intent;
+        sb_init(&cur_intent);
+        char err[512] = {0};
+        se->read_record(se, intent_path, &cur_intent, err, sizeof(err));
+
+        StrBuf entry;
+        sb_init(&entry);
+        sb_append(&entry, "     (:id \"");
+        sb_append_escaped(&entry, id);
+        sb_append(&entry, "\"\n      :sym \"");
+        sb_append_escaped(&entry, sym ? sym : id);
+        sb_append(&entry, "\"\n      :title \"");
+        sb_append_escaped(&entry, title);
+        sb_append(&entry, "\"\n      :intent \"");
+        sb_append_escaped(&entry, intent_text);
+        sb_append(&entry, "\"\n      :outcome \"");
+        sb_append_escaped(&entry, outcome ? outcome : "");
+        sb_append(&entry, "\"\n      :whyNot ");
+        sb_append(&entry, why_not ? why_not : "()");
+        sb_append(&entry, "\n      :adr \"");
+        sb_append_escaped(&entry, adr ? adr : "");
+        sb_append(&entry, "\"\n      :tasks ");
+        sb_append(&entry, tasks ? tasks : "[]");
+        sb_append(&entry, "\n      :closure \"");
+        sb_append_escaped(&entry, closure ? closure : "");
+        sb_append(&entry, "\"\n      :status \"");
+        sb_append_escaped(&entry, status);
+        sb_append(&entry, "\"\n      :planStatus \"approved\")\n");
+
+        if (cur_intent.len > 0 && cur_intent.data) {
+            char *last_close = strrchr(cur_intent.data, ')');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_intent.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_intent.data, prefix_len);
+                sb_append(&updated, entry.data);
+                sb_append(&updated, "))\n");
+                se->write_record(se, intent_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            }
+        }
+        sb_free(&entry);
+        sb_free(&cur_intent);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"intent\" :action \"record\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"intent\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "intent", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported intent action");
+}
+
+static int handle_rpc_principle(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "record";
+
+    if (strcmp(action, "record") == 0 || strcmp(action, "write") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *statement = get_kw_arg(tokens, ntokens, "statement");
+        const char *why = get_kw_arg(tokens, ntokens, "why");
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "principle", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Principle id is required");
+        }
+        if (!statement || !statement[0]) {
+            return emit_blamed_rejection(out, step_id, "principle", "E_SCHEMA_MISSING_FIELD", "statement", "string", ":nil", "Principle statement is required");
+        }
+
+        char principles_path[4096];
+        snprintf(principles_path, sizeof(principles_path), "%s/.asl/mem/principles.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_principles;
+        sb_init(&cur_principles);
+        char err[512] = {0};
+        se->read_record(se, principles_path, &cur_principles, err, sizeof(err));
+
+        StrBuf pentry;
+        sb_init(&pentry);
+        sb_append(&pentry, "    (:principle :id \"");
+        sb_append_escaped(&pentry, id);
+        sb_append(&pentry, "\" :statement \"");
+        sb_append_escaped(&pentry, statement);
+        sb_append(&pentry, "\" :why \"");
+        sb_append_escaped(&pentry, why ? why : "");
+        sb_append(&pentry, "\")\n");
+
+        if (cur_principles.len > 0 && cur_principles.data) {
+            char *last_close = strrchr(cur_principles.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_principles.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_principles.data, prefix_len);
+                sb_append(&updated, pentry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, principles_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            }
+        }
+        sb_free(&pentry);
+        sb_free(&cur_principles);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"principle\" :action \"record\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"principle\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "principle", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported principle action");
+}
+
+static int handle_rpc_recipe(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "record";
+
+    if (strcmp(action, "record") == 0 || strcmp(action, "write") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *name = get_kw_arg(tokens, ntokens, "name");
+        const char *goal = get_kw_arg(tokens, ntokens, "goal");
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "recipe", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Recipe id is required");
+        }
+        if (!goal || !goal[0]) {
+            return emit_blamed_rejection(out, step_id, "recipe", "E_SCHEMA_MISSING_FIELD", "goal", "string", ":nil", "Recipe goal is required");
+        }
+
+        char recipes_path[4096];
+        snprintf(recipes_path, sizeof(recipes_path), "%s/.asl/mem/recipes.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_recipes;
+        sb_init(&cur_recipes);
+        char err[512] = {0};
+        se->read_record(se, recipes_path, &cur_recipes, err, sizeof(err));
+
+        StrBuf rentry;
+        sb_init(&rentry);
+        sb_append(&rentry, "    (:recipe :id \"");
+        sb_append_escaped(&rentry, id);
+        sb_append(&rentry, "\" :name \"");
+        sb_append_escaped(&rentry, name ? name : id);
+        sb_append(&rentry, "\" :goal \"");
+        sb_append_escaped(&rentry, goal);
+        sb_append(&rentry, "\")\n");
+
+        if (cur_recipes.len > 0 && cur_recipes.data) {
+            char *last_close = strrchr(cur_recipes.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_recipes.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_recipes.data, prefix_len);
+                sb_append(&updated, rentry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, recipes_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            }
+        } else {
+            StrBuf new_file;
+            sb_init(&new_file);
+            sb_append(&new_file, "(:recipes\n  :version \"1.0.0\"\n  :recipes [\n");
+            sb_append(&new_file, rentry.data);
+            sb_append(&new_file, "  ]\n)\n");
+            se->write_record(se, recipes_path, new_file.data, err, sizeof(err));
+            sb_free(&new_file);
+        }
+        sb_free(&rentry);
+        sb_free(&cur_recipes);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"recipe\" :action \"record\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"recipe\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "recipe", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported recipe action");
+}
+
+static int handle_rpc_component(int step_id, StepToken *tokens, int ntokens, const char *ws_root, StrBuf *out) {
+    const char *action = get_kw_arg(tokens, ntokens, "action");
+    if (!action) action = "record";
+
+    if (strcmp(action, "record") == 0 || strcmp(action, "write") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        const char *package = get_kw_arg(tokens, ntokens, "package");
+        const char *module = get_kw_arg(tokens, ntokens, "module");
+
+        if (!id || !id[0]) {
+            return emit_blamed_rejection(out, step_id, "component", "E_SCHEMA_MISSING_FIELD", "id", "string", ":nil", "Component id is required");
+        }
+        if (!package || !package[0]) {
+            return emit_blamed_rejection(out, step_id, "component", "E_SCHEMA_MISSING_FIELD", "package", "string", ":nil", "Component package is required");
+        }
+
+        char comp_path[4096];
+        snprintf(comp_path, sizeof(comp_path), "%s/.asl/mem/components.asn", ws_root);
+        StorageEngine *se = get_default_storage_engine();
+        StrBuf cur_comps;
+        sb_init(&cur_comps);
+        char err[512] = {0};
+        se->read_record(se, comp_path, &cur_comps, err, sizeof(err));
+
+        StrBuf centry;
+        sb_init(&centry);
+        sb_append(&centry, "    (:component :id \"");
+        sb_append_escaped(&centry, id);
+        sb_append(&centry, "\" :package \"");
+        sb_append_escaped(&centry, package);
+        sb_append(&centry, "\" :module \"");
+        sb_append_escaped(&centry, module ? module : "");
+        sb_append(&centry, "\")\n");
+
+        if (cur_comps.len > 0 && cur_comps.data) {
+            char *last_close = strrchr(cur_comps.data, ']');
+            if (last_close) {
+                size_t prefix_len = last_close - cur_comps.data;
+                StrBuf updated;
+                sb_init(&updated);
+                sb_append_len(&updated, cur_comps.data, prefix_len);
+                sb_append(&updated, centry.data);
+                sb_append(&updated, "  ]\n)\n");
+                se->write_record(se, comp_path, updated.data, err, sizeof(err));
+                sb_free(&updated);
+            }
+        }
+        sb_free(&centry);
+        sb_free(&cur_comps);
+
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"component\" :action \"record\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id);
+        sb_append(out, "\")\n");
+        return 0;
+    } else if (strcmp(action, "query") == 0 || strcmp(action, "list") == 0) {
+        const char *id = get_kw_arg(tokens, ntokens, "id");
+        sb_append(out, "  (:step :id ");
+        sb_append_int(out, step_id);
+        sb_append(out, " :op \"component\" :action \"");
+        sb_append(out, action);
+        sb_append(out, "\" :status \"ok\" :id \"");
+        sb_append_escaped(out, id ? id : "");
+        sb_append(out, "\")\n");
+        return 0;
+    }
+
+    return emit_blamed_rejection(out, step_id, "component", "E_SCHEMA_INVALID_KEYWORD", "action", "keyword", action, "Unsupported component action");
+}
+
 static int validate_manifest_ast_c(const char *ws_root, const char *rel_path);
 static int check_pure_asl_zero_comments(const char *ws_root);
 static int check_grounded_claims(const char *ws_root, int *out_claims_count);
@@ -4063,6 +4506,16 @@ static int execute_single_step(int step_id, const char *step_str, const char *ws
         handle_rpc_receipt(step_id, tokens, ntokens, ws_root, out);
     } else if (strcmp(op, "telemetry") == 0) {
         handle_rpc_telemetry(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "decision") == 0) {
+        handle_rpc_decision(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "intent") == 0) {
+        handle_rpc_intent(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "principle") == 0) {
+        handle_rpc_principle(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "recipe") == 0) {
+        handle_rpc_recipe(step_id, tokens, ntokens, ws_root, out);
+    } else if (strcmp(op, "component") == 0) {
+        handle_rpc_component(step_id, tokens, ntokens, ws_root, out);
     } else {
         sb_append(out, "  (:step :id ");
         sb_append_int(out, step_id);
