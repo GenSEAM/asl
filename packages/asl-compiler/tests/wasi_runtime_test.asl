@@ -6,38 +6,43 @@
       testDynamicWasiCapabilityDenial
       testTaskRegistrationFile
       runTests]
-  :i [(wasm :a w) (wasi :a wasi) (vfs_git :a vfs)])
+  :i [(ast :a a) (wasm :a w) (wasi :a wasi) (vfs_git :a vfs)])
 
 (df testDynamicWasiStdoutExecution [] -> Bool
   :d "Dynamically executes a compiled WASI module under Node.js Preview 1 host and verifies stdout and exit code 0."
-  (let [(jsRunner (str "const { WASI } = require('wasi');\n"
-                       "const wasi = new WASI({ version: 'preview1', args: ['prog'], env: {}, preopens: { '/tmp': '/tmp' } });\n"
-                       "const typeSec = [0x01, 0x10, 0x03, 0x60, 0x01, 0x7f, 0x00, 0x60, 0x04, 0x7f, 0x7f, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00];\n"
-                       "const importSec = [0x02, 0x46, 0x02, 0x16, ...Buffer.from('wasi_snapshot_preview1'), 0x09, ...Buffer.from('proc_exit'), 0x00, 0x00, 0x16, ...Buffer.from('wasi_snapshot_preview1'), 0x08, ...Buffer.from('fd_write'), 0x00, 0x01];\n"
-                       "const funcSec = [0x03, 0x02, 0x01, 0x02];\n"
-                       "const memSec = [0x05, 0x03, 0x01, 0x00, 0x01];\n"
-                       "const expSec = [0x07, 0x13, 0x02, 0x06, ...Buffer.from('_start'), 0x00, 0x02, 0x06, ...Buffer.from('memory'), 0x02, 0x00];\n"
-                       "const msg = Buffer.from('Hello, WASI!\\n');\n"
-                       "const ciovec = Buffer.from([32, 0, 0, 0, 13, 0, 0, 0]);\n"
-                       "const dataSec = [0x0b, 0x20, 0x02, 0x00, 0x41, 0x10, 0x0b, 0x08, ...ciovec, 0x00, 0x41, 0x20, 0x0b, 0x0d, ...msg];\n"
-                       "const code = [0x41, 0x01, 0x41, 0x10, 0x41, 0x01, 0x41, 0x08, 0x10, 0x01, 0x1a, 0x41, 0x00, 0x10, 0x00, 0x0b];\n"
-                       "const codeSec = [0x0a, 0x13, 0x01, 0x11, 0x00, ...code];\n"
-                       "const wasmBytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, ...typeSec, ...importSec, ...funcSec, ...memSec, ...expSec, ...codeSec, ...dataSec]);\n"
-                       "const mod = new WebAssembly.Module(wasmBytes);\n"
-                       "const inst = new WebAssembly.Instance(mod, { wasi_snapshot_preview1: wasi.wasiImport });\n"
-                       "const exitCode = wasi.start(inst);\n"
-                       "console.log('WASI_EXIT_CODE:' + exitCode);\n"))
-        (wRes (file-write "/tmp/run_dynamic_wasi.js" jsRunner))]
-    (assert (= (.-_tag wRes) "ok") "Writing runner script to /tmp must succeed")
-    (let [(execRes (sys-exec "/usr/local/bin/node /tmp/run_dynamic_wasi.js"))
-          (code (.-exitCode execRes))
-          (out (.-stdout execRes))]
-      (assert (= code 0) (str "Node WASI execution exitCode: " (string-from-int64 code) ", stdout: " out))
-      (refute (!= code 0) "Node WASI execution must not fail")
-      (assert (string-contains? out "Hello, WASI!") "Output must contain string emitted via WASI fd_write")
-      (assert (string-contains? out "WASI_EXIT_CODE:0") "Module must exit with code 0 via proc_exit")
-      (refute (string-contains? out "WASI_EXIT_CODE:42") "Module must not exit with non-zero code")
-      true)))
+  (let [(src "(df main [] -> Unit (do (fd_write 1 16 1 24) (proc_exit 0)))")
+        (parseRes (a/parse src))]
+    (assert (= (.-_tag parseRes) "ok") "Parsing WASI source program must succeed")
+    (mt parseRes
+      ((ok forms)
+       (let [(byteCsv (w/emitWasiBinaryTarget forms))
+             (bytePath "/tmp/wasi_dynamic_compiled.txt")
+             (wByteRes (file-write bytePath byteCsv))]
+         (assert (= (.-_tag wByteRes) "ok") "Writing dynamically compiled WASI bytecode must succeed")
+         (refute (!= (.-_tag wByteRes) "ok") "Bytecode write must not fail")
+         (assert (> (string-length byteCsv) 0) "Bytecode string must not be empty")
+         (let [(jsRunner (str "const { WASI } = require('wasi')\n"
+                              "const fs = require('fs')\n"
+                              "const wasi = new WASI({ version: 'preview1', args: ['prog'], env: {}, preopens: { '/tmp': '/tmp' } })\n"
+                              "const raw = fs.readFileSync('/tmp/wasi_dynamic_compiled.txt', 'utf8').trim()\n"
+                              "const bytes = raw.split(',').map(Number)\n"
+                              "const wasmBytes = new Uint8Array(bytes)\n"
+                              "const mod = new WebAssembly.Module(wasmBytes)\n"
+                              "const inst = new WebAssembly.Instance(mod, { wasi_snapshot_preview1: wasi.wasiImport })\n"
+                              "const exitCode = wasi.start(inst)\n"
+                              "console.log('WASI_EXIT_CODE:' + exitCode)\n"))
+               (wRes (file-write "/tmp/run_dynamic_wasi.js" jsRunner))]
+           (assert (= (.-_tag wRes) "ok") "Writing dynamic runner script to /tmp must succeed")
+           (let [(execRes (sys-exec "/usr/local/bin/node /tmp/run_dynamic_wasi.js"))
+                 (code (.-exitCode execRes))
+                 (out (.-stdout execRes))]
+             (assert (= code 0) (str "Node WASI dynamic execution exitCode: " (string-from-int64 code) ", stdout: " out))
+             (refute (!= code 0) "Node WASI dynamic execution must not fail")
+             (assert (string-contains? out "Hello, WASI!") "Dynamic output must contain string emitted via WASI fd_write")
+             (assert (string-contains? out "WASI_EXIT_CODE:0") "Module must exit with code 0 via proc_exit")
+             (refute (string-contains? out "WASI_EXIT_CODE:42") "Module must not exit with non-zero code")
+             true))))
+      ((err _) false))))
 
 (df testDynamicWasiFileIo [] -> Bool
   :d "Verifies live WASI file I/O operations and error reporting against actual disk."

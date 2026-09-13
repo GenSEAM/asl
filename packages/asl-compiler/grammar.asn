@@ -108,6 +108,12 @@
           :rationale "Evaluates subprocess execution and sandboxed capability boundaries in self-hosted evaluator")
     (:sym :name "emitWasiBinaryTarget" :kind :fn :tokens 4
           :rationale "Compiles parsed AST forms into standalone WebAssembly binary module targeting WASI Preview 1")
+    (:sym :name "emitWasiBinaryBytes" :kind :fn :tokens 4
+          :rationale "Compiles parsed AST forms into raw WebAssembly v1 binary bytes targeting WASI Preview 1")
+    (:sym :name "encodeDataSegment" :kind :fn :tokens 3
+          :rationale "Encodes WebAssembly Section 11 active data segment at specified memory offset")
+    (:sym :name "encodeDataSection" :kind :fn :tokens 3
+          :rationale "Encodes WebAssembly Section 11 data section framing with vector of segments")
 
     (:sym :name "encodeImportEntry" :kind :fn :tokens 3
           :rationale "Encodes WebAssembly Section 2 host import entry descriptor with module and field identifiers")

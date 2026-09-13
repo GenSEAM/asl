@@ -268,15 +268,76 @@ static int is_safe_path(const char *ws_root, const char *path) {
     }
     size_t wlen = strlen(target_ws);
 
+    bool within_ws = false;
     if (realpath(full, real_f) != NULL) {
-        if (strncmp(real_f, target_ws, wlen) != 0) return 0;
-        if (real_f[wlen] != 0 && real_f[wlen] != '/') return 0;
-        return 1;
+        if (strncmp(real_f, target_ws, wlen) == 0 && (real_f[wlen] == 0 || real_f[wlen] == '/')) {
+            within_ws = true;
+        }
+    } else {
+        if (strncmp(norm, target_ws, wlen) == 0 && (norm[wlen] == 0 || norm[wlen] == '/')) {
+            within_ws = true;
+        }
+    }
+    if (within_ws) return 1;
+
+    char dot_git[4096];
+    snprintf(dot_git, sizeof(dot_git), "%s/.git", target_ws);
+    struct stat st_git;
+    if (stat(dot_git, &st_git) == 0 && S_ISREG(st_git.st_mode)) {
+        FILE *f = fopen(dot_git, "r");
+        if (f) {
+            char line[4096];
+            if (fgets(line, sizeof(line), f)) {
+                char *g = line;
+                while (*g == ' ' || *g == '\t') g++;
+                if (strncmp(g, "gitdir:", 7) == 0) {
+                    char *d = g + 7;
+                    while (*d == ' ' || *d == '\t') d++;
+                    size_t dlen = strlen(d);
+                    while (dlen > 0 && (d[dlen-1] == '\r' || d[dlen-1] == '\n' || d[dlen-1] == ' ')) d[--dlen] = '\0';
+                    char full_d[4096];
+                    if (d[0] == '/') snprintf(full_d, sizeof(full_d), "%s", d);
+                    else snprintf(full_d, sizeof(full_d), "%s/%s", target_ws, d);
+                    char real_gd[4096];
+                    if (realpath(full_d, real_gd) != NULL) {
+                        size_t gdlen = strlen(real_gd);
+                        if (strncmp(real_f, real_gd, gdlen) == 0 && (real_f[gdlen] == 0 || real_f[gdlen] == '/')) {
+                            fclose(f);
+                            return 1;
+                        }
+                    }
+                    char cdir_file[4096];
+                    snprintf(cdir_file, sizeof(cdir_file), "%s/commondir", full_d);
+                    FILE *cf = fopen(cdir_file, "r");
+                    if (cf) {
+                        char cline[4096];
+                        if (fgets(cline, sizeof(cline), cf)) {
+                            char *cd = cline;
+                            while (*cd == ' ' || *cd == '\t') cd++;
+                            size_t cdlen = strlen(cd);
+                            while (cdlen > 0 && (cd[cdlen-1] == '\r' || cd[cdlen-1] == '\n' || cd[cdlen-1] == ' ')) cd[--cdlen] = '\0';
+                            char full_cd[4096];
+                            if (cd[0] == '/') snprintf(full_cd, sizeof(full_cd), "%s", cd);
+                            else snprintf(full_cd, sizeof(full_cd), "%s/%s", full_d, cd);
+                            char real_cd[4096];
+                            if (realpath(full_cd, real_cd) != NULL) {
+                                size_t cddlen = strlen(real_cd);
+                                if (strncmp(real_f, real_cd, cddlen) == 0 && (real_f[cddlen] == 0 || real_f[cddlen] == '/')) {
+                                    fclose(cf);
+                                    fclose(f);
+                                    return 1;
+                                }
+                            }
+                        }
+                        fclose(cf);
+                    }
+                }
+            }
+            fclose(f);
+        }
     }
 
-    if (strncmp(norm, target_ws, wlen) != 0) return 0;
-    if (norm[wlen] != 0 && norm[wlen] != '/') return 0;
-    return 1;
+    return 0;
 }
 static void resolve_path(const char *ws_root, const char *path, char *out, size_t out_len) {
     if (!path || !path[0]) {
