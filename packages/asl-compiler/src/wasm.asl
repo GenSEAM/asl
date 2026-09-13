@@ -373,10 +373,10 @@
          ((map-has? locals v)
           (let [(idx (option-or (map-get locals v) 0))]
             (emitInstrLocalGet idx)))
-         (:else (emitInstrConstI64 0)))))
+         (:else (if (= (wasmValType retType) 127) (emitInstrConstI32 0) (emitInstrConstI64 0))))))
     ((sexprList items)
      (if (list-empty? items)
-         (emitInstrConstI64 0)
+         (if (= (wasmValType retType) 127) (emitInstrConstI32 0) (emitInstrConstI64 0))
          (let [(head (sexprToAtomStr (option-or (list-get items 0) (rd/makeAtom ""))))]
            (cond
              ((= head "if")
@@ -446,8 +446,8 @@
                                                       args)))
                     (callInstr (emitInstrCall targetIdx))]
                 (list-append argInstrs callInstr)))
-             (:else (emitInstrConstI64 0))))))
-    ((sexprVect _) (emitInstrConstI64 0))))
+             (:else (if (= (wasmValType retType) 127) (emitInstrConstI32 0) (emitInstrConstI64 0)))))))
+    ((sexprVect _) (if (= (wasmValType retType) 127) (emitInstrConstI32 0) (emitInstrConstI64 0)))))
 
 (df lowerAstFunction [(d a/DefunNode) (fnIndices (Map Str Int64))] -> (List Int64)
   :d "Lowers a single topDefun AST node to an encoded WebAssembly function body."
@@ -558,6 +558,27 @@
   :d "Emits capability denial receipt sequence returning 403 denied."
   (list-append (emitInstrConstI32 403) (list 11)))
 
+(df emitRpcDispatchInstructions [] -> (List Int64)
+  :d "Emits instructions for asl_rpc_dispatch writing batch response to out_ptr when out_ptr > 0."
+  (let [(resp "(:batch-res :status \"completed\" :bridge \"asl-core\" :zero-socket true :results [])\n")
+        (bytes (encodeUtf8 resp))
+        (storeInstrs (fold (fn [(acc (List Int64)) (idx Int64)]
+                             (let [(b (option-or (list-get bytes idx) 0))]
+                               (list-append acc
+                                 (list-append (emitInstrLocalGet 2)
+                                   (list-append (emitInstrConstI32 b)
+                                     (list-append (list 58 0) (leb128EncodeU32 idx)))))))
+                           (list)
+                           (range 0 (list-length bytes))))
+        (nullTerm (list-append (emitInstrLocalGet 2)
+                    (list-append (emitInstrConstI32 0)
+                      (list-append (list 58 0) (leb128EncodeU32 (list-length bytes))))))
+        (ifBlock (list-append (emitInstrLocalGet 2)
+                   (list-append (list 4 64)
+                     (list-append storeInstrs
+                       (list-append nullTerm (list 11))))))]
+    (list-append ifBlock (list-append (emitInstrConstI32 0) (list 11)))))
+
 (df emitWasmBinaryBytes [(forms (List a/TopForm))] -> (List Int64)
   :d "Compiles top-level AST forms into a complete WebAssembly v1 binary with memory and Batch RPC exports."
   (let [(fnIndices (buildFunctionTypeIndex forms))
@@ -602,7 +623,7 @@
                          userDefuns))
         (allocBody (encodeFunctionBody (list) (list-append (emitInstrConstI32 65536) (list 11))))
         (freeBody (encodeFunctionBody (list) (list 11)))
-        (dispatchBody (encodeFunctionBody (list) (list-append (emitInstrConstI32 0) (list 11))))
+        (dispatchBody (encodeFunctionBody (list) (emitRpcDispatchInstructions)))
         (allBodies (list-append userBodies (list allocBody freeBody dispatchBody)))
         (codeSec (encodeCodeSection allBodies))]
     (list-append (wasmMagicHeader)

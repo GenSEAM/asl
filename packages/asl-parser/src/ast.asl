@@ -154,7 +154,7 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
   (let [(core (dropSuffix s))]
     (and (not (string-empty? core))
          (and (string-contains? "abcdefghijklmnopqrstuvwxyz" (charAt core 0))
-              (charsWithin? "abcdefghijklmnopqrstuvwxyz0123456789-" core)))))
+              (charsWithin? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-" core)))))
 
 (df pascalName? [(s String)] -> Bool
   :d "True for §2's type-name shape: an uppercase head then alphanumerics."

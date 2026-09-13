@@ -1,7 +1,8 @@
 (module asl-eval
   :d "Pure AgentScript AST Evaluator, Lexical Closures, and Module Loading Runtime."
   :x [EvalResult EvalEnv Closure
-      evalNode invokeClosure loadModule makeEvalEnv]
+      evalNode invokeClosure loadModule makeEvalEnv
+      evalArithmetic clamp]
   :i [])
 
 (dfs EvalResult
@@ -72,3 +73,15 @@
           (if (not (string-contains? src (str "module " modName)))
             (EvalResult :value "" :ok false :errCode "ERR_MODULE_NAME_MISMATCH")
             (EvalResult :value modName :ok true :errCode "")))))))
+
+(df evalArithmetic [(op I64) (a I64) (b I64)] -> I64
+  :d "Evaluates arithmetic operation op: 1=add, 2=sub, 3=mul, 4=div, 5=mod."
+  (if (= op 1) (+ a b)
+    (if (= op 2) (- a b)
+      (if (= op 3) (* a b)
+        (if (= op 4) (/ a b)
+          (if (= op 5) (mod a b) 0))))))
+
+(df clamp [(v I64) (low I64) (high I64)] -> I64
+  :d "Clamps an integer between lower and upper bounds."
+  (if (< v low) low (if (> v high) high v)))
