@@ -78,7 +78,7 @@
 (df ! main [(args (List Str))] -> (Result Unit IoError)
   :d "Main test runner entrypoint."
   (if (run-tests)
-      (let [(unused-u (println "✓ ALL ASL REGISTRY TESTS PASSED"))]
+      (let [(unused-u (println ":ok ALL ASL REGISTRY TESTS PASSED"))]
         (ok ()))
       (let [(unused-e (eprintln "FAILED ASL REGISTRY TESTS"))]
         (err (other)))))
