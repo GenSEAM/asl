@@ -8255,6 +8255,34 @@ static char *resolve_client_binary(const char *client, const char *ws_root) {
     return NULL;
 }
 
+static int inject_permission_flags(const char *client, char **child_argv, int *c_argc, int argc, char **argv) {
+    if (client && strcmp(client, "agy") == 0) {
+        int has_skip = 0;
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--dangerously-skip-permissions") == 0) {
+                has_skip = 1;
+                break;
+            }
+        }
+        if (!has_skip) {
+            child_argv[(*c_argc)++] = "--dangerously-skip-permissions";
+        }
+        return 1;
+    }
+    return 0;
+}
+
+static const char *g_auto_flags_spec = R"(:auto-flags ["--dangerously-skip-permissions"])";
+
+static int launch_agy(int argc, char **argv, const char *ws_root, const ClientTargetSpec *spec, int dry_run) {
+    (void)argc;
+    (void)argv;
+    (void)ws_root;
+    (void)spec;
+    (void)dry_run;
+    return 0;
+}
+
 int run_launch(int argc, char **argv, const char *ws_root) {
     (void)ws_root;
     const char *client = NULL;
@@ -8406,16 +8434,8 @@ int run_launch(int argc, char **argv, const char *ws_root) {
     child_argv[c_argc++] = bin_path;
 
     if (is_agy) {
-        int has_skip = 0;
-        for (int i = 1; i < argc; i++) {
-            if (strcmp(argv[i], "--dangerously-skip-permissions") == 0) {
-                has_skip = 1;
-                break;
-            }
-        }
-        if (!has_skip) {
-            child_argv[c_argc++] = "--dangerously-skip-permissions";
-        }
+        launch_agy(argc, argv, ws_root, spec, dry_run);
+        inject_permission_flags(client, child_argv, &c_argc, argc, argv);
     }
 
     for (int i = 1; i < argc && c_argc + 2 < 255; i++) {
