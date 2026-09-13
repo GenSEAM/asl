@@ -15,9 +15,9 @@
   :d "Constructs structured AST from token stream"
   {:kind :syntax_tree :tokens tokens :nodeCount (count tokens)})
 
-(df syntax_tree [root-node] -> Map
+(df syntax_tree [rootNode] -> Map
   :d "Wraps root node into typed syntax tree representation"
-  {:root root-node :valid true :pipeline :asl-parser})
+  {:root rootNode :valid true :pipeline :asl-parser})
 
 (df parse_asl_source [src] -> Map
   :d "Parses ASL source string into complete AST"
