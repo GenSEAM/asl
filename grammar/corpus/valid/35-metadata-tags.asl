@@ -1,9 +1,9 @@
 "Decoupled metadata tags (:tag) in module, defun, defschema, and defenum."
 
-(module demo/meta-tags
+(module demo/metaTags
   :doc "Demonstrates decoupled metadata annotations."
   (:tag :arch "d-1eed" :spec "sec-08" :doc "m-meta-tags")
-  :export [User Role verify-credentials])
+  :export [User Role verifyCredentials])
 
 (defschema User
   (:tag :model "db-user" :arch "d-4a1b")
@@ -16,7 +16,7 @@
   (:case admin [] "Administrator role" (:tag :level "super"))
   (:case guest [] "Guest role" (:tag :level "public")))
 
-(df verify-credentials [(user User) (token String)] -> Bool
+(df verifyCredentials [(user User) (token String)] -> Bool
   :doc "Verify token for the user."
   (:tag :inv "constant-time" :perf "p-120us" :doc "fn-verify-creds")
   (if (.-active user)

@@ -3,7 +3,7 @@
 
 (module core/private
   :doc "A module whose type declarations stay private to it."
-  :export [size-of])
+  :export [sizeOf])
 
 (defenum Hidden
   (:case secret [(payload String)] "A value nobody outside may name"))
@@ -11,6 +11,6 @@
 (defschema Vault
   (:field x Int64 "A counter nobody outside may construct"))
 
-(df size-of [(s String)] -> Int64
+(df sizeOf [(s String)] -> Int64
   :doc "Length of a string, over builtins only."
   (string-length s))

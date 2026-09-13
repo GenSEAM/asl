@@ -1,12 +1,12 @@
-(module asl-codec/doc-engine
+(module asl-codec/docEngine
   :d "Structured ASN Documentation Schema and Dual-Target Compiler: Human Markdown vs Token-Dense Agent Stubs."
   :x [DocSymbol
       DocModule
-      create-doc-symbol
-      create-doc-module
-      compile-doc-to-markdown
-      extract-agent-doc-stub
-      estimate-doc-token-savings]
+      createDocSymbol
+      createDocModule
+      compileDocToMarkdown
+      extractAgentDocStub
+      estimateDocTokenSavings]
   :i [])
 
 (dfs DocSymbol
@@ -16,14 +16,14 @@
   (:f doc Str "Summary description"))
 
 (dfs DocModule
-  (:f module-id Str "Unique module path e.g. asl-bus/wire")
+  (:f moduleId Str "Unique module path e.g. asl-bus/wire")
   (:f title Str "Human-readable module title")
   (:f problem Str "Problem addressed by this module")
   (:f solution Str "Architectural solution provided")
   (:f invariants (List Str) "List of enforced invariant rules")
   (:f symbols (List DocSymbol) "List of documented symbols"))
 
-(df create-doc-symbol [(name Str) (kind Str) (sig Str) (doc Str)] -> DocSymbol
+(df createDocSymbol [(name Str) (kind Str) (sig Str) (doc Str)] -> DocSymbol
   :d "Initializes a DocSymbol record."
   (DocSymbol
     :name name
@@ -31,20 +31,20 @@
     :signature sig
     :doc doc))
 
-(df create-doc-module [(id Str) (title Str) (prob Str) (sol Str) (invs (List Str)) (syms (List DocSymbol))] -> DocModule
+(df createDocModule [(id Str) (title Str) (prob Str) (sol Str) (invs (List Str)) (syms (List DocSymbol))] -> DocModule
   :d "Initializes a DocModule record."
   (DocModule
-    :module-id id
+    :moduleId id
     :title title
     :problem prob
     :solution sol
     :invariants invs
     :symbols syms))
 
-(df compile-doc-to-markdown [(doc DocModule)] -> Str
+(df compileDocToMarkdown [(doc DocModule)] -> Str
   :d "Compiles an ASN DocModule into human-readable Markdown documentation."
   (let [(md0 (str "# " (.-title doc) "\n\n"
-                  "**Module**: `" (.-module-id doc) "`\n\n"
+                  "**Module**: `" (.-moduleId doc) "`\n\n"
                   "## Problem Solved\n"
                   (.-problem doc) "\n\n"
                   "## Solution & Architecture\n"
@@ -63,34 +63,34 @@
                     (.-symbols doc)))]
     md3))
 
-(df extract-agent-doc-stub [(doc DocModule) (symbol-name Str)] -> (Option Str
+(df extractAgentDocStub [(doc DocModule) (symbolName Str)] -> (Option Str
 )  :d "Extracts a compact, token-dense ASN stub for an AI agent, omitting human prose."
   (let [(matches (filter (fn [(s DocSymbol)] -> Bool
-                           (= (.-name s) symbol-name))
+                           (= (.-name s) symbolName))
                          (.-symbols doc)))]
     (if (list-empty? matches)
         (none)
         (let [(s (first matches))
               (rules (string-join (.-invariants doc) "; "))]
-          (some (str "(:doc-stub :mod \"" (.-module-id doc) "\""
+          (some (str "(:doc-stub :mod \"" (.-moduleId doc) "\""
                      " :sym \"" (.-name s) "\""
                      " :kind \"" (.-kind s) "\""
                      " :sig \"" (.-signature s) "\""
                      " :rules [\"" rules "\"]"
                      " :doc \"" (.-doc s) "\")"))))))
 
-(df estimate-doc-token-savings [(doc DocModule)] -> F64
+(df estimateDocTokenSavings [(doc DocModule)] -> F64
   :d "Calculates the token reduction percentage of agent ASN stubs compared to full Markdown documentation."
-  (let [(full-md (compile-doc-to-markdown doc))
-        (md-len (string-length full-md))]
-    (if (<= md-len 0)
+  (let [(fullMd (compileDocToMarkdown doc))
+        (mdLen (string-length fullMd))]
+    (if (<= mdLen 0)
         0.0
-        (let [(stub-sample (extract-agent-doc-stub doc (if (list-empty? (.-symbols doc)) "" (.-name (first (.-symbols doc))))))]
-          (mt stub-sample
+        (let [(stubSample (extractAgentDocStub doc (if (list-empty? (.-symbols doc)) "" (.-name (first (.-symbols doc))))))]
+          (mt stubSample
             ((none) 0.0)
             ((some stub)
-             (let [(stub-len (string-length stub))
-                   (diff (- md-len stub-len))]
+             (let [(stubLen (string-length stub))
+                   (diff (- mdLen stubLen))]
                (if (<= diff 0)
                    0.0
-                   (/ (* (float-from-int64 diff) 100.0) (float-from-int64 md-len))))))))))
+                   (/ (* (floatFromInt64 diff) 100.0) (floatFromInt64 mdLen))))))))))

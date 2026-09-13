@@ -30,7 +30,7 @@
         (:field :name :defectId :type :string :pattern "^def-[0-9a-fA-F-]+$")
         (:field :name :path :type :string)
         (:field :name :lineNumber :type :integer)
-        (:field :name :kind :type :keyword :allowed [:syntax-malformation :tautological-assertion :unbound-symbol :comment-leak :emoji-contamination :concurrency-hazard :boundary-violation])
+        (:field :name :kind :type :keyword :allowed [:syntaxMalformation :tautologicalAssertion :unboundSymbol :commentLeak :emojiContamination :concurrencyHazard :boundaryViolation])
         (:field :name :severity :type :keyword :allowed [:critical :high :medium :low :advisory])
         (:field :name :blameSymbol :type :string)
         (:field :name :rationale :type :string)
@@ -54,12 +54,12 @@
     (:schema :id defectTaxonomy :category :taxonomy
       :description "Defect taxonomy categorization rules."
       :categories [
-        (:category :id :syntax-malformation :description "Unbalanced S-expressions, missing delimiters, or invalid AST forms.")
-        (:category :id :tautological-assertion :description "Vacuous assertions such as (= 1 1) or trivial constant comparisons that fail to test reality.")
-        (:category :id :unbound-symbol :description "Calls to unresolved symbols or missing imports in module headers.")
-        (:category :id :comment-leak :description "Violations of pure ASL zero-comment invariant C1.")
-        (:category :id :emoji-contamination :description "Violations of machine ASN zero-emoji invariant C2.")
-        (:category :id :concurrency-hazard :description "Unprotected concurrent file writes or missing flock locks in record stores.")
-        (:category :id :boundary-violation :description "Unauthorized file ownership writes or foreign ecosystem imports.")])
+        (:category :id :syntaxMalformation :description "Unbalanced S-expressions, missing delimiters, or invalid AST forms.")
+        (:category :id :tautologicalAssertion :description "Vacuous assertions such as (= 1 1) or trivial constant comparisons that fail to test reality.")
+        (:category :id :unboundSymbol :description "Calls to unresolved symbols or missing imports in module headers.")
+        (:category :id :commentLeak :description "Violations of pure ASL zero-comment invariant C1.")
+        (:category :id :emojiContamination :description "Violations of machine ASN zero-emoji invariant C2.")
+        (:category :id :concurrencyHazard :description "Unprotected concurrent file writes or missing flock locks in record stores.")
+        (:category :id :boundaryViolation :description "Unauthorized file ownership writes or foreign ecosystem imports.")])
   ]
 )

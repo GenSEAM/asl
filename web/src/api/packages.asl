@@ -1,8 +1,8 @@
-(module asl-web/api-packages
+(module aslWeb/apiPackages
   :d "Canonical Package Registry metadata model for AgentScript web endpoints"
-  :x [package-catalog])
+  :x [packageCatalog])
 
-(df package-catalog [] -> (List Any)
+(df packageCatalog [] -> (List Any)
   :d "Returns list of core packages"
   [
     (:name "@genseam/search" :version "1.0.0" :repo "https://github.com/GenSEAM/search" :desc "SearXNG metasearch engine")

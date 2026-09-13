@@ -3,7 +3,7 @@
 
 (module text/report
   :doc "Rendering for shapes declared in another module."
-  :export [describe unit-square]
+  :export [describe unitSquare]
   :import [(core/shapes :as s)])
 
 (df describe [(sh s/Shape)] -> String
@@ -12,6 +12,6 @@
     ((s/circle r)      (str "circle " (string-from-float64 r)))
     ((s/rectangle w h) (str "rectangle " (string-from-float64 (* w h))))))
 
-(df unit-square [] -> s/Shape
+(df unitSquare [] -> s/Shape
   :doc "The 1x1 rectangle."
   (s/rectangle 1.0 1.0))

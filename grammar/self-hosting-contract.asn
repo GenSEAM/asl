@@ -1,4 +1,4 @@
-(:selfHostingDocumentation :v 1 :src ADR-0081
+(:selfHostingDocumentation :v 1 :src ADR0081
   :summary "Grounded self-hosting claims, bootstrap generations, and settled architectural choices under ADR-0081."
   :stages [
     (:stage :id 0 :name "seed" :role "Explicit owned C seed adapter" :runtime "Native Darwin/POSIX C" :status :grounded)

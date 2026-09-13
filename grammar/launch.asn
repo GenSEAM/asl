@@ -9,7 +9,7 @@
         (:field :name :client :type :keyword :allowed [:agy :claude :codex :cursor :windsurf])
         (:field :name :channel :type :keyword :allowed [:global :isolated :workspace])
         (:field :name :orchestratorMode :type :boolean)
-        (:field :name :permissionTier :type :keyword :allowed [:read-only :sandboxed-write :dangerous-rescue])
+        (:field :name :permissionTier :type :keyword :allowed [:readOnly :sandboxedWrite :dangerousRescue])
         (:field :name :sessionId :type :string)
         (:field :name :targetWorkspace :type :string)
         (:field :name :launchFlags :type :vector :items :string)])
@@ -18,9 +18,9 @@
     (:schema :id permissionTier :category :security
       :description "Autonomous permission elevation tiers for unattended loops."
       :tiers [
-        (:tier :id :read-only :description "Strict perceptual mode; writes and modifications prohibited")
-        (:tier :id :sandboxed-write :description "Local isolated mutations within owned paths only")
-        (:tier :id :dangerous-rescue :description "Full autonomous elevation injecting dangerous-rescue flags to prevent interactive prompt stalls")])
+        (:tier :id :readOnly :description "Strict perceptual mode; writes and modifications prohibited")
+        (:tier :id :sandboxedWrite :description "Local isolated mutations within owned paths only")
+        (:tier :id :dangerousRescue :description "Full autonomous elevation injecting dangerous-rescue flags to prevent interactive prompt stalls")])
   ]
   :clientChannels [
     (:schema :id clientChannel :category :transport

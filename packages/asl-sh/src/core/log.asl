@@ -1,6 +1,6 @@
 (module asl-sh/log
-  :d "Structured Administrative Logging & Error Streams for Agent Scripts (@pcp:d-446d)."
-  :x [LogLevel LogEntry info! warn! err! format-entry])
+  :d "Structured Administrative Logging & Error Streams for Agent Scripts (d-446d)."
+  :x [LogLevel LogEntry info! warn! err! formatEntry])
 
 (dfe LogLevel
   (:c debug [] "Debug log level")
@@ -14,14 +14,14 @@
   (:f timestamp Int64    "Epoch millisecond timestamp")
   (:f subsystem String   "Originating module or task subsystem"))
 
-(df format-entry [(entry LogEntry)] -> String
+(df formatEntry [(entry LogEntry)] -> String
   :d "Renders a structured log entry into canonical text format."
-  (let [(lvl-str (mt (.-level entry)
+  (let [(lvlStr (mt (.-level entry)
                   ((debug) "DEBUG")
                   ((info)  "INFO ")
                   ((warn)  "WARN ")
                   ((error) "ERROR")))]
-    (str "[" lvl-str "] [" (.-subsystem entry) "] " (.-message entry))))
+    (str "[" lvlStr "] [" (.-subsystem entry) "] " (.-message entry))))
 
 (df ! info! [(subsystem String) (message String)] -> Unit
   :d "Emits an informational log line to standard log channel."

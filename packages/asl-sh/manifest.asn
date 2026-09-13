@@ -2,6 +2,6 @@
  :version "0.1.0"
  :entry "src/sh.asl"
  :description "Native AgentScript System & Process Automation Toolkit with Structured Shell Pipelines & Channel Redirection"
- :asl-first true
- :modules ["asl-sh/core" "asl-sh/reducer" "asl-sh/spool" "asl-sh/watchdog" "asl-sh/apm" "asl-sh/git-diff" "asl-sh/git-topo" "asl-sh/github" "asl-sh/git-search" "asl-sh/batch-dag"]
- :dependencies [])
+ :aslFirst true
+ :modules ["asl-sh" "asl-sh/ansi" "asl-sh/apm" "asl-sh/batchDag" "asl-sh/diagnostics" "asl-sh/gitDiff" "asl-sh/gitSearch" "asl-sh/gitTopo" "asl-sh/github" "asl-sh/process" "asl-sh/reducer" "asl-sh/spool" "asl-sh/watchdog" "asl-sh/log" "asl-sh/pipe" "asl-sh/coreProcess"]
+ :dependencies ["asl-text"])

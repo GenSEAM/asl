@@ -12,12 +12,12 @@
                     parts))]
     (string-join heads ".")))
 
-(df parse-pair [(s String)] -> (Result Int64 String)
+(df parsePair [(s String)] -> (Result Int64 String)
   (let [(trimmed (string-trim s))
         (n (try (option-to-result (string-to-int64 trimmed) "not a number")))]
     (ok (* n 2))))
 
-(df evens-below [(limit Int64)] -> (List Int64)
+(df evensBelow [(limit Int64)] -> (List Int64)
   (filter (fn [(n Int64)] -> Bool (= (mod n 2) 0))
           (range 0 limit)))
 

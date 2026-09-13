@@ -1,13 +1,13 @@
-(module asl-codec/asn-driver
+(module asl-codec/asnDriver
   :d "Driver for the ASN reader, writer and checker. Every entry answers with text
       a test can compare against a value written by hand."
-  :x [canon shape kinds verdict idem decoded-field]
-  :i [(asn :a a) (asn-check :a c)])
+  :x [canon shape kinds verdict idem decodedField]
+  :i [(asn :a a) (asnCheck :a c)])
 
 (df canon [(src String)] -> String
   :d "The canonical text of a document, or `!code` when it will not read."
-  (mt (a/asn-read src)
-    ((ok v)   (a/asn-write v))
+  (mt (a/asnRead src)
+    ((ok v)   (a/asnWrite v))
     ((err co) (str "!" co))))
 
 (df idem [(src String)] -> Bool
@@ -17,61 +17,61 @@
   (let [(once (canon src))]
     (= (canon once) once)))
 
-(df shape-of [(v a/AsnValue)] -> String
+(df shapeOf [(v a/AsnValue)] -> String
   :d "A value's kind and arity, as text."
   (mt v
-    ((a/asn-nil)         "nil")
-    ((a/asn-bool _)      "bool")
-    ((a/asn-unit)        "unit")
-    ((a/asn-int _)       "int")
-    ((a/asn-float _)     "float")
-    ((a/asn-str _)       "str")
-    ((a/asn-kw _)        "kw")
-    ((a/asn-sym _)       "sym")
-    ((a/asn-pair _ _)    "pair")
-    ((a/asn-vec items)   (str "vec/" (string-from-int64 (list-length items))))
-    ((a/asn-map es)      (str "map/" (string-from-int64 (list-length es))))
-    ((a/asn-rec fs)      (str "rec/" (string-from-int64 (list-length fs))))
-    ((a/asn-ctor n fs)   (str "ctor " n "/" (string-from-int64 (list-length fs))))
-    ((a/asn-rows n rows) (str "rows " n "/" (string-from-int64 (list-length rows))))
-    ((a/asn-case n args) (str "case " n "/" (string-from-int64 (list-length args))))
-    ((a/asn-table cs rs) (str "table/" (string-from-int64 (list-length cs))
+    ((a/asnNil)         "nil")
+    ((a/asnBool _)      "bool")
+    ((a/asnUnit)        "unit")
+    ((a/asnInt _)       "int")
+    ((a/asnFloat _)     "float")
+    ((a/asnStr _)       "str")
+    ((a/asnKw _)        "kw")
+    ((a/asnSym _)       "sym")
+    ((a/asnPair _ _)    "pair")
+    ((a/asnVec items)   (str "vec/" (string-from-int64 (list-length items))))
+    ((a/asnMap es)      (str "map/" (string-from-int64 (list-length es))))
+    ((a/asnRec fs)      (str "rec/" (string-from-int64 (list-length fs))))
+    ((a/asnCtor n fs)   (str "ctor " n "/" (string-from-int64 (list-length fs))))
+    ((a/asnRows n rows) (str "rows " n "/" (string-from-int64 (list-length rows))))
+    ((a/asnCase n args) (str "case " n "/" (string-from-int64 (list-length args))))
+    ((a/asnTable cs rs) (str "table/" (string-from-int64 (list-length cs))
                               "x" (string-from-int64 (list-length rs))))))
 
 (df shape [(src String)] -> String
   :d "The top-level value's kind and arity, or `!code`."
-  (mt (a/asn-read src)
-    ((ok v)   (shape-of v))
+  (mt (a/asnRead src)
+    ((ok v)   (shapeOf v))
     ((err co) (str "!" co))))
 
 (df kinds [(src String)] -> String
   :d "The kind of every element of a vector document, joined by `|`. This is what
       distinguishes a scalar the reader classified from one it merely echoed."
-  (mt (a/asn-read src)
-    ((ok v)   (string-join (map (fn [(x a/AsnValue)] -> String (shape-of x))
-                                (a/vec-items v)) "|"))
+  (mt (a/asnRead src)
+    ((ok v)   (string-join (map (fn [(x a/AsnValue)] -> String (shapeOf x))
+                                (a/vecItems v)) "|"))
     ((err co) (str "!" co))))
 
 (df verdict [(src String)] -> String
   :d "The conformance codes a document raises, in report order, or `!code` when
       it will not read at all."
-  (mt (a/asn-read src)
-    ((ok v)   (c/diag-codes (c/asn-check v)))
+  (mt (a/asnRead src)
+    ((ok v)   (c/diagCodes (c/asnCheck v)))
     ((err co) (str "!" co))))
 
-(df decoded-field [(src String) (key String)] -> String
+(df decodedField [(src String) (key String)] -> String
   :d "The decoded characters of a named string field of a record document, which
       is what proves the reader keeps a lexeme AND can still hand back its value."
-  (mt (a/asn-read src)
-    ((ok v)   (field-text v key))
+  (mt (a/asnRead src)
+    ((ok v)   (fieldText v key))
     ((err co) (str "!" co))))
 
-(df field-text [(v a/AsnValue) (key String)] -> String
+(df fieldText [(v a/AsnValue) (key String)] -> String
   :d "The decoded string at a record's named field, or the empty string."
   (mt v
-    ((a/asn-rec fs)
+    ((a/asnRec fs)
      (mt (list-head (filter (fn [(f a/AsnField)] -> Bool (= (.-key f) key)) fs))
-       ((some f) (mt (a/asn-string-value (.-val f))
+       ((some f) (mt (a/asnStringValue (.-val f))
                    ((some s) s)
                    ((none)   "")))
        ((none) "")))

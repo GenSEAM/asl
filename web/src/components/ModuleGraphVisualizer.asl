@@ -1,9 +1,9 @@
-(module asl-web/module-graph-visualizer
+(module aslWeb/moduleGraphVisualizer
   :d "Visual Module Topology and Architecture Cockpit in pure AgentScript."
-  :x [module-graph-visualizer render-module-graph-visualizer graph-view]
+  :x [moduleGraphVisualizer renderModuleGraphVisualizer graphView]
   :i [])
 
-(df render-module-graph-visualizer [] -> Str
+(df renderModuleGraphVisualizer [] -> Str
   :d "Renders the interactive module topology cockpit with domain filtering, schema inspection, and jailed sandbox telemetry."
   "<section id=\"module-graph\" aria-labelledby=\"module-graph-heading\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
     <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
@@ -550,10 +550,10 @@
     })();
   </script>")
 
-(df module-graph-visualizer [] -> Str
+(df moduleGraphVisualizer [] -> Str
   :d "Alias for render-module-graph-visualizer."
-  (render-module-graph-visualizer))
+  (renderModuleGraphVisualizer))
 
-(df graph-view [] -> Str
+(df graphView [] -> Str
   :d "Alias for render-module-graph-visualizer."
-  (render-module-graph-visualizer))
+  (renderModuleGraphVisualizer))

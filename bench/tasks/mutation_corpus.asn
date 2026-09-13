@@ -1,4 +1,4 @@
-(:mutation-corpus
+(:mutationCorpus
   :version "1.0"
   :packages [
     (:package :name "asl-gates" :tier :core :path "asl/packages/asl-gates")

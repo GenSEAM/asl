@@ -2,6 +2,6 @@
 "The lambda is bound by a let, not passed to anything, so no signature says what"
 "its parameter is. Elision is legal where the position determines the type; here"
 "nothing does, and the annotation is required."
-(df apply-later [(n Int64)] -> Int64
+(df applyLater [(n Int64)] -> Int64
   (let [(g (fn [x] x))]
     n))

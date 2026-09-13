@@ -1,44 +1,44 @@
-(module asl-sh/apm-daemon-test
+(module asl-sh/apmDaemonTest
   :d "Falsifiable test suite for APM Singleton Lock, Stream Framing, Supervisor, and 10s Watchdog."
-  :x [run-tests]
+  :x [runTests]
   :i [(apm      :a apm)
       (watchdog :a wd)])
 
-(df test-singleton-lock [] -> Bool
+(df testSingletonLock [] -> Bool
   :d "Verifies singleton lock acquisition, duplicate collision detection, and stale PID reclamation."
-  (let [(v-acq (apm/resolve-lock "/tmp/test.lock" 100 0 false))
-        (v-coll (apm/resolve-lock "/tmp/test.lock" 200 100 true))
-        (v-stale (apm/resolve-lock "/tmp/test.lock" 300 999 false))
-        (v-self (apm/resolve-lock "/tmp/test.lock" 100 100 true))]
-    (assert (.-acquired v-acq) "Fresh lock must be acquired")
-    (assert (= (.-status v-acq) ":acquired") "Status must be :acquired")
-    (assert (= (.-event v-acq) ":lock-acquired") "Event must be :lock-acquired")
-    (assert (not (.-acquired v-coll)) "Collision must refuse lock acquisition")
-    (assert (= (.-status v-coll) ":collision") "Collision status must be :collision")
-    (assert (= (.-event v-coll) ":lock-refused") "Collision event must be :lock-refused")
-    (assert (.-acquired v-stale) "Stale lock must be reclaimed")
-    (assert (= (.-status v-stale) ":stale") "Stale lock status must be :stale")
-    (assert (= (.-event v-stale) ":lock-reclaimed") "Stale lock event must be :lock-reclaimed")
-    (assert (.-acquired v-self) "Self lock re-entry must be permitted")
+  (let [(vAcq (apm/resolveLock "/tmp/test.lock" 100 0 false))
+        (vColl (apm/resolveLock "/tmp/test.lock" 200 100 true))
+        (vStale (apm/resolveLock "/tmp/test.lock" 300 999 false))
+        (vSelf (apm/resolveLock "/tmp/test.lock" 100 100 true))]
+    (assert (.-acquired vAcq) "Fresh lock must be acquired")
+    (assert (= (.-status vAcq) ":acquired") "Status must be :acquired")
+    (assert (= (.-event vAcq) ":lock-acquired") "Event must be :lock-acquired")
+    (refute (.-acquired vColl) "Collision must refuse lock acquisition")
+    (assert (= (.-status vColl) ":collision") "Collision status must be :collision")
+    (assert (= (.-event vColl) ":lock-refused") "Collision event must be :lock-refused")
+    (assert (.-acquired vStale) "Stale lock must be reclaimed")
+    (assert (= (.-status vStale) ":stale") "Stale lock status must be :stale")
+    (assert (= (.-event vStale) ":lock-reclaimed") "Stale lock event must be :lock-reclaimed")
+    (assert (.-acquired vSelf) "Self lock re-entry must be permitted")
     true))
 
-(df test-stream-framing-newline [] -> Bool
+(df testStreamFramingNewline [] -> Bool
   :d "Verifies ASNL newline-delimited stream frame extraction with parenthesis balance tracking."
   (let [(b1 "(:ping)\n(:next)\n")
-        (r1 (apm/parse-stream-frame b1))
+        (r1 (apm/parseStreamFrame b1))
         (f1 (fst r1))
         (rem1 (snd r1))]
-    (assert (option-is-some? f1) "First frame must be extracted")
+    (assert (is-some? f1) "First frame must be extracted")
     (mt f1
       ((some frame)
        (assert (= (.-payload frame) "(:ping)") "Frame payload must be (:ping)")
        (assert (= (.-kind frame) "newline") "Frame kind must be newline")
        (assert (.-valid frame) "Frame must be valid")
        (assert (= rem1 "(:next)\n") "Remaining buffer must preserve subsequent frames")
-       (let [(r2 (apm/parse-stream-frame rem1))
+       (let [(r2 (apm/parseStreamFrame rem1))
              (f2 (fst r2))
              (rem2 (snd r2))]
-         (assert (option-is-some? f2) "Second frame must be extracted")
+         (assert (is-some? f2) "Second frame must be extracted")
          (mt f2
            ((some frame2)
             (assert (= (.-payload frame2) "(:next)") "Second frame payload must be (:next)")
@@ -47,13 +47,13 @@
            ((none) false))))
       ((none) false))))
 
-(df test-stream-framing-content-length [] -> Bool
+(df testStreamFramingContentLength [] -> Bool
   :d "Verifies Content-Length header parsing and payload chunk delineation without packet tearing."
   (let [(header "Content-Length: 14\n\n(:ping :seq 1)TRAILING")
-        (parsed (apm/parse-stream-frame header))
+        (parsed (apm/parseStreamFrame header))
         (f (fst parsed))
         (rem (snd parsed))]
-    (assert (option-is-some? f) "Content-Length frame must be parsed")
+    (assert (is-some? f) "Content-Length frame must be parsed")
     (mt f
       ((some frame)
        (assert (= (.-kind frame) "content-length") "Frame kind must be content-length")
@@ -63,39 +63,39 @@
        true)
       ((none) false))))
 
-(df test-supervisor-10s-watchdog [] -> Bool
+(df testSupervisor10sWatchdog [] -> Bool
   :d "Verifies that steps exceeding the 10s ceiling trigger worker recycling and :ERR_WATCHDOG_TIMEOUT."
-  (let [(ok-verdict (wd/check-step-deadline 2500 10000))
-        (timeout-verdict (wd/check-step-deadline 10001 10000))
-        (sup-ok (apm/supervise-step 400 10000 ":ping"))
-        (sup-timeout (apm/supervise-step 10500 10000 ":exec-slow"))]
-    (assert (not (.-timed-out ok-verdict)) "Step under 10s must not time out")
-    (assert (= (.-error-code ok-verdict) ":none") "Normal step must have :none error code")
-    (assert (.-timed-out timeout-verdict) "Step over 10s must trigger watchdog timeout")
-    (assert (= (.-error-code timeout-verdict) ":ERR_WATCHDOG_TIMEOUT") "Breached deadline must emit :ERR_WATCHDOG_TIMEOUT")
-    (assert (= (.-event timeout-verdict) ":step-timeout-recycled") "Breached deadline must emit :step-timeout-recycled")
-    (assert (= (.-status sup-ok) ":ok") "Supervisor status for fast step must be :ok")
-    (assert (not (.-worker-recycled sup-ok)) "Supervisor must not recycle worker for fast step")
-    (assert (= (.-status sup-timeout) ":recycled") "Supervisor status on 10s timeout must be :recycled")
-    (assert (= (.-exit-code sup-timeout) 124) "Watchdog timeout exit code must be 124")
-    (assert (= (.-error-code sup-timeout) ":ERR_WATCHDOG_TIMEOUT") "Supervisor error code must be :ERR_WATCHDOG_TIMEOUT")
-    (assert (.-worker-recycled sup-timeout) "Worker must be marked as recycled")
+  (let [(okVerdict (wd/checkStepDeadline 2500 10000))
+        (timeoutVerdict (wd/checkStepDeadline 10001 10000))
+        (supOk (apm/superviseStep 400 10000 ":ping"))
+        (supTimeout (apm/superviseStep 10500 10000 ":exec-slow"))]
+    (refute (.-timedOut okVerdict) "Step under 10s must not time out")
+    (assert (= (.-errorCode okVerdict) ":none") "Normal step must have :none error code")
+    (assert (.-timedOut timeoutVerdict) "Step over 10s must trigger watchdog timeout")
+    (assert (= (.-errorCode timeoutVerdict) ":ERR_WATCHDOG_TIMEOUT") "Breached deadline must emit :ERR_WATCHDOG_TIMEOUT")
+    (assert (= (.-event timeoutVerdict) ":step-timeout-recycled") "Breached deadline must emit :step-timeout-recycled")
+    (assert (= (.-status supOk) ":ok") "Supervisor status for fast step must be :ok")
+    (refute (.-workerRecycled supOk) "Supervisor must not recycle worker for fast step")
+    (assert (= (.-status supTimeout) ":recycled") "Supervisor status on 10s timeout must be :recycled")
+    (assert (= (.-exitCode supTimeout) 124) "Watchdog timeout exit code must be 124")
+    (assert (= (.-errorCode supTimeout) ":ERR_WATCHDOG_TIMEOUT") "Supervisor error code must be :ERR_WATCHDOG_TIMEOUT")
+    (assert (.-workerRecycled supTimeout) "Worker must be marked as recycled")
     true))
 
-(df test-introspection-table [] -> Bool
+(df testIntrospectionTable [] -> Bool
   :d "Verifies diagnostic daemon inspection table formatting with DAEMON ID header."
-  (let [(e1 (apm/make-daemon-entry "751f1272" 14842 42 ":active" ":idle"))
-        (tbl (apm/format-daemon-table (list e1)))]
+  (let [(e1 (apm/makeDaemonEntry "751f1272" 14842 42 ":active" ":idle"))
+        (tbl (apm/formatDaemonTable (list e1)))]
     (assert (string-contains? tbl "DAEMON ID") "Table must contain DAEMON ID header")
     (assert (string-contains? tbl "751f1272") "Table must contain daemon ID")
     (assert (string-contains? tbl "14842") "Table must contain PID")
     (assert (string-contains? tbl ":active") "Table must contain status")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Runs all APM daemon, singleton lock, stream framing, and watchdog supervisor tests."
-  (and (test-singleton-lock)
-       (and (test-stream-framing-newline)
-            (and (test-stream-framing-content-length)
-                 (and (test-supervisor-10s-watchdog)
-                      (test-introspection-table))))))
+  (and (testSingletonLock)
+       (and (testStreamFramingNewline)
+            (and (testStreamFramingContentLength)
+                 (and (testSupervisor10sWatchdog)
+                      (testIntrospectionTable))))))

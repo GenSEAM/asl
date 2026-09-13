@@ -9,4 +9,4 @@
 
 (df show [] -> String
   :doc "Describe the unit square without naming its type."
-  (r/describe (r/unit-square)))
+  (r/describe (r/unitSquare)))

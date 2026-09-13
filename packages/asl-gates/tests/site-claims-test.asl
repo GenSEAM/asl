@@ -1,66 +1,66 @@
-(module asl-gates/tests/site-claims-test
+(module asl-gates/tests/siteClaimsTest
   :d "Unit tests for pure AgentScript Site Claims Verification Gate."
-  :x [test-known-claims test-unknown-claim test-claims-audit test-full-grounding test-load-published-claims run-tests]
-  :i [(site-claims :a sc)])
+  :x [testKnownClaims testUnknownClaim testClaimsAudit testFullGrounding testLoadPublishedClaims runTests]
+  :i [(siteClaims :a sc)])
 
-(df test-known-claims [] -> Bool
+(df testKnownClaims [] -> Bool
   :d "Verifies grounded claims pass lookup."
-  (let [(registry (sc/standard-claims))]
-    (assert (sc/is-known-metric "57%–65%" registry) "metric 57-65%")
-    (assert (sc/is-known-metric "<100ms" registry) "metric <100ms")
-    (assert (sc/is-known-metric "24MB" registry) "metric 24MB")
+  (let [(registry (sc/standardClaims))]
+    (assert (sc/isKnownMetric "57%–65%" registry) "metric 57-65%")
+    (assert (sc/isKnownMetric "<100ms" registry) "metric <100ms")
+    (assert (sc/isKnownMetric "24MB" registry) "metric 24MB")
     true))
 
-(df test-unknown-claim [] -> Bool
+(df testUnknownClaim [] -> Bool
   :d "Verifies ungrounded claims are rejected and grounded claims pass."
-  (let [(registry (sc/standard-claims))]
-    (assert (sc/is-known-metric "24MB" registry) "known valid metric claim accepted")
-    (assert (sc/is-known-metric "0.038ms" registry) "known sub-millisecond metric claim accepted")
-    (assert (not (sc/is-known-metric "99.999% fake" registry)) "fake claim rejected")
-    (assert (not (sc/is-known-metric "" registry)) "empty claim string rejected")
-    (assert (not (sc/is-known-metric "bogus-throughput" registry)) "unregistered bogus metric rejected")
-    (assert (not (.-grounded (sc/audit-claim "ungrounded-speedup" registry))) "audit claim of ungrounded metric must not be grounded")
+  (let [(registry (sc/standardClaims))]
+    (assert (sc/isKnownMetric "24MB" registry) "known valid metric claim accepted")
+    (assert (sc/isKnownMetric "0.038ms" registry) "known sub-millisecond metric claim accepted")
+    (assert (not (sc/isKnownMetric "99.999% fake" registry)) "fake claim rejected")
+    (assert (not (sc/isKnownMetric "" registry)) "empty claim string rejected")
+    (assert (not (sc/isKnownMetric "bogus-throughput" registry)) "unregistered bogus metric rejected")
+    (assert (not (.-grounded (sc/auditClaim "ungrounded-speedup" registry))) "audit claim of ungrounded metric must not be grounded")
     true))
 
-(df test-claims-audit [] -> Bool
+(df testClaimsAudit [] -> Bool
   :d "Verifies run-claims-audit computes accurate report totals."
-  (let [(registry (sc/standard-claims))
+  (let [(registry (sc/standardClaims))
         (sample (list "57%–65%" "fake-claim"))
-        (report (sc/run-claims-audit sample registry))]
+        (report (sc/runClaimsAudit sample registry))]
     (assert (= (.-total report) 2) "total 2")
     (assert (= (.-passed report) 1) "passed 1")
     (assert (= (.-failed report) 1) "failed 1")
     (assert (= (.-status report) "FAIL") "status FAIL")
     true))
 
-(df test-full-grounding [] -> Bool
+(df testFullGrounding [] -> Bool
   :d "Verifies standard claims matrix is fully grounded and ungrounded audits fail."
-  (let [(registry (sc/standard-claims))
-        (good-report (sc/run-claims-audit registry registry))
-        (bad-report (sc/run-claims-audit (list "fabricated-speedup" "invalid-metric") registry))]
-    (assert (sc/verify-claims-grounding) "claims grounded")
-    (assert (= (.-status good-report) "PASS") "canonical claims audit report must pass")
-    (assert (= (.-failed good-report) 0) "canonical claims audit must have zero failures")
-    (assert (not (= (.-status bad-report) "PASS")) "ungrounded claims audit report must not pass")
-    (assert (not (= (.-failed bad-report) 0)) "ungrounded claims audit must have non-zero failure count")
-    (assert (not (sc/is-known-metric "fabricated-speedup" registry)) "invalid claim must not be in standard registry")
+  (let [(registry (sc/standardClaims))
+        (goodReport (sc/runClaimsAudit registry registry))
+        (badReport (sc/runClaimsAudit (list "fabricated-speedup" "invalid-metric") registry))]
+    (assert (sc/verifyClaimsGrounding) "claims grounded")
+    (assert (= (.-status goodReport) "PASS") "canonical claims audit report must pass")
+    (assert (= (.-failed goodReport) 0) "canonical claims audit must have zero failures")
+    (assert (not (= (.-status badReport) "PASS")) "ungrounded claims audit report must not pass")
+    (assert (not (= (.-failed badReport) 0)) "ungrounded claims audit must have non-zero failure count")
+    (assert (not (sc/isKnownMetric "fabricated-speedup" registry)) "invalid claim must not be in standard registry")
     true))
 
-(df ! test-load-published-claims [] -> Bool
+(df ! testLoadPublishedClaims [] -> Bool
   :d "Verifies load-published-claims parses bench/published_claims.asn from disk"
-  (let [(claims (sc/load-published-claims))]
+  (let [(claims (sc/loadPublishedClaims))]
     (assert (>= (list-length claims) 12) "load-published-claims must load >= 12 claims from disk")
     (assert (list-contains? claims "57%–65%") "claims must contain 57%–65%")
     (assert (list-contains? claims "-64.7%") "claims must contain -64.7%")
     (assert (list-contains? claims "-75%") "claims must contain -75%")
     true))
 
-(df ! run-tests [] -> Bool
+(df ! runTests [] -> Bool
   :d "Runs all site claims tests."
   (do
-    (assert (test-known-claims) "test-known-claims must pass")
-    (assert (test-unknown-claim) "test-unknown-claim must pass")
-    (assert (test-claims-audit) "test-claims-audit must pass")
-    (assert (test-full-grounding) "test-full-grounding must pass")
-    (assert (test-load-published-claims) "test-load-published-claims must pass")
+    (assert (testKnownClaims) "test-known-claims must pass")
+    (assert (testUnknownClaim) "test-unknown-claim must pass")
+    (assert (testClaimsAudit) "test-claims-audit must pass")
+    (assert (testFullGrounding) "test-full-grounding must pass")
+    (assert (testLoadPublishedClaims) "test-load-published-claims must pass")
     true))

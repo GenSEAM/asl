@@ -1,28 +1,28 @@
-(module asl-web/dom
+(module aslWeb/dom
   :d "Pure AgentScript DOM and WASM AST manipulation utilities"
-  :x [dom-element dom-query format-vdom-node]
+  :x [domElement domQuery formatVdomNode]
   :i [])
 
-(df dom-element [(tag Str) (attrs (List Any)) (children (List Any))] -> Any
+(df domElement [(tag Str) (attrs (List Any)) (children (List Any))] -> Any
   :d "Constructs structured DOM element node record with tag, attribute key-value pairs, and child nodes"
   (:tag tag :attrs attrs :children children))
 
-(df format-attr [(attr Any)] -> Str
+(df formatAttr [(attr Any)] -> Str
   :d "Serializes a single attribute pair or record into key-value string format"
-  (if (> (list-len attr) 1)
-      (let [(k (option-unwrap (list-get attr 0)))
-            (v (option-unwrap (list-get attr 1)))]
+  (if (> (listLen attr) 1)
+      (let [(k (optionUnwrap (list-get attr 0)))
+            (v (optionUnwrap (list-get attr 1)))]
         (str " " k "=\"" v "\""))
       (str " " (.-name attr) "=\"" (.-value attr) "\"")))
 
-(df format-attrs [(attrs (List Any))] -> Str
+(df formatAttrs [(attrs (List Any))] -> Str
   :d "Serializes a list of attributes into formatted space-prefixed string"
   (fold (fn [(acc Str) (attr Any)] -> Str
-          (str acc (format-attr attr)))
+          (str acc (formatAttr attr)))
         ""
         attrs))
 
-(df format-vdom-node [(node Any)] -> Str
+(df formatVdomNode [(node Any)] -> Str
   :d "Serializes an element node and its nested children into a canonical formatted tag string representation"
   (if (= node nil)
       ""
@@ -31,20 +31,20 @@
           (let [(tag (.-tag node))
                 (attrs (.-attrs node))
                 (children (.-children node))]
-            (let [(attr-str (if (= attrs nil) "" (format-attrs attrs)))
-                  (child-str (if (= children nil)
+            (let [(attrStr (if (= attrs nil) "" (formatAttrs attrs)))
+                  (childStr (if (= children nil)
                                  ""
                                  (fold (fn [(acc Str) (child Any)] -> Str
-                                         (str acc (format-vdom-node child)))
+                                         (str acc (formatVdomNode child)))
                                        ""
                                        children)))]
-              (str "<" tag attr-str ">" child-str "</" tag ">"))))))
+              (str "<" tag attrStr ">" childStr "</" tag ">"))))))
 
-(df dom-query [(root Any) (tag-name Str)] -> (Option Any)
+(df domQuery [(root Any) (tagName Str)] -> (Option Any)
   :d "Recursively traverses node tree and returns the first element matching tag-name, or nil if not found"
   (if (= root nil)
       nil
-      (if (= (.-tag root) tag-name)
+      (if (= (.-tag root) tagName)
           root
           (let [(children (.-children root))]
             (if (= children nil)
@@ -52,6 +52,6 @@
                 (fold (fn [(found Any) (child Any)] -> Any
                         (if (!= found nil)
                             found
-                            (dom-query child tag-name)))
+                            (domQuery child tagName)))
                       nil
                       children))))))

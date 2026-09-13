@@ -1,6 +1,6 @@
 (module search/engine
   :d "SearXNG metasearch aggregator, proxy pool rotator, and agent context extractor"
-  :x [Proxy ProxyStatus SearchItem SearchResult select-proxy deduplicate-results format-for-llm]
+  :x [Proxy ProxyStatus SearchItem SearchResult selectProxy deduplicateResults formatForLlm]
   :i [(asl-text/string :as s)])
 
 (dfe ProxyStatus
@@ -25,27 +25,27 @@
   (:f total I64 "Total raw results aggregated")
   (:f items (List SearchItem) "Deduplicated and ranked items"))
 
-(df select-proxy [(pool (List Proxy))] -> (Option Proxy)
+(df selectProxy [(pool (List Proxy))] -> (Option Proxy)
   :d "Selects the lowest-latency active proxy from the pool"
   (match pool
     ((list) (none))
     ((cons head tail)
       (match (.-status head)
         ((active) (some head))
-        ((degraded f) (if (< f 3) (some head) (select-proxy tail)))
-        ((dead) (select-proxy tail))))))
+        ((degraded f) (if (< f 3) (some head) (selectProxy tail)))
+        ((dead) (selectProxy tail))))))
 
-(df deduplicate-results [(items (List SearchItem))] -> (List SearchItem)
+(df deduplicateResults [(items (List SearchItem))] -> (List SearchItem)
   :d "Deduplicates search items by canonical URL"
   (match items
     ((list) (list))
     ((cons first rest)
-      (cons first (deduplicate-results rest)))))
+      (cons first (deduplicateResults rest)))))
 
-(df format-item-markdown [(item SearchItem)] -> Str
+(df formatItemMarkdown [(item SearchItem)] -> Str
   :d "Formats a single search item into token-efficient markdown"
   (s/concat "### " (.-title item)))
 
-(df format-for-llm [(res SearchResult)] -> Str
+(df formatForLlm [(res SearchResult)] -> Str
   :d "Formats entire search result into compact RAG context for LLM prompts"
   (s/concat "## Search Results for: " (.-query res)))

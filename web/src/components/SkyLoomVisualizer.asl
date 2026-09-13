@@ -1,9 +1,9 @@
-(module asl-web/skyloom-visualizer
+(module aslWeb/skyloomVisualizer
   :d "SeamBus Resilient Swarm Mesh Visualizer in pure AgentScript."
-  :x [skyloom-visualizer render-skyloom-visualizer]
+  :x [skyloomVisualizer renderSkyloomVisualizer]
   :i [])
 
-(df render-skyloom-visualizer [] -> Str
+(df renderSkyloomVisualizer [] -> Str
   :d "Renders the interactive SeamBus inter-agent protocol and asymmetric mesh cockpit."
   "<section id=\"skyloom-mesh\" class=\"overflow-hidden border-t border-line py-16 bg-sunken/40\">
     
@@ -489,6 +489,6 @@ Please execute the requested task and reply in a fenced JSON code block:
     })();
   </script>")
 
-(df skyloom-visualizer [] -> Str
+(df skyloomVisualizer [] -> Str
   :d "Alias for render-skyloom-visualizer."
-  (render-skyloom-visualizer))
+  (renderSkyloomVisualizer))

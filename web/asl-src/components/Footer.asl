@@ -1,9 +1,9 @@
-(module asl-web/footer
+(module aslWeb/footer
   :d "Declarative footer component in pure AgentScript."
-  :x [footer-view]
+  :x [footerView]
   :i [])
 
-(df footer-view [] -> Str
+(df footerView [] -> Str
   :d "Renders global application footer with license and community links."
   "(footer (:class \"border-t border-line bg-surface/40 py-12 px-6 text-center text-sm text-ink-muted\")
     (p (:class \"mb-2\") \"AgentScript (ASL) — Native Agent-Centric Language & observably sandboxed toolchain.\")

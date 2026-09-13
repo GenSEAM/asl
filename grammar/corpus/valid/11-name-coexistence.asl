@@ -4,19 +4,19 @@
 
 (module text/coexist
   :doc "A locally declared Shape beside an imported one."
-  :export [Shape local-name imported-name relay identity-of]
+  :export [Shape localName importedName relay identityOf]
   :import [(core/shapes :as s)
            (core/shapes :as sh)])
 
 (defenum Shape
   (:case blob [] "The only case of the local union"))
 
-(df local-name [(x Shape)] -> String
+(df localName [(x Shape)] -> String
   :doc "Name the local union's case."
   (match x
     ((blob) "blob")))
 
-(df imported-name [(x sh/Shape)] -> String
+(df importedName [(x sh/Shape)] -> String
   :doc "Name an imported shape reached through the second alias."
   (match x
     ((sh/circle r)      "circle")
@@ -24,8 +24,8 @@
 
 (df relay [(x s/Shape)] -> String
   :doc "Hand a value reached through one alias to a function typed by the other."
-  (imported-name x))
+  (importedName x))
 
-(df {Shape} identity-of [(x Shape)] -> Shape
+(df {Shape} identityOf [(x Shape)] -> Shape
   :doc "A binder may reuse an imported type's spelling: the import is only ever s/Shape."
   x)

@@ -6,15 +6,15 @@
 "A top-level note spanning two lines, which every backend erases outright and
  which therefore proves the erasure, not the escaping."
 
-(module text/usage-program
+(module text/usageProgram
   :doc "Prints its own help text and exits."
-  :export [help-text])
+  :export [helpText])
 
-(df help-text [] -> String
+(df helpText [] -> String
   :doc "Two lines and a continuation, as one literal."
   "usage: notes FILE
        notes --help")
 
 (df ! main [(args (List String))] -> (Result Unit IoError)
   :doc "Print the help text."
-  (println (help-text)))
+  (println (helpText)))

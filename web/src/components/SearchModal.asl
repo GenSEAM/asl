@@ -1,9 +1,9 @@
-(module asl-web/search-modal
+(module aslWeb/searchModal
   :d "Search modal dialog component in pure AgentScript."
-  :x [search-modal render-search-modal]
+  :x [searchModal renderSearchModal]
   :i [])
 
-(df render-search-modal [] -> Str
+(df renderSearchModal [] -> Str
   :d "Renders the universal search modal with fast filtering and keyboard navigation."
   "<div id=\"search-modal-root\" class=\"fixed inset-0 z-50 items-start justify-center pt-20 sm:pt-28 px-4 bg-black/60 backdrop-blur-md animate-fade-in\" style=\"display: none;\">
     <div id=\"search-modal-dialog\" class=\"relative w-full max-w-xl rounded-2xl border border-line bg-surface/95 backdrop-blur-2xl shadow-e4 overflow-hidden\">
@@ -242,6 +242,6 @@
     })();
   </script>")
 
-(df search-modal [] -> Str
+(df searchModal [] -> Str
   :d "Alias for render-search-modal."
-  (render-search-modal))
+  (renderSearchModal))

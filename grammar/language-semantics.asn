@@ -1,4 +1,4 @@
-(:languageSemantics :v 1 :src ADR-0081
+(:languageSemantics :v 1 :src ADR0081
   :summary "Canonical language semantics contract for module imports, symbol resolution, and evaluator failures."
   :semantics [
     (:semantic :id moduleImportResolution

@@ -1,13 +1,13 @@
-(module asl-web/ecosystem-view
+(module aslWeb/ecosystemView
   :d "Declarative Ecosystem Showcase View in pure AgentScript"
-  :x [describe-ecosystem render-ecosystem-view]
+  :x [describeEcosystem renderEcosystemView]
   :i [(asl-text/string :a s)])
 
-(df describe-ecosystem [] -> Str
+(df describeEcosystem [] -> Str
   :d "Returns structured metadata description of the 9 official GenSEAM packages"
   "(ecosystem :packages [\"@genseam/asl-codec\" \"@genseam/asl-sh\" \"@genseam/asl-agent-core\" \"@genseam/asl-eddie\" \"@genseam/asl-agent-bus\" \"@genseam/asl-mem\" \"@genseam/asl-web-search\" \"@genseam/asl-vdom\" \"@genseam/asl-quantum\"])")
 
-(df render-ecosystem-view [] -> Str
+(df renderEcosystemView [] -> Str
   :d "Renders the ecosystem view markup"
   (s/concat
     "<div class=\"pt-24 sm:pt-28 pb-24 max-w-6xl mx-auto px-4\">"

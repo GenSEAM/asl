@@ -1,8 +1,8 @@
-(module grammar/corpus-test
+(module grammar/corpusTest
   :d "Automated assertion test suite for grammar corpus"
-  :x [Testcorpus-integrity])
+  :x [TestcorpusIntegrity])
 
-(df Testcorpus-integrity [] -> Bool
+(df TestcorpusIntegrity [] -> Bool
   (let [(f1 (file-read "asl/grammar/corpus/valid/01-basics.asl"))
         (f1b (if (.-ok f1) f1 (file-read "../corpus/valid/01-basics.asl")))
         (f1c (if (.-ok f1b) f1b (file-read "grammar/corpus/valid/01-basics.asl")))]
@@ -15,4 +15,4 @@
       (assert (> (string-length (.-value f2c)) 0) "corpus file is not empty")
       true)))
 
-(Testcorpus-integrity)
+(TestcorpusIntegrity)

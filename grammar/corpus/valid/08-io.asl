@@ -2,7 +2,7 @@
 "is inferred inside a body but written on the signature, because a caller reads"
 "the signature and not the body."
 
-(module io-demo
+(module ioDemo
   :doc "Copies a file and echoes it back, reporting a missing source rather than
         trapping."
   :export [main])
@@ -14,7 +14,7 @@
     ((err (not-found)) "missing")
     ((err e)           "unreadable")))
 
-(df ! copy-all [(paths (List String))] -> (List String)
+(df ! copyAll [(paths (List String))] -> (List String)
   :doc "The lambda carries its own marker; that is what lets one `map` serve
         both effectful and pure functions."
   (map (fn ! [p] (describe p)) paths))

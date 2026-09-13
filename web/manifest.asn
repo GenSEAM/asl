@@ -1,8 +1,8 @@
-(:package asl-web
+(:package aslWeb
  :version "0.1.0"
  :entry "src/main.asl"
  :description "AgentScript interactive web showcase and runtime playground"
- :asl-first true
+ :aslFirst true
  :modules [
    "asl-web/App"
    "asl-web/components/AgentObservabilityStudio"

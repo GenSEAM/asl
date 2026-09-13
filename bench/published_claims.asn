@@ -1,4 +1,4 @@
-(:published-claims
+(:publishedClaims
   :version "1.0"
   :standards [
     (:claim :metric "57%–65%" :category "token_compression" :source "bench/token_frames.py" :desc "Structural token reduction vs JSON")
@@ -14,7 +14,7 @@
     (:claim :metric "64KB" :category "wasm_memory" :source "packages/asl-mem" :desc "Linear memory page for Wasm vector store")
     (:claim :metric "-75%" :category "vdom_reduction" :source "packages/asl-vdom" :desc "AXTree + D2Snap DOM downsampling token reduction")
   ]
-  :peripheral-scopes [
+  :peripheralScopes [
     (:scope
       :package "asl-quantum"
       :status "conceptual-schema"

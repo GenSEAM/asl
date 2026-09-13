@@ -1,7 +1,7 @@
 (:grammar
   :package asl-parser
   :version "0.1.0"
-  :tokens-baseline 1
+  :tokensBaseline 1
   :symbols [
     (:sym :name "AstField" :kind :type :tokens 1)
     (:sym :name "BalanceResult" :kind :type :tokens 1)
@@ -20,55 +20,55 @@
     (:sym :name "TokenType" :kind :type :tokens 1)
     (:sym :name "TopForm" :kind :type :tokens 1)
 
-    (:sym :name "closure-heads" :kind :fn :tokens 2)
-    (:sym :name "detect-lang" :kind :fn :tokens 2)
+    (:sym :name "closureHeads" :kind :fn :tokens 2)
+    (:sym :name "detectLang" :kind :fn :tokens 2)
     (:sym :name "dump" :kind :fn :tokens 1)
-    (:sym :name "format-outline" :kind :fn :tokens 2)
-    (:sym :name "is-atom?" :kind :fn :tokens 2)
-    (:sym :name "is-delimiter" :kind :fn :tokens 2)
-    (:sym :name "is-list?" :kind :fn :tokens 2)
-    (:sym :name "is-vect?" :kind :fn :tokens 2)
-    (:sym :name "is-whitespace" :kind :fn :tokens 2)
-    (:sym :name "len-list" :kind :fn :tokens 2)
-    (:sym :name "make-atom" :kind :fn :tokens 2)
-    (:sym :name "make-list" :kind :fn :tokens 2)
-    (:sym :name "make-token" :kind :fn :tokens 2)
-    (:sym :name "make-vect" :kind :fn :tokens 2)
+    (:sym :name "formatOutline" :kind :fn :tokens 2)
+    (:sym :name "isAtom?" :kind :fn :tokens 2)
+    (:sym :name "isDelimiter" :kind :fn :tokens 2)
+    (:sym :name "isList?" :kind :fn :tokens 2)
+    (:sym :name "isVect?" :kind :fn :tokens 2)
+    (:sym :name "isWhitespace" :kind :fn :tokens 2)
+    (:sym :name "lenList" :kind :fn :tokens 2)
+    (:sym :name "makeAtom" :kind :fn :tokens 2)
+    (:sym :name "makeList" :kind :fn :tokens 2)
+    (:sym :name "makeToken" :kind :fn :tokens 2)
+    (:sym :name "makeVect" :kind :fn :tokens 2)
     (:sym :name "parse" :kind :fn :tokens 1)
-    (:sym :name "proj-defun" :kind :fn :tokens 2)
-    (:sym :name "proj-enum" :kind :fn :tokens 2)
-    (:sym :name "proj-heads" :kind :fn :tokens 2)
-    (:sym :name "proj-module" :kind :fn :tokens 2)
-    (:sym :name "proj-parse" :kind :fn :tokens 2)
-    (:sym :name "proj-schema" :kind :fn :tokens 2)
-    (:sym :name "proj-topform" :kind :fn :tokens 2)
-    (:sym :name "render-all" :kind :fn :tokens 2)
-    (:sym :name "render-compound" :kind :fn :tokens 2)
-    (:sym :name "render-node" :kind :fn :tokens 2)
-    (:sym :name "render-sexpr" :kind :fn :tokens 2)
-    (:sym :name "run-smoke" :kind :fn :tokens 2)
-    (:sym :name "run-tokenize" :kind :fn :tokens 2)
-    (:sym :name "scan-outline" :kind :fn :tokens 2)
-    (:sym :name "sexpr-head" :kind :fn :tokens 2)
-    (:sym :name "token-kind" :kind :fn :tokens 2)
+    (:sym :name "projDefun" :kind :fn :tokens 2)
+    (:sym :name "projEnum" :kind :fn :tokens 2)
+    (:sym :name "projHeads" :kind :fn :tokens 2)
+    (:sym :name "projModule" :kind :fn :tokens 2)
+    (:sym :name "projParse" :kind :fn :tokens 2)
+    (:sym :name "projSchema" :kind :fn :tokens 2)
+    (:sym :name "projTopform" :kind :fn :tokens 2)
+    (:sym :name "renderAll" :kind :fn :tokens 2)
+    (:sym :name "renderCompound" :kind :fn :tokens 2)
+    (:sym :name "renderNode" :kind :fn :tokens 2)
+    (:sym :name "renderSexpr" :kind :fn :tokens 2)
+    (:sym :name "runSmoke" :kind :fn :tokens 2)
+    (:sym :name "runTokenize" :kind :fn :tokens 2)
+    (:sym :name "scanOutline" :kind :fn :tokens 2)
+    (:sym :name "sexprHead" :kind :fn :tokens 2)
+    (:sym :name "tokenKind" :kind :fn :tokens 2)
     (:sym :name "tokenize" :kind :fn :tokens 1)
 
-    (:sym :name "build-grammar-trie" :kind :fn :tokens 3
+    (:sym :name "buildGrammarTrie" :kind :fn :tokens 3
           :rationale "Builds in-memory grammar trie state machine from structured ASN grammar rules for constrained decoding")
-    (:sym :name "compute-valid-tokens" :kind :fn :tokens 3
+    (:sym :name "computeValidTokens" :kind :fn :tokens 3
           :rationale "Computes exact legal next token set admitted by grammar trie given current prefix")
-    (:sym :name "is-head-match?" :kind :fn :tokens 3
+    (:sym :name "isHeadMatch?" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'head-match?': question mark predicate form requires full verb phrase to avoid collision with pattern matching macros")
-    (:sym :name "token-type-name" :kind :fn :tokens 3
+    (:sym :name "tokenTypeName" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'token-name': disambiguates lexer token category names from identifier token literal strings")
-    (:sym :name "validate-token-sequence" :kind :fn :tokens 3
+    (:sym :name "validateTokenSequence" :kind :fn :tokens 3
           :rationale "Validates whether sequential token stream satisfies grammar trie transition constraints to terminal state")
-    (:sym :name "check-delimiter-balance" :kind :fn :tokens 3
+    (:sym :name "checkDelimiterBalance" :kind :fn :tokens 3
           :rationale "Computes structural delimiter balance and nesting across parens brackets and braces")
-    (:sym :name "is-delimiter-balanced?" :kind :fn :tokens 3
+    (:sym :name "isDelimiterBalanced?" :kind :fn :tokens 3
           :rationale "Convenience predicate checking if source code has perfectly balanced delimiters")
-    (:sym :name "count-unclosed-parens" :kind :fn :tokens 3
+    (:sym :name "countUnclosedParens" :kind :fn :tokens 3
           :rationale "Returns count of unclosed open parentheses in source string for auto-repair and delimiter balancing")
-    (:sym :name "balance-delimiters" :kind :fn :tokens 2
+    (:sym :name "balanceDelimiters" :kind :fn :tokens 2
           :rationale "Balances unclosed parentheses in source code with quote and escape awareness")
   ])

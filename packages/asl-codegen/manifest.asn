@@ -2,6 +2,6 @@
  :version "0.1.0"
  :entry "src/emit.asl"
  :description "Pure AgentScript Native Rust Codegen Pipeline"
- :asl-first true
+ :aslFirst true
  :dependencies ["asl-parser"
                 "asl-checker"])

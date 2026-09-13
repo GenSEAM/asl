@@ -12,7 +12,7 @@
   :doc "One character per predicate, so a report is fixed width."
   (if b "T" "F"))
 
-(df show-int [(o (Option Int64))] -> String
+(df showInt [(o (Option Int64))] -> String
   :doc "An optional index, tagged so index zero is not read as absence."
   (match o
     ((some n) (str "some " (string-from-int64 n)))
@@ -21,7 +21,7 @@
 (df query [(hay String) (needle String)] -> String
   :doc "length, index, contains?, starts-with?, ends-with?, empty?, char count."
   (string-join (list (string-from-int64 (string-length hay))
-                     (show-int (string-index-of hay needle))
+                     (showInt (string-index-of hay needle))
                      (mark (string-contains? hay needle))
                      (mark (string-starts-with? hay needle))
                      (mark (string-ends-with? hay needle))

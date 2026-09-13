@@ -1,7 +1,7 @@
 (:grammar
-  :package asl-core
+  :package aslCore
   :version "0.1.0"
-  :tokens-baseline 2
+  :tokensBaseline 2
   :symbols [
     (:sym :name "module" :kind :form :tokens 1)
     (:sym :name "df" :kind :form :tokens 1)
@@ -53,9 +53,9 @@
     (:sym :name "assert" :kind :form :tokens 1)
     (:sym :name "reject" :kind :form :tokens 1)
     (:sym :name "refute" :kind :form :tokens 1)
-    (:sym :name "assert-reject" :kind :fn :tokens 2)
-    (:sym :name "assert-err" :kind :fn :tokens 2)
-    (:sym :name "assert-case" :kind :fn :tokens 2)
-    (:sym :name "refute-case" :kind :fn :tokens 2)
+    (:sym :name "assertReject" :kind :fn :tokens 2)
+    (:sym :name "assertErr" :kind :fn :tokens 2)
+    (:sym :name "assertCase" :kind :fn :tokens 2)
+    (:sym :name "refuteCase" :kind :fn :tokens 2)
   ]
 )

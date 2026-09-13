@@ -2,7 +2,7 @@
 "`value` has no :default, and construction rules do not change across a module"
 "boundary. Validating keys against the local schema table instead reports"
 "nothing at all here."
-(module text/empty-cell
+(module text/emptyCell
   :doc "Constructs an imported record without its required field."
   :export [make]
   :import [(core/trees :as t)])

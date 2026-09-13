@@ -1,4 +1,4 @@
-(:protocolConformance :v 1 :src ADR-0081
+(:protocolConformance :v 1 :src ADR0081
   :summary "Honest RPC capability and result contracts specification."
   :contracts [
     (:contract :id rpcRejection

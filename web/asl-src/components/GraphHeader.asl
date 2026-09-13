@@ -1,9 +1,9 @@
-(module asl-web/graph-header
+(module aslWeb/graphHeader
   :d "Declarative Graph Header Component in ASL"
-  :x [render-graph-header]
+  :x [renderGraphHeader]
   :i [(asl-text/string :a s)])
 
-(df render-graph-header [(title Str) (subtitle Str)] -> Str
+(df renderGraphHeader [(title Str) (subtitle Str)] -> Str
   :d "Renders header markup for graph reactor"
   (s/concat
     (s/concat "<div class=\"text-center max-w-3xl mx-auto mb-8\"><h1 class=\"text-3xl sm:text-5xl font-extrabold text-ink tracking-tight mb-4\">" title)

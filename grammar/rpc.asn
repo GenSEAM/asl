@@ -1,4 +1,4 @@
-(:rpc-registry
+(:rpcRegistry
   :version "1.0.0"
   :rejectionCode ":ERR_UNIMPLEMENTED"
   :rejectionPolicy "Unrecognized or unimplemented operations are rejected with status rejected and error-code :ERR_UNIMPLEMENTED."

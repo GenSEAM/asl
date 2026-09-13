@@ -2,10 +2,10 @@
 "match patterns. These heads are ambiguous by design: (list) is the empty-list"
 "pattern in an arm and the empty-list constructor in an expression."
 
-(df small-primes [] -> (List Int64)
+(df smallPrimes [] -> (List Int64)
   (list 2 3 5 7 11))
 
-(df no-names [] -> (List String)
+(df noNames [] -> (List String)
   (list))
 
 (df wrap [(n Int64)] -> (Result Int64 String)
@@ -13,7 +13,7 @@
     (err "negative")
     (ok n)))
 
-(df maybe-double [(o (Option Int64))] -> (Option Int64)
+(df maybeDouble [(o (Option Int64))] -> (Option Int64)
   (match o
     ((some n) (some (* n 2)))
     ((none)   (none))))

@@ -9,23 +9,23 @@
 
 (module list/aggregate
   :doc "Summarise a comma-separated list of numbers."
-  :export [agg agg-empty lookup rank nan-identity])
+  :export [agg aggEmpty lookup rank nanIdentity])
 
-(df show-floats [(xs (List Float64))] -> String
+(df showFloats [(xs (List Float64))] -> String
   :doc "A list of floats, bracketed and comma separated."
   (str "[" (string-join (map (fn [v] (string-from-float64 v)) xs) ",") "]"))
 
-(df show-ints [(xs (List Int64))] -> String
+(df showInts [(xs (List Int64))] -> String
   :doc "A list of integers, bracketed and comma separated."
   (str "[" (string-join (map (fn [v] (string-from-int64 v)) xs) ",") "]"))
 
-(df show-float [(o (Option Float64))] -> String
+(df showFloat [(o (Option Float64))] -> String
   :doc "An optional float, so `none` is distinguishable from zero."
   (match o
     ((some x) (string-from-float64 x))
     ((none)   "none")))
 
-(df show-int [(o (Option Int64))] -> String
+(df showInt [(o (Option Int64))] -> String
   :doc "An optional integer, tagged so an index of zero is not read as absence."
   (match o
     ((some n) (str "some " (string-from-int64 n)))
@@ -36,12 +36,12 @@
   (string-join (list (if (list-empty? xs) "T" "F")
                      (string-from-int64 (list-length xs))
                      (string-from-float64 (list-sum xs))
-                     (show-float (list-min xs))
-                     (show-float (list-max xs))
-                     (show-floats (list-sort xs)))
+                     (showFloat (list-min xs))
+                     (showFloat (list-max xs))
+                     (showFloats (list-sort xs)))
                "|"))
 
-(df no-floats [] -> (List Float64)
+(df noFloats [] -> (List Float64)
   :doc "The empty list at Float64, which splitting a string cannot produce:
         (string-split \"\" \",\") is a one-element list holding the empty string."
   (list))
@@ -51,20 +51,20 @@
   (report (map (fn [t] (option-or (string-to-float64 t) 0.0))
                (string-split csv ","))))
 
-(df agg-empty [] -> String
+(df aggEmpty [] -> String
   :doc "The same summary of nothing: the true side of list-empty? and the
         identity of the empty sum."
-  (report (no-floats)))
+  (report (noFloats)))
 
 (df lookup [(csv String) (needle Int64)] -> String
   :doc "Membership, first index, length, sum, and the list sorted descending by
         a projection."
   (let [(xs (map (fn [t] (option-or (string-to-int64 t) 0)) (string-split csv ",")))]
     (string-join (list (if (list-contains? xs needle) "T" "F")
-                       (show-int (list-index-of xs needle))
+                       (showInt (list-index-of xs needle))
                        (string-from-int64 (list-length xs))
                        (string-from-int64 (list-sum xs))
-                       (show-ints (list-sort-by (fn [x] (neg x)) xs)))
+                       (showInts (list-sort-by (fn [x] (neg x)) xs)))
                  "|")))
 
 (df rank [(csv String)] -> String
@@ -75,7 +75,7 @@
                              (string-split csv ","))
                "|"))
 
-(df nan-identity [(csv String)] -> String
+(df nanIdentity [(csv String)] -> String
   :doc "Membership, position and equality against the list's own first element.
         A NaN is equal to nothing, including the one already in the list, and a
         host that tests identity before equality answers otherwise."
@@ -83,7 +83,7 @@
                  (string-split csv ",")))
         (h (option-or (list-head xs) 0.0))]
     (string-join (list (if (list-contains? xs h) "T" "F")
-                       (show-int (list-index-of xs h))
+                       (showInt (list-index-of xs h))
                        (if (= xs xs) "T" "F")
                        (if (= h h) "T" "F"))
                  "|")))

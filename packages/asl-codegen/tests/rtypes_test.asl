@@ -1,21 +1,21 @@
-(module asl-codegen/rtypes-test
+(module asl-codegen/rtypesTest
   :d "Unit tests for asl-codegen/rtypes"
-  :x [test-rtypes run-tests]
-  :i [(rtypes :a cg-ty)])
+  :x [testRtypes runTests]
+  :i [(rtypes :a cgTy)])
 
-(df test-rtypes [] -> Bool
+(df testRtypes [] -> Bool
   :d "Verifies Rust type mappings and derive attributes."
-  (let [(t1 (cg-ty/emit-type-str "Int"))
-        (t2 (cg-ty/emit-type-str "Str"))
-        (t3 (cg-ty/emit-type-str "Bool"))
-        (t4 (cg-ty/emit-type-str "(List Int)"))
-        (t5 (cg-ty/emit-type-str "(Option Str)"))
-        (t6 (cg-ty/emit-type-str "(Result Int IoError)"))
-        (t7 (cg-ty/emit-type-str "(Pair Int Str)"))
-        (t8 (cg-ty/emit-type-str "(Map Str Int)"))
-        (d-all (cg-ty/emit-derives false false))
-        (d-float (cg-ty/emit-derives false true))
-        (d-io (cg-ty/emit-derives true false))]
+  (let [(t1 (cgTy/emitTypeStr "Int"))
+        (t2 (cgTy/emitTypeStr "Str"))
+        (t3 (cgTy/emitTypeStr "Bool"))
+        (t4 (cgTy/emitTypeStr "(List Int)"))
+        (t5 (cgTy/emitTypeStr "(Option Str)"))
+        (t6 (cgTy/emitTypeStr "(Result Int IoError)"))
+        (t7 (cgTy/emitTypeStr "(Pair Int Str)"))
+        (t8 (cgTy/emitTypeStr "(Map Str Int)"))
+        (dAll (cgTy/emitDerives false false))
+        (dFloat (cgTy/emitDerives false true))
+        (dIo (cgTy/emitDerives true false))]
     (assert (= t1 "i64") "emit Int")
     (assert (= t2 "String") "emit Str")
     (assert (= t3 "bool") "emit Bool")
@@ -24,13 +24,13 @@
     (assert (= t6 "Result<i64, rt::IoError>") "emit Result Int IoError")
     (assert (= t7 "(i64, String)") "emit Pair Int Str")
     (assert (= t8 "std::collections::BTreeMap<String, i64>") "emit Map Str Int")
-    (assert (= d-all "#[derive(Debug, Clone, PartialEq, PartialOrd)]") "derives all")
-    (assert (= d-float "#[derive(Debug, Clone, PartialEq, PartialOrd)]") "derives float")
-    (assert (= d-io "#[derive(Debug, Clone, PartialEq)]") "derives io")
+    (assert (= dAll "#[derive(Debug, Clone, PartialEq, PartialOrd)]") "derives all")
+    (assert (= dFloat "#[derive(Debug, Clone, PartialEq, PartialOrd)]") "derives float")
+    (assert (= dIo "#[derive(Debug, Clone, PartialEq)]") "derives io")
     true))
 
-(df run-tests [] -> Bool
+(df runTests [] -> Bool
   :d "Runs rtypes test suite"
   (do
-    (assert (test-rtypes) "test-rtypes must pass")
+    (assert (testRtypes) "test-rtypes must pass")
     true))

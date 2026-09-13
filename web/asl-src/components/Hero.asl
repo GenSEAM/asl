@@ -1,13 +1,13 @@
-(module asl-web/hero
+(module aslWeb/hero
   :d "Declarative Hero Component in pure AgentScript"
-  :x [describe-hero render-hero]
+  :x [describeHero renderHero]
   :i [(asl-text/string :a s)])
 
-(df describe-hero [] -> Str
+(df describeHero [] -> Str
   :d "Returns structured metadata description of the Hero section."
   "(hero :title \"The Native Language of Autonomous Agents\" :reduction \"57%-65%\" :speed \"<100ms\")")
 
-(df render-hero [] -> Str
+(df renderHero [] -> Str
   :d "Renders the hero banner markup."
   (s/concat
     "<section class=\"relative pt-20 pb-16 text-center max-w-5xl mx-auto px-4\">"

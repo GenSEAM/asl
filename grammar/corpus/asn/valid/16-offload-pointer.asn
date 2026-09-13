@@ -7,6 +7,6 @@
 
 (:offload "scrape-9481"
  :summary "Extracted 42 product items. Status 200. Zero parse errors."
- :size-bytes 54200
+ :sizeBytes 54200
  :sample [(:sku "A1" :price 24.50)
           (:sku "A2" :price 12.00)])

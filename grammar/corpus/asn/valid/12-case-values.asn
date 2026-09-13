@@ -6,4 +6,4 @@
 
 [(user 1 "Alice" :admin)
  (bot 2 "code-bot" 1200)
- (deploy-event :success 1714829100)]
+ (deployEvent :success 1714829100)]

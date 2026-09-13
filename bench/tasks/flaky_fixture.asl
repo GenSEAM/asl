@@ -1,15 +1,15 @@
-(module asl-bench/tasks/flaky-fixture
+(module aslBench/tasks/flakyFixture
   :d "Deliberately planted unstable fixture for flakiness and stability detection verification."
   :x [SimulateFlakyRun IsOutcomePass? RunTests]
   :i [])
 
-(df IsOutcomePass? [(run-index I64)] -> Bool
+(df IsOutcomePass? [(runIndex I64)] -> Bool
   :d "Simulates fluctuating test outcome across runs"
-  (= (mod run-index 2) 0))
+  (= (mod runIndex 2) 0))
 
-(df SimulateFlakyRun [(run-index I64)] -> Str
+(df SimulateFlakyRun [(runIndex I64)] -> Str
   :d "Returns pass or fail status based on run index"
-  (if (IsOutcomePass? run-index)
+  (if (IsOutcomePass? runIndex)
       "pass"
       "fail"))
 

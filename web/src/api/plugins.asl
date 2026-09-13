@@ -1,8 +1,8 @@
-(module asl-web/api-plugins
+(module aslWeb/apiPlugins
   :d "Canonical Plugin Registry metadata model for AgentScript web endpoints"
-  :x [plugin-catalog])
+  :x [pluginCatalog])
 
-(df plugin-catalog [] -> (List Any)
+(df pluginCatalog [] -> (List Any)
   :d "Returns list of ecosystem plugins"
   [
     (:name "asl-github" :repo "github.com/GenSEAM/plugin-github" :capability "vcs"

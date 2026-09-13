@@ -1,8 +1,8 @@
-(module grammar/density-test
+(module grammar/densityTest
   :d "Automated assertion test suite for grammar density and rationale compliance"
-  :x [test-density-audit])
+  :x [testDensityAudit])
 
-(df test-density-audit []
+(df testDensityAudit []
   (assert (> (count [:df :fn :module :import :export :assert]) 0) "grammar symbols verified")
   (assert (<= 1 2) "token density boundary verified")
   (assert (string-contains? "canonical-vocabulary" "canonical") "canonical vocabulary enforced")
@@ -13,4 +13,4 @@
   (assert (= (head [:status :rationale]) :status) "rationale tags verified")
   (assert (not (= :df :defun)) "deprecated keywords eliminated"))
 
-(test-density-audit)
+(testDensityAudit)

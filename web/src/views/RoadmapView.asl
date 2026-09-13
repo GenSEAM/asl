@@ -1,9 +1,9 @@
-(module asl-web/roadmap-view
+(module aslWeb/roadmapView
   :d "Strategic Trajectory and Canons Roadmap view in pure AgentScript."
-  :x [roadmap-view render-roadmap-view]
+  :x [roadmapView renderRoadmapView]
   :i [])
 
-(df render-roadmap-view [] -> Str
+(df renderRoadmapView [] -> Str
   :d "Renders the complete 4-phase strategic roadmap view."
   "<div class=\"pt-28 pb-20\">
     <section id=\"roadmap\" aria-labelledby=\"roadmap-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
@@ -120,6 +120,6 @@
     </section>
   </div>")
 
-(df roadmap-view [] -> Str
+(df roadmapView [] -> Str
   :d "Alias for render-roadmap-view."
-  (render-roadmap-view))
+  (renderRoadmapView))

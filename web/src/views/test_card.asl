@@ -1,9 +1,9 @@
-(module asl-web/views/test-card)
+(module aslWeb/views/testCard)
 
 (df renderPlaygroundCards ()
   "<div>cards</div>")
 
-(df test-render-cards [] -> Bool
+(df testRenderCards [] -> Bool
   :d "Verifies card markup generation"
   (let [(html (renderPlaygroundCards))]
     (assert (string-contains? html "cards") "Rendered cards must contain cards text")

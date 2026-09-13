@@ -1,4 +1,4 @@
-(:capabilities :v 1 :src ADR-0081
+(:capabilities :v 1 :src ADR0081
   :note "Situation-keyed capability registry. Declared here; :status is NOT written by hand, it is measured by asl doctor into capabilities.lock and joined at render time. A capability whose measured status contradicts this file fails gate 7."
   :statusValues [:works :partial :absent :lies]
   :supportedLanguages [:asl :asn :ts :tsx :js :py :go :rs :php :md :c]

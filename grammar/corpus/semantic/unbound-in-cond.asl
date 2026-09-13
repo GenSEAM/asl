@@ -5,5 +5,5 @@
 "while the identical call one line out was rejected."
 (df classify [(n Int64)] -> String
   (cond
-    ((> n 0) (describe-sign n))
+    ((> n 0) (describeSign n))
     (:else   "non-positive")))

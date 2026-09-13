@@ -3,7 +3,7 @@
 
 (module core/trees
   :doc "A parameterised binary tree and a one-field cell for its payload."
-  :export [Tree Cell tree-size])
+  :export [Tree Cell treeSize])
 
 (defenum {T} Tree
   (:case leaf []                                           "An empty subtree")
@@ -12,8 +12,8 @@
 (defschema {T} Cell
   (:field value T "The wrapped value"))
 
-(df {T} tree-size [(t (Tree T))] -> Int64
+(df {T} treeSize [(t (Tree T))] -> Int64
   :doc "Count the interior nodes of a tree."
   (match t
     ((leaf)       0)
-    ((node v l r) (+ 1 (+ (tree-size l) (tree-size r))))))
+    ((node v l r) (+ 1 (+ (treeSize l) (treeSize r))))))

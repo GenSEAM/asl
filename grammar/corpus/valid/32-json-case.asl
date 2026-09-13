@@ -7,16 +7,16 @@
   :export [Account Ledger describe])
 
 (defschema Account
-  :json-case camel
-  (:field holder-name String "Name on the account")
-  (:field opened-at   Int64  "Creation time, epoch seconds")
+  :jsonCase camel
+  (:field holderName String "Name on the account")
+  (:field openedAt   Int64  "Creation time, epoch seconds")
   (:field nickname    String "Display label" :default "unnamed"))
 
 (defschema Ledger
-  :json-case snake
+  :jsonCase snake
   (:field account Account "The account this ledger belongs to")
   (:field balance Int64   "Minor units" :json "balance_minor"))
 
 (df describe [(l Ledger)] -> String
   :doc "One line naming the holder and the balance."
-  (str (.-holder-name (.-account l)) ": " (string-from-int64 (.-balance l))))
+  (str (.-holderName (.-account l)) ": " (string-from-int64 (.-balance l))))

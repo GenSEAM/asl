@@ -3,7 +3,7 @@
 "declaration in core/shapes says the case takes one argument. Arity does not"
 "stop being checkable at a module boundary — the import table carries the"
 "callee's parameters."
-(module text/too-many
+(module text/tooMany
   :doc "Calls an imported constructor with the wrong number of arguments."
   :export [big]
   :import [(core/shapes :as s)])

@@ -10,8 +10,8 @@
 
 (module math/report
   :doc "Report the numeric vocabulary over one pair of values."
-  :export [num fnum narrow minmax edge from-float wrap-mod
-           trap-div trap-neg trap-abs trap-add trap-sub trap-mul trap-sum])
+  :export [num fnum narrow minmax edge fromFloat wrapMod
+           trapDiv trapNeg trapAbs trapAdd trapSub trapMul trapSum])
 
 (df oi [(o (Option Int64))] -> String
   :doc "An optional integer, rendered so `none` is distinguishable from zero."
@@ -83,7 +83,7 @@
                        (oi (float64-to-int64 x)))
                  "|")))
 
-(df int64-min [] -> Int64
+(df int64Min [] -> Int64
   :doc "Int64's least value, reached by arithmetic rather than written down.
         The decimal spelling compiles too — 29-literals.agentscript writes it — so
         this form is here for what it exercises: neg and - one step from the
@@ -93,46 +93,46 @@
 (df edge [(b Int64)] -> String
   :doc "The checked operations against Int64's least value, where the quotient
         leaves the type and the remainder does not."
-  (string-join (list (oi (checked-div (int64-min) b))
-                     (oi (checked-mod (int64-min) b)))
+  (string-join (list (oi (checked-div (int64Min) b))
+                     (oi (checked-mod (int64Min) b)))
                "|"))
 
-(df from-float [(t String)] -> String
+(df fromFloat [(t String)] -> String
   :doc "Both parses of one text: float64-to-int64 over the parsed double, and
         string-to-int64 over the text. Neither may answer a number outside
         Int64, and neither may accept what the other rejects."
   (let [(x (option-or (string-to-float64 t) 0.0))]
     (string-join (list (oi (float64-to-int64 x)) (oi (string-to-int64 t))) "|")))
 
-(df wrap-mod [] -> Int64
+(df wrapMod [] -> Int64
   :doc "The remainder at the boundary the quotient traps on. It is 0, which is
         representable, so this is the one operation of the pair that answers."
-  (mod (int64-min) (neg 1)))
+  (mod (int64Min) (neg 1)))
 
-(df trap-div [] -> Int64
+(df trapDiv [] -> Int64
   :doc "The quotient at that boundary is 2^63, which Int64 does not hold."
-  (/ (int64-min) (neg 1)))
+  (/ (int64Min) (neg 1)))
 
-(df trap-neg [] -> Int64
+(df trapNeg [] -> Int64
   :doc "Two's complement is not symmetric, so negating the least value traps."
-  (neg (int64-min)))
+  (neg (int64Min)))
 
-(df trap-abs [] -> Int64
+(df trapAbs [] -> Int64
   :doc "Absolute value is that same negation for a negative argument."
-  (abs (int64-min)))
+  (abs (int64Min)))
 
-(df trap-add [] -> Int64
+(df trapAdd [] -> Int64
   :doc "Addition past the greatest value traps rather than widening."
   (+ 9223372036854775807 1))
 
-(df trap-sub [] -> Int64
+(df trapSub [] -> Int64
   :doc "Subtraction past the least value, which is the other end of the type."
-  (- (int64-min) 1))
+  (- (int64Min) 1))
 
-(df trap-mul [] -> Int64
+(df trapMul [] -> Int64
   :doc "Multiplication overflows without ever reaching a boundary value."
   (* 9223372036854775807 2))
 
-(df trap-sum [] -> Int64
+(df trapSum [] -> Int64
   :doc "list-sum accumulates through the same addition, so it traps too."
   (list-sum (list 9223372036854775807 1)))
