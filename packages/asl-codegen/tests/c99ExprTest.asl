@@ -140,7 +140,8 @@
     (assert (string-contains? eMatch "switch ((val).tag)") "match contains switch on tag")
     (assert (string-contains? eMatch "case ASL_TAG_SOME:") "match contains some tag case")
     (assert (string-contains? eMatch "case ASL_TAG_NONE:") "match contains none tag case")
-    (assert (string-contains? eMatchQual "case ASL_TAG_RD_SEXPRATOM:") "match on qualified case replaces slash with underscore")
+    (assert (string-contains? eMatchQual "case ASL_TAG_SEXPRATOM:") "match on a qualified case drops the module alias so the tag matches the alias emitCaseTagAlias emits for the bare case name")
+    (refute (string-contains? eMatchQual "ASL_TAG_RD_") "a module alias in the tag names a constant no enum ever defines")
     (assert (string-contains? eMatch "break;") "match cases have break")
     (assert (string-contains? eMatch "default: { abort(); break; }") "match contains unreachable default guard")
     (refute (not (string-contains? eRec "(AslPerson){")) "record contains type cast")
@@ -151,6 +152,23 @@
     (refute (string-contains? eMatchQual "ASL_TAG_RD/") "match tag must not contain slash")
     true))
 
+(df testC99VariadicStr [] -> Bool
+  :d "Verifies that the variadic str builtin lowers to right-nested pairwise concatenation instead of an undeclared variadic call."
+  (let [(sA (rd/sexprAtom "\"a\""))
+        (sB (rd/sexprAtom "\"b\""))
+        (sC (rd/sexprAtom "\"c\""))
+        (zero (ex/lowerCExpr (rd/sexprList (list (rd/sexprAtom "str")))))
+        (one (ex/lowerCExpr (rd/sexprList (list (rd/sexprAtom "str") sA))))
+        (two (ex/lowerCExpr (rd/sexprList (list (rd/sexprAtom "str") sA sB))))
+        (three (ex/lowerCExpr (rd/sexprList (list (rd/sexprAtom "str") sA sB sC))))]
+    (assert (string-contains? zero ".len = 0") "empty str lowers to the empty string literal")
+    (refute (string-contains? one "string_concat2") "single argument str needs no concatenation")
+    (assert (string-contains? two "string_concat2(") "two argument str concatenates")
+    (assert (string-contains? three "string_concat2(") "three argument str concatenates")
+    (refute (string-contains? two "str(") "str must never survive as a variadic C call")
+    (refute (string-contains? three "str(") "str must never survive as a variadic C call")
+    true))
+
 (df runTests [] -> Bool
   :d "Executes all unit tests in c99ExprTest."
   (do
@@ -159,4 +177,5 @@
     (assert (testC99LogicAndComparisons) "testC99LogicAndComparisons must pass")
     (assert (testC99ConditionalsAndLet) "testC99ConditionalsAndLet must pass")
     (assert (testC99RecordsAndMatching) "testC99RecordsAndMatching must pass")
+    (assert (testC99VariadicStr) "testC99VariadicStr must pass")
     true))

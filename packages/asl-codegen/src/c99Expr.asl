@@ -593,16 +593,16 @@
              ((rd/sexprAtom v)
               (if (or (= v "_") (= v ":else") (= v "else"))
                   (str "default: { " bodyStr "break; }")
-                  (let [(tag (str "ASL_TAG_" (string-upper (string-replace (string-replace v "/" "_") "-" "_"))))]
+                  (let [(tag (caseTagConst v))]
                     (str "case " tag ": { " bodyStr "break; }"))))
              ((rd/sexprList pItems)
               (let [(pHead (nthAtom pItems 0))
-                    (tag (str "ASL_TAG_" (string-upper (string-replace (string-replace pHead "/" "_") "-" "_"))))
+                    (tag (caseTagConst pHead))
                     (argCount (- (list-length pItems) 1))
                     (payloadBindings (if (> argCount 0)
                                          (string-join (makePayloadBindingsStep subj pHead pItems 0 argCount (list)) "")
                                          ""))]
-                (let [(res (str "case " tag ": { " payloadBindings bodyStr "break; }"))] (if (= tag "ASL_TAG_RD_SEXPRVECT") (print (str "DEBUG SEXPRVECT\nPB=[" payloadBindings "]\nBODY=[" bodyStr "]\nRES=[" res "]")) "") res)))
+                (str "case " tag ": { " payloadBindings bodyStr "break; }")))
              ((rd/sexprVect _)
               "")))))
     ((rd/sexprVect aItems)
@@ -686,6 +686,19 @@
       (str "(" s ")")
       s))
 
+(df caseTagConst [(patHead String)] -> String
+  :d "Builds the tag constant for a match arm using the bare case name, matching the alias emitCaseTagAlias emits; the module alias is dropped because the alias is keyed on the case name alone."
+  (str "ASL_TAG_" (string-upper (string-replace (stripModulePrefix patHead) "-" "_"))))
+
+(df lowerCStrConcat [(args (List rd/SExpr)) (idx Int64) (len Int64)] -> String
+  :d "Right-nests the variadic str builtin into pairwise ISO C99 string concatenations, which needs no element type because str is variadic over String."
+  (if (>= idx len)
+      "((asl_string_t){ .data = \"\", .len = 0 })"
+      (let [(here (lowerCExpr (option-or (list-get args idx) (rd/sexprAtom "\"\""))))]
+        (if (= idx (- len 1))
+            here
+            (str "string_concat2(" here ", " (lowerCStrConcat args (+ idx 1) len) ")")))))
+
 (df lowerCCall [(items (List rd/SExpr))] -> String
   :d "Lowers a call form, field access, or operator expression into ISO C99."
   (let [(head (nthAtom items 0))
@@ -702,6 +715,8 @@
                       (lowerCExpr (option-or (list-get rawArgs 0) (rd/sexprAtom "false")))
                       "false"))]
          (str "(!(" arg "))")))
+      ((= head "str")
+       (lowerCStrConcat rawArgs 0 (list-length rawArgs)))
       ((isBinaryOp? head)
        (let [(argCount (list-length rawArgs))
              (cOp (opToC head))]

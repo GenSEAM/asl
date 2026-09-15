@@ -338,6 +338,8 @@
         (uniqDefuns (collectUniqueDefuns defuns))
         (preamble (if isFreestanding (emitCFreestandingPreamble) (emitCHostedPreamble)))
         (forwardSchemas (map emitSchemaForwardDecl uniqSchemas))
+        (sliceTypedefs (ct/emitInstTypedefs forms true))
+        (valueTypedefs (ct/emitInstTypedefs forms false))
         (simpleEnumStrs (map ct/emitCDefenum simpleEnums))
         (schemaStrs (map ct/emitCDefschema uniqSchemas))
         (complexEnumStrs (map ct/emitCDefenum complexEnums))
@@ -352,9 +354,11 @@
         (sections (filter isNonEmptyString?
                           (list preamble
                                 (string-join forwardSchemas "\n")
+                                sliceTypedefs
                                 (string-join simpleEnumStrs "\n")
                                 (string-join schemaStrs "\n")
                                 (string-join complexEnumStrs "\n")
+                                valueTypedefs
                                 (string-join protoStrs "\n")
                                 (string-join fnDefs "\n")
                                 mainEntry)))]

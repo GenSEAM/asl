@@ -7,6 +7,14 @@
       emitCStringType
       emitCOptionType
       emitCSliceType
+      emitCPairType
+      emitCMapType
+      collectInsts
+      collectInstsFromAnnotation
+      emitInstTypedef
+      emitInstTypedefs
+      dedupeInsts
+      c99FromType
       c99TypeName
       c99FieldIdent
       c99UpperIdent
@@ -127,6 +135,12 @@
                        (b (c99FromType (option-or (list-get args 1) (ty/tyCon "Unit" (list) (none) (none)))))]
                    (str "AslPair_" (sanitizeCIdent a) "_" (sanitizeCIdent b)))
                  "AslPair_void_void"))
+            ((= name "Map")
+             (if (>= (list-length args) 2)
+                 (let [(k (c99FromType (option-or (list-get args 0) (ty/tyCon "Unit" (list) (none) (none)))))
+                       (v (c99FromType (option-or (list-get args 1) (ty/tyCon "Unit" (list) (none) (none)))))]
+                   (str "AslMap_" (sanitizeCIdent k) "_" (sanitizeCIdent v)))
+                 "AslMap_void_void"))
             (:else
              (c99TypeName name)))))))))
 
@@ -139,29 +153,186 @@
           (mt prim
             ((some p) p)
             ((none)
-             (if (string-starts-with? trimmed "AslOption_")
+             (if (or (string-starts-with? trimmed "AslOption_")
+                     (or (string-starts-with? trimmed "AslSlice_")
+                         (or (string-starts-with? trimmed "AslPair_")
+                             (string-starts-with? trimmed "AslMap_"))))
                  trimmed
-                 (if (string-starts-with? trimmed "AslSlice_")
+                 (if (string-ends-with? trimmed "*")
                      trimmed
-                     (if (string-ends-with? trimmed "*")
-                         trimmed
-                         (c99FromType (ty/parseTypeStr trimmed (list))))))))))))
+                     (c99FromType (ty/parseTypeStr trimmed (list)))))))))))
 
 (df emitCStringType [] -> String
   :d "Emits standard ISO C99 string slice typedef."
   "#ifndef ASL_STRING_T_DEFINED\n#define ASL_STRING_T_DEFINED\ntypedef struct {\n    const char* data;\n    size_t len;\n} asl_string_t;\n#endif\n")
 
+(df guardTypedef [(name String) (body String)] -> String
+  :d "Wraps a container typedef in an include guard so the host runtime header and the emitter can both provide it."
+  (str "#ifndef " name "_DEFINED\n#define " name "_DEFINED\n" body "#endif\n"))
+
 (df emitCOptionType [(innerType String)] -> String
-  :d "Emits an ISO C99 Option container typedef for a given inner type."
+  :d "Emits an ISO C99 Option container typedef as a tagged union, matching the representation the match lowering reads."
   (let [(cTy (c99TypeStr innerType))
         (optName (str "AslOption_" (sanitizeCIdent cTy)))]
-    (str "typedef struct {\n    bool hasValue;\n    " cTy " value;\n} " optName ";\n")))
+    (guardTypedef optName
+      (if (= cTy "void")
+          (str "typedef struct {\n    bool tag;\n} " optName ";\n")
+          (str "typedef struct {\n    bool tag;\n    union {\n        " cTy " some;\n    } data;\n} " optName ";\n")))))
 
 (df emitCSliceType [(elemType String)] -> String
   :d "Emits an ISO C99 List/Slice container typedef for a given element type."
   (let [(cTy (c99TypeStr elemType))
         (sliceName (str "AslSlice_" (sanitizeCIdent cTy)))]
-    (str "typedef struct {\n    const " cTy "* items;\n    size_t count;\n} " sliceName ";\n")))
+    (guardTypedef sliceName
+      (if (= cTy "void")
+          (str "typedef struct {\n    const void* items;\n    size_t count;\n} " sliceName ";\n")
+          (str "typedef struct {\n    " cTy "* items;\n    size_t count;\n} " sliceName ";\n")))))
+
+(df emitCPairType [(firstType String) (secondType String)] -> String
+  :d "Emits an ISO C99 Pair container typedef for a given pair of component types."
+  (let [(aTy (c99TypeStr firstType))
+        (bTy (c99TypeStr secondType))
+        (pairName (str "AslPair_" (sanitizeCIdent aTy) "_" (sanitizeCIdent bTy)))]
+    (guardTypedef pairName
+      (str "typedef struct {\n    " aTy " first;\n    " bTy " second;\n} " pairName ";\n"))))
+
+(df emitCMapType [(keyType String) (valType String)] -> String
+  :d "Emits an ISO C99 Map container typedef as a flat association vector of key and value pairs."
+  (let [(kTy (c99TypeStr keyType))
+        (vTy (c99TypeStr valType))
+        (pairName (str "AslPair_" (sanitizeCIdent kTy) "_" (sanitizeCIdent vTy)))
+        (mapName (str "AslMap_" (sanitizeCIdent kTy) "_" (sanitizeCIdent vTy)))]
+    (guardTypedef mapName
+      (str "typedef struct {\n    " pairName "* entries;\n    size_t count;\n} " mapName ";\n"))))
+
+(df isContainerCon? [(name String)] -> Bool
+  :d "Checks whether a type constructor is a generic container needing an emitted instantiation typedef."
+  (or (= name "Option") (or (= name "List") (or (= name "Pair") (= name "Map")))))
+
+(df mapEntryPair [(args (List ty/Type))] -> ty/Type
+  :d "Builds the Pair instantiation a Map's entry vector is made of, so the pair typedef is registered before the map."
+  (let [(unitTy (ty/tyCon "Unit" (list) (none) (none)))
+        (k (option-or (list-get args 0) unitTy))
+        (v (option-or (list-get args 1) unitTy))]
+    (ty/tyCon "Pair" (list k v) (none) (none))))
+
+(df collectInstStep [(args (List ty/Type)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Folds instantiation collection across a constructor argument list."
+  (if (>= idx len)
+      acc
+      (let [(a (option-or (list-get args idx) (ty/tyCon "Unit" (list) (none) (none))))
+            (acc2 (collectInsts a acc))]
+        (collectInstStep args (+ idx 1) len acc2))))
+
+(df collectInsts [(t ty/Type) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Collects generic container instantiations from a type, components before composites so emission order is dependency order."
+  (mt t
+    ((ty/tyVar id kind) acc)
+    ((ty/tyFun params ret) acc)
+    ((ty/tyCon name args modOpt shownOpt)
+     (let [(acc2 (collectInstStep args 0 (list-length args) acc))
+           (acc3 (if (and (= name "Map") (>= (list-length args) 2))
+                     (list-append acc2 (list (mapEntryPair args)))
+                     acc2))]
+       (if (isContainerCon? name)
+           (list-append acc3 (list t))
+           acc3)))))
+
+(df collectInstsFromAnnotation [(annotation String) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Parses a type annotation and collects the container instantiations it mentions."
+  (let [(trimmed (string-trim annotation))]
+    (if (or (= trimmed "") (isC99NativeType? trimmed))
+        acc
+        (collectInsts (ty/parseTypeStr trimmed (list)) acc))))
+
+(df emitInstTypedef [(t ty/Type)] -> String
+  :d "Emits the guarded typedef for one collected container instantiation."
+  (mt t
+    ((ty/tyVar id kind) "")
+    ((ty/tyFun params ret) "")
+    ((ty/tyCon name args modOpt shownOpt)
+     (let [(unitTy (ty/tyCon "Unit" (list) (none) (none)))]
+       (cond
+         ((= name "Option") (emitCOptionType (c99FromType (option-or (list-get args 0) unitTy))))
+         ((= name "List") (emitCSliceType (c99FromType (option-or (list-get args 0) unitTy))))
+         ((= name "Pair") (emitCPairType (c99FromType (option-or (list-get args 0) unitTy))
+                                         (c99FromType (option-or (list-get args 1) unitTy))))
+         ((= name "Map") (emitCMapType (c99FromType (option-or (list-get args 0) unitTy))
+                                       (c99FromType (option-or (list-get args 1) unitTy))))
+         (:else ""))))))
+
+(df dedupeInstsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (seen (List String)) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Drops repeated instantiations by emitted C name while preserving first-seen order."
+  (if (>= idx len)
+      acc
+      (let [(t (option-or (list-get insts idx) (ty/tyCon "Unit" (list) (none) (none))))
+            (cname (c99FromType t))]
+        (if (list-contains? seen cname)
+            (dedupeInstsStep insts (+ idx 1) len seen acc)
+            (dedupeInstsStep insts (+ idx 1) len (list-append seen (list cname)) (list-append acc (list t)))))))
+
+(df dedupeInsts [(insts (List ty/Type))] -> (List ty/Type)
+  :d "Deduplicates collected instantiations by their emitted C type name."
+  (dedupeInstsStep insts 0 (list-length insts) (list) (list)))
+
+(df collectParamInsts [(ps (List a/Param)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Collects container instantiations mentioned by a parameter list."
+  (if (>= idx len)
+      acc
+      (let [(p (option-or (list-get ps idx) (a/Param :name "" :type "Unit")))]
+        (collectParamInsts ps (+ idx 1) len (collectInstsFromAnnotation (.-type p) acc)))))
+
+(df collectFieldInsts [(fs (List a/AstField)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Collects container instantiations mentioned by a schema field list."
+  (if (>= idx len)
+      acc
+      (let [(f (option-or (list-get fs idx) (a/AstField :name "" :type "Unit" :docstring "" :default (none) :json (none))))]
+        (collectFieldInsts fs (+ idx 1) len (collectInstsFromAnnotation (.-type f) acc)))))
+
+(df collectCaseInsts [(cs (List a/EnumCase)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Collects container instantiations mentioned by enum case payloads."
+  (if (>= idx len)
+      acc
+      (let [(c (option-or (list-get cs idx) (a/EnumCase :name "" :fields (list) :docstring "")))
+            (acc2 (collectParamInsts (.-fields c) 0 (list-length (.-fields c)) acc))]
+        (collectCaseInsts cs (+ idx 1) len acc2))))
+
+(df collectFormInsts [(forms (List a/TopForm)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Collects every container instantiation reachable from the top-level forms of a translation unit."
+  (if (>= idx len)
+      acc
+      (let [(form (option-or (list-get forms idx) (a/topModule (a/ModuleNode :path "" :docstring "" :exported (list) :imports (list) :defs (list)))))
+            (acc2 (mt form
+                    ((a/topModule node) acc)
+                    ((a/topSchema node) (collectFieldInsts (.-fields node) 0 (list-length (.-fields node)) acc))
+                    ((a/topEnum node) (collectCaseInsts (.-cases node) 0 (list-length (.-cases node)) acc))
+                    ((a/topDefun node)
+                     (let [(withParams (collectParamInsts (.-params node) 0 (list-length (.-params node)) acc))]
+                       (collectInstsFromAnnotation (.-retType node) withParams)))))]
+        (collectFormInsts forms (+ idx 1) len acc2))))
+
+(df isSliceInst? [(t ty/Type)] -> Bool
+  :d "Checks whether an instantiation is a List, which stores its elements behind a pointer."
+  (mt t
+    ((ty/tyVar id kind) false)
+    ((ty/tyFun params ret) false)
+    ((ty/tyCon name args modOpt shownOpt) (= name "List"))))
+
+(df emitInstTypedefsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (wantSlices Bool) (acc (List String))] -> (List String)
+  :d "Renders the deduplicated instantiation typedefs of one wave in dependency order."
+  (if (>= idx len)
+      acc
+      (let [(t (option-or (list-get insts idx) (ty/tyCon "Unit" (list) (none) (none))))
+            (line (if (= (isSliceInst? t) wantSlices) (emitInstTypedef t) ""))]
+        (emitInstTypedefsStep insts (+ idx 1) len wantSlices
+                              (if (= line "") acc (list-append acc (list line)))))))
+
+(df emitInstTypedefs [(forms (List a/TopForm)) (wantSlices Bool)] -> String
+  :d "Emits one wave of generic container typedefs: slices store elements behind a pointer so they precede the record definitions, while Option and Pair store by value and must follow them."
+  (let [(raw (collectFormInsts forms 0 (list-length forms) (list)))
+        (uniq (dedupeInsts raw))
+        (lines (emitInstTypedefsStep uniq 0 (list-length uniq) wantSlices (list)))]
+    (string-join lines "")))
 
 (df hasEmptyFieldNameStep [(fields (List a/AstField)) (idx Int64) (len Int64)] -> Bool
   :d "Checks if any schema field has empty name."
