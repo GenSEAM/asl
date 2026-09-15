@@ -8,7 +8,7 @@
       emitDerives
       anyTrue?
       boxedTypeIfRecursive]
-  :i [(types :a ty) (mangle :a m)])
+  :i [(asl-checker/types :a ty) (mangle :a m)])
 
 (df anyTrue? [(flags (List Bool))] -> Bool
   :d "True if any boolean in list is true."

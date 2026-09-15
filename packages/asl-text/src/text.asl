@@ -1,6 +1,6 @@
 (module asl-text/text
   :d "Pure AgentScript text engine: HTML parsing, entity decoding, multi-format text extraction, chunking, and ASN structuring."
-  :x [ExtractedDoc ContextChunk ContextualClause decodeHtmlEntities stripEnclosed cleanHtml extractHtml extractMarkdown extractPlaintext extractJsonKv extractXmlAtom extractContext chunkText chunkDoc formatChunkMarkdown formatContextRag formatDocsRag formatClauseBreadcrumb formatContextualClause extractClauses extractContextualClauses docToAsn chunkToAsn clauseToAsn stripQuotes stripColon estimateTokens calcSavings extractBetween])
+  :x [ExtractedDoc ContextChunk ContextualClause decodeHtmlEntities stripEnclosed cleanHtml extractHtml extractMarkdown extractPlaintext extractJsonKv extractXmlAtom extractContext chunkText chunkDoc formatChunkMarkdown formatContextRag formatDocsRag formatClauseBreadcrumb formatContextualClause extractClauses extractContextualClauses docToAsn chunkToAsn clauseToAsn stripQuotes stripColon estimateTokens calcSavings extractBetween isNumeric stripComment])
 
 (dfs ExtractedDoc
   (:f title Str "Document title or headline")
@@ -340,7 +340,7 @@
 (df updateBreadcrumbPath [(path (List Str)) (level I64) (heading Str)] -> (List Str)
   :d "Updates section breadcrumb path maintaining hierarchy at level."
   (let [(keepCount (max 1 (min (list-length path) level)))
-        (truncated (listTake path keepCount))]
+        (truncated (list-take path keepCount))]
     (list-append truncated (list heading))))
 
 (df emitClauseRecord [(docTitle Str) (path (List Str)) (text Str) (source Str) (idx I64)] -> ContextualClause
@@ -435,7 +435,9 @@
     (cond
       ((<= len 0) 0)
       ((<= len 4) 1)
-      (:else (int64-from-float (/ (+ len 3) 4))))))
+      (:else (let [(num (+ len 3))
+                   (rem (mod num 4))]
+               (/ (- num rem) 4))))))
 
 (df calcSavings [(orig I64) (asn I64)] -> F64
   :d "Calculates token savings percentage between original and ASN representation."
@@ -444,7 +446,7 @@
       (let [(diff (- orig asn))]
         (if (<= diff 0)
             0.0
-            (/ (* (floatFromInt64 diff) 100.0) (floatFromInt64 orig))))))
+            (/ (* (int64-to-float64 diff) 100.0) (int64-to-float64 orig))))))
 
 (df extractBetween [(text Str) (prefix Str) (suffix Str)] -> (Option Str)
   :d "Extracts substring between prefix and subsequent suffix."
@@ -457,3 +459,44 @@
          ((none) (none))
          ((some endIdx)
           (string-slice remaining 0 endIdx)))))))
+
+(df isNumeric [(s Str)] -> Bool
+  :d "Returns true if string represents integer or float."
+  (let [(chars (string-chars s))]
+    (if (list-empty? chars)
+      false
+      (numericLoop chars true false))))
+
+(df numericLoop [(chars (List Str)) (isFirst Bool) (hasDot Bool)] -> Bool
+  :d "Helper loop for numeric validation."
+  (mt (list-head chars)
+    ((none) true)
+    ((some c)
+     (if (string-contains? "0123456789" c)
+       (numericLoop (option-or (list-tail chars) (list)) false hasDot)
+       (if (and isFirst (= c "-"))
+         (numericLoop (option-or (list-tail chars) (list)) false hasDot)
+         (if (and (not hasDot) (= c "."))
+           (numericLoop (option-or (list-tail chars) (list)) false true)
+           false))))))
+
+(df stripComment [(line Str) (commentChar Str)] -> Str
+  :d "Strips comment starting with commentChar outside quotes from a line."
+  (let [(chars (string-chars line))]
+    (stripCommentLoop chars commentChar false "")))
+
+(df stripCommentLoop [(chars (List Str)) (commentChar Str) (inQuote Bool) (acc Str)] -> Str
+  :d "Helper loop for stripping trailing comments."
+  (mt (list-head chars)
+    ((none) acc)
+    ((some c)
+     (if inQuote
+       (if (or (= c "\"") (= c "'"))
+         (stripCommentLoop (option-or (list-tail chars) (list)) commentChar false (str acc c))
+         (stripCommentLoop (option-or (list-tail chars) (list)) commentChar true (str acc c)))
+       (if (or (= c "\"") (= c "'"))
+         (stripCommentLoop (option-or (list-tail chars) (list)) commentChar true (str acc c))
+         (if (= c commentChar)
+           acc
+           (stripCommentLoop (option-or (list-tail chars) (list)) commentChar false (str acc c))))))))
+

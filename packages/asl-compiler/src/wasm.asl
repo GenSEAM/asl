@@ -1,5 +1,5 @@
 (module asl-compiler/wasm
-  :d "Pure AgentScript WebAssembly v1 binary emitter and MVP bytecode generator."
+  :d "Pure AgentScript WebAssembly v1 binary emitter and MVP bytecode generator. Note: evalNode, invokeClosure, loadModule, and makeEvalEnv are MVP stubs returning 0n, scheduled for Phase 508."
   :x [leb128EncodeU32
       leb128EncodeI32
       encodeUtf8
@@ -550,16 +550,16 @@
   :d "Emits export descriptors for linear memory and Batch RPC bridge functions."
   (list
     (encodeExportEntry "memory" 2 0)
-    (encodeExportEntry "asl_alloc" 0 allocIdx)
-    (encodeExportEntry "asl_free" 0 freeIdx)
-    (encodeExportEntry "asl_rpc_dispatch" 0 dispatchIdx)))
+    (encodeExportEntry "aslAlloc" 0 allocIdx)
+    (encodeExportEntry "aslFree" 0 freeIdx)
+    (encodeExportEntry "aslRpcDispatch" 0 dispatchIdx)))
 
 (df emitWasmCapabilityDenial [(capName Str)] -> (List Int64)
   :d "Emits capability denial receipt sequence returning 403 denied."
   (list-append (emitInstrConstI32 403) (list 11)))
 
 (df emitRpcDispatchInstructions [] -> (List Int64)
-  :d "Emits instructions for asl_rpc_dispatch writing batch response to out_ptr when out_ptr > 0."
+  :d "Emits instructions for aslRpcDispatch writing batch response to out_ptr when out_ptr > 0."
   (let [(resp "(:batch-res :status \"completed\" :bridge \"asl-core\" :zero-socket true :results [])\n")
         (bytes (encodeUtf8 resp))
         (storeInstrs (fold (fn [(acc (List Int64)) (idx Int64)]
@@ -621,7 +621,7 @@
         (userBodies (map (fn [(d a/DefunNode)] -> (List Int64)
                            (lowerAstFunction d fnIndices))
                          userDefuns))
-        (allocBody (encodeFunctionBody (list) (list-append (emitInstrConstI32 65536) (list 11))))
+        (allocBody (encodeFunctionBody (list (list 2 127)) (list 65 0 40 2 0 34 1 69 4 64 65 128 8 33 1 11 32 1 32 0 106 34 2 63 0 65 128 128 4 108 79 4 64 65 2 64 0 26 11 65 0 32 2 54 2 0 32 1 11)))
         (freeBody (encodeFunctionBody (list) (list 11)))
         (dispatchBody (encodeFunctionBody (list) (emitRpcDispatchInstructions)))
         (allBodies (list-append userBodies (list allocBody freeBody dispatchBody)))

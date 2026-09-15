@@ -1,12 +1,14 @@
 (module aslWeb/ecosystem
   :d "Multi-Runtime Interoperability ecosystem section in pure AgentScript."
   :x [ecosystem renderEcosystem ecosystemView]
-  :i [])
+  :i [(aslVdom/html :a h)])
 
 (df renderEcosystem [] -> Str
   :d "Renders multi-runtime ecosystem targets, differential verification flow, and agent specs."
-  "<section id=\"toolchain\" aria-labelledby=\"toolchain-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
-    <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
+  (h/vnodeToHtml
+    (h/sec (h/attrsOf (list (h/attrId "toolchain") (h/attr "aria-labelledby" "toolchain-title") (h/attrClass "relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden")))
+      (list
+        (h/raw "<div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
       
       <header class=\"mb-16 sm:mb-20 max-w-3xl\">
         <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
@@ -370,8 +372,7 @@
         </div>
       </div>
 
-    </div>
-  </section>")
+    </div>")))))
 
 (df ecosystem [] -> Str
   :d "Alias for render-ecosystem."

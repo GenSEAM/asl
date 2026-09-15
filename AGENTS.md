@@ -2,9 +2,12 @@
 Activate and use the asl-toolbelt skill in priority; asl is available in PATH.
 <!-- ASL_TOOLBELT_END -->
 
-# AgentScript (ASL) — Autonomous Agent Operational Instructions
+# ASL Engine Internal Operational Instructions
 
-> **Foundational Philosophy & Invariants**: All AI agents operating in this workspace MUST adhere strictly to [**`MANIFESTO.md`**](../MANIFESTO.md) and its 7 core pillars:
+> [!NOTE]
+> This guide covers ASL runtime internals. For the global autonomous agent teleological mandates, please refer to the root `/AGENTS.md` file.
+
+> **Foundational Philosophy & Invariants**: All AI agents operating in this workspace MUST adhere strictly to [**`MANIFESTO.md`**](../MANIFESTO.md) and its 8 core pillars:
 > 1. **LLM-Native Code Generation**: Homogeneous S-expression geometry, closed AST vocabulary, and balanced form semantics.
 > 2. **Mathematical Optimality & Token Density**: Extreme BPE subtoken efficiency (<= 2 tokens per primitive) without lossy disemvoweling.
 > 3. **Zero-Foreign-Code Invariant**: 100% pure AgentScript (.asl/.asn) in code packages. Zero Python/JS/TS/Rust/C in core logic.

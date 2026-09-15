@@ -174,9 +174,9 @@
   (if (isLiteralParam expr)
     (list expr)
     (mt expr
-      ((binary _ l r)   (list-concat (collectParams l) (collectParams r)))
-      ((andExpr l r)   (list-concat (collectParams l) (collectParams r)))
-      ((orExpr l r)    (list-concat (collectParams l) (collectParams r)))
+      ((binary _ l r)   (listConcat (collectParams l) (collectParams r)))
+      ((andExpr l r)   (listConcat (collectParams l) (collectParams r)))
+      ((orExpr l r)    (listConcat (collectParams l) (collectParams r)))
       ((notExpr inner) (collectParams inner))
       (_                (list)))))
 
@@ -187,7 +187,7 @@
     (mt (list-head joins)
       ((some j)
        (let [(restJoins (mt (list-tail joins) ((some r) r) ((none) (list))))]
-         (list-concat (collectParams (.-onClause j)) (collectJoinsParams restJoins))))
+         (listConcat (collectParams (.-onClause j)) (collectJoinsParams restJoins))))
       ((none) (list)))))
 
 (df isParameterized [(expr SqlExpr)] -> Bool
@@ -333,7 +333,7 @@
         (returnSql (renderReturning (.-returningColumns q)))
         (fullSql (str baseSql joinsSql whereSql orderSql limitSql offsetSql lockSql returnSql))
         (whereParams (extractWhereParams (.-whereClause q)))
-        (allParams (list-concat joinParams whereParams))
+        (allParams (listConcat joinParams whereParams))
         (pCount (list-length allParams))]
     (RenderedQuery :sql fullSql
                    :querySql fullSql

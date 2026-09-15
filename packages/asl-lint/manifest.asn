@@ -3,4 +3,4 @@
  :entry "src/core/lint.asl"
  :description "AgentScript Native Quality, Smell, and Anti-Pattern Analysis Engine"
  :aslFirst true
- :dependencies [])
+ :dependencies ["asl-parser"])

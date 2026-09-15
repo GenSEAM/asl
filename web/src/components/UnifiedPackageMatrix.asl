@@ -501,7 +501,7 @@ asl bus send agent-coder &quot;(? task/exec :target \&quot;core/asn\&quot;)&quot
       (asl-vdom/perception :a perc)])
 
 (:d \"Declarative UI dialect transpiled directly to React 19 TSX\")
-(df render-card [(title Str) (count I64)] -> h/VNode
+(df renderCard [(title Str) (count I64)] -> h/VNode
   (h/div :class \"rounded-2xl border border-line bg-surface p-4\"
     [(h/span :class \"font-mono text-micro text-signal\" title)
      (h/h3 :class \"text-h2 font-bold text-ink\" (string-from-int64 count))]))</pre></div>

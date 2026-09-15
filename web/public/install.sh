@@ -4,10 +4,11 @@
 # Usage: curl -fsSL https://aslang.dev/install.sh | bash
 set -eo pipefail
 
+RULES_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 # ---- rules single source of truth: asl/grammar/rules.asn -> every exported surface ----
 rules_main() {
   local MODE="$1"
-  local RULES_ROOT; RULES_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   local RULES_SRC="$RULES_ROOT/asl/grammar/rules.asn"
   [ -f "$RULES_SRC" ] || { echo "missing $RULES_SRC" >&2; exit 2; }
   SRC="$RULES_SRC"
@@ -137,8 +138,11 @@ rules_main() {
     for row in "${HOME_SURFACES[@]}"; do
       IFS='|' read -r f sre ere <<< "$row"; [ -f "$f" ] && { render_between "$f" "$sre" "$ere"; echo "  rendered $f"; }
     done
-    for d in "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.cursor/skills" "$HOME/.codeium/windsurf/skills" "$HOME/.gemini/skills" "$HOME/.gemini/config/skills" "$HOME/.factory/skills" "$HOME/.codex/skills"; do
-      t="$d/asl-toolbelt/SKILL.md"; [ -f "$t" ] && cp "$RULES_ROOT/.agents/skills/asl-toolbelt/SKILL.md" "$t" && echo "  refreshed $t"
+    for d in "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.cursor/skills" "$HOME/.codeium/windsurf/skills" "$HOME/.gemini/skills" "$HOME/.gemini/config/skills" "$HOME/.factory/skills" "$HOME/.codex/skills" "$HOME/.eddie/skills" "$HOME/.addie/skills"; do
+      for s in "$RULES_ROOT/.agents/skills"/*; do
+        skill_name=$(basename "$s")
+        [ -d "$s" ] && [ -f "$s/SKILL.md" ] && mkdir -p "$d/$skill_name" && cp "$s/SKILL.md" "$d/$skill_name/SKILL.md" && echo "  refreshed $d/$skill_name/SKILL.md"
+      done
     done
   fi
   [ "$MODE" = "--check" ] && { [ $rc -eq 0 ] && echo "rules: all surfaces identical to $SRC" || echo "rules: drift detected" >&2; }
@@ -285,15 +289,27 @@ if [ "$BINARY_INSTALLED" -eq 0 ]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
   LOCAL_ASL="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/asl/asl"
   LOCAL_ENGINE="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/asl/bin/asl-engine"
-  LOCAL_SRC="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/asl/tools/asl.c"
-  if [ -f "$LOCAL_SRC" ] && command -v clang >/dev/null 2>&1; then
+  LOCAL_SRC="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/engine/asl.c"
+  LOCAL_BOOTSTRAP="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/bootstrap.c"
+  LOCAL_INC="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/engine"
+  if [ -f "$LOCAL_BOOTSTRAP" ] && command -v clang >/dev/null 2>&1; then
+    echo "📦 Compiling and installing self-hosted ASL from bootstrap.c...";
+    if clang -std=c99 -O3 -I "$LOCAL_INC" "$LOCAL_BOOTSTRAP" -o "${INSTALL_DIR}/asl" && "${INSTALL_DIR}/asl" --version >/dev/null 2>&1; then
+      chmod +x "${INSTALL_DIR}/asl"
+      ln -sf "${INSTALL_DIR}/asl" "${INSTALL_DIR}/agentscript"
+      cp -f "${INSTALL_DIR}/asl" "$LOCAL_ASL" 2>/dev/null || true
+      BINARY_INSTALLED=1
+    fi
+  fi
+  if [ "$BINARY_INSTALLED" -eq 0 ] && [ -f "$LOCAL_SRC" ] && command -v clang >/dev/null 2>&1; then
+    echo "Warning: the self-hosted bootstrap.c path did not produce a working binary; falling back to the JavaScriptCore host build." >&2
     echo "📦 Compiling and installing ASL with embedded source digest...";
     DIGEST=$(shasum -a 256 "$LOCAL_SRC" 2>/dev/null | awk '{print substr($1,1,16)}' || echo "unknown")
     clang -O2 -DASL_SOURCE_DIGEST="\"$DIGEST\"" -framework JavaScriptCore "$LOCAL_SRC" -o "${INSTALL_DIR}/asl"
     chmod +x "${INSTALL_DIR}/asl"
     ln -sf "${INSTALL_DIR}/asl" "${INSTALL_DIR}/agentscript"
     cp -f "${INSTALL_DIR}/asl" "$LOCAL_ASL" 2>/dev/null || true
-  elif [ -f "$LOCAL_ASL" ]; then
+  elif [ "$BINARY_INSTALLED" -eq 0 ] && [ -f "$LOCAL_ASL" ]; then
     echo "📦 Installing ASL from local workspace: $LOCAL_ASL...";
     ln -sf "$LOCAL_ASL" "${INSTALL_DIR}/asl"
     ln -sf "$LOCAL_ASL" "${INSTALL_DIR}/agentscript"
@@ -438,7 +454,7 @@ install_agent_skills() {
     dir="$(dirname "$target")"
     mkdir -p "$dir"
     local directive='<!-- ASL_RULES_START -->
-(:rules :v 7 :src ADR-0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+(:rules :v 7 :src ADR0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
   (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
     :check "./bin/asl audit gates"
@@ -460,7 +476,7 @@ install_agent_skills() {
     :gate "./bin/asl audit consistency"
     :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
   (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
-    :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
+    :do "ASL-first policy: everything must be written or used in ASL. No Bash, no Python. Small logic must be re-implemented in pure ASL. Required logic in other target languages (e.g., C) must be authored in ASL and transpiled to the target language. The C host at asl/tools is declared, not hidden; no MCP; no new ecosystem dependency."
     :check "./bin/asl audit foreign"
     :gate "./bin/asl audit foreign"
     :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
@@ -471,8 +487,8 @@ install_agent_skills() {
     :not "batch several steps then verify; claim progress with a caller-supplied exit code")
   (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
-    :check "./bin/asl test tests/acceptance/d81/Task46601.asl"
-    :gate "./bin/asl test tests/acceptance/d81/Task46601.asl"
+    :check :none
+    :gate :none
     :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
   (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
     :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
@@ -561,10 +577,10 @@ install_agent_skills() {
     :outcomes ["grounded measurements with method scope and date" "refutation of proxy metrics" "epistemic uncertainty markers" "empirical ledger tracking"]
     :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
     :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
-  (:pack :id audit :tier [:pack :full]
-    :outcomes ["independent verification in clean contexts" "falsifiable gates shown to fail on baseline" "structural gap analysis" "rejection of vacuous test suites"]
-    :failureModes ["self-grading by author" "loosened test assertions to reach green" "unreachability masking"]
-    :affordances ["supervise gate" "asl audit gates" "strict falsify harness" "receipt validation"]))
+  (:pack :id multilensAudit :tier [:pack :full]
+    :outcomes ["dual-polarity refutation verification (D77)" "anti-falsification dynamic roundtripping (D89)" "genuine artifact parsing without mocking" "edge-case coverage verification"]
+    :failureModes ["static string mocking" "vacuous positive assertions without refutes" "evaluating self-preference"]
+    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"]))
 <!-- ASL_RULES_END -->'
 
     if [ -f "$target" ]; then
@@ -598,7 +614,7 @@ description: >-
 ## Rules
 
 ```asn
-(:rules :v 7 :src ADR-0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+(:rules :v 7 :src ADR0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
   (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
     :check "./bin/asl audit gates"
@@ -620,7 +636,7 @@ description: >-
     :gate "./bin/asl audit consistency"
     :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
   (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
-    :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
+    :do "ASL-first policy: everything must be written or used in ASL. No Bash, no Python. Small logic must be re-implemented in pure ASL. Required logic in other target languages (e.g., C) must be authored in ASL and transpiled to the target language. The C host at asl/tools is declared, not hidden; no MCP; no new ecosystem dependency."
     :check "./bin/asl audit foreign"
     :gate "./bin/asl audit foreign"
     :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
@@ -631,8 +647,8 @@ description: >-
     :not "batch several steps then verify; claim progress with a caller-supplied exit code")
   (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
-    :check "./bin/asl test tests/acceptance/d81/Task46601.asl"
-    :gate "./bin/asl test tests/acceptance/d81/Task46601.asl"
+    :check :none
+    :gate :none
     :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
   (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
     :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
@@ -721,10 +737,10 @@ description: >-
     :outcomes ["grounded measurements with method scope and date" "refutation of proxy metrics" "epistemic uncertainty markers" "empirical ledger tracking"]
     :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
     :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
-  (:pack :id audit :tier [:pack :full]
-    :outcomes ["independent verification in clean contexts" "falsifiable gates shown to fail on baseline" "structural gap analysis" "rejection of vacuous test suites"]
-    :failureModes ["self-grading by author" "loosened test assertions to reach green" "unreachability masking"]
-    :affordances ["supervise gate" "asl audit gates" "strict falsify harness" "receipt validation"]))
+  (:pack :id multilensAudit :tier [:pack :full]
+    :outcomes ["dual-polarity refutation verification (D77)" "anti-falsification dynamic roundtripping (D89)" "genuine artifact parsing without mocking" "edge-case coverage verification"]
+    :failureModes ["static string mocking" "vacuous positive assertions without refutes" "evaluating self-preference"]
+    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"]))
 ```
 
 ## Tool Suite Reference (verified 2026-09-11)

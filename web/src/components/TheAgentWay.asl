@@ -1,12 +1,14 @@
 (module aslWeb/theAgentWay
   :d "The Agent Way philosophy showcase component in pure AgentScript."
   :x [theAgentWay renderTheAgentWay agentWayView]
-  :i [])
+  :i [(aslVdom/html :a h)])
 
 (df renderTheAgentWay [] -> Str
   :d "Renders the 4 language epochs comparison and balance thesis."
-  "<section id=\"agent-way\" aria-labelledby=\"agent-way-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent\">
-    <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
+  (h/vnodeToHtml
+    (h/sec (h/attrsOf (list (h/attrId "agent-way") (h/attr "aria-labelledby" "agent-way-title") (h/attrClass "relative py-28 sm:py-36 transition-colors bg-transparent")))
+      (list
+        (h/raw "<div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
       <header class=\"mb-16 sm:mb-20 max-w-3xl\">
         <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
           <span class=\"text-signal\">01</span>
@@ -84,8 +86,7 @@
           An indentation-sensitive language asks a model to hold invisible state across a hundred lines. A balanced-parenthesis one asks it to close what it opened &mdash; a check the parser makes in a single left-to-right pass, and the one structural mistake a generator is least able to make silently.
         </p>
       </div>
-    </div>
-  </section>")
+    </div>")))))
 
 (df theAgentWay [] -> Str
   :d "Alias for render-the-agent-way."

@@ -117,6 +117,10 @@
           :rationale "Calculates token savings percentage between original and ASN representation")
     (:sym :name "extractBetween" :kind :fn :tokens 2
           :rationale "Extracts substring between prefix and subsequent suffix")
+    (:sym :name "isNumeric" :kind :fn :tokens 2
+          :rationale "Checks if string represents an integer or float")
+    (:sym :name "stripComment" :kind :fn :tokens 2
+          :rationale "Strips comments from a string")
     (:sym :name "concat" :kind :fn :tokens 1)
     (:sym :name "join" :kind :fn :tokens 1)
   ])

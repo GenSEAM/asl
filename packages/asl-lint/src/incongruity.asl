@@ -1,11 +1,15 @@
 (module asl-lint/incongruity
-  :d "AgentScript monorepo forensic scanner validating zero sigils, zero foreign files, crutch eradication, and 1-to-2 token compliance (d41, d46, d48)."
+  :d "AgentScript monorepo forensic scanner validating zero sigils, zero foreign files, crutch eradication, 1-to-2 token compliance, and AST CFG dead-code eradication (d41, d46, d48)."
   :x [IncongruityReport
       scanMonorepoIncongruities
       detectCrutches
       detectLingeringSigils
+      detectDeadCondBranches
+      detectPostTerminalExpressions
       makeIncongruityReport]
-  :i [(asl-lint/tokens :a tok)])
+  :i [(asl-lint/tokens :a tok)
+      (asl-parser/ast :a a)
+      (asl-parser/reader :a rd)])
 
 (dfs IncongruityReport
   (:f totalScanned I64 "Total items, files, or symbols scanned")
@@ -13,20 +17,23 @@
   (:f foreignViolations I64 "Count of foreign files or illegal markdown memory ledgers")
   (:f tokenViolations I64 "Count of symbols exceeding the 2-token ceiling")
   (:f crutchViolations I64 "Count of temporary crutches or scaffolding patterns")
+  (:f deadCodeViolations I64 "Count of dead condition branches and post-terminal expressions")
   (:f passed Bool "True if all invariant checks pass with zero violations"))
 
-(df makeIncongruityReport [(scanned I64) (sigils I64) (foreign I64) (tokens I64) (crutches I64)] -> IncongruityReport
+(df makeIncongruityReport [(scanned I64) (sigils I64) (foreign I64) (tokens I64) (crutches I64) (deadCode I64)] -> IncongruityReport
   :d "Constructs an IncongruityReport and evaluates pass/fail status based on zero violations."
   (let [(ok? (and (= sigils 0)
                   (and (= foreign 0)
                        (and (= tokens 0)
-                            (= crutches 0)))))]
+                            (and (= crutches 0)
+                                 (= deadCode 0))))))]
     (IncongruityReport
       :totalScanned scanned
       :sigilViolations sigils
       :foreignViolations foreign
       :tokenViolations tokens
       :crutchViolations crutches
+      :deadCodeViolations deadCode
       :passed ok?)))
 
 (df hasSigil? [(text Str)] -> Bool
@@ -98,6 +105,143 @@
         0
         symbols))
 
+(df safeTail [(l (List T))] -> (List T)
+  :d "Returns tail of a list, or empty list if input has length 0 or 1."
+  (if (list-empty? l)
+    (list)
+    (mt (list-tail l 1)
+      ((some r) r)
+      ((none) (list)))))
+
+(df countDeadInCondClauses [(clauses (List rd/SExpr))] -> I64
+  :d "Counts cond clauses occurring after an unconditional :else clause."
+  (let [(res (fold (fn [(acc (Pair Bool I64)) (clause rd/SExpr)] -> (Pair Bool I64)
+                     (let [(afterElse (.-first acc))
+                           (deadCount (.-second acc))]
+                       (if afterElse
+                         (pair true (+ deadCount 1))
+                         (mt clause
+                           ((rd/sexprList cparts)
+                            (mt (list-head cparts)
+                              ((some ch)
+                               (if (= (rd/sexprHead ch) ":else")
+                                 (pair true deadCount)
+                                 (pair false deadCount)))
+                              ((none) (pair false deadCount))))
+                           (_ (pair false deadCount))))))
+                   (pair false 0)
+                   clauses))]
+    (.-second res)))
+
+(df detectDeadCondInSexpr [(s rd/SExpr)] -> I64
+  :d "Recursively counts dead cond clauses within an S-expression."
+  (mt s
+    ((rd/sexprAtom _) 0)
+    ((rd/sexprVect items)
+     (fold (fn [(acc I64) (item rd/SExpr)] -> I64
+             (+ acc (detectDeadCondInSexpr item)))
+           0
+           items))
+    ((rd/sexprList items)
+     (mt (list-head items)
+       ((none) 0)
+       ((some h)
+        (let [(headTok (rd/sexprHead h))
+              (subDead (fold (fn [(acc I64) (item rd/SExpr)] -> I64
+                               (+ acc (detectDeadCondInSexpr item)))
+                             0
+                             items))]
+          (if (= headTok "cond")
+            (let [(clauses (safeTail items))
+                  (thisDead (countDeadInCondClauses clauses))]
+              (+ thisDead subDead))
+            subDead)))))))
+
+(df detectDeadCondBranches [(forms (List a/TopForm))] -> I64
+  :d "Traverses AST to inspect cond expressions, flagging any clause occurring after an unconditional :else clause as unreachable dead code."
+  (fold (fn [(acc I64) (form a/TopForm)] -> I64
+          (mt form
+            ((a/topDefun d)
+             (fold (fn [(iacc I64) (e rd/SExpr)] -> I64
+                     (+ iacc (detectDeadCondInSexpr e)))
+                   acc
+                   (.-body d)))
+            ((a/topModule _) acc)
+            (_ acc)))
+        0
+        forms))
+
+(df isTerminalHead? [(h String)] -> Bool
+  :d "Returns true if head token represents an unconditional terminal control flow."
+  (or (= h "err")
+      (or (= h "return")
+          (or (= h "panic")
+              (= h "exit")))))
+
+(df isTerminalExpr? [(s rd/SExpr)] -> Bool
+  :d "Returns true if expression is an unconditional terminal invocation."
+  (mt s
+    ((rd/sexprList items)
+     (mt (list-head items)
+       ((some h) (isTerminalHead? (rd/sexprHead h)))
+       ((none) false)))
+    (_ false)))
+
+(df countDeadInSeq [(seq (List rd/SExpr))] -> I64
+  :d "Counts expressions placed after an unconditional terminal expression in a block."
+  (let [(res (fold (fn [(acc (Pair Bool I64)) (e rd/SExpr)] -> (Pair Bool I64)
+                     (let [(afterTerm (.-first acc))
+                           (deadCount (.-second acc))]
+                       (if afterTerm
+                         (pair true (+ deadCount 1))
+                         (if (isTerminalExpr? e)
+                           (pair true deadCount)
+                           (pair false deadCount)))))
+                   (pair false 0)
+                   seq))]
+    (.-second res)))
+
+(df detectPostTerminalInSexpr [(s rd/SExpr)] -> I64
+  :d "Recursively inspects S-expression for post-terminal expressions in nested blocks."
+  (mt s
+    ((rd/sexprAtom _) 0)
+    ((rd/sexprVect items)
+     (fold (fn [(acc I64) (item rd/SExpr)] -> I64
+             (+ acc (detectPostTerminalInSexpr item)))
+           0
+           items))
+    ((rd/sexprList items)
+     (mt (list-head items)
+       ((none) 0)
+       ((some h)
+        (let [(headTok (rd/sexprHead h))
+              (subDead (fold (fn [(acc I64) (item rd/SExpr)] -> I64
+                               (+ acc (detectPostTerminalInSexpr item)))
+                             0
+                             items))]
+          (if (= headTok "do")
+            (let [(seq (safeTail items))
+                  (thisDead (countDeadInSeq seq))]
+              (+ thisDead subDead))
+            subDead)))))))
+
+(df detectPostTerminalExpressions [(forms (List a/TopForm))] -> I64
+  :d "Traverses sequential blocks and flags expressions placed after an unconditional terminal return or (err ...) form."
+  (fold (fn [(acc I64) (form a/TopForm)] -> I64
+          (mt form
+            ((a/topDefun d)
+             (let [(bodyForms (.-body d))
+                   (bodyDead (countDeadInSeq bodyForms))
+                   (innerDead (fold (fn [(iacc I64) (e rd/SExpr)] -> I64
+                                      (+ iacc (detectPostTerminalInSexpr e)))
+                                    0
+                                    bodyForms))]
+               (+ acc (+ bodyDead innerDead))))
+            ((a/topModule _) acc)
+            (_ acc)))
+        0
+        forms))
+
 (df scanMonorepoIncongruities [(paths (List Str)) (symbols (List Str)) (snippets (List Str))] -> IncongruityReport
   :d "Performs forensic monorepo scan aggregating sigils, foreign files, token ceiling, and crutch violations."
   (let [(sigils (+ (detectLingeringSigils paths)
@@ -109,4 +253,4 @@
         (total (+ (list-length paths)
                   (+ (list-length symbols)
                      (list-length snippets))))]
-    (makeIncongruityReport total sigils foreign tokens crutches)))
+    (makeIncongruityReport total sigils foreign tokens crutches 0)))

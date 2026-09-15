@@ -1,7 +1,13 @@
 (:package asl-codegen
  :version "0.1.0"
  :entry "src/emit.asl"
- :description "Pure AgentScript Native Rust Codegen Pipeline"
+ :description "Pure AgentScript Native Rust and ISO C99 Codegen Pipeline"
  :aslFirst true
+ :modules ["asl-codegen/emit"
+           "asl-codegen/emitC"
+           "asl-codegen/c99Type"
+           "asl-codegen/c99Mangle"
+           "asl-codegen/c99Expr"
+           "asl-codegen/c99Emit"]
  :dependencies ["asl-parser"
                 "asl-checker"])

@@ -85,7 +85,7 @@
             (string-contains? s "/"))))
 
 (df makeDiag [(code String) (msg String) (path String)] -> ty/Diagnostic
-  (ty/Diagnostic :code code :message msg :line 1 :col 1 :path path))
+  (ty/Diagnostic :code code :message msg :msg msg :line 1 :col 1 :path path))
 
 (df collectFields [(fields (List a/AstField))] -> (List FieldSummary)
   (map (fn [(f a/AstField)] -> FieldSummary
@@ -218,7 +218,7 @@
         facc
         fields))
 
-(df {T} safeTail [(l (List T))] -> (List T)
+(df safeTail [(l (List T))] -> (List T)
   :d "Returns list tail or empty list if none."
   (if (list-empty? l)
     (list)
@@ -246,10 +246,7 @@
 
 (df sexprToList [(e rd/SExpr)] -> (List rd/SExpr)
   :d "Extracts elements from vector or list S-expression."
-  (mt e
-    ((rd/sexprVect bits) bits)
-    ((rd/sexprList bits) bits)
-    (_ (list))))
+  (rd/sexprToList e))
 
 (df firstVectItems [(l (List rd/SExpr))] -> (List rd/SExpr)
   :d "Extracts elements from first element vector or list."
@@ -261,7 +258,7 @@
     ((some v) v)
     ((none) (rd/makeAtom ""))))
 
-(df {T} listAppendOne [(xs (List T)) (x T)] -> (List T)
+(df listAppendOne [(xs (List T)) (x T)] -> (List T)
   :d "Appends a single element to a list."
   (list-append xs (list x)))
 
@@ -286,13 +283,13 @@
     ((none) (none))
     ((some r)
      (let [(candAsl (str r "/" modPath ".asl"))
+           (candSrc (str r "/" (string-replace modPath "/" "/src/") ".asl"))
            (restRoots (safeTail roots))]
-       (mt (file-exists? candAsl)
-         ((ok existsAsl?)
-          (if existsAsl?
-            (some candAsl)
-            (findModuleFile! restRoots modPath)))
-         ((err _) (findModuleFile! restRoots modPath)))))))
+       (if (file-exists? candAsl)
+         (some candAsl)
+         (if (file-exists? candSrc)
+           (some candSrc)
+           (findModuleFile! restRoots modPath)))))))
 
 (df ! loadModuleDeps! [(roots (List String)) (imports (List String))] -> (Result (Map String ModuleSummary) IoError)
   :d "Recursively loads module dependencies from search roots." 
@@ -310,10 +307,10 @@
            ((none) (foldDeps! roots rest loaded))
            ((some fpath)
             (mt (file-read fpath)
-              ((err _) (foldDeps! roots rest loaded))
+              ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe))) (foldDeps! roots rest loaded))
               ((ok src)
                (mt (a/parse src)
-                 ((err _) (foldDeps! roots rest loaded))
+                 ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe))) (foldDeps! roots rest loaded))
                  ((ok forms)
                   (let [(summary (collectSummary forms fpath))
                         (nextLoaded (map-set loaded modPath summary))
@@ -791,26 +788,26 @@
                     (list-cons (makeDiag "rule-2" (str v " is not defined") path) acc))))))))
     (_ acc)))
 
-(dfs RItem
+(dfs ResolveWorkItem
   (:f expr rd/SExpr "Expression to evaluate")
   (:f scope (Map String Bool) "Current lexical scope")
   (:f effectOk Bool "Effect capability"))
 
-(dfs RState
-  (:f work (List RItem) "Pending expression stack")
+(dfs ResolveState
+  (:f work (List ResolveWorkItem) "Pending expression stack")
   (:f diags (List ty/Diagnostic) "Accumulated diagnostics"))
 
 (df firstHeadIdent [(l (List rd/SExpr))] -> String
   :d "Returns identifier of first element's head or empty string."
   (rd/sexprHead (firstExprEmpty l)))
 
-(df addLetBinding [(bparts (List rd/SExpr)) (pairAcc (Pair (Map String Bool) (List RItem))) (effectOk Bool)] -> (Pair (Map String Bool) (List RItem))
+(df addLetBinding [(bparts (List rd/SExpr)) (pairAcc (Pair (Map String Bool) (List ResolveWorkItem))) (effectOk Bool)] -> (Pair (Map String Bool) (List ResolveWorkItem))
   (let [(bname (firstHeadIdent bparts))
         (bval (secondExprEmpty bparts))
         (curSc (.-first pairAcc))
         (curItems (.-second pairAcc))]
     (pair (map-set curSc bname true)
-          (list-cons (RItem :expr bval :scope curSc :effectOk effectOk) curItems))))
+          (list-cons (ResolveWorkItem :expr bval :scope curSc :effectOk effectOk) curItems))))
 
 (df enumCaseArity [(m ModuleSummary) (ename String) (member String)] -> (Option Int64)
   (mt (modEnum m ename)
@@ -821,13 +818,13 @@
          ((none) (none)))))
     ((none) (none))))
 
-(df mapRitems [(exprs (List rd/SExpr)) (scope (Map String Bool)) (effectOk Bool)] -> (List RItem)
-  (map (fn [(e rd/SExpr)] -> RItem (RItem :expr e :scope scope :effectOk effectOk)) exprs))
+(df mapRitems [(exprs (List rd/SExpr)) (scope (Map String Bool)) (effectOk Bool)] -> (List ResolveWorkItem)
+  (map (fn [(e rd/SExpr)] -> ResolveWorkItem (ResolveWorkItem :expr e :scope scope :effectOk effectOk)) exprs))
 
 (df dropTwo [(l (List rd/SExpr))] -> (List rd/SExpr)
   (safeTail (safeTail l)))
 
-(df rResolveTick [(st RState) (tickIdx Int64) (mod ModuleSummary) (deps (Map String ModuleSummary)) (fieldNames (Map String Bool)) (path String)] -> RState
+(df rResolveTick [(st ResolveState) (tickIdx Int64) (mod ModuleSummary) (deps (Map String ModuleSummary)) (fieldNames (Map String Bool)) (path String)] -> ResolveState
   (mt (list-head (.-work st))
     ((none) st)
     ((some item)
@@ -839,51 +836,51 @@
        (mt expr
          ((rd/sexprAtom v)
           (if (isLiteralAtom? v)
-            (RState :work rest :diags acc)
+            (ResolveState :work rest :diags acc)
             (if (string-starts-with? v ":")
-              (RState :work rest :diags acc)
+              (ResolveState :work rest :diags acc)
               (if (isReservedIdent? v)
-                (RState :work rest :diags (diagReservedPrefix v path acc))
+                (ResolveState :work rest :diags (diagReservedPrefix v path acc))
                 (if (isQualifiedName? v)
                   (let [(qp (splitQual v))
                         (alias (.-first qp))
                         (member (.-second qp))]
                     (mt (checkQualifiedMember v alias member mod deps path)
-                      ((some d) (RState :work rest :diags (list-cons d acc)))
-                      ((none) (RState :work rest :diags acc))))
+                      ((some d) (ResolveState :work rest :diags (list-cons d acc)))
+                      ((none) (ResolveState :work rest :diags acc))))
                   (if (map-has? scope v)
-                    (RState :work rest :diags acc)
+                    (ResolveState :work rest :diags acc)
                     (if (map-has? (.-funs mod) v)
-                      (RState :work rest :diags acc)
+                      (ResolveState :work rest :diags acc)
                       (if (map-has? (.-caseOwner mod) v)
-                        (RState :work rest :diags acc)
+                        (ResolveState :work rest :diags acc)
                         (if (isPreludeTag? v)
-                          (RState :work rest :diags acc)
+                          (ResolveState :work rest :diags acc)
                           (if (isSpecialForm? v)
-                            (RState :work rest :diags acc)
+                            (ResolveState :work rest :diags acc)
                             (mt (ty/builtinSig v)
                               ((some _)
-                               (RState :work rest :diags (list-cons (makeDiag "builtin-reference" (str v " is a builtin, not a value; wrap it in an fn to pass it") path) acc)))
+                               (ResolveState :work rest :diags (list-cons (makeDiag "builtin-reference" (str v " is a builtin, not a value; wrap it in an fn to pass it") path) acc)))
                                 ((none)
-                                 (RState :work rest :diags (list-cons (makeDiag "rule-2" (str v " is not defined") path) acc))))))))))))))
+                                 (ResolveState :work rest :diags (list-cons (makeDiag "rule-2" (str v " is not defined") path) acc))))))))))))))
 
          ((rd/sexprVect items)
-          (RState :work (list-append (mapRitems items scope effectOk) rest) :diags acc))
+          (ResolveState :work (list-append (mapRitems items scope effectOk) rest) :diags acc))
 
          ((rd/sexprList items)
           (mt (list-head items)
-            ((none) (RState :work rest :diags acc))
+            ((none) (ResolveState :work rest :diags acc))
             ((some h)
              (let [(headTok (rd/sexprHead h))
                    (tailArgs (safeTail items))]
                (cond
                  ((= headTok "==")
-                  (RState :work rest :diags (list-cons (makeDiag "builtin-reference" "= is a builtin, not a value; wrap it in an fn to pass it" path) acc)))
+                  (ResolveState :work rest :diags (list-cons (makeDiag "builtin-reference" "= is a builtin, not a value; wrap it in an fn to pass it" path) acc)))
 
                  ((= headTok "let")
                   (let [(bindItems (firstVectItems tailArgs))
                         (bodyExprs (safeTail tailArgs))
-                        (bindRes (fold (fn [(pairAcc (Pair (Map String Bool) (List RItem))) (bit rd/SExpr)] -> (Pair (Map String Bool) (List RItem))
+                        (bindRes (fold (fn [(pairAcc (Pair (Map String Bool) (List ResolveWorkItem))) (bit rd/SExpr)] -> (Pair (Map String Bool) (List ResolveWorkItem))
                                           (mt bit
                                             ((rd/sexprList bparts) (addLetBinding bparts pairAcc effectOk))
                                             ((rd/sexprVect bparts) (addLetBinding bparts pairAcc effectOk))
@@ -893,13 +890,13 @@
                         (finalLetScope (.-first bindRes))
                         (letValItems (list-reverse (.-second bindRes)))
                         (letBodyItems (mapRitems bodyExprs finalLetScope effectOk))]
-                    (RState :work (list-append letValItems (list-append letBodyItems rest)) :diags acc)))
+                    (ResolveState :work (list-append letValItems (list-append letBodyItems rest)) :diags acc)))
 
                  ((= headTok "if")
-                  (RState :work (list-append (mapRitems tailArgs scope effectOk) rest) :diags acc))
+                  (ResolveState :work (list-append (mapRitems tailArgs scope effectOk) rest) :diags acc))
 
                  ((= headTok "cond")
-                  (let [(condItems (fold (fn [(cacc (List RItem)) (clause rd/SExpr)] -> (List RItem)
+                  (let [(condItems (fold (fn [(cacc (List ResolveWorkItem)) (clause rd/SExpr)] -> (List ResolveWorkItem)
                                             (mt clause
                                               ((rd/sexprList cparts)
                                                (let [(chead (firstHeadIdent cparts))]
@@ -909,7 +906,7 @@
                                               (_ cacc)))
                                           (list)
                                           tailArgs))]
-                    (RState :work (list-append condItems rest) :diags acc)))
+                    (ResolveState :work (list-append condItems rest) :diags acc)))
 
                  ((= headTok "fn")
                   (let [(isBang (and (not (list-empty? tailArgs))
@@ -931,13 +928,13 @@
                                         scope
                                         paramItems))
                         (fnBodyItems (mapRitems bodyNodes fnScope isBang))]
-                    (RState :work (list-append fnBodyItems rest) :diags acc)))
+                    (ResolveState :work (list-append fnBodyItems rest) :diags acc)))
 
                  ((= headTok "match")
                   (let [(scrutinee (mt (list-head tailArgs) ((some s) s) ((none) (rd/makeAtom ""))))
                         (arms (safeTail tailArgs))
-                        (scrutItem (RItem :expr scrutinee :scope scope :effectOk effectOk))
-                        (armsRes (fold (fn [(accArms (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List RItem)))) (arm rd/SExpr)] -> (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List RItem)))
+                        (scrutItem (ResolveWorkItem :expr scrutinee :scope scope :effectOk effectOk))
+                        (armsRes (fold (fn [(accArms (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List ResolveWorkItem)))) (arm rd/SExpr)] -> (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List ResolveWorkItem)))
                                           (mt arm
                                             ((rd/sexprList armParts)
                                              (let [(pat (mt (list-head armParts) ((some p) p) ((none) (rd/makeAtom "_"))))
@@ -959,7 +956,7 @@
                                   (.-first (.-second armsRes))
                                   (checkMatchExhaustiveness (.-first (.-first armsRes)) mod deps path (.-first (.-second armsRes)))))
                         (allMatchItems (.-second (.-second armsRes)))]
-                    (RState :work (list-append allMatchItems rest) :diags dArms)))
+                    (ResolveState :work (list-append allMatchItems rest) :diags dArms)))
 
                  ((string-starts-with? headTok ".-")
                   (let [(fname (sliceFrom headTok 2))
@@ -967,7 +964,7 @@
                                    acc
                                    (list-cons (makeDiag "rule-2" (str "no record in this module has a field " fname) path) acc)))
                         (newItems (mapRitems tailArgs scope effectOk))]
-                    (RState :work (list-append newItems rest) :diags dFname)))
+                    (ResolveState :work (list-append newItems rest) :diags dFname)))
 
                  ((isCtorHead? headTok)
                    (let [(schemaInfo (if (isQualifiedName? headTok)
@@ -992,7 +989,7 @@
                     (mt (.-first schemaInfo)
                       ((none)
                        (let [(newItems (mapRitems tailArgs scope effectOk))]
-                         (RState :work (list-append newItems rest) :diags dCtor)))
+                         (ResolveState :work (list-append newItems rest) :diags dCtor)))
                       ((some schema)
                        (let [(fieldMap (fold (fn [(fm (Map String FieldSummary)) (f FieldSummary)] -> (Map String FieldSummary)
                                                 (map-set fm (.-name f) f))
@@ -1009,8 +1006,8 @@
                                           (list-cons (makeDiag "ctor" (str (.-name schema) " is missing " (string-join (map (fn [(f FieldSummary)] -> String (.-name f)) missing) ", ")) path) dFields)
                                           dFields))
                              (ctorValExprs (extractCtorValExprs tailArgs))
-                             (newItems (map (fn [(e rd/SExpr)] -> RItem (RItem :expr e :scope scope :effectOk effectOk)) ctorValExprs))]
-                         (RState :work (list-append newItems rest) :diags dMissing))))))
+                             (newItems (map (fn [(e rd/SExpr)] -> ResolveWorkItem (ResolveWorkItem :expr e :scope scope :effectOk effectOk)) ctorValExprs))]
+                         (ResolveState :work (list-append newItems rest) :diags dMissing))))))
 
                  (:else
                   (let [(isLiteralCallee (isLiteralAtom? headTok))
@@ -1088,10 +1085,10 @@
                                    ((none) dEffect)))
                         (dHead (checkHeadExpr h scope effectOk mod deps fieldNames path dArity))
                         (newItems (mapRitems tailArgs scope effectOk))]
-                    (RState :work (list-append newItems rest) :diags dHead)))))))))))))
+                    (ResolveState :work (list-append newItems rest) :diags dHead)))))))))))))
 
-(df rResolveRun [(st RState) (budget Int64) (mod ModuleSummary) (deps (Map String ModuleSummary)) (fieldNames (Map String Bool)) (path String)] -> RState
-  (let [(next (fold (fn [(s RState) (idx Int64)] -> RState
+(df rResolveRun [(st ResolveState) (budget Int64) (mod ModuleSummary) (deps (Map String ModuleSummary)) (fieldNames (Map String Bool)) (path String)] -> ResolveState
+  (let [(next (fold (fn [(s ResolveState) (idx Int64)] -> ResolveState
                       (rResolveTick s idx mod deps fieldNames path))
                     st
                     (range 0 budget)))]
@@ -1136,10 +1133,10 @@
                              (map-set sc (.-name p) true))
                            (map-empty)
                            (.-params d)))
-        (initItems (map (fn [(bodyE rd/SExpr)] -> RItem
-                           (RItem :expr bodyE :scope paramScope :effectOk (.-effect d)))
+        (initItems (map (fn [(bodyE rd/SExpr)] -> ResolveWorkItem
+                           (ResolveWorkItem :expr bodyE :scope paramScope :effectOk (.-effect d)))
                          (.-body d)))
-        (finalSt (rResolveRun (RState :work initItems :diags acc) 64 mod deps fieldNames path))]
+        (finalSt (rResolveRun (ResolveState :work initItems :diags acc) 64 mod deps fieldNames path))]
     (.-diags finalSt)))
 
 (df checkBodies [(forms (List a/TopForm)) (mod ModuleSummary) (deps (Map String ModuleSummary)) (path String)] -> (List ty/Diagnostic)

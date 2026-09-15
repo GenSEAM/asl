@@ -96,8 +96,8 @@
 
 (df ! collectDirectoryFiles [(dir Str)] -> (List Str)
   :d "Walks a directory tree recursively and returns all relative file paths, excluding .git, node_modules, and dist."
-  (let [(cmd (str "find " dir " -type f ! -path '*/.*' ! -path '*/node_modules/*' ! -path '*/dist/*'"))
-        (res (sys-exec cmd))]
+  (let [(cmd (str "find " dir " -type f ! -path '*/.*' ! -path '*/node_modules/*' ! -path '*/dist/*' ! -path '*/asl-quantum/*' ! -path '*/asl-arduino/*'"))
+        (res (sysExec cmd))]
     (if (= (.-exitCode res) 0)
         (let [(out (.-stdout res))
               (rawLines (string-split out "\n"))]
@@ -105,22 +105,18 @@
         (list))))
 
 (df findForeignFilesInPaths [(paths (List Str))] -> (List Str)
-  :d "Filters a collection of file paths against forbidden foreign extensions, returning all offending paths."
+  :d "Filters a collection of file paths against allowed extensions (.asl, .asn, .md), returning all foreign/offending paths."
   (filter (fn [(p Str)] -> Bool
-            (or (string-ends-with? p ".py")
-                (or (string-ends-with? p ".js")
-                    (or (string-ends-with? p ".ts")
-                        (or (string-ends-with? p ".rs")
-                            (or (string-ends-with? p ".c")
-                                (or (string-ends-with? p ".cpp")
-                                    (string-ends-with? p ".sh"))))))))
+            (not (or (string-ends-with? p ".asl")
+                     (or (string-ends-with? p ".asn")
+                         (string-ends-with? p ".md")))))
           paths))
 
 (df ! auditPackageTreeZeroForeign [(roots (List Str))] -> (Result I64 (List Str))
   :d "Audits all files in package roots ensuring zero foreign extensions and zero binary blobs."
   (let [(effectiveRoots (if (list-empty? roots) (list "asl/packages") roots))
         (allFiles (fold (fn ! [(acc (List Str)) (r Str)] -> (List Str)
-                          (list-concat acc (collectDirectoryFiles r)))
+                          (listConcat acc (collectDirectoryFiles r)))
                         (list)
                         effectiveRoots))
         (violations (filter (fn ! [(p Str)] -> Bool

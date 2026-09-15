@@ -63,4 +63,8 @@
           :rationale "Cannot be reduced to 'block-gate': distinguishes the general error severity gate check from specialized sub-gates")
     (:sym :name "shouldBlockTokenGate" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'block-gate': isolates token-density threshold gate blocking from general error severity blocking")
+    (:sym :name "detectDeadCondBranches" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'dead-branches': scopes CFG analysis specifically to cond branching anomalies")
+    (:sym :name "detectPostTerminalExpressions" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'post-terminal': specifies AST analysis of unreachable expressions after terminal exits")
   ])

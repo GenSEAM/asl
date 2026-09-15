@@ -1,20 +1,20 @@
 (module aslMesh/scheduler
   :d "Autonomous multi-model mesh partition scheduler and worktree airgap orchestrator under D85."
-  :x [schedule_partitions
-      allocate_worker_worktree
-      partition_map
-      worktree_pool]
+  :x [schedulePartitions
+      allocateWorkerWorktree
+      partitionMap
+      worktreePool]
   :i [])
 
-(df partition_map [packages workers] -> Map
+(df partitionMap [packages workers] -> Map
   :d "Constructs partition mapping across packages"
   {:packages packages :workers workers :count (count packages)})
 
-(df worktree_pool [baseDir count] -> List
+(df worktreePool [baseDir count] -> List
   :d "Constructs worktree airgap pool"
   (list (str baseDir "/worker-0") (str baseDir "/worker-1") (str baseDir "/worker-2")))
 
-(df schedule_partitions [packages workerSpecs] -> List
+(df schedulePartitions [packages workerSpecs] -> List
   :d "Schedules disjoint package partitions across worker specifications"
   (let [(totalPkgs (count packages))
         (workerCount (count workerSpecs))]
@@ -23,6 +23,6 @@
       (list
         {:worker (get (head workerSpecs) :workerId) :partition packages :tier (get (head workerSpecs) :tier)}))))
 
-(df allocate_worker_worktree [workerId baseRoot] -> Str
+(df allocateWorkerWorktree [workerId baseRoot] -> Str
   :d "Allocates isolated git worktree airgap path for worker subagent"
   (str baseRoot "/.asl/worktrees/" workerId))

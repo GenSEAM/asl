@@ -1,12 +1,14 @@
 (module aslWeb/agentWireProtocol
   :d "Agent-to-Agent Mesh Protocol showcase component in pure AgentScript."
   :x [agentWireProtocol renderAgentWireProtocol wireProtocolView renderWireProtocol]
-  :i [])
+  :i [(aslVdom/html :a h)])
 
 (df renderAgentWireProtocol [] -> Str
   :d "Renders the Agent-to-Agent Mesh Protocol architecture and token comparison."
-  "<section id=\"a2a-protocol\" aria-labelledby=\"a2a-title\" class=\"relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden\">
-    <div class=\"max-w-shell mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
+  (h/vnodeToHtml
+    (h/sec (h/attrsOf (list (h/attrId "a2a-protocol") (h/attr "aria-labelledby" "a2a-title") (h/attrClass "relative py-28 sm:py-36 transition-colors bg-transparent overflow-hidden")))
+      (list
+        (h/raw "<div class=\"max-w-shell mx-auto px-4 sm:px-6 lg:px-8 relative z-10\">
       <header class=\"mb-16 sm:mb-20 max-w-3xl mx-auto text-center\">
         <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
           <span class=\"text-signal\">04</span>
@@ -171,8 +173,7 @@
           </div>
         </div>
       </div>
-    </div>
-  </section>")
+    </div>")))))
 
 (df agentWireProtocol [] -> Str
   :d "Alias for render-agent-wire-protocol."

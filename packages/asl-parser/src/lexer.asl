@@ -1,7 +1,7 @@
 (module asl-parser/lexer
   :d "100% Self-Hosted AgentScript S-Expression Lexer and Token Stream Engine."
   :x [TokenType Token makeToken tokenKind isWhitespace isDelimiter
-           tokenTypeName tokenize])
+           tokenTypeName tokenize charAt isDigit])
 
 (dfe TokenType
   (:c tokLparen    [] "Left parenthesis delimiter '('")
@@ -84,11 +84,10 @@
 
 (df delimKind [(c String)] -> TokenType
   :d "The nullary token kind a delimiter character names."
-  (mt c
-    ("(" (tokLparen))
-    (")" (tokRparen))
-    ("[" (tokLbracket))
-    (_   (tokRbracket))))
+  (if (= c "(") (tokLparen)
+    (if (= c ")") (tokRparen)
+      (if (= c "[") (tokLbracket)
+        (tokRbracket)))))
 
 (dfe RunMode
   (:c runSymbol     [] "Symbol or identifier run")
@@ -141,9 +140,9 @@
     ((runStringEsc) (tokError "unterminated string literal"))
     ((runIntDot)    (tokError "a float needs a digit after its decimal point"))
     ((runFloat)
-     (tokFloat (mt (string-to-float64 raw) ((some v) v) ((none) 0.0))))
+     (tokFloat (option-or (string-to-float64 raw) 0.0)))
     ((runInt)
-     (tokInt (mt (string-to-int64 raw) ((some v) v) ((none) 0))))))
+     (tokInt (option-or (string-to-int64 raw) 0)))))
 
 (dfs RunState
   (:f mode RunMode "Run mode")

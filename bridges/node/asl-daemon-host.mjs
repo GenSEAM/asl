@@ -58,12 +58,15 @@ function escapeString(str) {
 function countParenAndQuoteBalance(str) {
   let depth = 0;
   let inStr = false;
+  let inComment = false;
   let esc = false;
   let malformed = false;
 
   for (let i = 0; i < str.length; i++) {
     const c = str[i];
-    if (inStr) {
+    if (inComment) {
+      if (c === '\n' || c === '\r') inComment = false;
+    } else if (inStr) {
       if (esc) {
         esc = false;
       } else if (c === '\\') {
@@ -72,7 +75,9 @@ function countParenAndQuoteBalance(str) {
         inStr = false;
       }
     } else {
-      if (c === '"') {
+      if (c === ';') {
+        inComment = true;
+      } else if (c === '"') {
         inStr = true;
       } else if (c === '(') {
         depth++;
@@ -265,15 +270,25 @@ function startServer(options) {
       if (responded) return;
       const str = chunk.toString('utf8');
       reqBuf += str;
+      if (reqBuf.length > 16 * 1024 * 1024) {
+        responded = true;
+        socket.end('(:status "error" :code :ERR_PAYLOAD_TOO_LARGE :message "Payload exceeds 16MB ceiling")\n');
+        return;
+      }
 
+      let inComment = false;
       for (let i = 0; i < str.length; i++) {
         const c = str[i];
-        if (inStr) {
+        if (inComment) {
+          if (c === '\n' || c === '\r') inComment = false;
+        } else if (inStr) {
           if (esc) esc = false;
           else if (c === '\\') esc = true;
           else if (c === '"') inStr = false;
         } else {
-          if (c === '"') {
+          if (c === ';') {
+            inComment = true;
+          } else if (c === '"') {
             inStr = true;
           } else if (c === '(') {
             depth++;

@@ -15,17 +15,23 @@
     ((ok out)
      (let [(spoolPath (red/generateSpoolPath (.-bin c) (.-durationMs out)))
            (demuxer (apm/makeOobDemuxer spoolPath 67108864))
-           (demuxed (if (string-empty? (.-stdout out))
-                        demuxer
-                        (apm/oobDemuxChunk demuxer (.-stdout out))))
+           (demuxed1 (if (string-empty? (.-stdout out))
+                         demuxer
+                         (apm/oobDemuxChunk demuxer (.-stdout out))))
+           (demuxed2 (if (string-empty? (.-stderr out))
+                         demuxed1
+                         (apm/oobDemuxChunk demuxed1 (.-stderr out))))
            (rssVerdict (wd/checkRssCeiling 0 512))
            (deadlockVerdict (wd/detectDeadlock 0 10000))
-           (boundPort (let [(pv (wd/detectBoundPort (.-stdout out)))]
+           (combinedOut (if (string-empty? (.-stderr out))
+                            (.-stdout out)
+                            (str (.-stdout out) "\n" (.-stderr out))))
+           (boundPort (let [(pv (wd/detectBoundPort combinedOut))]
                          (if (.-detected pv) (some (.-port pv)) (none))))
            (_ (mt boundPort
                 ((some p) (log/info! "asl-sh" (str ":port-bound " (string-from-int64 p))))
                 ((none) ())))
-           (receipt (apm/oobDemuxFinish demuxed (.-exitCode out) (.-durationMs out)))]
+           (receipt (apm/oobDemuxFinish demuxed2 (.-exitCode out) (.-durationMs out)))]
        (ok receipt)))
     ((err e) (err e))))
 

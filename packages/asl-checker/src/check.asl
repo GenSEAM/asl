@@ -38,7 +38,7 @@
               :intSites (.-intSites st)
               :mapSites (.-mapSites st)
               :lambdas (.-lambdas st)
-              :diags (list-cons (ty/Diagnostic :code code :message msg :line 1 :col 1 :path path)
+              :diags (list-cons (ty/Diagnostic :code code :message msg :msg msg :line 1 :col 1 :path path)
                                 (.-diags st))))
 
 (df noteMapType [(st InferState) (t ty/Type) (scope String)] -> InferState
@@ -172,8 +172,8 @@
        ((some esum)
         (let [(matching (filter (fn [(c r/CaseSummary)] -> Bool (= (.-name c) sym)) (.-cases esum)))]
           (mt (list-head matching)
-            ((some c)
-             (let [(pStrs (paramTypesToStrs (.-params c)))
+            ((some caseNode)
+             (let [(pStrs (paramTypesToStrs (.-params caseNode)))
                    (tvars (.-typevars esum))
                    (retStr (if (list-empty? tvars)
                                 ename
@@ -267,7 +267,9 @@
     (:else
      (mt (lookupSymbolType v env mod deps st)
        ((some found) found)
-       ((none) (freshVar st "any"))))))
+       ((none)
+        (let [(st1 (addDiag st "rule-1" (str "unbound symbol: " v) path))]
+          (freshVar st1 "any")))))))
 
 (df inferAtomFm [(fm FrameMachine) (v String) (st InferState)] -> (Pair ty/Type InferState)
   (inferAtom v (.-env fm) (.-mod fm) (.-deps fm) (.-scope fm) (.-path fm) st))
@@ -369,7 +371,9 @@
               (subPats (r/safeTail parts))
               (ctorOpt (lookupSymbolType cname env mod deps st))]
           (mt ctorOpt
-            ((none) (pair env st))
+            ((none)
+             (let [(st1 (addDiag st "type" (str "unknown constructor in match pattern: " cname) (.-path mod)))]
+               (pair env st1)))
             ((some ctorRes)
              (let [(ctorTy (.-first ctorRes))
                    (st1 (.-second ctorRes))]
@@ -445,6 +449,46 @@
         (let [(headTok (rd/sexprHead h))
               (tailArgs (r/safeTail items))]
           (cond
+            ((or (= headTok "quote") (= headTok "quasiquote"))
+             (let [(sexprTy (ty/tyCon "SExpr" (list) (none) (none)))]
+               (FrameMachine :frames restFrames
+                             :values (list-cons sexprTy (.-values fm))
+                             :env (.-env fm)
+                             :retType (.-retType fm)
+                             :inLambda (.-inLambda fm)
+                             :scope (.-scope fm)
+                             :path (.-path fm)
+                             :mod (.-mod fm)
+                             :deps (.-deps fm)
+                             :state (.-state fm))))
+
+            ((= headTok "do")
+             (if (list-empty? tailArgs)
+               (FrameMachine :frames restFrames
+                             :values (list-cons (unitType) (.-values fm))
+                             :env (.-env fm)
+                             :retType (.-retType fm)
+                             :inLambda (.-inLambda fm)
+                             :scope (.-scope fm)
+                             :path (.-path fm)
+                             :mod (.-mod fm)
+                             :deps (.-deps fm)
+                             :state (.-state fm))
+               (let [(res (fold (fn [(acc (Pair ty/Type InferState)) (arg rd/SExpr)] -> (Pair ty/Type InferState)
+                                  (evalFm fm arg (.-second acc)))
+                                (pair (unitType) (.-state fm))
+                                tailArgs))]
+                 (FrameMachine :frames restFrames
+                               :values (list-cons (.-first res) (.-values fm))
+                               :env (.-env fm)
+                               :retType (.-retType fm)
+                               :inLambda (.-inLambda fm)
+                               :scope (.-scope fm)
+                               :path (.-path fm)
+                               :mod (.-mod fm)
+                               :deps (.-deps fm)
+                               :state (.-second res)))))
+
             ((= headTok "let")
              (let [(bitems (r/firstVectItems tailArgs))
                    (tails (r/safeTail tailArgs))]
@@ -477,9 +521,9 @@
                                  :state (.-state fm))))))
 
             ((= headTok "if")
-             (let [(condE (mt (list-get tailArgs 0) ((some c) c) ((none) (rd/makeAtom "true"))))
-                   (thenE (mt (list-get tailArgs 1) ((some t) t) ((none) (rd/makeAtom "()"))))
-                   (elseE (mt (list-get tailArgs 2) ((some e) e) ((none) (rd/makeAtom "()"))))]
+             (let [(condE (option-or (list-get tailArgs 0) (rd/makeAtom "true")))
+                   (thenE (option-or (list-get tailArgs 1) (rd/makeAtom "()")))
+                   (elseE (option-or (list-get tailArgs 2) (rd/makeAtom "()")))]
                (FrameMachine :frames (list-cons (fEval condE) (list-cons (fIfCond thenE elseE (.-env fm)) restFrames))
                              :values (.-values fm)
                              :env (.-env fm)
@@ -688,7 +732,8 @@
                                         ((none) (some (.-mod fm)))))]
                       (mt targetMod
                         ((none)
-                         (fmPushFresh fm restFrames st1))
+                         (let [(st2 (addDiag st1 "type" (str "unknown module for type " (ty/showType tgtTy)) (.-path fm)))]
+                           (fmPushFresh fm restFrames st2)))
                         ((some smod)
                          (mt (r/modSchema smod tname)
                            ((some ssum)
@@ -714,8 +759,9 @@
                                 ((none)
                                  (let [(st2 (addDiag st1 "type" (str (ty/showType tgtTy) " has no field " fname) (.-path fm)))]
                                    (fmPushFresh fm restFrames st2))))))
-                           ((none)
-                            (fmPushFresh fm restFrames st1))))))))
+                            ((none)
+                             (let [(st2 (addDiag st1 "type" (str "unknown schema " tname " in module " (.-name smod)) (.-path fm)))]
+                               (fmPushFresh fm restFrames st2)))))))))
                  (_
                   (fmPushFresh fm restFrames st1)))))
 
@@ -1087,41 +1133,41 @@
 (df checkModule [(forms (List a/TopForm)) (deps (Map String r/ModuleSummary)) (path String)] -> (List ty/Diagnostic)
   :d "Purely functional semantic type checker for an AST module."
   (let [(summary (r/collectSummary forms path))
-        (p12Diags (r/resolveModule summary forms deps))]
-    (if (not (list-empty? p12Diags))
-      p12Diags
-      (let [(defunDiags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic)
-                                 (mt form
-                                   ((a/topDefun d)
-                                    (let [(st0 (makeInferState))
-                                          (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type)
-                                                        (map-set e (.-name p) (qualifyTypeWithMod (ty/parseTypeStr (.-type p) (list)) summary deps)))
-                                                      (map-empty)
-                                                      (.-params d)))
-                                          (retTy (qualifyTypeWithMod (ty/parseTypeStr (.-retType d) (list)) summary deps))
-                                          (scopeName (str "function " (.-name d)))
-                                          (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState
-                                                             (noteMapType s (qualifyTypeWithMod (ty/parseTypeStr (.-type p) (list)) summary deps) scopeName))
-                                                           st0
-                                                           (.-params d)))
-                                          (stNote (noteMapType stParams retTy scopeName))
-                                          (bodyNodes (.-body d))]
-                                      (if (list-empty? bodyNodes)
-                                        acc
-                                        (let [(lastE (lastExprUnit bodyNodes))
-                                              (res (runExprDirect lastE env0 (some retTy) false scopeName path summary deps stNote))
-                                              (lastTy (.-first res))
-                                              (st1 (.-second res))
-                                              (st2 (expectType st1 lastTy retTy (str "return of " (.-name d)) path))
-                                              (st3Subst (.-subst st2))
-                                              (dLam (checkUndeterminedLambdas (.-lambdas st2) st3Subst path (.-diags st2)))
-                                              (dLit (checkLiteralRanges (.-intSites st2) st3Subst path dLam))
-                                              (dMap (checkMapKeyRules (.-mapSites st2) st3Subst summary deps path dLit))]
-                                          (list-append dMap acc)))))
-                                   (_ acc)))
-                               (list)
-                               forms))]
-        defunDiags))))
+        (p12Diags (r/resolveModule summary forms deps))
+        (defunDiags (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic)
+                             (mt form
+                               ((a/topDefun d)
+                                (let [(st0 (makeInferState))
+                                      (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type)
+                                                    (map-set e (.-name p) (qualifyTypeWithMod (ty/parseTypeStr (.-type p) (list)) summary deps)))
+                                                  (map-empty)
+                                                  (.-params d)))
+                                      (retTy (qualifyTypeWithMod (ty/parseTypeStr (.-retType d) (list)) summary deps))
+                                      (scopeName (str "function " (.-name d)))
+                                      (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState
+                                                         (noteMapType s (qualifyTypeWithMod (ty/parseTypeStr (.-type p) (list)) summary deps) scopeName))
+                                                       st0
+                                                       (.-params d)))
+                                      (stNote (noteMapType stParams retTy scopeName))
+                                      (bodyNodes (.-body d))]
+                                  (if (list-empty? bodyNodes)
+                                    acc
+                                    (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (e rd/SExpr)] -> (Pair ty/Type InferState)
+                                                              (runExprDirect e env0 (some retTy) false scopeName path summary deps (.-second accRes)))
+                                                            (pair (unitType) stNote)
+                                                            bodyNodes))
+                                          (lastTy (.-first allBodyRes))
+                                          (st1 (.-second allBodyRes))
+                                          (st2 (expectType st1 lastTy retTy (str "return of " (.-name d)) path))
+                                          (st3Subst (.-subst st2))
+                                          (dLam (checkUndeterminedLambdas (.-lambdas st2) st3Subst path (.-diags st2)))
+                                          (dLit (checkLiteralRanges (.-intSites st2) st3Subst path dLam))
+                                          (dMap (checkMapKeyRules (.-mapSites st2) st3Subst summary deps path dLit))]
+                                      (list-append dMap acc)))))
+                               (_ acc)))
+                           (list)
+                           forms))]
+    (list-append p12Diags defunDiags)))
 
 (df parseErrDiag [(pe a/ParseError) (path String)] -> (List ty/Diagnostic)
   (list (ty/Diagnostic :code "parse" :message (.-msg pe) :line (.-line pe) :col (.-col pe) :path path)))
@@ -1134,15 +1180,18 @@
 
 (df ! checkFile! [(path String) (roots (List String))] -> (Result (List ty/Diagnostic) IoError)
   :d "Effectful entry point: loads source and dependencies from filesystem and checks."
-  (let [(src (try (file-read path)))]
-    (mt (a/parse src)
-      ((err pe) (ok (parseErrDiag pe path)))
-      ((ok forms)
-       (let [(summary (r/collectSummary forms path))
-             (importPaths (r/mapValuesList (.-imports summary)))
-             (allRoots (list-cons (mt (parentDir path) ((some p) p) ((none) ".")) roots))
-             (deps (try (r/loadModuleDeps! allRoots importPaths)))]
-         (ok (checkModule forms deps path)))))))
+  (mt (file-read path)
+    ((err ioErr) (err ioErr))
+    ((ok src)
+     (mt (a/parse src)
+       ((err pe) (ok (parseErrDiag pe path)))
+       ((ok forms)
+        (let [(summary (r/collectSummary forms path))
+              (importPaths (r/mapValuesList (.-imports summary)))
+              (allRoots (list-cons (option-or (parentDir path) ".") roots))]
+          (mt (r/loadModuleDeps! allRoots importPaths)
+            ((err ioErr2) (err ioErr2))
+            ((ok deps) (ok (checkModule forms deps path))))))))))
 
 (df parentDir [(p String)] -> (Option String)
   (if (string-contains? p "/")

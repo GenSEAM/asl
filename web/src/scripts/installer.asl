@@ -64,4 +64,4 @@
          "  add_to_path \"${INSTALL_DIR}\" \"${HOME}/.profile\"\n"
          "fi\n\n"
          "echo \" ASL successfully installed to ${INSTALL_DIR}/" cli "\"\n"
-         "echo \"⚡ Try running: " cli " --version\"\n")))
+         "echo \"> Try running: " cli " --version\"\n")))

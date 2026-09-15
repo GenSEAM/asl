@@ -20,34 +20,60 @@
   (:f layers I64 "Number of distinct architectural layers evaluated")
   (:f healthy Bool "Overall architectural health status"))
 
+(df extractPkg [(parts (List Str)) (defaultName Str)] -> Str
+  :d "Extracts the package identifier from path segments."
+  (if (and (>= (list-length parts) 3)
+           (and (= (option-or (list-get parts 0) "") "asl")
+                (= (option-or (list-get parts 1) "") "packages")))
+    (option-or (list-get parts 2) defaultName)
+    (if (and (>= (list-length parts) 2)
+             (= (option-or (list-get parts 0) "") "packages"))
+      (option-or (list-get parts 1) defaultName)
+      (option-or (list-get parts 0) defaultName))))
+
+(df isLayer3Pkg? [(p Str)] -> Bool
+  :d "Checks if package belongs to Layer 3 (Supervision & Tooling)"
+  (list-contains? (list "asl-harness" "harness"
+                        "asl-gates" "gates"
+                        "asl-lint" "lint"
+                        "asl-checker" "checker"
+                        "asl-cli" "cli"
+                        "asl-pack" "pack"
+                        "asl-bridge" "bridge"
+                        "asl-plugin" "plugin"
+                        "bench" "tools")
+                  p))
+
+(df isLayer2Pkg? [(p Str)] -> Bool
+  :d "Checks if package belongs to Layer 2 (Agent Intent)"
+  (list-contains? (list "asl-agent" "agent"
+                        "agent-bus" "agent-core"
+                        "asl-teleology" "teleology"
+                        "asl-router" "router"
+                        "asl-crawler" "crawler"
+                        "asl-bus" "bus")
+                  p))
+
+(df isLayer1Pkg? [(p Str)] -> Bool
+  :d "Checks if package belongs to Layer 1 (Resident Engine)"
+  (list-contains? (list "asl-engine" "engine"
+                        "asl-vfs" "vfs"
+                        "asl-vdom" "vdom"
+                        "asl-intel" "intel"
+                        "asl-mem" "mem"
+                        "asl-egraph" "egraph")
+                  p))
+
 (df moduleLayer [(name Str)] -> I64
   :d "Maps package name, module path, or identifier to architectural layer tier (0..3)."
-  (let [(n (string-trim name))]
-    (if (or (string-contains? n "asl-bridge")
-            (or (string-contains? n "asl-plugin")
-                (or (string-contains? n "asl-sh")
-                    (or (string-contains? n "asl-cli")
-                        (or (string-contains? n "asl-gates")
-                            (or (string-contains? n "browser-plugin")
-                                (or (string-contains? n "bridges/")
-                                    (or (string-contains? n "bin/")
-                                        (or (string-contains? n "vdom")
-                                            (string-contains? n "gsa"))))))))))
+  (let [(n (string-trim name))
+        (parts (string-split n "/"))
+        (pkg (extractPkg parts n))]
+    (if (isLayer3Pkg? pkg)
       3
-      (if (or (string-contains? n "crawler")
-              (or (string-contains? n "web-api-search")
-                  (or (string-contains? n "asl-registry")
-                      (or (string-contains? n "voice")
-                          (or (string-contains? n "asl-mem")
-                              (or (= n "mem")
-                                  (or (string-contains? n "mem/")
-                                      (or (string-contains? n "/mem/")
-                                          (string-contains? n "config")))))))))
+      (if (isLayer2Pkg? pkg)
         2
-        (if (or (string-contains? n "agent-bus")
-                (or (string-contains? n "agent-core")
-                    (or (string-contains? n "harness")
-                        (string-contains? n "asl-contracts"))))
+        (if (isLayer1Pkg? pkg)
           1
           0)))))
 

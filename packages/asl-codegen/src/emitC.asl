@@ -1,0 +1,75 @@
+(module asl-codegen/emitC
+  :d "Embedded ANSI C and Arduino Sketch code generator for AgentScript."
+  :x [emitCHeader
+      emitArduinoHeader
+      emitCType
+      emitCFn
+      emitArduinoSketch
+      formatGpioCall
+      formatDelayCall
+      emitCStandalone
+      emitCHeaderFile
+      emitCSourceFile
+      c99TypeStr]
+  :i [(ast :a a) (c99Emit :a ce) (c99Type :a ct)])
+
+(df emitCHeader [] -> Str
+  :d "Emits standard freestanding C headers."
+  "#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n")
+
+(df emitArduinoHeader [] -> Str
+  :d "Emits standard Arduino platform header."
+  "#include <Arduino.h>\n")
+
+(df emitCType [(ty Str)] -> Str
+  :d "Maps AgentScript type to embedded C/Arduino native type."
+  (cond
+    ((= ty "I64") "int32_t")
+    ((= ty "I32") "int32_t")
+    ((= ty "Bool") "bool")
+    ((= ty "Str") "const char*")
+    ((= ty "F64") "double")
+    ((= ty "Unit") "void")
+    (:else ty)))
+
+(df emitCFn [(name Str) (retTy Str) (body Str)] -> Str
+  :d "Emits a simple C function definition."
+  (str (emitCType retTy) " " name "(void) {\n" body "\n}\n"))
+
+(df formatGpioCall [(callKind Str) (pin I64) (state I64)] -> Str
+  :d "Formats hardware GPIO call (pinMode or digitalWrite) into Arduino C syntax."
+  (cond
+    ((= callKind "pin-mode")
+     (let [(modeStr (if (= state 1) "OUTPUT" "INPUT"))]
+       (str "  pinMode(" (string-from-int64 pin) ", " modeStr ");\n")))
+    ((= callKind "digital-write")
+     (let [(valStr (if (= state 1) "HIGH" "LOW"))]
+       (str "  digitalWrite(" (string-from-int64 pin) ", " valStr ");\n")))
+    (:else "")))
+
+(df formatDelayCall [(ms I64)] -> Str
+  :d "Formats millisecond hardware delay."
+  (str "  delay(" (string-from-int64 ms) ");\n"))
+
+(df emitArduinoSketch [(setupBody Str) (loopBody Str)] -> Str
+  :d "Generates an Arduino sketch containing setup() and loop() entrypoints."
+  (let [(hdr (emitArduinoHeader))
+        (setupFn (str "void setup() {\n" setupBody "}\n\n"))
+        (loopFn (str "void loop() {\n" loopBody "}\n"))]
+    (str hdr "\n" setupFn loopFn)))
+
+(df emitCStandalone [(forms (List a/TopForm)) (entryFn Str) (isFreestanding Bool)] -> Str
+  :d "Delegates to c99Emit/emitCStandalone for ISO C99 single-file generation."
+  (ce/emitCStandalone forms entryFn isFreestanding))
+
+(df emitCHeaderFile [(mod a/ModuleNode)] -> Str
+  :d "Delegates to c99Emit/emitCHeaderFile for ISO C99 header projection."
+  (ce/emitCHeaderFile mod))
+
+(df emitCSourceFile [(mod a/ModuleNode)] -> Str
+  :d "Delegates to c99Emit/emitCSourceFile for ISO C99 implementation projection."
+  (ce/emitCSourceFile mod))
+
+(df c99TypeStr [(ty Str)] -> Str
+  :d "Delegates to c99Type/c99TypeStr for canonical ISO C99 type mapping."
+  (ct/c99TypeStr ty))

@@ -314,6 +314,27 @@
           :rationale "Parses compact ASN sparkline S-expression into SparkMetric record")
     (:sym :name "renderSparklineAscii" :kind :fn :tokens 3
           :rationale "Renders sequence of float telemetry values into Unicode 8-level sparkline string")
+
+    (:sym :name "MultilensModel" :kind :type :tokens 1)
+    (:sym :name "LensOptions" :kind :type :tokens 1)
+    (:sym :name "LensResult" :kind :type :tokens 1)
+    (:sym :name "MultilensBundle" :kind :type :tokens 1)
+    (:sym :name "projectLens" :kind :fn :tokens 2)
+    (:sym :name "asnToCss" :kind :fn :tokens 2)
+    (:sym :name "emitMultilensBundle" :kind :fn :tokens 3
+          :rationale "Simultaneously projects unified model across multiple format lenses into bundle")
+    (:sym :name "renderHtml5Document" :kind :fn :tokens 3
+          :rationale "Synthesizes complete standalone HTML5 document with head, doctype and styles")
+    (:sym :name "projectLensHtml" :kind :fn :tokens 3
+          :rationale "Projects unified model into HTML5 document or fragment with optional styling")
+    (:sym :name "projectLensCss" :kind :fn :tokens 3
+          :rationale "Projects unified model styles into standard CSS custom properties and rules")
+    (:sym :name "projectLensYaml" :kind :fn :tokens 3
+          :rationale "Projects unified model configuration and data into structured YAML representation")
+    (:sym :name "projectLensJson" :kind :fn :tokens 3
+          :rationale "Projects unified model data records into strict RFC 8259 JSON representation")
+    (:sym :name "projectLensToml" :kind :fn :tokens 3
+          :rationale "Projects unified model configuration and metadata into standard TOML tables")
   ])
 
 

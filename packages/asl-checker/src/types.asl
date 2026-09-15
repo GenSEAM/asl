@@ -21,6 +21,7 @@
 (dfs Diagnostic
   (:f code String "Diagnostic rule code")
   (:f message String "Human diagnostic message")
+  (:f msg String "Alias for human diagnostic message")
   (:f line Int64 "1-based source line")
   (:f col Int64 "1-based source column")
   (:f path String "Source file path"))
@@ -216,7 +217,7 @@
      (str "(fn [" (string-join (showTypes params) " ") "] -> " (showType ret) ")"))
     ((tyCon name args mod shown)
      (let [(head (mt shown
-                   ((some s) s)
+                   ((some rest) rest)
                    ((none) (if (string-starts-with? name "#")
                              (stripFirstChar name)
                              name))))]
@@ -262,33 +263,34 @@
   (if (not (string-contains? head "/"))
     (pair (resolveTypeAlias head) (pair (none) (none)))
     (let [(parts (string-split head "/"))
-          (alias (mt (list-get parts 0) ((some s) (some s)) ((none) (none))))
-          (member (mt (list-get parts 1) ((some s) s) ((none) head)))]
-      (makeQualPair member alias head))))
+          (alias (list-get parts 0))]
+      (match (list-get parts 1)
+        ((some s) (makeQualPair s alias head))
+        ((none) (makeQualPair head alias head))))))
 
 (df safeToksTail [(toks (List String))] -> (List String)
   (if (list-empty? toks)
     (list)
     (mt (list-slice toks 1 (list-length toks))
-      ((some s) s)
+      ((some rest) rest)
       ((none) (list)))))
 
 (df skipDelim [(toks (List String)) (delim String)] -> (List String)
   (mt (list-head toks)
-    ((some h) (if (= h delim) (safeToksTail toks) toks))
+    ((some str) (if (= str delim) (safeToksTail toks) toks))
     ((none) toks)))
 
 (df parseTypeToks [(toks (List String)) (typevars (List String))] -> (Pair Type (List String))
   (mt (list-head toks)
     ((none) (pair (tyCon "Unit" (list) (none) (none)) (list)))
-    ((some head)
+    ((some s)
      (let [(rest (safeToksTail toks))]
-       (if (= head "(")
+       (if (= s "(")
          (mt (list-head rest)
            ((none) (pair (tyCon "Unit" (list) (none) (none)) (list)))
-           ((some headSym)
+           ((some sSym)
             (let [(rest2 (safeToksTail rest))]
-              (if (= headSym "fn")
+              (if (= sSym "fn")
                 (let [(curToks (skipDelim rest2 "["))
                       (pRes (parseFnParams curToks typevars (list)))
                       (params (.-first pRes))
@@ -302,16 +304,16 @@
                 (let [(argsRes (parseTypeArgs rest2 typevars (list)))
                       (args (.-first argsRes))
                       (afterArgs (.-second argsRes))
-                      (conInfo (parseConName headSym))
+                      (conInfo (parseConName sSym))
                       (cName (.-first conInfo))
                       (cMod (.-first (.-second conInfo)))
                       (cShown (.-second (.-second conInfo)))]
                   (pair (tyCon cName args cMod cShown) afterArgs))))))
-         (if (list-contains? typevars head)
-           (let [(varId (getTypevarId head typevars))
-                 (kind (if (= head "N") "num" (if (or (= head "A") (or (= head "B") (or (= head "T") (= head "E")))) "any" "any")))]
+         (if (list-contains? typevars s)
+           (let [(varId (getTypevarId s typevars))
+                 (kind (if (= s "N") "num" (if (or (= s "A") (or (= s "B") (or (= s "T") (= s "E")))) "any" "any")))]
              (pair (tyVar varId kind) rest))
-           (let [(conInfo (parseConName head))
+           (let [(conInfo (parseConName s))
                  (cName (.-first conInfo))
                  (cMod (.-first (.-second conInfo)))
                  (cShown (.-second (.-second conInfo)))]
@@ -320,8 +322,8 @@
 (df parseDelimitedTypes [(toks (List String)) (typevars (List String)) (closing String) (acc (List Type))] -> (Pair (List Type) (List String))
   (mt (list-head toks)
     ((none) (pair (list-reverse acc) (list)))
-    ((some t)
-     (if (= t closing)
+    ((some str)
+     (if (= str closing)
        (let [(revAcc (list-reverse acc))
              (remToks (safeToksTail toks))]
          (pair revAcc remToks))

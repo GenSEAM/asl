@@ -1,0 +1,139 @@
+(:dependencyBoundaries :v 1 :src ADR0081
+  :summary "Declared host boundaries and dependency classifications for the sovereign ASL runtime."
+  :hostAdapter (:path "engine/asl.c" :boundary "host-adapter" :declared true :thirdParty false :reported true)
+  :substrate (:zeroSubstrateClaimed false :substrateStatus "declared-host-substrate" :hostRuntime "macOS/POSIX")
+  :collectionRoots ["asl/packages" "."]
+  :coreIsolation (:zeroExtensionKnowledge true :measuredHardcodedEliminated 32 :moduleResolutionBasis "declared module graph alone")
+  :developmentBoundaries [
+    (:boundary :id "racket-reference"
+      :purpose "Semantic naming and reference dialect; optional differential oracle"
+      :status :referenceOnly
+      :deployedRequirement :forbidden
+      :differentialOracle (:maintenanceCost "two-implementation drift overhead" :adopted false))
+  ]
+  :tiers [
+    (:tier :id "bootstrap"
+      :purpose "Seed compiler and C host used to compile the resident engine"
+      :allowed ["engine/asl.c" "clang" "gcc"])
+    (:tier :id "build"
+      :purpose "Generation and assembly scripts for headers and toolchain"
+      :allowed ["engine/genEngineHeader.sh" "scripts/build-from-source.sh" "bash" "xxd"])
+    (:tier :id "test"
+      :purpose "Independent test runner and embedded execution substrate"
+      :allowed ["scripts/run-gate-tests.sh" "JavaScriptCore"])
+    (:tier :id "deployed"
+      :purpose "Autonomous sovereign native binary"
+      :constraint "Single binary (bin/asl) with zero host external runtime requirements (no Node, Python, or MCP).")
+    (:tier :id "oracle"
+      :purpose "Optional development-time differential oracle and reference implementation"
+      :allowed ["racket"]
+      :constraint "Permitted as development-time boundary only; strictly forbidden as a deployment dependency.")
+  ]
+  :adapterAdmission [
+    (:rule :id twoStrikesRule
+      :statement "No shared interface is admitted before two concrete adapters exist sharing the mathematical or semantic contract; data and view live entirely in extensions."
+      :enforcement "ast-audit"
+      :failureCode "ERR_PREMATURE_GENERALIZATION")
+  ]
+  :dependencyDirection [
+    (:rule :id unidirectionalFlow
+      :statement "Dependency flows strictly unidirectional from extensions toward core; core never depends on extensions or their presence."
+      :enforcement "module-graph-audit"
+      :failureCode "ERR_INVERTED_CORE_DEPENDENCY")
+  ]
+  :dormantModules [
+    (:dormantGroup
+      :pathPrefix "asl/"
+      :count 48
+      :classification :dormantCoreExtensions
+      :wakingCondition "Explicit invocation via --enable-core-experimental flag or downstream compiler stage activation"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "mem/"
+      :count 28
+      :classification :dormantVectorMemorySubstrate
+      :wakingCondition "Local vector DB indexing required by multi-agent memory task"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "agent/"
+      :count 25
+      :classification :dormantAgentSubsystem
+      :wakingCondition "Autonomous multi-turn goal execution enabled via agent loop runtime"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "voice/"
+      :count 18
+      :classification :dormantVoiceStreaming
+      :wakingCondition "Native audio I/O streaming bridge connected via 16kHz PCM duplex session"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "agent-core/"
+      :count 13
+      :classification :dormantAgentCore
+      :wakingCondition "Agent deliberation frame pipeline requested by cognitive orchestrator"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "intel/"
+      :count 12
+      :classification :dormantIntelAudit
+      :wakingCondition "Extended code graph health matrix and preloading diagnostic triggered"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "asl/packages/asl-pack/"
+      :count 12
+      :classification :dormantPackageBundling
+      :wakingCondition "Single-file bundle packaging workflow active"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "agent-bus/"
+      :count 12
+      :classification :dormantAgentBusSwarm
+      :wakingCondition "Distributed mesh websocket relay initialized for multi-agent swarm"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "browser-plugin/"
+      :count 34
+      :classification :dormantBrowserAutomation
+      :wakingCondition "Headless browser extension worker connected for DOM automation"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "crawler/"
+      :count 26
+      :classification :dormantWebCrawler
+      :wakingCondition "Autonomous web crawling and link frontier extraction pipeline activated"
+      :statExclusion true)
+    (:dormantGroup
+      :pathPrefix "editorial-matrix/"
+      :count 42
+      :classification :dormantEditorialMatrix
+      :wakingCondition "Documentation and blog publication generation pipeline running"
+      :statExclusion true)
+  ]
+  :dormantAccounting [
+    (:totalDormantBaseline 270 :count 270 :statExclusion true :status :classifiedAndDeclared)
+  ]
+  :subsystemDispositions [
+    (:subsystem :id "browser-plugin"
+      :disposition :wired
+      :classification "active-runtime-target"
+      :entryPoint "browser-plugin/src/plugin.asl"
+      :evidence "Reclassified in Phase 446 / Task44601 as in-browser runtime target; comp-browser-plugin-relay active.")
+    (:subsystem :id "agent"
+      :disposition :wired
+      :classification "active-agent-orchestrator"
+      :entryPoint "agent/src/agent.asl"
+      :evidence "Declared in agent/manifest.asn as autonomous agent orchestrator and TUI; active in CLI and mesh.")
+    (:subsystem :id "voice"
+      :disposition :dormant
+      :classification "experimental-conceptual-schema"
+      :entryPoint "voice/src/voice.asl"
+      :wakingCondition "Host audio hardware capture/playback driver integration or streaming STT/TTS engine availability"
+      :evidence "voice/manifest.asn declares :status conceptual-schema; decoupled from core text runtime relay.")
+    (:subsystem :id "crawler"
+      :disposition :dormant
+      :classification "dormant-web-crawler"
+      :entryPoint "crawler/src/crawler.asl"
+      :wakingCondition "Dialectical RAG activation or outbound web knowledge retrieval pipeline enablement"
+      :evidence "Decoupled web crawling utility; domain package reserved for autonomous knowledge graphs.")
+  ]
+)

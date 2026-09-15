@@ -1,0 +1,193 @@
+(:grammar
+  :package asl-pack
+  :version "0.1.0"
+  :tokensBaseline 1
+  :symbols [
+    (:sym :name "BuildSpec" :kind :type :tokens 1)
+    (:sym :name "PackageArtifact" :kind :type :tokens 1)
+    (:sym :name "TargetOs" :kind :type :tokens 1)
+    (:sym :name "TargetArch" :kind :type :tokens 1)
+    (:sym :name "PlatformDescriptor" :kind :type :tokens 1)
+    (:sym :name "WasmRuntimeKind" :kind :type :tokens 1)
+    (:sym :name "TargetEnvironment" :kind :type :tokens 1)
+    (:sym :name "ExecutionMode" :kind :type :tokens 1)
+    (:sym :name "RuntimeProfile" :kind :type :tokens 1)
+    (:sym :name "StandaloneBundleConfig" :kind :type :tokens 1)
+    (:sym :name "BundleManifest" :kind :type :tokens 1)
+    (:sym :name "LibraryType" :kind :type :tokens 1)
+    (:sym :name "NativeLibrarySpec" :kind :type :tokens 1)
+    (:sym :name "ResolvedLinkerFlags" :kind :type :tokens 1)
+    (:sym :name "KotlinTargetSpec" :kind :type :tokens 1)
+    (:sym :name "KotlinAppSpec" :kind :type :tokens 1)
+    (:sym :name "SwiftPackageSpec" :kind :type :tokens 1)
+    (:sym :name "SwiftAppSpec" :kind :type :tokens 1)
+    (:sym :name "MobilePreviewSpec" :kind :type :tokens 1)
+    (:sym :name "PreviewServerSpec" :kind :type :tokens 1)
+    (:sym :name "KernelSyscall" :kind :type :tokens 1)
+    (:sym :name "DistConfig" :kind :type :tokens 1)
+    (:sym :name "ReleasePlan" :kind :type :tokens 1)
+    (:sym :name "ReleaseStepResult" :kind :type :tokens 1)
+    (:sym :name "ReleaseReceipt" :kind :type :tokens 1)
+    (:sym :name "SlashCommandSpec" :kind :type :tokens 1)
+    (:sym :name "AgentPlatform" :kind :type :tokens 1)
+    (:sym :name "InstallerConfig" :kind :type :tokens 1)
+    (:sym :name "InstallationPlan" :kind :type :tokens 1)
+
+    (:sym :name "planPackage" :kind :fn :tokens 2
+          :rationale "Computes package build strategy and target artifact paths")
+    (:sym :name "makePlatform" :kind :fn :tokens 2
+          :rationale "Constructs platform descriptor with OS, architecture, and ABI")
+    (:sym :name "targetTriple" :kind :fn :tokens 2
+          :rationale "Formats platform descriptor into standard LLVM target triple string")
+    (:sym :name "isWindows?" :kind :fn :tokens 2
+          :rationale "Predicate testing if platform is Windows")
+    (:sym :name "isMacos?" :kind :fn :tokens 2
+          :rationale "Predicate testing if platform is macOS")
+    (:sym :name "isLinux?" :kind :fn :tokens 2
+          :rationale "Predicate testing if platform is Linux")
+    (:sym :name "runtimeName" :kind :fn :tokens 2
+          :rationale "Returns human-readable name of Wasm runtime variant")
+    (:sym :name "modeName" :kind :fn :tokens 2
+          :rationale "Returns string representation of execution mode")
+    (:sym :name "magicFooter" :kind :fn :tokens 2
+          :rationale "Returns magic byte signature identifying standalone ASL binary bundles")
+    (:sym :name "requiresCodesign?" :kind :fn :tokens 2
+          :rationale "Predicate checking if target bundle requires Apple/Windows code signing")
+    (:sym :name "runTests" :kind :fn :tokens 2
+          :rationale "Executes unit test suite")
+
+    (:sym :name "generatePackagingManifest" :kind :fn :tokens 3
+          :rationale "Serializes build plan into distributable packaging manifest")
+    (:sym :name "formatBinaryName" :kind :fn :tokens 3
+          :rationale "Appends platform-specific executable extensions (.exe)")
+    (:sym :name "profileForRuntime" :kind :fn :tokens 3
+          :rationale "Retrieves default execution profile for named Wasm runtime")
+    (:sym :name "recommendRuntimeProfile" :kind :fn :tokens 3
+          :rationale "Recommends optimal runtime profile based on target environment")
+    (:sym :name "footerSizeBytes" :kind :fn :tokens 3
+          :rationale "Returns byte length of embedded standalone bundle metadata footer")
+    (:sym :name "formatFooterManifest" :kind :fn :tokens 3
+          :rationale "Encodes bundle metadata into fixed-length binary footer trailer")
+    (:sym :name "formatCodesignCommand" :kind :fn :tokens 3
+          :rationale "Constructs codesign CLI invocation for macOS Mach-O binaries")
+    (:sym :name "planStandaloneBundle" :kind :fn :tokens 3
+          :rationale "Plans self-contained single-file executable creation")
+    (:sym :name "formatSharedLibName" :kind :fn :tokens 4
+          :rationale "Formats dynamic shared library filename (.dylib, .so, .dll)")
+    (:sym :name "resolveLibraryTarget" :kind :fn :tokens 3
+          :rationale "Resolves target dynamic library path and linker search flags")
+    (:sym :name "makeKernelCall" :kind :fn :tokens 3
+          :rationale "Encodes raw Linux kernel system call parameter frame")
+    (:sym :name "generateJniBinding" :kind :fn :tokens 3
+          :rationale "Emits Java Native Interface C bridge headers and Kotlin stubs")
+    (:sym :name "generateGradleDependency" :kind :fn :tokens 3
+          :rationale "Emits Gradle build.gradle.kts dependency snippet for ASL AAR")
+    (:sym :name "generatePackageSwift" :kind :fn :tokens 3
+          :rationale "Emits Swift Package Manager Package.swift manifest")
+    (:sym :name "generateCBridgeHeader" :kind :fn :tokens 4
+          :rationale "Emits C bridging header for Apple Swift FFI integration")
+    (:sym :name "generateXcframeworkScript" :kind :fn :tokens 3
+          :rationale "Emits shell script to package multi-arch XCFramework for physical iOS and simulator")
+    (:sym :name "generateSwiftuiEntrypoint" :kind :fn :tokens 3
+          :rationale "Emits SwiftUI 6 application scene entrypoint and root window")
+    (:sym :name "generateSwiftObservableStore" :kind :fn :tokens 4
+          :rationale "Emits Swift 6 observation framework reactive store binding ASL native memory")
+    (:sym :name "generateKmpBuildGradle" :kind :fn :tokens 4
+          :rationale "Emits Kotlin Multiplatform build.gradle.kts with Android, iOS, and Wasm targets")
+    (:sym :name "generateComposeActivity" :kind :fn :tokens 3
+          :rationale "Emits Android ComponentActivity using Jetpack Compose UI surface")
+    (:sym :name "generateKmpStateFlow" :kind :fn :tokens 4
+          :rationale "Emits Kotlin StateFlow observable store for multiplatform ASL dispatch")
+    (:sym :name "generateDevicePreviewHtml" :kind :fn :tokens 4
+          :rationale "Generates HTML5 dual-device simulator with iPhone and Pixel mockups")
+    (:sym :name "generatePreviewWasmManifest" :kind :fn :tokens 4
+          :rationale "Emits ASN runtime configuration manifest for in-browser Wasm execution")
+    (:sym :name "makePreviewServerSpec" :kind :fn :tokens 3
+          :rationale "Constructs standard mobile preview dev server specification")
+    (:sym :name "formatHotReloadPatchFrame" :kind :fn :tokens 4
+          :rationale "Formats an atomic differential patch frame into compact JSON for simulator")
+    (:sym :name "generatePreviewServerScript" :kind :fn :tokens 4
+          :rationale "Emits a lightweight standalone WebSocket hot-reload server script")
+    (:sym :name "testFooterConstants" :kind :fn :tokens 3
+          :rationale "Verifies bundle footer serialization integrity")
+    (:sym :name "testCodesignEvaluation" :kind :fn :tokens 3
+          :rationale "Verifies codesigning requirement logic across target OS variants")
+    (:sym :name "makeDistConfig" :kind :fn :tokens 3
+          :rationale "Initializes release distribution parameters and artifact paths")
+    (:sym :name "emitInstallSh" :kind :fn :tokens 3
+          :rationale "Emits POSIX installer script with binary download and source fallback")
+    (:sym :name "emitInstallPs1" :kind :fn :tokens 3
+          :rationale "Emits Windows PowerShell one-line installer script")
+    (:sym :name "emitBuildFromSourceSh" :kind :fn :tokens 4
+          :rationale "Emits automated shell script to compile and verify ASL from source")
+    (:sym :name "emitNpmPackageJson" :kind :fn :tokens 4
+          :rationale "Emits NPM package manifest for global CLI and NPX distribution")
+    (:sym :name "emitNpmBin" :kind :fn :tokens 3
+          :rationale "Emits Node executable dispatcher for NPM and NPX execution")
+    (:sym :name "makeReleasePlan" :kind :fn :tokens 3
+          :rationale "Initializes release specification parameters")
+    (:sym :name "executeReleaseStep" :kind :fn :tokens 3
+          :rationale "Natively executes a release step command")
+    (:sym :name "runVerificationGate" :kind :fn :tokens 3
+          :rationale "Executes pure ASL verification gate suite")
+    (:sym :name "prepareDistDirectory" :kind :fn :tokens 3
+          :rationale "Prepares clean output distribution directory")
+    (:sym :name "bundleTargetPlatform" :kind :fn :tokens 3
+          :rationale "Packages binary archive for target platform")
+    (:sym :name "generateChecksumManifest" :kind :fn :tokens 3
+          :rationale "Generates SHA256 checksum manifest for release")
+    (:sym :name "preparePublishMetadata" :kind :fn :tokens 3
+          :rationale "Prepares package metadata for publishing")
+    (:sym :name "executeReleasePlan" :kind :fn :tokens 3
+          :rationale "Master release pipeline orchestrator")
+    (:sym :name "executeSelfUpdate" :kind :fn :tokens 3
+          :rationale "Natively coordinates in-place binary upgrade")
+    (:sym :name "emitReleaseScriptSh" :kind :fn :tokens 4
+          :rationale "Emits automated release pipeline script")
+    (:sym :name "emitUpgradeScriptSh" :kind :fn :tokens 4
+          :rationale "Emits atomic in-place binary upgrade script")
+    (:sym :name "emitVersionAsn" :kind :fn :tokens 3
+          :rationale "Emits release metadata manifest in ASN format")
+    (:sym :name "testReleasePlan" :kind :fn :tokens 3
+          :rationale "Verifies release plan parameters")
+    (:sym :name "testReleaseScriptGeneration" :kind :fn :tokens 4
+          :rationale "Verifies release script generation")
+    (:sym :name "testUpgradeScriptGeneration" :kind :fn :tokens 4
+          :rationale "Verifies upgrade script generation")
+    (:sym :name "testVersionAsnGeneration" :kind :fn :tokens 4
+          :rationale "Verifies version.asn manifest generation")
+    (:sym :name "testNativeReleaseOrchestration" :kind :fn :tokens 4
+          :rationale "Verifies native release step execution and receipts")
+    (:sym :name "formatToolbeltDirective" :kind :fn :tokens 3
+          :rationale "Emits canonical ASL toolbelt directive for agent instructions")
+    (:sym :name "formatSlashAsl" :kind :fn :tokens 3
+          :rationale "Emits slash command definition for asl batch rpc mode")
+    (:sym :name "formatSlashAslBuild" :kind :fn :tokens 4
+          :rationale "Emits slash command definition for asl build toolbelt mode")
+    (:sym :name "makeAgentPlatform" :kind :fn :tokens 3
+          :rationale "Constructs AgentPlatform descriptor for agent environment")
+    (:sym :name "defaultAgentPlatforms" :kind :fn :tokens 3
+          :rationale "Returns standard supported agent platforms")
+    (:sym :name "makeInstallerConfig" :kind :fn :tokens 3
+          :rationale "Initializes installer configuration with flags")
+    (:sym :name "sanitizeInstructionText" :kind :fn :tokens 3
+          :rationale "Removes deprecated TokenSave sections from instruction files")
+    (:sym :name "injectInstructionDirective" :kind :fn :tokens 3
+          :rationale "Idempotently inserts or updates ASL toolbelt directive in instruction content")
+    (:sym :name "planAgentInstallation" :kind :fn :tokens 3
+          :rationale "Computes targeted rule files skills dirs and commands to install")
+    (:sym :name "emitStandaloneInstallerScript" :kind :fn :tokens 4
+          :rationale "Emits standalone shell installer for zero-dependency agent environment setup")
+    (:sym :name "testToolbeltDirective" :kind :fn :tokens 3
+          :rationale "Verifies toolbelt directive formatting")
+    (:sym :name "testSlashCommands" :kind :fn :tokens 3
+          :rationale "Verifies slash command definitions")
+    (:sym :name "testAgentPlatforms" :kind :fn :tokens 3
+          :rationale "Verifies agent platforms configuration")
+    (:sym :name "testSanitizeAndInject" :kind :fn :tokens 4
+          :rationale "Verifies instruction sanitization and directive injection")
+    (:sym :name "testPlanInstallation" :kind :fn :tokens 3
+          :rationale "Verifies agent installation planning")
+    (:sym :name "testEmitInstallerScript" :kind :fn :tokens 4
+          :rationale "Verifies standalone installer script generation")
+  ])

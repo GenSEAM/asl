@@ -19,7 +19,7 @@
       formatOutputSkeleton]
   :i [(ansi :a ansi)
       (diagnostics :a diag)
-      (asl-sh/process :a proc)])
+      (asl-sh/coreProcess :a proc)])
 
 (dfs ReductionConfig
   (:f headLimit Int64 "Maximum lines retained at stream head (default 500)")
@@ -166,7 +166,7 @@
 (df generateSpoolPath [(bin String) (nonce Int64)] -> String
   :d "Generates canonical ephemeral spool filesystem path with sanitized binary name."
   (let [(safeBin (string-replace bin "/" "_"))]
-    (str "/tmp/asl-proc-" safeBin "-" (string-from-int64 nonce) ".spool")))
+    (str "tmp/asl-proc-" safeBin "-" (string-from-int64 nonce) ".spool")))
 
 (df extractErrorSummary [(stdoutText String) (stderrText String) (exitCode Int64)] -> String
   :d "Extracts compact semantic diagnostic string (<50 tokens) from stdout and stderr."
@@ -217,7 +217,7 @@
 
 (df isErrorLine? [(line String)] -> Bool
   :d "Detects whether an individual log line contains an error or failure indicator."
-  (let [(lower (stringToLowercase line))]
+  (let [(lower (string-to-lowercase line))]
     (or (string-contains? lower "error")
         (or (string-contains? lower "failed")
             (or (string-contains? lower "fatal")

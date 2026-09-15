@@ -6,9 +6,9 @@
  :modules ["asl-compiler/compiler"
            "asl-compiler/wasm"
            "asl-compiler/wasi"
-           "asl-compiler/vfs_git"
+           "asl-compiler/vfsGit"
            "asl-compiler/evaluator"
-           "asl-compiler/compact_rewrite"
+           "asl-compiler/compactRewrite"
            "asl-compiler/elf"
            "asl-compiler/macho"
            "asl-compiler/parser"]

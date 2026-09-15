@@ -12,6 +12,8 @@
       isBalancedFrame?
       extractContentLength
       parseStreamFrame
+      findBalancedNewlineFrame
+      computeRingBytes
       makeSupervisorVerdict
       superviseStep
       makeDaemonEntry
@@ -19,9 +21,10 @@
       makeOobDemuxer
       oobDemuxChunk
       oobDemuxFinish]
-  :i [(watchdog     :a wd)
+  :i [(asl-sh/coreProcess :a cp)
+      (watchdog     :a wd)
       (spool        :a spool)
-      (asl-sh/coreProcess :a proc)])
+      (reducer      :a red)])
 
 (dfs LockVerdict
   (:f acquired Bool "True if singleton advisory lock was successfully acquired")
@@ -53,7 +56,7 @@
   (StreamFrame :kind kind :payload payload :length length :valid valid))
 
 (df countParenBalance [(text String)] -> Int64
-  :d "Computes net parenthesis balance (+1 for '(', -1 for ')'), ignoring characters inside double quotes."
+  :d "Computes net parenthesis balance (+1 for '(', -1 for ')'), ignoring characters inside double quotes. Negative balance prevents subsequent recovery."
   (let [(chars (string-chars text))
         (st (fold (fn [(acc (Pair Int64 (Pair Bool Bool))) (c String)] -> (Pair Int64 (Pair Bool Bool))
                     (let [(depth (fst acc))
@@ -69,11 +72,13 @@
                                   (pair depth (pair (not inStr) false))
                                   (if inStr
                                       acc
-                                      (if (= c "(")
-                                          (pair (+ depth 1) (pair inStr false))
-                                          (if (= c ")")
-                                              (pair (- depth 1) (pair inStr false))
-                                              acc))))))))
+                                      (if (< depth 0)
+                                          acc
+                                          (if (= c "(")
+                                              (pair (+ depth 1) (pair inStr false))
+                                              (if (= c ")")
+                                                  (pair (- depth 1) (pair inStr false))
+                                                  acc)))))))))
                   (pair 0 (pair false false))
                   chars))]
     (fst st)))
@@ -93,6 +98,27 @@
               (clean (string-trim after))]
           (string-to-int64 clean))
         (none))))
+
+(df findBalancedNewlineFrame [(buffer String) (offset Int64)] -> (Pair (Option StreamFrame) String)
+  :d "Scans buffer across newlines accumulating lines until net parenthesis balance is zero."
+  (let [(bufLen (string-length buffer))]
+    (if (>= offset bufLen)
+        (pair (none) buffer)
+        (let [(searchFrom (option-or (string-slice buffer offset bufLen) ""))
+              (nlRel (string-index-of searchFrom "\n"))]
+          (mt nlRel
+            ((some relIdx)
+             (let [(absIdx (+ offset relIdx))
+                   (candidate (option-or (string-slice buffer 0 absIdx) ""))
+                   (rem (option-or (string-slice buffer (+ absIdx 1) bufLen) ""))]
+               (if (= (countParenBalance candidate) 0)
+                   (let [(payload (string-trim candidate))]
+                     (if (string-empty? payload)
+                         (findBalancedNewlineFrame rem 0)
+                         (pair (some (makeStreamFrame "newline" payload (int32-to-int64 (string-length payload)) true)) rem)))
+                   (findBalancedNewlineFrame buffer (+ absIdx 1)))))
+            ((none)
+             (pair (none) buffer)))))))
 
 (df parseStreamFrame [(buffer String)] -> (Pair (Option StreamFrame) String)
   :d "Delineates stream frame using Content-Length headers or newline-delimited ASNL s-expressions."
@@ -118,19 +144,7 @@
                         (pair (none) buffer))))
                  ((none) (pair (none) buffer)))))
             ((none) (pair (none) buffer))))
-        (let [(nlIdx (string-index-of buffer "\n"))]
-          (mt nlIdx
-            ((some i)
-             (let [(candidate (option-or (string-slice buffer 0 i) ""))
-                   (rem (option-or (string-slice buffer (+ i 1) (string-length buffer)) ""))]
-               (if (= (countParenBalance candidate) 0)
-                   (let [(payload (string-trim candidate))]
-                     (if (string-empty? payload)
-                         (pair (none) rem)
-                         (let [(frame (makeStreamFrame "newline" payload (int32-to-int64 (string-length payload)) true))]
-                           (pair (some frame) rem))))
-                   (pair (none) buffer))))
-            ((none) (pair (none) buffer)))))))
+        (findBalancedNewlineFrame buffer 0))))
 
 (dfs SupervisorVerdict
   (:f status String "Execution status: :ok or :recycled")
@@ -194,6 +208,13 @@
       :isTerminated false
       :terminationReason ":none")))
 
+(df computeRingBytes [(rb spool/RingBuffer)] -> Int64
+  :d "Computes total byte size of lines currently resident in RAM ring buffer."
+  (fold (fn [(acc Int64) (line String)] -> Int64
+          (+ acc (int32-to-int64 (string-length line))))
+        0
+        (.-lines rb)))
+
 (df oobDemuxChunk [(demuxer OobDemuxer) (chunk String)] -> OobDemuxer
   :d "Streams a chunk into the two-tier spool while bounding active buffer memory strictly under max-buffer-bytes."
   (let [(chunkLen (int32-to-int64 (string-length chunk)))
@@ -207,25 +228,25 @@
           :spool (.-spool demuxer)
           :isTerminated true
           :terminationReason (.-terminationReason demuxer))
-        (let [(newBuf (+ (.-bufferBytes demuxer) chunkLen))]
-          (if (> newBuf maxBuf)
+        (let [(updatedSpool (spool/twoTierPush (.-spool demuxer) chunk))
+              (activeRam (computeRingBytes (.-ring updatedSpool)))]
+          (if (> activeRam maxBuf)
               (OobDemuxer
                 :maxBufferBytes maxBuf
-                :bufferBytes (.-bufferBytes demuxer)
+                :bufferBytes activeRam
                 :totalBytes newTotal
-                :spool (.-spool demuxer)
+                :spool updatedSpool
                 :isTerminated true
                 :terminationReason ":buffer-overflow")
-              (let [(updatedSpool (spool/twoTierPush (.-spool demuxer) chunk))]
-                (OobDemuxer
-                  :maxBufferBytes maxBuf
-                  :bufferBytes newBuf
-                  :totalBytes newTotal
-                  :spool updatedSpool
-                  :isTerminated false
-                  :terminationReason ":none")))))))
+              (OobDemuxer
+                :maxBufferBytes maxBuf
+                :bufferBytes activeRam
+                :totalBytes newTotal
+                :spool updatedSpool
+                :isTerminated false
+                :terminationReason ":none"))))))
 
-(df oobDemuxFinish [(demuxer OobDemuxer) (exitCode Int64) (durationMs Int64)] -> proc/ProcessReceipt
+(df oobDemuxFinish [(demuxer OobDemuxer) (exitCode Int64) (durationMs Int64)] -> cp/ProcessReceipt
   :d "Finalizes two-tier spool and returns a compact ProcessReceipt (<80 tokens)."
   (let [(closedSpool (spool/twoTierClose (.-spool demuxer)))
         (spoolPath (.-path (.-disk closedSpool)))
@@ -234,5 +255,6 @@
                            "OOB stream terminated: memory bound < 64MB exceeded"
                            (if (= exitCode 0)
                                "Command succeeded"
-                               (str "Process failed with exit code " (string-from-int64 exitCode)))))]
-    (proc/makeProcessReceipt finalExit durationMs 32 spoolPath finalSummary)))
+                               (let [(ringText (spool/ringToString (.-ring (.-spool demuxer))))]
+                                 (red/extractErrorSummary ringText "" exitCode)))))]
+    (cp/makeProcessReceipt finalExit durationMs 32 spoolPath finalSummary)))

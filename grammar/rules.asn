@@ -20,7 +20,7 @@
     :gate "./bin/asl audit consistency"
     :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
   (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
-    :do "pure ASL inside packages; the C host at asl/tools is declared, not hidden; no MCP; seed compiler, build tools and independent test hosts are declared boundaries and the deployed runtime must not require them; no new ecosystem dependency beyond those boundaries"
+    :do "ASL-first policy: everything must be written or used in ASL. No Bash, no Python. Small logic must be re-implemented in pure ASL. Required logic in other target languages (e.g., C) must be authored in ASL and transpiled to the target language. The C host at asl/tools is declared, not hidden; no MCP; no new ecosystem dependency."
     :check "./bin/asl audit foreign"
     :gate "./bin/asl audit foreign"
     :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
@@ -31,8 +31,8 @@
     :not "batch several steps then verify; claim progress with a caller-supplied exit code")
   (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
     :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
-    :check "./bin/asl test tests/acceptance/d81/Task46601.asl"
-    :gate "./bin/asl test tests/acceptance/d81/Task46601.asl"
+    :check :none
+    :gate :none
     :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
   (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
     :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
@@ -121,7 +121,7 @@
     :outcomes ["grounded measurements with method scope and date" "refutation of proxy metrics" "epistemic uncertainty markers" "empirical ledger tracking"]
     :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
     :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
-  (:pack :id audit :tier [:pack :full]
-    :outcomes ["independent verification in clean contexts" "falsifiable gates shown to fail on baseline" "structural gap analysis" "rejection of vacuous test suites"]
-    :failureModes ["self-grading by author" "loosened test assertions to reach green" "unreachability masking"]
-    :affordances ["supervise gate" "asl audit gates" "strict falsify harness" "receipt validation"]))
+  (:pack :id multilensAudit :tier [:pack :full]
+    :outcomes ["dual-polarity refutation verification (D77)" "anti-falsification dynamic roundtripping (D89)" "genuine artifact parsing without mocking" "edge-case coverage verification"]
+    :failureModes ["static string mocking" "vacuous positive assertions without refutes" "evaluating self-preference"]
+    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"]))

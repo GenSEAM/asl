@@ -128,7 +128,7 @@
                 </div>
                 <p class=\"text-meta text-ink-2 leading-relaxed\">Dense codebase symbol lookup and call graph impact extraction without consuming large context windows.</p>
                 <div class=\"p-2.5 rounded-xl bg-ground border border-line font-mono text-micro text-ink-3\">
-                  <span class=\"text-signal font-semibold\">$ </span>asl intel create-token
+                  <span class=\"text-signal font-semibold\">$ </span>asl intel createToken
                 </div>
               </div>
             </div>
@@ -215,7 +215,7 @@
   (:f id Str)
   (:f exp I64))
 
-(df create-token [(id Str) (ttl I64)] -> Token
+(df createToken [(id Str) (ttl I64)] -> Token
   (Token :id id :exp (+ 1700000000 ttl)))</pre>
             </div>
           </div>

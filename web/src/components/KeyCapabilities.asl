@@ -1,12 +1,14 @@
 (module aslWeb/keyCapabilities
   :d "Key Capabilities and Tooling blueprint section in pure AgentScript."
   :x [keyCapabilities renderKeyCapabilities capabilitiesView]
-  :i [])
+  :i [(aslVdom/html :a h)])
 
 (df renderKeyCapabilities [] -> Str
   :d "Renders the 3 blueprint cards: Architect-First Observability, Accelerate Development Flow, and Built-in Ecosystem Tools."
-  "<section id=\"capabilities\" class=\"relative py-24 sm:py-32 bg-transparent\">
-    <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">
+  (h/vnodeToHtml
+    (h/sec (h/attrsOf (list (h/attrId "capabilities") (h/attrClass "relative py-24 sm:py-32 bg-transparent")))
+      (list
+        (h/raw "<div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">
       
       <div class=\"mb-14\">
         <span class=\"inline-flex items-center gap-3 font-mono text-micro font-medium uppercase text-ink-3\">
@@ -225,8 +227,7 @@
 
       </div>
 
-    </div>
-  </section>")
+    </div>")))))
 
 (df keyCapabilities [] -> Str
   :d "Alias for render-key-capabilities."

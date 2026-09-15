@@ -7,7 +7,7 @@
       emitRustProgram
       mergeMaps
       hasMainFn?]
-  :i [(ast :a a) (mangle :a m) (rtypes :a cgTy) (expr :a ex) (types :a ty)])
+  :i [(ast :a a) (mangle :a m) (rtypes :a cgTy) (expr :a ex) (asl-checker/types :a ty)])
 
 (df mergeMaps [(m1 (Map String String)) (m2 (Map String String))] -> (Map String String)
   :d "Merges two maps."

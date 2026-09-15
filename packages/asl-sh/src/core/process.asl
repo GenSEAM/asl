@@ -9,9 +9,12 @@
       withCwd
       withTimeout
       withStdin
+      withEnv
+      buildShellCmd
       exec!
       runSimple!
       sessionSpawn!
+      sessionSpawnWithPid!
       sessionSendInput!
       sessionInput!
       sessionPollTail!
@@ -114,6 +117,16 @@
     :timeoutMs (.-timeoutMs c)
     :stdinData (some input)))
 
+(df withEnv [(c ProcessCmd) (k String) (v String)] -> ProcessCmd
+  :d "Sets or overrides an environment variable."
+  (ProcessCmd
+    :bin (.-bin c)
+    :args (.-args c)
+    :env (map-set (.-env c) k v)
+    :cwd (.-cwd c)
+    :timeoutMs (.-timeoutMs c)
+    :stdinData (.-stdinData c)))
+
 (df quoteShellArg [(arg String)] -> String
   (str "'" (string-replace arg "'" "'\\''") "'"))
 
@@ -122,32 +135,97 @@
     (option-or (string-slice s 0 (- (string-length s) 1)) s)
     s))
 
-(df buildShellCmd [(b String) (args (List String)) (stdinVal String)] -> String
-  (let [(quotedArgs (map quoteShellArg args))
-        (baseCmd (if (list-empty? quotedArgs)
-                   b
-                   (str b " " (string-join " " quotedArgs))))]
-    (if (string-empty? stdinVal)
-      (str baseCmd " < /dev/null")
-      (str "printf '%s' " (quoteShellArg stdinVal) " | " baseCmd))))
+(df formatTimeoutSeconds [(ms Int64)] -> String
+  (let [(sec (/ ms 1000))
+        (fraction (mod (/ ms 100) 10))]
+    (if (< ms 1000)
+        (str "0." (string-from-int64 (/ ms 100)))
+        (if (> fraction 0)
+            (str (string-from-int64 sec) "." (string-from-int64 fraction))
+            (string-from-int64 sec)))))
 
-(df exec! [(c ProcessCmd)] -> (Result ProcessOutput ProcessError)
-  :d "Executes a typed process command with timeout enforcement and captured output."
+(df buildShellCmd [(c ProcessCmd) (stdinPath String)] -> String
+  :d "Constructs the full shell execution pipeline for a ProcessCmd with cwd, env, quoting, timeout, watchdog sentinel, and safe stdin."
   (let [(b (.-bin c))
         (args (.-args c))
-        (stdinOpt (.-stdinData c))
-        (stdinVal (mt stdinOpt
-                     ((some s) s)
+        (quotedBin (quoteShellArg b))
+        (quotedArgs (map quoteShellArg args))
+        (baseCmd (if (list-empty? quotedArgs)
+                     quotedBin
+                     (str quotedBin " " (string-join " " quotedArgs))))
+        (envKeys (map-keys (.-env c)))
+        (envPrefix (if (list-empty? envKeys)
+                       ""
+                       (let [(entries (map (fn [(k String)] -> String
+                                             (let [(v (option-or (map-get (.-env c) k) ""))]
+                                               (str k "=" (quoteShellArg v))))
+                                           envKeys))]
+                         (str "env " (string-join " " entries) " "))))
+        (cwdPrefix (mt (.-cwd c)
+                     ((some d) (str "cd " (quoteShellArg d) " && "))
                      ((none) "")))
+        (cmdWithEnv (str cwdPrefix envPrefix baseCmd))
+        (stdinOpt (.-stdinData c))
+        (stdinPart (mt stdinOpt
+                     ((some s)
+                      (if (string-empty? s)
+                          "< /dev/null"
+                          (str "< " (quoteShellArg stdinPath))))
+                     ((none) "< /dev/null")))
+        (innerCmd (str "( " cmdWithEnv " ) " stdinPart))
         (timeout (.-timeoutMs c))]
+    (if (<= timeout 0)
+        innerCmd
+        (let [(tSec (formatTimeoutSeconds timeout))]
+          (str "S=$(mktemp 2>/dev/null || echo /tmp/.asl_wd_sentinel_$$); rm -f $S; ( " innerCmd " ) & P=$!; (sleep " tSec " && touch $S && kill -9 $P 2>/dev/null) & W=$!; wait $P 2>/dev/null; R=$?; kill -9 $W 2>/dev/null; wait $W 2>/dev/null; if [ -f $S ]; then rm -f $S; exit 124; else rm -f $S; exit $R; fi")))))
+
+(df buildShellCmdArgs [(b String) (args (List String)) (stdinVal String)] -> String
+  :d "Legacy helper for buildShellCmd."
+  (let [(c (ProcessCmd
+             :bin b
+             :args args
+             :env (map-empty)
+             :cwd (none)
+             :timeoutMs 5000
+             :stdinData (if (string-empty? stdinVal) (none) (some stdinVal))))]
+    (buildShellCmd c "")))
+
+(df ! exec! [(c ProcessCmd)] -> (Result ProcessOutput ProcessError)
+  :d "Executes a typed process command with timeout enforcement and captured output."
+  (let [(b (.-bin c))
+        (timeoutMsVal (.-timeoutMs c))]
     (cond
-      ((<= timeout 0)
-       (err (timeout timeout)))
+      ((<= timeoutMsVal 0)
+       (err (timeout timeoutMsVal)))
       (:else
-       (let [(fullCmd (buildShellCmd b args stdinVal))
-             (res (execCmd fullCmd))
-             (code (.-exitCode res))]
+       (let [(stdinOpt (.-stdinData c))
+             (stdinRes (mt stdinOpt
+                         ((some s)
+                          (if (string-empty? s)
+                              (ok "")
+                              (let [(canon (pathCanonicalize "."))
+                                    (root (mt canon ((ok r) r) ((err _) ".")))
+                                    (tmpRes (execCmd "uuidgen"))
+                                    (uuid (stripTrailingNewline (.-stdout tmpRes)))
+                                    (relPath (str "tmp/.asl_proc_stdin_" uuid ".tmp"))
+                                    (absPath (str root "/" relPath))
+                                    (wRes (file-write relPath s))]
+                                (mt wRes
+                                  ((ok _) (ok absPath))
+                                  ((err _) (err (executionFailed -1 "Failed to write stdin spool file")))))))
+                         ((none) (ok ""))))]
+         (mt stdinRes
+           ((err e) (err e))
+           ((ok stdinPath)
+            (let [(fullCmd (buildShellCmd c stdinPath))
+                  (res (execCmd fullCmd))
+                  (code (.-exitCode res))
+                  (cleanRes (if (not (string-empty? stdinPath))
+                                (execCmd (str "rm -f " (quoteShellArg stdinPath)))
+                                (:exitCode 0 :stdout "" :stderr "")))]
          (cond
+           ((= code 124)
+            (err (timeout timeoutMsVal)))
            ((= code 127)
             (err (not-found b)))
            ((= code 126)
@@ -157,7 +235,7 @@
                   :exitCode code
                   :stdout (stripTrailingNewline (.-stdout res))
                   :stderr (stripTrailingNewline (.-stderr res))
-                  :durationMs 1)))))))))
+                  :durationMs 1))))))))))))
 
 
 (df runSimple! [(bin String) (args (List String))] -> (Result String ProcessError)
@@ -190,11 +268,11 @@
   :d "Estimates total BPE tokens for a rendered ProcessReceipt."
   (txt/estimateTokens (renderReceipt r)))
 
-(df sessionSpawn! [(id String) (c ProcessCmd)] -> ProcessSession
-  :d "Initializes an interactive process session bound to a ProcessCmd."
+(df sessionSpawnWithPid! [(id String) (pid Int64) (c ProcessCmd)] -> ProcessSession
+  :d "Initializes an interactive process session bound to a ProcessCmd with an explicit PID."
   (ProcessSession
     :id id
-    :pid 1001
+    :pid pid
     :state "active"
     :cmd c
     :stdinBuffer (list)
@@ -204,10 +282,13 @@
     :idleMs 0
     :timeoutMs (.-timeoutMs c)
     :deadlockDetected false
-    :deadlocked false
     :termDeadlineMs 10000
     :killDeadlineMs 12000
     :terminationReceipt (none)))
+
+(df sessionSpawn! [(id String) (c ProcessCmd)] -> ProcessSession
+  :d "Initializes an interactive process session bound to a ProcessCmd."
+  (sessionSpawnWithPid! id 1001 c))
 
 (df sessionSendInput! [(s ProcessSession) (input String)] -> ProcessSession
   :d "Injects standard input data into an active session resetting idle timer."
@@ -238,7 +319,7 @@
   (ProcessSession
     :id (.-id s)
     :pid (.-pid s)
-    :state (.-state s)
+    :state (if (= (.-state s) "terminated") "terminated" "active")
     :cmd (.-cmd s)
     :stdinBuffer (.-stdinBuffer s)
     :stdoutBuffer (list-append (.-stdoutBuffer s) (list line))
@@ -284,7 +365,17 @@
 
 (df sessionKill! [(s ProcessSession) (sig String)] -> ProcessSession
   :d "Terminates an interactive session with the specified signal."
-  (let [(code (if (= sig "SIGTERM") 143 137))]
+  (let [(code (cond
+                ((= sig "SIGHUP") 129)
+                ((= sig "SIGINT") 130)
+                ((= sig "SIGQUIT") 131)
+                ((= sig "SIGKILL") 137)
+                ((= sig "SIGUSR1") 138)
+                ((= sig "SIGUSR2") 140)
+                ((= sig "SIGPIPE") 141)
+                ((= sig "SIGALRM") 142)
+                ((= sig "SIGTERM") 143)
+                (:else 137)))]
     (ProcessSession
       :id (.-id s)
       :pid (.-pid s)
@@ -310,7 +401,7 @@
     (ProcessSession
       :id (.-id s)
       :pid (.-pid s)
-      :state (if breached "idle" (.-state s))
+      :state (if (= (.-state s) "terminated") "terminated" (if breached "idle" "active"))
       :cmd (.-cmd s)
       :stdinBuffer (.-stdinBuffer s)
       :stdoutBuffer (.-stdoutBuffer s)
@@ -319,7 +410,6 @@
       :idleMs (.-idleMs s)
       :timeoutMs (.-timeoutMs s)
       :deadlockDetected breached
-      :deadlocked breached
       :termDeadlineMs (.-termDeadlineMs s)
       :killDeadlineMs (.-killDeadlineMs s)
       :terminationReceipt (.-terminationReceipt s))))
@@ -341,7 +431,6 @@
       :idleMs newIdle
       :timeoutMs (.-timeoutMs s)
       :deadlockDetected isDeadlocked
-      :deadlocked isDeadlocked
       :termDeadlineMs (.-termDeadlineMs s)
       :killDeadlineMs (.-killDeadlineMs s)
       :terminationReceipt (.-terminationReceipt s))))
@@ -360,8 +449,8 @@
     :idleMs 0
     :timeoutMs (+ (.-timeoutMs s) extendMs)
     :deadlockDetected false
-    :termDeadlineMs (.-termDeadlineMs s)
-    :killDeadlineMs (.-killDeadlineMs s)
+    :termDeadlineMs (+ (.-termDeadlineMs s) extendMs)
+    :killDeadlineMs (+ (.-killDeadlineMs s) extendMs)
     :terminationReceipt (.-terminationReceipt s)))
 
 (df sessionSetTimeout [(s ProcessSession) (newMs Int64)] -> ProcessSession
@@ -378,63 +467,65 @@
     :idleMs 0
     :timeoutMs newMs
     :deadlockDetected false
-    :termDeadlineMs (.-termDeadlineMs s)
-    :killDeadlineMs (.-killDeadlineMs s)
+    :termDeadlineMs newMs
+    :killDeadlineMs (+ newMs 2000)
     :terminationReceipt (.-terminationReceipt s)))
 
 (df sessionStepWatchdog! [(s ProcessSession) (deltaMs Int64) (spoolPath String)] -> ProcessSession
   :d "Advances idle timer and enforces two-stage stdin deadlock watchdog escalation (SIGTERM at 10s, SIGKILL at 12s)."
-  (let [(newIdle (+ (.-idleMs s) deltaMs))
-        (termLimit (.-termDeadlineMs s))
-        (killLimit (.-killDeadlineMs s))]
-    (cond
-      ((>= newIdle killLimit)
-       (let [(receipt (makeProcessReceipt 137 newIdle 0 spoolPath "Stdin deadlock watchdog: SIGKILL dispatched at 12s"))]
-         (ProcessSession
-           :id (.-id s)
-           :pid (.-pid s)
-           :state "terminated"
-           :cmd (.-cmd s)
-           :stdinBuffer (.-stdinBuffer s)
-           :stdoutBuffer (.-stdoutBuffer s)
-           :stderrBuffer (.-stderrBuffer s)
-           :exitCode (some 137)
-           :idleMs newIdle
-           :timeoutMs (.-timeoutMs s)
-           :deadlockDetected true
-           :termDeadlineMs termLimit
-           :killDeadlineMs killLimit
-           :terminationReceipt (some receipt))))
-      ((>= newIdle termLimit)
-       (let [(receipt (makeProcessReceipt 143 newIdle 0 spoolPath "Stdin deadlock watchdog: SIGTERM dispatched at 10s"))]
-         (ProcessSession
-           :id (.-id s)
-           :pid (.-pid s)
-           :state "terminating"
-           :cmd (.-cmd s)
-           :stdinBuffer (.-stdinBuffer s)
-           :stdoutBuffer (.-stdoutBuffer s)
-           :stderrBuffer (.-stderrBuffer s)
-           :exitCode (some 143)
-           :idleMs newIdle
-           :timeoutMs (.-timeoutMs s)
-           :deadlockDetected true
-           :termDeadlineMs termLimit
-           :killDeadlineMs killLimit
-           :terminationReceipt (some receipt))))
-      (:else
-       (ProcessSession
-         :id (.-id s)
-         :pid (.-pid s)
-         :state "active"
-         :cmd (.-cmd s)
-         :stdinBuffer (.-stdinBuffer s)
-         :stdoutBuffer (.-stdoutBuffer s)
-         :stderrBuffer (.-stderrBuffer s)
-         :exitCode (.-exitCode s)
-         :idleMs newIdle
-         :timeoutMs (.-timeoutMs s)
-         :deadlockDetected false
-         :termDeadlineMs termLimit
-         :killDeadlineMs killLimit
-         :terminationReceipt (.-terminationReceipt s))))))
+  (if (= (.-state s) "terminated")
+      s
+      (let [(newIdle (+ (.-idleMs s) deltaMs))
+            (termLimit (.-termDeadlineMs s))
+            (killLimit (.-killDeadlineMs s))]
+        (cond
+          ((>= newIdle killLimit)
+           (let [(receipt (makeProcessReceipt 137 newIdle 0 spoolPath "Stdin deadlock watchdog: SIGKILL dispatched at 12s"))]
+             (ProcessSession
+               :id (.-id s)
+               :pid (.-pid s)
+               :state "terminated"
+               :cmd (.-cmd s)
+               :stdinBuffer (.-stdinBuffer s)
+               :stdoutBuffer (.-stdoutBuffer s)
+               :stderrBuffer (.-stderrBuffer s)
+               :exitCode (some 137)
+               :idleMs newIdle
+               :timeoutMs (.-timeoutMs s)
+               :deadlockDetected true
+               :termDeadlineMs termLimit
+               :killDeadlineMs killLimit
+               :terminationReceipt (some receipt))))
+          ((>= newIdle termLimit)
+           (let [(receipt (makeProcessReceipt 143 newIdle 0 spoolPath "Stdin deadlock watchdog: SIGTERM dispatched at 10s"))]
+             (ProcessSession
+               :id (.-id s)
+               :pid (.-pid s)
+               :state "terminated"
+               :cmd (.-cmd s)
+               :stdinBuffer (.-stdinBuffer s)
+               :stdoutBuffer (.-stdoutBuffer s)
+               :stderrBuffer (.-stderrBuffer s)
+               :exitCode (some 143)
+               :idleMs newIdle
+               :timeoutMs (.-timeoutMs s)
+               :deadlockDetected true
+               :termDeadlineMs termLimit
+               :killDeadlineMs killLimit
+               :terminationReceipt (some receipt))))
+          (:else
+           (ProcessSession
+             :id (.-id s)
+             :pid (.-pid s)
+             :state (.-state s)
+             :cmd (.-cmd s)
+             :stdinBuffer (.-stdinBuffer s)
+             :stdoutBuffer (.-stdoutBuffer s)
+             :stderrBuffer (.-stderrBuffer s)
+             :exitCode (.-exitCode s)
+             :idleMs newIdle
+             :timeoutMs (.-timeoutMs s)
+             :deadlockDetected false
+             :termDeadlineMs termLimit
+             :killDeadlineMs killLimit
+             :terminationReceipt (.-terminationReceipt s)))))))

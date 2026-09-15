@@ -10,8 +10,8 @@
 (df formatAttr [(attr Any)] -> Str
   :d "Serializes a single attribute pair or record into key-value string format"
   (if (> (listLen attr) 1)
-      (let [(k (optionUnwrap (list-get attr 0)))
-            (v (optionUnwrap (list-get attr 1)))]
+      (let [(k (option-unwrap (list-get attr 0)))
+            (v (option-unwrap (list-get attr 1)))]
         (str " " k "=\"" v "\""))
       (str " " (.-name attr) "=\"" (.-value attr) "\"")))
 

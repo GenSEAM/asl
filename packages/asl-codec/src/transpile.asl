@@ -3,10 +3,12 @@
   :x [TranspileResult
       jsonToAsn asnToJson
       yamlToAsn asnToYaml
-      htmlToVdomAsn vdomAsnToHtml
+      htmlToVdomAsn vdomAsnToHtml vdomNodeToHtml
       csvToAsn asnToCsv
       tsvToAsn asnToTsv
       tomlToAsn asnToToml
+      renderHtml5Document
+      projectLens emitMultilensBundle
       measureTranspileSavings]
   :i [(asl-parser/reader :a rd)
       (asl-parser/lexer :a lx)
@@ -14,6 +16,7 @@
       (yamlTranspile :a yt)
       (csvTranspile :a ct)
       (tomlTranspile :a tt)
+      (multilens :a ml)
       (asl-text/text :a txt)])
 
 (dfs TranspileResult
@@ -22,10 +25,6 @@
   (:f asnTokens I64 "Token count in compact ASN representation")
   (:f savingsPercent F64 "Token compaction percentage")
   (:f success Bool "True if parsing and transpilation succeeded"))
-
-(df isDigit [(c Str)] -> Bool
-  :d "Returns true if char is decimal digit."
-  (string-contains? "0123456789" c))
 
 (df isAlpha [(c Str)] -> Bool
   :d "Returns true if char is alphabetic identifier character."
@@ -66,7 +65,7 @@
          ((= c ":") (JsonScanState :mode "idle" :buf "" :tokens (list-cons (jtkColon) (.-tokens st)) :hasErr false :errMsg ""))
          ((= c ",") (JsonScanState :mode "idle" :buf "" :tokens (list-cons (jtkComma) (.-tokens st)) :hasErr false :errMsg ""))
          ((= c "\"") (JsonScanState :mode "str" :buf "" :tokens (.-tokens st) :hasErr false :errMsg ""))
-         ((or (= c "-") (isDigit c)) (JsonScanState :mode "num" :buf c :tokens (.-tokens st) :hasErr false :errMsg ""))
+         ((or (= c "-") (lx/isDigit c)) (JsonScanState :mode "num" :buf c :tokens (.-tokens st) :hasErr false :errMsg ""))
          ((isAlpha c) (JsonScanState :mode "word" :buf c :tokens (.-tokens st) :hasErr false :errMsg ""))
          (:else (JsonScanState :mode "idle" :buf "" :tokens (.-tokens st) :hasErr true :errMsg (str "Unexpected character: " c)))))
       ((= (.-mode st) "str")
@@ -85,7 +84,7 @@
                         (:else (str "\\" c))))]
          (JsonScanState :mode "str" :buf (str (.-buf st) escaped) :tokens (.-tokens st) :hasErr false :errMsg "")))
       ((= (.-mode st) "num")
-       (if (or (isDigit c) (or (= c ".") (or (= c "e") (or (= c "E") (or (= c "+") (= c "-"))))))
+       (if (or (lx/isDigit c) (or (= c ".") (or (= c "e") (or (= c "E") (or (= c "+") (= c "-"))))))
          (JsonScanState :mode "num" :buf (str (.-buf st) c) :tokens (.-tokens st) :hasErr false :errMsg "")
          (let [(numTk (jtkNum (.-buf st)))
                (toks1 (list-cons numTk (.-tokens st)))]
@@ -801,3 +800,23 @@
        :asnTokens (txt/estimateTokens input)
        :savingsPercent 0.0
        :success false))))
+
+(df renderHtml5Document [(title Str) (lang Str) (cssText Str) (bodyHtml Str) (minify Bool)] -> Str
+  :d "Synthesizes a complete valid standalone HTML5 document."
+  (let [(cleanLang (if (string-empty? lang) "en" lang))
+        (cleanTitle (if (string-empty? title) "AgentScript Document" title))
+        (hasCss (> (string-length (string-trim cssText)) 0))]
+    (if minify
+      (let [(cssBlock (if hasCss (str "<style>" (string-trim cssText) "</style>") ""))]
+        (str "<!DOCTYPE html><html lang=\"" cleanLang "\"><head><meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"/><title>" cleanTitle "</title>" cssBlock "</head><body>" bodyHtml "</body></html>"))
+      (let [(cssBlock (if hasCss (str "\n  <style>\n" (string-trim cssText) "\n  </style>") ""))]
+        (str "<!DOCTYPE html>\n<html lang=\"" cleanLang "\">\n<head>\n  <meta charset=\"UTF-8\"/>\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"/>\n  <title>" cleanTitle "</title>" cssBlock "\n</head>\n<body>\n  " bodyHtml "\n</body>\n</html>")))))
+
+(df projectLens [(lens Str) (model ml/MultilensModel) (opts ml/LensOptions)] -> ml/LensResult
+  :d "Re-exported multilens projection dispatcher."
+  (ml/projectLens lens model opts))
+
+(df emitMultilensBundle [(model ml/MultilensModel) (lenses (List Str)) (opts ml/LensOptions)] -> ml/MultilensBundle
+  :d "Re-exported multilens bundle projection engine."
+  (ml/emitMultilensBundle model lenses opts))
+

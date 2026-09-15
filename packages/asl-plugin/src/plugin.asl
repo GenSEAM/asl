@@ -1,76 +1,65 @@
 (module asl-plugin/plugin
   :d "Formal plugin specification and capability registry for AgentScript core."
-  :x [PluginKind PluginCapability PluginExport PluginManifest PluginRegistry PluginCall PluginResult
-      emptyRegistry registerPlugin lookupPlugin findPluginsByCapability
-      hasCapability? validateManifest formatManifest dispatchCall]
-  :i [])
-
-(dfe PluginKind
-  (:c kindWasm [] "WebAssembly module plugin")
-  (:c kindNativeFfi [] "Native host shared object FFI plugin")
-  (:c kindHostDriver [] "External driver or subprocess host plugin"))
-
-(dfs PluginCapability
-  (:f name Str "Capability identifier e.g. cap-db, cap-fs, cap-net")
-  (:f version Str "Capability semantic version string")
-  (:f doc Str "Capability specification documentation"))
-
-(dfs PluginExport
-  (:f symbolName Str "Exported function or entrypoint name")
-  (:f signature Str "AgentScript typed signature description")
-  (:f doc Str "Export documentation"))
-
-(dfs PluginManifest
-  (:f id Str "Unique plugin identifier e.g. plugin-postgres")
-  (:f name Str "Human-readable plugin name")
-  (:f version Str "Plugin semantic version")
-  (:f kind PluginKind "Plugin runtime boundary type")
-  (:f capabilities (List PluginCapability) "List of implemented capabilities")
-  (:f exports (List PluginExport) "List of exposed symbols")
-  (:f entrypoint Str "Path or symbol entrypoint"))
-
-(dfs PluginRegistry
-  (:f plugins (Map Str PluginManifest) "Map of plugin ID to plugin manifest")
-  (:f capabilityIndex (Map Str (List Str)) "Map of capability name to list of providing plugin IDs"))
-
-(dfs PluginCall
-  (:f pluginId Str "Target plugin ID")
-  (:f symbolName Str "Target symbol name to invoke")
-  (:f payload Str "Serialized input arguments"))
-
-(dfs PluginResult
-  (:f success Bool "True if execution completed without error")
-  (:f payload Str "Serialized return payload on success")
-  (:f errorMsg Str "Error message on failure"))
+  :x [emptyRegistry registerPlugin lookupManifest lookupInstance hasCapability? findPluginsByCapability dispatchCall sealRegistry
+      PluginKind PluginCapability PluginExport PluginManifest PluginInstance PluginRegistry PluginBuffer PluginError PluginResult PluginCall CallerAuth
+      DispatchReceipt DispatchFault
+      kindWasm kindNativeFfi kindHostDriver
+      errNotFound errDuplicateId errInvalidSignature errUnauthorized errSandboxEscape errExecutionTrap errTimeout errUnimplemented errRegistrySealed]
+  :i [(asl-plugin/types) (asl-plugin/security)])
 
 (df emptyRegistry [] -> PluginRegistry
-  :d "Initializes an empty plugin registry."
-  (PluginRegistry :plugins (map-empty) :capabilityIndex (map-empty)))
+  :d "Initializes an empty sealed-off plugin registry."
+  (PluginRegistry :manifests (map-empty) :instances (map-empty) :capabilityIndex (map-empty) :callerNonces (map-empty) :sealed false))
 
-(df indexPluginCapabilities [(capIndex (Map Str (List Str))) (pluginId Str) (caps (List PluginCapability))] -> (Map Str (List Str))
-  :d "Indexes all capabilities provided by a plugin into the registry index."
-  (fold (fn [(acc (Map Str (List Str))) (c PluginCapability)] -> (Map Str (List Str))
-          (let [(cName (.-name c))
-                (existing (option-or (map-get acc cName) (list)))
-                (updated (list-cons pluginId existing))]
-            (map-set acc cName updated)))
-        capIndex
+(df sealRegistry [(reg PluginRegistry)] -> PluginRegistry
+  :d "Seals the registry, preventing any further plugin registration (Registry Poisoning defense)."
+  (PluginRegistry :manifests (.-manifests reg) :instances (.-instances reg) :capabilityIndex (.-capabilityIndex reg) :callerNonces (.-callerNonces reg) :sealed true))
+
+(df indexPluginCapabilities [(capIndex (Map Str (List Str))) (pluginId Str) (caps (List PluginCapability))] -> (Result (Map Str (List Str)) PluginError)
+  :d "Indexes all capabilities provided by a plugin into the registry index with deduplication."
+  (fold (fn [(acc (Result (Map Str (List Str)) PluginError)) (c PluginCapability)] -> (Result (Map Str (List Str)) PluginError)
+          (mt acc
+            ((err e) (err e))
+            ((ok index)
+             (let [(cName (.-name c))]
+               (if (string-starts-with? cName "core-")
+                   (err (errInvalidSignature (str "Cannot register core capability namespace: " cName)))
+                   (let [(existing (option-or (map-get index cName) (list)))]
+                     (if (list-contains? existing pluginId)
+                         (ok index)
+                         (let [(updated (list-concat existing (list pluginId)))]
+                           (ok (map-set index cName updated))))))))))
+        (ok capIndex)
         caps))
 
-(df registerPlugin [(reg PluginRegistry) (manifest PluginManifest)] -> PluginRegistry
-  :d "Registers a plugin manifest into the registry and updates capability indexing."
-  (let [(pId (.-id manifest))
-        (updatedPlugins (map-set (.-plugins reg) pId manifest))
-        (updatedIndex (indexPluginCapabilities (.-capabilityIndex reg) pId (.-capabilities manifest)))]
-    (PluginRegistry :plugins updatedPlugins :capabilityIndex updatedIndex)))
+(df registerPlugin [(reg PluginRegistry) (manifest PluginManifest) (sandboxRoot Str)] -> (Result PluginRegistry PluginError)
+  :d "Validates and registers a plugin manifest, blocking if sealed or duplicated."
+  (let [(pId (.-id manifest))]
+    (cond
+      ((.-sealed reg)
+       (err (errRegistrySealed)))
+      ((option-some? (map-get (.-manifests reg) pId))
+       (err (errDuplicateId pId)))
+      (:else
+       (mt (validateManifestSecurity manifest sandboxRoot)
+         ((err e) (err e))
+         ((ok _)
+          (let [(indexRes (indexPluginCapabilities (.-capabilityIndex reg) pId (.-capabilities manifest)))]
+         (mt indexRes
+           ((err e) (err e))
+           ((ok updatedIndex)
+            (let [(updatedManifests (map-set (.-manifests reg) pId manifest))
+                  (initialInstance (PluginInstance :pluginId pId :memoryHandle 0 :invocationCount 0))
+                  (updatedInstances (map-set (.-instances reg) pId initialInstance))]
+              (ok (PluginRegistry :manifests updatedManifests :instances updatedInstances :capabilityIndex updatedIndex :callerNonces (.-callerNonces reg) :sealed (.-sealed reg)))))))))))))
 
-(df lookupPlugin [(reg PluginRegistry) (pluginId Str)] -> (Option PluginManifest)
+(df lookupManifest [(reg PluginRegistry) (pluginId Str)] -> (Option PluginManifest)
   :d "Looks up a plugin manifest by its identifier."
-  (map-get (.-plugins reg) pluginId))
+  (map-get (.-manifests reg) pluginId))
 
-(df findPluginsByCapability [(reg PluginRegistry) (capabilityName Str)] -> (List Str)
-  :d "Returns all plugin identifiers providing a given capability."
-  (option-or (map-get (.-capabilityIndex reg) capabilityName) (list)))
+(df lookupInstance [(reg PluginRegistry) (pluginId Str)] -> (Option PluginInstance)
+  :d "Looks up a plugin active instance by its identifier."
+  (map-get (.-instances reg) pluginId))
 
 (df hasCapability? [(manifest PluginManifest) (capabilityName Str)] -> Bool
   :d "Checks whether a plugin manifest implements a specific capability."
@@ -78,37 +67,55 @@
                            (= (.-name c) capabilityName))
                          (.-capabilities manifest)))]
     (not (list-empty? matches))))
+(df findPluginsByCapability [(reg PluginRegistry) (capabilityName Str)] -> (List Str)
+  :d "Retrieves list of plugin IDs advertising the requested capability."
+  (option-or (map-get (.-capabilityIndex reg) capabilityName) (list)))
 
-(df validateManifest [(manifest PluginManifest)] -> (Result Unit Str)
-  :d "Validates that a plugin manifest meets all core structural requirements."
-  (cond
-    ((string-empty? (.-id manifest)) (err "Plugin ID cannot be empty"))
-    ((string-empty? (.-name manifest)) (err "Plugin name cannot be empty"))
-    ((string-empty? (.-version manifest)) (err "Plugin version cannot be empty"))
-    ((string-empty? (.-entrypoint manifest)) (err "Plugin entrypoint cannot be empty"))
-    (:else (ok ()))))
-
-(df formatKind [(k PluginKind)] -> Str
-  :d "Formats plugin runtime kind into string."
-  (mt k
-    ((kindWasm) "wasm")
-    ((kindNativeFfi) "ffi")
-    ((kindHostDriver) "driver")))
-
-(df formatManifest [(m PluginManifest)] -> Str
-  :d "Formats plugin manifest into concise diagnostic summary string."
-  (str "plugin:" (.-id m) "@" (.-version m) "[" (formatKind (.-kind m)) "]"
-       " caps:" (string-join (map (fn [(c PluginCapability)] -> Str (.-name c)) (.-capabilities m)) ",")))
-
-(df dispatchCall [(reg PluginRegistry) (call PluginCall)] -> PluginResult
-  :d "Dispatches a foreign call to a registered plugin verifying its presence and exports."
-  (let [(pOpt (lookupPlugin reg (.-pluginId call)))]
+(df dispatchCall [(reg PluginRegistry) (call PluginCall) (secretKey Str)] -> (Result DispatchReceipt DispatchFault)
+  :d "Dispatches a foreign call, enforcing authorization and returning algebraic state updates including the updated registry."
+  (let [(pOpt (lookupInstance reg (.-pluginId call)))]
     (mt pOpt
-      ((none) (PluginResult :success false :payload "" :errorMsg (str "Plugin not found: " (.-pluginId call))))
-      ((some m)
-       (let [(expMatches (filter (fn [(e PluginExport)] -> Bool
-                                    (= (.-symbolName e) (.-symbolName call)))
-                                  (.-exports m)))]
-         (if (list-empty? expMatches)
-             (PluginResult :success false :payload "" :errorMsg (str "Symbol not exported by plugin: " (.-symbolName call)))
-             (PluginResult :success true :payload (str "ok:" (.-payload call)) :errorMsg "")))))))
+      ((none) (err (DispatchFault :registry reg :error (errNotFound (.-pluginId call)))))
+      ((some inst)
+       (let [(mOpt (lookupManifest reg (.-pluginId call)))]
+         (mt mOpt
+           ((none) (err (DispatchFault :registry reg :error (errNotFound (.-pluginId call)))))
+           ((some manifest)
+            (let [(expMatches (filter (fn [(e PluginExport)] -> Bool
+                                        (= (.-symbolName e) (.-symbolName call)))
+                                      (.-exports manifest)))]
+              (if (list-empty? expMatches)
+                  (err (DispatchFault :registry reg :error (errInvalidSignature (str "Symbol not exported: " (.-symbolName call)))))
+                  (let [(expDef (option-or (list-head expMatches) (PluginExport :symbolName "" :signature "" :doc "" :requiredCapability "")))
+                        (auth (.-auth call))
+                        (callerId (.-identity auth))
+                        (hasNonce? (not (string-empty? (.-nonce auth))))]
+                    (if hasNonce?
+                        (let [(nonceOpt (string-to-int64 (.-nonce auth)))]
+                          (mt nonceOpt
+                            ((none)
+                             (err (DispatchFault :registry reg :error (errUnauthorized "Invalid nonce format"))))
+                            ((some nonceVal)
+                             (let [(lastNonce (option-or (map-get (.-callerNonces reg) callerId) 0))]
+                               (if (<= nonceVal lastNonce)
+                                   (err (DispatchFault :registry reg :error (errUnauthorized "Replayed or out-of-order nonce")))
+                                   (let [(authRes (authorizeCall auth expDef secretKey))]
+                                     (mt authRes
+                                       ((err e) (err (DispatchFault :registry reg :error e)))
+                                       ((ok _)
+                                        (let [(updatedNonces (map-set (.-callerNonces reg) callerId nonceVal))
+                                              (updatedInst (PluginInstance :pluginId (.-pluginId inst) :memoryHandle (.-memoryHandle inst) :invocationCount (+ (.-invocationCount inst) 1)))
+                                              (mockOutBuffer (PluginBuffer :ptr 0 :size 0))
+                                              (updatedInstances (map-set (.-instances reg) (.-pluginId call) updatedInst))
+                                              (updatedReg (PluginRegistry :manifests (.-manifests reg) :instances updatedInstances :capabilityIndex (.-capabilityIndex reg) :callerNonces updatedNonces :sealed (.-sealed reg)))]
+                                          (ok (DispatchReceipt :registry updatedReg :buffer mockOutBuffer :invocationCount (.-invocationCount updatedInst))))))))))))
+                        (let [(authRes (authorizeCall auth expDef secretKey))]
+                          (mt authRes
+                            ((err e) (err (DispatchFault :registry reg :error e)))
+                            ((ok _)
+                             (let [(updatedInst (PluginInstance :pluginId (.-pluginId inst) :memoryHandle (.-memoryHandle inst) :invocationCount (+ (.-invocationCount inst) 1)))
+                                   (mockOutBuffer (PluginBuffer :ptr 0 :size 0))
+                                   (updatedInstances (map-set (.-instances reg) (.-pluginId call) updatedInst))
+                                   (updatedReg (PluginRegistry :manifests (.-manifests reg) :instances updatedInstances :capabilityIndex (.-capabilityIndex reg) :callerNonces (.-callerNonces reg) :sealed (.-sealed reg)))]
+                               (ok (DispatchReceipt :registry updatedReg :buffer mockOutBuffer :invocationCount (.-invocationCount updatedInst))))))))))))))))))
+

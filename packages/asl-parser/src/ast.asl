@@ -101,7 +101,7 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
   -> String
   :d "The verbose spelling a names in this table, or a unchanged."
   (mt (list-index-of spellings a)
-    ((some i) (mt (list-get verbs i) ((some v) v) ((none) a)))
+    ((some i) (option-or (list-get verbs i) a))
     ((none) a)))
 
 (df headVerbose [(a String)] -> String
@@ -129,12 +129,6 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
                   (map (fn [(w String)] -> String (typeVerbose w)) words) " "))]
     (string-replace (string-replace mapped "( " "(") " )" ")")))
 
-(df charAt [(s String) (i Int64)] -> String
-  :d "The single character at index i, or the empty string past the end."
-  (mt (string-slice s i (+ i 1))
-    ((some c) c)
-    ((none)   "")))
-
 (df charsWithin? [(allowed String) (s String)] -> Bool
   :d "True when every character of s appears in allowed."
   (fold (fn [(acc Bool) (c String)] -> Bool (and acc (string-contains? allowed c)))
@@ -144,22 +138,20 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
 (df dropSuffix [(s String)] -> String
   :d "s without a trailing ? or ! marker."
   (if (or (string-ends-with? s "?") (string-ends-with? s "!"))
-    (mt (string-slice s 0 (- (string-length s) 1))
-      ((some p) p)
-      ((none)   ""))
+    (option-or (string-slice s 0 (- (string-length s) 1)) "")
     s))
 
 (df kebabIdent? [(s String)] -> Bool
   :d "True for §2's ident shape: lowercase, digits and hyphens, optional ?/! tail."
   (let [(core (dropSuffix s))]
     (and (not (string-empty? core))
-         (and (string-contains? "abcdefghijklmnopqrstuvwxyz" (charAt core 0))
+         (and (string-contains? "abcdefghijklmnopqrstuvwxyz" (lx/charAt core 0))
               (charsWithin? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-" core)))))
 
 (df pascalName? [(s String)] -> Bool
   :d "True for §2's type-name shape: an uppercase head then alphanumerics."
   (and (not (string-empty? s))
-       (and (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" (charAt s 0))
+       (and (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZ" (lx/charAt s 0))
             (charsWithin?
               "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" s))))
 
@@ -204,8 +196,8 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
 (df nthExpr [(items (List rd/SExpr)) (i Int64)] -> rd/SExpr
   :d "The i-th element of an SExpr list, or an empty atom."
   (mt (list-get items i)
-    ((some s) s)
-    ((none)   (rd/makeAtom ""))))
+    ((some node) node)
+    ((none)      (rd/makeAtom ""))))
 
 (df nthString [(items (List rd/SExpr)) (i Int64)] -> String
   :d "The i-th element rendered to its atom text."
@@ -379,8 +371,9 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
 
 (df parse [(src String)] -> (Result (List TopForm) ParseError)
   :d "Tokenize and parse a module source into typed top forms."
-  (let [(forms (try (readForms (lx/tokenize src))))]
-    (buildModule forms)))
+  (mt (readForms (lx/tokenize src))
+    ((err e) (err e))
+    ((ok forms) (buildModule forms))))
 
 (df moduleForm? [(pf PosForm)] -> Bool
   :d "True when a top-level form is the module header."
@@ -392,8 +385,15 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
     ((some r) (list-head r))
     ((none)   (none))))
 
+(df checkModPath [(m PosForm)] -> (Result String ParseError)
+  :d "Checks that module form has a valid path."
+  (let [(p (nthString (sexprItems (.-expr m)) 1))]
+    (if (modPath? p)
+      (ok p)
+      (err (perr "module header needs a path" m)))))
+
 (df modulePath [(mods (List PosForm))] -> (Result String ParseError)
-  :d "The module path, or an error when no header names one.
+  :d "The module's declaring path or empty string when omitted.
 
   A second header is rejected rather than dropped: a file has one module surface,
   and silently keeping the first is how a header stops meaning anything."
@@ -401,25 +401,40 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
     ((some extra) (err (perr "a second module header" extra)))
     ((none)
      (mt (list-head mods)
-       ((some m)
-        (let [(p (nthString (sexprItems (.-expr m)) 1))]
-          (if (modPath? p)
-            (ok p)
-            (err (perr "module header needs a path" m)))))
+       ((some m) (checkModPath m))
        ((none) (ok ""))))))
+
+(df isModulePosForm? [(p PosForm)] -> Bool
+  :d "True when a position form wraps a module header."
+  (moduleForm? p))
+
+(df isNotModulePosForm? [(p PosForm)] -> Bool
+  :d "True when a position form is not a module header."
+  (not (moduleForm? p)))
+
+(df modsExported [(mods (List PosForm))] -> (List String)
+  :d "Extracts exported names from first module form or returns empty list."
+  (mt (list-head mods)
+    ((some m) (moduleExported (.-expr m)))
+    ((none)   (list))))
+
+(df buildModuleDecls [(mods (List PosForm)) (rest (List PosForm)) (path String)] -> (Result (List TopForm) ParseError)
+  :d "Builds module declarations once path is known."
+  (let [(exported (modsExported mods))]
+    (mt (declForms rest exported)
+      ((err e) (err e))
+      ((ok decls)
+       (mt (list-head mods)
+         ((some m) (ok (list-cons (topModule (moduleNode (.-expr m) path decls)) decls)))
+         ((none)   (ok decls)))))))
 
 (df buildModule [(forms (List PosForm))] -> (Result (List TopForm) ParseError)
   :d "Wrap the module header, when present, and every declaration into top forms."
-  (let [(mods (filter (fn [(p PosForm)] -> Bool (moduleForm? p)) forms))
-        (rest (filter (fn [(p PosForm)] -> Bool (not (moduleForm? p))) forms))
-        (path (try (modulePath mods)))
-        (exported (mt (list-head mods)
-                    ((some m) (moduleExported (.-expr m)))
-                    ((none)   (list))))
-        (decls (try (declForms rest exported)))]
-    (mt (list-head mods)
-      ((some m) (ok (list-cons (topModule (moduleNode (.-expr m) path decls)) decls)))
-      ((none)   (ok decls)))))
+  (let [(mods (filter isModulePosForm? forms))
+        (rest (filter isNotModulePosForm? forms))]
+    (mt (modulePath mods)
+      ((err e) (err e))
+      ((ok path) (buildModuleDecls mods rest path)))))
 
 (df moduleExported [(m rd/SExpr)] -> (List String)
   :d "The module's exported names from its :export vector."
@@ -431,8 +446,8 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
   :d "Import path and alias pairs from the :import list."
   (mt (findOpt (sexprItems m) ":import")
     ((some v)
-     (map (fn [(t rd/SExpr)] -> (Pair String String) (importPair t))
-          (filter (fn [(t rd/SExpr)] -> Bool (rd/isList? t)) (sexprItems v))))
+     (map importPair
+          (filter rd/isList? (sexprItems v))))
     ((none) (list))))
 
 (df importPair [(t rd/SExpr)] -> (Pair String String)
@@ -440,12 +455,16 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
   (let [(items (sexprItems t))]
     (pair (nthString items 0) (nthString items 2))))
 
+(df moduleDocstring [(m rd/SExpr)] -> String
+  :d "Extracts module docstring from :doc option or returns empty string."
+  (mt (findOpt (sexprItems m) ":doc")
+    ((some v) (rd/sexprHead v))
+    ((none)   "")))
+
 (df moduleNode [(m rd/SExpr) (path String) (defs (List TopForm))] -> ModuleNode
   :d "The module header as a typed module node."
   (ModuleNode :path path
-              :docstring (mt (findOpt (sexprItems m) ":doc")
-                           ((some v) (rd/sexprHead v))
-                           ((none)   ""))
+              :docstring (moduleDocstring m)
               :exported (moduleExported m)
               :imports (moduleImports m)
               :defs defs))
@@ -456,20 +475,22 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
        (let [(h (rd/sexprHead s))]
          (= h ":tag"))))
 
-(df declStep [(acc (Result (List TopForm) ParseError)) (pf PosForm)
-                  (exported (List String))]
+(df appendDecl [(pf PosForm) (exported (List String)) (xs (List TopForm))] -> (Result (List TopForm) ParseError)
+  :d "Parses and appends one decl form if not comment or tag."
+  (let [(s (.-expr pf))]
+    (if (or (and (rd/isAtom? s) (string-starts-with? (rd/sexprHead s) "\""))
+            (isTag? s))
+      (ok xs)
+      (mt (declForm pf exported)
+        ((ok t)  (ok (list-cons t xs)))
+        ((err e) (err e))))))
+
+(df declStep [(acc (Result (List TopForm) ParseError)) (pf PosForm) (exported (List String))]
   -> (Result (List TopForm) ParseError)
   :d "Add one converted declaration, keeping the first error. Bare strings are comments."
   (mt acc
     ((err e) (err e))
-    ((ok xs)
-     (let [(s (.-expr pf))]
-       (if (or (and (rd/isAtom? s) (string-starts-with? (rd/sexprHead s) "\""))
-               (isTag? s))
-         (ok xs)
-         (mt (declForm pf exported)
-           ((ok t)  (ok (list-cons t xs)))
-           ((err e) (err e))))))))
+    ((ok xs) (appendDecl pf exported xs))))
 
 (df declForms [(forms (List PosForm)) (exported (List String))]
   -> (Result (List TopForm) ParseError)
@@ -493,72 +514,74 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
       ((or (= h "defenum") (= h "dfe"))   (enumNode s pf))
       (:else (err (perr (str "not a declaration head: '" h "'") pf))))))
 
-(df readTypeVars [(items (List rd/SExpr))]
-  -> (Pair (List String) (List rd/SExpr))
-  :d "Consume a leading { ... } type-parameter block, if present."
-  (mt (list-head items)
-    ((some h)
-     (if (and (rd/isAtom? h) (= (rd/sexprHead h) "{"))
-       (collectVars (tailExprs items) (list))
-       (pair (list) items)))
-    ((none) (pair (list) items))))
-
-(df collectVars [(items (List rd/SExpr)) (acc (List String))]
-  -> (Pair (List String) (List rd/SExpr))
-  :d "Collect type-parameter names up to the closing brace."
-  (mt (list-head items)
-    ((some h)
-     (if (= (rd/sexprHead h) "}")
-       (pair (list-reverse acc) (tailExprs items))
-       (collectVars (tailExprs items) (list-cons (rd/sexprHead h) acc))))
-    ((none) (pair (list-reverse acc) (list)))))
-
 (df filterTags [(items (List rd/SExpr))] -> (List rd/SExpr)
   :d "Remove metadata tag forms from an expression list."
   (filter (fn [(x rd/SExpr)] -> Bool (not (isTag? x))) items))
 
-(df splitDoc [(items (List rd/SExpr))] -> (Pair String (List rd/SExpr))
-  :d "Split a leading :doc pair off a form's remaining items, dropping tags."
+(df docString [(items (List rd/SExpr))] -> String
+  :d "Extracts leading docstring or empty string."
   (mt (list-head items)
     ((some h)
      (cond
-       ((isTag? h) (splitDoc (tailExprs items)))
+       ((isTag? h) (docString (tailExprs items)))
        ((and (rd/isAtom? h) (= (rd/sexprHead h) ":doc"))
         (mt (list-head (tailExprs items))
-          ((some d) (pair (rd/sexprHead d) (filterTags (tailExprs (tailExprs items)))))
-          ((none)   (pair "" (list)))))
-       (:else (pair "" (filterTags items)))))
-    ((none) (pair "" (list)))))
+          ((some d) (rd/sexprHead d))
+          ((none) "")))
+       (:else "")))
+    ((none) "")))
+
+(df docBody [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Extracts body expressions after docstring, dropping tags."
+  (mt (list-head items)
+    ((some h)
+     (cond
+       ((isTag? h) (docBody (tailExprs items)))
+       ((and (rd/isAtom? h) (= (rd/sexprHead h) ":doc"))
+        (filterTags (tailExprs (tailExprs items))))
+       (:else (filterTags items))))
+    ((none) (list))))
 
 (df paramsVector? [(v (Option rd/SExpr))] -> Bool
   :d "True when a defun's parameter slot holds a [ ] vector."
   (mt v
-    ((some p) (rd/isVect? p))
+    ((some node) (rd/isVect? node))
     ((none)   false)))
+
+(df hasEffect? [(firstOpt (Option rd/SExpr))] -> Bool
+  :d "True if the first form after defun name is the ! effect marker."
+  (mt firstOpt
+    ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "!")))
+    ((none)   false)))
+
+(df funParams [(pslot (Option rd/SExpr))] -> (List Param)
+  :d "Extracts parameter list from defun parameter slot."
+  (mt pslot
+    ((some node) (paramList node))
+    ((none)      (list))))
+
+(df funRetType [(rslot (Option rd/SExpr))] -> String
+  :d "Resolves return type string from defun return slot."
+  (mt rslot
+    ((some node) (resolveTypeText (rd/renderSexpr node)))
+    ((none)      "")))
 
 (df funNode [(s rd/SExpr) (exported (List String)) (pf PosForm)]
   -> (Result TopForm ParseError)
   :d "Build a typed defun node from its SExpr form, or reject the signature."
   (let [(items (sexprItems s))
         (rest1 (tailExprs items))
-        (eff (mt (list-head rest1)
-               ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "!")))
-               ((none)   false)))
+        (eff (hasEffect? (list-head rest1)))
         (rest2 (if eff (tailExprs rest1) rest1))
-        (tv (readTypeVars rest2))
-        (rest3 (.-second tv))
-        (name (listHeadText rest3))
-        (rest4 (tailExprs rest3))
+        (name (listHeadText rest2))
+        (rest4 (tailExprs rest2))
         (pslot (list-head rest4))
-        (params (mt pslot
-                  ((some p) (paramList p))
-                  ((none)   (list))))
+        (params (funParams pslot))
         (rest5 (tailExprs rest4))
         (arrow (listHeadText rest5))
-        (ret (mt (list-head (tailExprs rest5))
-               ((some r) (resolveTypeText (rd/renderSexpr r)))
-               ((none)   "")))
-        (docpart (splitDoc (tailExprs (tailExprs rest5))))]
+        (ret (funRetType (list-head (tailExprs rest5))))
+        (doc (docString (tailExprs (tailExprs rest5))))
+        (body (docBody (tailExprs (tailExprs rest5))))]
     (cond
       ((not (kebabIdent? name))
        (err (perr (str "defun name is not kebab-case: '" name "'") pf)))
@@ -568,14 +591,14 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
        (err (perr "defun return type must be introduced by ->" pf)))
       ((string-empty? ret)
        (err (perr "defun has no return type" pf)))
-      ((list-empty? (.-second docpart))
+      ((list-empty? body)
        (err (perr "defun has no body" pf)))
       (:else
-       (ok (topDefun (DefunNode :name name :typeVars (.-first tv)
-                                 :isExported (list-contains? exported name)
-                                 :effect eff :params params :retType ret
-                                 :docstring (.-first docpart)
-                                 :body (.-second docpart))))))))
+       (ok (topDefun (DefunNode :name name :typeVars (list)
+                                :isExported (list-contains? exported name)
+                                :effect eff :params params :retType ret
+                                :docstring doc
+                                :body body)))))))
 
 (df paramList [(v rd/SExpr)] -> (List Param)
   :d "Parameter records from a params vector."
@@ -594,16 +617,19 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
         true
         forms))
 
+(df schemaJsonCase [(items (List rd/SExpr))] -> (Option String)
+  :d "Extracts json-case option from schema items."
+  (mt (findOpt items ":json-case")
+    ((some node) (some (rd/sexprHead node)))
+    ((none)      (none))))
+
 (df schemaNode [(s rd/SExpr) (pf PosForm)] -> (Result TopForm ParseError)
   :d "Build a typed schema node from its SExpr form, or reject its shape."
   (let [(items (sexprItems s))
-        (tv (readTypeVars (tailExprs items)))
-        (rest (.-second tv))
+        (rest (tailExprs items))
         (name (listHeadText rest))
         (fforms (filter (fn [(f rd/SExpr)] -> Bool (and (rd/isList? f) (not (isTag? f)))) (tailExprs rest)))
-        (jc (mt (findOpt items ":json-case")
-              ((some v) (some (rd/sexprHead v)))
-              ((none)   (none))))]
+        (jc (schemaJsonCase items))]
     (cond
       ((not (pascalName? name))
        (err (perr (str "defschema name is not PascalCase: '" name "'") pf)))
@@ -612,7 +638,7 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
       ((not (allHeads? fforms ":field"))
        (err (perr "every defschema member must be a (:field ...) form" pf)))
       (:else
-       (ok (topSchema (SchemaNode :name name :typeVars (.-first tv)
+       (ok (topSchema (SchemaNode :name name :typeVars (list)
                                    :fields (map (fn [(f rd/SExpr)] -> AstField
                                                   (fieldNode f))
                                                 fforms)
@@ -636,8 +662,7 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
 (df enumNode [(s rd/SExpr) (pf PosForm)] -> (Result TopForm ParseError)
   :d "Build a typed enum node from its SExpr form, or reject its shape."
   (let [(items (sexprItems s))
-        (tv (readTypeVars (tailExprs items)))
-        (rest (.-second tv))
+        (rest (tailExprs items))
         (name (listHeadText rest))
         (cforms (filter (fn [(c rd/SExpr)] -> Bool (and (rd/isList? c) (not (isTag? c)))) (tailExprs rest)))]
     (cond
@@ -648,17 +673,21 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
       ((not (allHeads? cforms ":case"))
        (err (perr "every defenum member must be a (:case ...) form" pf)))
       (:else
-       (ok (topEnum (EnumNode :name name :typeVars (.-first tv)
+       (ok (topEnum (EnumNode :name name :typeVars (list)
                                :cases (map (fn [(c rd/SExpr)] -> EnumCase (caseNode c))
                                            cforms))))))))
+
+(df caseFields [(items (List rd/SExpr))] -> (List Param)
+  :d "Extracts fields parameter list from enum case items."
+  (mt (list-get items 2)
+    ((some node) (paramList node))
+    ((none)      (list))))
 
 (df caseNode [(c rd/SExpr)] -> EnumCase
   :d "One (:case name [fields] doc) form as a typed record."
   (let [(items (sexprItems c))]
     (EnumCase :name (nthString items 1)
-              :fields (mt (list-get items 2)
-                        ((some v) (paramList v))
-                        ((none)   (list)))
+              :fields (caseFields items)
               :docstring (nthString items 3))))
 
 (df renderNode [(t TopForm)] -> String
@@ -722,6 +751,12 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
   :d "One parameter as canonical text."
   (str "(" (.-name p) " " (.-type p) ")"))
 
+(df renderJsonCasePart [(jc (Option String))] -> String
+  :d "Renders json-case attribute if present."
+  (mt jc
+    ((some v) (str " :json-case " v))
+    ((none)   "")))
+
 (df renderSchema [(s SchemaNode)] -> String
   :d "Canonical verbose schema text.
 
@@ -731,19 +766,25 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
         (fields (renderJoined (map (fn [(f AstField)] -> String (renderField f))
                                     (.-fields s))
                                " "))
-        (jc (mt (.-jsonCase s)
-              ((some v) (str " :json-case " v))
-              ((none)   "")))]
+        (jc (renderJsonCasePart (.-jsonCase s)))]
     (str "(defschema " tv (.-name s) jc fields ")")))
+
+(df renderFieldDefault [(opt (Option String))] -> String
+  :d "Renders default attribute if present."
+  (mt opt
+    ((some v) (str " :default " v))
+    ((none)   "")))
+
+(df renderFieldJson [(opt (Option String))] -> String
+  :d "Renders json attribute if present."
+  (mt opt
+    ((some v) (str " :json " v))
+    ((none)   "")))
 
 (df renderField [(f AstField)] -> String
   :d "One field as canonical text."
-  (let [(defp (mt (.-default f)
-                ((some v) (str " :default " v))
-                ((none)   "")))
-        (jsonp (mt (.-json f)
-                 ((some v) (str " :json " v))
-                 ((none)   "")))]
+  (let [(defp (renderFieldDefault (.-default f)))
+        (jsonp (renderFieldJson (.-json f)))]
     (str "(:field " (.-name f) " " (.-type f) " " (.-docstring f) defp jsonp ")")))
 
 (df renderEnum [(e EnumNode)] -> String

@@ -37,17 +37,6 @@
       (str s ".clone()")
       s))
 
-(df anyTrue? [(flags (List Bool))] -> Bool
-  :d "True if any boolean in list is true."
-  (fold (fn [(acc Bool) (cur Bool)] (or acc cur)) false flags))
-
-(df sexprToList [(e rd/SExpr)] -> (List rd/SExpr)
-  :d "Extracts items list from vect or list SExpr."
-  (mt e
-    ((rd/sexprVect items) items)
-    ((rd/sexprList items) items)
-    ((rd/sexprAtom _) (list))))
-
 (df caseCall [(tgt String) (args (List String))] -> String
   :d "Formats an enum constructor or unit variant."
   (if (> (list-length args) 0)
@@ -229,9 +218,9 @@
   :d "Lowers a let form to Rust block expression."
   (let [(bindingsNode (option-or (list-get items 1) (rd/sexprVect (list))))
         (body (sliceTail items 2))
-        (bindList (sexprToList bindingsNode))
+        (bindList (rd/sexprToList bindingsNode))
         (letStmts (map (fn [(b rd/SExpr)] -> String
-                          (let [(pair (sexprToList b))]
+                          (let [(pair (rd/sexprToList b))]
                             (if (>= (list-length pair) 2)
                                 (let [(bName (m/mangleIdent (nthAtom pair 0)))
                                       (bVal (cloneIfIdent (emitExpr (option-or (list-get pair 1) (rd/sexprAtom "()")) aliases)))]
@@ -306,8 +295,8 @@
   :d "Lowers a match or mt form to Rust match expression."
   (let [(subj (emitExpr (option-or (list-get items 1) (rd/sexprAtom "()")) aliases))
         (arms (sliceTail items 2))
-        (isSlice (anyTrue? (map isListArm? arms)))
-        (isStr (anyTrue? (map isStringArm? arms)))
+        (isSlice (cgTy/anyTrue? (map isListArm? arms)))
+        (isStr (cgTy/anyTrue? (map isStringArm? arms)))
         (subjBase (if (isIdent? subj) (str subj ".clone()") subj))
         (subjArg (cond
                     (isSlice (str subjBase ".as_slice()"))
@@ -348,7 +337,7 @@
         (pIdx (if hasBang? 2 1))
         (bIdx (if hasBang? 3 2))
         (paramsNode (option-or (list-get items pIdx) (rd/sexprVect (list))))
-        (pList (sexprToList paramsNode))
+        (pList (rd/sexprToList paramsNode))
         (pStrs (map emitFnParam pList))
         (body (if (> (list-length items) bIdx)
                   (let [(tail (sliceTail items bIdx))

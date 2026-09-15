@@ -145,5 +145,70 @@
           :rationale "Emits sovereign in-browser Batch RPC dispatcher export signatures for WebAssembly linear memory")
     (:sym :name "emitAslCoreWasmModule" :kind :fn :tokens 5
           :rationale "Emits complete standalone asl-core.wasm module envelope with WASI preview 1 imports and Batch RPC exports")
-  ])
+  
+    (:sym :name "mangleCIdent" :kind :fn :tokens 3
+          :rationale "Transforms ASL kebab-case identifiers to valid ISO C99 snake_case names with keyword collision protection")
+    (:sym :name "isC99Keyword?" :kind :fn :tokens 3
+          :rationale "Checks if identifier matches any of the 32 ISO C99 reserved keywords or standard library symbols")
+    (:sym :name "mangleCTypeName" :kind :fn :tokens 4
+          :rationale "Translates ASL schema and enum names into C99 PascalCase typedef identifiers with mandatory Asl prefix")
+    (:sym :name "mangleCModulePrefix" :kind :fn :tokens 4
+          :rationale "Derives a unique, legal C identifier prefix from an ASL hierarchical module path")
 
+    (:sym :name "c99PrimitiveType" :kind :fn :tokens 3
+          :rationale "Maps primitive ASL types to ISO C99 fixed-width integer and standard IEEE floating-point types")
+    (:sym :name "c99TypeStr" :kind :fn :tokens 3
+          :rationale "Canonical entrypoint for mapping arbitrary ASL type annotations to ISO C99 types")
+    (:sym :name "emitCDefschema" :kind :fn :tokens 3
+          :rationale "Lowers SchemaNode AST definitions into ordered ISO C99 struct typedefs")
+    (:sym :name "emitCDefenum" :kind :fn :tokens 3
+          :rationale "Lowers EnumNode AST definitions into ISO C99 tagged union architectures")
+    (:sym :name "emitCStringType" :kind :fn :tokens 3
+          :rationale "Emits standard ISO C99 string slice typedef containing data pointer and length bounds")
+    (:sym :name "emitCOptionType" :kind :fn :tokens 3
+          :rationale "Synthesizes typed optional value wrapper struct for ISO C99 targets")
+    (:sym :name "emitCSliceType" :kind :fn :tokens 3
+          :rationale "Synthesizes typed linear slice sequence struct for ISO C99 targets")
+
+    (:sym :name "lowerCExpr" :kind :fn :tokens 3
+          :rationale "Recursively lowers arbitrary ASL SExpr expressions into valid ISO C99 expressions")
+    (:sym :name "lowerCAtom" :kind :fn :tokens 3
+          :rationale "Lowers terminal SExpr atoms into C99 literals or sanitized identifiers")
+    (:sym :name "lowerCLet" :kind :fn :tokens 3
+          :rationale "Synthesizes scoped C99 block statements from ASL let binding vectors")
+    (:sym :name "lowerCIf" :kind :fn :tokens 3
+          :rationale "Lowers conditional branching expressions into parenthesized C99 ternary expressions")
+    (:sym :name "lowerCCond" :kind :fn :tokens 3
+          :rationale "Lowers multi-branch cond forms into nested C99 ternary expressions")
+    (:sym :name "lowerCMatch" :kind :fn :tokens 3
+          :rationale "Lowers pattern matching expressions into exhaustive C99 switch statements with unreachable default abort")
+    (:sym :name "lowerCCall" :kind :fn :tokens 3
+          :rationale "Lowers function invocation, operator application, or field navigation into ISO C99")
+    (:sym :name "lowerCFieldAccess" :kind :fn :tokens 4
+          :rationale "Lowers struct property access expressions into ISO C99 dot notation")
+    (:sym :name "lowerCRecordInit" :kind :fn :tokens 4
+          :rationale "Synthesizes C99 designated compound literal initializers for record construction")
+
+    (:sym :name "emitCHeaderGuards" :kind :fn :tokens 4
+          :rationale "Generates standard ISO C99 preprocessor macro guards preventing multiple header inclusions")
+    (:sym :name "emitCStandardIncludes" :kind :fn :tokens 4
+          :rationale "Emits standard header includes conditioned on freestanding or hosted execution presets")
+    (:sym :name "emitCFunctionPrototype" :kind :fn :tokens 4
+          :rationale "Formats forward function prototype declarations for header files and translation unit preambles")
+    (:sym :name "emitCExternCWrapper" :kind :fn :tokens 4
+          :rationale "Wraps declarations in extern C block when compiled under C++ compilers")
+    (:sym :name "emitCFreestandingPreamble" :kind :fn :tokens 4
+          :rationale "Emits minimal freestanding C99 headers and string slice typedef for zero-allocation preset")
+    (:sym :name "emitCHostedPreamble" :kind :fn :tokens 4
+          :rationale "Emits complete hosted C99 headers and runtime support for standalone POSIX execution")
+    (:sym :name "emitCHeaderFile" :kind :fn :tokens 4
+          :rationale "Projects an ASL module into a clean ISO C99 header file with guards, types, and prototypes")
+    (:sym :name "emitCSourceFile" :kind :fn :tokens 4
+          :rationale "Projects an ASL module into an ISO C99 implementation translation unit")
+    (:sym :name "emitCStandalone" :kind :fn :tokens 3
+          :rationale "Assembles types, prototypes, functions, and main entrypoint into a self-contained C99 source file")
+    (:sym :name "emitCMainEntry" :kind :fn :tokens 4
+          :rationale "Emits standard main entrypoint wiring CLI arguments and process exit code for hosted preset")
+    (:sym :name "assembleCModule" :kind :fn :tokens 3
+          :rationale "Top-level facade assembling an ASL module node into an ISO C99 source unit")
+  ])

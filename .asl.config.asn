@@ -34,7 +34,7 @@
     :strictPolarity false
     :discountZeroAsserts true
     :coreDesired 100.0
-    :corePackages ["packages/asl-compiler" "packages/asl-parser" "packages/asl-codec" "packages/asl-lint" "packages/asl-gates"]
+    :corePackages ["packages/asl-compiler" "packages/asl-parser" "packages/asl-codec" "packages/asl-lint" "packages/asl-gates" "packages/asl-pack"]
     :exclude ["examples/**" "asl-arduino/**" "asl-quantum/**"]
   )
   :tasks [

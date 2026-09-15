@@ -1,7 +1,7 @@
 (:grammar
   :package asl-compiler
   :version "0.1.0"
-  :tokensBaseline 1
+  :tokensBaseline 2
   :symbols [
     (:sym :name "CompileResult" :kind :type :tokens 1)
     (:sym :name "EvalValue" :kind :type :tokens 1)
@@ -169,4 +169,51 @@
           :rationale "Parses Git repository configuration format from .git/config")
     (:sym :name "gitInspectRepoStatus" :kind :fn :tokens 4
           :rationale "Inspects Git repository status returning branch, commit SHA, and clean status without subprocesses")
+
+    (:sym :name "emitElf64" :kind :fn :tokens 2)
+    (:sym :name "writeElfHeaders" :kind :fn :tokens 3
+          :rationale "Generates ELF64 executable file header with machine and entrypoint configuration")
+    (:sym :name "elfSections" :kind :fn :tokens 2)
+    (:sym :name "sysvAbi" :kind :fn :tokens 2)
+
+    (:sym :name "emitMachoArm64" :kind :fn :tokens 3
+          :rationale "Emits complete Mach-O ARM64 executable binary image targeting Apple Silicon Darwin")
+    (:sym :name "writeMachoHeaders" :kind :fn :tokens 3
+          :rationale "Generates Mach-O 64-bit executable file header with command sizing and flags")
+    (:sym :name "arm64Instructions" :kind :fn :tokens 2)
+    (:sym :name "machoSections" :kind :fn :tokens 2)
+
+    (:sym :name "parseAslSource" :kind :fn :tokens 3
+          :rationale "Parses ASL source string into complete syntax tree representation")
+    (:sym :name "tokenizeAsl" :kind :fn :tokens 2)
+    (:sym :name "astBuilder" :kind :fn :tokens 2)
+    (:sym :name "syntaxTree" :kind :fn :tokens 2)
+
+    (:sym :name "gitResolveRefCommit" :kind :fn :tokens 4
+          :rationale "Resolves 40-character hexadecimal commit SHA from loose or packed reference")
+    (:sym :name "normalizePath" :kind :fn :tokens 2)
+    (:sym :name "gitResolveDirs" :kind :fn :tokens 3
+          :rationale "Resolves active Git directory and common directory paths for linked worktrees")
+
+    (:sym :name "wasiFdStdin" :kind :fn :tokens 3
+          :rationale "Standard input file descriptor constant index in WASI runtime")
+    (:sym :name "wasiFdStdout" :kind :fn :tokens 3
+          :rationale "Standard output file descriptor constant index in WASI runtime")
+    (:sym :name "wasiFdStderr" :kind :fn :tokens 3
+          :rationale "Standard error file descriptor constant index in WASI runtime")
+    (:sym :name "wasiFdPreopenStart" :kind :fn :tokens 4
+          :rationale "First preopened directory descriptor constant index in WASI runtime")
+    (:sym :name "wasiErrno" :kind :fn :tokens 2)
+    (:sym :name "wasiFileTypeName" :kind :fn :tokens 4
+          :rationale "Maps WASI file type integer descriptor to canonical type name string")
+    (:sym :name "wasiStandardImportEntries" :kind :fn :tokens 4
+          :rationale "Constructs catalog of standard WASI Preview 1 host import entry descriptors")
+    (:sym :name "wasiStandardImportTypes" :kind :fn :tokens 4
+          :rationale "Constructs function signature descriptors for standard WASI host imports")
+    (:sym :name "wasiFileStat" :kind :fn :tokens 3
+          :rationale "Retrieves low-level filesystem status record for target path in WASI runtime")
+    (:sym :name "nativeTierCapabilities" :kind :fn :tokens 3
+          :rationale "Constructs capability map granting native execution permissions without sandboxing")
+      (:sym :name "compileSourceToC99" :kind :fn :tokens 4
+          :rationale "Compiles ASL source string directly to standalone ISO C99 target output")
   ])

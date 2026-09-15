@@ -10,9 +10,12 @@
       withCwd
       withTimeout
       withStdin
+      withEnv
+      buildShellCmd
       exec!
       runSimple!
       sessionSpawn!
+      sessionSpawnWithPid!
       sessionSendInput!
       sessionInput!
       sessionPollTail!
@@ -71,6 +74,14 @@
   :d "Sets standard input data for the process."
   (cp/withStdin c input))
 
+(df withEnv [(c cp/ProcessCmd) (k String) (v String)] -> cp/ProcessCmd
+  :d "Sets or overrides an environment variable."
+  (cp/withEnv c k v))
+
+(df buildShellCmd [(c cp/ProcessCmd) (stdinPath String)] -> String
+  :d "Builds the shell command string for a ProcessCmd."
+  (cp/buildShellCmd c stdinPath))
+
 (df ! exec! [(c cp/ProcessCmd)] -> (Result cp/ProcessOutput cp/ProcessError)
   :d "Executes a typed process command with timeout enforcement and captured output."
   (cp/exec! c))
@@ -82,6 +93,10 @@
 (df ! sessionSpawn! [(id String) (c cp/ProcessCmd)] -> cp/ProcessSession
   :d "Initializes an interactive process session bound to a ProcessCmd."
   (cp/sessionSpawn! id c))
+
+(df ! sessionSpawnWithPid! [(id String) (pid Int64) (c cp/ProcessCmd)] -> cp/ProcessSession
+  :d "Initializes an interactive process session bound to a ProcessCmd with an explicit PID."
+  (cp/sessionSpawnWithPid! id pid c))
 
 (df ! sessionSendInput! [(s cp/ProcessSession) (input String)] -> cp/ProcessSession
   :d "Injects standard input data into an active session resetting idle timer."
@@ -138,25 +153,7 @@
 
 (df sessionTickIdle [(s cp/ProcessSession) (deltaMs Int64)] -> cp/ProcessSession
   :d "Advances session idle duration counter by elapsed milliseconds."
-  (let [(res (cp/sessionTickIdle s deltaMs))
-        (ceiling (if (> (.-timeoutMs s) 10000) (.-timeoutMs s) 10000))
-        (isDeadlocked (>= (.-idleMs res) ceiling))]
-    (cp/ProcessSession
-      :id (.-id res)
-      :pid (.-pid res)
-      :state (if isDeadlocked "idle" (.-state res))
-      :cmd (.-cmd res)
-      :stdinBuffer (.-stdinBuffer res)
-      :stdoutBuffer (.-stdoutBuffer res)
-      :stderrBuffer (.-stderrBuffer res)
-      :exitCode (.-exitCode res)
-      :idleMs (.-idleMs res)
-      :timeoutMs (.-timeoutMs res)
-      :deadlockDetected isDeadlocked
-      :deadlocked isDeadlocked
-      :termDeadlineMs (.-termDeadlineMs res)
-      :killDeadlineMs (.-killDeadlineMs res)
-      :terminationReceipt (.-terminationReceipt res))))
+  (cp/sessionTickIdle s deltaMs))
 
 (df sessionExtendTimeout [(s cp/ProcessSession) (extendMs Int64)] -> cp/ProcessSession
   :d "Dynamically extends watchdog timeout ceiling on active session resetting idle timer."

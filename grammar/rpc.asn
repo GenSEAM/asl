@@ -1,4 +1,4 @@
-(:rpcRegistry
+(:rpc-registry
   :version "1.0.0"
   :rejectionCode ":ERR_UNIMPLEMENTED"
   :rejectionPolicy "Unrecognized or unimplemented operations are rejected with status rejected and error-code :ERR_UNIMPLEMENTED."
@@ -68,13 +68,46 @@
          :purpose "Semantic recall and ranked Okapi BM25 retrieval over .asl/mem ledgers and codebase"
          :savings "90%")
 
+    (:op :id "asl-mem-query"
+         :tier [:affordance :full]
+         :cmd "asl rpc '(:batch (:mem :query \"...\" [:scope \"...\"] [:limit <n>]))' or asl mem query <text>"
+         :category "search"
+         :signatures [(:sig :op "query" :args [:query "Str" :scope "Str?" :limit "Int?"] :return ":mem-query" :tokens 12 :savings "90%" :d "vector semantic search AST")]
+         :purpose "Vector semantic search AST across docstrings, decisions, and codebase"
+         :savings "90%")
+
     (:op :id "asl-mem-edit"
          :tier [:essential :full]
-         :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\"))'"
+         :cmd "asl rpc '(:batch (:edit \"...\" \"old\" \"new\"))' or asl mem edit <file> <old> <new>"
          :category "editing"
+         :signatures [(:sig :op "edit" :args [:file "Str" :old "Str" :new "Str"] :return ":mem-edit" :tokens 15 :savings "85%" :d "stage atomic string replacement")]
          :mode "immediate"
-         :purpose "Immediate text replacement writing directly to disk; returns :mode \"immediate\""
+         :purpose "Immediate text replacement writing directly to disk or staged in RAM virtual file buffer"
          :savings "85%")
+
+    (:op :id "asl-mem-diff"
+         :tier [:affordance :full]
+         :cmd "asl rpc '(:batch (:diff [:file \"...\"]))' or asl mem diff [file]"
+         :category "editing"
+         :signatures [(:sig :op "diff" :args [:file "Str?"] :return ":mem-diff" :tokens 8 :savings "90%" :d "inspect staged RAM diffs")]
+         :purpose "Inspect staged RAM diffs and modified virtual buffers before commit"
+         :savings "90%")
+
+    (:op :id "asl-mem-flush"
+         :tier [:essential :full]
+         :cmd "asl rpc '(:batch (:flush))' or asl mem flush"
+         :category "editing"
+         :signatures [(:sig :op "flush" :args [] :return ":mem-flush" :tokens 6 :savings "85%" :d "persist staged edits disk")]
+         :purpose "Persist staged edits disk atomically from RAM buffers"
+         :savings "85%")
+
+    (:op :id "asl-mem-discard"
+         :tier [:affordance :full]
+         :cmd "asl rpc '(:batch (:discard))' or asl mem discard"
+         :category "editing"
+         :signatures [(:sig :op "discard" :args [] :return ":mem-discard" :tokens 6 :savings "90%" :d "clear staged RAM buffers")]
+         :purpose "Clear staged RAM buffers without modifying physical disk files"
+         :savings "90%")
 
     (:op :id "asl-mem-patch"
          :tier [:essential :full]
@@ -93,9 +126,19 @@
     (:op "mem"
          :id "asl-mem"
          :tier [:affordance :full]
-         :cmd "asl rpc '(:batch (:mem :query \"...\") | (:mem :write :kind \"...\" :content \"...\" :closure \"...\") | (:mem :promote :id \"...\" :to \"...\"))' or asl mem <query|write|promote>"
+         :cmd "asl rpc '(:batch (:mem :query \"...\") | (:mem :write :kind \"...\" :content \"...\" :closure \"...\") | (:mem :promote :id \"...\" :to \"...\"))' or asl mem <query|edit|diff|flush|discard|write|doc|tree>"
          :category "memory"
-         :purpose "Unified memory query and write surface across intents, goals, practices and notes with path-independent search and lineage preservation"
+         :purpose "Unified memory query, stage, and write surface across 8 canonical tools with path-independent search and lineage preservation"
+         :signatures [
+           (:sig :op "query" :args [:query "Str" :scope "Str?" :limit "Int?"] :return ":mem-query" :tokens 12 :savings "90%" :d "vector semantic search AST")
+           (:sig :op "edit" :args [:file "Str" :old "Str" :new "Str"] :return ":mem-edit" :tokens 15 :savings "85%" :d "stage atomic string replacement")
+           (:sig :op "diff" :args [:file "Str?"] :return ":mem-diff" :tokens 8 :savings "90%" :d "inspect staged RAM diffs")
+           (:sig :op "flush" :args [] :return ":mem-flush" :tokens 6 :savings "85%" :d "persist staged edits disk")
+           (:sig :op "discard" :args [] :return ":mem-discard" :tokens 6 :savings "90%" :d "clear staged RAM buffers")
+           (:sig :op "write" :args [:kind "Str" :payload "Str"] :return ":mem-write" :tokens 14 :savings "88%" :d "append durable memory ledger")
+           (:sig :op "doc" :args [:file "Str" :section "Str"] :return ":mem-doc" :tokens 12 :savings "92%" :d "read section without disk")
+           (:sig :op "tree" :args [:path "Str?"] :return ":mem-tree" :tokens 10 :savings "85%" :d "render holistic hierarchy telemetry")
+         ]
          :savings "92%")
 
     (:op :id "asl-mem-intent"
@@ -128,9 +171,26 @@
 
     (:op :id "asl-mem-write"
          :tier [:affordance :full]
-         :cmd "asl rpc '(:batch (:write \"...\" \"content\") (:flush))'"
+         :cmd "asl rpc '(:batch (:write \"...\" \"content\") (:flush))' or asl mem write <kind> <payload>"
          :category "editing"
-         :purpose "Direct virtual file creation and atomic overwrite in resident RAM VFS"
+         :signatures [(:sig :op "write" :args [:kind "Str" :payload "Str"] :return ":mem-write" :tokens 14 :savings "88%" :d "append durable memory ledger")]
+         :purpose "Direct virtual file creation, atomic overwrite in resident RAM VFS, and append durable memory ledger"
+         :savings "85%")
+
+    (:op :id "asl-mem-doc"
+         :tier [:affordance :full]
+         :cmd "asl rpc '(:batch (:doc \"<file>\" \"<section>\"))' or asl mem doc <file> <section>"
+         :category "reading"
+         :signatures [(:sig :op "doc" :args [:file "Str" :section "Str"] :return ":mem-doc" :tokens 12 :savings "92%" :d "read section without disk")]
+         :purpose "Read section without disk by extracting markdown AST heading in RAM"
+         :savings "92%")
+
+    (:op :id "asl-mem-tree"
+         :tier [:affordance :full]
+         :cmd "asl rpc '(:batch (:tree [\"<path>\"]))' or asl mem tree [path]"
+         :category "reading"
+         :signatures [(:sig :op "tree" :args [:path "Str?"] :return ":mem-tree" :tokens 10 :savings "85%" :d "render holistic hierarchy telemetry")]
+         :purpose "Render holistic hierarchy telemetry across packages and ledgers"
          :savings "85%")
 
     (:op :id "asl-mem-staging"

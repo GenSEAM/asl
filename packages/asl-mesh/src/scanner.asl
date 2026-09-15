@@ -1,16 +1,16 @@
 (module aslMesh/scanner
   :d "AST defect hunter harness and vacuous test detector under D85."
-  :x [scan_ast_defects
-      check_vacuous_tests
-      ast_visitor
-      defect_emitter]
+  :x [scanAstDefects
+      checkVacuousTests
+      astVisitor
+      defectEmitter]
   :i [])
 
-(df ast_visitor [node visitorFn] -> Map
+(df astVisitor [node visitorFn] -> Map
   :d "Traverses AST node invoking visitor function"
   {:visited 1 :node node})
 
-(df defect_emitter [defectId path lineNum kind severity blameSym rationale] -> Map
+(df defectEmitter [defectId path lineNum kind severity blameSym rationale] -> Map
   :d "Emits formal structured defect record conforming to mesh defect taxonomy"
   {:defectId defectId
    :path path
@@ -20,15 +20,15 @@
    :blameSymbol blameSym
    :rationale rationale})
 
-(df check_vacuous_tests [src path] -> List
+(df checkVacuousTests [src path] -> List
   :d "Scans test source for vacuous assertion patterns"
   (if (string-contains? src "(assert (= 1 1)")
-    (list (defect_emitter "def-vacuous-1" path 1 :tautologicalAssertion :critical "assert" "Tautological assertion (= 1 1) detected"))
+    (list (defectEmitter "def-vacuous-1" path 1 :tautologicalAssertion :critical "assert" "Tautological assertion (= 1 1) detected"))
     (if (not (string-contains? src "assert"))
-      (list (defect_emitter "def-vacuous-0" path 1 :tautologicalAssertion :high "assert" "Zero assertions declared in test suite"))
+      (list (defectEmitter "def-vacuous-0" path 1 :tautologicalAssertion :high "assert" "Zero assertions declared in test suite"))
       (list))))
 
-(df scan_ast_defects [src path] -> List
+(df scanAstDefects [src path] -> List
   :d "Scans source file for AST defects and returns list of defect records"
-  (let [(vacuous (check_vacuous_tests src path))]
+  (let [(vacuous (checkVacuousTests src path))]
     vacuous))

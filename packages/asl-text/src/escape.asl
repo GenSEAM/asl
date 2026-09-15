@@ -46,8 +46,10 @@
   (let [(s1 (string-replace s "\\" "\\\\"))
         (s2 (string-replace s1 "\"" "\\\""))
         (s3 (string-replace s2 "\n" "\\n"))
-        (s4 (string-replace s3 "\r" "\\r"))]
-    (string-replace s4 "\t" "\\t")))
+        (s4 (string-replace s3 "\r" "\\r"))
+        (s5 (string-replace s4 "\b" "\\b"))
+        (s6 (string-replace s5 "\f" "\\f"))]
+    (string-replace s6 "\t" "\\t")))
 
 (df unescapeJsonStr [(s Str)] -> Str
   :d "Inverts JSON string escaping via single-pass scanner preventing premature control code substitution."

@@ -2,6 +2,7 @@
   :d "Home landing page view composed entirely in pure AgentScript."
   :x [homeView renderHomeView describeHomeView]
   :i [(asl-text/string :a s)
+      (aslVdom/html :a h)
       aslWeb/hero
       aslWeb/ecosystem
       aslWeb/keyCapabilities
@@ -18,18 +19,18 @@
 
 (df renderHomeView [] -> Str
   :d "Renders the full showcase home landing page."
-  (s/concat
-    "<main id=\"main-content\" class=\"flex-1 max-w-shell mx-auto w-full\">"
-    (s/concat (hero)
-    (s/concat (ecosystem)
-    (s/concat (keyCapabilities)
-    (s/concat (theAgentWay)
-    (s/concat (agentWireProtocol)
-    (s/concat (harnessToolkit)
-    (s/concat (moduleGraphVisualizer)
-    (s/concat (engineeringBlog)
-    (s/concat (inBrowserAgent)
-    "</main>")))))))))))
+  (h/vnodeToHtml
+    (h/main (h/attrsOf (list (h/attrId "main-content") (h/attrClass "flex-1 max-w-shell mx-auto w-full")))
+      (list
+        (h/t (hero))
+        (h/t (ecosystem))
+        (h/t (keyCapabilities))
+        (h/t (theAgentWay))
+        (h/t (agentWireProtocol))
+        (h/t (harnessToolkit))
+        (h/t (moduleGraphVisualizer))
+        (h/t (engineeringBlog))
+        (h/t (inBrowserAgent))))))
 
 (df homeView [] -> Str
   :d "Alias for render-home-view."

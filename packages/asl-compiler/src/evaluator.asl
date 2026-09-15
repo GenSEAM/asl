@@ -3,7 +3,7 @@
   :x [EvalValue EvalEnv makeRootEnv makeChildEnv envLookup envBind
             evalAtom evalBuiltinArithmetic evalBuiltinComparison evalBuiltinLogic
             evalBuiltinString evalBuiltinList evalBuiltinIo evalBuiltinSys
-            evalSpecialForm evalSexpr evalAssert isTruthy? evalResultIsOk? formatVal]
+            evalSpecialForm evalSexpr evalAssert truthy? evalResultIsOk? formatVal]
   :i [(reader :a rd) (wasi :a wasi)])
 
 (dfe EvalValue
@@ -54,7 +54,7 @@
   (EvalEnv :bindings (map-set (.-bindings env) name val)
            :parentFrames (.-parentFrames env)))
 
-(df isTruthy? [(v EvalValue)] -> Bool
+(df truthy? [(v EvalValue)] -> Bool
   :d "Evaluates whether an EvalValue is truthy in logical contexts."
   (mt v
     ((valBool b) b)
@@ -82,13 +82,13 @@
 
 (df evalAssert [(condVal EvalValue) (msgStr String)] -> EvalValue
   :d "Falsifiable assertion returning val-bool true on success or val-error on failure."
-  (if (isTruthy? condVal)
+  (if (truthy? condVal)
       (valBool true)
       (valError msgStr)))
 
 (df evalReject [(condVal EvalValue) (msgStr String)] -> EvalValue
   :d "Rejects a truthy forbidden-state condition and returns val-bool on safe state."
-  (if (isTruthy? condVal)
+  (if (truthy? condVal)
       (valError msgStr)
       (valBool true)))
 
@@ -586,7 +586,7 @@
             ((some thenRest)
              (mt (list-head thenRest)
                ((some thenExpr)
-                (if (isTruthy? cVal)
+                (if (truthy? cVal)
                     (evalSexpr thenExpr env)
                     (mt (list-tail thenRest)
                       ((some elseRest)

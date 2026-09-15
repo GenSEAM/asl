@@ -10,82 +10,79 @@
 
 (df stackCountSymbol [(stack (List Str)) (sym Str)] -> I64
   :d "Counts occurrences of a delimiter in the LIFO stack"
-  (fold (fn [(acc I64) (item Str)] -> I64 (if (stringEquals? item sym) (+ acc 1) acc)) 0 stack))
+  (fold (fn [(acc I64) (item Str)] -> I64 (if (string-equals? item sym) (+ acc 1) acc)) 0 stack))
 
-(df checkBalanceStep [(chars (List Str)) (stack (List Str)) (inQuote Bool) (escape Bool)] -> BalanceResult
-  :d "Recursive string-aware and escape-aware delimiter balance scanner with LIFO delimiter stack."
-  (if (list-empty? chars)
-    (let [(p (stackCountSymbol stack "("))
-          (b (stackCountSymbol stack "["))
-          (br (stackCountSymbol stack "{"))
-          (isBal (and (= p 0)
-                       (and (= b 0)
-                            (and (= br 0)
-                                 (and (list-empty? stack)
-                                      (not inQuote))))))]
-      (BalanceResult
-        :balanced isBal
-        :openParens p
-        :openBrackets b
-        :openBraces br))
-    (let [(c (option-or (list-head chars) ""))
-          (rst (option-or (list-tail chars) (list)))]
-      (if inQuote
-        (if escape
-          (checkBalanceStep rst stack true false)
-          (if (= c "\\")
-            (checkBalanceStep rst stack true true)
-            (if (= c "\"")
-              (checkBalanceStep rst stack false false)
-              (checkBalanceStep rst stack true false))))
-        (if (= c "\"")
-          (checkBalanceStep rst stack true false)
-          (cond
-            ((= c "(")
-             (checkBalanceStep rst (cons "(" stack) false false))
-            ((= c ")")
-             (if (list-empty? stack)
-               (BalanceResult :balanced false :openParens -1 :openBrackets 0 :openBraces 0)
-               (let [(top (option-or (list-head stack) ""))
-                     (stkRst (option-or (list-tail stack) (list)))]
-                 (if (= top "(")
-                   (checkBalanceStep rst stkRst false false)
-                   (let [(p (stackCountSymbol stack "("))
-                         (b (stackCountSymbol stack "["))
-                         (br (stackCountSymbol stack "{"))]
-                     (BalanceResult :balanced false :openParens p :openBrackets b :openBraces br))))))
-            ((= c "[")
-             (checkBalanceStep rst (cons "[" stack) false false))
-            ((= c "]")
-             (if (list-empty? stack)
-               (BalanceResult :balanced false :openParens 0 :openBrackets -1 :openBraces 0)
-               (let [(top (option-or (list-head stack) ""))
-                     (stkRst (option-or (list-tail stack) (list)))]
-                 (if (= top "[")
-                   (checkBalanceStep rst stkRst false false)
-                   (let [(p (stackCountSymbol stack "("))
-                         (b (stackCountSymbol stack "["))
-                         (br (stackCountSymbol stack "{"))]
-                     (BalanceResult :balanced false :openParens p :openBrackets b :openBraces br))))))
-            ((= c "{")
-             (checkBalanceStep rst (cons "{" stack) false false))
-            ((= c "}")
-             (if (list-empty? stack)
-               (BalanceResult :balanced false :openParens 0 :openBrackets 0 :openBraces -1)
-               (let [(top (option-or (list-head stack) ""))
-                     (stkRst (option-or (list-tail stack) (list)))]
-                 (if (= top "{")
-                   (checkBalanceStep rst stkRst false false)
-                   (let [(p (stackCountSymbol stack "("))
-                         (b (stackCountSymbol stack "["))
-                         (br (stackCountSymbol stack "{"))]
-                     (BalanceResult :balanced false :openParens p :openBrackets b :openBraces br))))))
-            (:else
-             (checkBalanceStep rst stack false false))))))))
+(dfs BalanceScanState
+  (:f stack (List Str) "LIFO delimiter stack")
+  (:f inQuote Bool "Currently inside a string literal")
+  (:f escape Bool "Previous character was a backslash")
+  (:f earlyError Bool "Encountered unmatched closing delimiter"))
+
+(df balanceScanStep [(state BalanceScanState) (c Str)] -> BalanceScanState
+  :d "Fold step function: processes one character against the balance scan state."
+  (if (.-earlyError state)
+    state
+    (if (.-inQuote state)
+      (if (.-escape state)
+        (BalanceScanState :stack (.-stack state) :inQuote true :escape false :earlyError false)
+        (if (= c "\\")
+          (BalanceScanState :stack (.-stack state) :inQuote true :escape true :earlyError false)
+          (if (= c "\"")
+            (BalanceScanState :stack (.-stack state) :inQuote false :escape false :earlyError false)
+            (BalanceScanState :stack (.-stack state) :inQuote true :escape false :earlyError false))))
+      (if (= c "\"")
+        (BalanceScanState :stack (.-stack state) :inQuote true :escape false :earlyError false)
+        (cond
+          ((= c "(")
+           (BalanceScanState :stack (cons "(" (.-stack state)) :inQuote false :escape false :earlyError false))
+          ((= c ")")
+           (if (list-empty? (.-stack state))
+             (BalanceScanState :stack (list) :inQuote false :escape false :earlyError true)
+             (let [(top (option-or (list-head (.-stack state)) ""))
+                   (stkRst (option-or (list-tail (.-stack state)) (list)))]
+               (if (= top "(")
+                 (BalanceScanState :stack stkRst :inQuote false :escape false :earlyError false)
+                 (BalanceScanState :stack (.-stack state) :inQuote false :escape false :earlyError true)))))
+          ((= c "[")
+           (BalanceScanState :stack (cons "[" (.-stack state)) :inQuote false :escape false :earlyError false))
+          ((= c "]")
+           (if (list-empty? (.-stack state))
+             (BalanceScanState :stack (list) :inQuote false :escape false :earlyError true)
+             (let [(top (option-or (list-head (.-stack state)) ""))
+                   (stkRst (option-or (list-tail (.-stack state)) (list)))]
+               (if (= top "[")
+                 (BalanceScanState :stack stkRst :inQuote false :escape false :earlyError false)
+                 (BalanceScanState :stack (.-stack state) :inQuote false :escape false :earlyError true)))))
+          ((= c "{")
+           (BalanceScanState :stack (cons "{" (.-stack state)) :inQuote false :escape false :earlyError false))
+          ((= c "}")
+           (if (list-empty? (.-stack state))
+             (BalanceScanState :stack (list) :inQuote false :escape false :earlyError true)
+             (let [(top (option-or (list-head (.-stack state)) ""))
+                   (stkRst (option-or (list-tail (.-stack state)) (list)))]
+               (if (= top "{")
+                 (BalanceScanState :stack stkRst :inQuote false :escape false :earlyError false)
+                 (BalanceScanState :stack (.-stack state) :inQuote false :escape false :earlyError true)))))
+          (:else state))))))
 
 (df checkDelimiterBalance [(code Str)] -> BalanceResult
-  :d "Computes structural delimiter balance across parentheses, square brackets, and curly braces with string literal awareness."
-  (checkBalanceStep (string-chars code) (list) false false))
+  :d "Computes structural delimiter balance across parentheses, square brackets, and curly braces with string literal awareness. Uses fold to avoid stack overflow on large inputs."
+  (let [(initState (BalanceScanState :stack (list) :inQuote false :escape false :earlyError false))
+        (finalState (fold balanceScanStep initState (string-chars code)))
+        (p (stackCountSymbol (.-stack finalState) "("))
+        (b (stackCountSymbol (.-stack finalState) "["))
+        (br (stackCountSymbol (.-stack finalState) "{"))
+        (isBal (and (not (.-earlyError finalState))
+                     (and (= p 0)
+                          (and (= b 0)
+                               (and (= br 0)
+                                    (and (list-empty? (.-stack finalState))
+                                         (not (.-inQuote finalState))))))))]
+    (BalanceResult
+      :balanced isBal
+      :openParens (if (.-earlyError finalState) -1 p)
+      :openBrackets (if (.-earlyError finalState) -1 b)
+      :openBraces (if (.-earlyError finalState) -1 br))))
 
 (df isDelimiterBalanced? [(code Str)] -> Bool
   :d "Convenience predicate returning true if code has perfectly balanced delimiters."

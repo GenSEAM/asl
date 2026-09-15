@@ -6,7 +6,7 @@
       split
       concat
       join
-      txtStarts?
+      txt-starts?
       txtEnds?
       txtHas?
       txtSplit
@@ -37,7 +37,7 @@
   :d "Splits string by delimiter into list of substrings."
   (string-split s delim))
 
-(df txtStarts? [(s Str) (prefix Str)] -> Bool
+(df txt-starts? [(s Str) (prefix Str)] -> Bool
   :d "Hyphen compatibility alias for starts?."
   (starts? s prefix))
 

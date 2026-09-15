@@ -210,5 +210,27 @@
                 ((some p) (makePortVerdict true p ":port-bound"))
                 ((none) (makePortVerdict false 0 ":none")))))
            ((none) (makePortVerdict false 0 ":none")))))
+      ((string-contains? lower "[::1]:")
+       (let [(idx (string-index-of lower "[::1]:"))]
+         (mt idx
+           ((some i)
+            (let [(after (option-or (string-slice lower (+ i 6) (string-length lower)) ""))
+                  (parts (string-split (string-trim after) " "))
+                  (token (option-or (list-head parts) ""))]
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
+      ((string-contains? lower "[::]:")
+       (let [(idx (string-index-of lower "[::]:"))]
+         (mt idx
+           ((some i)
+            (let [(after (option-or (string-slice lower (+ i 5) (string-length lower)) ""))
+                  (parts (string-split (string-trim after) " "))
+                  (token (option-or (list-head parts) ""))]
+              (mt (parsePortNumber token)
+                ((some p) (makePortVerdict true p ":port-bound"))
+                ((none) (makePortVerdict false 0 ":none")))))
+           ((none) (makePortVerdict false 0 ":none")))))
       (:else
        (makePortVerdict false 0 ":none")))))

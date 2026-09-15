@@ -3,22 +3,46 @@
   :version "0.1.0"
   :tokensBaseline 1
   :symbols [
+    (:sym :name "CallerAuth" :kind :type :tokens 1)
+    (:sym :name "DispatchFault" :kind :type :tokens 1)
+    (:sym :name "DispatchReceipt" :kind :type :tokens 1)
+    (:sym :name "PluginBuffer" :kind :type :tokens 1)
     (:sym :name "PluginCall" :kind :type :tokens 1)
     (:sym :name "PluginCapability" :kind :type :tokens 1)
+    (:sym :name "PluginError" :kind :type :tokens 1)
     (:sym :name "PluginExport" :kind :type :tokens 1)
+    (:sym :name "PluginInstance" :kind :type :tokens 1)
     (:sym :name "PluginKind" :kind :type :tokens 1)
     (:sym :name "PluginManifest" :kind :type :tokens 1)
     (:sym :name "PluginRegistry" :kind :type :tokens 1)
     (:sym :name "PluginResult" :kind :type :tokens 1)
 
+    (:sym :name "authorizeCall" :kind :fn :tokens 2)
     (:sym :name "dispatchCall" :kind :fn :tokens 2)
     (:sym :name "emptyRegistry" :kind :fn :tokens 2)
-    (:sym :name "formatManifest" :kind :fn :tokens 2)
     (:sym :name "hasCapability?" :kind :fn :tokens 2)
-    (:sym :name "lookupPlugin" :kind :fn :tokens 2)
+    (:sym :name "lookupInstance" :kind :fn :tokens 2)
+    (:sym :name "lookupManifest" :kind :fn :tokens 2)
     (:sym :name "registerPlugin" :kind :fn :tokens 2)
     (:sym :name "runTests" :kind :fn :tokens 2)
-    (:sym :name "validateManifest" :kind :fn :tokens 2)
+    (:sym :name "sealRegistry" :kind :fn :tokens 2)
+
+    (:sym :name "validateSandboxPath" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'validate-path': explicitly scopes path canonicalization and root containment to sandbox boundary")
+    (:sym :name "verifyArtifactDigest" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'verify-digest': specifies physical on-disk byte hashing of binary artifacts")
+    (:sym :name "validateManifestSecurity" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'validate-security': explicitly validates manifest boundary security rules and artifact digest")
+    (:sym :name "computeCallerSignature" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'compute-signature': computes canonical HMAC-SHA256 signature for caller auth tokens")
+    (:sym :name "verifyCallerSignature" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'verify-signature': verifies cryptographic HMAC-SHA256 signature of caller auth tokens")
+    (:sym :name "verifyCallerNonce" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'verify-nonce': validates caller monotonic anti-replay sequence counters")
+    (:sym :name "constantTimeEqual" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'equal': enforces constant-time byte comparison to eliminate cryptographic timing side-channels")
+    (:sym :name "findPluginsByCapability" :kind :fn :tokens 4
+          :rationale "Cannot be reduced to 'find-plugins': explicitly scopes query filtering by advertised capability keyword rather than name or version")
 
     (:sym :name "ActiveLandscape" :kind :type :tokens 1)
     (:sym :name "MountReceipt" :kind :type :tokens 1)
@@ -49,7 +73,25 @@
     (:sym :name "toolCount" :kind :fn :tokens 2)
     (:sym :name "unloadDomain" :kind :fn :tokens 2)
     (:sym :name "unmountReceipt" :kind :fn :tokens 2)
-
-    (:sym :name "findPluginsByCapability" :kind :fn :tokens 4
-          :rationale "Cannot be reduced to 'find-plugins': explicitly scopes query filtering by advertised capability keyword rather than name or version")
+    (:sym :name "kindWasm" :kind :const :tokens 1)
+    (:sym :name "kindNativeFfi" :kind :const :tokens 1)
+    (:sym :name "kindHostDriver" :kind :const :tokens 1)
+    (:sym :name "errNotFound" :kind :const :tokens 1)
+    (:sym :name "errDuplicateId" :kind :const :tokens 1)
+    (:sym :name "errInvalidSignature" :kind :const :tokens 1)
+    (:sym :name "errUnauthorized" :kind :const :tokens 1)
+    (:sym :name "errSandboxEscape" :kind :const :tokens 1)
+    (:sym :name "errExecutionTrap" :kind :const :tokens 1)
+    (:sym :name "errTimeout" :kind :const :tokens 1)
+    (:sym :name "errUnimplemented" :kind :const :tokens 1)
+    (:sym :name "errRegistrySealed" :kind :const :tokens 1)
+    (:sym :name "countWords" :kind :fn :tokens 2)
+    (:sym :name "validDenseDoc?" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'valid-doc': enforces exact 2-5 word density constraint for dense tool docstrings")
+    (:sym :name "renderDenseTool" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'render-tool': renders compact Turn 0 keyword signature representation")
+    (:sym :name "renderDenseLandscape" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'render-landscape': compiles complete Turn 0 prompt block with base meta-tools and dense keyword signatures")
+    (:sym :name "lookupToolHelp" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to 'lookup-help': lazy JIT lookup of rich tool parameter schemas without full context mounting")
   ])

@@ -1,11 +1,7 @@
 (:stylesheet
   :version "1.0.0"
   :frame "Instrumented Editorial"
-  :widthPolicy [
-    (:primaryShell "72rem")
-    (:proseMeasure "68ch")
-    (:wideSurface "80rem")
-  ]
+
   :tailwind [:base :components :utilities]
   :layers [
     (:layer
@@ -118,7 +114,21 @@
           :selector ".rule-hairline"
           :declarations [
             (:height "1px")
-            (:background "rgb(var(--line))")
+            (:backgroundColor "rgb(var(--line))")
+          ])
+        (:rule
+          :selector ".shell"
+          :declarations [
+            (:maxWidth "72rem")
+            (:marginLeft "auto")
+            (:marginRight "auto")
+          ])
+        (:rule
+          :selector ".canvas-wide"
+          :declarations [
+            (:maxWidth "80rem")
+            (:marginLeft "auto")
+            (:marginRight "auto")
           ])
       ])
   ]

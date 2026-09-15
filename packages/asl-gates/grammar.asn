@@ -196,4 +196,6 @@
           :rationale "Audits duplicate capabilities and symbol definitions outside allowlist")
     (:sym :name "auditD51Convergence" :kind :fn :tokens 3
           :rationale "Audits per-package CamelCase test functions and camelCase keys convergence")
+    (:sym :name "auditCheckScriptExistence" :kind :fn :tokens 4
+          :rationale "Verifies declared rule verification check scripts exist on disk")
   ])

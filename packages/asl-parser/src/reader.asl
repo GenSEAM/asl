@@ -1,7 +1,7 @@
 (module asl-parser/reader
   :d "100% Self-Hosted AgentScript S-Expression Reader & Dual-Projection AST Engine."
   :x [SExpr makeAtom makeList makeVect isAtom? isList? isVect?
-           isHeadMatch? sexprHead renderCompound renderSexpr])
+           isHeadMatch? sexprHead sexprToList renderCompound renderSexpr])
 
 (dfe SExpr
   (:c sexprAtom [(val String)] "Terminal atom token (symbol, literal or keyword)")
@@ -58,6 +58,13 @@
 (df isHeadMatch? [(s SExpr) (expected String)] -> Bool
   :d "Checks if SExpr head matches expected symbol."
   (= (sexprHead s) expected))
+
+(df sexprToList [(s SExpr)] -> (List SExpr)
+  :d "Extracts elements list from vector or list S-expression, or empty list for atom."
+  (mt s
+    ((sexprVect items) items)
+    ((sexprList items) items)
+    ((sexprAtom _) (list))))
 
 (dfe RItem
   (:c rText [(t String)] "Literal output text, already final")

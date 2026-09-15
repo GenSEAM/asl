@@ -1,7 +1,9 @@
 (module asl-codec/core
   :d "Zero-Cost Native JSON Serializer and Algebraic Value Representation for AgentScript."
   :x [JsonValue JsonEntry makeKv renderJson renderEntry renderJsonArray renderJsonObject
-           mapItems mapEntries])
+      mapItems mapEntries
+      projectLens emitMultilensBundle]
+  :i [(../multilens :a ml)])
 
 (dfs JsonEntry
   (:f key String "Object key")
@@ -54,3 +56,12 @@
     ((jsonStr s)   (str "\"" s "\""))
     ((jsonArr arr) (renderJsonArray arr))
     ((jsonObj obj) (renderJsonObject obj))))
+
+(df projectLens [(lens String) (model ml/MultilensModel) (opts ml/LensOptions)] -> ml/LensResult
+  :d "Top-level facade dispatching format projection through requested lens."
+  (ml/projectLens lens model opts))
+
+(df emitMultilensBundle [(model ml/MultilensModel) (lenses (List String)) (opts ml/LensOptions)] -> ml/MultilensBundle
+  :d "Top-level facade emitting complete multilens bundle across formats."
+  (ml/emitMultilensBundle model lenses opts))
+

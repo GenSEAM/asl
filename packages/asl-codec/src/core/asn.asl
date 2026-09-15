@@ -10,7 +10,8 @@
   :x [AsnValue AsnEntry AsnField
            asnRead asnWrite valueOk? isVec? isKw? vecItems
            asnIntValue asnFloatValue asnStringValue]
-  :i [(lexer :a lx)])
+  :i [(lexer :a lx)
+      (asl-text/text :a txt)])
 
 (dfs AsnField
   (:f key String "Field key, including its leading colon")
@@ -64,14 +65,8 @@
   :d "The characters an `asn-str` denotes, with quotes stripped and Core §2's
       five escapes decoded; none for any other value."
   (mt v
-    ((asnStr lex) (some (unescape (stripQuotes lex))))
+    ((asnStr lex) (some (unescape (txt/stripQuotes lex))))
     (_             (none))))
-
-(df stripQuotes [(lex String)] -> String
-  :d "A string lexeme without its delimiting quotes."
-  (mt (string-slice lex 1 (- (string-length lex) 1))
-    ((some s) s)
-    ((none)   "")))
 
 (dfs UnState
   (:f out (List String) "Decoded characters, most recent first")

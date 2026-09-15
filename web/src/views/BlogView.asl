@@ -70,7 +70,7 @@
           <div class="flex itemsCenter justifyBetween textMicro fontMono textInk3 mb3">
             <div class="flex itemsCenter gap1.5 flexWrap">
               <span class="px2 py0.5 rounded border borderSignal/30 bgSignal/5 textSignal uppercase trackingWider fontMedium">Protocols &amp; Wire Frames</span>
-              <span class="px1.5 py0.5 rounded border borderCyan400/40 bgCyan400/10 textCyan300 fontSemibold text-[10px]">★ Flagship</span>
+              <span class="px1.5 py0.5 rounded border borderCyan400/40 bgCyan400/10 textCyan300 fontSemibold text-[10px]">* Flagship</span>
             </div>
             <span>9 min read</span>
           </div>
@@ -88,7 +88,7 @@
           <div class="flex itemsCenter justifyBetween textMicro fontMono textInk3 mb3">
             <div class="flex itemsCenter gap1.5 flexWrap">
               <span class="px2 py0.5 rounded border borderSignal/30 bgSignal/5 textSignal uppercase trackingWider fontMedium">Language &amp; SLM Inference</span>
-              <span class="px1.5 py0.5 rounded border borderCyan400/40 bgCyan400/10 textCyan300 fontSemibold text-[10px]">★ Flagship</span>
+              <span class="px1.5 py0.5 rounded border borderCyan400/40 bgCyan400/10 textCyan300 fontSemibold text-[10px]">* Flagship</span>
             </div>
             <span>10 min read</span>
           </div>
@@ -106,7 +106,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Tools &amp; Compiler Architecture</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>9 min read</span>
           </div>
@@ -124,7 +124,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Architecture &amp; Memory Systems</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>11 min read</span>
           </div>
@@ -142,7 +142,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Language Theory &amp; Compilers</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>6 min read</span>
           </div>
@@ -160,7 +160,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Token Economy &amp; Serialization</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>8 min read</span>
           </div>
@@ -178,7 +178,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Runtime &amp; Execution</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>5 min read</span>
           </div>
@@ -214,7 +214,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Architecture &amp; Language Theory</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>9 min read</span>
           </div>
@@ -250,7 +250,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Autonomous Systems &amp; Grammar</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>7 min read</span>
           </div>
@@ -286,7 +286,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Architecture &amp; Operating Systems</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>8 min read</span>
           </div>
@@ -322,7 +322,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Tools &amp; Compiler Architecture</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>8 min read</span>
           </div>
@@ -340,7 +340,7 @@
           <div class=\"flex items-center justify-between text-micro font-mono text-ink-3 mb-3\">
             <div class=\"flex items-center gap-1.5 flex-wrap\">
               <span class=\"px-2 py-0.5 rounded border border-signal/30 bg-signal/5 text-signal uppercase tracking-wider font-medium\">Architecture &amp; Simplicity</span>
-              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">★ Flagship</span>
+              <span class=\"px-1.5 py-0.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-300 font-semibold text-[10px]\">* Flagship</span>
             </div>
             <span>5 min read</span>
           </div>

@@ -117,7 +117,7 @@
   :d "Writes spool content to disk using builtin file-write, ensuring file on disk is strictly <= max-bytes."
   (mt (file-write (.-path spool) (.-content spool))
     ((ok _) (ok spool))
-    ((err _) (err (str "Failed to sync disk spool to " (.-path spool))))))
+    ((err e) (err (str "Failed to sync disk spool to " (.-path spool) ": " e)))))
 
 (df ! spoolWriteSync! [(spool DiskSpool) (chunk String)] -> (Result DiskSpool String)
   :d "Pushes chunk circularly and flushes to disk."
@@ -141,14 +141,13 @@
             :isUnlinked (.-isUnlinked spool))))))
 
 (df spoolUnlink [(spool DiskSpool)] -> DiskSpool
-  :d "Reclaims disk spool storage and marks file descriptor as unlinked, truncating file on disk."
-  (let [(_ (file-write (.-path spool) ""))]
-    (DiskSpool
-      :path (.-path spool)
-      :maxBytes (.-maxBytes spool)
-      :currentBytes 0
-      :content ""
-      :isUnlinked true)))
+  :d "Reclaims disk spool storage and marks file descriptor as unlinked without deleting disk audit trail."
+  (DiskSpool
+    :path (.-path spool)
+    :maxBytes (.-maxBytes spool)
+    :currentBytes 0
+    :content ""
+    :isUnlinked true))
 
 (df spoolIsUnlinked? [(spool DiskSpool)] -> Bool
   :d "Verifies whether the ephemeral disk spool has been unlinked."
@@ -171,7 +170,12 @@
     (TwoTierSpool :ring newRing :disk newDisk)))
 
 (df twoTierClose [(s TwoTierSpool)] -> TwoTierSpool
-  :d "Closes two-tier spool, unlinking ephemeral disk storage while retaining ring buffer for tail inspection."
+  :d "Closes two-tier spool while retaining ring buffer and preserving disk spool audit trail."
   (TwoTierSpool
     :ring (.-ring s)
-    :disk (spoolUnlink (.-disk s))))
+    :disk (DiskSpool
+            :path (.-path (.-disk s))
+            :maxBytes (.-maxBytes (.-disk s))
+            :currentBytes (.-currentBytes (.-disk s))
+            :content (.-content (.-disk s))
+            :isUnlinked true)))

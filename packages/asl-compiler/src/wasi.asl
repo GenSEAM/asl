@@ -133,7 +133,7 @@
 
 (df wasiDirList [(path Str)] -> (List Str)
   :d "Lists directory entries at path."
-  (mt (dir-list path)
+  (mt (dirList path)
     ((ok entries) entries)
     ((err _) (list))))
 
@@ -155,7 +155,7 @@
   :d "Returns file statistics map containing size and filetype."
   (if (not (file-exists? path))
       (none)
-      (mt (file-stat path)
+      (mt (fileStat path)
         ((ok st)
          (let [(sz (option-or (string-to-int64 (str (.-size st))) 0))
                (isD (.-isDir st))
@@ -170,7 +170,7 @@
 
 (df wasiReadFdLines [] -> (List Str)
   :d "Reads existing FD table lines from ephemeral storage."
-  (let [(path "/tmp/.asl_wasi_fd_table")]
+  (let [(path "tmp/.asl_wasi_fd_table")]
     (if (not (file-exists? path))
         (list)
         (mt (file-read path)
@@ -181,7 +181,7 @@
 
 (df wasiWriteFdLines [(lines (List Str))] -> Bool
   :d "Writes FD table lines to ephemeral storage."
-  (let [(path "/tmp/.asl_wasi_fd_table")
+  (let [(path "tmp/.asl_wasi_fd_table")
         (content (str (string-join lines "\n") "\n"))]
     (mt (file-write path content)
       ((ok _) true)
@@ -390,7 +390,7 @@
   :d "Executes OS command if permitted by capabilities or returns explicit refusal receipt."
   (if (not (or (wasiCapabilityCheck "execCmd" capabilities) (wasiCapabilityCheck "sys-exec" capabilities)))
       (makeCapabilityRefusalReceipt "execCmd")
-      (let [(res (sys-exec cmd))]
+      (let [(res (sysExec cmd))]
         {:status "ok"
          :code (.-exitCode res)
          :stdout (.-stdout res)
