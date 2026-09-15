@@ -13,6 +13,11 @@
         (host (ce/emitCStandardIncludes false))]
     (assert (string-contains? free "<stdint.h>") "freestanding has stdint")
     (assert (string-contains? host "<stdio.h>") "hosted has stdio")
+    (assert (string-contains? host "_POSIX_C_SOURCE") "hosted preset requests POSIX.1-2008")
+    (assert (< (option-or (string-index-of host "_POSIX_C_SOURCE") 999999)
+               (option-or (string-index-of host "<stdio.h>") 0))
+            "the POSIX request precedes every libc header, because glibc latches the feature-test state in the first header it sees")
+    (refute (string-contains? free "_POSIX_C_SOURCE") "the freestanding preset asks for no POSIX surface")
     true))
 (df testExternCWrapper [] -> Bool
   (let [(res (ce/emitCExternCWrapper "int foo(void);"))]

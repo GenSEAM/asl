@@ -9,10 +9,13 @@
       emitCSliceType
       emitCPairType
       emitCMapType
+      emitCResultType
+      emitResultConstructors
       collectInsts
       collectInstsFromAnnotation
       emitInstTypedef
       emitInstTypedefs
+      emitInstAccessors
       dedupeInsts
       c99FromType
       c99TypeName
@@ -42,6 +45,13 @@
           "int" "long" "short" "unsigned int")
     s))
 
+(df isC99ReservedMacro? [(id String)] -> Bool
+  :d "Checks if an identifier is required by ISO C99 to be a macro, which makes it unusable as a struct member: glibc spells stdout as a self-referential macro and survives by luck, musl spells it (stdout) and a member access becomes a syntax error."
+  (list-contains?
+    (list "stdin" "stdout" "stderr" "errno" "assert" "offsetof" "NULL"
+          "EOF" "SEEK_SET" "SEEK_CUR" "SEEK_END" "BUFSIZ")
+    id))
+
 (df c99FieldIdent [(s String)] -> String
   :d "Sanitizes an ASL field name into a safe ISO C99 snake_case identifier."
   (let [(sLen (string-length s))
@@ -55,7 +65,7 @@
                    (str (m/sliceOr base1 0 (- len1 1) "") "-mut")
                    base1))
         (snaked (string-replace (string-replace base2 "-" "_") "/" "_"))]
-    (if (isC99Keyword? snaked)
+    (if (or (isC99Keyword? snaked) (isC99ReservedMacro? snaked))
         (str "asl_" snaked)
         snaked)))
 
@@ -135,6 +145,12 @@
                        (b (c99FromType (option-or (list-get args 1) (ty/tyCon "Unit" (list) (none) (none)))))]
                    (str "AslPair_" (sanitizeCIdent a) "_" (sanitizeCIdent b)))
                  "AslPair_void_void"))
+            ((= name "Result")
+             (if (>= (list-length args) 2)
+                 (let [(o (c99FromType (option-or (list-get args 0) (ty/tyCon "Unit" (list) (none) (none)))))
+                       (e (c99FromType (option-or (list-get args 1) (ty/tyCon "Unit" (list) (none) (none)))))]
+                   (str "AslResult_" (sanitizeCIdent o) "_" (sanitizeCIdent e)))
+                 "AslResult"))
             ((= name "Map")
              (if (>= (list-length args) 2)
                  (let [(k (c99FromType (option-or (list-get args 0) (ty/tyCon "Unit" (list) (none) (none)))))
@@ -156,7 +172,8 @@
              (if (or (string-starts-with? trimmed "AslOption_")
                      (or (string-starts-with? trimmed "AslSlice_")
                          (or (string-starts-with? trimmed "AslPair_")
-                             (string-starts-with? trimmed "AslMap_"))))
+                             (or (string-starts-with? trimmed "AslMap_")
+                                 (string-starts-with? trimmed "AslResult_")))))
                  trimmed
                  (if (string-ends-with? trimmed "*")
                      trimmed
@@ -205,9 +222,33 @@
     (guardTypedef mapName
       (str "typedef struct {\n    " pairName "* entries;\n    size_t count;\n} " mapName ";\n"))))
 
+(df emitCResultType [(okType String) (errType String)] -> String
+  :d "Emits an ISO C99 Result container typedef as a tagged union, so a Result can carry a value of any type instead of the type-erased void* the host header offered."
+  (let [(oTy (c99TypeStr okType))
+        (eTy (c99TypeStr errType))
+        (resName (str "AslResult_" (sanitizeCIdent oTy) "_" (sanitizeCIdent eTy)))
+        (okMember (if (= oTy "void") "" (str "        " oTy " ok;\n")))
+        (errMember (if (= eTy "void") "" (str "        " eTy " err;\n")))]
+    (guardTypedef resName
+      (if (and (= oTy "void") (= eTy "void"))
+          (str "typedef struct {\n    bool tag;\n} " resName ";\n")
+          (str "typedef struct {\n    bool tag;\n    union {\n" okMember errMember "    } data;\n} " resName ";\n")))))
+
+(df emitResultConstructors [(okType String) (errType String)] -> String
+  :d "Emits the per-instantiation Result constructors, because a generic ok or err cannot be written once in ISO C99 without discarding its argument."
+  (let [(oTy (c99TypeStr okType))
+        (eTy (c99TypeStr errType))
+        (resName (str "AslResult_" (sanitizeCIdent oTy) "_" (sanitizeCIdent eTy)))]
+    (str (if (= oTy "void")
+             (str "static inline " resName " asl_ok_" resName "(void) {\n    " resName " r;\n    r.tag = ASL_TAG_OK;\n    return r;\n}\n")
+             (str "static inline " resName " asl_ok_" resName "(" oTy " v) {\n    " resName " r;\n    r.tag = ASL_TAG_OK;\n    r.data.ok = v;\n    return r;\n}\n"))
+         (if (= eTy "void")
+             (str "static inline " resName " asl_err_" resName "(void) {\n    " resName " r;\n    r.tag = ASL_TAG_ERR;\n    return r;\n}\n")
+             (str "static inline " resName " asl_err_" resName "(" eTy " v) {\n    " resName " r;\n    r.tag = ASL_TAG_ERR;\n    r.data.err = v;\n    return r;\n}\n")))))
+
 (df isContainerCon? [(name String)] -> Bool
   :d "Checks whether a type constructor is a generic container needing an emitted instantiation typedef."
-  (or (= name "Option") (or (= name "List") (or (= name "Pair") (= name "Map")))))
+  (or (= name "Option") (or (= name "List") (or (= name "Pair") (or (= name "Map") (= name "Result"))))))
 
 (df mapEntryPair [(args (List ty/Type))] -> ty/Type
   :d "Builds the Pair instantiation a Map's entry vector is made of, so the pair typedef is registered before the map."
@@ -233,10 +274,14 @@
      (let [(acc2 (collectInstStep args 0 (list-length args) acc))
            (acc3 (if (and (= name "Map") (>= (list-length args) 2))
                      (list-append acc2 (list (mapEntryPair args)))
-                     acc2))]
+                     acc2))
+           (acc4 (if (and (= name "List") (>= (list-length args) 1))
+                     (list-append acc3 (list (ty/tyCon "Option" (list (option-or (list-get args 0) (ty/tyCon "Unit" (list) (none) (none)))) (none) (none))
+                                             (ty/tyCon "Option" (list t) (none) (none))))
+                     acc3))]
        (if (isContainerCon? name)
-           (list-append acc3 (list t))
-           acc3)))))
+           (list-append acc4 (list t))
+           acc4)))))
 
 (df collectInstsFromAnnotation [(annotation String) (acc (List ty/Type))] -> (List ty/Type)
   :d "Parses a type annotation and collects the container instantiations it mentions."
@@ -257,6 +302,8 @@
          ((= name "List") (emitCSliceType (c99FromType (option-or (list-get args 0) unitTy))))
          ((= name "Pair") (emitCPairType (c99FromType (option-or (list-get args 0) unitTy))
                                          (c99FromType (option-or (list-get args 1) unitTy))))
+         ((= name "Result") (emitCResultType (c99FromType (option-or (list-get args 0) unitTy))
+                                            (c99FromType (option-or (list-get args 1) unitTy))))
          ((= name "Map") (emitCMapType (c99FromType (option-or (list-get args 0) unitTy))
                                        (c99FromType (option-or (list-get args 1) unitTy))))
          (:else ""))))))
@@ -311,6 +358,46 @@
                        (collectInstsFromAnnotation (.-retType node) withParams)))))]
         (collectFormInsts forms (+ idx 1) len acc2))))
 
+(df emitSliceAccessors [(elemC String)] -> String
+  :d "Emits the per-instantiation container operations a generic accessor needs, because ISO C99 has no way to express one over all element types."
+  (let [(sliceName (str "AslSlice_" (sanitizeCIdent elemC)))
+        (optName (str "AslOption_" (sanitizeCIdent elemC)))]
+    (str "static inline " optName " asl_list_get_" sliceName "(" sliceName " s, int64_t i) {\n"
+         "    " optName " o;\n"
+         "    if (i < 0 || (size_t)i >= s.count) { o.tag = ASL_TAG_NONE; return o; }\n"
+         "    o.tag = ASL_TAG_SOME;\n"
+         "    o.data.some = s.items[i];\n"
+         "    return o;\n"
+         "}\n"
+         "static inline " optName " asl_list_head_" sliceName "(" sliceName " s) {\n"
+         "    return asl_list_get_" sliceName "(s, 0);\n"
+         "}\n"
+         "static inline AslOption_" (sanitizeCIdent sliceName) " asl_list_tail_" sliceName "(" sliceName " s) {\n"
+         "    AslOption_" (sanitizeCIdent sliceName) " o;\n"
+         "    " sliceName " r;\n"
+         "    if (s.count == 0) { o.tag = ASL_TAG_NONE; return o; }\n"
+         "    r.items = s.items + 1;\n"
+         "    r.count = s.count - 1;\n"
+         "    o.tag = ASL_TAG_SOME;\n"
+         "    o.data.some = r;\n"
+         "    return o;\n"
+         "}\n"
+         "static inline " elemC " asl_option_or_" optName "(" optName " o, " elemC " d) {\n"
+         "    if (o.tag == ASL_TAG_SOME) { return o.data.some; }\n"
+         "    return d;\n"
+         "}\n"
+         "static inline " optName " asl_some_" optName "(" elemC " v) {\n"
+         "    " optName " o;\n"
+         "    o.tag = ASL_TAG_SOME;\n"
+         "    o.data.some = v;\n"
+         "    return o;\n"
+         "}\n"
+         "static inline " optName " asl_none_" optName "(void) {\n"
+         "    " optName " o;\n"
+         "    o.tag = ASL_TAG_NONE;\n"
+         "    return o;\n"
+         "}\n")))
+
 (df isSliceInst? [(t ty/Type)] -> Bool
   :d "Checks whether an instantiation is a List, which stores its elements behind a pointer."
   (mt t
@@ -326,6 +413,34 @@
             (line (if (= (isSliceInst? t) wantSlices) (emitInstTypedef t) ""))]
         (emitInstTypedefsStep insts (+ idx 1) len wantSlices
                               (if (= line "") acc (list-append acc (list line)))))))
+
+(df emitInstAccessorsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Renders the per-instantiation container accessors for every collected slice."
+  (if (>= idx len)
+      acc
+      (let [(t (option-or (list-get insts idx) (ty/tyCon "Unit" (list) (none) (none))))
+            (unitTy (ty/tyCon "Unit" (list) (none) (none)))
+            (line (mt t
+                    ((ty/tyVar i k) "")
+                    ((ty/tyFun p r) "")
+                    ((ty/tyCon n args m s)
+                     (cond
+                       ((= n "List")
+                        (let [(elemC (c99FromType (option-or (list-get args 0) unitTy)))]
+                          (if (= elemC "void") "" (emitSliceAccessors elemC))))
+                       ((and (= n "Result") (>= (list-length args) 2))
+                        (emitResultConstructors (c99FromType (option-or (list-get args 0) unitTy))
+                                                (c99FromType (option-or (list-get args 1) unitTy))))
+                       (:else "")))))]
+        (emitInstAccessorsStep insts (+ idx 1) len
+                               (if (= line "") acc (list-append acc (list line)))))))
+
+(df emitInstAccessors [(forms (List a/TopForm))] -> String
+  :d "Emits the container operations that cannot be written once in ISO C99 and so must exist per instantiation."
+  (let [(raw (collectFormInsts forms 0 (list-length forms) (list)))
+        (uniq (dedupeInsts raw))
+        (lines (emitInstAccessorsStep uniq 0 (list-length uniq) (list)))]
+    (string-join lines "")))
 
 (df emitInstTypedefs [(forms (List a/TopForm)) (wantSlices Bool)] -> String
   :d "Emits one wave of generic container typedefs: slices store elements behind a pointer so they precede the record definitions, while Option and Pair store by value and must follow them."

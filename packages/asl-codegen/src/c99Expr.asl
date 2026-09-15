@@ -1,6 +1,10 @@
 (module asl-codegen/c99Expr
   :d "Pure ISO C99 expression lowering, control flow, and statement synthesis."
-  :x [lowerCExpr
+  :x [LowerCtx
+      emptyLowerCtx
+      ctxWithVar
+      ctxVarType
+      lowerCExpr
       lowerCAtom
       lowerCLet
       lowerCIf
@@ -17,6 +21,54 @@
       isIntegerLiteral?
       isFloatLiteral?]
   :i [(reader :a rd)])
+
+(dfs LowerCtx
+  (:f vars (List (Pair String String)) "Variable name to its emitted C type, for the enclosing function")
+  (:f substs (List (Pair String String)) "Name to the C expression it stands for, used for match payload binders so their type comes from the union member instead of being declared")
+  (:f fns (List (Pair String String)) "Function name to its emitted C return type, for every defun in the translation unit")
+  (:f retTy String "Emitted C return type of the enclosing function"))
+
+(df emptyLowerCtx [] -> LowerCtx
+  :d "The context used where no enclosing signature is known; a lookup in it fails rather than guessing a type."
+  (LowerCtx :vars (list) :substs (list) :fns (list) :retTy ""))
+
+(df ctxWithVar [(ctx LowerCtx) (name String) (cType String)] -> LowerCtx
+  :d "Extends the lowering context with one variable binding, shadowing any earlier binding of the same name."
+  (LowerCtx :vars (list-cons (pair name cType) (.-vars ctx)) :substs (.-substs ctx) :fns (.-fns ctx) :retTy (.-retTy ctx)))
+
+(df ctxWithSubst [(ctx LowerCtx) (name String) (cExpr String)] -> LowerCtx
+  :d "Binds a name to the C expression it stands for, so a match payload needs no declaration and therefore no guessed type."
+  (LowerCtx :vars (.-vars ctx) :substs (list-cons (pair name cExpr) (.-substs ctx)) :fns (.-fns ctx) :retTy (.-retTy ctx)))
+
+(df ctxFnRetType [(ctx LowerCtx) (name String)] -> (Option String)
+  :d "Resolves a called function to its declared C return type, which is what gives a let binding its type instead of a guess from the lowered text."
+  (ctxSubstStep (.-fns ctx) 0 (list-length (.-fns ctx)) name))
+
+(df ctxSubstStep [(ss (List (Pair String String))) (idx Int64) (len Int64) (name String)] -> (Option String)
+  :d "Scans substitutions innermost-first."
+  (if (>= idx len)
+      (none)
+      (let [(p (option-or (list-get ss idx) (pair "" "")))]
+        (if (= (.-first p) name)
+            (some (.-second p))
+            (ctxSubstStep ss (+ idx 1) len name)))))
+
+(df ctxSubst [(ctx LowerCtx) (name String)] -> (Option String)
+  :d "Resolves a name to the C expression it stands for, if one is bound."
+  (ctxSubstStep (.-substs ctx) 0 (list-length (.-substs ctx)) name))
+
+(df ctxVarTypeStep [(vars (List (Pair String String))) (idx Int64) (len Int64) (name String)] -> (Option String)
+  :d "Scans the context bindings in innermost-first order."
+  (if (>= idx len)
+      (none)
+      (let [(p (option-or (list-get vars idx) (pair "" "")))]
+        (if (= (.-first p) name)
+            (some (.-second p))
+            (ctxVarTypeStep vars (+ idx 1) len name)))))
+
+(df ctxVarType [(ctx LowerCtx) (name String)] -> (Option String)
+  :d "Resolves a variable to its emitted C type, or none when the enclosing signature does not determine it."
+  (ctxVarTypeStep (.-vars ctx) 0 (list-length (.-vars ctx)) name))
 
 (df sliceStrOr [(s String) (start Int64) (end Int64) (fallback String)] -> String
   :d "Safely slices string within bounds or returns fallback."
@@ -216,7 +268,7 @@
                        field)))]
     (str target "." (mangleCIdent clean))))
 
-(df lowerCRecordField [(items (List rd/SExpr)) (idx Int64)] -> String
+(df lowerCRecordField [(ctx LowerCtx) (items (List rd/SExpr)) (idx Int64)] -> String
   :d "Lowers a single record init key-value field."
   (let [(kPos (+ 1 (* idx 2)))
         (vPos (+ 2 (* idx 2)))
@@ -225,16 +277,16 @@
                     (sliceStrOr kAtom 1 (string-length kAtom) kAtom)
                     kAtom))
         (vNode (option-or (list-get items vPos) (rd/sexprAtom "()")))
-        (vVal (lowerCExpr vNode))]
+        (vVal (lowerCExpr ctx vNode))]
     (str "." (mangleCIdent kClean) " = " vVal)))
 
-(df lowerCRecordFieldsStep [(items (List rd/SExpr)) (idx Int64) (numPairs Int64) (acc (List String))] -> (List String)
+(df lowerCRecordFieldsStep [(ctx LowerCtx) (items (List rd/SExpr)) (idx Int64) (numPairs Int64) (acc (List String))] -> (List String)
   :d "Accumulates lowered record field initializers."
   (if (>= idx numPairs)
       acc
-      (lowerCRecordFieldsStep items (+ idx 1) numPairs (list-append acc (list (lowerCRecordField items idx))))))
+      (lowerCRecordFieldsStep ctx items (+ idx 1) numPairs (list-append acc (list (lowerCRecordField ctx items idx))))))
 
-(df lowerCRecordInit [(items (List rd/SExpr))] -> String
+(df lowerCRecordInit [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers record construction into a C99 designated compound literal."
   (let [(rawName (nthAtom items 0))
         (recName (stripModulePrefix rawName))
@@ -243,15 +295,15 @@
     (if (<= itemsLen 1)
         (str "(" recType "){ 0 }")
         (let [(numPairs (/ (- itemsLen 1) 2))
-              (fieldStrs (lowerCRecordFieldsStep items 0 numPairs (list)))]
+              (fieldStrs (lowerCRecordFieldsStep ctx items 0 numPairs (list)))]
           (str "(" recType "){ " (string-join fieldStrs ", ") " }")))))
 
-(df lowerCIf [(items (List rd/SExpr))] -> String
+(df lowerCIf [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers an if form into if-statement with returns if branches have control flow, else ternary."
-  (let [(condExpr (lowerCExpr (option-or (list-get items 1) (rd/sexprAtom "false"))))
-        (rawThen (lowerCExpr (option-or (list-get items 2) (rd/sexprAtom "(void)0"))))
+  (let [(condExpr (lowerCExpr ctx (option-or (list-get items 1) (rd/sexprAtom "false"))))
+        (rawThen (lowerCExpr ctx (option-or (list-get items 2) (rd/sexprAtom "(void)0"))))
         (rawElse (if (> (list-length items) 3)
-                     (lowerCExpr (option-or (list-get items 3) (rd/sexprAtom "(void)0")))
+                     (lowerCExpr ctx (option-or (list-get items 3) (rd/sexprAtom "(void)0")))
                      "(void)0"))
         (thenHasFlow (or (string-contains? rawThen "return ") (string-contains? rawThen "switch")))
         (elseHasFlow (or (string-contains? rawElse "return ") (string-contains? rawElse "switch")))]
@@ -263,7 +315,7 @@
           (str "if (" condExpr ") { " tStmt " } else { " eStmt " }"))
         (str "((" condExpr ") ? (" rawThen ") : (" rawElse "))"))))
 
-(df lowerCCondClause [(clause rd/SExpr)] -> (Pair String String)
+(df lowerCCondClause [(ctx LowerCtx) (clause rd/SExpr)] -> (Pair String String)
   :d "Extracts condition and expression from a single cond clause."
   (let [(cList (rd/sexprToList clause))]
     (if (<= (list-length cList) 0)
@@ -271,27 +323,27 @@
         (let [(head (nthAtom cList 0))
               (isElse (or (= head ":else") (= head "else")))]
           (if isElse
-              (let [(bVal (lowerCExpr (option-or (list-get cList 1) (rd/sexprAtom "(void)0"))))]
+              (let [(bVal (lowerCExpr ctx (option-or (list-get cList 1) (rd/sexprAtom "(void)0"))))]
                 (pair ":else" bVal))
-              (let [(cVal (lowerCExpr (option-or (list-get cList 0) (rd/sexprAtom "false"))))
-                    (bVal (lowerCExpr (option-or (list-get cList 1) (rd/sexprAtom "(void)0"))))]
+              (let [(cVal (lowerCExpr ctx (option-or (list-get cList 0) (rd/sexprAtom "false"))))
+                    (bVal (lowerCExpr ctx (option-or (list-get cList 1) (rd/sexprAtom "(void)0"))))]
                 (pair cVal bVal)))))))
 
-(df hasCondFlow? [(clauses (List rd/SExpr)) (idx Int64)] -> Bool
+(df hasCondFlow? [(ctx LowerCtx) (clauses (List rd/SExpr)) (idx Int64)] -> Bool
   (if (>= idx (list-length clauses))
       false
       (let [(cNode (option-or (list-get clauses idx) (rd/sexprAtom "()")))
-            (p (lowerCCondClause cNode))
+            (p (lowerCCondClause ctx cNode))
             (rawBody (.-second p))]
         (if (or (string-starts-with? rawBody "return") (or (string-starts-with? rawBody "switch") (string-starts-with? rawBody "{")))
             true
-            (hasCondFlow? clauses (+ idx 1))))))
+            (hasCondFlow? ctx clauses (+ idx 1))))))
 
-(df lowerCCondStmtLoop [(clauses (List rd/SExpr)) (idx Int64)] -> String
+(df lowerCCondStmtLoop [(ctx LowerCtx) (clauses (List rd/SExpr)) (idx Int64)] -> String
   (if (>= idx (list-length clauses))
       ""
       (let [(cNode (option-or (list-get clauses idx) (rd/sexprAtom "()")))
-            (p (lowerCCondClause cNode))
+            (p (lowerCCondClause ctx cNode))
             (cCond (.-first p))
             (rawBody (.-second p))
             (hasFlow (or (string-starts-with? rawBody "return") (or (string-starts-with? rawBody "switch") (string-starts-with? rawBody "{"))))
@@ -300,39 +352,63 @@
         (if (= cCond ":else")
             (str "else { " stmt " } ")
             (if (= idx 0)
-                (str "if (" cCond ") { " stmt " } " (lowerCCondStmtLoop clauses (+ idx 1)))
-                (str "else if (" cCond ") { " stmt " } " (lowerCCondStmtLoop clauses (+ idx 1))))))))
+                (str "if (" cCond ") { " stmt " } " (lowerCCondStmtLoop ctx clauses (+ idx 1)))
+                (str "else if (" cCond ") { " stmt " } " (lowerCCondStmtLoop ctx clauses (+ idx 1))))))))
 
-(df lowerCCondExprLoop [(clauses (List rd/SExpr)) (idx Int64)] -> String
+(df lowerCCondExprLoop [(ctx LowerCtx) (clauses (List rd/SExpr)) (idx Int64)] -> String
   (if (>= idx (list-length clauses))
       "(void)0"
       (let [(cNode (option-or (list-get clauses idx) (rd/sexprAtom "()")))
-            (p (lowerCCondClause cNode))
+            (p (lowerCCondClause ctx cNode))
             (cCond (.-first p))
             (rawBody (.-second p))]
         (if (= cCond ":else")
             rawBody
-            (let [(restExpr (lowerCCondExprLoop clauses (+ idx 1)))]
+            (let [(restExpr (lowerCCondExprLoop ctx clauses (+ idx 1)))]
               (str "((" cCond ") ? (" rawBody ") : (" restExpr "))"))))))
 
-(df lowerCCond [(items (List rd/SExpr))] -> String
+(df lowerCCond [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers a cond form into nested C99 ternary expressions or if-else statements."
   (let [(clauses (sliceFrom1 items))]
-    (if (hasCondFlow? clauses 0)
-        (lowerCCondStmtLoop clauses 0)
-        (lowerCCondExprLoop clauses 0))))
+    (if (hasCondFlow? ctx clauses 0)
+        (lowerCCondStmtLoop ctx clauses 0)
+        (lowerCCondExprLoop ctx clauses 0))))
 
-(df inferCType [(valExpr String)] -> String
-  :d "Infers a C99 variable type from lowered value expression."
-  (cond
-    ((and (string-ends-with? valExpr "LL")
-          (not (string-contains? valExpr "(")))
-     "int64_t")
-    ((or (= valExpr "true") (= valExpr "false"))
-     "bool")
-    (:else "__auto_type")))
+(df inferCTypeOfExpr [(ctx LowerCtx) (e rd/SExpr) (valExpr String)] -> String
+  :d "Resolves the C type of a let binding from the binding expression and the enclosing context: a literal from its own shape, a variable or a call from a declared type. Falls back to the lowered text only when nothing declares it, which is the remaining gap the checker will close."
+  (mt e
+    ((rd/sexprVect _) "")
+    ((rd/sexprAtom v)
+     (cond
+       ((isIntegerLiteral? v) "int64_t")
+       ((isFloatLiteral? v) "double")
+       ((or (= v "true") (= v "false")) "bool")
+       ((string-starts-with? v "\"") "asl_string_t")
+       (:else (mt (ctxVarType ctx v)
+                ((some t) t)
+                ((none) "")))))
+    ((rd/sexprList items)
+     (if (<= (list-length items) 0)
+         ""
+         (let [(head (stripModulePrefix (nthAtom items 0)))]
+           (mt (ctxFnRetType ctx head)
+             ((some t) t)
+             ((none) "")))))))
 
-(df lowerCLetBinding [(b rd/SExpr)] -> String
+(df inferCType [(ctx LowerCtx) (e rd/SExpr) (valExpr String)] -> String
+  :d "Infers a C99 variable type, preferring a declared type over any inspection of the lowered text."
+  (let [(declared (inferCTypeOfExpr ctx e valExpr))]
+    (if (not (= declared ""))
+        declared
+        (cond
+          ((and (string-ends-with? valExpr "LL")
+                (not (string-contains? valExpr "(")))
+           "int64_t")
+          ((or (= valExpr "true") (= valExpr "false"))
+           "bool")
+          (:else "__auto_type")))))
+
+(df lowerCLetBinding [(ctx LowerCtx) (b rd/SExpr)] -> String
   :d "Lowers a single let binding into a C declaration."
   (let [(pair (rd/sexprToList b))
         (pairLen (list-length pair))]
@@ -340,7 +416,7 @@
       ((>= pairLen 3)
        (let [(vName (mangleCIdent (nthAtom pair 0)))
              (vType (c99TypeStr (nthAtom pair 1)))
-             (vVal (lowerCExpr (option-or (list-get pair 2) (rd/sexprAtom "()"))))]
+             (vVal (lowerCExpr ctx (option-or (list-get pair 2) (rd/sexprAtom "()"))))]
          (if (= vType "void")
              (str vVal ";")
              (if (string-starts-with? vVal "switch")
@@ -349,8 +425,8 @@
       ((= pairLen 2)
        (let [(rawName (nthAtom pair 0))
              (vName (mangleCIdent rawName))
-             (vVal (lowerCExpr (option-or (list-get pair 1) (rd/sexprAtom "()"))))
-             (vType (inferCType vVal))]
+             (vVal (lowerCExpr ctx (option-or (list-get pair 1) (rd/sexprAtom "()"))))
+             (vType (inferCType ctx (option-or (list-get pair 1) (rd/sexprAtom "()")) vVal))]
          (if (or (string-starts-with? rawName "unused")
                  (or (string-starts-with? vVal "println(")
                      (or (string-starts-with? vVal "eprintln(")
@@ -372,24 +448,24 @@
        (or (string-starts-with? s "{")
            (string-starts-with? s "switch"))))
 
-(df lowerCLetBodyStmt [(e rd/SExpr)] -> String
+(df lowerCLetBodyStmt [(ctx LowerCtx) (e rd/SExpr)] -> String
   :d "Lowers a statement in a let body."
-  (let [(s (lowerCExpr e))]
+  (let [(s (lowerCExpr ctx e))]
     (if (or (string-ends-with? s ";") (isBlockStmt? s))
         s
         (str s ";"))))
 
-(df lowerCLet [(items (List rd/SExpr))] -> String
+(df lowerCLet [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers a let binding form into a scoped C99 compound statement block."
   (let [(bindingsNode (option-or (list-get items 1) (rd/sexprVect (list))))
         (bodyNodes (sliceTail items 2))
         (bindList (rd/sexprToList bindingsNode))
-        (decls (map lowerCLetBinding bindList))
+        (decls (lowerCLetBindingsStep ctx bindList 0 (list-length bindList) (list)))
         (validDecls (filter isNonEmptyStr? decls))
         (bodyLen (list-length bodyNodes))]
     (if (<= bodyLen 0)
         (str "{ " (string-join validDecls " ") " }")
-        (let [(bodyStmts (map lowerCLetBodyStmt bodyNodes))]
+        (let [(bodyStmts (lowerCLetBodyStmtsStep ctx bodyNodes 0 (list-length bodyNodes) (list)))]
           (str "{ " (string-join validDecls " ") " " (string-join bodyStmts " ") " }")))))
 
 (df anyTrue? [(bools (List Bool))] -> Bool
@@ -399,51 +475,6 @@
       (if (option-or (list-get bools 0) false)
           true
           (anyTrue? (sliceFrom1 bools)))))
-
-(df isStringVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is a string name."
-  (let [(names (list "src" "path" "sSrc" "entrySrc" "content" "text" "fullText" "outputStr" "raw" "msg" "s" "line" "str" "doc" "val" "modPath" "alias" "candAsl" "candSrc" "errStr" "failureMsg" "p" "fpath" "exprStr" "target" "emsg" "failure" "errMessage" "key" "name" "reason" "chunk" "s1" "s2" "varName" "bname" "nextBname" "cname" "c" "ch"))]
-    (list-contains? names name)))
-
-(df isSliceVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is a slice name."
-  (let [(names (list "forms" "entryForms" "fList" "xs" "t" "files" "tokens" "args" "items" "lines" "parts" "cases" "fields" "defuns" "schemas" "enums" "r" "tail" "depFormsList" "entryForms" "fList"))]
-    (list-contains? names name)))
-
-(df isMapVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is a map name."
-  (let [(names (list "deps" "filesMap" "schemasMap" "enumsMap" "caseOwnerMap" "importsMap" "funsMap" "exportsMap"))]
-    (list-contains? names name)))
-
-(df isSExprVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is an SExpr name."
-  (let [(names (list "aExpr" "firstExpr" "e" "expr" "sexpr" "node" "h" "it" "v" "item" "firstItem" "pairExpr" "nameExpr" "valExpr" "paramsExpr" "msgExpr" "rnode" "innerE"))]
-    (list-contains? names name)))
-
-(df isIntVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is an integer name."
-  (let [(names (list "count" "n" "len" "idx" "pos" "col" "i"))]
-    (list-contains? names name)))
-
-(df isParseErrVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is a ParseError name."
-  (or (= name "pe") (= name "perr")))
-
-(df isDefunVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is a DefunNode name."
-  (or (= name "dfNode") (or (= name "dfOpt") (= name "d"))))
-
-(df isFrameVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is an AslFrame name."
-  (= name "f"))
-
-(df isPosFormVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is an AslPosForm name."
-  (or (= name "m") (or (= name "extra") (or (= name "pf") (= name "pForm")))))
-
-(df isRunStateVarName? [(name String)] -> Bool
-  :d "Checks if payload variable is an AslRunState name."
-  (= name "run"))
 
 (df constructorFieldName [(ctor String) (idx Int64)] -> String
   :d "Returns the struct member name for a given constructor and parameter index."
@@ -514,46 +545,23 @@
     ((rd/sexprList items) (<= (list-length items) 0))
     ((rd/sexprVect items) false)))
 
-(df makePayloadBinding [(subj String) (pHead String) (pItems (List rd/SExpr)) (idx Int64)] -> String
-  :d "Lowers a single pattern match arm payload binding."
-  (let [(rawName (nthAtom pItems (+ idx 1)))
-        (vName (mangleCIdent rawName))]
-    (if (or (= rawName "_") (or (= vName "_") (or (= rawName "") (= vName ""))))
-        ""
-        (if (or (= pHead "ok") (or (= pHead "some") (= pHead "err")))
-            (if (isStringVarName? rawName)
-                (str "asl_string_t " vName " = asl_opt_str(((" subj ").data." (mangleCIdent pHead) ")); ")
-                (if (isMapVarName? rawName)
-                    (str "AslMap " vName " = asl_opt_map(((" subj ").data." (mangleCIdent pHead) ")); ")
-                    (if (isSliceVarName? rawName)
-                        (str "AslSlice_void " vName " = asl_opt_slice(((" subj ").data." (mangleCIdent pHead) ")); ")
-                        (if (isSExprVarName? rawName)
-                            (str "AslSExpr " vName " = asl_opt_sexpr(((" subj ").data." (mangleCIdent pHead) ")); ")
-                            (if (isParseErrVarName? rawName)
-                                (str "AslParseError " vName " = asl_opt_perr(((" subj ").data." (mangleCIdent pHead) ")); ")
-                                (if (isDefunVarName? rawName)
-                                    (str "AslDefunNode " vName " = asl_opt_defun(((" subj ").data." (mangleCIdent pHead) ")); ")
-                                    (if (isFrameVarName? rawName)
-                                        (str "AslFrame " vName " = asl_opt_frame(((" subj ").data." (mangleCIdent pHead) ")); ")
-                                        (if (isPosFormVarName? rawName)
-                                            (str "AslPosForm " vName " = asl_opt_posform(((" subj ").data." (mangleCIdent pHead) ")); ")
-                                            (if (isRunStateVarName? rawName)
-                                                (str "AslRunState " vName " = asl_opt_runstate(((" subj ").data." (mangleCIdent pHead) ")); ")
-                                                (if (isIntVarName? rawName)
-                                                    (str "int64_t " vName " = (int64_t)((intptr_t)((" subj ").data." (mangleCIdent pHead) ")); ")
-                                                    (str "__auto_type " vName " = ((" subj ").data." (mangleCIdent pHead) "); ")))))))))))
-            (let [(baseH (stripModulePrefix pHead))
-                  (mHead (mangleCIdent baseH))
-                  (fld (constructorFieldName pHead idx))]
-              (if (string-empty? fld)
-                  (str "__auto_type " vName " = ((" subj ").data." mHead "); ")
-                  (str "__auto_type " vName " = ((" subj ").data." mHead "." fld "); ")))))))
+(df payloadAccessor [(subj String) (pHead String) (idx Int64)] -> String
+  :d "The C expression a match payload binder stands for: the union member itself, whose type therefore needs no declaration and no guess."
+  (let [(mHead (mangleCIdent (stripModulePrefix pHead)))
+        (fld (constructorFieldName pHead idx))]
+    (if (string-empty? fld)
+        (str "((" subj ").data." mHead ")")
+        (str "((" subj ").data." mHead "." fld ")"))))
 
-(df makePayloadBindingsStep [(subj String) (pHead String) (pItems (List rd/SExpr)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
-  :d "Accumulates payload bindings for pattern match arm."
+(df payloadSubstCtx [(ctx LowerCtx) (subj String) (pHead String) (pItems (List rd/SExpr)) (idx Int64) (len Int64)] -> LowerCtx
+  :d "Binds every payload name of a match arm to the union member it stands for, replacing the declaration whose type used to be guessed from the binder's spelling."
   (if (>= idx len)
-      acc
-      (makePayloadBindingsStep subj pHead pItems (+ idx 1) len (list-append acc (list (makePayloadBinding subj pHead pItems idx))))))
+      ctx
+      (let [(rawName (nthAtom pItems (+ idx 1)))]
+        (if (or (= rawName "_") (= rawName ""))
+            (payloadSubstCtx ctx subj pHead pItems (+ idx 1) len)
+            (payloadSubstCtx (ctxWithSubst ctx rawName (payloadAccessor subj pHead idx))
+                             subj pHead pItems (+ idx 1) len)))))
 
 (df lowerCMatchArmStmts [(bodyStmts (List String))] -> String
   :d "Lowers match arm body statements with return on final expression."
@@ -579,52 +587,49 @@
                           (str "return " lastS)))]
          (str (string-join initStmts " ") " " retLast " "))))))
 
-(df lowerCMatchArm [(arm rd/SExpr) (subj String)] -> String
+(df lowerCMatchArm [(ctx LowerCtx) (arm rd/SExpr) (subj String)] -> String
   :d "Lowers a single pattern match arm into a C99 switch case with mandatory break."
   (mt arm
     ((rd/sexprList aItems)
      (if (<= (list-length aItems) 0)
          ""
          (let [(patNode (option-or (list-get aItems 0) (rd/sexprAtom "_")))
-               (bodyTail (sliceFrom1 aItems))
-               (bodyStmts (map lowerCLetBodyStmt bodyTail))
-               (bodyStr (lowerCMatchArmStmts bodyStmts))]
+               (bodyTail (sliceFrom1 aItems))]
            (mt patNode
              ((rd/sexprAtom v)
-              (if (or (= v "_") (= v ":else") (= v "else"))
-                  (str "default: { " bodyStr "break; }")
-                  (let [(tag (caseTagConst v))]
-                    (str "case " tag ": { " bodyStr "break; }"))))
+              (let [(bodyStr (lowerCMatchArmStmts (lowerCLetBodyStmtsStep ctx bodyTail 0 (list-length bodyTail) (list))))]
+                (if (or (= v "_") (= v ":else") (= v "else"))
+                    (str "default: { " bodyStr "break; }")
+                    (str "case " (caseTagConst v) ": { " bodyStr "break; }"))))
              ((rd/sexprList pItems)
               (let [(pHead (nthAtom pItems 0))
                     (tag (caseTagConst pHead))
                     (argCount (- (list-length pItems) 1))
-                    (payloadBindings (if (> argCount 0)
-                                         (string-join (makePayloadBindingsStep subj pHead pItems 0 argCount (list)) "")
-                                         ""))]
-                (str "case " tag ": { " payloadBindings bodyStr "break; }")))
+                    (armCtx (payloadSubstCtx ctx subj pHead pItems 0 argCount))
+                    (bodyStr (lowerCMatchArmStmts (lowerCLetBodyStmtsStep armCtx bodyTail 0 (list-length bodyTail) (list))))]
+                (str "case " tag ": { " bodyStr "break; }")))
              ((rd/sexprVect _)
               "")))))
     ((rd/sexprVect aItems)
-     (lowerCMatchArm (rd/sexprList aItems) subj))
+     (lowerCMatchArm ctx (rd/sexprList aItems) subj))
     ((rd/sexprAtom _) "")))
 
 (df isDefaultArm? [(s String)] -> Bool
   :d "Checks if arm string starts with default:."
   (string-starts-with? s "default:"))
 
-(df lowerCMatchArmsStep [(arms (List rd/SExpr)) (subj String) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+(df lowerCMatchArmsStep [(ctx LowerCtx) (arms (List rd/SExpr)) (subj String) (idx Int64) (len Int64) (acc (List String))] -> (List String)
   :d "Accumulates lowered match arms."
   (if (>= idx len)
       acc
-      (let [(armStr (lowerCMatchArm (option-or (list-get arms idx) (rd/sexprAtom "")) subj))]
-        (lowerCMatchArmsStep arms subj (+ idx 1) len (list-append acc (list armStr))))))
+      (let [(armStr (lowerCMatchArm ctx (option-or (list-get arms idx) (rd/sexprAtom "")) subj))]
+        (lowerCMatchArmsStep ctx arms subj (+ idx 1) len (list-append acc (list armStr))))))
 
-(df lowerCMatch [(items (List rd/SExpr))] -> String
+(df lowerCMatch [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers a match or mt form into an exhaustive C99 switch statement with unreachable default."
-  (let [(subj (lowerCExpr (option-or (list-get items 1) (rd/sexprAtom "val"))))
+  (let [(subj (lowerCExpr ctx (option-or (list-get items 1) (rd/sexprAtom "val"))))
         (arms (sliceTail items 2))
-        (armStrs (lowerCMatchArmsStep arms subj 0 (list-length arms) (list)))
+        (armStrs (lowerCMatchArmsStep ctx arms subj 0 (list-length arms) (list)))
         (validArms (filter isNonEmptyStr? armStrs))
         (hasDefault (anyTrue? (map isDefaultArm? validArms)))
         (defaultGuard (if hasDefault "" "default: { abort(); break; }"))
@@ -672,13 +677,13 @@
                                                         (string-ends-with? h "Head")))))))))))))))
     ((rd/sexprVect _) false)))
 
-(df foldBinaryOpStep [(cOp String) (restArgs (List rd/SExpr)) (idx Int64) (len Int64) (acc String)] -> String
+(df foldBinaryOpStep [(ctx LowerCtx) (cOp String) (restArgs (List rd/SExpr)) (idx Int64) (len Int64) (acc String)] -> String
   :d "Accumulates binary operator expressions."
   (if (>= idx len)
       acc
       (let [(argNode (option-or (list-get restArgs idx) (rd/sexprAtom "0LL")))
-            (nextAcc (str "((" acc ") " cOp " (" (lowerCExpr argNode) "))"))]
-        (foldBinaryOpStep cOp restArgs (+ idx 1) len nextAcc))))
+            (nextAcc (str "((" acc ") " cOp " (" (lowerCExpr ctx argNode) "))"))]
+        (foldBinaryOpStep ctx cOp restArgs (+ idx 1) len nextAcc))))
 
 (df protectMacroArg [(s String)] -> String
   :d "Wraps compound literals or braced expressions in parentheses to protect macro commas."
@@ -690,16 +695,70 @@
   :d "Builds the tag constant for a match arm using the bare case name, matching the alias emitCaseTagAlias emits; the module alias is dropped because the alias is keyed on the case name alone."
   (str "ASL_TAG_" (string-upper (string-replace (stripModulePrefix patHead) "-" "_"))))
 
-(df lowerCStrConcat [(args (List rd/SExpr)) (idx Int64) (len Int64)] -> String
+(df lowerCExprsStep [(ctx LowerCtx) (es (List rd/SExpr)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Lowers a list of expressions in order, threading the lowering context explicitly rather than through a closure."
+  (if (>= idx len)
+      acc
+      (let [(e (option-or (list-get es idx) (rd/sexprAtom "()")))]
+        (lowerCExprsStep ctx es (+ idx 1) len (list-append acc (list (lowerCExpr ctx e)))))))
+
+(df lowerCLetBindingsStep [(ctx LowerCtx) (bs (List rd/SExpr)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Lowers let bindings in order, threading the lowering context explicitly rather than through a closure."
+  (if (>= idx len)
+      acc
+      (let [(b (option-or (list-get bs idx) (rd/sexprAtom "()")))]
+        (lowerCLetBindingsStep ctx bs (+ idx 1) len (list-append acc (list (lowerCLetBinding ctx b)))))))
+
+(df lowerCLetBodyStmtsStep [(ctx LowerCtx) (es (List rd/SExpr)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Lowers let body statements in order, threading the lowering context explicitly rather than through a closure."
+  (if (>= idx len)
+      acc
+      (let [(e (option-or (list-get es idx) (rd/sexprAtom "()")))]
+        (lowerCLetBodyStmtsStep ctx es (+ idx 1) len (list-append acc (list (lowerCLetBodyStmt ctx e)))))))
+
+(df lowerCStrConcat [(ctx LowerCtx) (args (List rd/SExpr)) (idx Int64) (len Int64)] -> String
   :d "Right-nests the variadic str builtin into pairwise ISO C99 string concatenations, which needs no element type because str is variadic over String."
   (if (>= idx len)
       "((asl_string_t){ .data = \"\", .len = 0 })"
-      (let [(here (lowerCExpr (option-or (list-get args idx) (rd/sexprAtom "\"\""))))]
+      (let [(here (lowerCExpr ctx (option-or (list-get args idx) (rd/sexprAtom "\"\""))))]
         (if (= idx (- len 1))
             here
-            (str "string_concat2(" here ", " (lowerCStrConcat args (+ idx 1) len) ")")))))
+            (str "string_concat2(" here ", " (lowerCStrConcat ctx args (+ idx 1) len) ")")))))
 
-(df lowerCCall [(items (List rd/SExpr))] -> String
+(df argCType [(ctx LowerCtx) (e rd/SExpr)] -> (Option String)
+  :d "Resolves the emitted C type of an argument when it is a variable the enclosing signature declares; none otherwise, never a guess."
+  (mt e
+    ((rd/sexprAtom v) (ctxVarType ctx v))
+    ((rd/sexprList _) (none))
+    ((rd/sexprVect _) (none))))
+
+(df typedAccessorCall [(ctx LowerCtx) (head String) (rawArgs (List rd/SExpr))] -> String
+  :d "Emits the per-instantiation container accessor when the enclosing signature determines the container type, and the empty string when it does not so the caller keeps its existing lowering."
+  (let [(bare (stripModulePrefix head))
+        (a0 (option-or (list-get rawArgs 0) (rd/sexprAtom "()")))
+        (retTy (.-retTy ctx))
+        (tyOpt (argCType ctx a0))]
+    (if (and (string-starts-with? retTy "AslResult_")
+             (and (or (= bare "ok") (= bare "err")) (> (list-length rawArgs) 0)))
+        (str "asl_" bare "_" retTy "(" (lowerCExpr ctx a0) ")")
+    (mt tyOpt
+      ((none) "")
+      ((some cTy)
+       (let [(isSlice (string-starts-with? cTy "AslSlice_"))
+             (isOpt (string-starts-with? cTy "AslOption_"))
+             (s0 (lowerCExpr ctx a0))]
+         (cond
+           ((and isSlice (= bare "list-get"))
+            (str "asl_list_get_" cTy "(" s0 ", " (lowerCExpr ctx (option-or (list-get rawArgs 1) (rd/sexprAtom "0"))) ")"))
+           ((and isSlice (= bare "list-head"))
+            (str "asl_list_head_" cTy "(" s0 ")"))
+           ((and isSlice (= bare "list-tail"))
+            (str "asl_list_tail_" cTy "(" s0 ")"))
+           ((and isOpt (= bare "option-or"))
+            (str "asl_option_or_" cTy "(" s0 ", " (lowerCExpr ctx (option-or (list-get rawArgs 1) (rd/sexprAtom "()"))) ")"))
+           (:else ""))))))))
+
+(df lowerCCall [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers a call form, field access, or operator expression into ISO C99."
   (let [(head (nthAtom items 0))
         (rawArgs (sliceFrom1 items))]
@@ -707,28 +766,28 @@
       ((string-starts-with? head ".-")
        (let [(field (sliceStrOr head 2 (string-length head) ""))
              (target (if (> (list-length rawArgs) 0)
-                         (lowerCExpr (option-or (list-get rawArgs 0) (rd/sexprAtom "()")))
+                         (lowerCExpr ctx (option-or (list-get rawArgs 0) (rd/sexprAtom "()")))
                          "()"))]
          (lowerCFieldAccess target field)))
       ((= head "not")
        (let [(arg (if (> (list-length rawArgs) 0)
-                      (lowerCExpr (option-or (list-get rawArgs 0) (rd/sexprAtom "false")))
+                      (lowerCExpr ctx (option-or (list-get rawArgs 0) (rd/sexprAtom "false")))
                       "false"))]
          (str "(!(" arg "))")))
       ((= head "str")
-       (lowerCStrConcat rawArgs 0 (list-length rawArgs)))
+       (lowerCStrConcat ctx rawArgs 0 (list-length rawArgs)))
       ((isBinaryOp? head)
        (let [(argCount (list-length rawArgs))
              (cOp (opToC head))]
          (cond
            ((= argCount 1)
-            (let [(a0 (lowerCExpr (option-or (list-get rawArgs 0) (rd/sexprAtom "0LL"))))]
+            (let [(a0 (lowerCExpr ctx (option-or (list-get rawArgs 0) (rd/sexprAtom "0LL"))))]
               (str "(-(" a0 "))")))
            ((>= argCount 2)
             (let [(raw0 (option-or (list-get rawArgs 0) (rd/sexprAtom "0LL")))
                   (raw1 (option-or (list-get rawArgs 1) (rd/sexprAtom "0LL")))
-                  (firstArg (lowerCExpr raw0))
-                  (secondArg (lowerCExpr raw1))
+                  (firstArg (lowerCExpr ctx raw0))
+                  (secondArg (lowerCExpr ctx raw1))
                   (isStr (or (string-contains? firstArg "asl_string_")
                              (or (string-contains? secondArg "asl_string_")
                                  (or (isStringExpr? raw0)
@@ -738,54 +797,59 @@
                       (str "asl_string_eq(" firstArg ", " secondArg ")")
                       (str "(!asl_string_eq(" firstArg ", " secondArg "))"))
                   (let [(restArgs (sliceFrom1 rawArgs))]
-                    (foldBinaryOpStep cOp restArgs 0 (list-length restArgs) firstArg)))))
+                    (foldBinaryOpStep ctx cOp restArgs 0 (list-length restArgs) firstArg)))))
            (:else ""))))
       ((and (> (string-length head) 0) (string-starts-with? head ":"))
-       (lowerCRecordInit items))
+       (lowerCRecordInit ctx items))
       ((and (> (string-length (stripModulePrefix head)) 0)
             (let [(c0 (sliceStrOr (stripModulePrefix head) 0 1 ""))]
               (and (>= c0 "A") (<= c0 "Z")))
             (> (list-length items) 1)
             (string-starts-with? (nthAtom items 1) ":"))
-       (lowerCRecordInit items))
+       (lowerCRecordInit ctx items))
       ((and (= (stripModulePrefix head) "ok")
             (or (<= (list-length rawArgs) 0)
                 (or (= (nthAtom rawArgs 0) "()")
                     (isUnitExpr? (option-or (list-get rawArgs 0) (rd/sexprAtom ""))))))
        "okUnit()")
+      ((not (= "" (typedAccessorCall ctx head rawArgs)))
+       (typedAccessorCall ctx head rawArgs))
       (:else
        (let [(fnName (mangleCIdent (stripModulePrefix head)))
-             (rawArgStrs (map lowerCExpr rawArgs))
+             (rawArgStrs (lowerCExprsStep ctx rawArgs 0 (list-length rawArgs) (list)))
              (args (map protectMacroArg rawArgStrs))]
          (str fnName "(" (string-join args ", ") ")"))))))
 
-(df lowerCDo [(items (List rd/SExpr))] -> String
+(df lowerCDo [(ctx LowerCtx) (items (List rd/SExpr))] -> String
   :d "Lowers a sequential do block into a C comma expression."
   (let [(stmts (sliceFrom1 items))
         (stmtCount (list-length stmts))]
     (cond
       ((<= stmtCount 0) "(void)0")
       ((= stmtCount 1)
-       (lowerCExpr (option-or (list-get stmts 0) (rd/sexprAtom "()"))))
+       (lowerCExpr ctx (option-or (list-get stmts 0) (rd/sexprAtom "()"))))
       (:else
-       (let [(exprs (map lowerCExpr stmts))]
+       (let [(exprs (lowerCExprsStep ctx stmts 0 (list-length stmts) (list)))]
          (str "(" (string-join exprs ", ") ")"))))))
 
-(df lowerCExpr [(e rd/SExpr)] -> String
+(df lowerCExpr [(ctx LowerCtx) (e rd/SExpr)] -> String
   :d "Lowers an arbitrary ASL S-expression into an ISO C99 expression."
   (mt e
-    ((rd/sexprAtom v) (lowerCAtom v))
+    ((rd/sexprAtom v)
+     (mt (ctxSubst ctx v)
+       ((some cExpr) cExpr)
+       ((none) (lowerCAtom v))))
     ((rd/sexprVect items)
-     (str "{" (string-join (map lowerCExpr items) ", ") "}"))
+     (str "{" (string-join (lowerCExprsStep ctx items 0 (list-length items) (list)) ", ") "}"))
     ((rd/sexprList items)
      (if (<= (list-length items) 0)
          "(void)0"
          (let [(head (nthAtom items 0))]
            (cond
              ((= head "fn") "(void*)0")
-             ((= head "let") (lowerCLet items))
-             ((= head "if") (lowerCIf items))
-             ((= head "cond") (lowerCCond items))
-             ((or (= head "match") (= head "mt")) (lowerCMatch items))
-             ((= head "do") (lowerCDo items))
-             (:else (lowerCCall items))))))))
+             ((= head "let") (lowerCLet ctx items))
+             ((= head "if") (lowerCIf ctx items))
+             ((= head "cond") (lowerCCond ctx items))
+             ((or (= head "match") (= head "mt")) (lowerCMatch ctx items))
+             ((= head "do") (lowerCDo ctx items))
+             (:else (lowerCCall ctx items))))))))

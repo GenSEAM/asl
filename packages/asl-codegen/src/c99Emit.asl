@@ -26,10 +26,10 @@
     (str "#ifndef " guard "\n#define " guard "\n\n" content "\n\n#endif\n")))
 
 (df emitCStandardIncludes [(isFreestanding Bool)] -> String
-  :d "Emits ISO C99 standard header includes based on freestanding or hosted execution preset."
+  :d "Emits ISO C99 standard header includes for the freestanding or hosted preset. The hosted preset must request POSIX.1-2008 before any libc header, because glibc latches the feature-test state in the first header it sees and a later request is then a no-op, which silently removes realpath and clock_gettime under -std=c99."
   (if isFreestanding
       "#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>"
-      "#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>"))
+      "#ifndef _POSIX_C_SOURCE\n#define _POSIX_C_SOURCE 200809L\n#endif\n\n#include <stdint.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>"))
 
 (df emitCExternCWrapper [(content String)] -> String
   :d "Wraps declarations in extern C block when compiled under C++ compilers."
@@ -64,14 +64,48 @@
           (str "#ifndef " shortName "\n#define " shortName " " fnName "\n#endif\n" proto))
         proto)))
 
-(df emitInitStmt [(e rd/SExpr)] -> String
+(df ctxOfParamsStep [(ctx ce/LowerCtx) (ps (List a/Param)) (idx Int64) (len Int64)] -> ce/LowerCtx
+  :d "Seeds the lowering context with each declared parameter and its emitted C type."
+  (if (>= idx len)
+      ctx
+      (let [(p (option-or (list-get ps idx) (a/Param :name "" :type "Unit")))]
+        (ctxOfParamsStep (ce/ctxWithVar ctx (.-name p) (ct/c99TypeStr (.-type p))) ps (+ idx 1) len))))
+
+(df fnRetTypesStep [(defuns (List a/DefunNode)) (idx Int64) (len Int64) (acc (List (Pair String String)))] -> (List (Pair String String))
+  :d "Collects every defun's declared C return type, so a let binding on a call takes its type from the callee's signature instead of from the lowered text."
+  (if (>= idx len)
+      acc
+      (let [(d (option-or (list-get defuns idx) (a/DefunNode :name "" :typeVars (list) :isExported false :effect false :params (list) :retType "Unit" :docstring "" :body (list))))]
+        (fnRetTypesStep defuns (+ idx 1) len
+                        (list-append acc (list (pair (.-name d) (ct/c99TypeStr (.-retType d)))))))))
+
+(df ctxOfDefun [(fn a/DefunNode) (fnTypes (List (Pair String String)))] -> ce/LowerCtx
+  :d "Builds the lowering context a function body is lowered under, from its declared signature and the signatures of every function it can call."
+  (let [(base (ce/LowerCtx :vars (list) :substs (list) :fns fnTypes :retTy (ct/c99TypeStr (.-retType fn))))]
+    (ctxOfParamsStep base (.-params fn) 0 (list-length (.-params fn)))))
+
+(df emitInitStmtsStep [(ctx ce/LowerCtx) (es (List rd/SExpr)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Formats intermediate body expressions as C statements under the enclosing context."
+  (if (>= idx len)
+      acc
+      (let [(e (option-or (list-get es idx) (rd/sexprAtom "()")))]
+        (emitInitStmtsStep ctx es (+ idx 1) len (list-append acc (list (emitInitStmt ctx e)))))))
+
+(df emitInitStmt [(ctx ce/LowerCtx) (e rd/SExpr)] -> String
   :d "Formats an intermediate SExpr as a C statement."
-  (let [(s (ce/lowerCExpr e))]
+  (let [(s (ce/lowerCExpr ctx e))]
     (if (or (string-ends-with? s ";") (string-ends-with? s "}"))
         (str "    " s)
         (str "    " s ";"))))
 
-(df emitCFunctionDef [(fn a/DefunNode)] -> String
+(df emitCFunctionDefsStep [(defuns (List a/DefunNode)) (fnTypes (List (Pair String String))) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Lowers each function definition under the shared signature table, threading it explicitly rather than through a closure."
+  (if (>= idx len)
+      acc
+      (let [(d (option-or (list-get defuns idx) (a/DefunNode :name "" :typeVars (list) :isExported false :effect false :params (list) :retType "Unit" :docstring "" :body (list))))]
+        (emitCFunctionDefsStep defuns fnTypes (+ idx 1) len (list-append acc (list (emitCFunctionDef d fnTypes)))))))
+
+(df emitCFunctionDef [(fn a/DefunNode) (fnTypes (List (Pair String String)))] -> String
   :d "Lowers a typed defun AST node into an ISO C99 function implementation."
   (let [(rawRet (.-retType fn))
         (retTy (ct/c99TypeStr rawRet))
@@ -80,6 +114,7 @@
         (paramStr (if (<= (list-length params) 0)
                       "void"
                       (string-join (map emitParamPrototype params) ", ")))
+        (bodyCtx (ctxOfDefun fn fnTypes))
         (body (.-body fn))
         (bodyLen (list-length body))]
     (cond
@@ -89,7 +124,7 @@
            (str retTy " " fnName "(" paramStr ") {\n    return (" retTy "){0};\n}\n")))
       ((= bodyLen 1)
        (let [(soleExpr (option-or (list-get body 0) (rd/sexprAtom "()")))
-             (lowered (ce/lowerCExpr soleExpr))]
+             (lowered (ce/lowerCExpr bodyCtx soleExpr))]
          (if (= retTy "void")
              (if (or (string-ends-with? lowered "}") (string-ends-with? lowered ";"))
                  (str retTy " " fnName "(" paramStr ") {\n    " lowered "\n    return;\n}\n")
@@ -109,8 +144,8 @@
       (:else
        (let [(initExprs (option-or (list-slice body 0 (- bodyLen 1)) (list)))
              (lastExpr (option-or (list-get body (- bodyLen 1)) (rd/sexprAtom "()")))
-             (initStmts (map emitInitStmt initExprs))
-             (lastLowered (ce/lowerCExpr lastExpr))
+             (initStmts (emitInitStmtsStep bodyCtx initExprs 0 (list-length initExprs) (list)))
+             (lastLowered (ce/lowerCExpr bodyCtx lastExpr))
              (lastStmt (if (= retTy "void")
                            (if (or (string-ends-with? lastLowered ";") (string-ends-with? lastLowered "}"))
                                (str "    " lastLowered "\n    return;")
@@ -321,7 +356,7 @@
         (defuns (collectFormsDefuns defs 0 (list-length defs) (list)))
         (preamble (emitCHostedPreamble))
         (protoStrs (map emitCFunctionPrototype defuns))
-        (fnDefs (map emitCFunctionDef defuns))
+        (fnDefs (emitCFunctionDefsStep defuns (fnRetTypesStep defuns 0 (list-length defuns) (list)) 0 (list-length defuns) (list)))
         (sections (filter isNonEmptyString?
                           (list preamble (string-join protoStrs "\n") (string-join fnDefs "\n"))))]
     (str (string-join sections "\n\n") "\n")))
@@ -340,11 +375,13 @@
         (forwardSchemas (map emitSchemaForwardDecl uniqSchemas))
         (sliceTypedefs (ct/emitInstTypedefs forms true))
         (valueTypedefs (ct/emitInstTypedefs forms false))
+        (instAccessors (ct/emitInstAccessors forms))
         (simpleEnumStrs (map ct/emitCDefenum simpleEnums))
         (schemaStrs (map ct/emitCDefschema uniqSchemas))
         (complexEnumStrs (map ct/emitCDefenum complexEnums))
         (protoStrs (map emitCFunctionPrototype uniqDefuns))
-        (fnDefs (map emitCFunctionDef uniqDefuns))
+        (fnTypes (fnRetTypesStep uniqDefuns 0 (list-length uniqDefuns) (list)))
+        (fnDefs (emitCFunctionDefsStep uniqDefuns fnTypes 0 (list-length uniqDefuns) (list)))
         (actualEntry (findEntryName uniqDefuns entryFn))
         (entryDefunOpt (findEntryDefun defuns actualEntry 0 (list-length defuns)))
         (hasArgs (mt entryDefunOpt
@@ -359,6 +396,7 @@
                                 (string-join schemaStrs "\n")
                                 (string-join complexEnumStrs "\n")
                                 valueTypedefs
+                                instAccessors
                                 (string-join protoStrs "\n")
                                 (string-join fnDefs "\n")
                                 mainEntry)))]

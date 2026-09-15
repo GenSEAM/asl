@@ -74,6 +74,7 @@
     (refute (string-contains? optDef "hasValue") "optDef must not use the by-value layout the match lowering cannot read")
     (assert (string-contains? sliceDef "typedef struct {") "sliceDef header")
     (assert (string-contains? sliceDef "int64_t* items;") "sliceDef items")
+    (refute (string-contains? sliceDef "const int64_t* items;") "sliceDef elements are mutable, matching the host header's AslSlice_asl_string_t, so the host and the emitter can supply the same container type")
     (assert (string-contains? sliceDef "size_t count;") "sliceDef count")
     (assert (string-contains? sliceDef "AslSlice_int64_t;") "sliceDef name")
     (assert (string-contains? sliceDef "#ifndef AslSlice_int64_t_DEFINED") "sliceDef include guard")
