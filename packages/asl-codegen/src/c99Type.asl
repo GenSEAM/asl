@@ -23,7 +23,7 @@
       c99UpperIdent
       isC99Keyword?
       isC99NativeType?]
-  :i [(ast :a a) (asl-checker/types :a ty) (mangle :a m)])
+  :i [(ast :a a) (asl-checker/types :a ty) (c99Mangle :a m)])
 
 (df isC99Keyword? [(id String)] -> Bool
   :d "Checks if identifier collides with an ISO C99 reserved keyword."

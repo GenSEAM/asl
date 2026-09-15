@@ -61,7 +61,7 @@
 (df testWasiImportsAndSectionFraming [] -> Bool
   :d "Verifies WebAssembly Section 2 import framing for WASI Preview 1."
   (let [(importNames (wasi/wasiStandardImports))
-        (entries (wasi/wasiStandardImportEntries))
+        (entries (w/wasiStandardImportEntries))
         (importSec (w/encodeImportSection entries))]
     (assert (= (list-length importNames) 5) "Standard WASI preview 1 must define 5 imports")
     (refute (list-empty? importNames) "WASI imports list must not be empty")

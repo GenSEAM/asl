@@ -166,23 +166,27 @@
                     (ok (str "✓ " path ": Semantic check passed cleanly.")))))))))))
 
 (df ! cmdBuild [(args (List Str))] -> (Result Str Str)
-  :d "Handles build command."
+  :d "Handles build command. The self-hosting core carries the C99 backend only; every other target lives in asl-compiler/targets."
   (if (list-empty? args)
-      (err "Usage: asl build [--target <target>] <file.asl>")
+      (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>")
       (let [(hasTargetFlag (and (>= (list-length args) 2) (= (option-or (list-head args) "") "--target")))
-            (target (if hasTargetFlag (option-or (list-get args 1) "wasm") "wasm"))
+            (target (if hasTargetFlag (option-or (list-get args 1) "c99") "c99"))
             (restArgs (if hasTargetFlag (option-or (list-tail (option-or (list-tail args) (list))) (list)) args))
             (path (option-or (list-head restArgs) ""))]
-        (if (string-empty? path)
-            (err "Usage: asl build [--target <target>] <file.asl>")
-            (let [(srcRes (file-read path))]
-              (mt srcRes
-                ((err ioErr) (err (str "Failed to read source file: " path)))
-                ((ok src)
-                 (let [(cres (comp/compileStandaloneTarget src target path))]
-                   (if (.-ok cres)
-                       (ok (.-code cres))
-                       (err (str "Build failed: " (string-join (.-diagnostics cres) "\n"))))))))))))
+        (cond
+          ((string-empty? path)
+           (err "Usage: asl build [--target <c99|c-embedded>] <file.asl>"))
+          ((and (!= target "c99") (!= target "c-embedded"))
+           (err (str "Target '" target "' is not built into the self-hosting core; it lives in asl-compiler/targets")))
+          (:else
+           (let [(srcRes (file-read path))]
+             (mt srcRes
+               ((err ioErr) (err (str "Failed to read source file: " path)))
+               ((ok src)
+                (let [(cres (comp/compileSourceToC99 src path (= target "c-embedded")))]
+                  (if (.-ok cres)
+                      (ok (.-code cres))
+                      (err (str "Build failed: " (string-join (.-diagnostics cres) "\n")))))))))))))
 
 (df ! cmdEval [(args (List Str))] -> (Result Str Str)
   :d "Handles eval command."

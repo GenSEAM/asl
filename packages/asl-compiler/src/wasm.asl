@@ -42,7 +42,9 @@
       encodeDataSegment
       encodeDataSection
       emitWasiBinaryBytes
-      emitWasiBinaryTarget]
+      emitWasiBinaryTarget
+      wasiStandardImportEntries
+      wasiStandardImportTypes]
   :i [(ast :a a) (reader :a rd)])
 
 (df leb128EncodeU32Step [(n Int64) (acc (List Int64))] -> (List Int64)
@@ -738,3 +740,20 @@
 (df emitWasiBinaryTarget [(forms (List a/TopForm))] -> Str
   :d "Emits full WebAssembly binary module targeting WASI Preview 1 as comma-separated byte string."
   (string-join (map (fn [(b Int64)] -> Str (string-from-int64 b)) (emitWasiBinaryBytes forms)) ","))
+
+(df wasiStandardImportEntries [] -> (List (List Int64))
+  :d "Emits encoded WebAssembly import section entries for WASI Preview 1."
+  (list
+    (encodeImportEntry "wasi_snapshot_preview1" "fd_write" 0 0)
+    (encodeImportEntry "wasi_snapshot_preview1" "fd_read" 0 0)
+    (encodeImportEntry "wasi_snapshot_preview1" "path_open" 0 1)
+    (encodeImportEntry "wasi_snapshot_preview1" "fd_close" 0 2)
+    (encodeImportEntry "wasi_snapshot_preview1" "proc_exit" 0 3)))
+
+(df wasiStandardImportTypes [] -> (List (List Int64))
+  :d "Emits WebAssembly function type signatures for standard WASI preview 1 imports."
+  (list
+    (encodeFuncType (list 127 127 127 127) (list 127))
+    (encodeFuncType (list 127 127 127 127 127 126 126 127 127) (list 127))
+    (encodeFuncType (list 127) (list 127))
+    (encodeFuncType (list 127) (list))))

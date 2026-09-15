@@ -10,8 +10,6 @@
       wasiFileType
       wasiFileTypeName
       wasiStandardImports
-      wasiStandardImportEntries
-      wasiStandardImportTypes
       encodeCiovec
       wasiFdWrite
       wasiFdRead
@@ -28,7 +26,7 @@
       sandboxedWasiCapabilities
       nativeTierCapabilities
       wasiSysExec]
-  :i [(wasm :a w)])
+  :i [])
 
 (df wasiFdStdin [] -> Int64 0)
 
@@ -97,23 +95,6 @@
 (df wasiStandardImports [] -> (List Str)
   :d "Returns list of standard WASI preview 1 import function names."
   (list "fd_write" "fd_read" "path_open" "fd_close" "proc_exit"))
-
-(df wasiStandardImportEntries [] -> (List (List Int64))
-  :d "Emits encoded WebAssembly import section entries for WASI Preview 1."
-  (list
-    (w/encodeImportEntry "wasi_snapshot_preview1" "fd_write" 0 0)
-    (w/encodeImportEntry "wasi_snapshot_preview1" "fd_read" 0 0)
-    (w/encodeImportEntry "wasi_snapshot_preview1" "path_open" 0 1)
-    (w/encodeImportEntry "wasi_snapshot_preview1" "fd_close" 0 2)
-    (w/encodeImportEntry "wasi_snapshot_preview1" "proc_exit" 0 3)))
-
-(df wasiStandardImportTypes [] -> (List (List Int64))
-  :d "Emits WebAssembly function type signatures for standard WASI preview 1 imports."
-  (list
-    (w/encodeFuncType (list 127 127 127 127) (list 127))
-    (w/encodeFuncType (list 127 127 127 127 127 126 126 127 127) (list 127))
-    (w/encodeFuncType (list 127) (list 127))
-    (w/encodeFuncType (list 127) (list))))
 
 (df encodeCiovec [(ptr Int64) (len Int64)] -> (List Int64)
   :d "Encodes a WASI ciovec struct (4-byte pointer, 4-byte length in little-endian)."
