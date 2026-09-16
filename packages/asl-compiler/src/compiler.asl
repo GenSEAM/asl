@@ -12,6 +12,20 @@
   :d "Formats a checker diagnostic into standard line:col: message format."
   (str (.-path d) ":" (string-from-int64 (.-line d)) ":" (string-from-int64 (.-col d)) ": [" (.-code d) "] " (.-message d)))
 
+(df formatDiagnosticsStep [(diags (List ty/Diagnostic)) (idx Int64) (len Int64) (acc (List Str))] -> (List Str)
+  :d "Formats a slice of diagnostics to strings without relying on higher-order map."
+  (if (>= idx len)
+      acc
+      (mt (list-get diags idx)
+        ((some d)
+         (formatDiagnosticsStep diags (+ idx 1) len (list-append acc (list (formatDiagnostic d)))))
+        ((none)
+         (formatDiagnosticsStep diags (+ idx 1) len acc)))))
+
+(df formatDiagnostics [(diags (List ty/Diagnostic))] -> (List Str)
+  :d "Formats diagnostic list to string list."
+  (formatDiagnosticsStep diags 0 (list-length diags) (list)))
+
 (df compileSourceToC99 [(src Str) (path Str) (isFreestanding Bool)] -> CompileResult
   :d "Compiles a standalone source string to ISO C99, the only target the self-hosting core carries."
   (mt (a/parse src)
@@ -21,7 +35,7 @@
     ((ok forms)
      (let [(diags (chk/checkModule forms (map-empty) path))]
        (if (not (list-empty? diags))
-           (let [(formatted (map (fn [(d ty/Diagnostic)] -> Str (formatDiagnostic d)) diags))]
+           (let [(formatted (formatDiagnostics diags))]
              (CompileResult :ok false :code "" :diagnostics formatted))
            (CompileResult :ok true :code (c99/emitCStandalone forms "" isFreestanding) :diagnostics (list)))))))
 
@@ -58,7 +72,7 @@
   :d "Collects macro aliases across all module summaries in the package."
   (if (>= idx len)
       acc
-      (let [(s (option-or (list-get summaries idx) (r/ModuleSummary :name "" :path "" :exports (list) :imports (map-empty) :schemas (map-empty) :enums (map-empty) :funs (map-empty))))
+      (let [(s (option-or (list-get summaries idx) (r/emptyModuleSummary)))
             (impMap (.-imports s))
             (aliases (map-keys impMap))
             (macros (collectAliasMacrosStep aliases impMap deps 0 (list-length aliases) (list)))]
@@ -84,7 +98,7 @@
   :d "Accumulates all top-level forms from dependency modules."
   (if (>= idx len)
       (ok acc)
-      (let [(s (option-or (list-get depSummaries idx) (r/ModuleSummary :name "" :path "" :hasHeader false :hasDoc false :exports (list) :exportedTypes (list) :imports (map-empty) :funs (map-empty) :schemas (map-empty) :enums (map-empty) :caseOwner (map-empty))))
+      (let [(s (option-or (list-get depSummaries idx) (r/emptyModuleSummary)))
             (p (.-path s))]
         (if (or (= p "") (= p entryFile))
             (collectDepFormsStep depSummaries entryFile (+ idx 1) len acc)
@@ -109,26 +123,35 @@
           (let [(msg (str entryFile ":" (string-from-int64 (.-line pe)) ":" (string-from-int64 (.-col pe)) ": [parse-error] " (.-msg pe)))]
             (ok (CompileResult :ok false :code "" :diagnostics (list msg)))))
          ((ok entryForms)
-          (let [(entrySummary (r/collectSummary entryForms entryFile))
-                (importPaths (r/mapValuesList (.-imports entrySummary)))
-                (depsRes (r/loadModuleDeps! roots importPaths))]
-            (mt depsRes
-              ((err _) (err "Failed to load package dependencies"))
-              ((ok deps)
-               (let [(diags (chk/checkModule entryForms deps entryFile))]
-                 (if (not (list-empty? diags))
-                     (let [(formatted (map formatDiagnostic diags))]
-                       (ok (CompileResult :ok false :code "" :diagnostics formatted)))
-                     (let [(depSummaries (map-values deps))
-                           (allSummaries (list-append depSummaries (list entrySummary)))
-                           (aliasMacros (collectAllAliasMacros allSummaries deps 0 (list-length allSummaries) (list)))
-                           (macroHeader (if (list-empty? aliasMacros)
-                                            ""
-                                            (str (string-join aliasMacros "\n") "\n\n")))
-                           (depFormsRes (collectDepFormsStep depSummaries entryFile 0 (list-length depSummaries) (list)))]
-                       (mt depFormsRes
-                         ((err msg) (ok (CompileResult :ok false :code "" :diagnostics (list msg))))
-                         ((ok depFormsList)
-                          (let [(allForms (list-append depFormsList entryForms))
-                                (cSource (str macroHeader (c99/emitCStandalone allForms "" isFreestanding)))]
-                            (ok (CompileResult :ok true :code cSource :diagnostics (list))))))))))))))))))
+          (do
+            (println "--> [Compiler Step A] Entry file parsed successfully")
+            (let [(entrySummary (r/collectSummary entryForms entryFile))
+                  (importPaths (r/mapValuesList (.-imports entrySummary)))
+                  (depsRes (r/loadModuleDeps! roots importPaths))]
+              (mt depsRes
+                ((err _) (err "Failed to load package dependencies"))
+                ((ok deps)
+                 (do
+                   (println (str "--> [Compiler Step B] Loaded " (string-from-int64 (map-size deps)) " dependencies"))
+                   (let [(diags (chk/checkModule entryForms deps entryFile))]
+                     (if (not (list-empty? diags))
+                         (let [(formatted (formatDiagnostics diags))]
+                           (ok (CompileResult :ok false :code "" :diagnostics formatted)))
+                         (do
+                           (println "--> [Compiler Step C] Module checked, collecting dep forms...")
+                           (let [(depSummaries (map-values deps))
+                                 (allSummaries (list-append depSummaries (list entrySummary)))
+                                 (aliasMacros (collectAllAliasMacros allSummaries deps 0 (list-length allSummaries) (list)))
+                                 (macroHeader (if (list-empty? aliasMacros)
+                                                  ""
+                                                  (str (string-join aliasMacros "\n") "\n\n")))
+                                 (depFormsRes (collectDepFormsStep depSummaries entryFile 0 (list-length depSummaries) (list)))]
+                             (mt depFormsRes
+                               ((err msg) (ok (CompileResult :ok false :code "" :diagnostics (list msg))))
+                               ((ok depFormsList)
+                                (do
+                                  (println (str "--> [Compiler Step D] Dep forms collected: " (string-from-int64 (list-length depFormsList)) ", emitting C99..."))
+                                  (let [(allForms (list-append depFormsList entryForms))
+                                        (cSource (str macroHeader (c99/emitCStandalone allForms "" isFreestanding)))]
+                                    (println (str "--> [Compiler Step E] Emitted C99: " (string-from-int64 (string-length cSource)) " chars"))
+                                    (ok (CompileResult :ok true :code cSource :diagnostics (list))))))))))))))))))))))

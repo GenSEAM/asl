@@ -25,7 +25,8 @@
       makeCapabilityRefusalReceipt
       sandboxedWasiCapabilities
       nativeTierCapabilities
-      wasiSysExec]
+      wasiSysExec
+      WasiExecReceipt]
   :i [])
 
 (df wasiFdStdin [] -> Int64 0)
@@ -234,7 +235,9 @@
                       (offset (option-or (string-to-int64 (option-or (map-get entry "offset") "0")) 0))]
                   (if (!= st "open")
                       (err "EBADF")
-                      (let [(existing (option-or (mt (file-read path) ((ok c) (some c)) ((err _) (none))) ""))
+                      (let [(existing (mt (file-read path)
+                                        ((ok c) c)
+                                        ((err _) "")))
                             (writeRes (file-write path (str existing content)))]
                         (mt writeRes
                           ((ok _)
@@ -331,13 +334,21 @@
       (option-or (map-get grants capName) false)
       false))
 
-(df makeCapabilityRefusalReceipt [(capName Str)] -> (Map Str Any)
+(dfs WasiExecReceipt
+  :d "Receipt of a WASI system command execution."
+  (:f status Str)
+  (:f code Int64)
+  (:f stdout Str)
+  (:f stderr Str))
+
+(df makeCapabilityRefusalReceipt [(capName Str)] -> WasiExecReceipt
   :d "Constructs a typed capability denial receipt."
   (let [(name (if (string-empty? capName) "execCmd" capName))]
-    {:status "refused"
-     :code 126
-     :stderr (str "ERR_CAPABILITY_DENIED: " name " not permitted in sandboxed WebAssembly substrate")
-     :stdout ""}))
+    (WasiExecReceipt
+      :status "refused"
+      :code 126
+      :stdout ""
+      :stderr (str "ERR_CAPABILITY_DENIED: " name " not permitted in sandboxed WebAssembly substrate"))))
 
 (df sandboxedWasiCapabilities [] -> (Map Str Bool)
   :d "Returns default capability map for sandboxed WebAssembly execution denying OS process spawning."
@@ -367,12 +378,13 @@
       "fileStat" true)
     "dirList" true))
 
-(df wasiSysExec [(cmd Str) (capabilities (Map Str Bool))] -> (Map Str Any)
+(df wasiSysExec [(cmd Str) (capabilities (Map Str Bool))] -> WasiExecReceipt
   :d "Executes OS command if permitted by capabilities or returns explicit refusal receipt."
   (if (not (or (wasiCapabilityCheck "execCmd" capabilities) (wasiCapabilityCheck "sys-exec" capabilities)))
       (makeCapabilityRefusalReceipt "execCmd")
       (let [(res (sysExec cmd))]
-        {:status "ok"
-         :code (.-exitCode res)
-         :stdout (.-stdout res)
-         :stderr (.-stderr res)})))
+        (WasiExecReceipt
+          :status "ok"
+          :code (.-exitCode res)
+          :stdout (.-stdout res)
+          :stderr (.-stderr res)))))

@@ -12,8 +12,7 @@
   :i [(ast :a a)
       (evaluator :a ev)
       (reader :a rd)
-      (lexer :a lx)
-      (asl-text/text :a txt)])
+      (lexer :a lx)])
 
 (dfe BatchArg
   (:c argPos [(val Str)])
@@ -40,10 +39,24 @@
     (let [(s2 (string-replace s1 "\"" "\\\""))]
       (string-replace s2 "\n" "\\n"))))
 
+(df stripQuotes [(s Str)] -> Str
+  :d "Strips outer quotes if string is enclosed in double quotes."
+  (if (and (string-starts-with? s "\"") (string-ends-with? s "\""))
+      (if (> (string-length s) 1)
+          (option-or (string-slice s 1 (- (string-length s) 1)) "")
+          "")
+      s))
+
+(df stripColon [(s Str)] -> Str
+  :d "Strips leading colon if keyword string starts with colon."
+  (if (string-starts-with? s ":")
+      (option-or (string-slice s 1 (string-length s)) "")
+      s))
+
 (df cleanTokenText [(t lx/Token)] -> Str
   (let [(raw (.-rawText t))]
     (mt (.-kind t)
-      ((lx/tokString _) (txt/stripQuotes raw))
+      ((lx/tokString _) (stripQuotes raw))
       (_ raw))))
 
 (df isSafePath [(path Str)] -> Bool
@@ -325,7 +338,7 @@
                    (escapeStr sym) "\" :scope \"workspace\")"))))
 
 (df executeSingleStep [(stepId Int64) (op Str) (args (List BatchArg))] -> StepResult
-  (let [(cleanOp (txt/stripColon op))]
+  (let [(cleanOp (stripColon op))]
     (cond
       ((= cleanOp "echo") (executeEchoStep stepId args))
       ((= cleanOp "eval") (executeEvalStep stepId args))
@@ -355,12 +368,12 @@
                (let [(valTok (option-or (list-get tokens (+ idx 1)) (lx/makeToken (lx/tokEof) "" 0 0)))]
                  (mt (.-kind valTok)
                    ((lx/tokRparen)
-                    (pair (list-reverse (list-cons (argKw (txt/stripColon key) "") acc)) (+ idx 1)))
+                    (pair (list-reverse (list-cons (argKw (stripColon key) "") acc)) (+ idx 1)))
                    (_
                     (parseStepArgsLoop tokens (+ idx 2) len
-                                       (list-cons (argKw (txt/stripColon key) (cleanTokenText valTok)) acc)))))
+                                       (list-cons (argKw (stripColon key) (cleanTokenText valTok)) acc)))))
                (parseStepArgsLoop tokens (+ idx 1) len
-                                  (list-cons (argKw (txt/stripColon key) "") acc))))
+                                  (list-cons (argKw (stripColon key) "") acc))))
           ((lx/tokLparen)
            (parseStepArgsLoop tokens (+ idx 1) len acc))
           (_
@@ -375,7 +388,7 @@
           ((lx/tokLparen)
            (if (< (+ startIdx 1) len)
                (let [(opTok (option-or (list-get tokens (+ startIdx 1)) (lx/makeToken (lx/tokEof) "" 0 0)))
-                     (opName (txt/stripColon (cleanTokenText opTok)))
+                     (opName (stripColon (cleanTokenText opTok)))
                      (argsParsed (parseStepArgsLoop tokens (+ startIdx 2) len (list)))]
                  (pair (some (BatchStep :id stepId :op opName :args (.-first argsParsed)))
                        (.-second argsParsed)))
@@ -393,7 +406,7 @@
           ((lx/tokEof)
            (BatchRequest :seq seqFlag :steps (list-reverse acc)))
           ((lx/tokKeyword key)
-           (let [(k (txt/stripColon key))]
+           (let [(k (stripColon key))]
              (if (or (= k "seq") (= k "sequenced"))
                  (if (< (+ idx 1) len)
                      (let [(valTok (option-or (list-get tokens (+ idx 1)) (lx/makeToken (lx/tokEof) "" 0 0)))
@@ -419,7 +432,7 @@
               (t1 (option-or (list-get tokens 1) (lx/makeToken (lx/tokEof) "" 0 0)))]
           (mt (.-kind t0)
             ((lx/tokLparen)
-             (let [(headName (txt/stripColon (cleanTokenText t1)))]
+             (let [(headName (stripColon (cleanTokenText t1)))]
                (if (= headName "batch")
                    (parseBatchBodyLoop tokens 2 len false 1 (list))
                    (let [(parsed (parseOneStep tokens 0 len 1))]

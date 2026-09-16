@@ -81,13 +81,21 @@
        (let [(code (if isNum "rule-6" "type"))]
          (addDiag st1 code (str where ": " msg) path))))))
 
+(df qualifyTypesStep [(types (List ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Qualifies a list of types sequentially."
+  (if (>= idx len)
+      acc
+      (let [(t (option-or (list-get types idx) (ty/tyCon "" (list) (none) (none))))]
+        (qualifyTypesStep types mod deps (+ idx 1) len (list-append acc (list (qualifyTypeWithMod t mod deps)))))))
+
 (df qualifyTypeWithMod [(t ty/Type) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> ty/Type
+  :d "Qualifies types with module namespace."
   (mt t
     ((ty/tyVar _ _) t)
     ((ty/tyCon name args optMod optShown)
      (let [(isLocal (and (not (string-empty? (.-name mod)))
-                          (or (mt (r/modSchema mod name) ((some _) true) ((none) false))
-                              (mt (r/modEnum mod name) ((some _) true) ((none) false)))))
+                         (or (option-some? (r/modSchema mod name))
+                             (option-some? (r/modEnum mod name)))))
            (nextMod (mt optMod
                        ((some alias)
                         (mt (r/modImport mod alias)
@@ -100,30 +108,49 @@
                         (if isLocal
                           (some (.-name mod))
                           (none)))))]
-        (ty/tyCon name (map (fn [(a ty/Type)] -> ty/Type (qualifyTypeWithMod a mod deps)) args) nextMod optShown)))
+        (ty/tyCon name (qualifyTypesStep args mod deps 0 (list-length args) (list)) nextMod optShown)))
     ((ty/tyFun params ret)
-     (ty/tyFun (map (fn [(p ty/Type)] -> ty/Type (qualifyTypeWithMod p mod deps)) params)
-                (qualifyTypeWithMod ret mod deps)))))
+     (ty/tyFun (qualifyTypesStep params mod deps 0 (list-length params) (list))
+               (qualifyTypeWithMod ret mod deps)))))
+
+(df freshVarsStep [(typevars (List String)) (idx Int64) (len Int64) (vmap (Map String ty/Type)) (st InferState)] -> (Pair (Map String ty/Type) InferState)
+  :d "Allocates fresh type metavariables sequentially for type variables."
+  (if (>= idx len)
+      (pair vmap st)
+      (let [(vname (option-or (list-get typevars idx) ""))
+            (kind (if (= vname "N") "num" (if (= vname "I") "int" "any")))
+            (fRes (freshVar st kind))
+            (nextVmap (map-set vmap vname (.-first fRes)))
+            (nextSt (.-second fRes))]
+        (freshVarsStep typevars (+ idx 1) len nextVmap nextSt))))
+
+(df instantiateParamsStep [(params (List String)) (vmap (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Instantiates and qualifies parameter types sequentially."
+  (if (>= idx len)
+      acc
+      (let [(p (option-or (list-get params idx) ""))
+            (pt (qualifyTypeWithMod (substParsedType (ty/parseTypeStr p (list)) vmap) mod deps))]
+        (instantiateParamsStep params vmap mod deps (+ idx 1) len (list-append acc (list pt))))))
 
 (df instantiateSig [(params (List String)) (ret String) (typevars (List String)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair (Pair (List ty/Type) ty/Type) InferState)
-  (let [(vRes (fold (fn [(acc (Pair (Map String ty/Type) InferState)) (vname String)] -> (Pair (Map String ty/Type) InferState)
-                       (let [(kind (if (= vname "N") "num" (if (= vname "I") "int" "any")))
-                             (fRes (freshVar (.-second acc) kind))]
-                         (pair (map-set (.-first acc) vname (.-first fRes))
-                               (.-second fRes))))
-                     (pair (map-empty) st)
-                     typevars))]
-    (let [(vmap (.-first vRes))
-          (st1 (.-second vRes))
-          (instP (map (fn [(p String)] -> ty/Type
-                         (qualifyTypeWithMod (substParsedType (ty/parseTypeStr p (list)) vmap) mod deps))
-                       params))
-          (instR (qualifyTypeWithMod (substParsedType (ty/parseTypeStr ret (list)) vmap) mod deps))]
-      (pair (pair instP instR) st1))))
+  :d "Instantiates a polymorphic signature with fresh metavariables."
+  (let [(vRes (freshVarsStep typevars 0 (list-length typevars) (map-empty) st))
+        (vmap (.-first vRes))
+        (st1 (.-second vRes))
+        (instP (instantiateParamsStep params vmap mod deps 0 (list-length params) (list)))
+        (instR (qualifyTypeWithMod (substParsedType (ty/parseTypeStr ret (list)) vmap) mod deps))]
+    (pair (pair instP instR) st1)))
+
+(df substParsedTypesStep [(ts (List ty/Type)) (vmap (Map String ty/Type)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
+  :d "Applies type variable mapping to a list of parsed types."
+  (if (>= idx len)
+      acc
+      (let [(item (option-or (list-get ts idx) (ty/tyCon "" (list) (none) (none))))]
+        (substParsedTypesStep ts vmap (+ idx 1) len (list-append acc (list (substParsedType item vmap)))))))
 
 (df substParsedTypes [(ts (List ty/Type)) (vmap (Map String ty/Type))] -> (List ty/Type)
   :d "Applies type variable mapping to a list of parsed types."
-  (map (fn [(item ty/Type)] -> ty/Type (substParsedType item vmap)) ts))
+  (substParsedTypesStep ts vmap 0 (list-length ts) (list)))
 
 (df substParsedType [(t ty/Type) (vmap (Map String ty/Type))] -> ty/Type
   :d "Substitutes concrete type variables in parsed types with fresh metavariables."
@@ -144,8 +171,15 @@
 (df sigResToFun [(res (Pair (Pair (List ty/Type) ty/Type) InferState))] -> (Option (Pair ty/Type InferState))
   (some (pair (ty/tyFun (.-first (.-first res)) (.-second (.-first res))) (.-second res))))
 
+(df paramTypesToStrsStep [(params (List (Pair String String))) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Extracts type strings from parameter pairs sequentially."
+  (if (>= idx len)
+      acc
+      (let [(p (option-or (list-get params idx) (pair "" "")))]
+        (paramTypesToStrsStep params (+ idx 1) len (list-append acc (list (.-second p)))))))
+
 (df paramTypesToStrs [(params (List (Pair String String)))] -> (List String)
-  (map (fn [(p (Pair String String))] -> String (.-second p)) params))
+  (paramTypesToStrsStep params 0 (list-length params) (list)))
 
 (df lookupLocalFun [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
   (mt (r/modFun mod sym)
@@ -191,8 +225,8 @@
 
 (df lookupImportedSymbol [(sym String) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Option (Pair ty/Type InferState))
   (let [(parts (string-split sym "/"))
-        (alias (mt (list-get parts 0) ((some a) a) ((none) "")))
-        (member (mt (list-get parts 1) ((some m) m) ((none) "")))]
+        (alias (option-or (list-get parts 0) ""))
+        (member (option-or (list-get parts 1) ""))]
     (mt (r/modImport mod alias)
       ((some mpath)
        (mt (map-get deps mpath)
@@ -231,8 +265,8 @@
     (if (string-contains? s ".")
       (let [(parts (string-split s "."))]
         (and (= (list-length parts) 2)
-             (and (isAllDigits (mt (list-get parts 0) ((some d) d) ((none) "")))
-                  (isAllDigits (mt (list-get parts 1) ((some d) d) ((none) ""))))))
+             (and (isAllDigits (option-or (list-get parts 0) ""))
+                  (isAllDigits (option-or (list-get parts 1) "")))))
       false)))
 
 (df isIntLit? [(v String)] -> Bool
@@ -333,7 +367,7 @@
                   :state (.-second fRes))))
 
 (df popValue [(fm FrameMachine)] -> (Pair ty/Type (List ty/Type))
-  (pair (mt (list-head (.-values fm)) ((some v) v) ((none) (unitType)))
+  (pair (option-or (list-head (.-values fm)) (unitType))
         (r/safeTail (.-values fm))))
 
 (df fmTick [(fm FrameMachine) (tickIdx Int64)] -> FrameMachine
@@ -354,6 +388,15 @@
           (fmIfThenStep elseE thenTy ienv restFrames fm))
          ((fTryInner valVar)
           (fmTryStep valVar restFrames fm)))))))
+
+(df bindMatchPatternList [(pats (List rd/SExpr)) (params (List ty/Type)) (idx Int64) (len Int64) (env (Map String ty/Type)) (st InferState) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary))] -> (Pair (Map String ty/Type) InferState)
+  (if (>= idx len)
+      (pair env st)
+      (let [(pat (option-or (list-get pats idx) (rd/sexprAtom "_")))
+            (paramTy (option-or (list-get params idx) (unitType)))
+            (pruned (u/applySubst (.-subst st) paramTy))
+            (res (bindMatchPattern pat pruned env mod deps st))]
+        (bindMatchPatternList pats params (+ idx 1) len (.-first res) (.-second res) mod deps))))
 
 (df bindMatchPattern [(pat rd/SExpr) (scrutTy ty/Type) (env (Map String ty/Type)) (mod r/ModuleSummary) (deps (Map String r/ModuleSummary)) (st InferState)] -> (Pair (Map String ty/Type) InferState)
   (mt pat
@@ -379,16 +422,9 @@
                    (st1 (.-second ctorRes))]
                (mt (u/applySubst (.-subst st1) ctorTy)
                  ((ty/tyFun cparams cret)
-                  (let [(st2 (expectType st1 scrutTy cret (str "pattern " cname) (.-path mod)))]
-                    (fold (fn [(acc (Pair (Map String ty/Type) InferState)) (pairItem (Pair rd/SExpr ty/Type))] -> (Pair (Map String ty/Type) InferState)
-                            (bindMatchPattern (.-first pairItem)
-                                                (u/applySubst (.-subst (.-second acc)) (.-second pairItem))
-                                                (.-first acc)
-                                                mod
-                                                deps
-                                                (.-second acc)))
-                          (pair env st2)
-                          (zip subPats cparams))))
+                  (let [(st2 (expectType st1 scrutTy cret (str "pattern " cname) (.-path mod)))
+                        (mLen (min (list-length subPats) (list-length cparams)))]
+                    (bindMatchPatternList subPats cparams 0 mLen env st2 mod deps)))
                  (_ (pair env st1))))))))))))
 
 (df fmTryOutsideError [(fm FrameMachine) (innerE rd/SExpr) (restFrames (List InferFrame))] -> FrameMachine
@@ -403,6 +439,13 @@
                   :mod (.-mod fm)
                   :deps (.-deps fm)
                   :state st1)))
+
+(df buildTypeSubstMap [(tvars (List String)) (targs (List ty/Type)) (idx Int64) (len Int64) (acc (Map String ty/Type))] -> (Map String ty/Type)
+  (if (>= idx len)
+      acc
+      (let [(v (option-or (list-get tvars idx) ""))
+            (arg (option-or (list-get targs idx) (unitType)))]
+        (buildTypeSubstMap tvars targs (+ idx 1) len (map-set acc v arg)))))
 
 (df fmEvalStep [(expr rd/SExpr) (restFrames (List InferFrame)) (fm FrameMachine)] -> FrameMachine
   (mt expr
@@ -712,8 +755,8 @@
                  ((ty/tyCon tname targs toptMod _)
                   (if (and (= tname "Pair") (= (list-length targs) 2))
                     (let [(outTy (if (= fname "first")
-                                    (mt (list-get targs 0) ((some f) f) ((none) (unitType)))
-                                    (mt (list-get targs 1) ((some s) s) ((none) (unitType)))))]
+                                    (option-or (list-get targs 0) (unitType))
+                                    (option-or (list-get targs 1) (unitType))))]
                       (FrameMachine :frames restFrames
                                     :values (list-cons outTy (.-values fm))
                                     :env (.-env fm)
@@ -741,10 +784,8 @@
                               (mt (list-head fMatch)
                                 ((some fdef)
                                  (let [(fieldTy (ty/parseTypeStr (.-type fdef) (list)))
-                                       (substMap (fold (fn [(acc (Map String ty/Type)) (p (Pair String ty/Type))] -> (Map String ty/Type)
-                                                          (map-set acc (.-first p) (.-second p)))
-                                                        (map-empty)
-                                                        (zip (.-typevars ssum) targs)))
+                                       (mLen (min (list-length (.-typevars ssum)) (list-length targs)))
+                                       (substMap (buildTypeSubstMap (.-typevars ssum) targs 0 mLen (map-empty)))
                                        (instField (substParsedType fieldTy substMap))]
                                    (FrameMachine :frames restFrames
                                                  :values (list-cons instField (.-values fm))
@@ -1044,7 +1085,7 @@
       ((ty/tyCon name args _ _)
        (let [(subKeys (extractMapKeysList args subst))]
          (if (and (= name "Map") (>= (list-length args) 1))
-           (list-cons (mt (list-head args) ((some k) k) ((none) pruned)) subKeys)
+           (list-cons (option-or (list-head args) pruned) subKeys)
            subKeys)))
       ((ty/tyFun params ret)
        (list-append (extractMapKeys ret subst) (extractMapKeysList params subst)))
@@ -1067,7 +1108,7 @@
            (mt badArg
              ((some b) (some b))
              ((none)
-              (let [(typeKey (str (mt optMod ((some m) m) ((none) (.-name mod))) "/" name))]
+              (let [(typeKey (str (option-or optMod (.-name mod)) "/" name))]
                 (if (mapHasKey? visited typeKey)
                   (none)
                   (let [(nextVis (map-set visited typeKey true))

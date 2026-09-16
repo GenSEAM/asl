@@ -12,7 +12,7 @@
 
 (df isC99Keyword? [(m String)] -> Bool
   :d "Checks if identifier collides with an ISO C99 reserved keyword or libc symbol."
-  (list-contains? (list "auto" "break" "case" "char" "const" "continue" "default" "do" "double" "else" "enum" "extern" "float" "for" "goto" "if" "inline" "int" "long" "register" "restrict" "return" "short" "signed" "sizeof" "static" "struct" "switch" "typedef" "union" "unsigned" "void" "volatile" "while" "_Bool" "_Complex" "_Imaginary" "main" "exit" "abort" "index") m))
+  (list-contains? (list "auto" "break" "case" "char" "const" "continue" "default" "do" "double" "else" "enum" "extern" "float" "for" "goto" "if" "inline" "int" "long" "register" "restrict" "return" "short" "signed" "sizeof" "static" "struct" "switch" "typedef" "union" "unsigned" "void" "volatile" "while" "_Bool" "_Complex" "_Imaginary" "main" "exit" "abort" "index" "stdin" "stdout" "stderr" "errno" "assert" "offsetof" "NULL" "EOF" "SEEK_SET" "SEEK_CUR" "SEEK_END" "BUFSIZ") m))
 
 (df sliceOr [(s String) (start Int64) (end Int64) (fallback String)] -> String
   :d "Safe string slice with fallback default."

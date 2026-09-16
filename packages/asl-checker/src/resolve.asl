@@ -1,6 +1,7 @@
 (module asl-checker/resolve
   :d "Pass 1 & Pass 2 Symbol Resolution, Module Scoping, and Semantic Rules."
   :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary
+      emptyModuleSummary
       cleanNumSign
       collectSummary
       firstCharStr
@@ -66,13 +67,29 @@
   (:f exportedCases (Map String String) "Exported case name to enum name mapping")
   (:f exportedFields (Map String Bool) "Exported record field names"))
 
+(df emptyModuleSummary [] -> ModuleSummary
+  :d "Constructs an empty ModuleSummary with all fields initialized."
+  (ModuleSummary :name ""
+                 :path ""
+                 :hasHeader false
+                 :hasDoc false
+                 :exports (list)
+                 :exportedTypes (list)
+                 :imports (map-empty)
+                 :funs (map-empty)
+                 :schemas (map-empty)
+                 :enums (map-empty)
+                 :caseOwner (map-empty)
+                 :exportedCases (map-empty)
+                 :exportedFields (map-empty)))
+
 (df firstCharStr [(s String)] -> String
   :d "Returns first character of string as string, or empty string."
-  (mt (string-slice s 0 1) ((some c) c) ((none) "")))
+  (option-or (string-slice s 0 1) ""))
 
 (df sliceFrom [(s String) (start Int64)] -> String
   :d "Slices string from start to end, defaulting to full string if out of range."
-  (mt (string-slice s start (string-length s)) ((some sub) sub) ((none) s)))
+  (option-or (string-slice s start (string-length s)) s))
 
 (df isPascalName? [(s String)] -> Bool
   (if (string-empty? s)
@@ -87,28 +104,47 @@
 (df makeDiag [(code String) (msg String) (path String)] -> ty/Diagnostic
   (ty/Diagnostic :code code :message msg :msg msg :line 1 :col 1 :path path))
 
+(df collectFieldsStep [(fields (List a/AstField)) (idx Int64) (len Int64) (acc (List FieldSummary))] -> (List FieldSummary)
+  :d "Accumulates field summaries sequentially."
+  (if (>= idx len)
+      acc
+      (let [(f (option-or (list-get fields idx) (a/AstField :name "" :type "" :docstring "" :default (none) :json (none))))
+            (s (FieldSummary :name (.-name f)
+                             :type (.-type f)
+                             :hasDefault (option-some? (.-default f))))]
+        (collectFieldsStep fields (+ idx 1) len (list-append acc (list s))))))
+
 (df collectFields [(fields (List a/AstField))] -> (List FieldSummary)
-  (map (fn [(f a/AstField)] -> FieldSummary
-         (FieldSummary :name (.-name f)
-                       :type (.-type f)
-                       :hasDefault (mt (.-default f) ((some _) true) ((none) false))))
-       fields))
+  :d "Collects field summaries from AstFields."
+  (collectFieldsStep fields 0 (list-length fields) (list)))
+
+(df collectParamsStep [(params (List a/Param)) (idx Int64) (len Int64) (acc (List (Pair String String)))] -> (List (Pair String String))
+  :d "Accumulates parameter pairs sequentially."
+  (if (>= idx len)
+      acc
+      (let [(p (option-or (list-get params idx) (a/Param :name "" :type "")))]
+        (collectParamsStep params (+ idx 1) len (list-append acc (list (pair (.-name p) (.-type p))))))))
 
 (df collectCaseParams [(params (List a/Param))] -> (List (Pair String String))
-  (map (fn [(p a/Param)] -> (Pair String String)
-         (pair (.-name p) (.-type p)))
-       params))
+  :d "Extracts parameter pairs for enum cases."
+  (collectParamsStep params 0 (list-length params) (list)))
+
+(df collectCasesStep [(cases (List a/EnumCase)) (idx Int64) (len Int64) (acc (List CaseSummary))] -> (List CaseSummary)
+  :d "Accumulates case summaries sequentially."
+  (if (>= idx len)
+      acc
+      (let [(c (option-or (list-get cases idx) (a/EnumCase :name "" :fields (list) :docstring "")))
+            (s (CaseSummary :name (.-name c)
+                            :params (collectCaseParams (.-fields c))))]
+        (collectCasesStep cases (+ idx 1) len (list-append acc (list s))))))
 
 (df collectCases [(cases (List a/EnumCase))] -> (List CaseSummary)
-  (map (fn [(c a/EnumCase)] -> CaseSummary
-         (CaseSummary :name (.-name c)
-                      :params (collectCaseParams (.-fields c))))
-       cases))
+  :d "Collects case summaries from EnumCases."
+  (collectCasesStep cases 0 (list-length cases) (list)))
 
 (df collectFunParams [(params (List a/Param))] -> (List (Pair String String))
-  (map (fn [(p a/Param)] -> (Pair String String)
-         (pair (.-name p) (.-type p)))
-       params))
+  :d "Extracts parameter pairs for functions."
+  (collectParamsStep params 0 (list-length params) (list)))
 
 (df collectSummary [(forms (List a/TopForm)) (path String)] -> ModuleSummary
   :d "Extracts structural module summary from top-level forms." 
@@ -306,17 +342,21 @@
          (mt (findModuleFile! roots modPath)
            ((none) (foldDeps! roots rest loaded))
            ((some fpath)
-            (mt (file-read fpath)
-              ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe))) (foldDeps! roots rest loaded))
-              ((ok src)
-               (mt (a/parse src)
-                 ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe))) (foldDeps! roots rest loaded))
-                 ((ok forms)
-                  (let [(summary (collectSummary forms fpath))
-                        (nextLoaded (map-set loaded modPath summary))
-                        (subImports (mapValuesList (.-imports summary)))
-                        (nextToLoad (list-append subImports rest))]
-                    (foldDeps! roots nextToLoad nextLoaded)))))))))))))
+            (if (map-has? loaded fpath)
+              (let [(summary (option-or (map-get loaded fpath) (emptyModuleSummary)))
+                    (nextLoaded (map-set loaded modPath summary))]
+                (foldDeps! roots rest nextLoaded))
+              (mt (file-read fpath)
+                ((err pe) (print (str "READ ERROR in " fpath ": " (.-message pe))) (foldDeps! roots rest loaded))
+                ((ok src)
+                 (mt (a/parse src)
+                   ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe))) (foldDeps! roots rest loaded))
+                   ((ok forms)
+                    (let [(summary (collectSummary forms fpath))
+                          (nextLoaded (map-set (map-set loaded modPath summary) fpath summary))
+                          (subImports (mapValuesList (.-imports summary)))
+                          (nextToLoad (list-append subImports rest))]
+                      (foldDeps! roots nextToLoad nextLoaded))))))))))))))
 
 (df mapKeysSet [(m (Map String ModuleSummary))] -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (k String)] -> (Map String Bool)
@@ -498,14 +538,21 @@
                ((some cyc) (some cyc))
                ((none) (checkCycleEdges rest stack visited deps modImports path))))))))))
 
+(df checkUnresolvedImportsStep [(mod ModuleSummary) (deps (Map String ModuleSummary)) (path String) (aliases (List String)) (idx Int64) (len Int64) (acc (List ty/Diagnostic))] -> (List ty/Diagnostic)
+  :d "Accumulates diagnostics for unresolved module imports."
+  (if (>= idx len)
+      acc
+      (let [(alias (option-or (list-get aliases idx) ""))
+            (mpath (option-or (modImport mod alias) ""))]
+        (if (and (!= mpath "") (not (map-has? deps mpath)))
+            (checkUnresolvedImportsStep mod deps path aliases (+ idx 1) len
+              (list-cons (makeDiag "unresolved-import" (str "no module " mpath " on the search path") path) acc))
+            (checkUnresolvedImportsStep mod deps path aliases (+ idx 1) len acc)))))
+
 (df checkImportsAndCycles [(mod ModuleSummary) (deps (Map String ModuleSummary)) (path String)] -> (List ty/Diagnostic)
-  (let [(unres (fold (fn [(acc (List ty/Diagnostic)) (alias String)] -> (List ty/Diagnostic)
-                       (let [(mpath (mt (modImport mod alias) ((some p) p) ((none) "")))]
-                         (if (not (map-has? deps mpath))
-                           (list-cons (makeDiag "unresolved-import" (str "no module " mpath " on the search path") path) acc)
-                           acc)))
-                     (list)
-                     (map-keys (.-imports mod))))
+  :d "Checks that all imported modules exist on search path and graph is acyclic."
+  (let [(aliases (map-keys (.-imports mod)))
+        (unres (checkUnresolvedImportsStep mod deps path aliases 0 (list-length aliases) (list)))
         (cycleOpt (checkCycleDfs (.-name mod) (list (.-name mod)) (map-set (map-empty) (.-name mod) true) deps (.-imports mod) path))]
     (mt cycleOpt
       ((some cyc)
@@ -628,8 +675,8 @@
 
 (df splitQual [(s String)] -> (Pair String String)
   (let [(parts (string-split s "/"))]
-    (pair (mt (list-get parts 0) ((some a) a) ((none) ""))
-          (mt (list-get parts 1) ((some m) m) ((none) "")))))
+    (pair (option-or (list-get parts 0) "")
+          (option-or (list-get parts 1) ""))))
 
 (df enumFamily [(m ModuleSummary) (ename String)] -> (Option (Pair String (List String)))
   (mt (modEnum m ename)
@@ -783,7 +830,7 @@
                               (or (map-has? (.-caseOwner mod) v)
                                   (or (isPreludeTag? v)
                                       (or (isSpecialForm? v)
-                                          (mt (ty/builtinSig v) ((some _) true) ((none) false)))))))
+                                          (option-some? (ty/builtinSig v)))))))
                     acc
                     (list-cons (makeDiag "rule-2" (str v " is not defined") path) acc))))))))
     (_ acc)))
@@ -1186,14 +1233,10 @@
 
 (df resolveModule [(mod ModuleSummary) (forms (List a/TopForm)) (deps (Map String ModuleSummary))] -> (List ty/Diagnostic)
   :d "Pass 1 & Pass 2 symbol resolution and rule checking."
-  (let [(p (.-path mod))
-        (passes (list (checkReservedNames forms p)
-                      (checkModuleRules mod p)
-                      (checkImportsAndCycles mod deps p)
-                      (checkExportClosure mod p)
-                      (checkTypeAnnotations mod deps p)
-                      (checkBodies forms mod deps p)))]
-    (fold (fn [(acc (List ty/Diagnostic)) (pDiags (List ty/Diagnostic))] -> (List ty/Diagnostic)
-            (list-append pDiags acc))
-          (list)
-          passes)))
+  (let [(p (.-path mod))]
+    (list-append (checkReservedNames forms p)
+      (list-append (checkModuleRules mod p)
+        (list-append (checkImportsAndCycles mod deps p)
+          (list-append (checkExportClosure mod p)
+            (list-append (checkTypeAnnotations mod deps p)
+                         (checkBodies forms mod deps p))))))))

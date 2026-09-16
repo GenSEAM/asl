@@ -32,7 +32,7 @@
 
 (df accFindAsserts [(acc (List rd/SExpr)) (it rd/SExpr)] -> (List rd/SExpr)
   :d "Accumulates assert and reject expressions from SExpr."
-  (listConcat acc (findAsserts it)))
+  (list-append acc (findAsserts it)))
 
 (df findAsserts [(expr rd/SExpr)] -> (List rd/SExpr)
   :d "Recursively walks an SExpr to collect all assert and reject forms."
@@ -47,7 +47,7 @@
 
 (df accBodyAsserts [(d-acc (List rd/SExpr)) (bodyExpr rd/SExpr)] -> (List rd/SExpr)
   :d "Accumulates assert expressions from defun body expressions."
-  (listConcat d-acc (findAsserts bodyExpr)))
+  (list-append d-acc (findAsserts bodyExpr)))
 
 (df accFormAsserts [(acc (List rd/SExpr)) (form a/TopForm)] -> (List rd/SExpr)
   :d "Accumulates assert expressions from top-level forms."
@@ -77,7 +77,7 @@
   (let [(env (ev/makeRootEnv))]
     (runAssertsStep env asserts 0)))
 
-(df checkGateSrc [(files (List Str)) (count I64) (path Str) (srcRes (Result Str IoError))] -> (Result I64 Str)
+(df checkGateSrc [(files (List Str)) (count I64) (path Str) (srcRes (Result Str IoError))] -> (Result Str Str)
   :d "Validates gate source content once read."
   (mt srcRes
     ((err _) (err (str "Failed to read gate target file: " path)))
@@ -90,7 +90,7 @@
        ((ok _)
         (checkGateFilesStep (option-or (list-tail files) (list)) (+ count 1)))))))
 
-(df checkGateFilesStep [(files (List Str)) (count I64)] -> (Result I64 Str)
+(df checkGateFilesStep [(files (List Str)) (count I64)] -> (Result Str Str)
   :d "Recursively validates gate target files."
   (mt (list-head files)
     ((none) (ok (str "✓ [Pure ASL Gate] " (string-from-int64 count) " file(s) verified cleanly.")))

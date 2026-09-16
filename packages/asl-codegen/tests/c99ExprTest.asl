@@ -5,6 +5,7 @@
       testC99LogicAndComparisons
       testC99ConditionalsAndLet
       testC99RecordsAndMatching
+      testC99LetBindingTypeReachesBody
       runTests]
   :i [(c99Expr :a ex)
       (reader :a rd)])
@@ -137,7 +138,7 @@
     (assert (= fAccess "person.age") "field access direct")
     (assert (= eField "person.age") "field access expr")
     (assert (= eRec "(AslPerson){ .name = (asl_string_t){ .data = \"Alice\", .len = 5 }, .age = 30LL }") "record compound literal")
-    (assert (string-contains? eMatch "switch ((val).tag)") "match contains switch on tag")
+    (assert (string-contains? eMatch "switch ((int)((val).tag))") "match contains switch on tag")
     (assert (string-contains? eMatch "case ASL_TAG_SOME:") "match contains some tag case")
     (assert (string-contains? eMatch "case ASL_TAG_NONE:") "match contains none tag case")
     (assert (string-contains? eMatchQual "case ASL_TAG_SEXPRATOM:") "match on a qualified case drops the module alias so the tag matches the alias emitCaseTagAlias emits for the bare case name")
@@ -169,6 +170,20 @@
     (refute (string-contains? three "str(") "str must never survive as a variadic C call")
     true))
 
+(df testC99LetBindingTypeReachesBody [] -> Bool
+  :d "A let binding's declared type must reach its own declaration and the body, so a container accessor lowers to its per-instantiation form instead of an undeclared call."
+  (let [(tyNode (rd/sexprList (list (rd/sexprAtom "List") (rd/sexprAtom "Int64"))))
+        (bind (rd/sexprList (list (rd/sexprAtom "xs") tyNode (rd/sexprAtom "input"))))
+        (bindings (rd/sexprVect (list bind)))
+        (body (rd/sexprList (list (rd/sexprAtom "list-head") (rd/sexprAtom "xs"))))
+        (letNode (rd/sexprList (list (rd/sexprAtom "let") bindings body)))
+        (out (ex/lowerCExpr (ex/emptyLowerCtx) letNode))]
+    (assert (string-contains? out "AslSlice_int64_t xs") "a compound annotation reaches the declaration instead of flattening to nothing")
+    (assert (string-contains? out "asl_list_head_AslSlice_int64_t(xs)") "the bound type reaches the body, so list-head lowers to its instantiation")
+    (refute (string-contains? out "list_head(xs)") "list-head must not stay an undeclared call once the binding type is known")
+    (refute (string-contains? out "__auto_type xs") "an annotated binding must not fall back to a deduced type")
+    true))
+
 (df runTests [] -> Bool
   :d "Executes all unit tests in c99ExprTest."
   (do
@@ -178,4 +193,5 @@
     (assert (testC99ConditionalsAndLet) "testC99ConditionalsAndLet must pass")
     (assert (testC99RecordsAndMatching) "testC99RecordsAndMatching must pass")
     (assert (testC99VariadicStr) "testC99VariadicStr must pass")
+    (assert (testC99LetBindingTypeReachesBody) "testC99LetBindingTypeReachesBody must pass")
     true))

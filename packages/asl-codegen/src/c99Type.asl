@@ -15,7 +15,12 @@
       collectInstsFromAnnotation
       emitInstTypedef
       emitInstTypedefs
+      emitInstTypedefsFromUniq
+      emitInstForwardDecls
+      emitInstForwardDeclsFromUniq
       emitInstAccessors
+      emitInstAccessorsFromUniq
+      collectAllInsts
       dedupeInsts
       c99FromType
       c99TypeName
@@ -32,7 +37,8 @@
           "double" "else" "enum" "extern" "float" "for" "goto" "if"
           "inline" "int" "long" "register" "restrict" "return" "short" "signed"
           "sizeof" "static" "struct" "switch" "typedef" "union" "unsigned" "void"
-          "volatile" "while" "_Bool" "_Complex" "_Imaginary")
+          "volatile" "while" "_Bool" "_Complex" "_Imaginary"
+          "main" "exit" "abort" "index" "stdin" "stdout" "stderr" "errno" "assert" "offsetof" "NULL" "EOF" "SEEK_SET" "SEEK_CUR" "SEEK_END" "BUFSIZ")
     id))
 
 (df isC99NativeType? [(s String)] -> Bool
@@ -110,6 +116,7 @@
       ((or (= name "Float64") (= name "F64") (= name "Float") (= name "Num") (= canon "Float64")) (some "double"))
       ((or (= name "Bool") (= canon "Bool")) (some "bool"))
       ((or (= name "Unit") (= canon "Unit")) (some "void"))
+      ((or (= name "Any") (= canon "Any")) (some "void*"))
       ((or (= name "String") (= name "Str") (= canon "String")) (some "asl_string_t"))
       (:else (none)))))
 
@@ -191,10 +198,9 @@
   :d "Emits an ISO C99 Option container typedef as a tagged union, matching the representation the match lowering reads."
   (let [(cTy (c99TypeStr innerType))
         (optName (str "AslOption_" (sanitizeCIdent cTy)))]
-    (guardTypedef optName
-      (if (= cTy "void")
-          (str "typedef struct {\n    bool tag;\n} " optName ";\n")
-          (str "typedef struct {\n    bool tag;\n    union {\n        " cTy " some;\n    } data;\n} " optName ";\n")))))
+    (if (= cTy "void")
+        (str "#ifndef " optName "_DEFINED\n#define " optName "_DEFINED\n#ifndef " optName "_FWD_DEFINED\n#define " optName "_FWD_DEFINED\nstruct " optName "_s;\ntypedef struct " optName "_s " optName ";\n#endif\nstruct " optName "_s {\n    bool tag;\n};\n#endif\n")
+        (str "#ifndef " optName "_DEFINED\n#define " optName "_DEFINED\n#ifndef " optName "_FWD_DEFINED\n#define " optName "_FWD_DEFINED\nstruct " optName "_s;\ntypedef struct " optName "_s " optName ";\n#endif\nstruct " optName "_s {\n    bool tag;\n    union {\n        " cTy " some;\n    } data;\n};\n#endif\n"))))
 
 (df emitCSliceType [(elemType String)] -> String
   :d "Emits an ISO C99 List/Slice container typedef for a given element type."
@@ -210,8 +216,7 @@
   (let [(aTy (c99TypeStr firstType))
         (bTy (c99TypeStr secondType))
         (pairName (str "AslPair_" (sanitizeCIdent aTy) "_" (sanitizeCIdent bTy)))]
-    (guardTypedef pairName
-      (str "typedef struct {\n    " aTy " first;\n    " bTy " second;\n} " pairName ";\n"))))
+    (str "#ifndef " pairName "_DEFINED\n#define " pairName "_DEFINED\n#ifndef " pairName "_FWD_DEFINED\n#define " pairName "_FWD_DEFINED\nstruct " pairName "_s;\ntypedef struct " pairName "_s " pairName ";\n#endif\nstruct " pairName "_s {\n    " aTy " first;\n    " bTy " second;\n};\n#endif\n")))
 
 (df emitCMapType [(keyType String) (valType String)] -> String
   :d "Emits an ISO C99 Map container typedef as a flat association vector of key and value pairs."
@@ -219,8 +224,7 @@
         (vTy (c99TypeStr valType))
         (pairName (str "AslPair_" (sanitizeCIdent kTy) "_" (sanitizeCIdent vTy)))
         (mapName (str "AslMap_" (sanitizeCIdent kTy) "_" (sanitizeCIdent vTy)))]
-    (guardTypedef mapName
-      (str "typedef struct {\n    " pairName "* entries;\n    size_t count;\n} " mapName ";\n"))))
+    (str "#ifndef " mapName "_DEFINED\n#define " mapName "_DEFINED\n#ifndef " mapName "_FWD_DEFINED\n#define " mapName "_FWD_DEFINED\nstruct " mapName "_s;\ntypedef struct " mapName "_s " mapName ";\n#endif\nstruct " mapName "_s {\n    " pairName "* entries;\n    size_t count;\n};\n#endif\n")))
 
 (df emitCResultType [(okType String) (errType String)] -> String
   :d "Emits an ISO C99 Result container typedef as a tagged union, so a Result can carry a value of any type instead of the type-erased void* the host header offered."
@@ -229,10 +233,9 @@
         (resName (str "AslResult_" (sanitizeCIdent oTy) "_" (sanitizeCIdent eTy)))
         (okMember (if (= oTy "void") "" (str "        " oTy " ok;\n")))
         (errMember (if (= eTy "void") "" (str "        " eTy " err;\n")))]
-    (guardTypedef resName
-      (if (and (= oTy "void") (= eTy "void"))
-          (str "typedef struct {\n    bool tag;\n} " resName ";\n")
-          (str "typedef struct {\n    bool tag;\n    union {\n" okMember errMember "    } data;\n} " resName ";\n")))))
+    (if (and (= oTy "void") (= eTy "void"))
+        (str "#ifndef " resName "_DEFINED\n#define " resName "_DEFINED\n#ifndef " resName "_FWD_DEFINED\n#define " resName "_FWD_DEFINED\nstruct " resName "_s;\ntypedef struct " resName "_s " resName ";\n#endif\nstruct " resName "_s {\n    bool tag;\n};\n#endif\n")
+        (str "#ifndef " resName "_DEFINED\n#define " resName "_DEFINED\n#ifndef " resName "_FWD_DEFINED\n#define " resName "_FWD_DEFINED\nstruct " resName "_s;\ntypedef struct " resName "_s " resName ";\n#endif\nstruct " resName "_s {\n    bool tag;\n    union {\n" okMember errMember "    } data;\n};\n#endif\n"))))
 
 (df emitResultConstructors [(okType String) (errType String)] -> String
   :d "Emits the per-instantiation Result constructors, because a generic ok or err cannot be written once in ISO C99 without discarding its argument."
@@ -308,19 +311,19 @@
                                        (c99FromType (option-or (list-get args 1) unitTy))))
          (:else ""))))))
 
-(df dedupeInstsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (seen (List String)) (acc (List ty/Type))] -> (List ty/Type)
+(df dedupeInstsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (seen (Map String Bool)) (acc (List ty/Type))] -> (List ty/Type)
   :d "Drops repeated instantiations by emitted C name while preserving first-seen order."
   (if (>= idx len)
-      acc
+      (list-reverse acc)
       (let [(t (option-or (list-get insts idx) (ty/tyCon "Unit" (list) (none) (none))))
             (cname (c99FromType t))]
-        (if (list-contains? seen cname)
+        (if (map-has? seen cname)
             (dedupeInstsStep insts (+ idx 1) len seen acc)
-            (dedupeInstsStep insts (+ idx 1) len (list-append seen (list cname)) (list-append acc (list t)))))))
+            (dedupeInstsStep insts (+ idx 1) len (map-set seen cname true) (list-cons t acc))))))
 
 (df dedupeInsts [(insts (List ty/Type))] -> (List ty/Type)
   :d "Deduplicates collected instantiations by their emitted C type name."
-  (dedupeInstsStep insts 0 (list-length insts) (list) (list)))
+  (dedupeInstsStep insts 0 (list-length insts) (map-empty) (list)))
 
 (df collectParamInsts [(ps (List a/Param)) (idx Int64) (len Int64) (acc (List ty/Type))] -> (List ty/Type)
   :d "Collects container instantiations mentioned by a parameter list."
@@ -358,20 +361,29 @@
                        (collectInstsFromAnnotation (.-retType node) withParams)))))]
         (collectFormInsts forms (+ idx 1) len acc2))))
 
+(df collectAllInsts [(forms (List a/TopForm))] -> (List ty/Type)
+  :d "Collects every container instantiation reachable from forms."
+  (collectFormInsts forms 0 (list-length forms) (list)))
+
 (df emitSliceAccessors [(elemC String)] -> String
   :d "Emits the per-instantiation container operations a generic accessor needs, because ISO C99 has no way to express one over all element types."
   (let [(sliceName (str "AslSlice_" (sanitizeCIdent elemC)))
         (optName (str "AslOption_" (sanitizeCIdent elemC)))]
-    (str "static inline " optName " asl_list_get_" sliceName "(" sliceName " s, int64_t i) {\n"
+    (str "#ifndef asl_list_get_" sliceName "_DEFINED\n#define asl_list_get_" sliceName "_DEFINED\n"
+         "static inline " optName " asl_list_get_" sliceName "(" sliceName " s, int64_t i) {\n"
          "    " optName " o;\n"
          "    if (i < 0 || (size_t)i >= s.count) { o.tag = ASL_TAG_NONE; return o; }\n"
          "    o.tag = ASL_TAG_SOME;\n"
          "    o.data.some = s.items[i];\n"
          "    return o;\n"
          "}\n"
+         "#endif\n"
+         "#ifndef asl_list_head_" sliceName "_DEFINED\n#define asl_list_head_" sliceName "_DEFINED\n"
          "static inline " optName " asl_list_head_" sliceName "(" sliceName " s) {\n"
          "    return asl_list_get_" sliceName "(s, 0);\n"
          "}\n"
+         "#endif\n"
+         "#ifndef asl_list_tail_" sliceName "_DEFINED\n#define asl_list_tail_" sliceName "_DEFINED\n"
          "static inline AslOption_" (sanitizeCIdent sliceName) " asl_list_tail_" sliceName "(" sliceName " s) {\n"
          "    AslOption_" (sanitizeCIdent sliceName) " o;\n"
          "    " sliceName " r;\n"
@@ -382,6 +394,7 @@
          "    o.data.some = r;\n"
          "    return o;\n"
          "}\n"
+         "#endif\n"
          "static inline " elemC " asl_option_or_" optName "(" optName " o, " elemC " d) {\n"
          "    if (o.tag == ASL_TAG_SOME) { return o.data.some; }\n"
          "    return d;\n"
@@ -398,12 +411,77 @@
          "    return o;\n"
          "}\n")))
 
+(df emitMapAccessors [(keyC String) (valC String)] -> String
+  :d "Emits typed map operations for a specific key and value type."
+  (let [(mapName (str "AslMap_" (sanitizeCIdent keyC) "_" (sanitizeCIdent valC)))
+        (pairName (str "AslPair_" (sanitizeCIdent keyC) "_" (sanitizeCIdent valC)))
+        (optVal (str "AslOption_" (sanitizeCIdent valC)))
+        (sliceVal (str "AslSlice_" (sanitizeCIdent valC)))
+        (sliceKey (str "AslSlice_" (sanitizeCIdent keyC)))
+        (isKeyStr (= keyC "asl_string_t"))
+        (eqExpr (if isKeyStr "asl_string_eq(m.entries[i].first, key)" "m.entries[i].first == key"))]
+    (str
+      "#ifndef asl_map_get_" mapName "_DEFINED\n#define asl_map_get_" mapName "_DEFINED\n"
+      "static inline " optVal " asl_map_get_" mapName "(" mapName " m, " keyC " key) {\n"
+      "    " optVal " o;\n"
+      "    for (size_t i = 0; i < m.count; ++i) {\n"
+      "        if (" eqExpr ") { o.tag = ASL_TAG_SOME; o.data.some = m.entries[i].second; return o; }\n"
+      "    }\n"
+      "    o.tag = ASL_TAG_NONE; return o;\n"
+      "}\n"
+      "#endif\n"
+      "#ifndef asl_map_has_" mapName "_DEFINED\n#define asl_map_has_" mapName "_DEFINED\n"
+      "static inline bool asl_map_has_" mapName "(" mapName " m, " keyC " key) {\n"
+      "    for (size_t i = 0; i < m.count; ++i) {\n"
+      "        if (" eqExpr ") return true;\n"
+      "    }\n"
+      "    return false;\n"
+      "}\n"
+      "#endif\n"
+      "#ifndef asl_map_values_" mapName "_DEFINED\n#define asl_map_values_" mapName "_DEFINED\n"
+      "static inline " sliceVal " asl_map_values_" mapName "(" mapName " m) {\n"
+      "    " sliceVal " s;\n"
+      "    s.count = m.count;\n"
+      "    if (m.count == 0 || m.entries == NULL) { s.items = NULL; return s; }\n"
+      "    s.items = (" valC "*)malloc(sizeof(" valC ") * m.count);\n"
+      "    for (size_t i = 0; i < m.count; ++i) { s.items[i] = m.entries[i].second; }\n"
+      "    return s;\n"
+      "}\n"
+      "#endif\n"
+      "#ifndef asl_map_keys_" mapName "_DEFINED\n#define asl_map_keys_" mapName "_DEFINED\n"
+      "static inline " sliceKey " asl_map_keys_" mapName "(" mapName " m) {\n"
+      "    " sliceKey " s;\n"
+      "    s.count = m.count;\n"
+      "    if (m.count == 0 || m.entries == NULL) { s.items = NULL; return s; }\n"
+      "    s.items = (" keyC "*)malloc(sizeof(" keyC ") * m.count);\n"
+      "    for (size_t i = 0; i < m.count; ++i) { s.items[i] = m.entries[i].first; }\n"
+      "    return s;\n"
+      "}\n"
+      "#endif\n"
+      "#ifndef asl_map_set_" mapName "_DEFINED\n#define asl_map_set_" mapName "_DEFINED\n"
+      "static inline " mapName " asl_map_set_" mapName "(" mapName " m, " keyC " key, " valC " val) {\n"
+      "    for (size_t i = 0; i < m.count; ++i) {\n"
+      "        if (" eqExpr ") {\n"
+      "            " pairName "* ent = (" pairName "*)malloc(sizeof(" pairName ") * m.count);\n"
+      "            memcpy(ent, m.entries, sizeof(" pairName ") * m.count);\n"
+      "            ent[i].second = val;\n"
+      "            " mapName " r; r.entries = ent; r.count = m.count; return r;\n"
+      "        }\n"
+      "    }\n"
+      "    size_t nc = m.count + 1;\n"
+      "    " pairName "* ent = (" pairName "*)malloc(sizeof(" pairName ") * nc);\n"
+      "    if (m.count > 0 && m.entries != NULL) { memcpy(ent, m.entries, sizeof(" pairName ") * m.count); }\n"
+      "    ent[m.count].first = key; ent[m.count].second = val;\n"
+      "    " mapName " r; r.entries = ent; r.count = nc; return r;\n"
+      "}\n"
+      "#endif\n")))
+
 (df isSliceInst? [(t ty/Type)] -> Bool
-  :d "Checks whether an instantiation is a List, which stores its elements behind a pointer."
+  :d "Checks whether an instantiation is a pointer-backed container (List or Map)."
   (mt t
     ((ty/tyVar id kind) false)
     ((ty/tyFun params ret) false)
-    ((ty/tyCon name args modOpt shownOpt) (= name "List"))))
+    ((ty/tyCon name args modOpt shownOpt) (or (= name "List") (= name "Map")))))
 
 (df emitInstTypedefsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (wantSlices Bool) (acc (List String))] -> (List String)
   :d "Renders the deduplicated instantiation typedefs of one wave in dependency order."
@@ -413,6 +491,40 @@
             (line (if (= (isSliceInst? t) wantSlices) (emitInstTypedef t) ""))]
         (emitInstTypedefsStep insts (+ idx 1) len wantSlices
                               (if (= line "") acc (list-append acc (list line)))))))
+
+(df emitInstForwardDecl [(t ty/Type)] -> String
+  :d "Emits forward declaration for an instantiation struct."
+  (mt t
+    ((ty/tyVar id kind) "")
+    ((ty/tyFun params ret) "")
+    ((ty/tyCon name args modOpt shownOpt)
+     (let [(cTy (c99FromType t))]
+       (if (or (string-starts-with? cTy "AslPair_")
+               (or (string-starts-with? cTy "AslMap_")
+                   (or (string-starts-with? cTy "AslOption_")
+                       (string-starts-with? cTy "AslResult_"))))
+           (str "#ifndef " cTy "_DEFINED\n#ifndef " cTy "_FWD_DEFINED\n#define " cTy "_FWD_DEFINED\nstruct " cTy "_s;\ntypedef struct " cTy "_s " cTy ";\n#endif\n#endif\n")
+           "")))))
+
+(df emitInstForwardDeclsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Emits forward declarations for all generic containers."
+  (if (>= idx len)
+      acc
+      (let [(t (option-or (list-get insts idx) (ty/tyCon "Unit" (list) (none) (none))))
+            (decl (emitInstForwardDecl t))]
+        (emitInstForwardDeclsStep insts (+ idx 1) len
+                                  (if (= decl "") acc (list-append acc (list decl)))))))
+
+(df emitInstForwardDeclsFromUniq [(uniq (List ty/Type))] -> String
+  :d "Emits forward declarations for pre-deduplicated generic containers."
+  (let [(lines (emitInstForwardDeclsStep uniq 0 (list-length uniq) (list)))]
+    (string-join lines "")))
+
+(df emitInstForwardDecls [(forms (List a/TopForm))] -> String
+  :d "Emits forward declarations for all generic containers reachable from top-level forms."
+  (let [(raw (collectFormInsts forms 0 (list-length forms) (list)))
+        (uniq (dedupeInsts raw))]
+    (emitInstForwardDeclsFromUniq uniq)))
 
 (df emitInstAccessorsStep [(insts (List ty/Type)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
   :d "Renders the per-instantiation container accessors for every collected slice."
@@ -428,6 +540,9 @@
                        ((= n "List")
                         (let [(elemC (c99FromType (option-or (list-get args 0) unitTy)))]
                           (if (= elemC "void") "" (emitSliceAccessors elemC))))
+                       ((and (= n "Map") (>= (list-length args) 2))
+                        (emitMapAccessors (c99FromType (option-or (list-get args 0) unitTy))
+                                          (c99FromType (option-or (list-get args 1) unitTy))))
                        ((and (= n "Result") (>= (list-length args) 2))
                         (emitResultConstructors (c99FromType (option-or (list-get args 0) unitTy))
                                                 (c99FromType (option-or (list-get args 1) unitTy))))
@@ -435,19 +550,27 @@
         (emitInstAccessorsStep insts (+ idx 1) len
                                (if (= line "") acc (list-append acc (list line)))))))
 
+(df emitInstAccessorsFromUniq [(uniq (List ty/Type))] -> String
+  :d "Emits container operations for pre-deduplicated generic containers."
+  (let [(lines (emitInstAccessorsStep uniq 0 (list-length uniq) (list)))]
+    (string-join lines "")))
+
 (df emitInstAccessors [(forms (List a/TopForm))] -> String
   :d "Emits the container operations that cannot be written once in ISO C99 and so must exist per instantiation."
   (let [(raw (collectFormInsts forms 0 (list-length forms) (list)))
-        (uniq (dedupeInsts raw))
-        (lines (emitInstAccessorsStep uniq 0 (list-length uniq) (list)))]
+        (uniq (dedupeInsts raw))]
+    (emitInstAccessorsFromUniq uniq)))
+
+(df emitInstTypedefsFromUniq [(uniq (List ty/Type)) (wantSlices Bool)] -> String
+  :d "Emits one wave of generic container typedefs from pre-deduplicated instantiations."
+  (let [(lines (emitInstTypedefsStep uniq 0 (list-length uniq) wantSlices (list)))]
     (string-join lines "")))
 
 (df emitInstTypedefs [(forms (List a/TopForm)) (wantSlices Bool)] -> String
   :d "Emits one wave of generic container typedefs: slices store elements behind a pointer so they precede the record definitions, while Option and Pair store by value and must follow them."
   (let [(raw (collectFormInsts forms 0 (list-length forms) (list)))
-        (uniq (dedupeInsts raw))
-        (lines (emitInstTypedefsStep uniq 0 (list-length uniq) wantSlices (list)))]
-    (string-join lines "")))
+        (uniq (dedupeInsts raw))]
+    (emitInstTypedefsFromUniq uniq wantSlices)))
 
 (df hasEmptyFieldNameStep [(fields (List a/AstField)) (idx Int64) (len Int64)] -> Bool
   :d "Checks if any schema field has empty name."
@@ -525,6 +648,13 @@
             (structStr (str "    struct {\n" (string-join fieldLines "") "    } " caseMemberName ";\n"))]
         (emitEnumCaseMemberLinesStep rawName typeName cases (+ idx 1) len (list-append acc (list structStr))))))
 
+(df emitSchemaFieldTypedefs [(fields (List a/AstField))] -> String
+  :d "Emits container typedefs for any field types needed by a schema."
+  (let [(insts (collectFieldInsts fields 0 (list-length fields) (list)))
+        (uniq (dedupeInsts insts))
+        (lines (emitInstTypedefsStep uniq 0 (list-length uniq) false (list)))]
+    (string-join lines "")))
+
 (df emitCDefschema [(s a/SchemaNode)] -> String
   :d "Serializes an AST SchemaNode into an ISO C99 struct typedef."
   (let [(rawName (string-trim (.-name s)))
@@ -538,7 +668,7 @@
               (bodyStrs (if (<= fLen 0)
                             "    char _unused;\n"
                             (string-join (emitSchemaFieldLinesStep rawName typeName fields 0 fLen (list)) "")))]
-          (str "typedef struct " typeName "_s {\n" bodyStrs "} " typeName ";\n")))))
+          (str "#ifndef " typeName "_DEFINED\n#define " typeName "_DEFINED\n#ifndef " typeName "_FWD_DEFINED\n#define " typeName "_FWD_DEFINED\nstruct " typeName "_s;\ntypedef struct " typeName "_s " typeName ";\n#endif\nstruct " typeName "_s {\n" bodyStrs "};\n#endif\n")))))
 
 (df emitCaseTagAlias [(upperEnum String) (c a/EnumCase)] -> String
   :d "Emits tag alias for an enum case."
@@ -563,19 +693,22 @@
             (pName (c99FieldIdent (.-name p)))
             (rawTy (.-type p))
             (pTy (if (or (= rawTy rawName) (= rawTy typeName))
-                     (str "struct " typeName "_s*")
+                     typeName
                      (c99TypeStr rawTy)))
             (entry (str pTy " " pName))]
         (emitConstructorParamsStep rawName typeName params (+ idx 1) len (list-append acc (list entry))))))
 
-(df emitConstructorAssignsStep [(cMember String) (params (List a/Param)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+(df emitConstructorAssignsStep [(rawName String) (typeName String) (cMember String) (params (List a/Param)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
   :d "Formats payload field assignments for enum case constructor."
   (if (>= idx len)
       acc
       (let [(p (option-or (list-get params idx) (a/Param :name "" :type "Unit")))
             (pName (c99FieldIdent (.-name p)))
-            (line (str "    _res.data." cMember "." pName " = " pName ";\n"))]
-        (emitConstructorAssignsStep cMember params (+ idx 1) len (list-append acc (list line))))))
+            (rawTy (.-type p))
+            (line (if (or (= rawTy rawName) (= rawTy typeName))
+                      (str "    _res.data." cMember "." pName " = (struct " typeName "_s*)malloc(sizeof(struct " typeName "_s));\n    *_res.data." cMember "." pName " = " pName ";\n")
+                      (str "    _res.data." cMember "." pName " = " pName ";\n")))]
+        (emitConstructorAssignsStep rawName typeName cMember params (+ idx 1) len (list-append acc (list line))))))
 
 (df emitCaseConstructor [(upperEnum String) (rawName String) (typeName String) (c a/EnumCase)] -> String
   :d "Emits a static inline constructor function for an enum case."
@@ -589,7 +722,7 @@
     (if (<= pLen 0)
         (str "static inline " typeName " " fnName "(void) {\n    " typeName " _res;\n    memset(&_res, 0, sizeof(_res));\n    _res.tag = " tagConst ";\n    return _res;\n}\n\n")
         (let [(paramStr (string-join (emitConstructorParamsStep rawName typeName pList 0 pLen (list)) ", "))
-              (assignLines (emitConstructorAssignsStep cMember pList 0 pLen (list)))]
+              (assignLines (emitConstructorAssignsStep rawName typeName cMember pList 0 pLen (list)))]
           (str "static inline " typeName " " fnName "(" paramStr ") {\n    " typeName " _res;\n    memset(&_res, 0, sizeof(_res));\n    _res.tag = " tagConst ";\n" (string-join assignLines "") "    return _res;\n}\n\n")))))
 
 (df emitCaseConstructorsStep [(upperEnum String) (rawName String) (typeName String) (cases (List a/EnumCase)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
@@ -599,6 +732,13 @@
       (let [(c (option-or (list-get cases idx) (a/EnumCase :name "" :fields (list))))
             (ctor (emitCaseConstructor upperEnum rawName typeName c))]
         (emitCaseConstructorsStep upperEnum rawName typeName cases (+ idx 1) len (list-append acc (list ctor))))))
+
+(df emitEnumCaseTypedefs [(cases (List a/EnumCase))] -> String
+  :d "Emits container typedefs for any payload field types needed by an enum."
+  (let [(insts (collectCaseInsts cases 0 (list-length cases) (list)))
+        (uniq (dedupeInsts insts))
+        (lines (emitInstTypedefsStep uniq 0 (list-length uniq) false (list)))]
+    (string-join lines "")))
 
 (df emitCDefenum [(e a/EnumNode)] -> String
   :d "Serializes an AST EnumNode into an ISO C99 tagged union architecture."
@@ -624,5 +764,5 @@
               (unionSection (str "typedef union {\n" unionBody "} " dataUnionName ";\n\n"))
               (tagAliases (string-join (emitCaseTagAliasesStep upperEnum cases 0 cLen (list)) ""))
               (constructors (string-join (emitCaseConstructorsStep upperEnum rawName typeName cases 0 cLen (list)) ""))
-              (structSection (str "typedef struct " typeName "_s {\n    " tagEnumName " tag;\n    " dataUnionName " data;\n} " typeName ";\n\n"))]
+              (structSection (str "#ifndef " typeName "_DEFINED\n#define " typeName "_DEFINED\n#ifndef " typeName "_FWD_DEFINED\n#define " typeName "_FWD_DEFINED\nstruct " typeName "_s;\ntypedef struct " typeName "_s " typeName ";\n#endif\nstruct " typeName "_s {\n    " tagEnumName " tag;\n    " dataUnionName " data;\n};\n#endif\n\n"))]
           (str tagSection tagAliases "\n" unionSection structSection constructors)))))

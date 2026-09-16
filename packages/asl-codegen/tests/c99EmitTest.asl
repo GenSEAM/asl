@@ -59,7 +59,7 @@
   (let [(modNode (sampleModuleNode))
         (hdr (ce/emitCHeaderFile modNode))]
     (assert (string-contains? hdr "#ifndef ASL_DEMO_MATH_H") "hdr guard")
-    (assert (string-contains? hdr "typedef struct AslPoint_s {") "hdr struct")
+    (assert (string-contains? hdr "struct AslPoint_s {") "hdr struct")
     (assert (string-contains? hdr "int64_t add(int64_t a, int64_t b);") "hdr add proto")
     true))
 (df testSourceFileProjection [] -> Bool

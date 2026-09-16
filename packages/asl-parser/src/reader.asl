@@ -78,17 +78,20 @@
   :d "The work list without its head; empty when absent."
   (option-or (list-tail items) (list)))
 
+(df rSeparatedStep [(items (List SExpr)) (idx Int64) (len Int64) (acc (List RItem))] -> (List RItem)
+  :d "Accumulates child expressions separated by spaces."
+  (if (>= idx len)
+      acc
+      (let [(x (option-or (list-get items idx) (sexprAtom "")))]
+        (rSeparatedStep items (+ idx 1) len (list-append acc (list (rText " ") (rExpr x)))))))
+
 (df rSeparated [(items (List SExpr))] -> (List RItem)
   :d "Child expressions with a single space between neighbours."
-  (mt (list-head items)
-    ((some h)
-     (list-cons (rExpr h)
-                (list-reverse
-                  (fold (fn [(acc (List RItem)) (x SExpr)] -> (List RItem)
-                          (list-cons (rExpr x) (list-cons (rText " ") acc)))
-                        (list)
-                        (option-or (list-tail items) (list))))))
-    ((none) (list))))
+  (let [(cnt (list-length items))]
+    (if (<= cnt 0)
+        (list)
+        (let [(h (option-or (list-get items 0) (sexprAtom "")))]
+          (rSeparatedStep items 1 cnt (list (rExpr h)))))))
 
 (df rExpand [(open String) (items (List SExpr)) (close String)] -> (List RItem)
   :d "One delimited form pushed onto the work list, outermost piece first."
@@ -112,15 +115,11 @@
     ((none) st)))
 
 (df rRun [(st RState) (budget Int64)] -> RState
-  :d "Run work-list steps in doubling batches until the work list drains.
-
-  The batch size doubles because `fold` needs its step count up front and a
-  tree's node count is not known without walking it; recursion is then O(log n)
-  in the node count rather than O(depth), which is what overflowed before."
+  :d "Run work-list steps in doubling batches until the work list drains."
   (let [(next (fold rTick st (range 0 budget)))]
     (if (list-empty? (.-work next))
-      next
-      (rRun next (* budget 2)))))
+        next
+        (rRun next (* budget 2)))))
 
 (df rRender [(items (List RItem))] -> String
   :d "Drain a work list to its concatenated text."

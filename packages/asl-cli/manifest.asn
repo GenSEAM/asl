@@ -4,7 +4,6 @@
  :description "Pure AgentScript Native CLI Toolchain"
  :aslFirst true
  :dependencies ["asl-parser"
-                "asl-text"
                 "asl-checker"
                 "asl-codegen"
                 "asl-compiler"

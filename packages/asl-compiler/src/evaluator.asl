@@ -298,32 +298,42 @@
   (cond
     ((= op "str-concat")
      (mt (list-head args)
-       ((some (valStr s1))
-        (mt (list-tail args)
-          ((some rest)
-           (mt (list-head rest)
-             ((some (valStr s2)) (valStr (str s1 s2)))
-             ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a1)
+        (mt a1
+          ((valStr s1)
+           (mt (list-tail args)
+             ((some rest)
+              (mt (list-head rest)
+                ((some a2)
+                 (mt a2
+                   ((valStr s2) (valStr (str s1 s2)))
+                   (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
+                ((none) (valStr s1))))
              ((none) (valStr s1))))
-          ((none) (valStr s1))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valStr ""))))
     ((= op "str-len")
      (mt (list-head args)
-       ((some (valStr s)) (valInt (string-length s)))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a)
+        (mt a
+          ((valStr s) (valInt (string-length s)))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "str-contains?")
      (mt (list-head args)
-       ((some (valStr s1))
-        (mt (list-tail args)
-          ((some rest)
-           (mt (list-head rest)
-             ((some (valStr s2)) (valBool (string-contains? s1 s2)))
-             ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a1)
+        (mt a1
+          ((valStr s1)
+           (mt (list-tail args)
+             ((some rest)
+              (mt (list-head rest)
+                ((some a2)
+                 (mt a2
+                   ((valStr s2) (valBool (string-contains? s1 s2)))
+                   (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
+                ((none) (valError "ERR_MISSING_ARGUMENT"))))
              ((none) (valError "ERR_MISSING_ARGUMENT"))))
-          ((none) (valError "ERR_MISSING_ARGUMENT"))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     (:else (valError (str "ERR_UNKNOWN_STRING_OP: " op)))))
 
@@ -336,71 +346,96 @@
         (mt (list-tail args)
           ((some rest)
            (mt (list-head rest)
-             ((some (valList items)) (valList (list-cons item items)))
-             ((some _) (valError "ERR_TYPE_EXPECTED_LIST"))
+             ((some a2)
+              (mt a2
+                ((valList items) (valList (list-cons item items)))
+                (:else (valError "ERR_TYPE_EXPECTED_LIST"))))
              ((none) (valError "ERR_MISSING_ARGUMENT"))))
           ((none) (valError "ERR_MISSING_ARGUMENT"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "first")
      (mt (list-head args)
-       ((some (valList items))
-        (mt (list-head items)
-          ((some h) h)
-          ((none) (valNull))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_LIST"))
+       ((some a)
+        (mt a
+          ((valList items)
+           (mt (list-head items)
+             ((some h) h)
+             ((none) (valNull))))
+          (:else (valError "ERR_TYPE_EXPECTED_LIST"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "rest")
      (mt (list-head args)
-       ((some (valList items))
-        (mt (list-tail items)
-          ((some t) (valList t))
-          ((none) (valList (list)))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_LIST"))
+       ((some a)
+        (mt a
+          ((valList items)
+           (mt (list-tail items)
+             ((some t) (valList t))
+             ((none) (valList (list)))))
+          (:else (valError "ERR_TYPE_EXPECTED_LIST"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "list-empty?")
      (mt (list-head args)
-       ((some (valList items)) (valBool (list-empty? items)))
-       ((some _) (valError "ERR_TYPE_EXPECTED_LIST"))
+       ((some a)
+        (mt a
+          ((valList items) (valBool (list-empty? items)))
+          (:else (valError "ERR_TYPE_EXPECTED_LIST"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     (:else (valError (str "ERR_UNKNOWN_LIST_OP: " op)))))
+
+(df valStringsStep [(entries (List Str)) (idx Int64) (len Int64) (acc (List EvalValue))] -> (List EvalValue)
+  :d "Converts list of strings to EvalValue string records."
+  (if (>= idx len)
+      acc
+      (let [(e (option-or (list-get entries idx) ""))]
+        (valStringsStep entries (+ idx 1) len (list-append acc (list (valStr e)))))))
 
 (df evalBuiltinIo [(op String) (args (List EvalValue))] -> EvalValue
   :d "Evaluates filesystem I/O operations in pure ASL."
   (cond
     ((= op "file-read")
      (mt (list-head args)
-       ((some (valStr path))
-        (mt (wasi/wasiFileRead path)
-          ((ok text) (valStr text))
-          ((err e) (valError (str "ERR_FILE_NOT_FOUND: " e)))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a)
+        (mt a
+          ((valStr path)
+           (mt (wasi/wasiFileRead path)
+             ((ok text) (valStr text))
+             ((err e) (valError (str "ERR_FILE_NOT_FOUND: " e)))))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "file-write")
      (mt (list-head args)
-       ((some (valStr path))
-        (mt (list-tail args)
-          ((some rest)
-           (mt (list-head rest)
-             ((some (valStr content))
-              (mt (wasi/wasiFileWrite path content)
-                ((ok _) (valBool true))
-                ((err e) (valError (str "ERR_FILE_WRITE: " e)))))
-             ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a1)
+        (mt a1
+          ((valStr path)
+           (mt (list-tail args)
+             ((some rest)
+              (mt (list-head rest)
+                ((some a2)
+                 (mt a2
+                   ((valStr content)
+                    (mt (wasi/wasiFileWrite path content)
+                      ((ok _) (valBool true))
+                      ((err e) (valError (str "ERR_FILE_WRITE: " e)))))
+                   (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
+                ((none) (valError "ERR_MISSING_ARGUMENT"))))
              ((none) (valError "ERR_MISSING_ARGUMENT"))))
-          ((none) (valError "ERR_MISSING_ARGUMENT"))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "file-exists?")
      (mt (list-head args)
-       ((some (valStr path)) (valBool (wasi/wasiFileExists? path)))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a)
+        (mt a
+          ((valStr path) (valBool (wasi/wasiFileExists? path)))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     ((= op "dir-list")
      (mt (list-head args)
-       ((some (valStr path))
-        (let [(entries (wasi/wasiDirList path))]
-          (valList (map (fn [(e Str)] -> EvalValue (valStr e)) entries))))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a)
+        (mt a
+          ((valStr path)
+           (let [(entries (wasi/wasiDirList path))]
+             (valList (valStringsStep entries 0 (list-length entries) (list)))))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     (:else (valError (str "ERR_UNKNOWN_IO_OP: " op)))))
 
@@ -409,17 +444,19 @@
   (cond
     ((or (= op "sys-exec") (= op "execCmd"))
      (mt (list-head args)
-       ((some (valStr cmd))
-        (let [(receipt (wasi/wasiSysExec cmd (wasi/sandboxedWasiCapabilities)))
-              (m (map-set
-                   (map-set
-                     (map-set
-                       (map-set (map-empty) "status" (valStr (.-status receipt)))
-                       "code" (valInt (.-code receipt)))
-                     "stderr" (valStr (.-stderr receipt)))
-                   "stdout" (valStr (.-stdout receipt))))]
-          (valMap m)))
-       ((some _) (valError "ERR_TYPE_EXPECTED_STRING"))
+       ((some a)
+        (mt a
+          ((valStr cmd)
+           (let [(receipt (wasi/wasiSysExec cmd (wasi/sandboxedWasiCapabilities)))
+                 (m (map-set
+                      (map-set
+                        (map-set
+                          (map-set (map-empty) "status" (valStr (.-status receipt)))
+                          "code" (valInt (.-code receipt)))
+                        "stderr" (valStr (.-stderr receipt)))
+                      "stdout" (valStr (.-stdout receipt))))]
+             (valMap m)))
+          (:else (valError "ERR_TYPE_EXPECTED_STRING"))))
        ((none) (valError "ERR_MISSING_ARGUMENT"))))
     (:else (valError (str "ERR_UNKNOWN_SYS_OP: " op)))))
 
@@ -429,45 +466,49 @@
     ((rd/sexprAtom name) name)
     ((rd/sexprList items)
      (mt (list-head items)
-       ((some (rd/sexprAtom name)) name)
-       ((some _) "")
+       ((some node)
+        (mt node
+          ((rd/sexprAtom name) name)
+          (:else "")))
        ((none) "")))
     ((rd/sexprVect items)
      (mt (list-head items)
-       ((some (rd/sexprAtom name)) name)
-       ((some _) "")
+       ((some node)
+        (mt node
+          ((rd/sexprAtom name) name)
+          (:else "")))
        ((none) "")))))
 
 (df extractParamNamesList [(items (List rd/SExpr))] -> (List String)
   :d "Extracts list of parameter names from a list of SExpr parameters."
   (mt (list-head items)
     ((some h)
-     (list-cons (extractParamName h)
-                (mt (list-tail items)
-                  ((some rest) (extractParamNamesList rest))
-                  ((none) (list)))))
+     (let [(rest (option-or (list-tail items) (list)))]
+       (list-cons (extractParamName h) (extractParamNamesList rest))))
     ((none) (list))))
 
 (df skipTypeAndDoc [(items (List rd/SExpr))] -> (List rd/SExpr)
   :d "Skips optional return type and docstring annotations in function declarations."
   (mt (list-head items)
-    ((some (rd/sexprAtom a))
-     (if (= a "->")
-         (mt (list-tail items)
-           ((some rest1)
-            (mt (list-tail rest1)
-              ((some rest2) (skipTypeAndDoc rest2))
-              ((none) (list))))
-           ((none) (list)))
-         (if (or (= a ":d") (= a "d"))
-             (mt (list-tail items)
-               ((some rest1)
-                (mt (list-tail rest1)
-                  ((some rest2) (skipTypeAndDoc rest2))
-                  ((none) (list))))
-               ((none) (list)))
-             items)))
-    ((some _) items)
+    ((some node)
+     (mt node
+       ((rd/sexprAtom a)
+        (if (= a "->")
+            (mt (list-tail items)
+              ((some rest1)
+               (mt (list-tail rest1)
+                 ((some rest2) (skipTypeAndDoc rest2))
+                 ((none) (list))))
+              ((none) (list)))
+            (if (or (= a ":d") (= a "d"))
+                (mt (list-tail items)
+                  ((some rest1)
+                   (mt (list-tail rest1)
+                     ((some rest2) (skipTypeAndDoc rest2))
+                     ((none) (list))))
+                  ((none) (list)))
+                items)))
+       (:else items)))
     ((none) (list))))
 
 (df extractFnBody [(rest (List rd/SExpr))] -> rd/SExpr
@@ -666,11 +707,7 @@
             ((some afterName)
              (mt (list-head afterName)
                ((some paramsExpr)
-                (let [(params (extractParamNamesList
-                               (mt paramsExpr
-                                 ((rd/sexprVect pi) pi)
-                                 ((rd/sexprList pi) pi)
-                                 ((rd/sexprAtom _) (list)))))]
+                (let [(params (extractParamNamesList (rd/sexprToList paramsExpr)))]
                   (mt (list-tail afterName)
                     ((some bodyRest)
                      (let [(body (extractFnBody bodyRest))]
@@ -682,11 +719,7 @@
     ((= op "fn")
      (mt (list-head args)
        ((some paramsExpr)
-        (let [(params (extractParamNamesList
-                       (mt paramsExpr
-                         ((rd/sexprVect pi) pi)
-                         ((rd/sexprList pi) pi)
-                         ((rd/sexprAtom _) (list)))))]
+        (let [(params (extractParamNamesList (rd/sexprToList paramsExpr)))]
           (mt (list-tail args)
             ((some bodyRest)
              (let [(body (extractFnBody bodyRest))]
@@ -725,15 +758,19 @@
                 ((some args)
                  (let [(evalArgs (evalSexprList args env))]
                    (mt (list-head evalArgs)
-                     ((some (valInt a1))
-                      (mt (list-tail evalArgs)
-                        ((some rest)
-                         (mt (list-head rest)
-                           ((some (valInt a2)) (evalBuiltinArithmetic op a1 a2))
-                           ((some _) (valError "ERR_ARITHMETIC_OPERAND_NOT_INT"))
+                     ((some v1)
+                      (mt v1
+                        ((valInt a1)
+                         (mt (list-tail evalArgs)
+                           ((some rest)
+                            (mt (list-head rest)
+                              ((some v2)
+                               (mt v2
+                                 ((valInt a2) (evalBuiltinArithmetic op a1 a2))
+                                 (:else (valError "ERR_ARITHMETIC_OPERAND_NOT_INT"))))
+                              ((none) (valError "ERR_MISSING_ARITHMETIC_OPERAND"))))
                            ((none) (valError "ERR_MISSING_ARITHMETIC_OPERAND"))))
-                        ((none) (valError "ERR_MISSING_ARITHMETIC_OPERAND"))))
-                     ((some _) (valError "ERR_ARITHMETIC_OPERAND_NOT_INT"))
+                        (:else (valError "ERR_ARITHMETIC_OPERAND_NOT_INT"))))
                      ((none) (valError "ERR_MISSING_ARITHMETIC_OPERAND")))))
                 ((none) (valError "ERR_MISSING_ARITHMETIC_OPERAND"))))
              ((or (= op "=") (or (= op "!=") (or (= op "<") (or (= op "<=") (or (= op ">") (= op ">="))))))
@@ -755,15 +792,19 @@
                 ((some args)
                  (let [(evalArgs (evalSexprList args env))]
                    (mt (list-head evalArgs)
-                     ((some (valBool b1))
-                      (mt (list-tail evalArgs)
-                        ((some rest)
-                         (mt (list-head rest)
-                           ((some (valBool b2)) (evalBuiltinLogic op b1 b2))
-                           ((some _) (valError "ERR_LOGIC_OPERAND_NOT_BOOL"))
+                     ((some v1)
+                      (mt v1
+                        ((valBool b1)
+                         (mt (list-tail evalArgs)
+                           ((some rest)
+                            (mt (list-head rest)
+                              ((some v2)
+                               (mt v2
+                                 ((valBool b2) (evalBuiltinLogic op b1 b2))
+                                 (:else (valError "ERR_LOGIC_OPERAND_NOT_BOOL"))))
+                              ((none) (valError "ERR_MISSING_LOGIC_OPERAND"))))
                            ((none) (valError "ERR_MISSING_LOGIC_OPERAND"))))
-                        ((none) (valError "ERR_MISSING_LOGIC_OPERAND"))))
-                     ((some _) (valError "ERR_LOGIC_OPERAND_NOT_BOOL"))
+                        (:else (valError "ERR_LOGIC_OPERAND_NOT_BOOL"))))
                      ((none) (valError "ERR_MISSING_LOGIC_OPERAND")))))
                 ((none) (valError "ERR_MISSING_LOGIC_OPERAND"))))
              ((= op "not")
@@ -771,8 +812,10 @@
                 ((some args)
                  (let [(evalArgs (evalSexprList args env))]
                    (mt (list-head evalArgs)
-                     ((some (valBool b)) (valBool (not b)))
-                     ((some _) (valError "ERR_LOGIC_OPERAND_NOT_BOOL"))
+                     ((some v)
+                      (mt v
+                        ((valBool b) (valBool (not b)))
+                        (:else (valError "ERR_LOGIC_OPERAND_NOT_BOOL"))))
                      ((none) (valError "ERR_MISSING_LOGIC_OPERAND")))))
                 ((none) (valError "ERR_MISSING_LOGIC_OPERAND"))))
              ((or (= op "str-concat") (or (= op "str-len") (= op "str-contains?")))
@@ -810,6 +853,13 @@
           ((rd/sexprVect _) (valError "ERR_UNSUPPORTED_APPLICATION_HEAD"))))
        ((none) (valNull))))))
 
+(df formatValsStep [(items (List EvalValue)) (idx Int64) (len Int64) (acc (List String))] -> (List String)
+  :d "Formats list of EvalValues to strings."
+  (if (>= idx len)
+      acc
+      (let [(it (option-or (list-get items idx) (valNull)))]
+        (formatValsStep items (+ idx 1) len (list-append acc (list (formatVal it)))))))
+
 (df formatVal [(v EvalValue)] -> String
   :d "Formats an EvalValue into readable S-expression literal representation."
   (mt v
@@ -819,7 +869,7 @@
     ((valBool b) (if b "true" "false"))
     ((valNull) "null")
     ((valError msg) (str "(error \"" msg "\")"))
-    ((valList items) (str "(" (string-join (map (fn [(it EvalValue)] -> String (formatVal it)) items) " ") ")"))
-    ((valVect items) (str "[" (string-join (map (fn [(it EvalValue)] -> String (formatVal it)) items) " ") "]"))
+    ((valList items) (str "(" (string-join (formatValsStep items 0 (list-length items) (list)) " ") ")"))
+    ((valVect items) (str "[" (string-join (formatValsStep items 0 (list-length items) (list)) " ") "]"))
     ((valMap entries) "{...}")
     ((valClosure name _ _ _) (if (= name "") "(closure)" (str "(closure " name ")")))))

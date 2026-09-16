@@ -14,6 +14,7 @@
       lowerCFieldAccess
       lowerCRecordInit
       lowerCDo
+      wrapBlockWithReturn
       isC99Keyword?
       mangleCIdent
       mangleCTypeName
@@ -298,21 +299,78 @@
               (fieldStrs (lowerCRecordFieldsStep ctx items 0 numPairs (list)))]
           (str "(" recType "){ " (string-join fieldStrs ", ") " }")))))
 
+(df isNonEmptyStr? [(s String)] -> Bool
+  :d "Checks if string is non-empty."
+  (> (string-length s) 0))
+
+(df wrapBlockWithReturn [(s String)] -> String
+  :d "Wraps block with return on final expression without statement expressions."
+  (let [(t (string-trim s))]
+    (if (and (string-starts-with? t "{") (string-ends-with? t "}"))
+        (if (or (string-starts-with? t "{ return")
+                (or (string-contains? t "switch")
+                    (or (string-contains? t "abort")
+                        (string-contains? t "return"))))
+            t
+            (let [(inner (string-trim (sliceStrOr t 1 (- (string-length t) 1) "")))]
+              (let [(parts (string-split inner ";"))
+                    (pCount (list-length parts))]
+                (if (<= pCount 1)
+                    (if (string-empty? inner)
+                        "{ return; }"
+                        (if (or (string-starts-with? inner "return")
+                                (or (string-starts-with? inner "switch")
+                                    (or (string-starts-with? inner "abort")
+                                        (string-starts-with? inner "if"))))
+                            (str "{ " inner "; }")
+                            (str "{ return " inner "; }")))
+                    (let [(nonEmpty (filter isNonEmptyStr? (map string-trim parts)))
+                          (nLen (list-length nonEmpty))]
+                      (if (<= nLen 0)
+                          "{ return; }"
+                          (if (= nLen 1)
+                              (let [(s0 (option-or (list-get nonEmpty 0) ""))]
+                                (if (or (string-starts-with? s0 "return")
+                                        (or (string-starts-with? s0 "switch")
+                                            (or (string-starts-with? s0 "abort")
+                                                (string-starts-with? s0 "if"))))
+                                    (str "{ " s0 "; }")
+                                    (str "{ return " s0 "; }")))
+                              (let [(inits (option-or (list-slice nonEmpty 0 (- nLen 1)) (list)))
+                                    (lastS (option-or (list-get nonEmpty (- nLen 1)) ""))
+                                    (retLast (if (or (string-starts-with? lastS "return")
+                                                     (or (string-starts-with? lastS "switch")
+                                                         (or (string-starts-with? lastS "abort")
+                                                             (string-starts-with? lastS "if"))))
+                                                 lastS
+                                                 (str "return " lastS)))]
+                                (str "{ " (string-join inits "; ") "; " retLast "; }")))))))))
+        (if (or (string-starts-with? t "return")
+                (or (string-starts-with? t "switch")
+                    (or (string-starts-with? t "abort")
+                        (string-starts-with? t "if"))))
+            t
+            (str "return " t ";")))))
+
 (df lowerCIf [(ctx LowerCtx) (items (List rd/SExpr))] -> String
-  :d "Lowers an if form into if-statement with returns if branches have control flow, else ternary."
+  :d "Lowers an if form into if-statement with returns if branches have control flow or blocks, else ternary."
   (let [(condExpr (lowerCExpr ctx (option-or (list-get items 1) (rd/sexprAtom "false"))))
         (rawThen (lowerCExpr ctx (option-or (list-get items 2) (rd/sexprAtom "(void)0"))))
         (rawElse (if (> (list-length items) 3)
                      (lowerCExpr ctx (option-or (list-get items 3) (rd/sexprAtom "(void)0")))
                      "(void)0"))
-        (thenHasFlow (or (string-contains? rawThen "return ") (string-contains? rawThen "switch")))
-        (elseHasFlow (or (string-contains? rawElse "return ") (string-contains? rawElse "switch")))]
+        (tTrim (string-trim rawThen))
+        (eTrim (string-trim rawElse))
+        (thenIsBlock (string-starts-with? tTrim "{"))
+        (elseIsBlock (string-starts-with? eTrim "{"))
+        (thenHasFlow (or thenIsBlock (or (string-contains? rawThen "return ") (string-contains? rawThen "switch"))))
+        (elseHasFlow (or elseIsBlock (or (string-contains? rawElse "return ") (string-contains? rawElse "switch"))))]
     (if (or thenHasFlow elseHasFlow)
-        (let [(tWrap (if (string-starts-with? rawThen "{") (str "(" rawThen ")") rawThen))
-              (eWrap (if (string-starts-with? rawElse "{") (str "(" rawElse ")") rawElse))
-              (tStmt (if thenHasFlow rawThen (str "return " tWrap ";")))
-              (eStmt (if elseHasFlow rawElse (str "return " eWrap ";")))]
-          (str "if (" condExpr ") { " tStmt " } else { " eStmt " }"))
+        (let [(tStmt (wrapBlockWithReturn rawThen))
+              (eStmt (wrapBlockWithReturn rawElse))]
+          (let [(tFinal (if (string-starts-with? tStmt "{") tStmt (str "{ " tStmt " }")))
+                (eFinal (if (string-starts-with? eStmt "{") eStmt (str "{ " eStmt " }")))]
+            (str "if (" condExpr ") " tFinal " else " eFinal)))
         (str "((" condExpr ") ? (" rawThen ") : (" rawElse "))"))))
 
 (df lowerCCondClause [(ctx LowerCtx) (clause rd/SExpr)] -> (Pair String String)
@@ -346,14 +404,13 @@
             (p (lowerCCondClause ctx cNode))
             (cCond (.-first p))
             (rawBody (.-second p))
-            (hasFlow (or (string-starts-with? rawBody "return") (or (string-starts-with? rawBody "switch") (string-starts-with? rawBody "{"))))
-            (wrapBody (if (string-starts-with? rawBody "{") (str "(" rawBody ")") rawBody))
-            (stmt (if hasFlow rawBody (str "return " wrapBody ";")))]
-        (if (= cCond ":else")
-            (str "else { " stmt " } ")
-            (if (= idx 0)
-                (str "if (" cCond ") { " stmt " } " (lowerCCondStmtLoop ctx clauses (+ idx 1)))
-                (str "else if (" cCond ") { " stmt " } " (lowerCCondStmtLoop ctx clauses (+ idx 1))))))))
+            (stmt (wrapBlockWithReturn rawBody))]
+        (let [(wrapped (if (string-starts-with? stmt "{") stmt (str "{ " stmt " }")))]
+          (if (= cCond ":else")
+              (str "else " wrapped " ")
+              (if (= idx 0)
+                  (str "if (" cCond ") " wrapped " " (lowerCCondStmtLoop ctx clauses (+ idx 1)))
+                  (str "else if (" cCond ") " wrapped " " (lowerCCondStmtLoop ctx clauses (+ idx 1)))))))))
 
 (df lowerCCondExprLoop [(ctx LowerCtx) (clauses (List rd/SExpr)) (idx Int64)] -> String
   (if (>= idx (list-length clauses))
@@ -408,6 +465,56 @@
            "bool")
           (:else "__auto_type")))))
 
+(df typeNodeToStr [(e rd/SExpr)] -> String
+  :d "Renders a type SExpr node into a canonical C99 type name."
+  (mt e
+    ((rd/sexprAtom v) (mangleCTypeName v))
+    ((rd/sexprList items)
+     (if (<= (list-length items) 0)
+         "void"
+         (let [(head (nthAtom items 0))]
+           (cond
+             ((= head "List")
+              (let [(elem (if (> (list-length items) 1) (typeNodeToStr (option-or (list-get items 1) (rd/sexprAtom ""))) "asl_string_t"))]
+                (str "AslSlice_" elem)))
+             ((= head "Option")
+              (let [(inner (if (> (list-length items) 1) (typeNodeToStr (option-or (list-get items 1) (rd/sexprAtom ""))) "void"))]
+                (str "AslOption_" inner)))
+             ((= head "Pair")
+              (let [(t1 (if (> (list-length items) 1) (typeNodeToStr (option-or (list-get items 1) (rd/sexprAtom ""))) "asl_string_t"))
+                    (t2 (if (> (list-length items) 2) (typeNodeToStr (option-or (list-get items 2) (rd/sexprAtom ""))) "asl_string_t"))]
+                (str "AslPair_" t1 "_" t2)))
+             ((= head "Map")
+              (let [(t1 (if (> (list-length items) 1) (typeNodeToStr (option-or (list-get items 1) (rd/sexprAtom ""))) "asl_string_t"))
+                    (t2 (if (> (list-length items) 2) (typeNodeToStr (option-or (list-get items 2) (rd/sexprAtom ""))) "asl_string_t"))]
+                (str "AslMap_" t1 "_" t2)))
+             ((= head "Result")
+              (let [(t1 (if (> (list-length items) 1) (typeNodeToStr (option-or (list-get items 1) (rd/sexprAtom ""))) "void"))
+                    (t2 (if (> (list-length items) 2) (typeNodeToStr (option-or (list-get items 2) (rd/sexprAtom ""))) "asl_string_t"))]
+                (str "AslResult_" t1 "_" t2)))
+             (:else (mangleCTypeName head))))))
+    ((rd/sexprVect _) "")))
+
+(df ctxWithBindingsStep [(ctx LowerCtx) (bs (List rd/SExpr)) (idx Int64) (len Int64)] -> LowerCtx
+  :d "Extends lowering context with types of let bindings so accessors resolve per instantiation."
+  (if (>= idx len)
+      ctx
+      (let [(b (option-or (list-get bs idx) (rd/sexprAtom "()")))
+            (pair (rd/sexprToList b))
+            (pLen (list-length pair))]
+        (if (>= pLen 3)
+            (let [(rawName (nthAtom pair 0))
+                  (ty (typeNodeToStr (option-or (list-get pair 1) (rd/sexprAtom ""))))]
+              (ctxWithBindingsStep (ctxWithVar ctx rawName ty) bs (+ idx 1) len))
+            (if (= pLen 2)
+                (let [(rawName (nthAtom pair 0))
+                      (valNode (option-or (list-get pair 1) (rd/sexprAtom "()")))
+                      (ty (inferCType ctx valNode (lowerCExpr ctx valNode)))]
+                  (if (!= ty "__auto_type")
+                      (ctxWithBindingsStep (ctxWithVar ctx rawName ty) bs (+ idx 1) len)
+                      (ctxWithBindingsStep ctx bs (+ idx 1) len)))
+                (ctxWithBindingsStep ctx bs (+ idx 1) len))))))
+
 (df lowerCLetBinding [(ctx LowerCtx) (b rd/SExpr)] -> String
   :d "Lowers a single let binding into a C declaration."
   (let [(pair (rd/sexprToList b))
@@ -415,7 +522,7 @@
     (cond
       ((>= pairLen 3)
        (let [(vName (mangleCIdent (nthAtom pair 0)))
-             (vType (c99TypeStr (nthAtom pair 1)))
+             (vType (typeNodeToStr (option-or (list-get pair 1) (rd/sexprAtom ""))))
              (vVal (lowerCExpr ctx (option-or (list-get pair 2) (rd/sexprAtom "()"))))]
          (if (= vType "void")
              (str vVal ";")
@@ -438,10 +545,6 @@
                  (str vType " " vName " = " vVal ";")))))
       (:else ""))))
 
-(df isNonEmptyStr? [(s String)] -> Bool
-  :d "Checks if string is non-empty."
-  (> (string-length s) 0))
-
 (df isBlockStmt? [(s String)] -> Bool
   :d "Checks if statement is a block or switch statement."
   (and (string-ends-with? s "}")
@@ -460,12 +563,13 @@
   (let [(bindingsNode (option-or (list-get items 1) (rd/sexprVect (list))))
         (bodyNodes (sliceTail items 2))
         (bindList (rd/sexprToList bindingsNode))
+        (bodyCtx (ctxWithBindingsStep ctx bindList 0 (list-length bindList)))
         (decls (lowerCLetBindingsStep ctx bindList 0 (list-length bindList) (list)))
         (validDecls (filter isNonEmptyStr? decls))
         (bodyLen (list-length bodyNodes))]
     (if (<= bodyLen 0)
         (str "{ " (string-join validDecls " ") " }")
-        (let [(bodyStmts (lowerCLetBodyStmtsStep ctx bodyNodes 0 (list-length bodyNodes) (list)))]
+        (let [(bodyStmts (lowerCLetBodyStmtsStep bodyCtx bodyNodes 0 (list-length bodyNodes) (list)))]
           (str "{ " (string-join validDecls " ") " " (string-join bodyStmts " ") " }")))))
 
 (df anyTrue? [(bools (List Bool))] -> Bool
@@ -574,7 +678,7 @@
                  (or (string-starts-with? s "switch")
                      (or (string-starts-with? s "abort")
                          (string-starts-with? s "{"))))
-             (str s " ")
+             (str (wrapBlockWithReturn s) " ")
              (str "return " s " "))))
       (:else
        (let [(initStmts (option-or (list-slice bodyStmts 0 (- cnt 1)) (list)))
@@ -583,7 +687,7 @@
                               (or (string-starts-with? lastS "switch")
                                   (or (string-starts-with? lastS "abort")
                                       (string-starts-with? lastS "{"))))
-                          lastS
+                          (wrapBlockWithReturn lastS)
                           (str "return " lastS)))]
          (str (string-join initStmts " ") " " retLast " "))))))
 
@@ -636,7 +740,7 @@
         (allClauses (if (> (string-length defaultGuard) 0)
                         (list-append validArms (list defaultGuard))
                         validArms))]
-    (str "switch ((" subj ").tag) { " (string-join allClauses " ") " }")))
+    (str "switch ((int)((" subj ").tag)) { " (string-join allClauses " ") " }")))
 
 (df isStringExpr? [(e rd/SExpr)] -> Bool
   :d "Heuristic check if SExpr produces a string value."
@@ -811,7 +915,9 @@
             (or (<= (list-length rawArgs) 0)
                 (or (= (nthAtom rawArgs 0) "()")
                     (isUnitExpr? (option-or (list-get rawArgs 0) (rd/sexprAtom ""))))))
-       "okUnit()")
+       (if (and (> (string-length (.-retTy ctx)) 0) (string-starts-with? (.-retTy ctx) "AslResult_"))
+           (str "asl_ok_" (.-retTy ctx) "()")
+           "okUnit()"))
       ((not (= "" (typedAccessorCall ctx head rawArgs)))
        (typedAccessorCall ctx head rawArgs))
       (:else

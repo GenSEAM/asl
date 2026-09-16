@@ -83,12 +83,18 @@
 (df diffLength? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
   (not (= (list-length l1) (list-length l2))))
 
+(df typeListEqualStep [(l1 (List ty/Type)) (l2 (List ty/Type)) (idx Int64) (len Int64)] -> Bool
+  (if (>= idx len)
+      true
+      (let [(t1 (option-or (list-get l1 idx) (ty/tyVar -1 "any")))
+            (t2 (option-or (list-get l2 idx) (ty/tyVar -1 "any")))]
+        (if (typeEqual? t1 t2)
+            (typeListEqualStep l1 l2 (+ idx 1) len)
+            false))))
+
 (df typeListEqual? [(l1 (List ty/Type)) (l2 (List ty/Type))] -> Bool
   (and (sameLength? l1 l2)
-       (fold (fn [(acc Bool) (p (Pair ty/Type ty/Type))] -> Bool
-               (and acc (typeEqual? (.-first p) (.-second p))))
-             true
-             (zip l1 l2))))
+       (typeListEqualStep l1 l2 0 (list-length l1))))
 
 (df modDiffers? [(m1 (Option String)) (m2 (Option String))] -> Bool
   (mt m1
@@ -129,15 +135,20 @@
                   (typeEqual? r1 r2))))
        (_ false)))))
 
+(df unifyListsStep [(l1 (List ty/Type)) (l2 (List ty/Type)) (idx Int64) (len Int64) (curSubst (Map Int64 ty/Type))] -> UnifyOutcome
+  (if (>= idx len)
+      (uOk curSubst)
+      (let [(t1 (option-or (list-get l1 idx) (ty/tyVar -1 "any")))
+            (t2 (option-or (list-get l2 idx) (ty/tyVar -1 "any")))
+            (res (unify t1 t2 curSubst))]
+        (mt res
+          ((uOk nextSubst) (unifyListsStep l1 l2 (+ idx 1) len nextSubst))
+          ((uErr _ _) res)))))
+
 (df unifyLists [(l1 (List ty/Type)) (l2 (List ty/Type)) (subst (Map Int64 ty/Type))] -> UnifyOutcome
   (if (diffLength? l1 l2)
     (uErr "type argument arity mismatch" false)
-    (fold (fn [(res UnifyOutcome) (p (Pair ty/Type ty/Type))] -> UnifyOutcome
-            (mt res
-              ((uOk curSubst) (unify (.-first p) (.-second p) curSubst))
-              ((uErr _ _) res)))
-          (uOk subst)
-          (zip l1 l2))))
+    (unifyListsStep l1 l2 0 (list-length l1) subst)))
 
 (df bindVarChecked [(id Int64) (target ty/Type) (subst (Map Int64 ty/Type))] -> UnifyOutcome
   (if (occursIn? id target subst)
