@@ -1,7 +1,12 @@
 (module asl-parser/ast
   :d "Typed AST nodes for the four section-4 heads, parseable from either dialect."
   :x [ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField
-           TopForm ParseError parse renderNode]
+           TopForm ParseError parse renderNode
+           AstLit litInt litFloat litString litBool litUnit
+           AstPattern patWildcard patVar patLit patTuple patRecord patCtor
+           AstMatchArm matchArm makeMatchArm
+           AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock
+           AstType typeNamed typeTuple typeRecord typeFn]
   :i [(lexer :a lx) (reader :a rd)])
 
 (dfs ParseError
@@ -58,6 +63,50 @@
   (:c topSchema [(node SchemaNode)] "A defschema declaration")
   (:c topEnum   [(node EnumNode)] "A defenum declaration")
   (:c topDefun  [(node DefunNode)] "A defun declaration"))
+
+(dfe AstLit
+  (:c litInt    [(val Int64)])
+  (:c litFloat  [(val Float64)])
+  (:c litString [(val String)])
+  (:c litBool   [(val Bool)])
+  (:c litUnit   []))
+
+(dfe AstPattern
+  (:c patWildcard [] "Wildcard _")
+  (:c patVar      [(name String)] "Variable binding")
+  (:c patLit      [(lit AstLit)] "Literal pattern")
+  (:c patTuple    [(elements (List AstPattern))] "Tuple/list pattern")
+  (:c patRecord   [(fields (List (Pair String AstPattern)))] "Record pattern")
+  (:c patCtor     [(name String) (arg (Option AstPattern))] "Constructor pattern"))
+
+(dfs AstMatchArm
+  (:f pat AstPattern)
+  (:f body AstExpr))
+
+(dfe AstExpr
+  (:c exprLit    [(lit AstLit)] "Literal constant")
+  (:c exprIdent  [(name String)] "Variable or symbol reference")
+  (:c exprMember [(target AstExpr) (field String)] "Record/schema field access target.field")
+  (:c exprCall   [(func AstExpr) (args (List AstExpr))] "Function or constructor call")
+  (:c exprLet    [(bindings (List (Pair AstPattern AstExpr))) (body (List AstExpr))] "Let binding form")
+  (:c exprIf     [(cond AstExpr) (thenBranch AstExpr) (elseBranch AstExpr)] "Conditional branch")
+  (:c exprMatch  [(target AstExpr) (arms (List AstMatchArm))] "Pattern match form")
+  (:c exprTry    [(inner AstExpr)] "Error propagation try operator expr?")
+  (:c exprBlock  [(exprs (List AstExpr))] "Block of sequential expressions"))
+
+(dfe AstType
+  (:c typeNamed  [(name String)])
+  (:c typeTuple  [(elements (List AstType))])
+  (:c typeRecord [(fields (List (Pair String AstType)))])
+  (:c typeFn     [(paramTypes (List AstType)) (retType AstType)]))
+
+(df matchArm [(pat AstPattern) (body AstExpr)] -> AstMatchArm
+  :d "Constructs an AstMatchArm record."
+  (AstMatchArm :pat pat :body body))
+
+(df makeMatchArm [(pat AstPattern) (body AstExpr)] -> AstMatchArm
+  :d "Constructs an AstMatchArm record."
+  (AstMatchArm :pat pat :body body))
 
 "The Nano projection, mirroring prelude.json's `projection` section. It is
 duplicated here because a parser written in AgentScript cannot read the JSON;
