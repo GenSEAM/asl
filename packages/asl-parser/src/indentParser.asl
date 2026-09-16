@@ -1,6 +1,6 @@
 (module asl-parser/indentParser
   :d "Pure ASL v0.4 Indented Reader and SExpr Desugaring Engine."
-  :x [parseIndented parseIndentedForms desugarDot desugarInterpolation]
+  :x [parseIndented parseIndentedForms desugarDot desugarInterpolation desugarTry]
   :i [(indentLexer :a lx) (reader :a rd)])
 
 (df desugarDot [(name String)] -> rd/SExpr
@@ -35,6 +35,13 @@
                      parts))]
     (rd/makeList (cons (rd/makeAtom "str") (.-first pairs)))))
 
+(df desugarTry [(expr rd/SExpr)] -> rd/SExpr
+  :d "Lowers try expression expr? into early-return match form."
+  (let [(okArm (rd/makeList (list (rd/makeAtom "ok") (rd/makeAtom "__v") (rd/makeAtom "__v"))))
+        (errRet (rd/makeList (list (rd/makeAtom "return") (rd/makeList (list (rd/makeAtom "err") (rd/makeAtom "__e"))))))
+        (errArm (rd/makeList (list (rd/makeAtom "err") (rd/makeAtom "__e") errRet)))]
+    (rd/makeList (list (rd/makeAtom "match") expr okArm errArm))))
+
 (dfs ParseExprResult
   (:f rest (List lx/IndentToken) "Remaining tokens")
   (:f expr rd/SExpr "Parsed SExpr"))
@@ -48,6 +55,7 @@
     ((tokInterp pts exs) (desugarInterpolation pts exs))
     ((tokInt n)          (rd/makeAtom (string-from-int64 n)))
     ((tokFloat f)        (rd/makeAtom (.-rawText tok)))
+    ((tokQuestion)       (rd/makeAtom "?"))
     (_                   (rd/makeAtom (.-rawText tok)))))
 
 (df skipNewlines [(toks (List lx/IndentToken))] -> (List lx/IndentToken)
@@ -97,6 +105,16 @@
                              (if (<= depth 1)
                                (pair (pair 0 items) (pair rem true))
                                (pair (pair (- depth 1) items) (pair rem false))))
+                            ((tokQuestion)
+                             (if (= depth 1)
+                               (mt (list-head items)
+                                 ((some prevExpr)
+                                  (let [(remItems (option-or (list-tail items) (list)))
+                                        (desugared (desugarTry prevExpr))]
+                                    (pair (pair depth (cons desugared remItems)) (pair rem false))))
+                                 ((none)
+                                  (pair (pair depth (cons (parseSingleTokenExpr t) items)) (pair rem false))))
+                               (pair (pair depth (cons (parseSingleTokenExpr t) items)) (pair rem false))))
                             (_
                              (pair (pair depth (cons (parseSingleTokenExpr t) items)) (pair rem false)))))))
                     (pair (pair 0 (list)) (pair (list) false))
@@ -123,6 +141,16 @@
                              (if (<= depth 1)
                                (pair (pair 0 items) (pair rem true))
                                (pair (pair (- depth 1) items) (pair rem false))))
+                            ((tokQuestion)
+                             (if (= depth 1)
+                               (mt (list-head items)
+                                 ((some prevExpr)
+                                  (let [(remItems (option-or (list-tail items) (list)))
+                                        (desugared (desugarTry prevExpr))]
+                                    (pair (pair depth (cons desugared remItems)) (pair rem false))))
+                                 ((none)
+                                  (pair (pair depth (cons (parseSingleTokenExpr t) items)) (pair rem false))))
+                               (pair (pair depth (cons (parseSingleTokenExpr t) items)) (pair rem false))))
                             (_
                              (pair (pair depth (cons (parseSingleTokenExpr t) items)) (pair rem false)))))))
                     (pair (pair 0 (list)) (pair (list) false))
@@ -161,6 +189,16 @@
                                       (subSexpr (rd/makeList (cons (rd/makeAtom "list") brkItems)))]
                                   (pair (cons subSexpr collected) (pair (list) (pair 0 0))))
                                 (pair collected (pair (cons t subToks) (pair parenDepth nxtB))))))
+                           ((tokQuestion)
+                            (if (or (> parenDepth 0) (> bracketDepth 0))
+                              (pair collected (pair (cons t subToks) (pair parenDepth bracketDepth)))
+                              (mt (list-head collected)
+                                ((some prevExpr)
+                                 (let [(rem (option-or (list-tail collected) (list)))
+                                       (desugared (desugarTry prevExpr))]
+                                   (pair (cons desugared rem) (pair (list) (pair 0 0)))))
+                                ((none)
+                                 (pair (cons (parseSingleTokenExpr t) collected) (pair (list) (pair 0 0)))))))
                            (_
                             (if (or (> parenDepth 0) (> bracketDepth 0))
                               (pair collected (pair (cons t subToks) (pair parenDepth bracketDepth)))

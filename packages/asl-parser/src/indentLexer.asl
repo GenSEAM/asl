@@ -25,6 +25,7 @@
   (:c tokArrow     [] "Arrow operator '->'")
   (:c tokEqual     [] "Assignment or definition '='")
   (:c tokBullet    [] "Unordered list bullet '-'")
+  (:c tokQuestion  [] "Error propagation operator '?'")
   (:c tokError     [(code String) (msg String)] "Lexical or indentation diagnostic error")
   (:c tokEof       [] "End of input stream"))
 
@@ -76,6 +77,7 @@
     ((tokArrow)         "ARROW")
     ((tokEqual)         "EQUAL")
     ((tokBullet)        "BULLET")
+    ((tokQuestion)      "?")
     ((tokError c m)     (str "ERROR(" c ":" m ")"))
     ((tokEof)           "EOF")))
 
@@ -100,7 +102,7 @@
 (df isSymbolChar [(c String)] -> Bool
   :d "Checks if character can form part of an identifier or compound symbol."
   (and (not (string-empty? c))
-       (not (string-contains? " \t\r\n()[]{}\";:#=" c))))
+       (not (string-contains? " \t\r\n()[]{}\";:#=?" c))))
 
 (dfs LineMeasure
   (:f spaces Int64 "Total indentation count in space units")
@@ -212,21 +214,23 @@
   (:f buf String "Current segment buffer")
   (:f inExpr Bool "Inside {expr}")
   (:f esc Bool "Backslash escape")
-  (:f err (Option String) "Encountered error"))
+  (:f err (Option String) "Encountered error")
+  (:f done Bool "Scanning complete after closing quote"))
 
 (df scanStringLiteral [(src String) (startIdx Int64) (srcLen Int64)] -> StringScanResult
   :d "Scans string literal starting at quote, parsing {expr} interpolations and escapes."
   (let [(finalState (fold (fn [(st StringScanState) (ch String)] -> StringScanState
-                            (if (< (.-idx st) (+ startIdx 1))
-                              (StringScanState :idx (+ (.-idx st) 1)
-                                               :parts (.-parts st)
-                                               :exprs (.-exprs st)
-                                               :buf (.-buf st)
-                                               :inExpr (.-inExpr st)
-                                               :esc false
-                                               :err (.-err st))
-                              (if (is-some? (.-err st))
-                                st
+                            (if (or (is-some? (.-err st)) (.-done st))
+                              st
+                              (if (< (.-idx st) (+ startIdx 1))
+                                (StringScanState :idx (+ (.-idx st) 1)
+                                                 :parts (.-parts st)
+                                                 :exprs (.-exprs st)
+                                                 :buf (.-buf st)
+                                                 :inExpr (.-inExpr st)
+                                                 :esc false
+                                                 :err (.-err st)
+                                                 :done false)
                                 (if (.-esc st)
                                   (if (and (.-inExpr st) (= ch "}"))
                                     (StringScanState :idx (+ (.-idx st) 1)
@@ -235,14 +239,16 @@
                                                      :buf (str (.-buf st) "}")
                                                      :inExpr true
                                                      :esc false
-                                                     :err (none))
+                                                     :err (none)
+                                                     :done false)
                                     (StringScanState :idx (+ (.-idx st) 1)
                                                      :parts (.-parts st)
                                                      :exprs (.-exprs st)
                                                      :buf (str (.-buf st) ch)
                                                      :inExpr (.-inExpr st)
                                                      :esc false
-                                                     :err (none)))
+                                                     :err (none)
+                                                     :done false))
                                   (cond
                                     ((= ch "\\")
                                      (StringScanState :idx (+ (.-idx st) 1)
@@ -251,7 +257,8 @@
                                                       :buf (.-buf st)
                                                       :inExpr (.-inExpr st)
                                                       :esc true
-                                                      :err (none)))
+                                                      :err (none)
+                                                      :done false))
                                     ((and (not (.-inExpr st)) (= ch "{"))
                                      (StringScanState :idx (+ (.-idx st) 1)
                                                       :parts (cons (.-buf st) (.-parts st))
@@ -259,7 +266,8 @@
                                                       :buf ""
                                                       :inExpr true
                                                       :esc false
-                                                      :err (none)))
+                                                      :err (none)
+                                                      :done false))
                                     ((and (.-inExpr st) (= ch "}"))
                                      (StringScanState :idx (+ (.-idx st) 1)
                                                       :parts (.-parts st)
@@ -267,7 +275,8 @@
                                                       :buf ""
                                                       :inExpr false
                                                       :esc false
-                                                      :err (none)))
+                                                      :err (none)
+                                                      :done false))
                                     ((and (not (.-inExpr st)) (= ch "\""))
                                      (StringScanState :idx (+ (.-idx st) 1)
                                                       :parts (cons (.-buf st) (.-parts st))
@@ -275,7 +284,8 @@
                                                       :buf ""
                                                       :inExpr false
                                                       :esc false
-                                                      :err (none)))
+                                                      :err (none)
+                                                      :done true))
                                     (:else
                                      (StringScanState :idx (+ (.-idx st) 1)
                                                       :parts (.-parts st)
@@ -283,8 +293,9 @@
                                                       :buf (str (.-buf st) ch)
                                                       :inExpr (.-inExpr st)
                                                       :esc false
-                                                      :err (none))))))))
-                          (StringScanState :idx 0 :parts (list) :exprs (list) :buf "" :inExpr false :esc false :err (none))
+                                                      :err (none)
+                                                      :done false)))))))
+                          (StringScanState :idx 0 :parts (list) :exprs (list) :buf "" :inExpr false :esc false :err (none) :done false)
                           (string-chars (sliceStr src 0 srcLen))))]
     (let [(consumed (.-idx finalState))
           (partsRev (.-parts finalState))
@@ -370,6 +381,12 @@
                                                         :openBrackets (.-openBrackets st))))
                                       ((= c "=")
                                        (let [(t (makeIndentToken (tokEqual) "=" lineNum (+ colOffset idx 1)))]
+                                         (LineScanState :idx (+ idx 1)
+                                                        :toks (cons t (.-toks st))
+                                                        :diags (.-diags st)
+                                                        :openBrackets (.-openBrackets st))))
+                                      ((= c "?")
+                                       (let [(t (makeIndentToken (tokQuestion) "?" lineNum (+ colOffset idx 1)))]
                                          (LineScanState :idx (+ idx 1)
                                                         :toks (cons t (.-toks st))
                                                         :diags (.-diags st)
