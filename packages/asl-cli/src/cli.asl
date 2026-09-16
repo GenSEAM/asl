@@ -1,7 +1,7 @@
 (module asl-cli/cli
   :d "Pure AgentScript native command-line interface toolchain."
   :x [formatVersion formatHelp checkGateFiles dispatchRpc dispatchCmd executeCli main]
-  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk) (evaluator :a ev) (reader :a rd) (batch :a b)])
+  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk) (evaluator :a ev) (reader :a rd) (batch :a b) (migrate :a mig)])
 
 (df formatVersion [] -> Str
   :d "Returns AgentScript native CLI version string."
@@ -26,6 +26,7 @@
        "  test <file>     Execute falsifiable test suite via pure evaluator\n"
        "  parse <file>    Parse S-expression AST and print node count\n"
        "  lint <file>     Inspect AST for basic validity\n"
+       "  migrate [--dry-run|--check] <file.asl> Migrate S-expression file to indented syntax\n"
        "  launch [client] Launch target agent (agy, claude) with runtime toolbelt & consultative AGENTS.md\n"
        "  version         Display toolchain version\n"
        "  help [--full]   Display this usage guide (use --full for legacy commands)\n"))
@@ -124,6 +125,8 @@
      (checkGateFiles args))
     ((= cmd "check")
      (cmdCheck args))
+    ((= cmd "migrate")
+     (mig/runMigrate args))
     ((= cmd "build")
      (cmdBuild args))
     ((= cmd "eval")
