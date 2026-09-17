@@ -1,0 +1,32 @@
+(:wasm :v 1 :src D87 :shortcode D87
+  :d "Formal ASN specification of WebAssembly Ambient Substrate, Linear Memory Limits, and OPFS Storage Contract under D87."
+  :schemas [
+    (:schema WasmSubstrateConfig
+      :d "Configuration parameters for ambient WebAssembly runtime substrate"
+      :fields [
+        (:field :initialPages :type :int :d "Initial linear memory pages (64KB each)")
+        (:field :maxPages :type :int :d "Maximum linear memory page ceiling")
+        (:field :allowGrow :type :bool :d "Whether linear memory can dynamically expand")
+      ])
+    (:schema LinearMemoryLimits
+      :d "Boundaries and page constraints for WebAssembly linear memory"
+      :fields [
+        (:field :pageSizeBytes :type :int :default 65536 :d "WASM standard 64KB page size")
+        (:field :hardMaxBytes :type :int :default 1073741824 :d "1GB hard memory ceiling guard")
+      ])
+  ]
+  :contracts [
+    (:contract HostImportContract
+      :d "Interface boundary specification for host imports exposed to WASM guests"
+      :moduleName "asl_host"
+      :functionName "opfs_sync"
+      :paramTypes [:int :int :int]
+      :returnType :int)
+    (:contract OpfsStorageContract
+      :d "Browser Origin Private File System persistent storage contract"
+      :rootPrefix "agent_memory"
+      :syncHandle true
+      :atomicFlush true
+      :maxFileSizeBytes 104857600)
+  ]
+)
