@@ -329,33 +329,108 @@
        (ok (string-join (map (fn [(s rd/SExpr)] -> String (ipr/formatIndented s)) origSexprs) "\n\n"))
        (err "Migration aborted: semantic divergence detected")))))
 
+(df findModuleName [(forms (List rd/SExpr))] -> String
+  :d "Finds module name from top forms."
+  (mt (list-head forms)
+    ((none) "unnamed")
+    ((some f)
+     (mt f
+       ((rd/sexprList items)
+        (if (= (rd/sexprHead f) "module")
+          (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom "unnamed")))
+          (findModuleName (option-or (list-tail forms) (list)))))
+       (_ (findModuleName (option-or (list-tail forms) (list))))))))
+
+(df findModuleDoc [(forms (List rd/SExpr))] -> (Option String)
+  :d "Finds module docstring from top forms."
+  (mt (list-head forms)
+    ((none) (none))
+    ((some f)
+     (mt f
+       ((rd/sexprList items)
+        (if (= (rd/sexprHead f) "module")
+          (mt (findKeywordOption items ":doc" ":d")
+            ((some d) (some (rd/sexprHead d)))
+            ((none) (none)))
+          (findModuleDoc (option-or (list-tail forms) (list)))))
+       (_ (findModuleDoc (option-or (list-tail forms) (list))))))))
+
+(df collectFnDocs [(forms (List rd/SExpr))] -> (List (Pair String String))
+  :d "Collects function names and their docstrings from top forms."
+  (fold (fn [(acc (List (Pair String String))) (f rd/SExpr)] -> (List (Pair String String))
+          (mt f
+            ((rd/sexprList items)
+             (let [(headSym (rd/sexprHead f))]
+               (if (or (= headSym "df") (= headSym "defun"))
+                 (let [(fnName (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom ""))))]
+                   (mt (findKeywordOption items ":doc" ":d")
+                     ((some d)
+                      (list-append acc (list (pair fnName (rd/sexprHead d)))))
+                     ((none) acc)))
+                 acc)))
+            (_ acc)))
+        (list)
+        forms))
+
+(df cleanDocFileName [(name String)] -> String
+  :d "Replaces slashes in module name with underscores."
+  (string-join (string-split name "/") "_"))
+
+(df ! externalizeDocstrings [(origForms (List rd/SExpr))] -> Bool
+  :d "Extracts module and function docstrings and writes delimiter-balanced ASN records to .asl/mem/docs/."
+  (let [(modName (findModuleName origForms))
+        (modDoc (findModuleDoc origForms))
+        (fnDocs (collectFnDocs origForms))]
+    (if (and (is-none? modDoc) (list-empty? fnDocs))
+      true
+      (let [(docFileName (str ".asl/mem/docs/" (cleanDocFileName modName) ".asn"))
+            (modDocStr (option-or modDoc ""))
+            (fnEntries (map (fn [(p (Pair String String))] -> String
+                              (str "    (:fn \"" (.-first p) "\" :doc \"" (.-second p) "\")"))
+                            fnDocs))
+            (fnBlock (if (list-empty? fnEntries)
+                       ""
+                       (str "\n  :items [\n" (string-join fnEntries "\n") "\n  ]")))
+            (asnContent (str "(:doc :module \"" modName "\"\n"
+                             "  :doc \"" modDocStr "\""
+                             fnBlock
+                             ")\n"))]
+        (mt (file-write docFileName asnContent)
+          ((ok _) true)
+          ((err _) false))))))
+
 (df ! migrateSource [(src Str) (path Str) (dryRun Bool) (checkOnly Bool)] -> (Result Str Str)
   :d "Migrates source S-expressions to indented format with in-memory semantic equivalence verification."
-  (mt (readSexprs src)
-    ((err _)
-     (err "Migration aborted: semantic divergence detected"))
-    ((ok origForms)
-     (if (list-empty? origForms)
-       (err "Migration aborted: semantic divergence detected")
-       (mt (tryGenerateIndented src origForms)
-         ((err _)
-          (err "Migration aborted: semantic divergence detected"))
-         ((ok indentedText)
-          (mt (ip/parseIndentedForms indentedText)
-            ((err _)
-             (err "Migration aborted: semantic divergence detected"))
-            ((ok reparsedForms)
-             (if (not (verifyAllSemanticEquivalence origForms reparsedForms))
-               (err "Migration aborted: semantic divergence detected")
-               (if checkOnly
-                 (ok (str "✓ " path ": Validated migratable."))
-                 (if dryRun
-                   (ok indentedText)
-                   (mt (file-write path indentedText)
-                     ((ok _)
-                      (ok (str "✓ " path ": Successfully migrated.")))
-                     ((err _)
-                      (err (str "Failed to write migrated file: " path)))))))))))))))
+  (let [(actualPath (if (string-empty? path) "memory.asl" path))
+        (isCheckOnly (if checkOnly true false))
+        (isDryRun (if dryRun true (if (string-empty? path) true false)))]
+    (mt (readSexprs src)
+      ((err _)
+       (err "Migration aborted: semantic divergence detected"))
+      ((ok origForms)
+       (if (list-empty? origForms)
+         (err "Migration aborted: semantic divergence detected")
+         (do
+           (externalizeDocstrings origForms)
+           (mt (tryGenerateIndented src origForms)
+             ((err _)
+              (err "Migration aborted: semantic divergence detected"))
+             ((ok indentedText)
+              (mt (ip/parseIndentedForms indentedText)
+                ((err _)
+                 (err "Migration aborted: semantic divergence detected"))
+                ((ok reparsedForms)
+                 (if (not (verifyAllSemanticEquivalence origForms reparsedForms))
+                   (err "Migration aborted: semantic divergence detected")
+                   (if isCheckOnly
+                     (ok (str "✓ " actualPath ": Validated migratable."))
+                     (if isDryRun
+                       (ok indentedText)
+                       (mt (file-write actualPath indentedText)
+                         ((ok _)
+                          (ok (str "✓ " actualPath ": Successfully migrated.")))
+                           ((err _)
+                            (err (str "Failed to write migrated file: " actualPath)))))))))))))))))
 
 (df ! validateBatchFile [(path Str)] -> (Result (Pair Str Str) Str)
   :d "Validates a single source file in memory for semantic equivalence without disk mutation."
@@ -421,7 +496,8 @@
 (dfs MigrateCliOptions
   (:f path String "Target file path")
   (:f dryRun Bool "True when --dry-run flag is active")
-  (:f checkOnly Bool "True when --check flag is active"))
+  (:f checkOnly Bool "True when --check flag is active")
+  (:f v04 Bool "True when --v04 clean-break flag is active"))
 
 (df parseMigrateArgsLoop [(args (List String)) (opts MigrateCliOptions)] -> MigrateCliOptions
   :d "Folds over CLI arguments extracting flags and file path."
@@ -431,17 +507,19 @@
      (let [(restArgs (option-or (list-tail args) (list)))]
        (cond
          ((= arg "--dry-run")
-          (parseMigrateArgsLoop restArgs (MigrateCliOptions :path (.-path opts) :dryRun true :checkOnly (.-checkOnly opts))))
+          (parseMigrateArgsLoop restArgs (MigrateCliOptions :path (.-path opts) :dryRun true :checkOnly (.-checkOnly opts) :v04 (.-v04 opts))))
          ((= arg "--check")
-          (parseMigrateArgsLoop restArgs (MigrateCliOptions :path (.-path opts) :dryRun (.-dryRun opts) :checkOnly true)))
+          (parseMigrateArgsLoop restArgs (MigrateCliOptions :path (.-path opts) :dryRun (.-dryRun opts) :checkOnly true :v04 (.-v04 opts))))
+         ((= arg "--v04")
+          (parseMigrateArgsLoop restArgs (MigrateCliOptions :path (.-path opts) :dryRun (.-dryRun opts) :checkOnly (.-checkOnly opts) :v04 true)))
          (:else
           (let [(curPath (.-path opts))
                 (newPath (if (string-empty? curPath) arg curPath))]
-            (parseMigrateArgsLoop restArgs (MigrateCliOptions :path newPath :dryRun (.-dryRun opts) :checkOnly (.-checkOnly opts))))))))))
+            (parseMigrateArgsLoop restArgs (MigrateCliOptions :path newPath :dryRun (.-dryRun opts) :checkOnly (.-checkOnly opts) :v04 (.-v04 opts))))))))))
 
 (df parseMigrateArgs [(args (List String))] -> MigrateCliOptions
   :d "Extracts target file path and options from CLI arguments."
-  (parseMigrateArgsLoop args (MigrateCliOptions :path "" :dryRun false :checkOnly false)))
+  (parseMigrateArgsLoop args (MigrateCliOptions :path "" :dryRun false :checkOnly false :v04 false)))
 
 (df ! runMigrate [(args (List Str))] -> (Result Str Str)
   :d "CLI handler for asl migrate command."

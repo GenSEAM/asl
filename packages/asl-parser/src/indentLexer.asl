@@ -2,7 +2,7 @@
   :d "Pure ASL v0.4 Indentation-Aware Lexer with Interpolation and Diagnostics."
   :x [IndentTokenType IndentToken LexerDiagnostic
       makeIndentToken makeDiagnostic tokenTypeName
-      tokenizeIndented tokenizeLines isInterpolatedString?]
+      tokenize tokenizeIndented tokenizeLines isInterpolatedString?]
   :i [(reader :a rd)])
 
 (dfe IndentTokenType
@@ -26,6 +26,9 @@
   (:c tokEqual     [] "Assignment or definition '='")
   (:c tokBullet    [] "Unordered list bullet '-'")
   (:c tokQuestion  [] "Error propagation operator '?'")
+  (:c tokCoalesce  [] "Null coalescing operator '??'")
+  (:c tokOptChain  [] "Optional chaining operator '?.'")
+  (:c tokPipe      [] "Pipeline operator '|>'")
   (:c tokError     [(code String) (msg String)] "Lexical or indentation diagnostic error")
   (:c tokEof       [] "End of input stream"))
 
@@ -78,6 +81,9 @@
     ((tokEqual)         "EQUAL")
     ((tokBullet)        "BULLET")
     ((tokQuestion)      "?")
+    ((tokCoalesce)      "??")
+    ((tokOptChain)      "?.")
+    ((tokPipe)          "|>")
     ((tokError c m)     (str "ERROR(" c ":" m ")"))
     ((tokEof)           "EOF")))
 
@@ -102,7 +108,7 @@
 (df isSymbolChar [(c String)] -> Bool
   :d "Checks if character can form part of an identifier or compound symbol."
   (and (not (string-empty? c))
-       (not (string-contains? " \t\r\n()[]{}\";:#=?" c))))
+       (not (string-contains? " \t\r\n()[]{}\";:#=?|" c))))
 
 (dfs LineMeasure
   (:f spaces Int64 "Total indentation count in space units")
@@ -187,7 +193,8 @@
   (let [(run (scanSymbolRun content startIdx len))
         (endK (.-nextIdx run))
         (raw (.-sym run))]
-    (let [(isNum (and (> (string-length raw) 0) (isDigitChar (charAt raw 0))))]
+    (let [(isNum (or (and (> (string-length raw) 0) (isDigitChar (charAt raw 0)))
+                     (and (> (string-length raw) 1) (= (charAt raw 0) "-") (isDigitChar (charAt raw 1)))))]
       (if isNum
         (if (string-contains? raw ".")
           (let [(fval (option-or (string-to-float64 raw) 0.0))
@@ -386,30 +393,74 @@
                                                         :diags (.-diags st)
                                                         :openBrackets (.-openBrackets st))))
                                       ((= c "?")
-                                       (let [(t (makeIndentToken (tokQuestion) "?" lineNum (+ colOffset idx 1)))]
-                                         (LineScanState :idx (+ idx 1)
-                                                        :toks (cons t (.-toks st))
-                                                        :diags (.-diags st)
-                                                        :openBrackets (.-openBrackets st))))
-                                      ((= c "-")
+                                       (let [(nextC (if (< (+ idx 1) len) (charAt content (+ idx 1)) ""))]
+                                         (cond
+                                           ((= nextC "?")
+                                            (let [(t (makeIndentToken (tokCoalesce) "??" lineNum (+ colOffset idx 1)))]
+                                              (LineScanState :idx (+ idx 2)
+                                                             :toks (cons t (.-toks st))
+                                                             :diags (.-diags st)
+                                                             :openBrackets (.-openBrackets st))))
+                                           ((= nextC ".")
+                                            (let [(t (makeIndentToken (tokOptChain) "?." lineNum (+ colOffset idx 1)))]
+                                              (LineScanState :idx (+ idx 2)
+                                                             :toks (cons t (.-toks st))
+                                                             :diags (.-diags st)
+                                                             :openBrackets (.-openBrackets st))))
+                                           (:else
+                                            (let [(t (makeIndentToken (tokQuestion) "?" lineNum (+ colOffset idx 1)))]
+                                              (LineScanState :idx (+ idx 1)
+                                                             :toks (cons t (.-toks st))
+                                                             :diags (.-diags st)
+                                                             :openBrackets (.-openBrackets st)))))))
+                                      ((= c "|")
                                        (let [(nextC (if (< (+ idx 1) len) (charAt content (+ idx 1)) ""))]
                                          (if (= nextC ">")
-                                           (let [(t (makeIndentToken (tokArrow) "->" lineNum (+ colOffset idx 1)))]
+                                           (let [(t (makeIndentToken (tokPipe) "|>" lineNum (+ colOffset idx 1)))]
                                              (LineScanState :idx (+ idx 2)
                                                             :toks (cons t (.-toks st))
                                                             :diags (.-diags st)
                                                             :openBrackets (.-openBrackets st)))
-                                           (if (or (= nextC " ") (= nextC "\t") (= nextC ""))
-                                             (let [(t (makeIndentToken (tokBullet) "-" lineNum (+ colOffset idx 1)))]
-                                               (LineScanState :idx (+ idx 1)
-                                                              :toks (cons t (.-toks st))
-                                                              :diags (.-diags st)
-                                                              :openBrackets (.-openBrackets st)))
-                                             (let [(t (makeIndentToken (tokSymbol "-") "-" lineNum (+ colOffset idx 1)))]
-                                               (LineScanState :idx (+ idx 1)
-                                                              :toks (cons t (.-toks st))
-                                                              :diags (.-diags st)
-                                                              :openBrackets (.-openBrackets st)))))))
+                                           (let [(t (makeIndentToken (tokSymbol "|") "|" lineNum (+ colOffset idx 1)))]
+                                             (LineScanState :idx (+ idx 1)
+                                                            :toks (cons t (.-toks st))
+                                                            :diags (.-diags st)
+                                                            :openBrackets (.-openBrackets st))))))
+                                      ((= c "-")
+                                       (let [(nextC (if (< (+ idx 1) len) (charAt content (+ idx 1)) ""))]
+                                         (cond
+                                           ((= nextC ">")
+                                            (let [(t (makeIndentToken (tokArrow) "->" lineNum (+ colOffset idx 1)))]
+                                              (LineScanState :idx (+ idx 2)
+                                                             :toks (cons t (.-toks st))
+                                                             :diags (.-diags st)
+                                                             :openBrackets (.-openBrackets st))))
+                                           ((isDigitChar nextC)
+                                            (let [(numSym (scanNumberOrSymbol content idx len lineNum colOffset))
+                                                  (endK (.-nextIdx numSym))
+                                                  (tok (.-tok numSym))]
+                                              (LineScanState :idx endK
+                                                             :toks (cons tok (.-toks st))
+                                                             :diags (.-diags st)
+                                                             :openBrackets (.-openBrackets st))))
+                                           ((or (= nextC " ") (= nextC "\t") (= nextC ""))
+                                            (if (list-empty? (.-toks st))
+                                              (let [(t (makeIndentToken (tokBullet) "-" lineNum (+ colOffset idx 1)))]
+                                                (LineScanState :idx (+ idx 1)
+                                                               :toks (cons t (.-toks st))
+                                                               :diags (.-diags st)
+                                                               :openBrackets (.-openBrackets st)))
+                                              (let [(t (makeIndentToken (tokSymbol "-") "-" lineNum (+ colOffset idx 1)))]
+                                                (LineScanState :idx (+ idx 1)
+                                                               :toks (cons t (.-toks st))
+                                                               :diags (.-diags st)
+                                                               :openBrackets (.-openBrackets st)))))
+                                           (:else
+                                            (let [(t (makeIndentToken (tokSymbol "-") "-" lineNum (+ colOffset idx 1)))]
+                                              (LineScanState :idx (+ idx 1)
+                                                             :toks (cons t (.-toks st))
+                                                             :diags (.-diags st)
+                                                             :openBrackets (.-openBrackets st)))))))
                                       ((= c ":")
                                        (let [(nextC (if (< (+ idx 1) len) (charAt content (+ idx 1)) ""))]
                                          (if (isSymbolChar nextC)
@@ -560,3 +611,7 @@
   :d "Tokenizes full v0.4 indented source into IndentToken list and diagnostic stream."
   (let [(lines (string-split src "\n"))]
     (tokenizeLines lines)))
+
+(df tokenize [(src String)] -> (List IndentToken)
+  :d "Tokenizes full v0.4 source returning token stream."
+  (.-first (tokenizeIndented src)))

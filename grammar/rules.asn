@@ -52,7 +52,7 @@
     :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
     :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7")
   (:rule :id output :force :orientation :tier [:orientation :full] :when [:all]
-    :do "return typed receipts as ASN with path and line; reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
+    :do "return typed receipts as ASN with path and symbol/anchor; never specify line numbers (Zero-Line-Number Invariant); reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
     :check :none
     :why "compact tool-result notations lost accuracy on several model and benchmark pairs (Notation Matters, up to 9-14pp); the effect is not uniform, so measure, do not assume")
   (:rule :id anchor :force :orientation :tier [:orientation :full] :when [:all]

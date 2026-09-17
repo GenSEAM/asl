@@ -56,6 +56,10 @@
     ((tokInt n)          (rd/makeAtom (string-from-int64 n)))
     ((tokFloat f)        (rd/makeAtom (.-rawText tok)))
     ((tokQuestion)       (rd/makeAtom "?"))
+    ((tokCoalesce)       (rd/makeAtom "??"))
+    ((tokOptChain)       (rd/makeAtom "?."))
+    ((tokPipe)           (rd/makeAtom "|>"))
+    ((tokArrow)          (rd/makeAtom "->"))
     (_                   (rd/makeAtom (.-rawText tok)))))
 
 (df skipNewlines [(toks (List lx/IndentToken))] -> (List lx/IndentToken)
@@ -209,50 +213,81 @@
 
 (df parseTokensToExprList [(toks (List lx/IndentToken))] -> (List rd/SExpr)
   :d "Converts a sequence of tokens on one line into a list of SExpr items."
-  (let [(items (fold (fn [(acc (Pair (List rd/SExpr) (Pair (List lx/IndentToken) (Pair Int64 Int64)))) (t lx/IndentToken)]
-                       -> (Pair (List rd/SExpr) (Pair (List lx/IndentToken) (Pair Int64 Int64)))
+  (let [(items (fold (fn [(acc (Pair (List rd/SExpr) (Pair (List lx/IndentToken) (Pair Int64 (Pair Int64 (Pair Bool (Option lx/IndentToken))))))) (t lx/IndentToken)]
+                       -> (Pair (List rd/SExpr) (Pair (List lx/IndentToken) (Pair Int64 (Pair Int64 (Pair Bool (Option lx/IndentToken))))))
                        (let [(collected (.-first acc))
                              (subToks (.-first (.-second acc)))
                              (parenDepth (.-first (.-second (.-second acc))))
-                             (bracketDepth (.-second (.-second (.-second acc))))]
+                             (bracketDepth (.-first (.-second (.-second (.-second acc)))))
+                             (isCall (.-first (.-second (.-second (.-second (.-second acc))))))
+                             (lastTok (.-second (.-second (.-second (.-second (.-second acc))))))]
                          (mt (.-kind t)
                            ((tokLparen)
-                            (let [(nxtP (+ parenDepth 1))]
-                              (pair collected (pair (cons t subToks) (pair nxtP bracketDepth)))))
+                            (let [(nxtP (+ parenDepth 1))
+                                  (callFlag (if (= parenDepth 0)
+                                              (mt lastTok
+                                                ((some lt)
+                                                 (and (= (.-line lt) (.-line t))
+                                                      (= (+ (.-col lt) (string-length (.-rawText lt))) (.-col t))))
+                                                ((none) false))
+                                              isCall))]
+                              (pair collected (pair (cons t subToks) (pair nxtP (pair bracketDepth (pair callFlag lastTok)))))))
                            ((tokRparen)
                             (let [(nxtP (- parenDepth 1))]
                               (if (and (<= nxtP 0) (= bracketDepth 0))
                                 (let [(allParenToks (list-reverse (cons t subToks)))
                                       (parenItems (.-second (parseParenGroup allParenToks)))
                                       (subSexpr (rd/makeList parenItems))]
-                                  (pair (cons subSexpr collected) (pair (list) (pair 0 0))))
-                                (pair collected (pair (cons t subToks) (pair nxtP bracketDepth))))))
+                                  (if isCall
+                                    (mt (list-head collected)
+                                      ((some headExpr)
+                                       (if (and (rd/isAtom? headExpr)
+                                                (not (string-starts-with? (rd/sexprHead headExpr) ":"))
+                                                (not (string-starts-with? (rd/sexprHead headExpr) "\""))
+                                                (!= (rd/sexprHead headExpr) "let")
+                                                (!= (rd/sexprHead headExpr) "fn")
+                                                (!= (rd/sexprHead headExpr) "if")
+                                                (!= (rd/sexprHead headExpr) "match")
+                                                (!= (rd/sexprHead headExpr) "try")
+                                                (!= (rd/sexprHead headExpr) "|>")
+                                                (!= (rd/sexprHead headExpr) "->")
+                                                (!= (rd/sexprHead headExpr) "?")
+                                                (!= (rd/sexprHead headExpr) "??")
+                                                (!= (rd/sexprHead headExpr) "="))
+                                         (let [(callSexpr (rd/makeList (cons headExpr parenItems)))
+                                               (remCollected (option-or (list-tail collected) (list)))]
+                                           (pair (cons callSexpr remCollected) (pair (list) (pair 0 (pair 0 (pair false (none)))))))
+                                         (pair (cons subSexpr collected) (pair (list) (pair 0 (pair 0 (pair false (none))))))))
+                                      ((none)
+                                       (pair (cons subSexpr collected) (pair (list) (pair 0 (pair 0 (pair false (none))))))))
+                                    (pair (cons subSexpr collected) (pair (list) (pair 0 (pair 0 (pair false (none))))))))
+                                (pair collected (pair (cons t subToks) (pair nxtP (pair bracketDepth (pair isCall lastTok))))))))
                            ((tokLbracket)
                             (let [(nxtB (+ bracketDepth 1))]
-                              (pair collected (pair (cons t subToks) (pair parenDepth nxtB)))))
+                              (pair collected (pair (cons t subToks) (pair parenDepth (pair nxtB (pair isCall lastTok)))))))
                            ((tokRbracket)
                             (let [(nxtB (- bracketDepth 1))]
                               (if (and (<= nxtB 0) (= parenDepth 0))
                                 (let [(allBrkToks (list-reverse (cons t subToks)))
                                       (brkItems (.-second (parseBracketGroup allBrkToks)))
                                       (subSexpr (rd/makeList (cons (rd/makeAtom "list") brkItems)))]
-                                  (pair (cons subSexpr collected) (pair (list) (pair 0 0))))
-                                (pair collected (pair (cons t subToks) (pair parenDepth nxtB))))))
+                                  (pair (cons subSexpr collected) (pair (list) (pair 0 (pair 0 (pair false (none)))))))
+                                (pair collected (pair (cons t subToks) (pair parenDepth (pair nxtB (pair isCall lastTok))))))))
                            ((tokQuestion)
                             (if (or (> parenDepth 0) (> bracketDepth 0))
-                              (pair collected (pair (cons t subToks) (pair parenDepth bracketDepth)))
+                              (pair collected (pair (cons t subToks) (pair parenDepth (pair bracketDepth (pair isCall lastTok)))))
                               (mt (list-head collected)
                                 ((some prevExpr)
                                  (let [(rem (option-or (list-tail collected) (list)))
                                        (desugared (desugarTry prevExpr))]
-                                   (pair (cons desugared rem) (pair (list) (pair 0 0)))))
+                                   (pair (cons desugared rem) (pair (list) (pair 0 (pair 0 (pair false (none))))))))
                                 ((none)
-                                 (pair (cons (parseSingleTokenExpr t) collected) (pair (list) (pair 0 0)))))))
+                                 (pair (cons (parseSingleTokenExpr t) collected) (pair (list) (pair 0 (pair 0 (pair false (some t))))))))))
                            (_
                             (if (or (> parenDepth 0) (> bracketDepth 0))
-                              (pair collected (pair (cons t subToks) (pair parenDepth bracketDepth)))
-                              (pair (cons (parseSingleTokenExpr t) collected) (pair (list) (pair 0 0))))))))
-                     (pair (list) (pair (list) (pair 0 0)))
+                              (pair collected (pair (cons t subToks) (pair parenDepth (pair bracketDepth (pair isCall lastTok)))))
+                              (pair (cons (parseSingleTokenExpr t) collected) (pair (list) (pair 0 (pair 0 (pair false (some t)))))))))))
+                     (pair (list) (pair (list) (pair 0 (pair 0 (pair false (none))))))
                      toks))]
     (list-reverse (.-first items))))
 
@@ -389,21 +424,81 @@
           (allExprs (list-reverse (cons lastExpr priorSegments)))]
       (rd/makeList (cons (rd/makeAtom "|>") allExprs)))))
 
+
+(df desugarTryPrefix [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Desugars prefix 'try expr' in expression list into early-return match form."
+  (mt (list-head items)
+    ((none) (list))
+    ((some hd)
+     (let [(tl (option-or (list-tail items) (list)))]
+       (if (and (rd/isAtom? hd) (= (rd/sexprHead hd) "try"))
+         (mt (list-head tl)
+           ((none) (list hd))
+           ((some nextExpr)
+            (let [(rem (option-or (list-tail tl) (list)))
+                  (desugared (desugarTry nextExpr))]
+              (cons desugared (desugarTryPrefix rem)))))
+         (cons hd (desugarTryPrefix tl)))))))
+
+(df hasCoalesceSymbol? [(items (List rd/SExpr))] -> Bool
+  :d "True if SExpr list contains null coalescing operator ??."
+  (fold (fn [(acc Bool) (it rd/SExpr)] -> Bool
+          (or acc (and (rd/isAtom? it) (= (rd/sexprHead it) "??"))))
+        false
+        items))
+
+(df desugarCoalesce [(items (List rd/SExpr))] -> rd/SExpr
+  :d "Desugars primary ?? fallback into canonical (?? primary fallback) SExpr."
+  (let [(split (fold (fn [(acc (Pair (List rd/SExpr) (Pair (List rd/SExpr) Bool))) (it rd/SExpr)]
+                       -> (Pair (List rd/SExpr) (Pair (List rd/SExpr) Bool))
+                       (let [(left (.-first acc))
+                             (right (.-first (.-second acc)))
+                             (seen (.-second (.-second acc)))]
+                         (if seen
+                           (pair left (pair (cons it right) true))
+                           (if (and (rd/isAtom? it) (= (rd/sexprHead it) "??"))
+                             (pair left (pair (list) true))
+                             (pair (cons it left) (pair (list) false))))))
+                     (pair (list) (pair (list) false))
+                     items))]
+    (let [(leftItems (list-reverse (.-first split)))
+          (rightItems (list-reverse (.-first (.-second split))))
+          (leftExpr (if (= (list-length leftItems) 1)
+                      (option-or (list-head leftItems) (rd/makeAtom ""))
+                      (rd/makeList leftItems)))
+          (rightExpr (if (hasCoalesceSymbol? rightItems)
+                       (desugarCoalesce rightItems)
+                       (if (= (list-length rightItems) 1)
+                         (option-or (list-head rightItems) (rd/makeAtom ""))
+                         (rd/makeList rightItems))))]
+      (rd/makeList (list (rd/makeAtom "??") leftExpr rightExpr)))))
+
 (df parseLineTokensToSexpr [(toks (List lx/IndentToken))] -> rd/SExpr
   :d "Converts a sequence of tokens on one line into a call form, single atom, let form, or pipeline form."
   (if (isLetDestructureLine? toks)
     (let [(info (parseLetLineInfo toks))]
       (applyLetDesugar info (.-inlineBody info)))
-    (let [(resList (parseTokensToExprList toks))]
-      (if (hasPipeSymbol? resList)
-        (desugarPipeList resList)
-        (if (= (list-length resList) 1)
-          (option-or (list-head resList) (rd/makeAtom ""))
-          (rd/makeList resList))))))
+    (let [(rawList (parseTokensToExprList toks))
+          (resList (desugarTryPrefix rawList))]
+      (cond
+        ((hasPipeSymbol? resList)
+         (desugarPipeList resList))
+        ((hasCoalesceSymbol? resList)
+         (desugarCoalesce resList))
+        ((= (list-length resList) 1)
+         (option-or (list-head resList) (rd/makeAtom "")))
+        (:else
+         (rd/makeList resList))))))
 
 (dfs BlockResult
   (:f rest (List lx/IndentToken) "Tokens remaining after block")
   (:f forms (List rd/SExpr) "Parsed block expressions"))
+
+(df isIfLine? [(toks (List lx/IndentToken))] -> Bool
+  :d "True if line starts with keyword if."
+  (mt (list-head toks)
+    ((some t) (= (.-rawText t) "if"))
+    ((none) false)))
 
 (df parseBlockLine [(remToks (List lx/IndentToken)) (forms (List rd/SExpr)) (curLevel Int64) (targetLevel Int64)]
   -> (Pair (List rd/SExpr) (Pair (List lx/IndentToken) (Pair Int64 Bool)))
@@ -434,23 +529,84 @@
             ((none)
              (let [(letSexpr (applyLetDesugar info (list)))]
                (pair (cons letSexpr forms) (pair afterLine (pair curLevel true))))))))
-      (let [(lineForm (parseLineTokensToSexpr lineToks))]
-        (if (= (rd/sexprHead lineForm) "match")
+      (if (isIfLine? lineToks)
+        (let [(condToks (filter (fn [(t lx/IndentToken)] -> Bool
+                                  (and (!= (.-rawText t) "if")
+                                       (!= (.-rawText t) ":")))
+                                lineToks))
+              (condExpr (parseLineTokensToSexpr condToks))]
           (mt (list-head afterLine)
             ((some nextT)
              (mt (.-kind nextT)
                ((tokIndent lvl)
-                (let [(matchRes (parseMatchArms (option-or (list-tail afterLine) (list)) lvl))
-                      (arms (.-arms matchRes))
-                      (remAfterMatch (.-rest matchRes))
-                      (targetSexpr (option-or (list-get (rd/sexprToList lineForm) 1) (rd/makeAtom "_")))
-                      (fullMatchSexpr (rd/makeList (list (rd/makeAtom "match") targetSexpr (rd/makeList arms))))]
-                  (pair (cons fullMatchSexpr forms) (pair remAfterMatch (pair curLevel false)))))
+                (let [(thenBlockRes (parseIndentedBlock (option-or (list-tail afterLine) (list)) lvl))
+                      (thenForms (.-forms thenBlockRes))
+                      (afterThen (.-rest thenBlockRes))
+                      (thenExpr (if (= (list-length thenForms) 1)
+                                  (option-or (list-head thenForms) (rd/makeAtom ""))
+                                  (rd/makeList (cons (rd/makeAtom "do") thenForms))))
+                      (afterThenClean (skipNewlines afterThen))]
+                  (mt (list-head afterThenClean)
+                    ((some elseTok)
+                     (if (= (.-rawText elseTok) "else")
+                       (let [(elseSplit (takeUntilLineEnd afterThenClean))
+                             (elseLineToks (.-first elseSplit))
+                             (afterElseLine (.-second elseSplit))
+                             (elseInline (filter (fn [(t lx/IndentToken)] -> Bool
+                                                   (and (!= (.-rawText t) "else")
+                                                        (!= (.-rawText t) ":")))
+                                                 elseLineToks))]
+                         (if (not (list-empty? elseInline))
+                           (let [(elseExpr (parseLineTokensToSexpr elseInline))
+                                 (ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr elseExpr)))]
+                             (pair (cons ifSexpr forms) (pair afterElseLine (pair curLevel false))))
+                           (mt (list-head afterElseLine)
+                             ((some nextElseT)
+                              (mt (.-kind nextElseT)
+                                ((tokIndent elseLvl)
+                                 (let [(elseBlockRes (parseIndentedBlock (option-or (list-tail afterElseLine) (list)) elseLvl))
+                                       (elseForms (.-forms elseBlockRes))
+                                       (remAfterElse (.-rest elseBlockRes))
+                                       (elseExpr (if (= (list-length elseForms) 1)
+                                                   (option-or (list-head elseForms) (rd/makeAtom ""))
+                                                   (rd/makeList (cons (rd/makeAtom "do") elseForms))))
+                                       (ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr elseExpr)))]
+                                   (pair (cons ifSexpr forms) (pair remAfterElse (pair curLevel false)))))
+                                (_
+                                 (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                                   (pair (cons ifSexpr forms) (pair afterElseLine (pair curLevel false)))))))
+                             ((none)
+                              (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                                (pair (cons ifSexpr forms) (pair (list) (pair curLevel false))))))))
+                       (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                         (pair (cons ifSexpr forms) (pair afterThen (pair curLevel false))))))
+                    ((none)
+                     (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                       (pair (cons ifSexpr forms) (pair (list) (pair curLevel false))))))))
                (_
-                (pair (cons lineForm forms) (pair afterLine (pair curLevel false))))))
+                (let [(lineForm (parseLineTokensToSexpr lineToks))]
+                  (pair (cons lineForm forms) (pair afterLine (pair curLevel false)))))))
             ((none)
-             (pair (cons lineForm forms) (pair afterLine (pair curLevel false)))))
-          (pair (cons lineForm forms) (pair afterLine (pair curLevel false))))))))
+             (let [(lineForm (parseLineTokensToSexpr lineToks))]
+               (pair (cons lineForm forms) (pair afterLine (pair curLevel false)))))))
+        (let [(lineForm (parseLineTokensToSexpr lineToks))]
+          (if (= (rd/sexprHead lineForm) "match")
+            (mt (list-head afterLine)
+              ((some nextT)
+               (mt (.-kind nextT)
+                 ((tokIndent lvl)
+                  (let [(matchRes (parseMatchArms (option-or (list-tail afterLine) (list)) lvl))
+                        (arms (.-arms matchRes))
+                        (remAfterMatch (.-rest matchRes))
+                        (targetSexpr (option-or (list-get (rd/sexprToList lineForm) 1) (rd/makeAtom "_")))
+                        (fullMatchSexpr (rd/makeList (list (rd/makeAtom "match") targetSexpr (rd/makeList arms))))]
+                    (pair (cons fullMatchSexpr forms) (pair remAfterMatch (pair curLevel false)))))
+                 (_
+                  (pair (cons lineForm forms) (pair afterLine (pair curLevel false))))))
+              ((none)
+               (pair (cons lineForm forms) (pair afterLine (pair curLevel false)))))
+            (pair (cons lineForm forms) (pair afterLine (pair curLevel false)))))))))
+
 
 (df parseIndentedBlock [(toks (List lx/IndentToken)) (targetLevel Int64)] -> BlockResult
   :d "Parses all expressions inside an indented block at targetLevel."
@@ -541,9 +697,28 @@
                                 (let [(lineSplit (takeUntilLineEnd remToks))
                                       (lineToks (.-first lineSplit))
                                       (afterLine (.-second lineSplit))
-                                      (arm (parseMatchArmLine lineToks))
-                                      (armSexpr (rd/makeList (list (.-pattern arm) (.-body arm))))]
-                                  (pair (cons armSexpr arms) (pair afterLine false))))))))))
+                                      (arm (parseMatchArmLine lineToks))]
+                                  (if (and (rd/isAtom? (.-body arm)) (= (rd/sexprHead (.-body arm)) ""))
+                                    (mt (list-head afterLine)
+                                      ((some nextT)
+                                       (mt (.-kind nextT)
+                                         ((tokIndent armLvl)
+                                          (let [(armBlockRes (parseIndentedBlock (option-or (list-tail afterLine) (list)) armLvl))
+                                                (armBodyForms (.-forms armBlockRes))
+                                                (remAfterArm (.-rest armBlockRes))
+                                                (armBody (if (= (list-length armBodyForms) 1)
+                                                           (option-or (list-head armBodyForms) (rd/makeAtom ""))
+                                                           (rd/makeList (cons (rd/makeAtom "do") armBodyForms))))
+                                                 (armSexpr (rd/makeList (list (.-pattern arm) armBody)))]
+                                             (pair (cons armSexpr arms) (pair remAfterArm false))))
+                                          (_
+                                           (let [(armSexpr (rd/makeList (list (.-pattern arm) (.-body arm))))]
+                                             (pair (cons armSexpr arms) (pair afterLine false))))))
+                                       ((none)
+                                        (let [(armSexpr (rd/makeList (list (.-pattern arm) (.-body arm))))]
+                                          (pair (cons armSexpr arms) (pair (list) false)))))
+                                    (let [(armSexpr (rd/makeList (list (.-pattern arm) (.-body arm))))]
+                                      (pair (cons armSexpr arms) (pair afterLine false))))))))))))
                     (pair (list) (pair toks false))
                     (string-chars (string-repeat " " (list-length toks)))))]
     (MatchBlockResult :rest (.-first (.-second step))
@@ -816,6 +991,71 @@
   (:f rest (List lx/IndentToken) "Tokens remaining")
   (:f form (Option rd/SExpr) "Parsed top form"))
 
+(df parseIfTopForm [(toks (List lx/IndentToken))] -> TopFormResult
+  :d "Parses top-level if/else form with indented blocks."
+  (let [(lineSplit (takeUntilLineEnd toks))
+        (lineToks (.-first lineSplit))
+        (afterLine (.-second lineSplit))
+        (condToks (filter (fn [(t lx/IndentToken)] -> Bool
+                            (and (!= (.-rawText t) "if")
+                                 (!= (.-rawText t) ":")))
+                          lineToks))
+        (condExpr (parseLineTokensToSexpr condToks))]
+    (mt (list-head afterLine)
+      ((some indTok)
+       (mt (.-kind indTok)
+         ((tokIndent lvl)
+          (let [(thenBlockRes (parseIndentedBlock (option-or (list-tail afterLine) (list)) lvl))
+                (thenForms (.-forms thenBlockRes))
+                (afterThen (.-rest thenBlockRes))
+                (thenExpr (if (= (list-length thenForms) 1)
+                            (option-or (list-head thenForms) (rd/makeAtom ""))
+                            (rd/makeList (cons (rd/makeAtom "do") thenForms))))
+                (cleanAfterThen (skipNewlines afterThen))]
+            (mt (list-head cleanAfterThen)
+              ((some elseTok)
+               (if (= (.-rawText elseTok) "else")
+                 (let [(elseSplit (takeUntilLineEnd cleanAfterThen))
+                       (elseLineToks (.-first elseSplit))
+                       (afterElseLine (.-second elseSplit))
+                       (elseInline (filter (fn [(t lx/IndentToken)] -> Bool
+                                             (and (!= (.-rawText t) "else")
+                                                  (!= (.-rawText t) ":")))
+                                           elseLineToks))]
+                   (if (not (list-empty? elseInline))
+                     (let [(elseExpr (parseLineTokensToSexpr elseInline))
+                           (ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr elseExpr)))]
+                       (TopFormResult :rest afterElseLine :form (some ifSexpr)))
+                     (mt (list-head afterElseLine)
+                       ((some nextElseT)
+                        (mt (.-kind nextElseT)
+                          ((tokIndent elseLvl)
+                           (let [(elseBlockRes (parseIndentedBlock (option-or (list-tail afterElseLine) (list)) elseLvl))
+                                 (elseForms (.-forms elseBlockRes))
+                                 (remAfterElse (.-rest elseBlockRes))
+                                 (elseExpr (if (= (list-length elseForms) 1)
+                                             (option-or (list-head elseForms) (rd/makeAtom ""))
+                                             (rd/makeList (cons (rd/makeAtom "do") elseForms))))
+                                 (ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr elseExpr)))]
+                             (TopFormResult :rest remAfterElse :form (some ifSexpr))))
+                          (_
+                           (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                             (TopFormResult :rest afterElseLine :form (some ifSexpr))))))
+                       ((none)
+                        (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                          (TopFormResult :rest (list) :form (some ifSexpr)))))))
+                 (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                   (TopFormResult :rest afterThen :form (some ifSexpr)))))
+              ((none)
+               (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr thenExpr (rd/makeAtom "nil"))))]
+                 (TopFormResult :rest (list) :form (some ifSexpr)))))))
+         (_
+          (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr (rd/makeAtom "nil") (rd/makeAtom "nil"))))]
+            (TopFormResult :rest afterLine :form (some ifSexpr))))))
+      ((none)
+       (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr (rd/makeAtom "nil") (rd/makeAtom "nil"))))]
+         (TopFormResult :rest (list) :form (some ifSexpr)))))))
+
 (df parseTopForm [(toks (List lx/IndentToken))] -> TopFormResult
   :d "Parses single top form (fn, match, type, or expression) from tokens."
   (let [(cleanToks (skipNewlines toks))]
@@ -908,6 +1148,8 @@
              (parseSchemaTopForm cleanToks))
             ((or (= s "enum") (= s "defenum"))
              (parseEnumTopForm cleanToks))
+            ((= s "if")
+             (parseIfTopForm cleanToks))
             (:else
              (let [(lineSplit (takeUntilLineEnd cleanToks))
                    (lineToks (.-first lineSplit))
@@ -949,3 +1191,5 @@
          ((some f) (ok f))
          ((none)   (err "No valid indented form parsed from source"))))
       ((err msg) (err msg)))))
+
+

@@ -1,0 +1,98 @@
+(:grammar :name "asl.v04" :version "0.4.0"
+  :d
+  "Formal ASL v0.4+ clean-break grammar specification"
+  :schemas [
+    (:schema v04Grammar
+      :d
+      "Root specification for ASL v0.4 language substrate"
+      :fields [
+        (:field :name :version :type :string :default "0.4.0")
+        (:field :name :layout :type :keyword :allowed [:indentation :offside])
+        (:field :name :docPolicy :type :keyword :allowed [:externalized :memoryOnly])
+        (:field :name :cleanBreak :type :bool :default true)
+      ])
+
+    (:schema ModuleHeader
+      :d
+      "Clean module header declaration without parentheses or legacy sigils"
+      :fields [
+        (:field :name :form :type :string :default "module")
+        (:field :name :syntax :type :string :default "module <ModulePath> [<Exports...>]")
+        (:field :name :imports :type :string :default "import <Path> as <Alias>")
+      ])
+
+    (:schema FunctionDeclaration
+      :d
+      "Clean fn declaration with typed parameters and return type"
+      :fields [
+        (:field :name :keyword :type :string :default "fn")
+        (:field :name :syntax :type :string :default "fn <name>(<param>: <Type>, ...) -> <ReturnType>:")
+        (:field :name :semantics :type :string :default "lexical closure with typed signatures")
+      ])
+
+    (:schema DotFieldAccess
+      :d
+      "Direct dot field navigation on record structures"
+      :fields [
+        (:field :name :syntax :type :string :default "<record>.<field>")
+        (:field :name :chaining :type :string :default "<record>.<field1>.<field2>")
+        (:field :name :semantics :type :string :default "direct zero-cost record property projection")
+      ])
+
+    (:schema PipelineOperator
+      :d
+      "Forward dataflow pipeline operator |>"
+      :fields [
+        (:field :name :operator :type :string :default "|>")
+        (:field :name :syntax :type :string :default "<expression> |> <function>(<extraArgs...>)")
+        (:field :name :lowering :type :string :default "first argument thread transform")
+      ])
+
+    (:schema TryOperator
+      :d
+      "Prefix try and postfix ? error propagation operators"
+      :fields [
+        (:field :name :prefixOp :type :string :default "try")
+        (:field :name :postfixOp :type :string :default "?")
+        (:field :name :syntax :type :string :default "try <expression> or <expression>?")
+        (:field :name :lowering :type :string :default "monadic bind over remainder of enclosing block")
+      ])
+
+    (:schema NullCoalescing
+      :d
+      "Null/None coalescing fallback operator ??"
+      :fields [
+        (:field :name :operator :type :string :default "??")
+        (:field :name :syntax :type :string :default "<primary> ?? <fallback>")
+        (:field :name :semantics :type :string :default "evaluate fallback when primary evaluates to none or nil")
+      ])
+
+    (:schema SequentialLet
+      :d
+      "Bracket-free sequential let binding"
+      :fields [
+        (:field :name :keyword :type :string :default "let")
+        (:field :name :syntax :type :string :default "let <binding> = <expression>")
+        (:field :name :scoping :type :string :default "sequential scope across subsequent block statements")
+      ])
+
+    (:schema MatchExpression
+      :d
+      "Pattern matching with arrow arms pat -> body"
+      :fields [
+        (:field :name :keyword :type :string :default "match")
+        (:field :name :syntax :type :string :default "match <expression>:\n    <pattern> -> <body>")
+        (:field :name :operator :type :string :default "->")
+      ])
+
+    (:schema TypeAnnotation
+      :d
+      "Colon-annotated type signatures"
+      :fields [
+        (:field :name :syntax :type :string :default "<identifier>: <Type>")
+        (:field :name :returnSyntax :type :string :default "-> <Type>")
+        (:field :name :listType :type :string :default "[<Type>]")
+        (:field :name :optionalType :type :string :default "<Type>?")
+      ])
+  ]
+)

@@ -1,7 +1,7 @@
 (module asl-parser/indentPrinter
   :d "Pure ASL v0.4 Canonical Indented Formatter & Round-Trip Pretty Printer."
   :x [formatIndented formatSexpr isDotAccess? formatDotAccess
-      isInterpolatedStr? formatInterpolatedStr isListForm? formatListForm]
+      isInterpolatedStr? formatInterpolatedStr isListForm? formatListForm printIndented]
   :i [(reader :a rd)])
 
 (df indentPrefix [(level Int64)] -> String
@@ -153,6 +153,17 @@
             (string-join armLines "\n"))))
     (_ "")))
 
+(df stripInlineDoc [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Strips inline docstring :d or :doc and its following argument from items list."
+  (mt (list-head items)
+    ((none) (list))
+    ((some h)
+     (let [(hVal (rd/sexprHead h))
+           (tailItems (option-or (list-tail items) (list)))]
+       (if (or (= hVal ":d") (= hVal ":doc"))
+         (stripInlineDoc (option-or (list-tail tailItems) (list)))
+         (cons h (stripInlineDoc tailItems)))))))
+
 (df formatDefunForm [(s rd/SExpr) (indent Int64)] -> String
   :d "Formats (df name params -> ret body...) into fn signature and indented body."
   (mt s
@@ -161,12 +172,15 @@
            (paramsVect (option-or (list-get items 2) (rd/makeVect (list))))
            (arrowSym (rd/sexprHead (option-or (list-get items 3) (rd/makeAtom "->"))))
            (retType (option-or (list-get items 4) (rd/makeAtom "Unit")))
-           (bodyForms (if (> (list-length items) 5)
-                        (option-or (list-slice items 5 (list-length items)) (list))
-                        (list)))
+           (rawBodyForms (if (> (list-length items) 5)
+                           (option-or (list-slice items 5 (list-length items)) (list))
+                           (list)))
+           (bodyForms (stripInlineDoc rawBodyForms))
            (sigText (formatParamsVector paramsVect))
            (retText (formatSexpr retType 0))
-           (header (str (indentPrefix indent) "fn " fnName " " sigText " -> " retText))]
+           (header (if (string-empty? sigText)
+                     (str (indentPrefix indent) "fn " fnName " -> " retText)
+                     (str (indentPrefix indent) "fn " fnName " " sigText " -> " retText)))]
        (if (list-empty? bodyForms)
          header
          (let [(bodyLines (map (fn [(b rd/SExpr)] -> String
@@ -210,6 +224,8 @@
           (formatDefunForm s 0))
          ((= headSym "match")
           (formatMatchForm s 0))
+         ((= headSym "module")
+          (formatSexpr s 0))
          ((isDotAccess? s)
           (formatDotAccess s))
          ((isInterpolatedStr? s)
@@ -219,3 +235,30 @@
          (:else
           (formatCallBody s)))))
     (_ (formatSexpr s 0))))
+
+(df formatTopForm [(s rd/SExpr)] -> String
+  :d "Formats a single top-level form into clean v0.4 surface syntax."
+  (mt s
+    ((sexprList items)
+     (let [(headSym (rd/sexprHead s))]
+       (cond
+         ((or (= headSym "df") (= headSym "defun"))
+          (formatDefunForm s 0))
+         ((= headSym "match")
+          (formatMatchForm s 0))
+         ((= headSym "module")
+          (formatSexpr s 0))
+         ((or (= headSym "schema") (or (= headSym "dfs") (= headSym "defschema")))
+          (formatSexpr s 0))
+         ((or (= headSym "enum") (or (= headSym "dfe") (= headSym "defenum")))
+          (formatSexpr s 0))
+         (:else
+          (formatIndented s)))))
+    (_ (formatSexpr s 0))))
+
+(df printIndented [(forms (List rd/SExpr))] -> String
+  :d "Formats a list of AST SExpr forms into canonical indented text."
+  (if (list-empty? forms)
+    ""
+    (let [(strs (map (fn [(s rd/SExpr)] -> String (formatTopForm s)) forms))]
+      (string-join strs "\n\n"))))
