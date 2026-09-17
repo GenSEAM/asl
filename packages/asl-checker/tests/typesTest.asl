@@ -1,6 +1,6 @@
 (module asl-checker/typesTest
   :d "Unit tests for asl-checker/types"
-  :x [testTypes runTests]
+  :x [testTypes runTests RunTests]
   :i [(types :a ty)])
 
 (df checkBounds [(res (Option (Pair Int64 Int64)))] -> Bool
@@ -55,3 +55,8 @@
   (do
     (assert (testTypes) "test-types must pass")
     true))
+
+(df RunTests [] -> Bool
+  :d "Canonical runner for types test suite"
+  (runTests))
+

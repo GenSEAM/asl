@@ -494,6 +494,7 @@
   (addStringsToSet (map-empty) xs))
 
 (df checkModuleRules [(mod ModuleSummary) (path String)] -> (List ty/Diagnostic)
+  :d "Enforces Rule 8 (docstring requirements on module and exports) and Rule 2 (export definitions) uniformly across all modules."
   (let [(d1 (if (and (.-hasHeader mod) (not (.-hasDoc mod)))
               (list (makeDiag "rule-8" (str "module " (.-name mod) " has no :doc") path))
               (list)))

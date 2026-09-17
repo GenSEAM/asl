@@ -1,6 +1,6 @@
 (module asl-checker/resolveTest
   :d "Unit tests for asl-checker/resolve"
-  :x [testResolve runTests]
+  :x [testResolve runTests RunTests]
   :i [(types :a ty) (ast :a a) (resolve :a r)])
 
 (df checkHasCode [(diags (List ty/Diagnostic)) (wantCode String)] -> Bool
@@ -92,3 +92,8 @@
     (assert (testResolve) "test-resolve must pass")
     (refute (resolveProbe "(df f [] -> Int64 42)" "rule-2") "pure constant has no rule-2")
     true))
+
+(df RunTests [] -> Bool
+  :d "Canonical runner for resolve test suite"
+  (runTests))
+

@@ -1,6 +1,6 @@
 (module asl-checker/unifyTest
   :d "Unit tests for asl-checker/unify"
-  :x [testUnify runTests]
+  :x [testUnify runTests RunTests]
   :i [(types :a ty) (unify :a u)])
 
 (df intType [] -> ty/Type
@@ -88,3 +88,8 @@
   (do
     (assert (testUnify) "test-unify must pass")
     true))
+
+(df RunTests [] -> Bool
+  :d "Canonical runner for unify test suite"
+  (runTests))
+
