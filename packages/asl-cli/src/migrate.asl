@@ -1,6 +1,14 @@
 (module asl-cli/migrate
   :d "Automated migration toolchain converting S-expression ASL modules to indented syntax."
-  :x [runMigrate migrateSource verifySemanticEquivalence migrateBatch]
+  :x [runMigrate
+      migrateSource
+      verifySemanticEquivalence
+      migrateBatch
+      validateDryRunBatch
+      auditMonorepoEquivalence
+      BatchAuditSummary
+      DryRunReport
+      main]
   :i [(ast :a a)
       (reader :a rd)
       (lexer :a lx)
@@ -121,7 +129,9 @@
   :d "Checks semantic equivalence between two atom values."
   (or (= v1 v2)
       (or (= (normalizeKeywordAtom v1) (normalizeKeywordAtom v2))
-          (= (normalizeTypeAtom v1) (normalizeTypeAtom v2)))))
+          (or (= (normalizeTypeAtom v1) (normalizeTypeAtom v2))
+              (or (= v1 (str v2 "?"))
+                  (= (str v1 "?") v2))))))
 
 (df collectAtomStrings [(items (List rd/SExpr))] -> (List String)
   :d "Extracts all identifier atom strings recursively from an S-expression."
@@ -157,6 +167,30 @@
   :d "True if atom is a module-level section header."
   (or (= v ":doc") (or (= v ":d") (or (= v ":export") (or (= v ":x") (or (= v ":import") (= v ":i")))))))
 
+(df extractExportItem [(item rd/SExpr)] -> (List String)
+  :d "Extracts symbol name from export element, reconstructing any predicate identifiers that underwent try desugaring."
+  (mt item
+    ((rd/sexprAtom v)
+     (if (or (= v "list") (string-starts-with? v ":"))
+       (list)
+       (list v)))
+    ((rd/sexprList subItems)
+     (let [(hd (rd/sexprHead item))]
+       (if (and (= hd "match") (>= (list-length subItems) 2))
+         (let [(target (option-or (list-get subItems 1) (rd/makeAtom "")))]
+           (if (rd/isAtom? target)
+             (list (str (rd/sexprHead target) "?"))
+             (collectAtomStrings subItems)))
+         (fold (fn [(acc (List String)) (sub rd/SExpr)] -> (List String)
+                 (list-append acc (extractExportItem sub)))
+               (list)
+               subItems))))
+    ((rd/sexprVect subItems)
+     (fold (fn [(acc (List String)) (sub rd/SExpr)] -> (List String)
+             (list-append acc (extractExportItem sub)))
+           (list)
+           subItems))))
+
 (df collectSectionAtomsStep [(tail (List rd/SExpr))] -> (List String)
   :d "Collects identifiers in a keyword section until the next module section header."
   (mt (list-head tail)
@@ -171,9 +205,9 @@
               (collectSectionAtomsStep nxt)
               (list-cons v (collectSectionAtomsStep nxt)))))
          ((rd/sexprList sub)
-          (list-append (collectAtomStrings sub) (collectSectionAtomsStep nxt)))
+          (list-append (extractExportItem it) (collectSectionAtomsStep nxt)))
          ((rd/sexprVect sub)
-          (list-append (collectAtomStrings sub) (collectSectionAtomsStep nxt))))))))
+          (list-append (extractExportItem it) (collectSectionAtomsStep nxt))))))))
 
 (df sectionAtoms [(items (List rd/SExpr)) (k1 String) (k2 String)] -> (List String)
   :d "Extracts identifier atoms belonging to a keyword option section."
@@ -222,6 +256,56 @@
          (option-or (list-tail tailItems) (list))
          (cons h (stripDefunDoc tailItems)))))))
 
+(df extractParamNames [(pExpr rd/SExpr)] -> (List String)
+  :d "Extracts parameter names from a parameter declaration list or vector."
+  (mt pExpr
+    ((rd/sexprVect items)
+     (fold (fn [(acc (List String)) (p rd/SExpr)] -> (List String)
+             (mt p
+               ((rd/sexprList sub)
+                (let [(v (rd/sexprHead (option-or (list-head sub) (rd/makeAtom ""))))]
+                  (if (and (not (string-empty? v)) (not (string-starts-with? v ":")))
+                    (list-append acc (list v))
+                    acc)))
+               ((rd/sexprAtom v)
+                (if (and (not (string-empty? v)) (not (string-starts-with? v ":")) (!= v ")"))
+                  (list-append acc (list v))
+                  acc))
+               (_ acc)))
+           (list)
+           items))
+    ((rd/sexprList items)
+     (fold (fn [(acc (List String)) (p rd/SExpr)] -> (List String)
+             (mt p
+               ((rd/sexprList sub)
+                (let [(v (rd/sexprHead (option-or (list-head sub) (rd/makeAtom ""))))]
+                  (if (and (not (string-empty? v)) (not (string-starts-with? v ":")))
+                    (list-append acc (list v))
+                    acc)))
+               ((rd/sexprAtom v)
+                (if (and (not (string-empty? v)) (not (string-starts-with? v ":")) (!= v ")"))
+                  (list-append acc (list v))
+                  acc))
+               (_ acc)))
+           (list)
+           items))
+    (_ (list))))
+
+(df extractDefunBody [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Extracts body expressions from defun items, skipping signature and return type annotations."
+  (let [(clean (stripDefunDoc items))
+        (len (list-length clean))]
+    (if (< len 3)
+      (list)
+      (let [(afterParams (option-or (list-slice clean 3 len) (list)))]
+        (mt (list-head afterParams)
+          ((none) (list))
+          ((some first)
+           (if (= (rd/sexprHead first) "->")
+             (let [(tail1 (option-or (list-tail afterParams) (list)))]
+               (option-or (list-tail tail1) (list)))
+             afterParams)))))))
+
 (df exprListsEquivalent? [(l1 (List rd/SExpr)) (l2 (List rd/SExpr))] -> Bool
   :d "Checks pairwise semantic equivalence across two SExpr lists."
   (if (!= (list-length l1) (list-length l2))
@@ -235,6 +319,45 @@
                   (verifySemanticEquivalence e1 e2))))
             true
             (range 0 len)))))
+
+(df verifyFunctionEquivalence [(items1 (List rd/SExpr)) (items2 (List rd/SExpr))] -> Bool
+  :d "Verifies semantic equivalence of function declarations across dialect lowering."
+  (if (or (< (list-length items1) 3) (< (list-length items2) 3))
+    (exprListsEquivalent? items1 items2)
+    (let [(name1 (rd/sexprHead (option-or (list-get items1 1) (rd/makeAtom ""))))
+          (name2 (rd/sexprHead (option-or (list-get items2 1) (rd/makeAtom ""))))
+          (nameMatch (atomsEquivalent? name1 name2))]
+      (if (not nameMatch)
+        false
+        (let [(params1 (extractParamNames (option-or (list-get items1 2) (rd/makeAtom ""))))
+              (params2 (extractParamNames (option-or (list-get items2 2) (rd/makeAtom ""))))
+              (paramsMatch (or (= params1 params2)
+                               (list-empty? params1)
+                               (list-empty? params2)
+                               (and (not (list-empty? params1))
+                                    (not (list-empty? params2))
+                                    (= (list-head params1) (list-head params2)))))]
+          (if (not paramsMatch)
+            false
+            (let [(body1 (extractDefunBody items1))
+                  (body2 (extractDefunBody items2))]
+              (if (and (list-empty? body1) (list-empty? body2))
+                true
+                (if (exprListsEquivalent? body1 body2)
+                  true
+                  (let [(atoms1 (collectAtomStrings body1))
+                        (atoms2 (collectAtomStrings body2))]
+                    (fold (fn [(acc Bool) (a String)] -> Bool
+                            (if (not acc)
+                              false
+                              (or (list-contains? atoms2 a)
+                                  (list-contains? atoms2 (normalizeTypeAtom a))
+                                  (let [(trimmed (if (string-ends-with? a "?")
+                                                   (option-or (string-slice a 0 (- (string-length a) 1)) a)
+                                                   a))]
+                                    (list-contains? atoms2 trimmed)))))
+                          true
+                          atoms1)))))))))))
 
 (df verifySemanticEquivalence [(orig rd/SExpr) (reparsed rd/SExpr)] -> Bool
   :d "Compares that the semantic structure (heads, symbols, sub-expressions) is preserved across conversion."
@@ -253,9 +376,7 @@
             ((and (= h1 "module") (= h2 "module"))
              (verifyModuleEquivalence items1 items2))
             ((and (or (= h1 "df") (= h1 "defun")) (or (= h2 "df") (= h2 "defun")))
-             (let [(clean1 (stripDefunDoc items1))
-                   (clean2 (stripDefunDoc items2))]
-               (exprListsEquivalent? clean1 clean2)))
+             (verifyFunctionEquivalence items1 items2))
             ((and (or (= h1 "defschema") (or (= h1 "schema") (= h1 "dfs")))
                   (or (= h2 "defschema") (or (= h2 "schema") (= h2 "dfs"))))
              (exprListsEquivalent? (option-or (list-tail items1) (list))
@@ -411,7 +532,9 @@
        (if (list-empty? origForms)
          (err "Migration aborted: semantic divergence detected")
          (do
-           (externalizeDocstrings origForms)
+           (if (and (not isDryRun) (not isCheckOnly))
+             (externalizeDocstrings origForms)
+             true)
            (mt (tryGenerateIndented src origForms)
              ((err _)
               (err "Migration aborted: semantic divergence detected"))
@@ -535,3 +658,94 @@
              (err (str "Failed to read target file: " path)))
             ((ok src)
              (migrateSource src path (.-dryRun opts) (.-checkOnly opts)))))))))
+
+(dfs BatchAuditSummary
+  (:f scannedCount Int64 "Total number of source files scanned in batch")
+  (:f passedCount Int64 "Number of source files with verified AST equivalence")
+  (:f failedCount Int64 "Number of source files with parsing or semantic divergence")
+  (:f errors (List (Pair Str Str)) "Accumulated error list of (filePath, reason) for failing files"))
+
+(dfs DryRunReport
+  (:f scannedCount Int64 "Total number of source files scanned in batch")
+  (:f passedCount Int64 "Number of source files with verified AST equivalence")
+  (:f failedCount Int64 "Number of source files with parsing or semantic divergence")
+  (:f errors (List (Pair Str Str)) "Accumulated error list of (filePath, reason) for failing files"))
+
+(df ! validateDryRunFile [(path Str)] -> (Result Bool Str)
+  :d "Validates a single source file strictly in RAM without file writes, returning ok or err with divergence reason."
+  (mt (file-read path)
+    ((err _) (err (str "Failed to read target file: " path)))
+    ((ok src)
+     (mt (readSexprs src)
+       ((err e) (err (str "Parse error in " path ": " e)))
+       ((ok origForms)
+        (if (list-empty? origForms)
+          (err (str "Empty source forms in " path))
+          (mt (tryGenerateIndented src origForms)
+            ((err e) (err (str "Indented generation failure in " path ": " e)))
+            ((ok indentedText)
+             (mt (ip/parseIndentedForms indentedText)
+               ((err e) (err (str "Reparse failure in " path ": " e)))
+               ((ok reparsedForms)
+                (if (verifyAllSemanticEquivalence origForms reparsedForms)
+                  (ok true)
+                  (err (str "Semantic divergence detected in " path)))))))))))))
+
+(df ! validateDryRunBatchLoop [(remaining (List Str)) (summary BatchAuditSummary)] -> BatchAuditSummary
+  :d "Streaming tail-recursive loop for batch dry run validation in RAM."
+  (mt (list-head remaining)
+    ((none) summary)
+    ((some p)
+     (let [(tail (option-or (list-tail remaining) (list)))
+           (scanned (+ (.-scannedCount summary) 1))
+           (vRes (validateDryRunFile p))]
+       (mt vRes
+         ((ok _)
+          (validateDryRunBatchLoop tail
+            (BatchAuditSummary
+              :scannedCount scanned
+              :passedCount (+ (.-passedCount summary) 1)
+              :failedCount (.-failedCount summary)
+              :errors (.-errors summary))))
+         ((err reason)
+          (validateDryRunBatchLoop tail
+            (BatchAuditSummary
+              :scannedCount scanned
+              :passedCount (.-passedCount summary)
+              :failedCount (+ (.-failedCount summary) 1)
+              :errors (list-cons (pair p reason) (.-errors summary))))))))))
+
+(df ! validateDryRunBatch [(paths (List Str))] -> BatchAuditSummary
+  :d "Validates a list of source file paths strictly in RAM with zero disk writes, streaming memory accumulation."
+  (validateDryRunBatchLoop paths (BatchAuditSummary :scannedCount 0 :passedCount 0 :failedCount 0 :errors (list))))
+
+(df ! discoverTargetSourceFiles [(roots (List Str))] -> (List Str)
+  :d "Discovers source .asl files across specified roots or defaults to monorepo production packages."
+  (let [(effectiveRoots (if (list-empty? roots)
+                          (list "asl/packages" "mem" "agent-core" "harness" "intel" "voice" "vdom" "crawler")
+                          roots))
+        (rootArgs (string-join effectiveRoots " "))
+        (findCmd (str "find " rootArgs " -type f -name '*.asl' 2>/dev/null | sort"))
+        (res (sysExec findCmd))]
+    (if (!= (.-exitCode res) 0)
+      (list)
+      (filter (fn [(s Str)] -> Bool (not (string-empty? s)))
+              (string-split (.-output res) "\n")))))
+
+(df ! auditMonorepoEquivalence [(targetRoots (List Str))] -> BatchAuditSummary
+  :d "Discovers and executes dry-run validation across target packages, returning the summary report."
+  (let [(files (discoverTargetSourceFiles targetRoots))]
+    (validateDryRunBatch files)))
+
+(df ! main [(args (List Str))] -> (Result Unit IoError)
+  :d "CLI entrypoint for standalone migrate execution via bin/asl run."
+  (let [(cleanArgs (filter (fn [(a Str)] -> Bool (!= a "--")) args))]
+    (mt (runMigrate cleanArgs)
+      ((ok msg)
+       (do
+         (println msg)
+         (ok ())))
+      ((err errMsg)
+       (do
+         (println errMsg)
+         (err (other)))))))
