@@ -1,6 +1,6 @@
 (module asl-codegen/c99EmitTest
   :d "Unit tests"
-  :x [testHeaderGuards testStandardIncludes testExternCWrapper testFunctionPrototype testFunctionDef testMainEntry testHeaderFileProjection testSourceFileProjection testStandaloneProjection testDualPolarityRefutations runTests]
+  :x [testHeaderGuards testStandardIncludes testExternCWrapper testFunctionPrototype testFunctionDef testMainEntry testHeaderFileProjection testSourceFileProjection testStandaloneProjection testDualPolarityRefutations testC99LocalizedSampleFixture runTests]
   :i [(c99Emit :a ce) (ast :a a) (reader :a rd)])
 
 (df testHeaderGuards [] -> Bool
@@ -85,6 +85,40 @@
     (refute (string-contains? cFree "free(") "freestanding mode must not call free")
     true))
 
+(df testC99LocalizedSampleFixture [] -> Bool
+  :d "Verifies reading and emitting localized C99 sample fixture into header and source projections."
+  (let [(readRes (file-read "asl/packages/asl-codegen/tests/fixtures/c99/sampleC99.asl"))]
+    (assert (is-ok? readRes) "sampleC99 fixture must be readable")
+    (refute (is-err? readRes) "sampleC99 fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (let [(parseRes (a/parse src))]
+         (assert (is-ok? parseRes) "sampleC99 source parses successfully")
+         (refute (is-err? parseRes) "sampleC99 source refutes parse error under D77")
+         (mt parseRes
+           ((err _) false)
+           ((ok forms)
+            (mt (list-head forms)
+              ((some (a/topModule modNode))
+               (let [(hdr (ce/emitCHeaderFile modNode))
+                     (srcCode (ce/emitCSourceFile modNode))
+                     (cStandalone (ce/emitCStandalone (.-defs modNode) "main" false))]
+                 (assert (string-contains? hdr "#ifndef ASL_CODEGEN_TESTS_FIXTURES_C99_SAMPLEC99_H") "Header guard matches fixture path")
+                 (assert (string-contains? hdr "int64_t add(int64_t a, int64_t b);") "Header prototype for add")
+                 (assert (string-contains? hdr "int64_t multiply(int64_t x, int64_t y);") "Header prototype for multiply")
+                 (assert (string-contains? hdr "int64_t sampleOp(int64_t p, int64_t q, int64_t r);") "Header prototype for sampleOp")
+                 (assert (string-contains? srcCode "int64_t add(int64_t a, int64_t b) {") "Source def for add")
+                 (assert (string-contains? srcCode "int64_t multiply(int64_t x, int64_t y) {") "Source def for multiply")
+                 (assert (string-contains? srcCode "int64_t sampleOp(int64_t p, int64_t q, int64_t r) {") "Source def for sampleOp")
+                 (assert (string-contains? cStandalone "int main(int argc, char** argv)") "Standalone main entry")
+                 (refute (string-contains? hdr "package ") "Header refutes Go package under D77")
+                 (refute (string-contains? hdr "def add(") "Header refutes Python def add under D77")
+                 (refute (string-contains? hdr "(module") "Header refutes WAT '(module' under D77")
+                 (refute (string-contains? srcCode "tests/fixtures/wat") "Source refutes dependency on global shared fixtures under D77")
+                 true))
+              (:else false)))))))))
+
 (df runTests [] -> Bool
   (do
     (assert (testHeaderGuards) "testHeaderGuards")
@@ -97,4 +131,5 @@
     (assert (testSourceFileProjection) "testSourceFileProjection")
     (assert (testStandaloneProjection) "testStandaloneProjection")
     (assert (testDualPolarityRefutations) "testDualPolarityRefutations")
+    (assert (testC99LocalizedSampleFixture) "testC99LocalizedSampleFixture")
     true))

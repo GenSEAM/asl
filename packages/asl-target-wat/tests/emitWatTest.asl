@@ -199,6 +199,62 @@
     (refute (string-contains? envelope "#include") "Module envelope must refute C preprocessor")
     true))
 
+(df testWatLocalizedArithmeticFixture [] -> Bool
+  :d "Verifies reading and emitting localized arithmetic fixture into WebAssembly Text format."
+  (let [(readRes (file-read "asl/packages/asl-target-wat/tests/fixtures/arithmetic.asl"))]
+    (assert (is-ok? readRes) "Arithmetic fixture must be readable")
+    (refute (is-err? readRes) "Arithmetic fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (do
+         (assert (string-contains? src "(module asl-target-wat/tests/fixtures/arithmetic") "Source declares arithmetic module")
+         (assert (string-contains? src "(df add") "Source contains add function")
+         (assert (string-contains? src "(df sub") "Source contains sub function")
+         (assert (string-contains? src "(df mul") "Source contains mul function")
+         (refute (string-contains? src "tests/fixtures/wat/add.asl") "Source refutes global shared fixture path under D77")
+         (let [(fnAdd (w/watFn "add" "(param $a i64) (param $b i64)" "I64" "i64.add (local.get $a) (local.get $b)" true))
+               (fnSub (w/watFn "sub" "(param $a i64) (param $b i64)" "I64" "i64.sub (local.get $a) (local.get $b)" true))
+               (fnMul (w/watFn "mul" "(param $a i64) (param $b i64)" "I64" "i64.mul (local.get $a) (local.get $b)" true))
+               (modWat (w/emitWatModule (str "  " fnAdd "\n  " fnSub "\n  " fnMul) true))]
+           (assert (string-contains? modWat "(module") "Emitted arithmetic module contains (module")
+           (assert (string-contains? modWat "(func $add (export \"add\")") "Emitted module contains exported add")
+           (assert (string-contains? modWat "(func $sub (export \"sub\")") "Emitted module contains exported sub")
+           (assert (string-contains? modWat "(func $mul (export \"mul\")") "Emitted module contains exported mul")
+           (assert (string-contains? modWat "i64.add") "Emitted module contains i64.add instruction")
+           (assert (string-contains? modWat "i64.sub") "Emitted module contains i64.sub instruction")
+           (assert (string-contains? modWat "i64.mul") "Emitted module contains i64.mul instruction")
+           (refute (string-contains? modWat "package ") "Emitted WAT refutes Go keyword 'package ' under D77")
+           (refute (string-contains? modWat "def ") "Emitted WAT refutes Python keyword 'def ' under D77")
+           (refute (string-contains? modWat "#include") "Emitted WAT refutes C99 preprocessor under D77")
+           (refute (string-contains? modWat "tests/fixtures/wat/add.asl") "Refutes dependency on global shared fixture directory under D77")
+           true))))))
+
+(df testWatLocalizedWasiFixture [] -> Bool
+  :d "Verifies reading and emitting localized WASI host imports fixture into WebAssembly Text format."
+  (let [(readRes (file-read "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl"))]
+    (assert (is-ok? readRes) "WASI imports fixture must be readable")
+    (refute (is-err? readRes) "WASI imports fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (do
+         (assert (string-contains? src "(module asl-target-wat/tests/fixtures/wasiImports") "Source declares wasiImports module")
+         (assert (string-contains? src "wasiFdWrite") "Source contains wasiFdWrite")
+         (assert (string-contains? src "wasiFdRead") "Source contains wasiFdRead")
+         (assert (string-contains? src "wasiProcExit") "Source contains wasiProcExit")
+         (assert (string-contains? src "wasiClockTimeGet") "Source contains wasiClockTimeGet")
+         (refute (string-contains? src "tests/fixtures/wat") "Source refutes global shared fixture path under D77")
+         (let [(imports (w/emitWasiImports))
+               (envelope (w/emitAslCoreWasmModule "  (func $main)"))]
+           (assert (string-contains? imports "(import \"wasi_snapshot_preview1\" \"fd_write\"") "Emitted imports contain fd_write")
+           (assert (string-contains? imports "(import \"wasi_snapshot_preview1\" \"proc_exit\"") "Emitted imports contain proc_exit")
+           (assert (string-contains? envelope "wasi_snapshot_preview1") "AslCore module embeds WASI preview 1 imports")
+           (refute (string-contains? envelope "package ") "Emitted WAT envelope refutes Go package under D77")
+           (refute (string-contains? envelope "import sys") "Emitted WAT envelope refutes Python import sys under D77")
+           (refute (string-contains? envelope "#include <stdio.h>") "Emitted WAT envelope refutes C99 stdio under D77")
+           true))))))
+
 (df runTests [] -> Bool
   :d "Runs all WebAssembly codegen unit tests."
   (do
@@ -217,4 +273,6 @@
     (assert (testWasmMemoryModel) "testWasmMemoryModel must pass")
     (assert (testWasmExportDispatch) "testWasmExportDispatch must pass")
     (assert (testAslCoreWasmModule) "testAslCoreWasmModule must pass")
+    (assert (testWatLocalizedArithmeticFixture) "testWatLocalizedArithmeticFixture must pass")
+    (assert (testWatLocalizedWasiFixture) "testWatLocalizedWasiFixture must pass")
     true))

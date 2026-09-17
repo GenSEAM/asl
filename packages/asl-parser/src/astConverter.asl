@@ -1,6 +1,6 @@
 (module asl-parser/astConverter
   :d "Bidirectional AST Converter and Roundtrip Equivalence between generic S-expressions and Typed AST."
-  :x [sexprToAst astToSexpr liftExpr lowerExpr liftPattern lowerPattern liftType lowerType]
+  :x [sexprToAst astToSexpr liftExpr lowerExpr liftPattern lowerPattern liftType lowerType sexprToTopForm topFormToSexpr]
   :i [(ast :a a) (reader :a rd)])
 
 (df charsWithin? [(allowed String) (s String)] -> Bool
@@ -285,12 +285,35 @@
                   (body (map (fn [(e rd/SExpr)] -> a/AstExpr (liftExpr e)) bodyNodes))]
               (a/exprLet bindings body)))
            ((or (= h "match") (= h "mt"))
-            (let [(target (liftExpr (nthExpr items 1)))
-                  (armNodes (if (> (list-length items) 2)
-                              (option-or (list-slice items 2 (list-length items)) (list))
-                              (list)))
-                  (arms (map liftMatchArmForm armNodes))]
-              (a/exprMatch target arms)))
+            (if (isDesugaredTryMatch? items)
+              (a/exprTry (liftExpr (nthExpr items 1)))
+              (let [(target (liftExpr (nthExpr items 1)))
+                    (rawArms (if (> (list-length items) 2)
+                               (option-or (list-slice items 2 (list-length items)) (list))
+                               (list)))
+                    (armNodes (if (and (= (list-length rawArms) 1)
+                                       (rd/isList? (nthExpr rawArms 0)))
+                                (let [(inner (nthExpr rawArms 0))
+                                      (inItems (sexprItems inner))]
+                                  (if (and (not (list-empty? inItems)) (rd/isList? (nthExpr inItems 0)))
+                                    inItems
+                                    rawArms))
+                                rawArms))
+                    (arms (map liftMatchArmForm armNodes))]
+                (a/exprMatch target arms))))
+           ((= h "|>")
+            (let [(subExprs (tailExprs items))]
+              (if (list-empty? subExprs)
+                (a/exprLit (a/litUnit))
+                (fold (fn [(acc a/AstExpr) (step rd/SExpr)] -> a/AstExpr
+                        (let [(stepAst (liftExpr step))]
+                          (mt stepAst
+                            ((a/exprCall f args)
+                             (a/exprCall f (cons acc args)))
+                            (_
+                             (a/exprCall stepAst (list acc))))))
+                      (liftExpr (nthExpr subExprs 0))
+                      (tailExprs subExprs)))))
            ((= h "do")
             (let [(formNodes (tailExprs items))]
               (a/exprBlock (map (fn [(e rd/SExpr)] -> a/AstExpr (liftExpr e)) formNodes))))
@@ -302,6 +325,136 @@
                   (args (map (fn [(e rd/SExpr)] -> a/AstExpr (liftExpr e)) (tailExprs items)))]
               (a/exprCall func args)))))))))
 
+(df isDesugaredTryMatch? [(items (List rd/SExpr))] -> Bool
+  :d "Checks if an S-expression match form represents a desugared try operator (?)"
+  (if (!= (list-length items) 4)
+    false
+    (let [(arm1 (nthExpr items 2))
+          (arm2 (nthExpr items 3))]
+      (and (= (rd/sexprHead arm1) "ok")
+           (= (rd/sexprHead arm2) "err")))))
+
 (df sexprToAst [(s rd/SExpr)] -> a/AstExpr
   :d "Converts generic SExpr to typed AstExpr."
   (liftExpr s))
+
+(df nthString [(items (List rd/SExpr)) (i Int64)] -> String
+  :d "Extracts atom string at index i or empty string."
+  (mt (list-get items i)
+    ((some node)
+     (mt node
+       ((rd/sexprAtom v) v)
+       (_ (rd/renderSexpr node))))
+    ((none) "")))
+
+(df sexprToTopForm [(s rd/SExpr)] -> (Result a/TopForm String)
+  :d "Converts canonical S-expression declaration into a typed TopForm node."
+  (let [(h (rd/sexprHead s))]
+    (cond
+      ((or (= h "defun") (or (= h "df") (= h "fn")))
+       (let [(items (sexprItems s))]
+         (if (< (list-length items) 5)
+           (err "Malformed defun form: expected at least (df name params -> retType)")
+           (let [(name (nthString items 1))
+                 (paramsNode (nthExpr items 2))
+                 (rawParams (sexprItems paramsNode))
+                 (params (map (fn [(p rd/SExpr)] -> a/Param
+                                (let [(pItems (sexprItems p))]
+                                  (a/Param :name (nthString pItems 0)
+                                           :type (nthString pItems 1))))
+                              rawParams))
+                 (retType (nthString items 4))
+                 (bodyForms (if (> (list-length items) 5)
+                              (option-or (list-slice items 5 (list-length items)) (list))
+                              (list)))]
+             (ok (a/topDefun (a/DefunNode :name name
+                                          :typeVars (list)
+                                          :isExported false
+                                          :effect false
+                                          :params params
+                                          :retType retType
+                                          :docstring ""
+                                          :body bodyForms)))))))
+      ((or (= h "defschema") (or (= h "dfs") (= h "schema")))
+       (let [(items (sexprItems s))]
+         (if (< (list-length items) 2)
+           (err "Malformed defschema form: missing schema name")
+           (let [(name (nthString items 1))
+                 (fieldForms (tailExprs (tailExprs items)))
+                 (fields (map (fn [(f rd/SExpr)] -> a/AstField
+                                (let [(fItems (sexprItems f))]
+                                  (a/AstField :name (nthString fItems 1)
+                                              :type (nthString fItems 2)
+                                              :docstring (unquoteString (nthString fItems 3))
+                                              :default (none)
+                                              :json (none))))
+                              fieldForms))]
+             (ok (a/topSchema (a/SchemaNode :name name
+                                            :typeVars (list)
+                                            :fields fields
+                                            :jsonCase (none))))))))
+      ((or (= h "defenum") (or (= h "dfe") (= h "enum")))
+       (let [(items (sexprItems s))]
+         (if (< (list-length items) 2)
+           (err "Malformed defenum form: missing enum name")
+           (let [(name (nthString items 1))
+                 (caseForms (tailExprs (tailExprs items)))
+                 (cases (map (fn [(c rd/SExpr)] -> a/EnumCase
+                               (let [(cItems (sexprItems c))
+                                     (cName (nthString cItems 1))
+                                     (rawParams (if (> (list-length cItems) 2)
+                                                  (sexprItems (nthExpr cItems 2))
+                                                  (list)))
+                                     (cParams (map (fn [(p rd/SExpr)] -> a/Param
+                                                     (let [(pItems (sexprItems p))]
+                                                       (a/Param :name (nthString pItems 0)
+                                                                :type (nthString pItems 1))))
+                                                   rawParams))
+                                     (cDoc (unquoteString (nthString cItems 3)))]
+                                 (a/EnumCase :name cName :fields cParams :docstring cDoc)))
+                             caseForms))]
+             (ok (a/topEnum (a/EnumNode :name name
+                                        :typeVars (list)
+                                        :cases cases)))))))
+      (:else
+       (err (str "Unrecognized declaration head: " h))))))
+
+(df topFormToSexpr [(tf a/TopForm)] -> rd/SExpr
+  :d "Lowers a typed TopForm node to canonical S-expression representation."
+  (mt tf
+    ((a/topDefun d)
+     (let [(paramsSexpr (rd/makeVect (map (fn [(p a/Param)] -> rd/SExpr
+                                            (rd/makeList (list (rd/makeAtom (.-name p))
+                                                               (rd/makeAtom (.-type p)))))
+                                          (.-params d))))]
+       (rd/makeList (list-append (list (rd/makeAtom "df")
+                                       (rd/makeAtom (.-name d))
+                                       paramsSexpr
+                                       (rd/makeAtom "->")
+                                       (rd/makeAtom (.-retType d)))
+                                 (.-body d)))))
+    ((a/topSchema s)
+     (let [(fieldSexprs (map (fn [(f a/AstField)] -> rd/SExpr
+                               (rd/makeList (list (rd/makeAtom ":field")
+                                                  (rd/makeAtom (.-name f))
+                                                  (rd/makeAtom (.-type f))
+                                                  (rd/makeAtom (quoteString (.-docstring f))))))
+                             (.-fields s)))]
+       (rd/makeList (list-cons (rd/makeAtom "defschema")
+                               (list-cons (rd/makeAtom (.-name s)) fieldSexprs)))))
+    ((a/topEnum e)
+     (let [(caseSexprs (map (fn [(c a/EnumCase)] -> rd/SExpr
+                              (let [(fieldsVect (rd/makeVect
+                                                  (map (fn [(p a/Param)] -> rd/SExpr
+                                                         (rd/makeList (list (rd/makeAtom (.-name p))
+                                                                            (rd/makeAtom (.-type p)))))
+                                                       (.-fields c))))]
+                                (rd/makeList (list (rd/makeAtom ":case")
+                                                   (rd/makeAtom (.-name c))
+                                                   fieldsVect
+                                                   (rd/makeAtom (quoteString (.-docstring c)))))))
+                            (.-cases e)))]
+       (rd/makeList (list-cons (rd/makeAtom "defenum")
+                               (list-cons (rd/makeAtom (.-name e)) caseSexprs)))))
+    ((a/topModule m)
+     (rd/makeList (list (rd/makeAtom "module") (rd/makeAtom (.-path m)))))))

@@ -77,6 +77,59 @@
     (refute (string-contains? prog "#include") "Must refute C preprocessor")
     true))
 
+(df testGoLocalizedUserStructFixture [] -> Bool
+  :d "Verifies reading and emitting localized userStruct fixture into Go format."
+  (let [(readRes (file-read "asl/packages/asl-target-go/tests/fixtures/userStruct.asl"))]
+    (assert (is-ok? readRes) "userStruct fixture must be readable")
+    (refute (is-err? readRes) "userStruct fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (do
+         (assert (string-contains? src "(module asl-target-go/tests/fixtures/userStruct") "Source declares userStruct module")
+         (assert (string-contains? src "(dfs User") "Source contains User schema definition")
+         (assert (string-contains? src "newUser") "Source contains newUser constructor")
+         (refute (string-contains? src "tests/fixtures/wat") "Source refutes global shared fixture directory under D77")
+         (let [(fields "\tID int64\n\tName string\n\tEmail string\n")
+               (sDef (g/emitGoStruct "User" fields))
+               (cBody "return &User{ID: id, Name: name, Email: email}")
+               (fnDef (g/emitGoFn "newUser" "id int64, name string, email string" "*User" cBody true))
+               (prog (g/emitGoProgram "user" sDef fnDef))]
+           (assert (string-contains? prog "package user") "Emitted program contains package user")
+           (assert (string-contains? prog "type User struct {") "Emitted program declares User struct")
+           (assert (string-contains? prog "ID int64") "Emitted struct contains ID field")
+           (assert (string-contains? prog "Name string") "Emitted struct contains Name field")
+           (assert (string-contains? prog "Email string") "Emitted struct contains Email field")
+           (assert (string-contains? prog "func NewUser(id int64, name string, email string) *User {") "Emitted constructor is exported and capitalized")
+           (refute (string-contains? prog "class User") "Emitted Go refutes Python class under D77")
+           (refute (string-contains? prog "(module") "Emitted Go refutes WAT module under D77")
+           (refute (string-contains? prog "#include") "Emitted Go refutes C99 preprocessor under D77")
+           (refute (string-contains? prog "tests/fixtures/wat") "Refutes global shared fixture directory under D77")
+           true))))))
+
+(df testGoLocalizedCalcFnFixture [] -> Bool
+  :d "Verifies reading and emitting localized calcFn fixture into Go format."
+  (let [(readRes (file-read "asl/packages/asl-target-go/tests/fixtures/calcFn.asl"))]
+    (assert (is-ok? readRes) "calcFn fixture must be readable")
+    (refute (is-err? readRes) "calcFn fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (do
+         (assert (string-contains? src "(module asl-target-go/tests/fixtures/calcFn") "Source declares calcFn module")
+         (assert (string-contains? src "(df calc") "Source contains calc function")
+         (refute (string-contains? src "tests/fixtures/wat") "Source refutes global shared fixture directory under D77")
+         (let [(fnDef (g/emitGoFn "calc" "base int64, multiplier int64, offset int64" "I64" "return (base * multiplier) + offset" true))
+               (prog (g/emitGoProgram "calc" "" fnDef))]
+           (assert (string-contains? prog "package calc") "Emitted program contains package calc")
+           (assert (string-contains? prog "func Calc(base int64, multiplier int64, offset int64) int64 {") "Emitted function declaration has exported name")
+           (assert (string-contains? prog "return (base * multiplier) + offset") "Emitted function has arithmetic body")
+           (refute (string-contains? prog "def calc") "Emitted Go refutes Python def under D77")
+           (refute (string-contains? prog "i64.add") "Emitted Go refutes WAT instruction under D77")
+           (refute (string-contains? prog "int64_t") "Emitted Go refutes C99 type under D77")
+           (refute (string-contains? prog "tests/fixtures/wat") "Refutes global shared fixture directory under D77")
+           true))))))
+
 (df runTests [] -> Bool
   :d "Runs Go codegen test suite."
   (do
@@ -85,4 +138,6 @@
     (assert (testGoStruct) "testGoStruct must pass")
     (assert (testGoEnum) "testGoEnum must pass")
     (assert (testGoProgram) "testGoProgram must pass")
+    (assert (testGoLocalizedUserStructFixture) "testGoLocalizedUserStructFixture must pass")
+    (assert (testGoLocalizedCalcFnFixture) "testGoLocalizedCalcFnFixture must pass")
     true))

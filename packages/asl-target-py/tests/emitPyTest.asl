@@ -159,6 +159,58 @@
     (refute (string-contains? emptyFn "return 0") "Empty body defun refutes return 0 under D77")
     true))
 
+(df testPyLocalizedPointClassFixture [] -> Bool
+  :d "Verifies reading and emitting localized pointClass fixture into Python dataclass format."
+  (let [(readRes (file-read "asl/packages/asl-target-py/tests/fixtures/pointClass.asl"))]
+    (assert (is-ok? readRes) "pointClass fixture must be readable")
+    (refute (is-err? readRes) "pointClass fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (let [(parseRes (a/parse src))]
+         (assert (is-ok? parseRes) "pointClass source must parse successfully")
+         (refute (is-err? parseRes) "pointClass source refutes parse error under D77")
+         (mt parseRes
+           ((err _) false)
+           ((ok forms)
+            (let [(pyCode (py/emitPythonSource forms))]
+              (assert (string-contains? pyCode "from dataclasses import dataclass") "Emitted Python imports dataclass")
+              (assert (string-contains? pyCode "@dataclass") "Emitted Python contains @dataclass decorator")
+              (assert (string-contains? pyCode "class Point:") "Emitted Python contains class Point:")
+              (assert (string-contains? pyCode "x: int") "Emitted Python contains x: int")
+              (assert (string-contains? pyCode "y: int") "Emitted Python contains y: int")
+              (refute (string-contains? pyCode "type Point struct") "Emitted Python refutes Go struct under D77")
+              (refute (string-contains? pyCode "(module") "Emitted Python refutes WAT module under D77")
+              (refute (string-contains? pyCode "struct AslPoint_s") "Emitted Python refutes C99 struct under D77")
+              (refute (string-contains? pyCode "tests/fixtures/wat") "Refutes global shared fixture directory under D77")
+              true))))))))
+
+(df testPyLocalizedMathOpsFixture [] -> Bool
+  :d "Verifies reading and emitting localized mathOps fixture into Python typed function format."
+  (let [(readRes (file-read "asl/packages/asl-target-py/tests/fixtures/mathOps.asl"))]
+    (assert (is-ok? readRes) "mathOps fixture must be readable")
+    (refute (is-err? readRes) "mathOps fixture refutes read error under D77")
+    (mt readRes
+      ((err _) false)
+      ((ok src)
+       (let [(parseRes (a/parse src))]
+         (assert (is-ok? parseRes) "mathOps source must parse successfully")
+         (refute (is-err? parseRes) "mathOps source refutes parse error under D77")
+         (mt parseRes
+           ((err _) false)
+           ((ok forms)
+            (let [(pyCode (py/emitPythonSource forms))]
+              (assert (string-contains? pyCode "def add(a: int, b: int) -> int:") "Emitted Python contains def add with type annotations")
+              (assert (string-contains? pyCode "def mul(a: int, b: int) -> int:") "Emitted Python contains def mul with type annotations")
+              (assert (string-contains? pyCode "def compute_distance") "Emitted Python contains def compute_distance")
+              (assert (string-contains? pyCode "return a + b") "Emitted Python contains return a + b")
+              (assert (string-contains? pyCode "return a * b") "Emitted Python contains return a * b")
+              (refute (string-contains? pyCode "func ") "Emitted Python refutes Go func keyword under D77")
+              (refute (string-contains? pyCode "int64_t") "Emitted Python refutes C99 type int64_t under D77")
+              (refute (string-contains? pyCode "i64.add") "Emitted Python refutes WAT instruction under D77")
+              (refute (string-contains? pyCode "tests/fixtures/wat") "Refutes global shared fixture directory under D77")
+              true))))))))
+
 (df runTests [] -> Bool
   :d "Runs all Python target unit tests."
   (do
@@ -168,4 +220,6 @@
     (assert (testPyEnum) "testPyEnum must pass")
     (assert (testPythonSourceAndProgram) "testPythonSourceAndProgram must pass")
     (assert (testDualPolarityRefutations) "testDualPolarityRefutations must pass")
+    (assert (testPyLocalizedPointClassFixture) "testPyLocalizedPointClassFixture must pass")
+    (assert (testPyLocalizedMathOpsFixture) "testPyLocalizedMathOpsFixture must pass")
     true))

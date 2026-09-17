@@ -558,9 +558,9 @@ duplicated here because a parser written in AgentScript cannot read the JSON;
     (cond
       ((not (rd/isList? s))
        (err (perr "expected a top-level declaration" pf)))
-      ((or (= h "defun") (= h "df"))     (funNode s exported pf))
-      ((or (= h "defschema") (= h "dfs")) (schemaNode s pf))
-      ((or (= h "defenum") (= h "dfe"))   (enumNode s pf))
+      ((or (= h "defun") (or (= h "df") (= h "fn")))          (funNode s exported pf))
+      ((or (= h "defschema") (or (= h "dfs") (= h "schema"))) (schemaNode s pf))
+      ((or (= h "defenum") (or (= h "dfe") (= h "enum")))     (enumNode s pf))
       (:else (err (perr (str "not a declaration head: '" h "'") pf))))))
 
 (df filterTags [(items (List rd/SExpr))] -> (List rd/SExpr)
