@@ -4,7 +4,7 @@
       compileSource
       compileStandaloneTarget
       compileStandaloneSource]
-  :i [(ast :a a) (reader :a rd) (types :a ty) (check :a chk) (resolve :a r) (compiler :a comp) (c99Emit :a c99)])
+  :i [(ast :a a) (reader :a rd) (types :a ty) (check :a chk) (resolve :a r) (compiler :a comp) (c99Emit :a c99) (asl-target-c :a c11)])
 
 (df compileSourceTarget [(src Str) (target Str) (deps (Map Str r/ModuleSummary)) (path Str)] -> comp/CompileResult
   :d "End-to-end compilation with target selection and dependencies under ADR D93."
@@ -19,7 +19,20 @@
                (let [(formatted (map (fn [(d ty/Diagnostic)] -> Str (comp/formatDiagnostic d)) diags))]
                  (comp/CompileResult :ok false :code "" :diagnostics formatted))
                (comp/CompileResult :ok true :code (c99/emitCStandalone forms "" (= target "c-embedded")) :diagnostics (list))))))
-      (comp/CompileResult :ok false :code "" :diagnostics (list (str "Target '" target "' decoupled from core; use dynamic pluggable backend")))))
+      (if (= target "c11")
+          (mt (a/parse src)
+            ((err pe)
+             (let [(msg (str path ":" (string-from-int64 (.-line pe)) ":" (string-from-int64 (.-col pe)) ": [parse-error] " (.-msg pe)))]
+               (comp/CompileResult :ok false :code "" :diagnostics (list msg))))
+            ((ok forms)
+             (let [(diags (chk/checkModule forms deps path))]
+               (if (not (list-empty? diags))
+                   (let [(formatted (map (fn [(d ty/Diagnostic)] -> Str (comp/formatDiagnostic d)) diags))]
+                     (comp/CompileResult :ok false :code "" :diagnostics formatted))
+                   (mt (c11/emitC11Source src path)
+                     ((ok cCode) (comp/CompileResult :ok true :code cCode :diagnostics (list)))
+                     ((err errM) (comp/CompileResult :ok false :code "" :diagnostics (list errM))))))))
+          (comp/CompileResult :ok false :code "" :diagnostics (list (str "Target '" target "' decoupled from core; use dynamic pluggable backend"))))))
 
 (df compileSource [(src Str) (deps (Map Str r/ModuleSummary)) (path Str)] -> comp/CompileResult
   :d "End-to-end compilation defaulting to C99 core target."

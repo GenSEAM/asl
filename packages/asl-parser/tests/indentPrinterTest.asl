@@ -52,10 +52,40 @@
       (assert (= printed "[1 2 3]") (str "Must format as inline list: got " printed))
       true)))
 
+(df testFormatSchema [] -> Bool
+  :d "Verifies canonical formatting of defschema into indented schema declaration."
+  (let [(schemaAst (rd/makeList (list (rd/makeAtom "defschema")
+                                      (rd/makeAtom "Point")
+                                      (rd/makeList (list (rd/makeAtom ":field") (rd/makeAtom "x") (rd/makeAtom "Int") (rd/makeAtom "")))
+                                      (rd/makeList (list (rd/makeAtom ":field") (rd/makeAtom "y") (rd/makeAtom "Int") (rd/makeAtom "\"ordinate\""))))))]
+    (let [(printed (ipr/formatIndented schemaAst))]
+      (assert (string-contains? printed "schema Point") "Must contain schema header")
+      (assert (string-contains? printed "  x: Int") "Must contain field x")
+      (assert (string-contains? printed "  y: Int \"ordinate\"") "Must contain field y with doc")
+      (refute (string-contains? printed "defschema") "Must refute old defschema keyword")
+      true)))
+
+(df testFormatEnum [] -> Bool
+  :d "Verifies canonical formatting of defenum into indented enum declaration."
+  (let [(enumAst (rd/makeList (list (rd/makeAtom "defenum")
+                                    (rd/makeAtom "Color")
+                                    (rd/makeList (list (rd/makeAtom ":case") (rd/makeAtom "Red") (rd/makeVect (list)) (rd/makeAtom "")))
+                                    (rd/makeList (list (rd/makeAtom ":case") (rd/makeAtom "Green") (rd/makeVect (list)) (rd/makeAtom "")))
+                                    (rd/makeList (list (rd/makeAtom ":case") (rd/makeAtom "Blue") (rd/makeVect (list)) (rd/makeAtom ""))))))]
+    (let [(printed (ipr/formatIndented enumAst))]
+      (assert (string-contains? printed "enum Color") "Must contain enum header")
+      (assert (string-contains? printed "  Red") "Must contain case Red")
+      (assert (string-contains? printed "  Green") "Must contain case Green")
+      (assert (string-contains? printed "  Blue") "Must contain case Blue")
+      (refute (string-contains? printed "defenum") "Must refute old defenum keyword")
+      true)))
+
 (df runTests [] -> Bool
   :d "Runs all canonical formatter tests."
   (assert (testFormatFunction) "testFormatFunction passed")
   (assert (testFormatDotAccess) "testFormatDotAccess passed")
   (assert (testFormatInterpolatedString) "testFormatInterpolatedString passed")
   (assert (testFormatInlineList) "testFormatInlineList passed")
+  (assert (testFormatSchema) "testFormatSchema passed")
+  (assert (testFormatEnum) "testFormatEnum passed")
   true)

@@ -1,1 +1,7 @@
-(:grammar :package "asl-target-py" :version 1 :symbols [])
+(:grammar :package "asl-target-py" :version 1
+  :symbols [
+    (:sym :name "emitPyModule" :kind :fn :tokens 2 :d "Emits verified Python module from asl-ir module")
+    (:sym :name "emitPyBlock" :kind :fn :tokens 2 :d "Emits Python statement block from list of IrStmt")
+    (:sym :name "emitPyBinop" :kind :fn :tokens 2 :d "Emits Python binary operator expression")
+    (:sym :name "emitPyStandaloneCase" :kind :fn :tokens 2 :d "Emits compliant Python source code for a conformance test case")
+  ])

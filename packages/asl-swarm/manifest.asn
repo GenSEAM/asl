@@ -1,0 +1,7 @@
+(:package asl-swarm
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Pure AgentScript Autonomous Agent Swarm Coordinator and Merkle Optimistic Concurrency Control"
+ :aslFirst true
+ :modules ["asl-swarm" "asl-swarm/coord" "asl-swarm/occ"]
+ :dependencies ["asl-hypergraph"])

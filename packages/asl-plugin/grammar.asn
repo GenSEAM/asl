@@ -41,6 +41,8 @@
           :rationale "Cannot be reduced to 'verify-nonce': validates caller monotonic anti-replay sequence counters")
     (:sym :name "constantTimeEqual" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'equal': enforces constant-time byte comparison to eliminate cryptographic timing side-channels")
+    (:sym :name "validateManifestHash" :kind :fn :tokens 3
+          :rationale "Validates package manifest content against expected Blake3 or SHA256 integrity digest")
     (:sym :name "findPluginsByCapability" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'find-plugins': explicitly scopes query filtering by advertised capability keyword rather than name or version")
 

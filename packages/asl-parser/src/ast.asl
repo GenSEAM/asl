@@ -1,7 +1,7 @@
 (module asl-parser/ast
   :d "Typed AST nodes for the four section-4 heads, parseable from either dialect."
   :x [ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField
-           TopForm ParseError parse renderNode
+           TopForm ParseError PosForm readForms parse renderNode
            AstLit litInt litFloat litString litBool litUnit
            AstPattern patWildcard patVar patLit patTuple patRecord patCtor
            AstMatchArm matchArm makeMatchArm

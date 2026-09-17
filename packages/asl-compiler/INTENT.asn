@@ -1,0 +1,31 @@
+(:packageIntent
+  :package "asl-compiler"
+  :archetype :compiler
+  :teleologyTier :V1
+  :stakeholders [:autonomousAgent :runtimeSubstrate :languageEcosystem]
+  :doc "Pure-ASL compiler pipeline, Salsa incremental computation, comptime evaluation, and target codegen."
+
+  :goals [
+    (:goal :id :salsaIdempotence :desc "Incremental compilation yields byte-identical output to a clean full build" :metric :incrementalDivergence :threshold 0.0)
+    (:goal :id :roundtripFixpoint :desc "AST unparsing followed by parsing preserves structural equivalence" :metric :roundtripEquivalence :threshold 1.0)
+    (:goal :id :deterministicCodegen :desc "Identical AST inputs produce bit-for-bit identical binary/target lowering output" :metric :binaryDeterminism :threshold 1.0)
+    (:goal :id :compileTimeGasCap :desc "All compile-time evaluations and macros are bounded by explicit gas limits to prevent infinite loops" :metric :terminationGuarantee :threshold true)
+  ]
+
+  :antiGoals [
+    (:antiGoal :noAmbiguousGrammar :rule "Zero shift-reduce or reduce-reduce conflicts in language parser")
+    (:antiGoal :noImplicitForeignDependencies :rule "Target lowering must not inject undeclared runtime libraries")
+    (:antiGoal :noUncheckedRecursion :rule "Unbounded recursion in comptime evaluator is strictly forbidden")
+  ]
+
+  :invariants [
+    (:invariant :typeSoundness :rule "Well-typed ASL expressions cannot encounter untrapped runtime type faults")
+    (:invariant :delimiterBalance :rule "Dyck-1 formal balance enforced on all compiler AST nodes")
+  ]
+
+  :traceabilityMatrix [
+    (:link :goal :salsaIdempotence :verifiedBy "tests/acceptance/d81/Task53701.asl" :mutantsKilledMin 1)
+    (:link :goal :roundtripFixpoint :verifiedBy "tests/acceptance/d81/Task53702.asl" :mutantsKilledMin 1)
+    (:link :goal :deterministicCodegen :verifiedBy "tests/acceptance/d81/Task53703.asl" :mutantsKilledMin 1)
+  ]
+)

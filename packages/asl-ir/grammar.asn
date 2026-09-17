@@ -1,0 +1,20 @@
+(:grammar
+  :package asl-ir
+  :version 1
+  :symbols [
+    (:sym :name "IrModule" :tokens 1 :rationale "IR module container")
+    (:sym :name "IrFunction" :tokens 1 :rationale "IR function definition")
+    (:sym :name "IrStmt" :tokens 1 :rationale "IR statement node")
+    (:sym :name "IrExpr" :tokens 1 :rationale "IR expression node")
+    (:sym :name "IrType" :tokens 1 :rationale "IR type specification")
+    (:sym :name "IrDiagnostic" :tokens 1 :rationale "IR verification diagnostic")
+    (:sym :name "AstPatchOp" :tokens 1 :rationale "AST patch atomic operation enum")
+    (:sym :name "AstPatch" :tokens 1 :rationale "AST patch transaction descriptor")
+    (:sym :name "PatchDiag" :tokens 1 :rationale "AST patch failure diagnostic")
+    (:sym :name "PatchResult" :tokens 1 :rationale "AST patch execution receipt")
+    (:sym :name "parsePatch" :tokens 1 :rationale "Parse AST patch from ASN text")
+    (:sym :name "applyPatch" :tokens 1 :rationale "Apply AST patch with roundtrip validation")
+    (:sym :name "invertPatch" :tokens 1 :rationale "Generate inverse AST patch for rollback")
+    (:sym :name "verifyPatch" :tokens 1 :rationale "Verify AST patch pre-conditions and validity")
+    (:sym :name "makeReplacePatch" :tokens 1 :rationale "Construct single-op replace AST patch")
+  ])

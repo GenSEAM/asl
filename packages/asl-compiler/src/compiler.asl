@@ -1,6 +1,6 @@
 (module asl-compiler/compiler
   :d "Self-hosting AgentScript compiler core: parse, check and lower to ISO C99."
-  :x [CompileResult compileSourceToC99 compilePackageToC99! formatDiagnostic compileSourceTarget compileStandaloneTarget]
+  :x [CompileResult compileSourceToC99 compilePackageToC99! formatDiagnostic compileSourceTarget compileStandaloneTarget verifyPackageCapabilities eliminateDeadCapabilities]
   :i [(ast :a a) (types :a ty) (check :a chk) (resolve :a r) (c99Emit :a c99) (c99Mangle :a cm)])
 
 (dfs CompileResult
@@ -165,3 +165,33 @@
                                         (cSource (str macroHeader (c99/emitCStandalone allForms "" isFreestanding)))]
                                     (println (str "--> [Compiler Step E] Emitted C99: " (string-from-int64 (string-length cSource)) " chars"))
                                     (ok (CompileResult :ok true :code cSource :diagnostics (list))))))))))))))))))))))
+
+(df verifyPackageCapabilities [(declared (List Str)) (used (List Str))] -> Bool
+  :d "Verifies used capabilities against declared package capability row."
+  (let [(unauth (fold (fn [(acc (List Str)) (cap Str)] -> (List Str)
+                        (if (list-contains? declared cap)
+                          acc
+                          (list-append acc (list cap))))
+                      (list)
+                      used))]
+    (list-empty? unauth)))
+
+(df eliminateDeadCapabilities [(sourceCode Str) (requestedCaps (List Str))] -> Str
+  :d "Eliminates unreferenced platform syscall stubs from emitted C99 translation units."
+  (let [(allPlatformCaps (list "netSocket" "procSpawn" "procWait" "procSignal" "fsWatch"))
+        (deadCaps (fold (fn [(acc (List Str)) (cap Str)] -> (List Str)
+                          (if (list-contains? requestedCaps cap)
+                            acc
+                            (list-append acc (list cap))))
+                        (list)
+                        allPlatformCaps))]
+    (fold (fn [(code Str) (deadCap Str)] -> Str
+            (if (= deadCap "netSocket")
+              (string-replace code "asl_platform_darwin_net_socket" "/* dce */ 0")
+              (if (= deadCap "procSpawn")
+                (string-replace code "asl_platform_darwin_proc_spawn" "/* dce */ 0")
+                (if (= deadCap "fsWatch")
+                  (string-replace code "asl_platform_darwin_fs_watch" "/* dce */ 0")
+                  code))))
+          sourceCode
+          deadCaps)))

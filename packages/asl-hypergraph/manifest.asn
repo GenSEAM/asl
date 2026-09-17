@@ -1,0 +1,7 @@
+(:package asl-hypergraph
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Pure ASL Codebase Hypergraph Indexer and Sub-80-Token Blast Radius Analysis under ADR D94"
+ :aslFirst true
+ :modules ["asl-hypergraph" "asl-hypergraph/model" "asl-hypergraph/index" "asl-hypergraph/query" "asl-hypergraph/digest"]
+ :dependencies ["asl-parser" "asl-ir"])

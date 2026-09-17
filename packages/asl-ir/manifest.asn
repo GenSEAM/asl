@@ -1,0 +1,7 @@
+(:package asl-ir
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "AgentScript Typed Monomorphic ANF Core Intermediate Representation and AST Patch Engine"
+ :aslFirst true
+ :modules ["asl-ir" "asl-ir/types" "asl-ir/anf" "asl-ir/lowering" "asl-ir/drops" "asl-ir/verify" "asl-ir/printer" "asl-ir/patch"]
+ :dependencies ["asl-parser"])

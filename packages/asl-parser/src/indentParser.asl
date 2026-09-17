@@ -63,12 +63,13 @@
     (_                   (rd/makeAtom (.-rawText tok)))))
 
 (df skipNewlines [(toks (List lx/IndentToken))] -> (List lx/IndentToken)
-  :d "Skips leading newline tokens."
+  :d "Skips leading newline and dedent tokens."
   (mt (list-head toks)
     ((some t)
      (mt (.-kind t)
-       ((tokNewline) (skipNewlines (option-or (list-tail toks) (list))))
-       (_            toks)))
+       ((tokNewline)  (skipNewlines (option-or (list-tail toks) (list))))
+       ((tokDedent _) (skipNewlines (option-or (list-tail toks) (list))))
+       (_             toks)))
     ((none) (list))))
 
 (df takeUntilLineEnd [(toks (List lx/IndentToken))] -> (Pair (List lx/IndentToken) (List lx/IndentToken))
@@ -740,7 +741,13 @@
                                  (afterArrow (.-first (.-second (.-second acc))))
                                  (retSexpr (.-second (.-second (.-second acc))))]
                              (if afterArrow
-                               (pair pList (pair (none) (pair true (desugarDot (.-rawText t)))))
+                               (let [(rawRet (.-rawText t))]
+                                 (if (= rawRet ":")
+                                   acc
+                                   (let [(cleanRet (if (string-ends-with? rawRet ":")
+                                                     (option-or (string-slice rawRet 0 (- (string-length rawRet) 1)) rawRet)
+                                                     rawRet))]
+                                     (pair pList (pair (none) (pair true (desugarDot cleanRet)))))))
                                (mt (.-kind t)
                                  ((tokArrow)
                                   (pair pList (pair (none) (pair true retSexpr))))
@@ -889,7 +896,10 @@
     (mt nameTok
       ((none) (TopFormResult :rest (list) :form (none)))
       ((some nt)
-       (let [(schemaName (.-rawText nt))
+       (let [(rawName (.-rawText nt))
+             (schemaName (if (string-ends-with? rawName ":")
+                           (option-or (string-slice rawName 0 (- (string-length rawName) 1)) rawName)
+                           rawName))
              (afterName (option-or (list-tail afterKw) (list)))]
          (if (hasLbrace? afterName)
            (let [(braceRes (takeTokensInsideBraces afterName))
@@ -924,7 +934,10 @@
     (mt nameTok
       ((none) (TopFormResult :rest (list) :form (none)))
       ((some nt)
-       (let [(enumName (.-rawText nt))
+       (let [(rawName (.-rawText nt))
+             (enumName (if (string-ends-with? rawName ":")
+                         (option-or (string-slice rawName 0 (- (string-length rawName) 1)) rawName)
+                         rawName))
              (afterName (option-or (list-tail afterKw) (list)))]
          (if (hasLbrace? afterName)
            (let [(braceRes (takeTokensInsideBraces afterName))

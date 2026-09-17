@@ -1,0 +1,73 @@
+(:grammar asl-conform :v 1 :src D81 :decision D93
+  :summary "Grammar and record types for cross-platform target conformance harness."
+  :records [
+    (:record TargetProfile
+      :fields [
+        (:f id Str "Unique profile identifier (e.g. c11, py, wasm)")
+        (:f name Str "Human-readable profile name")
+        (:f compiler Str "Compiler invocation string")
+        (:f tier Str "Target maturity tier")
+      ])
+    (:record ConformanceCase
+      :fields [
+        (:f id Str "Unique case identifier")
+        (:f rule Str "Target semantics rule identifier")
+        (:f tier Str "Conformance tier")
+        (:f oracle Str "Oracle provenance identifier")
+        (:f srcPath Str "Relative path to case.asl")
+        (:f expectStdout Str "Expected standard output")
+        (:f expectExit I64 "Expected process exit code")
+      ])
+    (:record ConformanceResult
+      :fields [
+        (:f caseId Str "Target case identifier")
+        (:f profile Str "Target profile identifier")
+        (:f passed Bool "Execution match status")
+        (:f actualStdout Str "Observed standard output")
+        (:f actualExit I64 "Observed exit code")
+        (:f reason Str "Diagnostic message on mismatch or host failure")
+      ])
+    (:record ConformReceipt
+      :fields [
+        (:f profile Str "Target profile evaluated")
+        (:f totalCases I64 "Total count of executed cases")
+        (:f passedCases I64 "Count of matching cases")
+        (:f failedCases I64 "Count of non-matching or diverging cases")
+        (:f results (List ConformanceResult) "Per-case verification records")
+        (:f mutantsChecked (List Str) "List of evaluated mutant IDs")
+        (:f invertedReachable Bool "Status of negative assertion reachability check")
+      ])
+    (:record AuditNode
+      :fields [
+        (:f id Str "Unique audit finding identifier")
+        (:f lens Str "Diagnostic lens name")
+        (:f severity Str "Severity classification")
+        (:f anchor Str "Symbol and AST anchor path")
+        (:f evidence Str "Concrete diagnostic proof")
+        (:f remedy Str "Machine-verifiable single-turn remediation prescription")
+        (:f provenance Str "Audit rule ID and originating engine")
+      ])
+    (:record AuditEdge
+      :fields [
+        (:f from Str "Source audit node or AST symbol ID")
+        (:f to Str "Target audit node or AST symbol ID")
+        (:f kind Str "Relational causality kind")
+      ])
+    (:record AuditHypergraph
+      :fields [
+        (:f version Str "Schema version")
+        (:f timestamp Int64 "Generation timestamp in nanoseconds")
+        (:f nodes (List AuditNode) "Indexed diagnostic findings")
+        (:f edges (List AuditEdge) "Causal relational edges")
+        (:f score Int64 "Composite integrity score")
+      ])
+    (:record PatchReceipt
+      :fields [
+        (:f id Str "Receipt identifier")
+        (:f target Str "Target symbol or node anchor")
+        (:f status Str "Remediation status")
+        (:f diffStr Str "Minimal AST diff or patch replacement")
+        (:f tokenCount Int64 "Perceptual token count strictly under 120")
+      ])
+  ]
+)

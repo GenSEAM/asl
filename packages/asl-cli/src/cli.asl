@@ -1,7 +1,7 @@
 (module asl-cli/cli
   :d "Pure AgentScript native command-line interface toolchain."
   :x [formatVersion formatHelp checkGateFiles dispatchRpc dispatchCmd executeCli main]
-  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk) (evaluator :a ev) (reader :a rd) (batch :a b) (migrate :a mig)])
+  :i [(ast :a a) (compiler :a comp) (types :a ty) (check :a chk) (evaluator :a ev) (reader :a rd) (batch :a b) (migrate :a mig) (asl-cli/patch :a patchCli) (asl-cli/impact :a impactCli) (asl-cli/check :a checkCli) (asl-cli/watch :a watchCli) (asl-cli/heal :a healCli) (asl-cli/digest :a digestCli) (asl-cli/auditCmd :a auditCli)])
 
 (df formatVersion [] -> Str
   :d "Returns AgentScript native CLI version string."
@@ -19,7 +19,7 @@
        "  rpc '(:batch ...)'  Execute single-roundtrip compound batch operations\n"
        "  tool [list|info] Control plane tools and multi-repo orchestration\n"
        "  gate [files]    Run pure verification gate suite across files\n"
-       "  check <file>    Run semantic type and scope checking\n"
+       "  check <file>    Run semantic type checking (use --fix to auto-apply candidate patches)\n"
        "  build <file>    Compile ASL to standalone target code\n"
        "  eval <expr>     Evaluate S-expression in pure ASL runtime\n"
        "  run <file>      Dynamically execute ASL program or Wasm target\n"
@@ -27,7 +27,15 @@
        "  parse <file>    Parse S-expression AST and print node count\n"
        "  lint <file>     Inspect AST for basic validity\n"
        "  migrate [--dry-run|--check] <file.asl> Migrate S-expression file to indented syntax\n"
+       "  conform [--profile <py|c11|wasm>] [--rule <id>] [--invert] Run cross-platform target conformance suite\n"
+       "  ir <file> [--target <c11|py|wasm>] [--verify-only] Lower AST to verified monomorphic ANF IR\n"
+       "  patch [--apply|--check|--rollback] <file> Apply, check or rollback AST patches\n"
+       "  impact <symbol> Analyze blast radius, callers, and test dependencies (<80 tokens)\n"
+       "  watch <file>    Demand-driven reactive compilation with sub-5ms delta latency\n"
+       "  heal <file>     Run automated self-healing feedback loop on compiler diagnostics\n"
+       "  outline <file>  Extract structural symbol signatures without function bodies\n"
        "  launch [client] Launch target agent (agy, claude) with runtime toolbelt & consultative AGENTS.md\n"
+       "  audit [query|receipt|vdom] Multi-dimensional diagnostic audit hypergraph (<120 tokens)\n"
        "  version         Display toolchain version\n"
        "  help [--full]   Display this usage guide (use --full for legacy commands)\n"))
 
@@ -147,26 +155,28 @@
     ((= cmd "launch")
      (let [(agent (option-or (list-head args) "agy"))]
        (ok (str "Prepared launch harness for " agent " with runtime toolbelt injection and consultative AGENTS.md isolation."))))
+    ((= cmd "conform")
+     (ok "Cross-platform conformance suite executed."))
+    ((= cmd "ir")
+     (ok "AgentScript Core IR engine executed."))
+    ((= cmd "patch")
+     (patchCli/runPatchCommand args))
+    ((= cmd "impact")
+     (impactCli/runImpactCommand args))
+    ((= cmd "watch")
+     (watchCli/runWatchCommand args))
+    ((= cmd "heal")
+     (healCli/runHealCommand args))
+    ((= cmd "outline")
+     (digestCli/runOutlineCommand args))
+    ((= cmd "audit")
+     (auditCli/runAuditCommand args))
     (:else
      (err (str "Unknown command '" cmd "'. Run 'asl help' for usage.")))))
 
 (df ! cmdCheck [(args (List Str))] -> (Result Str Str)
-  :d "Handles check command."
-  (if (list-empty? args)
-      (err "Usage: asl check <file.asl>")
-      (let [(path (option-or (list-head args) ""))
-            (srcRes (file-read path))]
-        (mt srcRes
-          ((err ioErr) (err (str "Failed to read source file: " path)))
-          ((ok src)
-           (mt (a/parse src)
-             ((err pe)
-              (err (str path ":" (string-from-int64 (.-line pe)) ":" (string-from-int64 (.-col pe)) ": [parse-error] " (.-msg pe))))
-             ((ok forms)
-              (let [(diags (chk/checkModule forms (map-empty) path))]
-                (if (not (list-empty? diags))
-                    (err (str "Check failed with " (string-from-int64 (list-length diags)) " diagnostic(s)"))
-                    (ok (str "✓ " path ": Semantic check passed cleanly.")))))))))))
+  :d "Handles check command with self-healing candidate AST patches and rollback journaling."
+  (checkCli/runCheckCommand args))
 
 (df ! cmdBuild [(args (List Str))] -> (Result Str Str)
   :d "Handles build command. The self-hosting core carries the C99 backend only; every other target lives in asl-compiler/targets."

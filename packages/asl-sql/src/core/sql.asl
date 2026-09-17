@@ -1,11 +1,13 @@
 (module asl-sql/core
   :d "Native AgentScript Cross-Dialect SQL AST Query Builder and Parameterized Renderer."
-  :x [SqlDialect BinaryOp OrderDir JoinType SqlExpr SqlJoin SelectQuery RenderedQuery
-           defaultDialect dialectQuoteChar dialectParamPrefix
-           isParameterized isLiteralParam colExpr strExpr intExpr boolExpr rawExpr jsonGetExpr
-           makeJoin makeSelect renderBinaryOp renderPlaceholder renderJsonPath
-           renderExprStr countParams renderSelect countPairParams renderLogicalOp
-           collectParams collectJoinsParams renderJoinsIndexed renderWhereClauseIndexed]
+  :x [SqlDialect BinaryOp OrderDir JoinType SqlExpr SqlJoin SelectQuery RenderedQuery WhenClause
+      defaultDialect dialectQuoteChar dialectParamPrefix
+      isParameterized isLiteralParam colExpr strExpr intExpr boolExpr rawExpr jsonGetExpr
+      arithExpr aggExpr aliasExpr qualColExpr caseWhenExpr makeWhen
+      makeJoin makeSelect renderBinaryOp renderPlaceholder renderJsonPath
+      renderExprStr countParams renderSelect countPairParams renderLogicalOp
+      collectParams collectJoinsParams renderJoinsIndexed renderWhereClauseIndexed
+      renderGroupBy renderHavingClauseIndexed extractHavingParams]
   :i [(asl-text/string :a s)])
 
 (dfe SqlDialect
@@ -34,6 +36,10 @@
   (:c rightJoin [] "RIGHT OUTER JOIN")
   (:c fullJoin  [] "FULL OUTER JOIN"))
 
+(dfs WhenClause
+  (:f cond SqlExpr "Condition predicate")
+  (:f result SqlExpr "Result expression"))
+
 (dfe SqlExpr
   (:c col          [(name String)]                                   "Column identifier")
   (:c litStr      [(val String)]                                    "String literal parameter")
@@ -45,7 +51,12 @@
   (:c binary       [(op BinaryOp) (left SqlExpr) (right SqlExpr)]    "Binary comparison operation")
   (:c andExpr     [(left SqlExpr) (right SqlExpr)]                  "Logical AND conjunction")
   (:c orExpr      [(left SqlExpr) (right SqlExpr)]                  "Logical OR disjunction")
-  (:c notExpr     [(inner SqlExpr)]                                 "Logical NOT inversion"))
+  (:c notExpr     [(inner SqlExpr)]                                 "Logical NOT inversion")
+  (:c arith       [(op String) (left SqlExpr) (right SqlExpr)]      "Arithmetic expression (+ - * /)")
+  (:c agg         [(fn String) (arg SqlExpr) (distinct Bool)]       "Aggregate function invocation (sum, count, avg, min, max)")
+  (:c alias       [(expr SqlExpr) (asName String)]                  "Aliased expression AS asName")
+  (:c qualCol     [(tbl String) (col String)]                       "Qualified column reference tbl.col")
+  (:c caseWhen    [(whens (List WhenClause)) (elseExpr SqlExpr)]    "CASE WHEN ... THEN ... ELSE ... END"))
 
 (dfs SqlJoin
   (:f joinType JoinType "Join classification")
@@ -57,6 +68,8 @@
   (:f fromTable String "Primary source table name")
   (:f joins (List SqlJoin) "Joined table clauses")
   (:f whereClause (Option SqlExpr) "Optional filter predicate")
+  (:f groupBy (List String) "Optional GROUP BY column list")
+  (:f havingClause (Option SqlExpr) "Optional HAVING predicate")
   (:f orderColumn (Option String) "Optional ordering column")
   (:f orderDir OrderDir "Sort direction (asc or desc)")
   (:f limitCount (Option Int64) "Maximum rows to return")
@@ -111,6 +124,30 @@
   :d "Constructs a cross-dialect JSON extraction expression."
   (jsonExtract col path))
 
+(df makeWhen [(cond SqlExpr) (result SqlExpr)] -> WhenClause
+  :d "Constructs a WhenClause record."
+  (WhenClause :cond cond :result result))
+
+(df arithExpr [(op String) (left SqlExpr) (right SqlExpr)] -> SqlExpr
+  :d "Constructs an arithmetic expression."
+  (arith op left right))
+
+(df aggExpr [(fn String) (arg SqlExpr) (distinct Bool)] -> SqlExpr
+  :d "Constructs an aggregate function expression."
+  (agg fn arg distinct))
+
+(df aliasExpr [(expr SqlExpr) (asName String)] -> SqlExpr
+  :d "Constructs an aliased expression."
+  (alias expr asName))
+
+(df qualColExpr [(tbl String) (col String)] -> SqlExpr
+  :d "Constructs a qualified column expression."
+  (qualCol tbl col))
+
+(df caseWhenExpr [(whens (List WhenClause)) (elseExpr SqlExpr)] -> SqlExpr
+  :d "Constructs a CASE WHEN expression."
+  (caseWhen whens elseExpr))
+
 (df makeJoin [(jt JoinType) (tbl String) (onCond SqlExpr)] -> SqlJoin
   :d "Constructs a SqlJoin record."
   (SqlJoin :joinType jt :table tbl :onClause onCond))
@@ -121,6 +158,8 @@
                :fromTable tbl
                :joins (list)
                :whereClause whereOpt
+               :groupBy (list)
+               :havingClause (none)
                :orderColumn (none)
                :orderDir (asc)
                :limitCount (none)
@@ -158,6 +197,17 @@
     ((litBool _) true)
     (_            false)))
 
+(df countWhensParams [(whens (List WhenClause))] -> Int64
+  :d "Recursively counts parameter placeholders across WHEN clauses."
+  (if (list-empty? whens)
+    0
+    (mt (list-head whens)
+      ((some w)
+       (let [(wCount (+ (countParams (.-cond w)) (countParams (.-result w))))
+             (restW (mt (list-tail whens) ((some r) r) ((none) (list))))]
+         (+ wCount (countWhensParams restW))))
+      ((none) 0))))
+
 (df countParams [(expr SqlExpr)] -> Int64
   :d "Recursively counts parameter placeholders in an expression."
   (if (isLiteralParam expr)
@@ -167,7 +217,23 @@
       ((andExpr l r)   (countPairParams l r))
       ((orExpr l r)    (countPairParams l r))
       ((notExpr inner) (countParams inner))
+      ((arith _ l r)   (countPairParams l r))
+      ((agg _ arg _)   (countParams arg))
+      ((alias inner _) (countParams inner))
+      ((qualCol _ _)   0)
+      ((caseWhen whens elseExpr) (+ (countWhensParams whens) (countParams elseExpr)))
       (_                0))))
+
+(df collectWhensParams [(whens (List WhenClause))] -> (List SqlExpr)
+  :d "Extracts literal parameters across WHEN clauses in traversal order."
+  (if (list-empty? whens)
+    (list)
+    (mt (list-head whens)
+      ((some w)
+       (let [(wParams (listConcat (collectParams (.-cond w)) (collectParams (.-result w))))
+             (restW (mt (list-tail whens) ((some r) r) ((none) (list))))]
+         (listConcat wParams (collectWhensParams restW))))
+      ((none) (list)))))
 
 (df collectParams [(expr SqlExpr)] -> (List SqlExpr)
   :d "Walks SqlExpr tree and extracts all literal parameters in traversal order."
@@ -178,6 +244,11 @@
       ((andExpr l r)   (listConcat (collectParams l) (collectParams r)))
       ((orExpr l r)    (listConcat (collectParams l) (collectParams r)))
       ((notExpr inner) (collectParams inner))
+      ((arith _ l r)   (listConcat (collectParams l) (collectParams r)))
+      ((agg _ arg _)   (collectParams arg))
+      ((alias inner _) (collectParams inner))
+      ((qualCol _ _)   (list))
+      ((caseWhen whens elseExpr) (listConcat (collectWhensParams whens) (collectParams elseExpr)))
       (_                (list)))))
 
 (df collectJoinsParams [(joins (List SqlJoin))] -> (List SqlExpr)
@@ -219,6 +290,24 @@
     ((mysql)      (renderJsonFunc "JSON_UNQUOTE(JSON_EXTRACT(" col ", '$." path "'))"))
     ((clickhouse) (renderJsonFunc "JSONExtractString(" col ", '" path "')"))))
 
+(df renderWhensIndexed [(whens (List WhenClause)) (dialect SqlDialect) (paramIdx Int64)] -> String
+  :d "Renders WHEN ... THEN ... branches sequentially with threaded parameter indices."
+  (if (list-empty? whens)
+    ""
+    (mt (list-head whens)
+      ((some w)
+       (let [(condStr (renderExprStr (.-cond w) dialect paramIdx))
+             (condCount (countParams (.-cond w)))
+             (resIdx (+ paramIdx condCount))
+             (resStr (renderExprStr (.-result w) dialect resIdx))
+             (resCount (countParams (.-result w)))
+             (nextIdx (+ resIdx resCount))
+             (restW (mt (list-tail whens) ((some r) r) ((none) (list))))
+             (clauseStr (str " WHEN " condStr " THEN " resStr))
+             (restStr (renderWhensIndexed restW dialect nextIdx))]
+         (str clauseStr restStr)))
+      ((none) ""))))
+
 (df renderExprStr [(expr SqlExpr) (dialect SqlDialect) (paramIdx Int64)] -> String
   :d "Recursively renders a parameterized SQL expression."
   (if (isLiteralParam expr)
@@ -232,6 +321,16 @@
       ((andExpr l r)   (renderLogicalOp "AND" l r dialect paramIdx))
       ((orExpr l r)    (renderLogicalOp "OR" l r dialect paramIdx))
       ((notExpr inner) (str "NOT (" (renderExprStr inner dialect paramIdx) ")"))
+      ((arith op l r)  (renderPairExprs l r dialect paramIdx op true))
+      ((agg fn arg distinct) (str (string-upper fn) "(" (if distinct "DISTINCT " "") (renderExprStr arg dialect paramIdx) ")"))
+      ((alias inner asName) (str (renderExprStr inner dialect paramIdx) " AS " asName))
+      ((qualCol tbl col) (str tbl "." col))
+      ((caseWhen whens elseExpr)
+       (let [(whensSql (renderWhensIndexed whens dialect paramIdx))
+             (whensCount (countWhensParams whens))
+             (elseIdx (+ paramIdx whensCount))
+             (elseSql (renderExprStr elseExpr dialect elseIdx))]
+         (str "CASE" whensSql " ELSE " elseSql " END")))
       (_                ""))))
 
 (df renderJoinType [(jt JoinType)] -> String
@@ -318,6 +417,24 @@
     ((none) (list))
     ((some wExpr) (collectParams wExpr))))
 
+(df renderGroupBy [(groups (List String))] -> String
+  :d "Renders GROUP BY clause if columns are specified."
+  (if (or (nil? groups) (list-empty? groups))
+    ""
+    (str " GROUP BY " (string-join groups ", "))))
+
+(df renderHavingClauseIndexed [(havingOpt (Option SqlExpr)) (dialect SqlDialect) (paramIdx Int64)] -> String
+  :d "Renders HAVING clause SQL string if present with custom parameter offset."
+  (mt havingOpt
+    ((none) "")
+    ((some hExpr) (str " HAVING " (renderExprStr hExpr dialect paramIdx)))))
+
+(df extractHavingParams [(havingOpt (Option SqlExpr))] -> (List SqlExpr)
+  :d "Extracts literal parameter list from optional HAVING clause."
+  (mt havingOpt
+    ((none) (list))
+    ((some hExpr) (collectParams hExpr))))
+
 (df renderSelect [(q SelectQuery) (dialect SqlDialect)] -> RenderedQuery
   :d "Renders a complete SelectQuery into parameterized SQL string."
   (let [(baseSql (str "SELECT " (string-join (.-columns q) ", ") " FROM " (.-fromTable q)))
@@ -326,14 +443,19 @@
         (joinsSql (renderJoinsIndexed (.-joins q) dialect 1))
         (whereStartIdx (+ 1 joinParamsCount))
         (whereSql (renderWhereClauseIndexed (.-whereClause q) dialect whereStartIdx))
+        (whereParams (extractWhereParams (.-whereClause q)))
+        (whereParamsCount (list-length whereParams))
+        (groupSql (renderGroupBy (.-groupBy q)))
+        (havingStartIdx (+ whereStartIdx whereParamsCount))
+        (havingSql (renderHavingClauseIndexed (.-havingClause q) dialect havingStartIdx))
+        (havingParams (extractHavingParams (.-havingClause q)))
         (orderSql (renderOrderBy (.-orderColumn q) (.-orderDir q)))
         (limitSql (renderLimit (.-limitCount q)))
         (offsetSql (renderOffset (.-offsetCount q)))
         (lockSql (renderForUpdate (.-forUpdateSkipLocked q)))
         (returnSql (renderReturning (.-returningColumns q)))
-        (fullSql (str baseSql joinsSql whereSql orderSql limitSql offsetSql lockSql returnSql))
-        (whereParams (extractWhereParams (.-whereClause q)))
-        (allParams (listConcat joinParams whereParams))
+        (fullSql (str baseSql joinsSql whereSql groupSql havingSql orderSql limitSql offsetSql lockSql returnSql))
+        (allParams (listConcat (listConcat joinParams whereParams) havingParams))
         (pCount (list-length allParams))]
     (RenderedQuery :sql fullSql
                    :querySql fullSql

@@ -1,0 +1,20 @@
+(:grammar
+  :id "asl-replay-pkg-grammar"
+  :version 1
+  :package "asl-replay"
+  :doc "Exported symbol registry for asl-replay under C5 token density standards"
+  :symbols [
+    (:sym :name "ReplayEvent" :tokens 1 :rationale "Canonical recorded agent execution event")
+    (:sym :name "ReplaySession" :tokens 1 :rationale "Ordered sequence of execution replay events bound to session")
+    (:sym :name "makeReplayEvent" :tokens 1 :rationale "Constructor for raw recorded replay event descriptor")
+    (:sym :name "recordAgentEvent" :tokens 1 :rationale "Records an atomic agent execution step event")
+    (:sym :name "normalizeVolatileFields" :tokens 1 :rationale "Produces canonical deterministic string representation masking non-deterministic volatile metadata")
+    (:sym :name "calculateEventDigest" :tokens 1 :rationale "Calculates deterministic digest across normalized event contents")
+    (:sym :name "createReplaySession" :tokens 1 :rationale "Constructs an immutable replay session descriptor")
+    (:sym :name "DivergenceReport" :tokens 1 :rationale "State divergence diagnostic report indicating exact step and mismatched hashes")
+    (:sym :name "makeDivergenceReport" :tokens 1 :rationale "Constructor for execution replay divergence report descriptor")
+    (:sym :name "verifyStateDigest" :tokens 1 :rationale "Verifies byte-for-byte equality between expected and actual state digests")
+    (:sym :name "detectDivergence" :tokens 1 :rationale "Detects execution drift or tampering between replay session events and runtime states")
+    (:sym :name "getDivergenceReport" :tokens 1 :rationale "Extracts clean or error DivergenceReport from divergence detection result")
+    (:sym :name "replayEventStream" :tokens 1 :rationale "Re-executes canonical event stream returning completed session identifier")
+  ])

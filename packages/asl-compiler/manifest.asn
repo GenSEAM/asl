@@ -11,7 +11,12 @@
            "asl-compiler/compactRewrite"
            "asl-compiler/elf"
            "asl-compiler/macho"
-           "asl-compiler/parser"]
+           "asl-compiler/parser"
+           "asl-compiler/diagnostics"
+           "asl-compiler/comptime"
+           "asl-compiler/salsa"
+           "asl-compiler/heal"]
  :dependencies ["asl-parser"
                 "asl-checker"
-                "asl-codegen"])
+                "asl-codegen"
+                "asl-ir"])

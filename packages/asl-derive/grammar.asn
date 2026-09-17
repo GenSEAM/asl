@@ -1,0 +1,41 @@
+(:grammar
+  :package asl-derive
+  :version "0.1.0"
+  :tokensBaseline 2
+  :symbols [
+    (:sym :name "FieldDef" :kind :type :tokens 1)
+    (:sym :name "RecordSchema" :kind :type :tokens 1)
+    (:sym :name "VariantCaseDef" :kind :type :tokens 1)
+    (:sym :name "VariantSchema" :kind :type :tokens 1)
+    (:sym :name "JsonCodec" :kind :type :tokens 1)
+    (:sym :name "AsnCodec" :kind :type :tokens 1)
+    (:sym :name "VisitorCode" :kind :type :tokens 1)
+    (:sym :name "VariantCodec" :kind :type :tokens 1)
+
+    (:sym :name "makeField" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "RunTests" :kind :fn :tokens 2)
+
+    (:sym :name "makeRecordSchema" :kind :fn :tokens 3
+          :rationale "Cannot be reduced to make-schema: record qualifier distinguishes struct schemas from union or interface schemas")
+    (:sym :name "makeVariantCase" :kind :fn :tokens 3
+          :rationale "Constructs variant constructor arm descriptor with optional payload type")
+    (:sym :name "makeVariantSchema" :kind :fn :tokens 3
+          :rationale "Constructs closed sum type variant schema descriptor")
+    (:sym :name "deriveJsonCodec" :kind :fn :tokens 3
+          :rationale "Generates monomorphic JSON encoder and decoder functions for record schemas")
+    (:sym :name "deriveAsnCodec" :kind :fn :tokens 3
+          :rationale "Generates monomorphic ASN S-expression encoder and decoder functions for record schemas")
+    (:sym :name "deriveRecordVisitor" :kind :fn :tokens 3
+          :rationale "Generates field visitor dispatch function without runtime reflection tables")
+    (:sym :name "deriveVariantCodec" :kind :fn :tokens 3
+          :rationale "Generates monomorphic pattern matching encoder and decoder functions for sum types")
+    (:sym :name "formatRecordToJson" :kind :fn :tokens 4
+          :rationale "Serializes record field value pairs to JSON string format")
+    (:sym :name "formatRecordToAsn" :kind :fn :tokens 4
+          :rationale "Serializes record field value pairs to ASN S-expression format")
+    (:sym :name "parseJsonToFieldPairs" :kind :fn :tokens 4
+          :rationale "Parses JSON string into typed field key-value pairs without reflection")
+    (:sym :name "parseAsnToFieldPairs" :kind :fn :tokens 4
+          :rationale "Parses ASN S-expression text into typed field key-value pairs without reflection")
+  ])

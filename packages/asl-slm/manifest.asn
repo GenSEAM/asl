@@ -1,0 +1,7 @@
+(:package asl-slm
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "AgentScript Small Language Model EBNF Grammar PDA and Token Mask Bitset Engine"
+ :aslFirst true
+ :modules ["asl-slm" "asl-slm/masker"]
+ :dependencies [])

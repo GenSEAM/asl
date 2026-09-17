@@ -90,4 +90,6 @@
           :rationale "Verifies DDL column types mapping across SQL dialects")
     (:sym :name "typeToSqlString" :kind :fn :tokens 4
           :rationale "Cannot be reduced to 'type-to-sql': distinguishes DDL type declaration string rendering from query expression lowering")
+    (:sym :name "deriveSqlTableSchema" :kind :fn :tokens 4
+          :rationale "Generates SQL CREATE TABLE DDL from record schema descriptors")
   ])

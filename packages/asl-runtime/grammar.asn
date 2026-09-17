@@ -1,0 +1,8 @@
+(:grammar :package "asl-runtime" :version 1
+  :symbols [
+    (:sym :name "rtRetain" :kind :fn :tokens 2 :d "Increments reference count of heap object")
+    (:sym :name "rtRelease" :kind :fn :tokens 2 :d "Decrements reference count of heap object and frees when zero")
+    (:sym :name "rtFormatF64" :kind :fn :tokens 2 :d "Formats 64-bit float using shortest round-trip decimal representation")
+    (:sym :name "rtStableSort" :kind :fn :tokens 2 :d "Performs stable merge sort over a list with custom comparator")
+    (:sym :name "rtPanic" :kind :fn :tokens 2 :d "Aborts process execution with fixed diagnostic exit code")
+  ])

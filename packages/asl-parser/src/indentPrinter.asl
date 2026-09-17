@@ -1,7 +1,8 @@
 (module asl-parser/indentPrinter
   :d "Pure ASL v0.4 Canonical Indented Formatter & Round-Trip Pretty Printer."
   :x [formatIndented formatSexpr isDotAccess? formatDotAccess
-      isInterpolatedStr? formatInterpolatedStr isListForm? formatListForm printIndented]
+      isInterpolatedStr? formatInterpolatedStr isListForm? formatListForm printIndented
+      formatSchemaForm formatEnumForm]
   :i [(reader :a rd)])
 
 (df indentPrefix [(level Int64)] -> String
@@ -189,6 +190,67 @@
            (str header "\n" (string-join bodyLines "\n"))))))
     (_ "")))
 
+(df formatSchemaField [(f rd/SExpr) (indent Int64)] -> String
+  :d "Formats a single schema field (:field name type [doc]) into 'name: type [doc]'."
+  (mt f
+    ((sexprList items)
+     (let [(fName (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom ""))))
+           (fType (formatSexpr (option-or (list-get items 2) (rd/makeAtom "Any")) 0))
+           (docOpt (list-get items 3))]
+       (mt docOpt
+         ((some docAtom)
+          (let [(docStr (rd/sexprHead docAtom))]
+            (if (or (= docStr "") (= docStr "\"\""))
+              (str (indentPrefix indent) fName ": " fType)
+              (str (indentPrefix indent) fName ": " fType " " docStr))))
+         ((none)
+          (str (indentPrefix indent) fName ": " fType)))))
+    (_ "")))
+
+(df formatSchemaForm [(s rd/SExpr) (indent Int64)] -> String
+  :d "Formats defschema SExpr into clean v0.4 indented schema declaration."
+  (mt s
+    ((sexprList items)
+     (let [(name (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom "Anonymous"))))
+           (fieldForms (if (> (list-length items) 2)
+                         (option-or (list-slice items 2 (list-length items)) (list))
+                         (list)))
+           (header (str (indentPrefix indent) "schema " name))]
+       (if (list-empty? fieldForms)
+         header
+         (let [(fieldLines (map (fn [(f rd/SExpr)] -> String
+                                  (formatSchemaField f (+ indent 1)))
+                                fieldForms))]
+           (str header "\n" (string-join fieldLines "\n"))))))
+    (_ "")))
+
+(df formatEnumCase [(c rd/SExpr) (indent Int64)] -> String
+  :d "Formats a single enum variant (:case Name [params] [doc]) into 'Name'."
+  (mt c
+    ((sexprList items)
+     (let [(caseName (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom ""))))]
+       (str (indentPrefix indent) caseName)))
+    ((sexprAtom v)
+     (str (indentPrefix indent) v))
+    (_ "")))
+
+(df formatEnumForm [(s rd/SExpr) (indent Int64)] -> String
+  :d "Formats defenum SExpr into clean v0.4 indented enum declaration."
+  (mt s
+    ((sexprList items)
+     (let [(name (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom "Anonymous"))))
+           (caseForms (if (> (list-length items) 2)
+                        (option-or (list-slice items 2 (list-length items)) (list))
+                        (list)))
+           (header (str (indentPrefix indent) "enum " name))]
+       (if (list-empty? caseForms)
+         header
+         (let [(caseLines (map (fn [(c rd/SExpr)] -> String
+                                 (formatEnumCase c (+ indent 1)))
+                               caseForms))]
+           (str header "\n" (string-join caseLines "\n"))))))
+    (_ "")))
+
 (df formatSexpr [(s rd/SExpr) (indent Int64)] -> String
   :d "Formats single SExpr into canonical v0.4 indented text."
   (mt s
@@ -202,6 +264,10 @@
           (formatDefunForm s indent))
          ((= headSym "match")
           (formatMatchForm s indent))
+         ((or (= headSym "schema") (or (= headSym "dfs") (= headSym "defschema")))
+          (formatSchemaForm s indent))
+         ((or (= headSym "enum") (or (= headSym "dfe") (= headSym "defenum")))
+          (formatEnumForm s indent))
          ((isDotAccess? s)
           (formatDotAccess s))
          ((isInterpolatedStr? s)
@@ -226,6 +292,10 @@
           (formatMatchForm s 0))
          ((= headSym "module")
           (formatSexpr s 0))
+         ((or (= headSym "schema") (or (= headSym "dfs") (= headSym "defschema")))
+          (formatSchemaForm s 0))
+         ((or (= headSym "enum") (or (= headSym "dfe") (= headSym "defenum")))
+          (formatEnumForm s 0))
          ((isDotAccess? s)
           (formatDotAccess s))
          ((isInterpolatedStr? s)
@@ -249,9 +319,9 @@
          ((= headSym "module")
           (formatSexpr s 0))
          ((or (= headSym "schema") (or (= headSym "dfs") (= headSym "defschema")))
-          (formatSexpr s 0))
+          (formatSchemaForm s 0))
          ((or (= headSym "enum") (or (= headSym "dfe") (= headSym "defenum")))
-          (formatSexpr s 0))
+          (formatEnumForm s 0))
          (:else
           (formatIndented s)))))
     (_ (formatSexpr s 0))))

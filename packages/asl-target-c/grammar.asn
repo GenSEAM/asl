@@ -1,0 +1,8 @@
+(:grammar :package "asl-target-c" :version 1
+  :symbols [
+    (:sym :name "emitC11Module" :kind :fn :tokens 2 :d "Emits verified C11 source file from verified asl-ir module")
+    (:sym :name "emitC11Type" :kind :fn :tokens 2 :d "Maps an IrType to C11 type declaration")
+    (:sym :name "emitC11Block" :kind :fn :tokens 2 :d "Emits C11 statement block from list of IrStmt")
+    (:sym :name "emitC11Closure" :kind :fn :tokens 2 :d "Emits environment struct and wrapper for closure")
+    (:sym :name "emitC11Panic" :kind :fn :tokens 2 :d "Emits C11 panic statement with fixed exit code")
+  ])

@@ -32,6 +32,15 @@
     (:sym :name "AgentPlatform" :kind :type :tokens 1)
     (:sym :name "InstallerConfig" :kind :type :tokens 1)
     (:sym :name "InstallationPlan" :kind :type :tokens 1)
+    (:sym :name "CapabilityReport" :kind :type :tokens 2)
+    (:sym :name "DceResult" :kind :type :tokens 2)
+
+    (:sym :name "verifyPackageCapabilities" :kind :fn :tokens 3
+          :rationale "Link-time capability sandboxing pass verifying used capabilities against declared package capabilities")
+    (:sym :name "eliminateDeadCapabilities" :kind :fn :tokens 3
+          :rationale "Eliminates unreferenced platform syscall stubs from emitted C99 or WASM source code")
+    (:sym :name "validateManifestHash" :kind :fn :tokens 3
+          :rationale "Validates package manifest content against expected integrity digest")
 
     (:sym :name "planPackage" :kind :fn :tokens 2
           :rationale "Computes package build strategy and target artifact paths")

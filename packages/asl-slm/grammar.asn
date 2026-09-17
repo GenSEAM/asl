@@ -1,0 +1,31 @@
+(:grammar
+  :package asl-slm
+  :version "0.1.0"
+  :tokensBaseline 2
+  :symbols [
+    (:sym :name "GrammarPda" :kind :type :tokens 1)
+    (:sym :name "MaskerState" :kind :type :tokens 1)
+    (:sym :name "TokenMaskBitset" :kind :type :tokens 1)
+
+    (:sym :name "maskerInit" :kind :fn :tokens 2)
+    (:sym :name "isTokenAllowed" :kind :fn :tokens 2)
+    (:sym :name "runTests" :kind :fn :tokens 2)
+    (:sym :name "RunTests" :kind :fn :tokens 2)
+
+    (:sym :name "resetMaskerBuffer" :kind :fn :tokens 3
+          :rationale "Resets accumulated partial subword buffer to empty string")
+    (:sym :name "compileGrammarToDfa" :kind :fn :tokens 3
+          :rationale "Compiles EBNF grammar into deterministic pushdown automaton with delimiter balance states")
+    (:sym :name "advanceMaskerState" :kind :fn :tokens 3
+          :rationale "Transitions pushdown automaton state and updates delimiter balance depth on sampled token")
+    (:sym :name "advanceMaskerSubword" :kind :fn :tokens 3
+          :rationale "Performs BPE subword prefix matching and updates partial token buffer state")
+    (:sym :name "computeTokenMaskBitset" :kind :fn :tokens 3
+          :rationale "Precomputes token mask bitset over vocabulary prohibiting invalid tokens and enforcing EOS masking")
+    (:sym :name "isTokenValidAtState" :kind :fn :tokens 3
+          :rationale "Evaluates whether candidate token is permitted under active grammar pushdown state")
+    (:sym :name "isSubwordPrefixValid" :kind :fn :tokens 3
+          :rationale "Validates whether accumulated subword buffer matches valid prefix of grammar terminal")
+    (:sym :name "isGrammarTerminalAllowed" :kind :fn :tokens 3
+          :rationale "Checks whether candidate token matches terminal rules recognized by grammar")
+  ])

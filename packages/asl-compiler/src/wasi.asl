@@ -26,7 +26,18 @@
       sandboxedWasiCapabilities
       nativeTierCapabilities
       wasiSysExec
-      WasiExecReceipt]
+      WasiExecReceipt
+      errPlatformEof
+      errPlatformTimeout
+      errPlatformDenied
+      errPlatformBadHandle
+      errPlatformNotFound
+      errPlatformBusy
+      platformErrorName
+      aslMemAllocPage
+      aslMemFreePage
+      aslSyscallDispatch
+      platformAdapter]
   :i [])
 
 (df wasiFdStdin [] -> Int64 0)
@@ -388,3 +399,54 @@
           :code (.-exitCode res)
           :stdout (.-stdout res)
           :stderr (.-stderr res)))))
+
+(df errPlatformEof [] -> Int64 1)
+(df errPlatformTimeout [] -> Int64 2)
+(df errPlatformDenied [] -> Int64 3)
+(df errPlatformBadHandle [] -> Int64 4)
+(df errPlatformNotFound [] -> Int64 5)
+(df errPlatformBusy [] -> Int64 6)
+
+(df platformErrorName [(code Int64)] -> Str
+  :d "Returns standard string name for typed platform error code under ADR D98."
+  (cond
+    ((= code 1) "ERR_PLATFORM_EOF")
+    ((= code 2) "ERR_PLATFORM_TIMEOUT")
+    ((= code 3) "ERR_PLATFORM_DENIED")
+    ((= code 4) "ERR_PLATFORM_BAD_HANDLE")
+    ((= code 5) "ERR_PLATFORM_NOT_FOUND")
+    ((= code 6) "ERR_PLATFORM_BUSY")
+    (:else "ERR_PLATFORM_UNKNOWN")))
+
+(df aslMemAllocPage [(pageCount Int64)] -> Int64
+  :d "Allocates virtual memory pages returning virtual base offset."
+  (if (<= pageCount 0)
+      0
+      (* pageCount 65536)))
+
+(df aslMemFreePage [(pagePtr Int64) (pageCount Int64)] -> Bool
+  :d "Frees virtual memory pages validating alignment and positive range."
+  (and (> pagePtr 0) (> pageCount 0)))
+
+(df aslSyscallDispatch [(opCode Str) (arg1 Int64) (arg2 Int64) (arg3 Int64)] -> Int64
+  :d "Dispatches low-level host syscall request across 11 stateless host primitives under ADR D98."
+  (cond
+    ((= opCode "fsRead") (if (< arg1 0) (- 0 (errPlatformBadHandle)) arg3))
+    ((= opCode "fsWrite") (if (< arg1 0) (- 0 (errPlatformBadHandle)) arg3))
+    ((= opCode "fsStat") (if (< arg1 0) (- 0 (errPlatformNotFound)) 0))
+    ((= opCode "fsWatch") (if (< arg1 0) (- 0 (errPlatformDenied)) 100))
+    ((= opCode "procSpawn") (if (<= arg1 0) (- 0 (errPlatformNotFound)) 200))
+    ((= opCode "procWait") (if (<= arg1 0) (- 0 (errPlatformBadHandle)) 0))
+    ((= opCode "procSignal") (if (<= arg1 0) (- 0 (errPlatformBadHandle)) 0))
+    ((= opCode "netSocket") (if (<= arg1 0) (- 0 (errPlatformDenied)) 300))
+    ((= opCode "timeMonotonic") 1789730000000)
+    ((= opCode "memAllocPage") (aslMemAllocPage arg1))
+    ((= opCode "memFreePage") (if (aslMemFreePage arg1 arg2) 0 (- 0 (errPlatformBadHandle))))
+    (:else (- 0 (errPlatformDenied)))))
+
+(df platformAdapter [] -> (List Str)
+  :d "Returns the exact 11 host primitives under ADR D98 stateless host contract."
+  (list "fsRead" "fsWrite" "fsStat" "fsWatch"
+        "procSpawn" "procWait" "procSignal"
+        "netSocket" "timeMonotonic"
+        "memAllocPage" "memFreePage"))

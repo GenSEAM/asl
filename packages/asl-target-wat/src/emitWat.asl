@@ -12,6 +12,8 @@
       watEmit
       emitWatExpr
       emitWatModule
+      emitWatSwitch
+      emitWatBinop
       emitWasiImports
       emitWasiFdWrite
       emitWasiProcExit
@@ -180,3 +182,37 @@
        (emitWasmExportDispatch "asl-core")
        funcsWat "\n"
        ")"))
+
+(df emitWatBinop [(op Str) (left Str) (right Str)] -> Str
+  :d "Emits WebAssembly Text binary instruction with floored division and modulus support."
+  (cond
+    ((= op "/")
+     (str "(call $asl_floor_div (local.get $" left ") (local.get $" right "))"))
+    ((or (= op "mod") (= op "%"))
+     (str "(call $asl_floor_mod (local.get $" left ") (local.get $" right "))"))
+    ((= op "+")
+     (str "(i64.add (local.get $" left ") (local.get $" right "))"))
+    ((= op "-")
+     (str "(i64.sub (local.get $" left ") (local.get $" right "))"))
+    ((= op "*")
+     (str "(i64.mul (local.get $" left ") (local.get $" right "))"))
+    ((or (= op "shl") (= op "<<"))
+     (str "(i64.shl (local.get $" left ") (i64.and (local.get $" right ") (i64.const 63)))"))
+    ((or (= op "shr") (= op ">>"))
+     (str "(i64.shr_s (local.get $" left ") (i64.and (local.get $" right ") (i64.const 63)))"))
+    (:else
+     (str "(i64.add (local.get $" left ") (local.get $" right "))"))))
+
+(df emitWatSwitch [(scrutinee Str) (cases (List Str)) (defaultArm Str)] -> Str
+  :d "Lowers an ir/switch statement to a structured br_table with explicit default arm."
+  (let [(caseBlocks (fold (fn [(acc Str) (c Str)] -> Str
+                            (str "      (block\n" acc "      )\n      " c "\n      (br 0)\n"))
+                          (str "        (br_table 0 (local.get $" scrutinee "))\n")
+                          cases))]
+    (str "  (block $exit\n"
+         "    (block $default\n"
+         caseBlocks
+         "    )\n"
+         "    " defaultArm "\n"
+         "  )")))
+

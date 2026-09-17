@@ -1,1 +1,6 @@
-(:grammar :package "asl-target-wat" :version 1 :symbols [])
+(:grammar :package "asl-target-wat" :version 1
+  :symbols [
+    (:sym :name "emitWatModule" :kind :fn :tokens 2 :d "Emits WebAssembly text module from function definitions or IR")
+    (:sym :name "emitWatSwitch" :kind :fn :tokens 2 :d "Lowers switch to br_table with explicit default arm in WAT")
+    (:sym :name "emitWatBinop" :kind :fn :tokens 2 :d "Emits WebAssembly binary operator with floored division and modulus")
+  ])

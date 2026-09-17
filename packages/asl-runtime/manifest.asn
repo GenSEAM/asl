@@ -1,0 +1,11 @@
+(:package asl-runtime
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Standard Pure ASL Runtime: Refcounting, Containers, Sorting, Float Formatting, and Panic Handling"
+ :aslFirst true
+ :modules ["asl-runtime"
+           "asl-runtime/refcount"
+           "asl-runtime/float"
+           "asl-runtime/sort"
+           "asl-runtime/panic"]
+ :dependencies [])

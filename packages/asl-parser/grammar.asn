@@ -14,11 +14,14 @@
     (:sym :name "OutlineItem" :kind :type :tokens 1)
     (:sym :name "Param" :kind :type :tokens 1)
     (:sym :name "ParseError" :kind :type :tokens 1)
+    (:sym :name "PosForm" :kind :type :tokens 1)
     (:sym :name "SExpr" :kind :type :tokens 1)
     (:sym :name "SchemaNode" :kind :type :tokens 1)
     (:sym :name "Token" :kind :type :tokens 1)
     (:sym :name "TokenType" :kind :type :tokens 1)
     (:sym :name "TopForm" :kind :type :tokens 1)
+
+    (:sym :name "readForms" :kind :fn :tokens 2)
 
     (:sym :name "closureHeads" :kind :fn :tokens 2)
     (:sym :name "detectLang" :kind :fn :tokens 2)

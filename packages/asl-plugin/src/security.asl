@@ -1,6 +1,6 @@
 (module asl-plugin/security
   :d "Security, sandbox, and capability validation boundaries for plugins."
-  :x [validateSandboxPath verifyArtifactDigest validateManifestSecurity authorizeCall computeCallerSignature verifyCallerSignature verifyCallerNonce constantTimeEqual]
+  :x [validateSandboxPath verifyArtifactDigest validateManifestSecurity authorizeCall computeCallerSignature verifyCallerSignature verifyCallerNonce constantTimeEqual validateManifestHash]
   :i [(asl-plugin/types)])
 
 (df constantTimeEqual [(a Str) (b Str)] -> Bool
@@ -153,3 +153,19 @@
              (if (list-contains? (.-grantedCapabilities auth) reqCap)
                  (ok ())
                  (err (errUnauthorized (str "Caller lacking required capability: " reqCap))))))))))
+
+(df validateManifestHash [(manifestContent Str) (expectedDigest Str)] -> (Result Str PluginError)
+  :d "Validates package manifest content against expected Blake3 or SHA256 integrity digest."
+  (if (string-empty? expectedDigest)
+      (err (errInvalidSignature "Expected manifest hash cannot be empty"))
+      (if (string-empty? manifestContent)
+          (err (errInvalidSignature "Manifest content cannot be empty"))
+          (let [(escaped (string-replace manifestContent "'" "'\\''"))
+                (cmd (str "printf '%s' '" escaped "' | shasum -a 256 2>/dev/null | awk '{print $1}' || printf '%s' '" escaped "' | sha256sum | awk '{print $1}'"))
+                (res (sysExec cmd))]
+            (if (!= (.-exitCode res) 0)
+                (err (errExecutionTrap "Failed to compute manifest hash"))
+                (let [(computed (string-trim (.-stdout res)))]
+                  (if (constantTimeEqual computed expectedDigest)
+                      (ok computed)
+                      (err (errInvalidSignature (str "Manifest hash mismatch: computed " computed " but expected " expectedDigest))))))))))

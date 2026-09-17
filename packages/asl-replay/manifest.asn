@@ -1,0 +1,7 @@
+(:package asl-replay
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Pure AgentScript Deterministic Execution Replay Engine and Canonical Event Streamer"
+ :aslFirst true
+ :modules ["asl-replay" "asl-replay/record" "asl-replay/replay"]
+ :dependencies [])

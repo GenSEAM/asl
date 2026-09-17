@@ -1,0 +1,7 @@
+(:package asl-net
+ :version "0.1.0"
+ :entry "src/socket.asl"
+ :description "Native AgentScript Non-Blocking POSIX Socket Primitives and Event Loop"
+ :aslFirst true
+ :modules ["asl-net" "asl-net/socket" "asl-net/unix"]
+ :dependencies [])

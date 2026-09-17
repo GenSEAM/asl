@@ -1,0 +1,32 @@
+(:packageIntent
+  :package "asl-vector"
+  :archetype :uiVector
+  :teleologyTier :V4
+  :stakeholders [:autonomousAgent :webEngine :humanUser]
+  :doc "Pure-ASL declarative vector graphics synthesis, marching squares contour tracing, OKLCH palette harmony, and primitive-first SVG generation."
+
+  :goals [
+    (:goal :id :svgSynthesis :desc "Synthesize clean SVG paths from raster bitmasks and color grids" :metric :tokenReduction :threshold 0.60)
+    (:goal :id :primitiveFirst :desc "Decompose shapes into high-level primitives (rc, circ, poly) before falling back to Bezier paths" :metric :primitiveCoverage :threshold 0.75)
+    (:goal :id :closedLoopPerception :desc "Verify rendered vector output matches source image with perceptual IoU >= 0.99" :metric :iouMin :threshold 0.99)
+  ]
+
+  :antiGoals [
+    (:antiGoal :noRasterBlobs :rule "Never embed base64 raster images or png data inside vector SVG output")
+    (:antiGoal :noForeignLibraries :rule "Zero external graphics libraries outside pure ASL runtime and math builtins")
+    (:antiGoal :noUnboundedCoordinates :rule "Never emit vector forms without explicit viewBox and aspect-ratio metadata")
+    (:antiGoal :noRawHexMagic :rule "Disallow magic hex color literals in favor of OKLCH or semantic color tokens")
+  ]
+
+  :invariants [
+    (:invariant :oklchColorGamut :rule "All generated colors strictly validated within valid OKLCH gamut boundaries")
+    (:invariant :delimiterBalance :rule "Dyck-1 formal balance verified on all emitted vector forms")
+    (:invariant :pureAslOnly :rule "100% pure ASL implementation with zero C extensions or npm dependencies")
+  ]
+
+  :traceabilityMatrix [
+    (:link :goal :svgSynthesis :verifiedBy "tests/acceptance/d81/Task54402.asl" :mutantsKilledMin 1)
+    (:link :goal :primitiveFirst :verifiedBy "tests/acceptance/d81/Task54402.asl" :mutantsKilledMin 1)
+    (:link :goal :closedLoopPerception :verifiedBy "harness/tests/perceptualLoopTest.asl" :mutantsKilledMin 1)
+  ]
+)

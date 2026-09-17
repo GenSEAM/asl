@@ -1,0 +1,10 @@
+(:package asl-target-c
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Standalone C11 Backend consuming verified asl-ir with Address/Undefined Sanitizer support under ADR D93"
+ :layer 0
+ :aslFirst true
+ :modules ["asl-target-c"
+           "asl-target-c/types"
+           "asl-target-c/emit"]
+ :dependencies [])

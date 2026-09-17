@@ -1,0 +1,7 @@
+(:package asl-derive
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "AgentScript Zero-Cost Schema, Codec, and Monomorphic Serializer Generation Engine"
+ :aslFirst true
+ :modules ["asl-derive" "asl-derive/derive"]
+ :dependencies ["asl-parser" "asl-compiler"])

@@ -40,4 +40,76 @@
           :rationale "Asserts dispatching of language toolchain subcommands")
     (:sym :name "testEvalDispatch" :kind :fn :tokens 3
           :rationale "Asserts inline expression evaluation dispatch and math results")
+
+    (:sym :name "runPatchCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl patch subcommand with apply, check, and rollback flags")
+    (:sym :name "validateMerkleRoot" :kind :fn :tokens 3
+          :rationale "Validates pre-condition AST Merkle root hash for optimistic concurrency")
+    (:sym :name "pushRollbackStack" :kind :fn :tokens 3
+          :rationale "Pushes inverse patch and post-root state onto external LIFO rollback stack")
+    (:sym :name "popRollbackStack" :kind :fn :tokens 3
+          :rationale "Pops inverse patch entries from LIFO rollback stack with dirty-state verification")
+    (:sym :name "checkDisjointCommutativity" :kind :fn :tokens 3
+          :rationale "Verifies that concurrent patches target non-overlapping AST subtree anchor paths")
+    (:sym :name "RollbackEntry" :kind :type :tokens 2)
+    (:sym :name "testPatchDispatch" :kind :fn :tokens 3
+          :rationale "Asserts patch subcommand dispatching and options in CLI")
+    (:sym :name "runImpactCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl impact subcommand to compute blast radius under 80 tokens")
+    (:sym :name "formatImpactHelp" :kind :fn :tokens 3
+          :rationale "Formats usage manual for asl impact subcommand")
+    (:sym :name "executeImpactQuery" :kind :fn :tokens 3
+          :rationale "Executes codebase hypergraph query and returns structured impact receipt")
+    (:sym :name "runCheckCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl check subcommand with --fix self-healing capability")
+    (:sym :name "formatCheckHelp" :kind :fn :tokens 3
+          :rationale "Formats usage manual for asl check subcommand with self-healing options")
+    (:sym :name "applyCandidatePatchAndJournal" :kind :fn :tokens 4
+          :rationale "Applies candidate AST patch to target file and journals inverse patch to rollback stack")
+    (:sym :name "checkSourceWithFix" :kind :fn :tokens 3
+          :rationale "Checks source file AST and conditionally applies candidate fix patches")
+    (:sym :name "testCheckDispatch" :kind :fn :tokens 3
+          :rationale "Asserts check subcommand dispatching with self-healing and fix options")
+
+    (:sym :name "WatchState" :kind :type :tokens 2)
+    (:sym :name "WatchReceipt" :kind :type :tokens 2)
+    (:sym :name "watchInit" :kind :fn :tokens 2)
+    (:sym :name "watchStep" :kind :fn :tokens 2)
+    (:sym :name "watchLoop" :kind :fn :tokens 2)
+    (:sym :name "formatWatchHelp" :kind :fn :tokens 3
+          :rationale "Formats usage manual for asl watch subcommand")
+    (:sym :name "runWatchCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl watch subcommand with check and interactive monitoring")
+    (:sym :name "testWatchDispatch" :kind :fn :tokens 3
+          :rationale "Asserts watch subcommand dispatching and options in CLI")
+    (:sym :name "runHealCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl heal subcommand with max attempts ceiling and rollback tracking")
+    (:sym :name "formatHealHelp" :kind :fn :tokens 3
+          :rationale "Formats usage manual for asl heal subcommand")
+    (:sym :name "formatHealReceipt" :kind :fn :tokens 3
+          :rationale "Formats canonical ASN receipt for self-healing execution result")
+    (:sym :name "executeHealFile" :kind :fn :tokens 3
+          :rationale "Executes self-healing loop on target file within recursion ceiling")
+    (:sym :name "testHealDispatch" :kind :fn :tokens 3
+          :rationale "Asserts heal subcommand dispatching and receipt output in CLI")
+    (:sym :name "generateAstOutline" :kind :fn :tokens 3
+          :rationale "Extracts structural symbol signatures without function bodies")
+    (:sym :name "formatOutlineHelp" :kind :fn :tokens 3
+          :rationale "Formats usage manual for asl outline subcommand")
+    (:sym :name "runOutlineCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl outline subcommand on target source file")
+    (:sym :name "runAuditCommand" :kind :fn :tokens 3
+          :rationale "Dispatches asl audit CLI subcommands for multi-dimensional hypergraph inspection")
+    (:sym :name "formatAuditHelp" :kind :fn :tokens 3
+          :rationale "Formats usage manual for asl audit subcommand")
+    (:sym :name "executeAuditRun" :kind :fn :tokens 3
+          :rationale "Executes full diagnostic audit hypergraph analysis and emits ASN hypergraph")
+    (:sym :name "executeAuditQuery" :kind :fn :tokens 3
+          :rationale "Queries hypergraph findings using lens, severity, or anchor selectors")
+    (:sym :name "executeAuditReceipt" :kind :fn :tokens 3
+          :rationale "Finds audit node by id and generates machine-verifiable PatchReceipt")
+    (:sym :name "executeAuditVdom" :kind :fn :tokens 3
+          :rationale "Renders declarative SVG radar and VDOM dashboard representation")
+    (:sym :name "buildSampleAuditGraph" :kind :fn :tokens 3
+          :rationale "Constructs canonical baseline audit hypergraph across 6 diagnostic lenses")
   ])

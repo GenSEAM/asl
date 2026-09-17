@@ -1,0 +1,24 @@
+(:grammar
+  :package asl-hypergraph
+  :version 1
+  :symbols [
+    (:sym :name "HyperNode" :tokens 1 :rationale "Symbolic node in codebase hypergraph")
+    (:sym :name "HyperEdge" :tokens 1 :rationale "Relational edge between AST symbols")
+    (:sym :name "HyperIndex" :tokens 1 :rationale "Codebase hypergraph index container")
+    (:sym :name "ImpactReceipt" :tokens 1 :rationale "Sub-80-token impact query receipt")
+    (:sym :name "buildHypergraphIndex" :tokens 1 :rationale "Build hypergraph index from source files")
+    (:sym :name "querySymbolImpact" :tokens 1 :rationale "Query direct and transitive blast radius of symbol")
+    (:sym :name "formatImpactReceipt" :tokens 1 :rationale "Format compact sub-80-token ASN receipt")
+    (:sym :name "serializeHyperIndex" :kind :fn :tokens 1 :rationale "Serialize hypergraph index to disk")
+    (:sym :name "deserializeHyperIndex" :kind :fn :tokens 1 :rationale "Load hypergraph index from disk")
+    (:sym :name "PerceptionDigest" :kind :type :tokens 3
+          :rationale "Compact perceptual digest container for blast radius observations")
+    (:sym :name "makePerceptionDigest" :kind :fn :tokens 3
+          :rationale "Constructs structured perception digest descriptor")
+    (:sym :name "generateImpactDigest" :kind :fn :tokens 3
+          :rationale "Generates high-SNR blast radius impact digest under 80 tokens")
+    (:sym :name "compactPerceptionReceipt" :kind :fn :tokens 3
+          :rationale "Compresses receipt whitespace and enforces strict token budget")
+    (:sym :name "estimateTokenCount" :kind :fn :tokens 3
+          :rationale "Estimates BPE token count for perception receipt")
+  ])

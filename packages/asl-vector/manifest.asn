@@ -1,0 +1,7 @@
+(:package asl-vector
+ :version "0.1.0"
+ :entry "src/vectorizer.asl"
+ :description "Pure AgentScript Native Image-to-SVG Vector Synthesizer and Gestalt Semiotics Engine"
+ :aslFirst true
+ :modules ["asl-vector" "asl-vector/color" "asl-vector/marching" "asl-vector/primitives" "asl-vector/emitter" "asl-vector/vectorizer"]
+ :dependencies [])

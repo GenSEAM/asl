@@ -1,6 +1,13 @@
 (module asl-plugin/targetRegistry
   :d "Dynamic target dispatch and capability integration registry for AgentScript pluggable backends under ADR D93."
-  :x [TargetRegistry emptyTargetRegistry registerTarget hasTarget? lookupTarget dispatchTargetCodegen listRegisteredTargets]
+  :x [TargetRegistry
+      emptyTargetRegistry
+      registerTarget
+      registerCodegenTarget
+      hasTarget?
+      lookupTarget
+      dispatchTargetCodegen
+      listRegisteredTargets]
   :i [(ast :a a) (reader :a rd)])
 
 (dfs TargetRegistry
@@ -15,6 +22,10 @@
   :d "Registers a target name, documentation, and code emitter function in the registry."
   (TargetRegistry :targets (map-set (.-targets reg) name emitter)
                   :docstrings (map-set (.-docstrings reg) name doc)))
+
+(df registerCodegenTarget [(reg TargetRegistry) (name Str) (emitter (fn [(List a/TopForm) (Map Str Str)] -> (Result Str Str)))] -> TargetRegistry
+  :d "Registers a code generation target provider for the codegen/target capability under ADR D93."
+  (registerTarget reg name "codegen/target provider" emitter))
 
 (df hasTarget? [(reg TargetRegistry) (name Str)] -> Bool
   :d "Returns true if the target is registered in the registry, false otherwise."

@@ -24,6 +24,10 @@
           :rationale "Cannot be reduced to 'compile-source': 'standalone' qualifier indicates an isolated compilation pipeline without workspace dependency resolution")
     (:sym :name "compileStandaloneTarget" :kind :fn :tokens 3
           :rationale "Cannot be reduced to 'compile-target': 'standalone' qualifier indicates isolated target backend emission without global project manifests")
+    (:sym :name "verifyPackageCapabilities" :kind :fn :tokens 3
+          :rationale "Verifies used capabilities against declared package capability row")
+    (:sym :name "eliminateDeadCapabilities" :kind :fn :tokens 3
+          :rationale "Eliminates unreferenced platform syscall stubs from emitted C99 translation units")
     (:sym :name "emitWasmBinaryTarget" :kind :fn :tokens 4
           :rationale "Compiles parsed AST forms into standalone WebAssembly v1 MVP binary buffer string")
     (:sym :name "emitWasmMemorySection" :kind :fn :tokens 4
@@ -175,6 +179,24 @@
           :rationale "Generates ELF64 executable file header with machine and entrypoint configuration")
     (:sym :name "elfSections" :kind :fn :tokens 2)
     (:sym :name "sysvAbi" :kind :fn :tokens 2)
+    (:sym :name "hostLinuxAdapter" :kind :fn :tokens 3
+          :rationale "Linux host platform adapter descriptor conforming to ADR D98")
+    (:sym :name "hostWindowsAdapter" :kind :fn :tokens 3
+          :rationale "Windows host platform adapter descriptor with IOCP ring translation")
+    (:sym :name "hostWasiAdapter" :kind :fn :tokens 3
+          :rationale "WASI host platform adapter descriptor conforming to preview1")
+    (:sym :name "normalizeWin32Path" :kind :fn :tokens 3
+          :rationale "Translates Win32 backslashes and drive letters into canonical forward-slash paths")
+    (:sym :name "qpcToNanoseconds" :kind :fn :tokens 3
+          :rationale "Translates 64-bit QueryPerformanceCounter ticks to monotonic nanoseconds without overflow")
+    (:sym :name "iocpRingInit" :kind :fn :tokens 3
+          :rationale "Initializes single-threaded IOCP readiness event ring buffer with bounded capacity")
+    (:sym :name "iocpRingPush" :kind :fn :tokens 3
+          :rationale "Pushes IOCP completion event into readiness ring with 1024-entry bounded overflow protection")
+    (:sym :name "iocpRingPop" :kind :fn :tokens 3
+          :rationale "Pops oldest IOCP event from ring buffer")
+    (:sym :name "translateIocpEvent" :kind :fn :tokens 3
+          :rationale "Translates raw Win32 IOCP completion event into mapped readiness event")
 
     (:sym :name "emitMachoArm64" :kind :fn :tokens 3
           :rationale "Emits complete Mach-O ARM64 executable binary image targeting Apple Silicon Darwin")
@@ -182,6 +204,12 @@
           :rationale "Generates Mach-O 64-bit executable file header with command sizing and flags")
     (:sym :name "arm64Instructions" :kind :fn :tokens 2)
     (:sym :name "machoSections" :kind :fn :tokens 2)
+    (:sym :name "hostDarwinAdapter" :kind :fn :tokens 3
+          :rationale "Darwin host platform adapter descriptor conforming to ADR D98")
+    (:sym :name "machTimeToNanoseconds" :kind :fn :tokens 4
+          :rationale "Calculates monotonic nanoseconds from mach absolute time ticks using timebase ratio")
+    (:sym :name "canonicalizePathDarwin" :kind :fn :tokens 3
+          :rationale "Normalizes Darwin file paths ensuring forward slashes and no redundant dot segments")
 
     (:sym :name "parseAslSource" :kind :fn :tokens 3
           :rationale "Parses ASL source string into complete syntax tree representation")
@@ -216,4 +244,94 @@
           :rationale "Constructs capability map granting native execution permissions without sandboxing")
       (:sym :name "compileSourceToC99" :kind :fn :tokens 4
           :rationale "Compiles ASL source string directly to standalone ISO C99 target output")
+    (:sym :name "SelfHealingDiagnostic" :kind :type :tokens 2)
+    (:sym :name "makeSelfHealingDiagnostic" :kind :fn :tokens 3
+          :rationale "Constructs structured diagnostic with candidate AST patch")
+    (:sym :name "emitDiagnosticWithPatch" :kind :fn :tokens 3
+          :rationale "Emits self-healing diagnostic holding candidate AST patch for automatic repair")
+    (:sym :name "suggestMissingImportPatch" :kind :fn :tokens 3
+          :rationale "Constructs candidate AST patch to insert missing module import")
+    (:sym :name "suggestMissingMatchBranchPatch" :kind :fn :tokens 3
+          :rationale "Constructs candidate AST patch to append unhandled variant match branch")
+    (:sym :name "suggestTypeMismatchPatch" :kind :fn :tokens 3
+          :rationale "Constructs candidate AST patch to correct return type or parameter annotation")
+    (:sym :name "suggestMissingExportPatch" :kind :fn :tokens 3
+          :rationale "Constructs candidate AST patch to add unexported symbol to module exports")
+    (:sym :name "formatDiagnosticWithPatch" :kind :fn :tokens 3
+          :rationale "Formats self-healing diagnostic into canonical ASN notation without line numbers")
+    (:sym :name "renderDiagnosticReceipt" :kind :fn :tokens 3
+          :rationale "Renders diagnostic receipt S-expression representation")
+    (:sym :name "parseDiagnosticReceipt" :kind :fn :tokens 3
+          :rationale "Parses diagnostic receipt from serialized ASN S-expression format")
+    (:sym :name "ComptimeConfig" :kind :type :tokens 2)
+    (:sym :name "ComptimeResult" :kind :type :tokens 2)
+    (:sym :name "makeComptimeConfig" :kind :fn :tokens 3
+          :rationale "Initializes compile-time evaluation configuration with fuel budget and purity constraints")
+    (:sym :name "makeComptimeResult" :kind :fn :tokens 3
+          :rationale "Constructs structured compile-time evaluation result with fuel tracking and diagnostics")
+    (:sym :name "evalComptime" :kind :fn :tokens 2)
+    (:sym :name "evalComptimeWithConfig" :kind :fn :tokens 4
+          :rationale "Evaluates compile-time expression under custom configuration and resource limits")
+    (:sym :name "checkPurity" :kind :fn :tokens 2)
+    (:sym :name "consumeFuel" :kind :fn :tokens 2)
+    (:sym :name "expandQuasiquote" :kind :fn :tokens 2)
+
+    (:sym :name "QueryKey" :kind :type :tokens 2)
+    (:sym :name "QueryEntry" :kind :type :tokens 2)
+    (:sym :name "SalsaDatabase" :kind :type :tokens 2)
+    (:sym :name "QueryResult" :kind :type :tokens 2)
+    (:sym :name "makeQueryKey" :kind :fn :tokens 3
+          :rationale "Constructs a demand-driven compiler query key with symbol and kind")
+    (:sym :name "makeSalsaDatabase" :kind :fn :tokens 3
+          :rationale "Initializes incremental compiler query database with generational eviction policies")
+    (:sym :name "executeQuery" :kind :fn :tokens 2)
+    (:sym :name "invalidateQuery" :kind :fn :tokens 2)
+    (:sym :name "evictStaleEpochs" :kind :fn :tokens 3
+          :rationale "Evicts stale query entries older than retention window to enforce bounded memory")
+    (:sym :name "redGreenCheck" :kind :fn :tokens 3
+          :rationale "Evaluates red-green freshness status of query node in reactive graph")
+    (:sym :name "simulateEditCycles" :kind :fn :tokens 3
+          :rationale "Simulates continuous edit cycles verifying bounded memory under epoch eviction")
+    (:sym :name "HealTransactionResult" :kind :type :tokens 3
+          :rationale "Result record representing status of candidate AST patch application")
+    (:sym :name "makeHealTransactionResult" :kind :fn :tokens 3
+          :rationale "Constructs structured transaction result for candidate patch application")
+    (:sym :name "RollbackJournalRecord" :kind :type :tokens 3
+          :rationale "Record descriptor for rollback journal entry with pre and post Merkle roots")
+    (:sym :name "makeRollbackJournalRecord" :kind :fn :tokens 3
+          :rationale "Constructs structured rollback journal record descriptor")
+    (:sym :name "createRollbackJournalEntry" :kind :fn :tokens 3
+          :rationale "Constructs rollback journal entry tracking pre and post roots with inverse patch")
+    (:sym :name "canRetryHeal" :kind :fn :tokens 3
+          :rationale "Checks whether healing attempt is within limit cycle circuit breaker ceiling")
+    (:sym :name "synthesizeHealPatch" :kind :fn :tokens 3
+          :rationale "Synthesizes structured candidate AST patch from diagnostic error code")
+    (:sym :name "verifyHealPatchCandidate" :kind :fn :tokens 3
+          :rationale "Verifies whether candidate AST patch can be applied cleanly without corruption")
+    (:sym :name "applyHealTransaction" :kind :fn :tokens 3
+          :rationale "Applies candidate AST patch transactionally with rollback defense")
+    (:sym :name "getPatchOpKind" :kind :fn :tokens 4
+          :rationale "Extracts discriminant string name for AST patch operation variant")
+    (:sym :name "errPlatformEof" :kind :fn :tokens 2
+          :rationale "Typed platform error code for end of file")
+    (:sym :name "errPlatformTimeout" :kind :fn :tokens 2
+          :rationale "Typed platform error code for operation timeout")
+    (:sym :name "errPlatformDenied" :kind :fn :tokens 2
+          :rationale "Typed platform error code for capability denial")
+    (:sym :name "errPlatformBadHandle" :kind :fn :tokens 3
+          :rationale "Typed platform error code for invalid file or process handle")
+    (:sym :name "errPlatformNotFound" :kind :fn :tokens 3
+          :rationale "Typed platform error code for missing resource")
+    (:sym :name "errPlatformBusy" :kind :fn :tokens 2
+          :rationale "Typed platform error code for resource contention")
+    (:sym :name "platformErrorName" :kind :fn :tokens 3
+          :rationale "Returns string name for platform error code under ADR D98")
+    (:sym :name "aslMemAllocPage" :kind :fn :tokens 3
+          :rationale "Allocates virtual memory pages in WebAssembly and C99 host")
+    (:sym :name "aslMemFreePage" :kind :fn :tokens 3
+          :rationale "Frees virtual memory pages in WebAssembly and C99 host")
+    (:sym :name "aslSyscallDispatch" :kind :fn :tokens 3
+          :rationale "Dispatches low-level host syscall request across 11 stateless host primitives")
+    (:sym :name "platformAdapter" :kind :fn :tokens 2
+          :rationale "Returns declared 11 host primitives under ADR D98")
   ])

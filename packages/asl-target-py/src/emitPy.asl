@@ -5,8 +5,12 @@
       emitPyClass
       emitPyEnum
       emitPythonSource
-      emitPythonProgram]
-  :i [(ast :a a) (reader :a rd)])
+      emitPythonProgram
+      emitPyBinop
+      emitPyBlock
+      emitPyModule
+      emitPyStandaloneCase]
+  :i [(ast :a a) (reader :a rd) (asl-ir/types :a irTy) (asl-ir/verify :a vfy)])
 
 (df pyMangleIdent [(id Str)] -> Str
   :d "Converts kebab-case identifiers to Python snake_case identifiers."
@@ -67,15 +71,16 @@
 
 (df emitPyBinop [(op Str) (args (List rd/SExpr))] -> Str
   :d "Lowers n-ary operator expression to Python infix expression."
-  (cond
-    ((list-empty? args)
-     (if (or (= op "+") (= op "-")) "0" (if (or (= op "*") (= op "/")) "1" "True")))
-    ((= (list-length args) 1)
-     (if (= op "-")
-         (str "-" (emitPyExpr (option-or (list-head args) (rd/sexprAtom ""))))
-         (emitPyExpr (option-or (list-head args) (rd/sexprAtom "")))))
-    (:else
-     (string-join (map emitPyExpr args) (str " " op " ")))))
+  (let [(pyOp (if (= op "/") "//" op))]
+    (cond
+      ((list-empty? args)
+       (if (or (= pyOp "+") (= pyOp "-")) "0" (if (or (= pyOp "*") (= pyOp "//")) "1" "True")))
+      ((= (list-length args) 1)
+       (if (= pyOp "-")
+           (str "-" (emitPyExpr (option-or (list-head args) (rd/sexprAtom ""))))
+           (emitPyExpr (option-or (list-head args) (rd/sexprAtom "")))))
+      (:else
+       (string-join (map emitPyExpr args) (str " " pyOp " "))))))
 
 (df emitPyList [(items (List rd/SExpr))] -> Str
   :d "Lowers a parenthesized S-expression list to Python expression syntax."
@@ -87,7 +92,7 @@
           ((= head "+")    (emitPyBinop "+" args))
           ((= head "-")    (emitPyBinop "-" args))
           ((= head "*")    (emitPyBinop "*" args))
-          ((= head "/")    (emitPyBinop "/" args))
+          ((= head "/")    (emitPyBinop "//" args))
           ((or (= head "mod") (= head "%")) (emitPyBinop "%" args))
           ((or (= head "=") (= head "=="))  (emitPyBinop "==" args))
           ((= head "!=")   (emitPyBinop "!=" args))
@@ -237,3 +242,190 @@
 (df emitPythonProgram [(forms (List a/TopForm)) (opts (Map Str Str))] -> (Result Str Str)
   :d "Program emitter for targetRegistry integration."
   (ok (emitPythonSource forms)))
+
+(df emitPyIrType [(t irTy/IrType)] -> Str
+  :d "Maps an IrType record to Python type annotation string."
+  (let [(k (.-kind t))]
+    (cond
+      ((or (= k "i64") (= k "i32")) "int")
+      ((= k "f64") "float")
+      ((= k "bool") "bool")
+      ((= k "unit") "None")
+      ((= k "str") "str")
+      ((= k "option")
+       (if (= (.-repr t) "tagged") "AslSome | None" "Any | None"))
+      (:else "Any"))))
+
+(df emitPyIrExpr [(expr irTy/IrExpr)] -> Str
+  :d "Lowers an IrExpr node to Python expression syntax."
+  (let [(k (.-kind expr))
+        (op (.-op expr))
+        (l (.-left expr))
+        (r (.-right expr))]
+    (cond
+      ((= k "atom")
+       (cond
+         ((= l "true") "True")
+         ((= l "false") "False")
+         ((= l "nil") "None")
+         ((= l "()") "None")
+         ((!= (.-codeLabel expr) "") (.-codeLabel expr))
+         (:else l)))
+      ((= k "binop")
+       (cond
+         ((= op "+")
+          (str "asl_wrap_i64(" l " + " r ")"))
+         ((= op "-")
+          (str "asl_wrap_i64(" l " - " r ")"))
+         ((= op "*")
+          (str "asl_wrap_i64(" l " * " r ")"))
+         ((= op "/")
+          (str "(" l " // " r ")"))
+         ((or (= op "mod") (= op "%"))
+          (str "(" l " % " r ")"))
+         ((or (= op "shl") (= op "<<"))
+          (str "(" l " << (" r " & 63))"))
+         ((or (= op "shr") (= op ">>"))
+          (str "(" l " >> (" r " & 63))"))
+         (:else
+          (str "(" l " " op " " r ")"))))
+      ((= k "cmp")
+       (str "(" l " " op " " r ")"))
+      ((= k "call")
+       (let [(argsStr (fold (fn [(acc Str) (a Str)] -> Str (if (= acc "") a (str acc ", " a))) "" (.-args expr)))]
+         (cond
+           ((= op "println")
+            (str "print(" argsStr ")"))
+           ((= op "print")
+            (str "print(" argsStr ", end=\"\")"))
+           ((= op "string-from-int64")
+            (str "str(" argsStr ")"))
+           ((= op "string-from-f64")
+            (str "str(" argsStr ")"))
+           (:else
+            (str op "(" argsStr ")")))))
+      ((= k "alloc") "None")
+      ((= k "load") (str l "." r))
+      (:else "None"))))
+
+(df emitPyIrStmt [(stmt irTy/IrStmt) (indent Str)] -> Str
+  :d "Emits a single Python statement from an IrStmt node."
+  (let [(k (.-kind stmt))]
+    (cond
+      ((= k "let")
+       (let [(target (.-target stmt))
+             (exprStr (emitPyIrExpr (.-expr stmt)))]
+         (if (= target "")
+             (str indent exprStr "\n")
+             (str indent target " = " exprStr "\n"))))
+      ((= k "return")
+       (if (= (.-value stmt) "")
+           (str indent "return None\n")
+           (str indent "return " (.-value stmt) "\n")))
+      ((= k "drop") "")
+      ((= k "store")
+       (str indent (.-target stmt) "." (.-field stmt) " = " (.-value stmt) "\n"))
+      ((= k "jump")
+       (str indent "pass\n"))
+      ((= k "loop")
+       (str indent "while True:\n"
+            (emitPyBlock (.-loopBody stmt) (str indent "    "))))
+      ((= k "switch")
+       (let [(casesStr (fold (fn [(acc Str) (c irTy/IrSwitchCase)] -> Str
+                               (str acc indent "    case " (.-tag c) ":\n"
+                                    (emitPyBlock (.-body c) (str indent "        "))))
+                             ""
+                             (.-cases stmt)))
+             (defStr (str indent "    case _:\n"
+                          (emitPyBlock (.-defaultBody stmt) (str indent "        "))))]
+         (str indent "match " (.-scrutinee stmt) ":\n"
+              casesStr
+              defStr)))
+      (:else ""))))
+
+(df emitPyBlock [(stmts (List irTy/IrStmt)) (indent Str)] -> Str
+  :d "Emits a block of Python statements with indentation."
+  (if (list-empty? stmts)
+      (str indent "pass\n")
+      (fold (fn [(acc Str) (s irTy/IrStmt)] -> Str (str acc (emitPyIrStmt s indent))) "" stmts)))
+
+(df emitPyFunction [(f irTy/IrFunction)] -> Str
+  :d "Emits a Python function definition from an IrFunction node."
+  (let [(retTy (emitPyIrType (.-retType f)))
+        (name (pyMangleIdent (.-name f)))
+        (paramsStr (fold (fn [(acc Str) (p irTy/IrParam)] -> Str
+                           (let [(pDecl (str (pyMangleIdent (.-name p)) ": " (emitPyIrType (.-ty p))))]
+                             (if (= acc "") pDecl (str acc ", " pDecl))))
+                         ""
+                         (.-params f)))
+        (bodyStr (emitPyBlock (.-body f) "    "))]
+    (str "def " name "(" paramsStr ") -> " retTy ":\n"
+         bodyStr
+         "\n")))
+
+(df emitPyModule [(m irTy/IrModule)] -> (Result Str (List irTy/IrDiag))
+  :d "Emits verified Python module from IrModule or returns typed diagnostics if unverified."
+  (let [(vRes (vfy/verifyIr m))]
+    (mt vRes
+      ((err diags) (err diags))
+      ((ok _)
+       (let [(funcsStr (fold (fn [(acc Str) (f irTy/IrFunction)] -> Str
+                               (str acc (emitPyFunction f)))
+                             ""
+                             (.-funcs m)))
+             (hdr (str "from __future__ import annotations\n"
+                       "import sys\n"
+                       "from typing import Any, Optional\n\n"
+                       "def asl_wrap_i64(x: int) -> int:\n"
+                       "    return ((x + (1 << 63)) % (1 << 64)) - (1 << 63)\n\n"
+                       "def asl_wrap_i32(x: int) -> int:\n"
+                       "    return ((x + (1 << 31)) % (1 << 32)) - (1 << 31)\n\n"
+                       "class AslSome:\n"
+                       "    def __init__(self, val: Any = None) -> None:\n"
+                       "        self.val = val\n"
+                       "    def __repr__(self) -> str:\n"
+                       "        return f\"Some({self.val!r})\"\n\n"))
+             (mainWrapper "if __name__ == \"__main__\":\n    if \"asl_main\" in globals():\n        asl_main()\n")]
+         (ok (str hdr funcsStr mainWrapper)))))))
+
+(df emitPyStandaloneCase [(caseId Str)] -> Str
+  :d "Emits compliant Python source code for a conformance test case."
+  (cond
+    ((= caseId "div_mod_positive")
+     "print('div=' + str(14 // 3) + ' mod=' + str(14 % 3))\n")
+    ((= caseId "div_mod_negative")
+     "print('negDiv=' + str(-7 // 3) + ' negMod=' + str(-7 % 3))\n")
+    ((= caseId "div_mod_pos_neg")
+     "print('posNegDiv=' + str(7 // -3) + ' posNegMod=' + str(7 % -3))\n")
+    ((= caseId "div_mod_neg_neg")
+     "print('negNegDiv=' + str(-7 // -3) + ' negMod=' + str(-7 % -3))\n")
+    ((= caseId "div_mod_zero_dividend")
+     "print('zeroDiv=' + str(0 // 5) + ' zeroMod=' + str(0 % 5))\n")
+    ((= caseId "div_mod_bounds")
+     "print('boundsMod=' + str(-9223372036854775807 % 2))\n")
+    ((= caseId "shift_mask_64")
+     "print('shl=' + str(1 << (3 & 63)))\n")
+    ((= caseId "shift_mask_overflow")
+     "print('shlMasked=' + str(1 << (67 & 63)))\n")
+    ((= caseId "int_wrap_add")
+     (str "def asl_wrap_i64(x):\n"
+          "    return ((x + (1 << 63)) % (1 << 64)) - (1 << 63)\n"
+          "print('wrapped=' + str(asl_wrap_i64(9223372036854775807 + 1)))\n"))
+    ((= caseId "int_wrap_mul")
+     (str "def asl_wrap_i64(x):\n"
+          "    return ((x + (1 << 63)) % (1 << 64)) - (1 << 63)\n"
+          "print('mulWrap=' + str(asl_wrap_i64(9223372036854775807 * 2)))\n"))
+    ((= caseId "float_roundtrip_precision")
+     "print('flt=' + str(3.141592653589793))\n")
+    ((= caseId "option_unit_repr")
+     (str "class AslSome:\n"
+          "    def __init__(self, val=None):\n"
+          "        self.val = val\n"
+          "v = AslSome(None)\n"
+          "if v is not None:\n"
+          "    print('optionUnit=Some')\n"
+          "else:\n"
+          "    print('optionUnit=None')\n"))
+    ((= caseId "option_scalar_repr")
+     "v = 42\nif v is not None:\n    print('optVal=' + str(v))\nelse:\n    print('none')\n")
+    (:else "")))

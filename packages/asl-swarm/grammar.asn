@@ -1,0 +1,23 @@
+(:grammar
+  :id "asl-swarm-pkg-grammar"
+  :version 1
+  :package "asl-swarm"
+  :doc "Exported symbol registry for asl-swarm under C5 token density standards"
+  :symbols [
+    (:sym :name "SwarmClaim" :tokens 1 :rationale "Worker write set and Merkle base root claim descriptor")
+    (:sym :name "WorkerPartition" :tokens 1 :rationale "Bin-packed disjoint worker schedule partition")
+    (:sym :name "makeSwarmClaim" :tokens 1 :rationale "Constructor for swarm task claim descriptor")
+    (:sym :name "makeWorkerPartition" :tokens 1 :rationale "Constructor for disjoint worker partition descriptor")
+    (:sym :name "areClaimsDisjoint" :tokens 1 :rationale "Determines whether two swarm claims have mutually disjoint write sets")
+    (:sym :name "scheduleDisjointTasks" :tokens 1 :rationale "Schedules a batch of task claims into disjoint non-interfering worker partitions")
+    (:sym :name "listsOverlap" :tokens 1 :rationale "Checks whether two string lists share at least one common element")
+    (:sym :name "OccState" :tokens 1 :rationale "Active Merkle root and lease tracking state for OCC manager")
+    (:sym :name "ConflictReport" :tokens 1 :rationale "OCC collision report emitted when base Merkle root diverged")
+    (:sym :name "makeOccState" :tokens 1 :rationale "Constructor for active OCC Merkle state tracker")
+    (:sym :name "makeConflictReport" :tokens 1 :rationale "Constructor for OCC collision or success report descriptor")
+    (:sym :name "validateMerkleCommit" :tokens 1 :rationale "Validates claim base Merkle root against current root")
+    (:sym :name "getCommitConflictReport" :tokens 1 :rationale "Extracts or creates structured ConflictReport from OCC commit result")
+    (:sym :name "resolveLeaseConflict" :tokens 1 :rationale "Resolves competing claims on overlapping write sets prioritizing earlier lease timestamp")
+    (:sym :name "canRetryOccCommit" :tokens 1 :rationale "Enforces maximum retry ceiling of 3 attempts for OCC commit recovery")
+    (:sym :name "discardStagingBuffer" :tokens 1 :rationale "Rolls back and discards uncommitted staging VFS buffer on aborted transaction")
+  ])

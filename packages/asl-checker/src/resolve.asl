@@ -372,7 +372,8 @@
   :d "True for nullary built-in primitive types."
   (or (ty/isNumericType? resolved)
       (or (or (= resolved "String") (or (= resolved "Bool") (= resolved "Unit")))
-          (or (= resolved "IoError") (= resolved "N")))))
+          (or (or (= resolved "IoError") (= resolved "N"))
+              (= resolved "Bytes")))))
 
 (df isKnownBuiltinType? [(name String)] -> Bool
   :d "True for recognized built-in types."

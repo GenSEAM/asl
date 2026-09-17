@@ -3,4 +3,5 @@
  :entry "src/core/sql.asl"
  :description "Native AgentScript Cross-Dialect SQL AST Query Builder & Parameterized Emission Engine"
  :aslFirst true
- :dependencies [])
+ :modules ["asl-sql" "asl-sql/ddl" "asl-sql/schemaGen"]
+ :dependencies ["asl-derive"])

@@ -1,0 +1,21 @@
+(:grammar
+  :package asl-net
+  :version 1
+  :symbols [
+    (:sym :name "SocketConfig" :tokens 1 :rationale "Configuration record for non-blocking server socket")
+    (:sym :name "ServerSocket" :tokens 1 :rationale "Active server socket handle representation")
+    (:sym :name "makeSocketConfig" :tokens 1 :rationale "Constructor for socket configuration")
+    (:sym :name "openServerSocket" :tokens 1 :rationale "Initialize and bind non-blocking server socket")
+    (:sym :name "readSocketBytes" :tokens 1 :rationale "Read available bytes from socket file descriptor")
+    (:sym :name "writeSocketBytes" :tokens 1 :rationale "Write byte buffer to socket file descriptor")
+    (:sym :name "closeSocket" :tokens 1 :rationale "Close socket file descriptor cleanly")
+    (:sym :name "pollSocket" :tokens 1 :rationale "Poll socket file descriptor with timeout")
+    (:sym :name "acceptSocketConnection" :tokens 1 :rationale "Accept incoming client connection")
+    (:sym :name "UnixSocketConfig" :tokens 1 :rationale "Configuration record for Unix domain socket")
+    (:sym :name "UnixServerSocket" :tokens 1 :rationale "Active Unix domain server socket handle")
+    (:sym :name "makeUnixSocketConfig" :tokens 1 :rationale "Constructor for Unix domain socket configuration")
+    (:sym :name "openUnixServerSocket" :tokens 1 :rationale "Bind and listen on Unix domain socket path")
+    (:sym :name "closeUnixSocket" :tokens 1 :rationale "Close and unlink Unix domain socket")
+    (:sym :name "handoffListeningSocket" :tokens 1 :rationale "Handoff active listening descriptor for zero-downtime reload")
+    (:sym :name "receiveListeningSocket" :tokens 1 :rationale "Adopt handed off descriptor from parent process")
+  ])

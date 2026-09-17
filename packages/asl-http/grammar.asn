@@ -1,0 +1,23 @@
+(:grammar
+  :package asl-http
+  :version 1
+  :symbols [
+    (:sym :name "HttpHeaders" :tokens 1 :rationale "Collection of HTTP request and response headers")
+    (:sym :name "HttpRequest" :tokens 1 :rationale "Parsed HTTP request representation")
+    (:sym :name "HttpResponse" :tokens 1 :rationale "HTTP response message representation")
+    (:sym :name "makeHeaders" :tokens 1 :rationale "Constructor for HTTP headers map")
+    (:sym :name "getHeader" :tokens 1 :rationale "Case-insensitive HTTP header lookup")
+    (:sym :name "makeRequest" :tokens 1 :rationale "Constructor for HTTP request")
+    (:sym :name "makeResponse" :tokens 1 :rationale "Constructor for HTTP response")
+    (:sym :name "parseHttpRequest" :tokens 1 :rationale "Streaming parser for HTTP/1.1 wire requests")
+    (:sym :name "getQueryParam" :tokens 1 :rationale "Query parameter extractor from request target")
+    (:sym :name "formatHttpResponse" :tokens 1 :rationale "Wire serializer for HTTP response messages")
+    (:sym :name "Http2Frame" :tokens 1 :rationale "HTTP/2 binary frame container")
+    (:sym :name "HpackTable" :tokens 1 :rationale "HPACK dynamic header compression table")
+    (:sym :name "makeHttp2Frame" :tokens 1 :rationale "Constructor for HTTP/2 binary frame")
+    (:sym :name "encodeHttp2Frame" :tokens 1 :rationale "Binary wire serializer for HTTP/2 frames")
+    (:sym :name "decodeHttp2Frame" :tokens 1 :rationale "Binary wire parser for HTTP/2 frames")
+    (:sym :name "makeHpackTable" :tokens 1 :rationale "Constructor for HPACK compression table")
+    (:sym :name "encodeHpack" :tokens 1 :rationale "HPACK header block compressor")
+    (:sym :name "decodeHpack" :tokens 1 :rationale "HPACK header block decompressor")
+  ])

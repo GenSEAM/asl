@@ -1,0 +1,7 @@
+(:package asl-web
+ :version "0.1.0"
+ :entry "src/ws.asl"
+ :description "Pure AgentScript WebSocket and Server-Sent Events Protocol Implementations"
+ :aslFirst true
+ :modules ["asl-web" "asl-web/ws" "asl-web/sse" "asl-web/proxy" "asl-web/ssr" "asl-web/hydrate"]
+ :dependencies ["asl-net" "asl-http" "aslVdom"])

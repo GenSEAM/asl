@@ -1,0 +1,8 @@
+(:package asl-ui
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Pure AgentScript Universal Declarative UI, Elm Architecture, and Double-Buffered Frame Arena"
+ :aslFirst true
+ :modules ["asl-ui" "asl-ui/vnode" "asl-ui/runtime" "asl-ui/arena" "asl-ui/layout" "asl-ui/tokens" "asl-ui/theme" "asl-ui/ax" "asl-ui/query" "asl-ui/renderWeb" "asl-ui/renderNative" "asl-ui/auditDashboard"]
+ :dependencies ["vdom"
+                "asl-conform"])
