@@ -1,0 +1,8 @@
+(:package asl-target-wat
+ :version "0.1.0"
+ :entry "src/emitWat.asl"
+ :description "Standalone WebAssembly Text (WAT) emitter backend for AgentScript"
+ :aslFirst true
+ :layer 0
+ :modules ["asl-target-wat/emitWat"]
+ :dependencies ["asl-parser" "asl-checker"])
