@@ -46,12 +46,25 @@
   (:f rest (List lx/IndentToken) "Remaining tokens")
   (:f expr rd/SExpr "Parsed SExpr"))
 
+(df escapeStringContent [(s String)] -> String
+  :d "Escapes special characters in string content for SExpr atom literal."
+  (let [(chars (string-chars s))]
+    (fold (fn [(acc String) (ch String)] -> String
+            (cond
+              ((= ch "\n") (str acc "\\n"))
+              ((= ch "\r") (str acc "\\r"))
+              ((= ch "\t") (str acc "\\t"))
+              ((= ch "\"") (str acc "\\\""))
+              (:else (str acc ch))))
+          ""
+          chars)))
+
 (df parseSingleTokenExpr [(tok lx/IndentToken)] -> rd/SExpr
   :d "Converts single token to SExpr with dot and string desugaring."
   (mt (.-kind tok)
     ((tokSymbol s)       (desugarDot s))
     ((tokKeyword k)      (rd/makeAtom k))
-    ((tokString s)       (rd/makeAtom (str "\"" s "\"")))
+    ((tokString s)       (rd/makeAtom (str "\"" (escapeStringContent s) "\"")))
     ((tokInterp pts exs) (desugarInterpolation pts exs))
     ((tokInt n)          (rd/makeAtom (string-from-int64 n)))
     ((tokFloat f)        (rd/makeAtom (.-rawText tok)))
@@ -212,6 +225,91 @@
           (pair (list-reverse (.-first (.-second step)))
                 (.-second (.-second step))))))
 
+(df isPredicateName? [(name String)] -> Bool
+  :d "Checks if identifier represents a predicate convention."
+  (let [(prefixes (list "is-" "is_" "has-" "has_" "can-" "should-" "string-" "list-" "vector-" "map-"))
+        (exacts (list "empty" "null" "nil" "zero" "true" "false"))
+        (hasPrefix (fold (fn [(acc Bool) (p String)] -> Bool
+                           (or acc (string-starts-with? name p)))
+                         false
+                         prefixes))
+        (isExact (list-contains? exacts name))]
+    (or hasPrefix
+        (or isExact
+            (or (string-contains? name "valid")
+                (or (string-starts-with? name "is")
+                    (or (string-ends-with? name "-p")
+                        (string-ends-with? name "?"))))))))
+
+(df preprocessTokens [(toks (List lx/IndentToken))] -> (List lx/IndentToken)
+  :d "Merges adjacent tokens for symbols ending in ? or ! to prevent token fragmentation."
+  (let [(step (fold (fn [(acc (Pair (List lx/IndentToken) (Pair (Option lx/IndentToken) (Pair (Option lx/IndentToken) Int64)))) (t lx/IndentToken)]
+                      -> (Pair (List lx/IndentToken) (Pair (Option lx/IndentToken) (Pair (Option lx/IndentToken) Int64)))
+                      (let [(emitted (.-first acc))
+                            (pending (.-first (.-second acc)))
+                            (prevEmitted (.-first (.-second (.-second acc))))
+                            (inBrk (.-second (.-second (.-second acc))))]
+                        (mt pending
+                          ((none)
+                           (mt (.-kind t)
+                             ((tokLbracket)
+                              (pair (cons t emitted) (pair (none) (pair (some t) (+ inBrk 1)))))
+                             ((tokRbracket)
+                              (let [(nxtB (if (> inBrk 0) (- inBrk 1) 0))]
+                                (pair (cons t emitted) (pair (none) (pair (some t) nxtB)))))
+                             ((tokSymbol _)
+                              (pair emitted (pair (some t) (pair prevEmitted inBrk))))
+                             (_
+                              (pair (cons t emitted) (pair (none) (pair (some t) inBrk))))))
+                          ((some p)
+                           (let [(pRaw (.-rawText p))
+                                 (isAdj (and (= (.-line p) (.-line t))
+                                             (= (+ (.-col p) (string-length pRaw)) (.-col t))))]
+                             (cond
+                               ((and isAdj (= (.-rawText t) "!"))
+                                (let [(mergedSym (str pRaw "!"))
+                                      (mergedTok (lx/makeIndentToken (lx/tokSymbol mergedSym) mergedSym (.-line p) (.-col p)))]
+                                  (pair emitted (pair (some mergedTok) (pair prevEmitted inBrk)))))
+                               ((and isAdj (or (= (.-rawText t) "?")
+                                               (mt (.-kind t) ((tokQuestion) true) (_ false))))
+                                (let [(isAfterFn (mt prevEmitted
+                                                   ((some pt) (or (= (.-rawText pt) "fn") (or (= (.-rawText pt) "defun") (= (.-rawText pt) "df"))))
+                                                   ((none) false)))
+                                      (isPred (isPredicateName? pRaw))
+                                      (inB (> inBrk 0))]
+                                  (if (or isAfterFn (or isPred inB))
+                                    (let [(mergedSym (str pRaw "?"))
+                                          (mergedTok (lx/makeIndentToken (lx/tokSymbol mergedSym) mergedSym (.-line p) (.-col p)))]
+                                      (pair emitted (pair (some mergedTok) (pair prevEmitted inBrk))))
+                                    (mt (.-kind t)
+                                      ((tokLbracket)
+                                       (pair (cons t (cons p emitted)) (pair (none) (pair (some t) (+ inBrk 1)))))
+                                      ((tokRbracket)
+                                       (let [(nxtB (if (> inBrk 0) (- inBrk 1) 0))]
+                                         (pair (cons t (cons p emitted)) (pair (none) (pair (some t) nxtB)))))
+                                      ((tokSymbol _)
+                                       (pair (cons p emitted) (pair (some t) (pair (some p) inBrk))))
+                                      (_
+                                       (pair (cons t (cons p emitted)) (pair (none) (pair (some t) inBrk))))))))
+                               (:else
+                                (mt (.-kind t)
+                                  ((tokLbracket)
+                                   (pair (cons t (cons p emitted)) (pair (none) (pair (some t) (+ inBrk 1)))))
+                                  ((tokRbracket)
+                                   (let [(nxtB (if (> inBrk 0) (- inBrk 1) 0))]
+                                     (pair (cons t (cons p emitted)) (pair (none) (pair (some t) nxtB)))))
+                                  ((tokSymbol _)
+                                   (pair (cons p emitted) (pair (some t) (pair (some p) inBrk))))
+                                  (_
+                                   (pair (cons t (cons p emitted)) (pair (none) (pair (some t) inBrk))))))))))))
+                    (pair (list) (pair (none) (pair (none) 0)))
+                    toks))]
+    (let [(emitted (.-first step))
+          (pending (.-first (.-second step)))]
+      (mt pending
+        ((some p) (list-reverse (cons p emitted)))
+        ((none)   (list-reverse emitted))))))
+
 (df parseTokensToExprList [(toks (List lx/IndentToken))] -> (List rd/SExpr)
   :d "Converts a sequence of tokens on one line into a list of SExpr items."
   (let [(items (fold (fn [(acc (Pair (List rd/SExpr) (Pair (List lx/IndentToken) (Pair Int64 (Pair Int64 (Pair Bool (Option lx/IndentToken))))))) (t lx/IndentToken)]
@@ -280,8 +378,22 @@
                               (mt (list-head collected)
                                 ((some prevExpr)
                                  (let [(rem (option-or (list-tail collected) (list)))
-                                       (desugared (desugarTry prevExpr))]
-                                   (pair (cons desugared rem) (pair (list) (pair 0 (pair 0 (pair false (none))))))))
+                                       (isAdjacent (mt lastTok
+                                                     ((some lt)
+                                                      (and (= (.-line lt) (.-line t))
+                                                           (= (+ (.-col lt) (string-length (.-rawText lt))) (.-col t))))
+                                                     ((none) false)))
+                                       (isSym (rd/isAtom? prevExpr))
+                                       (prevName (if isSym (rd/sexprHead prevExpr) ""))
+                                       (shouldBeSymbol (and isAdjacent
+                                                            isSym
+                                                            (isPredicateName? prevName)))]
+                                   (if shouldBeSymbol
+                                     (let [(mergedAtom (rd/makeAtom (str prevName "?")))
+                                           (newTok (lx/makeIndentToken (lx/tokSymbol (str prevName "?")) (str prevName "?") (.-line t) (.-col t)))]
+                                       (pair (cons mergedAtom rem) (pair (list) (pair 0 (pair 0 (pair false (some newTok)))))))
+                                     (let [(desugared (desugarTry prevExpr))]
+                                       (pair (cons desugared rem) (pair (list) (pair 0 (pair 0 (pair false (none))))))))))
                                 ((none)
                                  (pair (cons (parseSingleTokenExpr t) collected) (pair (list) (pair 0 (pair 0 (pair false (some t))))))))))
                            (_
@@ -663,7 +775,9 @@
           (seenArrow (.-second (.-second split)))]
       (let [(patSexpr (parseLineTokensToSexpr patToks))
             (bodSexpr (if seenArrow
-                        (parseLineTokensToSexpr bodToks)
+                        (if (list-empty? bodToks)
+                          (rd/makeAtom "")
+                          (parseLineTokensToSexpr bodToks))
                         (rd/makeAtom "")))]
         (MatchArm :pattern patSexpr :body bodSexpr)))))
 
@@ -698,8 +812,10 @@
                                 (let [(lineSplit (takeUntilLineEnd remToks))
                                       (lineToks (.-first lineSplit))
                                       (afterLine (.-second lineSplit))
-                                      (arm (parseMatchArmLine lineToks))]
-                                  (if (and (rd/isAtom? (.-body arm)) (= (rd/sexprHead (.-body arm)) ""))
+                                      (arm (parseMatchArmLine lineToks))
+                                      (isBodyEmpty (or (and (rd/isAtom? (.-body arm)) (= (rd/sexprHead (.-body arm)) ""))
+                                                       (and (rd/isList? (.-body arm)) (list-empty? (rd/sexprToList (.-body arm))))))]
+                                  (if isBodyEmpty
                                     (mt (list-head afterLine)
                                       ((some nextT)
                                        (mt (.-kind nextT)
@@ -727,47 +843,71 @@
 
 (dfs FnSignature
   (:f name String "Function name")
+  (:f effect Bool "True if effect marker ! is present")
   (:f params rd/SExpr "Parameters vector [(param Type) ...]")
-  (:f retType rd/SExpr "Return type SExpr"))
+  (:f retType rd/SExpr "Return type SExpr")
+  (:f docstring (Option String) "Optional inline docstring"))
+
+(df parseParamsVector [(pToks (List lx/IndentToken))] -> rd/SExpr
+  :d "Parses parameter tokens into canonical [(p1 T1) (p2 T2)] vector."
+  (let [(cleanToks (fold (fn [(acc (List lx/IndentToken)) (t lx/IndentToken)] -> (List lx/IndentToken)
+                           (let [(txt (.-rawText t))]
+                             (if (or (= txt "[")
+                                     (or (= txt "]")
+                                         (or (= txt "(")
+                                             (or (= txt ")")
+                                                 (= txt ":")))))
+                               acc
+                               (cons t acc))))
+                         (list)
+                         pToks))]
+    (let [(flatToks (list-reverse cleanToks))]
+      (let [(pairs (fold (fn [(acc (Pair (List rd/SExpr) (Option String))) (t lx/IndentToken)]
+                           -> (Pair (List rd/SExpr) (Option String))
+                           (let [(collected (.-first acc))
+                                 (pending (.-second acc))]
+                             (mt pending
+                               ((some pName)
+                                (let [(pType (desugarDot (.-rawText t)))
+                                      (pPair (rd/makeList (list (rd/makeAtom pName) pType)))]
+                                  (pair (cons pPair collected) (none))))
+                               ((none)
+                                (pair collected (some (.-rawText t)))))))
+                         (pair (list) (none))
+                         flatToks))]
+        (rd/makeVect (list-reverse (.-first pairs)))))))
 
 (df parseFnParamsAndReturn [(toks (List lx/IndentToken))] -> FnSignature
-  :d "Parses function name, parameters, and return type from header line tokens."
-  (let [(fnName (mt (list-head toks) ((some t) (.-rawText t)) ((none) "anonymous")))
-        (restToks (option-or (list-tail toks) (list)))]
-    (let [(scanRes (fold (fn [(acc (Pair (List rd/SExpr) (Pair (Option String) (Pair Bool rd/SExpr)))) (t lx/IndentToken)]
-                           -> (Pair (List rd/SExpr) (Pair (Option String) (Pair Bool rd/SExpr)))
-                           (let [(pList (.-first acc))
-                                 (pendingParam (.-first (.-second acc)))
-                                 (afterArrow (.-first (.-second (.-second acc))))
-                                 (retSexpr (.-second (.-second (.-second acc))))]
-                             (if afterArrow
-                               (let [(rawRet (.-rawText t))]
-                                 (if (= rawRet ":")
-                                   acc
-                                   (let [(cleanRet (if (string-ends-with? rawRet ":")
-                                                     (option-or (string-slice rawRet 0 (- (string-length rawRet) 1)) rawRet)
-                                                     rawRet))]
-                                     (pair pList (pair (none) (pair true (desugarDot cleanRet)))))))
-                               (mt (.-kind t)
-                                 ((tokArrow)
-                                  (pair pList (pair (none) (pair true retSexpr))))
-                                 ((tokColon)
-                                  acc)
-                                 ((tokSymbol s)
-                                  (mt pendingParam
-                                    ((some pName)
-                                     (let [(pairExpr (rd/makeList (list (rd/makeAtom pName) (desugarDot s))))]
-                                       (pair (cons pairExpr pList) (pair (none) (pair false retSexpr)))))
-                                    ((none)
-                                     (pair pList (pair (some s) (pair false retSexpr))))))
-                                 (_ acc)))))
-                         (pair (list) (pair (none) (pair false (rd/makeAtom "Unit"))))
-                         restToks))]
-      (let [(paramsRev (.-first scanRes))
-            (retSexpr (.-second (.-second (.-second scanRes))))]
-        (FnSignature :name fnName
-                     :params (rd/makeVect (list-reverse paramsRev))
-                     :retType retSexpr)))))
+  :d "Parses function name, optional effect marker, parameters, return type, and optional docstring."
+  (let [(t0 (list-head toks))
+        (fnName (mt t0 ((some t) (.-rawText t)) ((none) "anonymous")))
+        (restToks (option-or (list-tail toks) (list)))
+        (firstRest (list-head restToks))
+        (hasEffect (mt firstRest
+                     ((some fr) (= (.-rawText fr) "!"))
+                     ((none) (string-ends-with? fnName "!"))))
+        (paramAndRetToks (if (and hasEffect (is-some? firstRest) (= (.-rawText (option-or firstRest (lx/makeIndentToken (lx/tokSymbol "") "" 1 1))) "!"))
+                           (option-or (list-tail restToks) (list))
+                           restToks))
+        (arrowSplit (splitTokensAtWord paramAndRetToks "->"))
+        (pToks (.-first arrowSplit))
+        (afterArrow (.-first (.-second arrowSplit)))
+        (paramsVect (parseParamsVector pToks))
+        (docSplit (splitTokensAtWord afterArrow ":d"))
+        (hasDoc (.-second (.-second docSplit)))
+        (retToks (if hasDoc (.-first docSplit) afterArrow))
+        (docToks (if hasDoc (.-first (.-second docSplit)) (list)))
+        (docstring (mt (list-head docToks)
+                     ((some dt) (some (.-rawText dt)))
+                     ((none) (none))))
+        (retTypeSexpr (if (list-empty? retToks)
+                        (rd/makeAtom "Unit")
+                        (parseLineTokensToSexpr retToks)))]
+    (FnSignature :name fnName
+                 :effect hasEffect
+                 :params paramsVect
+                 :retType retTypeSexpr
+                 :docstring docstring)))
 
 (df hasLbrace? [(toks (List lx/IndentToken))] -> Bool
   :d "Checks if tokens contain a left brace '{'."
@@ -1069,6 +1209,36 @@
        (let [(ifSexpr (rd/makeList (list (rd/makeAtom "if") condExpr (rd/makeAtom "nil") (rd/makeAtom "nil"))))]
          (TopFormResult :rest (list) :form (some ifSexpr)))))))
 
+(df extractBodyDoc [(headerDoc (Option String)) (bodyForms (List rd/SExpr))] -> (Pair (List rd/SExpr) (List rd/SExpr))
+  :d "Normalizes header docstring or first body form docstring into (:d doc) SExpr atoms."
+  (mt headerDoc
+    ((some d)
+     (let [(dAtom (if (string-starts-with? d "\"") (rd/makeAtom d) (rd/makeAtom (str "\"" d "\""))))]
+       (pair (list (rd/makeAtom ":d") dAtom) bodyForms)))
+    ((none)
+     (mt (list-head bodyForms)
+       ((some firstForm)
+        (mt firstForm
+          ((sexprList fItems)
+           (mt (list-head fItems)
+             ((some hAtom)
+              (let [(hName (rd/sexprHead hAtom))]
+                (if (or (= hName ":d") (= hName ":doc"))
+                  (let [(docVal (option-or (list-get fItems 1) (rd/makeAtom "\"\"")))
+                        (remForms (option-or (list-tail bodyForms) (list)))]
+                    (pair (list (rd/makeAtom ":d") docVal) remForms))
+                  (pair (list) bodyForms))))
+             ((none) (pair (list) bodyForms))))
+          ((sexprAtom aName)
+           (if (or (= aName ":d") (= aName ":doc"))
+             (let [(tailForms (option-or (list-tail bodyForms) (list)))
+                   (docVal (option-or (list-head tailForms) (rd/makeAtom "\"\"")))
+                   (remForms (option-or (list-tail tailForms) (list)))]
+               (pair (list (rd/makeAtom ":d") docVal) remForms))
+             (pair (list) bodyForms)))
+          (_ (pair (list) bodyForms))))
+       ((none) (pair (list) (list)))))))
+
 (df parseTopForm [(toks (List lx/IndentToken))] -> TopFormResult
   :d "Parses single top form (fn, match, type, or expression) from tokens."
   (let [(cleanToks (skipNewlines toks))]
@@ -1090,29 +1260,36 @@
                   (mt (.-kind indTok)
                     ((tokIndent lvl)
                      (let [(blockRes (parseIndentedBlock (option-or (list-tail afterHeader) (list)) lvl))
-                           (bodyForms (.-forms blockRes))
-                           (remToks (.-rest blockRes))]
-                       (let [(fnSexpr (rd/makeList (list-append
-                                                     (list (rd/makeAtom "df")
-                                                           (rd/makeAtom (.-name sig))
-                                                           (.-params sig)
-                                                           (rd/makeAtom "->")
-                                                           (.-retType sig))
-                                                     bodyForms)))]
-                         (TopFormResult :rest remToks :form (some fnSexpr)))))
+                           (rawBodyForms (.-forms blockRes))
+                           (remToks (.-rest blockRes))
+                           (docRes (extractBodyDoc (.-docstring sig) rawBodyForms))
+                           (finalDocList (.-first docRes))
+                           (finalBodyForms (.-second docRes))
+                           (effList (if (.-effect sig) (list (rd/makeAtom "!")) (list)))
+                           (fnParts (list-append (list-append (list (rd/makeAtom "df") (rd/makeAtom (.-name sig))) effList)
+                                                 (list-append (list (.-params sig) (rd/makeAtom "->") (.-retType sig))
+                                                              (list-append finalDocList finalBodyForms))))
+                           (fnSexpr (rd/makeList fnParts))]
+                       (TopFormResult :rest remToks :form (some fnSexpr))))
                     (_
-                     (let [(fnSexpr (rd/makeList (list (rd/makeAtom "df")
-                                                       (rd/makeAtom (.-name sig))
-                                                       (.-params sig)
-                                                       (rd/makeAtom "->")
-                                                       (.-retType sig))))]
+                     (let [(effList (if (.-effect sig) (list (rd/makeAtom "!")) (list)))
+                           (docList (mt (.-docstring sig)
+                                      ((some d) (list (rd/makeAtom ":d") (rd/makeAtom (if (string-starts-with? d "\"") d (str "\"" d "\"")))))
+                                      ((none) (list))))
+                           (fnParts (list-append (list-append (list (rd/makeAtom "df") (rd/makeAtom (.-name sig))) effList)
+                                                 (list-append (list (.-params sig) (rd/makeAtom "->") (.-retType sig))
+                                                              docList)))
+                           (fnSexpr (rd/makeList fnParts))]
                        (TopFormResult :rest afterHeader :form (some fnSexpr))))))
                  ((none)
-                  (let [(fnSexpr (rd/makeList (list (rd/makeAtom "df")
-                                                    (rd/makeAtom (.-name sig))
-                                                    (.-params sig)
-                                                    (rd/makeAtom "->")
-                                                    (.-retType sig))))]
+                  (let [(effList (if (.-effect sig) (list (rd/makeAtom "!")) (list)))
+                        (docList (mt (.-docstring sig)
+                                   ((some d) (list (rd/makeAtom ":d") (rd/makeAtom (if (string-starts-with? d "\"") d (str "\"" d "\"")))))
+                                   ((none) (list))))
+                        (fnParts (list-append (list-append (list (rd/makeAtom "df") (rd/makeAtom (.-name sig))) effList)
+                                              (list-append (list (.-params sig) (rd/makeAtom "->") (.-retType sig))
+                                                           docList)))
+                        (fnSexpr (rd/makeList fnParts))]
                     (TopFormResult :rest (list) :form (some fnSexpr)))))))
             ((= s "match")
              (let [(lineSplit (takeUntilLineEnd (option-or (list-tail cleanToks) (list))))
@@ -1179,21 +1356,28 @@
 (df parseIndentedForms [(src String)] -> (Result (List rd/SExpr) String)
   :d "Parses v0.4 indented source into a list of top-level SExpr forms."
   (let [(lexRes (lx/tokenizeIndented src))
-        (toks (.-first lexRes))
-        (diags (.-second lexRes))]
-    (let [(formsRes (fold (fn [(acc (Pair (List rd/SExpr) (List lx/IndentToken))) (_ String)]
-                            -> (Pair (List rd/SExpr) (List lx/IndentToken))
-                            (let [(collected (.-first acc))
-                                  (remToks (.-second acc))]
-                              (if (list-empty? remToks)
-                                acc
-                                (let [(topRes (parseTopForm remToks))]
-                                  (mt (.-form topRes)
-                                    ((some f) (pair (cons f collected) (.-rest topRes)))
-                                    ((none)   (pair collected (.-rest topRes))))))))
-                          (pair (list) toks)
-                          (string-chars (string-repeat " " (list-length toks)))))]
-      (ok (list-reverse (.-first formsRes))))))
+        (rawToks (.-first lexRes))
+        (diags (.-second lexRes))
+        (hasLexErr (fold (fn [(acc Bool) (d lx/LexerDiagnostic)] -> Bool
+                           (or acc (string-starts-with? (.-code d) "E")))
+                         false
+                         diags))]
+    (if hasLexErr
+      (err "Lexical error during indentation tokenization")
+      (let [(toks (preprocessTokens rawToks))
+            (formsRes (fold (fn [(acc (Pair (List rd/SExpr) (List lx/IndentToken))) (_ String)]
+                              -> (Pair (List rd/SExpr) (List lx/IndentToken))
+                              (let [(collected (.-first acc))
+                                    (remToks (.-second acc))]
+                                (if (list-empty? remToks)
+                                  acc
+                                  (let [(topRes (parseTopForm remToks))]
+                                    (mt (.-form topRes)
+                                      ((some f) (pair (cons f collected) (.-rest topRes)))
+                                      ((none)   (pair collected (.-rest topRes))))))))
+                            (pair (list) toks)
+                            (string-chars (string-repeat " " (list-length toks)))))]
+        (ok (list-reverse (.-first formsRes)))))))
 
 (df parseIndented [(src String)] -> (Result rd/SExpr String)
   :d "Parses single v0.4 indented form into canonical SExpr AST."

@@ -2,7 +2,7 @@
   :d "Pure ASL v0.4 Canonical Indented Formatter & Round-Trip Pretty Printer."
   :x [formatIndented formatSexpr isDotAccess? formatDotAccess
       isInterpolatedStr? formatInterpolatedStr isListForm? formatListForm printIndented
-      formatSchemaForm formatEnumForm]
+      formatSchemaForm formatEnumForm isMatchForm? extractDocstring]
   :i [(reader :a rd)])
 
 (df indentPrefix [(level Int64)] -> String
@@ -127,8 +127,20 @@
         (let [(renderedArgs (map (fn [(x rd/SExpr)] -> String (formatSexpr x 0)) items))]
           (string-join renderedArgs " ")))))))
 
+(df isMatchForm? [(s rd/SExpr)] -> Bool
+  :d "Checks if SExpr is a match form."
+  (mt s
+    ((sexprList items)
+     (mt (list-head items)
+       ((some h)
+        (mt h
+          ((sexprAtom v) (= v "match"))
+          (_ false)))
+       ((none) false)))
+    (_ false)))
+
 (df formatMatchArm [(arm rd/SExpr) (indent Int64)] -> String
-  :d "Formats match arm ((pattern) body) as Pattern -> Body."
+  :d "Formats match arm ((pattern) body) as Pattern -> Body or Pattern -> indented body."
   (mt arm
     ((sexprList items)
      (let [(firstItem (option-or (list-get items 0) (rd/makeAtom "_")))
@@ -136,58 +148,97 @@
        (let [(pat (mt firstItem
                     ((sexprList pItems)
                      (string-join (map (fn [(x rd/SExpr)] -> String (formatSexpr x 0)) pItems) " "))
-                    (_ (formatSexpr firstItem 0))))
-             (bod (formatCallBody secondItem))]
-         (str (indentPrefix indent) pat " -> " bod))))
+                    (_ (formatSexpr firstItem 0))))]
+         (if (isMatchForm? secondItem)
+           (str (indentPrefix indent) pat " ->\n" (formatMatchForm secondItem (+ indent 1)))
+           (let [(bod (formatCallBody secondItem))]
+             (str (indentPrefix indent) pat " -> " bod))))))
     (_ "")))
 
 (df formatMatchForm [(s rd/SExpr) (indent Int64)] -> String
-  :d "Formats (match target (arms...)) into match target\\n  arm1\\n  arm2."
+  :d "Formats (match target (arms...)) into match target\n  arm1\n  arm2."
   (mt s
     ((sexprList items)
      (let [(targetSexpr (option-or (list-get items 1) (rd/makeAtom "_")))
-           (armsContainer (option-or (list-get items 2) (rd/makeList (list))))
-           (armsList (rd/sexprToList armsContainer))
            (renderedTarget (formatSexpr targetSexpr 0))
+           (armsList (if (> (list-length items) 3)
+                       (option-or (list-slice items 2 (list-length items)) (list))
+                       (let [(c (option-or (list-get items 2) (rd/makeList (list))))]
+                         (mt c
+                           ((sexprList cItems)
+                            (mt (list-head cItems)
+                              ((some firstEl)
+                               (if (rd/isList? firstEl)
+                                 cItems
+                                 (list c)))
+                              ((none) (list))))
+                           (_ (list c))))))
            (armLines (map (fn [(a rd/SExpr)] -> String (formatMatchArm a (+ indent 1))) armsList))]
        (str (indentPrefix indent) "match " renderedTarget "\n"
             (string-join armLines "\n"))))
     (_ "")))
 
-(df stripInlineDoc [(items (List rd/SExpr))] -> (List rd/SExpr)
-  :d "Strips inline docstring :d or :doc and its following argument from items list."
+(df extractDocstring [(items (List rd/SExpr))] -> (Pair (Option String) (List rd/SExpr))
+  :d "Extracts inline docstring if present at head of body forms."
   (mt (list-head items)
-    ((none) (list))
     ((some h)
      (let [(hVal (rd/sexprHead h))
            (tailItems (option-or (list-tail items) (list)))]
        (if (or (= hVal ":d") (= hVal ":doc"))
-         (stripInlineDoc (option-or (list-tail tailItems) (list)))
-         (cons h (stripInlineDoc tailItems)))))))
+         (mt (list-head tailItems)
+           ((some docAtom)
+            (pair (some (rd/sexprHead docAtom)) (option-or (list-tail tailItems) (list))))
+           ((none)
+            (pair (none) tailItems)))
+         (pair (none) items))))
+    ((none) (pair (none) (list)))))
+
+(df stripInlineDoc [(items (List rd/SExpr))] -> (List rd/SExpr)
+  :d "Strips inline docstring :d or :doc and its following argument from items list."
+  (.-second (extractDocstring items)))
 
 (df formatDefunForm [(s rd/SExpr) (indent Int64)] -> String
-  :d "Formats (df name params -> ret body...) into fn signature and indented body."
+  :d "Formats (df name [!] params -> ret body...) into fn signature and indented body."
   (mt s
     ((sexprList items)
      (let [(fnName (rd/sexprHead (option-or (list-get items 1) (rd/makeAtom "anonymous"))))
-           (paramsVect (option-or (list-get items 2) (rd/makeVect (list))))
-           (arrowSym (rd/sexprHead (option-or (list-get items 3) (rd/makeAtom "->"))))
-           (retType (option-or (list-get items 4) (rd/makeAtom "Unit")))
-           (rawBodyForms (if (> (list-length items) 5)
-                           (option-or (list-slice items 5 (list-length items)) (list))
-                           (list)))
-           (bodyForms (stripInlineDoc rawBodyForms))
+           (item2 (option-or (list-get items 2) (rd/makeVect (list))))
+           (hasEffect (and (rd/isAtom? item2) (= (rd/sexprHead item2) "!")))
+           (paramsVect (if hasEffect
+                         (option-or (list-get items 3) (rd/makeVect (list)))
+                         item2))
+           (arrowSym (if hasEffect
+                       (rd/sexprHead (option-or (list-get items 4) (rd/makeAtom "->")))
+                       (rd/sexprHead (option-or (list-get items 3) (rd/makeAtom "->")))))
+           (retType (if hasEffect
+                      (option-or (list-get items 5) (rd/makeAtom "Unit"))
+                      (option-or (list-get items 4) (rd/makeAtom "Unit"))))
+           (rawBodyForms (if hasEffect
+                           (if (> (list-length items) 6)
+                             (option-or (list-slice items 6 (list-length items)) (list))
+                             (list))
+                           (if (> (list-length items) 5)
+                             (option-or (list-slice items 5 (list-length items)) (list))
+                             (list))))
+           (docRes (extractDocstring rawBodyForms))
+           (docOpt (.-first docRes))
+           (bodyForms (.-second docRes))
            (sigText (formatParamsVector paramsVect))
            (retText (formatSexpr retType 0))
+           (effStr (if hasEffect "! " ""))
            (header (if (string-empty? sigText)
-                     (str (indentPrefix indent) "fn " fnName " -> " retText)
-                     (str (indentPrefix indent) "fn " fnName " " sigText " -> " retText)))]
-       (if (list-empty? bodyForms)
+                     (str (indentPrefix indent) "fn " fnName (if hasEffect " ! -> " " -> ") retText)
+                     (str (indentPrefix indent) "fn " fnName " " effStr sigText " -> " retText)))
+           (docLine (mt docOpt
+                      ((some d) (list (str (indentPrefix (+ indent 1)) ":d " d)))
+                      ((none) (list))))
+           (bodyLines (map (fn [(b rd/SExpr)] -> String
+                             (formatSexpr b (+ indent 1)))
+                           bodyForms))
+           (allLines (list-append docLine bodyLines))]
+       (if (list-empty? allLines)
          header
-         (let [(bodyLines (map (fn [(b rd/SExpr)] -> String
-                                 (formatSexpr b (+ indent 1)))
-                               bodyForms))]
-           (str header "\n" (string-join bodyLines "\n"))))))
+         (str header "\n" (string-join allLines "\n")))))
     (_ "")))
 
 (df formatSchemaField [(f rd/SExpr) (indent Int64)] -> String
