@@ -1,6 +1,6 @@
 (module asl-cli/migrate
   :d "Automated migration toolchain converting S-expression ASL modules to indented syntax."
-  :x [runMigrate migrateSource verifySemanticEquivalence]
+  :x [runMigrate migrateSource verifySemanticEquivalence migrateBatch]
   :i [(ast :a a)
       (reader :a rd)
       (lexer :a lx)
@@ -110,6 +110,7 @@
     ((= s ":x") ":export")
     ((= s ":i") ":import")
     ((= s ":a") ":as")
+    ((= s ":f") ":field")
     ((= s "df") "defun")
     ((= s "mt") "match")
     ((or (= s "schema") (= s "dfs")) "defschema")
@@ -263,7 +264,7 @@
                   (or (= h2 "defenum") (or (= h2 "enum") (= h2 "dfe"))))
              (exprListsEquivalent? (option-or (list-tail items1) (list))
                                    (option-or (list-tail items2) (list))))
-            ((and (= h1 ":field") (= h2 ":field"))
+            ((and (or (= h1 ":field") (= h1 ":f")) (or (= h2 ":field") (= h2 ":f")))
              (let [(name1 (rd/sexprHead (option-or (list-get items1 1) (rd/makeAtom ""))))
                    (name2 (rd/sexprHead (option-or (list-get items2 1) (rd/makeAtom ""))))
                    (type1 (rd/sexprHead (option-or (list-get items1 2) (rd/makeAtom ""))))
@@ -355,6 +356,67 @@
                       (ok (str "✓ " path ": Successfully migrated.")))
                      ((err _)
                       (err (str "Failed to write migrated file: " path)))))))))))))))
+
+(df ! validateBatchFile [(path Str)] -> (Result (Pair Str Str) Str)
+  :d "Validates a single source file in memory for semantic equivalence without disk mutation."
+  (mt (file-read path)
+    ((err _)
+     (err (str "Migration aborted: semantic divergence detected in " path)))
+    ((ok src)
+     (mt (readSexprs src)
+       ((err _)
+        (err (str "Migration aborted: semantic divergence detected in " path)))
+       ((ok origForms)
+        (if (list-empty? origForms)
+          (err (str "Migration aborted: semantic divergence detected in " path))
+          (mt (tryGenerateIndented src origForms)
+            ((err _)
+             (err (str "Migration aborted: semantic divergence detected in " path)))
+            ((ok indentedText)
+             (mt (ip/parseIndentedForms indentedText)
+               ((err _)
+                (err (str "Migration aborted: semantic divergence detected in " path)))
+               ((ok reparsedForms)
+                (if (not (verifyAllSemanticEquivalence origForms reparsedForms))
+                  (err (str "Migration aborted: semantic divergence detected in " path))
+                  (ok (pair path indentedText)))))))))))))
+
+(df ! validateBatchFilesLoop [(remaining (List Str)) (acc (List (Pair Str Str)))] -> (Result (List (Pair Str Str)) Str)
+  :d "Validates all files in batch sequentially in memory, aborting immediately on first failure."
+  (mt (list-head remaining)
+    ((none) (ok (list-reverse acc)))
+    ((some p)
+     (mt (validateBatchFile p)
+       ((err e) (err e))
+       ((ok validated)
+        (let [(tail (option-or (list-tail remaining) (list)))]
+          (validateBatchFilesLoop tail (list-cons validated acc))))))))
+
+(df ! writeBatchFilesLoop [(remaining (List (Pair Str Str)))] -> (Result Bool Str)
+  :d "Writes validated indented contents to disk sequentially."
+  (mt (list-head remaining)
+    ((none) (ok true))
+    ((some it)
+     (let [(targetPath (.-first it))
+           (content (.-second it))
+           (tail (option-or (list-tail remaining) (list)))]
+       (mt (file-write targetPath content)
+         ((err _) (err (str "Failed to write migrated file: " targetPath)))
+         ((ok _) (writeBatchFilesLoop tail)))))))
+
+(df ! migrateBatch [(paths (List Str)) (dryRun Bool) (checkOnly Bool)] -> (Result (List Str) Str)
+  :d "Migrates a batch of files atomically with in-memory validation and zero side-effects on abort."
+  (mt (validateBatchFilesLoop paths (list))
+    ((err e) (err e))
+    ((ok validatedPairs)
+     (if checkOnly
+       (ok (map (fn [(p Str)] -> Str (str "✓ " p ": Validated migratable.")) paths))
+       (if dryRun
+         (ok (map (fn [(item (Pair Str Str))] -> Str (.-second item)) validatedPairs))
+         (mt (writeBatchFilesLoop validatedPairs)
+           ((err e) (err e))
+           ((ok _)
+            (ok (map (fn [(p Str)] -> Str (str "✓ " p ": Successfully migrated.")) paths)))))))))
 
 (dfs MigrateCliOptions
   (:f path String "Target file path")
