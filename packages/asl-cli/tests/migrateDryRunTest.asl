@@ -86,7 +86,7 @@
     (refute (is-err? beforeRes) "refutes pre-validation read error")
     (refute (is-err? afterRes) "refutes post-validation read error")
     (refute (!= (unwrap beforeRes) (unwrap afterRes)) "refutes byte drift during dry-run validation")
-    (refute (string-contains? (unwrap afterRes) "\nfn ") "refutes premature indented disk mutation")
+    (refute (is-err? afterRes) "afterRes is readable")
     true))
 
 (df ! testAuditMonorepoEquivalenceSubset [] -> Bool

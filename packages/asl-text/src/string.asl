@@ -1,63 +1,33 @@
-(module asl-text/string
-  :d "Pure AgentScript high-performance modular string primitives and 1-to-2 token aliases per d46 and d47."
-  :x [starts?
-      ends?
-      has?
-      split
-      concat
-      join
-      txt-starts?
-      txtEnds?
-      txtHas?
-      txtSplit
-      txt/starts?
-      txt/ends?
-      txt/has?
-      txt/split]
-  :i [])
+(module asl-text/string :doc "Pure AgentScript high-performance modular string primitives and 1-to-2 token aliases per d46 and d47." :export [starts? ends? has? split concat join txt-starts? txtEnds? txtHas? txtSplit txt/starts? txt/ends? txt/has? txt/split])
 
-(df starts? [(s Str) (prefix Str)] -> Bool
-  :d "Tests whether string starts with given prefix."
-  (string-starts-with? s prefix))
+fn starts? s: Str prefix: Str -> Bool
+  string-starts-with? s prefix
 
-(df ends? [(s Str) (suffix Str)] -> Bool
-  :d "Tests whether string ends with given suffix."
-  (let [(slen (string-length s))
-        (sublen (string-length suffix))]
-    (if (< slen sublen)
-      false
-      (let [(start (- slen sublen))]
-        (= (option-or (string-slice s start slen) "") suffix)))))
+fn ends? s: Str suffix: Str -> Bool
+  let slen = (string-length s)
+  let sublen = (string-length suffix)
+  if (< slen sublen) false (let start = (- slen sublen) in (= (option-or (string-slice s start slen) "") suffix))
 
-(df has? [(s Str) (sub Str)] -> Bool
-  :d "Tests whether string contains given substring."
-  (string-contains? s sub))
+fn has? s: Str sub: Str -> Bool
+  string-contains? s sub
 
-(df split [(s Str) (delim Str)] -> (List Str)
-  :d "Splits string by delimiter into list of substrings."
-  (string-split s delim))
+fn split s: Str delim: Str -> (List Str)
+  s |> (string-split delim)
 
-(df txt-starts? [(s Str) (prefix Str)] -> Bool
-  :d "Hyphen compatibility alias for starts?."
-  (starts? s prefix))
+fn txt-starts? s: Str prefix: Str -> Bool
+  starts? s prefix
 
-(df txtEnds? [(s Str) (suffix Str)] -> Bool
-  :d "Hyphen compatibility alias for ends?."
-  (ends? s suffix))
+fn txtEnds? s: Str suffix: Str -> Bool
+  ends? s suffix
 
-(df txtHas? [(s Str) (sub Str)] -> Bool
-  :d "Hyphen compatibility alias for has?."
-  (has? s sub))
+fn txtHas? s: Str sub: Str -> Bool
+  has? s sub
 
-(df txtSplit [(s Str) (delim Str)] -> (List Str)
-  :d "Hyphen compatibility alias for split."
-  (split s delim))
+fn txtSplit s: Str delim: Str -> (List Str)
+  split s delim
 
+fn concat a: Str b: Str -> Str
+  str a b
 
-(df concat [(a Str) (b Str)] -> Str
-  :d "Concatenates two strings."
-  (str a b))
-
-(df join [(parts (List Str)) (sep Str)] -> Str
-  :d "Joins list of strings with separator."
-  (string-join parts sep))
+fn join parts: (List Str) sep: Str -> Str
+  parts |> (string-join sep)
