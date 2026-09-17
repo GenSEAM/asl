@@ -112,6 +112,8 @@
     ((= s ":a") ":as")
     ((= s "df") "defun")
     ((= s "mt") "match")
+    ((or (= s "schema") (= s "dfs")) "defschema")
+    ((or (= s "enum") (= s "dfe")) "defenum")
     (:else s)))
 
 (df atomsEquivalent? [(v1 String) (v2 String)] -> Bool
@@ -253,6 +255,24 @@
              (let [(clean1 (stripDefunDoc items1))
                    (clean2 (stripDefunDoc items2))]
                (exprListsEquivalent? clean1 clean2)))
+            ((and (or (= h1 "defschema") (or (= h1 "schema") (= h1 "dfs")))
+                  (or (= h2 "defschema") (or (= h2 "schema") (= h2 "dfs"))))
+             (exprListsEquivalent? (option-or (list-tail items1) (list))
+                                   (option-or (list-tail items2) (list))))
+            ((and (or (= h1 "defenum") (or (= h1 "enum") (= h1 "dfe")))
+                  (or (= h2 "defenum") (or (= h2 "enum") (= h2 "dfe"))))
+             (exprListsEquivalent? (option-or (list-tail items1) (list))
+                                   (option-or (list-tail items2) (list))))
+            ((and (= h1 ":field") (= h2 ":field"))
+             (let [(name1 (rd/sexprHead (option-or (list-get items1 1) (rd/makeAtom ""))))
+                   (name2 (rd/sexprHead (option-or (list-get items2 1) (rd/makeAtom ""))))
+                   (type1 (rd/sexprHead (option-or (list-get items1 2) (rd/makeAtom ""))))
+                   (type2 (rd/sexprHead (option-or (list-get items2 2) (rd/makeAtom ""))))]
+               (and (= name1 name2) (atomsEquivalent? type1 type2))))
+            ((and (= h1 ":case") (= h2 ":case"))
+             (let [(name1 (rd/sexprHead (option-or (list-get items1 1) (rd/makeAtom ""))))
+                   (name2 (rd/sexprHead (option-or (list-get items2 1) (rd/makeAtom ""))))]
+               (= name1 name2)))
             (:else
              (exprListsEquivalent? items1 items2)))))
        ((rd/sexprVect items2)
