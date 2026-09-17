@@ -306,6 +306,23 @@
                (option-or (list-tail tail1) (list)))
              afterParams)))))))
 
+(df extractDefunRetType [(items (List rd/SExpr))] -> (Option String)
+  :d "Extracts return type annotation from defun items if present."
+  (let [(clean (stripDefunDoc items))
+        (len (list-length clean))]
+    (if (< len 4)
+      (none)
+      (let [(afterParams (option-or (list-slice clean 3 len) (list)))]
+        (mt (list-head afterParams)
+          ((none) (none))
+          ((some first)
+           (if (= (rd/sexprHead first) "->")
+             (let [(tail1 (option-or (list-tail afterParams) (list)))]
+               (mt (list-head tail1)
+                 ((some r) (some (rd/sexprHead r)))
+                 ((none) (none))))
+             (none))))))))
+
 (df exprListsEquivalent? [(l1 (List rd/SExpr)) (l2 (List rd/SExpr))] -> Bool
   :d "Checks pairwise semantic equivalence across two SExpr lists."
   (if (!= (list-length l1) (list-length l2))
@@ -339,25 +356,38 @@
                                     (= (list-head params1) (list-head params2)))))]
           (if (not paramsMatch)
             false
-            (let [(body1 (extractDefunBody items1))
-                  (body2 (extractDefunBody items2))]
-              (if (and (list-empty? body1) (list-empty? body2))
-                true
-                (if (exprListsEquivalent? body1 body2)
-                  true
-                  (let [(atoms1 (collectAtomStrings body1))
-                        (atoms2 (collectAtomStrings body2))]
-                    (fold (fn [(acc Bool) (a String)] -> Bool
-                            (if (not acc)
-                              false
-                              (or (list-contains? atoms2 a)
-                                  (list-contains? atoms2 (normalizeTypeAtom a))
-                                  (let [(trimmed (if (string-ends-with? a "?")
-                                                   (option-or (string-slice a 0 (- (string-length a) 1)) a)
-                                                   a))]
-                                    (list-contains? atoms2 trimmed)))))
-                          true
-                          atoms1)))))))))))
+            (let [(ret1 (extractDefunRetType items1))
+                  (ret2 (extractDefunRetType items2))
+                  (retMatch (mt ret1
+                              ((some r1)
+                               (mt ret2
+                                 ((some r2) (atomsEquivalent? r1 r2))
+                                 ((none) true)))
+                              ((none)
+                               (mt ret2
+                                 ((some _) true)
+                                 ((none) true)))))]
+              (if (not retMatch)
+                false
+                (let [(body1 (extractDefunBody items1))
+                      (body2 (extractDefunBody items2))]
+                  (if (and (list-empty? body1) (list-empty? body2))
+                    true
+                    (if (exprListsEquivalent? body1 body2)
+                      true
+                      (let [(atoms1 (collectAtomStrings body1))
+                            (atoms2 (collectAtomStrings body2))]
+                        (fold (fn [(acc Bool) (a String)] -> Bool
+                                (if (not acc)
+                                  false
+                                  (or (list-contains? atoms2 a)
+                                      (list-contains? atoms2 (normalizeTypeAtom a))
+                                      (let [(trimmed (if (string-ends-with? a "?")
+                                                       (option-or (string-slice a 0 (- (string-length a) 1)) a)
+                                                       a))]
+                                        (list-contains? atoms2 trimmed)))))
+                              true
+                              atoms1)))))))))))))
 
 (df verifySemanticEquivalence [(orig rd/SExpr) (reparsed rd/SExpr)] -> Bool
   :d "Compares that the semantic structure (heads, symbols, sub-expressions) is preserved across conversion."
