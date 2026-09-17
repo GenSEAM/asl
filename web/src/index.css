@@ -106,6 +106,46 @@
     margin-left: auto;
     margin-right: auto;
   }
+
+  /* Cyberpunk Neon Bloom, Glassmorphism & Ambient Light Utilities */
+  .neon-glow-pill {
+    background: rgba(24, 19, 39, 0.92);
+    border: 1px solid rgba(176, 96, 255, 0.65);
+    box-shadow: 0 0 12px rgba(176, 96, 255, 0.5), 0 0 35px rgba(176, 96, 255, 0.35), inset 0 0 15px rgba(176, 96, 255, 0.12);
+  }
+
+  .neon-card {
+    background: rgba(24, 19, 39, 0.72);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(176, 96, 255, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 4px 24px rgba(12, 9, 20, 0.6);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .neon-card:hover {
+    border-color: rgba(192, 132, 252, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 28px rgba(176, 96, 255, 0.35);
+    transform: translateY(-2px);
+  }
+
+  .neon-title-gradient {
+    background: linear-gradient(180deg, #FFFFFF 0%, #E9D5FF 50%, #C084FC 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 18px rgba(192, 132, 252, 0.35));
+  }
+
+  .neon-text-glow {
+    text-shadow: 0 0 12px rgba(192, 132, 252, 0.55), 0 0 28px rgba(176, 96, 255, 0.35);
+  }
+
+  .neon-svg-glow {
+    filter: drop-shadow(0 0 10px rgba(176, 96, 255, 0.45)) drop-shadow(0 0 25px rgba(192, 132, 252, 0.25));
+  }
+
+  .ambient-top-light {
+    background: radial-gradient(ellipse 75% 45% at 50% -10%, rgba(176, 96, 255, 0.25), transparent 70%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

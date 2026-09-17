@@ -28,5 +28,10 @@
       :syncHandle true
       :atomicFlush true
       :maxFileSizeBytes 104857600)
+    (:contract WebLocksLeaseContract
+      :d "Multi-tab single-writer exclusion lock contract over OPFS storage"
+      :lockName "asl_opfs_writer_lock"
+      :mode "exclusive"
+      :stealTimeoutMs 5000)
   ]
 )

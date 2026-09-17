@@ -1,0 +1,38 @@
+(:grammar
+  :id "asl/grammar/hypergraph"
+  :version 1
+  :package "asl-hypergraph"
+  :description "Closed specification for codebase hypergraph indexer and sub-80-token impact analysis under ADR D94"
+  :types [
+    (:struct HyperNode
+      :d "Symbolic AST node in codebase hypergraph"
+      (:field id Str "Fully-qualified identifier Module:symbol")
+      (:field kind Str "Kind of declaration: function, struct, test, type")
+      (:field module Str "Enclosing module path")
+      (:field symbol Str "Unqualified symbol name")
+      (:field doc Str "Documentation string from :d attribute"))
+
+    (:struct HyperEdge
+      :d "Directed relational hyperedge between symbols"
+      (:field source Str "Source symbol identifier Module:symbol")
+      (:field relation Str "Relationship type: calls, types, mutates, tests")
+      (:field target Str "Target symbol identifier Module:symbol or type name")
+      (:field anchor Str "Subtree anchor key within declaration"))
+
+    (:struct HyperIndex
+      :d "In-memory or serialized codebase hypergraph index"
+      (:field version Int64 "Index schema version")
+      (:field nodes (List HyperNode) "Indexed declaration nodes")
+      (:field edges (List HyperEdge) "Indexed relational edges")
+      (:field timestamp Int64 "Epoch timestamp of index generation"))
+
+    (:struct ImpactReceipt
+      :d "Sub-80-token high-SNR blast-radius impact analysis receipt"
+      (:field symbol Str "Target query symbol")
+      (:field callers (List Str) "Truncated direct callers list, max 5 plus overflow label")
+      (:field callersCount Int64 "Total count of direct inbound callers")
+      (:field tests (List Str) "Direct and transitive test dependencies")
+      (:field testsCount Int64 "Total count of affected test suites")
+      (:field types (List Str) "Type signatures and referenced struct definitions")
+      (:field status Str "Query status: ok, not-found, circular"))
+  ])

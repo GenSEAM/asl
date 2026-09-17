@@ -24,14 +24,14 @@
     (:contract :id clientLauncher
       :rule "Client targeting, channels, orchestration limits, and client-specific security invariants."
       :clients [
-        (:client :id "agy" :channel "<RULE[user_global]>" :permissionTier "dangerous-rescue" :autoFlags ["--dangerously-skip-permissions"])
-        (:client :id "claude" :channel "system-guided" :permissionTier "safe" :invariants [
+        (:client :id "agy" :channel "<RULE[user_global]>" :permissionTier "dangerous-rescue" :autoFlags ["--dangerously-skip-permissions"] :compulsion [:autoElevatedSkip :preflightRules :receiptGating])
+        (:client :id "claude" :channel "system-guided" :permissionTier "safe" :compulsion [:mcpElevation :preToolUseHooks :pathShims :receiptGating] :invariants [
           (:invariant :id "claudeSystemPromptAppend" :rule "Convert system prompt overwrite (-s/--system-prompt) to append (--append-system-prompt)")
           (:invariant :id "claudeStripDangerousPermissions" :rule "Strip --dangerously-skip-permissions to enforce safe permission tier")
         ])
-        (:client :id "codex" :channel "system" :permissionTier "safe")
-        (:client :id "addie" :channel "native" :permissionTier "safe")
-        (:client :id "eddie" :channel "native" :permissionTier "safe")
+        (:client :id "codex" :channel "system" :permissionTier "safe" :compulsion [:sandboxWrite :preExecDeny :receiptGating])
+        (:client :id "addie" :channel "native" :permissionTier "safe" :compulsion [:nativeHarness])
+        (:client :id "eddie" :channel "native" :permissionTier "safe" :compulsion [:nativeHarness])
       ])
     (:contract :id hostInterface
       :rule "Single declared host interface covering evaluation, filesystem, network, time, and randomness, naming zero concrete engines; at least two conforming engines satisfy the interface."

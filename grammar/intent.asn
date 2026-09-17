@@ -1,0 +1,91 @@
+(:intentGrammar
+  :doc "Stratified Intent Grammar: High-Level Existential Mission, Semiotic Voice & Cognitive Stance, Axiological North Stars, User Journeys, and Grounded Package I-Maps"
+
+  ;; =========================================================================
+  ;; 0. HIGH-LEVEL TELEOLOGICAL STRATUM (The Philosophical North Star)
+  ;; Intent begins not with technical thresholds, but with an existential mission,
+  ;; a definitive voice, and non-negotiable principles of human-machine symbiosis.
+  ;; =========================================================================
+  (:highLevelStratum
+    :schema [
+      (:missionSchema
+        :fields [
+          (:field :raisonDetre :type :string :doc "Why the ecosystem exists; the fundamental transformation it enacts on software creation")
+          (:field :teleologicalCore :type :string :doc "The mathematical and philosophical anchor dominating all operational decisions")
+        ])
+      (:voiceSchema
+        :fields [
+          (:field :stance :type :keyword :doc "Primary operational posture [:sovereignLogician :ruthlessPopperian :autonomousEngineer]")
+          (:field :tone :type :string :doc "Communication style: calm engineering clarity, zero sycophancy, zero conversational fluff")
+          (:field :attitudeToCode :type :string :doc "Code is unproven until tested against mutations; green without assert is vacuous")
+          (:field :attitudeToHuman :type :string :doc "Reverence for human sovereignty (V0) and attention; autonomous in reversible bounds")
+          (:field :prohibitedModes :type :list :doc "Forbidden postures: servile apologies, conversational filler, learned helplessness")
+        ])
+      (:northStarSchema
+        :fields [
+          (:field :id :type :keyword :doc "Canonical identifier of the guiding principle")
+          (:field :statement :type :string :doc "The unyielding axiomatic truth")
+          (:field :causalEffect :type :string :doc "How this guiding light alters real-world engineering behavior")
+        ])
+      (:journeySchema
+        :fields [
+          (:field :id :type :keyword :doc "Macro-journey identifier")
+          (:field :initiator :type :keyword :doc "Who triggers the journey [:humanVoice :humanPrompt :systemRegresion :agentDaemon]")
+          (:field :transformation :type :string :doc "What state changes from inception to completion")
+          (:field :humanCheckpoint :type :string :doc "Where the human enters the loop (strictly at irreversible boundaries or strategic forks)")
+          (:field :proofOfClosure :type :string :doc "The falsifiable, cryptographic evidence that concludes the journey")
+        ])
+      (:subsystemCharterSchema
+        :fields [
+          (:field :subsystem :type :keyword :doc "Subsystem identifier [:compiler :vectorUi :storage :harness :swarm]")
+          (:field :existentialRole :type :string :doc "The high-level mandate and qualitative standard of excellence")
+          (:field :sacredBoundary :type :string :doc "The invariant this subsystem will never compromise")
+        ])
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 1. PACKAGE INTENT SCHEMA (I-Map Specification - Tactical Grounding)
+  ;; Bridges high-level mission down to concrete packages and falsifiable gates.
+  ;; =========================================================================
+  (:packageIntentSchema
+    :fields [
+      (:field :package :type :string :required true :doc "Canonical package identifier (e.g. asl-vector, asl-compiler)")
+      (:field :archetype :type :keyword :required true :doc "Subsystem archetype [:compiler :storage :uiVector :harness :swarm :runtime]")
+      (:field :charterRef :type :keyword :required true :doc "Reference to the high-level subsystem charter")
+      (:field :teleologyTier :type :keyword :required true :doc "Highest dominant teleological tier governing this package [V0..V6]")
+      (:field :stakeholders :type :list :required true :doc "Target consumers [:autonomousAgent :humanDeveloper :externalRuntime]")
+      (:field :goals :type :list :required true :doc "Falsifiable target outcomes with measurable acceptance predicates")
+      (:field :antiGoals :type :list :required true :doc "Strictly prohibited features, behaviors, or dependencies to bound causal scope")
+      (:field :invariants :type :list :required true :doc "Constitutional invariants that must hold across all state transitions")
+      (:field :traceabilityMatrix :type :list :required true :doc "Bi-directional linkage between every goal and its acceptance test")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 2. THE ZERO-ORPHAN INVARIANT (Bi-Directional Intent Grounding)
+  ;; =========================================================================
+  (:zeroOrphanInvariant
+    :rule "Every declared goal must be backed by >= 1 acceptance test; every acceptance test must trace to >= 1 declared goal."
+    :enforcement [
+      (:check :noUnbackedGoal :action :reject :message "Goal lacks an executable verification test in traceability matrix")
+      (:check :noOrphanTest :action :reject :message "Test exists without an explicit binding to a declared package goal")
+      (:check :antiGoalViolation :action :abort :message "Diff implements a pattern explicitly prohibited in package antiGoals")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 3. INTENT DRIFT & COGNITIVE COLLAPSE DETECTION
+  ;; =========================================================================
+  (:driftDetection
+    :metrics [
+      (:metric :intentHash :computation "sha256(canonicalize(goals + antiGoals + invariants))")
+      (:metric :causalSurfaceRatio :computation "diff_tokens / intent_complexity")
+      (:metric :teleologicalCompliance :computation "count(passed_invariants) / count(total_invariants)")
+    ]
+    :tripBreaker [
+      (:condition "causalSurfaceRatio > 3.0 without intent revision" :action :flagScopeCreep)
+      (:condition "antiGoalViolation detected in staged diff" :action :discardStagedBuffer)
+    ]
+  )
+)

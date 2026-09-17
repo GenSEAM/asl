@@ -1,0 +1,34 @@
+(:grammar
+  :id "asl-replay-grammar"
+  :version 1
+  :package "asl-replay"
+  :doc "Deterministic execution replay and canonical ASN event streaming schema under ADR D97"
+  :types [
+    (:type :name "ReplayEvent"
+           :doc "Canonical recorded agent execution event"
+           :fields [
+             (:f :name "step" :type "Int64")
+             (:f :name "kind" :type "String")
+             (:f :name "payload" :type "String")
+             (:f :name "stateDigest" :type "String")
+             (:f :name "volatileMetadata" :type "String")
+           ])
+
+    (:type :name "ReplaySession"
+           :doc "Ordered sequence of execution replay events bound to session"
+           :fields [
+             (:f :name "sessionId" :type "String")
+             (:f :name "events" :type "List ReplayEvent")
+             (:f :name "initialDigest" :type "String")
+           ])
+
+    (:type :name "DivergenceReport"
+           :doc "State divergence diagnostic report indicating exact step and mismatched hashes"
+           :fields [
+             (:f :name "diverged" :type "Bool")
+             (:f :name "step" :type "Int64")
+             (:f :name "expectedDigest" :type "String")
+             (:f :name "actualDigest" :type "String")
+             (:f :name "reason" :type "String")
+           ])
+  ])

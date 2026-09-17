@@ -1,0 +1,61 @@
+<svg viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" class="asl-mascot-chroma" role="img" aria-label="Schematic Cyber Chameleon AX-4 Chroma Icon">
+  <defs>
+    <filter id="chroma-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <linearGradient id="neonPurpleChroma" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5d0fe" />
+      <stop offset="30%" stop-color="#C084FC" />
+      <stop offset="70%" stop-color="#A855F7" />
+      <stop offset="100%" stop-color="#7e22ce" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M 16 132 C 48 122 92 110 144 94"
+    stroke="#3B2D54"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-dasharray="5 3"
+    opacity="0.6"
+    vector-effect="non-scaling-stroke"
+  />
+  <g filter="url(#chroma-glow)">
+    <path
+      d="M 54 44 C 46 34 34 32 28 36 C 22 40 24 50 30 56 C 16 66 10 88 18 112 C 26 132 46 142 64 136 C 78 130 84 114 78 96 C 72 82 56 80 50 90 C 44 100 52 108 60 104 C 65 101 63 94 58 93"
+      stroke="url(#neonPurpleChroma)"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      vector-effect="non-scaling-stroke"
+    />
+    <path
+      d="M 54 44 C 72 42 94 52 88 70 C 82 82 68 88 56 94"
+      stroke="url(#neonPurpleChroma)"
+      stroke-width="2.2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      vector-effect="non-scaling-stroke"
+    />
+    <circle cx="34" cy="36" r="1.5" fill="#f5d0fe" opacity="0.9" />
+    <circle cx="88" cy="70" r="1.5" fill="#f5d0fe" opacity="0.9" />
+    <g class="aperture-iris">
+      <circle cx="75" cy="52" r="9" stroke="#A855F7" stroke-width="2" fill="#181327" vector-effect="non-scaling-stroke" />
+      <g class="aperture-blades">
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(0 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(45 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(90 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(135 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(180 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(225 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(270 75 52)" />
+        <path d="M 75 43 Q 80 46 82 51" stroke="#C084FC" stroke-width="0.8" fill="none" transform="rotate(315 75 52)" />
+      </g>
+      <circle cx="75" cy="52" r="3.5" fill="#A855F7" />
+      <circle cx="75" cy="52" r="1.2" fill="#f5d0fe" />
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,266 @@
+(:cognition
+  :doc "Universal Portable Agent Cognition, Semiocognitive Scratchpads, Teleological Functor, Tri-Map Pipeline, and Agnostic Runtime Adapters"
+
+  ;; =========================================================================
+  ;; 1. COGNITIVE S-EXPRESSION SCRATCHPAD: Thinking in Pure ASL/ASN
+  ;; Replaces unstructured natural language Chain-of-Thought with typed DAGs.
+  ;; Semantic Utility Density: SUD(T) = |Constraints(T)| / |Tokens(T)| in [0.65, 0.95].
+  ;; Decision-Relevant Information Rate: DIR = I(Tokens; Action) / H(Tokens) -> 1.0.
+  ;; Dyck-1 Delimiter Physics: pushdown state balance b(i) >= 0, b(n) = 0.
+  ;; Atomic Rollback: O(1) stack pop to parent frame on branch refutation.
+  ;; Structural Transposition: canonical hashing modulo alpha-renaming memoizes DAG states.
+  ;; =========================================================================
+  (:scratchpad
+    :format :asnSexpr
+    :delimiters :dyck1Balanced
+    :metrics [
+      (:metric :sud :nominalRange [0.65 0.95] :formula "constraints / tokens")
+      (:metric :dir :target 1.0 :formula "I(tokens; action) / H(tokens)")
+      (:metric :rollbackComplexity :bigO "O(1)" :mechanism :pushdownPop)
+      (:metric :stateMemoization :algorithm :canonicalAstHash)
+    ]
+    :schema [
+      (:think
+        :fields [
+          (:perceive
+            :required true
+            :doc "Empirical observation of system state, triggers, and anomalies"
+            :params [:state :triggers :anomalies :probes])
+          (:decompose
+            :required false
+            :doc "Decomposition of complex problem into orthogonal invariant sub-problems"
+            :params [:subProblems :dependencies :topologicalOrder])
+          (:hypothesize
+            :required true
+            :doc "Mutually exclusive candidate hypotheses with prior probabilities"
+            :params [:candidates])
+          (:falsify
+            :required true
+            :doc "Dual-polarity refutation tests designed to disprove each candidate hypothesis"
+            :params [:gates :probes :mutants :results])
+          (:select
+            :required true
+            :doc "Selection of surviving hypothesis dominant under lexicographic teleology"
+            :params [:dominanceChain :survivor :rationale])
+          (:actionDag
+            :required true
+            :doc "Minimal causal execution DAG of atomic verified steps"
+            :params [:steps :owns :gates :rollbackPlan])
+        ])
+    ]
+    :example [
+      (:think
+        (:perceive
+          :symptom "intermittent stale search results after write"
+          :trigger "worker flush concurrent with cache read"
+          :state {:cacheEngine :redis :db :postgres :consistency :eventual})
+        (:hypothesize
+          :candidates [
+            (:h :id :h1 :cause "cache invalidation message dropped" :prior 0.40)
+            (:h :id :h2 :cause "read replica replication lag exceeds cache TTL" :prior 0.35)
+            (:h :id :h3 :cause "non-atomic lease expiry before CAS flush" :prior 0.25)
+          ])
+        (:falsify
+          :gates [
+            (:gate :id :g1 :target :h1 :probe "redis MONITOR | grep DEL" :failIf "DEL received before stale read")
+            (:gate :id :g2 :target :h2 :probe "check pg_stat_replication lag" :failIf "lag < 5ms during anomaly")
+            (:gate :id :g3 :target :h3 :probe "reproduce with delayed flush" :failIf "CAS version mismatch handled")
+          ]
+          :results [
+            (:result :gate :g1 :status :refuted :evidence "DEL arrived t=1002ms")
+            (:result :gate :g2 :status :refuted :evidence "replica lag strictly zero")
+            (:result :gate :g3 :status :confirmed :evidence "CAS hash overwrote L2 write at t=1004ms")
+          ])
+        (:select
+          :dominanceChain [V0 V1 V2 V3 V4 V5 V6]
+          :survivor :h3
+          :rationale "H1 and H2 refuted by empirical probes; H3 confirmed by CAS reproduction gate")
+        (:actionDag
+          :steps [
+            (:step :id :s1 :op :atomicLeaseCas :owns ["src/vfs/buffer.rs"] :gate "cargo test test_lease_cas")
+            (:step :id :s2 :op :verifyReplication :owns [] :gate "cargo test test_concurrency_fuzz")
+          ]))
+    ])
+
+  ;; =========================================================================
+  ;; 2. TELEOLOGY INDUCING ONTOLOGY: The Universal Adjunction F -| G
+  ;; Category Tel: thin poset category of lexicographic priority (V0 > ... > V6).
+  ;; Category Ont: category of typed signatures, operational entities, and morphisms.
+  ;; Functor F: Tel -> Ont maps Vi -> Skolem(Enforce(Vi)).
+  ;; Functor G: Ont -> Tel maps entity schema to maximal enforceable value chain.
+  ;; Ashby's Variety-Forcing Lemma: Requisite variety against disturbances to Vi
+  ;; strictly forces the emergence of corresponding operational distinctions.
+  ;; Ontological Parsimony: unit eta is conservative, counit epsilon eliminates orphans.
+  ;; =========================================================================
+  (:teleologyOntologyFunctor
+    :adjunction {:freeFunctor "F: Tel -> Ont" :forgetfulFunctor "G: Ont -> Tel" :law "Ont(F(V), O) =~ Tel(V, G(O))"}
+    :varietyForcingLemma "Regulator variety Vr >= Vd forces Skolem distinctions for every value Vi"
+    :parsimonyLaws [
+      (:law :conservativeTeleology :formula "G(F(V)) =~ V" :meaning "zero phantom values")
+      (:law :zeroOrphanEntities :formula "entities(F(V)) = Union(Skolem(Enforce(Vi)))" :meaning "zero bloat entities")
+    ]
+    :mappings [
+      (:mapping
+        :value :V0
+        :title "Human Sovereignty"
+        :dominance :absolute
+        :enforcement "airgaps, irreversible data safety, human override"
+        :forcesOntology [
+          (:entity :humanOverride :nature :terminalMorphism :rule "unique morphism absorbing all active computation")
+          (:entity :airgap :nature :severCapability :rule "physical detachment of actuation channels")
+          (:entity :consentReceipt :nature :cryptographicProof :rule "signed human confirmation for irreversible ops")
+        ])
+      (:mapping
+        :value :V1
+        :title "Invariant Preservation"
+        :dominance :constitutional
+        :enforcement "delimiter balance, memory safety, owns boundaries"
+        :forcesOntology [
+          (:entity :owns :nature :linearResource :rule "strict boundary partitions; writes outside owns forbidden")
+          (:entity :vfsBuffer :nature :isolatedStaging :rule "RAM VFS staging; zero raw un-staged disk mutations")
+          (:entity :delimiterState :nature :pushdownTracker :rule "strict Dyck-1 balanced enclosures")
+          (:entity :invariantGuard :nature :preservationPredicate :rule "algebraic properties holding across transitions")
+        ])
+      (:mapping
+        :value :V2
+        :title "Contractual Intent Fidelity"
+        :dominance :contractual
+        :enforcement "verified prompt satisfaction, zero silent drop"
+        :forcesOntology [
+          (:entity :intentAtom :nature :closedTerm :rule "atomic requirement <verb, object, constraint, provenance>")
+          (:entity :sMap :nature :intentLattice :rule "closed set of intent atoms without free variables")
+          (:entity :acceptanceCriteria :nature :obligationProof :rule "formal contracts mapping intent to verification")
+        ])
+      (:mapping
+        :value :V3
+        :title "Falsifiability & Refutability"
+        :dominance :epistemic
+        :enforcement "reproducible dual-polarity gates, non-vacuous assertions"
+        :forcesOntology [
+          (:entity :claim :nature :refutableProposition :rule "every assertion must admit a refuting test")
+          (:entity :falsificationGate :nature :executableFalsifier :rule "decidable probe emitting {PASS, FAIL}")
+          (:entity :mutant :nature :faultInjector :rule "counterfactual mutation proving gate sensitivity")
+          (:entity :fMap :nature :refutationCover :rule "bijective mapping from every intent atom to a gate")
+          (:entity :witness :nature :failureRecord :rule "cryptographic trace of refuted hypothesis")
+        ])
+      (:mapping
+        :value :V4
+        :title "Minimal Causal Surface"
+        :dominance :structural
+        :enforcement "minimal diff entropy, zero speculative bloat"
+        :forcesOntology [
+          (:entity :diffHunk :nature :minimalGeneratingSet :rule "atomic code modification hunk")
+          (:entity :entropyBudget :nature :kolmogorovMeasure :rule "strict bound on diff size and blast radius")
+          (:entity :bMap :nature :causalExecutionDag :rule "topologically ordered edit nodes satisfying F-Map")
+          (:entity :causalCone :nature :impactBoundary :rule "transitive closure of modified symbols")
+        ])
+      (:mapping
+        :value :V5
+        :title "Lexical SNR & Semiotics"
+        :dominance :semiotic
+        :enforcement "pure ASN S-expressions, high IDF keywords, zero English filler"
+        :forcesOntology [
+          (:entity :asnSexpr :nature :shannonOptimalEncoding :rule "balanced delimiter token stream")
+          (:entity :bareSymbol :nature :zeroQuotationAtom :rule "leading-colon keywords with maximum information density")
+          (:entity :tokenCompressor :nature :normalizationFunctor :rule "lossless compaction of verbose ASTs")
+        ])
+      (:mapping
+        :value :V6
+        :title "Velocity & Efficiency"
+        :dominance :operational
+        :enforcement "speed of task execution, dominated by safety"
+        :forcesOntology [
+          (:entity :memoCache :nature :transpositionTable :rule "deduplication of verified sub-computations")
+          (:entity :pipelineScheduler :nature :dagExecutor :rule "parallel independent scouts and wave execution")
+          (:entity :batchAction :nature :atomicTransactionGroup :rule "batched non-interfering tool invocations")
+        ])
+    ])
+
+  ;; =========================================================================
+  ;; 3. INTENT-TO-REALITY PIPELINE: S-Map -> F-Map -> B-Map
+  ;; De-noising, Grounding, Ambiguity Resolution, and Bi-Directional Tri-Map.
+  ;; Hallucination-Freedom Condition: every intent atom must have support in prompt or repo.
+  ;; Reality Reconciliation: GroundFacts strictly dominate model priors.
+  ;; AdversarialReflect: bounded minimax game detecting unhandled invariants.
+  ;; =========================================================================
+  (:intentPipeline
+    :stages [
+      (:stage :id :denoise
+        :op :stripConversationalNoise
+        :rule "filter conversational hedging, discourse markers, polite filler")
+      (:stage :id :atomize
+        :op :extractIntentAtoms
+        :output :sMap
+        :atomSchema [
+          (:field :id :type :keyword :doc "unique identifier e.g. :a1")
+          (:field :verb :type :keyword :doc "action operator e.g. :implement, :refactor, :optimize")
+          (:field :object :type :symbol :doc "target symbol, file, or protocol")
+          (:field :constraint :type :map :doc "measurable bounds and properties")
+          (:field :provenance :type :string :doc "source span in prompt or repo issue")
+          (:field :confidence :type :float :doc "posterior confidence in [0.0, 1.0]")
+        ]
+        :hallucinationFreedomRule "atom valid iff support(prompt union repo, atom) >= theta; orphan atoms quarantined as :assumption")
+      (:stage :id :ground
+        :op :realityReconciliation
+        :tools [:grep :read :test :git]
+        :rule "probe repository to establish GroundFacts; empirical facts strictly dominate prior beliefs")
+      (:stage :id :adversarialReflect
+        :op :counterModelMinimax
+        :depth 2
+        :rule "evaluate candidate interpretations against red-team counter-models; prune brittle branches")
+      (:stage :id :falsifyMap
+        :op :generateFalsificationGates
+        :output :fMap
+        :gateSchema [
+          (:field :id :type :keyword :doc "unique gate id e.g. :g1")
+          (:field :targetAtom :type :keyword :doc "link to S-Map atom id")
+          (:field :probe :type :string :doc "executable command or test")
+          (:field :threePointCausality :type :boolean :default true)
+          (:field :redBaseline :type :keyword :values [:fail :semanticFailure] :default :fail)
+          (:field :greenBaseline :type :keyword :values [:pass :exitZero] :default :pass)
+          (:field :revertBaseline :type :keyword :values [:fail :semanticFailure] :default :fail)
+          (:field :mutantsKilledMin :type :integer :default 1 :doc "fault detection sensitivity")
+          (:field :budgetMs :type :integer :doc "timeout ceiling for probe")
+        ]
+        :rule "every S-Map atom must be covered by at least one gate; red baseline failure must be semantic")
+      (:stage :id :synthesizePlan
+        :op :minimalCausalDag
+        :output :bMap
+        :optimization "B* = argmin_{B} (|B| + lambda * |boundary(B)|) such that forall g in F: g(B) == PASS"
+        :rule "minimal edit hunks causally linked to F-Map gates; zero speculative code")
+    ])
+
+  ;; =========================================================================
+  ;; 4. 100% PORTABLE UNIVERSAL HARNESS: Agnostic Polyglot Architecture
+  ;; Decoupled from repository internals; zero legacy shortcodes.
+  ;; Operates seamlessly in Rust, Python, TypeScript, Go, C/C++, or pure ASL.
+  ;; In-memory pure ASL/ASN reasoning lifted from and lowered to target diffs.
+  ;; =========================================================================
+  (:portableHarness
+    :portability :complete
+    :legacyDecoupled true
+    :manifestSniffing [
+      (:manifest :priority 1 :file "asl.json" :ecosystem :asl :build "./bin/asl check" :test "./bin/asl test" :lint "./bin/asl audit")
+      (:manifest :priority 2 :file "Cargo.toml" :ecosystem :rust :build "cargo check" :test "cargo test" :lint "cargo clippy")
+      (:manifest :priority 3 :file "pyproject.toml" :ecosystem :python :build "python -m py_compile" :test "pytest" :lint "ruff check")
+      (:manifest :priority 4 :file "package.json" :ecosystem :nodeTypescript :build "npm run build" :test "npm test" :lint "npm run lint")
+      (:manifest :priority 5 :file "go.mod" :ecosystem :go :build "go build ./..." :test "go test ./..." :lint "golangci-lint run")
+      (:manifest :priority 6 :file "CMakeLists.txt" :ecosystem :cpp :build "cmake --build build" :test "ctest --test-dir build" :lint "clang-tidy")
+      (:manifest :priority 7 :file "setup.py" :ecosystem :python :build "python setup.py build" :test "pytest" :lint "flake8")
+      (:manifest :priority 8 :file "Makefile" :ecosystem :cSystem :build "make" :test "make test" :lint "make lint")
+    ]
+    :executionProtocol [
+      (:phase :lift :rule "parse target codebase files into in-memory AST and typed symbol graph")
+      (:phase :reason :rule "execute all reasoning, decomposition, and planning in pure ASN S-expressions")
+      (:phase :stage :rule "stage modifications in RAM VFS buffers (:edit -> :diff -> :flush | :discard)")
+      (:phase :verify :rule "execute falsification gates via detected manifest toolchain in clean context")
+      (:phase :lower :rule "emit path-and-symbol anchored AST splices or content-hash replacements (Zero-Line-Number Invariant)")
+    ]
+    :circuitBreaker [
+      (:threshold 3 :action :tripBreaker :rule "identical failure witness >= 3 trips breaker")
+      (:transition :basinTransition :targets [:scout :plan :escalateV0])
+      (:witnessFormat [:hash :errorClass :gateId :hunkDigest :attemptCount])
+      (:resetCondition "resets attemptCount to 0 upon basin transition with novel hypothesis hash or signed human override")
+      (:counterScope :taskGateHunk)
+    ])
+)

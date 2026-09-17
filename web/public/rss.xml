@@ -5,8 +5,53 @@
     <link>https://aslang.dev/blog</link>
     <description>Technical essays, architecture deep-dives, and compiler benchmarks for the AgentScript language and GenSEAM ecosystem.</description>
     <language>en-us</language>
-    <lastBuildDate>Thu, 10 Sep 2026 00:00:00 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 12 Sep 2026 00:00:00 GMT</lastBuildDate>
     <atom:link href="https://aslang.dev/rss.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Clean Break v0.4: Eradicating Legacy Substrates for Pure AgentScript Architecture</title>
+      <link>https://aslang.dev/blog/clean-break-v04</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/clean-break-v04</guid>
+      <pubDate>Sat, 12 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>Architecture &amp; Runtime</category>
+      <description>How v0.4 executed a total clean break from legacy scripting wrappers, establishing pure ASL self-hosting with a minimal ANSI C99 host kernel and zero external runtime dependencies.</description>
+    </item>
+    <item>
+      <title>The Stateless 9-Syscall Kernel: Microkernel Architecture for Deterministic Agents</title>
+      <link>https://aslang.dev/blog/the-stateless-nine-syscall-kernel</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/the-stateless-nine-syscall-kernel</guid>
+      <pubDate>Sat, 12 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>Runtime &amp; Security</category>
+      <description>Why autonomous agent sandboxes must be restricted to exactly 9 canonical POSIX syscalls, eliminating ambient authority, socket leakage, and unobservable side effects.</description>
+    </item>
+    <item>
+      <title>S-Expression Wire Protocol vs. JSON-RPC: The 86% Token Arbitrage in Multi-Agent Swarms</title>
+      <link>https://aslang.dev/blog/s-expression-wire-protocol-vs-json-rpc</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/s-expression-wire-protocol-vs-json-rpc</guid>
+      <pubDate>Fri, 11 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>Protocols &amp; Performance</category>
+      <description>An empirical analysis of BPE tokenization geometry demonstrating why S-expression wire frames eliminate JSON quote taxation, delimiter escaping cascades, and 86% of payload tokens.</description>
+    </item>
+    <item>
+      <title>The Zero-Line-Number Invariant: Semantic Anchoring and AST Navigation in Autonomous Coding</title>
+      <link>https://aslang.dev/blog/zero-line-number-invariant</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/zero-line-number-invariant</guid>
+      <pubDate>Fri, 11 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>Methodology &amp; Verification</category>
+      <description>Why line numbers are the primary driver of agent code merge conflicts and hallucinations, and how semantic AST addresses and anchor tokens eliminate drift.</description>
+    </item>
+    <item>
+      <title>SLM Inference on Apple Silicon: Sub-2GB Local Autonomous Coding on M1/M2/M3</title>
+      <link>https://aslang.dev/blog/slm-inference-apple-silicon</link>
+      <guid isPermaLink="true">https://aslang.dev/blog/slm-inference-apple-silicon</guid>
+      <pubDate>Thu, 10 Sep 2026 00:00:00 GMT</pubDate>
+      <author>GenSEAM (GenSEAM)</author>
+      <category>SLM &amp; Apple Silicon</category>
+      <description>Empirical benchmarks demonstrating 118+ tokens/sec throughput and 94% task accuracy for 3B models operating within a 2GB unified memory ceiling on Apple Silicon hardware.</description>
+    </item>
     <item>
       <title>Why 3B Local Models Fail at Python but Fly on S-Expressions: Zero-Tax Autonomous Coding on Apple Silicon</title>
       <link>https://aslang.dev/blog/why-3b-local-models-fail-at-python-but-fly-on-s-expressions</link>

@@ -2,10 +2,18 @@ import { defineConfig } from 'vite';
 import path from 'path';
 import tailwindcss from 'tailwindcss';
 import autoprefixer from 'autoprefixer';
-import { aslPlugin } from './plugins/vite-plugin-asl.js';
+import { aslPlugin } from './plugins/vitePluginAsl.js';
 
 export default defineConfig({
   plugins: [aslPlugin()],
+  server: {
+    port: 4173,
+    allowedHosts: true,
+  },
+  preview: {
+    port: 4173,
+    allowedHosts: true,
+  },
   css: {
     postcss: {
       plugins: [tailwindcss(), autoprefixer()],

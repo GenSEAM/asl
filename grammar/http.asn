@@ -1,0 +1,45 @@
+(:schema
+  :id "Http"
+  :version "0.1.0"
+  :summary "AgentScript HTTP/1.1 and Streaming Protocol Specification"
+  :types [
+    (:type :name "HttpHeaders"
+      :summary "Collection of HTTP request and response headers"
+      :fields [
+        (:field :name "entries" :type "(List (Pair Str Str))")
+      ])
+    (:type :name "HttpRequest"
+      :summary "Parsed HTTP request representation"
+      :fields [
+        (:field :name "method" :type "Str")
+        (:field :name "path" :type "Str")
+        (:field :name "version" :type "Str")
+        (:field :name "headers" :type "HttpHeaders")
+        (:field :name "body" :type "Str")
+        (:field :name "query" :type "Str")
+      ])
+    (:type :name "HttpResponse"
+      :summary "HTTP response message representation"
+      :fields [
+        (:field :name "statusCode" :type "Int")
+        (:field :name "reasonPhrase" :type "Str")
+        (:field :name "headers" :type "HttpHeaders")
+        (:field :name "body" :type "Str")
+      ])
+    (:type :name "SocketConfig"
+      :summary "Configuration for non-blocking server socket"
+      :fields [
+        (:field :name "host" :type "Str")
+        (:field :name "port" :type "Int")
+        (:field :name "nonBlocking" :type "Bool")
+        (:field :name "backlog" :type "Int")
+      ])
+    (:type :name "ServerSocket"
+      :summary "Active non-blocking listening server socket handle"
+      :fields [
+        (:field :name "fd" :type "Int")
+        (:field :name "host" :type "Str")
+        (:field :name "port" :type "Int")
+        (:field :name "status" :type "Str")
+      ])
+  ])

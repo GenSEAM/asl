@@ -1,0 +1,22 @@
+(:comptime-spec
+  :version 1
+  :description "Closed schema for compile-time pure AST evaluation, macro staging, and fuel accounting"
+  :records [
+    (:record :id "ComptimeConfig"
+             :desc "Configuration for compile-time execution"
+             :fields [
+               (:f :name "fuelBudget" :type "Int" :desc "Maximum reduction steps before halting failure (default 10000)")
+               (:f :name "pureOnly" :type "Bool" :desc "Reject all ambient effects, file IO, process calls, or non-deterministic clocks")
+               (:f :name "maxAstNodes" :type "Int" :desc "Ceiling on generated AST nodes to prevent expansion denial of service (default 10000)")
+             ])
+    (:record :id "ComptimeResult"
+             :desc "Result of compile-time evaluation or macro expansion"
+             :fields [
+               (:f :name "status" :type "Str" :desc "Success or error status string: ok, error")
+               (:f :name "fuelRemaining" :type "Int" :desc "Steps remaining in fuel budget after execution")
+               (:f :name "nodeCount" :type "Int" :desc "Total AST nodes traversed or emitted")
+               (:f :name "outputValue" :type "Str" :desc "Serialized folded literal or expanded syntax expression")
+               (:f :name "diagnosticCode" :type "Str" :desc "Canonical diagnostic code on failure, or empty string on success")
+               (:f :name "diagnosticMessage" :type "Str" :desc "Human-readable explanation of compile-time evaluation result")
+             ])
+  ])

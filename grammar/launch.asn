@@ -6,7 +6,7 @@
       :required [:client :channel :orchestratorMode :permissionTier]
       :optional [:sessionId :targetWorkspace :launchFlags]
       :fields [
-        (:field :name :client :type :keyword :allowed [:agy :claude :codex :cursor :windsurf])
+        (:field :name :client :type :keyword :allowed [:addie :agy :claude :codex :cursor :windsurf])
         (:field :name :channel :type :keyword :allowed [:global :isolated :workspace])
         (:field :name :orchestratorMode :type :boolean)
         (:field :name :permissionTier :type :keyword :allowed [:readOnly :sandboxedWrite :dangerousRescue])
@@ -32,4 +32,40 @@
         (:field :name :capabilities :type :vector :items :keyword)
         (:field :name :launchFlags :type :vector :items :string)])
   ]
+  :compulsionLayers [
+    (:schema :id compulsionLayer :category :enforcement
+      :description "Deterministic four-layer mechanical compulsion architecture compelling third-party agents into domain tool adoption."
+      :layers [
+        (:layer :id :pathShims :level 0 :description "Filesystem wrapper shims intercepting destructive shell tools (sed, awk, patch) with exit code 2 and structured ASN redirect receipts")
+        (:layer :id :mcpElevation :level 1 :description "First-class Model Context Protocol tool router registration elevating asl.mem and verification tools to single-hop JSON schemas")
+        (:layer :id :preToolUseHooks :level 2 :description "PreToolUse hook interception denying native write tools (Edit, Write, NotebookEdit) and redirecting to asl.mem.edit")
+        (:layer :id :receiptGating :level 3 :description "Cryptographic receipt gating requiring sha256 runner receipts to satisfy step transaction boundaries")])
+  ]
+  :promptDialects [
+    (:schema :id promptDialect :category :representation
+      :description "Pure-ASL/ASN symbolic prompt cards and micro-anchor representation standards."
+      :dialects [
+        (:dialect :id :pureAsn :tokenBudget 400 :description "Ultra-dense delimiter-balanced S-expression card with near-zero English prose")
+        (:dialect :id :microAnchor :tokenBudget 450 :description "Symbolic S-expression AST augmented with minimal (<2%) English micro-anchors for novel primitives")])
+  ]
+  :embeddedAgent [
+    (:schema :id addieEmbedded :category :nativeRuntime
+      :description "Addie: In-house sovereign autonomous AI engineer embedded directly in runtime."
+      :modes [
+        (:mode :id :nativeBinary :target "bin/addie" :substrate :posixC :overheadMs 0.04
+          :description "Embedded native ASL executable running zero-overhead in-memory ReAct loops")
+        (:mode :id :inBrowserWorker :target "addie-worker.js" :substrate :webGpuWebWorker
+          :description "Embedded client-side WebWorker with quantized local SLM (Qwen 2.5 Coder 1.5B Q4_K_M)")
+        (:mode :id :tuiMesh :target "agent/src/tui.asl" :substrate :terminalMesh
+          :description "Embedded interactive terminal IDE orchestration mesh")
+      ]
+      :integratedCognition [
+        (:component :sanitizer :spec "asl/grammar/sanitizer.asn" :role "Ingress prompt denoising and ASR voice repair")
+        (:component :cognition :spec "asl/grammar/cognition.asn" :role "Tri-Map S->F->B intent execution and in-memory scratchpads")
+        (:component :prisms :spec "asl/grammar/prisms.asn" :role "7 universal domain prisms for vector graphics, UI, perception, architecture")
+        (:component :paradigms :spec "asl/grammar/paradigms.asn" :role "Teleological value hierarchy V0..V6 and dynamic attractor basins")
+        (:component :toolbelt :spec "asl/grammar/toolbelt.asn" :role "Direct in-memory zero-process toolbelt matrix")
+      ])
+  ]
 )
+

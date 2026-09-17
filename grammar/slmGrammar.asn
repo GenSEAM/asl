@@ -1,0 +1,90 @@
+(:schema
+  :id "SlmGrammar"
+  :version "0.1.0"
+  :summary "Pure ASL EBNF Grammar Automaton, Pushdown State Tracker, and Token Mask Bitset Specification"
+  :types [
+    (:type :name "GrammarPda"
+      :summary "Pushdown automaton compiled from EBNF/PEG grammar"
+      :fields [
+        (:field :name "status" :type "Str")
+        (:field :name "diagnosticCode" :type "Str")
+        (:field :name "stateCount" :type "Int")
+        (:field :name "startState" :type "Int")
+        (:field :name "acceptState" :type "Int")
+        (:field :name "rootRequiresDelimiter" :type "Bool")
+        (:field :name "ruleNames" :type "(List Str)")
+        (:field :name "terminals" :type "(List Str)")
+        (:field :name "delimiters" :type "(List Str)")
+      ])
+    (:type :name "MaskerState"
+      :summary "Runtime pushdown automaton state with delimiter stack tracking"
+      :fields [
+        (:field :name "currentState" :type "Int")
+        (:field :name "stackDepth" :type "Int")
+        (:field :name "isEosAllowed" :type "Bool")
+        (:field :name "isPrefixValid" :type "Bool")
+        (:field :name "buffer" :type "Str")
+      ])
+    (:type :name "TokenMaskBitset"
+      :summary "Bitset mapping token IDs to boolean allowed/prohibited flags"
+      :fields [
+        (:field :name "allowedTokenIds" :type "(List Int)")
+        (:field :name "totalVocabSize" :type "Int")
+      ])
+    (:type :name "ContextTierSpec"
+      :summary "Specification of LLM/SLM context tiers and token allocations"
+      :fields [
+        (:field :name "tierId" :type "Str")
+        (:field :name "targetParameterRange" :type "Str")
+        (:field :name "totalContextBudget" :type "Int")
+        (:field :name "systemKernelBudget" :type "Int")
+        (:field :name "toolSchemaBudget" :type "Int")
+        (:field :name "trajectoryExemplarBudget" :type "Int")
+        (:field :name "taskInputBudget" :type "Int")
+        (:field :name "outputReserveBudget" :type "Int")
+        (:field :name "reasoningFormat" :type "Str")
+      ])
+    (:type :name "MicroTierKernel"
+      :summary "Ultra-dense essential operating kernel for 1k-2k context SLMs"
+      :fields [
+        (:field :name "compiledImperatives" :type "(List Str)")
+        (:field :name "prunedToolForms" :type "(List Str)")
+        (:field :name "trajectoryExemplar" :type "Str")
+        (:field :name "escalationToken" :type "Str")
+        (:field :name "substrateGateRequirements" :type "(List Str)")
+      ])
+    (:type :name "SpecialistBlockManifest"
+      :summary "Contract manifest for pluggable domain specialist models"
+      :fields [
+        (:field :name "blockId" :type "Str")
+        (:field :name "category" :type "Str")
+        (:field :name "role" :type "Str")
+        (:field :name "authority" :type "Str")
+        (:field :name "budgetLeashTokens" :type "Int")
+        (:field :name "attractorMapping" :type "(List Str)")
+        (:field :name "inputContract" :type "Str")
+        (:field :name "outputContract" :type "Str")
+        (:field :name "failureMode" :type "Str")
+      ])
+    (:type :name "SpecialistEnvelope"
+      :summary "Standard typed epistemic envelope returned by modular specialist blocks"
+      :fields [
+        (:field :name "blockId" :type "Str")
+        (:field :name "claim" :type "Str")
+        (:field :name "evidence" :type "Str")
+        (:field :name "evidenceDigest" :type "Str")
+        (:field :name "callerSignature" :type "Str")
+        (:field :name "confidence" :type "Float")
+        (:field :name "validityAnchor" :type "Str")
+        (:field :name "validityHorizon" :type "Str")
+        (:field :name "tokenCost" :type "Int")
+      ])
+    (:type :name "TierCascadeLadder"
+      :summary "Multi-tier escalation ladder from local SLM to frontier orchestrator"
+      :fields [
+        (:field :name "initialTier" :type "Str")
+        (:field :name "escalateTriggers" :type "(List Str)")
+        (:field :name "escalationTargetTier" :type "Str")
+        (:field :name "handoffEnvelope" :type "Str")
+      ])
+  ])

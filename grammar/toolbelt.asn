@@ -1,0 +1,249 @@
+(:toolbelt
+  :doc "Universal Third-Party Agent Toolbelt Architecture: Pure-ASL Implicit Parallel Batch Protocol, Encapsulated CLI Host, and Asynchronous Daemon Supervision"
+
+  ;; =========================================================================
+  ;; 1. SEPARATION MATRIX: Exposed Pure-ASN S-Expression Surface vs Quarantined Host
+  ;; Protects system integrity by strictly quarantining low-level host CLI mechanics.
+  ;; Third-party agents interact EXCLUSIVELY via structured pure-ASL callable forms.
+  ;; Raw host CLI commands (asl mem edit, unix pipes, bash loops) are completely HIDDEN.
+  ;; =========================================================================
+  (:separationMatrix
+    :exposedSurface [
+      (:tool :query
+        :form "(:query <query-string> [:scope <:code|:tasks|:decisions|:all>] [:limit <n>])"
+        :contract "vector semantic search AST & ledgers"
+        :tier :turn0)
+      (:tool :read
+        :form "(:read :file <path> [:start <n>] [:end <m>])"
+        :contract "bounded AST & slice retrieval"
+        :tier :turn0)
+      (:tool :edit
+        :form "(:edit :file <path> :old <target-string> :new <replacement-string>)"
+        :contract "stage atomic string replacement in RAM VFS"
+        :tier :turn0)
+      (:tool :diff
+        :form "(:diff [:file <path>])"
+        :contract "inspect staged RAM diffs"
+        :tier :turn0)
+      (:tool :flush
+        :form "(:flush)"
+        :contract "persist verified staged edits to disk"
+        :tier :turn0)
+      (:tool :discard
+        :form "(:discard)"
+        :contract "clear staged RAM buffers without disk mutation"
+        :tier :turn0)
+      (:tool :doc
+        :form "(:doc :file <path> :section <heading-title>)"
+        :contract "read markdown section without disk I/O"
+        :tier :turn0)
+      (:tool :tree
+        :form "(:tree [:path <dir>])"
+        :contract "render dense structural hierarchy telemetry"
+        :tier :turn0)
+      (:tool :check
+        :form "(:check [:file <path>])"
+        :contract "verify delimiter & AST syntax integrity"
+        :tier :turn0)
+      (:tool :test
+        :form "(:test [:file <path>] [:strict-falsify true])"
+        :contract "execute assertions under verification"
+        :tier :turn0)
+      (:tool :doctor
+        :form "(:doctor)"
+        :contract "audit measured capabilities & invariants"
+        :tier :turn0)
+      (:tool :sanitize
+        :form "(:sanitize :prompt <raw-user-prompt>)"
+        :contract "transpile natural language to pure-ASN intent"
+        :tier :turn0)
+      (:tool :gate
+        :form "(:gate :id <gate-id>)"
+        :contract "verify dual-polarity red-green gate"
+        :tier :turn0)
+      (:tool :job
+        :form "(:job <:spawn|:await|:status|:cancel> [:jobId <id>] [:op <form>] [:timeoutMs <ms>])"
+        :contract "manage asynchronous background processes & daemon jobs"
+        :tier :turn0)
+      (:tool :where
+        :form "(:where)"
+        :contract "query current step, owned write set, and active capability slice"
+        :tier :turn0)
+      (:tool :plan
+        :form "(:plan [:phase <id>] [:steps [...]])"
+        :contract "anchor dependency-ordered atomic steps with closing gates in ledger"
+        :tier :turn0)
+      (:tool :escalate
+        :form "(:escalate <:uncertain|:unauthorized|:stale> [:reason <str>] [:witness <record>])"
+        :contract "escalate safely to Full-Tier frontier model or V0 human sovereign"
+        :tier :turn0)
+      (:tool :note
+        :form "(:note <:write|:query|:list> [:content <asn>] [:id <id>])"
+        :contract "manage working memory records and volatile observations across turns"
+        :tier :turn0)
+    ]
+    :quarantinedHost [
+      (:primitive :rawCliCommands :reason "raw shell strings ('asl mem edit', 'bash -c') cause LLM delimiter degradation and shell-blasting")
+      (:primitive :wasmCompiler :reason "low-level bytecode generation; internal engine only")
+      (:primitive :walDirectIo :reason "raw WAL segment paging; memory safety invariant")
+      (:primitive :sqliteMmap :reason "direct B-tree page mutations; integrity hazard")
+      (:primitive :irLowering :reason "intermediate AST lowering pipelines; compiler only")
+      (:primitive :signingKeys :reason "cryptographic receipt HMAC keys; sandbox isolation")
+      (:primitive :rawShellBlast :reason "unbounded shell execution; strictly forbidden for 3rd parties")
+    ])
+
+  ;; =========================================================================
+  ;; 2. IMPLICIT PARALLEL BATCH PROTOCOL: Default Zero-Overhead Concurrency
+  ;; Agents invoke 'asl' passing any number of top-level S-expressions.
+  ;; No wrapper keyword (:batch ...) or array brackets ([ ... ]) required.
+  ;; Example: asl '(:query "symbol") (:doc "doc.md" "Spec") (:edit :file "f" :old "A" :new "B")'
+  ;; The engine executes independent operations concurrently in-memory and returns
+  ;; a single, delimiter-balanced typed receipt.
+  ;; =========================================================================
+  (:implicitParallelBatch
+    :invocationContract "asl '<form1> <form2> ... <formN>'"
+    :defaultConcurrency :parallel
+    :transactionSemantics :allOrNothingPerFile
+    :receiptEnvelope "(:batch-res :status <:completed|:completed-with-errors|:failed> :itemsCount ?n :parallel true :results [...])"
+    :isolationRules [
+      (:rule :independentFiles "Operations targeting disjoint files or read-only tools execute in parallel with zero locking")
+      (:rule :sameFileSequencing "Multiple edits to the same file in one batch are applied sequentially in RAM VFS buffer")
+      (:rule :conflictRollback "Conflicting edits to the same file abort the entire batch and preserve previous buffer state")
+    ])
+
+  ;; =========================================================================
+  ;; 3. ASYNCHRONOUS DAEMON & PROCESS SUPERVISION
+  ;; Resident engine daemon manages long-running gates, watches, and background jobs.
+  ;; Eliminates subshell blocking and token-burning polling loops.
+  ;; =========================================================================
+  (:asyncDaemonSupervision
+    :daemonSocket "/tmp/asl_mem_${WORKSPACE_NAME}.sock"
+    :daemonProtocol :unixDomainSocket
+    :jobLifecycle [
+      (:state :spawned :action "Engine forks process or spawns background thread, registers monotonic jobId")
+      (:state :running :action "Supervised by daemon with monotonic timer and circuit breaker limit cycles")
+      (:state :completed :action "Emits signed ASN receipt bound to jobId, exitCode, and stdout/stderr digests")
+      (:state :timedOut :action "Terminated on timeoutMs expiry with :ERR_TIMEOUT receipt")
+      (:state :canceled :action "Killed on (:job :cancel :jobId ?id) request")
+    ]
+    :circuitBreaker [
+      (:rule :limitCycleThreshold 3)
+      (:rule :tripAction "3 identical failure signatures trip the circuit breaker and emit structured :witness record")
+      (:rule :escalationTarget :humanSovereigntyV0)
+    ])
+
+  ;; =========================================================================
+  ;; 4. PROMPT-CACHE INVARIANT: Zero KV-Cache Invalidation
+  ;; Tool signatures in the prompt prefix are byte-stable across the session.
+  ;; Dynamic phase/permission adaptation is handled entirely at runtime gating.
+  ;; =========================================================================
+  (:promptCacheInvariant
+    :layer1StaticPrefix [
+      (:rule :byteStability "never modify tool definitions mid-session to preserve KV cache")
+      (:rule :denseSignatures "Turn 0 signatures capped at 2-5 words each")
+      (:rule :negativeSpaceDirective "explicitly instruct model that raw CLI command tables do not exist")
+      (:rule :lazyHydration "Turn N full schema hydrated only on --help or fail-open")
+    ]
+    :layer2RuntimeGating [
+      (:rule :phaseMasking "runtime intercepts calls unsuited for the current attractor phase")
+      (:rule :failOpenNotice "masked tools return exit code 0 with structured ASN guidance")
+      (:responseOnMasked (
+        :status :masked
+        :reason :phaseReadonly
+        :activePhase :scout
+        :remedy "Advance phase to :build or plan with (:where) before mutation"
+        :activeTools ["query" "tree" "doc" "check"]))
+    ])
+
+  ;; =========================================================================
+  ;; 5. DYNAMIC CONTEXT-AWARE ASSEMBLER: Phase & Ecosystem Slices
+  ;; Evaluates environment state to compute active capability permissions.
+  ;; =========================================================================
+  (:contextEngineAssembler
+    :phaseRules [
+      (:phase :scout
+        :active [:query :read :tree :doc :check :doctor :sanitize :job]
+        :masked [:edit :diff :flush :discard :test]
+        :rationale "Scout is read-only and parallel; mutations strictly forbidden")
+      (:phase :plan
+        :active [:query :read :tree :doc :check :doctor :sanitize :job]
+        :masked [:edit :diff :flush :discard :test]
+        :rationale "Planner designs Action DAG and gates; implementation unmounted")
+      (:phase :build
+        :active [:query :read :tree :doc :check :edit :diff :flush :discard :test :doctor :gate :job]
+        :masked [:sanitize]
+        :boundaryEnforcement :ownsPartition
+        :rationale "Implementer stages edits in RAM VFS bounded strictly by :owns; verifies capabilities with doctor")
+      (:phase :audit
+        :active [:query :read :tree :doc :check :diff :test :doctor :gate :job]
+        :masked [:edit :flush :discard :sanitize]
+        :rationale "Auditor inspects diffs and verifies gates in clean context; never modifies code")
+    ]
+    :ecosystemRules [
+      (:ecosystem :rust :testGate "cargo test" :checkGate "cargo check" :lintGate "cargo clippy")
+      (:ecosystem :python :testGate "pytest" :checkGate "python -m py_compile" :lintGate "ruff check")
+      (:ecosystem :nodeTypescript :testGate "npm test" :checkGate "npm run build" :lintGate "npm run lint")
+      (:ecosystem :go :testGate "go test ./..." :checkGate "go build ./..." :lintGate "golangci-lint run")
+      (:ecosystem :cpp :testGate "ctest --test-dir build" :checkGate "cmake --build build" :lintGate "clang-tidy")
+      (:ecosystem :asl :testGate "./bin/asl test" :checkGate "./bin/asl check" :lintGate "./bin/asl audit")
+    ])
+
+  ;; =========================================================================
+  ;; 6. THIRD-PARTY AGENT INSTALLER PIPELINE: Multi-Client Integration
+  ;; Formats and renders tailored configuration surfaces for each agent client.
+  ;; =========================================================================
+  (:installerPipeline
+    :targets [
+      (:client :claudeCode
+        :targetFile "CLAUDE.md"
+        :format :markdownDirectives
+        :tokenCeiling 450)
+      (:client :antigravity
+        :targetFile "AGENTS.md"
+        :format :markdownDirectives
+        :skillPath ".agents/skills/asl-toolbelt/"
+        :tokenCeiling 450)
+      (:client :cursor
+        :targetFile ".cursorrules"
+        :format :conciseSystemPrompt
+        :tokenCeiling 350)
+      (:client :codex
+        :targetFile ".codex/rules"
+        :format :plainDirectives
+        :tokenCeiling 350)
+      (:client :windsurf
+        :targetFile ".windsurfrules"
+        :format :conciseSystemPrompt
+        :tokenCeiling 350)
+    ]
+    :directiveTemplate "
+# ASN-ONLY OPERATING DIRECTIVE
+You are an autonomous ASN runtime agent. Think and respond exclusively in pure S-expressions.
+Zero conversational filler. No English chit-chat. Never emit raw shell commands or bash loops; all tool invocations execute exclusively via `asl '<forms>'`.
+
+## Pure-ASN Toolbelt & Implicit Parallel Batches
+Execute all searches, inspections, edits, and verifications via `asl '<form1> <form2> ...'`.
+By default, multiple forms execute concurrently in RAM VFS buffers.
+- `(:query <text> [:scope :code|:tasks|:decisions|:all])`: vector semantic AST search
+- `(:read :file <path> [:start <n>] [:end <m>])`: bounded AST & slice retrieval
+- `(:edit :file <path> :old <target> :new <replacement>)`: stage atomic string replacement in RAM VFS
+- `(:diff [:file <path>])`: inspect pending staged edits
+- `(:flush)`: persist staged edits to disk
+- `(:discard)`: clear staged edits
+- `(:doc :file <path> :section <title>)`: read markdown section without disk I/O
+- `(:tree [:path <dir>])`: render structural hierarchy
+- `(:check [:file <path>])`: verify delimiter balance & syntax
+- `(:test [:file <path>])`: run assertions under verification
+- `(:doctor)`: measure live capability status and invariants
+- `(:sanitize :prompt <text>)`: transpile raw user prompt to pure-ASN intent
+- `(:job <:spawn|:await|:status|:cancel> [:jobId <id>] [:op <form>])`: supervise async daemon jobs
+
+## Rules
+1. Negative-Space Invariant: Direct CLI commands (`asl mem edit`, etc.) do not exist. Use pure S-expressions.
+2. Never edit files outside declared `:owns` partition.
+3. Every mutation requires a closing verification gate before `(:flush)`.
+4. On gate failure: diagnose witness, never weaken check.
+5. Token Economics: BPE CamelCase identifiers, bounded symbol reads (:limit 50), batch multi-ops, mask logs to typed receipts.
+"
+  )
+)

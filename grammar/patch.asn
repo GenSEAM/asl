@@ -1,0 +1,59 @@
+(:patch-spec
+  :version 1
+  :description "Closed vocabulary for AST-delta structural mutations and dual-polarity refutations (ADR D94)"
+  :operations [
+    (:op :id "replace"
+         :desc "Subtree substitution addressed strictly by module, symbol, and anchor"
+         :fields [
+           (:f :name "target" :type "Str" :desc "Qualified symbol target Module:symbol")
+           (:f :name "anchor" :type "Str" :desc "Relative structural anchor path within symbol AST")
+           (:f :name "oldNode" :type "Str" :desc "Expected serialized AST node to replace")
+           (:f :name "newNode" :type "Str" :desc "Replacement serialized AST node")
+         ])
+    (:op :id "splice"
+         :desc "Child sequence insertion and deletion at index or relative to anchor"
+         :fields [
+           (:f :name "target" :type "Str" :desc "Qualified symbol target Module:symbol")
+           (:f :name "anchor" :type "Str" :desc "Target collection anchor")
+           (:f :name "index" :type "Int64" :desc "Zero-based index in collection")
+           (:f :name "deleteCount" :type "Int64" :desc "Number of items to remove")
+           (:f :name "insertNodes" :type "(List Str)" :desc "Serialized AST nodes to insert")
+         ])
+    (:op :id "rename"
+         :desc "Identifier renaming across symbol or module scope"
+         :fields [
+           (:f :name "target" :type "Str" :desc "Qualified symbol target Module:symbol")
+           (:f :name "oldName" :type "Str" :desc "Current identifier name")
+           (:f :name "newName" :type "Str" :desc "New identifier name")
+         ])
+    (:op :id "retype"
+         :desc "Type annotation modification for parameter, field, or return type"
+         :fields [
+           (:f :name "target" :type "Str" :desc "Qualified symbol target Module:symbol")
+           (:f :name "anchor" :type "Str" :desc "Type location anchor (e.g. retType or param name)")
+           (:f :name "oldType" :type "Str" :desc "Expected old type annotation")
+           (:f :name "newType" :type "Str" :desc "Replacement new type annotation")
+         ])
+  ]
+  :container [
+    (:form :id "astPatch"
+           :fields [
+             (:f :name "id" :type "Str" :desc "Unique patch identifier")
+             (:f :name "targetModule" :type "Str" :desc "Target module path")
+             (:f :name "preRoot" :type "(Option Str)" :desc "Expected AST Merkle root hash before patch")
+             (:f :name "postRoot" :type "(Option Str)" :desc "Expected AST Merkle root hash after patch")
+             (:f :name "ops" :type "(List AstPatchOp)" :desc "Ordered list of atomic AST patch operations")
+           ])
+  ]
+  :diagnostics [
+    (:diag :code "ERR_PATCH_INVALID_SYNTAX" :desc "Malformed or unparseable patch specification")
+    (:diag :code "ERR_PATCH_SYMBOL_NOT_FOUND" :desc "Target symbol not found in module")
+    (:diag :code "ERR_PATCH_ANCHOR_NOT_FOUND" :desc "Anchor path not found within target symbol AST")
+    (:diag :code "ERR_PATCH_OLD_NODE_MISMATCH" :desc "Current AST node at anchor does not match expected oldNode")
+    (:diag :code "ERR_PATCH_VALIDATION_FAILED" :desc "Post-patch AST roundtrip parse or structural verification failed")
+    (:diag :code "ERR_PATCH_TYPE_MISMATCH" :desc "Retype or replacement causes type check failure")
+    (:diag :code "ERR_PATCH_EMPTY_OPS" :desc "Patch contains no operations")
+    (:diag :code "ERR_PATCH_INDEX_OUT_OF_BOUNDS" :desc "Splice index out of range for target collection")
+    (:diag :code "ERR_CONCURRENCY_CONFLICT" :desc "Pre-condition Merkle root conflict")
+  ]
+)

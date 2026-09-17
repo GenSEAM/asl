@@ -1,0 +1,171 @@
+(:grammar
+  :id "asl-ui-grammar"
+  :version 1
+  :package "asl-ui"
+  :doc "Closed declarative UI schema specification under ADR D96: VNode primitives, Elm architecture, and Frame Arena"
+  :types [
+    (:type :name "VNode"
+           :doc "Declarative UI virtual node representation"
+           :fields [
+             (:f :name "tag" :type "String")
+             (:f :name "key" :type "String")
+             (:f :name "text" :type "String")
+             (:f :name "attrs" :type "Map String String")
+             (:f :name "children" :type "List VNode")
+             (:f :name "width" :type "Int64")
+             (:f :name "height" :type "Int64")
+             (:f :name "visible" :type "Bool")
+           ])
+
+    (:type :name "Msg"
+           :doc "Elm architecture message container"
+           :fields [
+             (:f :name "kind" :type "String")
+             (:f :name "value" :type "Int64")
+           ])
+
+    (:type :name "Cmd"
+           :doc "Elm architecture asynchronous command descriptor"
+           :fields [
+             (:f :name "kind" :type "String")
+             (:f :name "payload" :type "String")
+           ])
+
+    (:type :name "CounterModel"
+           :doc "Pure immutable sample user model for Elm runtime demonstration"
+           :fields [
+             (:f :name "count" :type "Int64")
+             (:f :name "label" :type "String")
+           ])
+
+    (:type :name "RuntimeStepResult"
+           :doc "Result of single step in Elm runtime loop"
+           :fields [
+             (:f :name "model" :type "CounterModel")
+             (:f :name "cmd" :type "Cmd")
+           ])
+
+    (:type :name "MutationRecord"
+           :doc "Atomic DOM/surface mutation delta"
+           :fields [
+             (:f :name "kind" :type "String")
+             (:f :name "targetKey" :type "String")
+             (:f :name "node" :type "VNode")
+             (:f :name "attrs" :type "Map String String")
+             (:f :name "index" :type "Int64")
+           ])
+
+    (:type :name "FrameArena"
+           :doc "Double-buffered ping-pong frame memory arena allocator state"
+           :fields [
+             (:f :name "capacityBytes" :type "Int64")
+             (:f :name "activeIdx" :type "Int64")
+             (:f :name "offset0" :type "Int64")
+             (:f :name "offset1" :type "Int64")
+             (:f :name "nodesCount0" :type "Int64")
+             (:f :name "nodesCount1" :type "Int64")
+           ])
+
+    (:type :name "LayoutConstraints"
+           :doc "Bounding constraints for two-pass layout engine"
+           :fields [
+             (:f :name "minWidth" :type "Int64")
+             (:f :name "maxWidth" :type "Int64")
+             (:f :name "minHeight" :type "Int64")
+             (:f :name "maxHeight" :type "Int64")
+           ])
+
+    (:type :name "Dimensions"
+           :doc "Two-dimensional size representation"
+           :fields [
+             (:f :name "width" :type "Int64")
+             (:f :name "height" :type "Int64")
+           ])
+
+    (:type :name "Rect"
+           :doc "Bounding rectangle representation"
+           :fields [
+             (:f :name "x" :type "Int64")
+             (:f :name "y" :type "Int64")
+             (:f :name "width" :type "Int64")
+             (:f :name "height" :type "Int64")
+           ])
+
+    (:type :name "LayoutBox"
+           :doc "Arranged layout box with positioned bounds and children"
+           :fields [
+             (:f :name "tag" :type "String")
+             (:f :name "key" :type "String")
+             (:f :name "bounds" :type "Rect")
+             (:f :name "children" :type "List LayoutBox")
+           ])
+
+    (:type :name "TypographyToken"
+           :doc "Typography scale token representation"
+           :fields [
+             (:f :name "role" :type "String")
+             (:f :name "fontSize" :type "Int64")
+             (:f :name "lineHeight" :type "Int64")
+             (:f :name "fontWeight" :type "Int64")
+           ])
+
+    (:type :name "ColorToken"
+           :doc "Semantic color token representation"
+           :fields [
+             (:f :name "name" :type "String")
+             (:f :name "hex" :type "String")
+             (:f :name "r" :type "Int64")
+             (:f :name "g" :type "Int64")
+             (:f :name "b" :type "Int64")
+           ])
+
+    (:type :name "ThemePalette"
+           :doc "Semantic theme color palette container"
+           :fields [
+             (:f :name "bgBase" :type "ColorToken")
+             (:f :name "bgSurface" :type "ColorToken")
+             (:f :name "fgPrimary" :type "ColorToken")
+             (:f :name "fgMuted" :type "ColorToken")
+             (:f :name "accent" :type "ColorToken")
+             (:f :name "border" :type "ColorToken")
+           ])
+
+    (:type :name "AXNode"
+           :doc "Semantic accessibility node projection for agent perception"
+           :fields [
+             (:f :name "anchor" :type "String")
+             (:f :name "role" :type "String")
+             (:f :name "name" :type "String")
+             (:f :name "disabled" :type "Bool")
+             (:f :name "hidden" :type "Bool")
+             (:f :name "ariaModal" :type "Bool")
+             (:f :name "children" :type "List AXNode")
+           ])
+
+    (:type :name "SemanticReceipt"
+           :doc "Structured typed receipt returned from semantic action dispatch"
+           :fields [
+             (:f :name "status" :type "String")
+             (:f :name "reason" :type "String")
+             (:f :name "anchor" :type "String")
+             (:f :name "msg" :type "Option Msg")
+           ])
+
+    (:type :name "DomPatch"
+           :doc "WASM virtual DOM mutation patch instruction"
+           :fields [
+             (:f :name "opcode" :type "String")
+             (:f :name "targetKey" :type "String")
+             (:f :name "param1" :type "String")
+             (:f :name "param2" :type "String")
+           ])
+
+    (:type :name "NativeSurfaceConfig"
+           :doc "Native platform surface display and presentation configuration"
+           :fields [
+             (:f :name "title" :type "String")
+             (:f :name "width" :type "Int64")
+             (:f :name "height" :type "Int64")
+             (:f :name "vsync" :type "Bool")
+           ])
+  ])

@@ -1,0 +1,59 @@
+;; AgentScript Core Monomorphic ANF Intermediate Representation Grammar (ADR D93)
+(:ir-spec
+  :version 1
+  :description "Closed vocabulary for typed monomorphic ANF core IR"
+  :forms [
+    (:form :id "ir/module"
+           :fields [(:f name Str) (:f types (List Any)) (:f funcs (List Any))])
+    (:form :id "ir/func"
+           :fields [(:f name Str) (:f params (List Any)) (:f retType Any) (:f locals (List Any)) (:f body (List Any))])
+    (:form :id "ir/let"
+           :fields [(:f name Str) (:f ty Any) (:f expr Any)])
+    (:form :id "ir/binop"
+           :fields [(:f op Str) (:f left Str) (:f right Str) (:f ty Any) (:f wrap Str) (:f shiftMask Bool) (:f divModFloor Bool)])
+    (:form :id "ir/cmp"
+           :fields [(:f op Str) (:f left Str) (:f right Str)])
+    (:form :id "ir/switch"
+           :fields [(:f scrutinee Str) (:f cases (List Any)) (:f defaultCase Any)])
+    (:form :id "ir/loop"
+           :fields [(:f label Str) (:f params (List Any)) (:f body (List Any))])
+    (:form :id "ir/jump"
+           :fields [(:f label Str) (:f args (List Str))])
+    (:form :id "ir/call"
+           :fields [(:f target Str) (:f args (List Str)) (:f retType Any)])
+    (:form :id "ir/return"
+           :fields [(:f value (Option Str))])
+    (:form :id "ir/alloc"
+           :fields [(:f ty Any) (:f fields (List Str))])
+    (:form :id "ir/load"
+           :fields [(:f base Str) (:f field Str)])
+    (:form :id "ir/store"
+           :fields [(:f base Str) (:f field Str) (:f value Str)])
+    (:form :id "ir/drop"
+           :fields [(:f name Str) (:f ty Any)])
+    (:form :id "ir/closure"
+           :fields [(:f codeLabel Str) (:f captures (List Str))])
+  ]
+  :types [
+    (:type :id "i64")
+    (:type :id "i32")
+    (:type :id "f64")
+    (:type :id "bool")
+    (:type :id "unit")
+    (:type :id "str")
+    (:type :id "buf" :secondClass true)
+    (:type :id "option" :reprs [:tagged :nullable])
+    (:type :id "closure")
+    (:type :id "adt")
+  ]
+  :diagnostics [
+    (:diag :code "ERR_IR_MISSING_DEFAULT" :desc "Switch form lacks mandatory default arm")
+    (:diag :code "ERR_IR_UNBOUND_VAR" :desc "Reference to variable not in scope")
+    (:diag :code "ERR_IR_NON_ANF" :desc "Expression is not in Administrative Normal Form")
+    (:diag :code "ERR_IR_BUF_ESCAPE" :desc "Second-class buffer escapes local scope")
+    (:diag :code "ERR_IR_TYPE_MISMATCH" :desc "Operands or assignment types do not match")
+    (:diag :code "ERR_IR_UNTERMINATED_BLOCK" :desc "Basic block does not end in return or jump")
+    (:diag :code "ERR_IR_DUPLICATE_BINDING" :desc "Variable symbol bound more than once in same scope")
+    (:diag :code "ERR_IR_INVALID_OPTION_REPR" :desc "Option representation cannot distinguish none from payload")
+  ]
+)

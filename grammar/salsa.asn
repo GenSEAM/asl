@@ -1,0 +1,68 @@
+(:schema
+  :id "Salsa"
+  :version "0.1.0"
+  :summary "Demand-Driven Reactive Compiler Specification with Red-Green Backdating and Generational Epoch Eviction"
+  :types [
+    (:type :name "QueryKey"
+      :summary "Unique identifier for demand-driven compiler query keyed by symbol and kind"
+      :fields [
+        (:field :name "symbol" :type "Str")
+        (:field :name "kind" :type "Str")
+      ])
+    (:type :name "QueryEntry"
+      :summary "Cached query result node with dependency tracking and epoch stamps"
+      :fields [
+        (:field :name "symbol" :type "Str")
+        (:field :name "kind" :type "Str")
+        (:field :name "inputEpoch" :type "Int")
+        (:field :name "verifiedEpoch" :type "Int")
+        (:field :name "changedEpoch" :type "Int")
+        (:field :name "valueHash" :type "Str")
+        (:field :name "value" :type "Str")
+        (:field :name "dependencies" :type "(List QueryKey)")
+        (:field :name "lastAccessedEpoch" :type "Int")
+        (:field :name "state" :type "Str")
+      ])
+    (:type :name "QueryProvider"
+      :summary "Registered demand-driven query provider definition with declared dependencies"
+      :fields [
+        (:field :name "symbol" :type "Str")
+        (:field :name "kind" :type "Str")
+        (:field :name "dependencies" :type "(List QueryKey)")
+      ])
+    (:type :name "SalsaDatabase"
+      :summary "Incremental compiler query database with generational eviction policies"
+      :fields [
+        (:field :name "currentEpoch" :type "Int")
+        (:field :name "maxEpochRetention" :type "Int")
+        (:field :name "totalRecomputations" :type "Int")
+        (:field :name "totalCacheHits" :type "Int")
+        (:field :name "queries" :type "(List QueryEntry)")
+        (:field :name "providers" :type "(List QueryProvider)")
+      ])
+    (:type :name "QueryResult"
+      :summary "Outcome of a demand-driven query execution"
+      :fields [
+        (:field :name "status" :type "Str")
+        (:field :name "value" :type "Str")
+        (:field :name "valueHash" :type "Str")
+        (:field :name "wasRecomputed" :type "Bool")
+        (:field :name "changedEpoch" :type "Int")
+      ])
+    (:type :name "WatchState"
+      :summary "Reactive file watcher state holding salsa incremental database"
+      :fields [
+        (:field :name "database" :type "SalsaDatabase")
+        (:field :name "watchPath" :type "Str")
+        (:field :name "activeEpoch" :type "Int")
+      ])
+    (:type :name "WatchReceipt"
+      :summary "Structured receipt emitted after processing a localized AST-delta edit"
+      :fields [
+        (:field :name "status" :type "Str")
+        (:field :name "mutatedSymbol" :type "Str")
+        (:field :name "recomputedCount" :type "Int")
+        (:field :name "recomputedQueries" :type "(List Str)")
+        (:field :name "latencyMicros" :type "Int")
+      ])
+  ])

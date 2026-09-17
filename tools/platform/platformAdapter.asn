@@ -1,15 +1,35 @@
-(:platformAdapter :v 1 :src ADR0081
-  :summary "Declared host and platform OS adapter boundary specifications for native compilation."
+(:platformAdapter :v 2 :src ADR0098
+  :summary "Declared stateless host boundary (9 OS syscalls + 2 memory primitives) for cross-platform compilation under ADR D98."
   :targets [
-    (:target :os "darwin" :arch "arm64" :format "Mach-O" :adapter "engine/asl.c" :abi "sysv-arm64")
-    (:target :os "darwin" :arch "x86_64" :format "Mach-O" :adapter "engine/asl.c" :abi "sysv-x86_64")
-    (:target :os "linux" :arch "x86_64" :format "ELF" :adapter "engine/asl.c" :abi "sysv-elf")
-    (:target :os "windows" :arch "x86_64" :format "PE" :adapter "engine/asl.c" :abi "win64")
-    (:target :os "wasi" :arch "wasm32" :format "WASM" :adapter "wasm32-wasi" :abi "wasi-preview1")
+    (:target :os "darwin" :arch "arm64" :format "Mach-O" :adapter "asl/tools/platform/host_darwin.c" :abi "sysv-arm64")
+    (:target :os "darwin" :arch "x86_64" :format "Mach-O" :adapter "asl/tools/platform/host_darwin.c" :abi "sysv-x86_64")
+    (:target :os "linux" :arch "x86_64" :format "ELF" :adapter "asl/tools/platform/host_linux.c" :abi "sysv-elf")
+    (:target :os "windows" :arch "x86_64" :format "PE" :adapter "asl/tools/platform/host_windows.c" :abi "win64")
+    (:target :os "wasi" :arch "wasm32" :format "WASM" :adapter "asl/tools/platform/host_wasi.c" :abi "wasi-preview1")
+  ]
+  :syscalls [
+    (:op :id :fsRead :sig "(fn [(Handle) (Buffer) (Int64)] -> (Result Int64 PlatformError))" :d "Read bytes from handle into buffer")
+    (:op :id :fsWrite :sig "(fn [(Handle) (Buffer) (Int64)] -> (Result Int64 PlatformError))" :d "Write bytes from buffer into handle")
+    (:op :id :fsStat :sig "(fn [(Path)] -> (Result FileStat PlatformError))" :d "Stat file metadata")
+    (:op :id :fsWatch :sig "(fn [(Path)] -> (Result WatchHandle PlatformError))" :d "Register file or directory change watch")
+    (:op :id :procSpawn :sig "(fn [(Path) (List Str) (List Str)] -> (Result ProcHandle PlatformError))" :d "Spawn child process")
+    (:op :id :procWait :sig "(fn [(ProcHandle)] -> (Result ExitStatus PlatformError))" :d "Wait for child process termination")
+    (:op :id :procSignal :sig "(fn [(ProcHandle) (Int64)] -> (Result Unit PlatformError))" :d "Send signal to process")
+    (:op :id :netSocket :sig "(fn [(Str) (Int64)] -> (Result SocketHandle PlatformError))" :d "Create and connect network socket")
+    (:op :id :timeMonotonic :sig "(fn [] -> Int64)" :d "Read monotonic clock in nanoseconds")
+  ]
+  :memoryPrimitives [
+    (:op :id :memAllocPage :sig "(fn [(Int64)] -> (Result Ptr PlatformError))" :d "Allocate virtual memory pages")
+    (:op :id :memFreePage :sig "(fn [(Ptr) (Int64)] -> (Result Unit PlatformError))" :d "Free virtual memory pages")
   ]
   :capabilities [
-    :fsRead :fsWrite :fsStat :fsReaddir
+    :fsRead :fsWrite :fsStat :fsWatch
     :procSpawn :procWait :procSignal
-    :netSocket :timeMonotonic :memAlloc
+    :netSocket :timeMonotonic
+    :memAllocPage :memFreePage
+  ]
+  :errorCodes [
+    :errPlatformEof :errPlatformTimeout :errPlatformDenied
+    :errPlatformBadHandle :errPlatformNotFound :errPlatformBusy
   ]
 )

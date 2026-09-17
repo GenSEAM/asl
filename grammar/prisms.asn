@@ -1,0 +1,551 @@
+(:prisms
+  :doc "Universal Non-Biased Agent Prisms, Computational Vector Semiotics, Symbolic Perception, and Dual Communication Protocols"
+
+  :taxonomy [
+    (:prism :id :vectorGraphics :domain :visual :nature :generative)
+    (:prism :id :uiDesign :domain :interaction :nature :declarative)
+    (:prism :id :symbolicPerception :domain :vision :nature :analytic)
+    (:prism :id :systemsArchitecture :domain :systems :nature :invariant)
+    (:prism :id :falsificationAudit :domain :verification :nature :refutational)
+    (:prism :id :a2aProtocol :domain :communication :nature :machine)
+    (:prism :id :himTelemetry :domain :communication :nature :human)
+    (:prism :id :intentFormalization :domain :requirements :nature :synthetic)
+    (:prism :id :dataTopology :domain :persistence :nature :structural)
+    (:prism :id :codeSynthesis :domain :construction :nature :constructive)
+    (:prism :id :rootCauseDiagnosis :domain :verification :nature :causal)
+    (:prism :id :adversarialHardening :domain :security :nature :adversarial)
+    (:prism :id :deploymentTopology :domain :operations :nature :temporal)
+    (:prism :id :tokenEconomics :domain :resources :nature :quantitative)
+    (:prism :id :imageToSvg :domain :perception :nature :transductive)
+    (:prism :id :zvinkaFeedback :domain :sensory :nature :sonification)
+    (:prism :id :gestaltUi :domain :cognition :nature :projective)
+  ]
+
+
+  ;; =========================================================================
+  ;; 1. VECTOR GRAPHICS PRISM: Non-Biased Generative Vector Semiotics
+  ;; Product Space: V = Projection x Style x Palette x Lighting x Typography x Geometry
+  ;; =========================================================================
+  (:prism :id :vectorGraphics
+    :axes [
+      (:projection
+        :orthogonal true
+        :modes [
+          (:mode :isometric :alpha 30.0 :xi 0.5 :matrix [[0.866 -0.866 0.0] [0.5 0.5 1.0] [0.0 0.0 0.0]])
+          (:mode :perspective :fov 50 :vanishingPoints 2)
+          (:mode :orthographic :planes [:xy :xz :yz])
+          (:mode :curvilinear :distortion :fisheye :k 0.25)
+          (:mode :flat :planes [:xy])
+        ])
+
+      (:style
+        :orthogonal true
+        :morphisms [
+          (:styleDef :minimalistGestalt
+            :stroke {:sw 1.5 :cap :round :join :round}
+            :fill {:mode :solid :translucency 0.0}
+            :contour :continuousSingleBezier
+            :negativeSpace :opticalClosure)
+          (:styleDef :isometricHud
+            :stroke {:sw 1.0 :glow 4.0 :dash :none}
+            :fill {:mode :translucent :alpha 0.85}
+            :grid {:type :isometric :spacing 8 :opacity 0.25}
+            :telemetry {:ticks true :pips true :gauges true})
+          (:styleDef :technicalBlueprint
+            :stroke {:sw 0.75 :color :cyan :dash [4 2]}
+            :fill {:mode :hollow}
+            :dimensions {:callouts true :hairlines true :units :px}
+            :background :navyGrid)
+          (:styleDef :swissEditorial
+            :stroke {:sw 0.0}
+            :fill {:mode :flatColorBlock}
+            :typography {:prominence :dominant :weight 800 :tracking :tight}
+            :grid {:columns 12 :gutter 16 :asymmetric true})
+          (:styleDef :neoBrutalist
+            :stroke {:sw 3.0 :color :black}
+            :fill {:mode :highSaturation}
+            :shadow {:mode :hardOffset :dx 6 :dy 6 :color :black :blur 0}
+            :radius 0)
+          (:styleDef :cyberSynthwave
+            :stroke {:sw 1.5 :glow 8.0}
+            :fill {:mode :linearGradient :angle 90}
+            :horizon {:perspective true :gridLines 24 :sunSlices true}
+            :bloom {:radius 12 :intensity 0.9})
+          (:styleDef :glassmorphic
+            :stroke {:sw 1.0 :gradient [:white 0.3 :none 0.7]}
+            :fill {:mode :translucent :alpha 0.15}
+            :backdropFilter {:blur 16 :saturate 1.4 :brightness 1.1}
+            :shadow {:mode :softDrop :dx 0 :dy 16 :blur 32 :alpha 0.25})
+          (:styleDef :skeuomorphic
+            :stroke {:sw 1.0 :specularBevel true}
+            :fill {:mode :multiStopGradient :tactile true}
+            :shadow {:mode :extrudedCavity :depth 4 :ambientOcclusion true})
+        ])
+
+      (:palette
+        :space :oklch
+        :harmonies [
+          (:harmony :monochrome :deltaHue 0.0 :lightnessSteps 6)
+          (:harmony :analogous :deltaHue 30.0 :angles [-30.0 0.0 30.0])
+          (:harmony :triadic :deltaHue 120.0 :angles [0.0 120.0 240.0])
+          (:harmony :splitComp :deltaHue 150.0 :angles [0.0 150.0 210.0])
+          (:harmony :lumaBalanced :targetLum [0.15 0.35 0.65 0.95] :wcagVerified true)
+        ]
+        :presets [
+          (:theme :slateCyan :bg "#020617" :surface "#0f172a" :border "#06b6d4" :accent "#38bdf8" :text "#f8fafc")
+          (:theme :synthwave :bg "#090014" :surface "#1f0322" :border "#ff007f" :accent "#00f2ff" :text "#ffe6ff")
+          (:theme :blueprint :bg "#041426" :surface "#092540" :border "#22d3ee" :accent "#67e8f9" :text "#e0f2fe")
+          (:theme :neoPop :bg "#fef08a" :surface "#ffffff" :border "#000000" :accent "#ec4899" :text "#000000")
+        ])
+
+      (:lighting
+        :model :blinnPhong
+        :parameters [
+          (:light :dir :nw :vector [-0.577 -0.577 0.577] :ambient 0.25 :specular 0.75 :roughness 0.2)
+          (:faceShading :top 1.0 :left 0.82 :right 0.68)
+          (:shadows :drop true :extrusion true :contactOcclusion true)
+        ])
+
+      (:typography
+        :system :modularScale
+        :baseSize 16
+        :ratios [
+          (:ratio :majorSecond 1.125)
+          (:ratio :minorThird 1.200)
+          (:ratio :majorThird 1.250)
+          (:ratio :perfectFourth 1.333)
+          (:ratio :goldenRatio 1.618)
+        ]
+        :opticalRhythm {:grid 8 :baselineMultiple 4 :tabularNumerals true})
+    ]
+
+    :primitives [
+      (:prim :rc :args [:x :y :w :h :rx :ry :f :s :sw :op])
+      (:prim :circ :args [:cx :cy :r :f :s :sw :op])
+      (:prim :ell :args [:cx :cy :rx :ry :f :s :sw :op])
+      (:prim :ln :args [:x1 :y1 :x2 :y2 :s :sw :op :cap :dash])
+      (:prim :poly :args [:pts :f :s :sw :op])
+      (:prim :p :args [:d :f :s :sw :op :join :cap])
+      (:prim :txt :args [:x :y :sz :f :weight :anchor :font :content])
+      (:prim :g :args [:id :tr :op :clip :children])
+      (:prim :grad :args [:id :type :from :to :stops])
+      (:prim :filter :args [:id :nodes])
+      (:prim :mask :args [:id :children])
+    ]
+
+    :renderCompiler "asl codec asn-to-svg"
+    :decompiler "asl codec svg-to-asn"
+  )
+
+  ;; =========================================================================
+  ;; 2. UI DESIGN PRISM: Universal Declarative UI & VDOM Engine
+  ;; =========================================================================
+  (:prism :id :uiDesign
+    :architecture :elm
+    :flow [
+      (:model :immutablePureState)
+      (:view :pureFunction :signature "Model -> VNode")
+      (:update :pureStateTransition :signature "Msg -> Model -> (Model, Cmd)")
+    ]
+    :memory [
+      (:allocator :doubleBufferedFrameArena :alignment 8 :overflowProtection true)
+      (:gcPauses 0 :footprintTarget "<500KB")
+    ]
+    :layout [
+      (:passOne :measureBottomUp :clamping 0 :fixedPointArithmetic true)
+      (:passTwo :arrangeTopDown :zeroLayoutShift true)
+      (:spatialGrid :tokens [4 8 12 16 24 32 48 64 96 128])
+      (:containerQueries :fluidResponsive :viewports [360 768 1024 1440 1920])
+    ]
+    :accessibility [
+      (:projection :axNodeTree)
+      (:addressing :pureSymbolic :format "Module:symbol:anchor")
+      (:contrastVerification :wcagAA :minimumContrast 4.5)
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 3. SYMBOLIC PERCEPTION PRISM: Inverse Vision & Image Deconstruction
+  ;; Inverse Rendering: AST* = argmin (Distance(Render(AST), Image) + lambda * MDL(AST))
+  ;; =========================================================================
+  (:prism :id :symbolicPerception
+    :pipeline [
+      (:stage :segmentation :colorSpace :oklch :quantization :kmeans)
+      (:stage :primitiveFitting :algorithms [:ransacLine :fitzgibbonEllipse :bezierSpline])
+      (:stage :gestaltGrouping :affinity [:proximity :similarity :continuity :closure :commonRegion])
+      (:stage :layoutInference :gridDetection :autocorrelation :snapping 8)
+      (:stage :semanticClassification :roles [:navigation :hero :card :metric :chart :mascot])
+      (:stage :astSynthesis :deduplication :commonSubexpressionElimination)
+    ]
+    :lossTiers [
+      (:tier :L0 :exactSymbolic :nature :lossless :target :axNode)
+      (:tier :L1 :geometricFidelity :nature :perceptual :deltaEMax 1.0 :iouMin 0.99)
+      (:tier :L2 :semanticEquivalence :nature :structural :intentPreserved true)
+    ]
+    :schema [
+      (:scene
+        :bounds [:w :h]
+        :palette [:colors]
+        :layers [
+          (:layer :id ?id :bounds [:x :y :w :h] :z ?z :elements [...])
+        ]
+        :focalPoint [:x :y :prominence ?weight]
+        :spatialGraph [
+          (:relation :source ?idA :target ?idB :predicate [:above :below :inside :adjacent :aligned])
+        ])
+    ]
+    :advantageOverOcr "symbolic querying consumes 85% fewer tokens with zero raster blur or spatial hallucination"
+  )
+
+  ;; =========================================================================
+  ;; 4. SYSTEMS ARCHITECTURE PRISM: Compiler, Runtime & Storage Invariants
+  ;; =========================================================================
+  (:prism :id :systemsArchitecture
+    :invariants [
+      (:aslAsIr :roundTripDeterminism "project(parse(project(ast))) = project(ast)")
+      (:hostBoundary :declared "engine/asl.c single POSIX/macOS bootstrap interface")
+      (:storageHierarchy [:ramCow :memoryWal :sqliteSubstrate :casArtifacts])
+      (:diffSurface :minimalCausalEntropy :speculativeBloat 0)
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 5. FALSIFICATION AUDIT PRISM: Refutational Verification & Multi-Lens
+  ;; =========================================================================
+  (:prism :id :falsificationAudit
+    :causality [
+      (:threePointRedGreen
+        :evalDiscard :FAIL
+        :evalApply :PASS
+        :evalRevert :FAIL
+        :revertSensitivity true)
+      (:mutationKill :threshold 1 :operator [:negateCondition :swapReturn :offByOne])
+      (:assertionNonVacuity :assertCountMin 1 :exceptionEscapeAsFail true)
+    ]
+    :isolation [
+      (:cleanContext :disjointContextHash true :ephemeralSandbox true :networkDeny true)
+      (:graderNamespace :readOnlyClosure :tamperEvident true)
+      (:receiptChain :cryptographic :signed monotonic)
+    ]
+    :circuitBreaker [
+      (:failureSignature "hash(errorClass, gateId, hunkDigest)")
+      (:threshold 3 :action [:emitWitness :forceBasinTransition])
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 6. AGENT-TO-AGENT PROTOCOL PRISM (A2A): Pure-ASN Machine Communication
+  ;; =========================================================================
+  (:prism :id :a2aProtocol
+    :envelope [
+      (:msg
+        :id ?uuid
+        :sender ?agentId
+        :receiver ?agentId
+        :type [:req :ack :delta :witness :receipt]
+        :parentDigest ?sha256
+        :payload ?asnSexpr
+        :sig ?signature)
+    ]
+    :deltaGrammar [
+      (:patch
+        (:set :targetPath ?astAnchor :val ?newVal)
+        (:ins :targetPath ?astAnchor :node ?astNode)
+        (:del :targetPath ?astAnchor)
+        (:mov :source ?astAnchor :dest ?astAnchor))
+    ]
+    :zeroConversationalFiller true
+    :machineCheckedDelimiters :dyckOne
+  )
+
+  ;; =========================================================================
+  ;; 7. HUMAN-IN-THE-MIDDLE TELEMETRY PRISM (HIM): Terminal TUI Telemetry
+  ;; =========================================================================
+  (:prism :id :himTelemetry
+    :wordBudget {:maxWordsPerUpdate 30 :penaltyPerExcessWord :high}
+    :glyphs [
+      (:glyph :ready "✓ [READY]")
+      (:glyph :progress "⟳ [RUNNING]")
+      (:glyph :fault "✗ [FAILED]")
+      (:glyph :checkpoint "! [DECISION]")
+    ]
+    :jargonFilter [
+      (:eliminate ["ADR0081" "D81" "Task43605" "Phase436" "FastTrack" "Level2Scope"])
+      (:replaceWithPlainConcepts true)
+    ]
+    :decisionFork [
+      (:fork
+        :issue ?clearOneLineSummary
+        :options [
+          (:opt :id :A :action ?actionA :tradeOff ?costBenefitA)
+          (:opt :id :B :action ?actionB :tradeOff ?costBenefitB)
+        ]
+        :recommendation :A)
+    ]
+    :triggerCheckpoint :irreversibleV0ActionsOnly
+  )
+
+  ;; =========================================================================
+  ;; 8. INTENT FORMALIZATION PRISM: Synthetic Requirements Engineering
+  ;; =========================================================================
+  (:prism :id :intentFormalization
+    :axes [
+      (:ambiguityEntropy :target :zero :measure "unresolved semantic branches")
+      (:constraintExtraction :source [:userPrompt :systemInvariants :domainContext])
+      (:acceptanceCriteriaFormalization :target :falsifiablePredicate)
+      (:nonGoalDemarcation :required true :format :antiPatternList)
+    ]
+    :invariants [
+      (:invariant :everyConceptMapsToFalsifiablePredicate
+        :rule "every natural-language concept must be grounded in >= 1 executable test predicate")
+      (:invariant :explicitNonGoals
+        :rule "prohibited behaviors and out-of-scope features must be explicitly enumerated")
+      (:invariant :zeroUnfalsifiableRequirements
+        :rule "claims of quality or performance must state metric, threshold, and test harness")
+    ]
+    :failureModes [
+      (:mode :scopeCreep :mitigation "pin non-goals before code synthesis")
+      (:mode :unfalsifiableRequirements :mitigation "reject requirements lacking an acceptance gate")
+      (:mode :silentAssumptionCollapse :mitigation "log implicit priors as explicit hypotheses")
+      (:mode :prematureCommitment :mitigation "preserve option space until constraints force decision")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 9. DATA TOPOLOGY PRISM: Structural State & Schema Evolution
+  ;; =========================================================================
+  (:prism :id :dataTopology
+    :axes [
+      (:consistencyModel :modes [:strongAcid :eventualCrdt :linearizableRaft :localSingleThread])
+      (:normalizationDegree :balance [:bcnf :readOptimizedProjection :denormalizedCache])
+      (:schemaEvolutionVector :properties [:monotonicAdditive :provablyReversible :versionPinned])
+      (:migrationReversibility :requirement :atomicRollback)
+      (:cardinalityBounds :explicit [:oneToOne :oneToMany :manyToMany :boundedArray])
+    ]
+    :invariants [
+      (:invariant :reversibleMigrations
+        :rule "every forward schema delta must declare its exact inverse down-migration")
+      (:invariant :zeroImplicitNPlusOne
+        :rule "query paths across boundaries must declare batch fetching or pre-joined projections")
+      (:invariant :writePathInvariantValidation
+        :rule "business invariants must be validated atomically inside write transactions")
+    ]
+    :failureModes [
+      (:mode :migrationDrift :mitigation "verify migration round-trip up->down->up in gate")
+      (:mode :orphanRecords :mitigation "enforce foreign key cascades or algebraic sum types")
+      (:mode :unindexedHotPath :mitigation "query planner verification in CI")
+      (:mode :lossyMigration :mitigation "refuse destructive migrations without pre-snapshot")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 10. CODE SYNTHESIS PRISM: Constructive Polyglot Lowering
+  ;; =========================================================================
+  (:prism :id :codeSynthesis
+    :axes [
+      (:typeTotality :requirement "all pattern matches must be exhaustive without catch-all wildcards")
+      (:effectDiscipline :tracking [:pureFunction :memoryMutation :ioNetwork :diskFs :processExec])
+      (:semanticDensity :ratio "AST operations per token in [0.60, 0.90]")
+      (:complexityBudget :bounds {:cyclomaticMax 10 :nestingMax 4 :paramsMax 5})
+    ]
+    :invariants [
+      (:invariant :generatedFromSpecPredicatesOnly
+        :rule "synthesized code must satisfy a bi-directional trace to intent formalization predicates")
+      (:invariant :explicitEffectSignatures
+        :rule "side-effecting operations must be tagged and isolated from pure logic")
+      (:invariant :zeroUndeclaredDependencies
+        :rule "all foreign library bindings must be declared in package manifest")
+    ]
+    :failureModes [
+      (:mode :testOverfitting :mitigation "generate adversarial mutant inputs via property tests")
+      (:mode :effectLeak :mitigation "strict static type and effect verification in asl check")
+      (:mode :tokenBloat :mitigation "enforce minimal AST representation and dead-code elimination")
+      (:mode :deadBranchAccretion :mitigation "require branch reachability evidence in gate")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 11. ROOT CAUSE DIAGNOSIS PRISM: Causal Verification & Autonomous Debugging
+  ;; =========================================================================
+  (:prism :id :rootCauseDiagnosis
+    :axes [
+      (:differentialBisection :complexity "O(log n) over commit DAG or input token slice")
+      (:causalLocalization :algorithms [:spectrumOchiai :tarantulaRank :counterfactualDelta])
+      (:counterexampleMinimization :algorithm :ddminAdaptive :target "minimal failing test case")
+      (:hypothesisPruning :lattice :popperianFalsification :strategy :riskiestAssumptionFirst)
+    ]
+    :invariants [
+      (:invariant :minimalReproducibleCounterexample
+        :rule "every accepted diagnosis must provide a minimal standalone reproduction script")
+      (:invariant :discriminatingFalsificationExperiment
+        :rule "each hypothesis must emit a test that cleanly distinguishes it from alternatives")
+      (:invariant :zeroFixWithoutRootCause
+        :rule "symptom patches and try-catch wrappers around unlocalized errors are forbidden")
+    ]
+    :failureModes [
+      (:mode :symptomPatching :mitigation "require mutation test showing failure persists without core fix")
+      (:mode :hypothesisConfirmationBias :mitigation "force generation of counter-hypotheses")
+      (:mode :heisenbugs :mitigation "pin pseudo-random seeds, environment clocks, and thread order")
+      (:mode :causalConfusion :mitigation "intervene on isolated suspected node to confirm causal power")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 12. ADVERSARIAL HARDENING PRISM: Boundary Defense & Resilience
+  ;; =========================================================================
+  (:prism :id :adversarialHardening
+    :axes [
+      (:attackSurfaceArea :strategy :minimizeExposedSurface)
+      (:trustBoundaryCount :enumeration :explicitAcl)
+      (:capabilityAttenuation :model :leastPrivilegeObjectCapability)
+      (:exploitCostAsymmetry :objective "attacker work factor >> defender verification cost")
+    ]
+    :invariants [
+      (:invariant :untrustedBoundaryInputs
+        :rule "all inputs crossing trust boundaries must be validated against strict schemas")
+      (:invariant :asymptoticallyBoundedResources
+        :rule "all loops, recursions, and buffer allocations must have explicit gas/depth caps")
+      (:invariant :zeroContextSecrets
+        :rule "cryptographic keys and tokens must never be injected into agent context windows")
+    ]
+    :failureModes [
+      (:mode :securityTheater :mitigation "execute active penetration fuzzing in verification gate")
+      (:mode :overPrivilegeDefault :mitigation "default permissions are deny-all with explicit grants")
+      (:mode :unboundedAllocation :mitigation "gas-metered evaluator and fixed-size arenas")
+      (:mode :trustBoundaryViolation :mitigation "compile-time taint tracking on tainted inputs")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 13. DEPLOYMENT TOPOLOGY PRISM: Operational Reversibility
+  ;; =========================================================================
+  (:prism :id :deploymentTopology
+    :axes [
+      (:reversibility :target :instantRollback :mechanism :blueGreenOrSymlinkSwap)
+      (:blastRadiusContainment :strategy [:canaryDeployment :tenantSharding :cellArchitecture])
+      (:canaryDivergence :telemetry [:errorRateDelta :latencyP99Delta :memoryGrowth])
+      (:sloDecidability :predicates [:availabilityRatio :responseTimeBound :errorBudgetFloor])
+    ]
+    :invariants [
+      (:invariant :contentAddressedArtifacts
+        :rule "all deployed binaries and assets must be immutable and content-addressed by hash")
+      (:invariant :boundedTimeRollback
+        :rule "rollback to prior known-good state must complete in < 60 seconds")
+      (:invariant :preDeclaredDecidableSlos
+        :rule "deployments must declare metric thresholds that trigger automated abort")
+    ]
+    :failureModes [
+      (:mode :irreversibleDeploy :mitigation "reject deployments coupled with irreversible data mutations")
+      (:mode :snowflakeEnv :mitigation "hermetic container / WASI build isolation")
+      (:mode :canaryGaming :mitigation "randomized traffic allocation across diverse workloads")
+      (:mode :cascadingFailure :mitigation "circuit breakers and graceful load shedding")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 14. TOKEN ECONOMICS PRISM: Cognitive Arbitrage & Budget Governance
+  ;; =========================================================================
+  (:prism :id :tokenEconomics
+    :axes [
+      (:costPerVerifiedArtifact :measure "total tokens expended per passing gate")
+      (:contextHalfLife :metric "useful token retention rate over multi-turn interactions")
+      (:kvCacheLocality :metric "prompt prefix byte stability percentage")
+      (:compressionEntropy :metric "semantic utility density SUD(T) = constraints / tokens")
+    ]
+    :invariants [
+      (:invariant :meteredTokenExpenditure
+        :rule "token usage is recorded per task step and compared against baseline budget")
+      (:invariant :zeroReDerivationOfMemoizedDags
+        :rule "AST subtrees with matching content hash are reused without re-synthesis")
+      (:invariant :circuitBreakerOnBudgetExhaustion
+        :rule "exceeding 2x estimated budget trips circuit breaker for supervisor escalation")
+    ]
+    :failureModes [
+      (:mode :unboundedRefinementBurn :mitigation "hard cap of <= 3 refinement iterations per gate")
+      (:mode :contextRot :mitigation "observation masking and task boundary compaction")
+      (:mode :unpricedQualityClaims :mitigation "require token efficiency delta in optimization PRs")
+      (:mode :rederivationWaste :mitigation "persistent AST cache keyed by content hash")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 15. IMAGE-TO-SVG PRISM: Inverse Vector Graphics & Perceptual Transduction
+  ;; =========================================================================
+  (:prism :id :imageToSvg
+    :axes [
+      (:contourDecomposition :target :continuousBezier :algorithms [:potrace :ramerDouglasPeucker :cubicSpline])
+      (:colorQuantization :space :oklch :harmonies [:solid :linearGradient :radialGradient])
+      (:semanticHierarchy :heuristics [:spatialContainment :gestaltProximity :textPathSeparation])
+      (:fidelityBudget :tradeoff "token cost vs SSIM topological similarity")
+    ]
+    :invariants [
+      (:invariant :topologyPreservation
+        :rule "closed visual regions remain closed vector paths; spatial containment order strictly preserved")
+      (:invariant :semanticAnchorAlignment
+        :rule "extracted vector elements must carry semantic domain tags (:header :button :badge :canvas :icon)")
+      (:invariant :boundedLossiness
+        :rule "transduction output must carry :evidenceClass :lossyTransduction with measured SSIM metric")
+    ]
+    :failureModes [
+      (:mode :pathExplosion :mitigation "curvature simplification and stroke-reduction passes")
+      (:mode :topologyCollapse :mitigation "edge-contrast boundary verification before merge")
+      (:mode :hallucinatedText :mitigation "OCR glyph confidence threshold; fallback to raw path")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 16. ZVINKA FEEDBACK PRISM: Auditory & Multi-Sensory State Sonification
+  ;; =========================================================================
+  (:prism :id :zvinkaFeedback
+    :axes [
+      (:eventSonification
+        :mappings [
+          (:event :gatePass :waveform :harmonicMajorTriad :decayMs 80 :rootHz 880 :d "Crisp passing chime")
+          (:event :invariantTrip :waveform :minorSecondDissonance :decayMs 150 :rootHz 220 :d "Attention alert pulse")
+          (:event :budgetWarning :waveform :lowFrequencyModulation :decayMs 200 :rootHz 110 :d "Attention budget pulse")
+          (:event :milestoneArrival :waveform :ascendingArpeggio :decayMs 250 :rootHz 440 :d "Milestone celebration")
+          (:event :agentHandoff :waveform :stereoPanClick :decayMs 20 :rootHz 1760 :d "Stigmergic handoff click")
+        ])
+      (:interruptionBudget :policy :silenceByDefault :debounceMs 500 :maxEventsPerMinute 12)
+      (:sensoryChannel :parameters [:frequency :envelope :harmonics :stereoPan :gain])
+    ]
+    :invariants [
+      (:invariant :singleSourceOfTruth
+        :rule "auditory events derive exclusively from central event-sourcing log; identical trigger to Gestalt UI")
+      (:invariant :zeroAudioBlobRetention
+        :rule "sound synthesized dynamically from ASN parametric descriptors; zero binary audio stored in ledgers")
+      (:invariant :cognitiveSanctuary
+        :rule "strictly obey interruption budget; non-critical telemetry muted by default to preserve human focus")
+    ]
+    :failureModes [
+      (:mode :acousticFatigue :mitigation "exponential backoff debounce and automatic volume suppression")
+      (:mode :crossModalDesync :mitigation "unified atomic event dispatcher ensuring sound matches visual state")
+      (:mode :uncalibratedUrgency :mitigation "strict dB and dissonance mapping tied to teleological priority V0..V6")
+    ]
+  )
+
+  ;; =========================================================================
+  ;; 17. GESTALT UI PRISM: Declarative Cognitive Interface & Affordance Projection
+  ;; =========================================================================
+  (:prism :id :gestaltUi
+    :axes [
+      (:gestaltGrouping :principles [:proximity :similarity :continuity :closure :figureGround])
+      (:affordanceDensity :bound "Fitts's Law compliant; minimal visual clutter per interactive affordance")
+      (:visualHierarchy :scales [:dominant :subordinate :whisper] :contrastRatios [:wcagAaa :wcagAa])
+      (:compactVdomProjection :target :pureFunctionalVdom :format :asnHomoiconic)
+    ]
+    :invariants [
+      (:invariant :zeroUnboundedLayoutShift
+        :rule "interactive containers must declare static layout bounds prior to dynamic data arrival")
+      (:invariant :tokenDenseRepresentation
+        :rule "VDOM trees rendered in pure ASN S-expressions without redundant HTML/JSX token tax")
+      (:invariant :deterministicProjection
+        :rule "render(State) must be referentially transparent, pure, and reversible")
+    ]
+    :failureModes [
+      (:mode :layoutThrashing :mitigation "pre-allocated layout slots and CSS Grid containment")
+      (:mode :decorativeComplexity :mitigation "strict Swiss minimalist Gestalt styling rules")
+      (:mode :hiddenActionState :mitigation "every asynchronous operation must project an explicit pending state")
+    ]
+  )
+)

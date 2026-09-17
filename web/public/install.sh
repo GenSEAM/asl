@@ -138,7 +138,7 @@ rules_main() {
     for row in "${HOME_SURFACES[@]}"; do
       IFS='|' read -r f sre ere <<< "$row"; [ -f "$f" ] && { render_between "$f" "$sre" "$ere"; echo "  rendered $f"; }
     done
-    for d in "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.cursor/skills" "$HOME/.codeium/windsurf/skills" "$HOME/.gemini/skills" "$HOME/.gemini/config/skills" "$HOME/.factory/skills" "$HOME/.codex/skills" "$HOME/.eddie/skills" "$HOME/.addie/skills"; do
+    for d in "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.cursor/skills" "$HOME/.codeium/windsurf/skills" "$HOME/.gemini/skills" "$HOME/.gemini/config/skills" "$HOME/.factory/skills" "$HOME/.codex/skills" "$HOME/.eddie/skills" "$HOME/.addie/skills" "$HOME/.gemini/config/plugins/toolbelt/skills" "$HOME/.gemini/config/plugins/toolbelt/harnesses/antigravity/skills"; do
       for s in "$RULES_ROOT/.agents/skills"/*; do
         skill_name=$(basename "$s")
         [ -d "$s" ] && [ -f "$s/SKILL.md" ] && mkdir -p "$d/$skill_name" && cp "$s/SKILL.md" "$d/$skill_name/SKILL.md" && echo "  refreshed $d/$skill_name/SKILL.md"
@@ -454,46 +454,60 @@ install_agent_skills() {
     dir="$(dirname "$target")"
     mkdir -p "$dir"
     local directive='<!-- ASL_RULES_START -->
-(:rules :v 7 :src ADR0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
-  (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
-    :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
-    :check "./bin/asl audit gates"
-    :gate "./bin/asl audit gates"
-    :now "the evaluator abandons a body at exit 0 on unknown symbols until Phase436 (prior audit: about half of declared assertions never ran); treat green as unverified and confirm asserts executed")
-  (:rule :id gates :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
-    :do "every change carries a gate that fails before and passes after, and the baseline failure must be the intended semantic failure, not a missing command or a grep label; report exit code and executed asserts; assertion inversion measures reachability, production-code mutation measures fault detection, report both"
-    :check "./bin/asl audit gates"
-    :gate "./bin/asl audit gates"
-    :not "weaken, skip, loosen, mock, or stub to reach green; exit 0 is not non-vacuity; a printed label is not a result")
-  (:rule :id grading :force :invariant :tier [:essential :full] :when [:grade]
-    :do "the writer never grades its own work; a reviewer runs the gates in a clean context and verification rests on reproducible evidence, not on role labels; scouts are read-only and parallel"
-    :check "sh tests/acceptance/d81/SuperviseGate.sh"
-    :gate "sh tests/acceptance/d81/SuperviseGate.sh"
-    :why "self-correction without external feedback tends to degrade results; self-preference bias in self-evaluation; persona prompts showed no overall benefit on factual QA")
-  (:rule :id concepts :force :invariant :tier [:essential :full] :when [:plan]
-    :do "a normative principle may be adopted explicitly without measurement, but every number in a rule needs source, scope and uncertainty; an empirical claim enters only with a measurable definition and a baseline-failing gate"
+(:rules :v 9 :src ADR0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+  (:rule :id teleology :force :invariant :tier [:essential :full] :when [:all]
+    :do "teleological value hierarchy: (V0 > V1 > V2 > V3 > V4 > V5 > V6); V0 human sovereignty (override requires signed confirmation; restricted to irreversible operations), V1 invariant preservation (:owns, delimiter balance, executed writes only), V2 contractual intent fidelity, V3 evidence-backed falsifiability, V4 minimal causal surface, V5 lexical SNR, V6 velocity; anti-Goodhart: proxy metrics never override ground truth"
     :check "./bin/asl audit consistency"
     :gate "./bin/asl audit consistency"
-    :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
-  (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
-    :do "ASL-first policy: everything must be written or used in ASL. No Bash, no Python. Small logic must be re-implemented in pure ASL. Required logic in other target languages (e.g., C) must be authored in ASL and transpiled to the target language. The C host at asl/tools is declared, not hidden; no MCP; no new ecosystem dependency."
-    :check "./bin/asl audit foreign"
-    :gate "./bin/asl audit foreign"
-    :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
-  (:rule :id oneStep :force :invariant :tier [:essential :full] :when [:implement]
-    :do "a step is a transaction with an owned write set and a closing gate; batch independent edits inside it; advance only with a runner-issued receipt bound to session, step, gate and source digest"
+    :why "explicit lexicographic value dominance ensures safety and boundary invariants strictly dominate speed and prompt compliance; when intent conflicts with invariants, the agent escalates")
+  (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
+    :do "imports bind; an unknown symbol is an error; zero truthiness; a test returning non-true fails; runner-measured executed assertions must be strictly positive (assertCount > 0); unhandled exceptions in gate scope count as failure; exception swallowing or vacuous assert(true) is a critical defect"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
+    :why "syntactic green without executed assertions is vacuous pass fraud; verified status requires strictly positive assertion counts and sealed symbol bindings")
+  (:rule :id gates :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
+    :do "three-point red-green causality: gate(discard) = FAIL, gate(apply) = PASS, gate(revert) = FAIL; baseline failure must be semantic to the claim predicate, not a mechanical missing file; gate hash is pinned at red state; production code mutation must prove fault detection by killing at least one mutant; report exit code, executed asserts, and killed mutants"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
+    :why "a gate that does not fail on revert or fails to kill production mutants is causally disconnected from the diff and cannot alter epistemic state")
+  (:rule :id triMap :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
+    :do "Popperian Tri-Map Reconciliation: closed S-Map (intent atoms), F-Map (falsification gates), and B-Map (diff hunks); zero omissions (all S atoms caused by B hunks), zero speculative bloat (all B hunks justified by S atoms), total falsification coverage (every S atom refutable by an F gate); empirical claims enter only with registered measurable definitions and F gates"
+    :check "./bin/asl audit consistency"
+    :gate "./bin/asl audit consistency"
+    :why "tri-map bijection guarantees that prompt intent is completely satisfied without speculative drift or dropped requirements")
+  (:rule :id grading :force :invariant :tier [:essential :full] :when [:grade]
+    :do "the writer never grades its own work; an independent reviewer executes gates in a hermetic clean context (disjoint context hash, ephemeral sandbox, network denied, deterministic seed); grader-owned acceptance tests and fixtures are strictly read-only and tamper-evident; receipts are runner-issued, signed, and hash-chained"
+    :check "sh tests/acceptance/d81/SuperviseGate.sh"
+    :gate "sh tests/acceptance/d81/SuperviseGate.sh"
+    :why "self-grading and shared context produce self-preference bias; hermetic separation ensures evaluation reflects ground reality")
+  (:rule :id astAddressing :force :invariant :tier [:essential :full] :when [:implement :grade]
+    :do "Zero-Line-Number Invariant: all code locations, diffs, patches, and receipts are addressed exclusively by path and symbol anchor (:file ?f :symbol ?s :anchor ?a); integer line numbers are strictly forbidden in commands and receipts; edits are idempotent AST splices or content-hash anchored replacements"
+    :check "./bin/asl check"
+    :gate "./bin/asl check"
+    :why "integer line numbers are ephemeral artifacts that drift across edits and invalidate concurrent or rebased patches")
+  (:rule :id ramTxn :force :invariant :tier [:essential :full] :when [:implement]
+    :do "step is a transaction with declared :owns write set and closing gate; all modifications staged in virtual RAM VFS buffers (:edit -> :diff -> :flush | :discard); flush is atomic with temporary file fsync and rename; process-tree write-set closure strictly contained within :owns; un-staged raw disk writes forbidden; advance only with runner-issued receipt"
     :check "./bin/asl audit steps"
     :gate "./bin/asl audit steps"
-    :not "batch several steps then verify; claim progress with a caller-supplied exit code")
-  (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
-    :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
-    :check :none
-    :gate :none
-    :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
+    :why "RAM VFS staging prevents workspace corruption during failed attempts and guarantees atomic rollbacks")
+  (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
+    :do "ASL-first policy: packages contain 100% pure ASL; C host at asl/tools is declared boundary; in foreign target codebases (C, Python, TypeScript, Rust, Go), agents reason in-memory using ASL/ASN action DAGs and lower operations to native diffs with round-trip determinism (project(parse(project(ast))) = project(ast)); zero raw string-blasting"
+    :check "./bin/asl audit foreign"
+    :gate "./bin/asl audit foreign"
+    :why "intermediate representation decouples language-agnostic reasoning from target syntax mechanics, guaranteeing reversibility and formal traceability")
+  (:rule :id limitCycle :force :invariant :tier [:essential :full] :when [:all]
+    :do "dynamic witness circuit breaker: repeated failure signatures (hash of error class, gate id, hunk digest) capped at 3; three identical failures trip the breaker, halting execution and emitting a structured :witness record; forces basin transition (:build -> :scout or :build -> :plan) or V0 escalation; retries require a distinct causal hypothesis"
+    :check "./bin/asl doctor"
+    :gate "./bin/asl doctor"
+    :why "prevents infinite apology loops and token-burning thrash by turning repeated failure into an explicit phase boundary")
+  (:rule :id inMemoryAsl :force :affordance :tier [:affordance :full] :when [:scout :plan :implement]
+    :do "in foreign codebases (Python, TypeScript, Rust, Go, C), agents reason in-memory using ASL/ASN action DAGs and typed scratchpads, then lower verified operations to native target diffs"
+    :check "./bin/asl check"
+    :why "intermediate representation decouples language-agnostic reasoning from target syntax mechanics, guaranteeing reversibility and formal traceability")
   (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
     :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
     :check "./bin/asl check"
-    :not "treat RPC as the primary interface; treat :status ok as success without checking the typed receipt; execute unvalidated shell text or expose direct command descriptions to agents")
+    :why "ordinary ASN execution is the sole canonical operational surface; valid operations return typed ASN receipts with path and anchor, preventing unvalidated shell execution")
   (:rule :id note :force :affordance :tier [:affordance :full] :when [:all]
     :do "record working memory via asl note write when holding volatile context, architectural discoveries, or empirical findings that would otherwise be lost across steps; query active observations via asl note query or asl note list to prevent duplicate investigation"
     :check "./bin/asl note list"
@@ -505,8 +519,7 @@ install_agent_skills() {
   (:rule :id capabilities :force :affordance :tier [:affordance :full] :when [:all]
     :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
     :check "./bin/asl doctor"
-    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
-    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7")
+    :why "epistemic grounding precedes invocation; active capabilities are verified by physical doctor measurement, unmeasured or absent capabilities execute declared fallback paths")
   (:rule :id output :force :orientation :tier [:orientation :full] :when [:all]
     :do "return typed receipts as ASN with path and symbol/anchor; never specify line numbers (Zero-Line-Number Invariant); reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
     :check :none
@@ -560,11 +573,15 @@ install_agent_skills() {
     :check :none
     :defeat "complete whole-file AST analysis or small schema generation"
     :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
+  (:rule :id tokenEconomics :force :heuristic :tier [:heuristic :full] :when [:all]
+    :do "attention density law: redundant tokens dilute Softmax attention mass on invariants; preserve KV cache via byte-stable prefixes, batch independent forms in one turn, address code by symbol slices, use CamelCase for BPE subword efficiency, mask execution logs to typed receipts, and enforce lossless reversibility"
+    :check "./bin/asl check"
+    :gate "./bin/asl check"
+    :why "every noise token reduces attention probability mass on constraints; S-expressions cut 55-75% JSON tax and CamelCase saves 44-50% on BPE identifiers")
   (:rule :id reconstructibility :force :affordance :tier [:affordance :full] :when [:all]
     :do "anything reconstructible from code, git history, or a command is not written to durable memory; reconstructible records are refused and the refusal names the command that reports it; rejected alternatives are accepted because no command reports what was not chosen"
     :check :none
-    :not "write durable records that duplicate git tree status or command output without meeting the reconstructibility test"
-    :why "restating command outputs creates drift and bloats context; durable records exist only for what cannot be reconstructed from the tree")
+    :why "memory records carry strictly novel non-reconstructible delta; tree status and command outputs are reconstructed on-demand from the substrate to eliminate context bloat")
   (:pack :id design :tier [:pack :full]
     :outcomes ["high visual signal to noise ratio" "typography hierarchy" "responsive layout boundaries" "compact VDOM token density"]
     :failureModes ["decorative gratuitous complexity" "unbounded layout shift" "unresponsive component containers"]
@@ -578,9 +595,18 @@ install_agent_skills() {
     :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
     :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
   (:pack :id multilensAudit :tier [:pack :full]
-    :outcomes ["dual-polarity refutation verification (D77)" "anti-falsification dynamic roundtripping (D89)" "genuine artifact parsing without mocking" "edge-case coverage verification"]
+    :outcomes ["dual-polarity refutation verification" "anti-falsification dynamic roundtripping" "genuine artifact parsing without mocking" "edge-case coverage verification"]
     :failureModes ["static string mocking" "vacuous positive assertions without refutes" "evaluating self-preference"]
-    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"]))
+    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"])
+  (:pack :id architecture :tier [:pack :full]
+    :outcomes ["minimal causal surface" "bounded dependency DAG" "host interface independence" "polymorphic storage hierarchy" "circuit breaker limit cycles"]
+    :failureModes ["premature universalism" "unbounded coupling" "hidden ecosystem dependencies" "infinite oscillation cycles"]
+    :affordances ["asl audit consistency" "asl audit foreign" "storage engine switch" "circuit breaker escalation"])
+  (:pack :id cognitiveSlm :tier [:pack :full]
+    :outcomes ["sub-100ms cold start" "unified memory footprint <=24MB" "progressive disclosure bounded retrieval" "thinking-vs-exec budget arbitrage"]
+    :failureModes ["unbounded context explosion" "redundant full-file reads" "uncalibrated inference loops"]
+    :affordances ["asl mem query" "asl mem tree" "asl-slm telemetry" "observation masking"]))
+
 <!-- ASL_RULES_END -->'
 
     if [ -f "$target" ]; then
@@ -614,46 +640,60 @@ description: >-
 ## Rules
 
 ```asn
-(:rules :v 7 :src ADR0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
-  (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
-    :do "imports bind; an unknown symbol is an error; a test returning non-true fails"
-    :check "./bin/asl audit gates"
-    :gate "./bin/asl audit gates"
-    :now "the evaluator abandons a body at exit 0 on unknown symbols until Phase436 (prior audit: about half of declared assertions never ran); treat green as unverified and confirm asserts executed")
-  (:rule :id gates :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
-    :do "every change carries a gate that fails before and passes after, and the baseline failure must be the intended semantic failure, not a missing command or a grep label; report exit code and executed asserts; assertion inversion measures reachability, production-code mutation measures fault detection, report both"
-    :check "./bin/asl audit gates"
-    :gate "./bin/asl audit gates"
-    :not "weaken, skip, loosen, mock, or stub to reach green; exit 0 is not non-vacuity; a printed label is not a result")
-  (:rule :id grading :force :invariant :tier [:essential :full] :when [:grade]
-    :do "the writer never grades its own work; a reviewer runs the gates in a clean context and verification rests on reproducible evidence, not on role labels; scouts are read-only and parallel"
-    :check "sh tests/acceptance/d81/SuperviseGate.sh"
-    :gate "sh tests/acceptance/d81/SuperviseGate.sh"
-    :why "self-correction without external feedback tends to degrade results; self-preference bias in self-evaluation; persona prompts showed no overall benefit on factual QA")
-  (:rule :id concepts :force :invariant :tier [:essential :full] :when [:plan]
-    :do "a normative principle may be adopted explicitly without measurement, but every number in a rule needs source, scope and uncertainty; an empirical claim enters only with a measurable definition and a baseline-failing gate"
+(:rules :v 9 :src ADR0081 :shortcode D81 :tiers [:essential :hot :affordance :orientation :heuristic :pack :full] :when [:scout :plan :implement :grade :all]
+  (:rule :id teleology :force :invariant :tier [:essential :full] :when [:all]
+    :do "teleological value hierarchy: (V0 > V1 > V2 > V3 > V4 > V5 > V6); V0 human sovereignty (override requires signed confirmation; restricted to irreversible operations), V1 invariant preservation (:owns, delimiter balance, executed writes only), V2 contractual intent fidelity, V3 evidence-backed falsifiability, V4 minimal causal surface, V5 lexical SNR, V6 velocity; anti-Goodhart: proxy metrics never override ground truth"
     :check "./bin/asl audit consistency"
     :gate "./bin/asl audit consistency"
-    :why "SNR 0.75, sovereignty, homeostasis and 72% compaction were stated as measurements without sources and failed audit")
-  (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
-    :do "ASL-first policy: everything must be written or used in ASL. No Bash, no Python. Small logic must be re-implemented in pure ASL. Required logic in other target languages (e.g., C) must be authored in ASL and transpiled to the target language. The C host at asl/tools is declared, not hidden; no MCP; no new ecosystem dependency."
-    :check "./bin/asl audit foreign"
-    :gate "./bin/asl audit foreign"
-    :now "core is C plus an embedded JS evaluator on JavaScriptCore, macOS only, until Phase438")
-  (:rule :id oneStep :force :invariant :tier [:essential :full] :when [:implement]
-    :do "a step is a transaction with an owned write set and a closing gate; batch independent edits inside it; advance only with a runner-issued receipt bound to session, step, gate and source digest"
+    :why "explicit lexicographic value dominance ensures safety and boundary invariants strictly dominate speed and prompt compliance; when intent conflicts with invariants, the agent escalates")
+  (:rule :id semantics :force :invariant :tier [:essential :full] :when [:implement :grade]
+    :do "imports bind; an unknown symbol is an error; zero truthiness; a test returning non-true fails; runner-measured executed assertions must be strictly positive (assertCount > 0); unhandled exceptions in gate scope count as failure; exception swallowing or vacuous assert(true) is a critical defect"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
+    :why "syntactic green without executed assertions is vacuous pass fraud; verified status requires strictly positive assertion counts and sealed symbol bindings")
+  (:rule :id gates :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
+    :do "three-point red-green causality: gate(discard) = FAIL, gate(apply) = PASS, gate(revert) = FAIL; baseline failure must be semantic to the claim predicate, not a mechanical missing file; gate hash is pinned at red state; production code mutation must prove fault detection by killing at least one mutant; report exit code, executed asserts, and killed mutants"
+    :check "./bin/asl audit gates"
+    :gate "./bin/asl audit gates"
+    :why "a gate that does not fail on revert or fails to kill production mutants is causally disconnected from the diff and cannot alter epistemic state")
+  (:rule :id triMap :force :invariant :tier [:essential :full] :when [:plan :implement :grade]
+    :do "Popperian Tri-Map Reconciliation: closed S-Map (intent atoms), F-Map (falsification gates), and B-Map (diff hunks); zero omissions (all S atoms caused by B hunks), zero speculative bloat (all B hunks justified by S atoms), total falsification coverage (every S atom refutable by an F gate); empirical claims enter only with registered measurable definitions and F gates"
+    :check "./bin/asl audit consistency"
+    :gate "./bin/asl audit consistency"
+    :why "tri-map bijection guarantees that prompt intent is completely satisfied without speculative drift or dropped requirements")
+  (:rule :id grading :force :invariant :tier [:essential :full] :when [:grade]
+    :do "the writer never grades its own work; an independent reviewer executes gates in a hermetic clean context (disjoint context hash, ephemeral sandbox, network denied, deterministic seed); grader-owned acceptance tests and fixtures are strictly read-only and tamper-evident; receipts are runner-issued, signed, and hash-chained"
+    :check "sh tests/acceptance/d81/SuperviseGate.sh"
+    :gate "sh tests/acceptance/d81/SuperviseGate.sh"
+    :why "self-grading and shared context produce self-preference bias; hermetic separation ensures evaluation reflects ground reality")
+  (:rule :id astAddressing :force :invariant :tier [:essential :full] :when [:implement :grade]
+    :do "Zero-Line-Number Invariant: all code locations, diffs, patches, and receipts are addressed exclusively by path and symbol anchor (:file ?f :symbol ?s :anchor ?a); integer line numbers are strictly forbidden in commands and receipts; edits are idempotent AST splices or content-hash anchored replacements"
+    :check "./bin/asl check"
+    :gate "./bin/asl check"
+    :why "integer line numbers are ephemeral artifacts that drift across edits and invalidate concurrent or rebased patches")
+  (:rule :id ramTxn :force :invariant :tier [:essential :full] :when [:implement]
+    :do "step is a transaction with declared :owns write set and closing gate; all modifications staged in virtual RAM VFS buffers (:edit -> :diff -> :flush | :discard); flush is atomic with temporary file fsync and rename; process-tree write-set closure strictly contained within :owns; un-staged raw disk writes forbidden; advance only with runner-issued receipt"
     :check "./bin/asl audit steps"
     :gate "./bin/asl audit steps"
-    :not "batch several steps then verify; claim progress with a caller-supplied exit code")
-  (:rule :id hiddenTests :force :invariant :tier [:essential :full] :when [:implement :grade]
-    :do "the implementer cannot modify grader-owned acceptance tests; read-only public regression tests and author-owned development tests are allowed; enforced by :owns in the engine and tool allowlists, not by prompt"
-    :check :none
-    :gate :none
-    :why "protected hidden evaluation reduced test exploitation (ImpossibleBench); prompting effects were model and task dependent")
+    :why "RAM VFS staging prevents workspace corruption during failed attempts and guarantees atomic rollbacks")
+  (:rule :id foreign :force :invariant :tier [:essential :full] :when [:implement]
+    :do "ASL-first policy: packages contain 100% pure ASL; C host at asl/tools is declared boundary; in foreign target codebases (C, Python, TypeScript, Rust, Go), agents reason in-memory using ASL/ASN action DAGs and lower operations to native diffs with round-trip determinism (project(parse(project(ast))) = project(ast)); zero raw string-blasting"
+    :check "./bin/asl audit foreign"
+    :gate "./bin/asl audit foreign"
+    :why "intermediate representation decouples language-agnostic reasoning from target syntax mechanics, guaranteeing reversibility and formal traceability")
+  (:rule :id limitCycle :force :invariant :tier [:essential :full] :when [:all]
+    :do "dynamic witness circuit breaker: repeated failure signatures (hash of error class, gate id, hunk digest) capped at 3; three identical failures trip the breaker, halting execution and emitting a structured :witness record; forces basin transition (:build -> :scout or :build -> :plan) or V0 escalation; retries require a distinct causal hypothesis"
+    :check "./bin/asl doctor"
+    :gate "./bin/asl doctor"
+    :why "prevents infinite apology loops and token-burning thrash by turning repeated failure into an explicit phase boundary")
+  (:rule :id inMemoryAsl :force :affordance :tier [:affordance :full] :when [:scout :plan :implement]
+    :do "in foreign codebases (Python, TypeScript, Rust, Go, C), agents reason in-memory using ASL/ASN action DAGs and typed scratchpads, then lower verified operations to native target diffs"
+    :check "./bin/asl check"
+    :why "intermediate representation decouples language-agnostic reasoning from target syntax mechanics, guaranteeing reversibility and formal traceability")
   (:rule :id tools :force :affordance :tier [:affordance :full] :when [:scout :implement]
     :do "use ordinary asl invocation with ASN notation as the primary surface; embed scripts, program forms, executable descriptors, code, and tool calls in one validated ASN script; batch independent forms inside that script when useful; RPC is a deprecated compatibility adapter only"
     :check "./bin/asl check"
-    :not "treat RPC as the primary interface; treat :status ok as success without checking the typed receipt; execute unvalidated shell text or expose direct command descriptions to agents")
+    :why "ordinary ASN execution is the sole canonical operational surface; valid operations return typed ASN receipts with path and anchor, preventing unvalidated shell execution")
   (:rule :id note :force :affordance :tier [:affordance :full] :when [:all]
     :do "record working memory via asl note write when holding volatile context, architectural discoveries, or empirical findings that would otherwise be lost across steps; query active observations via asl note query or asl note list to prevent duplicate investigation"
     :check "./bin/asl note list"
@@ -665,8 +705,7 @@ description: >-
   (:rule :id capabilities :force :affordance :tier [:affordance :full] :when [:all]
     :do "know what you can do before you try: asl/grammar/capabilities.asn keys every capability by situation (orient find read understand plan change verify recover handoff observe) with a measured :status and a named :fallback; (:where) delivers the slice for the current step; when a capability is :absent or :lies, take its fallback and say so, never present the fallback result as the capability"
     :check "./bin/asl doctor"
-    :not "assume an op works because it is declared, or because it returned :status ok; 22 of 36 capabilities are :absent or :lies today"
-    :why "measured, not declared: :status is written by asl doctor into capabilities.lock, and a hand-edited status that contradicts measurement fails gate 7")
+    :why "epistemic grounding precedes invocation; active capabilities are verified by physical doctor measurement, unmeasured or absent capabilities execute declared fallback paths")
   (:rule :id output :force :orientation :tier [:orientation :full] :when [:all]
     :do "return typed receipts as ASN with path and symbol/anchor; never specify line numbers (Zero-Line-Number Invariant); reversible formatting and deduplication are fine; never drop evidence or constraints to save tokens; compare end-to-end success and total cost before adopting a compact representation"
     :check :none
@@ -720,11 +759,15 @@ description: >-
     :check :none
     :defeat "complete whole-file AST analysis or small schema generation"
     :why "degradation with context length is nonuniform and distractor-sensitive across 18 models (Chroma)")
+  (:rule :id tokenEconomics :force :heuristic :tier [:heuristic :full] :when [:all]
+    :do "attention density law: redundant tokens dilute Softmax attention mass on invariants; preserve KV cache via byte-stable prefixes, batch independent forms in one turn, address code by symbol slices, use CamelCase for BPE subword efficiency, mask execution logs to typed receipts, and enforce lossless reversibility"
+    :check "./bin/asl check"
+    :gate "./bin/asl check"
+    :why "every noise token reduces attention probability mass on constraints; S-expressions cut 55-75% JSON tax and CamelCase saves 44-50% on BPE identifiers")
   (:rule :id reconstructibility :force :affordance :tier [:affordance :full] :when [:all]
     :do "anything reconstructible from code, git history, or a command is not written to durable memory; reconstructible records are refused and the refusal names the command that reports it; rejected alternatives are accepted because no command reports what was not chosen"
     :check :none
-    :not "write durable records that duplicate git tree status or command output without meeting the reconstructibility test"
-    :why "restating command outputs creates drift and bloats context; durable records exist only for what cannot be reconstructed from the tree")
+    :why "memory records carry strictly novel non-reconstructible delta; tree status and command outputs are reconstructed on-demand from the substrate to eliminate context bloat")
   (:pack :id design :tier [:pack :full]
     :outcomes ["high visual signal to noise ratio" "typography hierarchy" "responsive layout boundaries" "compact VDOM token density"]
     :failureModes ["decorative gratuitous complexity" "unbounded layout shift" "unresponsive component containers"]
@@ -738,27 +781,42 @@ description: >-
     :failureModes ["unsourced numeric claims" "evaluating self-preference" "confusing normative principles with empirical findings"]
     :affordances ["bench telemetry" "token profiling" "direct tokenizer evaluation" "principles ledger"])
   (:pack :id multilensAudit :tier [:pack :full]
-    :outcomes ["dual-polarity refutation verification (D77)" "anti-falsification dynamic roundtripping (D89)" "genuine artifact parsing without mocking" "edge-case coverage verification"]
+    :outcomes ["dual-polarity refutation verification" "anti-falsification dynamic roundtripping" "genuine artifact parsing without mocking" "edge-case coverage verification"]
     :failureModes ["static string mocking" "vacuous positive assertions without refutes" "evaluating self-preference"]
-    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"]))
+    :affordances ["multilens roundtrip validation" "strict falsify harness" "receipt validation"])
+  (:pack :id architecture :tier [:pack :full]
+    :outcomes ["minimal causal surface" "bounded dependency DAG" "host interface independence" "polymorphic storage hierarchy" "circuit breaker limit cycles"]
+    :failureModes ["premature universalism" "unbounded coupling" "hidden ecosystem dependencies" "infinite oscillation cycles"]
+    :affordances ["asl audit consistency" "asl audit foreign" "storage engine switch" "circuit breaker escalation"])
+  (:pack :id cognitiveSlm :tier [:pack :full]
+    :outcomes ["sub-100ms cold start" "unified memory footprint <=24MB" "progressive disclosure bounded retrieval" "thinking-vs-exec budget arbitrage"]
+    :failureModes ["unbounded context explosion" "redundant full-file reads" "uncalibrated inference loops"]
+    :affordances ["asl mem query" "asl mem tree" "asl-slm telemetry" "observation masking"]))
+
 ```
+## Pure-ASN Toolbelt & Implicit Parallel Batches
 
-## Tool Suite Reference (verified 2026-09-11)
+Execute all searches, inspections, edits, and verifications via `asl '<form1> <form2> ...'`.
+Direct CLI command tables (`asl mem edit`, etc.) do NOT exist for external agents and must never be emitted.
+Multiple top-level forms execute concurrently in RAM VFS buffers by default without `:batch` wrappers.
 
-| Op | Status | Use |
+| Tool Form | Dense Contract (Turn 0) | Operational Guarantee |
 | :--- | :--- | :--- |
-| `(:sym "x")` `(:out "f")` `(:read "f" a b)` `(:sec "f" "h")` `(:ls "d")` | works | structure, slices, sections, listings |
-| `(:callers "x")` `(:impact "x")` | works | call graph, blast radius before changing an interface |
-| `(:find "glob")` | works, filename glob only | not a content search |
-| `(:grep "x")` `(:q "x")` | not implemented | use host search until Phase438 |
-| `(:edit "f" "old" "new")` | writes disk immediately | no staging; `(:diff)` `(:flush)` `(:discard)` report clean unconditionally until Phase438 |
-| `(:write "f" "text")` | works inside workspace | rejects paths outside the workspace |
-| `asl check <f>` `asl lint <f>` | work; exit 1 on violation | delimiters, C1, C2, C5 |
-| `asl test <f>` | delimiter check plus reached asserts | unreached asserts pass silently until Phase436 |
-| `(:plan …)` `(:where)` `(:step-done N :exit c :receipt r)` `(:checklist)` | planned (Phase441) | external working memory: re-anchor before each mutation, advance only with a receipt |
-| `(:budget)` `(:handoff)` `(:resume)` `(:recall q)` | planned (Phase441) | know when to compact; snapshot, reset, resume |
-| `:limit` / `:more` on every read op | planned (Phase441) | nothing enters the context unbounded |
-| `asl audit gates` `asl audit consistency` | work | see ADR-0081 for which gates are vacuous today |
+| `(:query <text> [:scope ...])` | `vector semantic search AST` | Sub-15ms BM25 and cosine ranking across AST symbols and ledgers |
+| `(:read :file <f> [:start :end])` | `bounded AST slice retrieval` | Targeted AST & code slice reading bounded by symbol |
+| `(:edit :file <f> :old <o> :new <n>)` | `stage atomic string replacement` | Virtual RAM buffer staging; isolated from disk until verified |
+| `(:diff [:file <f>])` | `inspect staged RAM diffs` | Inspect dirty RAM buffers and unified diffs prior to disk commit |
+| `(:flush)` | `persist staged edits disk` | Atomic fsync and rename from RAM staging to disk |
+| `(:discard)` | `clear staged RAM buffers` | Rollback pending RAM modifications with zero disk side-effects |
+| `(:doc :file <f> :section <s>)` | `read section without disk` | Bounded Markdown section extraction from AST without full reads |
+| `(:tree [:path <p>])` | `render dense structural hierarchy` | Dense structural telemetry across packages and ledgers in <80ms |
+| `(:check [:file <f>])` | `verify delimiter & syntax integrity` | Formal Dyck-1 balance, C1-C2 purity, and compiler diagnostics |
+| `(:test [:file <f>])` | `execute assertions under verification` | Popperian gate execution with executed assert counts > 0 |
+| `(:doctor)` | `audit measured capabilities & invariants` | Measured capability audit against capabilities.lock |
+| `(:sanitize :prompt <p>)` | `transpile plain text to ASN intent` | Pre-flight natural-language to pure-ASN Intent compiler |
+| `(:gate :id <g>)` | `verify dual-polarity red-green gate` | Gate execution with executed assert count > 0 |
+| `(:job <:spawn|:await|:status|:cancel> ...)` | `supervise async daemon jobs` | Resident daemon job management with circuit-breaker limit cycles |
+
 EOF
     echo "  ✓ Installed skill: ${target_dir}/SKILL.md"
   }
@@ -791,11 +849,13 @@ description: Activate AgentScript (ASL) toolchain
 ---
 
 # /asl: Activate Native ASL Toolchain
-Use native AgentScript (`asl`) toolchain for all code exploration, text search, editing, and verification:
-- Batch RPC: Execute through `asl rpc '(:batch ...)'` in a single roundtrip.
-- Outlines & Symbols: `(:out "file")`, `(:sym "name")`, `(:callers "name")`, `(:impact "name")`.
-- Search & Edit: `(:find "pattern")`, `(:edit "file" "old" "new")`, `(:diff)`, `(:flush)`.
-- Verification: `(:chk)` or `asl gate`.
+Execute all searches, inspections, edits, and verifications via `asl '<form1> <form2> ...'`:
+- Implicit Parallel Batches: Multiple top-level forms execute concurrently in RAM VFS buffers by default without `:batch` wrappers.
+- Query & Bounded Read: `(:query "text")`, `(:read :file "path" :start 1 :end 50)`, `(:doc :file "f" :section "s")`.
+- Memory Staging & Edit: `(:edit :file "f" :old "o" :new "n")`, `(:diff)`, `(:flush)`, `(:discard)`.
+- Verification & Gate: `(:check)`, `(:test)`, `(:doctor)`, `(:gate :id "g")`.
+- Transpiler Sanitizer: `(:sanitize :prompt "...")`.
+- Daemon Supervision: `(:job :spawn ...)` / `(:job :await ...)`.
 EOF
     echo "  ✓ Installed slash command: ~/.claude/commands/asl.md"
   fi
@@ -818,6 +878,8 @@ EOF
     if [ "$has_gemini" -eq 1 ] || [ "$selected_agents" != "all" ]; then
       write_skill_md "${HOME}/.gemini/config/skills/asl-toolbelt"
       write_skill_md "${HOME}/.gemini/skills/asl-toolbelt"
+      write_skill_md "${HOME}/.gemini/config/plugins/toolbelt/skills/asl-toolbelt"
+      write_skill_md "${HOME}/.gemini/config/plugins/toolbelt/harnesses/antigravity/skills/asl-toolbelt"
       inject_directive "${HOME}/.gemini/config/AGENTS.md"
       inject_directive "${HOME}/.gemini/config/rules/asl-toolbelt.md"
     fi

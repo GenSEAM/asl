@@ -213,6 +213,30 @@
       :rule "Refuted structural compaction rewrites (devowelling, delimiter deletion, indentation-significant rendering) are recorded with their empirical refutations and failure reasons; explicit delimiters remain the token-optimal structural encoding at current corpus depth, and reopening a refuted rewrite requires a new measurement rather than argument."
       :failureCode "ERR_REOPENED_REFUTED_REWRITE"
       :exitCode 1)
+    (:semantic :id quasiquoteAstSurgery
+      :rule "Homoiconic AST transformations execute exclusively through structured quasiquotation (:quote, :unquote, :splice) or node-addressed AST surgery; string-blasting code patches are rejected."
+      :failureCode "ERR_UNSTRUCTURED_AST_SURGERY"
+      :exitCode 1)
+    (:semantic :id patternMatchingExhaustiveness
+      :rule "Pattern matching constructs (:match) must provide exhaustive coverage over declared algebraic types or provide an explicit fallback; unhandled variant patterns fail at check time."
+      :failureCode "ERR_NON_EXHAUSTIVE_MATCH"
+      :exitCode 1)
+    (:semantic :id resultMonadReceiptBinding
+      :rule "Fallible operations produce typed monadic results (:ok val or :err reason) bound to verification receipts; uncaught silent exceptions or swallowed error buffers are forbidden."
+      :failureCode "ERR_UNBOUND_FALLIBLE_RESULT"
+      :exitCode 1)
+    (:semantic :id canonicalErrorFingerprinting
+      :rule "Circuit breaker error equivalence is evaluated by canonical fingerprint sha256(normalize(errClass + headSymbol + payload)); superficial edits to failed diffs do not evade the 3-failure cap."
+      :failureCode "ERR_CIRCUIT_BREAKER_EVASION"
+      :exitCode 1)
+    (:semantic :id selfDescribingResourceBudget
+      :rule "Complex multi-step actions must declare and enforce first-class resource budgets (:budget :tokens ?n :cost ?c :timeMs ?t); exceeding 2x budget trips supervisor escalation."
+      :failureCode "ERR_BUDGET_EXCEEDED"
+      :exitCode 1)
+    (:semantic :id dualSovereigntyPartition
+      :rule "The human owns decision sovereignty over actions and deployment (V0); the agent owns epistemic sovereignty over assertions and test results; human cannot compel fake green passes."
+      :failureCode "ERR_SOVEREIGNTY_VIOLATION"
+      :exitCode 1)
   ]
 )
 

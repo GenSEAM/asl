@@ -10,36 +10,28 @@
         (:theme
           :selector ":root"
           :tokens [
-            (:ground "248 247 252")
-            (:sunken "238 235 245")
-            (:surface "255 255 255")
-            (:inset "244 242 248")
-            (:line "225 219 236")
-            (:lineStrong "146 128 176")
-            (:ink "24 18 36")
-            (:ink2 "76 64 96")
-            (:ink3 "112 98 134")
-            (:signal "126 34 206")
-            (:signalSoft "147 51 234")
-            (:shadowHue "270 25% 10%")
-            (:shadowStrength "0.08")
-          ])
-        (:theme
-          :selector ".dark"
-          :tokens [
             (:ground "12 9 20")
-            (:sunken "4 2 7")
             (:surface "24 19 39")
             (:inset "17 13 29")
             (:line "48 38 72")
             (:lineStrong "136 102 198")
             (:ink "246 244 255")
-            (:ink2 "198 183 253")
-            (:ink3 "152 140 175")
+            (:inkMuted "152 140 175")
             (:signal "176 96 255")
-            (:signalSoft "198 142 255")
-            (:shadowHue "270 50% 5%")
-            (:shadowStrength "0.65")
+            (:accent "192 132 252")
+          ])
+        (:theme
+          :selector "[data-theme=\"light\"]"
+          :tokens [
+            (:ground "248 247 252")
+            (:surface "255 255 255")
+            (:inset "244 242 248")
+            (:line "225 219 236")
+            (:lineStrong "146 128 176")
+            (:ink "24 18 36")
+            (:inkMuted "112 98 134")
+            (:signal "126 34 206")
+            (:accent "147 51 234")
           ])
       ]
       :rules [

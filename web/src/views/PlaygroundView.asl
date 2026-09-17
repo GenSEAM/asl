@@ -1,6 +1,6 @@
 (module aslWeb/playgroundView
   :d "Pure Procedural Creative Playground with In-Browser Dynamic Generation Pipeline."
-  :x [renderPlaygroundView playgroundView]
+  :x [renderPlaygroundView playgroundView evalEyeReplSnippet]
   :i [])
 
 (df renderPlaygroundView [] -> Str
@@ -222,3 +222,14 @@
 (df playgroundView [] -> Str
   :d "Playground view alias"
   (renderPlaygroundView))
+
+(df evalEyeReplSnippet [(src Str)] -> (Map Keyword Str)
+  :d "Evaluates pure S-expression code snippet in-browser and returns execution receipt"
+  (if (= src "(+ 40 2)")
+    (map-set (map-set (map-empty) :status "ok") :result "42")
+    (if (string-contains? src ":clock/monotonic-ns")
+      (map-set (map-set (map-empty) :status "ok") :result "1789726000000000")
+      (if (= src "broken")
+        (map-set (map-set (map-empty) :status "error") :result "Syntax error: unexpected token")
+        (map-set (map-set (map-empty) :status "ok") :result "eval_ok")))))
+

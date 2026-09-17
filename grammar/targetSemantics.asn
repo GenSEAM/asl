@@ -1,0 +1,99 @@
+(:targetSemantics :src D81 :decision D93
+  :summary "Formal specification of cross-platform target execution semantics, conformance tiers, and mutant contracts."
+  :profiles [
+    (:profile :id "c11"
+              :name "C11 Native"
+              :compiler "clang -std=c11 -Wall -Werror -fsanitize=undefined,address -fno-sanitize-recover=all -ffp-contract=off"
+              :tier "A"
+              :defaultRepr (:optionScalar :tagged :optionHeap :nullable))
+    (:profile :id "ts"
+              :name "TypeScript / Node"
+              :compiler "tsc"
+              :tier "A"
+              :defaultRepr (:optionScalar :tagged :optionHeap :tagged))
+    (:profile :id "py"
+              :name "Python 3"
+              :compiler "python3"
+              :tier "A"
+              :defaultRepr (:optionScalar :tagged :optionHeap :tagged :optionUnit :tagged))
+    (:profile :id "wasm"
+              :name "WebAssembly WASI"
+              :compiler "wat2wasm"
+              :tier "A"
+              :defaultRepr (:optionScalar :tagged :optionHeap :tagged))
+  ]
+  :tiers [
+    (:tier :id "A" :name "Core Arithmetic, Bitwise, Scalar Option, and Stdout")
+    (:tier :id "B" :name "Algebraic Data Types, Pattern Match Decision Trees, and Closures")
+    (:tier :id "X" :name "Concurrency, Fibers, OPFS Storage, and Host FFI")
+  ]
+  :rules [
+    (:rule :id "divModFloor"
+           :tier "A"
+           :name "Floored Integer Division and Modulo"
+           :summary "div performs floor(a/b); mod performs a - b*floor(a/b). quot performs trunc(a/b); rem performs a - b*trunc(a/b)."
+           :cases ["tests/conformance/xplat/div_mod_positive"
+                   "tests/conformance/xplat/div_mod_negative"
+                   "tests/conformance/xplat/div_mod_pos_neg"
+                   "tests/conformance/xplat/div_mod_neg_neg"
+                   "tests/conformance/xplat/div_mod_zero_dividend"
+                   "tests/conformance/xplat/div_mod_bounds"]
+           :mutants [
+             (:mutant :id "divModFloorOmitMutant"
+                      :target "asl-target-py"
+                      :desc "Emit native % directly without floored modulus correction for negative numbers"
+                      :kills "tests/conformance/xplat/div_mod_negative")
+             (:mutant :id "divModTruncOmitMutant"
+                      :target "asl-target-c"
+                      :desc "Emit truncating division for div without sign adjustment"
+                      :kills "tests/conformance/xplat/div_mod_negative")
+           ])
+    (:rule :id "shiftMask"
+           :tier "A"
+           :name "Masked Bitwise Integer Shifts"
+           :summary "Shift count right operand must be masked: & 63 for 64-bit integers and & 31 for 32-bit integers."
+           :cases ["tests/conformance/xplat/shift_mask_64"
+                   "tests/conformance/xplat/shift_mask_overflow"]
+           :mutants [
+             (:mutant :id "shiftMaskOmitMutant"
+                      :target "asl-target-c"
+                      :desc "Omit & 63 mask on 64-bit shift operations causing C11 UBSan shift-out-of-bounds trap"
+                      :kills "tests/conformance/xplat/shift_mask_overflow")
+           ])
+    (:rule :id "intWrap"
+           :tier "A"
+           :name "Two's Complement 64-bit Integer Wrap"
+           :summary "Integer addition, subtraction, and multiplication must wrap modulo 2^64 cleanly with zero signed overflow UB."
+           :cases ["tests/conformance/xplat/int_wrap_add"
+                   "tests/conformance/xplat/int_wrap_mul"]
+           :mutants [
+             (:mutant :id "intWrapSignedMutant"
+                      :target "asl-target-c"
+                      :desc "Perform signed addition without unsigned casting triggering UBSan signed-integer-overflow"
+                      :kills "tests/conformance/xplat/int_wrap_add")
+           ])
+    (:rule :id "floatRoundtrip"
+           :tier "A"
+           :name "Shortest IEEE 754 Float Round-Trip Formatting"
+           :summary "Float formatting to decimal string and parsing back must recover exact 64-bit IEEE 754 bit pattern."
+           :cases ["tests/conformance/xplat/float_roundtrip_precision"]
+           :mutants [
+             (:mutant :id "floatFormatLossyMutant"
+                      :target "asl-target-c"
+                      :desc "Format floats with naive fixed 6 decimal digits precision"
+                      :kills "tests/conformance/xplat/float_roundtrip_precision")
+           ])
+    (:rule :id "optionRepr"
+           :tier "A"
+           :name "Option Unit Tag Preservation"
+           :summary "Option Unit (some ()) must never collapse into None/null; it must preserve tag distinction from none."
+           :cases ["tests/conformance/xplat/option_unit_repr"
+                   "tests/conformance/xplat/option_scalar_repr"]
+           :mutants [
+             (:mutant :id "optionUnitNullMutant"
+                      :target "asl-target-py"
+                      :desc "Collapse Option Unit directly into None under Python"
+                      :kills "tests/conformance/xplat/option_unit_repr")
+           ])
+  ]
+)

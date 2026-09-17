@@ -8,15 +8,20 @@
   :i [(aslWeb/blogPosts :a blog)])
 
 (df testBlogPostsCount [] -> Bool
-  :d "Verifies total blog post catalog contains exactly 23 articles"
+  :d "Verifies total blog post catalog contains exactly 28 articles"
   (let [(allPosts (blog/getAllPosts))]
-    (assert (= (listLen allPosts) 23) "post count is not 23")
+    (assert (= (listLen allPosts) 28) "post count is not 28")
     (assert (not (= (listLen allPosts) 0)) "post count must not be 0")
     true))
 
 (df testBlogPostsSlugs [] -> Bool
-  :d "Verifies presence of all 23 canonical slugs across catalog"
+  :d "Verifies presence of all 28 canonical slugs across catalog"
   (do
+    (assert (!= (blog/getPostBySlug "clean-break-v04") nil) "missing slug clean-break-v04")
+    (assert (!= (blog/getPostBySlug "the-stateless-nine-syscall-kernel") nil) "missing slug the-stateless-nine-syscall-kernel")
+    (assert (!= (blog/getPostBySlug "s-expression-wire-protocol-vs-json-rpc") nil) "missing slug s-expression-wire-protocol-vs-json-rpc")
+    (assert (!= (blog/getPostBySlug "zero-line-number-invariant") nil) "missing slug zero-line-number-invariant")
+    (assert (!= (blog/getPostBySlug "slm-inference-apple-silicon") nil) "missing slug slm-inference-apple-silicon")
     (assert (!= (blog/getPostBySlug "why-3b-local-models-fail-at-python-but-fly-on-s-expressions") nil) "missing slug 22")
     (assert (!= (blog/getPostBySlug "the-death-of-json-rpc-and-zero-copy-wire-protocols") nil) "missing slug 23")
         (assert (!= (blog/getPostBySlug "zero-overhead-test-telemetry-and-resource-observability") nil) "missing slug 21")

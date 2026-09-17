@@ -1,0 +1,53 @@
+(:grammar
+  :id "asl-swarm-grammar"
+  :version 1
+  :package "asl-swarm"
+  :doc "Swarm coordination, Merkle Optimistic Concurrency Control, and blast radius scheduling schema under ADR D97"
+  :types [
+    (:type :name "SwarmClaim"
+           :doc "Worker write set and Merkle base root claim descriptor"
+           :fields [
+             (:f :name "taskId" :type "String")
+             (:f :name "workerId" :type "String")
+             (:f :name "leaseTimestamp" :type "Int64")
+             (:f :name "writeSet" :type "List String")
+             (:f :name "readClosure" :type "List String")
+             (:f :name "baseMerkleRoot" :type "String")
+           ])
+
+    (:type :name "MerkleCommit"
+           :doc "Candidate Merkle commit record submitted by worker"
+           :fields [
+             (:f :name "claimId" :type "String")
+             (:f :name "workerId" :type "String")
+             (:f :name "candidateMerkleRoot" :type "String")
+             (:f :name "diffCount" :type "Int64")
+             (:f :name "committed" :type "Bool")
+           ])
+
+    (:type :name "ConflictReport"
+           :doc "OCC collision report emitted when base Merkle root diverged"
+           :fields [
+             (:f :name "status" :type "String")
+             (:f :name "reason" :type "String")
+             (:f :name "baseRoot" :type "String")
+             (:f :name "currentRoot" :type "String")
+             (:f :name "conflictingWorker" :type "String")
+             (:f :name "retryCount" :type "Int64")
+           ])
+
+    (:type :name "WorkerPartition"
+           :doc "Bin-packed disjoint worker schedule partition"
+           :fields [
+             (:f :name "workerId" :type "String")
+             (:f :name "taskIds" :type "List String")
+             (:f :name "combinedWriteSet" :type "List String")
+           ])
+
+    (:type :name "OccState"
+           :doc "Active Merkle root and lease tracking state for OCC manager"
+           :fields [
+             (:f :name "currentRoot" :type "String")
+             (:f :name "activeLeases" :type "Map String Int64")
+           ])
+  ])
