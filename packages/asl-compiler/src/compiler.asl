@@ -1,6 +1,6 @@
 (module asl-compiler/compiler
   :d "Self-hosting AgentScript compiler core: parse, check and lower to ISO C99."
-  :x [CompileResult compileSourceToC99 compilePackageToC99! formatDiagnostic]
+  :x [CompileResult compileSourceToC99 compilePackageToC99! formatDiagnostic compileSourceTarget compileStandaloneTarget]
   :i [(ast :a a) (types :a ty) (check :a chk) (resolve :a r) (c99Emit :a c99) (c99Mangle :a cm)])
 
 (dfs CompileResult
@@ -38,6 +38,16 @@
            (let [(formatted (formatDiagnostics diags))]
              (CompileResult :ok false :code "" :diagnostics formatted))
            (CompileResult :ok true :code (c99/emitCStandalone forms "" isFreestanding) :diagnostics (list)))))))
+
+(df compileSourceTarget [(src Str) (target Str) (deps (Map Str r/ModuleSummary)) (path Str)] -> CompileResult
+  :d "Compiles a standalone source string to the requested target. Core retains C99 backends; non-core targets are decoupled."
+  (if (or (or (= target "c99") (= target "c")) (= target "c-embedded"))
+      (compileSourceToC99 src path (= target "c-embedded"))
+      (CompileResult :ok false :code "" :diagnostics (list (str "Target '" target "' decoupled from core; use dynamic pluggable backend")))))
+
+(df compileStandaloneTarget [(src Str) (target Str) (path Str)] -> CompileResult
+  :d "Compiles a standalone source file for a specific target with no external dependencies."
+  (compileSourceTarget src target (map-empty) path))
 
 (df makeExpMacro [(al Str) (fnName Str)] -> Str
   :d "Constructs C macro alias definition for exported function."
