@@ -1,0 +1,8 @@
+(:package asl-target-py
+ :version "0.1.0"
+ :entry "src/emitPy.asl"
+ :description "Standalone Python 3.11+ emitter backend for AgentScript"
+ :aslFirst true
+ :layer 0
+ :modules ["asl-target-py/emitPy"]
+ :dependencies ["asl-parser" "asl-checker"])
