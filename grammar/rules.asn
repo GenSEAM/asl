@@ -44,6 +44,10 @@
     :check "./bin/asl doctor"
     :gate "./bin/asl doctor"
     :why "prevents infinite apology loops and token-burning thrash by turning repeated failure into an explicit phase boundary")
+  (:rule :id workspaceIsolation :force :invariant :tier [:essential :full] :when [:all]
+    :do "workspace zero-remote invariant: the workspace monorepo (asex) is strictly local and never pushed anywhere; it has no git remotes (origin is forbidden); remote git@github.com:GenSEAM/asl.git belongs exclusively to the standalone ASL package (asl/); never attach workspace root to remote or push workspace commits to GitHub"
+    :check :none
+    :why "pushing the workspace leaked private monorepo packages, plans, and internal tooling to the public ASL repository; workspace must remain unanchored to any remote")
   (:rule :id inMemoryAsl :force :affordance :tier [:affordance :full] :when [:scout :plan :implement]
     :do "in foreign codebases (Python, TypeScript, Rust, Go, C), agents reason in-memory using ASL/ASN action DAGs and typed scratchpads, then lower verified operations to native target diffs"
     :check "./bin/asl check"
