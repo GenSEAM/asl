@@ -54,7 +54,7 @@ In AgentScript, **memory is homoiconic**:
 - Memory records are native **S-expressions** (`.asn` and `.asl`).
 - Memory is not dead documentation; it is executable logic, dynamic schemas, and active guards.
 
-```lisp
+```asn
 (:invariant
   :id "C0001"
   :name "zero-comment-policy"
@@ -62,7 +62,7 @@ In AgentScript, **memory is homoiconic**:
   :tier :package
   :scope "packages/asl-checker"
   :uri "mem:asl/checker/invariants/C0001"
-  :predicate (df check-zero-comments [(source String)] -> Bool
+  :predicate (fn checkZeroComments source: Str -> Bool
                (not (string-contains? source ";;")))
   :rationale "Preserve maximum token density and machine understandability in pure ASL.")
 ```
@@ -107,7 +107,7 @@ sequenceDiagram
 - **`mode-snapshot`**: Immutable manifest snapshots synced to Git commits.
 - **`mode-journaled-wal`**: Append-only transaction write-ahead logs for multi-agent concurrency.
 
-The agent interacts exclusively with logical URIs; the underlying storage engine adapts seamlessly between local filesystems, Git repositories, and in-browser WASM virtual file systems.
+The agent interacts exclusively with logical URIs; the underlying storage engine routes I/O across local filesystems, Git repositories, and in-browser WASM virtual file systems without leaky abstractions.
 
 ---
 

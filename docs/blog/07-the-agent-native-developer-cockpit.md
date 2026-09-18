@@ -44,13 +44,13 @@ The AgentScript **Doctor & Self-Healing Engine** (`tools/heal.py`) turns diagnos
   :d "In-memory telemetry counters for agent cockpit."
   :x [Counter record-tick])
 
-(dfs Counter
-  (:f name Str "Metric name")
-  (:f ticks I64 "Cumulative ticks"))
+schema Counter
+  name: Str "Metric name"
+  ticks: I64 "Cumulative ticks"
 
-(df record-tick [(c Counter)] -> Counter
+fn recordTick c: Counter -> Counter
   :d "Increment counter tick value."
-  (Counter :name (.-name c) :ticks (+ (.-ticks c) 1)))
+  (Counter :name (.-name c) :ticks (+ (.-ticks c) 1))
 ```
 
 ### Automated Repair Rules:

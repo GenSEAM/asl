@@ -54,26 +54,26 @@ AgentScript (ASL) was designed to act as the universal semantic substrate. Inste
 ```agentscript
 (module math/vector
   :d "2D vector transformations and geometry"
-  :x [Vec2 dot-product magnitude normalize])
+  :x [Vec2 dotProduct magnitude normalize])
 
-(dfs Vec2
-  (:f x F64 "X coordinate")
-  (:f y F64 "Y coordinate"))
+schema Vec2
+  x: F64 "X coordinate"
+  y: F64 "Y coordinate"
 
-(df dot-product [(a Vec2) (b Vec2)] -> F64
+fn dotProduct a: Vec2 b: Vec2 -> F64
   :d "Calculates the dot product of two vectors"
-  (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b))))
+  (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b)))
 
-(df magnitude [(v Vec2)] -> F64
+fn magnitude v: Vec2 -> F64
   :d "Calculates Euclidean length"
-  (sqrt (+ (* (.-x v) (.-x v)) (* (.-y v) (.-y v)))))
+  (sqrt (+ (* (.-x v) (.-x v)) (* (.-y v) (.-y v))))
 
-(df normalize [(v Vec2)] -> Vec2
+fn normalize v: Vec2 -> Vec2
   :d "Returns unit vector or zero vector if length is zero"
   (let [(m (magnitude v))]
     (if (= m 0.0)
       (Vec2 :x 0.0 :y 0.0)
-      (Vec2 :x (/ (.-x v) m) :y (/ (.-y v) m)))))
+      (Vec2 :x (/ (.-x v) m) :y (/ (.-y v) m))))
 ```
 
 From this single source file, the ASL compiler deterministically emits native code across priority targets:

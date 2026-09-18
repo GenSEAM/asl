@@ -88,13 +88,13 @@ AgentScript (Standard ASL):
   :d "Dot product and vector operations."
   :x [Point dot])
 
-(dfs Point
-  (:f x F64 "X coordinate")
-  (:f y F64 "Y coordinate"))
+schema Point
+  x: F64 "X coordinate"
+  y: F64 "Y coordinate"
 
-(df dot [(a Point) (b Point)] -> F64
+fn dot a: Point b: Point -> F64
   :d "Sum of coordinate products."
-  (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b))))
+  (+ (* (.-x a) (.-x b)) (* (.-y a) (.-y b)))
 ```
 
 The compiler parses both projections into the exact same internal AST representation. Tools like `asl view` and `asl transcode` switch between them deterministically via AST manipulation—never through brittle text substitution.
@@ -119,10 +119,10 @@ AgentScript enforces the **2-Token Ceiling**:
 3. **Symbolic Rationale Anchors:** Long architectural justifications are extracted out-of-band into the project memory ledger (`.asl/mem/`), referenced in code by a compact 3-character tag (e.g. `@s02`, `@sec`, `@d01`):
 
 ```agentscript
-(df calculate-signature [(payload Str) (key Str)] -> Str
+fn calculateSignature payload: Str key: Str -> Str
   :d "HMAC-SHA256 digest calculation."
   "@s02"
-  (str payload key))
+  (str payload key)
 ```
 
 An agent reading the code spends only 2 tokens on `"@s02"`. If—and only if—it needs the historical design tradeoff, it queries the ledger out-of-band:

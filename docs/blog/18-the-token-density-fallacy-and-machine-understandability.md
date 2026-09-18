@@ -92,7 +92,7 @@ Through our consultation with Claude Fable 5, we defined **The Boundary Rule**:
 
 ## 4. Agent Operational Physics: Edit-Anchor Uniqueness & Grep Precision
 
-Beyond token counts and BPE embeddings lies a crucial practical constraint of modern AI agents: **how agents actually manipulate files**.
+Beyond token counts and BPE embeddings lies a hard physical constraint of autonomous code generation: **how agents actually manipulate files on disk**.
 
 Autonomous agents (including Claude Code, Factory Droid, EDDIE, and Gemini Code) do not operate via AST byte-offsets. They inspect code with `grep` and apply modifications using string-replacement blocks:
 ```text

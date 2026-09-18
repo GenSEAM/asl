@@ -42,9 +42,9 @@ AgentScript compiles directly to `wasm32-wasip1` bytecode. Rather than dispatchi
   :d "In-memory cyclic redundancy checksum with zero syscall overhead."
   :x [checksum])
 
-(df checksum [(bytes (List I64))] -> I64
+fn checksum bytes: (List I64) -> I64
   :d "Calculate 32-bit CRC over byte sequence."
-  (list-fold (fn [(acc I64) (b I64)] -> I64 (+ (* acc 31) b)) 0 bytes))
+  (list-fold (fn [(acc I64) (b I64)] -> I64 (+ (* acc 31) b)) 0 bytes)
 ```
 
 ### The Architectural Pipeline:

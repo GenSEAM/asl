@@ -1,9 +1,9 @@
 # How to Fix Agentic Coding: Why Autonomous LLMs Break on Human Languages (and What Replaces Them)
 *By GenSEAM | September 2026*
 
-Modern autonomous coding agents (Devin, Claude Code, Cursor, Codex derivatives) spend between **32% and 41% of their inference compute and context budgets** trapped in a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. 
+Modern autonomous coding agents (Devin, Claude Code, Cursor, Codex derivatives) frequently find a substantial fraction of their inference compute and context budgets consumed by a tight loop: generate, syntax error, patch, cascade indentation failure, re-query, repeat. 
 
-In compiler engineering, this is known as the **Syntax Repair Tax**. It is not an artifact of model parameter size or pre-training dataset scale. It is a fundamental information-theoretic mismatch between **left-to-right autoregressive token generation** and **20th-century human-centric grammar designs**.
+In compiler engineering, we characterize this phenomenon as the **Syntax Repair Tax**. It is not merely an artifact of model parameter size or pre-training dataset scale. It is an information-theoretic mismatch between **left-to-right autoregressive token generation** and **20th-century human-centric grammar designs**.
 
 Python and Rust represent two dominant paradigms of modern systems and application programming. Both, for radically different architectural reasons, are hostile to the computational geometry of transformer attention heads.
 
@@ -84,15 +84,15 @@ AgentScript (ASL) rejects both indentation-based scoping and implicit operator p
   :d "Geometric primitives with compile-time validation."
   :x [Shape area])
 
-(dfe Shape
-  (:c circle [(radius F64)] "Circle with radius")
-  (:c rect [(width F64) (height F64)] "Rectangle with width and height"))
+schema Shape
+  circle: (radius F64)
+  rect: (width F64 height F64)
 
-(df area [(s Shape)] -> F64
+fn area s: Shape -> F64
   :d "Calculate area across all shape variants."
   (mt s
     ((circle r) (* 3.141592653589793 (* r r)))
-    ((rect w h) (* w h))))
+    ((rect w h) (* w h)))
 ```
 
 ### Why S-Expressions Eliminate Hallucination in Attention Heads

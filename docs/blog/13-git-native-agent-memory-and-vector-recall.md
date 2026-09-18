@@ -45,35 +45,33 @@ $$10{,}000 \times 45\,\text{ns} = 0.45\,\text{ms}$$
 
 AgentScript provides native algebraic vector operations inside `packages/asl-mem/src/store.asl`. The implementation is zero-dependency and compiles directly to Wasm:
 
-```agp
-;; Definition of a vector item in asl-mem
-(dfs VectorItem
-  (:f id Str "Unique memory snapshot identifier")
-  (:f text Str "Text payload the vector was derived from")
-  (:f vector (List F64) "Dense semantic embedding vector"))
+```agentscript
+schema VectorItem
+  id: Str "Unique memory snapshot identifier"
+  text: Str "Text payload the vector was derived from"
+  vector: (List F64) "Dense semantic embedding vector"
 
-(dfs VectorStore
-  (:f name Str "Store name")
-  (:f dimensions I64 "Embedding dimension (e.g. 384, 768, 1536)")
-  (:f items (List VectorItem) "In-memory vector collection"))
+schema VectorStore
+  name: Str "Store name"
+  dimensions: I64 "Embedding dimension (e.g. 384, 768, 1536)"
+  items: (List VectorItem) "In-memory vector collection"
 ```
 
 ### Sub-0.05ms Dot-Product Calculation
 The cosine similarity kernel is evaluated directly inside the Wasm execution sandbox without host boundary crossing:
 
-```agp
-;; In-memory dot product and norm calculation
-(df dot [(a (List F64)) (b (List F64))] -> F64
+```agentscript
+fn dot a: (List F64) b: (List F64) -> F64
   :d "Sum of pairwise products, truncating to the shorter vector."
   (list-sum (map (fn [(p (Pair F64 F64))] -> F64 (* (.-first p) (.-second p)))
-                 (zip a b))))
+                 (zip a b)))
 
-(df cosine-similarity [(a (List F64)) (b (List F64))] -> F64
+fn cosineSimilarity a: (List F64) b: (List F64) -> F64
   :d "Cosine of the angle between two vectors; 0.0 when either has no length."
   (let [(denom (* (vector-norm a) (vector-norm b)))]
     (if (= denom 0.0)
       0.0
-      (/ (dot a b) denom))))
+      (/ (dot a b) denom)))
 ```
 
 When evaluated in the AgentScript WebAssembly runtime, a top-10 nearest neighbor search across 1,000 project memories completes in **0.038ms**—over 6,000 times faster than an external vector database API call.

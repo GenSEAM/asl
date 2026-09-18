@@ -33,25 +33,25 @@ Consider an uncompressed order processing module (390 tokens):
 ```agentscript
 (module store/orders
   :d "Order management and tax calculations"
-  :x [Order OrderStatus calculate-total])
+  :x [Order OrderStatus calculateTotal])
 
-(dfe OrderStatus
-  (:c pending [] "Awaiting payment")
-  (:c completed [(tx-id Str)] "Processed successfully"))
+schema OrderStatus
+  pending: Unit "Awaiting payment"
+  completed: (txId Str) "Processed successfully"
 
-(dfs Order
-  (:f id I64 "Order ID")
-  (:f total F64 "Net price"))
+schema Order
+  id: I64 "Order ID"
+  total: F64 "Net price"
 
-"Private internal helper - irrelevant to external callers"
-(df regional-tax-multiplier [(rate F64)] -> F64
-  (+ 1.0 (/ rate 100.0)))
+fn regionalTaxMultiplier rate: F64 -> F64
+  :d "Private internal helper - irrelevant to external callers"
+  (+ 1.0 (/ rate 100.0))
 
-(df calculate-total [(items (List Order)) (tax-rate F64)] -> F64
+fn calculateTotal items: (List Order) taxRate: F64 -> F64
   :d "Sums order items with regional tax applied"
   (let [(subtotal (list-sum (map (fn [(o Order)] -> F64 (.-total o)) items)))
-        (multiplier (regional-tax-multiplier tax-rate))]
-    (* subtotal multiplier)))
+        (multiplier (regionalTaxMultiplier taxRate))]
+    (* subtotal multiplier))
 ```
 
 When passed to a peer subagent that merely needs to construct orders or query prices, the ASL toolchain projects this file through AST interface extraction down to **82 tokens**:
@@ -59,19 +59,19 @@ When passed to a peer subagent that merely needs to construct orders or query pr
 ```agentscript
 (module store/orders
   :d "Order management and tax calculations"
-  :x [Order OrderStatus calculate-total])
+  :x [Order OrderStatus calculateTotal])
 
-(dfe OrderStatus
-  (:c pending [] "Awaiting payment")
-  (:c completed [(tx-id Str)] "Processed successfully"))
+schema OrderStatus
+  pending: Unit "Awaiting payment"
+  completed: (txId Str) "Processed successfully"
 
-(dfs Order
-  (:f id I64 "Order ID")
-  (:f total F64 "Net price"))
+schema Order
+  id: I64 "Order ID"
+  total: F64 "Net price"
 
-(df calculate-total [(items (List Order)) (tax-rate F64)] -> F64
+fn calculateTotal items: (List Order) taxRate: F64 -> F64
   :d "Sums order items with regional tax applied"
-  0.0)
+  0.0
 ```
 
 ### Why Naive Stripping Fails: The Valid Stub Invariant
