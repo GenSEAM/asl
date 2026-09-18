@@ -52,4 +52,5 @@
     ((ok _) (ok ()))
     ((err msg)
      (let [(unused (eprintln msg))]
-       (ok ())))))
+       (err (other))))))
+
