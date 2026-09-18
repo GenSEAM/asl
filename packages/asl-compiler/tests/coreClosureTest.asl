@@ -33,9 +33,8 @@
               ((err _) (list))
               ((ok deps) (map-keys deps))))))))))
 
-(df ! testCoreClosureExcludesForeignBackends [] -> Bool
-  :d "Every non-C99 backend must stay outside the bootstrap closure."
-  (let [(mods (entryClosureModules))]
+(df testExcludes [(mods (List Str))] -> Bool
+  (do
     (assert (> (list-length mods) 5) "the closure must actually resolve, not collapse to empty")
     (refute (list-contains? mods "emitWat") "the WAT backend must not reach the self-hosting core")
     (refute (list-contains? mods "emitGo") "the Go backend must not reach the self-hosting core")
@@ -48,26 +47,36 @@
     (refute (list-contains? mods "rtypes") "the Rust type mapper must not reach the self-hosting core")
     true))
 
-(df ! testCoreClosureKeepsLanguageCore [] -> Bool
-  :d "The language core and its C99 backend must remain reachable."
-  (let [(mods (entryClosureModules))]
+(df testKeeps [(mods (List Str))] -> Bool
+  (do
     (assert (list-contains? mods "compiler") "the compiler core stays in the closure")
     (assert (list-contains? mods "c99Emit") "the C99 backend stays in the closure")
     (assert (list-contains? mods "check") "the type checker stays in the closure")
     (assert (list-contains? mods "reader") "the reader stays in the closure")
     true))
 
-(df ! testCoreClosureRefutations [] -> Bool
-  :d "Dual-polarity guard under D77: the membership test must be able to answer both ways."
-  (let [(mods (entryClosureModules))]
+(df testRefutations [(mods (List Str))] -> Bool
+  (do
     (assert (list-contains? mods "compiler") "a module that is present reads as present")
     (refute (list-contains? mods "emitPy") "a module that was never in the closure reads as absent")
     (refute (list-contains? mods "thisModuleDoesNotExist") "an invented name must not report as present")
     true))
 
+(df ! testCoreClosureExcludesForeignBackends [] -> Bool
+  :d "Every non-C99 backend must stay outside the bootstrap closure."
+  (testExcludes (entryClosureModules)))
+
+(df ! testCoreClosureKeepsLanguageCore [] -> Bool
+  :d "The language core and its C99 backend must remain reachable."
+  (testKeeps (entryClosureModules)))
+
+(df ! testCoreClosureRefutations [] -> Bool
+  :d "Dual-polarity guard under D77: the membership test must be able to answer both ways."
+  (testRefutations (entryClosureModules)))
+
 (df ! runTests [] -> Bool
-  (do
-    (assert (testCoreClosureExcludesForeignBackends) "testCoreClosureExcludesForeignBackends")
-    (assert (testCoreClosureKeepsLanguageCore) "testCoreClosureKeepsLanguageCore")
-    (assert (testCoreClosureRefutations) "testCoreClosureRefutations")
+  (let [(mods (entryClosureModules))]
+    (assert (testExcludes mods) "testCoreClosureExcludesForeignBackends")
+    (assert (testKeeps mods) "testCoreClosureKeepsLanguageCore")
+    (assert (testRefutations mods) "testCoreClosureRefutations")
     true))
