@@ -347,10 +347,10 @@
                     (nextLoaded (map-set loaded modPath summary))]
                 (foldDeps! roots rest nextLoaded))
               (mt (file-read fpath)
-                ((err pe) (print (str "READ ERROR in " fpath ": " (.-message pe))) (foldDeps! roots rest loaded))
+                ((err pe) (print (str "READ ERROR in " fpath ": " (.-message pe) "\n")) (foldDeps! roots rest loaded))
                 ((ok src)
                  (mt (a/parse src)
-                   ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe))) (foldDeps! roots rest loaded))
+                   ((err pe) (print (str "PARSE ERROR in " fpath ": " (.-msg pe) "\n")) (foldDeps! roots rest loaded))
                    ((ok forms)
                     (let [(summary (collectSummary forms fpath))
                           (nextLoaded (map-set (map-set loaded modPath summary) fpath summary))
