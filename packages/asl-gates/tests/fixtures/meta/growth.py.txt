@@ -1,0 +1,5 @@
+# first plain line
+# second plain line
+def grown():
+    """a docstring line"""
+    return 1

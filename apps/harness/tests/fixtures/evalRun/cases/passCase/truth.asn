@@ -1,0 +1,1 @@
+(:defect :file "src/calc.txt" :anchor "return a - b" :kind "wrong-op")

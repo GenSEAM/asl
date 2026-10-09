@@ -1,0 +1,1 @@
+(= (label (s/circle 2.0)) "circle")

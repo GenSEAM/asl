@@ -1,0 +1,1 @@
+(and (= (shout "  hi ") "HI!") (= (initials "ada lovelace") "A.L") (= (parsePair " 21 ") (ok 42)) (= (evensBelow 6) (list 0 2 4)) (= (total (list 1 2 3)) 6))

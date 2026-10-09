@@ -1,0 +1,4 @@
+(module aslAgent/tests/ffiTest :x [runTests] :i [(ffi :a ffi)])
+
+fn ! runTests -> Bool
+  (let [(req (ffi/makeHostRequest "fs" "read" "/tmp/test"))] (assert (ffi/isValidCapability? "fs") "fs is valid") (assert (not (ffi/isValidCapability? "invalid")) "invalid is invalid") (assert (err? (ffi/hostCall! "exec" "exec" "asl/packages/asl-agent/tests/ffiTest.asl")) "exec is an error in the stage-0 sandbox, not a mock success") (assert (err? (ffi/hostCall! "fs" "write" "asl/packages/asl-agent/tests/ffiTest.asl")) "fs write is an error, it does not overwrite the payload path") (assert (ok? (ffi/hostCall! "fs" "read" "asl/packages/asl-agent/tests/ffiTest.asl")) "fs read of an existing file is ok") (assert (err? (ffi/hostCall! "fs" "read" "asl/packages/asl-agent/tests/noSuchFile.asl")) "fs read of a missing file is an error") true)

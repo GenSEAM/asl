@@ -1,0 +1,1121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AslAst",
+  "description": "JSON schema of the ASL AST for provider structured output (agy --json-schema)",
+  "$defs": {
+    "ImportEntry": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Imported module path"
+        },
+        "alias": {
+          "type": "string",
+          "description": "Local alias for module"
+        }
+      },
+      "required": [
+        "path",
+        "alias"
+      ],
+      "additionalProperties": false
+    },
+    "LetBinding": {
+      "type": "object",
+      "properties": {
+        "pat": {
+          "$ref": "#/$defs/AstPattern"
+        },
+        "val": {
+          "$ref": "#/$defs/AstExpr"
+        }
+      },
+      "required": [
+        "pat",
+        "val"
+      ],
+      "additionalProperties": false
+    },
+    "FieldPattern": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Record field pattern name"
+        },
+        "pat": {
+          "$ref": "#/$defs/AstPattern"
+        }
+      },
+      "required": [
+        "name",
+        "pat"
+      ],
+      "additionalProperties": false
+    },
+    "FieldExpr": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Record field name"
+        },
+        "val": {
+          "$ref": "#/$defs/AstExpr"
+        }
+      },
+      "required": [
+        "name",
+        "val"
+      ],
+      "additionalProperties": false
+    },
+    "CondClause": {
+      "type": "object",
+      "properties": {
+        "test": {
+          "$ref": "#/$defs/AstExpr"
+        },
+        "body": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AstExpr"
+          }
+        }
+      },
+      "required": [
+        "test",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "FieldType": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Record field type name"
+        },
+        "type": {
+          "$ref": "#/$defs/AstType"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "Param": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "AstField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "docstring": {
+          "type": "string"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AstExpr"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "json": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "docstring",
+        "default",
+        "json"
+      ],
+      "additionalProperties": false
+    },
+    "EnumCase": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Param"
+          }
+        },
+        "docstring": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "fields",
+        "docstring"
+      ],
+      "additionalProperties": false
+    },
+    "ModuleNode": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "docstring": {
+          "type": "string"
+        },
+        "exported": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "imports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ImportEntry"
+          }
+        },
+        "defs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TopForm"
+          }
+        }
+      },
+      "required": [
+        "path",
+        "docstring",
+        "exported",
+        "imports",
+        "defs"
+      ],
+      "additionalProperties": false
+    },
+    "SchemaNode": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "typeVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AstField"
+          }
+        },
+        "jsonCase": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "typeVars",
+        "fields",
+        "jsonCase"
+      ],
+      "additionalProperties": false
+    },
+    "EnumNode": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "typeVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EnumCase"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "typeVars",
+        "cases"
+      ],
+      "additionalProperties": false
+    },
+    "DefunNode": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "typeVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "isExported": {
+          "type": "boolean"
+        },
+        "effect": {
+          "type": "boolean"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Param"
+          }
+        },
+        "retType": {
+          "type": "string"
+        },
+        "docstring": {
+          "type": "string"
+        },
+        "body": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AstExpr"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "typeVars",
+        "isExported",
+        "effect",
+        "params",
+        "retType",
+        "docstring",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "TopForm": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "topModule"
+              ]
+            },
+            "node": {
+              "$ref": "#/$defs/ModuleNode"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "topSchema"
+              ]
+            },
+            "node": {
+              "$ref": "#/$defs/SchemaNode"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "topEnum"
+              ]
+            },
+            "node": {
+              "$ref": "#/$defs/EnumNode"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "topDefun"
+              ]
+            },
+            "node": {
+              "$ref": "#/$defs/DefunNode"
+            }
+          },
+          "required": [
+            "kind",
+            "node"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "topExpr"
+              ]
+            },
+            "pos": {
+              "$ref": "#/$defs/PosForm"
+            }
+          },
+          "required": [
+            "kind",
+            "pos"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AstLit": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "litInt"
+              ]
+            },
+            "val": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "val"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "litFloat"
+              ]
+            },
+            "val": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "val"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "litString"
+              ]
+            },
+            "val": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "val"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "litBool"
+              ]
+            },
+            "val": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "val"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "litUnit"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AstPattern": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "patWildcard"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "patVar"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "patLit"
+              ]
+            },
+            "lit": {
+              "$ref": "#/$defs/AstLit"
+            }
+          },
+          "required": [
+            "kind",
+            "lit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "patTuple"
+              ]
+            },
+            "elements": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstPattern"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "elements"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "patRecord"
+              ]
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FieldPattern"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "fields"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "patCtor"
+              ]
+            },
+            "name": {
+              "type": "string"
+            },
+            "arg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AstPattern"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "name",
+            "arg"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AstMatchArm": {
+      "type": "object",
+      "properties": {
+        "pat": {
+          "$ref": "#/$defs/AstPattern"
+        },
+        "body": {
+          "$ref": "#/$defs/AstExpr"
+        }
+      },
+      "required": [
+        "pat",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "AstExpr": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprLit"
+              ]
+            },
+            "lit": {
+              "$ref": "#/$defs/AstLit"
+            }
+          },
+          "required": [
+            "kind",
+            "lit"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprIdent"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprMember"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AstExpr"
+            },
+            "field": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "field"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprCall"
+              ]
+            },
+            "func": {
+              "$ref": "#/$defs/AstExpr"
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstExpr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "func",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprLet"
+              ]
+            },
+            "bindings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/LetBinding"
+              }
+            },
+            "body": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstExpr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "bindings",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprIf"
+              ]
+            },
+            "cond": {
+              "$ref": "#/$defs/AstExpr"
+            },
+            "thenBranch": {
+              "$ref": "#/$defs/AstExpr"
+            },
+            "elseBranch": {
+              "$ref": "#/$defs/AstExpr"
+            }
+          },
+          "required": [
+            "kind",
+            "cond",
+            "thenBranch",
+            "elseBranch"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprMatch"
+              ]
+            },
+            "target": {
+              "$ref": "#/$defs/AstExpr"
+            },
+            "arms": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstMatchArm"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "target",
+            "arms"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprTry"
+              ]
+            },
+            "inner": {
+              "$ref": "#/$defs/AstExpr"
+            }
+          },
+          "required": [
+            "kind",
+            "inner"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprBlock"
+              ]
+            },
+            "exprs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstExpr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "exprs"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprRecord"
+              ]
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FieldExpr"
+              }
+            },
+            "rawTokens": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstExpr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "fields",
+            "rawTokens"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprCond"
+              ]
+            },
+            "clauses": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CondClause"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "clauses"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprLambda"
+              ]
+            },
+            "params": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Param"
+              }
+            },
+            "retType": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "body": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstExpr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "params",
+            "retType",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "exprInterpolation"
+              ]
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstExpr"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "parts"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AstType": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "typeNamed"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "typeTuple"
+              ]
+            },
+            "elements": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstType"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "elements"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "typeRecord"
+              ]
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FieldType"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "fields"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "typeFn"
+              ]
+            },
+            "paramTypes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AstType"
+              }
+            },
+            "retType": {
+              "$ref": "#/$defs/AstType"
+            }
+          },
+          "required": [
+            "kind",
+            "paramTypes",
+            "retType"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "PosForm": {
+      "type": "object",
+      "properties": {
+        "expr": {
+          "$ref": "#/$defs/AstExpr"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "col": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "expr",
+        "line",
+        "col"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/TopForm"
+    },
+    {
+      "$ref": "#/$defs/ModuleNode"
+    },
+    {
+      "$ref": "#/$defs/AstExpr"
+    }
+  ]
+}

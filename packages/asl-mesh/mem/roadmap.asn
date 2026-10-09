@@ -1,0 +1,20 @@
+(:packageRoadmap
+  :package "asl-mesh"
+  :scope :local
+  :version "0.2.0"
+  :authority "ADR0081"
+  :milestones (
+    (:milestone
+      :id "M1-Raft-Consensus"
+      :status :completed
+      :doc "Pure ASL joint consensus transition and heartbeat leases verified")
+    (:milestone
+      :id "M2-OCC-Merkle"
+      :status :completed
+      :doc "Optimistic concurrency control and vector clock validation verified")
+    (:milestone
+      :id "M3-Self-Hosted-Federation"
+      :status :inProgress
+      :doc "Package-scoped memory federation and target adapter integration")
+  )
+)

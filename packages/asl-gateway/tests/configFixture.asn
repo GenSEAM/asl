@@ -1,0 +1,176 @@
+(:fixture
+  :variants (
+    (:variant :id "valid_user_gateway"
+      :text "(:gateway :v 2\n  :models ((:model :id flashLow :provider agy :name \"gemini-3.8-flash\" :effort low :calibration \"gemini-3.8-flash:low\")\n           (:model :id flashHigh :provider agy :name \"gemini-3.8-flash\" :effort high :calibration \"gemini-3.8-flash:high\")\n           (:model :id flashMedium :provider agy :name \"gemini-3.8-flash\" :effort medium :calibration \"gemini-3.8-flash:medium\")\n           (:model :id opus :provider claude :name \"opus\" :effort high)\n           (:model :id astra :provider codex :name \"gpt-6-astra\" :effort medium)\n           (:model :id agyOpus :provider agy :name \"claude-opus-4-6-thinking\")\n           (:model :id glm :provider ollama :name \"glm-5.3\" :effort low :maxTokens 65536 :timeoutSec 900 :calibration \"glm-5.3\")\n           (:model :id glmDeep :provider ollama :name \"glm-5.3\" :effort high :maxTokens 65536 :timeoutSec 1200 :calibration \"glm-5.3\")\n           (:model :id glmMed :provider ollama :name \"glm-5.3\" :effort medium :maxTokens 65536 :timeoutSec 1200 :calibration \"glm-5.3\")\n           (:model :id glmFlash :provider ollama :name \"glm-5.3-flash\" :effort low :calibration \"glm-5.3-flash\" :maxTokens 65536 :timeoutSec 900)\n           (:model :id minimax :provider ollama :name \"minimax-m3\" :maxTokens 32768)\n           (:model :id deepseekPro :provider ollama :name \"deepseek-v4-pro:0813\" :maxTokens 32768)\n           (:model :id geminiApiFlash :provider gemini :name \"gemini-3.8-flash\"))\n\n  :intents ((:intent :id plan) (:intent :id design :as plan) (:intent :id grade :as plan) (:intent :id research) (:intent :id reinforce) (:intent :id review :as plan) (:intent :id audit :as plan)\n            (:intent :id orchestrate :as plan) (:intent :id code) (:intent :id implement :as code))\n  :profiles ((:profile :id work :routes ((:intent plan :chain (opus flashHigh))\n                                         (:intent reinforce :chain (opus flashHigh))\n                                         (:intent research :chain (geminiApiFlash flashLow))\n                                         (:intent code :chain (flashLow))\n                                         (:intent any :chain (flashLow))))\n             (:profile :id agy :routes ((:intent plan :chain (flashHigh))\n                                        (:intent code :chain (flashLow))\n                                        (:intent any :chain (flashLow))))\n             (:profile :id effLow :routes ((:intent any :chain (flashLow))))\n             (:profile :id effMedium :routes ((:intent any :chain (flashMedium))))\n             (:profile :id effHigh :routes ((:intent any :chain (flashHigh))))\n             (:profile :id workOpus :routes ((:intent plan :chain (opus glm))\n                                             (:intent reinforce :chain (opus flashHigh))\n                                             (:intent research :chain (geminiApiFlash flashLow glm))\n                                             (:intent code :chain (flashLow flashHigh))\n                                             (:intent any :chain (flashLow flashHigh))))\n             (:profile :id research :routes ((:intent plan :chain (glm))\n                                             (:intent reinforce :chain (glm))\n                                             (:intent any :chain (geminiApiFlash flashLow glm))))\n             (:profile :id free :routes ((:intent any :chain (\"groq/qwen/qwen3.8-27b\" \"gemini-3.8-flash\" \"agy/gemini-3.8-flash\")))))\n  :uses ((:use :for default :profile work) (:use :for research :profile research) (:use :for free :profile free) (:use :for agy :profile agy)))"
+      :valid true
+      :version 2
+      :defaultProfile "work"
+      :numProfiles 8
+      :numModels 13
+      :error "")
+    (:variant :id "missing_profile"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile nonexistent)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "use default: unknown profile nonexistent")
+    (:variant :id "unknown_intent"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\"))\n  :intents ((:intent :id code))\n  :profiles ((:profile :id p1 :routes ((:intent unkIntent :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "profile p1: route intent unkintent is not in :intents")
+    (:variant :id "alias_with_effort"
+      :text "(:gateway :v 2\n  :models ((:model :id opus :provider claude :name \"opus\" :effort high)\n           (:model :id flash :provider agy :name \"flash\" :effort low :temperature 0.7))\n  :intents ((:intent :id code))\n  :profiles ((:profile :id default :routes ((:intent code :chain (opus))\n                                            (:intent any :chain (flash)))))\n  :uses ((:use :for default :profile default)))"
+      :valid true
+      :version 2
+      :defaultProfile "default"
+      :numProfiles 1
+      :numModels 2
+      :error "")
+    (:variant :id "empty_chain"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain ()))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "profile p1 route any: :chain must be a non-empty list of aliases")
+    (:variant :id "malformed_form"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\")"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "2 unclosed ( at end of text")
+    (:variant :id "v1_valid"
+      :text "(:gateway\n  :profile default\n  :profiles ((:profile :id default :routes ((:intent plan :models (\"opus\" \"gemini\"))\n                                           (:intent any :models (\"gemini\"))))))"
+      :valid true
+      :version 1
+      :defaultProfile "default"
+      :numProfiles 1
+      :numModels 0
+      :error "")
+    (:variant :id "intent_cycle"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\"))\n  :intents ((:intent :id loopA :as loopB) (:intent :id loopB :as loopA))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "intent cycle: loopa -> loopb -> loopa")
+    (:variant :id "profile_fallback_cycle"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\"))\n  :profiles ((:profile :id p1 :fallback p2 :routes ((:intent any :chain (m1))))\n             (:profile :id p2 :fallback p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "profile fallback cycle: p1 -> p2 -> p1")
+    (:variant :id "duplicate_model_alias"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\")\n           (:model :id m1 :provider agy :name \"model2\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "model alias m1 is defined twice")
+    (:variant :id "duplicate_profile_id"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"model1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1))))\n             (:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "profile p1 is defined twice")
+    (:variant :id "invalid_provider_base"
+      :text "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"ftp://bad-url\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "provider custom: :base must be an http(s) URL string; provider custom: an openai provider needs :base")
+    (:variant :id "invalid_param_value"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"m1\" :timeoutSec -5))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "model m1: :timeoutSec must be a positive number")
+    (:variant :id "empty_profiles"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"m1\"))\n  :profiles ()\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "use default: unknown profile p1; :profiles must define at least one (:profile ...)")
+    (:variant :id "unknown_provider"
+      :text "(:gateway :v 2\n  :models ((:model :id m1 :provider nosuchprov :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "model m1: unknown provider nosuchprov; profile p1 route any: unknown alias m1")
+    (:variant :id "comment_parens"
+      :text "; routing note (opus first, see (:intent any\n(:gateway\n  :profile default\n  :profiles ((:profile :id default :routes ((:intent plan :models (\"opus\" \"gemini\"))\n                                           (:intent any :models (\"gemini\"))))))\n; stray ) after the form\n"
+      :valid true
+      :version 1
+      :defaultProfile "default"
+      :numProfiles 1
+      :numModels 0
+      :error "")
+    (:variant :id "comment_then_unclosed"
+      :text "; balanced (x) but the form is not closed\n(:gateway\n  :profile default"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "1 unclosed ( at end of text")
+  )
+  :queries (
+    (:query :profile "work" :intent "plan"
+      :expectedLine ("plan")
+      :expectedChain ("opus" "flashHigh")
+      :expectedLabels ("opus" "flashHigh"))
+    (:query :profile "work" :intent "design"
+      :expectedLine ("design" "plan")
+      :expectedChain ("opus" "flashHigh")
+      :expectedLabels ("opus" "flashHigh"))
+    (:query :profile "work" :intent "implement"
+      :expectedLine ("implement" "code")
+      :expectedChain ("flashLow")
+      :expectedLabels ("flashLow"))
+    (:query :profile "work" :intent "unknown"
+      :expectedLine ("unknown")
+      :expectedChain ("flashLow")
+      :expectedLabels ("flashLow"))
+    (:query :profile "agy" :intent "plan"
+      :expectedLine ("plan")
+      :expectedChain ("flashHigh")
+      :expectedLabels ("flashHigh"))
+    (:query :profile "effLow" :intent "plan"
+      :expectedLine ("plan")
+      :expectedChain ("flashLow")
+      :expectedLabels ("flashLow"))
+    (:query :profile "free" :intent "any"
+      :expectedLine ("any")
+      :expectedChain ("groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "agy/gemini-3.8-flash")
+      :expectedLabels ("groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "agy/gemini-3.8-flash"))
+  )
+  :aliases (
+    (:alias :model "flashLow" :found true :expectedAlias "flashLow")
+    (:alias :model "agy/gemini-3.8-flash" :found true :expectedAlias "flashLow")
+    (:alias :model "ollama/glm-5.3" :found true :expectedAlias "glm")
+    (:alias :model "nonexistent" :found false :expectedAlias "")
+  )
+)

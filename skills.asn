@@ -1,0 +1,6 @@
+(:skillsCollection
+  :package asl
+  :version "0.1.0"
+  :skills [
+    (:skill :name "asl-toolbelt" :desc "Unified Third-Party Autonomous Agent Toolbelt")
+  ])

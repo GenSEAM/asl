@@ -1,0 +1,16 @@
+(module asl/packages/asl-lint/tests/incongruityDeadCodeTest :x [testDeadCondBranchDetection testPostTerminalExpressionDetection testIncongruityReportDeadCode testDualPolarityRefutations runTests] :i [(../src/incongruity :a inc) (../../asl-parser/src/ast :a a)])
+
+fn testDeadCondBranchDetection -> Bool
+  (let [(dirtySrc "(module test/deadCond :x [f]) (df f [(x Int64)] -> Int64 (cond ((= x 1) 10) (:else 20) ((= x 2) 30) ((= x 3) 40)))") (dirtyForms (mt (a/parse dirtySrc) ((ok forms) forms) ((err _) (list)))) (dirtyCount (inc/detectDeadCondBranches dirtyForms)) (cleanSrc "(module test/cleanCond :x [f]) (df f [(x Int64)] -> Int64 (cond ((= x 1) 10) ((= x 2) 20) (:else 30)))") (cleanForms (mt (a/parse cleanSrc) ((ok forms) forms) ((err _) (list)))) (cleanCount (inc/detectDeadCondBranches cleanForms))] (assert (= dirtyCount 2) "Dirty cond must detect exactly 2 dead branches after :else") (assert (= cleanCount 0) "Clean cond must have 0 dead branches") true)
+
+fn testPostTerminalExpressionDetection -> Bool
+  (let [(dirtySrc "(module test/deadPost :x [f]) (df f [] -> (Result Int64 String) (do (let [(x 1)] (+ x 1)) (err \"terminal\") (+ 1 2) (+ 3 4)))") (dirtyForms (mt (a/parse dirtySrc) ((ok forms) forms) ((err _) (list)))) (dirtyCount (inc/detectPostTerminalExpressions dirtyForms)) (cleanSrc "(module test/cleanPost :x [f]) (df f [] -> (Result Int64 String) (do (let [(x 1)] (+ x 1)) (ok (+ 1 2))))") (cleanForms (mt (a/parse cleanSrc) ((ok forms) forms) ((err _) (list)))) (cleanCount (inc/detectPostTerminalExpressions cleanForms))] (assert (= dirtyCount 2) "Dirty block must detect 2 post-terminal dead expressions") (assert (= cleanCount 0) "Clean block must detect 0 post-terminal dead expressions") true)
+
+fn testIncongruityReportDeadCode -> Bool
+  (let [(cleanRep (inc/makeIncongruityReport 10 0 0 0 0 0)) (dirtyRep (inc/makeIncongruityReport 10 0 0 0 0 2))] (assert cleanRep.passed "Clean report with zero dead code must pass") (assert (= cleanRep.deadCodeViolations 0) "Clean report must have 0 deadCodeViolations") (assert (not dirtyRep.passed) "Report with dead code violations must fail") (assert (= dirtyRep.deadCodeViolations 2) "Dirty report must record 2 deadCodeViolations") true)
+
+fn testDualPolarityRefutations -> Bool
+  (let [(dirtyCondSrc "(module m :x [f]) (df f [(x Int64)] -> Int64 (cond ((= x 1) 1) (:else 2) ((= x 3) 3)))") (dirtyCondForms (mt (a/parse dirtyCondSrc) ((ok forms) forms) ((err _) (list)))) (dirtyPostSrc "(module m :x [f]) (df f [] -> (Result Int64 String) (do (err \"fail\") 42))") (dirtyPostForms (mt (a/parse dirtyPostSrc) ((ok forms) forms) ((err _) (list)))) (repFail (inc/makeIncongruityReport 10 0 0 0 0 1))] (refute (= (inc/detectDeadCondBranches dirtyCondForms) 0) "Refute that dead cond branches are undetected") (refute (= (inc/detectPostTerminalExpressions dirtyPostForms) 0) "Refute that post-terminal expressions are undetected") (refute repFail.passed "Refute that report with dead code passes") true)
+
+fn runTests -> Bool
+  (do (assert (testDeadCondBranchDetection) "testDeadCondBranchDetection must pass") (assert (testPostTerminalExpressionDetection) "testPostTerminalExpressionDetection must pass") (assert (testIncongruityReportDeadCode) "testIncongruityReportDeadCode must pass") (assert (testDualPolarityRefutations) "testDualPolarityRefutations must pass") true)

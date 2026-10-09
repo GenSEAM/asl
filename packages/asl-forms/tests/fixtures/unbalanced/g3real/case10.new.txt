@@ -1,0 +1,3 @@
+                     (newLeft (if (or (= (tr/tokenKind colonTok) "error") (tr/isErrorNode altNode))
+                                (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) kids)
+                                (tr/makeNode "conditionalExpr" (tr/nodeStart left) (tr/nodeEnd altNode) kids))]

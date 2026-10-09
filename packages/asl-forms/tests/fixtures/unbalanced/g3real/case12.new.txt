@@ -1,0 +1,6 @@
+                     (rightRes (parseExprCore (pairSecond spRight) text (precComma)))
+                     (rightNode rightRes.node    )
+                     (kids (cons (tr/elemNode left) (listAppend triv (cons (tr/elemToken hd) (listAppend trivRight (list (tr/elemNode rightNode)))))))
+                     (newLeft (if (tr/isErrorNode rightNode)
+                                (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) kids)
+                                (tr/makeNode "seqExpr" (tr/nodeStart left) (tr/nodeEnd rightNode) kids))]

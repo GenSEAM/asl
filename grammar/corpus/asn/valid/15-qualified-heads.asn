@@ -1,0 +1,9 @@
+; Qualified heads. A payload naming a type or a union case from another module
+; spells it `alias/Name`, exactly as Core §4.0 spells it in a signature. The
+; terminal is the language's own, so an imported type stays one token here too.
+;
+; canonical: (:shape (s/Point :x 1 :y 2) :variant (s/circle 2.0) :rows (s/Item [1 "SSD-1TB"]))
+
+(:shape (s/Point :x 1 :y 2)
+ :variant (s/circle 2.0)
+ :rows (s/Item [1 "SSD-1TB"]))

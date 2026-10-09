@@ -1,0 +1,41 @@
+(module asl-syntax/js/expr
+                                                                                                       
+  :x [parse
+      parseString
+      parseExpr
+      parseExprString
+      parseExprToSExpr
+      exprNodeKind]
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/core/print :a pr)
+      (asl-syntax/js/lex :a lx)])
+
+fn exprNodeKind node: tr/Node -> String
+  node.kind    
+
+fn isTriviaTok tok: tr/Token -> Bool
+  (let [(k tok.kind    )]
+    (or (= k "whitespace")
+    (or (= k "newline")
+        (= k "comment"))))
+
+(schema ParseCtx
+  (:f src String)
+  (:f toks (List tr/Token))
+  (:f pos Int64))
+
+fn ctxToken ctx: ParseCtx -> (Option tr/Token)
+  (listGet ctx.toks     ctx.pos    )
+
+fn ctxAdvance ctx: ParseCtx -> ParseCtx
+  (ParseCtx :src ctx.src     :toks ctx.toks     :pos (+ ctx.pos     1))
+
+(schema ParseResult
+  (:f ctx ParseCtx)
+  (:f node tr/Node)
+  (:f sexpr String))
+
+fn parseExprToSExpr s: String -> String
+  (let [(tree (parseExprString s))]
+    "1"))

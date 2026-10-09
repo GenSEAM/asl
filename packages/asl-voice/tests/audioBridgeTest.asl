@@ -1,0 +1,28 @@
+(module aslVoice/testAudioBridge :x [testAudioBridgeInitializationAndIngestion testRingBufferCapacityOverflowBounding testQuietEdgeDetection testSpeechWindowDraining testHarnessProfileDefaultsAndAliases testHynessProfileDefaultsAndAliases testHynessEndpointsAndAsnRendering runAllBridgeTests runTests] :i [(voice/audioBridge :a ab) (voice/harnessProfile :a hp)])
+
+fn testAudioBridgeInitializationAndIngestion -> Bool
+  (let [(cfg (ab/makeAudioBridgeConfig 16000 20 4 0.05)) (st0 (ab/initAudioBridge cfg)) (c1 (ab/makeAudioChunk "c1" 320 0.08 0.05 1000)) (c2 (ab/makeAudioChunk "c2" 320 0.09 0.05 1020)) (st1 (ab/ingestAudioChunk st0 c1)) (st2 (ab/ingestAudioChunk st1 c2))] (assert (= st2.totalIngestedChunks 2) "two chunks ingested") (assert (= st2.consecutiveSpeechChunks 2) "consecutive speech run is 2") (assert (= st2.consecutiveSilenceChunks 0) "silence run is 0") (assert (= (listLength st2.ringChunks) 2) "ring buffer holds 2 chunks") true)
+
+fn testRingBufferCapacityOverflowBounding -> Bool
+  (let [(cfg (ab/makeAudioBridgeConfig 16000 20 4 0.05)) (st0 (ab/initAudioBridge cfg)) (c1 (ab/makeAudioChunk "c1" 320 0.08 0.05 1000)) (c2 (ab/makeAudioChunk "c2" 320 0.08 0.05 1020)) (c3 (ab/makeAudioChunk "c3" 320 0.08 0.05 1040)) (c4 (ab/makeAudioChunk "c4" 320 0.08 0.05 1060)) (c5 (ab/makeAudioChunk "c5" 320 0.08 0.05 1080)) (st (ab/ingestAudioChunk (ab/ingestAudioChunk (ab/ingestAudioChunk (ab/ingestAudioChunk (ab/ingestAudioChunk st0 c1) c2) c3) c4) c5))] (assert (= st.totalIngestedChunks 5) "five total chunks ingested") (assert (= (listLength st.ringChunks) 4) "ring buffer clamped at capacity 4") (mt (listHead st.ringChunks) ((some oldest) (do (assert (= oldest.chunkId "c2") "oldest chunk c1 evicted in FIFO order"))) ((none) (assert false "oldest missing"))) true)
+
+fn testQuietEdgeDetection -> Bool
+  (let [(cfg (ab/makeAudioBridgeConfig 16000 20 10 0.05)) (st0 (ab/initAudioBridge cfg)) (cSp1 (ab/makeAudioChunk "s1" 320 0.08 0.05 1000)) (cSp2 (ab/makeAudioChunk "s2" 320 0.09 0.05 1020)) (cSil1 (ab/makeAudioChunk "q1" 320 0.01 0.05 1040)) (cSil2 (ab/makeAudioChunk "q2" 320 0.01 0.05 1060)) (cSil3 (ab/makeAudioChunk "q3" 320 0.01 0.05 1080)) (st (ab/ingestAudioChunk (ab/ingestAudioChunk (ab/ingestAudioChunk (ab/ingestAudioChunk (ab/ingestAudioChunk st0 cSp1) cSp2) cSil1) cSil2) cSil3))] (assert (= st.consecutiveSilenceChunks 3) "consecutive silence run is 3") (assert (ab/isQuietEdgeDetected? st 3) "quiet edge detected at threshold 3") (refute (ab/isQuietEdgeDetected? st 5) "quiet edge not yet reached for threshold 5") true)
+
+fn testSpeechWindowDraining -> Bool
+  (let [(cfg (ab/makeAudioBridgeConfig 16000 20 6 0.05)) (st0 (ab/initAudioBridge cfg)) (c1 (ab/makeAudioChunk "c1" 320 0.08 0.05 1000)) (c2 (ab/makeAudioChunk "c2" 320 0.08 0.05 1020)) (stFull (ab/ingestAudioChunk (ab/ingestAudioChunk st0 c1) c2)) (drainRes (ab/drainSpeechWindow stFull)) (stDrained (pairFirst drainRes)) (extracted (pairSecond drainRes))] (assert (= (listLength extracted) 2) "extracted exactly 2 chunks") (assert (= (listLength stDrained.ringChunks) 0) "ring buffer cleared") (assert (= stDrained.consecutiveSpeechChunks 0) "speech counter reset") (assert (= stDrained.totalIngestedChunks 2) "lifetime ingested chunks preserved") true)
+
+fn testHynessProfileDefaultsAndAliases -> Bool
+  (let [(prof (hp/makeDefaultHynessProfile))] (assert (= prof.primaryLocale "en") "primary locale is en") (assert (= prof.secondaryLocale "ru") "secondary locale is ru") (assert prof.isMixedMode "mixed mode enabled") (assert (= (hp/resolveHarnessAlias prof "асекс") "genseam") "resolves асекс to asex") (assert (= (hp/resolveHarnessAlias prof "хайнесс") "harness") "resolves хайнесс to harness") (assert (= (hp/resolveHarnessAlias prof "ханес") "harness") "resolves ханес to harness") (assert (= (hp/resolveHarnessAlias prof "шроуди") "shrody") "resolves шроуди to shrody") (assert (= (hp/resolveHarnessAlias prof "unknown") "unknown") "preserves unmapped word") (let [(normalized (hp/applyHarnessAliases prof "запусти асекс в хайнесс и проверь шроуди"))] (assert (stringContains? normalized "genseam") "replaces асекс with asex") (assert (stringContains? normalized "harness") "replaces хайнесс with harness") (assert (stringContains? normalized "shrody") "replaces шроуди with shrody")) true)
+
+fn testHynessEndpointsAndAsnRendering -> Bool
+  (let [(prof (hp/makeDefaultHynessProfile)) (cfg (ab/makeAudioBridgeConfig 16000 20 4 0.05)) (st (ab/initAudioBridge cfg)) (cdpEp (hp/findEndpointByKind prof "cdp")) (hubEp (hp/findEndpointByKind prof "hub")) (noneEp (hp/findEndpointByKind prof "nonexistent")) (profAsn (hp/formatHynessProfileAsn prof)) (bridgeAsn (ab/renderBridgeTelemetryAsn st))] (assert (stringContains? cdpEp "ws://127.0.0.1:9222") "cdp endpoint resolved") (assert (stringContains? hubEp "~/.asl/run/hub.sock") "hub endpoint resolved") (assert (= noneEp "") "empty string for unknown endpoint") (assert (or (stringContains? profAsn ":name \"harness-workstation\"") (stringContains? profAsn ":name \"hyness-workstation\"")) "profile ASN contains name") (assert (stringContains? profAsn ":alias-count 6") "profile ASN reflects 6 aliases") (assert (stringContains? bridgeAsn ":audio-bridge") "bridge telemetry contains tag") true)
+
+fn testHarnessProfileDefaultsAndAliases -> Bool
+  (testHynessProfileDefaultsAndAliases)
+
+fn runAllBridgeTests -> Bool
+  (do (testAudioBridgeInitializationAndIngestion) (testRingBufferCapacityOverflowBounding) (testQuietEdgeDetection) (testSpeechWindowDraining) (testHarnessProfileDefaultsAndAliases) (testHynessProfileDefaultsAndAliases) (testHynessEndpointsAndAsnRendering) true)
+
+fn runTests -> Bool
+  (runAllBridgeTests)

@@ -1,0 +1,6 @@
+(:package asl-zstd
+ :version "0.1.0"
+ :entry "src/encode.asl"
+ :description "Pure AgentScript Zstandard encoder with raw literals and predefined FSE sequences"
+ :aslFirst true
+ :dependencies [])

@@ -1,0 +1,21 @@
+fn skipTrivia toks: (List tr/Token) -> (Pair (List tr/TreeElement) (List tr/Token))
+  (skipTriviaLoop toks (list))
+
+fn expectClose rem: (List tr/Token) kind: String endPos: Int64 -> (Pair tr/Token (List tr/Token))
+  (if (listEmpty? rem)
+    (pair (tr/makeToken "error" endPos endPos) rem)
+    (let [(hd (optionOr (listHead rem) (tr/makeToken "" 0 0)))]
+      (if (= (tr/tokenKind hd) kind)
+        (pair hd (optionOr (listTail rem) (list)))
+        (pair (tr/makeToken "error" endPos endPos) rem)))))
+
+fn startsWithDot s: String -> Bool
+  (mt (stringSlice s 0 1)
+    ((some p) (= p "."))
+    ((none) false))
+
+fn isValidAssignTarget node: tr/Node -> Bool
+  (let [(k (tr/nodeKind node))]
+    (or (= k "ident")
+    (or (= k "memberExpr")
+        (= k "optionalChain"))))

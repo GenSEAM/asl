@@ -1,0 +1,7 @@
+(:package asl-port
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Python-to-ASL porting assistant under PT1"
+ :aslFirst true
+ :modules ["asl-port/main" "asl-port/pyAst" "asl-port/astUtil" "asl-port/plan" "asl-port/translate" "asl-port/parity"]
+ :dependencies ["asl-json" "asl-proc"])

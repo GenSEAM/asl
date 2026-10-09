@@ -1,0 +1,4 @@
+; An alias carries exactly one slash. `a/b/c` is a module PATH, which appears in
+; a module header and nowhere in data — a payload names a type or a case, never
+; a file.
+(a/b/c 1)

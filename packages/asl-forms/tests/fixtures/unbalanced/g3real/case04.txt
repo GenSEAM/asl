@@ -1,0 +1,95 @@
+(module asl-syntax/tests/asl/layoutCorpusHelper
+                                                                 
+  :x [runShard]
+  :i [(asl-syntax/asl/layout :a lay)
+      (asl-parser/indentParser :a ip)
+      (asl-parser/reader :a rd)])
+
+fn isParenOrInvalidFile path: String -> Bool
+  (or (stringContains? path "tests/fixtures/")
+  (or (stringContains? path "asl/grammar/corpus/")
+  (or (stringContains? path "closureParity/")
+  (or (stringContains? path "scratch/")
+  (or (stringContains? path "test_")
+  (or (stringContains? path "tests/acceptance/r1Host/reader/invalid/")
+  (or (stringContains? path "tests/acceptance/vtbotDataPlane/fixtures/invalid/")
+  (or (= path "agent/src/dispatch.asl")
+  (or (= path "agent/tests/dispatchTest.asl")
+  (or (= path "asl/packages/asl-macro/src/macro.asl")
+  (or (= path "asl/packages/asl-ui/src/main.asl")
+  (or (= path "mem/src/tasks.asl")
+      (= path "tests/acceptance/d81/Task58801IntermediatePolicyTest.asl")))))))))))))
+
+fn parseFileList stdout: String -> (List String)
+  (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringSplit stdout "\n"))
+
+fn formsMatch? lForms: (List rd/SExpr) iForms: (List rd/SExpr) -> Bool
+  (if (!= (listLength lForms) (listLength iForms))
+    false
+    (fold (fn [(m Bool) (p (Pair rd/SExpr rd/SExpr))] -> Bool
+            (and m (= (rd/renderSexpr (pairFirst p)) (rd/renderSexpr (pairSecond p)))))
+          true (zip lForms iForms)))
+
+(schema CorpusStats
+  (:f matched Int64)
+  (:f excluded Int64)
+  (:f failed Int64))
+
+fn verifyCorpusFile path: String -> CorpusStats
+  (mt (fileRead path)
+    ((err e)
+     (do
+       (assert false (str path " read error: " e))
+       (CorpusStats :matched 0 :excluded 0 :failed 1)))
+    ((ok src)
+     (mt (ip/parseIndentedForms src)
+       ((err e)
+        (do
+          (print (str "EXCLUDED " path ": reference parser rejects: " e "\n"))
+          (CorpusStats :matched 0 :excluded 1 :failed 0)))
+       ((ok iForms)
+        (mt (lay/lowerString src)
+          ((err e)
+           (do
+             (assert false (str path " layout lower failed: " e))
+             (CorpusStats :matched 0 :excluded 0 :failed 1)))
+          ((ok lForms)
+           (let [(matched (formsMatch? lForms iForms))]
+             (do
+               (assert matched (str path " lowering matches a/parse renderSexpr"))
+               (if matched
+                 (CorpusStats :matched 1 :excluded 0 :failed 0)
+                 (CorpusStats :matched 0 :excluded 0 :failed 1)))))))))))
+
+fn addStats a: CorpusStats b: CorpusStats -> CorpusStats
+  (CorpusStats :matched (+ a.matched     b.matched    )
+               :excluded (+ a.excluded     b.excluded    )
+               :failed (+ a.failed     b.failed    ))
+
+fn shardFiles k: Int64 n: Int64 -> (List String)
+  (let [(cmdRes (processRun "git ls-files '*.asl'"))
+        (allFiles (parseFileList cmdRes.stdout    ))
+        (kept (filter (fn [(p String)] -> Bool (not (isParenOrInvalidFile p))) allFiles))
+        (sorted (listSort kept))
+        (indexed (zip sorted (range 0 (listLength sorted))))]
+    (map (fn [(p (Pair String Int64))] -> String (pairFirst p))
+         (filter (fn [(p (Pair String Int64))] -> Bool (= (mod (pairSecond p) n) k)) indexed)))
+
+fn runShard k: Int64 n: Int64 name: String -> Bool
+  (let [(files (shardFiles k n))
+        (t0 (monotonicNs))
+        (init (CorpusStats :matched 0 :excluded 0 :failed 0))
+        (stats (fold (fn [(acc CorpusStats) (path String)] -> CorpusStats
+                       (addStats acc (verifyCorpusFile path)))
+                     init files))
+        (t1 (monotonicNs))
+        (ms (/ (- t1 t0) 1000000))]
+    (do
+      (print (str name ": matched " (stringFromInt64 stats.matched    )
+                   " excluded " (stringFromInt64 stats.excluded    )
+                   " failed " (stringFromInt64 stats.failed    )
+                   " of " (stringFromInt64 (listLength files)) " files in "
+                   (stringFromInt64 ms) " ms\n"))
+      (assert (= stats.failed     0) (str name ": all file assertions passed"))
+      (assert (> (+ stats.matched     stats.excluded    ) 0) (str name ": shard checked at least one file"))
+      true)))

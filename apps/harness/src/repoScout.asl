@@ -1,0 +1,18 @@
+(module aslHarness/repoScout :x [RepoProfile RepoAuditResult scoutRepo formatProfileAsn auditCodeDiff makeEmptyProfile] :i [(deps :a d) (asl-text/string :a s)])
+
+(schema RepoProfile (:f workspaceRoot Str) (:f ecosystem Str) (:f primaryFramework Str) (:f frameworkVersion Str) (:f forbiddenApis (List Str)) (:f recommendedApis (List Str)) (:f rules (List Str)))
+
+(schema RepoAuditResult (:f allowed Bool) (:f violations (List Str)) (:f remediations (List Str)))
+
+fn makeEmptyProfile -> RepoProfile
+  (RepoProfile :workspaceRoot "." :ecosystem "generic" :primaryFramework "unknown" :frameworkVersion "0.0.0" :forbiddenApis (list) :recommendedApis (list) :rules (list "pure-asl" "zero-foreign-files"))
+
+fn scoutRepo rootPath: Str lockfileName: Str lockfileContent: Str -> RepoProfile
+  (let [(kind (d/detectLockfileKind lockfileName))] (cond ((or (stringContains? lockfileContent "\"react\"") (or (stringContains? lockfileContent "name: react") (stringContains? lockfileContent "/react@"))) (let [(reactVer (optionOr (d/parsePinnedVersion kind lockfileContent "react") "18.2.0"))] (if (or (stringStartsWith? reactVer "19.") (stringContains? reactVer "^19.")) (RepoProfile :workspaceRoot rootPath :ecosystem "js-ts" :primaryFramework "react" :frameworkVersion reactVer :forbiddenApis (list "useFormState" "componentWillMount") :recommendedApis (list "useActionState") :rules (list "server-actions" "zero-client-side-secrets")) (RepoProfile :workspaceRoot rootPath :ecosystem "js-ts" :primaryFramework "react" :frameworkVersion reactVer :forbiddenApis (list "componentWillMount") :recommendedApis (list "useEffect") :rules (list "functional-components"))))) ((or (stringContains? lockfileContent "pydantic") (stringContains? lockfileContent "pydantic-core")) (let [(pydVer (optionOr (d/parsePinnedVersion kind lockfileContent "pydantic") "2.5.0"))] (if (or (stringStartsWith? pydVer "2.") (stringContains? pydVer "^2.")) (RepoProfile :workspaceRoot rootPath :ecosystem "python" :primaryFramework "pydantic" :frameworkVersion pydVer :forbiddenApis (list ".dict()" ".parse_obj()") :recommendedApis (list ".model_dump()" ".model_validate()") :rules (list "type-strict" "v2-validation")) (RepoProfile :workspaceRoot rootPath :ecosystem "python" :primaryFramework "pydantic" :frameworkVersion pydVer :forbiddenApis (list ".model_dump()") :recommendedApis (list ".dict()") :rules (list "v1-legacy"))))) ((or (stringContains? lockfileContent "name = \"tokio\"") (stringContains? lockfileContent "name = \"axum\"")) (RepoProfile :workspaceRoot rootPath :ecosystem "rust" :primaryFramework "tokio" :frameworkVersion "1.38.0" :forbiddenApis (list "block_on_inside_async") :recommendedApis (list "spawn_blocking") :rules (list "async-safety"))) (else (makeEmptyProfile))))
+
+fn formatProfileAsn profile: RepoProfile -> Str
+  (let [(fStr (stringJoin (map (fn [(x Str)] -> Str (str "\"" x "\"")) profile.forbiddenApis) " ")) (rStr (stringJoin (map (fn [(x Str)] -> Str (str "\"" x "\"")) profile.recommendedApis) " "))] (str "(:repo-profile :root \"" profile.workspaceRoot "\" " ":eco \"" profile.ecosystem "\" " ":framework \"" profile.primaryFramework "\" " ":version \"" profile.frameworkVersion "\" " ":forbidden [" fStr "] " ":recommended [" rStr "])"))
+
+
+fn auditCodeDiff code: Str profile: RepoProfile -> RepoAuditResult
+  (let [(forbid profile.forbiddenApis) (violations (filter (fn [(api Str)] -> Bool (stringContains? code api)) forbid)) (remeds profile.recommendedApis)] (if (listEmpty? violations) (RepoAuditResult :allowed true :violations (list) :remediations (list)) (RepoAuditResult :allowed false :violations violations :remediations remeds)))

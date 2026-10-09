@@ -1,0 +1,7 @@
+(:package asl-coord
+ :version "0.1.0"
+ :entry "src/claims.asl"
+ :description "Shared worktree scope claim leases"
+ :aslFirst true
+ :modules ["asl-coord/claims"]
+ :dependencies [])

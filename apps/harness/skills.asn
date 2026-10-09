@@ -1,0 +1,70 @@
+(:skillsCollection
+  :package aslHarness
+  :version "0.1.0"
+  :skills [
+    (:skill
+      :name "asl-harness"
+      :desc "Autonomous Agent Coding Harness with in-memory deterministic execution routing, hallucination normalization, batch RPC execution, and system prompt representation policies."
+      :rules [
+        (:rule :type "representation-policy" :text "Standardized System Prompt Representation Policy: Enforce minimal syntax, unquoted atoms, atomic null (_), integer-basis fixed point, delta streams, and Adjacency DSL.")
+        (:rule :type "mandatory" :text "Route deterministic tools directly to local execution tier via batch RPC: asl rpc '(:batch ...)'.")
+        (:rule :type "mandatory" :text "Enforce strict offline sandboxing (ASL_AIRGAP=1) and sliding 10s idle timeout during benchmark evaluations and continuous execution.")
+        (:rule :type "workflow" :text "Auto-normalize LLM syntax drift, snake_case mapping, and unclosed parentheses via hallucination normalizer.")
+        (:rule :type "execution" :text "Enforce continuous action-observation loops: persistent session, non-interactive stdin redirection (< /dev/null), and PAGER=cat.")
+        (:rule :type "separation" :text "Strict separation of duties: orchestrator dispatches, planner plans, implementer codes, reviewer audits. Agent never reviews its own work.")
+        (:rule :type "esh-grounding" :text "Execution Simulation Hallucination (ESH) Hardware Grounding: Never claim task completion without a physical gate receipt in .asl/mem/receipts.asn.")
+      ]
+      :tools [
+        (:tool :name "asl-rpc-batch" :command "asl rpc '(:batch ...)'" :purpose "Single-roundtrip batch pipeline for search, AST outlines, edits, diffs, and verification gates" :savings "95%")
+        (:tool :name "asl-test-harness" :command "asl test harness/tests/coding-test.asl" :purpose "Execute native ASL coding tool execution test suite" :savings "95%")
+        (:tool :name "asl-gate" :command "asl gate" :purpose "Execute native 7-tier verification gate across all packages, manifests, and skills" :savings "98%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+
+    (:skill
+      :name "asl-slm"
+      :desc "Small Language Model (SLM) local inference engine, Apple Silicon M1 unified memory telemetry, thinking vs non-thinking benchmarking, and offline evaluation."
+      :rules [
+        (:rule :type "execution" :text "Deploy quantized 1.5B/3B parameter local SLMs for sub-millisecond AST intent compilation.")
+        (:rule :type "telemetry" :text "Measure time-to-first-token (TTFT) and tokens-per-second (TPS) on unified memory architecture.")
+        (:rule :type "offline" :text "Zero external cloud API dependency for code generation under ASL_AIRGAP=1.")
+      ]
+      :tools [
+        (:tool :name "asl-slm-bench" :command "asl bench slm" :purpose "Execute SLM inference latency and token throughput evaluation" :savings "90%")
+        (:tool :name "asl-slm-profile" :command "asl profile slm" :purpose "Audit unified memory utilization and thermal throttling" :savings "85%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+
+    (:skill
+      :name "asl-adaptive-dag"
+      :desc "Dynamic Adaptive Action DAG and Cybernetic Self-Healing: homeostatic feedback loops, gate-failure triage, and discrete epistemic anti-hallucination primitives (GroundFact, ContextBudget, AdversarialReflect, ReconcileReality)."
+      :rules [
+        (:rule :type "homeostasis" :text "Never fatally abort on intermediate step gate failure; invoke dynamic adaptive triage up to max-replan-iterations ceiling.")
+        (:rule :type "epistemic-grounding" :text "Execute GroundFact physically against disk ASTs before attempting in-place code mutations.")
+        (:rule :type "context-budget" :text "Enforce ContextBudget throttling; maintain SNR >= 0.75 and prevent KV-cache attention saturation.")
+        (:rule :type "adversarial-reflection" :text "Run AdversarialReflect pre-gate audit to detect omissions, unnecessary bloat, and boundary violations.")
+        (:rule :type "reconcile-reality" :text "Reconcile reality via strict asl test gate verification, recording non-vacuous assertions and exit code 0.")
+      ]
+      :tools [
+        (:tool :name "asl-dag-triage" :command "asl task triage-failure" :purpose "Diagnose root cause of intermediate gate break and generate adaptive recovery DAG" :savings "80%")
+        (:tool :name "asl-test-teleology" :command "asl test harness/tests/teleology_test.asl" :purpose "Verify adaptive replanning, epistemic primitives, and teleological mandate invariants" :savings "95%")
+        (:tool :name "asl-gate" :command "asl gate" :purpose "Run full 7-gate verification suite" :savings "98%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+
+    (:skill
+      :name "asl-skills-installer"
+      :desc "Multi-agent skills installer, environment detection, and toolbelt directive injector for Claude Code, Cursor, Windsurf, Antigravity, Factory Droid, and Codex."
+      :rules [
+        (:rule :type "multi-platform" :text "Detect and support 7 agent platforms: claude, cursor, windsurf, antigravity, factory, agents, codex.")
+        (:rule :type "idempotent-injection" :text "Idempotently inject ASL toolbelt directives into agent instruction files without corrupting existing rules.")
+        (:rule :type "co-located-compilation" :text "Compile canonical ASN specifications directly into downstream Markdown SKILL.md files on build.")
+        (:rule :type "zero-foreign" :text "Implement all environment discovery and installation orchestration in pure AgentScript.")
+      ]
+      :tools [
+        (:tool :name "asl-skill-install" :command "asl skill install" :purpose "Run pure ASL multi-agent skills installer across detected platforms" :savings "90%")
+        (:tool :name "asl-skill-sync" :command "asl skill sync" :purpose "Transpile all canonical ASN skill specifications into SKILL.md" :savings "95%")
+        (:tool :name "asl-pack-test" :command "asl test asl/packages/asl-pack/tests/installerTest.asl" :purpose "Verify multi-agent platform detection and directive injection test suite" :savings "95%")
+      ]
+      :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])
+  ])

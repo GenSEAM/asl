@@ -1,0 +1,24 @@
+(:package asl-compiler
+ :version "0.1.0"
+ :entry "src/compiler.asl"
+ :description "Pure AgentScript 100% Self-Hosted Compiler Toolchain"
+ :aslFirst true
+ :modules ["asl-compiler/compiler"
+           "asl-compiler/wasm"
+           "asl-compiler/wasi"
+           "asl-compiler/vfsGit"
+           "asl-compiler/evaluator"
+           "asl-compiler/compactRewrite"
+           "asl-compiler/elf"
+           "asl-compiler/macho"
+           "asl-compiler/diagnostics"
+           "asl-compiler/comptime"
+           "asl-compiler/salsa"
+           "asl-compiler/heal"
+           "asl-compiler/tryMacro"
+           "asl-compiler/threadMacro"
+           "asl-compiler/monad"
+           "asl-compiler/macro"
+           "asl-compiler/optFold"
+           "asl-compiler/asl1"]
+ :dependencies ["asl-parser" "asl-checker" "asl-codegen" "asl-ir" "asl-target-llvm" "asl-target-swift" "asl-target-rs" "asl-target-sh" "asl-target-c"])

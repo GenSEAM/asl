@@ -1,0 +1,4 @@
+#!/bin/sh
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec "$ROOT/asl" "$@"
+

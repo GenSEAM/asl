@@ -1,0 +1,171 @@
+fn isLiteralOperandKind k: String -> Bool
+  (or (= k "number")
+  (or (= k "bigint")
+  (or (= k "string")
+  (or (= k "boolean")
+  (or (= k "null")
+      (= k "regex"))))))
+
+fn isBinaryOpKind k: String -> Bool
+  (or (= k "star")
+  (or (= k "slash")
+  (or (= k "percent")
+  (or (= k "starStar")
+  (or (= k "eqEq")
+  (or (= k "bangEq")
+  (or (= k "eqEqEq")
+  (or (= k "bangEqEq")
+  (or (= k "lt")
+  (or (= k "lte")
+  (or (= k "gt")
+  (or (= k "gte")
+  (or (= k "shl")
+  (or (= k "shr")
+  (or (= k "shru")
+  (or (= k "amp")
+  (or (= k "caret")
+  (or (= k "pipe")
+  (or (= k "ampAmp")
+  (or (= k "pipePipe")
+      (= k "questionQuestion")))))))))))))))))))))))
+
+fn isPrefixKeywordKind sl: String -> Bool
+  (or (= sl "typeof")
+  (or (= sl "void")
+  (or (= sl "delete")
+  (or (= sl "await")
+      (= sl "new")))))
+
+fn isBinaryKeywordKind sl: String -> Bool
+  (or (= sl "in")
+      (= sl "instanceof"))
+
+fn nextNonTriviaToken toks: (List tr/Token) -> tr/Token
+  (if (listEmpty? toks)
+    (tr/makeToken "" 0 0)
+    (let [(hd (optionOr (listHead toks) (tr/makeToken "" 0 0)))
+          (tl (optionOr (listTail toks) (list)))]
+      (if (isTriviaTok hd)
+        (nextNonTriviaToken tl)
+        hd))))
+
+fn validateTokensLoop toks: (List tr/Token) text: String stack: (List (Pair String Int64)) questions: (List Int64) pendingTemplate: Int64 expectOperand: Bool lastOpOff: Int64 lastOperandStart: Int64 prevKind: String -> (Option Int64)
+  (if (listEmpty? toks)
+    (if (not (listEmpty? stack))
+      (some (pairSecond (optionOr (listHead stack) (pair "" 0))))
+      (if (not (listEmpty? questions))
+        (some (optionOr (listHead questions) 0))
+        (if (>= pendingTemplate 0)
+          (some pendingTemplate)
+          (if expectOperand
+            (some lastOpOff)
+            (none)))))
+    (let [(hd (optionOr (listHead toks) (tr/makeToken "" 0 0)))
+          (tl (optionOr (listTail toks) (list)))
+          (k (tr/tokenKind hd))]
+      (if (isTriviaTok hd)
+        (validateTokensLoop tl text stack questions pendingTemplate expectOperand lastOpOff lastOperandStart prevKind)
+        (let [(off (tr/tokenStart hd))]
+          (cond
+            ((or (= k "lparen") (or (= k "lbracket") (= k "lbrace")))
+             (validateTokensLoop tl text (cons (pair k off) stack) questions pendingTemplate true off lastOperandStart k))
+            ((or (= k "rparen") (or (= k "rbracket") (= k "rbrace")))
+             (if (listEmpty? stack)
+               (some off)
+               (let [(top (optionOr (listHead stack) (pair "" 0)))]
+                 (if (or (and (= k "rparen") (= (pairFirst top) "lparen"))
+                         (or (and (= k "rbracket") (= (pairFirst top) "lbracket"))
+                             (and (= k "rbrace") (= (pairFirst top) "lbrace"))))
+                   (validateTokensLoop tl text (optionOr (listTail stack) (list)) questions pendingTemplate false lastOpOff lastOperandStart k)
+                   (some off)))))
+            ((= k "question")
+             (if expectOperand
+               (some off)
+               (let [(nTok (nextNonTriviaToken tl))
+                     (nOff (tr/tokenStart nTok))]
+                 (if (and (= (tr/tokenKind nTok) "number")
+                          (and (= nOff (tr/tokenEnd hd))
+                               (stringStartsWith? (tokenSlice nTok text) ".")))
+                   (some (+ nOff 1))
+                   (validateTokensLoop tl text stack (cons off questions) pendingTemplate true off lastOperandStart k)))))
+            ((= k "colon")
+             (if expectOperand
+               (some off)
+               (validateTokensLoop tl text stack (optionOr (listTail questions) (list)) pendingTemplate true lastOpOff lastOperandStart k)))
+            ((= k "comma")
+             (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k))
+            ((= k "dot")
+             (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k))
+            ((= k "questionDot")
+             (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k))
+            ((or (= k "plusPlus") (= k "minusMinus"))
+             (if expectOperand
+               (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k)
+               (validateTokensLoop tl text stack questions pendingTemplate false lastOpOff lastOperandStart k)))
+            ((or (= k "plus") (= k "minus"))
+             (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k))
+            ((or (= k "bang") (= k "tilde"))
+             (if expectOperand
+               (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k)
+               (some off)))
+            ((= k "ellipsis")
+             (if expectOperand
+               (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k)
+               (some off)))
+            ((isBinaryOpKind k)
+             (if expectOperand
+               (some off)
+               (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k)))
+            ((isAssignmentToken k)
+             (if expectOperand
+               (some off)
+               (if (isLiteralOperandKind prevKind)
+                 (some lastOperandStart)
+                 (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k))))
+            ((= k "keyword")
+             (let [(sl (tokenSlice hd text))]
+               (cond
+                 ((or (= sl "this") (= sl "super"))
+                  (if expectOperand
+                    (validateTokensLoop tl text stack questions pendingTemplate false lastOpOff off sl)
+                    (some off)))
+                 ((isPrefixKeywordKind sl)
+                  (if expectOperand
+                    (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart sl)
+                    (some off)))
+                 ((isBinaryKeywordKind sl)
+                  (if expectOperand
+                    (some off)
+                    (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k)))
+                 (else
+                  (if expectOperand
+                    (validateTokensLoop tl text stack questions pendingTemplate false lastOpOff off sl)
+                    (some off))))))
+            ((or (= k "number") (or (= k "bigint") (or (= k "string") (or (= k "boolean") (or (= k "null") (or (= k "regex") (or (= k "ident") (= k "privateIdent"))))))))
+             (if expectOperand
+               (validateTokensLoop tl text stack questions pendingTemplate false lastOpOff off k)
+               (some off)))
+            ((= k "templateNoSub")
+             (validateTokensLoop tl text stack questions pendingTemplate false lastOpOff off k))
+            ((= k "templateHead")
+             (validateTokensLoop tl text stack questions pendingTemplate (if (< pendingTemplate 0) off pendingTemplate) true off lastOperandStart k))
+            ((= k "templateMiddle")
+             (validateTokensLoop tl text stack questions pendingTemplate true off lastOperandStart k))
+            ((= k "templateTail")
+             (validateTokensLoop tl text stack questions pendingTemplate (- 0 1) false lastOpOff off k))
+            (else
+             (some off)))))))
+
+fn findSyntaxError tokens: (List tr/Token) text: String -> (Option Int64)
+  (validateTokensLoop tokens text (list) (list) (- 0 1) true 0 0 "")
+
+fn parse text: String -> (Result tr/Node String)
+  (let [(tokens (lx/tokenize text))
+        (errOff (findSyntaxError tokens text))]
+    (mt errOff
+      ((some off) (err (str "syntax error at offset " (stringFromInt64 off))))
+      ((none)
+       (let [(root (parseTokens tokens text))]
+         (if (tr/isErrorNode root)
+           (err "syntax error at offset 0")
+           (ok root))))))

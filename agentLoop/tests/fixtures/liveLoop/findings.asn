@@ -1,0 +1,5 @@
+(:script :id "liveLoopFindings" :mode :scout
+  :turns (
+    (:turn :num 1 :reply "(:claim :text \"confirmed issue\" :file \"subject.txt\" :anchor \"a1\")")
+  )
+)

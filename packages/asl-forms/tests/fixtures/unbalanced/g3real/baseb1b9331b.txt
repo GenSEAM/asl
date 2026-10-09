@@ -1,0 +1,329 @@
+(module asl-forms/repair
+                                                                 
+  :x [RepairedItem
+      LeftItem
+      RepairResult
+      makeRepairedItem
+      makeLeftItem
+      makeRepairResult
+      repairedItemKind
+      repairedItemTok
+      repairedItemLine
+      repairedItemCol
+      leftItemLine
+      leftItemCol
+      leftItemExpected
+      leftItemNear
+      repairResultText
+      repairResultRepaired
+      repairResultLeft
+      repairResultReceipt
+      formatReceipt
+      repair
+      repairText
+      repairReceipt]
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/asl/paren :a prn)
+      (asl-syntax/asl/layout :a lay)])
+
+(schema RepairedItem
+  (:f kind String)
+  (:f tok String)
+  (:f line Int64)
+  (:f col Int64))
+
+(schema LeftItem
+  (:f line Int64)
+  (:f col Int64)
+  (:f expected String)
+  (:f near String))
+
+(schema RepairResult
+  (:f text String)
+  (:f repaired (List RepairedItem))
+  (:f left (List LeftItem))
+  (:f receipt String))
+
+(schema EditOp
+  (:f kind String)
+  (:f start Int64)
+  (:f end Int64)
+  (:f tok String)
+  (:f line Int64)
+  (:f col Int64))
+
+; (:m)                                       
+fn makeRepairedItem kind: String tok: String line: Int64 col: Int64 -> RepairedItem
+  (RepairedItem :kind kind :tok tok :line line :col col)
+
+; (:m)                                   
+fn makeLeftItem line: Int64 col: Int64 expected: String near: String -> LeftItem
+  (LeftItem :line line :col col :expected expected :near near)
+
+; (:m)                                       
+fn makeRepairResult text: String repaired: (List RepairedItem) left: (List LeftItem) receipt: String -> RepairResult
+  (RepairResult :text text :repaired repaired :left left :receipt receipt)
+
+; (:m)                                   
+fn repairedItemKind item: RepairedItem -> String
+  item.kind    
+
+; (:m)                                  
+fn repairedItemTok item: RepairedItem -> String
+  item.tok    
+
+; (:m)                                   
+fn repairedItemLine item: RepairedItem -> Int64
+  item.line    
+
+; (:m)                                  
+fn repairedItemCol item: RepairedItem -> Int64
+  item.col    
+
+; (:m)                               
+fn leftItemLine item: LeftItem -> Int64
+  item.line    
+
+; (:m)                              
+fn leftItemCol item: LeftItem -> Int64
+  item.col    
+
+; (:m)                                   
+fn leftItemExpected item: LeftItem -> String
+  item.expected    
+
+; (:m)                               
+fn leftItemNear item: LeftItem -> String
+  item.near    
+
+; (:m)                                   
+fn repairResultText res: RepairResult -> String
+  res.text    
+
+; (:m)                                       
+fn repairResultRepaired res: RepairResult -> (List RepairedItem)
+  res.repaired    
+
+; (:m)                                   
+fn repairResultLeft res: RepairResult -> (List LeftItem)
+  res.left    
+
+; (:m)                                      
+fn repairResultReceipt res: RepairResult -> String
+  res.receipt    
+
+; (:m)                                    
+fn escapeAsnString s: String -> String
+  (let [(s1 (stringReplace s "\\" "\\\\"))
+        (s2 (stringReplace s1 "\"" "\\\""))
+        (s3 (stringReplace s2 "\n" "\\n"))
+        (s4 (stringReplace s3 "\r" "\\r"))]
+    s4)
+
+; (:m)                                           
+fn nearSnippet text: String s: src/Source line: Int64 col: Int64 -> String
+  (mt (src/sourceLineStart s line)
+    ((some start)
+     (let [(end (src/sourceLineEnd s line))
+           (lineStr (optionOr (stringSlice text start end) ""))
+           (lineLen (stringLength lineStr))]
+       (if (<= lineLen 60)
+         lineStr
+         (let [(startIdx (if (<= col 40)
+                           0
+                           (if (> (+ (- col 30) 60) lineLen)
+                             (- lineLen 60)
+                             (- col 30))))
+               (sub (optionOr (stringSlice lineStr startIdx (+ startIdx 60)) ""))]
+           sub))))
+    ((none) ""))
+
+; (:m)                                            
+fn formatRepairedItem item: RepairedItem -> String
+  (str "(:kind " item.kind     " :tok \"" (escapeAsnString item.tok    ) "\" :line " (stringFromInt64 item.line    ) " :col " (stringFromInt64 item.col    ) ")")
+
+; (:m)                                        
+fn formatLeftItem item: LeftItem -> String
+  (str "(:line " (stringFromInt64 item.line    ) " :col " (stringFromInt64 item.col    ) " :expected \"" (escapeAsnString item.expected    ) "\" :near \"" (escapeAsnString item.near    ) "\")")
+
+; (:m)                                                 
+fn formatRepairedList items: (List RepairedItem) -> String
+  (if (listEmpty? items)
+    "()"
+    (let [(n (listLength items))]
+      (if (<= n 5)
+        (str "(" (stringJoin (map formatRepairedItem items) " ") ")")
+        (let [(first5 (listTake items 5))
+              (rem (- n 5))]
+          (str "(" (stringJoin (map formatRepairedItem first5) " ") " :more " (stringFromInt64 rem) ")")))))
+
+; (:m)                                             
+fn formatLeftList items: (List LeftItem) -> String
+  (if (listEmpty? items)
+    "()"
+    (let [(n (listLength items))]
+      (if (<= n 5)
+        (str "(" (stringJoin (map formatLeftItem items) " ") ")")
+        (let [(first5 (listTake items 5))
+              (rem (- n 5))]
+          (str "(" (stringJoin (map formatLeftItem first5) " ") " :more " (stringFromInt64 rem) ")")))))
+
+; (:m)                                      
+fn formatReceipt repaired: (List RepairedItem) left: (List LeftItem) -> String
+  (str "(:repaired " (formatRepairedList repaired) " :left " (formatLeftList left) ")")
+
+; (:m)                                     
+fn applyEditOp text: String op: EditOp -> String
+  (if (= op.kind     "delete")
+    (let [(s op.start    )
+          (e op.end    )
+          (len (stringLength text))]
+      (if (and (>= s 0) (<= s e) (<= e len))
+        (let [(prefix (optionOr (stringSlice text 0 s) ""))
+              (suffix (optionOr (stringSlice text e len) ""))]
+          (str prefix suffix))
+        text))
+    (let [(s op.start    )
+          (len (stringLength text))]
+      (if (and (>= s 0) (<= s len))
+        (let [(prefix (optionOr (stringSlice text 0 s) ""))
+              (suffix (optionOr (stringSlice text s len) ""))]
+          (str prefix op.tok     suffix))
+        text)))
+
+; (:m)                                          
+fn applyEditOpsLoop text: String ops: (List EditOp) -> String
+  (if (listEmpty? ops)
+    text
+    (let [(head (optionOr (listHead ops) (EditOp :kind "" :start 0 :end 0 :tok "" :line 0 :col 0)))
+          (tail (optionOr (listTail ops) (list)))
+          (nextText (applyEditOp text head))]
+      (applyEditOpsLoop nextText tail)))
+
+; (:m)                                
+fn isAsnLang lang: String -> Bool
+  (or (= lang "asn") (stringEndsWith? lang ".asn"))
+
+; (:m)                                        
+fn parseInLang text: String lang: String -> tr/Node
+  (if (isAsnLang lang)
+    (prn/parse text)
+    (lay/parse text))
+
+; (:m)                                       
+fn langHasErrors root: tr/Node lang: String -> Bool
+  (if (isAsnLang lang)
+    (prn/hasErrors root)
+    (lay/hasErrors root))
+
+; (:m)                                         
+fn langTreeErrors root: tr/Node lang: String -> (List tr/Node)
+  (if (isAsnLang lang)
+    (prn/treeErrors root)
+    (lay/treeErrors root))
+
+; (:m)                                      
+fn editKeyForApply op: EditOp -> Int64
+  (- 0 (+ (* op.start     10) (if (= op.kind     "delete") 1 0)))
+
+; (:m)                                                 
+fn editKeyForReport op: EditOp -> Int64
+  (+ (* op.start     10) (if (= op.kind     "delete") 0 1))
+
+; (:m)                                 
+fn makeDeleteEditOp text: String s: src/Source d: tr/Delete -> EditOp
+  (let [(start (tr/deleteStart d))
+        (end (tr/deleteEnd d))
+        (tok (optionOr (stringSlice text start end) ""))
+        (posOpt (src/sourcePosAt s start))
+        (line (mt posOpt ((some p) p.line    ) ((none) 1)))
+        (col (mt posOpt ((some p) p.byteCol    ) ((none) 1)))]
+    (EditOp :kind "delete" :start start :end end :tok tok :line line :col col))
+
+; (:m)                                  
+fn makeMissingEditOp s: src/Source m: tr/Missing -> EditOp
+  (let [(off (tr/missingOffset m))
+        (tok (tr/missingText m))
+        (posOpt (src/sourcePosAt s off))
+        (line (mt posOpt ((some p) p.line    ) ((none) 1)))
+        (col (mt posOpt ((some p) p.byteCol    ) ((none) 1)))]
+    (EditOp :kind "insert" :start off :end off :tok tok :line line :col col))
+
+; (:m)                                      
+fn editOpToRepairedItem op: EditOp -> RepairedItem
+  (RepairedItem :kind op.kind     :tok op.tok     :line op.line     :col op.col    )
+
+; (:m)                                              
+fn leftItemKey item: LeftItem -> String
+  (str (stringFromInt64 item.line    ) ":" (stringFromInt64 item.col    ) ":" item.expected    )
+
+; (:m)                                               
+fn dedupeLeftItems items: (List LeftItem) seen: (List String) acc: (List LeftItem) -> (List LeftItem)
+  (if (listEmpty? items)
+    (listReverse acc)
+    (let [(h (optionOr (listHead items) (LeftItem :line 0 :col 0 :expected "" :near "")))
+          (tail (optionOr (listTail items) (list)))
+          (k (leftItemKey h))]
+      (if (listContains? seen k)
+        (dedupeLeftItems tail seen acc)
+        (dedupeLeftItems tail (cons k seen) (cons h acc)))))
+
+; (:m)                                           
+fn collectLeftItems text: String s: src/Source nodes: (List tr/Node) acc: (List LeftItem) -> (List LeftItem)
+  (if (listEmpty? nodes)
+    (dedupeLeftItems (listReverse acc) (list) (list))
+    (let [(n (optionOr (listHead nodes) (tr/makeErrorNode 0 0 (list))))
+          (tail (optionOr (listTail nodes) (list)))
+          (startOff (tr/nodeStart n))
+          (posOpt (src/sourcePosAt s startOff))
+          (line (mt posOpt ((some p) p.line    ) ((none) 1)))
+          (col (mt posOpt ((some p) p.byteCol    ) ((none) 1)))
+          (expected (mt (tr/nodeMissing n)
+                      ((some m) (tr/missingTok m))
+                      ((none) "")))
+          (near (nearSnippet text s line col))
+          (item (LeftItem :line line :col col :expected expected :near near))]
+      (collectLeftItems text s tail (cons item acc))))
+
+; (:m)                                            
+fn repairLoop text: String lang: String depth: Int64 accRepaired: (List RepairedItem) -> RepairResult
+  (let [(root (parseInLang text lang))]
+    (if (not (langHasErrors root lang))
+      (makeRepairResult text accRepaired (list) (formatReceipt accRepaired (list)))
+      (if (<= depth 0)
+        (let [(srcObj (src/sourceFromString "<input>" text))
+              (errs (langTreeErrors root lang))
+              (left (collectLeftItems text srcObj errs (list)))]
+          (makeRepairResult text accRepaired left (formatReceipt accRepaired left)))
+        (let [(srcObj (src/sourceFromString "<input>" text))
+              (misList (tr/treeMissing root))
+              (delList (tr/treeDeletes root))]
+          (if (and (listEmpty? misList) (listEmpty? delList))
+            (let [(errs (langTreeErrors root lang))
+                  (left (collectLeftItems text srcObj errs (list)))]
+              (makeRepairResult text accRepaired left (formatReceipt accRepaired left)))
+            (let [(delOps (map (fn [(d tr/Delete)] -> EditOp (makeDeleteEditOp text srcObj d)) delList))
+                  (misOps (map (fn [(m tr/Missing)] -> EditOp (makeMissingEditOp srcObj m)) misList))
+                  (allOps (listAppend delOps misOps))
+                  (sortedForApply (listSortBy editKeyForApply allOps))
+                  (sortedForReport (listSortBy editKeyForReport allOps))
+                  (newRepaired (map editOpToRepairedItem sortedForReport))
+                  (nextRepaired (listAppend accRepaired newRepaired))
+                  (nextText (applyEditOpsLoop text sortedForApply))]
+              (repairLoop nextText lang (- depth 1) nextRepaired)))))))
+
+; (:m)                                         
+fn repairText text: String lang: String -> RepairResult
+  (let [(root (parseInLang text lang))]
+    (if (not (langHasErrors root lang))
+      (makeRepairResult text (list) (list) "(:repaired () :left ())")
+      (repairLoop text lang 4 (list))))
+
+; (:m)                                          
+fn repair text: String lang: String -> RepairResult
+  (repairText text lang)
+
+; (:m)                                               
+fn repairReceipt text: String lang: String -> String
+  (repairText text lang).receipt    

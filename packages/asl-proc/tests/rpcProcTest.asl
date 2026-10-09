@@ -1,0 +1,28 @@
+(module asl-proc/rpcProcTest :x [runTests] :i [(asl-proc/coreProcess :a proc) (reducer :a red)])
+
+fn testProcSpawnOperation! -> Bool
+  (let [(c (proc/cmd "python3" (list "-i"))) (s (proc/sessionSpawn! "proc-sess-100" c))] (assert (= s.id "proc-sess-100") "Session ID matches") (assert (= s.state "active") "Initial session state is active") (assert (> s.pid 0) "Session PID is positive integer") (assert (listEmpty? s.stdinBuffer) "Initial stdin buffer is empty") (assert (listEmpty? s.stdoutBuffer) "Initial stdout buffer is empty") true)
+
+fn testProcInputOperation! -> Bool
+  (let [(c (proc/cmd "cat" (list))) (s0 (proc/sessionSpawn! "proc-sess-101" c)) (s1 (proc/sessionTickIdle s0 5000)) (s2 (proc/sessionSendInput! s1 "import math\nmath.sqrt(16)\n"))] (assert (= s1.idleMs 5000) "Session idle ms updated") (assert (= s2.idleMs 0) "Sending input resets idle ms to 0") (assert (= (listLength s2.stdinBuffer) 1) "Stdin line stored in buffer") (assert (stringContains? (optionOr (listHead s2.stdinBuffer) "") "math.sqrt") "Stdin content matches") (assert (= s2.state "active") "Session remains active") true)
+
+fn testProcSkeletonOperation -> Bool
+  (let [(raw (str "--> [1/2] Compiling kernel\n" "warning: unused variable `ctx`\n" "--> [2/2] Running checks\n" "src/main.rs:42:10 - error: unresolved import\n")) (skel (red/extractOutputSkeleton raw))] (assert (= skel.totalLines 4) "Total lines count is 4") (assert (= (listLength skel.sections) 2) "Identified 2 sections") (assert (= (listLength skel.diagnostics) 1) "Extracted 1 compiler diagnostic") (assert (red/skeletonHasErrors? skel) "Skeleton flags error section") (assert (stringContains? skel.summary "Errors: 1") "Summary reports 1 error") (let [(s2 (optionOr (listGet skel.sections 1) (red/SkeletonSection :title "" :startLine 0 :endLine 0 :lineCount 0 :hasError false)))] (assert s2.hasError "Second section marked with error")) true)
+
+fn testProcReadSliceOperation -> Bool
+  (let [(lines (list "line 1: header" "line 2: compilation" "line 3: diagnostic error" "line 4: stack frame" "line 5: footer")) (startIdx 2) (endIdx 4) (slice (optionOr (listSlice lines startIdx endIdx) (list)))] (assert (= (listLength slice) 2) "Sliced 2 lines") (assert (= (optionOr (listGet slice 0) "") "line 3: diagnostic error") "First sliced line matches") (assert (= (optionOr (listGet slice 1) "") "line 4: stack frame") "Second sliced line matches") (refute (listEmpty? slice) "Slice is not empty") true)
+
+fn testProcSignalOperation! -> Bool
+  (let [(c (proc/cmd "sleep" (list "60"))) (s0 (proc/sessionSpawn! "proc-sess-102" c)) (s1 (proc/sessionKill! s0 ""))] (assert (= s0.state "active") "Original session active") (assert (= s1.state "terminated") "Killed session state is terminated") (assert (= s1.exitCode (some -9)) "Exit code reflects SIGKILL -9") (refute s1.deadlockDetected "No deadlock flagged on manual kill") true)
+
+fn testProcDeadlockTrapping! -> Bool
+  (let [(c (proc/cmd "bash" (list))) (s0 (proc/sessionSpawn! "proc-sess-103" c)) (sNormal (proc/sessionTickIdle s0 8000)) (sOver (proc/sessionTickIdle s0 12000)) (vNormal (proc/sessionCheckDeadlock sNormal 10000)) (vDeadlock (proc/sessionCheckDeadlock sOver 10000))] (refute sNormal.deadlockDetected "8s idle is not deadlocked") (assert sOver.deadlockDetected "12s idle trips deadlock") (refute vNormal.deadlockDetected "Verdict normal reports not deadlocked") (assert vDeadlock.deadlockDetected "Verdict deadlock reports deadlocked") true)
+
+fn testProcDynamicTimeoutExtension! -> Bool
+  (let [(c (proc/cmd "make" (list "-j8"))) (s0 (proc/sessionSpawn! "proc-sess-104" c)) (s1 (proc/sessionExtendTimeout s0 15000)) (s2 (proc/sessionSetTimeout s1 45000)) (sTick (proc/sessionTickIdle s2 20000)) (vCheck (proc/sessionCheckDeadlock sTick 0))] (assert (= s0.timeoutMs 5000) "Initial session timeout defaults to command timeout 5000ms") (assert (= s1.timeoutMs 20000) "Extended session timeout reflects addition") (assert (= s1.termDeadlineMs 25000) "Extended term deadline reflects addition") (assert (= s1.killDeadlineMs 27000) "Extended kill deadline reflects addition") (assert (= s2.timeoutMs 45000) "Updated session timeout reflects new ceiling") (assert (= s2.termDeadlineMs 45000) "Updated term deadline reflects set-timeout") (assert (= s2.killDeadlineMs 47000) "Updated kill deadline reflects set-timeout") (refute vCheck.deadlockDetected "20s idle is safely within 45s extended timeout ceiling") true)
+
+fn testProcDeadlineNoResurrection! -> Bool
+  (let [(c (proc/cmd "sleep" (list "60"))) (s0 (proc/sessionSpawn! "proc-sess-105" c)) (sKilled (proc/sessionKill! s0 "SIGTERM")) (sStepped (proc/sessionStepDeadline! sKilled 1000 "tmp/test-spool.spool")) (sTimedOut (proc/sessionStepDeadline! s0 10000 "tmp/test-spool.spool")) (sIdle (proc/sessionCheckDeadlock (proc/sessionTickIdle s0 1000) 500)) (sIdleStepped (proc/sessionStepDeadline! sIdle 100 "tmp/test-spool.spool"))] (assert (= sKilled.state "terminated") "Killed session is terminated") (assert (= sStepped.state "terminated") "Stepped terminated session remains terminated") (assert (= sStepped.exitCode (some -15)) "Exit code preserved on terminated step") (assert (= sTimedOut.state "terminated") "Session reaching termLimit transitions directly to terminated") (assert (= sIdle.state "idle") "Precondition: session must be idle") (assert (= sIdleStepped.state "idle") "Deadline step within threshold must preserve idle state") true)
+
+fn ! runTests -> Bool
+  (and (testProcSpawnOperation!) (and (testProcInputOperation!) (and (testProcSkeletonOperation) (and (testProcReadSliceOperation) (and (testProcSignalOperation!) (and (testProcDeadlockTrapping!) (and (testProcDynamicTimeoutExtension!) (testProcDeadlineNoResurrection!))))))))

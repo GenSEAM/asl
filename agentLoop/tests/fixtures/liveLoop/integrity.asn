@@ -1,0 +1,5 @@
+(:script :id "liveLoopIntegrity" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"green\\nplus\\n\") (:done)")
+  )
+)

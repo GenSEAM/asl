@@ -1,0 +1,1 @@
+(= (relay (s/circle 1.0)) "circle")

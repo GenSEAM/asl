@@ -1,0 +1,109 @@
+(:paradigm
+  :version "0.1.0"
+  :package aslHarness
+  :axioms [
+    (:axiom :id "energy-conservation" :rule "Context is scarce energy: target SNR >= 0.75, ban whole-file dumps >50 lines")
+    (:axiom :id "physical-truth" :rule "No claim without physical proof: required exit=0 and monotonically evaluated asserts>0")
+    (:axiom :id "boundary-universalism" :rule "Canonical shared packages for all wire protocols and delimiters (c3, d34)")
+    (:axiom :id "judicious-autonomy" :rule "Default to Fast-Path for routine work; escalate to Full-Rigor on boundaries or fault")
+    (:axiom :id "zero-sigils" :rule "Zero @ or # sigils across all identifiers, packages, and frames (c5, d48)")
+    (:axiom :id "pure-asn-memory" :rule "Zero markdown files in memory ledgers; 100% machine-native ASN with on-demand dual projection (d44)")
+    (:axiom :id "responsibility-unit" :rule "Shared teleological responsibility dominates bureaucratic compliance: user-centric intent fidelity over mechanical green passes")
+    (:axiom :id "epistemic-steps" :rule "Anti-hallucination disciplines (GroundFact, ContextBudget, AdversarialReflect, ReconcileReality) are discrete executable DAG steps, not prompt suggestions")
+    (:axiom :id "adaptive-homeostasis" :rule "Adaptive replanning upon gate failure: bounded self-healing feedback loops (max-replan-iterations 3) instead of fatal pipeline abortion")
+    (:axiom :id "audit-institutionalization" :rule "Audit discoveries must be codified into paradigm axioms; recurring defects are statically quarantined via explicit whitelisting (d69)")
+    (:axiom :id "strict-binary-whitelist" :rule "Zero unregistered third-party binaries: all host tools and dependencies must be declared in .asl.config.asn; undeclared binaries are rejected statically (d69)")
+  ]
+  :operatingModes [
+    (:mode :id "fast-path"
+      :ceremony :minimal
+      :budgetTokens 500
+      :applicability "Local single-module changes, bugfixes, test additions strictly inside declared :owns"
+      :workflow [:intentCheck :mutateMinimal :localGate :receipt])
+    (:mode :id "full-rigor"
+      :ceremony :comprehensive
+      :budgetTokens 2000
+      :applicability "Explicit directive (/plan, /gap, audit), cross-module wire/API changes, or gate failure"
+      :workflow [:intentGrounding :riskFraming :baselineFalsification :atomicDelta :adversarialReview :metaAudit])
+  ]
+  :actionOntology [
+    (:act :id "perceive" :role "scout" :tools [:sym :read :out :grep] :rule "Read slice only, zero writes, max SNR")
+    (:act :id "transliterate" :role "transliterator" :tools [:voice :fastPath :slm] :rule "Convert voice/prompt to canonical ASN intent DAG (d49)")
+    (:act :id "deliberate" :role "planner" :tools [:dag :gates :risks] :rule "Falsifiable gates before writing code")
+    (:act :id "mutate" :role "implementer" :tools [:edit :patch :write] :rule "Strictly inside :owns, zero gate weakening")
+    (:act :id "verify" :role "auditor" :tools [:test :gate :coverage] :rule "Clean context, physical receipts, dual polarity")
+    (:act :id "reconcile" :role "meta-audit" :tools [:crutchCheck :intent] :rule "Detect forgotten scaffolding and crutches")
+    (:act :id "compress" :role "compactor" :tools [:diffCodec :snr] :rule "Preserve semantic contracts, prune token noise")
+    (:act :id "ground-fact" :role "scout" :tools [:out :sym :read] :rule "Verify file AST and symbol truth before any mutation")
+    (:act :id "context-budget" :role "compactor" :tools [:tokens :snr] :rule "Throttle token ballast; enforce SNR >= 0.75")
+    (:act :id "adversarial-reflect" :role "auditor" :tools [:gap :diff] :rule "Self-adversarial pre-gate critique of diffs, boundaries, and omissions")
+    (:act :id "reconcile-reality" :role "auditor" :tools [:test :gate] :rule "Execute physical gates under strict falsifiability (exit 0, assert false must fail)")
+    (:act :id "adaptive-replan" :role "planner" :tools [:dag :triage] :rule "Dynamic recalculation of recovery DAG upon gate failure with bounded iterations")
+  ]
+  :taskLifecycle [
+    (:tier :id "t1-backlog" :file ".asl/mem/tasks/backlog.asn" :role "parked-candidates" :tokens 0 :op :triage :policy "strictly on-demand, zero recurring cron")
+    (:tier :id "t2-roadmap" :file ".asl/mem/tasks/phase_*.asn" :role "active-wave-dag" :invariants [c1 c3 c5 d40 d44 d48] :op :plan)
+    (:tier :id "t3-in-flight" :file ".asl/mem/tasks/in_flight.asn" :role "session-queue" :invariants [d45 d46 d49] :op :execute)
+  ]
+  :taskFlow [:triageBacklog :planWaveDag :claimSessionLease :queueStepsExec :verifyGateReceipt :settle]
+  :taskLeeway [
+    (:rule :tier "strict-invariants"
+      :scope ["wire-protocols" "c1-no-comments" "c2-no-emojis" "c3-canonical-helpers" "c4-token-density" "c5-no-sigils" "gate-assertions"]
+      :freedom :zero)
+    (:rule :tier "variance-leeway"
+      :scope ["internal-helper-decomposition" "local-data-structures" "algorithm-choice" "extra-edge-case-tests"]
+      :freedom :autonomous)
+    (:rule :tier "escalation-triggers"
+      :scope ["edits-outside-owns" "public-api-signature-breakage" "unresolvable-gate-failure"]
+      :freedom :mandatoryHandoff)
+  ]
+  :applicationDomains [
+    (:domain :id "ambient-voice-workspace" :target "voice/ & terminal" :desc "Hands-free coding supervisor with context-primed phoneme repair")
+    (:domain :id "ast-token-compactor" :target "asl-compiler & mem/vfs" :desc "Automated refactor passes compressing identifiers to 1-to-2 token basis")
+    (:domain :id "crash-resilient-swarms" :target "agent-core & mem/tasks" :desc "Multi-agent session lease heartbeats and deterministic step recovery")
+    (:domain :id "edge-slm-inference" :target "asl-slm & local hardware" :desc "Zero-dependency offline intent compilation on Apple Silicon M1")
+  ]
+  :densityExemplars [
+    (:ex :bad "(stringStartsWith? (vfs-normalize-path p) \"/\")"
+         :opt "(txt/starts? (v/norm p) \"/\")"
+         :savings "64% tokens")
+    (:ex :bad "voice STT: 'string start swiss' transcription error"
+         :opt "(txt/starts? ...)"
+         :savings "100% parseable intent")
+    (:ex :bad "I inspected the code and will now modify lines 10 to 15"
+         :opt "(:mutate :file \"mem/vfs.asl\" :lines [10 15] :why \"c3\")"
+         :savings "78% tokens")
+  ]
+  :decisionsAlignment [
+    (:sync :id "D40" :topic "holistic-task-protocol" :ref ".asl/mem/decisions/ADR-0040-holistic-task-protocol-and-lifecycle.asn")
+    (:sync :id "D41" :topic "epistemic-audit-crutch-taxonomy" :ref ".asl/mem/decisions/ADR-0041-harness-epistemic-audit-protocols-and-reconciliation.asn")
+    (:sync :id "D42" :topic "daemon-process-supervision" :ref ".asl/mem/decisions/ADR-0042-unified-engine-global-daemon-and-process-supervision.asn")
+    (:sync :id "D43" :topic "epistemic-paradigm-judicious-autonomy" :ref ".asl/mem/decisions/ADR-0043-harness-epistemic-paradigm-action-ontology-and-task-leeway.asn")
+    (:sync :id "D44" :topic "machine-native-asn-decisions" :ref ".asl/mem/decisions/ADR-0044-canonical-machine-native-asn-decisions-and-dual-projection-governance.asn")
+    (:sync :id "D45" :topic "sovereign-task-pool-session-leases" :ref ".asl/mem/decisions/ADR-0045-sovereign-task-pool-session-recovery-and-machine-notes-ledger.asn")
+    (:sync :id "D46" :topic "three-tier-lifecycle-bare-symbols" :ref ".asl/mem/decisions/ADR-0046-three-tier-task-architecture-and-bare-symbol-shortcodes.asn")
+    (:sync :id "D47" :topic "token-profiler-compaction-paradigm" :ref ".asl/mem/decisions/ADR-0047-codebase-token-profiler-and-rational-compaction-paradigm.asn")
+    (:sync :id "D48" :topic "universal-sigil-eradication" :ref ".asl/mem/decisions/ADR-0048-universal-sigil-eradication-and-native-bare-symbol-architecture.asn")
+    (:sync :id "D49" :topic "ambient-voice-prompt-transliterator" :ref ".asl/mem/decisions/ADR-0049-ambient-voice-and-prompt-transliterator-engine.asn")
+    (:sync :id "D50" :topic "sovereign-engine-resident-architecture" :ref ".asl/mem/decisions/ADR-0050-sovereign-engine-resident-architecture-and-deep-memory-integration.asn")
+    (:sync :id "D51" :topic "token-efficiency-format-camelcase" :ref ".asl/mem/decisions/ADR-0051-token-efficiency-format-and-camelcase-conventions.asn")
+    (:sync :id "D52" :topic "enriched-task-context-standard" :ref ".asl/mem/decisions/ADR-0052-enriched-task-context-and-holistic-consistency-audit.asn")
+    (:sync :id "D53" :topic "agent-responsibility-adaptive-dag-pure-asl" :ref ".asl/mem/decisions/ADR-0053-agent-responsibility-paradigm-adaptive-dag-and-pure-asl-migration.asn")
+    (:sync :id "D54" :topic "systemic-gap-remediation-ground-truth" :ref ".asl/mem/decisions/ADR-0054-systemic-gap-remediation-and-ground-truth-hardening.asn")
+    (:sync :id "D55" :topic "multi-dialect-shell-transpilation" :ref ".asl/mem/decisions/ADR-0055-multi-dialect-shell-transpilation-and-tool-support.asn")
+    (:sync :id "D56" :topic "holistic-audit-camelcase-compensating-sagas" :ref ".asl/mem/decisions/ADR-0056-holistic-audit-camelcase-token-optimization-and-compensating-sagas.asn")
+    (:sync :id "D57" :topic "semantic-subword-architecture" :ref ".asl/mem/decisions/ADR-0057-semantic-subword-architecture.asn")
+    (:sync :id "D58" :topic "attention-reliability-intent-driven-planning" :ref ".asl/mem/decisions/ADR-0058-attention-reliability-and-intent-driven-planning.asn")
+    (:sync :id "D59" :topic "typestate-decomposition-memory-hierarchy" :ref ".asl/mem/decisions/ADR-0059-monorepo-memory-hierarchy-and-typestate-decomposition.asn")
+    (:sync :id "D60" :topic "epistemic-meta-research-design-system" :ref ".asl/mem/decisions/ADR-0060-comprehensive-meta-research-design-and-algorithm-system.asn")
+    (:sync :id "D61" :topic "agent-goal-perception-infrastructure-readiness" :ref ".asl/mem/decisions/ADR-0061-agent-goal-perception-validation-and-infrastructure-readiness.asn")
+    (:sync :id "D62" :topic "dynamic-paradigm-specialization-chaining" :ref ".asl/mem/decisions/ADR-0062-dynamic-paradigm-specialization-third-party-harness-and-composable-chains.asn")
+    (:sync :id "D63" :topic "visual-monitoring-audit-tiers-jira-analysis" :ref ".asl/mem/decisions/ADR-0063-visual-monitoring-audit-tiers-and-jira-multidimensional-analysis.asn")
+    (:sync :id "D64" :topic "human-resonance-reflexive-psychology" :ref ".asl/mem/decisions/ADR-0064-human-resonance-reflexive-psychology-and-market-utility-paradigms.asn")
+    (:sync :id "D65" :topic "multi-project-daemon-mesh-orchestration" :ref ".asl/mem/decisions/ADR-0065-multi-project-orchestration-daemon-launch-strategy-and-mesh-network.asn")
+    (:sync :id "D66" :topic "runtime-substrate-debloat-netcat-eradication" :ref ".asl/mem/decisions/ADR-0066-runtime-substrate-debloat-netcat-eradication-and-ghost-architecture-pruning.asn")
+    (:sync :id "D67" :topic "conceptual-milestones-retrospective-practice" :ref ".asl/mem/decisions/ADR-0067-conceptual-milestones-retrospective-practice-and-pragmatic-observability.asn")
+    (:sync :id "D68" :topic "hierarchical-memory-scoping-package-repo-workspace" :ref ".asl/mem/decisions/ADR-0068-hierarchical-memory-scoping-package-repo-workspace-topology.asn")
+    (:sync :id "D69" :topic "paradigm-institutionalization-binary-whitelisting" :ref ".asl/mem/decisions/ADR-0069-paradigm-institutionalization-and-static-binary-whitelisting.asn")
+  ]
+)

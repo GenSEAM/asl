@@ -1,0 +1,7 @@
+; (:m :gate noSuchTest)
+fn fixtureMissingGate -> Int64
+  1
+
+; (:m :gate silentTest)
+fn fixtureSilentGate -> Int64
+  2

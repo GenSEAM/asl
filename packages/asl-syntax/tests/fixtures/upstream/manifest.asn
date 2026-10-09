@@ -1,0 +1,1742 @@
+(:upstreamManifest
+  :version "1.0.0"
+  :entries [
+    (:entry
+      :url "https://github.com/agent-script/asex"
+      :commit "0ddf291142993115146c70aeb5a06749126cea90"
+      :sha256 "be0106ad10c83661edf4f03bc5c9d55f1e0b9c1f936349ecd6eec638ebedd260"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/manifest.asn")
+    (:entry
+      :url "https://github.com/html5lib/html5lib-tests"
+      :commit "224991ec10db04f056a89eed8b0bd8695fd2950e"
+      :sha256 "524fcfa4d561a14f0c4e72e0573549abe6341fd4dfb8e16bc2dcf59a608a7219"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/html5lib/test1.test.sample")
+    (:entry
+      :url "https://github.com/html5lib/html5lib-tests"
+      :commit "224991ec10db04f056a89eed8b0bd8695fd2950e"
+      :sha256 "f6450e77760cea823258de86f8e08894a1815671dbec0d74e7fbdab075596e37"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/html5lib/test2.test.sample")
+    (:entry
+      :url "https://github.com/html5lib/html5lib-tests"
+      :commit "224991ec10db04f056a89eed8b0bd8695fd2950e"
+      :sha256 "9912fa27f03344243f1baa96d9690a5c2a4a9c9426c70da5cbf5c62391d62de4"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/html5lib/test3.test.sample")
+    (:entry
+      :url "https://github.com/html5lib/html5lib-tests"
+      :commit "224991ec10db04f056a89eed8b0bd8695fd2950e"
+      :sha256 "c4967118aecbf8eb2ca34d5c5306f536614acca03e58610f75fbd9efa89fbb42"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/html5lib/test4.test.sample")
+    (:entry
+      :url "https://github.com/html5lib/html5lib-tests"
+      :commit "224991ec10db04f056a89eed8b0bd8695fd2950e"
+      :sha256 "fe17483810a00247579f5f129ca9c007fbab6755ba839523e29aa9f8875f4085"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/html5lib/entities.test.sample")
+    (:entry
+      :url "https://github.com/html5lib/html5lib-tests"
+      :commit "224991ec10db04f056a89eed8b0bd8695fd2950e"
+      :sha256 "257b15197399db834361d977bdabe80b20bcbc9deff675560d2ab7bedc64947d"
+      :license "MIT"
+      :note "first 100 cases subset: full 4210 cases exceeds test runner budget"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/html5lib/namedEntities.test.sample")
+    (:entry
+      :url "https://github.com/SimonSapin/css-parsing-tests"
+      :commit "203ce36bffd617db7f118c551e32794561fb273d"
+      :sha256 "a8d7a5252373b892cfcac359360930ad9a57ed918a84331bcf0c872b80f83200"
+      :license "CC0-1.0"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/css/component_value_list.json.sample")
+    (:entry
+      :url "https://github.com/SimonSapin/css-parsing-tests"
+      :commit "203ce36bffd617db7f118c551e32794561fb273d"
+      :sha256 "7a0629ff8747c7837211c2f645a71f32ee69a5ee058ccc4e206d835cd128e55f"
+      :license "CC0-1.0"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/css/rule_list.json.sample")
+    (:entry
+      :url "https://github.com/SimonSapin/css-parsing-tests"
+      :commit "203ce36bffd617db7f118c551e32794561fb273d"
+      :sha256 "5d9e4680f64e9a92d9e668d1bc0a69168ab9bb8c6d392de8222b90e9dd88f052"
+      :license "CC0-1.0"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/css/declaration_list.json.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "1e8b6762f701c8377b4a1c714a482d03a5525ef53f6ee92ae6538f02dede5eb1"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/index.asn.sample")
+    (:entry
+      :url "https://github.com/nst/JSONTestSuite"
+      :commit "1ef36fa01286573e846ac449e8683f8833c5b26a"
+      :sha256 "6838359d34c0d077162b7e7ca70a0890e3395b8d3c28eff9aab5c8c9c112391d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/json/index.asn.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "228d3bb4d12ad6e0c00ebae60417f32c924e9cf94416f34e649e59ca4d963c50"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/7.8.3-3gs.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "148f6041944702e7c0aff02f8d4737d2fa503a7544b4039f00e08311e63fa400"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.1_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "ace5d075bce59850d44684d874c931663130b9b650dc4e3d09bca4c1e669f874"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "0d066e0e8d09f9495ed3e11cca654f7ff8bf4c8afb136a7335fb6039836d49d0"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.2_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "4b1339d4f625561ebf9b1cb8caee09b628f00c89eab0cad33585a4f37109e164"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.2_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "86765d6bfdc52760ced65def88a88fedcf09874fd5441088b996d7488353133e"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.2_T3.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "908003fb04e64bd195660bd5f68d2338e9570772b8685f2fde04529a65348d21"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.2_T4.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "c10167f1c0c8f91ed1151b285f59c42b84d7ce346c3637d28e88aaf886d6fe2c"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/numeric/S7.8.3_A1.2_T5.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d7eeafdd81cc3111a35a7949cef37e66a48bb0dbb4c02711fbb1104a7ffa6e24"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A2.1_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "5da00ffaf98c42efe07b5c3e977d6cb30f823a5cfcfbf6be219fff4610278707"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A2.1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "a6e27637bf9ffb727dc24a62962b57796209926e8234bb94f9a3002233c6fa9d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A2.2_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "11e4450f403158073a722472b48dd31e78982eb41946f12656f4da3c36157193"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A2.2_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "333a65b39c6921ea84fc08dc40640b99275328218d0f5c82c8f5840cbce17199"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A2.3_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "f402ecbd9ab3fd34d910cb7f3ed73bda6dc8f161a250746d53b1c6ba2df74314"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A4.1_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "a784886f23a6446d83820b3f184fa26b5625e145fbd1c9358b5535a1cf90f2a7"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A4.1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "74a60667178aac45dfa1888754bd781b040468384685b4fbb42998ea26759150"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/string/S7.8.4_A4.2_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "a6be59e7fd42dc2a0120b6feac8da0e2591f6f8a4b248f41213ecaf607a8b8d9"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/7.8.5-1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "b011a3fda28d62564c2b955648c06f716e5edefe01a2fad7a02b6d71ac2e20b9"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/7.8.5-1gs.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "6347e473dc6488ae8363766bc55418e316c3fd76d22cb09419a5b3cb48dd1015"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/7.8.5-2gs.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "143373d24d3d76e48d5fc20c4d87a0777dc972989825c77d9ee2dfb8e07a8ac3"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/S7.8.5_A1.1_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d390daa8a7d708348f4c3164dce87d46bb4414a2ab57d3cc9fb007947b515367"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/S7.8.5_A1.1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "dd3b70471bac6f4a9394eb0a40fd6fde9fc26092b9b896dead78e7fd3eca3371"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/S7.8.5_A1.3_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "b1aeb423feb6713d95e1fd6ca58a7340f0a3a37b48154c735c0eecac0fda13d4"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/S7.8.5_A1.3_T4.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d2821f3fa9de01e860dec5e9d7c39853e587baaee1282c75987f83bea5dc92eb"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/regexp/S7.8.5_A1.3_T5.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "f5296b3d57f807242feaf42cca5b4a09440a92d83abd01d7fe169cdc194b5d0d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/evaluation-order.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "cb2148112dfec7a53b7d77e0f9e0157ca29612f1105f7e3bf269898cfde10e5b"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-abrupt.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "a1b1eb318079b0fc78749ed8bacf64ea5e663d6228f5b2c34349773cdf2c6e27"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-function.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "5fee21b3bc1956a3f72f48c4434f1640744a5ecdbc2cd6cc8bd134016c695495"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-member-expr.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "e064bf1bd5295a196117d01191f2f5f6935b7551f5c8182f10f4bcb287a99755"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-method.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "3aeb6bf98a697df8cb141bd0a583e056ac848535e44ee01d9b1fe532779cc9db"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-obj.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "b7434c3258ab9b2cd995da99a49196b7530db641e867882de07f4a92ebff069a"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-primitive.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "983cb080b4f9785a2f56555877d0df165fc6feff6af203babc57feb9de273e33"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/template/literal-expr-template.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "add7d9e3ab9a98f468de7f1d32ce8f28ac2cd4e3483e51c5132ba3eed6fb26b9"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/S7.4_A1_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "9bda63a58b8c8331d804db7b5a230c9bbc9c7666e80024d7045b36c48f9072f8"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/S7.4_A1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "8fe92496f6c00d15acdd27feae47dc205e84f982b0bf33ddd361a24e1d9e881d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/S7.4_A2_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "e41c7bf3caaa06b740b310335109a8aaa247b2db461b6496a88ef370af9d37eb"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/S7.4_A4_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "586d8fa734617d4bab771866246b5f22cab19d78db739e6b477ffb5402572684"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/S7.4_A4_T3.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d9bc645e8f479713380bda032f2ab0633dba5bfa050f7eac56c20d65f300f92e"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/hashbang/function-body.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "4d1fd24af524ec9df0a59a731da80adb1c60f007753ea8ed06c62ead7efdd17d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/hashbang/statement-block.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "5334f7e877c06ca6e878560f4ed8216078e39cc4f6af7751e00c13795293c433"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/comments/hashbang/preceding-whitespace.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "968889d824476f415a0542d0fca8f2339b58d3237aa853f728bc6c71728d89c7"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A2.1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "9365a198e52e5f77eceec7f3debe408eeafee8b74df2f38faf14a43c6148f47b"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A2.2_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "96bdcc326f95933488ee08b36acc707574d55795ffb7e91ef76cdd284253938f"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A2.3_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d46a29b13993d9d1c02e9aa7a7ce88f3591dfc8e0cb9139113e8fb2026b8326f"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A2.4_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "14302b839e60223e6b1a92c9621001c316f6035245917d08d910c2c67a63537d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A2.5_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "a317e76c461c8efb08c3a6d4baf8e8b156c16aa2f7c1fc357b6e7969e14a0fe6"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A3.1_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "97886670b4de211a3b0496b50400efa15da53a1ed200e86fc35c96cab0d28e70"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A3.2_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "db0297f7b4b19f39b982ec6cb2d9123bbaaefd83b116e75e15377afb79104c03"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/white-space/S7.2_A3.3_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "ae56e77f43b13a1285bb8c0829d3efcf00a17b8259276562d43d05bd76e84c17"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/7.3-15.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "30204fd4aaf7b53e7f9664a7b96682633f29a6fc8228f84dd018374d349e5484"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/7.3-5.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "51773eef154ba229c821c1ed47cec77bce2269d1ea97cb3f248a4b428467bf0c"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/7.3-6.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "1cabb856757465a17d72950b0b6a0f23ceb69180e41917f8a7658e16c975f1e6"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/S7.3_A5.4.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "b167e636eaecba5a5983499e94c364d8b33389a3933f29a6747e54b0c8d078a9"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/S7.3_A7_T1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "2b003345ddc348d45a199bd71e812950e7352ea2f21402e7465bb0f297103d3f"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/S7.3_A7_T2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "10a968294c665df76278d3887f43b73ce32fe7feabcb0a7ce146540347be11c3"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/S7.3_A7_T3.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "7fcb42dfef9fd47306396fa41a331b86e22d75c48b83744cf4711d89a81e5173"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/line-terminators/S7.3_A7_T4.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "deb73f334517afb4553fb3f12d716767b6ffe3333476af542ef5927b45d5e001"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/other_id_continue-escaped.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "4a36775d34ea937475219a520be01768cf0b12712e16a0ff9eba8b7975b2d9cd"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/other_id_continue.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "285faafbb8baabcdc88ed53df483eb2c6836ca71495680ba39ae2242ee5e5a3b"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/other_id_start-escaped.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "98975fd7ab9d9ec0c875ce717af9c084446a2cfbf4f6d3a465856a831db010d8"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/other_id_start.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "808f6a38d050f226c78c50c6b1912948705b099ae26ce527a70e1c885cd5eac7"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/part-digits-via-escape-hex.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "4cad2f393d021a664ec64a9a8dfa64063ff503040fa725a9d2a8f9b67491bb58"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/part-digits-via-escape-hex4.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "1bb302369e77d197a71812ec810f8577806c526bb99635a4cbc935f8380ec9c2"
+      :license "BSD-3-Clause"
+      :note "reserved word in identifier position (syntactic parse error, not a lexical error)"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/val-if.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "65422b68ed0d7a35ed712152d18d4f0ccf11c5c990fcf1310438d3f3e05b7939"
+      :license "BSD-3-Clause"
+      :note "reserved word in identifier position (syntactic parse error, not a lexical error)"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/val-else.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "8035333182e7c7dd751e38fa9011ec39359ed35bac0011cce470cda59f4d8104"
+      :license "BSD-3-Clause"
+      :note "reserved word in identifier position (syntactic parse error, not a lexical error)"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/identifiers/val-while.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "78e90a05019d3903a5c22605bbed564b2f710359071424714d4e7349152d622b"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/arrowparameters-cover-initialize-1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "86245a2cd8b4fb9f890ffd7ed9a41b1b28f3a03696ed8584258c6730b4219a4f"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/arrowparameters-cover-rest-concisebody-functionbody.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d4268cc791620bd175d5ca507c040f174b5a3fda900cc85024a01e0bb8829f90"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/expression-body-implicit-return.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "df7a2b074ee7aa41582ff3cd73a5a0257f634d4642191646044bb5dbce2af7ae"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/params-trailing-comma-single.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "b004cce100ba09d6644b2e3ee35d347e7dd57344e59a6c52de3b927cbdfe2ce0"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/array-elements-with-object-patterns.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "37a93dab0a699760edb5cd633dfd286001842b3852528bee40d96c74ae931915"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/array-pattern-with-elisions.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "37b1cf6baabb65f5b72e6a1679632d5c3422948872e3b9917552c35b14153dbe"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/array-rest-elements.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "f1abe95180187905d7221edb53f9044d8f424bd429ad2e1e7620c9838f374919"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/object-pattern-with-no-property-list.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "06ac87c3c5ac41416bfe76a19474fef33019da94488be748296f2f4b1cbcc1c0"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/recursive-array-and-object-patterns.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "c23bdffcc494cdb21440a0162d9c53c6a14bc2aed857349222942d832be5f227"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/arrowparameters-bindingidentifier-concisebody-assignmentexpression.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "0d02ccae72725099d8eab41451f93bf8dd1c6ad049c0307105116455c41f615a"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/arrowparameters-bindingidentifier-concisebody-functionbody.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d6502f655fd2428970ba73eabe4a66941c79b12862c90efb22839a24f2962fe7"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/arrow/arrowparameters-cover-concisebody-assignmentexpression.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "35d7715ba6ab97ec510c98935b41a307802d6e9be4b7d8abf4e8057178233867"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/array-elements-with-initializer.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "6d989e8a2af51e3cc2fbed8772a22ed51491b29924a2f841c83e732bab321d37"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/array-elements-without-initializer.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "cc27ef83e4c078d4989b8411bda336dc4ce16f374c7eefc047cfd247d5ee894a"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/destructuring/property-list-bindings-elements.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "ce0e48c1c99a07051f9d3ecfc20aba2243f03159786b2a22d25978e20da6616c"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/spread/spread-mult-literal.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "c44e3503fe783e1cb1f59a8e7dd1c711a42fbad4a4d92aaabc27debf12dec29e"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/spread/spread-mult-empty.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "e952caf63db99d5b83fd3fc75a775ca4913c749e37dc8c0c62eb6bdaab6de10d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/spread/spread-mult-expr.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "7841b39b4b587aae42c26abd6054e8ddfd252f18d56bf9ddae951abdbc051dfc"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/spread/spread-obj-getter-init.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "95c0237a60610375181a2450ab789fde90595ef0180800dd6c7a1e65235cf8eb"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/spread/spread-obj-null.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "35da3e8100fe315f6b1e1686b4ff2dcaaefe4443a475558cba912f542c05d711"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/spread/spread-mult-iter.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "be31dd32641fababc321629af07af851ae76300599ebc6d3dc04352b87b6f038"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/rest/array-pattern.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "3d79e77d33b7f714e6f8e46c8121306d35daa8bc573444057beda31dc5dff885"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/rest/arrow-function.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d720321fcb4a2704dab99eec486d10179d683cb336b1433fb2e6b9124d19af00"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/rest/expected-argument-count.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "64c39d0b4f67a43fd8d5c381e2c54064cc91d9cff1de529d34cf4f33c2cd0695"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/rest/no-alias-arguments.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "3ab0743806cd7ae6fdabc3bc6e2a7e5c957932d5ba154fb049a939f98c6b357d"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/rest/object-pattern.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d6a0932b0eacde30f9625b6723f5db14f497bd8919f97cfc7290e728c377bbfe"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/rest/position-invalid.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "f4fbfc77977bfcfd30247cd127ccbb3f46d432c396f86546d07159cce8f298e8"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/async/arrow-returns-promise.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "9700d4c2915c2b755057c30848bf4e46465e52abb97604824a0de964e954b334"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/async/await-as-binding-identifier.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "f09310cd6c55f9ae129db1919cdd7c6042efafae149d9fec854abdc6ce31de6e"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/async/await-as-identifier-reference.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "35ca492d222b536ec1b30d7c0b50500883ba391d92603948b2dd563b6d2afe19"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/await/syntax-await-has-UnaryExpression.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "001fbe23a49650b2a7006a91533e3d4b4b4af2b9d1165d7b766396b6c53d4149"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/await/syntax-await-has-UnaryExpression-with-MultiplicativeExpression.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "a5e1013628cfabafc573a1e9633621abaaeaeffc8571026d93293e430371048e"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/await/async-await-interleaved.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "4b726fc9cbb0789ec4f40c8795df21cf2d2d358b8ef90bfb572888d9540011c0"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/await/await-in-function.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "dcf0c7ff2c30638e2c5f87c121c6228537b73058f23122db72a8ac1a23958b17"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/yield/captured-free-vars.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "e16e7a91de7ff547fafe2e8a0106367e8d8fbbe29b4b03405b055f80ad8547e2"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/yield/formal-parameters.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "d8a6ede8f26f0adcdb86a167e54f9a4a36a2acb248cc4c543dbcf553b9ea7559"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/yield/from-try.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "c8c243fb63210a4a36e2db562eca8976ded901e0e290d8df889259e611f7ecdd"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/yield/from-catch.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "13c8ffcac1cf38031457645c341e198164a93810a090cda57ca8c363fbde6793"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/yield/in-iteration-stmt.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "cf11c2d8102a35f2347522b6b0f7432baebcbb770c74119fa241479d5b78244a"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/yield/in-rltn-expr.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "f0ea78c4c4a2ca9bacbccc60c44017c773ddf09eb47f844b7e9720b92a966d55"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "91c0e5b8812f894575eb174ec4ed61c12b5584107da02ac63a3ecb44b474074e"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-2.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "10b4f2b92b2b5956a3100169500a9c13967f02c657ffcd8198cd6227924d388a"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-3.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "473add7647796e4a21108f4e658323f4fe43c0b3c169d74af1a0f2d429ae22af"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-4.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "aebdb6888be8d2a31aaa088d76f07249c156edaa221bbb799e862f4b2cca56db"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-5.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "2bf1383e9b2e4f93637a1ce4f03406aec81517c4383efef1e4827572430d194b"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-same-line-1.js.sample")
+    (:entry
+      :url "https://github.com/tc39/test262"
+      :commit "7ab7fafa0003f73fc85c1b95d88094d33f7eb8bd"
+      :sha256 "1e5f59888b7c0fd99a762c3bc985099a882d08cc5ed6c7e2cb037de818b175c0"
+      :license "BSD-3-Clause"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/test262/class-fields/fields-asi-same-line-2.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "c13da97825b3c67c3353bf446955767db0e6a2de4ef965d44c7df853c9c7af66"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/abstract.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1366e59dae5d2bb615f44bd3b3f007d025d2ef905a170bf30644cd3ad8a75d85"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/abstract-false-positive.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "89d6276db0f73a734fbc19ce642f2644c946653a699ad39fe5ec6c883ec8c5be"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/abstract-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "0033ed521d230c8f5de68621119c7493a645d7b3125429aeb45724ec5a5e0214"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/accessor.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "a96776561426b407ed89cf89d2ddeb622ab2750e69bd03891a7453a917c66e10"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/constructor-with-modifier-names.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "20c0595f5600042624d10ac67ec431ff44285839de28dfffe73f7f40ad60fe0d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/constructor-with-override-modifer-names.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "09b48b2dfdd77f0b57214270a2b6a74e604f2b1292da53e0ae008e5615afd3fa"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/declare-field-modifiers.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "8d7f0c082b5622fc5e2422f043e7db2391fb934fa5eeed49aaf250a9ed8f8686"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/index-signature.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "f33e77122fa039d9a4b36ddbb411579f6ce2fa68f362938c15c352aa2bda8ebc"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/members-with-modifier-names.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "9d18f28c8f892698a1139069a9682e7acf2a56d5363e18df714a7f5ab1ca59f7"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/method-modifier-name-with-type-parameters.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1531a7af6dd397fd7c2be609d3b294c5c4be506c783e63df6a99c4e491570670"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/method-with-modifiers-asi.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "00a48dd831f061d10f499ab592b36d50d36040e07c0f85bbaa9268fd9d916e32"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/modifiers-accessors.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "82d7cf2791a38fb612deb0fef761ae4cdf1742e315d27f2033e920aa884fa33b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/modifiers-methods-async.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "6dfcb917f6cec802d05ca7a76ce07129d32eae998bcde992c0508a8de24e9244"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/modifiers-override.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "15238e7bc1c3edb1ce1064a009c46b8498a929cd77753982a65516b4948a59e6"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/modifiers-properties.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "23858f65384040ac24a1a0f137bdc05c843439c9da65291a15bb34c623ef7350"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/optional-generator-method-with-modifiers.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "39d7a65c4fb3f1a4f1ee934cd8dee3dced7039e60160237286a4a5e860eabe06"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/parameter-properties.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5a34e7f7c763ee7e4e2d6934ab92efc52adaea1940717cb5a72dccb96c66a5c9"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/parameter-properties-with-decorators.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "c4b6300f6cc54bdb183bbe00c6d4ba3c398d86f415bbb97769d082cbf57a1751"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/class/private-fields-modifier-readonly.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d54f34fc200f9bf2a470920055255dfb8c4f1854e63e6f80da49821266c9fed4"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/const.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5372befad11c921468256251aef55e489f1afa8776f2b4eca5303db1a81bbf2d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/const-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "155e75bda5e8de74de30616f9fafb27bf9b08af91d222656a25b4b2672c67b42"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/destructure.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "73f0d6c7a95b5d5103333084300aec1739b6fbfe77d9469b920b632f2fc108f0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/eval.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "05fb5b08f4f78012a9d2f7df6fad95761f32d0e27bef2449a697b2688490f27a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/eval-dts.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1314f72c6fbfb2d01b5fc82d8b220b36e0d7b77af9886bf590b146c404f9c09b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/function-rest-trailing-comma.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "0f03a423a5a494f4debb1e8c20077d8afccc02a135c3ed105af1fc32bed99eb1"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/interface.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e59badec689c1cfd651d6823e3818f3e71d7724818eec016c149eba664c6141a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/interface-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "c502324d61719be926751dfc20a8fcfec514affd018cc0b353c8f8526616860f"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/let.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4289b78886f2e82368b20d260e8caa9fe27985b246bd4c2b2915dedceacc2efb"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/let-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "87946a6458208ce0ddce5b338af7f79a3077913f28c12a2d6bbb36c0dc765fce"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/pattern-parameters.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "9489d0324ef4e7a6dd57abf24447909a77b6b4700a7c4fa069a3a4e59c3100f6"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/valid-namespace-var.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "82689fa58c5b95fdc7ee2786c3483ab56bae9d6b6edbf9f6dfdcc56e5b37a71e"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/var.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "88ee0c58bdccacd715e400b633cb8cea29dc3067fca7ee99d6efeab5d8307d7b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/declare/var-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "3a57be01e55bb3d79d164112afd3bc888790e8336177c183659cd9243f794122"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/decorators/type-arguments.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "2429ba6daaf6dc4670adc4fdce927d72a4a491464cc2240c46fa9f899d547277"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/const.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "3fbc3245f8c6fa68a8a2669f943a7f5b197732095bbea4a97683b1ed76ad336c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/declare.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "bfcef3f9887433a09b2cc337394bdde76efcb7e2994ddcc80c78d6a278051bf0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/declare-const.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "12719cc0721c9364f3a7da31a3b3d6eab637cd92d8bee5d4f98ce53c84f035cc"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/declare-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "48df19ef35f6226be8e0c22fec595321fab72fe7d4e0ff3cf9bfdb465a2a9a1c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/enum-as-or-satisfies-brackets.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "8e887db4ae41c5d1827565b0c5006279440e626ae8faae0f0f4ddefbd5a48eb0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/export.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "100d45c95fef2ee24574541311dd6f2d49e52f25fce1ecff6c8941fcb9e03092"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/export-const.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e97911ff626b1b4bc226dcea0b9bafa43d34b50310e747a53fb529227ad5f861"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/export-declare-const.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "95c84fef73242b6d3e020c95006d1363c7f781491976a21a53b9d3ebaacea674"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/members.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "9d54b2c68be36029ac898bc95d3ef8b12f5cfce06dbe3a8b791d8f6a5dafab76"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/members-reserved-words.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "91807878c6b4f94bf8a36f932d56ffe94531ef2e47b388a52ffd661a2770f49c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/members-strings.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "943f87420bebf7fce25638c14d74adf31927bdc3c828fa32af2a31cc3224ba9a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/members-trailing-comma.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1218c3e11ee64905df07a97a67de1a607c056173d23b39a2b7e1cbd3023898c6"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/enum/members-trailing-comma-with-initializer.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d60856e00d9308c6ce307060163c86c59473668a428f8ed0fa5bf3e15c108e0c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/function/overloads.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "6ec1bb55ff1310e0a960babe97fbe97a5762ce7100b51b28feaa7a8ce5eb7326"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/call-signature.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "68995770d140d515d6206d7c500c40d282c27c7f1b7fe3f713a68c0ef24a5403"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/construct-signature.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "c162cd6c0f57696fe2cb6c4cdd32fa1464b8a57285e324a610fbf84bc22b32cb"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/export.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "90e5b9c018161c5d2e1836af6b2f69f1a776e24b5994b30291a4ff69ef854d5e"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/extends.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "602aeb9c26b238b3ec627fa430531a7d0041eac9aa8ae616a105563866937457"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/extends-identifier-type-arguments.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "56efa8b26860842a9ae768ddf555106441d26effa60a62b872c813fa5acaad4a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/function-like-node-1.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1ebcc9d20290c63ad1bd23cf0fb9d0ee0db9bb941394b984ca2b72a91f6d73bc"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/function-like-node-2.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e51d1a9f5f3436e7e7c2453100f97cd9dea929433a66e2d1a222cfd9c7359bf7"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/function-like-node-3.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "25683b1a037839d2378bfb6fd7995646e482f00c4534688ff9603f34c35a658f"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/function-like-node-4.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "0fe4cd723f8d8453b20cb40a8e3dd7aae08b96e0e24d64d60a9a5a65c6f61068"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/function-like-node-5.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4c8eca7fe1e785545246f0cf01f54080dfb5dc936d9463f91dcc7f30f6c5a98f"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/generic.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "b2cccb36d5d56aefff8590e2288207bd2494e2b52f740e13f02552a1deb51ba0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/get-set.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "0303c32cb6d58eecf54f1405e39f98ef6089ad9de611343dbc1f7705f2728747"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/get-set-ambiguous.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "3abeec071ad4f63647093be2baf2ca072724c689181f55562a23f40ecd054e65"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/get-set-methods.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "76c27b0bf48a1b22d27983dd1620ea6bafc011449a8049b68988b0d02ffe3747"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/index-signature.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "913a07b90294383053fe470492633a4e278b36c0537a14961c39f825bcebe9b6"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/interface-as-or-satisfies-brackets.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "18fe4b3184e50b416317c04c6f512fe9cdaa2608696ca0a9254163d3fdc8240d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/method-computed.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "a8d36f4e4db0d0ec13b8560608fa9c88983cf0c008a4fb4a7e9c3de2f03062ad"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/method-generic.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1567abb868fb15012436eb619557856c27204ebb52651e05a2725ffef1ce2ed5"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/method-optional.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "ed51594f421d442479e6a68de15d59fa514ddd5eba6d601923a0e362b393d2b5"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/method-plain.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "f7a0e960decc8f6164cdb0ed0f38ff6e9f5e35f1f5735f821aed4caf42679681"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/modifiers.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "3102164034d18a83fd4e9b39a94426a8476943e917560004bc365f701a4e6c9b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/pattern-parameters.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "48a150438d5a7d17001914d8519581a0375232d4c01892ff4b635cd5b2852289"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/properties.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "84700f3b17323739c7b31cacc8b1ee1b4fd675aaf5d57ff6f805a526f287a825"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/property-computed.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "7213d7cc5d9091384df36db0dbd69124ed4569d61fb6e05fc0e1d35d173cdcaa"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/property-named-public.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "0b79f79d6cde99f60700004bf2f1392aba7ddaefaeb32a7a98c8012aac2b279e"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/reserved-method-name.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "ba5dd86500cdb4bb01a61a6c5e9c2bd5aed16f66a028e2f3cfd58e1294059567"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/interface/separators.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "04dae7cccb8b3883459cff0e2a7ee48bb139c2d8d13ae92ca1ecd3d9ee130b9e"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/legacy-decorators/abstract-class.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "3a57be01e55bb3d79d164112afd3bc888790e8336177c183659cd9243f794122"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/legacy-decorators/type-arguments.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d12d80c29340fe5833898d647c5248f4ccf4864a58157ee82279466e036b8af9"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4e600141b85d0ac6ded803844ba5429cb2d9119acc5146eeb1234632229a2d3c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-declare.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1ed96d3cbcb99b4f5c2812a7327f7ccdc7dd1ee1d8e35e2c6d170ec4b39ab243"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-declare-export-named.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "17d57fdde06febd57d7f73e709231bddf1ea4e61b8c0c6c5e239d8962e948b6b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-declare-export-named-declaration.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "6c52e9b0801ef3397af155ca72c3a55eff75b3354c498d859e51e1f07a385f8d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-export-named-declaration.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "dda194de3d3cb1c4a7f7af9201bf660cd10a67cae28decd619d225d29cfc808a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-import-equals-internal.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "7f45827c7ecfe378b9227dcf9ff1bd94aabde778b8cef6e63096fb490f368e0c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-nested.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "8b3e941c26fbfe0e4d106f43682b212a2ab4d4e97fd5382350743b837c912e9a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/body-nested-declare.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "b6cf8712de381a76325438933791edbc34ebccc18c8f9bec7361afd3cc93a5d7"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/declare-shorthand.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "22f629fb3eb5a3d2486cb014110e102b74779767ba770598258b1c904336e312"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/global-in-module.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "94058e6d9019c4eebe46a1e58789862fc88bfea67e5ec9baab39ac29350e6984"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/head.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d835d0d9596811a7b16bef65cf76823ee027cf20bb46e0fc67d1c51add124d33"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/head-declare.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "52d66b297f28914433442fde0a18c90ffcdc0c1e6e5ebafaf5f7b2161c8bfa4b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/head-export.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "09b8b066315dfa3d780e73a0a1150a5fc87f2b25f904a6a81f3c032ce3fdbf41"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/module-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4d8a754d277c4e0b3c2161c01ab7e970ae64c6a83beb3fa965a051ea889f90d1"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/namespace-as-or-satisfies-brackets.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "f962f4878974f0ce3debb38dbc1583088702692659c61ea2ea3de26000cf0336"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/module-namespace/namespace-new-line.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4dfffb8ccdf694d9a78cdb51f8a90df7da4693c7374cdc382d9b0b1648e5e795"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/type-alias/declare.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "a5c52ae5dff4d44c4d3bdcdab1afbda92d1447da4bf4fa918d430729f65d13d6"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/type-alias/export.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "f1f8e60774d498475aa61e36f84c4a668b87fd05fb4bb42ef944a3565c5e468b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/type-alias/generic.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "20e0c39722eb3b5a52d9927a635ed0a0ed612d1a493a7ab3a20bb6035bd8f175"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/type-alias/generic-complex-tokens-true.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5615657cd2c27f3e863d216e1b76bbed5c7fbeb488fa501098116512c2a80230"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/type-alias/plain.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e31c7fe4b3f7dec9e24a26560a0d99b73a3569551fc1f1b402eae027a5f2d8a8"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-ts/type-alias/type-as-or-satisfies-equals.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "3ed7b633b8810458db9d3b1140497b64b329e2c2fd0aaa19b0e97476900c28b0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/1.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "a5b315df408157143198d7491f948e4b233ad6d8e137d8bc41cfc5dd5e46bb8d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/10.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "8c70bfa998fe9cf0bc9563a7437f875fdc419db0c179ca7291a2953c2ab05f94"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/11.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4389a4c14f320caf3907f724c6f2a149001b82028281a73efe958d6cc265b4e2"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/12.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5324970a47cb839858b1b1e63cae09d40be0732a51e2ed3d6c684119e79ddaf2"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/14.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "77c84baff40a778110a25552fe496e256feba2375b512968235a980b2addc543"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/15.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e9b26f73b26f26ad9a4b4402157cacdf5c9b64351bf89c775af6bf05b01356fa"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/16.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "b4ed3552e9a23892f28e086764bfd97634d5db7edf15af78347e20800045256b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/17.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "189d7f916cbe92f69366585e78777aa6ee8256f72f6f287841e35beb50856378"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/18.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5ed6d0fa7c148b51e66a1bab3dbf5ea0447587386318da46f756fbe837380a94"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/19.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "527b95d225edc600bf2d1657523dc72fb96b0729e1eba7a4a19dbdbcc969b333"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/2.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "fa64669dfda3ecea540b04e8126c673bd28fe4b265204fa4d6b9dcbedd7e8fa3"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/20.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "bc54581506958d8ddd747a3b2dbb00478743dd78c021653f56ea4773b64aa7c0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/21.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e0e0159a8941c0b0718b8c8cfb28468ebf0c3cfeb47cf0887af1492d5eb8cd06"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/3.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "eeb88aa6783b034da5e2d2d1d87a136834ca800b5a2914ba18cff9b18bda8792"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/4.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1274dd5b5e0d3c51aca320be5aa92dd1fda7a757d57893c890101a443c38f0c9"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/5.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "2a36903c42321144faeb7c49070c6cc0c6ab5d2c3027789f60001c4cf8538998"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/6.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "b647c859e511e9aa15f0231fb46d0257e420549487e2df8c62d09baf308d5b43"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/7.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "58cd5596b80dd13cdca498f81ef6519364fc74f0f4d6c4b21bce7e291e808470"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/8.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "a831e74cbbbd8025c13cd17844f38c65e6c5d9e66f2abb52bd6858e6f693cc30"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/asi.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "4a329885b2499db1b968583f681aeabf0bcdf9b55f9d3d1692a26f223f503492"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/empty-expression-container.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "7cd0cf0c4f0ac1d7514d6bbe0f94efc4821263aac1e4b6c828f2874f40293e58"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/entity.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "09e94bc7badc229576ccd249bf7235331d834a4531cb4fa428f14f958330993b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/fragment-1.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "2d5a1dfa451f768cc2d9a1e3a7a80c349d266c3499eaf49946058fb733992902"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/fragment-2.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5c6f4eb74731efe129e2b1c1f031bf1425dd139af93d3586f330ae23aca3e7ab"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/fragment-3.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "ad3e32581dd105479bb492e2ae74113b468e45bc45007d3e447d2b1bb638a697"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/fragment-4.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "ab43100706b579eca3f76b91b7c07084638243e0790237044c2ae73af0a958fb"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/fragment-5.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "b03fa3303a5190c270c8eeb9a8b6ee64efe3d3eb88c11ede39b412df534a00c4"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/fragment-6.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "2577591d02114569f8936dd34c1cea7863c6f57d4f798d0eb9a030693deee04a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/html-comment.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "412acbcd6b15656d1a98e0386ad6851ba814f0c384cb3927e687d1f19a2d95ff"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/jsx-text-closing-angle-bracket-wrapped.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "67b2c689f8d4b0a4833e834662492cd6e94ac264b8901cbf03ea2c98381b59f5"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/jsx-text-closing-curly-brace-wrapped.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "59b39723b3d5334927bb3150bfa7611a86db069ca58a456844c12ec9e637b415"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/keyword-tag.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1ee3c81ab812806a83056d18ad48fa6c0797a1ad6ea0445b58e7e71f9f2a965c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/namespace-tag.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "952fa0a7487ad59db8d198ab71a2d64792b9c8390c5f447a7160bc4df8103555"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/nonentity-decimal.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "8576905f0f55a0f36bd006138b90bdf52f245d14f2e3f09bb7ed1021730ecf6c"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/nonentity.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "867147a4a3de08de54f6ecbc0e518f7b34bff3e902ec7f14d1ff6d5819d8c7eb"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/sequence-expression.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "5c37f875a1c7dfd662a1171d02b714f766ca1060de99570213becee5efba1b4f"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/spread-text.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "fa9fac853b985c7f6453518b7572229486ce058530715acccda5d05010d994e7"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/basic/yield-tag.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "2ce48583c81916276a2f26bda622b9da52ca2a2fb44c76cda70be5b825b004d4"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/html-entities/code-point-like-ampersand.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "e838e290f1d2e6639fe1c5ed9e79671c5c5d7e10510bff85bf0d9b3ec5824443"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/html-entities/code-point.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "ec995be9cb428966cde56f060a854f9ee1b7376c83e9876e6ec3604ac7b5f539"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/html-entities/html4.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "65bbb35b3a6d4ad5d882b62a5fc7d0a1934fcefce8401049c28be9461ce03cc6"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/html-entities/invalid.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "45ff1b8a9b816170440491820b75190318cc10ea6a9c0a5720aedb8110819eae"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/html-entities/no-object-prototype.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "6f64f2da1ec85ccaed5bee753ff137f1122e24a78e7b77d43a8583f9aa1b42d0"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/1.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "b0568407e50711a716871331eb6fe53605c911c2410e5a2e7d488034a12f1079"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/2.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "a9d56d0a63b8a8aaf6bbb5e279906e6c8a2e74de1af0a4f38c511bee8b593b46"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/3.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d70f6b94d5e485ac4dd4017d9264c79d6976fdc8b7ca0f1e1f9b5781ddbc0e2b"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/4.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "85d681b9a572db1e0a92408023be8e1e391c90e04b08dc63c96f6ab47fc84730"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/5.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "f51bea5ea6c9708ae03e2c0597d23849ddf4740f1f3767466b1d245090858948"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/6.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "30901901b663e88150892b5c8443805bdb527d94bef64780b37d5197e20fde9d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/7.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "965ec56a9ee30b60d6ddf05401d914936b21f90c7ddea685a2ed570c98907724"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/issue-11387.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "c05a275ed1a00baeb5ada0f485f671df5f3e69633250c0c108dab4374d913e17"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/issue-14552.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "7c72c25ede5da0425811165b08b941765587e8db9b4a5c5af3a80fb0f6add848"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/issue-2083.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "c8c3f0e0dc8af04ca5bc2d969662c2425e29c0c484a789041328bd64c5895c0d"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/issue-2114.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d6e300b3d2594c4aec12b83b10bd2ca72f5260d3d527f350184b08712260e39a"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/issue-8891.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d11804f5a29e51adf3ee297558a589b738a99d84696bc1ca21017e3eae483440"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-jsx/regression/nbsp.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "793dc278dcc2ebd398d8c4405b06e44669db29b5e6ccda02a00e4b5fd4fa64a3"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/generic-tsx.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "1e2f2b6e396e979187225c251eaa53086315cf69665977cc18d2579818daf286"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/anonymous-function-generator.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "dc39f45e1830be9ab3e49e9b0326bb89e2bd10fb8cf5d70d554ef1abfd93e670"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/assignment-in-conditional-expression.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "06a9bc4efcfe245378dd87ebed57d1439a95d51df9685176f39ff21915602c40"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/brace-is-block.tsx.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d7fb899615c04b374c26d9c6ad67eeea4f79db33e76eb8013abc337cbd9dac9e"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/type-arguments.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "7bdeddde046bd205bbee78971c863cd47fc6334548e2b8fd782bab5f6d4d1946"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/type-parameters.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "fe6dd15e338803c53a2e194b65aadc99d5afda79cc767980f5cdbd8c8a94c001"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/jsx-opening-element-type-args.tsx.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d6d76156d639ee8f819037e77cddfd7f603a9e07f45c7dfbd2ad664b816eb6de"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/type-arguments-tsx.ts.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "f7608363eb0c9a138f91ae2ecece7d1e282ea747ce1459769515638c8df41266"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/arrow-function-generic-tsx-trailing-comma.js.sample")
+    (:entry
+      :url "https://github.com/babel/babel"
+      :commit "fd665901dece022a0eda2ae7adda03bc9baabd5e"
+      :sha256 "d17d8de176434358aa0c18fcaec0fd4b0ac0a27a439bb43ebe13949c60069c60"
+      :license "MIT"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/babel-tsx/arrow-function-generic-tsx.js.sample")
+  ])

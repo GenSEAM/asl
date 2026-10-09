@@ -1,0 +1,6 @@
+(:package asl-csv
+ :version "0.1.0"
+ :entry "src/csv.asl"
+ :description "Pure AgentScript RFC 4180 CSV row reader and typed numeric column parser"
+ :aslFirst true
+ :dependencies [])

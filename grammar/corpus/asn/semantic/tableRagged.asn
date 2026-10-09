@@ -1,0 +1,6 @@
+; expect: table-ragged
+; A table is a rectangle. A short row has no benign reading — the format has `_`
+; for a missing cell — and a long one has nowhere to put the extra.
+([:id :sku :price]
+ [[1 "SSD-1TB" 89.99]
+  [2 "RAM-32GB"]])

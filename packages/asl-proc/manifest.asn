@@ -1,0 +1,7 @@
+(:package aslProc
+ :version "0.1.0"
+ :entry "src/process.asl"
+ :description "Native AgentScript OS Child Process Management, Stream Redirection, Pipes, APM, and Resource Guards"
+ :aslFirst true
+ :modules ["asl-proc" "asl-proc/process" "asl-proc/pool" "asl-proc/pipe" "asl-proc/batchDag" "asl-proc/reducer" "asl-proc/spool" "asl-proc/deadline" "asl-proc/apm" "asl-proc/diagnostics" "asl-proc/gitDiff" "asl-proc/gitSearch" "asl-proc/gitTopo" "asl-proc/github"]
+ :dependencies ["asl-text"])

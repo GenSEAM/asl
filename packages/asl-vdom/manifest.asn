@@ -1,0 +1,19 @@
+(:package aslVdom
+ :version "0.1.0"
+ :entry "src/vdom.asl"
+ :description "Dual perception AXTree downsampling and reactive virtual DOM engine"
+ :aslFirst true
+ :modules [
+   "asl-vdom/asn-svg"
+   "asl-vdom/diagram"
+   "asl-vdom/emit-jsx"
+   "asl-vdom/html"
+   "asl-vdom/perception"
+   "asl-vdom/physics-reactor"
+   "asl-vdom/polyglot"
+   "asl-vdom/state"
+   "asl-vdom/state-bridge"
+   "asl-vdom/vdom"
+   "asl-vdom/signals"
+ ]
+ :dependencies [])

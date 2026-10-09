@@ -1,0 +1,105 @@
+(:rules :v 10 :src D81 :basis ".asl/mem/principles.asn" :glossary ".asl/mem/principles.asn :glossary"
+  :form "a rule is a goal, the question that refutes it, and its check; :invariant only where :enforcedBy exits non-zero on violation; :core true loads every session; :when lists phases, absent means all"
+  (:rule :id teleology :force :orientation :core true
+    :do "values rank V0 > V1 > V2 > V3 > V4 > V5 > V6: principal authority, irreversible or outward operations await explicit confirmation; invariants; stated intent; falsifiable evidence; minimal causal surface; signal over noise; velocity"
+    :refute "did a lower value, or a proxy metric, win over a higher one?"
+    :enforcedBy :none :basis (MeasureTheThingNotItsProxy))
+  (:rule :id workspaceIsolation :force :invariant :core true
+    :do "the asex workspace has no git remote; GenSEAM repos receive only exports built by tools/exportRepo.asl in a throwaway repo, never a push from the root"
+    :refute "does git remote print anything at the workspace root?"
+    :enforcedBy "git rev-parse --is-inside-work-tree >/dev/null 2>&1 && test $(git remote 2>/dev/null | wc -l) -eq 0")
+  (:rule :id ssot :force :invariant :core true
+    :do "rules live only in asl/grammar/rules.asn; every other surface is its rendering"
+    :refute "does any rendered surface differ from rules.asn?"
+    :enforcedBy "./scripts/install.sh --check-rules" :basis (DocumentationThatMisdirectsIsWorseThanNone))
+  (:rule :id syntax :force :invariant :core true
+    :do "every tracked ASL and ASN file has balanced delimiters"
+    :refute "is any tracked .asl or .asn file unbalanced?"
+    :enforcedBy "./bin/asl audit consistency" :basis (FailLoudlyAndInThePlaceResponsible))
+  (:rule :id semantics :force :invariant :core true
+    :do "every gate suite executes more than zero assertions and declared assertions equal executed ones and no assertion condition is constant (D152); a violation is red unless listed with its digest in .asl/mem/knownRed.asn, which only shrinks"
+    :refute "does a suite pass with zero executed assertions, or declare one it never reaches?"
+    :enforcedBy "./bin/asl audit gates --full --sync" :basis (AGateThatCannotFailIsNotAGate GroundTruthOverReport))
+  (:rule :id evaluator :force :orientation :when (implement grade)
+    :do "goal of phase R1: imports bind, an unknown symbol is an error, zero truthiness, and a test passes only by returning true"
+    :refute "does an unbound symbol exit 0, (if 0 1 2) yield 1, or a false-returning test pass?"
+    :enforcedBy :none :basis (DeclaredIsNotWorking))
+  (:rule :id dialect :force :orientation :when (implement)
+    :do "ASN and ASL converge on parens only, camelCase keywords and symbols, single-line wire frames"
+    :refute "how many bracket and brace opens remain outside strings?"
+    :enforcedBy :none :basis (D140 StructuralTaxIsNotOverhead))
+  (:rule :id gates :force :affordance :core true
+    :do "each step closes on a gate that fails before the change, passes after it, and fails on revert, failing on the claim rather than a missing file"
+    :refute "would this gate still pass on revert or on a mutant?"
+    :enforcedBy :none :basis (AGateThatCannotFailIsNotAGate))
+  (:rule :id grading :force :orientation :when (grade)
+    :do "a reviewer other than the writer runs the gates in a clean context and reports exit code and executed assertions"
+    :refute "did the writer grade its own work, or share the grader context?"
+    :enforcedBy :none :basis (TheWriterDoesNotGrade))
+  (:rule :id triMap :force :orientation :when (plan implement grade)
+    :do "every intent atom has a hunk and a gate, and every hunk serves an atom"
+    :refute "which atom lacks a hunk or a gate, which hunk serves no atom?"
+    :enforcedBy :none :basis (AGateThatCannotFailIsNotAGate))
+  (:rule :id txn :force :affordance :core true
+    :do "a step is a transaction: declared :owns, edits staged by (:edit) and (:diff), then (:flush) or (:discard); one writer per partition"
+    :refute "did a write land outside :owns, or two writers share a partition?"
+    :enforcedBy :none :basis (AStepIsATransaction OneWriterPerOwnedPartition))
+  (:rule :id parallelism :force :orientation :core true :when (plan implement)
+    :do "planning splits work into units one context finishes, each with disjoint :owns, a base and a gate; the planner keeps what it does next and queues the rest in .asl/mem for any taker, so one agent, several or dozens run the same plan; units start from a merged base, and merging to main keeps pace with writing"
+    :refute "which unit is too big for one context, lacks :owns or a gate, overlaps another open unit, or waits unmerged while new ones start?"
+    :enforcedBy :none :basis (OneWriterPerOwnedPartition))
+  (:rule :id fleet :force :affordance :core true :when (plan implement grade)
+    :do "parallel work runs as the asex-fleet skill (.claude/skills/asex-fleet): units on the same files form one track with one writer, tracks run in parallel in their own worktrees with a real host build; each writer proves its gates red before and green after; all tracks integrate once, the integration is compared with its base (suites of every touched package host and native, asl-host check of touched files, executed-assert counts), one fresh auditor grades every claim, one parallel fix round goes to the original writers, then one merge"
+    :refute "which unit was audited alone while its track was still writing, which integration skipped the base comparison, which fix went to a writer other than the track's?"
+    :enforcedBy :none :basis (OneWriterPerOwnedPartition))
+  (:rule :id concurrencyModes :force :orientation :core true :when (plan implement)
+    :do "one plan runs in any concurrency mode: a single thread, many parallel units, or calls merged into one model stream; the agent chooses the decomposition and keeps units conflict-free, and the gateway owns the calls: priority, admission and filtering, queues, batching, timeouts and retries, all declared per provider and profile (which models and providers a profile may use, when to route where, how to balance, which dispatch mode) rather than hard-coded"
+    :refute "which plan only works in one mode, which agent schedules model calls itself, which call bypasses the gateway queue or timeout?"
+    :enforcedBy :none :basis (OneWriterPerOwnedPartition))
+  (:rule :id coordination :force :orientation :core true
+    :do "conflicts are prevented, not resolved: a writer claims its scope before editing; coordination state lives in the tier its lifetime needs, with long-term decisions in tracked row-keyed ledgers that merge by row, and claims, queues, leases and session notes outside the tracked tree in a store every worktree and agent shares"
+    :refute "which write happened without a claim, which short-lived coordination file is tracked or force-added, which tracked ledger conflicts on concurrent row additions?"
+    :enforcedBy :none :basis (OneWriterPerOwnedPartition))
+  (:rule :id tools :force :affordance :when (scout plan implement)
+    :do "asl forms, catalogued by (:tools), pay on large files, symbol lookups and edits that must land together, and on a small file native tools cost about the same; in a project being ported to ASL foreign code is reasoned as ASL and lowered to native diffs, and in any other project it keeps its own patterns and tools; host C stays at the ASL-first floor"
+    :refute "was a large file read whole, or a symbol edit across files made by hand, where an asl form gave the same for less?"
+    :enforcedBy :none :basis (CoreKnowsNoExtension))
+  (:rule :id capabilities :force :affordance
+    :do "asl/grammar/capabilities.asn marks each capability works, partial, absent or lies, with a fallback; an absent one is replaced by its fallback and the report says so"
+    :refute "was a fallback result presented as the capability itself?"
+    :enforcedBy :none :basis (DeclaredIsNotWorking))
+  (:rule :id ledger :force :affordance :core true
+    :do "plans and non-reconstructible findings live in .asl/mem ledgers, re-read before mutation; what a command reconstructs is not stored"
+    :refute "was a plan held only in context, or a command output copied into memory?"
+    :enforcedBy :none :basis (TheLedgerIsTheMemory ReconstructibilityThreshold))
+  (:rule :id output :force :orientation :core true
+    :do "receipts are ASN; receipts, commands and patches address code by path and symbol or content anchor; evidence and constraints stay whole"
+    :refute "does a receipt, command or patch rely on a line number, or was evidence dropped?"
+    :enforcedBy :none :basis (OutputStatesOnlyWhatWasComputed FailLoudlyAndInThePlaceResponsible))
+  (:rule :id numbers :force :orientation
+    :do "every figure carries method, scope and date in principles.asn or a bench lock; a normative value is labelled adopted"
+    :refute "is there a number here with no entry behind it?"
+    :enforcedBy :none :basis (NumbersCarryScopeOrTheyAreNotClaims NormativeAndEmpiricalAreNotMixed))
+  (:rule :id context :force :orientation :when (scout implement)
+    :do "reads load by symbol and bounded slice, the prefix stays byte-stable, independent forms share a batch, compaction shortens structure and keeps whole words"
+    :refute "was a whole file loaded where a slice would do, or a word shortened?"
+    :enforcedBy :none :basis (ReadBySymbolAndSlice CompressStructureNeverSpelling))
+  (:rule :id names :force :orientation :when (implement)
+    :do "camelCase whole words; among names that carry the meaning, the measured cheapest wins"
+    :refute "was a name chosen by length or looks over meaning and measured cost?"
+    :enforcedBy :none :basis (MeasuredCostDecidesTheName CamelCaseCorpusSaving))
+  (:rule :id edge :force :orientation :core true
+    :do "where no step covers the case: read before write, stage before flush, smallest diff inside :owns, cheapest refutation first, off-assignment defects reported, escalation names seen, tried, fork and resolves"
+    :refute "was an unplanned case filled in fluently rather than escalated?"
+    :enforcedBy :none :basis (CheapestRefutationFirst StakeOverCompliance ReversibilityBeforeOptimality))
+  (:rule :id limitCycle :force :orientation :core true
+    :do "the same failure signature is capped at 3; the third yields a :witness record and a new causal hypothesis or an escalation"
+    :refute "did a fourth attempt repeat a failed approach?"
+    :enforcedBy :none :basis (AdaptivePivoting))
+  (:rule :id git :force :orientation :when (implement)
+    :do "a commit message is one ASN line (:c :a area :do what :g gate :ev ids), intended changes only, base diff and log verified before merge; a comment is one (:m ...) form per asl/grammar/meta.asn, ratcheted by metaAudit"
+    :refute "does a commit carry an unrelated change or sit on the wrong base?"
+    :enforcedBy :none :coAuthor false)
+  (:pack :id architecture
+    :outcomes ("minimal causal surface" "one-way dependency DAG" "host independence")
+    :affordances ("./bin/asl audit consistency" "./bin/asl audit foreign")))

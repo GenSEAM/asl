@@ -1,0 +1,5 @@
+; expect: table-duplicate-column
+; Mapping is by header name, so a repeated column means two cells claim one
+; field and the row's meaning depends on which the decoder reached first.
+([:id :sku :id]
+ [[1 "SSD-1TB" 2]])

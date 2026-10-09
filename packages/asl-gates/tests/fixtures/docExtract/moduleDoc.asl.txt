@@ -1,0 +1,7 @@
+(module asl-replay/fx/moduleDoc
+  :d "A module doc on its own line, alone"
+  :x [addOne]
+  :i [])
+
+fn addOne a: Int64 -> Int64
+  (+ a 1)

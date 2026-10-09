@@ -1,0 +1,7 @@
+(:doc :symbol "asl/packages/asl-port/src/astUtil.asl#" :text "AST inspection and JSON traversal utilities for Python AST")
+(:doc :symbol "asl/packages/asl-port/src/main.asl#" :text "Main CLI entry point for asl port py tool under PT1")
+(:doc :symbol "asl/packages/asl-port/src/parity.asl#" :text "Parity recorder spec generation for python functions under PT1")
+(:doc :symbol "asl/packages/asl-port/src/plan.asl#" :text "Port plan generation listing functions, classes, callers, globals, and imports")
+(:doc :symbol "asl/packages/asl-port/src/translate.asl#" :text "Mechanical translation of Python AST subset to ASL drafts and port gaps")
+(:doc :symbol "asl/packages/asl-port/tests/portTest.asl#" :text "Unit tests for asl-port under PT1")
+(:doc :symbol "asl/packages/asl-port/src/pyAst.asl#" :text "Isolated python3 invocation and AST parsing for asl-port under PT1")

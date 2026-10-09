@@ -1,0 +1,22 @@
+(module asl/packages/asl-mem/tests/wasmRuntimeTest :x [runTests RunTests testWasmRuntimeInitialization testLinearMemoryAllocation testLinearMemoryReadWrite testMemoryCeilingGuards testDualPolarityRefutations] :i [(../src/wasmRuntime :a wr)])
+
+fn testWasmRuntimeInitialization -> Bool
+  (let [(st (wr/initWasmRuntime 1 16))] (assert (= st.pageCount 1) "Initial page count must be 1") (assert (= st.maxPages 16) "Max page ceiling must be 16") (assert (= st.totalBytes 65536) "Initial bytes must equal 65536 (1 WASM page)") (refute (!= st.pageCount 1) "Initial page count must refute non-1") (refute (< st.maxPages st.pageCount) "Max pages must not be less than current pages") true)
+
+fn testLinearMemoryAllocation -> Bool
+  (let [(st (wr/initWasmRuntime 1 4)) (growRes (wr/growLinearMemory st 2))] (assert (ok? growRes) "Growing memory by 2 pages returns ok") (refute (err? growRes) "Growing memory within limits must not error") (let [(stGrown (optionOr (mt growRes ((ok s) (some s)) ((err _) (none))) st))] (assert (= stGrown.pageCount 3) "Page count must now be 3") (assert (= stGrown.totalBytes (* 3 65536)) "Total bytes must be 3 * 65536") (refute (!= stGrown.pageCount 3) "Page count must refute non-3") true))
+
+fn testLinearMemoryReadWrite -> Bool
+  (let [(st (wr/initWasmRuntime 1 4)) (writeRes (wr/writeLinearMemory st 100 (list 65 66 67 68)))] (assert (ok? writeRes) "Writing 4 bytes at offset 100 returns ok") (refute (err? writeRes) "Writing within bounds must not error") (let [(stAfter (optionOr (mt writeRes ((ok s) (some s)) ((err _) (none))) st)) (readRes (wr/readLinearMemory stAfter 100 4))] (assert (ok? readRes) "Reading 4 bytes at offset 100 returns ok") (let [(bytes (optionOr (mt readRes ((ok b) (some b)) ((err _) (none))) (list)))] (assert (= (listLength bytes) 4) "Read exactly 4 bytes") (assert (= (optionOr (listGet bytes 0) 0) 65) "First byte is 65 ('A')") (assert (= (optionOr (listGet bytes 1) 0) 66) "Second byte is 66 ('B')") (assert (= (optionOr (listGet bytes 2) 0) 67) "Third byte is 67 ('C')") (assert (= (optionOr (listGet bytes 3) 0) 68) "Fourth byte is 68 ('D')") (refute (!= (optionOr (listGet bytes 0) 0) 65) "First byte refutes non-65") true)))
+
+fn testMemoryCeilingGuards -> Bool
+  (let [(st (wr/initWasmRuntime 1 2)) (exceedRes (wr/growLinearMemory st 5)) (oobWrite (wr/writeLinearMemory st 70000 (list 1 2))) (oobRead (wr/readLinearMemory st 65535 4)) (negRead (wr/readLinearMemory st -1 4))] (assert (err? exceedRes) "Growing beyond max pages returns error") (refute (ok? exceedRes) "Growing beyond max pages must refute ok") (assert (err? oobWrite) "Write beyond total bytes returns error") (refute (ok? oobWrite) "Write beyond total bytes must refute ok") (assert (err? oobRead) "Read crossing page boundary returns error") (refute (ok? oobRead) "Read crossing page boundary must refute ok") (assert (err? negRead) "Negative offset read returns error") (refute (ok? negRead) "Negative offset read must refute ok") true)
+
+fn testDualPolarityRefutations -> Bool
+  (let [(st1 (wr/initWasmRuntime 1 8)) (st2 (wr/initWasmRuntime 2 8))] (assert (!= st1.pageCount st2.pageCount) "Different initial pages produce distinct states") (refute (= st1.pageCount st2.pageCount) "Different initial pages refute equality") (let [(zeroGrow (wr/growLinearMemory st1 0))] (assert (ok? zeroGrow) "Growing by 0 pages is a valid no-op") (refute (err? zeroGrow) "Growing by 0 pages must refute error")) (let [(negGrow (wr/growLinearMemory st1 -1))] (assert (err? negGrow) "Negative page growth returns error") (refute (ok? negGrow) "Negative page growth refutes ok")) (let [(emptyWrite (wr/writeLinearMemory st1 0 (list)))] (assert (ok? emptyWrite) "Writing empty byte list is valid no-op") (refute (err? emptyWrite) "Writing empty byte list refutes error")) (let [(zeroRead (wr/readLinearMemory st1 0 0))] (assert (ok? zeroRead) "Reading 0 bytes returns ok with empty list") (refute (err? zeroRead) "Reading 0 bytes refutes error")) true)
+
+fn runTests -> Bool
+  (do (assert (testWasmRuntimeInitialization) "testWasmRuntimeInitialization passed") (assert (testLinearMemoryAllocation) "testLinearMemoryAllocation passed") (assert (testLinearMemoryReadWrite) "testLinearMemoryReadWrite passed") (assert (testMemoryCeilingGuards) "testMemoryCeilingGuards passed") (assert (testDualPolarityRefutations) "testDualPolarityRefutations passed") true)
+
+fn RunTests -> Bool
+  (runTests)

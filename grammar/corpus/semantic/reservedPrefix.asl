@@ -1,0 +1,10 @@
+"expect: rule-7"
+
+"agentscript- is a reserved compiler-internal prefix (asl/agentSpecCore.md 2)."
+
+"This name is lexically well-formed, so rejection must come from the reserved"
+
+"rule itself and not from an unrelated character-class violation."
+
+fn agentscript-internal -> Int64
+  1

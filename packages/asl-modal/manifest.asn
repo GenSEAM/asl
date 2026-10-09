@@ -1,0 +1,7 @@
+(:package asl-modal
+ :version "0.1.0"
+ :entry "src/modal.asl"
+ :description "Modal provider: one preset pins every version; preset validation, modal command rendering, gateway provider entry, plugin capability record, lifecycle ops behind the budget spend gate, and the /v1/chat/completions contract; the Modal-side app.py is ASL data rendered under ~/.asl/run/modal, never tracked"
+ :aslFirst true
+ :modules ["asl-modal" "asl-modal/modal"]
+ :dependencies ["asl-parser" "asl-json" "asl-gateway" "asl-harness"])

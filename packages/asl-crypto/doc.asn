@@ -1,0 +1,7 @@
+(:doc :symbol "asl/packages/asl-crypto/src/aes.asl#" :text "FIPS-197 AES block cipher for 128, 192, and 256 bit keys.")
+(:doc :symbol "asl/packages/asl-crypto/src/fernet.asl#" :text "Fernet token verification and AES-CBC message recovery.")
+(:doc :symbol "asl/packages/asl-crypto/src/hmac.asl#" :text "RFC 2104 HMAC-SHA256 and constant-time byte equality.")
+(:doc :symbol "asl/packages/asl-crypto/tests/aesTest.asl#" :text "FIPS-197 AES block vectors and CBC padding validation.")
+(:doc :symbol "asl/packages/asl-crypto/tests/fernetFixture.asl#" :text "Fernet spec verify.json vector, decoded AES fields, and expected plaintext.")
+(:doc :symbol "asl/packages/asl-crypto/tests/fernetTest.asl#" :text "Fernet token verification vectors and rejection cases.")
+(:doc :symbol "asl/packages/asl-crypto/tests/hmacTest.asl#" :text "RFC 4231 SHA-256 HMAC vectors and constant-time equality behaviour.")

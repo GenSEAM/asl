@@ -1,0 +1,7 @@
+(module asl-replay/fx/fnDoc
+  :x [addOne]
+  :i [])
+
+fn addOne a: Int64 -> Int64
+  :d "Adds one to a"
+  (+ a 1)

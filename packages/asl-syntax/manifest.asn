@@ -1,0 +1,6 @@
+(:package asl-syntax
+ :version "0.1.0"
+ :entry "src/core/source.asl"
+ :description "Lossless syntax trees, source mapping, and foreign language models"
+ :aslFirst true
+ :dependencies [])

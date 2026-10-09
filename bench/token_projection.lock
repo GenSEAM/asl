@@ -1,0 +1,11 @@
+(:tokenProjectionLock
+  :version "0.4.0"
+  :encoding "cl100k_base"
+  :fixtures 37
+  :verboseTokens 15041
+  :v04Tokens 8723
+  :tokenSavingsPct 42.00
+  :byteSavingsPct 43.15
+  :compactionRatio 0.5799
+  :certified true
+  :timestamp 1789718400000)

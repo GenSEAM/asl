@@ -1,0 +1,5 @@
+(:script :id "liveLoopRejected" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:step :op \"write\" :file \".asl/run/agentLoop/intruder.txt\" :content \"bad\\n\") (:done)")
+  )
+)

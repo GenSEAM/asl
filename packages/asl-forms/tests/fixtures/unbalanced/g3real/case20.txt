@@ -1,0 +1,32 @@
+(module asl-syntax/tests/asl/probeTmp
+                                                                    
+  :x [runTests]
+  :i [(asl-syntax/asl/asn :a asn)
+      (asl-transpile/asn :a at)])
+
+fn probeOne path: String -> Bool
+  (mt (fileReadString path)
+    ((err e) (do (println (str path " READ-ERR " e)) false))
+    ((ok src)
+     (let [(r1 (asn/asnRead src))
+           (r2 (at/asnRead src))]
+       (println (str path " len=" (stringFromInt64 (stringLength src))))
+       (println (str path " syntax=" (if (ok? r1) "ok" "err")))
+       (println (str path " transpile=" (if (ok? r2) "ok" "err")))
+       (mt r1
+         ((ok v1)
+          (mt r2
+            ((ok v2)
+             (let [(s1 (asn/asnWrite v1)) (s2 (at/asnWrite v2))]
+               (println (str path " w1len=" (stringFromInt64 (stringLength s1)) " w2len=" (stringFromInt64 (stringLength s2)) " equal=" (if (= s1 s2) "yes" "NO")))
+               true))
+            ((err e2) (do (println (str path " transpile-err " e2)) true))))
+         ((err e1)
+          (mt r2
+            ((ok _) (do (println (str path " syntax-err " e1)) true))
+            ((err e2) (do (println (str path " both-err " e1 " / " e2)) true)))))))))
+
+fn runTests -> Bool
+  (and (probeOne "tests/agentEval/ledger.asn")
+  (and (probeOne "tests/acceptance/r1AgentLoop/fixtures/journalReplies.asn")
+       (probeOne "tests/harnessBench/ledger.asn")))

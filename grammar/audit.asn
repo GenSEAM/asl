@@ -1,0 +1,38 @@
+(:grammar
+  :id "asl/grammar/audit"
+  :version 1
+  :package "asl-conform"
+  :description "Schemas of the audit hypergraph: findings anchored by symbol and lens, edges between them, and patch receipts. The implementation is asl/packages/asl-conform/src/hypergraph.asl, whose schemas this mirrors."
+  :types (
+    (:struct AuditNode
+      :d "Diagnostic audit finding node anchored by symbol and lens"
+      (:field id Str "Unique audit finding identifier: lens/check/Module:symbol")
+      (:field lens Str "Diagnostic lens: architecture, platform, logic, memory, security, tokenEconomics")
+      (:field severity Str "Severity level: info, warning, error, critical")
+      (:field anchor Str "Code location anchor: Module:symbol:anchor")
+      (:field evidence Str "Concrete diagnostic proof or AST snippet")
+      (:field remedy Str "Machine-verifiable single-turn remediation prescription")
+      (:field provenance Str "Audit rule ID and originating engine"))
+
+    (:struct AuditEdge
+      :d "Directed relational hypergraph edge connecting audit nodes or symbols"
+      (:field from Str "Source audit node or AST symbol ID")
+      (:field to Str "Target audit node or AST symbol ID")
+      (:field kind Str "Relational causality kind: blastRadius, violates, imports, refutes, dependsOn"))
+
+    (:struct AuditHypergraph
+      :d "Multi-dimensional audit hypergraph container"
+      (:field version Str "Hypergraph schema version")
+      (:field timestamp Int64 "Generation timestamp in nanoseconds")
+      (:field nodes (List AuditNode) "Indexed diagnostic findings")
+      (:field edges (List AuditEdge) "Causal relational edges")
+      (:field score Int64 "Composite codebase integrity score (0-100)"))
+
+    (:struct PatchReceipt
+      :d "Remediation receipt for one audit node, built by emitPatchReceipt"
+      (:field id Str "Receipt identifier")
+      (:field target Str "Target symbol or node anchor")
+      (:field status Str "Remediation status: ready, applied, verified, rejected")
+      (:field diffStr Str "Minimal AST diff or patch replacement")
+      (:field tokenCount Int64 "Estimated token count: byte length of diffStr divided by 4, plus 8; no bound is enforced"))
+  ))

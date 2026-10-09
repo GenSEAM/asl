@@ -1,0 +1,2 @@
+(:doc :symbol "asl/packages/asl-foreign/src/block.asl#" :text "Identity tags for inline foreign blocks and context-specific value escapers.")
+(:doc :symbol "asl/packages/asl-foreign/tests/blockTest.asl#" :text "Foreign block and escaping tests.")

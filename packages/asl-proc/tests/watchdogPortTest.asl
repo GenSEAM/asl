@@ -1,0 +1,101 @@
+(module asl/packages/asl-proc/tests/watchdogPortTest
+  :x [runTests RunTests! testPortBindingGuard testSessionStepDeadlineResurrectionFix! testDeadlockEscalation! testDualPolarityRefutations]
+  :i [(asl-proc/deadline :a wd) (asl-proc/process :a proc) (asl-proc/coreProcess :a cp)])
+
+fn testPortBindingGuard -> Bool
+  (let [(p1 (wd/detectBoundPort "2026-09-18 [info] Server listening on port 8080"))
+        (p2 (wd/detectBoundPort "API gateway ready at http://localhost:3000/v1"))
+        (p3 (wd/detectBoundPort "Socket bound to 127.0.0.1:9090"))
+        (p4 (wd/detectBoundPort "Bound to 0.0.0.0:4000"))
+        (p5 (wd/detectBoundPort "Event :port-bound 5000 reported"))
+        (pNeg (wd/detectBoundPort "Normal execution log without any network binding"))
+        (parsed8080 (wd/parsePortNumber "8080"))
+        (parsedOvf (wd/parsePortNumber "999999"))
+        (parsedAlpha (wd/parsePortNumber "non_numeric_port"))]
+    (assert p1.detected "Port 8080 detected in 'listening on port' format")
+    (assert (= p1.port 8080) "Detected port number is 8080")
+    (assert (= p1.event ":port-bound") "Audit event is :port-bound")
+    (refute (not p1.detected) "Valid port line must not fail detection")
+    (assert p2.detected "Port 3000 detected in 'localhost:' format")
+    (assert (= p2.port 3000) "Detected port number is 3000")
+    (assert (= p2.event ":port-bound") "Localhost audit event is :port-bound")
+    (assert p3.detected "Port 9090 detected in '127.0.0.1:' format")
+    (assert (= p3.port 9090) "Detected port number is 9090")
+    (assert p4.detected "Port 4000 detected in '0.0.0.0:' format")
+    (assert (= p4.port 4000) "Detected port number is 4000")
+    (assert p5.detected "Port 5000 detected in ':port-bound' format")
+    (assert (= p5.port 5000) "Detected port number is 5000")
+    (assert (not pNeg.detected) "Negative line yields no port detection")
+    (refute pNeg.detected "Negative line must refute port detection")
+    (assert (= pNeg.port 0) "Negative line port number is 0")
+    (assert (= pNeg.event ":none") "Negative line event is :none")
+    (assert (= (optionOr parsed8080 -1) 8080) "parsePortNumber extracts 8080")
+    (assert (none? parsedOvf) "Port > 65535 returns none on overflow")
+    (refute (some? parsedOvf) "Overflow port must not be accepted")
+    (assert (none? parsedAlpha) "Non-numeric port string returns none")
+    (refute (some? parsedAlpha) "Alpha port must not be accepted")
+    true)
+
+fn testSessionStepDeadlineResurrectionFix! -> Bool
+  (let [(cmd (proc/cmd "sleep" (list "100")))
+        (termSession (cp/ProcessSession :id "sess-term" :pid 9999 :state "terminated" :cmd cmd :stdinBuffer (list) :stdoutBuffer (list) :stderrBuffer (list) :exitCode (some -9) :idleMs 12500 :timeoutMs 10000 :deadlockDetected true :termDeadlineMs 10000 :killDeadlineMs 12000 :terminationReceipt (none)))
+        (stepped (proc/sessionStepDeadline! termSession 1000 "tmp/deadline_test.spool"))]
+    (assert (= stepped.state "terminated") "Terminated session remains strictly terminated after a deadline step")
+    (refute (!= stepped.state "terminated") "Terminated session must not change state")
+    (refute (= stepped.state "active") "Terminated session must not be resurrected to active")
+    (refute (= stepped.state "running") "Terminated session must not be resurrected to running")
+    (assert (= stepped.exitCode (some -9)) "Exit code remains -9 after a deadline step")
+    (assert stepped.deadlockDetected "Deadlock detected flag preserved")
+    true)
+
+fn testDeadlockEscalation! -> Bool
+  (let [(cmd (proc/cmd "worker" (list)))
+        (activeSession (cp/ProcessSession :id "sess-act" :pid 1001 :state "active" :cmd cmd :stdinBuffer (list) :stdoutBuffer (list) :stderrBuffer (list) :exitCode (none) :idleMs 0 :timeoutMs 10000 :deadlockDetected false :termDeadlineMs 10000 :killDeadlineMs 12000 :terminationReceipt (none)))
+        (s1 (proc/sessionStepDeadline! activeSession 2000 "tmp/deadline_test.spool"))
+        (s2 (proc/sessionStepDeadline! s1 8500 "tmp/deadline_test.spool"))
+        (sKill (proc/sessionStepDeadline! activeSession 12500 "tmp/deadline_test.spool"))]
+    (assert (= s1.state "active") "Session under deadline remains active")
+    (refute s1.deadlockDetected "Session under deadline has no deadlock")
+    (assert (= s1.idleMs 2000) "Idle time accumulates to 2000ms")
+    (assert (= s2.state "terminated") "Session exceeding 10s termLimit terminates")
+    (assert s2.deadlockDetected "Deadlock detected at termLimit")
+    (assert (= s2.exitCode (some -15)) "SIGTERM exit code -15 emitted at termLimit")
+    (refute (= s2.state "active") "Breached session must not remain active")
+    (assert (= sKill.state "terminated") "Session exceeding 12s killLimit terminates")
+    (assert sKill.deadlockDetected "Deadlock detected at killLimit")
+    (assert (= sKill.exitCode (some -9)) "SIGKILL exit code -9 emitted at killLimit")
+    (refute (= sKill.state "active") "Breached kill session must not remain active")
+    true)
+
+fn testDualPolarityRefutations -> Bool
+  (let [(pEmpty (wd/detectBoundPort ""))
+        (pZero (wd/parsePortNumber "0"))
+        (pNeg (wd/parsePortNumber "-80"))
+        (dUnder (wd/checkStepDeadline 5000 10000))
+        (dOver (wd/checkStepDeadline 10500 10000))]
+    (assert (not pEmpty.detected) "Empty string yields no port detection")
+    (refute pEmpty.detected "Empty string must refute port detection")
+    (assert (none? pZero) "Port 0 returns none")
+    (refute (some? pZero) "Port 0 must not be accepted")
+    (assert (none? pNeg) "Negative port returns none")
+    (refute (some? pNeg) "Negative port must not be accepted")
+    (assert (not dUnder.timedOut) "5s on 10s deadline does not time out")
+    (refute dUnder.timedOut "5s step must refute timeout")
+    (assert (= dUnder.errorCode ":none") "Nominal step has :none error code")
+    (refute (!= dUnder.errorCode ":none") "Nominal step must not emit error code")
+    (assert dOver.timedOut "10.5s on 10s deadline triggers timeout")
+    (refute (not dOver.timedOut) "10.5s step must not pass without timeout")
+    (assert (= dOver.errorCode ":ERR_STEP_TIMEOUT") "Breached deadline emits :ERR_STEP_TIMEOUT")
+    (refute (!= dOver.errorCode ":ERR_STEP_TIMEOUT") "Breached deadline must not have nominal code")
+    true)
+
+fn RunTests! -> Bool
+  (do
+    (assert (testPortBindingGuard) "testPortBindingGuard must pass")
+    (assert (testSessionStepDeadlineResurrectionFix!) "testSessionStepDeadlineResurrectionFix must pass")
+    (assert (testDeadlockEscalation!) "testDeadlockEscalation must pass")
+    (assert (testDualPolarityRefutations) "testDualPolarityRefutations must pass")
+    true)
+
+fn ! runTests -> Bool
+  (RunTests!)

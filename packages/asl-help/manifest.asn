@@ -1,0 +1,6 @@
+(:package asl-help
+  :version "0.2.0"
+  :entry "src/toolRegistry.asl"
+  :description "Self-Contained Machine-Readable ASN Help System and Autonomous Toolbelt Introspection Engine"
+  :aslFirst true
+  :dependencies ["asl-text"])

@@ -1,0 +1,11 @@
+import os
+# noqa: E402
+# (:m :ref D140 :gate metaAuditTest :tags (audit) :effect pure :adopted MeasureTheThingNotItsProxy :why "the clean case has no violations")
+def cleanFixtureSymbol():
+    return os.sep
+
+
+# (:m :ref gates :why "a decorator sits between form and definition")
+@staticmethod
+def cleanDecorated():
+    return 1

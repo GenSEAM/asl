@@ -1,0 +1,68 @@
+(module asl-target-llvm/tests/exitCodeTest
+                                                                                                          
+  :x [runTests]
+  :i [])
+
+fn host -> String
+  "asl/host/out/asl-host"
+
+fn clang -> String
+  "/usr/bin/clang -Wno-override-module"
+
+fn lib -> String
+  "asl/host/out/libaslhost.a"
+
+fn ! sh cmd: String -> ProcessOutput
+  (processRun cmd)
+
+fn okProgram -> String
+  "(module test/okProg :d \"ok prog\" :x [entry] :i [])\n\nfn ! entry -> (Result Int64 String)\n  (ok 42)\n"
+
+fn okNonIntProgram -> String
+  "(module test/okNonIntProg :d \"ok non-int prog\" :x [entry] :i [])\n\nfn ! entry -> (Result String String)\n  (ok \"done\")\n"
+
+fn errProgram -> String
+  "(module test/errProg :d \"err prog\" :x [entry] :i [])\n\nfn ! entry -> (Result Int64 String)\n  (err \"boom\")\n"
+
+fn mainNameProgram -> String
+  "(module test/mainNameProg :d \"main name prog\" :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  (ok 7)\n"
+
+fn mainRawProgram -> String
+  "(module test/mainRawProg :d \"main raw prog\" :x [main] :i [])\n\nfn ! main -> Int64\n  13\n"
+
+fn buildDriver -> String
+  "asl/packages/asl-compiler/src/asl1.asl"
+
+fn ! compileAndRun work: String name: String src: String -> ProcessOutput
+  (let [(srcFile (str work "/" name ".asl"))
+        (llFile (str work "/" name ".ll"))
+        (binFile (str work "/" name))
+        (w (fileWriteString srcFile src))
+        (build (sh (str (host) " run " (buildDriver) " build " srcFile " -o " llFile)))
+        (link (sh (str (clang) " -x ir " llFile " -x none " (lib) " -lm -o " binFile)))]
+    (sh binFile))
+
+fn ! compareWithHost work: String name: String src: String -> Bool
+  (let [(srcFile (str work "/" name ".asl"))
+        (w (fileWriteString srcFile src))
+        (hostOut (sh (str (host) " run " srcFile)))
+        (nativeOut (compileAndRun work name src))]
+    (do
+      (assert (= nativeOut.exitCode     hostOut.exitCode    )
+              (str name ": exit code native " nativeOut.exitCode     " vs host " hostOut.exitCode    ))
+      (assert (= nativeOut.stdout     hostOut.stdout    )
+              (str name ": stdout native '" nativeOut.stdout     "' vs host '" hostOut.stdout     "'"))
+      true)))
+
+fn ! runTests -> Bool
+  (let [(made (sh "mktemp -d"))
+        (work (stringReplace made.stdout     "\n" ""))]
+    (do
+      (assert (= made.exitCode     0) "mktemp -d makes a work directory")
+      (assert (compareWithHost work "okProg" (okProgram)) "ok 42 matches host run")
+      (assert (compareWithHost work "okNonIntProg" (okNonIntProgram)) "ok non-int matches host run")
+      (assert (compareWithHost work "errProg" (errProgram)) "err matches host run")
+      (assert (compareWithHost work "mainProg" (mainNameProgram)) "entry named main returning Result matches host run")
+      (assert (compareWithHost work "mainRawProg" (mainRawProgram)) "entry named main returning Int64 matches host run")
+      (assert (= (sh (str "rm -rf " work)).exitCode     0) "work directory removed")
+      true))

@@ -1,0 +1,3 @@
+                       (newNode (if (elemsHaveError argsRes.elements    )
+                                  (tr/makeErrorNode (tr/tokenStart lparenTok) closeEnd kids)
+                                  (tr/makeNode "newExpr" (tr/tokenStart hd) closeEnd kids))]

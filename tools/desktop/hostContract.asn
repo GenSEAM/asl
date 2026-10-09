@@ -1,0 +1,27 @@
+(:hostBoundaryContract
+  :version "1.0.0"
+  :platform :macos
+  :renderer :wkWebView
+  :isolation :appSandbox
+  :entitlements [
+    (:entitlement :name "com.apple.security.app-sandbox" :value true :rationale "Contain renderer within macOS App Sandbox")
+    (:entitlement :name "com.apple.security.network.client" :value true :rationale "Restricted to 127.0.0.1 localhost IPC with asl-gateway")
+    (:entitlement :name "com.apple.security.files.user-selected.read-only" :value false :rationale "Deny arbitrary filesystem dialog escapes")
+  ]
+  :ipcBoundary (
+    :transport :localHttpAndWebsocket
+    :allowedOrigin "http://127.0.0.1:8765"
+    :messageValidation [
+      (:field :workspaceId :type :string :required true :rationale "Authenticate originating workspace")
+      (:field :leaseEpoch :type :int64 :required true :rationale "Fence stale worker execution")
+      (:field :owns :type :pathList :required true :rationale "Verify write set containment")
+    ]
+    :externalNavigation :denied
+    :popups :denied
+    :externalSchemes :denied
+  )
+  :memoryModel (
+    :aslCore :collectorFreeFrameArena
+    :webKitEngine :isolatedProcessMemory
+  )
+)

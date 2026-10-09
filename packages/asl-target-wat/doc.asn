@@ -1,0 +1,8 @@
+(:doc :symbol "asl/packages/asl-target-wat/src/emitWat.asl#" :text "Standalone WebAssembly Text (WAT) emitter backend for AgentScript.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/emitWatTest.asl#" :text "Unit tests for standalone WebAssembly Text (WAT) code generator with D77 refutations.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/arithmetic.asl#" :text "Localized arithmetic test fixture for WebAssembly Text target code emission.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl#" :text "Localized WASI snapshot preview-1 host imports test fixture for WebAssembly Text target code emission.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl#wasiFdWrite" :text "WASI snapshot preview 1 fd_write binding.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl#wasiFdRead" :text "WASI snapshot preview 1 fd_read binding.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl#wasiProcExit" :text "Contractual noreturn WASI snapshot preview 1 proc_exit binding emitting unreachable sentinel.")
+(:doc :symbol "asl/packages/asl-target-wat/tests/fixtures/wasiImports.asl#wasiClockTimeGet" :text "WASI snapshot preview 1 clock_time_get binding.")

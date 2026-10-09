@@ -1,0 +1,10 @@
+(module asl-replay/fx/fieldDoc
+  :x [Thing makeThing]
+  :i [])
+
+(schema Thing
+  (:f id Int64 "Row identifier")
+  (:f label String))
+
+fn makeThing id: Int64 label: String -> Thing
+  (Thing :id id :label label)

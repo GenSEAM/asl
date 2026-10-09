@@ -1,0 +1,6 @@
+(:package asl-zip
+ :version "0.1.0"
+ :entry "src/gzip.asl"
+ :description "Pure AgentScript RFC 1951 DEFLATE and RFC 1952 gzip decoder"
+ :aslFirst true
+ :dependencies [])

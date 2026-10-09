@@ -1,0 +1,19 @@
+(module aslVoice/tests/transliteratorTest :x [runTests testPhoneticRepairs testExtendedHomophones testEmitAsnIntent testTransliterateVoicePrompt testFastPathBypass] :i [(voice/transliterator :a tr) (voice/fastPath :a fp)])
+
+fn testPhoneticRepairs -> Bool
+  (let [(r1 (tr/disambiguateHomophones "please use string start swiss on data")) (r2 (tr/disambiguateHomophones "connect to asl man context")) (r3 (tr/disambiguateHomophones "execute task claim for worker"))] (assert (stringContains? r1 "stringStartsWith?") "Must repair string start swiss to stringStartsWith?") (assert (not (stringContains? r1 "string start swiss")) "Must not retain corrupted phoneme string start swiss") (assert (stringContains? r2 "asl-mem") "Must repair asl man to asl-mem") (assert (not (stringContains? r2 "asl man")) "Must not retain corrupted phoneme asl man") (assert (stringContains? r3 "task-claim") "Must repair task claim to task-claim") (assert (not (stringContains? r3 "task claim")) "Must not retain corrupted phoneme task claim") true)
+
+fn testExtendedHomophones -> Bool
+  (let [(r1 (tr/disambiguateHomophones "initialize vad config and step vad")) (r2 (tr/disambiguateHomophones "run tests on asl voice")) (r3 (tr/disambiguateHomophones "execute task settle and task recover"))] (assert (stringContains? r1 "VadConfig") "Must repair vad config to VadConfig") (assert (stringContains? r1 "step-vad") "Must repair step vad to step-vad") (assert (stringContains? r2 "run-tests") "Must repair run tests to run-tests") (assert (stringContains? r2 "asl-voice") "Must repair asl voice to asl-voice") (assert (stringContains? r3 "task-settle") "Must repair task settle to task-settle") (assert (not (stringContains? r3 "task settle")) "Must not retain unhyphenated task settle") true)
+
+fn testEmitAsnIntent -> Bool
+  (let [(i1 (tr/emitAsnIntent "verify voice" (list "task-claim" "task-settle"))) (i2 (tr/emitAsnIntent "standalone goal" (list))) (valid1 (fp/isValidAsnInput? i1)) (valid2 (fp/isValidAsnInput? i2))] (assert valid1 "Emitted intent must be valid ASN") (assert valid2 "Empty action intent must be valid ASN") (assert (stringContains? i1 ":goal \"verify voice\"") "Intent must contain target goal") (assert (stringContains? i1 ":action-dag [\"task-claim\" \"task-settle\"]") "Intent must contain action DAG") (assert (not (= (stringLength i1) 0)) "Emitted intent must not be empty") true)
+
+fn testTransliterateVoicePrompt -> Bool
+  (let [(res1 (tr/transliterateVoicePrompt "string start swiss and asl man")) (res2 (tr/transliterateVoicePrompt "task claim then run tests and task settle")) (valid1 (fp/isValidAsnInput? res1)) (valid2 (fp/isValidAsnInput? res2))] (assert valid1 "Transliterated output must be valid ASN S-expression") (assert valid2 "Multi-action transliterated output must be valid ASN S-expression") (assert (stringContains? res1 "stringStartsWith?") "Must contain repaired stringStartsWith?") (assert (stringContains? res1 "asl-mem") "Must contain repaired asl-mem") (assert (stringContains? res2 "task-claim") "Must contain task-claim action") (assert (stringContains? res2 "run-tests") "Must contain run-tests action") (assert (not (stringContains? res1 "asl man")) "Must not contain corrupted phoneme asl man") true)
+
+fn testFastPathBypass -> Bool
+  (let [(rawAsn "(:task :id t100 :priority :high)") (res (tr/transliterateVoicePrompt rawAsn))] (assert (= res rawAsn) "Valid ASN input must pass through unchanged without wrapping") (assert (not (stringStartsWith? res "(:intent")) "Pre-structured ASN must not be wrapped in intent frame") true)
+
+fn runTests -> Bool
+  (do (assert (testPhoneticRepairs) "test-phonetic-repairs must pass") (assert (testExtendedHomophones) "test-extended-homophones must pass") (assert (testEmitAsnIntent) "test-emit-asn-intent must pass") (assert (testTransliterateVoicePrompt) "test-transliterate-voice-prompt must pass") (assert (testFastPathBypass) "test-fast-path-bypass must pass") true)

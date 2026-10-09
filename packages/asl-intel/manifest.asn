@@ -1,0 +1,8 @@
+(:package asl-intel
+ :version "0.2.0"
+ :entry "src/main.asl"
+ :description "Code intelligence graph, impact analysis and ASN navigator (aslIntel modules, folded from the former top-level code-intel) plus analyzers (coupling, impact, outline, query, deadcode, vacuity, stubs, graph, complexity, trace, sweep, vitality) ported from bin/asl-intel under ADR D135"
+ :aslFirst true
+ :modules ["asl-intel" "asl-intel/model" "asl-intel/text" "asl-intel/rx" "asl-intel/pats" "asl-intel/json" "asl-intel/host" "asl-intel/tab" "asl-intel/coupling" "asl-intel/search" "asl-intel/deadcode" "asl-intel/vacuity" "asl-intel/stubs" "asl-intel/graph" "asl-intel/complexity" "asl-intel/trace" "asl-intel/sweep" "asl-intel/vitality" "asl-intel/fixture"
+           "asl-intel/codec" "asl-intel/diagram" "asl-intel/extractor" "asl-intel/symbolGraph" "asl-intel/health" "asl-intel/hotspotCoverage" "asl-intel/intel" "asl-intel/placement" "asl-intel/preload" "asl-intel/query" "asl-intel/stmBridge" "asl-intel/textScan" "asl-intel/xref"]
+ :dependencies ["asl-mem" "asl-text" "asl-runtime"])

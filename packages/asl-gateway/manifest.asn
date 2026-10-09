@@ -1,0 +1,27 @@
+(:package aslGateway
+  :version "1.1.0"
+  :entry "src/server.asl"
+  :description "Sovereign L7 Cognitive Gateway & Omni-Protocol Nexus: LMK key management, pure Dyck-1 data synchronization, universal browser frames, and generative media accounting"
+  :aslFirst true
+  :dependencies ("asl-text" "asl-json" "asl-proc" "asl-http")
+  :modules (
+    "aslGateway"
+    "aslGateway/server"
+    "aslGateway/wire"
+    "aslGateway/lmk"
+    "aslGateway/gateway"
+    "aslGateway/browserGateway"
+    "aslGateway/sync"
+    "aslGateway/browser"
+    "aslGateway/media"
+    "aslGateway/omniIngress"
+    "aslGateway/pyText"
+    "aslGateway/htmlEntities"
+    "aslGateway/search"
+    "aslGateway/research"
+    "aslGateway/cockpit"
+    "aslGateway/localTime"
+    "aslGateway/omniApi"
+    "aslGateway/getRoutes"
+    "aslGateway/batchPool"
+    "aslGateway/poolDispatch"))

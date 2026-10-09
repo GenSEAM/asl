@@ -1,0 +1,29 @@
+fn skipTrivia toks: (List tr/Token) -> (Pair (List tr/TreeElement) (List tr/Token))
+  (skipTriviaLoop toks (list))
+
+fn expectClose rem: (List tr/Token) kind: String endPos: Int64 -> (Pair tr/Token (List tr/Token))
+  (mt (listHead rem)
+    ((none) (pair (tr/makeToken "error" endPos endPos) rem))
+    ((some hd)
+     (if (= (tr/tokenKind hd) kind)
+       (pair hd (optionOr (listTail rem) (list)))
+       (pair (tr/makeToken "error" endPos endPos) rem))))
+
+fn elemsHaveError elems: (List tr/TreeElement) -> Bool
+  (if (listEmpty? elems)
+    false
+    (let [(hd (optionOr (listHead elems) (tr/elemToken (tr/makeToken "" 0 0))))
+          (tl (optionOr (listTail elems) (list)))]
+      (mt hd
+        ((tr/elemNode n) (or (tr/isErrorNode n) (or (elemsHaveError (tr/nodeChildren n)) (elemsHaveError tl))))
+        ((tr/elemToken tok) (if (or (tr/isErrorToken tok) (= (tr/tokenKind tok) "error")) true (elemsHaveError tl)))))))
+
+fn isAssignTarget n: tr/Node -> Bool
+  (let [(k (tr/nodeKind n))]
+    (or (= k "ident")
+    (or (= k "privateIdent")
+    (or (= k "memberExpr")
+    (or (= k "optionalChain")
+    (or (= k "parenExpr")
+    (or (= k "arrayLiteral")
+        (= k "objectLiteral")))))))))

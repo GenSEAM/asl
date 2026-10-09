@@ -1,0 +1,14 @@
+(module asl-replay/fx/comments
+  :x [addOne stripIt]
+  :i [])
+
+; (:m :why "strip outer quotes from docstring")
+fn stripIt a: Int64 -> Int64
+  (+ a 1)
+
+; a free comment about addOne
+; (:m :ref gates :why "kept form test")
+fn addOne a: Int64 -> Int64
+  (+ a 1)
+
+; trailing comment with no definition after it

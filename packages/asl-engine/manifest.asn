@@ -1,0 +1,19 @@
+(:package asl-engine
+ :version "0.1.0"
+ :layer 0
+ :entry "src/engine.asl"
+ :description "Resident Runtime Engine & Context Isolation Supervisor: Lifecycle, FileLock Lease, Circuit Breaker, RSS Guard, Watchdogs, Idle Exit, Subprocess Transport, Unix-Socket Server and the asl engine CLI"
+ :aslFirst true
+ :modules ["asl-engine"
+           "asl-engine/wire"
+           "asl-engine/breaker"
+           "asl-engine/lease"
+           "asl-engine/guard"
+           "asl-engine/watchdog"
+           "asl-engine/supervisor"
+           "asl-engine/transport"
+           "asl-engine/build"
+           "asl-engine/engine"
+           "asl-engine/server"
+           "asl-engine/cli"]
+ :dependencies ["asl-json"])

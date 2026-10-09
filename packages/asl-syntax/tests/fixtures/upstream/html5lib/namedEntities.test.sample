@@ -1,0 +1,1074 @@
+{
+  "tests": [
+    {
+      "input": "&AElig",
+      "description": "Named entity: AElig without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c6"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "input": "&AElig;",
+      "description": "Named entity: AElig; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c6"
+        ]
+      ]
+    },
+    {
+      "input": "&AMP",
+      "description": "Named entity: AMP without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 5
+        }
+      ]
+    },
+    {
+      "input": "&AMP;",
+      "description": "Named entity: AMP; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&"
+        ]
+      ]
+    },
+    {
+      "input": "&Aacute",
+      "description": "Named entity: Aacute without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c1"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "input": "&Aacute;",
+      "description": "Named entity: Aacute; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c1"
+        ]
+      ]
+    },
+    {
+      "input": "&Abreve",
+      "description": "Bad named entity: Abreve without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Abreve"
+        ]
+      ]
+    },
+    {
+      "input": "&Abreve;",
+      "description": "Named entity: Abreve; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0102"
+        ]
+      ]
+    },
+    {
+      "input": "&Acirc",
+      "description": "Named entity: Acirc without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c2"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "input": "&Acirc;",
+      "description": "Named entity: Acirc; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c2"
+        ]
+      ]
+    },
+    {
+      "input": "&Acy",
+      "description": "Bad named entity: Acy without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Acy"
+        ]
+      ]
+    },
+    {
+      "input": "&Acy;",
+      "description": "Named entity: Acy; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0410"
+        ]
+      ]
+    },
+    {
+      "input": "&Afr",
+      "description": "Bad named entity: Afr without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Afr"
+        ]
+      ]
+    },
+    {
+      "input": "&Afr;",
+      "description": "Named entity: Afr; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\ud835\udd04"
+        ]
+      ]
+    },
+    {
+      "input": "&Agrave",
+      "description": "Named entity: Agrave without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c0"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "input": "&Agrave;",
+      "description": "Named entity: Agrave; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c0"
+        ]
+      ]
+    },
+    {
+      "input": "&Alpha",
+      "description": "Bad named entity: Alpha without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Alpha"
+        ]
+      ]
+    },
+    {
+      "input": "&Alpha;",
+      "description": "Named entity: Alpha; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0391"
+        ]
+      ]
+    },
+    {
+      "input": "&Amacr",
+      "description": "Bad named entity: Amacr without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Amacr"
+        ]
+      ]
+    },
+    {
+      "input": "&Amacr;",
+      "description": "Named entity: Amacr; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0100"
+        ]
+      ]
+    },
+    {
+      "input": "&And",
+      "description": "Bad named entity: And without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&And"
+        ]
+      ]
+    },
+    {
+      "input": "&And;",
+      "description": "Named entity: And; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2a53"
+        ]
+      ]
+    },
+    {
+      "input": "&Aogon",
+      "description": "Bad named entity: Aogon without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Aogon"
+        ]
+      ]
+    },
+    {
+      "input": "&Aogon;",
+      "description": "Named entity: Aogon; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0104"
+        ]
+      ]
+    },
+    {
+      "input": "&Aopf",
+      "description": "Bad named entity: Aopf without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Aopf"
+        ]
+      ]
+    },
+    {
+      "input": "&Aopf;",
+      "description": "Named entity: Aopf; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\ud835\udd38"
+        ]
+      ]
+    },
+    {
+      "input": "&ApplyFunction",
+      "description": "Bad named entity: ApplyFunction without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&ApplyFunction"
+        ]
+      ]
+    },
+    {
+      "input": "&ApplyFunction;",
+      "description": "Named entity: ApplyFunction; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2061"
+        ]
+      ]
+    },
+    {
+      "input": "&Aring",
+      "description": "Named entity: Aring without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c5"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 7
+        }
+      ]
+    },
+    {
+      "input": "&Aring;",
+      "description": "Named entity: Aring; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c5"
+        ]
+      ]
+    },
+    {
+      "input": "&Ascr",
+      "description": "Bad named entity: Ascr without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Ascr"
+        ]
+      ]
+    },
+    {
+      "input": "&Ascr;",
+      "description": "Named entity: Ascr; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\ud835\udc9c"
+        ]
+      ]
+    },
+    {
+      "input": "&Assign",
+      "description": "Bad named entity: Assign without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Assign"
+        ]
+      ]
+    },
+    {
+      "input": "&Assign;",
+      "description": "Named entity: Assign; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2254"
+        ]
+      ]
+    },
+    {
+      "input": "&Atilde",
+      "description": "Named entity: Atilde without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c3"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "input": "&Atilde;",
+      "description": "Named entity: Atilde; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c3"
+        ]
+      ]
+    },
+    {
+      "input": "&Auml",
+      "description": "Named entity: Auml without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c4"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "input": "&Auml;",
+      "description": "Named entity: Auml; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c4"
+        ]
+      ]
+    },
+    {
+      "input": "&Backslash",
+      "description": "Bad named entity: Backslash without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Backslash"
+        ]
+      ]
+    },
+    {
+      "input": "&Backslash;",
+      "description": "Named entity: Backslash; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2216"
+        ]
+      ]
+    },
+    {
+      "input": "&Barv",
+      "description": "Bad named entity: Barv without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Barv"
+        ]
+      ]
+    },
+    {
+      "input": "&Barv;",
+      "description": "Named entity: Barv; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2ae7"
+        ]
+      ]
+    },
+    {
+      "input": "&Barwed",
+      "description": "Bad named entity: Barwed without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Barwed"
+        ]
+      ]
+    },
+    {
+      "input": "&Barwed;",
+      "description": "Named entity: Barwed; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2306"
+        ]
+      ]
+    },
+    {
+      "input": "&Bcy",
+      "description": "Bad named entity: Bcy without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Bcy"
+        ]
+      ]
+    },
+    {
+      "input": "&Bcy;",
+      "description": "Named entity: Bcy; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0411"
+        ]
+      ]
+    },
+    {
+      "input": "&Because",
+      "description": "Bad named entity: Because without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Because"
+        ]
+      ]
+    },
+    {
+      "input": "&Because;",
+      "description": "Named entity: Because; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2235"
+        ]
+      ]
+    },
+    {
+      "input": "&Bernoullis",
+      "description": "Bad named entity: Bernoullis without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Bernoullis"
+        ]
+      ]
+    },
+    {
+      "input": "&Bernoullis;",
+      "description": "Named entity: Bernoullis; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u212c"
+        ]
+      ]
+    },
+    {
+      "input": "&Beta",
+      "description": "Bad named entity: Beta without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Beta"
+        ]
+      ]
+    },
+    {
+      "input": "&Beta;",
+      "description": "Named entity: Beta; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0392"
+        ]
+      ]
+    },
+    {
+      "input": "&Bfr",
+      "description": "Bad named entity: Bfr without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Bfr"
+        ]
+      ]
+    },
+    {
+      "input": "&Bfr;",
+      "description": "Named entity: Bfr; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\ud835\udd05"
+        ]
+      ]
+    },
+    {
+      "input": "&Bopf",
+      "description": "Bad named entity: Bopf without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Bopf"
+        ]
+      ]
+    },
+    {
+      "input": "&Bopf;",
+      "description": "Named entity: Bopf; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\ud835\udd39"
+        ]
+      ]
+    },
+    {
+      "input": "&Breve",
+      "description": "Bad named entity: Breve without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Breve"
+        ]
+      ]
+    },
+    {
+      "input": "&Breve;",
+      "description": "Named entity: Breve; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u02d8"
+        ]
+      ]
+    },
+    {
+      "input": "&Bscr",
+      "description": "Bad named entity: Bscr without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Bscr"
+        ]
+      ]
+    },
+    {
+      "input": "&Bscr;",
+      "description": "Named entity: Bscr; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u212c"
+        ]
+      ]
+    },
+    {
+      "input": "&Bumpeq",
+      "description": "Bad named entity: Bumpeq without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Bumpeq"
+        ]
+      ]
+    },
+    {
+      "input": "&Bumpeq;",
+      "description": "Named entity: Bumpeq; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u224e"
+        ]
+      ]
+    },
+    {
+      "input": "&CHcy",
+      "description": "Bad named entity: CHcy without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CHcy"
+        ]
+      ]
+    },
+    {
+      "input": "&CHcy;",
+      "description": "Named entity: CHcy; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0427"
+        ]
+      ]
+    },
+    {
+      "input": "&COPY",
+      "description": "Named entity: COPY without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00a9"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 6
+        }
+      ]
+    },
+    {
+      "input": "&COPY;",
+      "description": "Named entity: COPY; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00a9"
+        ]
+      ]
+    },
+    {
+      "input": "&Cacute",
+      "description": "Bad named entity: Cacute without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cacute"
+        ]
+      ]
+    },
+    {
+      "input": "&Cacute;",
+      "description": "Named entity: Cacute; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0106"
+        ]
+      ]
+    },
+    {
+      "input": "&Cap",
+      "description": "Bad named entity: Cap without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cap"
+        ]
+      ]
+    },
+    {
+      "input": "&Cap;",
+      "description": "Named entity: Cap; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u22d2"
+        ]
+      ]
+    },
+    {
+      "input": "&CapitalDifferentialD",
+      "description": "Bad named entity: CapitalDifferentialD without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CapitalDifferentialD"
+        ]
+      ]
+    },
+    {
+      "input": "&CapitalDifferentialD;",
+      "description": "Named entity: CapitalDifferentialD; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2145"
+        ]
+      ]
+    },
+    {
+      "input": "&Cayleys",
+      "description": "Bad named entity: Cayleys without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cayleys"
+        ]
+      ]
+    },
+    {
+      "input": "&Cayleys;",
+      "description": "Named entity: Cayleys; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u212d"
+        ]
+      ]
+    },
+    {
+      "input": "&Ccaron",
+      "description": "Bad named entity: Ccaron without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Ccaron"
+        ]
+      ]
+    },
+    {
+      "input": "&Ccaron;",
+      "description": "Named entity: Ccaron; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u010c"
+        ]
+      ]
+    },
+    {
+      "input": "&Ccedil",
+      "description": "Named entity: Ccedil without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c7"
+        ]
+      ],
+      "errors": [
+        {
+          "code": "missing-semicolon-after-character-reference",
+          "line": 1,
+          "col": 8
+        }
+      ]
+    },
+    {
+      "input": "&Ccedil;",
+      "description": "Named entity: Ccedil; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00c7"
+        ]
+      ]
+    },
+    {
+      "input": "&Ccirc",
+      "description": "Bad named entity: Ccirc without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Ccirc"
+        ]
+      ]
+    },
+    {
+      "input": "&Ccirc;",
+      "description": "Named entity: Ccirc; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u0108"
+        ]
+      ]
+    },
+    {
+      "input": "&Cconint",
+      "description": "Bad named entity: Cconint without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cconint"
+        ]
+      ]
+    },
+    {
+      "input": "&Cconint;",
+      "description": "Named entity: Cconint; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2230"
+        ]
+      ]
+    },
+    {
+      "input": "&Cdot",
+      "description": "Bad named entity: Cdot without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cdot"
+        ]
+      ]
+    },
+    {
+      "input": "&Cdot;",
+      "description": "Named entity: Cdot; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u010a"
+        ]
+      ]
+    },
+    {
+      "input": "&Cedilla",
+      "description": "Bad named entity: Cedilla without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cedilla"
+        ]
+      ]
+    },
+    {
+      "input": "&Cedilla;",
+      "description": "Named entity: Cedilla; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00b8"
+        ]
+      ]
+    },
+    {
+      "input": "&CenterDot",
+      "description": "Bad named entity: CenterDot without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CenterDot"
+        ]
+      ]
+    },
+    {
+      "input": "&CenterDot;",
+      "description": "Named entity: CenterDot; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u00b7"
+        ]
+      ]
+    },
+    {
+      "input": "&Cfr",
+      "description": "Bad named entity: Cfr without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Cfr"
+        ]
+      ]
+    },
+    {
+      "input": "&Cfr;",
+      "description": "Named entity: Cfr; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u212d"
+        ]
+      ]
+    },
+    {
+      "input": "&Chi",
+      "description": "Bad named entity: Chi without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&Chi"
+        ]
+      ]
+    },
+    {
+      "input": "&Chi;",
+      "description": "Named entity: Chi; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u03a7"
+        ]
+      ]
+    },
+    {
+      "input": "&CircleDot",
+      "description": "Bad named entity: CircleDot without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CircleDot"
+        ]
+      ]
+    },
+    {
+      "input": "&CircleDot;",
+      "description": "Named entity: CircleDot; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2299"
+        ]
+      ]
+    },
+    {
+      "input": "&CircleMinus",
+      "description": "Bad named entity: CircleMinus without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CircleMinus"
+        ]
+      ]
+    },
+    {
+      "input": "&CircleMinus;",
+      "description": "Named entity: CircleMinus; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2296"
+        ]
+      ]
+    },
+    {
+      "input": "&CirclePlus",
+      "description": "Bad named entity: CirclePlus without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CirclePlus"
+        ]
+      ]
+    },
+    {
+      "input": "&CirclePlus;",
+      "description": "Named entity: CirclePlus; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2295"
+        ]
+      ]
+    },
+    {
+      "input": "&CircleTimes",
+      "description": "Bad named entity: CircleTimes without a semi-colon",
+      "output": [
+        [
+          "Character",
+          "&CircleTimes"
+        ]
+      ]
+    },
+    {
+      "input": "&CircleTimes;",
+      "description": "Named entity: CircleTimes; with a semi-colon",
+      "output": [
+        [
+          "Character",
+          "\u2297"
+        ]
+      ]
+    }
+  ]
+}

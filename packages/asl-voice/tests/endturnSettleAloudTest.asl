@@ -1,0 +1,19 @@
+(module aslVoice/testEndturnSettleAloud :x [testEndturnAnalyzer testVoiceSettleLifecycle testAloudFormatting testTtsEngineRouting runAllVoiceTests runTests] :i [(voice/endturn :a et) (voice/voiceSettle :a vs) (voice/aloud :a al) (voice/ttsEngine :a tts)])
+
+fn testEndturnAnalyzer -> Bool
+  (let [(rDangling (et/analyzeTurnCompletion "создай тест для")) (rHesitation (et/analyzeTurnCompletion "мы хотим ну")) (rHanging (et/analyzeTurnCompletion "я хочу чтобы ты")) (rAux (et/analyzeTurnCompletion "and now we should")) (rCompleteRu (et/analyzeTurnCompletion "добавь флаг версии в cli")) (rCompleteEn (et/analyzeTurnCompletion "run the full test suite"))] (assert (not rDangling.isComplete) "trailing coordinator must not be complete") (assert (= rDangling.recommendedWaitMs 3000) "trailing coordinator must wait 3000ms") (assert (not rHesitation.isComplete) "trailing hesitation must not be complete") (assert (not rHanging.isComplete) "trailing subject must not be complete") (assert (not rAux.isComplete) "trailing aux verb must not be complete") (assert rCompleteRu.isComplete "complete russian command must be complete") (assert (= rCompleteRu.recommendedWaitMs 0) "complete russian command must wait 0ms") (assert rCompleteEn.isComplete "complete english command must be complete") true)
+
+fn testVoiceSettleLifecycle -> Bool
+  (let [(s0 (vs/makeInitialBurstState)) (s1 (vs/ingestTranscriptFragment s0 "добавь флаг" 1000 3000 30000)) (s2 (vs/ingestTranscriptFragment s1 "в cli" 2000 3000 30000)) (stepEarly (vs/stepSettleTimer s2 3500 30000)) (stepTimeout (vs/stepSettleTimer s2 5500 30000)) (sLong (vs/ingestTranscriptFragment s0 "длинный запрос" 1000 3000 30000)) (stepCeiling (vs/stepSettleTimer sLong 32000 30000))] (assert s1.isActive "burst state active after first ingestion") (assert (= s2.messageCount 2) "burst message count is 2") (assert (= s2.accumulatedTranscript "добавь флаг в cli") "accumulated transcript concatenated") (assert (not stepEarly.shouldDispatch) "early step should not dispatch") (assert stepTimeout.shouldDispatch "timeout step must dispatch") (assert (= stepTimeout.finalTranscript "добавь флаг в cli") "dispatched transcript matches") (assert stepCeiling.shouldDispatch "ceiling step must dispatch") (assert (= stepCeiling.action (ceilingReached)) "action is ceiling-reached") true)
+
+fn testAloudFormatting -> Bool
+  (let [(cfg (al/makeAloudConfig 8 14)) (raw "**[QUEUED]** task #4f9c1a2b · 45m remaining · ◆ `vtbot`") (res (al/formatForEar raw cfg)) (spoken res.spokenText)] (assert (not (stringContains? spoken "**")) "markdown asterisks stripped") (assert (not (stringContains? spoken "`")) "backticks stripped") (assert (not (stringContains? spoken "#")) "hash stripped") (assert (stringContains? spoken "45 minutes") "minutes expanded from 45m") (assert (<= res.charCount 112) "spoken characters within budget") true)
+
+fn testTtsEngineRouting -> Bool
+  (let [(sileroCfg (tts/makeSileroConfig "ru" "xenia")) (kokoroCfg (tts/makeKokoroConfig "af_heart")) (optRu (tts/selectOptimalEngine "ru" true false)) (optEn (tts/selectOptimalEngine "en" true false)) (job (tts/createSynthesisJob "j1" "Задача успешно выполнена" sileroCfg))] (assert (tts/supportsLanguage? (sileroOnnx) "ru") "silero supports russian") (assert (tts/supportsLanguage? (sileroOnnx) "en") "silero supports english") (assert (not (tts/supportsLanguage? (kokoroOnnx) "ru")) "kokoro does not support russian") (assert (= optRu.engine (sileroOnnx)) "optimal engine for russian is silero") (assert (= optEn.engine (sileroOnnx)) "optimal engine with local silero is silero") (assert (= job.status "completed") "synthesis job created with completed status") (assert (> job.durationMs 0) "job duration is positive") true)
+
+fn runAllVoiceTests -> Bool
+  (do (testEndturnAnalyzer) (testVoiceSettleLifecycle) (testAloudFormatting) (testTtsEngineRouting) true)
+
+fn runTests -> Bool
+  (runAllVoiceTests)

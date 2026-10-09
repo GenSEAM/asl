@@ -1,0 +1,7 @@
+(:package asl-conform
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "AgentScript Multi-Target Semantic Conformance and Mutation Verification Harness"
+ :aslFirst true
+ :modules ["asl-conform" "asl-conform/types" "asl-conform/semantics" "asl-conform/compare" "asl-conform/mutant" "asl-conform/runner" "asl-conform/hypergraph"]
+ :dependencies ["asl-target-c" "asl-target-py"])

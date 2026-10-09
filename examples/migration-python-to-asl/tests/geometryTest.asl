@@ -1,0 +1,10 @@
+(module migrationGeometry/geometryTest :x [testEuclideanDistance testBatchClosestPoint runTests] :i [(geometry :a geo)])
+
+fn testEuclideanDistance -> Bool
+  (let [(p1 (geo/Point2D :x 0.0 :y 0.0)) (p2 (geo/Point2D :x 3.0 :y 4.0)) (dist (geo/euclideanDistance p1 p2))] (assert (= dist 5.0) "Distance must equal 5.0") true)
+
+fn testBatchClosestPoint -> Bool
+  (let [(target (geo/Point2D :x 10.0 :y 10.0)) (p1 (geo/Point2D :x 100.0 :y 100.0)) (p2 (geo/Point2D :x 11.0 :y 10.0)) (p3 (geo/Point2D :x 50.0 :y 50.0)) (pts (list p1 p2 p3)) (closest (geo/batchClosestPoint target pts))] (assert (= closest.x 11.0) "Closest point x must equal 11.0") (assert (= closest.y 10.0) "Closest point y must equal 10.0") true)
+
+fn runTests -> Bool
+  (do (assert (testEuclideanDistance) "test-euclidean-distance must pass") (assert (testBatchClosestPoint) "test-batch-closest-point must pass") true)

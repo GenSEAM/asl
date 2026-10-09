@@ -1,0 +1,4 @@
+(:script :id "missingAdvisor" :mode :review
+  :reviewer "(:verdict :met true :missing ())"
+  :turns ((:turn :num 1 :reply "(:done)"))
+)

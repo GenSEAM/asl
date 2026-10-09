@@ -1,0 +1,116 @@
+(module asl-syntax/tests/js/lexTest
+                             
+  :x [runTests]
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/core/print :a pr)
+      (asl-syntax/js/lex :a lex)])
+
+fn testRegexVsDiv -> Bool
+  (let [(toks1 (lex/lexJsText "x / y / z"))
+        (toks2 (lex/lexJsText "return /abc/g;"))
+        (toks3 (lex/lexJsText "const r = /foo\\/bar/i;"))
+        (toks4 (lex/lexJsText "(a + b) / 2"))
+        (toks5 (lex/lexJsText "[ /x/, /y/ ]"))]
+    (do
+      (assert (= (optionOr (listGet toks1 2) (tr/makeToken "" 0 0)).kind     "punct") "div punct 1")
+      (assert (= (optionOr (listGet toks1 6) (tr/makeToken "" 0 0)).kind     "punct") "div punct 2")
+      (assert (= (optionOr (listGet toks2 2) (tr/makeToken "" 0 0)).kind     "regex") "return regex")
+      (assert (= (optionOr (listGet toks3 6) (tr/makeToken "" 0 0)).kind     "regex") "assign regex")
+      (assert (= (optionOr (listGet toks4 8) (tr/makeToken "" 0 0)).kind     "punct") "paren div")
+      (assert (= (optionOr (listGet toks5 2) (tr/makeToken "" 0 0)).kind     "regex") "bracket regex 1")
+      (assert (= (optionOr (listGet toks5 5) (tr/makeToken "" 0 0)).kind     "regex") "bracket regex 2")
+      true)))
+
+fn testTemplates -> Bool
+  (let [(toks1 (lex/lexJsText "`simple template`"))
+        (toks2 (lex/lexJsText "`hello ${name}!`"))
+        (toks3 (lex/lexJsText "`outer ${`inner ${x}`} end`"))]
+    (do
+      (assert (= (optionOr (listGet toks1 0) (tr/makeToken "" 0 0)).kind     "template") "simple tpl")
+      (assert (> (listLength toks2) 3) "interp tpl length")
+      (assert (> (listLength toks3) 5) "nested tpl length")
+      true)))
+
+fn testBigInts -> Bool
+  (let [(toks (lex/lexJsText "123n 0x1fn 0b101n 0o77n"))]
+    (do
+      (assert (= (listLength toks) 7) "bigint tokens count")
+      (assert (= (optionOr (listGet toks 0) (tr/makeToken "" 0 0)).kind     "number") "dec bigint")
+      (assert (= (optionOr (listGet toks 2) (tr/makeToken "" 0 0)).kind     "number") "hex bigint")
+      (assert (= (optionOr (listGet toks 4) (tr/makeToken "" 0 0)).kind     "number") "bin bigint")
+      (assert (= (optionOr (listGet toks 6) (tr/makeToken "" 0 0)).kind     "number") "oct bigint")
+      true)))
+
+fn testNumbers -> Bool
+  (let [(toks (lex/lexJsText "0b1010 0o755 0xdead_beef 1_000_000 1.5e-3 .5"))]
+    (do
+      (assert (= (listLength toks) 11) "number forms count")
+      (assert (= (optionOr (listGet toks 0) (tr/makeToken "" 0 0)).kind     "number") "bin num")
+      (assert (= (optionOr (listGet toks 2) (tr/makeToken "" 0 0)).kind     "number") "oct num")
+      (assert (= (optionOr (listGet toks 4) (tr/makeToken "" 0 0)).kind     "number") "hex num")
+      (assert (= (optionOr (listGet toks 6) (tr/makeToken "" 0 0)).kind     "number") "sep num")
+      (assert (= (optionOr (listGet toks 8) (tr/makeToken "" 0 0)).kind     "number") "exp num")
+      (assert (= (optionOr (listGet toks 10) (tr/makeToken "" 0 0)).kind     "number") "dot num")
+      true)))
+
+fn testUnicode -> Bool
+  (let [(toks (lex/lexJsText "\\u0061bc foo\\u0061 foo\\u{61}bar π élan"))]
+    (do
+      (assert (= (optionOr (listGet toks 0) (tr/makeToken "" 0 0)).kind     "ident") "escape start ident")
+      (assert (= (optionOr (listGet toks 2) (tr/makeToken "" 0 0)).kind     "ident") "escape cont ident")
+      (assert (= (optionOr (listGet toks 4) (tr/makeToken "" 0 0)).kind     "ident") "brace escape ident")
+      (assert (= (optionOr (listGet toks 6) (tr/makeToken "" 0 0)).kind     "ident") "greek ident")
+      (assert (= (optionOr (listGet toks 8) (tr/makeToken "" 0 0)).kind     "ident") "accent ident")
+      true)))
+
+fn testHashbangAndNewlines -> Bool
+  (let [(code "#!/usr/bin/env node\r\nconst x = 1;\na\rb\nc\n")
+        (toks (lex/lexJsText code))]
+    (do
+      (assert (= (optionOr (listGet toks 0) (tr/makeToken "" 0 0)).kind     "hashbang") "hashbang kind")
+      (assert (= (optionOr (listGet toks 1) (tr/makeToken "" 0 0)).kind     "newline") "crlf kind")
+      true)))
+
+fn testJsx -> Bool
+  (let [(toks (lex/lexJsGoal (stringToBytes "hello world <div />") (lex/goalJsxText)))]
+    (do
+      (assert (= (optionOr (listGet toks 0) (tr/makeToken "" 0 0)).kind     "jsxText") "jsx text token")
+      (assert (= (optionOr (listGet toks 1) (tr/makeToken "" 0 0)).kind     "punct") "jsx tag start punct")
+      true)))
+
+fn verifyRoundTrip path: String text: String -> Bool
+  (let [(src (src/makeSource path text))
+        (toks (lex/lexJsSource src))
+        (node (lex/tokensToNode toks (src/sourceLength src)))
+        (printed (pr/print node src))
+        (tilingRes (tr/checkTiling node))]
+    (do
+      (assert (resultOk? tilingRes) (stringConcat "tiling check for " path))
+      (assert (= printed text) (stringConcat "lossless round-trip for " path))
+      true)))
+
+fn testFileRoundTrip path: String -> Bool
+  (mt (fileRead path)
+    ((ok bs) (verifyRoundTrip path (bytesToString bs)))
+    ((err msg) (do (assert false (stringConcat "fileRead failed: " msg)) false)))
+
+fn testTrackedFiles -> Bool
+  (do
+    (assert (testFileRoundTrip "asl/web/vite.config.js") "vite.config.js round-trip")
+    (assert (testFileRoundTrip "asl/web/tailwind.config.js") "tailwind.config.js round-trip")
+    (assert (testFileRoundTrip "asl/web/plugins/vitePluginAsl.js") "vitePluginAsl.js round-trip")
+    (assert (testFileRoundTrip "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js") "uploader.min.js round-trip")
+    true))
+
+fn runTests -> Bool
+  (do
+    (assert (testRegexVsDiv) "regex vs div")
+    (assert (testTemplates) "templates")
+    (assert (testBigInts) "bigints")
+    (assert (testNumbers) "numbers")
+    (assert (testUnicode) "unicode")
+    (assert (testHashbangAndNewlines) "hashbang and newlines")
+    (assert (testJsx) "jsx text")
+    (assert (testTrackedFiles) "tracked files round-trip")
+    true))

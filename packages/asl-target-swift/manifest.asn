@@ -1,0 +1,15 @@
+(:package asl-target-swift
+ :version "0.1.0"
+ :entry "src/emitSwift.asl"
+ :description "Standalone Swift 6 & SwiftUI native emitter backend for AgentScript under ADR D93 and D129"
+ :layer 0
+ :aslFirst true
+  :modules [
+    "asl-target-swift/types"
+    "asl-target-swift/emitSwift"
+    "asl-target-swift/app"
+    "asl-target-swift/audio"
+    "asl-target-swift/cockpitView"
+  ]
+ :dependencies ["asl-parser"]
+ :capabilities ["codegen/target"])

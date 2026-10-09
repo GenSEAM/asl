@@ -1,0 +1,26 @@
+(:package asl-pack
+ :version "0.1.0"
+ :entry "src/pack.asl"
+ :description "Universal cross-platform packager and runtime runner for AgentScript"
+ :aslFirst true
+ :modules [
+   "asl-pack/build-graph"
+   "asl-pack/package-asl"
+   "asl-pack/target-adapter"
+   "asl-pack/packaging"
+   "asl-pack/distribution-profiles"
+   "asl-pack/dist"
+   "asl-pack/ffi-linker"
+   "asl-pack/installer"
+   "asl-pack/pack"
+   "asl-pack/platform"
+   "asl-pack/release"
+   "asl-pack/runtime"
+   "asl-pack/standalone"
+   "asl-pack/targets/kotlin"
+   "asl-pack/targets/preview"
+   "asl-pack/targets/preview-server"
+   "asl-pack/targets/swift"
+   "asl-pack/intermediate-policy"
+ ]
+ :dependencies ["asl-transpile" "asl-proc"])

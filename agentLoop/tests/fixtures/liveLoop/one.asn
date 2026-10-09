@@ -1,0 +1,5 @@
+(:script :id "liveLoopOne" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:plan :steps ((:step :id finish :do \"complete the task\" :check \"task completed\"))) (:done)")
+  )
+)

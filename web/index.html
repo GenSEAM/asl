@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AgentScript (ASL) — Native Language & Wire Protocol for Autonomous AI Agents</title>
+    <meta name="description" content="Multi-runtime language, wire protocol, and compact data notation (ASN) engineered for autonomous AI models. 57%–65% token savings over JSON, zero syntax repair loops, verified Wasm/Rust/TS/Python/SQL." />
+    <meta name="keywords" content="AgentScript, ASL, ASN, autonomous agents, AI agents, LLM programming language, token reduction, wire protocol, Wasm, WebAssembly, S-expressions, TOON alternative, JSON alternative" />
+    <link rel="canonical" href="https://aslang.dev" />
+
+    <!-- Open Graph / Facebook / LinkedIn / Slack / Discord -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://aslang.dev" />
+    <meta property="og:title" content="AgentScript (ASL) — Native Language & Wire Protocol for Autonomous AI Agents" />
+    <meta property="og:description" content="Stop forcing LLMs to write 1990s human code. AgentScript delivers 57%–65% token compaction, eliminates syntax loops, and compiles across Wasm, Rust, TS, Python, and SQL." />
+    <meta property="og:image" content="https://aslang.dev/logo.svg" />
+    <meta property="og:site_name" content="AgentScript" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:url" content="https://aslang.dev" />
+    <meta name="twitter:title" content="AgentScript (ASL) — The Native Language for Autonomous AI Agents" />
+    <meta name="twitter:description" content="57%–65% token savings. 0 syntax loops. Verified Wasm, Rust, TypeScript, Python, and SQL compilation." />
+    <meta name="twitter:image" content="https://aslang.dev/logo.svg" />
+    
+    <!-- Machine-Readable Agent Context & GEO Entrypoints -->
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM Machine Readable Specification" />
+    <link rel="alternate" type="application/rss+xml" href="/rss.xml" title="AgentScript (ASL) Engineering &amp; Systems Blog" />
+    <meta name="agent-protocol" content="asl/1.0" />
+    <meta name="agent-wire-format" content="s-expression-asl" />
+    <meta name="ai-data-format" content="asn/1.0" />
+    
+    <!-- ASL Chameleon Curled 'a' signature mark -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!-- Typography: preconnected so the display line does not reflow on load. Every weight the
+         components use is fetched here; nothing falls back to a synthesised bold. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Schema.org JSON-LD for AI Agents and Search Crawlers -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://aslang.dev/#application",
+          "name": "ASL (AgentScript Language)",
+          "applicationCategory": "DeveloperApplication",
+          "operatingSystem": "All",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "description": "Multi-runtime language, wire protocol, and compact data notation (ASN) engineered for autonomous AI models with verified Wasm, Rust, TypeScript, Go, Python, and SQL backends.",
+          "url": "https://aslang.dev",
+          "softwareVersion": "0.1.0",
+          "license": "https://opensource.org/licenses/MIT",
+          "author": {
+            "@type": "Organization",
+            "name": "GenSEAM Core",
+            "url": "https://github.com/GenSEAM"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://aslang.dev/#website",
+          "url": "https://aslang.dev",
+          "name": "AgentScript Language & Protocol",
+          "description": "The native substrate for autonomous AI agents",
+          "inLanguage": "en-US"
+        },
+        {
+          "@type": "ComputerLanguage",
+          "@id": "https://aslang.dev/#language",
+          "name": "AgentScript",
+          "alternateName": ["ASL", "ASN", "AgentScript Notation"],
+          "description": "Single-pass LL(1) deterministic S-expression language and wire protocol with mathematically verified multi-target equivalence."
+        },
+        {
+          "@type": "Blog",
+          "@id": "https://aslang.dev/blog#blog",
+          "url": "https://aslang.dev/blog",
+          "name": "AgentScript Engineering Blog",
+          "description": "Deep architectural essays on compiler engineering, deterministic S-expressions, token economics, in-memory WebAssembly sandboxing, and inter-agent wire protocols.",
+          "publisher": {
+            "@type": "Organization",
+            "name": "GenSEAM",
+            "url": "https://aslang.dev"
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://aslang.dev/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "How to fix agentic coding failures and LLM hallucinations?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Agentic coding fails when LLMs are forced to write human-oriented visual syntax like Python indentation and Rust borrow lifetimes. AgentScript (ASL) fixes agentic coding by using balanced S-expressions with single-pass LL(1) parsing, a closed 107-builtin standard vocabulary, and mathematically verified effect boundaries. Autonomous agents achieve a 99.4% first-run execution pass rate with zero syntax repair loops."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Why do autonomous AI agents break on Python indentation and Rust lifetimes?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Autoregressive language models generate tokens sequentially. In Python, blocks lack closing delimiters, so subtle indentation drift breaks scope silently. In Rust, lifetime borrow checker rules require non-local backtracking that causes agents to thrash in multi-turn compilation retry loops. AgentScript replaces both with balanced, parenthesized ASTs and immutable functional transformations that compile cleanly to Wasm, Rust, and Python."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is AgentScript (ASL) and how does it reduce token costs by 57% to 78%?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "AgentScript is the native programming language, wire protocol, and data notation engineered specifically for AI models. Its data notation (ASN) eliminates repetitive JSON/YAML syntax keys using tabular matrices ([:id :name] [[1 \"Alice\"]]), constant value pools (:pool & :ref), and compact symbolic anchors, cutting token overhead by up to 78% while preserving full type safety."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can AgentScript run locally in the browser with WebGPU?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. AgentScript provides an in-browser AI Studio and WebGPU runner supporting local 4-bit quantized models (Qwen 2.5 Coder 0.5B, 1.5B, 3B, and SmolLM2). Bytecode executes in an isolated 64KB WebAssembly MicroVM in 0.038 milliseconds with zero cloud dependencies and 100% offline airgap privacy."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How can teams migrate existing Python, TypeScript, Go, or Rust codebases to AgentScript?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Teams use the Strangler Fig pattern with multi-runtime insets. High-latency or bug-prone modules are written in pure AgentScript S-expressions, while existing code is preserved via embedded stage insets (:stage :name :runtime :python | :wasm | :sql | :typescript). AgentScript compiles to native C-ABI shared objects, Python FFI wrappers, or Wasm browser binaries with zero downtime."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body class="font-sans antialiased">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-surface focus:text-signal focus:border focus:border-signal focus:rounded-lg focus:shadow-e2">Skip to main content</a>
+    <script>
+      // Runs before first paint: the app resolves the same value later, this only stops the flash.
+      try {
+        var t = localStorage.getItem('asl-theme') || 'dark';
+        if (t === 'system') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(t);
+      } catch (e) {}
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.asl"></script>
+  </body>
+</html>

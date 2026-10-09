@@ -1,0 +1,37 @@
+(:publishedClaims
+  :version "1.0"
+  :standards [
+    (:claim :metric "57%-65%" :category "token_compression" :source "asl/bench/asn_tokens.lock" :expected "asn-3-rows" :desc "Structural token reduction vs JSON")
+    (:claim :metric "-64.7%" :category "token_compression" :source "asl/bench/token_frames.lock" :expected "0.6471" :desc "Token reduction on agent tool frames")
+    (:claim :metric "1.90%" :category "token_compression" :source ".asl/mem/principles.asn" :expected "a saving of 1.90 percent" :desc "CamelCase corpus saving vs kebab-case on o200k, 2964 files, 2026-09-22 (CamelCaseCorpusSaving)")
+    (:claim :metric "1.68%" :category "token_compression" :source ".asl/mem/principles.asn" :expected "a saving of 1.68 percent" :desc "CamelCase corpus saving vs kebab-case on cl100k, 2964 files, 2026-09-22 (CamelCaseCorpusSaving)")
+    (:claim :metric "<100ms" :category "cold_start" :source "asl/bench/launchStability.asl" :expected "PrefixRecord" :desc "Agent launch cold start latency")
+    (:claim :metric "24MB" :category "memory_rss" :source "asl/bench/tierBudget.asl" :expected "maxMinimalTokens" :desc "Peak RSS memory budget ceiling")
+    (:claim :metric "<=2 tokens" :category "primitive_cost" :source "asl/grammar/grammar.asn" :expected ":tokens 1" :desc "BPE primitive token ceiling")
+    (:claim :metric "107/107" :category "vocab_coverage" :source "asl/prelude/coverage.lock" :expected "executed" :desc "Executed vocabulary coverage")
+    (:claim :metric "0.038ms" :category "wasm_launch" :source "asl/packages/asl-target-wat/manifest.asn" :expected "asl-target-wat" :desc "Wasm launch telemetry")
+    (:claim :metric "<0.04ms" :category "bus_latency" :source "asl/packages/asl-agent-bus/manifest.asn" :expected "agent-bus" :desc "Unix domain socket A2A bus message dispatch")
+    (:claim :metric "64KB" :category "wasm_memory" :source "asl/grammar/wasm.asn" :expected "WASM standard 64KB page size" :desc "WebAssembly linear memory page size, a spec constant (pageSizeBytes 65536)")
+    (:claim :metric "-75%" :category "vdom_reduction" :source "asl/packages/asl-vdom/manifest.asn" :expected "asl-vdom" :desc "AXTree + D2Snap DOM downsampling token reduction")
+  ]
+  :peripheralScopes [
+    (:scope
+      :package "asl-quantum"
+      :status "conceptual-schema"
+      :driver "none"
+      :falsifiable false
+      :desc "Quantum circuit synthesis, gate operations, and OpenQASM 3.0 compiler scoped as theoretical S-expression interfaces; no physical QPU or cloud backend.")
+    (:scope
+      :package "asl-arduino"
+      :status "conceptual-schema"
+      :driver "none"
+      :falsifiable false
+      :desc "Embedded hardware GPIO and serial interfaces scoped as compile-target schemas; no live AVR/ARM/ESP32 serial connection or bare-metal execution.")
+    (:scope
+      :package "asl-voice"
+      :status "conceptual-schema"
+      :driver "none"
+      :falsifiable false
+      :desc "Streaming audio chunk, voice intent, and speech synthesis records scoped as conceptual data protocols; no live OS microphone or speaker drivers.")
+  ]
+)

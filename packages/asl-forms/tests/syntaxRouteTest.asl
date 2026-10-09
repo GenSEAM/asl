@@ -1,0 +1,112 @@
+(module asl-forms/tests/syntaxRouteTest
+  :x [runTests]
+  :i [(asl-forms/symbol :a sy)])
+
+fn testMarkdownSections! -> Bool
+  (let [(mdContent "# Overview\nAn overview\n## Getting Started\nFirst steps\n### Details\nDeep dive\n")
+        (aslReceipt (sy/outlineReceipt "guide.md" "markdown" mdContent))
+        (readSec (sy/readSymbolReceipt "guide.md" "markdown" mdContent "Overview"))
+        (readSub (sy/readSymbolReceipt "guide.md" "markdown" mdContent "Getting Started"))]
+    (do
+      (assert (stringContains? aslReceipt ":itemsCount 3") "asl outline returns 3 sections")
+      (assert (stringContains? aslReceipt "(:item :name \"Overview\" :kind \"section\" :start 1 :end 6)") "asl outline includes Overview section")
+      (assert (stringContains? aslReceipt "(:item :name \"Getting Started\" :kind \"section\" :start 3 :end 6)") "asl outline includes Getting Started section")
+      (assert (stringContains? readSec ":symbol \"Overview\" :kind \"section\" :language \"markdown\"") "readSymbolReceipt returns Overview section")
+      (assert (stringContains? readSec "# Overview") "readSymbolReceipt includes Overview content")
+      (assert (stringContains? readSub ":symbol \"Getting Started\" :kind \"section\" :language \"markdown\"") "readSymbolReceipt returns Getting Started section")
+      true))
+
+fn testOutlineReceipts! -> Bool
+  (let [(asnFile "asl/packages/asl-forms/tests/fixtures/ws/symbols.asn")
+        (asnText (resultOr (fileReadString asnFile) ""))
+        (txtFile "asl/packages/asl-forms/tests/fixtures/ws/long.txt")
+        (txtText (resultOr (fileReadString txtFile) ""))
+        (mdFile "asl/packages/asl-forms/tests/fixtures/ws/unicode.md")
+        (mdText (resultOr (fileReadString mdFile) ""))
+        (asnReceipt (sy/outlineReceipt asnFile "asn" asnText))
+        (txtReceipt (sy/outlineReceipt txtFile "text" txtText))
+        (mdReceipt (sy/outlineReceipt mdFile "markdown" mdText))]
+    (do
+      (assert (stringContains? asnReceipt ":itemsCount 7") "asn outline receipt has 7 items")
+      (assert (stringContains? asnReceipt ":name \"alpha\" :kind \"fn\"") "asn outline receipt has alpha")
+      (assert (stringContains? asnReceipt ":name \"Beta\" :kind \"schema\"") "asn outline receipt has Beta")
+      (assert (stringContains? asnReceipt ":name \"indented\" :kind \"defn\"") "asn outline receipt has indented")
+      (assert (stringContains? txtReceipt ":itemsCount 0 :items []") "text outline receipt has 0 items")
+      (assert (stringContains? mdReceipt ":itemsCount 0 :items []") "headingless markdown outline receipt has 0 items")
+      true))
+
+fn testDirectRouting! -> Bool
+  (let [(asnFile "asl/packages/asl-forms/tests/fixtures/ws/symbols.asn")
+        (asnText (resultOr (fileReadString asnFile) ""))
+        (readAlpha (sy/readSymbolReceipt asnFile "asn" asnText "alpha"))
+        (readNon (sy/readSymbolReceipt asnFile "asn" asnText "missing"))
+        (readAnc (sy/readAnchorReceipt asnFile asnText "Beta" 1 100))
+        (found (sy/findSymbolInLang asnText "asn" "Beta"))
+        (hit (pairFirst found))
+        (syms (pairSecond found))
+        (near (sy/nearestSymbols "alph" syms 3))]
+    (do
+      (assert (= (sy/languageOf! "x.asl") "asl") "languageOf maps .asl")
+      (assert (= (sy/languageOf! "x.asn") "asn") "languageOf maps .asn")
+      (assert (= (sy/languageOf! "x.md") "markdown") "languageOf maps .md")
+      (assert (= (sy/languageOf! "x.txt") "text") "languageOf maps .txt")
+      (assert (= (sy/languageOf! "x.py") "") "languageOf rejects unported .py")
+      (assert (stringContains? readAlpha ":symbol \"alpha\" :kind \"fn\" :language \"asn\" :start 4 :end 6") "readSymbolReceipt finds alpha")
+      (assert (stringContains? readNon ":error ERR_SYMBOL_NOT_FOUND") "readSymbolReceipt rejects missing")
+      (assert (stringContains? readAnc ":anchor \"Beta\" :occurrence 1") "readAnchorReceipt finds Beta")
+      (assert (some? hit) "findSymbolInLang finds Beta")
+      (assert (= (listLength syms) 7) "findSymbolInLang indexes 7 symbols")
+      (assert (listContains? near "alpha") "nearestSymbols matches alpha")
+      (assert (= (sy/lineOf asnText 69) 4) "lineOf computes line 4 for alpha start")
+      true))
+
+fn testDirectReceiptCoverage! -> Bool
+  (let [(asnFile "asl/packages/asl-forms/tests/fixtures/ws/symbols.asn")
+        (asnText (resultOr (fileReadString asnFile) ""))
+        (alpha (sy/readSymbolReceipt asnFile "asn" asnText "alpha"))
+        (beta (sy/readSymbolReceipt asnFile "asn" asnText "Beta"))
+        (indented (sy/readSymbolReceipt asnFile "asn" asnText "indented"))
+        (missing (sy/readSymbolReceipt asnFile "asn" asnText "nonexistent"))
+        (anchor (sy/readAnchorReceipt asnFile asnText "Beta" 1 100))
+        (kernelFile "asl/packages/asl-forms/src/kernel.asl")
+        (kernelText (resultOr (fileReadString kernelFile) ""))
+        (escape (sy/readSymbolReceipt kernelFile "asl" kernelText "escapeAsnVal"))
+        (binary (sy/readAnchorReceipt kernelFile kernelText "binaryKind" 1 100))
+        (txtFile "asl/packages/asl-forms/tests/fixtures/ws/long.txt")
+        (txtText (resultOr (fileReadString txtFile) ""))
+        (textAnchor (sy/readAnchorReceipt txtFile txtText "line 10" 1 100))
+        (textSymbol (sy/readSymbolReceipt txtFile "text" txtText "line 10"))
+        (crlfFile "asl/packages/asl-forms/tests/fixtures/ws/crlf.txt")
+        (crlfText (resultOr (fileReadString crlfFile) ""))
+        (crlfAnchor (sy/readAnchorReceipt crlfFile crlfText "two" 1 100))
+        (mdFile "asl/packages/asl-forms/tests/fixtures/ws/unicode.md")
+        (mdText (resultOr (fileReadString mdFile) ""))
+        (mdAnchor (sy/readAnchorReceipt mdFile mdText "tail" 1 100))
+        (mdSymbol (sy/readSymbolReceipt mdFile "markdown" mdText "tail"))]
+    (do
+      (assert (stringContains? alpha ":symbol \"alpha\" :kind \"fn\" :language \"asn\"") "ASN symbol receipt identifies alpha and its language")
+      (assert (stringContains? beta ":symbol \"Beta\" :kind \"schema\"") "ASN symbol receipt identifies Beta's schema kind")
+      (assert (stringContains? indented ":symbol \"indented\" :kind \"defn\"") "ASN symbol receipt finds indented definitions")
+      (assert (stringContains? missing ":error ERR_SYMBOL_NOT_FOUND") "ASN symbol receipt rejects missing names")
+      (assert (stringContains? missing ":symbolsIndexed 7") "ASN missing-symbol receipt reports its searched index size")
+      (assert (stringContains? anchor ":anchor \"Beta\" :occurrence 1") "ASN anchor receipt finds the first Beta occurrence")
+      (assert (stringContains? anchor ":content") "ASN anchor receipt includes source content")
+      (assert (stringContains? escape ":symbol \"escapeAsnVal\" :kind \"fn\"") "ASL symbol receipt reads escapeAsnVal")
+      (assert (stringContains? binary ":anchor \"binaryKind\" :occurrence 1") "ASL anchor receipt finds binaryKind")
+      (assert (stringContains? binary ":content") "ASL anchor receipt includes source content")
+      (assert (stringContains? textAnchor "line 10") "plain-text anchor receipt returns the requested line")
+      (assert (stringContains? textAnchor ":content") "plain-text anchor receipt includes source content")
+      (assert (stringContains? textSymbol ":error ERR_SYMBOL_NOT_FOUND") "plain-text symbol lookup rejects a non-symbol anchor")
+      (assert (stringContains? crlfAnchor "two") "CRLF anchor receipt preserves the matching line")
+      (assert (stringContains? crlfAnchor ":content") "CRLF anchor receipt includes source content")
+      (assert (stringContains? mdAnchor "tail") "Markdown anchor receipt returns the tail line")
+      (assert (stringContains? mdSymbol ":error ERR_SYMBOL_NOT_FOUND") "headingless Markdown does not expose arbitrary text as a symbol")
+      true))
+
+fn ! runTests -> Bool
+  (do
+    (assert (testMarkdownSections!) "testMarkdownSections")
+    (assert (testOutlineReceipts!) "testOutlineReceipts")
+    (assert (testDirectRouting!) "testDirectRouting")
+    (assert (testDirectReceiptCoverage!) "testDirectReceiptCoverage")
+    true)

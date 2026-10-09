@@ -1,0 +1,37 @@
+(module asl-plugin/security :x [validateSandboxPath! verifyArtifactDigest! validateManifestSecurity! authorizeCall! computeCallerSignature! verifyCallerSignature! verifyCallerNonce constantTimeEqual validateManifestHash!] :i [(asl-plugin/types) (asl-proc/coreProcess :a proc)])
+
+fn constantTimeEqual a: Str b: Str -> Bool
+  (if (!= (stringLength a) (stringLength b)) false (let [(ca (stringChars a)) (cb (stringChars b)) (mismatches (fold (fn [(acc Int64) (i Int64)] -> Int64 (let [(chA (optionOr (listGet ca i) "")) (chB (optionOr (listGet cb i) ""))] (if (= chA chB) acc (+ acc 1)))) 0 (range 0 (stringLength a))))] (= mismatches 0)))
+
+fn validateSandboxPath! entrypoint: Str sandboxRoot: Str -> (Result Str PluginError)
+  (if (or (stringEmpty? entrypoint) (stringEmpty? sandboxRoot)) (err (errNotFound entrypoint)) (if (or (stringStartsWith? entrypoint "/") (stringStartsWith? entrypoint "\\") (stringContains? entrypoint "..") (stringContains? entrypoint ":")) (err (errSandboxEscape entrypoint)) (mt (pathCanonicalize sandboxRoot) ((err _) (err (errSandboxEscape sandboxRoot))) ((ok canonRoot) (let [(candPath (str canonRoot "/" entrypoint))] (mt (pathCanonicalize candPath) ((err _) (err (errNotFound entrypoint))) ((ok canonEntry) (let [(prefix (str canonRoot "/"))] (if (or (= canonEntry canonRoot) (stringStartsWith? canonEntry prefix)) (ok canonEntry) (err (errSandboxEscape entrypoint)))))))))))
+
+fn ! runArgv! bin: Str args: (List Str) input: (Option Str) -> (Result proc/ProcessOutput proc/ProcessError)
+  (let [(base (proc/cmd bin args)) (command (mt input ((some bytes) (proc/withStdin base bytes)) ((none) base)))] (proc/exec! command))
+
+fn ! runSha256! path: Str -> (Result proc/ProcessOutput proc/ProcessError)
+  (mt (runArgv! "shasum" (list "-a" "256" path) (none)) ((ok res) (if (= res.exitCode 0) (ok res) (runArgv! "sha256sum" (list path) (none)))) ((err _) (runArgv! "sha256sum" (list path) (none))))
+
+fn ! runShaText! input: Str -> (Result proc/ProcessOutput proc/ProcessError)
+  (mt (runArgv! "shasum" (list "-a" "256") (some input)) ((ok res) (if (= res.exitCode 0) (ok res) (runArgv! "sha256sum" (list) (some input)))) ((err _) (runArgv! "sha256sum" (list) (some input))))
+
+fn verifyArtifactDigest! path: Str expectedSha256: Str -> (Result Unit PluginError)
+  (if (stringEmpty? expectedSha256) (err (errInvalidSignature "Missing integrity SHA-256 hash")) (if (!= (stringLength expectedSha256) 64) (err (errInvalidSignature "Integrity SHA-256 hash must be exactly 64 hexadecimal characters")) (mt (fileStat path) ((err _) (err (errNotFound path))) ((ok st) (if (not st.isFile) (err (errInvalidSignature (str "Artifact path is not a regular file: " path))) (mt (runSha256! path) ((err _) (err (errExecutionTrap "Failed to compute artifact checksum"))) ((ok res) (let [(outStr (if (= res.exitCode 0) (stringTrim res.stdout) ""))] (if (stringEmpty? outStr) (err (errExecutionTrap "Artifact checksum command returned empty output")) (let [(hashOpt (stringSlice outStr 0 64))] (mt hashOpt ((none) (err (errExecutionTrap "Invalid checksum output format"))) ((some hashVal) (let [(computed (stringLower hashVal)) (expected (stringLower expectedSha256))] (if (constantTimeEqual computed expected) (ok ()) (err (errInvalidSignature (str "Artifact SHA-256 digest mismatch: expected " expected " but got " computed)))))))))))))))))
+
+fn validateManifestSecurity! manifest: PluginManifest sandboxRoot: Str -> (Result Unit PluginError)
+  (cond ((stringEmpty? manifest.id) (err (errInvalidSignature "Plugin ID cannot be empty"))) ((stringEmpty? manifest.entrypoint) (err (errInvalidSignature "Plugin entrypoint cannot be empty"))) (else (let [(effectiveRoot (if (stringEmpty? sandboxRoot) "." sandboxRoot)) (pathRes (validateSandboxPath! manifest.entrypoint effectiveRoot))] (mt pathRes ((err e) (err e)) ((ok canonPath) (verifyArtifactDigest! canonPath manifest.integritySha256))))))
+
+fn computeCallerSignature! identity: Str capabilities: (List Str) nonce: Str secretKey: Str -> Str
+  (if (or (stringEmpty? identity) (stringEmpty? nonce) (stringEmpty? secretKey)) "" (let [(sortedCaps (listSort capabilities)) (capsStr (fold (fn [(acc Str) (cap Str)] -> Str (str acc (stringFromInt64 (stringLength cap)) ":" cap "&")) "" sortedCaps)) (preImage (str (stringFromInt64 (stringLength identity)) ":" identity "|" (stringFromInt64 (stringLength nonce)) ":" nonce "|" (stringFromInt64 (stringLength capsStr)) ":" capsStr))] (mt (runArgv! "openssl" (list "dgst" "-sha256" "-hmac" secretKey "-r") (some preImage)) ((err _) "") ((ok res) (if (!= res.exitCode 0) "" (let [(raw (stringTrim res.stdout))] (if (stringEmpty? raw) "" (stringLower (optionOr (stringSlice raw 0 64) "")))))))))
+
+fn verifyCallerSignature! auth: CallerAuth secretKey: Str -> (Result Unit PluginError)
+  (if (or (stringEmpty? auth.identity) (stringEmpty? auth.nonce)) (err (errInvalidSignature "Caller identity and nonce must not be empty")) (if (stringEmpty? auth.signature) (err (errInvalidSignature "Caller signature cannot be empty")) (if (stringEmpty? secretKey) (err (errInvalidSignature "Caller secret key cannot be empty")) (let [(expectedSig (computeCallerSignature! auth.identity auth.grantedCapabilities auth.nonce secretKey))] (if (stringEmpty? expectedSig) (err (errExecutionTrap "Failed to compute caller HMAC signature")) (if (constantTimeEqual (stringLower auth.signature) expectedSig) (ok ()) (err (errInvalidSignature "Caller HMAC signature mismatch"))))))))
+
+fn verifyCallerNonce callerNonces: (Map Str Int64) identity: Str nonce: Str -> (Result (Map Str Int64) PluginError)
+  (if (stringEmpty? identity) (err (errInvalidSignature "Caller identity cannot be empty")) (let [(nOpt (stringToInt64 nonce))] (mt nOpt ((none) (err (errUnauthorized "Invalid nonce format: must be a numeric integer"))) ((some nonceVal) (if (<= nonceVal 0) (err (errUnauthorized "Nonce must be a positive monotonic integer")) (let [(lastNonce (optionOr (mapGet callerNonces identity) 0))] (if (<= nonceVal lastNonce) (err (errUnauthorized (str "Replayed or out-of-order nonce: " nonce " <= " (stringFromInt64 lastNonce)))) (ok (mapSet callerNonces identity nonceVal)))))))))
+
+fn authorizeCall! auth: CallerAuth exportDef: PluginExport secretKey: Str -> (Result Unit PluginError)
+  (let [(reqCap exportDef.requiredCapability)] (if (stringEmpty? reqCap) (err (errInvalidSignature "Exports must explicitly declare a required capability, cannot be open-by-default")) (let [(sigRes (if (and (stringEmpty? secretKey) (stringEmpty? auth.signature)) (ok ()) (verifyCallerSignature! auth secretKey)))] (mt sigRes ((err e) (err e)) ((ok _) (if (listContains? auth.grantedCapabilities reqCap) (ok ()) (err (errUnauthorized (str "Caller lacking required capability: " reqCap)))))))))
+
+fn validateManifestHash! manifestContent: Str expectedDigest: Str -> (Result Str PluginError)
+  (if (stringEmpty? expectedDigest) (err (errInvalidSignature "Expected manifest hash cannot be empty")) (if (stringEmpty? manifestContent) (err (errInvalidSignature "Manifest content cannot be empty")) (mt (runShaText! manifestContent) ((err _) (err (errExecutionTrap "Failed to compute manifest hash"))) ((ok res) (let [(raw (stringTrim res.stdout)) (computed (optionOr (stringSlice raw 0 64) ""))] (if (!= res.exitCode 0) (err (errExecutionTrap "Failed to compute manifest hash")) (if (constantTimeEqual computed expectedDigest) (ok computed) (err (errInvalidSignature (str "Manifest hash mismatch: computed " computed " but expected " expectedDigest))))))))))

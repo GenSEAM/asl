@@ -1,0 +1,5 @@
+; expect: ref-shape
+; `(:ref N)` is a record whose SINGLE key is `:ref` over a non-negative integer.
+; A second key would make it ambiguous whether the value is the referent or a
+; record that merely mentions one.
+(:pool ["a"] :data [(:ref 0 :fallback "a")])

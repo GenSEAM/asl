@@ -1,0 +1,21 @@
+(module g3AltDriver                                :x [main] :i [(asl-forms/repair :a rep)])
+
+; (:m)                                                    
+fn printAll xs: (List String) sentinel: String -> Int64
+  (mt (listHead xs)
+    ((none) 0)
+    ((some x) (do (println sentinel) (println x) (printAll (optionOr (listTail xs) (list)) sentinel))))
+
+; (:m)             
+fn main args: (List String) -> (Result Int64 String)
+  (let [(inFile (optionOr (listGet args 0) ""))
+        (lang (optionOr (listGet args 1) "asl"))
+        (sentinel (optionOr (listGet args 2) "G3ALT"))]
+    (mt (fileReadString inFile)
+      ((err e) (ok 3))
+      ((ok text)
+        (let [(alts (rep/repairAlternatives text lang))]
+          (do (println (str "(:alts " (stringFromInt64 (listLength alts)) ")"))
+              (printAll alts sentinel)
+              (println sentinel)
+              (ok 0)))))))

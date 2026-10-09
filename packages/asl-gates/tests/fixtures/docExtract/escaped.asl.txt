@@ -1,0 +1,7 @@
+(module asl-replay/fx/escaped
+  :d "First line\nSecond line with a \"quoted\" word and a backslash \\ here"
+  :x [addOne]
+  :i [])
+
+fn addOne a: Int64 -> Int64
+  (+ a 1)

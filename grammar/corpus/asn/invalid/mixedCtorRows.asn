@@ -1,0 +1,5 @@
+; A PascalCase head takes named arguments or positional rows, never both. The
+; second token decides, in one token of lookahead, and a mixed form is
+; unparseable rather than merely discouraged — a decoder that had to choose would
+; be choosing what the payload means.
+(Item [1 "SSD-1TB" 89.99] :price 129.50)

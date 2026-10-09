@@ -1,0 +1,20 @@
+(:skill :name "asl-toolbelt" :generatedFrom "asl/grammar/tools.asn" :guide "SKILL.md"
+  :t0 "AgentScript (asl) runs batch file operations on the git repository containing the working directory. Reach for it for targeted symbol reads instead of dumping files, definitions plus uses in one step, and atomic edits validated before disk commit. Edits and writes stage in a session buffer on disk that persists across calls; (:diff), (:check) and (:test) see staged content, (:flush) writes it, (:discard) drops it. asl exits 0 on success, 1 on rejected forms, and 2 on syntax or balance errors. Forms can also come from a file, asl -f FILE, or from stdin, asl -, with the same batch and exit codes; a heredoc with a quoted delimiter (asl - <<'ASN') passes a form holding a single quote, which asl '...' cannot. Discover operations via (:tools) for the full registry, (:help :op <name>) for signatures and errors, and (:help :topic <topic>) for staging, txn, batch, receipts, and errors. Example: asl '(:read :file \"src/app.py\" :symbol \"greet\") (:edit :file \"src/app.py\" :old \"return 1\" :new \"return 2\") (:check :file \"src/app.py\") (:flush)'."
+  :ops (
+    (:tools)
+    (:help)
+    (:eval)
+    (:mem)
+    (:doc)
+    (:read)
+    (:query)
+    (:edit)
+    (:write)
+    (:diff)
+    (:flush)
+    (:discard)
+    (:check)
+    (:test)
+    (:fix)
+    (:txn)
+  ))

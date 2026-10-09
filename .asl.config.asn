@@ -1,0 +1,49 @@
+(:aslConfig
+  :workspace "asl"
+  :version "0.1.0"
+  :pureAsl true
+  :aslFirst true
+  :projections [
+    (:proj :from "package.asn" :to "package.json" :format "json" :doc "Root ASL NPM manifest")
+    (:proj :from "web/package.asn" :to "web/package.json" :format "json" :doc "Web showcase package manifest")
+    (:proj :from "wrangler.asn" :to "wrangler.toml" :format "toml" :doc "Cloudflare Workers configuration")
+  ]
+  :ignore [
+    "scratch/**"
+    "tmp/**"
+    ".asl/cache/**"
+    ".asl/log/**"
+    "**/.system_generated/**"
+    "**/*.tmp"
+    "bench/*.lock"
+    "grammar/*.lock"
+    "prelude/*.lock"
+    ".pre-commit-config.yaml"
+    "**/pnpm-lock.yaml"
+    "**/package-lock.json"
+    "**/pnpm-workspace.yaml"
+    "web/dist/**"
+  ]
+  :gates [1 2 3 4 5 6 7]
+  :tokenBaseline 2
+  :telemetry (:targetTurnMs 100 :maxTokenCeiling 150)
+  :daemon (:resident true :memoryIndex true :maxFiles 2000)
+  :coverage (
+    :desired 75.0
+    :minAssertions 2
+    :strictPolarity false
+    :discountZeroAsserts true
+    :coreDesired 100.0
+    :corePackages ["packages/asl-compiler" "packages/asl-parser" "packages/asl-codec" "packages/asl-lint" "packages/asl-gates" "packages/asl-pack"]
+    :exclude ["examples/**" "asl-arduino/**" "asl-quantum/**"]
+  )
+  :tasks [
+    (:task :name "project" :cmd "asl project" :doc "Transpile all declared ASN projections to host targets")
+    (:task :name "gate" :cmd "asl gate" :doc "Run full 7-gate pure ASL verification")
+    (:task :name "test" :cmd "asl test" :doc "Run native ASL test suites")
+    (:task :name "coverage" :cmd "asl coverage" :doc "Audit native function test coverage")
+    (:task :name "telemetry" :cmd "asl telemetry" :doc "Collect performance telemetry and token metrics")
+    (:task :name "web:transpile" :cmd "asl transpile-pkg web/package.asn web/package.json" :doc "Transpile web package.asn to package.json")
+    (:task :name "web:build" :cmd "asl task web:transpile && npm --prefix web run build" :doc "Build production web showcase")
+    (:task :name "web:dev" :cmd "asl task web:transpile && npm --prefix web run dev" :doc "Start Vite development server")
+  ])

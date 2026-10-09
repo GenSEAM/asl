@@ -1,0 +1,8 @@
+(:package asl-parquet
+ :version "0.1.0"
+ :entry "src/writer.asl"
+ :description "ASL Parquet writer and footer metadata reader"
+ :aslFirst true
+ :modules ["asl-parquet/writer" "asl-parquet/footer"]
+ :dependencies ["asl-syntax"]
+ :externalTools ["zstd"])

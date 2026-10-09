@@ -1,0 +1,17 @@
+(:replies :v 1 :src X1a :tokenizer o200kBase
+  :note "Subagent reply contract. One schema for every mode; modes differ only by :ceiling. Test instrument only: tests/acceptance/context/replySchemaTest.sh validates against it; no runtime consumer. Ceilings are adopted values from .asl/mem/work/X1/plan.asn :modes, unmeasured."
+  :form "(:reply :status ok|blocked|failed :did (s) :evidence ((:cmd c :exit n)) :paths (p) :risks (s) :ask (s))"
+  :schema (:head :reply
+    :required (:status :did :evidence :paths :risks :ask)
+    :status (ok blocked failed)
+    :types (:status symbol :did strList :evidence formList :paths strList :risks strList :ask strList)
+    :unique true
+    :evidenceItem (:cmd :exit)
+    :evidenceMin (:ok 1 :blocked 0 :failed 1)
+    :forbid (:preamble :fence :trailing))
+  :ceilings (
+    (:mode scout :ceiling 450)
+    (:mode plan :ceiling 600)
+    (:mode implement :ceiling 350)
+    (:mode grade :ceiling 350)
+    (:mode orchestrate :ceiling 350)))

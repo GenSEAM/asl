@@ -1,0 +1,18 @@
+(:package aslSearch
+ :version "0.1.0"
+ :entry "src/engine.asl"
+ :description "AgentScript Multi-Engine Web Search, Quota Router, and Ecosystem Provider Aggregator"
+ :aslFirst true
+ :modules [
+   "asl-search/config"
+   "asl-search/ecosystems"
+   "asl-search/engine"
+   "asl-search/hybrid"
+   "asl-search/quota"
+   "asl-search/router"
+   "asl-search/transport"
+   "asl-search/research"
+   "asl-search/commonCrawl"
+   "asl-search/commonCrawlCli"
+ ]
+ :dependencies ["asl-zip"])

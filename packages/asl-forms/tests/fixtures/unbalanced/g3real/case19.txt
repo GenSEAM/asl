@@ -1,0 +1,93 @@
+(module asl-target-llvm/tests/exitCodeTest
+                                                                                                          
+  :x [runTests]
+  :i [])
+
+(:m :why "Returns a newline character")
+fn nl -> String
+  "
+"
+
+(:m :why "Returns a double quote character")
+fn q -> String
+  "\""
+
+(:m :why "Path to stage-0 asl-host executable")
+fn host -> String
+  "asl/host/out/asl-host"
+
+(:m :why "Clang invocation for IR compilation")
+fn clang -> String
+  "/usr/bin/clang -Wno-override-module"
+
+(:m :why "Path to host runtime library")
+fn lib -> String
+  "asl/host/out/libaslhost.a"
+
+(:m :why "Path to self-hosted compiler driver")
+fn buildDriver -> String
+  "asl/packages/asl-compiler/src/asl1.asl"
+
+(:m :why "Executes a shell command")
+fn ! sh cmd: String -> ProcessOutput
+  (processRun cmd)
+
+(:m :why "Program returning (ok 42)")
+fn okProgram -> String
+  (str "(module test/okProg :d " (q) "ok prog" (q) " :x [main] :i [])" (nl) (nl)
+       "fn ! main -> (Result Int64 String)" (nl)
+       "  (ok 42)" (nl))
+
+(:m :why "Program returning (ok done)")
+fn okNonIntProgram -> String
+  (str "(module test/okNonIntProg :d " (q) "ok non-int prog" (q) " :x [main] :i [])" (nl) (nl)
+       "fn ! main -> (Result String String)" (nl)
+       "  (ok " (q) "done" (q) ")" (nl))
+
+(:m :why "Program returning (err boom)")
+fn errProgram -> String
+  (str "(module test/errProg :d " (q) "err prog" (q) " :x [main] :i [])" (nl) (nl)
+       "fn ! main -> (Result Int64 String)" (nl)
+       "  (err " (q) "boom" (q) ")" (nl))
+
+(:m :why "Program with entry named main returning Result")
+fn mainNameProgram -> String
+  (str "(module test/mainNameProg :d " (q) "main name prog" (q) " :x [main] :i [])" (nl) (nl)
+       "fn ! main -> (Result Int64 String)" (nl)
+       "  (ok 7)" (nl))
+
+(:m :why "Compiles a program with asl1 and runs the native binary")
+fn ! compileAndRun work: String name: String src: String -> ProcessOutput
+  (let [(srcFile (str work "/" name ".asl"))
+        (llFile (str work "/" name ".ll"))
+        (binFile (str work "/" name))
+        (w (fileWriteString srcFile src))
+        (build (sh (str (host) " run " (buildDriver) " build " srcFile " -o " llFile)))
+        (link (sh (str (clang) " -x ir " llFile " -x none " (lib) " -lm -o " binFile)))]
+    (sh binFile))
+
+(:m :why "Compares native binary exit code and stdout with asl-host run")
+fn ! compareWithHost work: String name: String src: String -> Bool
+  (let [(srcFile (str work "/" name ".asl"))
+        (w (fileWriteString srcFile src))
+        (hostOut (sh (str (host) " run " srcFile)))
+        (nativeOut (compileAndRun work name src))]
+    (do
+      (assert (= nativeOut.exitCode     hostOut.exitCode    )
+              (str name ": exit code native " (stringFromInt64 nativeOut.exitCode    ) " vs host " (stringFromInt64 hostOut.exitCode    )))
+      (assert (= nativeOut.stdout     hostOut.stdout    )
+              (str name ": stdout native " nativeOut.stdout     " vs host " hostOut.stdout    ))
+      true)))
+
+(:m :why "Runs all exitCodeTest assertions")
+fn ! runTests -> Bool
+  (let [(made (sh "mktemp -d"))
+        (work (stringReplace made.stdout     (nl) ""))]
+    (do
+      (assert (= made.exitCode     0) "mktemp -d makes a work directory")
+      (assert (compareWithHost work "okProg" (okProgram)) "ok 42 matches host run")
+      (assert (compareWithHost work "okNonIntProg" (okNonIntProgram)) "ok non-int matches host run")
+      (assert (compareWithHost work "errProg" (errProgram)) "err matches host run")
+      (assert (compareWithHost work "mainProg" (mainNameProgram)) "entry named main returning Result matches host run")
+      (assert (= (sh (str "rm -rf " work)).exitCode     0) "work directory removed")
+      true))

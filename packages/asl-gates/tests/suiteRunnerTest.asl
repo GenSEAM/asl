@@ -1,0 +1,195 @@
+(module asl-gates/tests/suiteRunnerTest
+  :x [runTests]
+  :i [(asl-parser/reader :a p) (asl-gates/suiteRunner :a sr) (tests/parity/gates/runnerCorpus :a gr)])
+
+fn items node: p/SExpr -> (List p/SExpr)
+  (p/sexprToList node)
+fn atom node: p/SExpr -> String
+  (mt node ((p/sexprAtom value) value) (_ ""))
+fn field xs: (List p/SExpr) key: String -> (Option p/SExpr)
+  (mt (listHead xs)
+    ((none) (none))
+    ((some k)
+      (mt (listTail xs)
+        ((none) (none))
+        ((some afterKey)
+          (mt (listHead afterKey)
+            ((none) (none))
+            ((some value)
+              (if (= (atom k) key) (some value)
+                  (field (optionOr (listTail afterKey) (list)) key))))))))
+fn strField xs: (List p/SExpr) key: String -> String
+  (mt (field xs key) ((some value) (gr/decodeString (atom value))) ((none) ""))
+fn listOf node: p/SExpr -> (List p/SExpr)
+  (p/sexprToList node)
+fn numField xs: (List p/SExpr) key: String -> Int64
+  (optionOr (stringToInt64 (atom (optionOr (field xs key) (p/sexprAtom "-1")))) -1)
+fn findGate records: (List p/SExpr) suite: String -> (Option p/SExpr)
+  (mt (listHead records)
+    ((none) (none))
+    ((some record)
+      (let [fields (optionOr (listTail (items record)) (list))]
+        (if (= (strField fields ":suite") suite)
+          (some record)
+          (findGate (optionOr (listTail records) (list)) suite)))))
+fn gateExit records: (List p/SExpr) suite: String -> Int64
+  (mt (findGate records suite)
+    ((none) -1)
+    ((some record) (numField (optionOr (listTail (items record)) (list)) ":exit")))
+fn gateOutput records: (List p/SExpr) suite: String -> String
+  (mt (findGate records suite)
+    ((none) "")
+    ((some record) (strField (optionOr (listTail (items record)) (list)) ":stdout")))
+
+fn ! timesLedger! -> String
+  (str (optionOr (envGet "TMPDIR") "/tmp") "/aslSuiteRunnerTimes." (stringFromInt64 (procSelf)) ".asn")
+
+fn ! replayTimeouts! records: (List p/SExpr) -> Bool
+  (mt (listHead records)
+    ((none) true)
+    ((some record)
+      (let [fields (optionOr (listTail (items record)) (list))
+            suite (strField fields ":suite")
+            seconds (numField fields ":seconds")]
+        (do
+          (assert (= (optionOr (sr/slowSuiteTimeoutS suite) -1) seconds)
+            (str "ASL slow-suite timeout matches recorded Python value for " suite))
+          (replayTimeouts! (optionOr (listTail records) (list)))))))
+
+fn ! timeoutTableSuites! -> (List String)
+  (let [res (processRun "sed -n '/^fn slowSuiteTimeoutS /,/^    (else (none))/p' asl/packages/asl-gates/src/suiteRunner.asl | grep -o '\"[^\"]*\"' | tr -d '\"'")]
+    (if (= res.exitCode 0)
+      (filter (fn [(line String)] -> Bool (!= line "")) (stringLines res.stdout))
+      (list)))
+
+fn timeoutSuites records: (List p/SExpr) -> (List String)
+  (map (fn [record] (strField (optionOr (listTail (items record)) (list)) ":suite")) records)
+
+fn ! lsFilesModes! root: String -> (List (Pair String String))
+  (let [text (mt (sr/gitOut! root (list "ls-files" "-s")) ((ok t) t) ((err _) ""))
+        lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (sr/pyLines text))]
+    (map (fn [(l String)] -> (Pair String String)
+           (let [tab (optionOr (stringIndexOf l "\t") (stringLength l))
+                 prefix (optionOr (stringSlice l 0 tab) "")
+                 path (optionOr (stringSlice l (+ tab 1) (stringLength l)) "")
+                 mode (optionOr (listHead (stringSplit prefix " ")) "")]
+             (pair mode path)))
+         lines))
+
+fn ! symlinkPaths! root: String -> (List String)
+  (map pairSecond (filter (fn [(e (Pair String String))] -> Bool (= (pairFirst e) "120000")) (lsFilesModes! root)))
+
+fn ! candidateSuites! root: String tracked: (List String) symlinks: (List String) -> (List String)
+  (filter (fn [(p String)] -> Bool
+            (and (sr/isSuiteName p)
+                 (not (sr/isExcludedSegment p))
+                 (not (listContains? symlinks p))
+                 (sr/isFile! (str root "/" p))))
+          tracked)
+
+fn ! expectedDiscovered! root: String tracked: (List String) -> (List String)
+  (let [helperSet (sr/helpers! root tracked)
+        symlinks (symlinkPaths! root)]
+    (filter (fn [(p String)] -> Bool
+              (and (none? (sr/nonHermeticReason p))
+                   (not (listContains? helperSet p))
+                   (none? (sr/driverCorpus p))))
+            (candidateSuites! root tracked symlinks)))
+
+fn ! replayGates! records: (List p/SExpr) -> Bool
+  (mt (listHead records)
+    ((none) true)
+    ((some record)
+      (let [fields (optionOr (listTail (items record)) (list))
+            suite (strField fields ":suite")
+            wantedExit (numField fields ":exit")
+            wantedOut (strField fields ":stdout")
+            got (processRun (str "ASL_GATE_TIMES=" (timesLedger!) " asl/host/out/asl-host run asl/packages/asl-gates/src/suiteRunner.asl gate " suite))]
+        (do
+          (assert (= got.stdout wantedOut)
+            (str "gate stdout matches recorded Python for " suite
+                 " lengths expected=" (stringFromInt64 (stringLength wantedOut))
+                 " actual=" (stringFromInt64 (stringLength got.stdout))
+                 "\nexpected: " wantedOut "\nactual: " got.stdout))
+          (assert (= got.exitCode wantedExit) (str "gate exit matches recorded Python for " suite))
+          (replayGates! (optionOr (listTail records) (list)))))))
+
+fn ! runTests -> Bool
+  (let [fixtureText (mt (fileReadString "tests/parity/audit/suiteRunner.asn")
+                         ((ok text) text)
+                         ((err e) (do (assert false (str "suite runner fixture read: " e)) "")))
+        root (items (p/parseSexpr fixtureText))
+        fields (optionOr (listTail root) (list))
+        timeoutNode (optionOr (field fields ":timeouts") (p/sexprList (list)))
+        gateNode (optionOr (field fields ":gates") (p/sexprList (list)))
+        timeouts (listOf timeoutNode)
+        tableSuites (timeoutTableSuites!)
+        gates (listOf gateNode)
+        discoveryResult (processRun "asl/host/out/asl-host run asl/packages/asl-gates/src/suiteRunner.asl discover")
+        discoveryLines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines discoveryResult.stdout))
+        discoveredCount (listLength discoveryLines)
+        suiteLines (listTake discoveryLines (- discoveredCount 1))
+        excludedLine (optionOr (listLast discoveryLines) "")
+        gitTreeRoot (mt (sr/gitRoot!) ((ok r) r) ((err _) ""))
+        trackedText (mt (sr/gitOut! gitTreeRoot (list "ls-files")) ((ok t) t) ((err _) ""))
+        tracked (sr/pyLines trackedText)
+        helperFixture "tests/acceptance/r1Prelude/helperDiscoveryFixture.sh"
+        expected (listSort (expectedDiscovered! gitTreeRoot tracked))
+        dedupedCount (listLength (mapKeys (mapFromPairs (map (fn [(p String)] -> (Pair String Bool) (pair p true)) suiteLines))))]
+    (do
+      (assert (= discoveryResult.exitCode 0) "ASL discovery exits successfully")
+      (assert (> discoveredCount 100) "ASL discovery lists over 100 suites")
+      (assert (listContains? suiteLines "asl/packages/asl-gates/tests/auditParityTest.asl") "discovery includes auditParityTest")
+      (assert (listContains? suiteLines "asl/packages/asl-gates/tests/suiteRunnerTest.asl") "discovery includes suiteRunnerTest")
+      (assert (stringStartsWith? excludedLine "(:excluded") "discovery output retains the exclusion form")
+      (assert (= suiteLines (listSort suiteLines)) "discovered suites are in sorted order")
+      (assert (= (listLength suiteLines) dedupedCount) "discovered suites have no duplicates")
+      (assert (listAll? (fn [(p String)] -> Bool (sr/isFile! (str gitTreeRoot "/" p))) suiteLines) "every discovered path exists on disk")
+      (assert (listAll? (fn [(p String)] -> Bool (listContains? tracked p)) suiteLines) "every discovered path is a tracked file")
+      (assert (= suiteLines expected)
+        (str "discovered set equals the set independently recomputed from the discovery rule (candidates minus nonHermetic, helper and driverCorpus exclusions): ASL "
+             (stringFromInt64 (listLength suiteLines)) ", rule " (stringFromInt64 (listLength expected))))
+      (assert (not (listContains? suiteLines "tests/acceptance/r1Prelude/fixtures/refuteEnum/enumImportTest.asl"))
+        "a suite name under a fixtures segment is not discovered")
+      (assert (not (listContains? suiteLines "asl/packages/asl-agent/tests/fixtures/test-app/tests/snakeTest.asl"))
+        "a suite name under asl/packages/asl-agent/tests/fixtures is not discovered")
+      (assert (listContains? tracked helperFixture)
+        "helper-discovery fixture participates as a tracked input")
+      (assert (listContains? (sr/helpers! gitTreeRoot tracked) "tests/acceptance/r1Prelude/hostUnderTest.sh")
+        "helpers! finds hostUnderTest.sh from tracked shell suites")
+      (assert (sr/isSuiteName "tests/acceptance/daemonLifecycleTest.asl") "isSuiteName accepts the ported lifecycle .asl suite")
+      (assert (listContains? suiteLines "tests/acceptance/daemonLifecycleTest.asl")
+        "discovery includes the ported lifecycle .asl suite")
+      (assert (listContains? suiteLines "tests/acceptance/aslDaemonSocketTest.asl")
+        "discovery includes the ported daemon socket .asl suite")
+      (assert (not (listContains? suiteLines "tests/acceptance/daemonLifecycleTest.sh"))
+        "discovery excludes the legacy nonhermetic lifecycle shell wrapper")
+      (assert (not (listContains? (sr/helpers! gitTreeRoot tracked) "tests/acceptance/daemonLifecycleTest.sh"))
+        "helpers! does not report a shell suite as its own helper")
+      (assert (sr/isSuiteName "tests/acceptance/asl_daemon_socket_test.sh") "isSuiteName accepts the _test.sh pattern")
+      (assert (not (listContains? suiteLines "tests/acceptance/asl_daemon_socket_test.sh"))
+        "asl_daemon_socket_test.sh matches isSuiteName but is excluded as nonHermetic")
+      (assert (not (listAny? (fn [(p String)] -> Bool (stringStartsWith? p "tests/acceptance/r1Host/")) suiteLines))
+        "no path under the r1Host driver corpus is discovered")
+      (assert (= (optionOr (sr/slowSuiteTimeoutS "asl/packages/asl-parser/tests/liftLowerIdentityTest.asl") 0) 900) "liftLowerIdentityTest retains its measured timeout")
+      (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/conformance/bootstrap/ddcFixpointTest.asl") 0) 1800) "DDC fixpoint timeout is 1800 seconds")
+      (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/conformance/cli/buildNativeAsl1Test.asl") 0) 2400) "buildNativeAsl1Test timeout was raised to 2400 after a 1376s measurement under load")
+      (assert (= (optionOr (sr/slowSuiteTimeoutS "tests/acceptance/r1AgentLoop/coreParityTest.sh") 0) 1200) "coreParityTest.sh timeout was raised to 1200 after a 640s measurement under load")
+      (assert (= (sr/suiteJob! "." "tests/acceptance/r1AgentLoop/coreParityTest.sh" 300).timeoutMs 1200000)
+        "suiteJob! gives coreParityTest.sh the table's 1200s timeout in ms, not the 300s default")
+      (assert (= (sr/suiteJob! "." "tests/acceptance/agentLoop/replyScanTest.sh" 300).timeoutMs 300000)
+        "suiteJob! gives an unlisted .sh suite the baseS default in ms")
+      (assert (= (listLength timeouts) 11) "fixture records every one of the 11 slow-suite entries")
+      (assert (= (listLength tableSuites) (listLength timeouts)) "ASL timeout table has no entries beyond the recorded Python table")
+      (assert (listAll? (fn [(suite String)] -> Bool (listContains? (timeoutSuites timeouts) suite)) tableSuites)
+        "every ASL timeout table entry is in the recorded Python table")
+      (assert (listAll? (fn [(suite String)] -> Bool (listContains? tableSuites suite)) (timeoutSuites timeouts))
+        "every recorded Python timeout entry is in the ASL table")
+      (assert (replayTimeouts! timeouts) "every ASL timeout equals the recorded Python table")
+      (assert (= (listLength gates) 10) "fixture records all ten runner gate cases")
+      (assert (= (gateExit gates "nonexistentTest.asl") 1) "recorded missing-suite gate fails")
+      (assert (stringContains? (gateOutput gates "nonexistentTest.asl") "ERR_NOT_A_SUITE") "recorded missing-suite cause is preserved")
+      (assert (replayGates! gates) "ASL gate outputs and exits equal recorded Python")
+      (assert (ok? (fileReadString (timesLedger!))) "runner children wrote the private gateTimes ledger")
+      (assert (ok? (pathRemove (timesLedger!))) "private gateTimes ledger removed")
+      true))

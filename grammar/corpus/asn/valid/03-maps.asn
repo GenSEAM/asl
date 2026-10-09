@@ -1,0 +1,12 @@
+; Both map entry forms in one literal. `:kw value` is the cheap form; the
+; parenthesised entry carries a key no keyword can spell — a dotted path, an
+; integer id, a boolean. A float key is absent by grammar, because Core §3
+; forbids one and a NaN key could never be looked up again.
+;
+; canonical: {:theme "dark" :retries 3 ("system.memory.max" 16384) (8 :cores) (true :enabled)}
+
+{:theme "dark"
+ :retries 3
+ ("system.memory.max" 16384)
+ (8 :cores)
+ (true :enabled)}

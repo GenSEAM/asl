@@ -1,0 +1,10 @@
+; The ad-hoc table: a header vector of column keywords and a vector of rows,
+; written as a bare two-element form with no head keyword at all. This is the
+; shape for data with no compiled schema — a query result, a CSV import — and it
+; is why ASN needs no `@table`, which would have cost two tokens for the `@`.
+;
+; canonical: ([:id :sku :price :currency] [[1 "SSD-1TB" 89.99 "USD"] [2 "RAM-32GB" 129.5 "USD"]])
+
+([:id :sku :price :currency]
+ [[1 "SSD-1TB"  89.99 "USD"]
+  [2 "RAM-32GB" 129.5 "USD"]])

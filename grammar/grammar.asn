@@ -1,0 +1,69 @@
+(:grammar
+  :package aslCore
+  :version "0.1.0"
+  :d "Core symbols of the stage-0 host. A file is a module header, then column-0 items: fn declarations, enum declarations and schema declarations. (df ...), (dfs ...) and (dfe ...) at top level are rejected with ERR_UNSUPPORTED_TOPLEVEL; try and assertErr are unbound. audit gates gate 6 requires exactly 48 symbols, and a rationale on each symbol costing more than :tokensBaseline."
+  :tokensBaseline 2
+  :tokensBaselineStatus :adopted
+  :tokensMethod (:tokenizer "o200k_base" :tool "tiktoken 0.12.0" :input "the bare symbol name, no leading space" :date "2026-09-24")
+  :symbols [
+    (:sym :name "module" :kind :form :tokens 1)
+    (:sym :name "fn" :kind :form :tokens 1)
+    (:sym :name "enum" :kind :form :tokens 1)
+    (:sym :name "schema" :kind :form :tokens 1)
+
+    (:sym :name "let" :kind :form :tokens 1)
+    (:sym :name "if" :kind :form :tokens 1)
+    (:sym :name "cond" :kind :form :tokens 1)
+    (:sym :name "mt" :kind :form :tokens 1)
+
+    (:sym :name "ok" :kind :ctor :tokens 1)
+    (:sym :name "err" :kind :ctor :tokens 1)
+    (:sym :name "some" :kind :ctor :tokens 1)
+    (:sym :name "none" :kind :ctor :tokens 1)
+    (:sym :name "list" :kind :ctor :tokens 1)
+    (:sym :name "pair" :kind :ctor :tokens 1)
+
+    (:sym :name "and" :kind :op :tokens 1)
+    (:sym :name "or" :kind :op :tokens 1)
+    (:sym :name "not" :kind :op :tokens 1)
+    (:sym :name "str" :kind :op :tokens 1)
+    (:sym :name "=" :kind :op :tokens 1)
+    (:sym :name "<" :kind :op :tokens 1)
+    (:sym :name ">" :kind :op :tokens 1)
+    (:sym :name "<=" :kind :op :tokens 1)
+    (:sym :name ">=" :kind :op :tokens 1)
+    (:sym :name "+" :kind :op :tokens 1)
+    (:sym :name "-" :kind :op :tokens 1)
+    (:sym :name "*" :kind :op :tokens 1)
+    (:sym :name "/" :kind :op :tokens 1)
+    (:sym :name "mod" :kind :op :tokens 1)
+
+    (:sym :name "list-length" :kind :fn :tokens 2)
+    (:sym :name "list-empty?" :kind :fn :tokens 3
+          :rationale "Standard collection emptiness predicate with question-mark convention")
+    (:sym :name "map-get" :kind :fn :tokens 2)
+    (:sym :name "map-set" :kind :fn :tokens 2)
+    (:sym :name "map-empty" :kind :fn :tokens 2)
+    (:sym :name "string-length" :kind :fn :tokens 2)
+    (:sym :name "string-replace" :kind :fn :tokens 3
+          :rationale "Substring substitution with target and replacement")
+    (:sym :name "string-split" :kind :fn :tokens 3
+          :rationale "String segmentation by delimiter with list return")
+    (:sym :name "string-contains?" :kind :fn :tokens 4
+          :rationale "Substring containment search predicate with question-mark convention")
+    (:sym :name "string-starts-with?" :kind :fn :tokens 5
+          :rationale "Standard string prefix predicate with clear domain semantics")
+    (:sym :name "string-from-int64" :kind :fn :tokens 4
+          :rationale "Explicit typed scalar formatting distinguishing I64 conversion")
+
+    (:sym :name "assert" :kind :form :tokens 1)
+    (:sym :name "refute" :kind :form :tokens 2)
+    (:sym :name "option-or" :kind :fn :tokens 2)
+    (:sym :name "result-or" :kind :fn :tokens 2)
+    (:sym :name "do" :kind :form :tokens 1)
+    (:sym :name "fold" :kind :fn :tokens 1)
+    (:sym :name "filter" :kind :fn :tokens 1)
+    (:sym :name "map" :kind :fn :tokens 1)
+    (:sym :name "println" :kind :fn :tokens 1)
+  ]
+)

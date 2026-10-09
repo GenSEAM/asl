@@ -1,0 +1,6 @@
+; A raw-string form needs `#`, which the language lexer cannot produce. Adding it
+; here would fork the lexer ASN claims to share, so multi-line text uses Core
+; §2's five escapes or a vector of lines instead.
+(:body #"""
+SELECT * FROM "users"
+"""#)

@@ -1,0 +1,1 @@
+(and (= (smallPrimes) (list 2 3 5 7 11)) (= (noNames) (list)) (= (wrap -1) (err "negative")) (= (maybeDouble (some 4)) (some 8)) (= (labelled "k" 1) (pair "k" 1)) (= (tagged (list 1 2) (list "a")) (list (pair 1 "a"))) (= (heads (list)) (list)))

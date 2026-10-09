@@ -1,0 +1,4 @@
+(:budgetConfig
+  :lines [(:line :id "endpoint-hour" :scope :endpoint :key "paid-api" :period :hour :cap 1000000 :approved false)
+          (:line :id "global-day" :scope :global :key "" :period :day :cap 9000000 :approved false)]
+  :approvals [(:approval :endpoint "paid-api" :cap 1000000)])

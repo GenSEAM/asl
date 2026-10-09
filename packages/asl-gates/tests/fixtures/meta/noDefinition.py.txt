@@ -1,0 +1,7 @@
+# (:m :ref gates)
+
+def afterBlank():
+    pass
+# (:m :ref gates)
+x += 1
+# (:m :ref gates)

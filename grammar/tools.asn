@@ -1,0 +1,453 @@
+(:tools :v 2 :substrate "ASL"
+  :doc "Authoritative machine-readable registry of operational Pure-ASN S-expressions for autonomous agents. Agents execute operations exclusively via these forms."
+  :t0 "AgentScript (asl) runs batch file operations on the git repository containing the working directory. Reach for it for targeted symbol reads instead of dumping files, definitions plus uses in one step, and atomic edits validated before disk commit. Edits and writes stage in a session buffer on disk that persists across calls; (:diff), (:check) and (:test) see staged content, (:flush) writes it, (:discard) drops it. asl exits 0 on success, 1 on rejected forms, and 2 on syntax or balance errors. Forms can also come from a file, asl -f FILE, or from stdin, asl -, with the same batch and exit codes; a heredoc with a quoted delimiter (asl - <<'ASN') passes a form holding a single quote, which asl '...' cannot. Discover operations via (:tools) for the full registry, (:help :op <name>) for signatures and errors, and (:help :topic <topic>) for staging, txn, batch, receipts, and errors. Example: asl '(:read :file \"src/app.py\" :symbol \"greet\") (:edit :file \"src/app.py\" :old \"return 1\" :new \"return 2\") (:check :file \"src/app.py\") (:flush)'."
+  :topics (
+    (:topic :name :staging :text "Operations edit, write, and fix with :apply stage changes in a buffer on disk outside the working tree: .asl/vfs, or ~/.cache/asl/vfs/<hash> for a workspace without .asl; each ASL_SESSION has its own buffer, and without ASL_SESSION the workspace shares one. The buffer persists across calls until flush or discard, so a later bare (:flush) writes changes staged earlier. Operation diff shows staged changes against disk; check and test run against staged content. Operation flush writes every staged file atomically (fsync and rename) and refuses with ERR_STALE_BASE a file whose disk content changed since it was staged. Operation discard drops staged changes without touching disk. (:txn) stages, gates and flushes in one call." :examples (
+      "(:diff)"
+    ))
+    (:topic :name :txn :text "Transaction atomicity across file edits and validation gates. The (:txn :owns (<path> ...) <form> ...) form executes nested edits and gates. All touched targets must resolve inside declared :owns boundaries. If any nested step fails or is rejected, all modifications are restored to their pre-transaction state. If all nested steps succeed, modifications are flushed atomically to disk." :examples (
+      "(:txn :owns (\"asl/grammar\") (:check :file \"asl/grammar/rules.asn\"))"
+    ))
+    (:topic :name :batch :text "Multiple ASN forms execute in one call via asl '(:form1 ...) (:form2 ...)'. Forms execute in input order; independent read-only forms run concurrently. Ordered execution with short-circuit on first failure is requested with (:batch :seq true ...). A mutation followed by flush also short-circuits on failure so invalid staged changes never reach disk." :examples (
+      "(:batch :seq true (:tools) (:diff))"
+    ))
+    (:topic :name :receipts :text "Every executed operation yields a structured ASN receipt. A single form prints an unwrapped receipt; multiple forms print (:batch <receipt1> <receipt2> ...). Receipts use Dyck-1 balanced parentheses and camelCase keys. Successful steps omit redundant ok status and item counts; rejected steps carry :error with an uppercase code, human-readable :message, and contextual fields." :examples (
+      "(:read :file \"asl/grammar/rules.asn\" :limit 5)"
+    ))
+    (:topic :name :errors :text "Failures produce predictable uppercase error codes under :error in rejected step receipts. Common codes include ERR_MISSING_ARG (required parameter absent), ERR_FILE_NOT_FOUND (target path does not exist in workspace), ERR_BOUNDARY_VIOLATION (path escapes repository root), ERR_NO_MATCH (old string not found), ERR_AMBIGUOUS (multiple matches without :all true), ERR_UNBALANCED (delimiter mismatch), ERR_SYNTAX (language syntax invalid), ERR_OWNS (target outside transaction owns)." :examples (
+      "(:read :file \"missing.txt\")"
+    ))
+    (:topic :name :language :text "An ASL file is a module header, then items starting in column 0: (module ws/name :x [exported names] :i [(other/module :a alias)]). Imports name the module a file declares, not its path. Docs are not in source: each lives as a (:doc :symbol \"path#name\" :text \"...\") row in the package doc.asn, and the reader rejects :d docstrings and prose ; comments. A function is a bare line, fn name a: Int64 b: String -> Bool, with its body indented below; that line is not a form, so the body closes only its own parentheses. Each bracket kind pairs exactly: ( ) forms, [ ] lists, { } records. enum Shape (circle r: Int64) (square side: Int64) makes positional constructors, taken apart by (mt s ((circle r) ...) ((square a) ...)); patterns nest one level. A record field reads as x.f, chains as a.b.c, and on an expression as (expr).f; (with x :k v) is a copy of record x with field k set to v. (let [(a 1) (b (+ a 1))] body) binds in sequence; (fn [x] body) is a value; cond ends with (else v). Conditions, and, or, not and assert take only true or false. Int and Float never mix; overflow and division by zero trap. There is no nil, exception or try: listHead, listTail, listGet, listSlice, stringSlice and mapGet return (some v) or (none), failures are (err e), unwrapped by mt, optionOr or resultOr. Builtins are camelCase like user names, predicates end in ?: listLength, stringContains?, some?; len and head do not exist; + is not a value. A test exports runTests, returning true after at least one (assert cond \"msg\") or refute. The stage-0 host asl/host/out/asl-host enforces all this before running, and (:test), (:check), asl test and asl check of an .asl file and asl eval run on it (asl eval prints a keyword-headed form back as ASN data); a bare asl test or asl check sweeps every discovered suite or tracked file on it, and the lenient asl-core runner is retired." :tools "After an ASL edit run asl/host/out/asl-host check FILE, then test FILE: exit 0 and the executed assert count are the evidence; a test is (module ws/t :x [runTests]) with fn runTests -> Bool ending true after (assert c); asl run FILE runs a program; asl '(:help :builtin stringTo)' lists builtins by name, else by doc, with types." :examples (
+      "(:read :file \"asl/prelude/prelude.asl\" :limit 20)"
+    ))
+  )
+  :entries (
+    (:op :tools
+      :scope any
+      :public "Print the operation registry."
+      :form "(:tools)"
+      :params ()
+      :examples (
+        "(:tools)"
+      )
+      :errors (ERR_UNIMPLEMENTED)
+      :related (help)
+      :doc "Introspect active agent tool schemas and operational signatures.")
+
+    (:op :help
+      :scope any
+      :public "Show help for an op, a topic, or the ASL builtins whose name contains a text."
+      :form "(:help :op <name>) | (:help :topic <topic>) | (:help :builtin <text>) | (:tools :op <name>)"
+      :params (
+        (:op :type sym :default :read :note "operation name to describe")
+        (:topic :type sym :default :staging :note "topic name to explain")
+        (:builtin :type str :note "text a builtin name contains, as in stringTo; when no name holds it, builtins whose doc holds its words (parse-int finds stringToInt64); answers with name, type and doc from asl/prelude/prelude.asn")
+      )
+      :examples (
+        "(:tools :op \"read\")"
+        "(:help :builtin \"stringTo\")"
+      )
+      :errors (ERR_UNKNOWN_SYMBOL ERR_UNIMPLEMENTED)
+      :related (tools)
+      :doc "Display documentation, signatures, parameters, examples, and error codes for ops and topics.")
+
+    (:op :eval
+      :scope any
+      :public "Evaluate ASL code in an isolated, time-bounded native-first subprocess."
+      :form "(:eval :code <str> [:timeoutMs <int>])"
+      :params (
+        (:code :type str :req true :note "ASL expression to evaluate")
+        (:timeoutMs :type int :default 5000 :note "subprocess timeout in milliseconds; range 1..120000")
+      )
+      :examples ("(:eval :code \"(+ 1 2)\")")
+      :errors (ERR_MISSING_ARG ERR_BAD_TIMEOUT ERR_TIMEOUT ERR_EVAL ERR_PROCESS)
+      :related (run help)
+      :doc "Compile and run an isolated temporary ASL module through the native-first run route; returns output, status and exit code.")
+
+    (:op :mem
+      :scope any
+      :public "List, get, query, and stage row-keyed memory ledger changes."
+      :form "(:mem :op list|get|query|put ...)"
+      :params (
+        (:op :type sym :req true :note "operation: list, get, query, or put")
+        (:dir :type str :default ".asl/mem" :note "ledger directory for list")
+        (:file :type str :note "ledger path confined to .asl/mem")
+        (:id :type str :note "row id to retrieve")
+        (:text :type str :note "query text")
+        (:limit :type int :default 100 :note "maximum matching rows")
+        (:row :type str :note "ASN row to append or replace")
+      )
+      :examples ("(:mem :op list)" "(:mem :op get :file \"intent.asn\" :id TOOLS-memEval)")
+      :errors (ERR_INVALID_ARG ERR_BOUNDARY_VIOLATION ERR_MEM_READ ERR_NOT_FOUND ERR_INVALID_ROW ERR_STAGE_FAILED ERR_INVALID_OP)
+      :related (edit flush)
+      :doc "Operate on parsed ASN rows in .asl/mem. Put stages via the edit VFS and is committed only by flush.")
+
+    (:op :doc
+      :scope any
+      :public "Look up a D150 doc ledger row by symbol, or list a file's rows."
+      :form "(:doc :symbol \"path#name\" | :file \"path\")"
+      :params (
+        (:symbol :type str :note "path#name, path# for a module doc, or path#Type.field for a field doc")
+        (:file :type str :note "source path; returns every ledgered row for that file")
+      )
+      :examples ("(:doc :symbol \"asl/packages/asl-replay/src/record.asl#\")" "(:doc :file \"asl/packages/asl-replay/src/record.asl\")")
+      :errors (ERR_MISSING_ARG ERR_DOC_READ)
+      :related (mem read)
+      :doc "Reads the doc.asn/doc ledger a docExtract --apply would have written to, routed the same way docExtract routes it (D150).")
+
+    (:op :manage
+      :scope toolchain
+      :params (
+        (:action :type sym :req true :note "action: spawn poll tail kill list")
+        (:id :type str :default "" :note "task identifier")
+        (:cmd :type str :default "" :note "command string to execute")
+        (:lines :type int :default 10 :note "log line count for tail")
+        (:timeoutMs :type int :default 30000 :note "execution timeout in milliseconds")
+      )
+      :actions (:spawn :poll :tail :kill :list)
+      :doc "APM engine process supervision, streaming logs, and session lifecycle. Replaces host manage_task.")
+
+    (:op :engine
+      :scope toolchain
+      :params (
+        (:action :type sym :req true :note "action: status ping start stop restart")
+        (:scope :type sym :default :workspace :note "scope: workspace or system")
+        (:force :type bool :default false :note "force engine restart")
+      )
+      :actions (:status :ping :start :stop :restart)
+      :scopes (:workspace :system)
+      :doc "Resident ASL engine runtime management, scope isolation, socket status, liveness ping, and graceful restart/termination via RPC.")
+
+    (:op :lens
+      :scope toolchain
+      :params (
+        (:file :type str :default "" :note "target file to evaluate")
+        (:target :type str :default "workspace" :note "target scope or path")
+        (:lenses :type forms :default (:invariants) :note "list of audit lenses to evaluate")
+        (:profile :type sym :default :freeTier :note "execution profile: freeTier frontier codexLuna")
+      )
+      :lenses (:all :invariants :teleology :semantics :gates :triMap :grading :astAddressing :ramTxn :foreign :limitCycle :workspaceIsolation :dyck1Purity :tokenEconomics)
+      :profiles (:freeTier :frontier :codexLuna)
+      :doc "Execute a multi-lens audit across 13 canonical inquiry lenses returning structured ASN report.")
+
+    (:op :agent
+      :scope toolchain
+      :brief "(:agent :task t [:root dir] [:owns (paths)] [:gates (commands)] [:intent i]) hands a task to Leon, the asl agent loop, which edits inside :root (default the calling repo), narrowed by :owns, and runs the gates"
+      :form "(:agent :task <str> ...)"
+      :params (
+        (:answer :type str :default "")
+        (:backend :type str :default "agy")
+        (:base :type str :default "" :note "rev gitDiff compares to")
+        (:budget :type int :default 3000)
+        (:contextFile :type str :default "")
+        (:contextTokens :type int)
+        (:dryRun :type bool :default false)
+        (:gates :type forms :default ())
+        (:gateTimeout :type int)
+        (:intent :type sym)
+        (:model :type str :default "")
+        (:owns :type forms :default () :note "narrows :root")
+        (:plan :type bool :default false)
+        (:queueTimeout :type int :default 1200 :note "seconds, outside timeout")
+        (:resume :type str :default "")
+        (:root :type str)
+        (:task :type str :req true)
+        (:timeout :type int :default 600 :note "execution seconds")
+        (:wallBudget :type int)
+      )
+      :examples (
+        "(:agent :task \"Survey the parser\")"
+        "(:agent :task \"Fix the failing check\" :owns (\"src\") :gates (\"asl check\"))"
+      )
+      :errors (ERR_UNKNOWN_ARG ERR_MISSING_ARG ERR_CONTEXT_FILE ERR_BACKEND ERR_OWNS ERR_EFFECT_UNDECLARED ERR_PARSE ERR_NO_REPLY ERR_VENDOR ERR_GATEWAY_OFFLINE)
+      :doc "Leon loop. Receipt: status session journal findings gates queueWaitSec execSec; exit 1 failed or escalated, 2 bad invocation.")
+
+    (:op :intel
+      :scope toolchain
+      :brief "(:intel :op outline :file f) lists a file's definitions with their line ranges; :op coupling, deadcode and stubs survey the repository"
+      :params (
+        (:op :type sym :req true :note "suboperation: coupling impact outline query deadcode vacuity graph complexity stubs vitality trace")
+        (:target :type str :default "" :note "target symbol package or file")
+        (:symbol :type str :default "" :note "symbol name")
+        (:file :type str :default "" :note "file path")
+        (:strict :type bool :default false :note "strict audit mode")
+        (:filter :type str :default "" :note "graph node filter")
+        (:symbol :type str :note "callers, status: the symbol")
+        (:module :type str :note "callers: restrict to one module (Python)")
+        (:path :type str :note "status: a file instead of a symbol")
+        (:spec :type str :note "coverage: the spec file")
+        (:id :type str :note "coverage: one requirement id")
+        (:limit :type int :default 20 :note "result limit")
+        (:module :type str :default "" :note "module path filter")
+      )
+      :ops (:coupling :impact :outline :query :deadcode :vacuity :graph :complexity :stubs :vitality :trace)
+      :doc "Unified Code Intelligence: whole-repo call graph, execution complexity metrics, stub detection, runtime hot-path tracing, package coupling DAG, blast radius impact, dead code detection, vacuity audit, and bounded outline extraction.")
+
+    (:op :read
+      :scope any
+      :public "Return a symbol or bounded slice of a file."
+      :form "(:read :file <path> [:symbol <sym>] [:anchor <str>] [:limit <int>] [:start <int>] [:end <int>])"
+      :params (
+        (:file :type str :req true :note "path to file in repository")
+        (:symbol :type str :default "" :note "symbol definition to extract")
+        (:anchor :type str :default "" :note "text anchor substring")
+        (:limit :type int :default 200 :note "maximum line count to return")
+        (:start :type int :default 0 :note "starting line number for slice")
+        (:end :type int :default 0 :note "ending line number for slice")
+      )
+      :examples (
+        "(:read :file \"asl/grammar/rules.asn\" :limit 10)"
+      )
+      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_SYMBOL_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_ANCHOR_NOT_FOUND ERR_BINARY)
+      :related (query)
+      :doc "Bounded AST symbol and slice retrieval without whole-file dumping; a binary file (NUL in the first 8 KB or a known magic) is rejected with ERR_BINARY, :bytes and :kind, never returned.")
+
+    (:op :query
+      :scope any
+      :public "Search code for definitions and uses of a name; :in text searches comments, docs, memories and data instead, each labelled."
+      :form "(:query :text <str> [:in code|text|all] [:limit <int>])"
+      :params (
+        (:text :type str :req true :note "substring or symbol query text")
+        (:in :type sym :default :code :note "code: definitions confirmed against the symbol index, then code lines where the text is code, and a :text count of what else matched; text: sections :comment (comments and strings in code) :doc :memory :data; all: both")
+        (:limit :type int :default 20 :note "maximum definition and hit count per section")
+      )
+      :examples (
+        "(:query :text \"rules\" :limit 5)"
+        "(:query :text \"rules\" :in text)"
+      )
+      :errors (ERR_MISSING_ARG ERR_QUERY_FAILED)
+      :related (read observe)
+      :doc "A mention outside code is not a use: it is counted under :text. Matching binary files are skipped, counted as :binarySkipped. Every call site of a function, through aliases and modules: (:observe :dim callers).")
+
+    (:op :edit
+      :scope any
+      :public "Stage a string replacement in the session buffer."
+      :form "(:edit :file <path> :old <str> :new <str> [:all <bool>] [:autofix <sym>] [:force <bool>])"
+      :params (
+        (:file :type str :req true :note "path to target file")
+        (:old :type str :req true :note "exact target string to replace")
+        (:new :type str :req true :note "replacement string")
+        (:all :type bool :default false :note "replace all occurrences")
+        (:autofix :type sym :default :none :note "structural or heuristic delimiter repair")
+        (:force :type bool :default false :note "stage despite balance or syntax errors")
+      )
+      :examples (
+        "(:edit :file \"asl/grammar/rules.asn\" :old \"rules\" :new \"rules\" :all true)"
+      )
+      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_NO_MATCH ERR_AMBIGUOUS ERR_UNBALANCED)
+      :related (diff flush discard check txn)
+      :doc "Atomic string replacement staged in the session buffer; rejected when the staged result breaks delimiter balance or syntax. :all replaces every occurrence, :autofix (true, indentation or heuristic) stages a delimiter repair, :force stages anyway.")
+
+    (:op :write
+      :scope any
+      :public "Stage whole-file content in the session buffer."
+      :form "(:write :file <path> :content <str> [:force <bool>])"
+      :params (
+        (:file :type str :req true :note "path to target file")
+        (:content :type str :req true :note "complete staged file content")
+        (:force :type bool :default false :note "stage despite balance or syntax errors")
+      )
+      :examples (
+        "(:write :file \".asl/scratch.asn\" :content \"(:scratch true)\" :force true)"
+      )
+      :errors (ERR_MISSING_ARG ERR_BOUNDARY_VIOLATION ERR_IS_DIRECTORY ERR_UNBALANCED ERR_WRITE_FAILED)
+      :related (edit diff flush discard)
+      :doc "Stage whole-file content in the session buffer, validated like edit; only flush touches disk.")
+
+    (:op :tree
+      :scope toolchain
+      :form "(:tree [:path <path>])"
+      :params (
+        (:path :type str :default "." :note "directory path to scan")
+      )
+      :examples (
+        "(:tree :path \".\")"
+      )
+      :errors (ERR_PATH_NOT_FOUND ERR_BOUNDARY_VIOLATION)
+      :related (read query)
+      :doc "Count files and directories under :path inside the workspace.")
+
+    (:op :observe
+      :scope toolchain
+      :form "(:observe :dim <tokenCost|memory|session|callers|status|coverage> [:scope p] [:limit n] [:symbol s] [:module m] [:path p] [:spec p] [:id r])"
+      :params (
+        (:dim :type sym :req true :note "callers: call sites of :symbol with path:line and kind, :possible, :excluded decoys; status: stub, callers, executing tests of :symbol or :path; coverage: :spec requirements implemented/tested; tokenCost: tokens by kind; memory: .asl/mem ledger sizes; session: agent sessions and :overlaps")
+        (:scope :type str :default "." :note "tokenCost: tracked files under this path")
+        (:limit :type int :default 20 :note "tokenCost :top or sessions shown, rest in :more; 1-100; receipt < 4096 bytes")
+      )
+      :examples (
+        "(:observe :dim callers :symbol \"Cache.fetch\")"
+      )
+      :errors (ERR_UNKNOWN_DIM ERR_NO_ENCODER ERR_BAD_ARG ERR_PATH_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_EXEC_FAILED)
+      :doc "Read-only workspace facts; an unknown :dim lists :nearest.")
+
+    (:op :diff
+      :scope any
+      :public "Show staged changes against disk."
+      :form "(:diff [:file <path>])"
+      :params (
+        (:file :type str :default "" :note "optional path to inspect; defaults to all staged")
+      )
+      :examples (
+        "(:diff)"
+      )
+      :errors (ERR_BOUNDARY_VIOLATION)
+      :related (edit write flush discard)
+      :doc "Show staged changes in the session buffer against disk.")
+
+    (:op :flush
+      :scope any
+      :public "Write all staged changes to disk atomically."
+      :form "(:flush [:file <path>])"
+      :params (
+        (:file :type str :default "" :note "optional path to persist; defaults to all staged")
+      )
+      :examples (
+        "(:flush)"
+      )
+      :errors (ERR_BOUNDARY_VIOLATION ERR_NOT_STAGED ERR_SYNTAX_MALFORMATION ERR_STALE_BASE ERR_WRITE_FAILED)
+      :related (diff discard edit txn)
+      :doc "Write all staged changes of the session buffer to disk atomically (fsync and rename); ERR_STALE_BASE when disk changed since staging.")
+
+    (:op :discard
+      :scope any
+      :public "Drop all staged changes."
+      :form "(:discard [:file <path>])"
+      :params (
+        (:file :type str :default "" :note "optional path to discard; defaults to all staged")
+      )
+      :examples (
+        "(:discard)"
+      )
+      :errors (ERR_BOUNDARY_VIOLATION)
+      :related (diff flush edit)
+      :doc "Drop all staged changes of the session buffer without touching disk.")
+
+    (:op :check
+      :scope any
+      :public "Check a file: delimiter balance, then for an .asl file the stage-0 host check on staged content."
+      :form "(:check [:file <path>])"
+      :params (
+        (:file :type str :default "" :note "file to verify; defaults to workspace check")
+      )
+      :examples (
+        "(:check :file \"asl/grammar/rules.asn\")"
+      )
+      :errors (ERR_FILE_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_SYNTAX ERR_UNBALANCED_DELIMITERS ERR_CHECK_FAILED ERR_HOST_ABSENT ERR_WORKSPACE_CHECK_FAILED)
+      :related (test fix edit)
+      :doc "Verify delimiter balance of an ASL or ASN file, or run a local syntax checker on a foreign one. A balanced .asl file then goes to asl/host/out/asl-host check on the content the next flush would write, which resolves imports and names and checks arity; its exit is :checkerExit and its diagnostics come back in :message. Without :file it runs asl check over the workspace: balance of every tracked ASL and ASN file and asl/host/out/asl-host check of each .asl.")
+
+    (:op :test
+      :scope asl
+      :public "Run an ASL test file on the stage-0 host against staged content."
+      :form "(:test :file <path>)"
+      :params (
+        (:file :type str :req true :note "path to ASL test file to execute")
+      )
+      :examples (
+        "(:test :file \"asl/packages/asl-parser/tests/readerTest.asl\")"
+      )
+      :errors (ERR_MISSING_ARG ERR_TEST_FAILED ERR_VACUOUS_PASS ERR_HOST_ABSENT ERR_EXEC_FAILED)
+      :related (check fix)
+      :doc "Run asl/host/out/asl-host test on the file as the next flush would write it: an unknown name is an error, assert takes only true or false, and runTests must return true. It passes only with a positive executed :assertCount; a failure carries the host's :exit, the asserts run before it, and its diagnostics.")
+
+    (:op :fix
+      :scope asl
+      :public "Propose or stage minimal delimiter repair."
+      :form "(:fix :file <path> [:apply <sym>])"
+      :params (
+        (:file :type str :req true :note "path to ASL or ASN file to balance")
+        (:apply :type sym :default :none :note "stage proposed repair (:true, :indentation, :heuristic)")
+      )
+      :examples (
+        "(:fix :file \"asl/grammar/rules.asn\")"
+      )
+      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_UNSUPPORTED_LANGUAGE ERR_AMBIGUOUS_REPAIR ERR_UNREPAIRABLE)
+      :related (check test edit)
+      :doc "Propose, or with :apply stage, the minimal delimiter repair of an ASL/ASN file when it is structurally unique; an indentation tie-break is staged only with :apply :indentation.")
+
+    (:op :txn
+      :scope any
+      :public "Run nested edits and gates atomically inside owns."
+      :form "(:txn :owns (<path> ...) <form> ...)"
+      :params (
+        (:owns :type forms :req true :note "path prefixes permitted to mutate")
+      )
+      :examples (
+        "(:txn :owns (\"asl/grammar\") (:check :file \"asl/grammar/rules.asn\"))"
+      )
+      :errors (ERR_MISSING_ARG ERR_OWNS ERR_TXN_FORBIDDEN ERR_TXN_ABORTED ERR_TXN_FLUSH_FAILED)
+      :related (edit check flush discard)
+      :doc "Stage nested edits inside :owns, run nested gates on staged content, flush only if all pass, else restore.")
+
+    (:op :audit
+      :scope toolchain
+      :params (
+        (:subcmd :type sym :default :consistency :note "subcommand to audit")
+      )
+      :subcmds (:consistency :gates :coupling :closure :foreign :steps :deadcode :vacuity :sweep :graph :complexity :stubs :vitality :trace :all :full)
+      :doc "Run systemic monorepo audit across declared dimensions including whole-repo sweep, dead code, test vacuity, stub detection, runtime tracing, and master system vitality.")
+
+    (:op :crawl
+      :scope toolchain
+      :params (
+        (:url :type str :req true :note "target URL to crawl")
+        (:mode :type sym :default :auto :note "crawler mode: auto staticHttp patchright")
+        (:distill :type sym :default :asn :note "distillation format: asn text raw")
+      )
+      :doc "Crawl target web page and distill DOM to pure Dyck-1 ASN without noise.")
+
+    (:op :search
+      :scope toolchain
+      :brief "(:search :query q [:limit n]) returns web results with a short answer"
+      :params (
+        (:query :type str :req true :note "search query string")
+        (:limit :type int :default 3 :note "maximum results to return")
+      )
+      :doc "Cognitive web search with provider cascading and direct fallback.")
+
+    (:op :research
+      :scope toolchain
+      :brief "(:research :topic t [:depth :flash|:deep|:exhaustive]) researches t on the web and returns a report whose facts carry their sources and a verification status"
+      :params (
+        (:topic :type str :req true :note "research topic inquiry")
+        (:depth :type sym :default :flash :note "one of :flash (3 results, gateway flash), :deep (5 results, gateway targeted), :exhaustive (5 results plus an adversarial search, gateway matrix); another value is rejected")
+      )
+      :doc "Web research through the gateway: the research route of its profile extracts facts; a report is :verified only when facts with source urls pass verification, else :unverified, :noEvidence or :failed with a :reason.")
+
+    (:op :doctor
+      :scope toolchain
+      :params ()
+      :doc "Audit measured capabilities and substrate invariants.")
+
+    (:op :note
+      :scope toolchain
+      :params (
+        (:action :type sym :default :list :note "action: list query write")
+        (:kind :type sym :default :observation :note "note category")
+        (:scope :type sym :default :workspace :note "scope tag")
+        (:date :type str :default "" :note "observation date")
+        (:claim :type str :default "" :note "claim or note content")
+      )
+      :doc "Record or query working memory observations in pure ASN.")
+
+    (:op :target
+      :scope toolchain
+      :params (
+        (:name :type sym :default :list :note "target generator name")
+        (:file :type str :default "" :note "target file path")
+      )
+      :doc "Compile ASL to standalone target code or synchronize distribution artifacts (sh, ps1, cmd, distrib, c, go, llvm, py, rs, swift, wat).")
+
+    (:op :pack
+      :scope toolchain
+      :params (
+        (:target :type str :default "all" :note "target platform architecture")
+        (:quick :type bool :default false :note "skip packaging archives")
+        (:dist :type bool :default false :note "build distribution bundles")
+        (:install :type bool :default false :note "install compiled binary")
+        (:skipGates :type bool :default false :note "skip verification gates")
+        (:self :type bool :default false :note "build host-only binary")
+      )
+      :doc "Assemble native self-hosted LLVM binary, audit verification gates, and package target distribution bundles (darwin-arm64, linux-x64, wasm).")
+  ))

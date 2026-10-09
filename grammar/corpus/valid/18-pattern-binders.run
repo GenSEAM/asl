@@ -1,0 +1,1 @@
+(and (= (outcome (ok "hi")) "hi") (= (outcome (err (notFound))) "missing") (= (outcome (err (other))) "other"))

@@ -1,0 +1,7 @@
+(:gateway :profile default
+  :profiles (
+    (:profile :id default
+      :routes ((:intent plan :models ("codex/gpt-6-astra" "agy/gemini-3.8-flash-high"))
+               (:intent any :models ("agy/gemini-3.8-flash-high" "codex/gpt-6-astra"))))
+    (:profile :id free
+      :routes ((:intent any :models ("groq/qwen/qwen3.8-27b" "gemini-3.8-flash" "agy/gemini-3.8-flash"))))))

@@ -1,0 +1,2 @@
+(:doc :symbol "fx/thing.asl#" :text "A tiny fixture module")
+(:doc :symbol "fx/thing.asl#addOne" :text "Adds one to a")

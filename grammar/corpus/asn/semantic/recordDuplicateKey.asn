@@ -1,0 +1,4 @@
+; expect: record-duplicate-key
+; Same rule as a map, for the same reason. A record is the anonymous-struct
+; shape and a struct has one value per field.
+(:ts 1714829100 :status :ok :ts 1714829105)

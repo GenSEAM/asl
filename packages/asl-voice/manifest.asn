@@ -1,0 +1,32 @@
+(:package aslVoice
+ :version "0.1.0"
+ :status "conceptual-schema"
+ :entry "src/voice.asl"
+ :description "Streaming speech synthesis and voice capability controller conceptual schema"
+ :aslFirst true
+ :disposition :dormant
+ :wakingCondition "Native audio I/O streaming bridge connected via 16kHz PCM duplex session"
+ :modules [
+   "asl-voice/aloud"
+   "asl-voice/audio-bridge"
+   "asl-voice/audio-frame"
+   "asl-voice/audio-stream"
+   "asl-voice/endturn"
+   "asl-voice/fast-path"
+   "asl-voice/heard-name"
+   "asl-voice/harness-profile"
+   "asl-voice/intent-cleaner"
+   "asl-voice/multilingual-matrix"
+   "asl-voice/room-noise"
+   "asl-voice/speaker-match"
+   "asl-voice/transliterator"
+   "asl-voice/tts-engine"
+   "asl-voice/vad"
+   "asl-voice/voice"
+   "asl-voice/voice-intent"
+   "asl-voice/voice-pipeline"
+   "asl-voice/voice-settle"
+   "asl-voice/voice-buffer"
+   "asl-voice/conversational-context"
+ ]
+ :dependencies [])

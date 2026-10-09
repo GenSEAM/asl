@@ -1,0 +1,5 @@
+(:script :id "liveLoopCommit" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"changed\\n\") (:done :commit \"(:c :a agentLoop :do \\\"live commit\\\" :g \\\"liveLoopTest 15 assertions\\\")\")")
+  )
+)

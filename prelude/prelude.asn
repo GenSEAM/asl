@@ -1,0 +1,478 @@
+(
+  :$comment "The vocabulary the stage-0 host binds (asl/host/out/asl-host), as probed on 2026-09-24: the C builtin tables in asl/host/src (prelude.c, arrays.c, parquet.c, sys.c), the operators and constructors compiled in, and the public fns of asl/prelude/prelude.asl, which the host loads before every module. :src names where each one is defined. tests/acceptance/r1Prelude/preludeParityTest.sh probes every :name below on the host and fails on ERR_UNKNOWN_SYMBOL. Nothing is generated from this file; asl-core (asl test, asl eval) binds a different set. Builtin names are camelCase with a trailing ? on predicates (D140 S2, S3); the hyphenated spellings were retired on 2026-09-25, tools/camelLexicon.asn maps each one to its name here, and the host answers ERR_UNKNOWN_SYMBOL for them."
+  :specialForms (
+    :declarations ["module" "fn" "enum" "schema"]
+    :expressions ["fn" "lambda" "let" "if" "cond" "do" "begin" "mt" "match" "when" "unless" "assert" "refute"]
+    :aliases (:lambda "fn" :begin "do" :match "mt")
+    :patterns "The pattern of an mt arm is (ctor arg ...), a literal, _ or a bare name that binds the value; a constructor argument is a name or _, so patterns nest one level, and a list is not a pattern."
+  )
+  :types (
+    :$comment "Annotation spellings. The host does not check annotations: a fn declared -> Int64 may return a String."
+    :primitive ["Bool" "Int32" "Int64" "Float64" "String" "Unit" "Bytes" "F64Array" "I64Array" "I8Array" "ParquetHandle"]
+    :constructed ["List" "Option" "Result" "Pair" "Map"]
+    :aliases (:Int "Int64" :I64 "Int64" :I32 "Int32" :F64 "Float64" :F32 "Float64" :Num "Float64" :Float "Float64" :Str "String")
+    :unions (:IoError ["notFound" "permissionDenied" "alreadyExists" "invalidPath" "interrupted" "other"] :Option ["some" "none"] :Result ["ok" "err"] :Pair ["pair"])
+  )
+  :absent (
+    :$comment "Names earlier versions of this file declared that the host does not bind (asl-host eval '(fn [] NAME)' gives ERR_UNKNOWN_SYMBOL on 2026-09-24)."
+    :names ["read-line" "read-all" "file-append" "try"]
+  )
+  :builtins [
+    (:name "+" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/compile.c"
+      :doc "Sum of two Int or two Float; Int and Float never mix. Traps on Int64 overflow.")
+    (:name "-" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/compile.c"
+      :doc "Difference, or negation with one operand. Traps on Int64 overflow.")
+    (:name "*" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/compile.c"
+      :doc "Product. Traps on Int64 overflow.")
+    (:name "/" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/compile.c"
+      :doc "Division; Int division floors, so (/ -7 2) is -4. Traps on a zero Int divisor and on a quotient outside Int64.")
+    (:name "mod" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/compile.c"
+      :doc "Floored remainder, so the sign follows the divisor: (mod -7 3) is 2, (mod -7.0 3.0) is 2.0. Traps on a zero Int divisor; a Float gives C fmod moved to the divisor's sign, so a zero divisor, an infinite or NaN operand give nan as fmod does, (mod -1.0 inf) is inf and an exact zero carries the divisor's sign.")
+    (:name "checkedDiv" :sec "Arithmetic" :type "N N -> (Option N)" :src "asl/prelude/prelude.asl"
+      :doc "Division, or none on a zero divisor or a quotient outside Int64.")
+    (:name "checkedMod" :sec "Arithmetic" :type "N N -> (Option N)" :src "asl/prelude/prelude.asl"
+      :doc "Floored remainder, or none on a zero divisor.")
+    (:name "abs" :sec "Arithmetic" :type "N -> N" :src "asl/host/src/prelude.c"
+      :doc "Absolute value. Traps on the Int64 minimum.")
+    (:name "min" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/prelude.c"
+      :doc "Lesser of two Int or two Float. With a NaN the result depends on order: (min nan 1.0) is nan, (min 1.0 nan) is 1.0.")
+    (:name "max" :sec "Arithmetic" :type "N N -> N" :src "asl/host/src/prelude.c"
+      :doc "Greater of two Int or two Float. With a NaN the result depends on order: (max nan 1.0) is 1.0.")
+    (:name "trap" :sec "Arithmetic" :type "String String -> T" :src "asl/host/src/prelude.c"
+      :doc "Aborts with a chosen error code and message, in the exact format and with the exact exit status a host-raised error of that code would have: \"<code>: <message>\" on stderr, exit 1. The code is checked against the host's own ERR_* vocabulary (the literal codes aslError raises, not a checker/loader diagnostic code); an unknown code, or a message holding a newline, itself traps ERR_TYPE. Unifies with any type since it never returns.")
+    (:name "floor" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Greatest integral value less than or equal to argument via libm floor.")
+    (:name "ceil" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Least integral value greater than or equal to argument via libm ceil.")
+    (:name "round" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Nearest integral value to argument, rounding halfway cases away from zero via libm round.")
+    (:name "clamp" :sec "Arithmetic" :type "Float64 Float64 Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Clamp x between lo and hi: (clamp lo hi x). Requires lo <= hi, else traps with ERR_RANGE. If x is NaN, returns NaN.")
+    (:name "pow" :sec "Arithmetic" :type "Float64 Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Base raised to exponent power via libm pow; passes through NaN and inf per C99 pow.")
+    (:name "exp" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Base-e exponential via libm exp; overflows to inf.")
+    (:name "log" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Natural logarithm via libm log; (log 0.0) is -inf, negative argument returns NaN.")
+    (:name "log2" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Base-2 logarithm via libm log2; (log2 0.0) is -inf, negative argument returns NaN.")
+    (:name "log10" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Base-10 logarithm via libm log10; (log10 0.0) is -inf, negative argument returns NaN.")
+    (:name "sqrt" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Square root via libm sqrt; NaN for negative or NaN argument, inf for inf.")
+    (:name "sin" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Sine in radians via libm sin.")
+    (:name "cos" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Cosine in radians via libm cos.")
+    (:name "tan" :sec "Arithmetic" :type "Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Tangent in radians via libm tan.")
+    (:name "atan2" :sec "Arithmetic" :type "Float64 Float64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Arctangent of y / x using signs of both arguments via libm atan2.")
+    (:name "isNan?" :sec "Arithmetic" :type "Float64 -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True for NaN.")
+    (:name "isFinite?" :sec "Arithmetic" :type "Float64 -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "False for NaN, inf and -inf.")
+    (:name "floatNan" :sec "Arithmetic" :type "-> Float64" :src "asl/prelude/prelude.asl"
+      :doc "The float NaN.")
+    (:name "floatInf" :sec "Arithmetic" :type "-> Float64" :src "asl/prelude/prelude.asl"
+      :doc "Positive infinity.")
+    (:name "floatNegInf" :sec "Arithmetic" :type "-> Float64" :src "asl/prelude/prelude.asl"
+      :doc "Negative infinity.")
+    (:name "=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "Structural equality over lists and records; comparing values of different kinds is a type error.")
+    (:name "==" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "The same operator as =.")
+    (:name "!=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "Structural inequality.")
+    (:name "not=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "The same operator as !=.")
+    (:name "<" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")
+    (:name "<=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")
+    (:name ">" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")
+    (:name ">=" :sec "Comparison and logic" :type "T T -> Bool" :src "asl/host/src/compile.c"
+      :doc "Ordered comparison of two values of the same type: Int, Float, String (bytewise) or Keyword (by name); any other pair is ERR_TYPE.")
+    (:name "and" :sec "Comparison and logic" :type "Bool... -> Bool" :src "asl/host/src/compile.c"
+      :doc "Conjunction; short-circuits; takes one or more Bool operands. Any other value is a type error.")
+    (:name "or" :sec "Comparison and logic" :type "Bool... -> Bool" :src "asl/host/src/compile.c"
+      :doc "Disjunction; short-circuits; takes one or more Bool operands.")
+    (:name "not" :sec "Comparison and logic" :type "Bool -> Bool" :src "asl/host/src/compile.c"
+      :doc "Negation of a Bool.")
+    (:name "str" :sec "String" :type "T... -> String" :src "asl/host/src/prelude.c"
+      :doc "Concatenate the arguments; an Int or Float argument is rendered as text.")
+    (:name "stringConcat" :sec "String" :type "String String -> String" :src "asl/host/src/prelude.c"
+      :doc "Concatenate two strings.")
+    (:name "stringLength" :sec "String" :type "String -> Int64" :src "asl/host/src/prelude.c"
+      :doc "Length in UTF-8 bytes, so (stringLength \"héllo\") is 6.")
+    (:name "stringLines" :sec "String" :type "String -> (List String)" :src "asl/prelude/prelude.asl"
+      :doc "Split on \"\\n\"; a trailing newline gives a last empty line.")
+    (:name "stringRepeat" :sec "String" :type "String Int64 -> String" :src "asl/prelude/prelude.asl"
+      :doc "The string n times; n <= 0 gives \"\".")
+    (:name "stringCountChar" :sec "String" :type "String String -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "How many characters of the string equal the one-character second argument.")
+    (:name "fnv1a64" :sec "String" :type "String -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "FNV-1a 64-bit hash of the string's UTF-8 bytes, as a signed Int64.")
+    (:name "stringEmpty?" :sec "String" :type "String -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the string has no bytes.")
+    (:name "stringSlice" :sec "String" :type "String Int64 Int64 -> (Option String)" :src "asl/host/src/prelude.c"
+      :doc "Half-open byte slice, or none when out of range; a cut inside a multi-byte character splits it.")
+    (:name "stringIndexOf" :sec "String" :type "String String -> (Option Int64)" :src "asl/prelude/prelude.asl"
+      :doc "Byte index of the first occurrence, or none.")
+    (:name "stringContains?" :sec "String" :type "String String -> Bool" :src "asl/host/src/prelude.c"
+      :doc "True when the substring occurs; the empty string always occurs.")
+    (:name "stringStartsWith?" :sec "String" :type "String String -> Bool" :src "asl/host/src/prelude.c"
+      :doc "True when the string begins with the prefix.")
+    (:name "stringEndsWith?" :sec "String" :type "String String -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the string ends with the suffix.")
+    (:name "stringSplit" :sec "String" :type "String String -> (List String)" :src "asl/prelude/prelude.asl"
+      :doc "Split on a separator. An empty separator traps.")
+    (:name "stringJoin" :sec "String" :type "(List String) String -> String" :src "asl/prelude/prelude.asl"
+      :doc "Join with a separator.")
+    (:name "stringUpper" :sec "String" :type "String -> String" :src "asl/prelude/prelude.asl"
+      :doc "Upper case for ASCII letters; other characters are unchanged.")
+    (:name "stringLower" :sec "String" :type "String -> String" :src "asl/prelude/prelude.asl"
+      :doc "Lower case for ASCII letters; other characters are unchanged.")
+    (:name "stringTrim" :sec "String" :type "String -> String" :src "asl/prelude/prelude.asl"
+      :doc "Remove leading and trailing spaces, tabs, carriage returns and newlines.")
+    (:name "stringReverse" :sec "String" :type "String -> String" :src "asl/prelude/prelude.asl"
+      :doc "Reverse the UTF-8 character sequence.")
+    (:name "stringReplace" :sec "String" :type "String String String -> String" :src "asl/prelude/prelude.asl"
+      :doc "Replace every occurrence. An empty search string traps.")
+    (:name "stringChars" :sec "String" :type "String -> (List String)" :src "asl/prelude/prelude.asl"
+      :doc "UTF-8 characters as one-character strings.")
+    (:name "stringFromInt64" :sec "String" :type "Int64 -> String" :src "asl/host/src/prelude.c"
+      :doc "Decimal rendering of an integer.")
+    (:name "stringFromFloat64" :sec "String" :type "Float64 -> String" :src "asl/host/src/prelude.c"
+      :doc "Decimal rendering of a float.")
+    (:name "stringToInt64" :sec "String" :type "String -> (Option Int64)" :src "asl/prelude/prelude.asl"
+      :doc "Parse an optionally signed integer, or none when it is malformed or outside Int64.")
+    (:name "stringToFloat64" :sec "String" :type "String -> (Option Float64)" :src "asl/host/src/prelude.c"
+      :doc "Parse a float (nan, inf and -inf included), or none when it is malformed.")
+    (:name "int32ToInt64" :sec "Numeric conversion" :type "Int32 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Widen.")
+    (:name "int64ToInt32" :sec "Numeric conversion" :type "Int64 -> (Option Int32)" :src "asl/prelude/prelude.asl"
+      :doc "Narrow, or none when out of range.")
+    (:name "int64ToFloat64" :sec "Numeric conversion" :type "Int64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "Convert to floating point.")
+    (:name "float64ToInt64" :sec "Numeric conversion" :type "Float64 -> (Option Int64)" :src "asl/host/src/prelude.c"
+      :doc "Truncate toward zero, or none for NaN, infinity and values outside Int64.")
+    (:name "list" :sec "List" :type "T... -> (List T)" :src "asl/host/src/prelude.c"
+      :doc "Construct a list; [a b] is the same value.")
+    (:name "cons" :sec "List" :type "T (List T) -> (List T)" :src "asl/host/src/prelude.c"
+      :doc "Prepend an element.")
+    (:name "listEmpty?" :sec "List" :type "(List T) -> Bool" :src "asl/host/src/prelude.c"
+      :doc "True when the list has no elements.")
+    (:name "listLength" :sec "List" :type "(List T) -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Element count.")
+    (:name "listGet" :sec "List" :type "(List T) Int64 -> (Option T)" :src "asl/prelude/prelude.asl"
+      :doc "Element at an index, or none.")
+    (:name "listHead" :sec "List" :type "(List T) -> (Option T)" :src "asl/host/src/prelude.c"
+      :doc "First element, or none.")
+    (:name "listTail" :sec "List" :type "(List T) -> (Option (List T))" :src "asl/host/src/prelude.c"
+      :doc "All but the first element, or none when empty.")
+    (:name "listAppend" :sec "List" :type "(List T) (List T) -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "Concatenate two lists.")
+    (:name "listReverse" :sec "List" :type "(List T) -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "Reverse order.")
+    (:name "listSlice" :sec "List" :type "(List T) Int64 Int64 -> (Option (List T))" :src "asl/prelude/prelude.asl"
+      :doc "Half-open slice, or none when out of range.")
+    (:name "listContains?" :sec "List" :type "(List T) T -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the element occurs.")
+    (:name "listIndexOf" :sec "List" :type "(List T) T -> (Option Int64)" :src "asl/prelude/prelude.asl"
+      :doc "Index of the first occurrence, or none.")
+    (:name "listSort" :sec "List" :type "(List T) -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "Stable ascending merge sort; a NaN sorts last.")
+    (:name "listSortBy" :sec "List" :type "(fn [T] -> K) (List T) -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "Stable ascending sort by a derived key; a NaN key sorts last.")
+    (:name "map" :sec "List" :type "(fn [A] -> B) (List A) -> (List B)" :src "asl/prelude/prelude.asl"
+      :doc "Apply a function to every element.")
+    (:name "filter" :sec "List" :type "(fn [T] -> Bool) (List T) -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "Keep elements satisfying a predicate, which must return a Bool.")
+    (:name "fold" :sec "List" :type "(fn [B A] -> B) B (List A) -> B" :src "asl/prelude/prelude.asl"
+      :doc "Left fold with an initial accumulator.")
+    (:name "parMap" :sec "List" :type "(fn [A] -> B) (List A) [Int64] -> (List B)" :src "asl/host/src/parallel.c"
+      :doc "Apply a function in parallel across worker processes via fork+pipe, preserving input order. If fork is unavailable, falls back to sequential map (D151). Propagates worker traps as ERR_WORKER_TRAP.")
+    (:name "parFold" :sec "List" :type "(fn [B A] -> B) (fn [B B] -> B) B (List A) [Int64] -> B" :src "asl/host/src/parallel.c"
+      :doc "Fold a list in parallel across worker processes via fork+pipe. Each chunk i folds step from init and chunk results are combined with combine. Requires init to be an identity of combine and combine associative. If fork is unavailable, falls back to sequential fold (D151). Propagates worker traps as ERR_WORKER_TRAP.")
+    (:name "range" :sec "List" :type "Int64 Int64 -> (List Int64)" :src "asl/prelude/prelude.asl"
+      :doc "Half-open integer range; empty when start is not below end.")
+    (:name "listTake" :sec "List" :type "(List T) Int64 -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "The first n elements, fewer when the list is shorter; n <= 0 gives (list).")
+    (:name "listDrop" :sec "List" :type "(List T) Int64 -> (List T)" :src "asl/prelude/prelude.asl"
+      :doc "The list without its first n elements; (list) when it is shorter.")
+    (:name "listLast" :sec "List" :type "(List T) -> (Option T)" :src "asl/prelude/prelude.asl"
+      :doc "The last element, or none for an empty list.")
+    (:name "listAny?" :sec "List" :type "(fn [T] -> Bool) (List T) -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the predicate holds for some element; stops at the first.")
+    (:name "listAll?" :sec "List" :type "(fn [T] -> Bool) (List T) -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the predicate holds for every element, so true for an empty list.")
+    (:name "enumerate" :sec "List" :type "(List T) -> (List (Pair Int64 T))" :src "asl/prelude/prelude.asl"
+      :doc "Each element paired with its index from 0.")
+    (:name "zip" :sec "List" :type "(List A) (List B) -> (List (Pair A B))" :src "asl/prelude/prelude.asl"
+      :doc "Pair up elements, truncating to the shorter list.")
+    (:name "listSum" :sec "List" :type "(List N) -> N" :src "asl/prelude/prelude.asl"
+      :doc "Sum of elements, 0 when empty. Traps on Int64 overflow.")
+    (:name "listMin" :sec "List" :type "(List T) -> (Option T)" :src "asl/prelude/prelude.asl"
+      :doc "Least element, or none when empty.")
+    (:name "listMax" :sec "List" :type "(List T) -> (Option T)" :src "asl/prelude/prelude.asl"
+      :doc "Greatest element, or none when empty.")
+    (:name "partial" :sec "List" :type "(fn [A... B...] -> R) A... -> (fn [B...] -> R)" :src "asl/host/src/prelude.c"
+      :doc "Bind leading arguments of a function.")
+    (:name "mapEmpty" :sec "Map" :type "-> (Map K V)" :src "asl/prelude/prelude.asl"
+      :doc "The empty map.")
+    (:name "mapGet" :sec "Map" :type "(Map K V) K -> (Option V)" :src "asl/prelude/prelude.asl"
+      :doc "Value for a key, or none.")
+    (:name "mapSet" :sec "Map" :type "(Map K V) K V -> (Map K V)" :src "asl/prelude/prelude.asl"
+      :doc "Map with the key bound to the value; entries stay ordered by key.")
+    (:name "mapRemove" :sec "Map" :type "(Map K V) K -> (Map K V)" :src "asl/prelude/prelude.asl"
+      :doc "Map without the key.")
+    (:name "mapHas?" :sec "Map" :type "(Map K V) K -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the key is present.")
+    (:name "mapSize" :sec "Map" :type "(Map K V) -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Number of entries.")
+    (:name "mapKeys" :sec "Map" :type "(Map K V) -> (List K)" :src "asl/prelude/prelude.asl"
+      :doc "Keys, sorted.")
+    (:name "mapValues" :sec "Map" :type "(Map K V) -> (List V)" :src "asl/prelude/prelude.asl"
+      :doc "Values, ordered by sorted key.")
+    (:name "mapPairs" :sec "Map" :type "(Map K V) -> (List (Pair K V))" :src "asl/prelude/prelude.asl"
+      :doc "Entries as pairs, ordered by sorted key.")
+    (:name "mapFromPairs" :sec "Map" :type "(List (Pair K V)) -> (Map K V)" :src "asl/prelude/prelude.asl"
+      :doc "Build from pairs; later entries win.")
+    (:name "some" :sec "Option, Result, Pair" :type "T -> (Option T)" :src "asl/host/src/compile.c"
+      :doc "A present value (constructor).")
+    (:name "none" :sec "Option, Result, Pair" :type "-> (Option T)" :src "asl/host/src/compile.c"
+      :doc "An absent value (constructor).")
+    (:name "ok" :sec "Option, Result, Pair" :type "T -> (Result T E)" :src "asl/host/src/compile.c"
+      :doc "A successful result (constructor).")
+    (:name "err" :sec "Option, Result, Pair" :type "E -> (Result T E)" :src "asl/host/src/compile.c"
+      :doc "A failed result (constructor).")
+    (:name "pair" :sec "Option, Result, Pair" :type "A B -> (Pair A B)" :src "asl/prelude/prelude.asl"
+      :doc "Construct a pair, taken apart with (mt p ((pair a b) ...)); a pair has no .-first field.")
+    (:name "pairFirst" :sec "Option, Result, Pair" :type "(Pair A B) -> A" :src "asl/prelude/prelude.asl"
+      :doc "First component of a pair.")
+    (:name "pairSecond" :sec "Option, Result, Pair" :type "(Pair A B) -> B" :src "asl/prelude/prelude.asl"
+      :doc "Second component of a pair.")
+    (:name "some?" :sec "Option, Result, Pair" :type "(Option T) -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when a value is present.")
+    (:name "none?" :sec "Option, Result, Pair" :type "(Option T) -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when no value is present.")
+    (:name "ok?" :sec "Option, Result, Pair" :type "(Result T E) -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the result succeeded.")
+    (:name "err?" :sec "Option, Result, Pair" :type "(Result T E) -> Bool" :src "asl/prelude/prelude.asl"
+      :doc "True when the result failed.")
+    (:name "optionOr" :sec "Option, Result, Pair" :type "(Option T) T -> T" :src "asl/prelude/prelude.asl"
+      :doc "The value, or a fallback when absent.")
+    (:name "resultOr" :sec "Option, Result, Pair" :type "(Result T E) T -> T" :src "asl/prelude/prelude.asl"
+      :doc "The value, or a fallback on failure.")
+    (:name "optionMap" :sec "Option, Result, Pair" :type "(fn [A] -> B) (Option A) -> (Option B)" :src "asl/prelude/prelude.asl"
+      :doc "Transform a present value.")
+    (:name "resultMap" :sec "Option, Result, Pair" :type "(Result A E) (fn [A] -> B) -> (Result B E)" :src "asl/prelude/prelude.asl"
+      :doc "Transform a successful value. The Result comes first, unlike optionMap and resultMapErr.")
+    (:name "resultMapErr" :sec "Option, Result, Pair" :type "(fn [E] -> F) (Result T E) -> (Result T F)" :src "asl/prelude/prelude.asl"
+      :doc "Transform a failure value.")
+    (:name "optionToResult" :sec "Option, Result, Pair" :type "(Option T) E -> (Result T E)" :src "asl/prelude/prelude.asl"
+      :doc "Absent becomes the given failure.")
+    (:name "resultToOption" :sec "Option, Result, Pair" :type "(Result T E) -> (Option T)" :src "asl/prelude/prelude.asl"
+      :doc "Failure becomes absence.")
+    (:name "notFound" :sec "I/O" :type "-> IoError" :src "asl/prelude/prelude.asl"
+      :doc "The not found failure (constructor).")
+    (:name "permissionDenied" :sec "I/O" :type "-> IoError" :src "asl/prelude/prelude.asl"
+      :doc "The permission denied failure (constructor).")
+    (:name "alreadyExists" :sec "I/O" :type "-> IoError" :src "asl/prelude/prelude.asl"
+      :doc "The already exists failure (constructor).")
+    (:name "invalidPath" :sec "I/O" :type "-> IoError" :src "asl/prelude/prelude.asl"
+      :doc "The invalid path failure (constructor).")
+    (:name "interrupted" :sec "I/O" :type "-> IoError" :src "asl/prelude/prelude.asl"
+      :doc "The interrupted failure (constructor).")
+    (:name "other" :sec "I/O" :type "-> IoError" :src "asl/prelude/prelude.asl"
+      :doc "The other failure (constructor).")
+    (:name "fileExists?" :sec "I/O" :type "String -> Bool" :src "asl/prelude/prelude.asl" :effect true
+      :doc "True when fileStat succeeds on the path (a file or a directory).")
+    (:name "print" :sec "I/O" :type "T... -> Unit" :src "asl/host/src/prelude.c" :effect true
+      :doc "Write the arguments to standard output, separated by spaces, with no trailing newline.")
+    (:name "println" :sec "I/O" :type "T... -> Unit" :src "asl/host/src/prelude.c" :effect true
+      :doc "Write the arguments to standard output, separated by spaces, then a newline.")
+    (:name "eprintln" :sec "I/O" :type "T... -> Unit" :src "asl/host/src/prelude.c" :effect true
+      :doc "Write the arguments to standard error, separated by spaces, then a newline.")
+    (:name "fileRead" :sec "I/O" :type "String -> (Result String IoError)" :src "asl/prelude/prelude.asl" :effect true
+      :doc "Read a whole file as text; the failure is the IoError case of the host message, e.g. (err (notFound)).")
+    (:name "fileReadString" :sec "I/O" :type "String -> (Result String String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Read a whole file as text. Every host IO failure is the message \"KIND: PATH: reason\", KIND an IoError case from errno, as in \"notFound: /x: No such file or directory\".")
+    (:name "fileReadBytes" :sec "I/O" :type "String -> (Result Bytes String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Read a whole file as bytes; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileReadRange" :sec "I/O" :type "String Int64 Int64 -> (Result Bytes String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Read length bytes starting at offset from path via pread (or read for non-regular files); window past the end returns bytes up to the end; negative offset or length returns err. Length is capped at 1 GiB (returning err lengthLimitExceeded). A positive offset on a non-seekable file (such as a FIFO) returns err nonSeekable.")
+    (:name "fileSize" :sec "I/O" :type "String -> (Result Int64 String)" :src "asl/prelude/prelude.asl" :effect true
+      :doc "File size in bytes via stat; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileWrite" :sec "I/O" :type "String (String|Bytes) -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Create or truncate a file and write the text or bytes; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileAppend" :sec "I/O" :type "String (String|Bytes) -> (Result Unit String)" :src "asl/host/src/sys.c" :effect true
+      :doc "Append content (String or Bytes) to path, creating it if absent, opened with O_APPEND; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "dirList" :sec "I/O" :type "String -> (Result (List String) String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Entry names of a directory without . and .., sorted bytewise; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileStat" :sec "I/O" :type "String -> (Result FileStat String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "stat of a path as {:isFile Bool :isDir Bool :size Int64 :mtime Int64 :mode Int64 :mtimeNs Int64}, :mtime in whole seconds and :mtimeNs in nanoseconds since the epoch; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileLstat" :sec "I/O" :type "String -> (Result LinkStat String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "lstat of a path, not following a final symlink: {:isFile Bool :isDir Bool :isSymlink Bool :size Int64 :mtime Int64 :mode Int64 :mtimeNs Int64}; a dangling link is ok with :isSymlink true while fileStat fails.")
+    (:name "fileChmod" :sec "I/O" :type "String Int64 -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "chmod a path to mode 0..07777 (e.g. 420 = 0644); a mode outside that range or a failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileFsync" :sec "I/O" :type "String -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Open a file or directory read-only and fsync it; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "fileReadlink" :sec "I/O" :type "String -> (Result String String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "The target text of a symlink, verbatim and unresolved; a path that is not a link is invalidPath.")
+    (:name "fileUtime" :sec "I/O" :type "String Int64 -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "utimensat: set atime and mtime of a path, following a final symlink, to mtimeNs nanoseconds since the epoch (negative before 1970); the failure is a \"KIND: PATH: reason\" message.")
+    (:name "pathSymlink" :sec "I/O" :type "String String -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "symlink target linkPath: create linkPath pointing at target (which need not exist); an existing linkPath is alreadyExists.")
+    (:name "processRun" :sec "I/O" :type "String -> ProcessOutput" :src "asl/host/src/prelude.c" :effect true
+      :doc "Run a command with /bin/sh -c and wait: {:exitCode Int64 :stdout String :stderr String}; retains shell convention where a child killed by signal N exits 128+N (unlike direct process waiters procWaitPid/procWaitAny which return -N). Failing to start it (pipe, fork) traps with ERR_IO.")
+    (:name "cpuCount" :sec "I/O" :type "-> (Result Int64 String)" :src "asl/host/src/sys.c" :effect true
+      :doc "Online CPUs from sysconf(_SC_NPROCESSORS_ONLN).")
+    (:name "procRusage" :sec "I/O" :type "-> (Result Rusage String)" :src "asl/host/src/sys.c" :effect true
+      :doc "getrusage of self and of reaped children: {:selfMaxRssKb :selfUserUs :selfSysUs :childrenMaxRssKb :childrenUserUs :childrenSysUs}, peak RSS in KB on macOS and Linux.")
+    (:name "platformInfo" :sec "I/O" :type "-> (Result PlatformInfo String)" :src "asl/host/src/sys.c" :effect true
+      :doc "uname as {:os String :release String :machine String}, e.g. \"Linux\" \"6.8.0\" \"x86_64\".")
+    (:name "localDate" :sec "I/O" :type "-> (Result String String)" :src "asl/host/src/sys.c" :effect true
+      :doc "Today in the local time zone as YYYY-MM-DD (localtime_r, strftime).")
+    (:name "procAlive?" :sec "I/O" :type "Int64 -> (Result Bool String)" :src "asl/host/src/sys.c" :effect true
+      :doc "kill(pid, 0): ok true when the process exists (EPERM counts as alive), ok false on ESRCH; pid outside 1..INT_MAX is err io:22.")
+    (:name "nowNs" :sec "I/O" :type "-> Int64" :src "asl/host/src/prelude.c" :effect true
+      :doc "Nanoseconds since the Unix epoch (CLOCK_REALTIME).")
+    (:name "monotonicNs" :sec "I/O" :type "-> Int64" :src "asl/host/src/prelude.c" :effect true
+      :doc "Nanoseconds of monotonic time since an unspecified starting point (CLOCK_MONOTONIC).")
+    (:name "sleepMs" :sec "I/O" :type "Int64 -> Unit" :src "asl/host/src/prelude.c" :effect true
+      :doc "Sleep for ms milliseconds (nanosleep, resumed after EINTR). A negative ms traps with ERR_RANGE.")
+    (:name "envGet" :sec "I/O" :type "String -> (Option String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Read an environment variable by name: (some val) or (none).")
+    (:name "getHomeDir" :sec "I/O" :type "-> (Result String String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "User's home directory: $HOME when set and non-empty, else getpwuid(getuid())->pw_dir; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "processSpawn" :sec "I/O" :type "String -> (Result Int64 String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Start /bin/sh -c cmd with stdout and stderr redirected, returning a handle id.")
+    (:name "processWait" :sec "I/O" :type "Int64 Int64 -> (Result ProcessOutput String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Wait up to timeoutMs (0 = no limit) for handle: (ok {:exitCode ... :stdout ... :stderr ...}); returns 128+n for a signal death; on timeout kills process group and returns exitCode 124.")
+    (:name "fileCreateExclusive" :sec "I/O" :type "String String -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Create a file exclusively (O_CREAT|O_EXCL) and write content; returns err \"exists\" if file already exists.")
+    (:name "dirCreate" :sec "I/O" :type "String -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Create directory and any missing parents (mkdir -p semantics); ok if dir exists, err if a file exists there.")
+    (:name "pathRemove" :sec "I/O" :type "String -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Remove a file or directory tree recursively without following symlinks out of it.")
+    (:name "pathRename" :sec "I/O" :type "String String -> (Result Unit String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Rename from to (rename(2)).")
+    (:name "realPath" :sec "I/O" :type "String -> (Result String String)" :src "asl/host/src/prelude.c" :effect true
+      :doc "Resolve a path with realpath; the failure is a \"KIND: PATH: reason\" message.")
+    (:name "pathCanonicalize" :sec "I/O" :type "String -> (Result String IoError)" :src "asl/prelude/prelude.asl" :effect true
+      :doc "Resolve a path with realpath; the failure is the IoError case, e.g. (err (notFound)).")
+    (:name "bytesLength" :sec "Bytes" :type "Bytes -> Int64" :src "asl/host/src/prelude.c"
+      :doc "Byte count.")
+    (:name "bytesAlloc" :sec "Bytes" :type "Int64 -> Bytes" :src "asl/host/src/prelude.c"
+      :doc "n zero bytes; a negative n traps with ERR_RANGE.")
+    (:name "bytesGet" :sec "Bytes" :type "Bytes Int64 -> Int64" :src "asl/host/src/prelude.c"
+      :doc "The byte at an index, 0..255; an index outside the bytes traps with ERR_RANGE.")
+    (:name "bytesSet" :sec "Bytes" :type "Bytes Int64 Int64 -> Unit" :src "asl/host/src/prelude.c" :effect true
+      :doc "Overwrite the byte at an index in place; an index outside the bytes or a value outside 0..255 traps with ERR_RANGE." :effectExemption "scoped (LS1, compile.c freshBytesExpr): not an effect for ERR_EFFECT_UNMARKED when the buffer is a bytesAlloc result, or an alias of one, bound in the same fn body or captured from it by a lambda; a local or module name bytesAlloc does not count; a write through a parameter is an effect; plan unit MUT1 tracks the real rule, including a lambda that keeps a captured buffer across calls")
+    (:name "bytesGetFloat64" :sec "Bytes" :type "Bytes Int64 -> Float64" :src "asl/host/src/prelude.c"
+      :doc "The native-endian Float64 in 8-byte slot i; a slot outside the bytes traps with ERR_RANGE.")
+    (:name "bytesSetFloat64" :sec "Bytes" :type "Bytes Int64 Float64 -> Unit" :src "asl/host/src/prelude.c" :effect true
+      :doc "Overwrite 8-byte slot i in place; a slot outside the bytes traps with ERR_RANGE, an Int value with ERR_TYPE." :effectExemption "scoped (LS1, compile.c freshBytesExpr): not an effect for ERR_EFFECT_UNMARKED when the buffer is a bytesAlloc result, or an alias of one, bound in the same fn body or captured from it by a lambda; a local or module name bytesAlloc does not count; a write through a parameter is an effect; plan unit MUT1 tracks the real rule, including a lambda that keeps a captured buffer across calls")
+    (:name "stringToBytes" :sec "Bytes" :type "String -> Bytes" :src "asl/host/src/prelude.c"
+      :doc "The UTF-8 bytes of a string. The one string primitive past stringLength, stringSlice and stringConcat; charCode and fnv1a64 derive from it.")
+    (:name "bytesToBase64" :sec "Bytes" :type "Bytes -> String" :src "asl/prelude/prelude.asl"
+      :doc "RFC 4648 base64 with = padding.")
+    (:name "bytesFromBase64" :sec "Bytes" :type "String -> (Result Bytes String)" :src "asl/prelude/prelude.asl"
+      :doc "Decode padded RFC 4648 base64; a character outside the alphabet, misplaced padding or a length not a multiple of 4 is an err.")
+    (:name "charCode" :sec "Bytes" :type "String -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Unicode code point of the first character, so (charCode \"é\") is 233; the empty string traps.")
+    (:name "&" :sec "Bytes" :type "Int64 Int64 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Bitwise and on two's complement Int64. Retired bitAnd is ERR_UNKNOWN_SYMBOL.")
+    (:name "|" :sec "Bytes" :type "Int64 Int64 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Bitwise or on two's complement Int64. Retired bitOr is ERR_UNKNOWN_SYMBOL.")
+    (:name "^" :sec "Bytes" :type "Int64 Int64 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Bitwise exclusive or on two's complement Int64. Retired bitXor is ERR_UNKNOWN_SYMBOL.")
+    (:name "~" :sec "Bytes" :type "Int64 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Bitwise complement, (- -1 x). Retired bitNot is ERR_UNKNOWN_SYMBOL.")
+    (:name "popcount64" :sec "Bytes" :type "Int64 -> Int64" :src "asl/prelude/prelude.asl"
+      :doc "Number of one bits in the two's complement Int64, so (popcount64 -1) is 64.")
+    (:name "bytesSha256" :sec "Bytes" :type "Bytes -> String" :src "asl/host/src/prelude.c"
+      :doc "SHA-256 digest as 64 lower-case hex characters.")
+    (:name "zstdDecompress" :sec "Bytes" :type "Bytes -> (Result Bytes String)" :src "asl/host/src/prelude.c"
+      :doc "Decompress a zstd frame; the failure is a message.")
+    (:name "f64ArrayLen" :sec "Arrays" :type "F64Array -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Element count.")
+    (:name "f64ArrayGet" :sec "Arrays" :type "F64Array Int64 -> Float64" :src "asl/host/src/arrays.c"
+      :doc "Element at an index; an index outside the array traps with ERR_RANGE.")
+    (:name "f64ArraySlice" :sec "Arrays" :type "F64Array Int64 Int64 -> F64Array" :src "asl/host/src/arrays.c"
+      :doc "Half-open copy; bounds outside the array trap with ERR_RANGE.")
+    (:name "f64ArrayConcat" :sec "Arrays" :type "(List F64Array) -> F64Array" :src "asl/host/src/arrays.c"
+      :doc "Concatenate a list of arrays.")
+    (:name "f64ArrayGenerate" :sec "Arrays" :type "Int64 (fn [Int64] -> Float64) -> F64Array" :src "asl/host/src/arrays.c"
+      :doc "Array of n elements, element i from the function applied to i.")
+    (:name "f64ArraySum" :sec "Arrays" :type "F64Array -> Float64" :src "asl/host/src/arrays.c"
+      :doc "Neumaier-compensated sum.")
+    (:name "f64ArrayCountEq" :sec "Arrays" :type "F64Array Float64 -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Number of elements equal to the value.")
+    (:name "f64ArrayFold" :sec "Arrays" :type "(fn [B Float64] -> B) B F64Array -> B" :src "asl/host/src/arrays.c"
+      :doc "Left fold.")
+    (:name "f64ArrayScan" :sec "Arrays" :type "(fn [Float64 Float64] -> Float64) Float64 F64Array -> F64Array" :src "asl/host/src/arrays.c"
+      :doc "Every intermediate accumulator of a left fold, as an array.")
+    (:name "dot" :sec "Arrays" :type "F64Array F64Array -> Float64" :src "asl/host/src/kernels.c"
+      :doc "Dot product of two Float64 arrays; traps on shape mismatch with ERR_SHAPE.")
+    (:name "axpy" :sec "Arrays" :type "Float64 F64Array F64Array -> F64Array" :src "asl/host/src/kernels.c"
+      :doc "Scaled vector add: y := a*x + y, returning a new Float64 array; traps on shape mismatch with ERR_SHAPE.")
+    (:name "gemm" :sec "Arrays" :type "Int64 Int64 Int64 F64Array F64Array -> F64Array" :src "asl/host/src/kernels.c"
+      :doc "Row-major matrix multiplication: C := A * B for m x k matrix A and k x n matrix B, returning a new Float64 array of shape m x n; traps on shape mismatch with ERR_SHAPE or negative dimensions with ERR_RANGE.")
+    (:name "i64ArrayLen" :sec "Arrays" :type "I64Array -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Element count.")
+    (:name "i64ArrayGet" :sec "Arrays" :type "I64Array Int64 -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Element at an index; an index outside the array traps with ERR_RANGE.")
+    (:name "i64ArraySlice" :sec "Arrays" :type "I64Array Int64 Int64 -> I64Array" :src "asl/host/src/arrays.c"
+      :doc "Half-open copy; bounds outside the array trap with ERR_RANGE.")
+    (:name "i64ArrayConcat" :sec "Arrays" :type "(List I64Array) -> I64Array" :src "asl/host/src/arrays.c"
+      :doc "Concatenate a list of arrays.")
+    (:name "i64ArrayGenerate" :sec "Arrays" :type "Int64 (fn [Int64] -> Int64) -> I64Array" :src "asl/host/src/arrays.c"
+      :doc "Array of n elements, element i from the function applied to i.")
+    (:name "i64ArraySum" :sec "Arrays" :type "I64Array -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Sum; traps on Int64 overflow.")
+    (:name "i64ArrayCountEq" :sec "Arrays" :type "I64Array Int64 -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Number of elements equal to the value.")
+    (:name "i64ArrayFold" :sec "Arrays" :type "(fn [B Int64] -> B) B I64Array -> B" :src "asl/host/src/arrays.c"
+      :doc "Left fold. The accumulator must end as an Int.")
+    (:name "i64ArrayScan" :sec "Arrays" :type "(fn [Int64 Int64] -> Int64) Int64 I64Array -> I64Array" :src "asl/host/src/arrays.c"
+      :doc "Every intermediate accumulator of a left fold, as an array.")
+    (:name "i8ArrayLen" :sec "Arrays" :type "I8Array -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Element count.")
+    (:name "i8ArrayGet" :sec "Arrays" :type "I8Array Int64 -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Element at an index; an index outside the array traps with ERR_RANGE.")
+    (:name "i8ArraySlice" :sec "Arrays" :type "I8Array Int64 Int64 -> I8Array" :src "asl/host/src/arrays.c"
+      :doc "Half-open copy; bounds outside the array trap with ERR_RANGE.")
+    (:name "i8ArrayConcat" :sec "Arrays" :type "(List I8Array) -> I8Array" :src "asl/host/src/arrays.c"
+      :doc "Concatenate a list of arrays.")
+    (:name "i8ArrayGenerate" :sec "Arrays" :type "Int64 (fn [Int64] -> Int64) -> I8Array" :src "asl/host/src/arrays.c"
+      :doc "Array of n elements, element i from the function applied to i. An element outside -128..127 traps.")
+    (:name "i8ArraySum" :sec "Arrays" :type "I8Array -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Sum; traps on Int64 overflow.")
+    (:name "i8ArrayCountEq" :sec "Arrays" :type "I8Array Int64 -> Int64" :src "asl/host/src/arrays.c"
+      :doc "Number of elements equal to the value.")
+    (:name "i8ArrayFold" :sec "Arrays" :type "(fn [B Int64] -> B) B I8Array -> B" :src "asl/host/src/arrays.c"
+      :doc "Left fold. The accumulator must end as an Int.")
+    (:name "i8ArrayScan" :sec "Arrays" :type "(fn [Int64 Int64] -> Int64) Int64 I8Array -> I8Array" :src "asl/host/src/arrays.c"
+      :doc "Every intermediate accumulator of a left fold, as an array.")
+    (:name "parquetOpen" :sec "Parquet" :type "String -> (Result ParquetHandle String)" :src "asl/host/src/parquet.c" :effect true
+      :doc "Open a Parquet file; the failure is a message.")
+    (:name "parquetNumRowGroups" :sec "Parquet" :type "ParquetHandle -> Int64" :src "asl/host/src/parquet.c"
+      :doc "Row group count.")
+    (:name "parquetNumRows" :sec "Parquet" :type "ParquetHandle -> Int64" :src "asl/host/src/parquet.c"
+      :doc "Row count.")
+    (:name "parquetColumnType" :sec "Parquet" :type "ParquetHandle String -> String" :src "asl/host/src/parquet.c"
+      :doc "The column's physical type: int64, double, int8, int32 or other. An unknown column traps.")
+    (:name "parquetReadF64" :sec "Parquet" :type "ParquetHandle String Int64 -> F64Array" :src "asl/host/src/parquet.c" :effect true
+      :doc "A double column of one row group; a wrong type or row group traps.")
+    (:name "parquetReadI64" :sec "Parquet" :type "ParquetHandle String Int64 -> I64Array" :src "asl/host/src/parquet.c" :effect true
+      :doc "An int64 column of one row group; a wrong type or row group traps.")
+    (:name "parquetReadI8" :sec "Parquet" :type "ParquetHandle String Int64 -> I8Array" :src "asl/host/src/parquet.c" :effect true
+      :doc "An int8 column of one row group; a wrong type or row group traps.")
+    (:name "parquetKvMetadata" :sec "Parquet" :type "ParquetHandle String -> (Result String String)" :src "asl/host/src/parquet.c"
+      :doc "Look up a key in the file key-value metadata; err if absent.")
+  ]
+)

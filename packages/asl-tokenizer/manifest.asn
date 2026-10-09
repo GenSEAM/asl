@@ -1,0 +1,6 @@
+(:package asl-tokenizer
+ :version "0.1.0"
+ :entry "src/tokenizer.asl"
+ :description "Pure AgentScript o200k_base BPE token counter"
+ :aslFirst true
+ :dependencies [])

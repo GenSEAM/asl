@@ -1,0 +1,15 @@
+(module aslWebApiSearch/router :x [SearchRoutingDecision isOpenEngine? selectEngineCascade routeSearchQuery] :i [(config :a cfg) (transport :a tr) (quota :a q)])
+
+(schema SearchRoutingDecision (:f selectedEngine Str) (:f fallbackEngines (List Str)) (:f transport tr/TransportStrategy) (:f isDeepResearch Bool) (:f reason Str))
+
+fn isOpenEngine? engine: Str -> Bool
+  (let [(e (stringLower engine))] (or (= e "ddg") (or (= e "wikipedia") (or (= e "github") (or (= e "arxiv") (or (= e "hackernews") (= e "searxng")))))))
+
+fn selectEngineCascade deepResearch: Bool hasKeys: Bool -> (List Str)
+  (if (and deepResearch hasKeys) (list "brave" "tavily" "ddg" "wikipedia" "arxiv") (list "ddg" "wikipedia" "hackernews" "github" "arxiv" "brave"))
+
+fn findFirstAvailableEngine cascade: (List Str) quotas: (List q/EngineQuota) -> Str
+  (if (listEmpty? cascade) "ddg" (let [(eng (optionOr (listHead cascade) "ddg")) (rest (optionOr (listTail cascade) (list)))] (if (isOpenEngine? eng) eng (let [(matchingQuota (filter (fn [(qu q/EngineQuota)] -> Bool (= qu.engineName eng)) quotas))] (if (and (not (listEmpty? matchingQuota)) (q/isQuotaAvailable? (optionOr (listHead matchingQuota) (q/inspectEngineQuota eng false 0)))) eng (findFirstAvailableEngine rest quotas))))))
+
+fn routeSearchQuery query: Str runtime: tr/RuntimeKind hasExtension: Bool deepResearch: Bool tracker: q/QuotaTracker -> SearchRoutingDecision
+  (let [(quotas tracker.quotas) (transport (tr/resolveRuntimeStrategy runtime hasExtension false))] (mt runtime ((tr/airgapSandbox) (SearchRoutingDecision :selectedEngine "memory" :fallbackEngines (list) :transport (tr/memoryCacheOnly) :isDeepResearch false :reason "Airgap environment detected: routing to resident memory cache")) ((tr/browserWebpage) (if hasExtension (let [(hasKeys (listAny? (fn [(qu q/EngineQuota)] -> Bool (and (not (isOpenEngine? qu.engineName)) (q/isQuotaAvailable? qu))) quotas)) (cascade (selectEngineCascade deepResearch hasKeys)) (primary (findFirstAvailableEngine cascade quotas))] (SearchRoutingDecision :selectedEngine primary :fallbackEngines (list "wikipedia" "ddg") :transport (tr/extensionRelay) :isDeepResearch (and deepResearch hasKeys) :reason "Browser WebExtension relay active: full CORS neutralization enabled")) (SearchRoutingDecision :selectedEngine "wikipedia" :fallbackEngines (list "searxng") :transport (tr/corsSafeDirect) :isDeepResearch false :reason "Browser webpage without extension: restricted to CORS-safe endpoints"))) (else (let [(hasKeys (listAny? (fn [(qu q/EngineQuota)] -> Bool (and (not (isOpenEngine? qu.engineName)) (q/isQuotaAvailable? qu))) quotas)) (cascade (selectEngineCascade deepResearch hasKeys)) (primary (findFirstAvailableEngine cascade quotas))] (SearchRoutingDecision :selectedEngine primary :fallbackEngines (filter (fn [e] (!= e primary)) cascade) :transport transport :isDeepResearch (and deepResearch hasKeys) :reason (if (and deepResearch hasKeys) "Deep research flagged with available keyed quotas" "Open-first default policy active to conserve API quotas"))))))

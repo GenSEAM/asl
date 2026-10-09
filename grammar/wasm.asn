@@ -1,0 +1,39 @@
+(:wasm :v 2
+  :d "WebAssembly substrate: linear memory limits, host imports and browser storage for the ASL runtime. The page size is the WebAssembly constant; the other contracts are targets, modelled in pure ASL in asl/packages/asl-mem/src and not bound to a browser."
+  :schemas [
+    (:schema WasmSubstrateConfig
+      :d "runtime memory configuration; asl/packages/asl-mem/src/wasmRuntime.asl initWasmRuntime takes initialPages and maxPages, and asl/packages/asl-target-wat/src/emitWat.asl emitWasmMemoryModel writes them into a (memory ...) export"
+      :fields [
+        (:field :initialPages :type :int :d "Initial linear memory pages (64KB each)")
+        (:field :maxPages :type :int :d "Maximum linear memory page ceiling")
+        (:field :allowGrow :type :bool :d "Whether linear memory can dynamically expand")
+      ])
+    (:schema LinearMemoryLimits
+      :d "Boundaries and page constraints for WebAssembly linear memory"
+      :fields [
+        (:field :pageSizeBytes :type :int :default 65536 :d "WASM standard 64KB page size")
+        (:field :hardMaxBytes :type :int :default 1073741824 :status :adopted :d "1GB memory ceiling, an adopted value")
+      ])
+  ]
+  :contracts [
+    (:contract HostImportContract :status :target
+      :d "target: a host import through which a WASM guest flushes storage; today no module exports or imports it"
+      :moduleName "asl_host"
+      :functionName "opfs_sync"
+      :paramTypes [:int :int :int]
+      :returnType :int)
+    (:contract OpfsStorageContract :status :target
+      :d "target: persistent storage in the browser Origin Private File System; today asl/packages/asl-mem/src/opfsAdapter.asl keeps records in an in-memory map under rootPrefix and rejects empty, absolute and .. paths"
+      :rootPrefix "agent_memory"
+      :syncHandle true
+      :atomicFlush true
+      :maxFileSizeBytes 104857600
+      :maxFileSizeStatus :adopted)
+    (:contract WebLocksLeaseContract :status :target
+      :d "target: single-writer exclusion across browser tabs with the Web Locks API; today no module implements it"
+      :lockName "asl_opfs_writer_lock"
+      :mode "exclusive"
+      :stealTimeoutMs 5000
+      :stealTimeoutStatus :adopted)
+  ]
+)

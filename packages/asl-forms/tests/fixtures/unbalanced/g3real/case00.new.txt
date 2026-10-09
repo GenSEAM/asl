@@ -1,0 +1,5 @@
+    ((= kind "terminal") (str "(forms" (c/joinAll (map (fn [f] (str " " (c/serString f))) (c/terminalForms (arg fs 0)))) ")"))
+    ((= kind "repair")
+      (let [(res (rep/repair (arg fs 0) (arg fs 1))]
+        (str "(repair " (c/serString (rep/repairResultText res)) " " (c/serString (rep/repairResultReceipt res)) ")")))
+    (else (str "ERR_UNKNOWN_KIND " kind)))

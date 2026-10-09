@@ -1,0 +1,31 @@
+(:modalPreset :v 2 :id bonsai2Vllm
+  :doc "Bonsai 2 27B on the community vLLM port (shtjww/bonsai2-vllm), for batch-heavy serving; validated by its author on RTX PRO 6000 Blackwell only, so the ladder starts at L40S; config and tokenizer come from the base Qwen3.8-27B repo (README: an inference, not a documented path)"
+  :app "asl-bonsai2-vllm"
+  :modalVersion "1.6.1"
+  :baseImage "nvidia/cuda:12.8.1-devel-ubuntu24.04"
+  :python "3.12"
+  :packages ("vllm==0.26.0" "torch==2.11.0" "transformers==5.17.0")
+  :preparePackages ("huggingface_hub==2.1.1")
+  :model "prism-ml/Ternary-Bonsai-2-27B-gguf"
+  :revision "b072e1d3b35a0a630cece372c2127528e0994386"
+  :weightFile "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+  :servedName "bonsai2-27b"
+  :engine vllmBonsai
+  :engineRef "62cd607bce8c13e9e64cab820f0b2477ee2749ea"
+  :tokenizerRepo "Qwen/Qwen3.8-27B"
+  :tokenizerRevision "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  :contextTokens 32768
+  :maxTokens 16384
+  :reasoning true
+  :scaledownSec 2
+  :startupSec 1200
+  :snapshot true
+  :maxContainers 1
+  :coldStartMs 150000
+  :volume "asl-modal-weights"
+  :secret "asl-modal-key"
+  :keyEnv ASL_MODAL_API_KEY
+  :gpus ((:tier L40S :maxConcurrency 16 :timeoutSec 600 :microUsdPerSec 542)
+         (:tier A100-80GB :maxConcurrency 32 :timeoutSec 600 :microUsdPerSec 694)
+         (:tier RTX-PRO-6000 :maxConcurrency 32 :timeoutSec 600 :microUsdPerSec 842))
+  :pool (:windowMs 7000 :peakCount 32 :bypassWhileBusy true))

@@ -1,0 +1,202 @@
+(module asl-syntax/tests/js/lexTest
+                                                                                                                                        
+  :x [runTests]
+  :i [(asl-syntax/core/tree :a tr)
+      (asl-syntax/core/print :a pr)
+      (asl-syntax/js/lex :a lx)])
+
+fn tokText s: String t: tr/Token -> String
+  (optionOr (stringSlice s t.start     t.end    ) "")
+
+fn kindAt toks: (List tr/Token) i: Int64 -> String
+  (optionOr (listGet toks i) (tr/makeToken "" 0 0)).kind    
+
+fn textAt s: String toks: (List tr/Token) i: Int64 -> String
+  (tokText s (optionOr (listGet toks i) (tr/makeToken "" 0 0)))
+
+fn nonTriviaToks toks: (List tr/Token) -> (List tr/Token)
+  (filter (fn [(t tr/Token)] -> Bool (not (tr/isTriviaToken t))) toks)
+
+fn testHashbangAndKeywords -> Bool
+  (let [(s "#!/usr/bin/env node
+const x = 123;
+let y = #private;")
+        (toks (lx/lexJsText s))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength s))) "hashbang fixture tiles")
+    (assert (lx/isHashbangToken (optionOr (listGet toks 0) (tr/makeToken "" 0 0))) "token 0 is hashbang")
+    (assert (= (textAt s toks 0) "#!/usr/bin/env node") "hashbang text")
+    (assert (lx/isNewlineToken (optionOr (listGet toks 1) (tr/makeToken "" 0 0))) "token 1 is newline")
+    (let [(nt (nonTriviaToks toks))]
+      (assert (= (textAt s nt 0) "#!/usr/bin/env node") "nt 0 hashbang")
+      (assert (= (textAt s nt 1) "const") "nt 1 const keyword")
+      (assert (lx/isKeywordToken (optionOr (listGet nt 1) (tr/makeToken "" 0 0))) "const is keyword")
+      (assert (= (textAt s nt 2) "x") "nt 2 ident x")
+      (assert (= (textAt s nt 3) "=") "nt 3 punct =")
+      (assert (= (textAt s nt 4) "123") "nt 4 number 123")
+      (assert (= (textAt s nt 5) ";") "nt 5 punct ;")
+      (assert (= (textAt s nt 6) "let") "nt 6 let keyword")
+      (assert (= (textAt s nt 7) "y") "nt 7 ident y")
+      (assert (= (textAt s nt 8) "=") "nt 8 punct =")
+      (assert (= (textAt s nt 9) "#private") "nt 9 private identifier")
+      (assert (= (textAt s nt 10) ";") "nt 10 punct ;"))
+    true)
+
+fn testNumericForms -> Bool
+  (let [(s "0x1F 0o17 0b1010 123n 0x1Fn 0b1n 0o7n 1_000_000 3.14 1e-10 2.5E+3 .5 0")
+        (toks (lx/lexJsText s))
+        (nums (nonTriviaToks toks))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength s))) "numeric forms tile")
+    (assert (= (listLength nums) 13) "13 numbers")
+    (assert (= (textAt s nums 0) "0x1F") "hex")
+    (assert (= (textAt s nums 1) "0o17") "octal")
+    (assert (= (textAt s nums 2) "0b1010") "binary")
+    (assert (= (textAt s nums 3) "123n") "decimal bigint")
+    (assert (= (textAt s nums 4) "0x1Fn") "hex bigint")
+    (assert (= (textAt s nums 5) "0b1n") "binary bigint")
+    (assert (= (textAt s nums 6) "0o7n") "octal bigint")
+    (assert (= (textAt s nums 7) "1_000_000") "separator")
+    (assert (= (textAt s nums 8) "3.14") "float")
+    (assert (= (textAt s nums 9) "1e-10") "exp neg")
+    (assert (= (textAt s nums 10) "2.5E+3") "exp pos")
+    (assert (= (textAt s nums 11) ".5") "leading dot float")
+    (assert (= (textAt s nums 12) "0") "zero")
+    true)
+
+fn testUnicodeEscapes -> Bool
+  (let [(s "var \u0061 = 1; let \u{62} = 2;")
+        (toks (lx/lexJsText s))
+        (nt (nonTriviaToks toks))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength s))) "unicode escapes tile")
+    (assert (= (listLength nt) 10) "10 non-trivia tokens")
+    (assert (= (textAt s nt 1) "\u0061") "4-hex unicode escape")
+    (assert (lx/isIdentToken (optionOr (listGet nt 1) (tr/makeToken "" 0 0))) "u0061 is ident")
+    (assert (= (textAt s nt 6) "\u{62}") "braced unicode escape")
+    (assert (lx/isIdentToken (optionOr (listGet nt 6) (tr/makeToken "" 0 0))) "u{62} is ident")
+    true)
+
+fn testRegexVsDivide -> Bool
+  (let [(s1 "x / y / z; return /foo/g; [ /bar/i ]; a = /baz/m; x /= 2; (a + b) / c; x++ / y;")
+        (toks1 (lx/lexJsText s1))
+        (nt1 (nonTriviaToks toks1))]
+    (assert (ok? (tr/checkTokensTiling toks1 (stringLength s1))) "regex vs divide fixture 1 tiles")
+    (assert (= (textAt s1 nt1 1) "/") "x / y is divide punct")
+    (assert (= (kindAt nt1 1) "punct") "divide is punct")
+    (assert (= (textAt s1 nt1 3) "/") "/ z is divide punct")
+    (assert (= (kindAt nt1 3) "punct") "divide is punct")
+    (assert (= (textAt s1 nt1 6) "/foo/g") "return /foo/g is regex")
+    (assert (= (kindAt nt1 6) "regex") "/foo/g is regex")
+    (assert (= (textAt s1 nt1 9) "/bar/i") "[ /bar/i ] is regex")
+    (assert (= (kindAt nt1 9) "regex") "/bar/i is regex")
+    (assert (= (textAt s1 nt1 13) "/baz/m") "= /baz/m is regex")
+    (assert (= (kindAt nt1 13) "regex") "/baz/m is regex")
+    (assert (= (textAt s1 nt1 16) "/=") "x /= 2 is /= punct")
+    (assert (= (textAt s1 nt1 24) "/") "(a + b) / c is divide punct")
+    (assert (= (kindAt nt1 24) "punct") "(a + b) / c divide is punct")
+    (assert (= (textAt s1 nt1 28) "/") "x++ / y is divide punct")
+    (assert (= (kindAt nt1 28) "punct") "x++ / y divide is punct")
+    (let [(sRegex "/forcedRegex/")
+          (toksRegex (lx/lexJsGoal (stringToBytes sRegex) (lx/goalRegex)))]
+      (assert (= (listLength toksRegex) 1) "goalRegex emits regex")
+      (assert (= (kindAt toksRegex 0) "regex") "forced regex token"))
+    true)
+
+fn testTemplateLiterals -> Bool
+  (let [(s "`hello ${name}, sum is ${a + b}!` `plain template`")
+        (toks (lx/lexJsText s))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength s))) "template fixture tiles")
+    (let [(sNested "`outer ${ `inner ${x}` } done`")
+          (toksNested (lx/lexJsText sNested))]
+      (assert (ok? (tr/checkTokensTiling toksNested (stringLength sNested))) "nested templates tile")
+      (let [(sCont "continuation ${v}`")
+            (toksCont (lx/lexJsGoal (stringToBytes sCont) (lx/goalTemplate)))]
+        (assert (ok? (tr/checkTokensTiling toksCont (stringLength sCont))) "template continuation tiles")
+        (assert (lx/isTemplateToken (optionOr (listGet toksCont 0) (tr/makeToken "" 0 0))) "first is template")))
+    true)
+
+fn testJsxTextHook -> Bool
+  (let [(s "Hello world <span>text</span>")
+        (toks (lx/lexJsGoal (stringToBytes s) (lx/goalJsxText)))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength s))) "jsx text tiles")
+    (assert (lx/isJsxTextToken (optionOr (listGet toks 0) (tr/makeToken "" 0 0))) "first is jsxText")
+    (assert (= (textAt s toks 0) "Hello world ") "jsxText content")
+    true)
+
+fn testNewlineFlags -> Bool
+  (let [(s "return
+123;")
+        (toks (lx/lexJsText s))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength s))) "return newline fixture tiles")
+    (assert (not (lx/hasPrecedingNewline toks 0)) "no newline before return")
+    (assert (lx/hasPrecedingNewline toks 2) "newline before 123")
+    (let [(s2 "return 123;")
+          (toks2 (lx/lexJsText s2))]
+      (assert (not (lx/hasPrecedingNewline toks2 2)) "no newline before 123 on same line"))
+    true)
+
+fn testPinned262LexicalCases -> Bool
+  (let [(sWs "\u00a0\uFEFFvar	 \u000bx\u000c=\r
+1\u2028+\u20292;")
+        (toks (lx/lexJsText sWs))]
+    (assert (ok? (tr/checkTokensTiling toks (stringLength sWs))) "test262 whitespace & line separators tile")
+    (let [(node (lx/tokensToNode toks (stringLength sWs)))
+          (out (pr/printTreeString sWs node))]
+      (assert (= out sWs) "lossless print of test262 whitespace"))
+    (let [(sClass "/[/]/g")
+          (toksClass (lx/lexJsText sClass))]
+      (assert (ok? (tr/checkTokensTiling toksClass (stringLength sClass))) "regex with slash in char class tiles")
+      (assert (= (kindAt toksClass 0) "regex") "char class with slash parsed as single regex")
+      (assert (= (textAt sClass toksClass 0) "/[/]/g") "regex content exact"))
+    true)
+
+fn checkFileRoundTrip path: String -> Bool
+  (let [(r (fileRead path))]
+    (assert (ok? r) (str "reading file succeeds: " path))
+    (let [(content (mt r ((ok s) s) ((err _) "")))
+          (bs (stringToBytes content))
+          (len (bytesLength bs))
+          (toks (lx/lexJs bs))
+          (tiling (tr/checkTokensTiling toks len))]
+      (assert (ok? tiling) (str "tiling succeeds for " path))
+      (let [(node (lx/tokensToNode toks len))
+            (outBs (pr/printTreeBytes bs node))]
+        (assert (= outBs bs) (str "round-trip exact for " path))
+        true))))
+
+fn testTrackedFilesRoundTrip -> Bool
+  (assert (checkFileRoundTrip "asl/web/vite.config.js") "vite.config.js round-trips")
+  (assert (checkFileRoundTrip "asl/web/tailwind.config.js") "tailwind.config.js round-trips")
+  (assert (checkFileRoundTrip "asl/web/plugins/vitePluginAsl.js") "vitePluginAsl.js round-trips")
+  (assert (checkFileRoundTrip "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js") "uploader.min.js round-trips")
+  true)
+
+fn testMinifiedBenchmark -> Bool
+  (let [(path "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js")
+        (r (fileRead path))]
+    (assert (ok? r) "reading minified benchmark file succeeds")
+    (let [(content (mt r ((ok s) s) ((err _) "")))
+          (bs (stringToBytes content))
+          (len (bytesLength bs))]
+      (assert (> len 300000) "benchmark file is >300 KB")
+      (let [(t0 (nowNs))
+            (toks (lx/lexJs bs))
+            (node (lx/tokensToNode toks len))
+            (outBs (pr/printTreeBytes bs node))
+            (t1 (nowNs))
+            (elapsedNs (- t1 t0))
+            (elapsedMs (/ elapsedNs 1000000))
+            (msPer100Kb (/ (* elapsedMs 102400) len))]
+        (assert (= outBs bs) "round-trip output matches input bytes")
+        (assert (<= msPer100Kb 60) (str "tokenize+print <= 60 ms per 100 KB, took: " (stringFromInt64 msPer100Kb) " ms"))
+        true))))
+
+fn runTests -> Bool
+  (and (testHashbangAndKeywords)
+  (and (testNumericForms)
+  (and (testUnicodeEscapes)
+  (and (testRegexVsDivide)
+  (and (testTemplateLiterals)
+  (and (testJsxTextHook)
+  (and (testNewlineFlags)
+  (and (testPinned262LexicalCases)
+  (and (testTrackedFilesRoundTrip)
+       (testMinifiedBenchmark))))))))))

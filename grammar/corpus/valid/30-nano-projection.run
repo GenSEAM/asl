@@ -1,0 +1,1 @@
+(and (= (summarise "s1" "1,2,3") "S1|3|2.0|drifting:2.0|rising") (= (widen 7) 7) (= (blank) ()))

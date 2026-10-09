@@ -1,0 +1,8 @@
+; The language now writes prose as a `note`: a free-standing string bound to
+; nothing, legal between declarations. ASN cannot borrow it. A document is one
+; value and a bare string IS a value, so a note beside a payload is simply a
+; second document and there is no reading under which it is prose.
+;
+; This is why `;` stays the only annotation ASN has.
+"A note, which is a declaration in the language and a second document here."
+(:sku "SSD-1TB" :price 89.99)

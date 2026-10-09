@@ -1,0 +1,21 @@
+(:meta :v 1 :date "2026-09-25" :checker "asl/packages/asl-gates/src/metaAudit.asl" :baseline "scripts/audit/metaBaseline.asn"
+  :doc "code carries no prose comments; a comment is one (:m ...) form on its own line directly above the definition it describes, after the language marker, and the marker plus the form is the whole line"
+  :markers ((:lang python :marker "#" :files (".py"))
+            (:lang shell :marker "#" :files (".sh" ".bash"))
+            (:lang asl :marker ";" :files (".asl")))
+  :shebangFiles "an extensionless tracked file whose first line is a #! naming python, sh, bash or zsh uses the # marker"
+  :keys ((:key ref :value atom :check "resolves: D<n> names a file .asl/mem/decisions/D<n><Title>.asn or an :id in .asl/mem/decisions/decisions.asn; a path ending .asn is a path in the --list file (the tracked tree), or an existing file when no list is given; any other atom is a (:rule :id) in asl/grammar/rules.asn")
+         (:key gate :value atom :proxy true :check "a file under tests/ or asl/packages/*/tests/ has this basename before its extension and its text contains the symbol defined below the form; a proxy: it shows the test names the symbol, not that the test fails without it")
+         (:key tags :value list :check "every word is in :tags below")
+         (:key effect :value atom :check "one of :effects below")
+         (:key adopted :value atom :check "an :id in .asl/mem/principles.asn")
+         (:key why :value string :check "at most :whyWords words; the only prose allowed"))
+  :tags (agy audit budget cache claims codex core gateway harness hostSubject journal leon owns prompt signals transport window)
+  :effects (pure io net proc)
+  :whyWords 8
+  :definitions ((:lang python :forms ("def NAME" "async def NAME" "class NAME" "NAME =" "NAME: TYPE =") :skip ("@decorator"))
+                (:lang shell :forms ("NAME()" "function NAME" "NAME=" "readonly NAME=" "export NAME=" "local NAME="))
+                (:lang asl :forms ("fn NAME" "fn ! NAME" "(schema NAME" "(enum NAME" "(module NAME" "(def NAME")))
+  :plain "a comment line that is not a (:m) form, a first-line shebang or a tool pragma; in python a docstring line counts as plain too"
+  :pragmas ("noqa" "type: ignore" "shellcheck" "fmt:" "pylint:" "mypy:" "eslint" "pragma" "-*-" "coding:" "isort:")
+  :ratchet "scripts/audit/metaBaseline.asn holds one (:file :path :plain) row per file with plain comment lines; a file above its row, or a file with none and plain lines, fails; rows may only be lowered")

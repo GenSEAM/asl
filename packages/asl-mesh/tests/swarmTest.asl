@@ -1,0 +1,13 @@
+(module asl-mesh/tests/swarmTest :x [RunTests runTests] :i [(asl-mesh/coord :a coord) (asl-mesh/occ :a occ)])
+
+fn testCoordinationAndScheduling -> Bool
+  (let [(c1 (coord/makeSwarmClaim "t1" "w1" 100 (list "a.asl") (list "a.asl") "root0")) (c2 (coord/makeSwarmClaim "t2" "w2" 200 (list "b.asl") (list "b.asl") "root0")) (c3 (coord/makeSwarmClaim "t3" "w3" 300 (list "a.asl") (list "a.asl") "root0")) (disj (coord/areClaimsDisjoint c1 c2)) (ovlp (coord/areClaimsDisjoint c1 c3)) (parts (coord/scheduleDisjointTasks (list c1 c2 c3))) (cWriter (coord/makeSwarmClaim "t4" "w4" 100 (list "x.asl") (list) "root0")) (cReader (coord/makeSwarmClaim "t5" "w5" 200 (list "y.asl") (list "x.asl") "root0")) (rwOverlap (coord/areClaimsDisjoint cWriter cReader))] (assert disj "Disjoint claims return true") (assert (not ovlp) "Overlapping claims return false") (assert (not rwOverlap) "Read-write overlapping claims must not be disjoint") (assert (> (listLength parts) 0) "Partitions are non-empty") (refute (not disj) "Refutation: Disjoint claims must not overlap") (refute ovlp "Refutation: Overlapping claims must be detected") (refute rwOverlap "Refutation: RW overlap must not be disjoint") true)
+
+fn testOccValidationAndArbitration -> Bool
+  (let [(c (coord/makeSwarmClaim "t1" "w1" 100 (list "a.asl") (list "a.asl") "root0")) (stMatch (occ/makeOccState "root0" (mapEmpty))) (stMismatch (occ/makeOccState "root1" (mapEmpty))) (resOk (occ/validateMerkleCommit c stMatch "root0-next")) (resErr (occ/validateMerkleCommit c stMismatch "root1-next")) (repOk (occ/getCommitConflictReport resOk)) (repErr (occ/getCommitConflictReport resErr)) (cEarlier (coord/makeSwarmClaim "t1" "wEarly" 50 (list "a.asl") (list "a.asl") "root0")) (cLater (coord/makeSwarmClaim "t1" "wLate" 150 (list "a.asl") (list "a.asl") "root0")) (arb (occ/resolveLeaseConflict cEarlier cLater)) (canRetry (occ/canRetryOccCommit 2)) (cannotRetry (occ/canRetryOccCommit 3)) (discarded (occ/discardStagingBuffer "w1"))] (assert (ok? resOk) "Matching root commit succeeds") (assert (err? resErr) "Diverged root commit fails") (assert (= repOk.status "ok") "Report status is ok") (assert (= repErr.status "conflict") "Report status is conflict") (assert (= arb.workerId "wEarly") "Earlier lease wins arbitration") (assert canRetry "Attempt 2 is allowed") (assert (not cannotRetry) "Attempt 3 is denied") (assert discarded "Staging buffer discarded cleanly") (refute (err? resOk) "Refutation: Matching root must not error") (refute (ok? resErr) "Refutation: Mismatched root must not succeed") true)
+
+fn runTests -> Bool
+  (let [(okCoord (testCoordinationAndScheduling)) (okOcc (testOccValidationAndArbitration))] (and okCoord okOcc))
+
+fn RunTests -> Bool
+  (runTests)

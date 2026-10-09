@@ -1,0 +1,6 @@
+(:script :id "liveLoopEdit" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"blue\\n\")")
+    (:turn :num 2 :reply "(:step :op \"write\" :file \"subject.txt\" :content \"green\\n\") (:done)")
+  )
+)

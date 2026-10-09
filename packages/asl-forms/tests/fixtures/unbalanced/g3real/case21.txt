@@ -1,0 +1,276 @@
+(module asl-syntax/tests/asl/asnTest
+                                                            
+  :x [runTests]
+  :i [(asl-syntax/asl/asn :a asn)
+      (asl-transpile/asn :a at)])
+
+fn testBasicScalars -> Bool
+  (let [(rInt (asn/asnRead "42"))
+        (rNegInt (asn/asnRead "-10"))
+        (rFloat (asn/asnRead "3.14"))
+        (rStr (asn/asnRead "\"hello world\""))
+        (rBoolT (asn/asnRead "true"))
+        (rBoolF (asn/asnRead "false"))
+        (rNil (asn/asnRead "_"))
+        (rUnit (asn/asnRead "()"))
+        (rKw (asn/asnRead ":fooBar"))]
+    (assert (ok? rInt) "asnRead parses int")
+    (assert (ok? rNegInt) "asnRead parses negative int")
+    (assert (ok? rFloat) "asnRead parses float")
+    (assert (ok? rStr) "asnRead parses string")
+    (assert (ok? rBoolT) "asnRead parses true")
+    (assert (ok? rBoolF) "asnRead parses false")
+    (assert (ok? rNil) "asnRead parses nil")
+    (assert (ok? rUnit) "asnRead parses unit")
+    (assert (ok? rKw) "asnRead parses keyword")
+    (assert (= (asn/asnWrite (resultOr rInt (asn/asnNil))) "42") "int renders back")
+    (assert (= (asn/asnWrite (resultOr rNegInt (asn/asnNil))) "-10") "negative int renders back")
+    (assert (= (asn/asnWrite (resultOr rFloat (asn/asnNil))) "3.14") "float renders back")
+    (assert (= (asn/asnWrite (resultOr rStr (asn/asnNil))) "\"hello world\"") "str renders back")
+    (assert (= (asn/asnWrite (resultOr rBoolT (asn/asnNil))) "true") "true renders back")
+    (assert (= (asn/asnWrite (resultOr rBoolF (asn/asnNil))) "false") "false renders back")
+    (assert (= (asn/asnWrite (resultOr rNil (asn/asnNil))) "_") "nil renders back")
+    (assert (= (asn/asnWrite (resultOr rUnit (asn/asnNil))) "()") "unit renders back")
+    (assert (= (asn/asnWrite (resultOr rKw (asn/asnNil))) ":fooBar") "kw renders back")
+    true)
+
+fn testCompoundValues -> Bool
+  (let [(rVecEmpty (asn/asnRead "[]"))
+        (rVec (asn/asnRead "[1 2 3]"))
+        (rVecNested (asn/asnRead "[[:a] [true false]]"))
+        (rRec (asn/asnRead "(:a 1 :b \"two\")"))
+        (rRecNested (asn/asnRead "(:outer (:inner :val))"))
+        (rMapEmpty (asn/asnRead "{}"))
+        (rMap (asn/asnRead "{:a 1 :b 2}"))
+        (rMapPairs (asn/asnRead "{(1 \"one\") (2 \"two\")}"))
+        (rMapSingleRec (asn/asnRead "{(:k 99)}"))
+        (rCtor (asn/asnRead "(Person :name \"Alice\" :age 30)"))
+        (rRows (asn/asnRead "(Point [1 2] [3 4])"))
+        (rCase (asn/asnRead "(some 42)"))
+        (rTable (asn/asnRead "([:name :age] [[\"Alice\" 30] [\"Bob\" 25]])"))
+        (rPair (asn/asnRead "{\"key\" 100}"))]
+    (assert (ok? rVecEmpty) "vec empty ok")
+    (assert (= (asn/asnWrite (resultOr rVecEmpty (asn/asnNil))) "[]") "vec empty render")
+    (assert (ok? rVec) "vec ok")
+    (assert (= (asn/asnWrite (resultOr rVec (asn/asnNil))) "[1 2 3]") "vec render")
+    (assert (ok? rVecNested) "nested vec ok")
+    (assert (= (asn/asnWrite (resultOr rVecNested (asn/asnNil))) "[[:a] [true false]]") "nested vec render")
+    (assert (ok? rRec) "rec ok")
+    (assert (= (asn/asnWrite (resultOr rRec (asn/asnNil))) "(:a 1 :b \"two\")") "rec render")
+    (assert (ok? rRecNested) "nested rec ok")
+    (assert (= (asn/asnWrite (resultOr rRecNested (asn/asnNil))) "(:outer (:inner :val))") "nested rec render")
+    (assert (ok? rMapEmpty) "map empty ok")
+    (assert (= (asn/asnWrite (resultOr rMapEmpty (asn/asnNil))) "{}") "map empty render")
+    (assert (ok? rMap) "map ok")
+    (assert (= (asn/asnWrite (resultOr rMap (asn/asnNil))) "{:a 1 :b 2}") "map render")
+    (assert (ok? rMapPairs) "map pairs ok")
+    (assert (= (asn/asnWrite (resultOr rMapPairs (asn/asnNil))) "{(1 \"one\") (2 \"two\")}") "map pairs render")
+    (assert (ok? rMapSingleRec) "map single rec ok")
+    (assert (= (asn/asnWrite (resultOr rMapSingleRec (asn/asnNil))) "{(:k 99)}") "map single rec render")
+    (assert (ok? rCtor) "ctor ok")
+    (assert (= (asn/asnWrite (resultOr rCtor (asn/asnNil))) "(Person :name \"Alice\" :age 30)") "ctor render")
+    (assert (ok? rRows) "rows ok")
+    (assert (= (asn/asnWrite (resultOr rRows (asn/asnNil))) "(Point [1 2] [3 4])") "rows render")
+    (assert (ok? rCase) "case ok")
+    (assert (= (asn/asnWrite (resultOr rCase (asn/asnNil))) "(some 42)") "case render")
+    (assert (ok? rTable) "table ok")
+    (assert (= (asn/asnWrite (resultOr rTable (asn/asnNil))) "([:name :age] [[\"Alice\" 30] [\"Bob\" 25]])") "table render")
+    (assert (ok? rPair) "pair ok")
+    (assert (= (asn/asnWrite (resultOr rPair (asn/asnNil))) "{\"key\" 100}") "pair render")
+    true)
+
+fn runTests -> Bool
+  (and (testBasicScalars)
+  (and (testCompoundValues)
+  (and (testInvalidAsnRejected)
+  (and (testDirectStepParsing)
+  (and (testTrackedAsnSweep)
+       (testFormsFixturesParity))))))
+
+fn testInvalidAsnRejected -> Bool
+  (let [(rEmpty (asn/asnRead ""))
+        (rBareSym (asn/asnRead "foo"))
+        (rBarePair (asn/asnRead "(\"key\" 100)"))
+        (rUnclosed (asn/asnRead "(:a 1"))
+        (rStrayClose (asn/asnRead ")"))
+        (rStrayBracket (asn/asnRead "]"))
+        (rOddRec (asn/asnRead "(:a 1 :b)"))
+        (rSpaceUnit (asn/asnRead "( )"))
+        (rFloatMapKey (asn/asnRead "{(1.5 \"val\")}"))
+        (rUntermStr (asn/asnRead "\"unterminated"))
+        (rMulti (asn/asnRead "(:a 1) (:b 2)"))
+        (rMapPair3Str (asn/asnRead "{\"k\" 1 2}"))
+        (rMapPair1Str (asn/asnRead "{\"k\"}"))
+        (rMapPair3Int (asn/asnRead "{(1 2 3)}"))
+        (rMapPair1Int (asn/asnRead "{(1)}"))
+        (rMapPair3Bool (asn/asnRead "{(true 1 2)}"))
+        (rMapPair1Bool (asn/asnRead "{(true)}"))]
+    (assert (err? rEmpty) "empty input rejected")
+    (assert (err? rBareSym) "bare symbol rejected")
+    (assert (err? rBarePair) "bare pair rejected")
+    (assert (err? rUnclosed) "unclosed paren rejected")
+    (assert (err? rStrayClose) "stray close paren rejected")
+    (assert (err? rStrayBracket) "stray bracket rejected")
+    (assert (err? rOddRec) "odd record rejected")
+    (assert (err? rSpaceUnit) "space unit rejected")
+    (assert (err? rFloatMapKey) "float map key rejected")
+    (assert (err? rUntermStr) "unterminated string rejected")
+    (assert (err? rMulti) "multiple top-level forms rejected")
+    (assert (err? rMapPair3Str) "3-item string pair in map rejected")
+    (assert (err? rMapPair1Str) "1-item string pair in map rejected")
+    (assert (err? rMapPair3Int) "3-item int pair in map rejected")
+    (assert (err? rMapPair1Int) "1-item int pair in map rejected")
+    (assert (err? rMapPair3Bool) "3-item bool pair in map rejected")
+    (assert (err? rMapPair1Bool) "1-item bool pair in map rejected")
+    true)
+
+fn kw step: asn/AsnStep key: String -> String
+  (optionOr (mapGet step.kwargs     key) "<absent>")
+
+fn testDirectStepParsing -> Bool
+  (let [(s1 (asn/parseStep "(:read :file \"scripts/agentLoop/loop.py\" :start 21 :end 40)"))
+        (s2 (asn/parseStep ":ping"))
+        (s3 (asn/parseStep "(:batch :seq true (:ping))"))
+        (s4 (asn/parseStep "(:read :x (:a \"b)\" :c 1) :file \"f\" :depth :deep extra)"))
+        (s5 (asn/parseStep "(:case :src edge :form \"(:read :file \\\"scripts/aslForms.py\\\" :symbol \\\"parse_step\\\")\" :expect fallback)"))]
+    (assert (= s1.op     "read") "s1 op read")
+    (assert (= (kw s1 "file") "scripts/agentLoop/loop.py") "s1 file")
+    (assert (= (kw s1 "start") "21") "s1 start")
+    (assert (= (kw s1 "end") "40") "s1 end")
+    (assert (listEmpty? s1.args    ) "s1 args empty")
+    (assert (= s2.op     "ping") "s2 op ping")
+    (assert (= s3.op     "batch") "s3 op batch")
+    (assert (= (kw s3 "seq") "true") "s3 seq true")
+    (assert (= (optionOr (listHead s3.args    ) "") "(:ping)") "s3 arg ping")
+    (assert (= s4.op     "read") "s4 op read")
+    (assert (= (kw s4 "x") "(:a \"b)\" :c 1)") "s4 x keeps nested paren")
+    (assert (= (kw s4 "file") "f") "s4 file")
+    (assert (= (kw s4 "depth") "true") "s4 depth flag")
+    (assert (= (kw s4 "deep") "extra") "s4 deep value")
+    (assert (= s5.op     "case") "s5 op case")
+    (assert (= (kw s5 "src") "edge") "s5 src")
+    (assert (= (kw s5 "form") "(:read :file \"scripts/aslForms.py\" :symbol \"parse_step\")") "s5 form")
+    (assert (= (kw s5 "expect") "fallback") "s5 expect")
+    true)
+
+fn parseFileList stdout: String -> (List String)
+  (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringSplit stdout "\n"))
+
+fn excludedAsnReason path: String -> String
+  (if (= path "tests/harnessBench/ledger.asn")
+    "at/asnRead does not terminate on this 668KB multi-form ledger (killed after 240s; asn/asnRead rejects it in under a second)"
+    "")
+
+fn checkOneAsnFile acc: (Pair Int64 Int64) path: String -> (Pair Int64 Int64)
+  (let [(checked (pairFirst acc))
+        (mismatches (pairSecond acc))]
+    (mt (fileReadString path)
+      ((err e)
+       (do
+         (assert false (str "read error for " path ": " e))
+         (pair (+ checked 1) (+ mismatches 1))))
+      ((ok src)
+       (let [(reason (excludedAsnReason path))]
+         (if (not (stringEmpty? reason))
+           (do
+             (println (str "asn sweep: excluding " path " from transpile parity: " reason))
+             (let [(r1 (asn/asnRead src))]
+               (assert (err? r1) (str "asn sweep: " path " excluded from parity but asn/asnRead must still reject it"))
+               (pair (+ checked 1) mismatches)))
+           (let [(r1 (asn/asnRead src))
+                 (r2 (at/asnRead src))]
+             (mt r2
+               ((ok v2)
+                (mt r1
+                  ((ok v1)
+                   (let [(s1 (asn/asnWrite v1))
+                         (s2 (at/asnWrite v2))
+                         (fileOk (= s1 s2))]
+                     (assert fileOk (str "asn sweep: " path " renders differ between asl-syntax and asl-transpile"))
+                     (pair (+ checked 1) (+ mismatches (if fileOk 0 1)))))
+                  ((err _)
+                   (do
+                     (assert false (str "asn sweep: " path " asl-syntax rejected but asl-transpile accepted"))
+                     (pair (+ checked 1) (+ mismatches 1)))))
+               ((err _)
+                (mt r1
+                  ((ok _)
+                   (do
+                     (assert false (str "asn sweep: " path " asl-syntax accepted but asl-transpile rejected"))
+                     (pair (+ checked 1) (+ mismatches 1))))
+                  ((err _)
+                   (do
+                     (assert true (str "asn sweep: " path " both parsers reject"))
+                     (pair (+ checked 1) mismatches)))))))))))))
+
+fn testTrackedAsnSweep -> Bool
+  (let [(cmdRes (processRun "git ls-files '*.asn'"))]
+    (assert (= cmdRes.exitCode     0) "git ls-files asn exited 0")
+    (let [(files (parseFileList cmdRes.stdout    ))
+          (stats (fold checkOneAsnFile (pair 0 0) files))
+          (totalChecked (pairFirst stats))
+          (mismatches (pairSecond stats))]
+      (assert (= totalChecked 1370) (str "checked exactly 1370 tracked asn files, got " (stringFromInt64 totalChecked)))
+      (assert (= mismatches 0) (str "zero mismatches vs asl-transpile on all tracked asn files, got " (stringFromInt64 mismatches)))
+      true)))
+
+fn findField fs: (List asn/AsnField) key: String -> asn/AsnValue
+  (mt (listHead (filter (fn [(f asn/AsnField)] -> Bool (= f.key     key)) fs))
+    ((some f) f.val    )
+    ((none) (asn/asnNil)))
+
+fn checkKwEntry kw: (Map String String) item: asn/AsnValue okSoFar: Bool -> Bool
+  (and okSoFar
+       (mt item
+         ((asn/asnRec fs)
+          (let [(k (optionOr (asn/asnStringValue (findField fs ":localKey")) ""))
+                (expV (optionOr (asn/asnStringValue (findField fs ":localVal")) ""))
+                (actV (optionOr (mapGet kw k) ""))]
+            (= actV expV)))
+         (_ false))))
+
+fn checkArgsEqual gotArgs: (List String) expArgs: (List asn/AsnValue) -> Bool
+  (if (!= (listLength gotArgs) (listLength expArgs))
+    false
+    (listEmpty? (filter (fn [(i Int64)] -> Bool
+                          (!= (optionOr (listGet gotArgs i) "")
+                              (optionOr (asn/asnStringValue (optionOr (listGet expArgs i) (asn/asnNil))) "")))
+                        (range 0 (listLength gotArgs)))))
+
+fn checkOneStepCase acc: Int64 rec: asn/AsnValue -> Int64
+  (mt rec
+    ((asn/asnRec fs)
+     (let [(formOpt (asn/asnStringValue (findField fs ":form")))
+           (opOpt (asn/asnStringValue (findField fs ":op")))
+           (kwVal (findField fs ":kw"))
+           (argsVal (findField fs ":args"))]
+       (mt formOpt
+         ((some form)
+          (let [(step (asn/parseStep form))
+                (expectedOp (optionOr opOpt ""))
+                (kwItems (asn/vecItems kwVal))
+                (expArgs (asn/vecItems argsVal))
+                (opMatches (= step.op     expectedOp))
+                (kwSizeMatches (= (mapSize step.kwargs    ) (listLength kwItems)))
+                (kwValsMatch (fold (fn [(okB Bool) (p asn/AsnValue)] -> Bool (checkKwEntry step.kwargs     p okB)) true kwItems))
+                (argsMatch (checkArgsEqual step.args     expArgs))]
+            (if (and opMatches (and kwSizeMatches (and kwValsMatch argsMatch)))
+              acc
+              (do
+                (println (str "Step mismatch for: " form "\n  got op: " step.op     " exp op: " expectedOp))
+                (+ acc 1)))))
+         ((none) (+ acc 1)))))
+    (_ (+ acc 1)))
+
+fn testFormsFixturesParity -> Bool
+  (let [(cmd "python3 -c \"import base64; exec(base64.b64decode('aW1wb3J0IHJlLCBvcwpjb2RlID0gb3Blbigic2NyaXB0cy9hc2xGb3Jtcy5weSIpLnJlYWQoKQptX3UgPSByZS5zZWFyY2gociJkZWYgYXNuX3VuZXNjYXBlXChzXCk6Lio/cmV0dXJuIFteXG5dKyIsIGNvZGUsIHJlLlMpCm1fcCA9IHJlLnNlYXJjaChyImRlZiBwYXJzZV9zdGVwXChzdGVwX3N0clwpOi4qP3JldHVybiBvcCwga3dhcmdzLCBhcmdzIiwgY29kZSwgcmUuUykKbnMgPSB7IlJPT1RfRElSIjogIi4iLCAiV1NfRElSIjogIi4iLCAib3MiOiBvcywgInJlIjogcmUsICJfQVNOX0VTQ0FQRVMiOiB7Im4iOiBjaHIoMTApLCAidCI6IGNocig5KSwgY2hyKDM0KTogY2hyKDM0KSwgY2hyKDkyKTogY2hyKDkyKX19CmV4ZWMobV91Lmdyb3VwKDApLCBucykKZXhlYyhtX3AuZ3JvdXAoMCksIG5zKQpjb3JwdXMgPSBvcGVuKCJhc2wvcGFja2FnZXMvYXNsLWZvcm1zL3Rlc3RzL2ZpeHR1cmVzL2Zvcm1zQ29ycHVzLmFzbiIpLnJlYWQoKQpjYXNlcyA9IHJlLmZpbmRhbGwocic6Zm9ybVxzKyIoKD86W14iXFxdfFxcLikqKSInLCBjb3JwdXMpCmRlZiBlc2Mocyk6CiAgICByZXR1cm4gcy5yZXBsYWNlKGNocig5MiksIGNocig5MikqMikucmVwbGFjZShjaHIoMzQpLCBjaHIoOTIpK2NocigzNCkpLnJlcGxhY2UoY2hyKDEwKSwgY2hyKDkyKStuIikucmVwbGFjZShjaHIoMTMpLCBjaHIoOTIpKyJyIikucmVwbGFjZShjaHIoOSksIGNocig5MikrInQiKQpyZWNzID0gW10KZm9yIGMgaW4gY2FzZXM6CiAgICBkID0gYnl0ZXMoYywgInV0Zi04IikuZGVjb2RlKCJ1bmljb2RlX2VzY2FwZSIpCiAgICBvcCwga3csIGFyZ3MgPSBuc1sicGFyc2Vfc3RlcCJdKGQpCiAgICBrd3MgPSAiICIuam9pbihmIjo6bG9jYWxLZXkgXCJ7ZXNjKGspfVwiIDpsb2NhbFZhbCBcIntlc2Modil9XCIiIGZvciBrLCB2IGluIGt3Lml0ZW1zKCkpCiAgICBhcmdzID0gIiAiLmpvaW4oZiJcIntlc2MoYSl9XCIiIGZvciBhIGluIGFyZ3MpCiAgICByZWNzLmFwcGVuZChmIig6b3AgXCJ7ZXNjKG9wKX1cIiA6Zm9ybSBcIntlc2MoZCl9XCIgOmt3IFt7a3dzfV0gOmFyZ3MgW3thcmdfc31dKSIpCm5sID0gY2hyKDEwKQpwcmludCgiWyIgKyBubCArIG5sLmpvaW4ocmVjcykgKyBubCArICJdIik=').decode())\"")
+        (res (processRun cmd))]
+    (assert (= res.exitCode     0) "python parse_step truth exited 0")
+    (let [(parsedDoc (asn/asnRead res.stdout    ))]
+      (assert (ok? parsedDoc) "python truth parsed as ASN")
+      (let [(items (asn/vecItems (resultOr parsedDoc (asn/asnNil))))
+            (n (listLength items))]
+        (assert (= n 176) (str "truth holds 176 cases, got " (stringFromInt64 n)))
+        (let [(mismatches (fold checkOneStepCase 0 items))]
+          (assert (= mismatches 0) (str "zero mismatches vs python parse_step across 176 forms, got " (stringFromInt64 mismatches)))
+          true)))))

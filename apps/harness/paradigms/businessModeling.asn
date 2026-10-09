@@ -1,0 +1,83 @@
+(:paradigmModule
+  :name "asl-harness/business-modeling"
+  :version "0.1.0"
+  :d "Real-World Business Modeling, Unit Economics, and Next-Generation Application Formats Paradigm Specification"
+  :axioms [
+    (:axiom :id "economic-sustainability" :rule "Autonomous systems must deliver positive unit economics: marginal value created must strictly exceed marginal inference and compute cost")
+    (:axiom :id "value-capture-alignment" :rule "Monetization must align with verified customer outcomes rather than artificial lock-in or seat-based billing")
+    (:axiom :id "local-slm-margin-shield" :rule "Protect margins by routing routine tasks to zero-marginal-cost local SLMs, reserving frontier cloud models for full-rigor architectural boundaries")
+    (:axiom :id "composable-app-modularity" :rule "Applications must be packaged into composable, inspectable, and sandboxed formats conforming to universal wire protocols")
+  ]
+  :businessModelCanvas [
+    (:dimension :id "value-proposition"
+      :elements [
+        "Sub-5ms AST intelligence and memory grep eliminating context thrashing"
+        "Guaranteed 7-tier verification gate eliminating software regressions"
+        "Lossless ASN format compaction delivering 72% token savings"
+        "Homoiconic pure AgentScript eliminating multi-language glue debt"
+      ])
+    (:dimension :id "customer-segments"
+      :elements [
+        "Autonomous AI coding agent framework developers"
+        "High-velocity enterprise software engineering teams"
+        "Mission-critical embedded, aerospace, and finance software systems"
+        "Individual 10x AI-first full-stack builders"
+      ])
+    (:dimension :id "revenue-streams"
+      :elements [
+        "Outcome-based verification escrow: pay only when verifiable tests and gates pass"
+        "Enterprise dual-projection monitoring and Jira multidimensional analysis bridges"
+        "Hosted persistent memory daemons and distributed agent mesh coordination"
+        "Domain-specialized cognitive paradigm modules and skills syndication"
+      ])
+    (:dimension :id "cost-structure"
+      :elements [
+        "Frontier LLM API inference tokens (minimized via local M1/M2 Metal SLM)"
+        "High-performance memory allocation and KV-cache persistence"
+        "Continuous integration and parallel gate test worker infrastructure"
+      ])
+    (:dimension :id "sustainable-moats"
+      :elements [
+        "Ecosystem network effects of pure ASL packages and skill registries"
+        "Self-feeding SFT/DPO telemetry flywheel converting verified sessions into weights"
+        "Proprietary sub-5ms resident in-memory VFS and token-optimized ASN codecs"
+      ])
+  ]
+  :appFormatTaxonomy [
+    (:format :id "agentic-micro-saas"
+      :archetype :autonomousSinglePurpose
+      :d "Laser-focused autonomous problem solvers solving one acute pain point with zero configuration"
+      :examples ["automated-adr-auditor" "token-density-compressor" "sql-schema-verifier"]
+      :delivery :cliOrGithubApp)
+    (:format :id "headless-agent-service"
+      :archetype :backgroundDaemon
+      :d "API-driven background operators monitoring event streams, webhooks, and queues"
+      :examples ["continuous-falsification-sentinel" "multi-agent-mesh-coordinator"]
+      :delivery :residentDaemonSocket)
+    (:format :id "dynamic-vdom-canvas"
+      :archetype :generativeUi
+      :d "Interactive desktop or web interfaces whose visual layouts dynamically adapt to agent state"
+      :examples ["asl-top-dashboard" "interactive-dag-visualizer" "decision-tree-editor"]
+      :delivery :localhostSseOrElectron)
+    (:format :id "outcome-based-escrow"
+      :archetype :contractProtocol
+      :d "Cryptographic and verifiable smart payment channels triggered strictly by physical gate receipts"
+      :examples ["bounty-settler" "verified-pr-release-escrow"]
+      :delivery :signedAsnReceipts)
+    (:format :id "agent-to-agent-marketplace"
+      :archetype :a2aCommerce
+      :d "Decentralized registry where agents discover, negotiate, and execute specialized peer skills"
+      :examples ["distributed-code-scout" "adversarial-security-red-team"]
+      :delivery :agentBusMesh)
+  ]
+  :unitEconomicsCalculus [
+    (:metric :id "marginal-cost-per-task"
+      :formula "C_task = (N_tokens_in * P_in) + (N_tokens_out * P_out) + (T_cpu_sec * P_compute)"
+      :target "< 0.05 USD per complex feature wave")
+    (:metric :id "gross-margin-floor"
+      :formula "GM = (Revenue - C_inference - C_infra) / Revenue"
+      :target ">= 75% gross margin")
+    (:metric :id "ltv-to-cac-ratio"
+      :formula "Ratio = Lifetime_Value / Acquisition_Cost"
+      :target ">= 3.5 via organic CLI developer adoption and zero marketing waste")
+  ])

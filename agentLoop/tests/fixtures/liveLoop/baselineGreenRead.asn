@@ -1,0 +1,6 @@
+(:script :id "liveLoopBaselineGreenRead" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:step :op \"read\" :file \"subject.txt\")")
+    (:turn :num 2 :reply "(:done)")
+  )
+)

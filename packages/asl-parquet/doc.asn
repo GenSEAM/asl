@@ -1,0 +1,3 @@
+(:doc :symbol "asl/packages/asl-parquet/src/footer.asl#" :text "Read compact-Thrift Parquet footer metadata directly from file bytes")
+(:doc :symbol "asl/packages/asl-parquet/src/writer.asl#" :text "Parquet file writer using typed arrays, compact Thrift and level-configured Zstandard compression")
+(:doc :symbol "asl/packages/asl-parquet/tests/writerTest.asl#" :text "G17 ASL Parquet writer and compact-footer round trips")

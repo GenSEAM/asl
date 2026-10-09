@@ -1,0 +1,1 @@
+(and (= (sumList (list 1 2 3 4)) 10) (= (firstOr (list) 9) 9) (= (safeDiv 7 2) (ok 3)) (= (describe (safeDiv 7 0)) "division by zero") (= (classify -5) "negative"))

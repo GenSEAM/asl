@@ -1,0 +1,7 @@
+(:package asl-regex
+ :version "0.1.0"
+ :entry "src/regex.asl"
+ :description "Pure ASL regular-expression library with RE2-style linear-time Pike VM execution (no backtracking)"
+ :aslFirst true
+ :modules ["asl-regex/regex"]
+ :dependencies [])

@@ -1,0 +1,156 @@
+(:paradigms
+  :doc "Domain paradigms: the principles work in each domain is judged by. The ordered values and rules are stated in asl/grammar/rules.asn, the attractors a launched model receives in asl/grammar/harness.asn, the scratchpad and intent pipeline in asl/grammar/cognition.asn. No code parses this file. An entry marked :target describes a mechanism nothing implements yet."
+  :cognition "asl/grammar/cognition.asn"
+  :harness "asl/grammar/harness.asn"
+  :rules "asl/grammar/rules.asn"
+
+  :teleology [
+    (:order [V0 V1 V2 V3 V4 V5 V6])
+    (:axioms [
+      (:V0 :principalAuthority :rule "irreversible or outward operations await explicit confirmation")
+      (:V1 :invariants :rule "the :invariant rules of rules.asn, each enforced by a command that exits non-zero on violation")
+      (:V2 :statedIntent :rule "every intent atom has a hunk and a gate, and every hunk serves an atom (rule triMap)")
+      (:V3 :falsifiableEvidence :rule "a gate fails before the change, passes after it and fails on revert (rule gates)")
+      (:V4 :minimalCausalSurface :rule "smallest diff inside the declared :owns")
+      (:V5 :signalOverNoise :rule "receipts are ASN; code is addressed by path and symbol or content anchor (rule output)")
+      (:V6 :velocity :rule "dominated by every value above")
+    ])
+    (:reversibilityLattice
+      :classes [
+        (:class :reversible :mechanism [:staging :git] :rule "staged edits ((:edit), (:diff), then (:flush) or (:discard)) and local commits can be undone")
+        (:class :costlyReversible :mechanism [:downMigration :snapshot] :rule "a schema migration or ABI change is undone only by running its inverse")
+        (:class :irreversible :mechanism [:confirmation] :rule "deletion of untracked data, publishing and anything outward awaits explicit confirmation (V0)")
+      ])
+    (:calibratedAbstention
+      :outcome "(:outcome :abstained :reason :evidenceDeficit :unresolvedHypotheses <n> :escalationTarget <t>)"
+      :rule "with too little evidence or contradictory constraints, an abstention with its reason carries more information than a guess")
+    (:provenanceLattice :status :target
+      :lattice [:humanVerified :gateVerified :agentAsserted :unverified]
+      :rule "target: durable memory admits only :gateVerified or better; today .asl/mem ledgers record provenance by hand")
+    (:temporalStaleness :status :target
+      :attributes [:validUntil :monotonicClock :stalenessClass]
+      :rule "target: an entry past :validUntil demotes to :unverified; today nothing reads :validUntil")
+    (:antiGoodhart (:rule "a proxy (a green test, exit code 0) never outranks the invariant it measures"))
+  ]
+
+  :universalAffordances [
+    :execution :implicitParallelBatch
+    :forms "the ops listed by ./bin/asl '(:tools)'; forms in one call run as one batch"
+  ]
+
+  :antiGoodhartDefense
+    (:axiom "Proxy metrics (syntactic green tests, exit code 0) never override the ground truth invariants they measure."
+     :pathologies [
+       (:pathology :concealment :mechanism "a failure treated as an infraction gives a motive to skip, mock or delete the test that shows it")
+       (:pathology :clamping :mechanism "silencing a crash by clamping a value (discount = 0) corrupts data instead of fixing the cause")
+       (:pathology :ritual :mechanism "long procedural checklists spend attention on repetition rather than on the cause")
+     ]
+     :mechanicalBounds "suites with zero executed assertions fail under both asl test and asl/host/out/asl-host test, and asl audit consistency rejects unbalanced delimiters, whatever a prompt claims")
+
+  :rationaleDecay :status :target
+    (:doctrine "a trade-off is valid for the context that justified it and needs re-evaluation when that context changes"
+     :triggers [
+       (:trigger :timeTtl :metric "elapsed time past a declared :validUntil date")
+       (:trigger :scaleThreshold :metric "workload or file count past the declared assumption")
+       (:trigger :milestoneAdvance :metric "a prototype becoming a relied-on component")
+       (:trigger :dependencyChange :metric "a blocked capability becoming available")
+     ]
+     :lifecycle [:fresh :aging :stale :reconciled]
+     :today "no mechanism tracks staleness; rationale dates live in .asl/mem ledgers")
+
+  :destructiveActionGuard
+    (:safeReversibleFlow "staged edits and commits on local branches inside the declared :owns"
+     :destructiveCategories [
+       (:category :untrackedDataLoss :action "deleting untracked files or clearing unstaged work")
+       (:category :remoteMutation :action "force-pushing or rewriting published history; this workspace has no remote (rule workspaceIsolation)")
+       (:category :secretExposure :action "exposing credentials or leaving a sandbox without authorization")
+       (:category :silentCorruption :action "committing a diff that turns a passing gate red")
+     ])
+
+  :substrateHooks [
+    (:dyck1Balance :today "(:check :file) and asl audit consistency reject unbalanced delimiters")
+    (:staging :today "(:edit) and (:write) stage in a session buffer; (:flush) writes and (:discard) drops; (:txn :owns ...) limits writes to the :owns prefixes, its errors including ERR_OWNS and ERR_TXN_ABORTED")
+    (:nonVacuousPass :today "a suite with zero executed assertions fails asl test and asl/host/out/asl-host test")
+    (:circuitBreaker :status :target :rule "target: the engine yields a :witness record on the third identical failure signature; today rule limitCycle is an orientation the agent follows")
+    (:mutationGradedAssertion :status :target :rule "an assertion counts only if it kills at least one production mutant; today scripts/audit/seededDefects.sh seeds fixed defects for the audits")
+  ]
+
+  :domains [
+    (:paradigm :id :development :category :engineering
+      :principles [
+        (:principle :aslIr (:flow [:liftAst :aslActionDag :verifyInIr :lowerTarget]))
+        (:principle :staging (:flow [:editStaged :diffStaged :flushAtomic :discardOnFail]))
+        (:principle :delimiterBalance (:rule "balanced (), [] and {} in every tracked ASL and ASN file (rule syntax)"))
+        (:principle :zeroEmoji (:rule "no emoji in tracked .asn and .asl files; asl audit consistency reports ERR_EMOJI"))
+        (:principle :intentLink (:rule "a diff with no intent atom behind it is speculative"))
+      ])
+
+    (:paradigm :id :architecture :category :systems
+      :principles [
+        (:principle :minimalCausalSurface (:rule "smallest diff, one-way dependency DAG"))
+        (:principle :epistemicGrounding (:rule "every figure carries method, scope and date (rule numbers)"))
+        (:principle :hostIndependence (:rule "one declared host interface, no hidden dependencies"))
+        (:principle :circuitBreaker (:rule "the same failure signature is capped at three (rule limitCycle)"))
+      ])
+
+    (:paradigm :id :design :category :visual
+      :principles [
+        (:principle :visualSnr (:rule "high signal-to-noise ratio, no decorative complexity"))
+        (:principle :typographicHierarchy (:rule "a spacing scale, a modular type scale, no layout shift"))
+        (:principle :colorTokens (:rule "semantic color tokens instead of raw hex literals in templates"))
+      ])
+
+    (:paradigm :id :audit :category :verification
+      :principles [
+        (:principle :dualPolarity (:rule "a seeded defect fails the gate and clean code passes it"))
+        (:principle :triMapProtocol (:rule "S-Map (intent atoms), F-Map (falsifiers), B-Map (diff hunks)"))
+        (:principle :cleanContext (:rule "a reviewer other than the writer runs the gates (rule grading)"))
+        (:principle :anchors (:rule "cite paths and symbol or content anchors, which survive edits that shift lines"))
+      ])
+
+    (:paradigm :id :research :category :empiricism
+      :principles [
+        (:principle :groundedMeasurement (:rule "every number carries source, scope and date"))
+        (:principle :tokenProfiling (:rule "token costs are measured with a named tokenizer, as .asl/mem/principles.asn does with o200k_base and cl100k_base"))
+        (:principle :reconstructibility (:rule "what a command reconstructs is not stored in durable memory (rule ledger)"))
+        (:principle :falsificationPrior (:rule "a hypothesis carries the test that could refute it"))
+      ])
+
+    (:paradigm :id :compilerArchetype :category :compilation
+      :principles [
+        (:principle :incrementalIdempotence (:rule "an incremental build equals a clean build byte for byte"))
+        (:principle :roundtripFixpoint (:rule "parse(unparse(ast)) equals ast"))
+        (:principle :grammarDeterminism (:rule "no grammar ambiguity"))
+      ])
+
+    (:paradigm :id :storageArchetype :category :persistence
+      :principles [
+        (:principle :walCrashConsistency (:rule "fsync before a commit is acknowledged, no torn writes"))
+        (:principle :reversibleMigrations (:rule "up, down, up is the identity"))
+      ])
+
+    (:paradigm :id :harnessArchetype :category :verification
+      :principles [
+        (:principle :ddminMinimality (:rule "input and diff minimization ends at a 1-minimal counterexample"))
+        (:principle :threePointCausality (:rule "discard fails, apply passes, revert fails for a behavioral change; clean, refactored and mutant give pass, pass, fail for a refactor"))
+      ])
+
+    (:paradigm :id :swarmArchetype :category :collaboration
+      :principles [
+        (:principle :deltaCommutativity (:rule "AST deltas that do not commute are not merged"))
+        (:principle :onePartitionOneWriter (:rule "one writer per partition (rule txn)"))
+        (:principle :replayProtection (:rule "monotonic nonces and envelope lifetimes reject replays"))
+      ])
+  ]
+
+  :agentTopology [
+    (:thirdPartySurface
+      :name "asl-toolbelt"
+      :skill "asl/skills/asl-toolbelt/SKILL.md"
+      :architecture "pure-ASN forms on the agent plane, independent forms batched in one call")
+    (:nativeEmbeddedAgent
+      :name "addie"
+      :today "asl/bin/addie is a shell wrapper that sets ASL_CLIENT_CHANNEL=addie and runs bin/asl"
+      :target "an agent embedded in the ASL runtime with no subshell forks, reusing asl/packages/asl-agent/src/tui.asl and the staging buffers of asl/packages/asl-mem/src/vfs.asl")
+  ]
+)

@@ -1,0 +1,13 @@
+(module aslVdom/tests/diagramTest :x [runTests] :i [(diagram :a diag)])
+
+fn testDiagramMermaidTranspile -> Bool
+  (let [(n1 (diag/makeDiagramNode "Harness" "Antigravity Harness" "rect")) (n2 (diag/makeDiagramNode "Rewrite" "Subagent Rewrite System" "rect")) (n3 (diag/makeDiagramNode "Queue" "Task Queue" "rounded")) (sg (diag/makeDiagramSubgraph "Host" "Host Environment" (list n1 n2 n3))) (e1 (diag/makeDiagramEdge "Harness" "Rewrite" "")) (e2 (diag/makeDiagramEdge "Rewrite" "Queue" "enqueues")) (d (diag/makeDiagram "TD" (list sg) (list e1 e2))) (m (diag/diagramToMermaid d))] (assert (stringContains? m "flowchart TD") "Mermaid output must specify flowchart TD") (assert (stringContains? m "subgraph Host[\"Host Environment\"]") "Mermaid output must contain subgraph") (assert (stringContains? m "Harness[\"Antigravity Harness\"]") "Node 1 must be rendered") (assert (stringContains? m "Queue(\"Task Queue\")") "Rounded node must use parens") (assert (stringContains? m "Harness --> Rewrite") "Edge 1 without label") (assert (stringContains? m "Rewrite -->|\"enqueues\"| Queue") "Edge 2 with label") true)
+
+fn testMermaidToHtml -> Bool
+  (let [(code "flowchart TD\n  A --> B") (html (diag/mermaidToHtml code "Test Architecture"))] (assert (stringContains? html "<!DOCTYPE html>") "HTML must have doctype") (assert (stringContains? html "<title>Test Architecture</title>") "HTML must set title") (assert (stringContains? html "cdn.jsdelivr.net/npm/mermaid@10") "HTML must load mermaid from CDN") (assert (stringContains? html "theme: 'dark'") "HTML must initialize dark theme") (assert (stringContains? html "class=\"mermaid\"") "HTML must include mermaid container") (assert (stringContains? html "A --> B") "HTML must embed raw diagram code") (assert (stringContains? html "window.zoomIn") "HTML must provide zoom controls") (assert (stringContains? html "window.exportSvg") "HTML must provide SVG export") true)
+
+fn testDiagramToHtmlEndToEnd -> Bool
+  (let [(n1 (diag/makeDiagramNode "A" "Supervisor" "rect")) (n2 (diag/makeDiagramNode "B" "Worker" "circle")) (sg (diag/makeDiagramSubgraph "Group" "Core Cluster" (list n1 n2))) (e (diag/makeDiagramEdge "A" "B" "dispatches")) (d (diag/makeDiagram "LR" (list sg) (list e))) (html (diag/diagramToHtml d "End to End"))] (assert (stringContains? html "flowchart LR") "End to end must specify LR") (assert (stringContains? html "B((\"Worker\"))") "Circle node rendered properly") (assert (stringContains? html "A -->|\"dispatches\"| B") "Dispatches edge rendered") true)
+
+fn runTests -> Bool
+  (and (testDiagramMermaidTranspile) (testMermaidToHtml) (testDiagramToHtmlEndToEnd))

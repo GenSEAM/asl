@@ -1,0 +1,12 @@
+; A deep recursive tree. Nesting is the only structure it needs and there is not
+; one escape character in it — the case a JSON document pays for in quotes and
+; backslashes at every level.
+;
+; canonical: (Element :tag :html :kids [(Element :tag :head :kids [(Element :tag :title :text "Dashboard")]) (Element :tag :body :class "dark-mode" :kids [(Element :tag :h1 :text "Telemetry") (Element :tag :p :text "Status: Online")])])
+
+(Element :tag :html :kids
+  [(Element :tag :head :kids
+     [(Element :tag :title :text "Dashboard")])
+   (Element :tag :body :class "dark-mode" :kids
+     [(Element :tag :h1 :text "Telemetry")
+      (Element :tag :p  :text "Status: Online")])])

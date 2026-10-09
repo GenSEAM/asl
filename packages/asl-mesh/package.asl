@@ -1,0 +1,22 @@
+(:package "asl-mesh"
+  :version "0.2.0"
+  :public true
+  :entry "src/main.asl"
+  :doc "Unified Autonomous Agent Mesh Orchestrator, Raft Distributed Consensus, Vector Clocks, Merkle OCC, and Parallel Partition Scheduler"
+  :modules (
+    "asl-mesh"
+    "asl-mesh/scheduler"
+    "asl-mesh/scanner"
+    "asl-mesh/synthesis"
+    "asl-mesh/emitter"
+    "asl-mesh/coord"
+    "asl-mesh/occ"
+    "asl-mesh/raft"
+    "asl-mesh/vectorClock"
+    "asl-mesh/wal"
+    "asl-mesh/triNode"
+  )
+  :dependencies (
+    (:dep "asl-hypergraph" :sourceType "local")
+    (:dep "asl-core" :sourceType "local")
+  ))

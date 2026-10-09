@@ -1,0 +1,5 @@
+; expect: ref-dangling
+; An index outside the pool is an error and never nil. Substituting nil turns a
+; transport fault into a data fault and moves the failure somewhere it can no
+; longer be traced to the payload that caused it.
+(:pool ["a" "b"] :data [(:ref 0) (:ref 7)])

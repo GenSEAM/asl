@@ -1,0 +1,4 @@
+; expect: map-duplicate-key
+; Last-wins would make two writers that disagree about ordering produce two
+; different maps from the same intent, so a repeated key is an error instead.
+{:theme "dark" :retries 3 :theme "light"}

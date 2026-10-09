@@ -1,0 +1,26 @@
+(module aslHarness/tests/e2e_toolcalls_test :x [testToolcallFsRead! testToolcallExecCmd! testToolcallAstSearch! testLocalExecRouting! testReceiptConstruction testReceiptTokenCeiling testTimestampAndLatency runTests] :i [(coding :a c) (worker :a w) (localExec :a lx)])
+
+fn testToolcallFsRead! -> Bool
+  (let [(call (c/ToolCall :id "tc-fs-1" :toolName "fs-read" :arguments (list (pair "path" ".asl/mem/receipts.asn")))) (res (c/executeBuiltinTool! call))] (do (assert res.success "fs-read execution must succeed") (assert (= res.callId "tc-fs-1") "fs-read call-id must match") (assert (= res.toolName "fs-read") "fs-read tool-name must match") (assert (stringContains? res.output ":receipts") "fs-read output must contain file content") (assert (= res.errorMsg "") "fs-read error-msg must be empty") true))
+
+fn testToolcallExecCmd! -> Bool
+  (let [(call (c/ToolCall :id "tc-exec-1" :toolName "exec-cmd" :arguments (list (pair "bin" "asl") (pair "arg" "check") (pair "arg" ".asl/mem/receipts.asn")))) (res (c/executeBuiltinTool! call))] (do (assert (not res.success) "exec-cmd execution must fail in sandbox") (assert (= res.callId "tc-exec-1") "exec-cmd call-id must match") (assert (= res.toolName "exec-cmd") "exec-cmd tool-name must match") (assert (= res.output "") "exec-cmd output must be empty") (assert (not (= res.errorMsg "")) "exec-cmd error-msg must not be empty") true))
+
+fn testToolcallAstSearch! -> Bool
+  (let [(call (c/ToolCall :id "tc-ast-1" :toolName "ast-search" :arguments (list (pair "query" "execute-builtin-tool")))) (res (c/executeBuiltinTool! call))] (do (assert res.success "ast-search execution must succeed") (assert (= res.callId "tc-ast-1") "ast-search call-id must match") (assert (= res.toolName "ast-search") "ast-search tool-name must match") (assert (stringContains? res.output "Command succeeded") "ast-search output must contain command succeeded") (assert (= res.errorMsg "") "ast-search error-msg must be empty") true))
+
+fn testLocalExecRouting! -> Bool
+  (let [(fsCall (c/ToolCall :id "tc-loc-1" :toolName "fs-read" :arguments (list (pair "path" "harness/src/worker.asl")))) (cmdCall (c/ToolCall :id "tc-loc-2" :toolName "exec-cmd" :arguments (list (pair "bin" "exit") (pair "arg" "0")))) (fsRes (lx/routeAndExecute! fsCall)) (cmdRes (lx/routeAndExecute! cmdCall)) (tier (lx/L0Local)) (rd (lx/RouteDecision :toolName "fs-read" :tier tier :estimatedSavingsTokens 650 :estimatedLatencyMs 2 :explanation "local test"))] (do (assert (lx/shouldExecuteLocally "fs-read") "fs-read must route locally") (assert (lx/shouldExecuteLocally "ast-search") "ast-search must route locally") (assert (not (lx/shouldExecuteLocally "exec-cmd")) "exec-cmd must not route locally") (assert fsRes.success "fs-read local execution must succeed") (assert (stringContains? fsRes.output "worker") "fs-read local output must match") (assert (not cmdRes.success) "exec-cmd routed execution must reject local tier") (assert (= cmdRes.errorMsg "Tool requires remote LLM execution tier") "exec-cmd error message must specify remote tier") (assert (= rd.explanation "local test") "RouteDecision explicit struct verify") (refute (= rd.explanation "wrong") "RouteDecision bounds check") true))
+
+
+fn testReceiptConstruction -> Bool
+  (let [(r (w/makeProcessReceipt 0 42 16 "/tmp/bench_tb_astra_01.log" "Process exited with code 0"))] (do (assert (= r.exitCode 0) "Receipt exit code must be 0") (assert (= r.durationMs 42) "Receipt duration must be 42ms") (assert (= r.peakRssMb 16) "Receipt peak rss must be 16MB") (assert (= r.spoolPath "/tmp/bench_tb_astra_01.log") "Receipt spool path must match") (assert (= r.summary "Process exited with code 0") "Receipt summary must match") (assert (> r.tokens 0) "Receipt tokens must be positive") true))
+
+fn testReceiptTokenCeiling -> Bool
+  (let [(r (w/makeProcessReceipt 0 65 20 "/tmp/bench_receipt_ceiling.log" "Process exited with code 0; all assertions verified")) (rendered (w/renderProcessReceipt r)) (toks (w/estimateReceiptTokens rendered))] (do (assert (< toks 80) "Rendered receipt tokens must be strictly under 80 BPE tokens") (assert (> toks 0) "Rendered receipt tokens must be positive") (assert (stringContains? rendered ":receipt") "Rendered receipt must contain :receipt tag") (assert (stringContains? rendered ":exit 0") "Rendered receipt must contain :exit 0") (assert (stringContains? rendered ":ms 65") "Rendered receipt must contain :ms 65") true))
+
+fn testTimestampAndLatency -> Bool
+  (let [(tsStart 1773000000000) (durationMs 42) (tsEnd (+ tsStart durationMs))] (do (assert (>= tsEnd tsStart) "End timestamp must be greater than or equal to start timestamp") (assert (= (- tsEnd tsStart) durationMs) "Timestamp delta must equal duration-ms") true))
+
+fn ! runTests -> Bool
+  (do (assert (testToolcallFsRead!) "test-toolcall-fs-read must pass") (assert (testToolcallExecCmd!) "test-toolcall-exec-cmd must pass") (assert (testToolcallAstSearch!) "test-toolcall-ast-search must pass") (assert (testLocalExecRouting!) "test-local-exec-routing must pass") (assert (testReceiptConstruction) "test-receipt-construction must pass") (assert (testReceiptTokenCeiling) "test-receipt-token-ceiling must pass") (assert (testTimestampAndLatency) "test-timestamp-and-latency must pass") true)

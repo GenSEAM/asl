@@ -1,0 +1,20 @@
+(:rpcRegistry
+  :version "2.0.0"
+  :rejectionCode ":ERR_UNIMPLEMENTED"
+  :rejectionPolicy "An operation the registry does not list is answered (:<op> :status :rejected :error ERR_UNIMPLEMENTED :message \"Operation not implemented\" :hint \"(:tools) lists the implemented forms and their params\")."
+  :source "The operations are those printed by asl '(:tools)', with parameters from asl '(:help :op <name>)'. This file does not copy that list: a command reconstructs it, so a copy would only drift."
+  :call "asl '<form> <form> ...' or asl rpc '<form> ...'; forms in one call run as one batch, e.g. asl '(:read :file \"asl/grammar/wire.asn\" :start 1 :end 2) (:query :text \"validateWireFrame\" :limit 2)'"
+  :legacyIds "harness/src/toolcall.asl (rpcOperationForCommand) still names operations by the ids of the earlier registry; each maps to a current op or to none"
+  :legacy [
+    (:legacyId "asl-intel-read" :op "(:read :file f :start s :end e) or (:read :file f :symbol name)")
+    (:legacyId "asl-intel-ast" :op "(:intel :op outline :file f) for an outline, (:read :file f :symbol name) for one definition")
+    (:legacyId "asl-intel-ls" :op "(:tree :path p) counts files and directories and lists entries")
+    (:legacyId "asl-intel-impact" :op "(:intel :op impact :symbol name)")
+    (:legacyId "asl-engine" :op "(:query :text t) searches definitions and text; (:engine) manages the resident runtime and does not search")
+    (:legacyId "asl-mem-edit" :op "(:edit :file f :old a :new b), then (:diff) and (:flush) or (:discard)")
+    (:legacyId "asl-mem-write" :op "(:write :file f :content c), then (:flush)")
+    (:legacyId "asl-mem-patch" :op :none :note "no AST patch op; (:edit) stages string replacements")
+    (:legacyId "asl-exec" :op :none :note "no op runs an arbitrary shell command")
+    (:legacyId "asl-git" :op :none :note "no git op")
+  ]
+)

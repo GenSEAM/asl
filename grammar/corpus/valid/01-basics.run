@@ -1,0 +1,1 @@
+(and (= (manhattan (origin) (scale (Point :x 1 :y 2) 3)) 9) (= (.-name (Config :name "a" :retries 3)) "a") (= (.-retries (Config :name "a" :retries 3)) 3))

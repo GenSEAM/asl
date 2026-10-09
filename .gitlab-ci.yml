@@ -1,0 +1,16 @@
+# GitLab Pages CI/CD Configuration for ASL (AgentScript Language)
+image: node:20-alpine
+
+pages:
+  stage: deploy
+  script:
+    - npm ci
+    - npm --prefix web ci
+    - npm run build:web
+    - rm -rf public
+    - cp -r web/dist public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

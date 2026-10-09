@@ -1,0 +1,5 @@
+#!/bin/sh
+eddie_wrapper="eddie"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export ASL_CLIENT_CHANNEL="eddie"
+exec "$ROOT/bin/asl" "$@"

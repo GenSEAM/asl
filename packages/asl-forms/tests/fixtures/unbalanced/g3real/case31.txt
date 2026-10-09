@@ -1,0 +1,289 @@
+(module asl-syntax/registry
+                                                                                                                                                                                                                                                                                                                              
+  :x [languageOf
+      languageByExtension
+      languageByShebang
+      languageByMarkdownInfo
+      languageByHtmlType
+      languageByMime
+      extensionOf]
+  :i [(asl-syntax/core/source :a src)])
+
+fn trimLeadingDots s: String -> String
+  (if (stringStartsWith? s ".")
+    (trimLeadingDots (optionOr (stringSlice s 1 (stringLength s)) ""))
+    s)
+
+fn extensionOf path: String -> String
+  (let [(base (optionOr (listLast (stringSplit path "/")) ""))
+        (stem (trimLeadingDots base))
+        (parts (stringSplit stem "."))]
+    (if (> (listLength parts) 1)
+      (str "." (stringToLower (optionOr (listLast parts) "")))
+      ""))
+
+fn extLangOf ext: String -> String
+  (cond
+    ((= ext ".asl") "asl")
+    ((= ext ".asn") "asn")
+    ((or (= ext ".ts") (= ext ".tsx") (= ext ".mts") (= ext ".cts")) "typescript")
+    ((or (= ext ".js") (= ext ".jsx") (= ext ".mjs") (= ext ".cjs")) "javascript")
+    ((or (= ext ".py") (= ext ".pyw")) "python")
+    ((= ext ".go") "go")
+    ((= ext ".rs") "rust")
+    ((or (= ext ".c") (= ext ".h")) "c")
+    ((= ext ".java") "java")
+    ((or (= ext ".sh") (= ext ".bash") (= ext ".zsh")) "shell")
+    ((= ext ".md") "markdown")
+    ((= ext ".json") "json")
+    ((or (= ext ".yaml") (= ext ".yml")) "yaml")
+    ((= ext ".toml") "toml")
+    ((= ext ".swift") "swift")
+    ((= ext ".rb") "ruby")
+    ((= ext ".kt") "kotlin")
+    ((or (= ext ".cpp") (= ext ".cc") (= ext ".hpp")) "cpp")
+    ((or (= ext ".m") (= ext ".mm")) "objc")
+    ((= ext ".zig") "zig")
+    ((= ext ".lua") "lua")
+    ((= ext ".pl") "perl")
+    ((= ext ".php") "php")
+    ((= ext ".ps1") "powershell")
+    ((or (= ext ".html") (= ext ".htm")) "html")
+    ((= ext ".css") "css")
+    ((or (= ext ".xml") (= ext ".svg")) "xml")
+    ((= ext ".sql") "sql")
+    ((= ext ".wasm") "wasm")
+    (else ""))
+
+fn languageByExtension ext: String -> String
+  (let [(n (stringToLower (stringTrim ext)))]
+    (if (stringEmpty? n)
+      ""
+      (extLangOf (if (stringStartsWith? n ".") n (str "." n)))))
+
+fn digitByte? c: Int64 -> Bool
+  (and (>= c 48) (<= c 57))
+
+fn versionRestOk bs: Bytes n: Int64 i: Int64 -> Bool
+  (if (>= i n)
+    true
+    (let [(c (bytesGet bs i))]
+      (if (or (digitByte? c) (= c 45) (= c 46) (= c 95))
+        (versionRestOk bs n (+ i 1))
+        false)))
+
+fn versionTailGo bs: Bytes n: Int64 i: Int64 -> Bool
+  (if (>= i n)
+    false
+    (let [(c (bytesGet bs i))]
+      (cond
+        ((digitByte? c) (versionRestOk bs n (+ i 1)))
+        ((= c 118)
+          (if (>= (+ i 1) n)
+            false
+            (if (digitByte? (bytesGet bs (+ i 1)))
+              (versionRestOk bs n (+ i 2))
+              false)))
+        (else false))))
+
+fn versionTail? rest: String -> Bool
+  (let [(bs (stringToBytes rest))
+        (n (bytesLength bs))]
+    (if (= n 0)
+      false
+      (let [(c0 (bytesGet bs 0))]
+        (versionTailGo bs n (if (or (= c0 45) (= c0 46) (= c0 95)) 1 0)))))
+
+fn shebangMatches? low: String base: String -> Bool
+  (if (not (stringStartsWith? low base))
+    false
+    (let [(rest (optionOr (stringSlice low (stringLength base) (stringLength low)) ""))]
+      (if (stringEmpty? rest)
+        true
+        (versionTail? rest))))
+
+fn matchShebang low: String -> String
+  (cond
+    ((shebangMatches? low "python") "python")
+    ((shebangMatches? low "perl") "perl")
+    ((shebangMatches? low "ruby") "ruby")
+    ((shebangMatches? low "bash") "shell")
+    ((shebangMatches? low "dash") "shell")
+    ((shebangMatches? low "zsh") "shell")
+    ((shebangMatches? low "ksh") "shell")
+    ((shebangMatches? low "node") "javascript")
+    ((shebangMatches? low "sh") "shell")
+    (else ""))
+
+fn baseName w: String -> String
+  (optionOr (listLast (stringSplit w "/")) "")
+
+fn keepWords s: String -> (List String)
+  (fold (fn [(acc (List String)) (w String)] -> (List String)
+          (if (stringEmpty? w) acc (listAppend acc w)))
+        (list)
+        (stringSplit s " "))
+
+fn firstNonFlag words: (List String) idx: Int64 -> String
+  (if (>= idx (listLength words))
+    ""
+    (let [(w (optionOr (listGet words idx) ""))]
+      (if (stringStartsWith? w "-")
+        (firstNonFlag words (+ idx 1))
+        w)))
+
+fn alnumGo bs: Bytes n: Int64 i: Int64 acc: String -> String
+  (if (>= i n)
+    acc
+    (let [(c (bytesGet bs i))]
+      (alnumGo bs n (+ i 1)
+        (if (or (digitByte? c) (and (>= c 65) (<= c 90)) (and (>= c 97) (<= c 122)))
+          (strConcat acc (stringFromCharCode c))
+          acc)))))
+
+fn alnumOnly name: String -> String
+  (let [(bs (stringToBytes name))]
+    (alnumGo bs (bytesLength bs) 0 ""))
+
+fn shebangLangOf head: String -> String
+  (let [(words (keepWords head))]
+    (if (listEmpty? words)
+      "shebang.empty"
+      (let [(w0 (optionOr (listGet words 0) ""))]
+        (let [(word (if (= (baseName w0) "env")
+                      (firstNonFlag words 1)
+                      w0))]
+          (if (stringEmpty? word)
+            "shebang.empty"
+            (let [(name (baseName word))
+                  (m (matchShebang (stringToLower name)))]
+              (if (= m "")
+                (let [(a (alnumOnly name))]
+                  (str "shebang." (if (stringEmpty? a) "empty" a)))
+                m)))))))
+
+fn lineEnd b: Bytes limit: Int64 i: Int64 -> Int64
+  (if (>= i limit)
+    limit
+    (if (= (bytesGet b i) 10)
+      i
+      (lineEnd b limit (+ i 1))))
+
+fn buildText b: Bytes i: Int64 e: Int64 acc: String -> String
+  (if (>= i e)
+    acc
+    (buildText b (+ i 1) e (strConcat acc (stringFromCharCode (bytesGet b i))))))
+
+fn shebangHead b: Bytes -> String
+  (let [(n (bytesLength b))]
+    (if (< n 2)
+      ""
+      (if (not (and (= (bytesGet b 0) 35) (= (bytesGet b 1) 33)))
+        ""
+        (let [(limit (if (< n 256) n 256))]
+          (buildText b 2 (lineEnd b limit 2) "")))))
+
+fn languageByShebang line: String -> String
+  (if (not (stringStartsWith? line "#!"))
+    ""
+    (let [(head (optionOr (stringSlice line 2 (stringLength line)) ""))]
+      (let [(nl (stringIndexOf head "
+"))]
+        (shebangLangOf (if (>= nl 0) (optionOr (stringSlice head 0 nl) "") head)))))
+
+fn languageOf path: String -> String
+  (if (not (fileExists? path))
+    "text"
+    (let [(b (fileRead path))
+          (kind (src/binaryKindBytes b))]
+      (if (!= kind "")
+        kind
+        (let [(head (shebangHead b))]
+          (if (!= head "")
+            (shebangLangOf head)
+            (let [(l (extLangOf (extensionOf path)))]
+              (if (= l "") "text" l)))))))
+
+fn mdMap word: String -> String
+  (cond
+    ((or (= word "python") (= word "py") (= word "py3") (= word "python3") (= word "ipython")) "python")
+    ((or (= word "javascript") (= word "js") (= word "jsx") (= word "node")) "javascript")
+    ((or (= word "typescript") (= word "ts") (= word "tsx")) "typescript")
+    ((or (= word "sh") (= word "bash") (= word "zsh") (= word "shell")) "shell")
+    ((= word "c") "c")
+    ((or (= word "cpp") (= word "c++")) "cpp")
+    ((= word "objc") "objc")
+    ((= word "java") "java")
+    ((or (= word "kotlin") (= word "kt")) "kotlin")
+    ((= word "swift") "swift")
+    ((or (= word "ruby") (= word "rb")) "ruby")
+    ((or (= word "go") (= word "golang")) "go")
+    ((or (= word "rust") (= word "rs")) "rust")
+    ((= word "zig") "zig")
+    ((= word "lua") "lua")
+    ((= word "perl") "perl")
+    ((= word "php") "php")
+    ((or (= word "powershell") (= word "ps1") (= word "pwsh")) "powershell")
+    ((= word "sql") "sql")
+    ((= word "json") "json")
+    ((or (= word "yaml") (= word "yml")) "yaml")
+    ((= word "toml") "toml")
+    ((or (= word "markdown") (= word "md")) "markdown")
+    ((= word "html") "html")
+    ((= word "css") "css")
+    ((= word "xml") "xml")
+    ((= word "wasm") "wasm")
+    ((= word "asl") "asl")
+    ((= word "asn") "asn")
+    ((or (= word "text") (= word "txt")) "text")
+    (else ""))
+
+fn languageByMarkdownInfo info: String -> String
+  (let [(words (keepWords (stringTrim info)))]
+    (if (listEmpty? words)
+      ""
+      (mdMap (stringToLower (optionOr (listGet words 0) "")))))
+
+fn languageByHtmlType t: String -> String
+  (let [(n (stringToLower (stringTrim t)))]
+    (cond
+      ((or (= n "text/javascript") (= n "application/javascript") (= n "application/x-javascript") (= n "module") (= n "text/jsx")) "javascript")
+      ((or (= n "text/typescript") (= n "application/typescript")) "typescript")
+      ((= n "text/css") "css")
+      ((or (= n "application/json") (= n "importmap")) "json")
+      ((= n "text/html") "html")
+      ((= n "application/wasm") "wasm")
+      (else "")))
+
+fn languageByMime m: String -> String
+  (let [(n (stringToLower (stringTrim m)))]
+    (cond
+      ((or (= n "application/javascript") (= n "text/javascript") (= n "application/ecmascript")) "javascript")
+      ((or (= n "application/typescript") (= n "text/typescript")) "typescript")
+      ((or (= n "text/x-python") (= n "application/x-python-code") (= n "text/python")) "python")
+      ((or (= n "text/x-shellscript") (= n "application/x-sh") (= n "application/x-shellscript")) "shell")
+      ((or (= n "text/x-c") (= n "text/x-csrc")) "c")
+      ((= n "text/x-c++src") "cpp")
+      ((or (= n "text/x-rust") (= n "application/rust")) "rust")
+      ((= n "text/x-go") "go")
+      ((= n "text/x-java") "java")
+      ((= n "text/x-kotlin") "kotlin")
+      ((= n "text/x-swift") "swift")
+      ((= n "text/x-ruby") "ruby")
+      ((= n "text/x-zig") "zig")
+      ((= n "text/x-lua") "lua")
+      ((= n "text/x-perl") "perl")
+      ((= n "text/x-php") "php")
+      ((or (= n "text/x-powershell") (= n "application/x-powershell")) "powershell")
+      ((= n "text/x-sql") "sql")
+      ((= n "application/json") "json")
+      ((or (= n "text/yaml") (= n "application/yaml")) "yaml")
+      ((= n "application/toml") "toml")
+      ((or (= n "text/markdown") (= n "text/x-markdown")) "markdown")
+      ((= n "text/html") "html")
+      ((= n "text/css") "css")
+      ((or (= n "application/xml") (= n "text/xml")) "xml")
+      ((= n "application/wasm") "wasm")
+      ((= n "text/x-asl") "asl")
+      ((= n "text/x-asn") "asn")
+      (else "")))

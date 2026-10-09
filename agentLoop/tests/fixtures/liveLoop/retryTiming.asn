@@ -1,0 +1,6 @@
+(:script :id "retryTiming" :mode :implement :attemptLog "enabled"
+  :turns (
+    (:turn :num 1 :error "ERR_VENDOR")
+    (:turn :num 2 :reply "(:done)")
+  )
+)

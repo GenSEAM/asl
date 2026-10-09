@@ -1,0 +1,10 @@
+dist/
+node_modules/
+build/
+.cache/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+.tokensave/
+asl.json

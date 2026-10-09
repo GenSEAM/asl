@@ -1,0 +1,28 @@
+(module asl-cli/tests/migrateDryRunTest :x [runTests RunTests testBatchAuditSummarySchema testDryRunReportSchema testValidateDryRunBatchSingle testValidateDryRunBatchErrorHandling testDiscoverTargetSourceFiles testZeroDiskDriftDuringBatchValidation testAuditMonorepoEquivalenceSubset] :i [(migrate :a mig) (reader :a rd)])
+
+fn testBatchAuditSummarySchema -> Bool
+  (let [(summary (mig/BatchAuditSummary :scannedCount 10 :passedCount 10 :failedCount 0 :errors (list)))] (assert (= summary.scannedCount 10) "scannedCount matches initialized value") (assert (= summary.passedCount 10) "passedCount matches initialized value") (assert (= summary.failedCount 0) "failedCount matches zero failure baseline") (assert (listEmpty? summary.errors) "errors list is empty on zero failure") (refute (!= summary.scannedCount 10) "refutes mismatched scannedCount") (refute (!= summary.passedCount 10) "refutes mismatched passedCount") (refute (!= summary.failedCount 0) "refutes non-zero failedCount") (refute (not (listEmpty? summary.errors)) "refutes non-empty error list") true)
+
+fn testDryRunReportSchema -> Bool
+  (let [(report (mig/DryRunReport :scannedCount 5 :passedCount 5 :failedCount 0 :errors (list)))] (assert (= report.scannedCount 5) "report scannedCount matches initialized value") (assert (= report.passedCount 5) "report passedCount matches initialized value") (assert (= report.failedCount 0) "report failedCount matches zero failure baseline") (assert (listEmpty? report.errors) "report errors list is empty on zero failure") (refute (!= report.scannedCount 5) "refutes report mismatched scannedCount") (refute (!= report.passedCount 5) "refutes report mismatched passedCount") (refute (!= report.failedCount 0) "refutes report non-zero failedCount") (refute (not (listEmpty? report.errors)) "refutes report non-empty error list") true)
+
+fn ! testValidateDryRunBatchSingle -> Bool
+  (let [(summary (mig/validateDryRunBatch (list "asl/packages/asl-text/src/string.asl")))] (assert (= summary.scannedCount 1) "single file scan records 1 scanned module") (assert (= summary.passedCount 1) "string.asl validates cleanly in memory") (assert (= summary.failedCount 0) "string.asl records 0 failures") (assert (listEmpty? summary.errors) "errors list remains empty on valid module") (refute (!= summary.scannedCount 1) "refutes incorrect scannedCount") (refute (= summary.passedCount 0) "refutes zero passed files on valid module") (refute (> summary.failedCount 0) "refutes failures on valid module") (refute (not (listEmpty? summary.errors)) "refutes unexpected errors on valid module") true)
+
+fn ! testValidateDryRunBatchErrorHandling -> Bool
+  (let [(summary (mig/validateDryRunBatch (list "nonexistent_source_xyz.asl")))] (assert (= summary.scannedCount 1) "nonexistent file is counted in scannedCount") (assert (= summary.passedCount 0) "nonexistent file yields 0 passed files") (assert (= summary.failedCount 1) "nonexistent file records 1 failed file") (assert (not (listEmpty? summary.errors)) "errors list records failure diagnostic") (refute (!= summary.scannedCount 1) "refutes inaccurate scannedCount on missing file") (refute (> summary.passedCount 0) "refutes positive passedCount on missing file") (refute (= summary.failedCount 0) "refutes zero failedCount on missing file") (refute (listEmpty? summary.errors) "refutes empty errors list on missing file") true)
+
+fn ! testDiscoverTargetSourceFiles -> Bool
+  (let [(files (mig/discoverTargetSourceFiles (list "asl/packages/asl-text")))] (assert (> (listLength files) 0) "discovered source files list is non-empty") (assert (listContains? files "asl/packages/asl-text/src/string.asl") "discovery finds asl-text/src/string.asl") (refute (listEmpty? files) "refutes empty discovery list on valid root") (refute (not (listContains? files "asl/packages/asl-text/src/string.asl")) "refutes missing known module in discovery") true)
+
+fn ! testZeroDiskDriftDuringBatchValidation -> Bool
+  (let [(targetPath "asl/packages/asl-text/src/string.asl") (beforeRes (fileRead targetPath)) (summary (mig/validateDryRunBatch (list targetPath))) (afterRes (fileRead targetPath))] (assert (ok? beforeRes) "source file exists and is readable prior to dry-run") (assert (ok? afterRes) "source file remains readable after dry-run") (assert (= (resultOr beforeRes "<unreadable-before>") (resultOr afterRes "<unreadable-after>")) "source file byte contents are 100% identical") (assert (= summary.passedCount 1) "dry-run validation confirmed successful") (refute (err? beforeRes) "refutes pre-validation read error") (refute (err? afterRes) "refutes post-validation read error") (refute (!= (resultOr beforeRes "<unreadable-before>") (resultOr afterRes "<unreadable-after>")) "refutes byte drift during dry-run validation") (refute (err? afterRes) "afterRes is readable") true)
+
+fn ! testAuditMonorepoEquivalenceSubset -> Bool
+  (let [(summary (mig/auditMonorepoEquivalence (list "asl/packages/asl-text/src/string.asl")))] (assert (> summary.scannedCount 0) "audit scanned at least one module") (assert (> summary.passedCount 0) "audit passed at least one module") (assert (= summary.failedCount 0) "audit on string.asl has 0 failures") (refute (= summary.scannedCount 0) "refutes zero scanned modules in audit") (refute (= summary.passedCount 0) "refutes zero passed modules in audit") true)
+
+fn ! runTests -> Bool
+  (do (println "PASS: migrateDryRunTest suite start") (testBatchAuditSummarySchema) (testDryRunReportSchema) (testValidateDryRunBatchSingle) (testValidateDryRunBatchErrorHandling) (testDiscoverTargetSourceFiles) (testZeroDiskDriftDuringBatchValidation) (testAuditMonorepoEquivalenceSubset) (println "PASS: migrateDryRunTest suite completed cleanly") true)
+
+fn ! RunTests -> Bool
+  (runTests)

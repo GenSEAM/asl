@@ -1,0 +1,7 @@
+                     (rightRes (parseExprCore (pairSecond spRight) text (- (precAssign) 1)))
+                     (rightNode rightRes.node    )
+                     (tgtOk (isAssignTarget left))
+                     (kids (cons (tr/elemNode left) (listAppend triv (cons (tr/elemToken hd) (listAppend trivRight (list (tr/elemNode rightNode)))))))
+                     (newLeft (if (or (not tgtOk) (tr/isErrorNode rightNode))
+                                (tr/makeErrorNode (if tgtOk (tr/tokenStart hd) (tr/nodeStart left)) (tr/tokenEnd hd) kids)
+                                (tr/makeNode "assignExpr" (tr/nodeStart left) (tr/nodeEnd rightNode) kids))]

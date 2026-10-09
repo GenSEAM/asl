@@ -1,0 +1,4 @@
+(:skill
+ :name "seambus"
+ :version "1.0.0"
+ :description "Universal Inter-Agent Communication Protocol & Resilient Swarm Mesh (SeamBus / Simba). Use when coordinating multiple AI agents, exchanging structured tasks, communicating across agent boundaries (aware vs unaware models), or routing messages via SeamBus CLI or Wasm SDK.")

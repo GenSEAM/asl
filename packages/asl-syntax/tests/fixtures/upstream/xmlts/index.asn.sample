@@ -1,0 +1,606 @@
+(:upstreamManifest
+  :archiveUrl "https://www.w3.org/XML/Test/xmlts20130923.zip"
+  :archiveSha256 "f9510b3532926e1b4c2e54855b021e4b8a66ec98a5337dcf4ff07e8a41968deb"
+  :license "W3C-Software-and-Document-Notice-and-License"
+  :entries [
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "de65b0aef0514bd49ec2b2a415b0cc77c5af509ae0292111bb539f008a71fa0b"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/001.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "9c8cd4004b4e99d7e0349198eff6b5788898d518a72e945690efa3aabb57e3c6"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/002.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "3aee4bc3cda28b648b590c705ce19b4291ddcd4382d3249d420b98e9fb95dc8b"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/003.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "57b2bc145c55e8774a08f7182456d140edc93f5126c9b0707a352afdf2dac3e0"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/004.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "8a50abecf1bd203df4bf3f8d54db5be292570280447eb2e38e496e80a56ecd6d"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/005.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "d146d572ed53098a54497dc1bfd3600ccaf8a0471e35638f2328a938897d38aa"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/006.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "7c6096f8ca3c6c9772343a0d10f6881f8fd77d4a00370444966521edc09875b6"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/007.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "5c62d26d2c0988e8a91c127b189cbbf520144a94d3f41061c3480891d7f163c4"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/008.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e5047696f71ca9174f7d18118d915f4fa86adf5685d7cc13d51e218e2fc1b9c6"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/009.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e652841c04130c91b891128f80357f485ff84a352a6c460c16d6a6a833b1e5b5"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/010.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "a95c220cf496c17bba8d575c052a7d12a87930a01b9e2c503b74bf71eed3667c"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/011.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "4f089ffade524a7504ccd1e89f78c6e04647de542b8529f97cd3651850ca99de"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/012.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "42bb8e17e723c9c21967dba49cf03910c898795ab6b30d71ba99c9384b7aa224"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/013.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "60ade39bdbba0cff403168c1cd03250a089ff5af5ea7918accab6cebc93b68f3"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/014.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "5c1c8e2d05d535e05cd62e7b7f24a1a6940b0400e892906e42508a54b844e1b5"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/015.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "5d5c7afef797d84876ee6275566f977dd87f1d1bb70be31404928041bf9f837f"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/016.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6311a96e406f712872e9e92878c421031f5d3a90623ddfcd47d540ee09207be5"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/017.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6439222060b97bb670285371dcbd0259c263e01eb2d37a1d766c1c0739f607e2"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/018.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6ad1831b8067fb5d83d42c45d28eaa79466723c216d605b62da9bd4c9abed2d4"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/019.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "2beb1161dc05a7cf01db8b8ce6f0871efac7bc13032bdc67f9fd167033114242"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/020.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "01a764012df5137710c50b64fd2ef99639745eb4f8241301eed107d32aa49fbd"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/021.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "659bf1542559a4ef7c0aab9eb5dd264771a1c47b65a3a402a5031d437ba71a90"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/022.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "588b9c8c22a7ec4e57df0c33038741c0840188abd12908598a9f2bca04c3a0c1"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/023.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "c534544b78396cd6295c3f07c60f514d3d38300765d97e5d6f0696d99333cf3c"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/024.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "78c006b0d433e2a0569c2b4ce107ecb34e889990373f00cb4e01cc60a47b4751"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/025.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "99b601d95e6e34b4bcca33113e26c071f3e66e8e96e6e215fdea37fc0fdb9b96"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/026.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "14da9e85d5ba172b4ca028cacced01cbfa53e7ba31f836858f2eb582a75873bf"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/027.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "eaeefc4b25fedefd9e5d26793acc286b99a2dac18d0ba9fcea329c8a73668950"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/028.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "f065ac05ca1ef5a93dcbf36c19c9aff46c96066e83fbedaee93b511a6e937667"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/029.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "638ed2e7c94c16be6cade75db70de2f4618ab5be54b9addc1c05de5333b1c5f8"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/030.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "0536c402ad6a42696fa7fa07b8a3dbff2e9c9799f1b256aa9f007c823b1b5d6f"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/031.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "36c49a8703c7af80911ea0cb9eaf11ce1993a947f7065113a5f3c32da6d79dd8"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/032.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "7bc622d8ec30ad6d355e86e5d659b6f79667fc8930b72fc47d2189b36f406706"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/033.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "312b9e78da071dd45f106427f3f86a8f2660195f9d6fc6d0a5109ea879618b84"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/034.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "be76c2fc1b113467534f74c23d4f2d533d1547ccf9229bff5b20f56914bc6a02"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/035.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "b9615b3ec8721713991c6023835170261c6c502541d79997583cdee7a8159eb0"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/036.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "834ea27def0e2064c22647ab023b856066758b981149ebdb090dc46449752b17"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/037.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e8014f2fcffb8d119d969301543349cf0458f5503fc01fce5d5063a892837d0a"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/038.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "f0872edf0fbc09eb88b232d98d6630e8fb5520ffa01489c86ba7e2e0e9fded54"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/039.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "0bbbbc77aac8efeb9bc220b566ae1b1bf1c1c40ae7e75adc90a56eb17762fb1b"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/040.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "45938d4df2d216856c343b3c27e7cd7ef751c148cbbea79b2d21d5357ac81b84"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/041.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "1a890276e241b4741cabf6e76b1c7b885baee0c10f4ed84bbc1d36266d27aa23"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/042.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6aa26c2bd44ebe142d7bf015bf025f86f174143dbc1dfef697d78de64727804d"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/043.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e51d844b10df754643512cb449960e21fdbf7f6e10f8f6d2cc6b87bc7dfcfa0e"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/044.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "7cc456d94bed060c113c3cbbbf58576bcbcc059e9a499cddef1b4c758408d86d"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/045.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "f9630cb210dc1a22eb53236fa292cceda3295c852d4aa1e1734faa1a5480b55e"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/046.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "5fe67170c1cc6b8e8a6af68b686efa242a2073add600bc31605dd46fe6ea9d67"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/047.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e7a5032d7c046a15d7705d85c86bb5d5553c224be78532c55d7d3796f2ebc5d8"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/048.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "64abd7e7d104031c2ef8c975f3240661557bde04f46108b66ea2e25d17c9d358"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/049.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "7650e8370a5a11705223bbe501bfc8e1bdd407e9d8bcaed58cc8b9f808cd79d5"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/valid/sa/050.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "91449388ec72aaf02b1a115d1f07cc560fe22e0a5e0de22dc791e77cf1a6d7ee"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/001.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "4f2607e43da9c9477811338c428f9b6fdddcdb25507f1d995384e521b41c884f"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/002.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "fd936ea59beeaed29e7923a576865375b52aaae589636b1508a168ac2a12d2f2"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/003.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "1978ca07e38783b2605db5c1e663144fb10e4b61309d965e8cbed2f365a46787"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/004.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "ec9bef1a92d7dbe9b1f10e30325577c95842527d438aefedb0e84c1fbf8598c9"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/005.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "4faadb9342b3a4c17b2ad203022e4508953ee7eaf7860448469dc817ebc76382"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/006.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "2f053291c4dbd62e64ea13677df2116170bf19c248f3531e1f51f8483e3e4e64"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/007.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "a524830ed8cd602089f74510d60242669dec71872d088a79ed1e6ec09c4352f2"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/008.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "68b2748cad92109ef134c347b84c1ad91c3d8e597a6a2591ded240d305da1509"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/009.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "186f2857ea33d09d2e77104c4c00751b3c5c7029fcc7c1e19aaa99f5c5b8aaca"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/010.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "a88bd529322629a7bf5be13142c8a2b825625ff9553cab5041c6d212b004e107"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/011.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "123439eebea52b8ff7fb39f95129ade5e36d889b88a718d20c25ddafc81a7fbe"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/012.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "30f4b929abf8eb0ef5e0d459f4e87cd3cce27242a62d74d7e177ae178683feb6"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/013.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "01cdd05cd60496c4ab3975f1985bf10df9b4c596e76a8eaedca376aa585f3aa2"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/014.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "131f99b3d018985761dadbdfa542ab877add0f4efbb49f9226b18eee6698b732"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/015.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "be63311123e445ecfa88e981d1291717500d690b7978e1b2ce85fcb20f1c27ba"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/016.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "a27ce6e13ead5ee353552d85d2bd2247edcfb66a252b3de74d8c89ec4fe6c3eb"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/017.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "4c050212d709670e65575c8049b0284da40091bb7600ae80be990e8fd5e1d64f"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/018.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "2a38c016e93ee4ad577360cab48456a0d65628e42aca79f94f97e065be629dcc"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/019.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "f7e9792328ac1339699201dfa0bdcf5ce7e2fdfd46d7029f508faea754f0f7c0"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/020.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "f0a727a0a0df998d33650560c816660ef2135d618b85de0dca3062bff54f738b"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/021.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "a2652935d45608256ac6f25a8f8f67e18cd82d06566d1f6ce9a4b3cb988a054d"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/022.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "26ba7ab33b998e87ed1411ac6045d997a66134c9120e9ca9d9080d7e83607f1f"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/023.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6ea4b838a87b5f6f98b0a4fc9f51c61693e55b8429957438cdaa8077b666c219"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/024.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "4be90368f0a9acfb3b102c65ba0ea99852a6ad2a0c30769b005e42a4cc2893e4"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/025.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "9db3402d9d62b52f23f83c5c87267fe965567471f00620901e5530210b6450b6"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/026.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "0314eab3b0ed40b8191a1b914c0c0569876b81b8f5ffbe9255772282761831a0"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/027.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "07293568f618e64757138992ac117690e4125757c76eee026269f6cc8317b3d4"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/028.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "20a1018ff90a2b9752b392bff19cf341516cee34836e7d85bc5c50bb52b3d5af"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/029.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "63ff689d7e5d0e6b0f0afc98ff6ddccdfa8b6b477ddf99e8e223e1c20de133e3"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/030.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "9c853519244a324ea772c307711046072f548243547212fe08dbb30a193970fa"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/031.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "dc5c16b1253363c0212f47f51a0c3da5a61f0b5938aef8fa6d23e15e3bb33048"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/032.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "f8436a3c9a4c8c313a19cc972f864119449e02cd2c1383e82fbafefb72ee8e13"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/033.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6f0147ad1e4d63f632faaf730a70d0d1cabd7e9555c3aa7fbcb011820a67a21a"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/034.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "85e756c57beeee253a9e146031f5d69af1d2c7c66985a665866e76f2586cb138"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/035.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "8c59a64f256f9868992084dc58753e89bec0a6440f503aa63ee12977cb08c1b3"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/036.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "2f9f014fc7607b8f8d7cd7f44c103863292edc0153e1383a76fef044cedad17d"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/037.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "2b8d412cd795f941c904cc6893c95f92e6f83f92edcd33f2c95611af6b776456"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/038.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "fa11ba659490a24760aed638ca38eab9b44e3dd769555f0b82c4ea1f0b7250e0"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/039.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "6b623ecc899711ff28efca0e4098752453043f584584d0229812123b918bf095"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/040.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "11bed820ba895c4114cec9f59c34b93dcd01759bca3002ca917910e06491c0c1"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/041.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e4e491b4e5fb99d3dbfa7bccb76b834fc51b9d83d2bd17f1ad59fdc385ee2ca5"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/042.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "c9343f5a9c421fccf1ea1a28c5a06ff62b3654c5e6cd2f999407bfad1db2cea1"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/043.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "221da0dc1adb2cc97e547933739b2b9dbbd818f32272b00396cb857d9a31e0d3"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/044.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "7be4a3d05e50ccf1f5dd07a57bd84dea1405ff4fcec8180db5c5165b96431b1e"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/045.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "efbcccba373e8a5c19a347aec37a8c1f710b003943919f7689a03be4d0dbff88"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/046.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "d708fc5498449473ed10360dbdb8a402b221d6fc5c147f18ad1fca28712d05b9"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/047.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e036dbba1adef700ac1d36f63bbc7c357c23ad1b7934fa0c33b1b0764d0390ce"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/048.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "0d327f715f4a8c8b3132702148d1f9d0987df39ce4b7b33a31480c599fe223ba"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/049.xml.sample")
+    (:entry
+      :url "https://www.w3.org/XML/Test/xmlts20130923.zip"
+      :commit "2013-09-23"
+      :sha256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      :license "W3C-Software-and-Document-Notice-and-License"
+      :path "asl/packages/asl-syntax/tests/fixtures/upstream/xmlts/not-wf/sa/050.xml.sample")
+  ])

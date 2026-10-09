@@ -1,0 +1,6 @@
+(:package asl-grammar
+ :version "0.1.0"
+ :entry "src/peg.asl"
+ :description "The single ASL grammar (asl/grammar/aslGrammar.asn): loader, grammar-driven recognizer and GBNF generator"
+ :aslFirst true
+ :dependencies [])

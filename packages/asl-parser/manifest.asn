@@ -1,0 +1,6 @@
+(:package asl-parser
+ :version "0.1.0"
+ :entry "src/lexer.asl"
+ :description "100% Self-Hosted Pure AgentScript S-Expression Lexer, Reader & AST Parser"
+ :aslFirst true
+ :dependencies [])

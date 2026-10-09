@@ -1,0 +1,1 @@
+(:truth (:expectedGate :cmd "sh $ASL_EVAL_HIDDEN/check.txt" :exit 0))

@@ -1,0 +1,12 @@
+(:skill
+  :name "asl-contracts"
+  :desc "Pure functional, formally verifiable smart contracts for Arbitrum Stylus (Wasm) and CosmWasm in AgentScript. Use when authoring contracts, verifying mathematical balance conservation with SMT-LIB2 / Z3, or designing agent escrow protocols."
+  :rules [
+    (:rule :type "mandatory" :text "Zero Reentrancy: Contracts are pure state transition functions: (transition State Action Context -> (Pair State (List Event))).")
+    (:rule :type "mandatory" :text "Zero Floating-Point: Floating-point numbers (F64) are banned at the specification level.")
+    (:rule :type "mandatory" :text "SMT Proofs by Construction: S-expression ASTs translate directly to SMT-LIB2 formulas for Z3/CVC5 theorem provers.")
+  ]
+  :tools [
+    (:tool :name "asl-test-contracts" :command "asl test asl-contracts/tests/spec_test.asl" :purpose "Run contract specification test suite" :savings "100%")
+  ]
+  :targets ["claude-code" "factory-droid" "antigravity" "cursor" "windsurf" "universal-agents"])

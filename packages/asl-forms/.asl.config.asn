@@ -1,0 +1,5 @@
+(:aslConfig
+  :workspace "asl-forms"
+  :version "0.1.0"
+  :pureAsl true
+  :aslFirst true)

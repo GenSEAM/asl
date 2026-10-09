@@ -1,0 +1,4 @@
+; A record is keyword/value pairs. A trailing key with no value is rejected by
+; the grammar rather than defaulted to nil, because `_` already spells nil and a
+; format with two ways to say it has two ways to disagree.
+(:status)

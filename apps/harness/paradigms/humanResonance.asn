@@ -1,0 +1,52 @@
+(:paradigmModule
+  :name "asl-harness/human-resonance"
+  :version "0.1.0"
+  :d "Human Resonance, Audience Perception, Jobs-To-Be-Done Utility, and Sociological Diffusion Paradigm Specification"
+  :axioms [
+    (:axiom :id "human-agency-priority" :rule "Human agency and psychological safety dominate autonomous optimization: systems must empower rather than usurp user autonomy")
+    (:axiom :id "semantic-resonance-fidelity" :rule "Linguistic and conceptual register must calibrate to audience cognitive state: target SNR >= 0.75 without condescension or token bloat")
+    (:axiom :id "problem-severity-grounding" :rule "No solution without verified latent or active pain: validate functional, emotional, and social jobs before synthesis")
+    (:axiom :id "friction-bounded-acceptance" :rule "Solution switching cost must not exceed marginal utility: minimize cognitive overhead and organizational resistance")
+  ]
+  :semanticResonance [
+    (:register :id "executive"
+      :tone :strategicConcise
+      :density :highSnr
+      :focus [:outcomes :roi :riskBounds :strategicTradeoffs]
+      :forbidden [:uncontextualizedRawLogs :syntacticTrivia :apologeticFiller])
+    (:register :id "engineering"
+      :tone :rigorousEmpirical
+      :density :preciseFalsifiable
+      :focus [:architecture :invariants :testGates :reproducibleReceipts]
+      :forbidden [:handWaving :unverifiedClaims :fluff])
+    (:register :id "collaborative-user"
+      :tone :empatheticClarifying
+      :density :calibratedErgonomic
+      :focus [:intentAlignment :visualAffordances :frictionReduction :stepFeedback]
+      :forbidden [:condescendingPaternalism :opaqueJargon :abruptUnexplainedStateShifts])
+  ]
+  :aestheticMechanics [
+    (:principle :id "visual-gravity" :metric "Spatial balance and typographic hierarchy in VDOM/SVG and TUI box-art")
+    (:principle :id "cognitive-ergonomics" :metric "Chunking information into <= 4 active perceptual elements per visual viewport")
+    (:principle :id "pacing-and-rhythm" :metric "Progressive disclosure: show immediate actionable summary first, defer deep proofs to expandable nodes")
+    (:principle :id "delight-and-polish" :metric "Deterministic crisp rendering, clean alignment, zero unclosed tags, balanced delimiters")
+  ]
+  :marketUtilityJtbd [
+    (:jobDimension :id "functional" :d "The practical, objective task the user needs accomplished" :metric "Time saved, error rate reduction, throughput multiplier")
+    (:jobDimension :id "emotional" :d "How the user feels during and after interaction" :metric "Anxiety reduction, cognitive confidence, sense of mastery")
+    (:jobDimension :id "social" :d "How the user is perceived by peers, superiors, and tribe" :metric "Status enhancement, professional credibility, peer trust")
+    (:painSeverityRubric
+      (:tier :id "hair-on-fire" :range [8 10] :action :immediatePrioritization :rule "Severe active disruption, blocker, or compliance failure")
+      (:tier :id "friction-burden" :range [5 7] :action :plannedWave :rule "Persistent cognitive friction, repeated manual rework, or velocity drain")
+      (:tier :id "latent-optimization" :range [1 4] :action :backlogCandidate :rule "Theoretical improvement with low immediate switching incentive"))
+    (:acceptanceThreshold
+      (:condition :id "switching-cost" :rule "Switching cost <= 0.3 * Perceived Utility Gain")
+      (:condition :id "cognitive-overhead" :rule "Learning curve <= 3 interaction cycles before value delivery")
+      (:condition :id "reversibility" :rule "Zero irreversible lock-in without explicit user confirmation"))
+  ]
+  :sociologicalDiffusion [
+    (:vector :id "memetic-resonance" :d "Idea portability and transmission efficiency across social graphs")
+    (:vector :id "social-proof-engine" :d "Empirical verification receipts serve as indisputable social proof for team adoption")
+    (:vector :id "tribal-alignment" :d "Harmonizing with engineering and organizational cultural norms")
+    (:vector :id "stakeholder-equilibrium" :d "Aligning incentives across sponsor, operator, developer, and compliance officer")
+  ])

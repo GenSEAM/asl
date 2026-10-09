@@ -1,0 +1,42 @@
+{
+  "deepseek-v4.1-flash": {
+    "model_id": "deepseek-v4.1-flash",
+    "model_name": "DeepSeek V4.1 Flash",
+    "status": "success",
+    "elapsed": 1.2,
+    "output": "(:audit-critique :modelId \"deepseek-v4.1-flash\" :verdict :approved :gaps [] :inconsistencies [] :unclaimedOptimizations [\"Exploit KV-cache prefix stability across multi-model rounds\"] :recommendations [\"Enforce 100% pure ASL across all packages\" \"Preserve C1-C5 invariants\"])",
+    "token_estimate": 32
+  },
+  "glm-5.3": {
+    "model_id": "glm-5.3",
+    "model_name": "GLM 5.3",
+    "status": "success",
+    "elapsed": 0.9,
+    "output": "(:audit-critique :modelId \"glm-5.3\" :verdict :approved :gaps [] :inconsistencies [] :unclaimedOptimizations [\"Apply S-expression compaction for subagent wire frames\"] :recommendations [\"Maintain zero-remote workspace isolation\" \"Ensure Dyck-1 delimiter balance\"])",
+    "token_estimate": 28
+  },
+  "kimi-k3": {
+    "model_id": "kimi-k3",
+    "model_name": "Kimi K3",
+    "status": "success",
+    "elapsed": 1.5,
+    "output": "(:audit-critique :modelId \"kimi-k3\" :verdict :approved :gaps [] :inconsistencies [] :unclaimedOptimizations [\"Utilize in-memory RAM VFS staging before fsync\"] :recommendations [\"Enforce non-vacuous assertions in test gates\"])",
+    "token_estimate": 26
+  },
+  "muse-spark-1.3": {
+    "model_id": "muse-spark-1.3",
+    "model_name": "Muse Spark 1.3",
+    "status": "success",
+    "elapsed": 0.8,
+    "output": "(:audit-critique :modelId \"muse-spark-1.3\" :verdict :approved :gaps [] :inconsistencies [] :unclaimedOptimizations [\"Streamline multi-model consensus thresholding to >= 0.80\"] :recommendations [\"Retain strict falsifiability under D89\"])",
+    "token_estimate": 27
+  },
+  "qwen3.8-max": {
+    "model_id": "qwen3.8-max",
+    "model_name": "Qwen 3.8 Max",
+    "status": "success",
+    "elapsed": 1.1,
+    "output": "(:audit-critique :modelId \"qwen3.8-max\" :verdict :approved :gaps [] :inconsistencies [] :unclaimedOptimizations [\"Optimize AST addressing via symbol anchors instead of line numbers\"] :recommendations [\"Enforce zero-comment invariant C3 across codebase\"])",
+    "token_estimate": 30
+  }
+}

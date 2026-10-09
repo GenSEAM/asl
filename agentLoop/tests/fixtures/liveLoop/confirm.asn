@@ -1,0 +1,5 @@
+(:script :id "liveLoopConfirm" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:step :op \"push\") (:done)")
+  )
+)

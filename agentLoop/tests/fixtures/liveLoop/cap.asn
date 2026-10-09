@@ -1,0 +1,6 @@
+(:script :id "liveLoopCap" :mode :implement
+  :turns (
+    (:turn :num 1 :reply "(:note :text \"still working\")")
+    (:turn :num 2 :reply "(:done)")
+  )
+)

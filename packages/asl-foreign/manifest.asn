@@ -1,0 +1,7 @@
+(:package asl-foreign
+ :version "0.1.0"
+ :entry "src/block.asl"
+ :description "Typed first-class inline foreign blocks and context-specific escaping."
+ :aslFirst true
+ :modules ["asl-foreign/block"]
+ :dependencies [])

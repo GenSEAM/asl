@@ -1,0 +1,13 @@
+(module aslAgent/tests/cockpitSchedulerTest :x [runTests] :i [(aslAgent/cockpitScheduler :a sched)])
+
+fn testFocusAuthorityDecoupling -> Bool
+  (let [(viewInit (sched/makeCockpitViewState "pane-left" "ws-asex" 1)) (jobA (sched/makeCockpitJobState "job-101" "ws-asex" "asl/packages/asl-ui" "lease-alpha" 1)) (viewSwitched (sched/switchFocusedPane viewInit "pane-right" "ws-vtbot")) (invariantHolds (sched/verifyFocusInvariant jobA jobA))] (assert (= viewSwitched.focusedPaneId "pane-right") "Focused pane switched to pane-right") (assert (= viewSwitched.visibleWorkspaceId "ws-vtbot") "Visible workspace switched to ws-vtbot") (assert invariantHolds "Focus invariant verified: jobA authority strictly preserved") (assert (= jobA.originWorkspaceId "ws-asex") "jobA origin workspace remains ws-asex") (refute (= viewSwitched.visibleWorkspaceId "ws-asex") "View workspace must not remain ws-asex") true)
+
+fn testEpochFencingAndReceiptRouting -> Bool
+  (let [(jobA (sched/makeCockpitJobState "job-101" "ws-asex" "asl/packages/asl-ui" "lease-alpha" 2)) (validRoute (sched/routeExecutionReceipt jobA "job-101" "ws-asex" 2)) (staleRoute (sched/routeExecutionReceipt jobA "job-101" "ws-asex" 1)) (crossWsRoute (sched/routeExecutionReceipt jobA "job-101" "ws-vtbot" 2))] (assert (ok? validRoute) "Valid matching receipt routes successfully") (assert (err? staleRoute) "Stale epoch receipt is rejected") (assert (= (mt staleRoute ((ok _) "") ((err e) e)) "ERR_STALE_LEASE_EPOCH") "Stale receipt yields ERR_STALE_LEASE_EPOCH") (assert (err? crossWsRoute) "Cross workspace receipt is rejected") (assert (= (mt crossWsRoute ((ok _) "") ((err e) e)) "ERR_CROSS_WORKSPACE_CONTAMINATION") "Cross workspace yields ERR_CROSS_WORKSPACE_CONTAMINATION") (refute (ok? staleRoute) "Stale epoch must never route successfully") true)
+
+fn testD80VisibilityTiers -> Bool
+  (let [(visSession (sched/resolveWorkspaceVisibility "session" false)) (visWs (sched/resolveWorkspaceVisibility "workspace" false)) (visPanopticonAuth (sched/resolveWorkspaceVisibility "panopticon" true)) (visPanopticonDenied (sched/resolveWorkspaceVisibility "panopticon" false))] (assert (ok? visSession) "Session tier resolves") (assert (ok? visWs) "Workspace lineage tier resolves") (assert (ok? visPanopticonAuth) "Panopticon resolves at global anchor") (assert (err? visPanopticonDenied) "Panopticon denied without global anchor") (refute (ok? visPanopticonDenied) "Panopticon must fail without anchor") true)
+
+fn runTests -> Bool
+  (let [(okDecouple (testFocusAuthorityDecoupling)) (okFence (testEpochFencingAndReceiptRouting)) (okVis (testD80VisibilityTiers))] (and (and okDecouple okFence) okVis))

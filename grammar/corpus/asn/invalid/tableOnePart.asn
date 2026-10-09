@@ -1,0 +1,3 @@
+; A table is exactly a header vector and a rows vector. One vector alone is not a
+; table and is not a record either, so there is no reading of it at all.
+([:id :sku :price])

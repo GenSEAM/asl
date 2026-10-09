@@ -1,0 +1,31 @@
+(module asl-net/handoff :x [HandoffChannel openHandoffChannel handoffListeningSocket receiveListeningSocket closeHandoffEnd] :i [(asl-net/unix :a unix)])
+
+(schema HandoffChannel (:f sender Int64) (:f receiver Int64))
+
+fn ! openHandoffChannel -> (Result HandoffChannel String)
+  (mt (unixSocketPair)
+    ((err e) (err (str "ERR_UNIX_HANDOFF_CHANNEL: " e)))
+    ((ok ends) (ok (HandoffChannel :sender (pairFirst ends) :receiver (pairSecond ends)))))
+
+fn ! handoffListeningSocket server: unix/UnixServerSocket channel: Int64 -> (Result Int64 String)
+  (if (not (= server.status "listening"))
+    (err "ERR_UNIX_HANDOFF_NOT_LISTENING")
+    (mt (sockSendFd channel server.fd)
+      ((err e) (err (str "ERR_UNIX_HANDOFF_SEND: " e)))
+      ((ok fd) (ok fd))))
+
+fn ! receiveListeningSocket channel: Int64 path: String -> (Result unix/UnixServerSocket String)
+  (mt (sockRecvFd channel)
+    ((err e) (err (str "ERR_UNIX_HANDOFF_RECV: " e)))
+    ((ok fd)
+      (mt (fileLstat path)
+        ((err e) (do (fdClose fd) (err (str "ERR_UNIX_HANDOFF_PATH: " e))))
+        ((ok st)
+          (if (not (= (mod (/ st.mode 4096) 16) 12))
+            (do (fdClose fd) (err "ERR_UNIX_HANDOFF_PATH: not a socket"))
+            (ok (unix/UnixServerSocket :fd fd :path path :status "listening" :permissions (mod st.mode 512))))))))
+
+fn ! closeHandoffEnd fd: Int64 -> (Result Bool String)
+  (mt (fdClose fd)
+    ((err e) (err (str "ERR_UNIX_HANDOFF_CLOSE: " e)))
+    ((ok _) (ok true)))

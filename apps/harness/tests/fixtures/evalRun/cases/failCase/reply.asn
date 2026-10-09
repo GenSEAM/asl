@@ -1,0 +1,1 @@
+(:agentReceipt :status :failed :deliver :patch :turns 4 :queueWaitSec 0.5 :written ("src/calc.txt") :gates ((:cmd "sh $ASL_EVAL_HIDDEN/check.txt" :exit 1)) :plan (:steps 2 :done 1 :dropped 0 :revisions 1))

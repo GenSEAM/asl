@@ -1,0 +1,22 @@
+(module aslHarness/tests/promptAuditTest :x [testSimpleTokenEstimation testSingleBudgetAudit testDualBudgetDecoupledWithinLimits testDualBudgetStaticOverflow testDualBudgetPayloadOverflow testRegistryStringAudit runTests] :i [(aslAgentCore/promptAudit :a pa)])
+
+fn testSimpleTokenEstimation -> Bool
+  (do (assert (= (pa/estimateTokensSimple "") 0) "Empty string must yield 0 tokens") (assert (= (pa/estimateTokensSimple "abc") 1) "Short string must yield minimum 1 token") (assert (= (pa/estimateTokensSimple "12345678") 2) "8-char string must yield 2 tokens") (assert (= (pa/estimateTokensSimple "1234567890123456") 4) "16-char string must yield 4 tokens") true)
+
+fn testSingleBudgetAudit -> Bool
+  (let [(pUnder (pa/PromptDef :id "p-under" :role "implementer" :budgetTokens 100 :system "short system" :template "short template")) (resUnder (pa/auditPromptTokens pUnder))] (do (assert (ok? resUnder) "audit-prompt-tokens must succeed") (let [(metric (resultOr resUnder (pa/TokenMetric :estimatedTokens 0 :budgetTokens 0 :headroom 0 :overBudget true)))] (assert (not metric.overBudget) "Under budget prompt must not be over-budget") (assert (> metric.headroom 0) "Under budget prompt must have positive headroom") (assert (pa/validatePromptBudget pUnder) "validate-prompt-budget must return true") true)))
+
+fn testDualBudgetDecoupledWithinLimits -> Bool
+  (let [(sysPrefix "(:mandate :id \"implementer\" :purpose \"delta executor\" :posture \"disciplined\" :primary-invariant \"Gate Preservation\")") (payload "Task: task-345-4\nFiles: [harness/src/prompt_audit.asl]\nInvariants: [C0001]") (report (pa/auditPromptBudgets "task-prompt" sysPrefix payload 60 1600))] (do (assert report.valid "Report must be valid when both budgets are respected") (assert (= report.errorCode "") "Error code must be empty on valid audit") (assert (= report.promptId "task-prompt") "Prompt id must match") (assert (> report.staticHeadroom 0) "Static headroom must be positive") (assert (> report.payloadHeadroom 0) "Payload headroom must be positive") (assert (<= report.staticTokens 60) "Static tokens must be <= static budget") (assert (<= report.payloadTokens 1600) "Payload tokens must be <= payload budget") true))
+
+fn testDualBudgetStaticOverflow -> Bool
+  (let [(sysPrefixBloated "You are an autonomous AI coding assistant designed by Google Deepmind team working on Advanced Agentic Coding. You should follow all instructions carefully and behave with extreme politeness and elaborate personas that consume hundreds of tokens needlessly.") (payload "Task: task-1") (report (pa/auditPromptBudgets "bloated-prompt" sysPrefixBloated payload 30 1600))] (do (assert (not report.valid) "Report must be invalid on static prefix overflow") (assert (= report.errorCode "STATIC_PREFIX_OVERFLOW") "Error code must be STATIC_PREFIX_OVERFLOW") (assert (< report.staticHeadroom 0) "Static headroom must be negative") (assert (> report.payloadHeadroom 0) "Payload headroom must remain positive") true))
+
+fn testDualBudgetPayloadOverflow -> Bool
+  (let [(sysPrefix "(:mandate :id \"scout\")") (payloadBloated (fold (fn [(acc Str) (_ I64)] -> Str (str acc "excessive payload token bloat that repeats over and over again to exhaust dynamic budget ceiling entirely ")) "" (list 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20))) (report (pa/auditPromptBudgets "payload-bloat" sysPrefix payloadBloated 60 100))] (do (assert (not report.valid) "Report must be invalid on dynamic payload overflow") (assert (= report.errorCode "PAYLOAD_BUDGET_OVERFLOW") "Error code must be PAYLOAD_BUDGET_OVERFLOW") (assert (> report.staticHeadroom 0) "Static headroom must remain positive") (assert (< report.payloadHeadroom 0) "Payload headroom must be negative") true))
+
+fn testRegistryStringAudit -> Bool
+  (let [(regText "(:prompts-registry :version \"1.2.0\" :prompts [ (:prompt :id \"p1\" :role \"r1\" :budget-tokens 500 :system \"sys1\" :template \"tpl1\") (:prompt :id \"p2\" :role \"r2\" :budget-tokens 600 :system \"sys2\" :template \"tpl2\") ])") (regRes (pa/auditRegistryString regText))] (do (assert (ok? regRes) "Registry audit must succeed with ok") (let [(items (resultOr regRes (list)))] (assert (= (listLength items) 2) "Registry audit must find 2 items") true)))
+
+fn runTests -> Bool
+  (do (assert (testSimpleTokenEstimation)) (assert (testSingleBudgetAudit)) (assert (testDualBudgetDecoupledWithinLimits)) (assert (testDualBudgetStaticOverflow)) (assert (testDualBudgetPayloadOverflow)) (assert (testRegistryStringAudit)) true)

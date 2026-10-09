@@ -1,0 +1,14 @@
+(:package asl-target-ts
+ :version "0.1.0"
+ :entry "src/emitTs.asl"
+ :description "Standalone TypeScript (ESM) transpiler, pure TsAst lowering, and npm/browser runtime for AgentScript"
+ :layer 0
+ :aslFirst true
+ :modules [
+   "asl-target-ts/types"
+   "asl-target-ts/tsAst"
+   "asl-target-ts/emitTs"
+ ]
+ :dependencies ["asl-parser"]
+ :capabilities ["codegen/target"]
+ :owner "principal")

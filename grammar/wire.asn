@@ -1,0 +1,56 @@
+(:wireSchema
+  :version 1
+  :d "Canonical frame of the agent bus. The implementation is asl/packages/asl-agent-bus/src/wire.asl (CanonicalWireFrame, validateWireFrame, encode and decode per transport); on 2026-09-24 asl/host/out/asl-host check of that file fails with 10 ERR_UNKNOWN_SYMBOL errors (show, optionIsSome?, option-unwrap), so the module runs only under asl-core."
+  :keys [:identity :sessionId :causality :payload :digest]
+  :transports [:stdio :unixSocket :http :sse]
+  :types [
+    (:record :name "CanonicalWireFrame"
+      :fields [
+        (:field :name "identity" :type :string :required true)
+        (:field :name "sessionId" :type :string :required true)
+        (:field :name "causality" :type :string :required true)
+        (:field :name "payload" :type :string :required true)
+        (:field :name "digest" :type :string :required true)
+      ])
+    (:record :name "WireValidationResult"
+      :fields [
+        (:field :name "valid?" :type :bool :required true)
+        (:field :name "errorKind" :type :string :required true)
+        (:field :name "message" :type :string :required true)
+      ])
+  ]
+  :validation "validateWireFrame rejects an empty identity (ERR_MISSING_IDENTITY), an empty sessionId (ERR_MISSING_SESSION_ID), an empty digest (ERR_MISSING_DIGEST) and a payload containing (:malformed-unclosed (ERR_MALFORMED_PAYLOAD); it does not check causality or recompute the digest"
+  :conformanceVectors [
+    (:vector :id "vec-valid-01"
+      :valid true
+      :identity "frame-001"
+      :sessionId "sess-446"
+      :causality "root-cause-0"
+      :payload "(:ping true)"
+      :digest "placeholder-01"
+      :digestNote "a placeholder: validation only requires a non-empty digest")
+    (:vector :id "vec-valid-02"
+      :valid true
+      :identity "frame-002"
+      :sessionId "sess-446"
+      :causality "frame-001"
+      :payload "(:pong true)"
+      :digest "placeholder-02")
+    (:vector :id "vec-invalid-missing-identity"
+      :valid false
+      :identity ""
+      :sessionId "sess-446"
+      :causality "root"
+      :payload "(:action :ping)"
+      :digest "placeholder-03"
+      :expectedError "ERR_MISSING_IDENTITY")
+    (:vector :id "vec-invalid-malformed"
+      :valid false
+      :identity "frame-003"
+      :sessionId "sess-446"
+      :causality "root"
+      :payload "(:malformed-unclosed"
+      :digest "placeholder-04"
+      :expectedError "ERR_MALFORMED_PAYLOAD")
+  ]
+)

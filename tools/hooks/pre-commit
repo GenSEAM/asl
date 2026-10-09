@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$ROOT_DIR"
+git diff --cached > .git/COMMIT_DIFF
+exec "$ROOT_DIR/bin/asl" run tools/pre-commit.asl aslTools/preCommit/main "$@"

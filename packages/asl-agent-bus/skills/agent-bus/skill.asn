@@ -1,0 +1,4 @@
+(:skill
+ :name "agent-bus"
+ :version "1.0.0"
+ :description "Inter-Agent Swarm Bus (SeamBus / Simba) for high-performance agent communication, typed S-expression packet routing, SSE streaming, and Unix domain socket IPC. Use when sending messages between subagents, querying swarm mesh topology, or streaming agent execution telemetry.")

@@ -1,0 +1,1 @@
+../../../../../../../tests/parity/forms/gatesStubs/stub.sh

@@ -1,0 +1,9 @@
+; A numeric matrix. Whitespace separates, so there are no commas to tokenize, and
+; nesting is the only structure a tensor needs. This is the case a data format
+; gets wrong by adding punctuation nobody reads.
+;
+; canonical: [[1.0 0.0 0.0] [0.0 1.0 0.0] [0.0 0.0 1.0]]
+
+[[1.0  0.0  0.0]
+ [0.0  1.0  0.0]
+ [0.0  0.0  1.0]]

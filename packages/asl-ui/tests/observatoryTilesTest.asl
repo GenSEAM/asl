@@ -1,0 +1,13 @@
+(module asl-ui/tests/observatoryTilesTest :x [runTests] :i [(asl-ui/vnode :a ui) (asl-ui/radarCard :a radar) (asl-ui/blastRadiusHeatmap :a blast) (asl-ui/vacuousMockDetector :a vacuous)])
+
+fn testRadarCard -> Bool
+  (let [(snap (radar/makeRadarSnapshot 100 95 98 94 96 92 "abc1234")) (pts (radar/calculateRadarPoints snap)) (vnode (radar/renderRadarCard snap))] (assert (= snap.score 95) "Calculated average score is 95") (assert (= snap.architectureScore 100) "Architecture score is 100") (assert (> (stringLength pts) 10) "Calculated radar points string is non-empty") (assert (= vnode.tag "container") "Rendered radar card is container VNode") (refute (= snap.score 100) "Average score must reflect all axes") true)
+
+fn testBlastRadiusHeatmap -> Bool
+  (let [(n1 (blast/makeBlastRadiusNode "asl-core" 4 false false)) (n2 (blast/makeBlastRadiusNode "asl-cli" 8 true true)) (n3 (blast/makeBlastRadiusNode "asl-help" 2 true false)) (maxB (blast/calculateMaxBlastRadius (list n1 n2 n3))) (clsRuntime (blast/classifyDependencyEdge true true)) (clsType (blast/classifyDependencyEdge true false)) (clsBlast (blast/classifyDependencyEdge false false)) (vnode (blast/renderBlastRadiusTile (list n1 n2 n3)))] (assert (= maxB 8) "Maximum blast radius is 8") (assert (= vnode.tag "container") "Rendered blast radius tile is container VNode") (refute (= maxB 4) "Max blast radius must pick highest value") true)
+
+fn testVacuousMockDetector -> Bool
+  (let [(mHollow (vacuous/makeVacuousMockItem "mockDb" "tests/mockDb.asl" 0 0 (vacuous/classifyMockAnomaly 0 0 false) false)) (mCleanConst (vacuous/makeVacuousMockItem "defaultPort" "src/net.asl" 0 5 (vacuous/classifyMockAnomaly 0 5 true) true)) (bVer (vacuous/badgeVerified)) (bIncomp (vacuous/badgeIncomplete)) (indVer (vacuous/formatBadgeIndicator bVer)) (indIncomp (vacuous/formatBadgeIndicator bIncomp)) (strVer (vacuous/badgeStateToString bVer)) (vnode (vacuous/renderVacuousMockTile (list mHollow mCleanConst)))] (assert (= strVer "verified") "Badge verified string is verified") (assert (= indVer "[OK] Verified") "Indicator verified matches format") (assert (= indIncomp "[VACUOUS] Incomplete") "Indicator incomplete matches format") (assert (= (vacuous/anomalyToString mHollow.anomaly) "hollowMock") "mHollow classified as hollowMock") (assert (= (vacuous/anomalyToString mCleanConst.anomaly) "cleanConstant") "mCleanConst classified as cleanConstant") (assert (= vnode.tag "container") "Rendered vacuous mock tile is container VNode") (refute (= strVer "failed") "Badge verified must not be failed") true)
+
+fn runTests -> Bool
+  (let [(okRadar (testRadarCard)) (okBlast (testBlastRadiusHeatmap)) (okVacuous (testVacuousMockDetector))] (and (and okRadar okBlast) okVacuous))

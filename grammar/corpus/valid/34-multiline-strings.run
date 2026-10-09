@@ -1,0 +1,1 @@
+(and (= (banner) "AgentScript\n===========") (= (usage) "usage: fmt [--width N] FILE\n\n  --width N  wrap at N columns\n  --help     show this text") (= (cells) "a\tb\tc") (= (lines) 2) (stringStartsWith? (render "asl") "AgentScript\n===========\nusage: asl "))

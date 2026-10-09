@@ -1,0 +1,33 @@
+(:modalPreset :v 2 :id bonsai2
+  :doc "default preset: Ternary Bonsai 2 27B (Qwen3.8-27B base, Apache-2.0) on the PrismML llama.cpp fork; every pin lives in this file, read by src/modal.asl and the app.py it renders; README.md cites each value's source"
+  :app "asl-bonsai2"
+  :modalVersion "1.6.1"
+  :baseImage "nvidia/cuda:12.8.1-devel-ubuntu24.04"
+  :python "3.12"
+  :packages ()
+  :preparePackages ("huggingface_hub==2.1.1")
+  :model "prism-ml/Ternary-Bonsai-2-27B-gguf"
+  :revision "b072e1d3b35a0a630cece372c2127528e0994386"
+  :weightFile "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+  :servedName "bonsai2-27b"
+  :engine prismLlamaCpp
+  :engineRef "prism-b10743-adfffbe"
+  :cudaArch "75;80;86;89"
+  :sampling (:temperature 1.0 :topP 0.95 :topK 20 :minP 0.05)
+  :contextTokens 32768
+  :maxTokens 16384
+  :reasoning true
+  :scaledownSec 2
+  :startupSec 1200
+  :snapshot true
+  :maxContainers 1
+  :coldStartMs 90000
+  :volume "asl-modal-weights"
+  :secret "asl-modal-key"
+  :keyEnv ASL_MODAL_API_KEY
+  :gpus ((:tier T4 :maxConcurrency 2 :timeoutSec 1800 :microUsdPerSec 164)
+         (:tier L4 :maxConcurrency 4 :timeoutSec 1200 :microUsdPerSec 222)
+         (:tier A10 :maxConcurrency 4 :timeoutSec 900 :microUsdPerSec 306 :weightFile "Ternary-Bonsai-2-27B-PQ2_0.gguf")
+         (:tier L40S :maxConcurrency 8 :timeoutSec 600 :microUsdPerSec 542)
+         (:tier A100 :maxConcurrency 16 :timeoutSec 600 :microUsdPerSec 583 :weightFile "Ternary-Bonsai-2-27B-PQ2_0.gguf"))
+  :pool (:windowMs 7000 :peakCount 16 :bypassWhileBusy true))

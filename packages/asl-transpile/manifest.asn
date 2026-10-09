@@ -1,0 +1,24 @@
+(:package aslTranspile
+ :version "0.1.0"
+ :entry "src/core/codec.asl"
+ :description "AgentScript Multi-Target AST Transpiler, Formatter, and Document Engine (YAML, TOML, CSV, SVG, CSS, Shell, Docs)"
+ :aslFirst true
+ :modules ["asl-transpile/core"
+           "asl-transpile/asn"
+           "asl-transpile/asnCheck"
+           "asl-transpile/placement"
+           "asl-transpile/asnl"
+           "asl-transpile/transpile"
+           "asl-transpile/yamlTranspile"
+           "asl-transpile/csvTranspile"
+           "asl-transpile/tomlTranspile"
+           "asl-transpile/svgTranspile"
+           "asl-transpile/compactNotations"
+           "asl-transpile/cssCascade"
+           "asl-transpile/cssEmit"
+           "asl-transpile/multilens"
+           "asl-transpile/shTranspile"
+           "asl-transpile/docEngine"
+           "asl-transpile/skillEngine"
+           "asl-transpile/scalar"]
+ :dependencies ["asl-parser" "asl-text"])

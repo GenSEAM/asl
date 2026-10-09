@@ -1,0 +1,37 @@
+(:closure :v 2
+  :d "Specification of asl audit closure: ten verification tiers, each judged by a check in scripts/audit/audit.py cmdClosure. A tier with no checker reports ERR_NOT_COMPUTED, so the audit exits non-zero until every tier has one."
+  :receipt "one stdout line (:audit :sub closure :status :passed|:failed (:check :id tierName :status :passed|:failed|:notComputed :err CODE :ev \"evidence\") ...); a failed tier carries ERR_TIER_FAILED"
+  :schemas [
+    (:schema TierCheck
+      :d "one tier in the closure receipt"
+      (:field :id :type :string :d "tierSyntax, tierTypes, tierTests, tierBounds, tierClaims, tierWasm, tierStage2, tierMesh, tierStorage or tierRules")
+      (:field :status :type :keyword :d ":passed, :failed or :notComputed")
+      (:field :err :type :string :d "ERR_TIER_FAILED or ERR_NOT_COMPUTED when not passed")
+      (:field :ev :type :string :d "the failing checks' ids, codes and evidence, at most 400 characters")
+    )
+    (:schema DigestTree :status :target
+      :d "target: a content-addressed digest tree over the workspace; today no audit computes one"
+      (:field :rootDigest :type :string :d "root SHA-256")
+      (:field :nodeCount :type :integer :d "sealed nodes")
+      (:field :algorithm :type :string :default "sha256" :d "hash algorithm")
+    )
+  ]
+  :tiers [
+    (:tier :id "syntax" :name "Delimiter balance" :checker "every tracked .asl and .asn file passes scripts/audit/dyck.py (rule syntax)")
+    (:tier :id "types" :name "Symbol bindings and types" :checker :none :target "fail on an unknown symbol or arity error, as asl/host/out/asl-host check does per file")
+    (:tier :id "tests" :name "Suites with executed assertions" :checker "suites affected since the fullGreen base run and pass; a :full scope is not computed here, run asl audit gates --full (rule semantics)")
+    (:tier :id "bounds" :name "Token cost" :checker "each symbol in asl/grammar/grammar.asn above :tokensBaseline carries a :rationale")
+    (:tier :id "claims" :name "Grounded published claims" :checker "every :metric in asl/bench/publishedClaims.asn is in standardClaims of asl/packages/asl-gates/src/siteClaims.asl and back")
+    (:tier :id "wasm" :name "WebAssembly substrate" :checker :none :target "a suite for the contracts in asl/grammar/wasm.asn")
+    (:tier :id "stage2" :name "Self-hosting compiler conformance" :checker :none :target "a stage-2 build compared with stage 0; asl build returns ERR_UNIMPLEMENTED")
+    (:tier :id "mesh" :name "Multi-agent coordination" :checker :none :target "a suite for the schemas in asl/grammar/mesh.asn")
+    (:tier :id "storage" :name "Memory ledger integrity" :checker :none :target "the checks of asl audit steps (placeholder digests in .asl/mem/tasks) counted in this tier")
+    (:tier :id "rules" :name "Rule SSOT and workspace isolation" :checker "./scripts/install.sh --check-rules reports no drift (rule ssot) and git remote is empty (rule workspaceIsolation)")
+  ]
+  :history [
+    (:milestone :id "M09" :written "2026-09-18"
+      :title "Full monorepo epistemic closure"
+      :recorded "declared settled with all ten tiers green"
+      :observed "2026-09-24: ./bin/asl audit closure exits 1; syntax, bounds, claims and rules pass; types, tests, wasm, stage2, mesh and storage report ERR_NOT_COMPUTED; asl/packages holds 46 package directories")
+  ]
+)

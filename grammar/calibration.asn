@@ -1,0 +1,23 @@
+(:spec :id calibration :v 1 :date "2026-09-25" :registry ".asl/mem/calibration/index.asn"
+  :doc "model calibration results, the only model data the repo stores; routing, aliases, keys and profiles live in the user file ~/.asl/gateway.asn. The index answers which params to use without re-running calibration; each model file keeps the runs behind them"
+  :layout ((:path ".asl/mem/calibration/index.asn" :holds "one (:model) row per calibrated model id")
+           (:path ".asl/mem/calibration/models/<file>.asn" :holds "one (:calibrationModel) per id: every run with method, cases, params tried, results and source"))
+  :index "(:calibrationIndex :v 1 :spec \"asl/grammar/calibration.asn\" :updated DATE :models (ROW ...))"
+  :row ((:key id :value string :means "provider-neutral model id: the upstream model name, plus :effort when the effort is part of the identity, as \"gemini-3.8-flash:low\"")
+        (:key status :value keyword :means ":calibrated params chosen from a measured sweep; :partial some figures measured, others adopted or unverified; :none never calibrated, no params")
+        (:key date :value string :means "date of the newest run the row draws on")
+        (:key params :value plist :means "best params: :temperature :effort :maxTokens :contextBudget :timeoutSec :reasoning; each value is a bare value or a FIGURE")
+        (:key headline :value list :means "(:metric NAME :v VALUE :n N :src SOURCE :method METHOD) forms, the few results a reader needs to choose")
+        (:key file :value string :means "the model file, relative to .asl/mem/calibration/"))
+  :figure "(:v VALUE :src SOURCE :method METHOD); SOURCE is a path with :line or symbol, a journal dir, or a bench ledger id; METHOD names how the figure was measured, or :unverified when its source states no method, or :adopted when it is a chosen normative value"
+  :modelFile "(:calibrationModel :id ID :provider NAME :runs (RUN ...))"
+  :run ((:key id :value atom :means "run name as its source calls it")
+        (:key date :value string)
+        (:key method :value string :means "how the run was made: harness, grader, what counts as a pass")
+        (:key cases :value list :means "case names as strings")
+        (:key n :value number :means "trials per case, or total trials when :cases is one suite")
+        (:key params :value plist :means "the params tried, one plist, or (:sweep (PLIST ...)) for a sweep")
+        (:key results :value list :means "(:case NAME :pass \"k/n\" :latencySec X :outputTokensPerTurn X :cachedShare X) per case; absent fields were not measured")
+        (:key source :value plist :means ":journal (DIR ...) :ledger (ID ...) :file (PATH ...)"))
+  :gateway "a (:model) alias in ~/.asl/gateway.asn with :calibration ID takes :temperature :effort :maxTokens :timeoutSec from the row with that :id; params on the alias override them; a request's explicit X-ASL-Temperature, ASL_TEMPERATURE, body temperature or body max_tokens override both; :contextBudget and :reasoning are read for /health only. The gateway reads the registry at <toolchain root>/.asl/mem/calibration/index.asn, or ASL_CALIBRATION_INDEX"
+  :recalibrate "a new run appends a (:run) to the model file and updates the row's :params :headline :date :status; a row only states figures some run or file carries")

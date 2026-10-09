@@ -1,0 +1,17 @@
+(:package asl-target-sh
+ :version "0.1.0"
+ :entry "src/emitSh.asl"
+ :description "Universal Shell, PowerShell, and Distribution Target Transpiler under ADR D133 / SSOT"
+ :layer 0
+ :aslFirst true
+ :modules [
+   "asl-target-sh/ast"
+   "asl-target-sh/emitSh"
+   "asl-target-sh/emitPs1"
+   "asl-target-sh/emitCmd"
+   "asl-target-sh/lower"
+   "asl-target-sh/distrib"
+   "asl-target-sh/rules"
+ ]
+ :dependencies []
+ :capabilities ["codegen/target" "codegen/shell" "codegen/powershell" "codegen/distrib"])

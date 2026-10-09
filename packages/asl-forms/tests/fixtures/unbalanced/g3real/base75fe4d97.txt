@@ -1,0 +1,138 @@
+(module asl/agentLoop/coreCli
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                             
+  :x [main]
+  :i [(asl/agentLoop/core :a c)])
+
+fn digitsEnd s: String i: Int64 -> Int64
+  (if (= (c/sliceOf s i (+ i 1)) ":") i (digitsEnd s (+ i 1)))
+
+fn netString s: String i: Int64 -> (Pair String Int64)
+  (let [colon (digitsEnd s i)
+        len (optionOr (stringToInt64 (c/sliceOf s i colon)) -1)]
+    (pair (c/sliceOf s (+ colon 1) (+ (+ colon 1) len)) (+ (+ colon 1) len)))
+
+fn netStrings s: String i: Int64 k: Int64 acc: (List String) -> (Pair (List String) Int64)
+  (if (= k 0)
+    (pair (listReverse acc) i)
+    (mt (netString s i) ((pair v j) (netStrings s j (- k 1) (cons v acc)))))
+
+fn toInt s: String -> Int64
+  (optionOr (stringToInt64 s) 0)
+
+fn triples xs: (List String) acc: (List (List String)) -> (List (List String))
+  (if (listEmpty? xs)
+    (listReverse acc)
+    (triples (optionOr (listSlice xs 3 (listLength xs)) (list)) (cons (optionOr (listSlice xs 0 3) (list)) acc)))
+
+fn spanPairs xs: (List String) acc: (List (Pair Int64 Int64)) -> (List (Pair Int64 Int64))
+  (if (listEmpty? xs)
+    (listReverse acc)
+    (spanPairs (c/restOf (c/restOf xs)) (cons (pair (toInt (c/firstOf xs)) (toInt (c/firstOf (c/restOf xs)))) acc)))
+
+fn arg fs: (List String) i: Int64 -> String
+  (optionOr (listGet fs i) "")
+
+fn coverageRun reads: (List (List String)) -> String
+  (mt (fold (fn [st r]
+              (mt st ((pair news cov)
+                (mt (c/recordRead cov (arg r 0) (toInt (arg r 1)) (toInt (arg r 2)))
+                  ((pair new cov2) (pair (cons (if new " true" " false") news) cov2))))))
+        (pair (list) (list)) reads)
+    ((pair news cov) (str "(new" (c/joinAll (listReverse news)) ") " (c/serString (c/renderSeen cov)))))
+
+fn restFrom fs: (List String) i: Int64 -> (List String)
+  (optionOr (listSlice fs i (listLength fs)) (list))
+
+fn coverageFields fs: (List String) acc: (List (Pair String (List (Pair Int64 Int64)))) -> (List (Pair String (List (Pair Int64 Int64))))
+  (if (listEmpty? fs)
+    (listReverse acc)
+    (let [k (* 2 (toInt (arg fs 1)))
+          spans (restFrom fs 2)]
+      (coverageFields (restFrom spans k)
+        (cons (pair (c/firstOf fs) (spanPairs (optionOr (listSlice spans 0 k) (list)) (list))) acc))))
+
+fn serCoverage cov: (List (Pair String (List (Pair Int64 Int64)))) -> String
+  (str "(coverage" (c/joinAll (map (fn [e] (mt e ((pair p sp) (str " (" (c/serString p) " " (c/serSpans sp) ")")))) cov)) ")")
+
+fn readsRun reads: (List (List String)) cov0: (List (Pair String (List (Pair Int64 Int64)))) -> String
+  (mt (fold (fn [st r]
+              (mt st ((pair news cov)
+                (mt (c/recordRead cov (arg r 0) (toInt (arg r 1)) (toInt (arg r 2)))
+                  ((pair new cov2) (pair (cons (if new " true" " false") news) cov2))))))
+        (pair (list) cov0) reads)
+    ((pair news cov) (str "(new" (c/joinAll (listReverse news)) ") " (serCoverage cov))))
+
+fn opFields xs: (List (List String)) -> (List (Pair String c/KvVal))
+  (map (fn [t] (pair (arg t 0) (c/fieldVal (= (arg t 1) "i") (arg t 2)))) xs)
+
+fn runCase kind: String fs: (List String) -> String
+  (cond
+    ((= kind "unescape") (c/serString (c/asnUnescape (arg fs 0))))
+    ((= kind "forms") (str "(forms" (c/joinAll (map (fn [f] (str " " (c/serString f))) (c/parseForms (arg fs 0)))) ")"))
+    ((= kind "parse") (c/serOps (c/parseReply (arg fs 0))))
+    ((= kind "prose") (if (c/isProseWrapped (arg fs 0)) "true" "false"))
+    ((= kind "evidence")
+      (str "(keys" (c/joinAll (map (fn [op] (str " " (c/serKey (c/evidenceKey op (arg fs 1) (arg fs 2))))) (c/parseReply (arg fs 0)))) ")"))
+    ((= kind "owns") (if (c/checkOwns (arg fs 0) (optionOr (listSlice fs 2 (listLength fs)) (list)) (arg fs 1)) "true" "false"))
+    ((= kind "merge") (c/serSpans (c/mergeSpans (spanPairs fs (list)))))
+    ((= kind "coverage") (coverageRun (triples fs (list))))
+    ((= kind "transcript")
+      (c/serString (c/renderTranscript
+        (map (fn [t] (c/makeTurn (arg t 0) (arg t 1) (arg t 2))) (triples (c/restOf fs) (list)))
+        (toInt (arg fs 0)))))
+    ((= kind "window")
+      (mt (c/renderWindow
+            (map (fn [t] (c/makeTurn (arg t 0) (arg t 1) (arg t 2))) (triples (restFrom fs (+ 4 (toInt (arg fs 3)))) (list)))
+            (toInt (arg fs 0)) (toInt (arg fs 1)) (toInt (arg fs 2)) (optionOr (listSlice fs 4 (+ 4 (toInt (arg fs 3)))) (list)))
+        ((c/windowOf text last cut dropped used whole)
+          (str "(window " (stringFromInt64 cut) " " (stringFromInt64 dropped) " " (stringFromInt64 used)
+            " (whole" (c/joinAll (map (fn [t] (str " " (c/serString t))) whole)) ") " (c/serString text) " " (c/serString last) ")"))))
+    ((= kind "strip") (c/serString (c/stripForms (arg fs 0))))
+    ((= kind "kv") (c/serOps (list (c/parseKv (arg fs 0)))))
+    ((= kind "key") (c/serKey (c/evidenceKey (opFields (triples (restFrom fs 2) (list))) (arg fs 0) (arg fs 1))))
+    ((= kind "seen") (c/serString (c/renderSeen (coverageFields fs (list)))))
+    ((= kind "spanSeen")
+      (if (c/spanSeen (coverageFields (restFrom fs 3) (list)) (arg fs 0) (toInt (arg fs 1)) (toInt (arg fs 2))) "true" "false"))
+    ((= kind "reads")
+      (let [k (* 3 (toInt (arg fs 0)))]
+        (readsRun (triples (optionOr (listSlice fs 1 (+ 1 k)) (list)) (list)) (coverageFields (restFrom fs (+ 1 k)) (list)))))
+    ((= kind "steps") (c/serOps (c/uniqueSteps (c/parseReply (arg fs 0)))))
+    ((= kind "dataFindings")
+      (str "(forms" (c/joinAll (map (fn [f] (str " " (c/serString f))) (c/dataFindings (arg fs 0) (restFrom fs 1)))) ")"))
+    ((= kind "nearest") (c/serString (c/nearestOp (arg fs 0) (restFrom fs 1))))
+    ((= kind "gate") (c/gateVerdict (= (arg fs 0) "1") (toInt (arg fs 1)) (arg fs 2) (arg fs 3)))
+    ((= kind "note") (c/noteStep (arg fs 0) (toInt (arg fs 1))))
+    ((= kind "outward")
+      (let [k (toInt (arg fs 1))]
+        (c/serString (c/runOutward (restFrom fs (+ 2 k)) (optionOr (listSlice fs 2 (+ 2 k)) (list)) (arg fs 0)))))
+    ((= kind "readOnly") (if (c/runReadOnly fs) "true" "false"))
+    ((= kind "hidden")
+      (let [k (toInt (arg fs 1))]
+        (str "(flags" (c/joinAll (map (fn [w] (if (c/hiddenPath w (optionOr (listSlice fs 2 (+ 2 k)) (list)) (arg fs 0)) " true" " false")) (restFrom fs (+ 2 k)))) ")")))
+    ((= kind "harness")
+      (str "(flags" (c/joinAll (map (fn [w] (if (c/harnessPath w (arg fs 0)) " true" " false")) (restFrom fs 1))) ")"))
+    ((= kind "changePlan")
+      (let [k (toInt (arg fs 1))]
+        (str "(plan" (c/joinAll (map (fn [v] (str " " (c/serString v))) (c/changePlan (restFrom fs (+ 2 k)) (optionOr (listSlice fs 2 (+ 2 k)) (list)) (arg fs 0)))) ")")))
+    ((= kind "terminal") (str "(forms" (c/joinAll (map (fn [f] (str " " (c/serString f))) (c/terminalForms (arg fs 0)))) ")"))
+    (else (str "ERR_UNKNOWN_KIND " kind)))
+
+fn caseLoop s: String n: Int64 i: Int64 idx: Int64 -> Int64
+  (if (>= i n)
+    idx
+    (mt (netString s i)
+      ((pair kind j)
+        (mt (netString s j)
+          ((pair count k)
+            (mt (netStrings s k (toInt count) (list))
+              ((pair fs next)
+                (do
+                  (println (str (stringFromInt64 idx) " " kind " " (runCase kind fs)))
+                  (caseLoop s n next (+ idx 1))))))))))
+
+fn main args: (List String) -> (Result Int64 String)
+  (if (listEmpty? args)
+    (err "usage: asl-host run asl/agentLoop/coreCli.asl CORPUS")
+    (mt (fileReadString (c/firstOf args))
+      ((ok s) (let [(n (caseLoop s (stringLength s) 0 0))] (ok 0)))
+      ((err e) (err e))))

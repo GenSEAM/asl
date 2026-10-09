@@ -1,0 +1,95 @@
+(module asl-syntax/js/expr
+                                                                                                  
+  :x [parseExpr
+      parseExprString
+      parseExprToSExpr
+      exprNodeKind]
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)
+      (asl-syntax/core/print :a pr)
+      (asl-syntax/js/lex :a lx)])
+
+fn exprNodeKind node: tr/Node -> String
+  node.kind    
+
+fn isTriviaTok tok: tr/Token -> Bool
+  (let [(k tok.kind    )]
+    (or (= k "whitespace")
+    (or (= k "newline")
+        (= k "comment"))))
+
+fn skipTrivia tokens: (List tr/Token) idx: Int64 len: Int64 -> Int64
+  (if (>= idx len)
+    idx
+    (let [(tok (optionOr (listGet tokens idx) (tr/makeToken "" 0 0)))]
+      (if (isTriviaTok tok)
+        (skipTrivia tokens (+ idx 1) len)
+        idx)))
+
+fn tokenText s: String tok: tr/Token -> String
+  (optionOr (stringSlice s tok.start     tok.end    ) "")
+
+(schema Ast
+  (:f kind String)
+  (:f op String)
+  (:f left (Option Ast))
+  (:f right (Option Ast))
+  (:f extra (Option Ast))
+  (:f args (List Ast))
+  (:f text String)
+  (:f start Int64)
+  (:f end Int64))
+
+fn makeAstLit kind: String text: String start: Int64 end: Int64 -> Ast
+  (Ast :kind kind :op "" :left (none) :right (none) :extra (none) :args (list) :text text :start start :end end)
+
+fn makeAstUnary op: String arg: Ast start: Int64 end: Int64 -> Ast
+  (Ast :kind "unary" :op op :left (some arg) :right (none) :extra (none) :args (list) :text "" :start start :end end)
+
+fn makeAstBinary op: String left: Ast right: Ast start: Int64 end: Int64 -> Ast
+  (Ast :kind "binary" :op op :left (some left) :right (some right) :extra (none) :args (list) :text "" :start start :end end)
+
+fn makeAstCond condExpr: Ast thenExpr: Ast elseExpr: Ast start: Int64 end: Int64 -> Ast
+  (Ast :kind "cond" :op "?:" :left (some condExpr) :right (some thenExpr) :extra (some elseExpr) :args (list) :text "" :start start :end end)
+
+fn makeAstCall callee: Ast args: (List Ast) start: Int64 end: Int64 -> Ast
+  (Ast :kind "call" :op "()" :left (some callee) :right (none) :extra (none) :args args :text "" :start start :end end)
+
+fn makeAstMember obj: Ast prop: String start: Int64 end: Int64 isComputed: Bool isOpt: Bool -> Ast
+  (let [(op (if isOpt (if isComputed "?.[]" "?.") (if isComputed "[]" ".")))]
+    (Ast :kind "member" :op op :left (some obj) :right (none) :extra (none) :args (list) :text prop :start start :end end))
+
+fn astToSExpr ast: Ast -> String
+  (let [(k ast.kind    )]
+    (cond
+      ((or (= k "ident") (or (= k "literal") (= k "this")))
+       ast.text    )
+      ((= k "unary")
+       (stringConcat "(" (stringConcat ast.op     (stringConcat " " (stringConcat (astToSExpr (optionOr ast.left     ast)) ")")))))
+      ((= k "binary")
+       (stringConcat "(" (stringConcat ast.op     (stringConcat " " (stringConcat (astToSExpr (optionOr ast.left     ast)) (stringConcat " " (stringConcat (astToSExpr (optionOr ast.right     ast)) ")")))))))
+      ((= k "cond")
+       (stringConcat "(?: " (stringConcat (astToSExpr (optionOr ast.left     ast)) (stringConcat " " (stringConcat (astToSExpr (optionOr ast.right     ast)) (stringConcat " " (stringConcat (astToSExpr (optionOr ast.extra     ast)) ")")))))))
+      ((= k "call")
+       (let [(calleeStr (astToSExpr (optionOr ast.left     ast)))
+             (argsStrs (map (fn [(a Ast)] -> String (astToSExpr a)) ast.args    ))
+             (argsJoined (if (listEmpty? argsStrs) "" (stringConcat " " (stringJoin argsStrs " "))))]
+         (stringConcat "(call " (stringConcat calleeStr (stringConcat argsJoined ")")))))
+      ((= k "member")
+       (stringConcat "(" (stringConcat ast.op     (stringConcat " " (stringConcat (astToSExpr (optionOr ast.left     ast)) (stringConcat " " (stringConcat ast.text     ")")))))))
+      (else ast.text    ))))
+
+fn parseExprString s: String -> tr/Node
+  (let [(tokens (lx/tokenize s))
+        (len (stringLength s))
+        (elems (map (fn [(t tr/Token)] -> tr/TreeElement (tr/elemToken t)) tokens))]
+    (tr/makeNode "Program" 0 len elems))
+
+fn parseExpr s: String -> tr/Node
+  (parseExprString s)
+
+fn parseExprToSExpr s: String -> String
+  (let [(tokens (lx/tokenize s))
+        (len (stringLength s))
+        (tok (optionOr (listGet tokens (skipTrivia tokens 0 (listLength tokens))) (tr/makeToken "" 0 0)))]
+    (tokenText s tok))

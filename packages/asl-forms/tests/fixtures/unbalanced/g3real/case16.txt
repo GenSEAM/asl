@@ -1,0 +1,662 @@
+(module asl-syntax/js/lex
+                                                                                                                                                                                      
+  :x [LexGoal
+      goalDefault
+      goalRegex
+      goalTemplate
+      goalJsxText
+      lexJs
+      lexJsGoal
+      lexJsText
+      lexJsSource
+      tokensToNode
+      tokenSliceString
+      tokenSliceBytes
+      hasPrecedingNewline
+      isWhitespaceToken
+      isNewlineToken
+      isCommentToken
+      isHashbangToken
+      isIdentToken
+      isKeywordToken
+      isNumberToken
+      isStringToken
+      isTemplateToken
+      isRegexToken
+      isPunctToken
+      isJsxTextToken
+      isPrivateNameToken
+      isInvalidToken]
+  :i [(asl-syntax/core/source :a src)
+      (asl-syntax/core/tree :a tr)])
+
+(enum LexGoal
+  (:c goalDefault [] "Divide-or-regex decided by previous significant token")
+  (:c goalRegex [] "A / at this position starts a regular expression")
+  (:c goalTemplate [] "Lexing resumes inside a template continuation")
+  (:c goalJsxText [] "Lexing resumes in JSX text mode"))
+
+(schema TplChunk
+  (:f tok tr/Token)
+  (:f next Int64)
+  (:f opensSubst Bool))
+
+fn goalIsDefault goal: LexGoal -> Bool
+  (mt goal ((goalDefault) true) (_ false))
+
+fn goalIsRegex goal: LexGoal -> Bool
+  (mt goal ((goalRegex) true) (_ false))
+
+fn goalIsJsxText goal: LexGoal -> Bool
+  (mt goal ((goalJsxText) true) (_ false))
+
+fn isWhitespaceToken tok: tr/Token -> Bool
+  (= tok.kind     "whitespace")
+
+fn isNewlineToken tok: tr/Token -> Bool
+  (= tok.kind     "newline")
+
+fn isCommentToken tok: tr/Token -> Bool
+  (= tok.kind     "comment")
+
+fn isHashbangToken tok: tr/Token -> Bool
+  (= tok.kind     "hashbang")
+
+fn isIdentToken tok: tr/Token -> Bool
+  (= tok.kind     "ident")
+
+fn isKeywordToken tok: tr/Token -> Bool
+  (= tok.kind     "keyword")
+
+fn isNumberToken tok: tr/Token -> Bool
+  (= tok.kind     "number")
+
+fn isStringToken tok: tr/Token -> Bool
+  (= tok.kind     "string")
+
+fn isTemplateToken tok: tr/Token -> Bool
+  (= tok.kind     "template")
+
+fn isRegexToken tok: tr/Token -> Bool
+  (= tok.kind     "regex")
+
+fn isPunctToken tok: tr/Token -> Bool
+  (= tok.kind     "punct")
+
+fn isJsxTextToken tok: tr/Token -> Bool
+  (= tok.kind     "jsxText")
+
+fn isPrivateNameToken tok: tr/Token -> Bool
+  (= tok.kind     "privateName")
+
+fn isInvalidToken tok: tr/Token -> Bool
+  (= tok.kind     "invalid")
+
+fn isWsByte b: Int64 -> Bool
+  (or (= b 32)
+  (or (= b 9)
+  (or (= b 11)
+      (= b 12))))
+
+fn isDigitByte b: Int64 -> Bool
+  (and (>= b 48) (<= b 57))
+
+fn isHexDigitByte b: Int64 -> Bool
+  (or (and (>= b 48) (<= b 57))
+  (or (and (>= b 65) (<= b 70))
+      (and (>= b 97) (<= b 102))))
+
+fn isIdentStartByte b: Int64 -> Bool
+  (or (and (>= b 65) (<= b 90))
+  (or (and (>= b 97) (<= b 122))
+  (or (= b 95)
+  (or (= b 36)
+      (>= b 128)))))
+
+fn isIdentContByte b: Int64 -> Bool
+  (or (isIdentStartByte b)
+      (isDigitByte b))
+
+fn isUnicodeLineSep bs: Bytes len: Int64 i: Int64 -> Bool
+  (and (< (+ i 2) len)
+       (and (= (bytesGet bs i) 226)
+            (and (= (bytesGet bs (+ i 1)) 128)
+                 (or (= (bytesGet bs (+ i 2)) 168)
+                     (= (bytesGet bs (+ i 2)) 169)))))
+
+fn scanWhitespaceRun bs: Bytes len: Int64 i: Int64 -> Int64
+  (if (>= i len)
+    i
+    (if (isWsByte (bytesGet bs i))
+      (scanWhitespaceRun bs len (+ i 1))
+      i))
+
+fn scanNewlineLen bs: Bytes len: Int64 i: Int64 -> Int64
+  (let [(b (bytesGet bs i))]
+    (if (= b 13)
+      (if (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 10)) 2 1)
+      1))
+
+fn scanLineComment bs: Bytes len: Int64 i: Int64 -> Int64
+  (if (>= i len)
+    len
+    (let [(b (bytesGet bs i))]
+      (if (or (= b 10) (= b 13))
+        i
+        (if (isUnicodeLineSep bs len i)
+          i
+          (scanLineComment bs len (+ i 1))))))
+
+fn scanBlockComment bs: Bytes len: Int64 i: Int64 -> Int64
+  (if (>= i len)
+    len
+    (let [(b (bytesGet bs i))]
+      (if (and (= b 42) (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 47)))
+        (+ i 2)
+        (scanBlockComment bs len (+ i 1)))))
+
+fn scanString bs: Bytes len: Int64 j: Int64 quote: Int64 -> Int64
+  (if (>= j len)
+    len
+    (let [(b (bytesGet bs j))]
+      (cond
+        ((= b 92)
+         (if (< (+ j 1) len)
+           (let [(nb (bytesGet bs (+ j 1)))]
+             (if (and (= nb 13) (and (< (+ j 2) len) (= (bytesGet bs (+ j 2)) 10)))
+               (scanString bs len (+ j 3) quote)
+               (scanString bs len (+ j 2) quote)))
+           len))
+        ((= b quote) (+ j 1))
+        ((or (= b 10) (= b 13)) j)
+        (else (scanString bs len (+ j 1) quote)))))
+
+fn scanRegexFlags bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (if (or (and (>= b 97) (<= b 122)) (or (and (>= b 65) (<= b 90)) (>= b 128)))
+        (scanRegexFlags bs len (+ j 1))
+        j))))
+
+fn scanRegex bs: Bytes len: Int64 j: Int64 inClass: Bool -> Int64
+  (if (>= j len)
+    len
+    (let [(b (bytesGet bs j))]
+      (cond
+        ((= b 92)
+         (if (< (+ j 1) len)
+           (scanRegex bs len (+ j 2) inClass)
+           len))
+        ((= b 91) (scanRegex bs len (+ j 1) true))
+        ((and (= b 93) inClass) (scanRegex bs len (+ j 1) false))
+        ((= b 47)
+         (if inClass
+           (scanRegex bs len (+ j 1) true)
+           (scanRegexFlags bs len (+ j 1))))
+        ((or (= b 10) (= b 13)) j)
+        ((isUnicodeLineSep bs len j) j)
+        (else (scanRegex bs len (+ j 1) inClass)))))
+
+fn scanDigitsRun bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (if (or (isDigitByte b) (= b 95))
+        (scanDigitsRun bs len (+ j 1))
+        j))))
+
+fn scanHexRun bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (if (or (isHexDigitByte b) (= b 95))
+        (scanHexRun bs len (+ j 1))
+        j))))
+
+fn scanOctalRun bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (if (or (and (>= b 48) (<= b 55)) (= b 95))
+        (scanOctalRun bs len (+ j 1))
+        j))))
+
+fn scanBinaryRun bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (if (or (= b 48) (or (= b 49) (= b 95)))
+        (scanBinaryRun bs len (+ j 1))
+        j))))
+
+fn scanRadixEnd bs: Bytes len: Int64 j: Int64 -> Int64
+  (let [(e (scanHexRun bs len j))]
+    (if (and (< e len) (= (bytesGet bs e) 110))
+      (+ e 1)
+      e)))
+
+fn scanOctalEnd bs: Bytes len: Int64 j: Int64 -> Int64
+  (let [(e (scanOctalRun bs len j))]
+    (if (and (< e len) (= (bytesGet bs e) 110))
+      (+ e 1)
+      e)))
+
+fn scanBinaryEnd bs: Bytes len: Int64 j: Int64 -> Int64
+  (let [(e (scanBinaryRun bs len j))]
+    (if (and (< e len) (= (bytesGet bs e) 110))
+      (+ e 1)
+      e)))
+
+fn scanDecimal bs: Bytes len: Int64 i: Int64 -> Int64
+  (let [(j0 (scanDigitsRun bs len i))
+        (afterDot (if (and (< j0 len)
+                           (and (= (bytesGet bs j0) 46)
+                                (and (< (+ j0 1) len)
+                                     (isDigitByte (bytesGet bs (+ j0 1))))))
+                    (scanDigitsRun bs len (+ j0 1))
+                    j0))
+        (afterExp (if (and (< afterDot len)
+                           (or (= (bytesGet bs afterDot) 101)
+                               (= (bytesGet bs afterDot) 69)))
+                    (let [(k0 (+ afterDot 1))
+                          (k1 (if (and (< k0 len)
+                                       (or (= (bytesGet bs k0) 43)
+                                           (= (bytesGet bs k0) 45)))
+                                (+ k0 1)
+                                k0))]
+                      (if (and (< k1 len) (isDigitByte (bytesGet bs k1)))
+                        (scanDigitsRun bs len k1)
+                        afterDot))
+                    afterDot))]
+    (if (and (< afterExp len)
+             (and (= (bytesGet bs afterExp) 110)
+                  (or (>= (+ afterExp 1) len)
+                      (not (isIdentContByte (bytesGet bs (+ afterExp 1)))))))
+      (+ afterExp 1)
+      afterExp)))
+
+fn scanNumber bs: Bytes len: Int64 i: Int64 -> Int64
+  (let [(b0 (bytesGet bs i))]
+    (if (and (= b0 48) (< (+ i 1) len))
+      (let [(n1 (bytesGet bs (+ i 1)))]
+        (cond
+          ((or (= n1 120) (= n1 88)) (scanRadixEnd bs len (+ i 2)))
+          ((or (= n1 111) (= n1 79)) (scanOctalEnd bs len (+ i 2)))
+          ((or (= n1 98) (= n1 66)) (scanBinaryEnd bs len (+ i 2)))
+          (else (scanDecimal bs len i))))
+      (scanDecimal bs len i))))
+
+fn scanHexBraceEnd bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (if (isHexDigitByte b)
+        (scanHexBraceEnd bs len (+ j 1))
+        (if (= b 125) (+ j 1) j)))))
+
+fn scanHex4End bs: Bytes len: Int64 j: Int64 count: Int64 -> Int64
+  (if (or (>= j len) (>= count 4))
+    j
+    (if (isHexDigitByte (bytesGet bs j))
+      (scanHex4End bs len (+ j 1) (+ count 1))
+      j)))
+
+fn scanUnicodeEscapeEnd bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (and (< (+ j 2) len) (= (bytesGet bs (+ j 2)) 123))
+    (scanHexBraceEnd bs len (+ j 3))
+    (scanHex4End bs len (+ j 2) 0)))
+
+fn scanIdent bs: Bytes len: Int64 j: Int64 -> Int64
+  (if (>= j len)
+    j
+    (let [(b (bytesGet bs j))]
+      (cond
+        ((isIdentContByte b) (scanIdent bs len (+ j 1)))
+        ((and (= b 92)
+              (and (< (+ j 1) len)
+                   (= (bytesGet bs (+ j 1)) 117)))
+         (scanIdent bs len (scanUnicodeEscapeEnd bs len j)))
+        ((and (= b 226)
+              (and (< (+ j 2) len)
+                   (and (= (bytesGet bs (+ j 1)) 128)
+                        (or (= (bytesGet bs (+ j 2)) 139)
+                            (= (bytesGet bs (+ j 2)) 140)))))
+         (scanIdent bs len (+ j 3)))
+        (else j)))))
+
+fn scanJsxText bs: Bytes len: Int64 i: Int64 -> Int64
+  (if (>= i len)
+    i
+    (let [(b (bytesGet bs i))]
+      (if (and (not (= b 60)) (not (= b 123)))
+        (scanJsxText bs len (+ i 1))
+        i))))
+
+fn scanTpl bs: Bytes len: Int64 start: Int64 j: Int64 -> TplChunk
+  (if (>= j len)
+    (TplChunk :tok (tr/makeToken "template" start len) :next len :opensSubst false)
+    (let [(b (bytesGet bs j))]
+      (cond
+        ((= b 92)
+         (if (< (+ j 1) len)
+           (scanTpl bs len start (+ j 2))
+           (TplChunk :tok (tr/makeToken "template" start len) :next len :opensSubst false)))
+        ((= b 96)
+         (TplChunk :tok (tr/makeToken "template" start (+ j 1)) :next (+ j 1) :opensSubst false))
+        ((and (= b 36)
+              (and (< (+ j 1) len)
+                   (= (bytesGet bs (+ j 1)) 123)))
+         (TplChunk :tok (tr/makeToken "template" start (+ j 2)) :next (+ j 2) :opensSubst true))
+        (else (scanTpl bs len start (+ j 1)))))))
+
+fn scanTemplateChunk bs: Bytes len: Int64 start: Int64 fromIdx: Int64 -> TplChunk
+  (scanTpl bs len start fromIdx))
+
+fn bytesRangeEqLoop bs: Bytes start: Int64 expected: Bytes j: Int64 n: Int64 -> Bool
+  (if (>= j n)
+    true
+    (if (= (bytesGet bs (+ start j)) (bytesGet expected j))
+      (bytesRangeEqLoop bs start expected (+ j 1) n)
+      false)))
+
+fn bytesRangeEq bs: Bytes start: Int64 expected: Bytes -> Bool
+  (let [(n (bytesLength expected))]
+    (bytesRangeEqLoop bs start expected 0 n)))
+
+fn classifyIdent bs: Bytes start: Int64 end: Int64 -> String
+  (let [(b0 (bytesGet bs start))
+        (l (- end start))]
+    (cond
+      ((= b0 97)
+       (if (and (= l 5) (bytesRangeEq bs start (stringToBytes "await"))) "keyword" "ident"))
+      ((= b0 98)
+       (if (and (= l 5) (bytesRangeEq bs start (stringToBytes "break"))) "keyword" "ident"))
+      ((= b0 99)
+       (if (or (and (= l 4) (bytesRangeEq bs start (stringToBytes "case")))
+             (or (and (= l 5) (bytesRangeEq bs start (stringToBytes "catch")))
+             (or (and (= l 5) (bytesRangeEq bs start (stringToBytes "class")))
+             (or (and (= l 5) (bytesRangeEq bs start (stringToBytes "const")))
+                 (and (= l 8) (bytesRangeEq bs start (stringToBytes "continue")))))))
+         "keyword" "ident"))
+      ((= b0 100)
+       (if (or (and (= l 8) (bytesRangeEq bs start (stringToBytes "debugger")))
+             (or (and (= l 7) (bytesRangeEq bs start (stringToBytes "default")))
+             (or (and (= l 6) (bytesRangeEq bs start (stringToBytes "delete")))
+                 (and (= l 2) (bytesRangeEq bs start (stringToBytes "do"))))))
+         "keyword" "ident"))
+      ((= b0 101)
+       (if (or (and (= l 4) (or (bytesRangeEq bs start (stringToBytes "else"))
+                                (bytesRangeEq bs start (stringToBytes "enum"))))
+             (or (and (= l 6) (bytesRangeEq bs start (stringToBytes "export")))
+                 (and (= l 7) (bytesRangeEq bs start (stringToBytes "extends")))))
+         "keyword" "ident"))
+      ((= b0 102)
+       (if (or (and (= l 5) (bytesRangeEq bs start (stringToBytes "false")))
+             (or (and (= l 7) (bytesRangeEq bs start (stringToBytes "finally")))
+             (or (and (= l 3) (bytesRangeEq bs start (stringToBytes "for")))
+                 (and (= l 8) (bytesRangeEq bs start (stringToBytes "function"))))))
+         "keyword" "ident"))
+      ((= b0 105)
+       (if (or (and (= l 2) (or (bytesRangeEq bs start (stringToBytes "if"))
+                                (bytesRangeEq bs start (stringToBytes "in"))))
+             (or (and (= l 6) (bytesRangeEq bs start (stringToBytes "import")))
+                 (and (= l 10) (bytesRangeEq bs start (stringToBytes "instanceof")))))
+         "keyword" "ident"))
+      ((= b0 108)
+       (if (and (= l 3) (bytesRangeEq bs start (stringToBytes "let"))) "keyword" "ident"))
+      ((= b0 110)
+       (if (or (and (= l 3) (bytesRangeEq bs start (stringToBytes "new")))
+               (and (= l 4) (bytesRangeEq bs start (stringToBytes "null"))))
+         "keyword" "ident"))
+      ((= b0 114)
+       (if (and (= l 6) (bytesRangeEq bs start (stringToBytes "return"))) "keyword" "ident"))
+      ((= b0 115)
+       (if (or (and (= l 5) (or (bytesRangeEq bs start (stringToBytes "super"))
+                                (bytesRangeEq bs start (stringToBytes "static"))))
+               (and (= l 6) (bytesRangeEq bs start (stringToBytes "switch"))))
+         "keyword" "ident"))
+      ((= b0 116)
+       (if (or (and (= l 4) (or (bytesRangeEq bs start (stringToBytes "this"))
+                                (bytesRangeEq bs start (stringToBytes "true"))))
+             (or (and (= l 5) (bytesRangeEq bs start (stringToBytes "throw")))
+             (or (and (= l 3) (bytesRangeEq bs start (stringToBytes "try")))
+                 (and (= l 6) (bytesRangeEq bs start (stringToBytes "typeof"))))))
+         "keyword" "ident"))
+      ((= b0 118)
+       (if (or (and (= l 3) (bytesRangeEq bs start (stringToBytes "var")))
+               (and (= l 4) (bytesRangeEq bs start (stringToBytes "void"))))
+         "keyword" "ident"))
+      ((= b0 119)
+       (if (or (and (= l 5) (bytesRangeEq bs start (stringToBytes "while")))
+               (and (= l 4) (bytesRangeEq bs start (stringToBytes "with"))))
+         "keyword" "ident"))
+      ((= b0 121)
+       (if (and (= l 5) (bytesRangeEq bs start (stringToBytes "yield"))) "keyword" "ident"))
+      (else "ident"))))
+
+fn literalLikeKeyword bs: Bytes start: Int64 end: Int64 -> Bool
+  (let [(b0 (bytesGet bs start))
+        (l (- end start))]
+    (cond
+      ((= b0 116)
+       (and (= l 4)
+            (or (bytesRangeEq bs start (stringToBytes "this"))
+                (bytesRangeEq bs start (stringToBytes "true")))))
+      ((= b0 110)
+       (and (= l 4) (bytesRangeEq bs start (stringToBytes "null"))))
+      ((= b0 102)
+       (and (= l 5) (bytesRangeEq bs start (stringToBytes "false"))))
+      ((= b0 115)
+       (and (= l 5) (bytesRangeEq bs start (stringToBytes "super"))))
+      (else false))))
+
+fn punctAllowsRegex pLen: Int64 bs: Bytes i: Int64 -> Bool
+  (if (= pLen 1)
+    (let [(b (bytesGet bs i))]
+      (not (or (= b 41)
+           (or (= b 93)
+           (or (= b 125)
+               (= b 46))))))
+    (if (= pLen 2)
+      (let [(b0 (bytesGet bs i))
+            (b1 (bytesGet bs (+ i 1)))]
+        (not (or (and (= b0 43) (= b1 43))
+             (or (and (= b0 45) (= b1 45))
+                 (and (= b0 63) (= b1 46))))))
+      true)))
+
+fn punctLen bs: Bytes len: Int64 i: Int64 -> Int64
+  (let [(b0 (bytesGet bs i))
+        (b1 (if (< (+ i 1) len) (bytesGet bs (+ i 1)) 0))
+        (b2 (if (< (+ i 2) len) (bytesGet bs (+ i 2)) 0))
+        (b3 (if (< (+ i 3) len) (bytesGet bs (+ i 3)) 0))]
+    (cond
+      ((and (= b0 62) (and (= b1 62) (and (= b2 62) (= b3 61)))) 4)
+      ((and (= b0 61) (and (= b1 61) (= b2 61))) 3)
+      ((and (= b0 33) (and (= b1 61) (= b2 61))) 3)
+      ((and (= b0 62) (and (= b1 62) (= b2 62))) 3)
+      ((and (= b0 60) (and (= b1 60) (= b2 61))) 3)
+      ((and (= b0 62) (and (= b1 62) (= b2 61))) 3)
+      ((and (= b0 42) (and (= b1 42) (= b2 61))) 3)
+      ((and (= b0 38) (and (= b1 38) (= b2 61))) 3)
+      ((and (= b0 124) (and (= b1 124) (= b2 61))) 3)
+      ((and (= b0 63) (and (= b1 63) (= b2 61))) 3)
+      ((and (= b0 46) (and (= b1 46) (= b2 46))) 3)
+      ((and (= b0 61) (= b1 61)) 2)
+      ((and (= b0 33) (= b1 61)) 2)
+      ((and (= b0 60) (= b1 61)) 2)
+      ((and (= b0 62) (= b1 61)) 2)
+      ((and (= b0 61) (= b1 62)) 2)
+      ((and (= b0 43) (= b1 43)) 2)
+      ((and (= b0 45) (= b1 45)) 2)
+      ((and (= b0 60) (= b1 60)) 2)
+      ((and (= b0 62) (= b1 62)) 2)
+      ((and (= b0 42) (= b1 42)) 2)
+      ((and (= b0 38) (= b1 38)) 2)
+      ((and (= b0 124) (= b1 124)) 2)
+      ((and (= b0 63) (= b1 63)) 2)
+      ((and (= b0 63) (and (= b1 46) (not (isDigitByte b2)))) 2)
+      ((and (= b0 43) (= b1 61)) 2)
+      ((and (= b0 45) (= b1 61)) 2)
+      ((and (= b0 42) (= b1 61)) 2)
+      ((and (= b0 47) (= b1 61)) 2)
+      ((and (= b0 37) (= b1 61)) 2)
+      ((and (= b0 38) (= b1 61)) 2)
+      ((and (= b0 124) (= b1 61)) 2)
+      ((and (= b0 94) (= b1 61)) 2)
+      ((or (= b0 123) (or (= b0 125) (or (= b0 40) (or (= b0 41)
+       (or (= b0 91) (or (= b0 93) (or (= b0 46) (or (= b0 59)
+       (or (= b0 44) (or (= b0 58) (or (= b0 63) (or (= b0 126)
+       (or (= b0 43) (or (= b0 45) (or (= b0 42) (or (= b0 37)
+       (or (= b0 38) (or (= b0 124) (or (= b0 94) (or (= b0 33)
+       (or (= b0 60) (or (= b0 62) (or (= b0 61) (or (= b0 47)
+       (= b0 64)))))))))))))))))))))))))
+       1)
+      (else 0))))
+
+fn lexLoop bs: Bytes len: Int64 i: Int64 acc: (List tr/Token) goal: LexGoal tplDepths: (List Int64) prevRegexOk: Bool -> (List tr/Token)
+  (if (>= i len)
+    (listReverse acc)
+    (let [(b (bytesGet bs i))]
+      (cond
+        ((and (goalIsJsxText goal) (and (not (= b 60)) (not (= b 123))))
+         (let [(e (scanJsxText bs len i))]
+           (lexLoop bs len e (cons (tr/makeToken "jsxText" i e) acc) goal tplDepths false)))
+        ((and (= i 0) (and (= b 35) (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 33))))
+         (let [(e (scanLineComment bs len (+ i 2)))]
+           (lexLoop bs len e (cons (tr/makeToken "hashbang" i e) acc) goal tplDepths false)))
+        ((isWsByte b)
+         (let [(e (scanWhitespaceRun bs len i))]
+           (lexLoop bs len e (cons (tr/makeToken "whitespace" i e) acc) goal tplDepths prevRegexOk)))
+        ((and (= b 239) (and (< (+ i 2) len) (and (= (bytesGet bs (+ i 1)) 187) (= (bytesGet bs (+ i 2)) 191))))
+         (lexLoop bs len (+ i 3) (cons (tr/makeToken "whitespace" i (+ i 3)) acc) goal tplDepths prevRegexOk))
+        ((and (= b 194) (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 160)))
+         (lexLoop bs len (+ i 2) (cons (tr/makeToken "whitespace" i (+ i 2)) acc) goal tplDepths prevRegexOk))
+        ((or (= b 10) (= b 13))
+         (let [(n (scanNewlineLen bs len i))]
+           (lexLoop bs len (+ i n) (cons (tr/makeToken "newline" i (+ i n)) acc) goal tplDepths prevRegexOk)))
+        ((isUnicodeLineSep bs len i)
+         (lexLoop bs len (+ i 3) (cons (tr/makeToken "newline" i (+ i 3)) acc) goal tplDepths prevRegexOk))
+        ((and (= b 47) (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 47)))
+         (let [(e (scanLineComment bs len (+ i 2)))]
+           (lexLoop bs len e (cons (tr/makeToken "comment" i e) acc) goal tplDepths prevRegexOk)))
+        ((and (= b 47) (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 42)))
+         (let [(e (scanBlockComment bs len (+ i 2)))]
+           (lexLoop bs len e (cons (tr/makeToken "comment" i e) acc) goal tplDepths prevRegexOk)))
+        ((or (= b 34) (= b 39))
+         (let [(e (scanString bs len (+ i 1) b))]
+           (lexLoop bs len e (cons (tr/makeToken "string" i e) acc) goal tplDepths false)))
+        ((= b 96)
+         (let [(chunk (scanTemplateChunk bs len i (+ i 1)))]
+           (if chunk.opensSubst    
+             (lexLoop bs len chunk.next     (cons chunk.tok     acc) goal (cons 0 tplDepths) true)
+             (lexLoop bs len chunk.next     (cons chunk.tok     acc) goal tplDepths false))))
+        ((and (not (listEmpty? tplDepths)) (= b 125))
+         (let [(topDepth (optionOr (listHead tplDepths) 0))]
+           (if (= topDepth 0)
+             (let [(restDepths (optionOr (listTail tplDepths) (list)))
+                   (chunk (scanTemplateChunk bs len (+ i 1) (+ i 1)))]
+               (if chunk.opensSubst    
+                 (lexLoop bs len chunk.next    
+                   (cons chunk.tok     (cons (tr/makeToken "punct" i (+ i 1)) acc))
+                   goal (cons 0 restDepths) true)
+                 (lexLoop bs len chunk.next    
+                   (cons chunk.tok     (cons (tr/makeToken "punct" i (+ i 1)) acc))
+                   goal restDepths false)))
+             (let [(restDepths (optionOr (listTail tplDepths) (list)))]
+               (lexLoop bs len (+ i 1)
+                 (cons (tr/makeToken "punct" i (+ i 1)) acc)
+                 goal (cons (- topDepth 1) restDepths) false)))))
+        ((and (not (listEmpty? tplDepths)) (= b 123))
+         (let [(topDepth (optionOr (listHead tplDepths) 0))
+               (restDepths (optionOr (listTail tplDepths) (list)))]
+           (lexLoop bs len (+ i 1)
+             (cons (tr/makeToken "punct" i (+ i 1)) acc)
+             goal (cons (+ topDepth 1) restDepths) true)))
+        ((and (= b 47)
+              (or (goalIsRegex goal)
+                  (and (goalIsDefault goal) prevRegexOk)))
+         (let [(e (scanRegex bs len (+ i 1) false))]
+           (lexLoop bs len e (cons (tr/makeToken "regex" i e) acc) goal tplDepths false)))
+        ((isDigitByte b)
+         (let [(e (scanNumber bs len i))]
+           (lexLoop bs len e (cons (tr/makeToken "number" i e) acc) goal tplDepths false)))
+        ((and (= b 46) (and (< (+ i 1) len) (isDigitByte (bytesGet bs (+ i 1)))))
+         (let [(e (scanNumber bs len i))]
+           (lexLoop bs len e (cons (tr/makeToken "number" i e) acc) goal tplDepths false)))
+        ((and (= b 35) (and (< (+ i 1) len) (isIdentStartByte (bytesGet bs (+ i 1)))))
+         (let [(e (scanIdent bs len (+ i 1)))]
+           (lexLoop bs len e (cons (tr/makeToken "privateName" i e) acc) goal tplDepths false)))
+        ((or (isIdentStartByte b)
+             (and (= b 92) (and (< (+ i 1) len) (= (bytesGet bs (+ i 1)) 117))))
+         (let [(e (scanIdent bs len i))
+               (kind (classifyIdent bs i e))]
+           (lexLoop bs len e (cons (tr/makeToken kind i e) acc) goal tplDepths
+             (if (= kind "keyword")
+               (not (literalLikeKeyword bs i e))
+               false))))
+        (else
+         (let [(n (punctLen bs len i))]
+           (if (> n 0)
+             (lexLoop bs len (+ i n) (cons (tr/makeToken "punct" i (+ i n)) acc) goal tplDepths (punctAllowsRegex n bs i))
+             (lexLoop bs len (+ i 1) (cons (tr/makeToken "invalid" i (+ i 1)) acc) goal tplDepths true))))))))
+
+fn lexJsGoal bs: Bytes goal: LexGoal -> (List tr/Token)
+  (let [(len (bytesLength bs))]
+    (mt goal
+      ((goalTemplate)
+       (let [(chunk (scanTemplateChunk bs len 0 0))]
+         (if chunk.opensSubst    
+           (lexLoop bs len chunk.next     (list chunk.tok    ) (goalDefault) (cons 0 (list)) true)
+           (lexLoop bs len chunk.next     (list chunk.tok    ) (goalDefault) (list) false))))
+      (_
+       (lexLoop bs len 0 (list) goal (list) true)))))
+
+fn lexJs bs: Bytes -> (List tr/Token)
+  (lexJsGoal bs (goalDefault))
+
+fn lexJsText text: String -> (List tr/Token)
+  (lexJs (stringToBytes text))
+
+fn lexJsSource s: src/Source -> (List tr/Token)
+  (lexJs (src/sourceBytes s))
+
+fn tokensToElems tokens: (List tr/Token) acc: (List tr/TreeElement) -> (List tr/TreeElement)
+  (if (listEmpty? tokens)
+    (listReverse acc)
+    (let [(tok (optionOr (listHead tokens) (tr/makeToken "" 0 0)))
+          (rest (optionOr (listTail tokens) (list)))]
+      (tokensToElems rest (cons (tr/elemToken tok) acc)))))
+
+fn tokensToNode tokens: (List tr/Token) len: Int64 -> tr/Node
+  (tr/makeNode "js" 0 len (tokensToElems tokens (list))))
+
+fn copySlice bs: Bytes srcIdx: Int64 dst: Bytes dstIdx: Int64 count: Int64 -> Unit
+  (if (<= count 0)
+    ()
+    (do
+      (bytesSet dst dstIdx (bytesGet bs srcIdx))
+      (copySlice bs (+ srcIdx 1) dst (+ dstIdx 1) (- count 1))))
+
+fn tokenSliceString text: String tok: tr/Token -> String
+  (optionOr (stringSlice text tok.start     tok.end    ) "")
+
+fn tokenSliceBytes bs: Bytes tok: tr/Token -> Bytes
+  (let [(len (tr/tokenLength tok))
+        (out (bytesAlloc len))]
+    (do
+      (copySlice bs tok.start     out 0 len)
+      out)))
+
+fn hasPrecedingNewline tokens: (List tr/Token) idx: Int64 -> Bool
+  (if (<= idx 0)
+    false
+    (mt (listGet tokens (- idx 1))
+      ((some t)
+       (cond
+         ((= t.kind     "newline") true)
+         ((or (= t.kind     "whitespace") (= t.kind     "comment"))
+          (hasPrecedingNewline tokens (- idx 1)))
+         (else false)))
+      ((none) false)))

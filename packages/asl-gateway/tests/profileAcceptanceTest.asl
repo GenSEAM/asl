@@ -1,0 +1,66 @@
+(module aslGateway/tests/profileAcceptanceTest
+  :x [runTests]
+  :i [(config :a cfg)])
+
+fn selected table: cfg/GatewayTable headers: (List (Pair String String)) env: (Option String) -> String
+  (mt (cfg/gatewayProfileSelect table headers env)
+    ((ok chosen) chosen.name)
+    ((err e) (str "ERROR:" e)))
+
+fn routed table: cfg/GatewayTable profile: String intent: String -> (List String)
+  (mt (mapGet table.profiles profile)
+    ((none) (list))
+    ((some chosen) (optionOr (cfg/gatewayProfileModels chosen.routes intent) (list))))
+
+fn ! runTests -> Bool
+  (let [(text "(:gateway :profile default :profiles ((:profile :id default :routes ((:intent plan :models (\"codex/a\" \"agy/b\")) (:intent any :models (\"agy/b\" \"codex/a\")))) (:profile :id free :routes ((:intent any :models (\"codex/c\" \"agy/d\"))))))")
+        (edited "(:gateway :profile default :profiles ((:profile :id default :routes ((:intent plan :models (\"codex/a\" \"codex/new\")) (:intent any :models (\"agy/b\" \"codex/a\")))) (:profile :id free :routes ((:intent any :models (\"codex/c\" \"agy/d\"))))))")
+        (parsed (cfg/gatewayConfigParse! text "fixture" ""))
+        (changed (cfg/gatewayConfigParse! edited "fixture" ""))
+        (bad (cfg/gatewayConfigParse! "(:gateway :profile default :profiles (" "broken" ""))]
+    (mt parsed
+      ((err _) false)
+      ((ok table)
+        (mt changed
+          ((err _) false)
+          ((ok changedTable)
+            (let [(plan (routed table "default" "plan"))
+                  (any (routed table "default" "review"))
+                  (free (routed table "free" "review"))]
+              (do
+                (assert (ok? parsed) "profile config parses")
+                (assert (= (selected table (list) none) "default") "default file profile wins without header or environment")
+                (assert (= (selected table (list) (some "free")) "free") "environment profile selects free")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "free")) none) "free") "profile header selects free")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "free")) (some "default")) "free") "header overrides environment")
+                (assert (= (selected table (list (pair "x-asl-profile" "free")) none) "free") "header matching is case insensitive")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "  free  ")) none) "free") "header profile name is trimmed")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "")) (some "free")) "free") "empty profile header falls back to environment")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "   ")) (some "free")) "free") "whitespace profile header falls back to environment")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "default")) (some "free")) "default") "header can override environment back to default")
+                (assert (= (selected table (list) (some " default ")) "default") "environment profile name is trimmed")
+                (assert (stringStartsWith? (selected table (list (pair "X-ASL-Profile" "missing")) none) "ERROR:unknown profile") "unknown header profile is an error")
+                (assert (stringStartsWith? (selected table (list) (some "missing")) "ERROR:unknown profile") "unknown environment profile is an error")
+                (assert (stringStartsWith? (selected table (list (pair "X-ASL-Use" "missing")) none) "ERROR:unknown use") "unknown profile use is an error")
+                (assert (= plan (list "codex/a" "agy/b")) "plan route preserves configured model order")
+                (assert (= any (list "agy/b" "codex/a")) "unmatched review intent selects any route")
+                (assert (= (routed table "default" "research") plan) "research selects the plan route")
+                (assert (= (routed table "default" "design") plan) "design intent aliases plan route")
+                (assert (= free (list "codex/c" "agy/d")) "free profile route preserves model order")
+                (assert (= (routed table "free" "plan") free) "free plan intent uses its any route")
+                (assert (= (routed table "free" "code") free) "free code intent uses its any route")
+                (assert (= (routed table "free" "design") free) "free design intent uses its any route")
+                (assert (= (routed table "free" "research") free) "free research intent uses its any route")
+                (assert (= (listLength plan) 2) "plan route has two ordered fallback candidates")
+                (assert (= (listLength any) 2) "any route has two ordered fallback candidates")
+                (assert (= (listLength free) 2) "free route has two ordered fallback candidates")
+                (assert (err? bad) "malformed profile config is rejected")
+                (assert (= (routed changedTable "default" "plan") (list "codex/a" "codex/new")) "reparsed config observes edited model chain")
+                (assert (= (selected changedTable (list (pair "X-ASL-Profile" "free")) none) "free") "reparsed config retains alternate profile selection")
+                (assert (= (selected changedTable (list) none) "default") "reparsed config retains default profile")
+                (assert (not (= (routed changedTable "default" "plan") plan)) "updated chain differs from pre-edit config")
+                (assert (= (routed table "default" "plan") plan) "previous config remains unchanged after reparsing")
+                (assert (= (selected table (list) (some "")) "default") "empty environment value falls back to file default")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "free")) (some "missing")) "free") "valid header wins over invalid environment")
+                (assert (= (selected table (list (pair "X-ASL-Profile" "default")) (some "missing")) "default") "header wins over invalid environment")
+                true)))))))

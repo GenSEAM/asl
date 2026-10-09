@@ -1,0 +1,20 @@
+;; (fn commentedOut [] nothing)
+(module fixture/symbols :x [alpha])
+
+(fn alpha [x]
+  (let [(s "(fn fake [] 1)")]
+    (fn inner [y] y)))
+
+(schema Beta (:f a String))
+
+(:op :read :params (:file String))
+
+(:task :id "T-1" :title "first task")
+
+(:rule :id second :do "x")
+
+defn indented x
+  (+ x 1)
+
+  (continued)
+next

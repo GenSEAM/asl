@@ -1,0 +1,29 @@
+(:agentReceipt :status :ok :phases () :unbacked 0)
+(:agentReceipt :status :partial :modeHint "sco\"ut" :deliver :patch :phases (scout plan) :session "abc123" :journal ".asl/run/agentLoop/abc123.journal" :unbacked 2 :unbackedClaims ("claim one" "c\"2") :contextTokens 64000 :turns 3 :gates ((:cmd "echo \"a\"" :exit 0) (:cmd "sleep 9" :timeout true :seconds 5)) :escalate (:reason "stuck") :patch "diff text" :restored ("a.txt") :written ("b.txt" "c d") :needsConfirm ((:op "push" :blocked true) (:op "deploy" :error ERR_X)) :ownsRejected ((:turn 2 :op "write" :file "x\"y" :error ERR_OWNS)) :error ERR_Z :gatePreflight ((:n 1 :cmd "a\"b" :shell "sh" :message "bad")) :turn 4 :parse-defect true :findings (f1 (:f 2)) :queueWaitSec 0.1 :execSec 2.0 :usage (:input 10 :cached 3 :output 5) :batching (:opsPerTurn 1.5 :singleOpShare 0.5 :opTurns 4) :plan (:steps 3 :done 1 :dropped 1 :revisions 0))
+(:agentReceipt :status :failed :phases () :unbacked 0 :turns 0 :turn 1 :parse-defect true :findings () :queueWaitSec 0.0 :usage (:input 0 :cached 0 :output 0) :batching (:opsPerTurn 0.0 :singleOpShare 0.0 :opTurns 0) :plan (:steps 0 :done 0 :dropped 0 :revisions 0))
+status modeHint deliver phases session journal unbacked contextTokens turns gates escalate error needsConfirm ownsRejected turn file gatePreflight parse-defect findings queueWaitSec execSec usage input cached output batching opsPerTurn singleOpShare opTurns
+["{ROOT}/.asl/run/agentLoop/full.journal","fix \"it\"","patch","review",["a.txt","b c"],["echo \"x\""],"main",64000,"(:note \"second \\\"q\\\"\")","partial",[[1,"(:read \"a\")","got a"]],2,"(:write)",true]
+["{ROOT}/.asl/run/agentLoop/legacy.journal","old",null,null,[],[],"",null,"",null,[[1,"one","brief"]],3,"three",false]
+["{ROOT}/.asl/run/agentLoop/hints.journal","say :modeHint \"x\" :intent \"y\"","scout",null,[],[],"",null,"",null,[],4,"four",false]
+(:agentReceipt :status :rejected :error ERR_RESUME :session "noTurn" :message "the journal holds no session header or no turn")
+(:agentReceipt :status :rejected :error ERR_RESUME :session "endedOk" :message "the session ended :ok")
+(:agentReceipt :status :rejected :error ERR_NO_JOURNAL :session "a..b" :message "no journal at .asl/run/agentLoop/a..b.journal")
+(:agentReceipt :status :rejected :error ERR_NO_JOURNAL :session "missing" :message "no journal at .asl/run/agentLoop/missing.journal")
+(:agentReceipt :status :rejected :error ERR_NO_JOURNAL :session "bad id" :message "no journal at .asl/run/agentLoop/bad id.journal")
+"re\"view"
+null
+"scout"
+null
+"spaced"
+null
+task
+base
+wallBudget
+contextFile
+gateTimeout
+model
+plan
+owns
+root
+task
+gates

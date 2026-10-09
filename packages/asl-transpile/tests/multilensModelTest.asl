@@ -1,0 +1,16 @@
+(module asl-transpile/multilensModelTest :x [testParseFullModel testOmittedOptionalSections testNegativeAndRefutations testDefaultLensOptionsAndEmptyModel runTests] :i [(asl-transpile/multilens :a ml) (asl-parser/reader :a rd)])
+
+fn testParseFullModel -> Bool
+  (let [(payload "(:doc :meta (:title \"Dashboard\" :version \"1.0.0\") :styles (:vars ((--bg \"#fff\"))) :content (div (:class \"app\") (h1 \"Hello\")) :data (:users [(:id 1)]) :config (:port 8080))") (model (ml/parseUnifiedModel payload))] (assert model.success "parse full model succeeds") (assert (= model.errorMsg "") "no error message on full model") (assert (rd/isList? (ml/modelExtractMeta model)) "meta is a list") (assert (rd/isList? (ml/modelExtractStyles model)) "styles is a list") (assert (rd/isList? (ml/modelExtractContent model)) "content is a list") (assert (rd/isList? (ml/modelExtractData model)) "data is a list") (assert (rd/isList? (ml/modelExtractConfig model)) "config is a list") true)
+
+fn testOmittedOptionalSections -> Bool
+  (let [(payload "(:doc :meta (:title \"Minimal\"))") (model (ml/parseUnifiedModel payload))] (assert model.success "minimal model succeeds") (assert (rd/isList? (ml/modelExtractMeta model)) "meta is extracted") (assert (rd/isList? (ml/modelExtractStyles model)) "styles defaults to empty list") (assert (rd/isList? (ml/modelExtractContent model)) "content defaults to empty list") (assert (rd/isList? (ml/modelExtractData model)) "data defaults to empty list") (assert (rd/isList? (ml/modelExtractConfig model)) "config defaults to empty list") true)
+
+fn testNegativeAndRefutations -> Bool
+  (let [(rEmpty (ml/parseUnifiedModel "")) (rAtom (ml/parseUnifiedModel "not-a-list")) (rBadRoot (ml/parseUnifiedModel "(:notdoc :meta ())")) (vEmpty (ml/validateMultilensModel "")) (vBad (ml/validateMultilensModel "invalid")) (vBadRoot (ml/validateMultilensModel "(:notdoc :meta ())")) (vGood (ml/validateMultilensModel "(:doc :meta ())"))] (refute rEmpty.success "empty input rejected") (refute rAtom.success "atom input rejected") (refute rBadRoot.success "non-doc root rejected") (refute vEmpty "validate rejects empty string") (refute vBad "validate rejects invalid syntax") (refute vBadRoot "validate rejects non-doc root") (assert vGood "validate accepts valid doc form") true)
+
+fn testDefaultLensOptionsAndEmptyModel -> Bool
+  (let [(opts (ml/defaultLensOptions)) (m (ml/emptyModel))] (assert (= opts.indent 2) "default indent is 2") (assert (not opts.minify) "default minify is false") (assert opts.standalone "default standalone is true") (assert opts.includeStyles "default includeStyles is true") (assert opts.doctype "default doctype is true") (assert m.success "empty model is marked success") (assert (rd/isList? m.meta) "empty model meta is list") (assert (rd/isList? m.styles) "empty model styles is list") (assert (rd/isList? m.content) "empty model content is list") (assert (rd/isList? m.data) "empty model data is list") (assert (rd/isList? m.config) "empty model config is list") true)
+
+fn runTests -> Bool
+  (do (assert (testParseFullModel) "testParseFullModel") (assert (testOmittedOptionalSections) "testOmittedOptionalSections") (assert (testNegativeAndRefutations) "testNegativeAndRefutations") (assert (testDefaultLensOptionsAndEmptyModel) "testDefaultLensOptionsAndEmptyModel") true)

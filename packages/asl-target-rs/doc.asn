@@ -1,0 +1,7 @@
+(:doc :symbol "asl/packages/asl-target-rs/src/ast.asl#" :text "Pure in-memory RsAst hierarchy ensuring tree-to-tree lowering for Rust 2024 emission under ADR D130.")
+(:doc :symbol "asl/packages/asl-target-rs/src/emitRust.asl#" :text "Idiomatic Rust 2024 code generator from pure RsAst trees under ADR D130.")
+(:doc :symbol "asl/packages/asl-target-rs/src/emitRust.asl#rsFormsHaveTopExpr?" :text "Rust output has no module-load hook, so a bare top-level expression is rejected by name instead of dropped")
+(:doc :symbol "asl/packages/asl-target-rs/src/ffi.asl#" :text "Foreign Function Interface (FFI) C-ABI, zero-panic boundary, and linear deallocator bridge for Rust under ADR D130.")
+(:doc :symbol "asl/packages/asl-target-rs/src/types.asl#" :text "Pure ASL Rust 2024 type lowering, keyword mangling, operators, and header emission under ADR D130.")
+(:doc :symbol "asl/packages/asl-target-rs/tests/emitRustTest.asl#" :text "Unit tests for standalone Rust 2024 code generation under ADR D130.")
+(:doc :symbol "asl/packages/asl-target-rs/tests/emitRustTest.asl#testTopExprNotSilentlyDropped!" :text "a bare top-level expression must fail by name, not vanish from generated Rust")

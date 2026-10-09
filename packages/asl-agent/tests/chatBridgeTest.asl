@@ -1,0 +1,16 @@
+(module aslAgent/testChatBridge :x [testChatIngressCreationAndFormatting testAnaphoraShorthandResolution testChatStreamingAndHistoryBounding testBargeInInterruptionAbort runTests] :i [(chatBridge :a cb)])
+
+fn testChatIngressCreationAndFormatting -> Bool
+  (let [(env (cb/makeChatIngress "sess-1" "ну запусти тест" "запусти тест" "ru" "dev" "запусти тест" 1773910000000)) (asnRepr (cb/formatChatIngressAsn env))] (assert env.sourceVoice "source is marked as voice") (assert (= env.sessionId "sess-1") "session-id matches") (assert (stringContains? asnRepr ":session \"sess-1\"") "asn contains session") (assert (stringContains? asnRepr ":intent \"dev\"") "asn contains intent") (assert (stringContains? asnRepr ":locale \"ru\"") "asn contains locale") (assert (stringContains? asnRepr ":prompt \"запусти тест\"") "asn contains prompt") true)
+
+fn testAnaphoraShorthandResolution -> Bool
+  (let [(prev "asl test asl/packages/asl-voice/tests/audio_bridge_test.asl") (r1 (cb/resolveAnaphoraDirective "run that again" prev)) (r2 (cb/resolveAnaphoraDirective "повтори" prev)) (r3 (cb/resolveAnaphoraDirective "retry" prev)) (r4 (cb/resolveAnaphoraDirective "fix it" "parser syntax error")) (r5 (cb/resolveAnaphoraDirective "исправь это" "type inference bug")) (r6 (cb/resolveAnaphoraDirective "apply it" "proposal 42")) (r7 (cb/resolveAnaphoraDirective "clean project" prev))] (assert (= r1 prev) "run that again returns previous prompt") (assert (= r2 prev) "повтори returns previous prompt") (assert (= r3 prev) "retry returns previous prompt") (assert (= r4 "fix: parser syntax error") "fix it prepends fix:") (assert (= r5 "fix: type inference bug") "исправь это prepends fix:") (assert (= r6 "apply: proposal 42") "apply it prepends apply:") (assert (= r7 "clean project") "unmatched directive preserved as-is") true)
+
+fn testChatStreamingAndHistoryBounding -> Bool
+  (let [(st0 (cb/initChatBridge "chat-42")) (e1 (cb/makeChatIngress "chat-42" "p1" "p1" "en" "dev" "p1" 1000)) (e2 (cb/makeChatIngress "chat-42" "p2" "p2" "en" "dev" "p2" 2000)) (st1 (cb/streamVoiceToChat st0 e1)) (st2 (cb/streamVoiceToChat st1 e2))] (assert st2.isStreaming "bridge is marked streaming") (assert (= (listLength st2.promptHistory) 2) "history holds 2 items") (let [(stMany (fold (fn [(acc cb/ChatBridgeState) (idx Int64)] (cb/streamVoiceToChat acc (cb/makeChatIngress "chat-42" "p" "p" "en" "dev" "p" (+ 3000 idx)))) st2 (list 1 2 3 4 5 6 7 8 9 10 11)))] (assert (= (listLength stMany.promptHistory) 10) "history clamped at 10 items")) true)
+
+fn testBargeInInterruptionAbort -> Bool
+  (let [(st0 (cb/initChatBridge "chat-42")) (e1 (cb/makeChatIngress "chat-42" "prompt" "prompt" "en" "dev" "prompt" 1000)) (stStreaming (cb/streamVoiceToChat st0 e1)) (stAborted (cb/triggerBargeInAbort stStreaming)) (telemetry (cb/renderChatTelemetryAsn stAborted))] (refute stAborted.isStreaming "streaming is false after barge-in abort") (assert (= stAborted.bargeInCount 1) "barge-in count incremented to 1") (assert (stringContains? telemetry ":barge-ins 1") "telemetry reports 1 barge-in") (assert (stringContains? telemetry ":streaming false") "telemetry reports streaming false") true)
+
+fn runTests -> Bool
+  (do (testChatIngressCreationAndFormatting) (testAnaphoraShorthandResolution) (testChatStreamingAndHistoryBounding) (testBargeInInterruptionAbort) true)

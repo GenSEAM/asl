@@ -1,0 +1,8 @@
+"expect: rule-6"
+
+"Both operands are declared, both are integers, and the widths differ. Core has"
+
+"no implicit conversion, so this is an error rather than a widening."
+
+fn addWidths a: Int32 b: Int64 -> Int64
+  (+ a b)

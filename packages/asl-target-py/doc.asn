@@ -1,0 +1,6 @@
+(:doc :symbol "asl/packages/asl-target-py/src/emitPy.asl#" :text "Standalone Python 3.11+ emitter backend for AgentScript under ADR D93.")
+(:doc :symbol "asl/packages/asl-target-py/tests/divisionEscapeTest.asl#" :text "Popperian acceptance gate fixture for Task 54705: Python emitter true division, integer division, and keyword escaping under ADR D93.")
+(:doc :symbol "asl/packages/asl-target-py/tests/emitPyTest.asl#" :text "Unit tests for standalone Python platform leaf code generator with dual-polarity D77 refutations.")
+(:doc :symbol "asl/packages/asl-target-py/tests/fixtures/mathOps.asl#" :text "Localized math operations fixture for Python typed function target code emission.")
+(:doc :symbol "asl/packages/asl-target-py/tests/fixtures/pointClass.asl#" :text "Localized Point schema fixture for Python dataclass target code emission.")
+(:doc :symbol "asl/packages/asl-target-py/tests/fixtures/pointClass.asl#Point.x" :text "x coordinate")

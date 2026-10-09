@@ -1,0 +1,3 @@
+                     (newLeft (if (elemsHaveError argsRes.elements    )
+                                (tr/makeErrorNode (tr/tokenStart hd) closeEnd kids)
+                                (tr/makeNode "callExpr" (tr/nodeStart left) closeEnd kids))]

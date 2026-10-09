@@ -1,0 +1,4 @@
+; ASN has no expressions. This is a data grammar, and one that also admitted
+; `let` would let a payload smuggle a program past a decoder that believed it was
+; reading data.
+(let [(x 1)] (+ x 2))

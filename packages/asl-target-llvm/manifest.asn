@@ -1,0 +1,29 @@
+(:package asl-target-llvm
+ :version "0.1.0"
+ :entry "src/main.asl"
+ :description "Standalone LLVM IR Backend consuming verified asl-ir and emitting typed SSA LLVM IR (.ll) under ADR D93 and D112"
+ :layer 0
+ :aslFirst true
+ :modules ["asl-target-llvm"
+           "asl-target-llvm/types"
+           "asl-target-llvm/emit"
+           "asl-target-llvm/ssa"
+           "asl-target-llvm/rtFormat"
+           "asl-target-llvm/rtError"
+           "asl-target-llvm/rtOps"
+           "asl-target-llvm/rtObject"
+           "asl-target-llvm/libc"
+           "asl-target-llvm/sys"
+           "asl-target-llvm/sysNet"
+           "asl-target-llvm/sysRoute"
+           "asl-target-llvm/parallel"
+           "asl-target-llvm/parRoute"
+           "asl-target-llvm/arrays"
+           "asl-target-llvm/arrayRoute"
+           "asl-target-llvm/gcAsl"
+           "asl-target-llvm/gcRoute"
+           "asl-target-llvm/wasmAlloc"
+           "asl-target-llvm/wasmLink"
+           "asl-target-llvm/wasmFormat"
+           "asl-target-llvm/wasmRuntime"]
+ :dependencies ["asl-ir"])

@@ -1,0 +1,17 @@
+(:package aslCrawler
+ :version "1.0.0"
+ :entry "src/crawler.asl"
+ :description "Sovereign Web Crawler, In-Browser Automation, Human Kinetics, and Multi-Tier Parsing Nexus"
+ :aslFirst true
+ :status "active"
+ :disposition :active
+ :modules [
+   "aslCrawler/crawler"
+   "aslCrawler/stealth"
+   "aslCrawler/browserDetector"
+   "aslCrawler/kinetics"
+   "aslCrawler/automation"
+   "aslCrawler/session"
+   "aslCrawler/inBrowserAgent"
+ ]
+ :dependencies ["asl-text" "asl-json" "aslAgentBus"])

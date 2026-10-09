@@ -1,0 +1,11 @@
+(:extensionManifest
+ :version 3
+ :name "Aslany Browser Plugin"
+ :appVersion "1.0.0"
+ :description "Cross-browser autonomous voice agent runtime for Aslany: AudioWorklet 16kHz, In-Memory WebGPU sandbox, AXTree DOM compactor, and CDP bridge"
+ :permissions ["activeTab" "storage" "scripting" "debugger" "offscreen"]
+ :hostPermissions ["<all_urls>"]
+ :background (:serviceWorker "dist/background.js" :type "module")
+ :offscreen (:page "src/offscreen.html" :reasons ["USER_MEDIA"] :justification "AudioWorklet 16kHz PCM streaming capture")
+ :action (:defaultPopup "src/popup.html" :defaultTitle "Aslany Studio")
+ :contentScripts [(:matches ["<all_urls>"] :js ["dist/content.js"] :runAt "document_idle")])

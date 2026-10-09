@@ -1,0 +1,8 @@
+                     (rightRes (parseExprCore (pairSecond spRight) text nextMinPrec))
+                     (rightNode rightRes.node    )
+                     (isLog (or (= k "ampAmp") (or (= k "pipePipe") (= k "questionQuestion"))))
+                     (kind (if isLog "logicalExpr" "binaryExpr"))
+                     (kids (cons (tr/elemNode left) (listAppend triv (cons (tr/elemToken hd) (listAppend trivRight (list (tr/elemNode rightNode)))))))
+                     (newLeft (if (tr/isErrorNode rightNode)
+                                (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) kids)
+                                (tr/makeNode kind (tr/nodeStart left) (tr/nodeEnd rightNode) kids))]

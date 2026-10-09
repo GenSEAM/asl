@@ -1,0 +1,4 @@
+(:doc :symbol "asl/packages/asl-coord/src/claims.asl#" :text "Shared cross-worktree scope leases in the git common directory")
+(:doc :symbol "asl/packages/asl-coord/src/claims.asl#claimsStore!" :text "only a claim creates the store; checks and listings on a repo without leases leave the git dir untouched")
+(:doc :symbol "asl/packages/asl-coord/src/claims.asl#leaseStale?" :text "every asl call is a short-lived process; only a holder declared by ASL_LEASE_PID outlives it, and pid 0 means none, so past the TTL only a live declared holder on this host keeps the lease")
+(:doc :symbol "asl/packages/asl-coord/src/claims.asl#releaseUnderLock!" :text "a live lease is released only by its holder: same unit and the host, branch and agent that claimed it; stale leases retire on sweep")

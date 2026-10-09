@@ -1,0 +1,1 @@
+(and (= (evens (list 1 2 3 4)) (list 2 4)) (= (doubled (list 1 2)) (list 2 4)) (= (total (list 1 2 3)) 6) (= (longest (list "a" "bbb")) 3) (= (byLength (list "bbb" "a" "cc")) (list "a" "cc" "bbb")))

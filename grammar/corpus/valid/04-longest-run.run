@@ -1,0 +1,1 @@
+(and (= (longestRun "aabbbc") (some (pair "b" 3))) (= (longestRun "") (none)))

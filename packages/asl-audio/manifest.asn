@@ -1,0 +1,14 @@
+(:package
+  :name "asl-audio"
+  :version "0.1.0"
+  :layer 0
+  :description "Sovereign voice engine: dual-feature VAD, speaker biometrics, AST Cyrillic sound-folding, ear-budgeted digests, and voice intent"
+  :dependencies []
+  :modules [
+    "vad"
+    "dictation"
+    "speakerVerifier"
+    "heardname"
+    "aloud"
+    "voiceIntent"
+  ])

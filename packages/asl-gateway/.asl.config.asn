@@ -1,0 +1,9 @@
+(:aslConfig
+  :workspace "asl-gateway"
+  :version "1.0.0"
+  :pureAsl true
+  :aslFirst true
+  :gates [1 2 3 4 5 6 7]
+  :tokenBaseline 2
+  :telemetry (:targetTurnMs 100 :maxTokenCeiling 150)
+  :daemon (:resident true :memoryIndex true :maxFiles 2000))

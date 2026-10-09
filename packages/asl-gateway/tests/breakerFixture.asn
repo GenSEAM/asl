@@ -1,0 +1,419 @@
+;; Auto-generated test fixture driving bin/asl-gateway Python circuit breaker functions
+;; Exact state and decision outputs for 26 distinct event sequences
+(:breakerFixture
+  :version "1.0.0"
+  :caseCount 26
+  :sequences [
+    (:sequence
+      :id "seq01_quota_429_simple"
+      :category "quota"
+      :provider "agy"
+      :cooldown 600
+      :inputText "HTTP 429 Too Many Requests"
+      :isQuota true
+      :finalNow 400
+      :finalDown 300
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 100 :tripped false :down 600)
+        (:ev :kind "down_for" :now 400 :tripped false :down 300)
+      ])
+    (:sequence
+      :id "seq02_quota_resource_exhausted"
+      :category "quota"
+      :provider "codex"
+      :cooldown 600
+      :inputText "RESOURCE_EXHAUSTED: Quota limit reached for project 123"
+      :isQuota true
+      :finalNow 150
+      :finalDown 600
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 150 :tripped false :down 600)
+        (:ev :kind "down_for" :now 150 :tripped false :down 600)
+      ])
+    (:sequence
+      :id "seq03_quota_lowercase_mixed"
+      :category "quota"
+      :provider "claude"
+      :cooldown 600
+      :inputText "error details: rate limit quota exhausted"
+      :isQuota true
+      :finalNow 200
+      :finalDown 600
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 200 :tripped false :down 600)
+        (:ev :kind "down_for" :now 200 :tripped false :down 600)
+      ])
+    (:sequence
+      :id "seq04_non_quota_500"
+      :category "quota"
+      :provider "agy"
+      :cooldown 600
+      :inputText "500 Internal Server Error: backend database failure"
+      :isQuota false
+      :finalNow 100
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "down_for" :now 100 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq05_quota_empty_text"
+      :category "quota"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 100
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "down_for" :now 100 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq06_503_single_does_not_trip"
+      :category "503_counts"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 100
+      :finalDown 0
+      :final503 1
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq07_503_two_does_not_trip"
+      :category "503_counts"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 105
+      :finalDown 0
+      :final503 2
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+        (:ev :kind "note_503" :now 105 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq08_503_three_trips_breaker"
+      :category "503_counts"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 110
+      :finalDown 600
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+        (:ev :kind "note_503" :now 105 :tripped false :down 0)
+        (:ev :kind "note_503" :now 110 :tripped true :down 600)
+      ])
+    (:sequence
+      :id "seq09_503_multi_provider_independent"
+      :category "503_counts"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 104
+      :finalDown 600
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+        (:ev :kind "note_503_other" :now 101 :tripped false :down 0 :other "codex")
+        (:ev :kind "note_503" :now 102 :tripped false :down 0)
+        (:ev :kind "note_503_other" :now 103 :tripped false :down 0 :other "codex")
+        (:ev :kind "note_503" :now 104 :tripped true :down 600)
+      ])
+    (:sequence
+      :id "seq10_503_reset_between"
+      :category "503_counts"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 115
+      :finalDown 0
+      :final503 1
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+        (:ev :kind "note_503" :now 105 :tripped false :down 0)
+        (:ev :kind "reset_503" :now 110 :tripped false :down 0)
+        (:ev :kind "note_503" :now 115 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq11_503_fourth_failure_after_trip"
+      :category "503_counts"
+      :provider "codex"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 103
+      :finalDown 599
+      :final503 1
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+        (:ev :kind "note_503" :now 101 :tripped false :down 0)
+        (:ev :kind "note_503" :now 102 :tripped true :down 600)
+        (:ev :kind "note_503" :now 103 :tripped false :down 599)
+      ])
+    (:sequence
+      :id "seq12_timeout_single_does_not_trip"
+      :category "timeouts"
+      :provider "claude"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 200
+      :finalDown 0
+      :final503 0
+      :finalTimeout 1
+      :events [
+        (:ev :kind "note_timeout" :now 200 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq13_timeout_two_does_not_trip"
+      :category "timeouts"
+      :provider "claude"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 205
+      :finalDown 0
+      :final503 0
+      :finalTimeout 2
+      :events [
+        (:ev :kind "note_timeout" :now 200 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 205 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq14_timeout_three_trips_breaker"
+      :category "timeouts"
+      :provider "claude"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 210
+      :finalDown 600
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_timeout" :now 200 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 205 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 210 :tripped true :down 600)
+      ])
+    (:sequence
+      :id "seq15_timeout_reset_between"
+      :category "timeouts"
+      :provider "claude"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 215
+      :finalDown 0
+      :final503 0
+      :finalTimeout 1
+      :events [
+        (:ev :kind "note_timeout" :now 200 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 205 :tripped false :down 0)
+        (:ev :kind "reset_timeout" :now 210 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 215 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq16_timeout_isolated_from_503"
+      :category "timeouts"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 103
+      :finalDown 0
+      :final503 2
+      :finalTimeout 2
+      :events [
+        (:ev :kind "note_timeout" :now 100 :tripped false :down 0)
+        (:ev :kind "note_503" :now 101 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 102 :tripped false :down 0)
+        (:ev :kind "note_503" :now 103 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq17_clear_resets_tripped_breaker"
+      :category "success_resets"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 150
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 100 :tripped false :down 600)
+        (:ev :kind "clear" :now 150 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq18_clear_resets_all_counters"
+      :category "success_resets"
+      :provider "codex"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 205
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 200 :tripped false :down 0)
+        (:ev :kind "note_503" :now 201 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 202 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 203 :tripped false :down 0)
+        (:ev :kind "clear" :now 205 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq19_markdown_resets_counters"
+      :category "success_resets"
+      :provider "claude"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 305
+      :finalDown 600
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 300 :tripped false :down 0)
+        (:ev :kind "note_503" :now 301 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 302 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 303 :tripped false :down 0)
+        (:ev :kind "mark_down" :now 305 :tripped false :down 600)
+      ])
+    (:sequence
+      :id "seq20_success_after_timeouts_prevents_trip"
+      :category "success_resets"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 120
+      :finalDown 0
+      :final503 0
+      :finalTimeout 2
+      :events [
+        (:ev :kind "note_timeout" :now 100 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 105 :tripped false :down 0)
+        (:ev :kind "clear" :now 110 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 115 :tripped false :down 0)
+        (:ev :kind "note_timeout" :now 120 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq21_cooldown_expiry_exact"
+      :category "cooldown_expiry"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 1600
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 1000 :tripped false :down 600)
+        (:ev :kind "down_for" :now 1599 :tripped false :down 1)
+        (:ev :kind "down_for" :now 1600 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq22_cooldown_expiry_past"
+      :category "cooldown_expiry"
+      :provider "codex"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 1700
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 1000 :tripped false :down 600)
+        (:ev :kind "down_for" :now 1700 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq23_snapshot_multi_provider_status"
+      :category "snapshot"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 1200
+      :finalDown 400
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 1000 :tripped false :down 600)
+        (:ev :kind "mark_down_other" :now 1000 :tripped false :down 600 :other "codex")
+        (:ev :kind "snapshot" :now 1200 :tripped false :down 400)
+      ])
+    (:sequence
+      :id "seq24_snapshot_partial_expiry"
+      :category "snapshot"
+      :provider "agy"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 1650
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 1000 :tripped false :down 600)
+        (:ev :kind "mark_down_other" :now 1200 :tripped false :down 600 :other "codex")
+        (:ev :kind "snapshot" :now 1650 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq25_custom_cooldown"
+      :category "cooldown_expiry"
+      :provider "agy"
+      :cooldown 120
+      :inputText ""
+      :isQuota false
+      :finalNow 170
+      :finalDown 0
+      :final503 0
+      :finalTimeout 0
+      :events [
+        (:ev :kind "mark_down" :now 50 :tripped false :down 120)
+        (:ev :kind "down_for" :now 100 :tripped false :down 70)
+        (:ev :kind "down_for" :now 170 :tripped false :down 0)
+      ])
+    (:sequence
+      :id "seq26_edge_case_empty_provider_and_dynamic"
+      :category "edge_cases"
+      :provider "gemini"
+      :cooldown 600
+      :inputText ""
+      :isQuota false
+      :finalNow 100
+      :finalDown 0
+      :final503 1
+      :finalTimeout 0
+      :events [
+        (:ev :kind "note_503" :now 100 :tripped false :down 0)
+        (:ev :kind "snapshot" :now 100 :tripped false :down 0)
+      ])
+  ])

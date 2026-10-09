@@ -1,0 +1,10 @@
+(:profile
+  :rules [
+    (:rule :id "interactive" :intent "chat" :role "assistant" :minTokens 0 :maxTokens 10000 :tools true :json true :streaming true :latency "interactive" :budget "standard" :maxWaitMs 300 :candidates [
+      (:candidate :endpoint "fast" :model "m-fast" :weight 2 :temperature 3 :topP 8 :maxTokens 2048 :effort "low" :stop ["HALT"])
+      (:candidate :endpoint "quality" :model "m-quality" :weight 1)
+    ])
+    (:rule :id "catchall" :intent "chat" :role "assistant" :minTokens 0 :maxTokens 999999 :tools true :json true :streaming true :latency "interactive" :budget "standard" :maxWaitMs 10000 :candidates [
+      (:candidate :endpoint "quality" :model "m-quality" :weight 1)
+    ])
+  ])

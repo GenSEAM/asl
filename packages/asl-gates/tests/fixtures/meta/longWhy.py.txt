@@ -1,0 +1,6 @@
+# (:m :why "one two three four five six seven eight nine")
+def nineWords():
+    pass
+# (:m :why "one two three four five six seven eight")
+def eightWords():
+    pass

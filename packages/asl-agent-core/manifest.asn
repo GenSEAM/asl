@@ -1,0 +1,31 @@
+(:package aslAgentCore
+ :version "0.1.0"
+ :entry "src/core.asl"
+ :description "Autonomous AgentScript execution core, onion middleware pipeline and state machine"
+ :aslFirst true
+ :modules [
+   "asl-agent-core/clarify"
+   "asl-agent-core/compose"
+   "asl-agent-core/core"
+   "asl-agent-core/dag"
+   "asl-agent-core/dag-merge"
+   "asl-agent-core/dispatch"
+   "asl-agent-core/fsm"
+   "asl-agent-core/onion"
+   "asl-agent-core/premise"
+   "asl-agent-core/prompt-tree"
+   "asl-agent-core/promptpool"
+   "asl-agent-core/protocol"
+   "asl-agent-core/scheduler"
+   "asl-agent-core/statemachine"
+   "asl-agent-core/taskstore"
+   "asl-agent-core/tasktypes"
+   "asl-agent-core/threads"
+   "asl-agent-core/types"
+   "asl-agent-core/promptAudit"
+   "asl-agent-core/fiberPool"
+   "asl-agent-core/fastKnowledgeCache"
+   "asl-agent-core/workerSupervisor"
+   "asl-agent-core/omniDaemon"
+ ]
+ :dependencies ["asl-text"])

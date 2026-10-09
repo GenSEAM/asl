@@ -1,0 +1,156 @@
+(module asl-target-swift/tests/emitSwiftTest :x [runTests] :i [(asl-target-swift/types :a t) (asl-target-swift/emitSwift :a s) (asl-target-swift/app :a app)])
+
+fn testSwiftTypes -> Bool
+  (let [(t1 (t/emitSwiftType "I64"))
+        (t2 (t/emitSwiftType "I32"))
+        (t3 (t/emitSwiftType "Bool"))
+        (t4 (t/emitSwiftType "Str"))
+        (t5 (t/emitSwiftType "F64"))
+        (t6 (t/emitSwiftType "Unit"))
+        (t7 (t/emitSwiftType "Bytes"))
+        (t8 (t/emitSwiftType "List Str"))
+        (t9 (t/emitSwiftType "Option I64"))
+        (t10 (t/emitSwiftType "Map Str Int"))
+        (t11 (t/emitSwiftType "Result Str Error"))
+        (t12 (t/emitSwiftType "CustomModel"))]
+    (assert (= t1 "Int") "I64 must map to Swift Int")
+    (assert (= t2 "Int32") "I32 must map to Swift Int32")
+    (assert (= t3 "Bool") "Bool must map to Swift Bool")
+    (assert (= t4 "String") "Str must map to Swift String")
+    (assert (= t5 "Double") "F64 must map to Swift Double")
+    (assert (= t6 "Void") "Unit must map to Swift Void")
+    (assert (= t7 "Data") "Bytes must map to Swift Data")
+    (assert (= t8 "[String]") "List Str must map to Swift [String]")
+    (assert (= t9 "Int?") "Option I64 must map to Swift Int?")
+    (assert (= t10 "[String: Int]") "Map Str Int must map to Swift [String: Int]")
+    (assert (= t11 "Result<String, Error>") "Result Str Error must map to Swift Result<String, Error>")
+    (assert (= t12 "CustomModel") "CustomModel must be preserved")
+    (refute (= t1 "int64") "Must refute Go int64")
+    (refute (= t4 "str") "Must refute Python str")
+    (refute (= t3 "boolean") "Must refute Java boolean")
+    (refute (= t7 "[]byte") "Must refute Go slice")
+    (refute (= t6 "None") "Must refute Python None")
+    true)
+
+fn testSwiftMangle -> Bool
+  (let [(m1 (t/swiftMangleIdent "normalIdent"))
+        (m2 (t/swiftMangleIdent "class"))
+        (m3 (t/swiftMangleIdent "default"))
+        (m4 (t/swiftMangleIdent "user-profile"))
+        (m5 (t/swiftMangleIdent "let"))]
+    (assert (= m1 "normalIdent") "normalIdent preserved without quotes")
+    (assert (= m2 "`class`") "class keyword escaped in backticks")
+    (assert (= m3 "`default`") "default keyword escaped in backticks")
+    (assert (= m4 "user_profile") "hyphen replaced with underscore")
+    (assert (= m5 "`let`") "let keyword escaped in backticks")
+    (refute (= m2 "class") "Must refute unescaped keyword")
+    (refute (= m3 "default") "Must refute unescaped keyword")
+    true)
+
+fn testSwiftHeader -> Bool
+  (let [(h1 (t/emitSwiftHeader false))
+        (h2 (t/emitSwiftHeader true))]
+    (assert (stringContains? h1 "import Foundation") "Base header includes Foundation")
+    (assert (stringContains? h2 "import Foundation") "UI header includes Foundation")
+    (assert (stringContains? h2 "import SwiftUI") "UI header includes SwiftUI")
+    (assert (stringContains? h2 "import Combine") "UI header includes Combine")
+    (refute (stringContains? h1 "import SwiftUI") "Base header refutes SwiftUI")
+    (refute (stringContains? h1 "#include") "Swift header refutes C include")
+    (refute (stringContains? h1 "package main") "Swift header refutes Go package")
+    true)
+
+fn testSwiftBinop -> Bool
+  (let [(b1 (t/emitSwiftBinop "+" "a" "b"))
+        (b2 (t/emitSwiftBinop "=" "x" "y"))
+        (b3 (t/emitSwiftBinop "and" "condA" "condB"))
+        (b4 (t/emitSwiftBinop "or" "flag1" "flag2"))
+        (b5 (t/emitSwiftBinop "!=" "m" "n"))]
+    (assert (= b1 "a + b") "Addition lowered")
+    (assert (= b2 "x == y") "Equality lowered to ==")
+    (assert (= b3 "condA && condB") "Conjunction lowered to &&")
+    (assert (= b4 "flag1 || flag2") "Disjunction lowered to ||")
+    (assert (= b5 "m != n") "Inequality lowered to !=")
+    (refute (= b2 "x = y") "Refutes assignment operator for equality")
+    (refute (= b3 "condA and condB") "Refutes Python/ASL and keyword")
+    true)
+
+fn testSwiftAtom -> Bool
+  (let [(a1 (t/emitSwiftAtom "true"))
+        (a2 (t/emitSwiftAtom "false"))
+        (a3 (t/emitSwiftAtom "nil"))
+        (a4 (t/emitSwiftAtom "none"))
+        (a5 (t/emitSwiftAtom "\"hello\""))
+        (a6 (t/emitSwiftAtom "42"))
+        (a7 (t/emitSwiftAtom "myVar"))]
+    (assert (= a1 "true") "true preserved")
+    (assert (= a2 "false") "false preserved")
+    (assert (= a3 "nil") "nil preserved")
+    (assert (= a4 "nil") "none lowered to nil")
+    (assert (= a5 "\"hello\"") "string literal preserved")
+    (assert (= a6 "42") "number preserved")
+    (assert (= a7 "myVar") "identifier preserved")
+    (refute (= a1 "True") "Refutes Python True")
+    (refute (= a4 "None") "Refutes Python None")
+    true)
+
+fn testSwiftStruct -> Bool
+  (let [(fields (list (pair "id" "I64") (pair "name" "Str") (pair "isActive" "Bool")))
+        (code (s/emitSwiftStructWithPairs "UserProfile" fields))]
+    (assert (stringContains? code "public struct UserProfile: Codable, Equatable, Hashable, Sendable {") "Struct header with conformances")
+    (assert (stringContains? code "public var id: Int") "id property")
+    (assert (stringContains? code "public var name: String") "name property")
+    (assert (stringContains? code "public var isActive: Bool") "isActive property")
+    (assert (stringContains? code "public init(id: Int, name: String, isActive: Bool)") "memberwise init")
+    (refute (stringContains? code "class UserProfile") "Refutes class keyword")
+    (refute (stringContains? code "type UserProfile struct") "Refutes Go struct")
+    true)
+
+fn testSwiftEnum -> Bool
+  (let [(simpleCases (list "pending" "running" "completed"))
+        (simpleCode (s/emitSwiftSimpleEnum "TaskState" simpleCases))
+        (adtCases (list (pair "success" "Str") (pair "failure" "I64")))
+        (adtCode (s/emitSwiftEnum "TaskOutcome" adtCases))]
+    (assert (stringContains? simpleCode "public enum TaskState: String, Codable, CaseIterable, Sendable {") "Simple enum header")
+    (assert (stringContains? simpleCode "case pending = \"pending\"") "Simple enum case")
+    (assert (stringContains? adtCode "public enum TaskOutcome: Codable, Equatable, Hashable, Sendable {") "ADT enum header")
+    (assert (stringContains? adtCode "case success(String)") "Payload case success")
+    (assert (stringContains? adtCode "case failure(Int)") "Payload case failure")
+    (refute (stringContains? simpleCode "iota") "Refutes Go iota")
+    (refute (stringContains? adtCode "enum class") "Refutes C++ enum class")
+    true)
+
+fn testSwiftFn -> Bool
+  (let [(fnCode (s/emitSwiftFn "calculateTotal" "amount: Int, tax: Double" "Double" "    return Double(amount) * (1.0 + tax)" true))]
+    (assert (stringContains? fnCode "public func calculateTotal(amount: Int, tax: Double) -> Double {") "Function signature")
+    (assert (stringContains? fnCode "return Double(amount) * (1.0 + tax)") "Function body")
+    (refute (stringContains? fnCode "def calculateTotal") "Refutes Python def")
+    (refute (stringContains? fnCode "func calculateTotal(amount: Int, tax: Double) Double") "Refutes Go return syntax")
+    true)
+
+fn testSwiftMacOsApp -> Bool
+  (let [(appCode (app/emitSwiftApp "Cockpit" "CockpitMainView"))
+        (bundle (app/emitSwiftMacOsBundle "Cockpit" "CockpitMainView" "// models" "// views"))]
+    (assert (stringContains? appCode "@main") "App code has @main attribute")
+    (assert (stringContains? appCode "public struct CockpitApp: App {") "App code declares struct conforming to App")
+    (assert (stringContains? appCode "WindowGroup {") "App code declares WindowGroup scene")
+    (assert (stringContains? appCode "CockpitMainView()") "App code instantiates CockpitMainView")
+    (assert (stringContains? appCode ".windowStyle(.hiddenTitleBar)") "App code has AppKit window styling")
+    (assert (stringContains? bundle "import SwiftUI") "Bundle includes SwiftUI")
+    (assert (stringContains? bundle "// models") "Bundle includes models section")
+    (assert (stringContains? bundle "// views") "Bundle includes views section")
+    (refute (stringContains? appCode "func main()") "Refutes Go/C style main function")
+    (refute (stringContains? appCode "public static void main") "Refutes Java main method")
+    true)
+
+fn runTests -> Bool
+  (do
+    (assert (testSwiftTypes) "testSwiftTypes must pass")
+    (assert (testSwiftMangle) "testSwiftMangle must pass")
+    (assert (testSwiftHeader) "testSwiftHeader must pass")
+    (assert (testSwiftBinop) "testSwiftBinop must pass")
+    (assert (testSwiftAtom) "testSwiftAtom must pass")
+    (assert (testSwiftStruct) "testSwiftStruct must pass")
+    (assert (testSwiftEnum) "testSwiftEnum must pass")
+    (assert (testSwiftFn) "testSwiftFn must pass")
+    (assert (testSwiftMacOsApp) "testSwiftMacOsApp must pass")
+    true)

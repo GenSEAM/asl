@@ -1,0 +1,9 @@
+; A heterogeneous collection. Each element is an enum case constructor written
+; exactly as the language writes it — camelCase head, positional arguments — so the
+; collection is self-describing without a `{type, data}` wrapper on every item.
+;
+; canonical: [(user 1 "Alice" :admin) (bot 2 "code-bot" 1200) (deployEvent :success 1714829100)]
+
+[(user 1 "Alice" :admin)
+ (bot 2 "code-bot" 1200)
+ (deployEvent :success 1714829100)]

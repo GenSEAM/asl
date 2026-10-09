@@ -1,0 +1,3 @@
+(:metaBaseline :v 1 :date "2026-09-25" :plain 3
+  (:file :path "asl/packages/asl-gates/tests/fixtures/meta/growth.py.txt" :plain 2)
+  (:file :path "asl/packages/asl-gates/tests/fixtures/meta/clean.py.txt" :plain 1))

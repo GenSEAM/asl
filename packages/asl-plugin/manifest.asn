@@ -1,0 +1,7 @@
+(:package asl-plugin
+ :version "0.1.0"
+ :entry "src/plugin.asl"
+ :description "Modular Plugin Architecture & Foreign Capability Interface for AgentScript Core"
+ :aslFirst true
+ :modules ["asl-plugin/types" "asl-plugin/security" "asl-plugin/plugin" "asl-plugin/dynamicTool" "asl-plugin/targetRegistry"]
+ :dependencies ["asl-text" "asl-parser"])

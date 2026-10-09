@@ -1,0 +1,7 @@
+(:package asl-sql
+ :version "0.1.0"
+ :entry "src/core/sql.asl"
+ :description "Native AgentScript Cross-Dialect SQL AST Query Builder & Parameterized Emission Engine"
+ :aslFirst true
+ :modules ["asl-sql" "asl-sql/ddl" "asl-sql/schemaGen"]
+ :dependencies ["asl-derive" "asl-text" "asl-parser"])
