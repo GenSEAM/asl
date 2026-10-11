@@ -1,9 +1,11 @@
 (module asl/agentLoop/txn
   :x [RVal AslRun TxnStep TxnPrep AbortAid WidenItem Effect FileText
       execTxn! txnPrepare txnFinish! serReceipt serValue balanceAid txnRefusal abortAid! abortAidOn applySteps stepsOf
-      intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt]
+      intelSubop widenWanted widenPick widenForm widenToSymbol! insideRoot normPath parseEffects loadEffects! checkEffect readText! splitLines outlineItems stripRightAt
+      langForPath tryRepairText]
   :i [(asl/agentLoop/core :a c)
-      (asl/agentLoop/diff :a diff)])
+      (asl/agentLoop/diff :a diff)
+      (asl-forms/repair :a rep)])
 
 enum RVal
   (rStr text: String)
@@ -727,6 +729,55 @@ fn runErr out: String -> String
 fn opt key: String v: (Option String) -> (List (Pair String RVal))
   (mt v ((some t) (list (pair key (rStr t)))) (none (list)))
 
+; (:m :tags (repair))
+fn langForPath path: String -> (Option String)
+  (cond
+    ((stringEndsWith? path ".asn") (some "asn"))
+    ((stringEndsWith? path ".asl") (some "asl"))
+    (else none))
+
+; (:m :ref G4 :tags (repair) :do "repairs cur with asl-forms/repair; accepted only when nothing is left over and the repaired text itself balances")
+fn tryRepairText cur: (Option String) tf: String -> (Option rep/RepairResult)
+  (mt cur
+    ((none) none)
+    ((some t)
+      (mt (langForPath tf)
+        ((none) none)
+        ((some lang)
+          (let [res (rep/repairAtSite t lang)]
+            (if (and (listEmpty? (rep/repairResultLeft res)) (none? (balanceAid (rep/repairResultText res))))
+              (some res)
+              none))))))
+
+fn repairedReceipt rid: String txnOwns: (List String) tf: String res: rep/RepairResult cmd: String -> (List (Pair String RVal))
+  (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr "ok"))
+    (pair "owns" (rList txnOwns)) (pair "flushed" (rList (list tf)))
+    (pair "error" (rNone)) (pair "message" (rNone))
+    (pair "cmd" (rStr cmd))
+    (pair "repaired" (rStr (rep/repairResultReceipt res)))
+    (pair "exit" (rInt 0)) (pair "stdout" (rStr "")) (pair "persisted" (rBool true)))
+
+fn ! defaultReceipt rid: String txnOwns: (List String) tf: String steps: (List TxnStep) root: String cmd: String okRun: Bool err: String msg: String balance: (Option String) code: Int64 out: String errText: String -> (List (Pair String RVal))
+  (let [extra (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? msg "the delimiters ( ) [ ] { } and quotes do not balance")) (largeFileHint) "")
+        aid (if okRun none (abortAid! root tf steps (str msg " " out " " errText) extra))
+        hint0 (mt aid ((some x) (mt x ((abortAidOf _ _ h) (some h)))) (none none))
+        tmpl (str "(:step :op \"write\" :file \"" tf "\" :content :raw)")
+        hint (if (and (not okRun) (and (or (= err "ERR_TXN_FLUSH_FAILED") (= err "ERR_TXN_ABORTED")) (!= tf "")))
+               (some (mt hint0 ((some h) (str h "; " tmpl)) (none tmpl)))
+               hint0)]
+    (listAppend
+      (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr (if okRun "ok" "rejected")))
+        (pair "owns" (rList txnOwns)) (pair "flushed" (rList (if okRun txnOwns (list))))
+        (pair "error" (if okRun (rNone) (rStr err))) (pair "message" (if okRun (rNone) (rStr msg)))
+        (pair "cmd" (rStr cmd)))
+      (listAppend (opt "balance" balance)
+        (listAppend
+          (list (pair "exit" (rInt code)) (pair "stdout" (rStr out)) (pair "persisted" (rBool okRun)))
+          (listAppend
+            (mt aid ((some x) (mt x ((abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) (none (list)))
+            (opt "hint" hint))))))
+
+; (:m :ref G4 :tags (repair txn) :do "a balance-flagged refusal is retried once through the repair module before it reaches the model; only a payload repair cannot fix still refuses")
 fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (Pair String RVal))
   (mt prep
     ((prepDone r) r)
@@ -747,24 +798,13 @@ fn ! txnFinish! prep: TxnPrep result: AslRun root: String rid: String -> (List (
                 balance (mt cur
                           ((some t) (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? tMsg (refusedMark))) (balanceAid t) none))
                           (none none))
-                extra (if (or (= err "ERR_TXN_FLUSH_FAILED") (stringContains? msg "the delimiters ( ) [ ] { } and quotes do not balance")) (largeFileHint) "")
-                aid (if okRun none (abortAid! root tf steps (str msg " " out " " errText) extra))
-                hint0 (mt aid ((some x) (mt x ((abortAidOf _ _ h) (some h)))) (none none))
-                tmpl (str "(:step :op \"write\" :file \"" tf "\" :content :raw)")
-                hint (if (and (not okRun) (and (or (= err "ERR_TXN_FLUSH_FAILED") (= err "ERR_TXN_ABORTED")) (!= tf "")))
-                       (some (mt hint0 ((some h) (str h "; " tmpl)) (none tmpl)))
-                       hint0)]
-            (listAppend
-              (list (pair "id" (rStr rid)) (pair "op" (rStr "txn")) (pair "status" (rStr (if okRun "ok" "rejected")))
-                (pair "owns" (rList txnOwns)) (pair "flushed" (rList (if okRun txnOwns (list))))
-                (pair "error" (if okRun (rNone) (rStr err))) (pair "message" (if okRun (rNone) (rStr msg)))
-                (pair "cmd" (rStr cmd)))
-              (listAppend (opt "balance" balance)
-                (listAppend
-                  (list (pair "exit" (rInt code)) (pair "stdout" (rStr out)) (pair "persisted" (rBool okRun)))
-                  (listAppend
-                    (mt aid ((some x) (mt x ((abortAidOf k a _) (list (pair "line" (rInt k)) (pair "arrived" (rStr a)))))) (none (list)))
-                    (opt "hint" hint))))))))))
+                repaired (if (some? balance) (tryRepairText cur tf) none)]
+            (mt repaired
+              ((some res)
+                (mt (fileWrite (joinPath root tf) (rep/repairResultText res))
+                  ((ok _) (repairedReceipt rid txnOwns tf res cmd))
+                  ((err _) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))
+              ((none) (defaultReceipt rid txnOwns tf steps root cmd okRun err msg balance code out errText))))))))
 
 fn ! snapAll snap: (fn [String] -> Bool) targets: (List String) -> String
   (cond

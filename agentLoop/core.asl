@@ -1,5 +1,6 @@
 (module asl/agentLoop/core
-  :x [asnUnescape escapeAsn parseForms stripForms parseKv parseReply isProseWrapped checkOwns fieldVal evidenceKey mergeSpans spanSeen recordRead renderSeen renderTranscript renderWindow makeTurn serString serOps serKey serSpans joinAll editDistance nearestOp terminalForms dataFindings uniqueSteps gateVerdict noteStep runOutward changePlan harnessPath hiddenPath runReadOnly firstOf restOf sliceOf ch dictGet isSpace isWordByte joinSep KvVal kvInt kvStr windowOf isDigit truthy headOf dictHas dictOr formEnd mapBytes progName runEnd strBodyEnd stripLeft stripRight trimSpace charIndex charLen charPrefix Turn]
+  :x [asnUnescape escapeAsn parseForms stripForms parseKv parseReply isProseWrapped checkOwns fieldVal evidenceKey mergeSpans spanSeen recordRead renderSeen renderTranscript renderWindow makeTurn serString serOps serKey serSpans joinAll editDistance nearestOp terminalForms dataFindings uniqueSteps gateVerdict noteStep runOutward changePlan harnessPath hiddenPath runReadOnly firstOf restOf sliceOf ch dictGet isSpace isWordByte joinSep KvVal kvInt kvStr windowOf isDigit truthy headOf dictHas dictOr formEnd mapBytes progName runEnd strBodyEnd stripLeft stripRight trimSpace charIndex charLen charPrefix Turn
+      residueWordCount hasFormResidue joinForms]
   :i [])
 
 enum KvVal
@@ -155,6 +156,17 @@ fn isProseWrapped reply: String -> Bool
     true
     (let [p (stripForms reply)]
       (> (wordCount p (stringLength p) 0 false 0) 40)))
+
+; (:m :ref PROSE-THRESHOLD :do "no 40-word/``` floor, so it trips on the same short trailing-text cases metrics.asl classifyDefect already flags as prose")
+fn residueWordCount reply: String -> Int64
+  (let [p (stripForms reply)]
+    (wordCount p (stringLength p) 0 false 0))
+
+fn hasFormResidue reply: String -> Bool
+  (> (residueWordCount reply) 0)
+
+fn joinForms reply: String -> String
+  (joinSep (parseForms reply) "\n")
 
 fn dictGet d: (List (Pair String KvVal)) k: String -> (Option KvVal)
   (cond

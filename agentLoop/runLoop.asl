@@ -1,5 +1,5 @@
 (module asl/agentLoop/runLoop
-  :x [LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision stateFor withHeadState withFindings wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider!]
+  :x [LoopSetup LoopRun ProviderRun withState withProcs withWritten withCommitMessage withOwnsRejections withPlan writtenPaths noteParseTurn headDecision stateFor withHeadState withFindings withPrefetch wallSeconds setup! head! finish! runLoopWith! runLoopWithProvider!]
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
@@ -293,6 +293,36 @@ fn withFindings state: s/LoopState findings: (List j/Json) confirms: (List j/Jso
       :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
       :writtenFiles state.writtenFiles)
 
+; (:m :ref PREFETCH-WIRE)
+fn withPrefetch state: s/LoopState prefetch: String -> s/LoopState
+  (s/LoopState
+      :turn state.turn :contextTokens state.contextTokens :core state.core
+      :wallBudget state.wallBudget :intent state.intent :plan state.plan :mode state.mode
+      :sizingModel state.sizingModel :explicitContext state.explicitContext
+      :transcriptChars state.transcriptChars :readCap state.readCap :startHead state.startHead
+      :turnsWithoutEvidence state.turnsWithoutEvidence :readStreak state.readStreak
+      :phases state.phases :deliver state.deliver :gatewayIntent state.gatewayIntent
+      :researchKind state.researchKind :turnFacts state.turnFacts :reinforceWhy state.reinforceWhy
+      :advisorCalls state.advisorCalls :advisorAsked state.advisorAsked :gateSigHistory state.gateSigHistory
+      :executedSteps state.executedSteps :workspaceGen state.workspaceGen :failureCounts state.failureCounts
+      :ownsRejections state.ownsRejections :scope state.scope :signalName state.signalName
+      :runStarted state.runStarted :vendorRetryCount state.vendorRetryCount :vendorWaitUsed state.vendorWaitUsed
+      :seenEvidence state.seenEvidence :turnEvidence state.turnEvidence :writeTurn state.writeTurn
+      :coverage state.coverage :writesPersisted state.writesPersisted :wroteSinceGate state.wroteSinceGate
+      :allReceipts state.allReceipts :allGateResults state.allGateResults :needsConfirmList state.needsConfirmList
+      :escalateReceipt state.escalateReceipt :findingsList state.findingsList :possibleOpen state.possibleOpen
+      :possibleNotices state.possibleNotices :status state.status :error state.error
+      :totalQueueWaitSec state.totalQueueWaitSec :totalExecSec state.totalExecSec
+      :usageTotals state.usageTotals :batching state.batching :hasTiming state.hasTiming
+      :basePrompt state.basePrompt :briefCount state.briefCount :code state.code
+      :commitRequested state.commitRequested :declaredOps state.declaredOps :fetched state.fetched
+      :header state.header :history state.history :lastGates state.lastGates
+      :missingGateIntro state.missingGateIntro :patchErr state.patchErr
+      :placeholderBriefs state.placeholderBriefs :prefetch prefetch :priorIds state.priorIds
+      :resumePatchPath state.resumePatchPath :retries state.retries :runUnbackedClaims state.runUnbackedClaims
+      :specChecksDone state.specChecksDone :startTurn state.startTurn :taskLines state.taskLines
+      :unparsable state.unparsable :vendorBounds state.vendorBounds :window state.window
+      :writtenFiles state.writtenFiles)
 
 fn preflightJson bad: (List (List (Pair String go/RVal))) -> j/Json
   (j/jarr (map (fn [rec]
@@ -321,6 +351,10 @@ fn ! startHead! rootDir: String -> (Result (Option String) String)
     ((err e) (err e))
     ((ok o) (ok (if (= o.exitCode 0) (some (ctx/pyStrip o.stdout)) none))))
 
+; (:m :ref PREFETCH-WIRE :do "no subprocess runner is available this early in setup; a large :owns file (over prefetchWholeBytes) is simply skipped, small ones still prefetch whole")
+fn noOutline f: String -> (Pair Int64 String)
+  (pair 1 "")
+
 fn ! setup! env: s/LoopEnv -> LoopSetup
   (let [state (stateFor env)
         sid (optionOr env.sessionId (env.newId))
@@ -346,7 +380,10 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
             ((err e) (pair fresh (pair none (some e)))) ((ok applied) applied)))
           ((none) (pair fresh (pair none none))))
         applied (pairFirst (pairSecond patchState))
-        patchError (pairSecond (pairSecond patchState))]
+        patchError (pairSecond (pairSecond patchState))
+        prefetchText (if (and (none? env.resume) (not (listEmpty? env.owns)))
+                       (pairFirst (ctx/prefetchBlock! (some env.task) env.owns rootDir state.readCap 1 (list) noOutline))
+                       "")]
     (do
       (jr/journalWrite env.journalPath header)
       (resumeJournal! applied env.journalPath)
@@ -362,9 +399,9 @@ fn ! setupAt! env: s/LoopEnv state: s/LoopState sid: String rootDir: String head
               (early (emptyResult env sid "rejected" (some "ERR_RESUME_PATCH") 0 none (list) none (some message) none)))))
         (else
           (ready (LoopRun
-            :state (withHeadState state state.turn state.readStreak (some? applied)
+            :state (withPrefetch (withHeadState state state.turn state.readStreak (some? applied)
               state.deliver state.allGateResults state.lastGates state.status state.signalName
-              state.escalateReceipt state.runStarted)
+              state.escalateReceipt state.runStarted) prefetchText)
             :procs (ro/newProcs) :written (pairFirst patchState) :session sid :commitMessage none :parseDefects 0 :lastDefect false :lastDefectTurn none))))))
 
 fn latestRed entry: j/Json -> Bool

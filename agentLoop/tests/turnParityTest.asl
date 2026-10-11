@@ -61,9 +61,18 @@ fn ! runTests -> Bool
                    "explanation explanation explanation explanation explanation explanation explanation explanation explanation explanation "
                    "explanation explanation explanation explanation explanation explanation explanation explanation explanation explanation "
                    "(:step :op \"read\" :file \"a.txt\")")
-        proseReply (tr/turnReply prose none)]
+        proseReply (tr/turnReply prose none)
+        shortProse "(:step :op \"read\" :file \"a.txt\") some words `"
+        shortProseReply (tr/turnReply shortProse none)]
     (do
       (assert (= passed 7) "all seven independently recorded turn results match the core turn implementation")
+      (assert (= shortProseReply.text "(:step :op \"read\" :file \"a.txt\")")
+              "PROSE-THRESHOLD: a short trailing-prose reply is repaired down to just its parsed form")
+      (assert (mt shortProseReply.repair ((some a) (= a.notice (some "(:repaired (:prose 3) :left ())"))) ((none) false))
+              "PROSE-THRESHOLD: the repair notice reports the stripped word count under :prose")
+      (assert (mt shortProseReply.repair ((some a) (= a.kinds (list "prose"))) ((none) false))
+              "PROSE-THRESHOLD: the repair is tagged with kind prose")
+      (assert (not (listEmpty? shortProseReply.facts.ops)) "PROSE-THRESHOLD: the kept op still parses after the prose is stripped")
       (assert (mt cut ((some ci) (and (= ci.op (some "write")) (= ci.file (some "big.txt")))) ((none) false))
               "a cut write keeps its operation and file for ERR_REPLY_CUT")
       (assert (and (= openReply.text "((") (mt openRepair ((some a) (stringEmpty? a.text)) ((none) false)))

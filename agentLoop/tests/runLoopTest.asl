@@ -41,6 +41,14 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
 
+; (:m :ref PREFETCH-WIRE)
+fn makeEnvOwns id: String task: String root: String journal: String owns: (List String) -> s/LoopEnv
+  (s/LoopEnv :provider fakeTurn :task task :modeHint (some "implement") :owns owns :gates (list)
+    :rootDir root :budget 4 :journalPath journal :maxRetries 0 :sessionId (some id)
+    :base (some "") :contextTokens (some 24000) :model (some "loop-run-fixture")
+    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+
 schema Final
   (:f turn Int64)
   (:f status String)
@@ -467,6 +475,14 @@ fn ! runTests -> Bool
         patchState (fn [turn] (rl/withHeadState baseState turn 0 false (some "patch") (list) (mapEmpty) "ok" none none baseState.runStarted))
         budget10Env (makeEnv "loopRun12" "no write share" tmp (str tmp "/loopRunTest-share.asn") 10 none (list) none)
         budget60Env (makeEnv "loopRun13" "no write cap" tmp (str tmp "/loopRunTest-cap.asn") 60 none (list) none)
+        prefetchFile (str tmp "/prefetch.txt")
+        prefetchFileReady (ok? (fileWrite prefetchFile "hello prefetch\n"))
+        prefetchEnv (makeEnvOwns "loopRun20" "prefetch wiring test" tmp (str tmp "/loopRunTest-prefetch.asn") (list "prefetch.txt"))
+        prefetchSetup (rl/setup! prefetchEnv)
+        prefetchState (mt prefetchSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor prefetchEnv)))
+        noOwnsEnv (makeEnv "loopRun21" "prefetch wiring test no owns" tmp (str tmp "/loopRunTest-prefetch-none.asn") 4 none (list) none)
+        noOwnsSetup (rl/setup! noOwnsEnv)
+        noOwnsState (mt noOwnsSetup ((rl/ready run) run.state) ((rl/early _) (rl/stateFor noOwnsEnv)))
         retainRoot (str tmp "/retain")
         retainMain (str retainRoot "/main")
         retainTree (str retainRoot "/tree")
@@ -600,6 +616,13 @@ fn ! runTests -> Bool
                     (assert (= (resultLine anonJournal) "(:result :status :failed :session \"loopRunTest\" :unbacked 1 :unbackedClaims (\"claim a\") :contextTokens 24000 :phases (scout) :findings ((:findings (\"possible\"))) :batching (:turns 0 :ops 0 :singleOp 0))") "the result line carries the generated session, unbacked claims and findings")
                     (assert (= anonResult.status "failed") "findings without a claim fail an ok run")
                     (assert (= anonResult.session "loopRunTest") "a generated session id reaches the result")
+                    (assert prefetchFileReady "prefetch fixture file is written inside the temporary root")
+                    (assert (mt prefetchSetup ((rl/ready _) true) ((rl/early _) false)) "a task with :owns passes setup")
+                    (assert (= prefetchState.prefetch (str "prefetched before turn 1, so no read is needed for them: small files whole, larger ones as outlines "
+                               "(start-end kind name) to read by :symbol or :start/:end; a file written since differs, so read it again before quoting :old"
+                               "\n(:prefetch (:file \"prefetch.txt\" :lines (1 1) :content \"hello prefetch\\n\"))"))
+                      "turn 1's state carries the prefetched block for a task with :owns")
+                    (assert (= noOwnsState.prefetch "") "a task with no :owns carries no prefetch block in turn 1's state")
                     (finishPathTests tmp)
                     (assert (ok? (removeIfExists! tmp)) "the temporary test root is removed")
                     (assert (mt (fileStat tmp) ((ok _) false) ((err _) true)) "no temporary test root is left behind")
