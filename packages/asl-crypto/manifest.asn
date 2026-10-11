@@ -2,5 +2,6 @@
  :version "0.1.0"
  :entry "src/hmac.asl"
  :description "Pure ASL cryptographic primitives: HMAC-SHA256, AES and Fernet"
+ :status "frozen"
  :aslFirst true
  :dependencies [])

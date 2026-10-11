@@ -34,8 +34,6 @@ fn knownSourceInvalidPaths -> (List String)
     "asl/bench/mutationStrategy.asl"
     "asl/examples/searxngPool.asl"
     "asl/packages/asl-audio/tests/heardnameTest.asl"
-    "asl/packages/asl-bridge/src/configCascade.asl"
-    "asl/packages/asl-bridge/tests/configCascadeTest.asl"
     "asl/packages/asl-cli/src/conform.asl"
     "asl/packages/asl-cli/tests/bootstrapTest.asl"
     "asl/packages/asl-cli/tests/digestTest.asl"

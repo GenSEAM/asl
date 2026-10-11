@@ -1,2 +1,0 @@
-(:doc :symbol "asl/packages/asl-zstd/src/encode.asl#" :text "Pure ASL Zstandard encoder with raw literals and predefined-FSE sequence blocks")
-(:doc :symbol "asl/packages/asl-zstd/tests/encodeTest.asl#" :text "Round-trip and compression-bound gate for the ASL Zstandard encoder")

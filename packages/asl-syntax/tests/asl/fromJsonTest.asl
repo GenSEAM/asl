@@ -348,8 +348,6 @@ fn inScopeCorpusFiles -> (List String)
         "asl/packages/asl-agent-bus/src/ambient.asl"
         "asl/packages/asl-agent-bus/src/asnlRing.asl"
         "asl/packages/asl-agent-bus/src/bridge.asl"
-        "asl/packages/asl-bridge/src/ports.asl"
-        "asl/packages/asl-bridge/src/configCascade.asl"
         "asl/packages/asl-syntax/src/core/bytesText.asl"
         "asl/packages/asl-search/src/commonCrawl.asl"
         "asl/packages/asl-syntax/src/core/outline.asl")

@@ -2,6 +2,7 @@
  :version "0.1.0"
  :entry "src/eval.asl"
  :description "100% Self-Hosted Pure AgentScript AST Evaluator, Closures & Module System"
+ :status "frozen"
  :aslFirst true
  :modules [
    "asl-eval"
