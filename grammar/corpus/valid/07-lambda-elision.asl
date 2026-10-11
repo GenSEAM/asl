@@ -1,9 +1,3 @@
-"Lambda annotations elided: each of these positions is an argument to a builtin"
-
-"whose signature fixes the parameter and return types completely, so writing"
-
-"them again could not differ from what the position already says."
-
 fn evens xs: (List Int64) -> (List Int64)
   (filter (fn [x] (= (mod x 2) 0)) xs)
 

@@ -1,7 +1,7 @@
 # (:m :ref D99999 :why "a decision that does not exist")
 def danglingDecision():
     pass
-# (:m :ref .asl/mem/noSuchLedger.asn)
+# (:m :ref asl/mem/noSuchLedger.asn)
 def danglingLedger():
     pass
 # (:m :ref noSuchRule)

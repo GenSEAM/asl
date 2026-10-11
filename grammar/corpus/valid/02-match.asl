@@ -1,7 +1,3 @@
-"Pattern matching over Option and Result. A list is not a pattern: it is taken"
-
-"apart through listHead and listTail, which return Options."
-
 fn sumList xs: (List Int64) -> Int64
   (match (listHead xs) ((none) 0) ((some h) (+ h (sumList (optionOr (listTail xs) (list))))))
 

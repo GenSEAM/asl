@@ -1,11 +1,3 @@
-"A self-referential record. The field naming its own declaration has no"
-
-"statically known size on the former Rust target, so it was boxed — and the box"
-
-"had to be put on at construction and taken off at every read, or the"
-
-"declaration was the only place the three agreed."
-
 (schema Node (:f value Int64 "The payload") (:f next (Option Node) "The rest of the chain, absent at the end"))
 
 fn leaf v: Int64 -> Node

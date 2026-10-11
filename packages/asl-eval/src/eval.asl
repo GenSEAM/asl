@@ -2,9 +2,9 @@
 
 (schema EvalResult (:f value Str) (:f ok Bool) (:f errCode Str))
 
-(schema EvalEnv (:f bindings [Str]) (:f values [Str]) (:f parentId Str))
+(schema EvalEnv (:f bindings (List Str)) (:f values (List Str)) (:f parentId Str))
 
-(schema Closure (:f params [Str]) (:f body Str) (:f env EvalEnv))
+(schema Closure (:f params (List Str)) (:f body Str) (:f env EvalEnv))
 
 fn makeEvalEnv -> EvalEnv
   (EvalEnv :bindings [] :values [] :parentId "root")
@@ -75,7 +75,7 @@ fn evalSExpr env: EvalEnv node: Str -> EvalResult
 fn evalNode env: EvalEnv node: Str -> EvalResult
   (if (stringEmpty? node) (EvalResult :value "" :ok true :errCode "") (if (= node "true") (EvalResult :value "true" :ok true :errCode "") (if (= node "false") (EvalResult :value "false" :ok true :errCode "") (if (or (stringStartsWith? node "\"") (stringStartsWith? node "'")) (EvalResult :value node :ok true :errCode "") (if (stringStartsWith? node "(") (evalSExpr env node) (if (or (stringStartsWith? node "0") (or (stringStartsWith? node "1") (or (stringStartsWith? node "2") (or (stringStartsWith? node "3") (or (stringStartsWith? node "4") (or (stringStartsWith? node "5") (or (stringStartsWith? node "6") (or (stringStartsWith? node "7") (or (stringStartsWith? node "8") (stringStartsWith? node "9")))))))))) (EvalResult :value node :ok true :errCode "") (mt (listIndexOf env.bindings node) ((some idx) (EvalResult :value (optionOr (listGet env.values idx) "") :ok true :errCode "")) ((none) (EvalResult :value "" :ok false :errCode "ERR_UNBOUND_SYMBOL")))))))))
 
-fn invokeClosure c: Closure args: [Str] -> EvalResult
+fn invokeClosure c: Closure args: (List Str) -> EvalResult
   (if (< (listLength args) (listLength c.params))
     (EvalResult :value "" :ok false :errCode "ERR_ARITY_MISMATCH")
     (let [(parentEnv c.env)

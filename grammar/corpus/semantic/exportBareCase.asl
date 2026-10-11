@@ -1,7 +1,3 @@
-"expect-only: rule-2"
-"`circle` is a case of Shape, not a declaration of its own. Cases travel with"
-"their type, so a bare case name on the export list names nothing (§4.0) — the"
-"surviving alternative would publish a constructor for a type nobody can write."
 (module text/bareCase
   :x [circle])
 

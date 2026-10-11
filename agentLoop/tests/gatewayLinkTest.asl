@@ -115,7 +115,7 @@ fn ! runTests -> Bool
         (stubPort (resultOr (sockLocalPort listener) 0))
         (base (str "http://127.0.0.1:" (stringFromInt64 stubPort)))
         (wrote (and (ok? (dirCreate (str temp "/.asl"))) (and (ok? (fileWrite (str temp "/.asl/gateway.asn") (config base))) (and (ok? (dirCreate (str temp "/work"))) (ok? (dirCreate bare))))))
-        (host (resultOr (procExePath) ""))
+        (host (hostExe!))
         (server (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") ""))
         (driver (resultOr (realPath "asl/agentLoop/tests/gatewayLinkDriver.asl") ""))
         (common (list (str "PATH=" (optionOr (envGet "PATH") "/usr/bin:/bin")) (str "HOME=" temp) (str "ASL_GATEWAY_ROOT=" temp)
@@ -156,3 +156,6 @@ fn ! runTests -> Bool
       (assert (= linkRows gwRows) (str "the in-process link logs the same decision and charge rows: " (stringJoin linkRows " | ")))
       (assert (stringContains? bareOut "(:error ERR_GATEWAY_CONFIG") (str "an in-process run without a config fails typed, with no HTTP fallback: " bareOut))
       (and gwKilled (and closed removed))))
+
+fn ! hostExe! -> String
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))

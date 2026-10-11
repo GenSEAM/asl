@@ -15,7 +15,7 @@ fn mainSource name: String libName: String -> String
        "    ((err e) (err e))\n"
        "    ((ok h) (mt (processWait h 5000)\n"
        "              ((err e) (err e))\n"
-       "              ((ok out) (do (print (.-stdout out)) (ok 0))))))\n")
+       "              ((ok out) (do (print out.stdout) (ok 0))))))\n")
 
 fn ! testLinkInits -> Bool
   (let [(entryIr "define i32 @main() {\nbb.entry:\n  call void @rterr.reportInit()\n  call void @init.e()\n  ret i32 0\n}\ndefine void @init.e() {\nbb.entry:\n  ret void\n}\n")

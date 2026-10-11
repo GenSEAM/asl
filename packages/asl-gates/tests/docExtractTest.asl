@@ -1,5 +1,5 @@
 (module asl-gates/tests/docExtractTest
-  :x [testModuleDoc! testFnDoc! testFieldDoc! testEscaped! testComments! testDryRunNoWrite! testApplyRoundTrip! testMutantGuards! runTests]
+  :x [testModuleDoc! testFnDoc! testFieldDoc! testEscaped! testComments! testDryRunNoWrite! testApplyRoundTrip! testMutantGuards! testNoteScan! testNoteMutantGuards! runTests]
   :i [(asl-gates/docExtract :a dx) (asl-parser/ast :a ast)])
 
 fn fixtureDir -> String
@@ -143,6 +143,33 @@ fn testMutantGuards! -> Bool
       (assert (stringContains? (dx/stripSource text cs) ":ref gates") "mutant guard: sibling keys of :why survive")
       true))
 
+fn noteSymbolsOf cs: (List dx/NoteCandidate) -> (List String)
+  (map (fn [(c dx/NoteCandidate)] -> String c.symbol) cs)
+
+fn noteTextsOf cs: (List dx/NoteCandidate) -> (List String)
+  (map (fn [(c dx/NoteCandidate)] -> String c.text) cs)
+
+fn scanNotes! path: String -> (List dx/NoteCandidate)
+  (dx/noteScanAll path (readFixture! "noteScan.asl.txt"))
+
+fn testNoteScan! -> Bool
+  (let [(cs (scanNotes! "fx/noteScan.asl"))]
+    (do
+      (assert (= (noteSymbolsOf cs) (list "fx/noteScan.asl#h" "fx/noteScan.asl#f" "fx/noteScan.asl#k" "fx/noteScan.asl#"))
+              (str "a note is keyed by the decl that follows it, or by path# when none follows: " (stringJoin (noteSymbolsOf cs) " ")))
+      (assert (listContains? (noteTextsOf cs) "Banner note with nothing else before the first real decl.") "a single note before a decl is recovered")
+      (assert (listContains? (noteTextsOf cs) "First note for f. Second note for f, still joined with a space.") "consecutive notes before one decl join with a space")
+      (assert (listContains? (noteTextsOf cs) "Edge case: a quote like \"this\" inside the note,\nspanning two physical lines in one literal.") "a note whose literal spans two physical lines, with an embedded escaped quote, is recovered whole and unescaped")
+      (assert (listContains? (noteTextsOf cs) "Trailing note with nothing after it.") "a trailing note with no following decl is keyed by path# alone")
+      true))
+
+fn testNoteMutantGuards! -> Bool
+  (let [(cs (scanNotes! "fx/noteScan.asl"))]
+    (do
+      (assert (listAll? (fn [(t String)] -> Bool (not (stringStartsWith? t "\""))) (noteTextsOf cs)) "mutant guard: a note's :text never keeps its surrounding quotes")
+      (assert (listAll? (fn [(t String)] -> Bool (not (stringContains? t "\\\""))) (noteTextsOf cs)) "mutant guard: an escaped quote inside a note is unescaped to a plain quote, not left as a literal backslash-quote pair")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testModuleDoc!) "testModuleDoc!")
@@ -155,4 +182,6 @@ fn ! runTests -> Bool
     (assert (testDryRunNoWrite!) "testDryRunNoWrite!")
     (assert (testApplyRoundTrip!) "testApplyRoundTrip!")
     (assert (testMutantGuards!) "testMutantGuards!")
+    (assert (testNoteScan!) "testNoteScan!")
+    (assert (testNoteMutantGuards!) "testNoteMutantGuards!")
     true)

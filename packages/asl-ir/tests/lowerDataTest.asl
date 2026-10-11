@@ -199,10 +199,11 @@ fn recordGolden -> String
     "  (fn sum (captures) (params (p rec:Point)) (returns i64)"
     "    (block entry ()"
     "      (let %0 val (field p x))"
-    "      (let %1 val (field p y))"
-    "      (let %2 val (entry \"+\" %0 %1))"
+    "      (let %1 i64 (unbox %0))"
+    "      (let %2 val (field p y))"
     "      (let %3 i64 (unbox %2))"
-    "      (return %3)))"
+    "      (let %4 i64 (prim addIntHost %1 %3))"
+    "      (return %4)))"
     "  (fn items (captures) (params (a i64)) (returns val)"
     "    (block entry ()"
     "      (let %0 i64 (const int 2))"
@@ -272,9 +273,16 @@ fn testBadMatch -> Bool
 
 fn testBadRecord -> Bool
   (let [(ds (diagsOf (low/lowerSource (badRecordSource))))]
-    (do (assert (= (codes ds) (list "ERR_LOWER_UNKNOWN_FIELD" "ERR_LOWER_MISSING_FIELD" "ERR_LOWER_DUPLICATE_FIELD" "ERR_LOWER_UNSUPPORTED")) "unknown, missing and repeated fields and positional construction are diagnostics")
-        (assert (= (loci ds) (list "stray@3:1" "half@4:1" "again@5:1" "loose@6:1")) "each diagnostic carries its declaration position")
-        (assert (stringContains? (messageAt ds 1) "omits 'y'") "the missing field is named")
+    (do (assert (= (codes ds) (list "ERR_LOWER_UNKNOWN_FIELD" "ERR_LOWER_DUPLICATE_FIELD" "ERR_LOWER_POSITIONAL_RECORD")) "an unknown field and a repeated field are diagnostics; an omitted field with no value supplied is left out, not one; a positional record literal (Point 1 2) is its own diagnostic, not an unknown field '1'")
+        (assert (= (loci ds) (list "stray@3:1" "again@5:1" "loose@6:1")) "each diagnostic carries its declaration position; half has none")
+        (assert (stringContains? (messageAt ds 0) "no field 'z'") "the unknown field is named")
+        (assert (stringContains? (messageAt ds 1) "repeats a field") "the duplicate field diagnostic names the repeat")
+        (assert (stringContains? (messageAt ds 2) "positional record literal: write (Point :x 1 :y 2)") "the positional diagnostic shows the keyed literal to write, pairing declared fields with the given values")
+        true))
+
+fn testBareKeyRecord -> Bool
+  (let [(res (low/lowerSource (joinLines (list "(module demo/bareKey :x [bare])" "(schema Point (:f x Int64 \"x\") (:f y Int64 \"y\"))" "(fn bare [] -> Point (Point x 1 y 2))"))))]
+    (do (assert (verified? res) (str "a bare declared field name is a key, not a positional value: " (stringJoin (codes (diagsOf res)) " ")))
         true))
 
 fn runTests -> Bool
@@ -282,6 +290,7 @@ fn runTests -> Bool
       (assert (testMatch) "testMatch")
       (assert (testPrelude) "testPrelude")
       (assert (testRecords) "testRecords")
+      (assert (testBareKeyRecord) "testBareKeyRecord")
       (assert (testBadMatch) "testBadMatch")
       (assert (testBadRecord) "testBadRecord")
       true)

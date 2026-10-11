@@ -121,8 +121,8 @@ fn ! testListBuilders cache: String -> Bool
         (filterBody (sh (str "cat " lls " | awk '/^define .*@prelude[$]2Efilter[(]/,/^}/'")).stdout)]
     (do (assert (= native.exitCode 0) (str "list bench runs natively: " native.stderr))
         (assert (= (stringTrim native.stdout) "751500") "list bench at 1000 prints 751500")
-        (assert (stringContains? mapBody "@asl_alloc_cons()") "prelude.map allocates its cells in the loop")
-        (assert (stringContains? filterBody "@asl_alloc_cons()") "prelude.filter allocates its cells in the loop")
+        (assert (stringContains? mapBody "call ptr @gcAsl.allocFastCons(i32 1, i64 40)") "prelude.map allocates its cells in the loop through the ALLOC-INLINE cons fast path")
+        (assert (stringContains? filterBody "call ptr @gcAsl.allocFastCons(i32 1, i64 40)") "prelude.filter allocates its cells in the loop through the ALLOC-INLINE cons fast path")
         (assert (not (stringContains? (str mapBody filterBody) "@prelude$2EpreludeMapOnto")) "prelude.map does not build a reversed copy")
         (assert (not (stringContains? (str mapBody filterBody) "@prelude$2EpreludeFilterOnto")) "prelude.filter does not build a reversed copy")
         (assert (not (stringContains? (str mapBody filterBody) "@prelude$2ElistReverse")) "neither reverses its result")

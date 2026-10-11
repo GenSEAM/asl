@@ -340,3 +340,5 @@
 (:doc :symbol "asl/packages/asl-agent-bus/tests/toolPlaneTest.asl#" :text "Unit tests for Agent Bus Tool Control Plane Router and Multi-Repo Scoping.")
 (:doc :symbol "asl/packages/asl-agent-bus/tests/transportTest.asl#" :text "Unit tests for AgentScript Bus Transport Specification.")
 (:doc :symbol "asl/packages/asl-agent-bus/tests/wireTest.asl#" :text "Unit verification test suite for ASB Wire Protocol and Compression Framing.")
+(:doc :symbol "asl/packages/asl-agent-bus/tests/gatewayTest.asl#testDemuxChannels" :text "run: (run-tests)")
+(:doc :symbol "asl/packages/asl-agent-bus/tests/meshTest.asl#testRoutingTableCreation" :text "run: (run-tests)")

@@ -1,6 +1,6 @@
 (module asl-tools/release
   :x [ReleaseBundle MilestoneReceipt makeReleaseBundle makeMilestoneReceipt buildReleasePackage superviseClosureGate build_release_package supervise_closure_gate release_bundle milestone_receipt]
-  :i [(reader :a rd)])
+  :i [(asl-parser/reader :a rd)])
 
 (schema ReleaseBundle
   (:f version Str)

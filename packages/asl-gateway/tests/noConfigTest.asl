@@ -54,7 +54,7 @@ fn ! runTests -> Bool
         (portResult (sockLocalPort listener))
         (providerPort (resultOr portResult 0))
         (socketDebug (str "listen=" (mt listenResult ((ok fd) (stringFromInt64 fd)) ((err e) e)) " local=" (mt portResult ((ok p) (stringFromInt64 p)) ((err e) e))))
-        (host (resultOr (procExePath) ""))
+        (host (hostExe!))
         (server (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") ""))
         (readyPath (str temp "/ready"))
         (command (str "exec " host " run " server " serve --port 0 --upstream http://127.0.0.1:" (stringFromInt64 providerPort) "/v1 --ready " readyPath " 2>" temp "/gateway.err"))
@@ -86,3 +86,6 @@ fn ! waitPort! path: String attempts: Int64 -> Int64
     (mt (optionOr (resultToOption (resultMap (fileReadString path) (fn [(t String)] -> (Option Int64) (stringToInt64 (stringTrim t))))) none)
       ((some port) (if (> port 0) port (do (sleepMs 20) (waitPort! path (- attempts 1)))) )
       ((none) (do (sleepMs 20) (waitPort! path (- attempts 1))))))
+
+fn ! hostExe! -> String
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))

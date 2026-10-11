@@ -1,13 +1,3 @@
-"A whole program across a module boundary: an imported union matched, an"
-
-"imported function called, and one module reached through two aliases. The two"
-
-"former backend targets represented that union completely differently — a"
-
-"tagged tuple on one, a namespaced variant on the other — and each derived its"
-
-"representation independently, so only running both proved they agreed."
-
 (module text/show :x [describe main] :i [(core/shapes :a s) (core/shapes :a g)])
 
 fn describe sh: s/Shape -> String

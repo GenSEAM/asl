@@ -7,8 +7,6 @@
 
 fn knownHostInvalidReason path: String -> (Option String)
   (cond
-    ((= path "asl/packages/asl-hypergraph/src/main.asl")
-     (some "a/parse splits the parameter type asl-parser/reader:SExpr at its colon into the type text asl-parser/reader :SExpr: Any, so the printed signature is rejected: ERR_UNKNOWN_SYMBOL Any"))
     ((= path "tests/acceptance/r1Host/sem/hostSubjectTest.asl")
      (some "compile.c's D152 constant-assert exemption keys off a ; (:m :tags (hostSubject)) line comment textually adjacent to the fn; DefunNode carries no field for it, so astPrinter cannot reproduce the comment and the printed form's otherwise-constant assert is rejected: ERR_CONSTANT_ASSERT"))
     ((= path "tests/acceptance/r1Host/sem/intDivModTest.asl")

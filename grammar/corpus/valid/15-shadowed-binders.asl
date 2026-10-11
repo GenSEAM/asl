@@ -1,11 +1,3 @@
-"A binder inside an imported module must win over a top-level name it collides"
-
-"with. The higher-order case is the sharp one: passing the shadowed name to"
-
-"`map` compiled, type-checked and ran on both former targets while calling the wrong"
-
-"function, so only a written-down expected output catches it."
-
 (module shadowDemo :x [main stringFromShadow] :i [(core/shadow :a sh)])
 
 fn stringFromShadow -> String

@@ -580,7 +580,7 @@ fn tagProbe name: String n: Int64 -> ty/SsaFunction
             (ty/termReturn "t"))))
 
 fn ! testTagGuard work: String -> Bool
-  (mt (lowered "sysTag" (lines (list "(module sysTag :x [main] :i [])" "" "fn ! main -> (Result Int64 String)" "  (do (fdClose 99) (ok 0))")))
+  (mt (lowered "sysTag" (lines (list "(module sysTag :x [main] :i [])" "" "fn ! main -> (Result Int64 String)" "  (do (fdClose 99) (fdPoll (list) 0) (ok 0))")))
     ((none) false)
     ((some m)
       (mt (routedOf (rt/routeModule (hostFacts) m))

@@ -280,6 +280,33 @@ fn tablesFunctions facts: libc/TripleFacts tables: (List RouteTable) pool: (Map 
                         ((ok more) (ok (listAppend fns more)))))))
         (ok (list)) tables)
 
+fn callNamesIn f: ty/SsaFunction -> (List String)
+  (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
+          (fold (fn [(acc2 (List String)) (i ty/SsaInstr)] -> (List String)
+                  (mt i.op
+                    ((ty/opCall n _) (cons n acc2))
+                    ((ty/opMakeClosure n _) (cons n acc2))
+                    (_ acc2)))
+                acc b.instrs))
+        (list) f.blocks)
+
+fn moduleCallNames fs: (List ty/SsaFunction) -> (List String)
+  (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (callNamesIn f))) (list) fs)
+
+fn growReachable toVisit: (List String) fnByName: (Map String ty/SsaFunction) seen: (Map String Bool) -> (Map String Bool)
+  (mt (listHead toVisit)
+    ((none) seen)
+    ((some n)
+      (let [(rest (optionOr (listTail toVisit) (list)))]
+        (if (some? (mapGet seen n))
+          (growReachable rest fnByName seen)
+          (mt (mapGet fnByName n)
+            ((none) (growReachable rest fnByName (mapSet seen n true)))
+            ((some f) (growReachable (listAppend (callNamesIn f) rest) fnByName (mapSet seen n true))))))))
+
+fn reachableFrom seed: (List String) fnByName: (Map String ty/SsaFunction) -> (Map String Bool)
+  (growReachable seed fnByName (mapEmpty))
+
 fn routeTablesInto facts: libc/TripleFacts m: ty/SsaModule tables: (List RouteTable) -> (Result Routed (List ty/IrDiag))
   (let [(pooled (poolWith m.strings (fold (fn [(acc (List String)) (t RouteTable)] -> (List String) (listAppend acc (tableStrings t))) (list) tables)))
         (names (fold (fn [(acc (List String)) (t RouteTable)] -> (List String) (listAppend acc (tableBuiltins t))) (list) tables))
@@ -290,7 +317,13 @@ fn routeTablesInto facts: libc/TripleFacts m: ty/SsaModule tables: (List RouteTa
     (mt (tablesFunctions facts tables (pairSecond pooled))
       ((err e) (err (list (routeDiag "ERR_LLVM_SYSROUTE_FACTS" e m.name))))
       ((ok fns)
-        (let [(added (dedupeFunctions fns))
+        (let [(available (dedupeFunctions fns))
+              (rewritten (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rewriteFunction names f)) m.functions))
+              (fnByName (fold (fn [(acc (Map String ty/SsaFunction)) (f ty/SsaFunction)] -> (Map String ty/SsaFunction) (mapSet acc f.name f)) (mapEmpty) available))
+              (globalInits (map (fn [(g ty/SsaGlobal)] -> String g.init) globals))
+              (seed (listAppend (moduleCallNames rewritten) globalInits))
+              (reached (reachableFrom seed fnByName))
+              (added (filter (fn [(f ty/SsaFunction)] -> Bool (some? (mapGet reached f.name))) available))
               (clashes (filter (fn [(f ty/SsaFunction)] -> Bool (listAny? (fn [(g ty/SsaFunction)] -> Bool (= g.name f.name)) m.functions)) added))]
           (if (not (listEmpty? clashes))
             (err (map (fn [(f ty/SsaFunction)] -> ty/IrDiag (routeDiag "ERR_LLVM_SYSROUTE_NAME" (str "module function '" f.name "' has the name of a routed syscall function") f.name)) clashes))
@@ -301,7 +334,7 @@ fn routeTablesInto facts: libc/TripleFacts m: ty/SsaModule tables: (List RouteTa
                   ((err diags) (err diags))
                   ((ok recs)
                     (ok (Routed :result (ty/ssaModule m.name (pairFirst pooled) (withTypes m.types types) recs merged (listAppend m.globals globals)
-                                          (listAppend (map (fn [(f ty/SsaFunction)] -> ty/SsaFunction (rewriteFunction names f)) m.functions) added))
+                                          (listAppend rewritten added))
                                 :internal (map (fn [(f ty/SsaFunction)] -> String f.name) added))))))))))))
 
 fn wasmImportTable -> (List (Pair String Int64))
@@ -457,19 +490,32 @@ fn ! routeHost! m: ty/SsaModule -> (Result Routed (List ty/IrDiag))
                     ((some facts) (routeModule facts m))))))
     (ok (Routed :result m :internal (list))))
 
+fn internalizeDefinePrefix -> String
+  "define tailcc "
+
+fn internalizeNames names: (List String) -> (Map String Bool)
+  (fold (fn [(acc (Map String Bool)) (n String)] -> (Map String Bool) (mapSet acc (ssa/llvmName n) true)) (mapEmpty) names)
+
+fn defineLineSymbol line: String -> String
+  (mt (listGet (stringSplit line "@") 1)
+    ((none) "")
+    ((some rest) (optionOr (listHead (stringSplit rest "(")) "")))
+
+fn internalizeLine wanted: (Map String Bool) line: String -> String
+  (if (stringStartsWith? line (internalizeDefinePrefix))
+    (if (some? (mapGet wanted (defineLineSymbol line)))
+      (stringReplace line (internalizeDefinePrefix) "define internal tailcc ")
+      line)
+    line)
+
 fn internalize res: (Result String (List ty/IrDiag)) names: (List String) -> (Result String (List ty/IrDiag))
   (if (listEmpty? names)
     res
     (mt res
       ((err diags) (err diags))
       ((ok text)
-        (let [(syms (map (fn [(n String)] -> String (str " @" (ssa/llvmName n) "(")) names))]
-          (ok (stringJoin (map (fn [(line String)] -> String
-                                 (if (and (stringStartsWith? line "define tailcc ") (listAny? (fn [(s String)] -> Bool (stringContains? line s)) syms))
-                                   (stringReplace line "define tailcc " "define internal tailcc ")
-                                   line))
-                               (stringSplit text "\n"))
-                          "\n"))))))
+        (let [(wanted (internalizeNames names))]
+          (ok (stringJoin (map (fn [(line String)] -> String (internalizeLine wanted line)) (stringSplit text "\n")) "\n"))))))
 
 fn signalNames -> (List String)
   (list "SIGHUP" "SIGINT" "SIGQUIT" "SIGKILL" "SIGUSR1" "SIGUSR2" "SIGTERM" "SIGCONT" "SIGSTOP" "SIGWINCH")

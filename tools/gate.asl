@@ -1,6 +1,6 @@
 (module asl-tools/gate
   :x [MasterTestRun AssertionAudit makeMasterTestRun makeAssertionAudit certifyMasterGate runFullCorpus certify_master_gate run_full_corpus master_test_run assertion_audit]
-  :i [(reader :a rd)])
+  :i [(asl-parser/reader :a rd)])
 
 (schema MasterTestRun
   (:f totalSuites Int64)

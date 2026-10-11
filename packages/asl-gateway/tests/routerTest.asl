@@ -28,7 +28,7 @@ fn ! testProfileParseAndFirstMatch -> Bool
           ((err _) false)
           ((ok decision) (do
             (assert (= decision.ruleId "interactive") "first matching rule wins")
-            (assert (= decision.choice.sampling.temperature 3) "candidate sampling override replaces role default")
+            (assert (= decision.choice.sampling.temperature (some 3)) "candidate sampling override replaces role default")
             (assert (= decision.choice.sampling.stop (list "HALT")) "stop override is parsed and retained")
             true))))))
 

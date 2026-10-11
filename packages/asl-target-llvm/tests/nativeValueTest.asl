@@ -142,7 +142,7 @@ fn ! testArchive -> Bool
     (do
       (assert (= listed.exitCode 0) (str "nm -P lists libaslrt.a: " listed.stderr))
       (map (fn [(m String)] -> Bool (do (assert (listContains? members m) (str "libaslrt.a has member " m "; members " (stringJoin members " "))) true))
-           (list "rtAbi.o" "gcAsl.o" "strFloor.o"))
+           (list "rtAbi.o" "gcAsl.o" "rtFloor.o"))
       (map (fn [(m String)] -> Bool (do (refute (listContains? members m) (str "libaslrt.a has no member " m "; members " (stringJoin members " "))) true))
            (list "abi.o" "value.o" "float.o" "gc.o"))
       true))

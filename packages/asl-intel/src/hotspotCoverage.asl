@@ -68,7 +68,6 @@
   (:f gaps (List CoverageGap))
   (:f isComplete Bool))
 
-"Constructs a planned HotspotTarget record."
 fn createHotspotTarget id: Str file: Str symbol: Str fanIn: I64 priority: I64 rationale: Str depth: I64 -> HotspotTarget
   (HotspotTarget
     :id id
@@ -79,7 +78,6 @@ fn createHotspotTarget id: Str file: Str symbol: Str fanIn: I64 priority: I64 ra
     :rationale rationale
     :plannedDepth depth)
 
-"Initializes an empty PlannedTraversal record."
 fn createPlannedTraversal id: Str title: Str budget: I64 -> PlannedTraversal
   (PlannedTraversal
     :planId id
@@ -87,15 +85,12 @@ fn createPlannedTraversal id: Str title: Str budget: I64 -> PlannedTraversal
     :targets (list)
     :totalBudget budget)
 
-"Appends a target to the PlannedTraversal."
 fn planAddTarget plan: PlannedTraversal target: HotspotTarget -> PlannedTraversal
   (with plan :targets (listAppend plan.targets (list target)))
 
-"Returns count of planned hotspot targets."
 fn planTargetCount plan: PlannedTraversal -> I64
   (listLength plan.targets)
 
-"Constructs an ActualVisit record."
 fn recordVisit targetId: Str file: Str depth: I64 status: Str findings: I64 tokens: I64 -> ActualVisit
   (ActualVisit
     :targetId targetId
@@ -105,7 +100,6 @@ fn recordVisit targetId: Str file: Str depth: I64 status: Str findings: I64 toke
     :findingsCount findings
     :tokensSpent tokens)
 
-"Initializes an empty ActualCoverage tracking ledger."
 fn createActualCoverage runId: Str sessionId: Str -> ActualCoverage
   (ActualCoverage
     :runId runId
@@ -113,29 +107,24 @@ fn createActualCoverage runId: Str sessionId: Str -> ActualCoverage
     :visits (list)
     :totalTokens 0)
 
-"Appends a visit to ActualCoverage."
 fn coverageAddVisit cov: ActualCoverage visit: ActualVisit -> ActualCoverage
   (with cov :visits (listAppend cov.visits (list visit)) :totalTokens (+ cov.totalTokens visit.tokensSpent))
 
-"Returns count of recorded inspection visits."
 fn coverageVisitCount cov: ActualCoverage -> I64
   (listLength cov.visits)
 
-"Checks if a target has been visited."
 fn isTargetVisited? targetId: Str visits: (List ActualVisit) -> Bool
   (fold (fn [(found Bool) (v ActualVisit)] -> Bool
           (if found true (= v.targetId targetId)))
         false
         visits)
 
-"Returns achieved depth for a visited target, or -1 if unvisited."
 fn findVisitDepth targetId: Str visits: (List ActualVisit) -> I64
   (fold (fn [(d I64) (v ActualVisit)] -> I64
           (if (>= d 0) d (if (= v.targetId targetId) v.actualDepth -1)))
         -1
         visits)
 
-"Identifies missing or depth-degraded hotspots by comparing planned targets against visits."
 fn findGaps targets: (List HotspotTarget) visits: (List ActualVisit) -> (List CoverageGap)
   (fold (fn [(gaps (List CoverageGap)) (t HotspotTarget)] -> (List CoverageGap)
           (let [(tid t.id)
@@ -161,21 +150,18 @@ fn findGaps targets: (List HotspotTarget) visits: (List ActualVisit) -> (List Co
         (list)
         targets)
 
-"Checks if visited target was declared in plan."
 fn isTargetInPlan? tid: Str targets: (List HotspotTarget) -> Bool
   (fold (fn [(inPlan Bool) (t HotspotTarget)] -> Bool
           (if inPlan true (= t.id tid)))
         false
         targets)
 
-"Counts visits to targets not declared in original traversal plan."
 fn calculateDrift visits: (List ActualVisit) targets: (List HotspotTarget) -> I64
   (fold (fn [(acc I64) (v ActualVisit)] -> I64
           (if (isTargetInPlan? v.targetId targets) acc (+ acc 1)))
         0
         visits)
 
-"Counts planned targets that were visited with sufficient depth."
 fn countCovered targets: (List HotspotTarget) visits: (List ActualVisit) -> I64
   (fold (fn [(acc I64) (t HotspotTarget)] -> I64
           (let [(d (findVisitDepth t.id visits))]
@@ -183,7 +169,6 @@ fn countCovered targets: (List HotspotTarget) visits: (List ActualVisit) -> I64
         0
         targets)
 
-"Compares planned traversal DAG against actual coverage."
 fn compareTraversalPaths plan: PlannedTraversal actual: ActualCoverage -> CoverageComparison
   (let [(targets plan.targets)
         (visits actual.visits)
@@ -205,11 +190,9 @@ fn compareTraversalPaths plan: PlannedTraversal actual: ActualCoverage -> Covera
       :gaps gaps
       :isComplete (= gapCnt 0)))
 
-"Formats a single CoverageGap S-expression item."
 fn formatGapItem g: CoverageGap -> Str
   (str "(:gap :target " g.targetId " :file " g.file " :severity " g.severity " :reason " g.reason ")")
 
-"Formats a structured S-expression coverage report."
 fn formatCoverageReport comp: CoverageComparison -> Str
   (let [(gapsStr (stringJoin (fold (fn [(acc (List Str)) (g CoverageGap)] -> (List Str)
                                        (listAppend acc (list (formatGapItem g))))
@@ -227,7 +210,6 @@ fn formatCoverageReport comp: CoverageComparison -> Str
          " :is-complete " (if comp.isComplete "true" "false")
          " :gaps [ " gapsStr " ])"))
 
-"Renders Adjacency DSL graph representation of planned versus actual traversal."
 fn renderTraversalGraph plan: PlannedTraversal actual: ActualCoverage -> Str
   (let [(targets plan.targets)
         (visits actual.visits)

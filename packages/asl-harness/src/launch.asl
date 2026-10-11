@@ -5,7 +5,7 @@
       Probe factsOf gitState migrateOn RenderOpts render hostPaths fillText
       buildArgv jsonStr absPath pathJoin writePrompt!
       Outcome Ctx freeze mainWith! usageText
-      Captured runCapture! whichIn! probe! platform! today! pruneRunDirs! runChild! main]
+      Captured runCapture! whichIn! probe! platform! today! pruneRunDirs! runChild! main mainIn!]
   :i [])
 
 enum Asn
@@ -929,12 +929,13 @@ fn parseArgs loaded: Loaded args: (List String) -> (Result Plan Outcome)
         (mt modePick
           ((err o) (err o))
           ((ok mp)
-            (let [(rest (pairSecond mp))
-                  (unknown (filter (fn [(a String)] -> Bool (not (listContains? (launchOptions) a))) rest))]
+            (let [(rest0 (pairSecond mp))
+                  (rest (filter (fn [(a String)] -> Bool (listContains? (launchOptions) a)) rest0))
+                  (passthrough (filter (fn [(a String)] -> Bool (not (listContains? (launchOptions) a))) rest0))]
               (cond
-                ((not (listEmpty? unknown)) (err (stop 2 (str "launch: unknown option " (optionOr (listHead unknown) "") "\n"))))
+                ((listContains? passthrough "--mode") (err (stop 2 "launch: unknown option --mode\n")))
                 ((and (listContains? rest "--bare") (!= client "agy")) (err (stop 2 "launch: --bare applies to agy only\n")))
-                (else (ok (Plan :client client :mode (pairFirst mp) :rest rest :extra extra :promptOnly (listContains? rest "--prompt-only")))))))))))
+                (else (ok (Plan :client client :mode (pairFirst mp) :rest rest :extra (listAppend passthrough extra) :promptOnly (listContains? rest "--prompt-only")))))))))))
 
 fn cpLength s: String -> Int64
   (let [(bs (stringToBytes s))] (cpIndex bs (bytesLength bs)))
@@ -1249,13 +1250,18 @@ fn ! main args: (List String) -> (Result Int64 String)
     ((none)
       (mt (envGet "ASL_ROOT")
         ((none) (ok (finish (stop 1 "launch: ASL_ROOT is not set; bin/asl launch sets it to the repository root\n"))))
-        ((some root)
-          (mt (loadRoot root)
-            ((err e) (ok (finish (stop 1 (str e "\n")))))
-            ((ok loaded)
-              (mt (parseArgs loaded args)
-                ((err o) (ok (finish o)))
-                ((ok plan)
-                  (mt (gatherCtx plan.client)
-                    ((err e) (ok (finish (stop 1 (str e "\n")))))
-                    ((ok ctx) (ok (finish (runPlan loaded ctx plan)))))))))))))
+        ((some root) (mainIn! root args)))))
+
+fn ! mainIn! root: String args: (List String) -> (Result Int64 String)
+  (mt (usageOutcome args)
+    ((some o) (ok (finish o)))
+    ((none)
+      (mt (loadRoot root)
+        ((err e) (ok (finish (stop 1 (str e "\n")))))
+        ((ok loaded)
+          (mt (parseArgs loaded args)
+            ((err o) (ok (finish o)))
+            ((ok plan)
+              (mt (gatherCtx plan.client)
+                ((err e) (ok (finish (stop 1 (str e "\n")))))
+                ((ok ctx) (ok (finish (runPlan loaded ctx plan)))))))))))

@@ -11,7 +11,7 @@ fn allowed -> (List String)
   (list "asl.write" "asl.exit" "asl.nowNs" "asl.trap")
 
 fn ! node -> String
-  (let [(candidates (list (str (optionOr (envGet "HOME") "") "/.local/bin/node") "/usr/local/bin/node" "/opt/homebrew/bin/node"))]
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))]
     (mt (listHead (filter fileExists? candidates))
       ((some p) p)
       ((none) (stringReplace (processRun "command -v node 2>/dev/null").stdout "\n" ""))))

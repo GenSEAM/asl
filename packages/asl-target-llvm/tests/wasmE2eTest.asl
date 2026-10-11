@@ -18,16 +18,16 @@ fn ! node -> String
   (toolPath "node")
 
 fn ! llc -> String
-  (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (quote c))).exitCode 0))
+  (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (shellQuote c))).exitCode 0))
                         (list "/opt/homebrew/opt/llvm/bin/llc" "/usr/local/opt/llvm/bin/llc" "/usr/lib/llvm-23/bin/llc" "/usr/lib/llvm-22/bin/llc" "/usr/lib/llvm-21/bin/llc" "/usr/lib/llvm-20/bin/llc" "/usr/lib/llvm-19/bin/llc" "/usr/lib/llvm-18/bin/llc")))]
     (mt (listHead known) ((some c) c) ((none) (toolPath "llc"))))
 
 fn ! linker -> String
-  (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (quote c))).exitCode 0))
+  (let [(known (filter (fn [(c String)] -> Bool (= (sh (str "test -x " (shellQuote c))).exitCode 0))
                         (list "/opt/homebrew/bin/wasm-ld" "/opt/homebrew/opt/lld/bin/wasm-ld" "/usr/local/bin/wasm-ld" "/usr/local/opt/lld/bin/wasm-ld" "/usr/bin/wasm-ld" "/usr/lib/llvm-23/bin/wasm-ld" "/usr/lib/llvm-22/bin/wasm-ld" "/usr/lib/llvm-21/bin/wasm-ld" "/usr/lib/llvm-20/bin/wasm-ld" "/usr/lib/llvm-19/bin/wasm-ld" "/usr/lib/llvm-18/bin/wasm-ld")))]
     (mt (listHead known) ((some c) c) ((none) (toolPath "wasm-ld"))))
 
-fn quote s: String -> String
+fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn ! emitLinked facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Result String (List irTy/IrDiag))
@@ -45,7 +45,7 @@ fn ! compile name: String part: String body: String work: String -> Bool
   (let [(ll (str work "/" part ".ll")) (obj (str work "/" part ".o"))]
     (do
       (assert (ok? (fileWrite ll body)) (str name " writes " part " IR"))
-      (let [(out (sh (str (quote (llc)) " -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory -filetype=obj " (quote ll) " -o " (quote obj))))]
+      (let [(out (sh (str (shellQuote (llc)) " -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory -filetype=obj " (shellQuote ll) " -o " (shellQuote obj))))]
         (assert (= out.exitCode 0) (str name " compiles " part ": " out.stderr)))
       true))
 
@@ -60,9 +60,9 @@ fn ! nativeRun name: String source: String work: String -> ProcessOutput
       (assert (some? (libc/libcFacts triple)) (str name " has native facts for " triple))
       (assert (ok? nativeText) (str name " native lowering: " (mt nativeText ((ok _) "ok") ((err ds) (diag ds)))))
       (assert (ok? (fileWrite ll (text nativeText))) (str name " writes native IR"))
-      (let [(linked (sh (str "/usr/bin/cc -Wno-override-module -x ir " (quote ll) " -x none asl/host/out/libaslrt.a -lm -o " (quote bin))))]
+      (let [(linked (sh (str "/usr/bin/cc -Wno-override-module -x ir " (shellQuote ll) " -x none asl/host/out/libaslrt.a -lm -o " (shellQuote bin))))]
         (assert (= linked.exitCode 0) (str name " native link: " linked.stderr))
-        (sh (quote bin)))))
+        (sh (shellQuote bin)))))
 
 fn ! runCase name: String -> Bool
   (let [(path (str "asl/packages/asl-target-llvm/tests/fixtures/wasmE2e/" name ".asl"))
@@ -75,7 +75,7 @@ fn ! runCase name: String -> Bool
         (wasm (str work "/main.wasm"))]
     (do
       (assert (ok? read) (str name " reads fixture"))
-      (assert (= (sh (str "mkdir -p " (quote work))).exitCode 0) (str name " creates work directory"))
+      (assert (= (sh (str "mkdir -p " (shellQuote work))).exitCode 0) (str name " creates work directory"))
       (assert (ok? mainText) (str name " wasm lowering: " (mt mainText ((ok _) "ok") ((err ds) (diag ds)))))
       (assert (ok? runtime) (str name " emits wasm runtime: " (mt runtime ((ok _) "ok") ((err ds) (diag ds)))))
       (assert (ok? support) (str name " emits wasm support: " (mt support ((ok _) "ok") ((err ds) (diag ds)))))
@@ -89,7 +89,7 @@ fn ! runCase name: String -> Bool
         (assert (ok? imports) (str name " import section reads: " (mt imports ((ok _) "ok") ((err e) e)))))
       (let [(native (nativeRun name source work))
             (gcCheck (if (= name "gcLoop") " --assert-gc" ""))
-            (wasmRun (sh (str (quote (node)) " tools/wasm/run.mjs " (quote wasm) gcCheck)))]
+            (wasmRun (sh (str (shellQuote (node)) " tools/wasm/run.mjs " (shellQuote wasm) gcCheck)))]
         (do
           (assert (= wasmRun.stderr native.stderr) (str name " stderr bytes equal native; wasm=" wasmRun.stderr " native=" native.stderr))
           (assert (= wasmRun.stdout native.stdout) (str name " stdout bytes equal native; wasm=" wasmRun.stdout " native=" native.stdout))
@@ -117,7 +117,7 @@ fn ! missingCollectorRejected work: String -> Bool
         (programText "declare ptr @asl_alloc(i32, i64)\ndefine void @_start() {\n  %p = call ptr @asl_alloc(i32 0, i64 8)\n  ret void\n}\n")]
     (do
       (assert (ok? (fileWrite programLl programText)) "writes a program requiring the collector ABI")
-      (let [(compiled (sh (str (quote (llc)) " -mtriple=wasm32-unknown-unknown -filetype=obj " (quote programLl) " -o " (quote programObj))))]
+      (let [(compiled (sh (str (shellQuote (llc)) " -mtriple=wasm32-unknown-unknown -filetype=obj " (shellQuote programLl) " -o " (shellQuote programObj))))]
         (do
           (assert (= compiled.exitCode 0) (str "compiles missing-collector probe: " compiled.stderr))
           (let [(linked (wl/linkWasm32 (linker) (list programObj) (list) output))]
@@ -136,11 +136,11 @@ fn ! absentCapabilityRejected -> Bool
         ((err ds) (listAny? (fn [(d irTy/IrDiag)] -> Bool (and (= d.code "ERR_CAPABILITY_ABSENT") (stringContains? d.message "tcpListen"))) ds)))))
 
 fn ! runTests -> Bool
-  (let [(runtimeTest (sh (str (quote (node)) " tools/wasm/run.mjs --self-test")))
+  (let [(runtimeTest (sh (str (shellQuote (node)) " tools/wasm/run.mjs --self-test")))
         (work "/tmp/asl-wasm-e2e")]
     (do
       (assert (= runtimeTest.exitCode 0) (str "runtime self-test: " runtimeTest.stderr))
-      (assert (= (sh (str "mkdir -p " (quote work))).exitCode 0) "creates wasm acceptance work directory")
+      (assert (= (sh (str "mkdir -p " (shellQuote work))).exitCode 0) "creates wasm acceptance work directory")
       (assert (missingCollectorRejected work) "wasm link rejects missing collector symbols")
       (assert (absentCapabilityRejected) "tcpListen reports ERR_CAPABILITY_ABSENT during wasm target lowering")
       (assert (runCase "hello") "hello compares wasm to native")

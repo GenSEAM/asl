@@ -4,7 +4,8 @@
       (asl-ir/lower :a low)
       (asl-target-llvm :a targetLlvm)
       (asl-target-llvm/libc :a libc)
-      (asl-target-llvm/target :a target)])
+      (asl-target-llvm/target :a target)
+      (tools/fleet/run :a run)])
 
 fn trapSource name: String expression: String -> String
   (str "(module " name " :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  " expression)
@@ -45,8 +46,29 @@ fn ! wasmTrapCode name: String source: String code: String -> Bool
           (assert (not (stringContains? text "longjmp")) (str name " emitted module has no longjmp"))
           true))))
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
+(schema Captured
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! shWithin cmd: String timeoutS: Int64 -> Captured
+  (let [(root (optionOr (envGet "ASL_ROOT") "."))
+        (prelude (optionOr (envGet "ASL_PRELUDE") (str root "/asl/prelude/prelude.asl")))
+        (path (optionOr (envGet "PATH") "/usr/bin:/bin"))
+        (base (str (optionOr (envGet "TMPDIR") "/tmp") "/wasmTrapTest." (monotonicNs)))
+        (outPath (str base ".out"))
+        (errPath (str base ".err"))
+        (done (run/runOneLimited (run/job (list "sh" "-c" (str "(cd '" root "' && (" cmd ")) > " outPath " 2> " errPath)) root
+                                         (run/childEnv (list (str "ASL_ROOT=" root) (str "ASL_PRELUDE=" prelude) (str "PATH=" path))))
+                                 (run/limits timeoutS 32)))
+        (outText (resultOr (fileReadString outPath) ""))
+        (errText (resultOr (fileReadString errPath) ""))
+        (_ (pathRemove outPath))
+        (_ (pathRemove errPath))]
+    (Captured :exitCode done.exit :stdout outText :stderr (if (= done.verdict "exit") errText (str errText done.out))))
+
+fn ! sh cmd: String -> Captured
+  (shWithin cmd 1200)
 
 fn errorLine out: ProcessOutput -> String
   (fold (fn [(acc String) (line String)] -> String (if (and (stringEmpty? acc) (not (stringEmpty? line))) line acc)) "" (stringSplit out.stderr "\n"))
@@ -59,6 +81,14 @@ fn errorMessage line: String -> String
   (let [(start (optionOr (stringIndexOf line ": ") (stringLength line)))]
     (optionOr (stringSlice line (+ start 2) (stringLength line)) ""))
 
+fn ! nodeBin -> String
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
+        (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
+        (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
+    (mt (listHead (filter fileExists? allCandidates))
+      ((some p) p)
+      ((none) "")))
+
 fn ! wasmTrapCase name: String source: String expectedMessage: String -> Bool
   (let [(work (str "/tmp/asl-wasm-trap-" name))
         (src (str work "/main.asl"))
@@ -67,7 +97,7 @@ fn ! wasmTrapCase name: String source: String expectedMessage: String -> Bool
         (nativeBin (str work "/native"))
         (obj (str work "/main.o"))
         (wasm (str work "/main.wasm"))
-        (node (str (optionOr (envGet "HOME") "") "/.local/bin/node"))
+        (node (nodeBin))
         (llc "/opt/homebrew/opt/llvm/bin/llc")
         (nm "/opt/homebrew/opt/llvm/bin/llvm-nm")
         (ld "/opt/homebrew/opt/lld/bin/wasm-ld")

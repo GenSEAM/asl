@@ -1,7 +1,5 @@
 (module aslAgent/snapshotTest :x [testSnapshotEntityFormatting testSnapshotSortingSerialization testSnapshotDiffing runTests] :i [(snapshot :a snap)])
 
-"run: (run-tests)"
-
 fn testSnapshotEntityFormatting -> Bool
   (let [(e (snap/makeEntity "req:001" (snap/kindReq) "Autonomous ReAct loop" "src/agent.asl:42")) (formatted (snap/formatEntity e))] (assert (>= (stringLength formatted) 20) "entity formatted length >= 20") (assert (= (snap/parseKind "req") (snap/kindReq)) "parsed kind matches") true)
 

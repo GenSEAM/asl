@@ -47,11 +47,13 @@ fn arityRows text: String -> (List (Pair String Int64))
       (let [(body (optionOr (stringSlice text start (stringLength text)) ""))
             (table (optionOr (stringSlice body 0 (optionOr (stringIndexOf body "\n\nfn ") (stringLength body))) ""))]
         (map (fn [(p String)] -> (Pair String Int64)
-               (let [(close (optionOr (stringIndexOf p "\" ") -1))
-                     (rest (optionOr (stringSlice p (+ close 2) (stringLength p)) ""))]
-                 (pair (optionOr (stringSlice p 0 (max close 0)) "")
+               (let [(close (optionOr (stringIndexOf p "\"") -1))
+                     (name (optionOr (stringSlice p 0 (max close 0)) ""))
+                     (someAt (optionOr (stringIndexOf p "(some ") -1))
+                     (rest (optionOr (stringSlice p (+ someAt 6) (stringLength p)) ""))]
+                 (pair name
                        (optionOr (stringToInt64 (stringTrim (optionOr (listHead (stringSplit rest ")")) ""))) -9))))
-             (listDrop (stringSplit table "(pair \"") 1)))))
+             (listDrop (stringSplit table "((= name \"") 1)))))
 
 fn documentedGaps -> (List (Pair String String))
   (list)

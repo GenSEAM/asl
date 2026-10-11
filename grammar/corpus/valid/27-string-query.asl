@@ -1,13 +1,3 @@
-"Querying a string. Both arguments are String, so a haystack/needle swap"
-
-"type-checks and compiles: the cases assert the index, not merely that one was"
-
-"found. The needle sits at the start in one case and at the end in another,"
-
-"which is what separates stringStartsWith? from stringEndsWith?, and the"
-
-"last case is non-ASCII, where a byte offset and a character offset differ."
-
 (module string/query :x [query cut])
 
 fn mark b: Bool -> String

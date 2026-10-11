@@ -1,6 +1,6 @@
 (module asl/agentLoop/tests/loopRunFixture
   :x [scenarioLines! scenarioCount! scenarioId repoFiles buildScenarioRepo! maskJournal turnRows listOf argStr field]
-  :i [(asl/agentLoop/plan :a p) (asl/agentLoop/core :a c) (asl-proc/coreProcess :a cp)])
+  :i [(asl/agentLoop/plan :a p) (asl/agentLoop/core :a c) (asl-proc/coreProcess :a cp) (asl-proc/gitFixture :a gf)])
 
 fn listOf n: p/SexpNode -> (List p/SexpNode)
   (mt n ((p/sexpList xs) xs) ((p/sexpAtom _) (list)) ((p/sexpStr _) (list)))
@@ -55,9 +55,11 @@ fn withEnv c: cp/ProcessCmd env: (List (Pair String String)) -> cp/ProcessCmd
   (fold (fn [acc kv] (cp/withEnv acc (pairFirst kv) (pairSecond kv))) c env)
 
 fn ! gitStep! root: String args: (List String) env: (List (Pair String String)) -> Bool
-  (mt (cp/exec! (cp/withTimeout (cp/withCwd (withEnv (cp/cmd "git" args) env) root) 60000))
-    ((ok o) (= o.exitCode 0))
-    ((err _) false))
+  (let [withCeiling (cp/withEnv (cp/withCwd (withEnv (cp/cmd "git" (listAppend (list "-C" root) args)) env) root)
+                                "GIT_CEILING_DIRECTORIES" (gf/ceilingFor! root))]
+    (mt (cp/exec! (cp/withTimeout withCeiling 60000))
+      ((ok o) (= o.exitCode 0))
+      ((err _) false)))
 
 fn ! buildScenarioRepo! root: String line: String -> Bool
   (let [created (ok? (dirCreate root))

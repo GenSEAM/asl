@@ -1,29 +1,3 @@
-"The Nano projection, written the way an agent under a token budget writes it:"
-
-"every declaration head in its short spelling, every option keyword in its short"
-
-"spelling, and every type alias in a position a backend has to emit. No corpus"
-
-"fixture had ever been Nano-spelled, so `check_corpus` and the differential gate"
-
-"had only ever seen verbose source — and three of the four backends were"
-
-"printing the alias verbatim, so `pub v: I64`, `readonly v: I64` and `v I64`"
-
-"reached rustc, tsc and go vet, which reject all three. Python hid it by"
-
-"emitting no types at all."
-
-"`F32` is the case that matters most: it is a reserved width Core does not have,"
-
-"resolving to Float64 and carrying none of a narrower width's semantics. Target:"
-
-"it lowers as Float64 on every backend, not as a per-backend guess at a 32-bit"
-
-"float; today no backend builds (asl build is unimplemented) and the host checks"
-
-"no types."
-
 (module sensor/nano :x [Sample Window Grade Trend readings meanOf sampleOf gradeOf labelOf trendOf trendLabel summarise widen blank] :i [(core/strings :a s)])
 
 (schema Sample (:f id Str "Identifier the readings were taken under.") (:f count Int "How many readings the sample summarises.") (:f mean Num "Arithmetic mean of the readings.") (:f drift F32 "Spread between the extreme readings.") (:f settled Bool "Whether the sample held any reading at all."))

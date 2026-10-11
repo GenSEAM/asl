@@ -186,7 +186,7 @@ fn excludedHere! -> String
 fn testReceiptFormatting! -> Bool
   (let [(r1 (sr/makeSuiteResult "suite1.asl" "OK" "" "" 10 0 10 0))
         (chk (rl/makeReconcileCheck "ERR_NEW_RED_SUITE" "suite2.asl" "bad \"test\""))
-        (res (rl/receipt (list r1) (list chk) 0 0 "(:knownRedDelta)" (excludedHere!) ":affected"))
+        (res (rl/receipt (list r1) (list chk) 0 0 "(:knownRedDelta)" (excludedHere!) ":affected" 0))
         (text (pairFirst res))
         (passed (pairSecond res))]
     (do
@@ -204,7 +204,7 @@ fn testReceiptOrderAndExcluded! -> Bool
   (let [(r1 (sr/makeSuiteResult "zeta.asl" "ASSERTION_FAILURE" "d1" "f1" 1 0 1 1))
         (chkA (rl/makeReconcileCheck "ERR_NEW_RED_SUITE" "zeta.asl" "first"))
         (chkB (rl/makeReconcileCheck "ERR_STALE_KNOWN_RED" "alpha.asl" "second"))
-        (text (pairFirst (rl/receipt (list r1) (list chkA chkB) 0 0 "(:knownRedDelta)" (excludedHere!) ":affected")))
+        (text (pairFirst (rl/receipt (list r1) (list chkA chkB) 0 0 "(:knownRedDelta)" (excludedHere!) ":affected" 0)))
         (iA (indexIn text ":suite \"zeta.asl\" :ev \"first\""))
         (iB (indexIn text ":suite \"alpha.asl\" :ev \"second\""))
         (iDelta (indexIn text "(:knownRedDelta)"))

@@ -1291,7 +1291,7 @@ fn ! nextTurn! p: Provider system: String user: String -> Turn
     ((scriptFixtureProvider name fixture index)
       (let [logged (mt fixture.attemptLogPath
                     ((some logPath) (fileAppend logPath (str "(:attempt :ns " (stringFromInt64 (monotonicNs)) ")\n")))
-                    ((none) (ok true)))]
+                    ((none) (ok ())))]
         (mt logged
           ((err e) (Turn :provider p :reply (err (ioError e)) :meta (emptyMeta)))
           ((ok _) (mt (listGet fixture.turns index)

@@ -14,19 +14,19 @@ fn ! fernetBase64UrlDecode encoded: String -> (Result Bytes String)
 
 fn fernetCopy source: Bytes start: Int64 count: Int64 -> Bytes
   (let [(out (bytesAlloc count))
-        (loop (fn [loop i] -> Unit
+        (step (fn [step i] -> Unit
           (if (< i count)
-            (do (bytesSet out i (bytesGet source (+ start i))) (loop loop (+ i 1)))
+            (do (bytesSet out i (bytesGet source (+ start i))) (step step (+ i 1)))
             ())))]
-    (loop loop 0)
+    (step step 0)
     out)
 
 fn fernetTimestamp token: Bytes -> Int64
   (if (>= (bytesGet token 1) 128) -1
-    (let [(loop (fn [loop i value] -> Int64
+    (let [(step (fn [step i value] -> Int64
       (if (>= i 9) value
-        (loop loop (+ i 1) (+ (* value 256) (bytesGet token i))))))]
-      (loop loop 1 0)))
+        (step step (+ i 1) (+ (* value 256) (bytesGet token i))))))]
+      (step step 1 0)))
 
 fn ! fernetVerify key: String token: String nowSeconds: Int64 ttlSeconds: Int64 -> (Result Bytes String)
   (mt (fernetBase64UrlDecode key)

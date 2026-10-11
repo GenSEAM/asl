@@ -1,0 +1,63 @@
+(:fleet :v 1 :date "2026-10-09" :rule fleet :skill asex-fleet :src (FLEET-TOOLS FLEET-COMPARE-TOOL FLEET-REDBEFORE-TOOL FLEET-BRIEF-CHECKLIST)
+  :teleology (:objective (minimise criticalPathWall modelTokens fixRounds)
+              :subjectTo "every claim is verified by a tool result: an exit code and an executed-assertion count, not prose"
+              :valueOrder (principalAuthority invariants statedIntent falsifiableEvidence minimalCausalSurface signalOverNoise velocity)
+              :valueOrderFrom teleology
+              :measured ("auditors spent 127-201k tokens each, mostly rerunning suites (2026-10-09, NATIVE-NT SYNTAX)"
+                         "most fix rounds came from checklist items a tool can catch (2026-10-09, FLEET-BRIEF-CHECKLIST)"))
+  :entities ((:entity Unit :fields (id track owns base gates claims channel status))
+             (:entity Track :fields (id units writer worktree branch owns))
+             (:entity Owns :fields (paths))
+             (:entity Base :fields (rev branch))
+             (:entity Worktree :fields (path branch base host))
+             (:entity Gate :fields (name kind cmd exit executed new) :required (name exit executed) :kinds (correctness timing golden check count))
+             (:entity Claim :fields (text gate evidence))
+             (:entity Receipt :fields (unit head owns gates redBefore timings) :required (head owns gates))
+             (:entity RedBefore :fields (wt base head gate exit executed reverted kept before after mutants redBefore vacuous verdict) :required (gate exit))
+             (:entity Mutant :fields (file old new applied exit executed killed))
+             (:entity Integration :fields (branch base tracks head))
+             (:entity Comparison :fields (base head hosts modes jobs changed suites checked greenToRed assertLoss newCheckErrors absentOnBase missing absentOnHead errorTextsRemoved newForeign timings cache verdict))
+             (:entity Verdict :fields (exit executed errors) :required (exit executed))
+             (:entity Audit :fields (integration auditor claims defects verdict))
+             (:entity Defect :fields (class unit file evidence round))
+             (:entity Round :fields (index defects fixedBy))
+             (:entity Channel :fields (id model use) :ids (claude-opus claude-sonnet agy luna leon))
+             (:entity Metric :fields (unit tokens wallMs rounds defects channel)))
+  :tools ((:tool compare :file "tools/fleet/compare.asl" :status works
+           :ops (greenToRed assertLoss newCheckErrors touchedSuites absentSuites errorTextsRemoved newForeign)
+           :emits Comparison)
+          (:tool cache :file "tools/fleet/cache.asl" :status works
+           :ops (closureDigest cacheKey readVerdict writeVerdict)
+           :emits Verdict)
+          (:tool redBefore :file "tools/fleet/redBefore.asl" :status works
+           :ops (proveRedBefore mutantKilled)
+           :emits RedBefore)
+          (:tool receipt :file "tools/fleet/receipt.asl" :status works
+           :ops (gateCounts redBeforeCoverage ownsPresent ownsDisjoint)
+           :reads (Receipt Gate RedBefore Owns))
+          (:tool docCoverage :file "tools/codemod/docCoverage.asl" :status works
+           :ops (uncoveredTexts))
+          (:tool run :file "tools/fleet/run.asl" :status works
+           :ops (runPoolLimited killTree! hostPath!))
+          (:tool guard :file "tools/fleet/guard.asl" :status works
+           :ops (guardOnce! killAll! procCounts!))
+          (:tool watch :file "tools/fleet/watch.asl" :status works
+           :ops (classify procAnomalies))
+          (:tool slot :file "tools/fleet/slot.asl" :status works
+           :ops (acquireSlot! releaseSlot! runUnderSlot)))
+  :checklist ((:class greenToRed :seen "suite green on base, red on the integration" :tool compare :op greenToRed)
+              (:class assertLoss :seen "fewer executed asserts than base, also on a suite red on both sides (trapPrimTest)" :tool compare :op assertLoss)
+              (:class checkError :seen "asl-host check of touched files skipped: 8 ERR_MATCH_NONEXHAUSTIVE in prelude passed every test" :tool compare :op newCheckErrors)
+              (:class packageSuiteMissed :seen "not every suite of a touched package was run" :tool compare :op touchedSuites)
+              (:class suiteDropped :seen "a suite present on base is absent on head, or a new suite has no base run" :tool compare :op absentSuites)
+              (:class errorTextChanged :seen "an ERR_ text changed and broke callers matching it" :tool compare :op errorTextsRemoved)
+              (:class newC :seen "new hand-written C, .py or .sh (D143, D157)" :tool compare :op newForeign)
+              (:class lostDocs :seen "docs dropped by a codemod or merge" :tool docCoverage :op uncoveredTexts)
+              (:class vacuousGate :seen "a new gate green before the change" :tool redBefore :op proveRedBefore)
+              (:class survivingMutant :seen "a claim's mutant leaves its gate green" :tool redBefore :op mutantKilled)
+              (:class unverifiedClaim :seen "a gate reported without exit code or executed count" :tool receipt :op gateCounts)
+              (:class missingRedBefore :seen "a new gate without a red-before run" :tool receipt :op redBeforeCoverage)
+              (:class ownsMissing :seen "a unit without :owns" :tool receipt :op ownsPresent)
+              (:class ownsOverlap :seen "two tracks own the same path, so their writers conflict" :tool receipt :op ownsDisjoint)
+              (:class runawayJob :seen "a native fleetCompareTest binary spawned itself as the asl host without bound: 4865 processes overnight (FORKBOMB-20261010)" :tool run :op runPoolLimited)
+              (:class runawayExe :seen "a cache binary with more instances than the cap outlives its pool" :tool guard :op guardOnce!)))

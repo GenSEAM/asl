@@ -1,4 +1,4 @@
-(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerSource declPositions builtinArity builtinArityFor] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd)])
+(module asl-ir/lower :x [LinkScope lowerModule lowerWithPrelude lowerLinked lowerLinkedAs lowerSource declPositions builtinArity builtinArityFor] :i [(asl-ir/types :a ty) (asl-parser/ast :a ast) (asl-parser/reader :a rd)])
 
 (schema Ctor (:f typeName String) (:f variant String) (:f arity Int64))
 
@@ -14,7 +14,8 @@
   (:f aliases (Map String String))
   (:f hidden (Map String String))
   (:f linked Bool)
-  (:f sigs (Map String FnSig)))
+  (:f sigs (Map String FnSig))
+  (:f variants (Map String (List String))))
 
 (schema FnSig (:f params (List ty/SsaTy)) (:f ret ty/SsaTy))
 
@@ -453,12 +454,13 @@ fn resolveSig info: ModInfo sig: FnSig -> FnSig
 fn resolveTyFor info: ModInfo callee: String t: ty/SsaTy -> ty/SsaTy
   (mt t
     ((ty/tyRec schema)
+     (if (not (stringContains? callee "/")) (resolveTy info t)
      (fold (fn [(resolved ty/SsaTy) (alias String)] -> ty/SsaTy
              (let [(source (str alias "/" schema))]
                (if (and (stringStartsWith? callee (str alias "/")) (some? (mapGet info.records source)))
                  (resolveTy info (ty/tyRec source))
                  resolved)))
-           (resolveTy info t) (mapKeys info.aliases)))
+           (resolveTy info t) (mapKeys info.aliases))))
     (_ t))
 
 fn resolveSigFor info: ModInfo callee: String sig: FnSig -> FnSig
@@ -715,6 +717,24 @@ fn bitPrim name: String ta: String tb: String -> String
     (cond ((= name "&") "rawAndI64") ((= name "|") "rawOrI64") ((= name "^") "rawXorI64") ((= name "<<") "rawShlI64") ((= name ">>") "rawAshrI64") (else ""))
     "")
 
+fn preludeBitOp? ctx: LowerCtx name: String -> Bool
+  (and (or (= name "&") (= name "|") (= name "^") (= name "~"))
+       (and (and (mapHas? ctx.info.arities name) (= (symbolOf ctx name) (str "prelude." name)))
+            (let [(sig (sigFor ctx name (if (= name "~") 1 2)))]
+              (and (= (listLength sig.params) (if (= name "~") 1 2))
+                   (and (= (ty/ssaTyName sig.ret) "i64") (listAll? (fn [(t ty/SsaTy)] -> Bool (= (ty/ssaTyName t) "i64")) sig.params))))))
+
+fn lowerPreludeBit ctx: LowerCtx env: (Map String String) st: LowerState name: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
+  (let [(n (if (= name "~") 1 2))]
+    (if (!= n (listLength args))
+      (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "'" name "' takes " n " argument(s), got " (listLength args))))
+      (mt (lowerArgs ctx env st args)
+        ((err d) (err d))
+        ((ok r) (let [(c (coerceAll r.st r.values (sigFor ctx name n).params))]
+                  (ok (if (= n 1)
+                        (notOn c.st (optionOr (listGet c.values 0) ""))
+                        (primOn c.st (bitPrim name "i64" "i64") c.values))))))))
+
 fn notOn st: LowerState v: String -> Lowered
   (let [(m (emitAs st (ty/tyI64) (ty/opConst (ty/constInt -1))))]
     (primOn m.st "rawXorI64" (list v m.value)))
@@ -794,11 +814,23 @@ fn keyedExprs ctx: LowerCtx schemaName: String declared: (List String) args: (Li
                               (if nestedPair (let [(nestedName (rd/sexprHead (optionOr (listHead items) (rd/makeAtom ""))))]
                                                (if (stringStartsWith? nestedName ":") (optionOr (stringSlice nestedName 1 (stringLength nestedName)) "") nestedName))
                                 (if (stringStartsWith? key ":") (optionOr (stringSlice key 1 (stringLength key)) "") key))))]
-                (if (or (stringEmpty? key) (not (some? value)))
-                  (err (unsupported ctx schemaName "construction other than :field value pairs is outside the lowered subset"))
+                (cond
+                  ((and (rd/isAtom? k) (and (not (stringEmpty? key)) (and (not (stringStartsWith? key ":")) (not (listContains? declared key)))))
+                   (err (lowerDiag ctx "ERR_LOWER_POSITIONAL_RECORD" (str "positional record literal: write " (keyedLiteral schemaName declared args)))))
+                  ((or (stringEmpty? key) (not (some? value)))
+                   (err (unsupported ctx schemaName "construction other than :field value pairs is outside the lowered subset")))
+                  (else
                   (mt (keyedExprs ctx schemaName declared rest)
                     ((err d) (err d))
-                    ((ok pairs) (ok (cons (KeyedExpr :key field :expr (optionOr value (rd/makeAtom ""))) pairs))))))))
+                    ((ok pairs) (ok (cons (KeyedExpr :key field :expr (optionOr value (rd/makeAtom ""))) pairs)))))))))
+
+fn keyedLiteral schemaName: String declared: (List String) args: (List rd/SExpr) -> String
+  (let [(pairs (fold (fn [(acc (List String)) (f String)] -> (List String)
+                       (mt (listGet args (listLength acc))
+                         ((some v) (listAppend acc (list (str ":" f " " (rd/renderSexpr v)))))
+                         ((none) acc)))
+                     (list) declared))]
+    (str "(" schemaName (if (listEmpty? pairs) "" (str " " (stringJoin pairs " "))) ")"))
 
 fn hasDuplicates xs: (List String) seen: (Map String Bool) -> Bool
   (mt (listHead xs)
@@ -874,7 +906,7 @@ fn classifyArm ctx: LowerCtx kw: String family: String arm: rd/SExpr -> (Result 
         (head (rd/sexprHead pat))]
     (cond
       ((or (not (rd/isList? arm)) (< (listLength items) 2)) (err (unsupported ctx kw "with an arm that is not (pattern body ...) is outside the lowered subset")))
-      ((and (rd/isAtom? pat) (listContains? (list "_" "else") head)) (ok (Arm :kind "wild" :variant "" :typeName "" :binds (list) :name "" :body body)))
+      ((and (rd/isAtom? pat) (or (= head "_") (= head "else"))) (ok (Arm :kind "wild" :variant "" :typeName "" :binds (list) :name "" :body body)))
       ((and (rd/isAtom? pat) (and (mapHas? ctx.info.ctors head) (= (ctorOf ctx head).typeName family))) (let [(c (ctorOf ctx head))] (if (!= c.arity 0) (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "pattern '" head "' of " c.typeName " binds 0 field(s), the variant has " c.arity))) (ok (Arm :kind "ctor" :variant c.variant :typeName c.typeName :binds (list) :name "" :body body)))))
       ((bindName? pat) (ok (Arm :kind "var" :variant "" :typeName "" :binds (list) :name head :body body)))
       ((not (and (rd/isList? pat) (rd/isAtom? (nthOf (rd/sexprToList pat) 0)))) (err (unsupported ctx (rd/renderSexpr pat) "is a pattern outside the lowered subset, which takes (constructor name ...), _ or a name")))
@@ -912,8 +944,7 @@ fn missingVariants ctx: LowerCtx arms: (List Arm) -> (List String)
   (let [(ctorArms (filter (fn [(a Arm)] -> Bool (= a.kind "ctor")) arms))
         (variants (map (fn [(a Arm)] -> String a.variant) ctorArms))
         (typeName (mt (listHead ctorArms) ((some a) a.typeName) ((none) "")))
-        (decl (listHead (filter (fn [(d ty/SsaTypeDecl)] -> Bool (= d.name typeName)) (listAppend (listAppend ctx.info.types ctx.info.foreign) (preludeTypes)))))
-        (declared (mt decl ((some d) (map (fn [(v ty/SsaVariant)] -> String v.name) d.variants)) ((none) (list))))]
+        (declared (optionOr (mapGet ctx.info.variants typeName) (list)))]
     (filter (fn [(v String)] -> Bool (not (listContains? variants v))) declared))
 
 fn withTrapBlock st: LowerState label: String -> LowerState
@@ -1198,13 +1229,14 @@ fn lowerHead ctx: LowerCtx env: (Map String String) st: LowerState name: String 
         (let [(body (rd/makeList (cons (rd/makeAtom "do") (tailOf args))))
               (unit (rd/makeAtom "()"))]
           (lowerIf ctx env st (if (= name "when") (list (nthOf args 0) body unit) (list (nthOf args 0) unit body))))))
-    ((listContains? (list "loop" "recur" "try" "return" "quote") name) (err (outside ctx name)))
+    ((or (= name "loop") (= name "recur") (= name "try") (= name "return") (= name "quote")) (err (outside ctx name)))
     ((mapHas? env name) (lowerCallClosure ctx env st (rd/makeAtom name) args))
+    ((preludeBitOp? ctx name) (lowerPreludeBit ctx env st name args))
     ((mapHas? ctx.info.arities name) (lowerCall ctx env st name (optionOr (mapGet ctx.info.arities name) 0) args))
     ((mapHas? ctx.info.ctors name) (lowerConstruct ctx env st name args))
     ((mapHas? ctx.info.records name) (lowerRecord ctx env st name args))
     ((and (stringStartsWith? name ".-") (> (stringLength name) 2)) (lowerField ctx env st name args))
-    ((and (listContains? (list "+" "*") name) (> (listLength args) 2)) (lowerExpr ctx env st (rd/makeList (list (rd/makeAtom name) (rd/makeList (listAppend (list (rd/makeAtom name)) (optionOr (listSlice args 0 (- (listLength args) 1)) (list)))) (nthOf args (- (listLength args) 1))))))
+    ((and (or (= name "+") (= name "*")) (> (listLength args) 2)) (lowerExpr ctx env st (rd/makeList (list (rd/makeAtom name) (rd/makeList (listAppend (list (rd/makeAtom name)) (optionOr (listSlice args 0 (- (listLength args) 1)) (list)))) (nthOf args (- (listLength args) 1))))))
     ((not (stringEmpty? (genericAlias name))) (lowerHead ctx env st (genericAlias name) args))
     ((and (genericMulti? name) (not (mapHas? ctx.info.late name))) (err (ambiguousDiag ctx name)))
     ((some? (builtinArity name)) (lowerBuiltin ctx env st name (optionOr (builtinArityFor name (listLength args)) (optionOr (builtinArity name) 0)) args))
@@ -1224,53 +1256,116 @@ fn lowerExpr ctx: LowerCtx env: (Map String String) st: LowerState e: rd/SExpr -
                                         (lowerCallClosure ctx env st h (tailOf items)))))))
 
 fn genericConcrete name: String kind: String -> String
-  (optionOr (mapGet (mapFromPairs (list (pair "head/*" "listHead") (pair "tail/*" "listTail") (pair "startsWith?/*" "stringStartsWith?") (pair "getFloat64/*" "bytesGetFloat64") (pair "setFloat64/*" "bytesSetFloat64") (pair "sha256/*" "bytesSha256")
-                                        (pair "last/*" "listLast") (pair "take/*" "listTake") (pair "drop/*" "listDrop") (pair "all?/*" "listAll?") (pair "any?/*" "listAny?") (pair "sort/*" "listSort") (pair "sortBy/*" "listSortBy")
-                                        (pair "endsWith?/*" "stringEndsWith?") (pair "split/*" "stringSplit") (pair "join/*" "stringJoin") (pair "replace/*" "stringReplace") (pair "trim/*" "stringTrim") (pair "chars/*" "stringChars")
-                                        (pair "lines/*" "stringLines") (pair "upper/*" "stringUpper") (pair "lower/*" "stringLower") (pair "repeat/*" "stringRepeat") (pair "countChar/*" "stringCountChar")
-                                        (pair "keys/*" "mapKeys") (pair "values/*" "mapValues") (pair "pairs/*" "mapPairs") (pair "remove/*" "mapRemove")
-                                        (pair "length/String" "stringLength") (pair "length/List" "listLength") (pair "length/Bytes" "bytesLength") (pair "length/Map" "mapSize") (pair "length/I64Array" "i64ArrayLen") (pair "length/I8Array" "i8ArrayLen") (pair "length/F64Array" "f64ArrayLen")
-                                        (pair "empty?/String" "stringEmpty?") (pair "empty?/List" "listEmpty?")
-                                        (pair "get/List" "listGet") (pair "get/Bytes" "bytesGet") (pair "get/Map" "mapGet") (pair "get/I64Array" "i64ArrayGet") (pair "get/I8Array" "i8ArrayGet") (pair "get/F64Array" "f64ArrayGet")
-                                        (pair "set/Bytes" "bytesSet") (pair "set/Map" "mapSet")
-                                        (pair "slice/String" "stringSlice") (pair "slice/List" "listSlice") (pair "slice/I64Array" "i64ArraySlice") (pair "slice/I8Array" "i8ArraySlice") (pair "slice/F64Array" "f64ArraySlice")
-                                        (pair "contains?/String" "stringContains?") (pair "contains?/List" "listContains?") (pair "contains?/Map" "mapHas?")
-                                        (pair "indexOf/String" "stringIndexOf") (pair "indexOf/List" "listIndexOf") (pair "reverse/String" "stringReverse") (pair "reverse/List" "listReverse")
-                                        (pair "append/String" "stringConcat") (pair "append/List" "listAppend")
-                                        (pair "sum/List" "listSum") (pair "sum/I64Array" "i64ArraySum") (pair "sum/I8Array" "i8ArraySum") (pair "sum/F64Array" "f64ArraySum")
-                                        (pair "countEq/I64Array" "i64ArrayCountEq") (pair "countEq/I8Array" "i8ArrayCountEq") (pair "countEq/F64Array" "f64ArrayCountEq")))
-                    (str name "/" kind))
-            "")
+  (if (= kind "*") (genericStar name) (genericKinded name kind))
+
+fn genericStar name: String -> String
+  (cond
+    ((= name "head") "listHead") ((= name "tail") "listTail") ((= name "startsWith?") "stringStartsWith?")
+    ((= name "getFloat64") "bytesGetFloat64") ((= name "setFloat64") "bytesSetFloat64") ((= name "sha256") "bytesSha256")
+    ((= name "last") "listLast") ((= name "take") "listTake") ((= name "drop") "listDrop")
+    ((= name "all?") "listAll?") ((= name "any?") "listAny?") ((= name "sort") "listSort")
+    ((= name "sortBy") "listSortBy") ((= name "endsWith?") "stringEndsWith?") ((= name "split") "stringSplit")
+    ((= name "join") "stringJoin") ((= name "replace") "stringReplace") ((= name "trim") "stringTrim")
+    ((= name "chars") "stringChars") ((= name "lines") "stringLines") ((= name "upper") "stringUpper")
+    ((= name "lower") "stringLower") ((= name "repeat") "stringRepeat") ((= name "countChar") "stringCountChar")
+    ((= name "keys") "mapKeys") ((= name "values") "mapValues") ((= name "pairs") "mapPairs")
+    ((= name "remove") "mapRemove")
+    (else ""))
+
+fn genericKinded name: String kind: String -> String
+  (cond
+    ((= name "length")
+      (cond
+        ((= kind "String") "stringLength") ((= kind "List") "listLength") ((= kind "Bytes") "bytesLength")
+        ((= kind "Map") "mapSize") ((= kind "I64Array") "i64ArrayLen") ((= kind "I8Array") "i8ArrayLen")
+        ((= kind "F64Array") "f64ArrayLen")
+        (else "")))
+    ((= name "empty?")
+      (cond
+        ((= kind "String") "stringEmpty?") ((= kind "List") "listEmpty?")
+        (else "")))
+    ((= name "get")
+      (cond
+        ((= kind "List") "listGet") ((= kind "Bytes") "bytesGet") ((= kind "Map") "mapGet")
+        ((= kind "I64Array") "i64ArrayGet") ((= kind "I8Array") "i8ArrayGet") ((= kind "F64Array") "f64ArrayGet")
+        (else "")))
+    ((= name "set")
+      (cond
+        ((= kind "Bytes") "bytesSet") ((= kind "Map") "mapSet")
+        (else "")))
+    ((= name "slice")
+      (cond
+        ((= kind "String") "stringSlice") ((= kind "List") "listSlice") ((= kind "I64Array") "i64ArraySlice")
+        ((= kind "I8Array") "i8ArraySlice") ((= kind "F64Array") "f64ArraySlice")
+        (else "")))
+    ((= name "contains?")
+      (cond
+        ((= kind "String") "stringContains?") ((= kind "List") "listContains?") ((= kind "Map") "mapHas?")
+        (else "")))
+    ((= name "indexOf")
+      (cond
+        ((= kind "String") "stringIndexOf") ((= kind "List") "listIndexOf")
+        (else "")))
+    ((= name "reverse")
+      (cond
+        ((= kind "String") "stringReverse") ((= kind "List") "listReverse")
+        (else "")))
+    ((= name "append")
+      (cond
+        ((= kind "String") "stringConcat") ((= kind "List") "listAppend")
+        (else "")))
+    ((= name "sum")
+      (cond
+        ((= kind "List") "listSum") ((= kind "I64Array") "i64ArraySum") ((= kind "I8Array") "i8ArraySum")
+        ((= kind "F64Array") "f64ArraySum")
+        (else "")))
+    ((= name "countEq")
+      (cond
+        ((= kind "I64Array") "i64ArrayCountEq") ((= kind "I8Array") "i8ArrayCountEq") ((= kind "F64Array") "f64ArrayCountEq")
+        (else "")))
+    (else ""))
 
 fn genericAlias name: String -> String
   (genericConcrete name "*")
 
 fn genericMulti? name: String -> Bool
-  (listContains? (list "length" "empty?" "get" "set" "slice" "contains?" "indexOf" "reverse" "append" "sum" "countEq") name)
+  (or (= name "length") (= name "empty?") (= name "get") (= name "set")
+      (= name "slice") (= name "contains?") (= name "indexOf") (= name "reverse")
+      (= name "append") (= name "sum") (= name "countEq"))
 
 fn ambiguousDiag ctx: LowerCtx name: String -> ty/IrDiag
   (lowerDiag ctx "ERR_AMBIGUOUS_OVERLOAD" (str name ": the receiver kind is not known here; candidates " (stringJoin (filter (fn [(k String)] -> Bool (not (stringEmpty? (genericConcrete name k)))) (list "String" "List" "Bytes" "Map" "I64Array" "I8Array" "F64Array")) ", ") "; annotate the receiver (D159)"))
 
 fn kindOfType t: rd/SExpr -> String
   (let [(h (rd/sexprHead t))]
-    (cond ((rd/isAtom? t) (cond ((or (= h "String") (= h "Str")) "String") ((listContains? (list "Bytes" "I64Array" "I8Array" "F64Array") h) h) (else "")))
+    (cond ((rd/isAtom? t) (cond ((or (= h "String") (= h "Str")) "String") ((or (= h "Bytes") (= h "I64Array") (= h "I8Array") (= h "F64Array")) h) (else "")))
           ((rd/isList? t) (cond ((= h "List") "List") ((= h "Map") "Map") (else "")))
           (else "")))
 
 fn kindOfAnnotation t: String -> String
-  (cond ((or (= t "String") (= t "Str")) "String") ((listContains? (list "Bytes" "I64Array" "I8Array" "F64Array") t) t)
+  (cond ((or (= t "String") (= t "Str")) "String") ((or (= t "Bytes") (= t "I64Array") (= t "I8Array") (= t "F64Array")) t)
         ((stringStartsWith? t "(List ") "List") ((stringStartsWith? t "(Map ") "Map") (else ""))
 
 fn kindReturned name: String recv: String -> String
-  (cond ((listContains? (list "list" "cons" "map" "filter" "range" "listReverse" "listAppend" "listTake" "listDrop" "listSort" "listSortBy" "stringSplit" "stringChars" "stringLines" "mapKeys" "mapValues" "mapPairs"
-                              "split" "chars" "lines" "keys" "values" "pairs" "sort" "sortBy" "take" "drop" "zip" "enumerate") name) "List")
-        ((listContains? (list "str" "stringConcat" "stringFromInt64" "stringFromFloat64" "stringReverse" "stringJoin" "stringReplace" "stringTrim" "stringUpper" "stringLower" "stringRepeat"
-                              "join" "replace" "trim" "upper" "lower" "repeat") name) "String")
-        ((listContains? (list "stringToBytes" "bytesAlloc") name) "Bytes")
-        ((listContains? (list "mapEmpty" "mapSet" "mapFromPairs" "mapRemove" "remove") name) "Map")
-        ((listContains? (list "i64ArrayGenerate" "i64ArraySlice" "i64ArrayConcat" "i64ArrayScan") name) "I64Array")
-        ((listContains? (list "i8ArrayGenerate" "i8ArraySlice" "i8ArrayConcat" "i8ArrayScan") name) "I8Array")
-        ((listContains? (list "f64ArrayGenerate" "f64ArraySlice" "f64ArrayConcat" "f64ArrayScan") name) "F64Array")
+  (cond ((or (= name "list") (= name "cons") (= name "map") (= name "filter")
+            (= name "range") (= name "listReverse") (= name "listAppend") (= name "listTake")
+            (= name "listDrop") (= name "listSort") (= name "listSortBy") (= name "stringSplit")
+            (= name "stringChars") (= name "stringLines") (= name "mapKeys") (= name "mapValues")
+            (= name "mapPairs") (= name "split") (= name "chars") (= name "lines")
+            (= name "keys") (= name "values") (= name "pairs") (= name "sort")
+            (= name "sortBy") (= name "take") (= name "drop") (= name "zip")
+            (= name "enumerate")) "List")
+        ((or (= name "str") (= name "stringConcat") (= name "stringFromInt64") (= name "stringFromFloat64")
+            (= name "stringReverse") (= name "stringJoin") (= name "stringReplace") (= name "stringTrim")
+            (= name "stringUpper") (= name "stringLower") (= name "stringRepeat") (= name "join")
+            (= name "replace") (= name "trim") (= name "upper") (= name "lower")
+            (= name "repeat")) "String")
+        ((or (= name "stringToBytes") (= name "bytesAlloc")) "Bytes")
+        ((or (= name "mapEmpty") (= name "mapSet") (= name "mapFromPairs") (= name "mapRemove")
+            (= name "remove")) "Map")
+        ((or (= name "i64ArrayGenerate") (= name "i64ArraySlice") (= name "i64ArrayConcat") (= name "i64ArrayScan")) "I64Array")
+        ((or (= name "i8ArrayGenerate") (= name "i8ArraySlice") (= name "i8ArrayConcat") (= name "i8ArrayScan")) "I8Array")
+        ((or (= name "f64ArrayGenerate") (= name "f64ArraySlice") (= name "f64ArrayConcat") (= name "f64ArrayScan")) "F64Array")
         ((or (= name "append") (= name "reverse")) recv)
         (else ""))
 
@@ -1339,6 +1434,7 @@ fn resolveCall ctx: LowerCtx kinds: (Map String String) items: (List rd/SExpr) -
         (conc (cond ((shadowed? ctx kinds h) "")
                     ((not (stringEmpty? alias)) alias)
                     ((listEmpty? args) "")
+                    ((not (genericMulti? h)) "")
                     (else (let [(k (kindOf ctx kinds (nthOf args 0)))] (if (stringEmpty? k) "" (genericConcrete h k))))))]
     (rd/makeList (cons (if (stringEmpty? conc) (nthOf items 0) (rd/makeAtom conc)) args)))
 
@@ -1367,7 +1463,9 @@ fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result L
                          (typeIndexSet m p.name (ty/ssaTyName p.ty)) m)) (typeIndexEmpty) params))
         (st0 (LowerState :next 0 :labels 0 :strings strings :done (list) :label "entry" :params (list) :instrs (list) :lifted (list) :lambdas 0 :types types :twins (typeIndexEmpty)))
         (kinds (fold (fn [(k (Map String String)) (p ast/Param)] -> (Map String String) (mapSet k p.name (kindOfAnnotation p.type))) (mapEmpty) d.params))]
-    (mt (lowerSeq ctx env st0 (resolveAll ctx kinds d.body))
+    (mt (lowerSeq ctx env st0 (if (and (preludeBitOp? ctx d.name) (= ctx.fnName (str "prelude." d.name)))
+                                (list (rd/makeList (cons (rd/makeAtom d.name) (map rd/makeAtom names))))
+                                (resolveAll ctx kinds d.body)))
       ((err e) (err e))
       ((ok r0) (let [(r (coerce r0.st r0.value sig.ret))
                      (final (closeBlock r.st (ty/termReturn r.value) "" (list)))]
@@ -1377,6 +1475,9 @@ fn lowerFunction ctx: LowerCtx strings: StringPool d: ast/DefunNode -> (Result L
 
 fn ctxFor name: String positions: (Map String String) info: ModInfo -> LowerCtx
   (LowerCtx :fnName (optionOr (mapGet info.targets name) name) :pos (optionOr (mapGet positions name) "?") :info info)
+
+fn addLowered acc: ModAcc lf: LoweredFn -> ModAcc
+  (ModAcc :strings lf.strings :functions (fold (fn [(fs (List ty/SsaFunction)) (f ty/SsaFunction)] -> (List ty/SsaFunction) (cons f fs)) acc.functions (cons lf.function lf.lifted)) :diags acc.diags)
 
 fn withDiag acc: ModAcc d: ty/IrDiag -> ModAcc
   (with acc :diags (listAppend acc.diags (list d)))
@@ -1393,7 +1494,7 @@ fn schemaDefaultAcc positions: (Map String String) info: ModInfo acc: ModAcc s: 
                   (synth (ast/DefunNode :name bareThunk :typeVars (list) :isExported false :effect false :params (list) :retType fieldTy :docstring "" :body (list defExpr) :bodyPos (list)))]
               (mt (lowerFunction (ctxFor bareThunk positions info) a.strings synth)
                 ((err e) (withDiag a e))
-                ((ok lf) (ModAcc :strings lf.strings :functions (listAppend a.functions (cons lf.function lf.lifted)) :diags a.diags)))))
+                ((ok lf) (addLowered a lf)))))
           acc (mapKeys defaults)))
 
 fn lowerTop positions: (Map String String) info: ModInfo only: (Option (List String)) acc: ModAcc t: ast/TopForm -> ModAcc
@@ -1405,12 +1506,12 @@ fn lowerTop positions: (Map String String) info: ModInfo only: (Option (List Str
                         acc
                         (mt (lowerFunction (ctxFor d.name positions info) acc.strings d)
                           ((err e) (withDiag acc e))
-                          ((ok lf) (ModAcc :strings lf.strings :functions (listAppend acc.functions (cons lf.function lf.lifted)) :diags acc.diags)))))
+                          ((ok lf) (addLowered acc lf)))))
     ((ast/topExpr p) (let [(initName (str "@init$" (stringFromInt64 p.line) "_" (stringFromInt64 p.col)))
                            (synth (ast/DefunNode :name initName :typeVars (list) :isExported false :effect true :params (list) :retType "" :docstring "\"\"" :body (list p.expr) :bodyPos (list p)))]
                        (mt (lowerFunction (ctxFor initName positions info) acc.strings synth)
                          ((err e) (withDiag acc e))
-                         ((ok lf) (ModAcc :strings lf.strings :functions (listAppend acc.functions (cons lf.function lf.lifted)) :diags acc.diags))))))
+                         ((ok lf) (addLowered acc lf))))))
 
 fn moduleHeader forms: (List ast/TopForm) -> (Option ast/ModuleNode)
   (fold (fn [(acc (Option ast/ModuleNode)) (t ast/TopForm)] -> (Option ast/ModuleNode)
@@ -1441,9 +1542,9 @@ fn enumDecl prefix: String e: ast/EnumNode -> ty/SsaTypeDecl
 fn enumDecls forms: (List ast/TopForm) prefix: String -> (List ty/SsaTypeDecl)
   (fold (fn [(acc (List ty/SsaTypeDecl)) (t ast/TopForm)] -> (List ty/SsaTypeDecl)
           (mt t
-            ((ast/topEnum e) (listAppend acc (list (enumDecl prefix e))))
+            ((ast/topEnum e) (cons (enumDecl prefix e) acc))
             ((ast/topModule _) acc) ((ast/topSchema _) acc) ((ast/topDefun _) acc) ((ast/topExpr _) acc)))
-        (list) forms)
+        (list) (listReverse forms))
 
 fn schemaFields s: ast/SchemaNode -> (List String)
   (map (fn [(f ast/AstField)] -> String f.name) s.fields)
@@ -1487,9 +1588,9 @@ fn visWithSchemaDefaults v: Vis key: String modName: String s: ast/SchemaNode ke
 fn recordDecls forms: (List ast/TopForm) prefix: String -> (List ty/SsaRecordDecl)
   (fold (fn [(acc (List ty/SsaRecordDecl)) (t ast/TopForm)] -> (List ty/SsaRecordDecl)
           (mt t
-            ((ast/topSchema s) (listAppend acc (list (ty/ssaRecordDecl (qualify prefix s.name) (schemaFields s)))))
+            ((ast/topSchema s) (cons (ty/ssaRecordDecl (qualify prefix s.name) (schemaFields s)) acc))
             ((ast/topModule _) acc) ((ast/topEnum _) acc) ((ast/topDefun _) acc) ((ast/topExpr _) acc)))
-        (list) forms)
+        (list) (listReverse forms))
 
 fn addCtorsAs keyPrefix: String acc: (Map String Ctor) d: ty/SsaTypeDecl -> (Map String Ctor)
   (fold (fn [(m (Map String Ctor)) (v ty/SsaVariant)] -> (Map String Ctor) (mapSet m (str keyPrefix v.name) (Ctor :typeName d.name :variant v.name :arity v.arity)))
@@ -1528,7 +1629,7 @@ fn addDecl keyPrefix: String modName: String exports: (Option (List String)) for
                              key modName s keyPrefix)
                            (hide v key modName))))
     ((ast/topEnum e) (let [(decl (enumDecl modName e))
-                           (decls (if foreign (listAppend v.foreign (list decl)) v.foreign))]
+                           (decls (if foreign (cons decl v.foreign) v.foreign))]
                        (if (visible? exports e.name)
                          (with v :ctors (addCtorsAs keyPrefix v.ctors decl) :foreign decls)
                          (fold (fn [(acc Vis) (c ast/EnumCase)] -> Vis (hide acc (str keyPrefix c.name) modName))
@@ -1542,10 +1643,18 @@ fn addDecls v: Vis forms: (List ast/TopForm) keyPrefix: String modName: String e
 fn baseVis -> Vis
   (Vis :arities (mapEmpty) :ctors (fold addCtors (mapEmpty) (preludeTypes)) :records (mapEmpty) :defaults (mapEmpty) :targets (mapEmpty) :foreign (list) :hidden (mapEmpty) :sigs (mapEmpty))
 
+fn variantIndex decls: (List ty/SsaTypeDecl) -> (Map String (List String))
+  (fold (fn [(m (Map String (List String))) (d ty/SsaTypeDecl)] -> (Map String (List String))
+          (if (mapHas? m d.name) m (mapSet m d.name (map (fn [(v ty/SsaVariant)] -> String v.name) d.variants))))
+        (mapEmpty) decls)
+
 fn infoOf forms: (List ast/TopForm) v: Vis late: (Map String Int64) prefix: String aliases: (Map String String) linked: Bool -> ModInfo
-  (let [(own (addDecls v forms "" prefix (none) false))]
-    (ModInfo :arities own.arities :late late :ctors own.ctors :records own.records :defaults own.defaults :types (enumDecls forms prefix) :sigs own.sigs
-             :targets own.targets :foreign own.foreign :aliases aliases :hidden own.hidden :linked linked))
+  (let [(own (addDecls v forms "" prefix (none) false))
+        (types (enumDecls forms prefix))
+        (foreign (listReverse own.foreign))]
+    (ModInfo :arities own.arities :late late :ctors own.ctors :records own.records :defaults own.defaults :types types :sigs own.sigs
+             :targets own.targets :foreign foreign :aliases aliases :hidden own.hidden :linked linked
+             :variants (variantIndex (listAppend types (listAppend foreign (preludeTypes))))))
 
 fn sysAlias imp: (Pair String String) -> String
   (if (stringEmpty? (pairSecond imp)) (pairFirst imp) (pairSecond imp))
@@ -1563,15 +1672,19 @@ fn importVis v: Vis alias: String forms: (List ast/TopForm) -> Vis
   (addDecls v forms (str alias "/") (moduleName forms) (some (mt (moduleHeader forms) ((some m) m.exported) ((none) (list)))) true)
 
 fn importedCtors scope: LinkScope -> (Map String Ctor)
-  (let [(decls (fold (fn [(acc (List ty/SsaTypeDecl)) (a String)] -> (List ty/SsaTypeDecl)
-                       (let [(forms (optionOr (mapGet scope.imports a) (list)))
-                             (fresh (filter (fn [(d ty/SsaTypeDecl)] -> Bool (listEmpty? (filter (fn [(e ty/SsaTypeDecl)] -> Bool (= e.name d.name)) acc))) (enumDecls forms (moduleName forms))))]
-                         (listAppend acc fresh)))
-                     (list) (mapKeys scope.imports)))
-        (all (fold (fn [(acc (List Ctor)) (d ty/SsaTypeDecl)] -> (List Ctor) (listAppend acc (mapValues (addCtors (mapEmpty) d)))) (list) decls))
-        (names (map (fn [(c Ctor)] -> String c.variant) all))]
+  (let [(walked (fold (fn [(acc (Pair (Map String Bool) (List ty/SsaTypeDecl))) (a String)] -> (Pair (Map String Bool) (List ty/SsaTypeDecl))
+                        (let [(forms (optionOr (mapGet scope.imports a) (list)))
+                              (seen (pairFirst acc))
+                              (fresh (filter (fn [(d ty/SsaTypeDecl)] -> Bool (not (mapHas? seen d.name))) (enumDecls forms (moduleName forms))))]
+                          (pair (fold (fn [(m (Map String Bool)) (d ty/SsaTypeDecl)] -> (Map String Bool) (mapSet m d.name true)) seen fresh)
+                                (fold (fn [(ds (List ty/SsaTypeDecl)) (d ty/SsaTypeDecl)] -> (List ty/SsaTypeDecl) (cons d ds)) (pairSecond acc) fresh))))
+                      (pair (mapEmpty) (list)) (mapKeys scope.imports)))
+        (all (listReverse (fold (fn [(acc (List Ctor)) (d ty/SsaTypeDecl)] -> (List Ctor)
+                                  (fold (fn [(cs (List Ctor)) (c Ctor)] -> (List Ctor) (cons c cs)) acc (mapValues (addCtors (mapEmpty) d))))
+                                (list) (listReverse (pairSecond walked)))))
+        (counts (fold (fn [(m (Map String Int64)) (c Ctor)] -> (Map String Int64) (mapSet m c.variant (+ (optionOr (mapGet m c.variant) 0) 1))) (mapEmpty) all))]
     (fold (fn [(acc (Map String Ctor)) (c Ctor)] -> (Map String Ctor)
-            (if (= (listLength (filter (fn [(n String)] -> Bool (= n c.variant)) names)) 1) (mapSet acc c.variant c) acc))
+            (if (= (optionOr (mapGet counts c.variant) 0) 1) (mapSet acc c.variant c) acc))
           (mapEmpty) all))
 
 fn withBareCtors v: Vis bare: (Map String Ctor) -> Vis
@@ -1584,31 +1697,37 @@ fn preludeVisOf prelude: (List ast/TopForm) -> Vis
 fn belowModule preludeVis: Vis -> Vis
   (with preludeVis :arities (mapEmpty))
 
-fn linkedInfo forms: (List ast/TopForm) scope: LinkScope -> ModInfo
+fn linkedInfoAs forms: (List ast/TopForm) scope: LinkScope prefix: String -> ModInfo
   (let [(preludeVis (preludeVisOf scope.prelude))
         (withPrelude (belowModule preludeVis))
         (aliasNames (mapKeys scope.imports))
         (withImports (withBareCtors (fold (fn [(v Vis) (a String)] -> Vis (importVis v a (optionOr (mapGet scope.imports a) (list)))) withPrelude aliasNames) (importedCtors scope)))
         (aliases (fold (fn [(m (Map String String)) (a String)] -> (Map String String) (mapSet m a (moduleName (optionOr (mapGet scope.imports a) (list))))) (sysAliases forms) aliasNames))]
-    (infoOf forms withImports preludeVis.arities (moduleName forms) aliases true))
+    (infoOf forms withImports preludeVis.arities prefix aliases true))
+
+fn linkedInfo forms: (List ast/TopForm) scope: LinkScope -> ModInfo
+  (linkedInfoAs forms scope (moduleName forms))
 
 fn typesUsedBy f: ty/SsaFunction -> (List String)
   (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String)
-          (listAppend (listAppend acc (fold (fn [(names (List String)) (i ty/SsaInstr)] -> (List String) (mt i.op ((ty/opConstruct tn _ _) (cons tn names)) (_ names))) (list) b.instrs))
-                       (mt b.term ((ty/termSwitch _ tn _ _) (list tn)) (_ (list)))))
+          (fold (fn [(names (List String)) (i ty/SsaInstr)] -> (List String) (mt i.op ((ty/opConstruct tn _ _) (cons tn names)) (_ names)))
+                (mt b.term ((ty/termSwitch _ tn _ _) (cons tn acc)) (_ acc))
+                b.instrs))
         (list) f.blocks)
 
 fn dedupeTypes decls: (List ty/SsaTypeDecl) -> (List ty/SsaTypeDecl)
-  (fold (fn [(acc (List ty/SsaTypeDecl)) (d ty/SsaTypeDecl)] -> (List ty/SsaTypeDecl)
-          (if (listAny? (fn [(e ty/SsaTypeDecl)] -> Bool (= e.name d.name)) acc) acc (listAppend acc (list d))))
-        (list) decls)
+  (listReverse (pairSecond (fold (fn [(acc (Pair (Map String Bool) (List ty/SsaTypeDecl))) (d ty/SsaTypeDecl)] -> (Pair (Map String Bool) (List ty/SsaTypeDecl))
+                                   (if (mapHas? (pairFirst acc) d.name) acc (pair (mapSet (pairFirst acc) d.name true) (cons d (pairSecond acc)))))
+                                 (pair (mapEmpty) (list)) decls)))
 
 fn moduleTypes info: ModInfo functions: (List ty/SsaFunction) -> (List ty/SsaTypeDecl)
-  (let [(used (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (typesUsedBy f))) (list) functions))
-        (own (map (fn [(d ty/SsaTypeDecl)] -> String d.name) info.types))
+  (let [(used (fold (fn [(acc (Map String Bool)) (f ty/SsaFunction)] -> (Map String Bool)
+                      (fold (fn [(m (Map String Bool)) (n String)] -> (Map String Bool) (mapSet m n true)) acc (typesUsedBy f)))
+                    (mapEmpty) functions))
+        (own (fold (fn [(m (Map String Bool)) (d ty/SsaTypeDecl)] -> (Map String Bool) (mapSet m d.name true)) (mapEmpty) info.types))
         (allForeign (listAppend info.foreign (preludeTypes)))]
     (listAppend info.types
-                (dedupeTypes (filter (fn [(d ty/SsaTypeDecl)] -> Bool (and (listContains? used d.name) (not (listContains? own d.name)))) allForeign))))
+                (dedupeTypes (filter (fn [(d ty/SsaTypeDecl)] -> Bool (and (mapHas? used d.name) (not (mapHas? own d.name)))) allForeign))))
 
 fn recordsUsedBy f: ty/SsaFunction -> (List ty/SsaRecordDecl)
   (fold (fn [(acc (List ty/SsaRecordDecl)) (b ty/SsaBlock)] -> (List ty/SsaRecordDecl)
@@ -1620,13 +1739,15 @@ fn recordsUsedBy f: ty/SsaFunction -> (List ty/SsaRecordDecl)
         (list) f.blocks)
 
 fn dedupeRecords decls: (List ty/SsaRecordDecl) -> (List ty/SsaRecordDecl)
-  (fold (fn [(acc (List ty/SsaRecordDecl)) (d ty/SsaRecordDecl)] -> (List ty/SsaRecordDecl)
-          (if (listAny? (fn [(e ty/SsaRecordDecl)] -> Bool (= e.name d.name)) acc) acc (listAppend acc (list d))))
-        (list) decls)
+  (listReverse (pairSecond (fold (fn [(acc (Pair (Map String Bool) (List ty/SsaRecordDecl))) (d ty/SsaRecordDecl)] -> (Pair (Map String Bool) (List ty/SsaRecordDecl))
+                                   (if (mapHas? (pairFirst acc) d.name) acc (pair (mapSet (pairFirst acc) d.name true) (cons d (pairSecond acc)))))
+                                 (pair (mapEmpty) (list)) decls)))
 
 fn moduleRecords forms: (List ast/TopForm) prefix: String functions: (List ty/SsaFunction) -> (List ty/SsaRecordDecl)
   (let [(own (recordDecls forms prefix))
-        (used (fold (fn [(acc (List ty/SsaRecordDecl)) (f ty/SsaFunction)] -> (List ty/SsaRecordDecl) (listAppend acc (recordsUsedBy f))) (list) functions))]
+        (used (listReverse (fold (fn [(acc (List ty/SsaRecordDecl)) (f ty/SsaFunction)] -> (List ty/SsaRecordDecl)
+                                   (fold (fn [(rs (List ty/SsaRecordDecl)) (r ty/SsaRecordDecl)] -> (List ty/SsaRecordDecl) (cons r rs)) acc (recordsUsedBy f)))
+                                 (list) functions)))]
     (dedupeRecords (listAppend own used)))
 
 fn opExternRefs op: ty/SsaOp -> (List String)
@@ -1645,18 +1766,27 @@ fn dedupeStrings xs: (List String) -> (List String)
                                    (if (typeIndexHas? (pairFirst acc) s) acc (pair (typeIndexSet (pairFirst acc) s true) (cons s (pairSecond acc)))))
                                  (pair (typeIndexEmpty) (list)) xs)))
 
-fn externSig info: ModInfo n: String sig: FnSig -> FnSig
-  (mt (listHead (filter (fn [(k String)] -> Bool (and (qualified? k) (= (optionOr (mapGet info.targets k) "") n))) (mapKeys info.targets)))
+fn targetSources info: ModInfo -> (Map String String)
+  (fold (fn [(acc (Map String String)) (k String)] -> (Map String String)
+          (let [(target (optionOr (mapGet info.targets k) ""))]
+            (if (and (qualified? k) (not (mapHas? acc target))) (mapSet acc target k) acc)))
+        (mapEmpty) (mapKeys info.targets))
+
+fn externSig info: ModInfo sources: (Map String String) n: String sig: FnSig -> FnSig
+  (mt (mapGet sources n)
     ((some source) (resolveSigFor info source sig))
     ((none) (resolveSig info sig)))
 
 fn moduleExterns info: ModInfo functions: (List ty/SsaFunction) -> (List ty/SsaExtern)
-  (let [(defined (map (fn [(f ty/SsaFunction)] -> String f.name) functions))
-        (refs (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (functionExternRefs f))) (list) functions))
-        (needed (filter (fn [(n String)] -> Bool (not (listContains? defined n))) (dedupeStrings refs)))]
+  (let [(defined (fold (fn [(acc (Map String Bool)) (f ty/SsaFunction)] -> (Map String Bool) (mapSet acc f.name true)) (mapEmpty) functions))
+        (refs (listReverse (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String)
+                                   (fold (fn [(a (List String)) (n String)] -> (List String) (cons n a)) acc (functionExternRefs f)))
+                                 (list) functions)))
+        (needed (filter (fn [(n String)] -> Bool (not (mapHas? defined n))) (dedupeStrings refs)))
+        (sources (targetSources info))]
     (map (fn [(n String)] -> ty/SsaExtern
            (mt (mapGet info.sigs n)
-             ((some sig) (let [(resolved (externSig info n sig))] (ty/ssaExternTyped n resolved.params resolved.ret)))
+             ((some sig) (let [(resolved (externSig info sources n sig))] (ty/ssaExternTyped n resolved.params resolved.ret)))
              ((none)
                (mt (mapGet info.arities n)
                  ((some a) (ty/ssaExtern n a))
@@ -1767,7 +1897,7 @@ fn splitFunctions functions: (List ty/SsaFunction) -> (List ty/SsaFunction)
 fn lowerWith forms: (List ast/TopForm) positions: (Map String String) info: ModInfo prefix: String strings: (List String) only: (Option (List String)) -> (Result ty/SsaModule (List ty/IrDiag))
   (let [(name (moduleName forms))
         (acc (fold (fn [(a ModAcc) (t ast/TopForm)] -> ModAcc (lowerTop positions info only a t)) (ModAcc :strings (poolOf strings) :functions (list) :diags (list)) forms))
-        (functions (splitFunctions acc.functions))
+        (functions (splitFunctions (listReverse acc.functions)))
         (diags (if (stringEmpty? name) (cons (ty/makeIrDiag "ERR_LOWER_NO_MODULE" "the source has no module header" "?") acc.diags) acc.diags))
         (inits (filter (fn [(f ty/SsaFunction)] -> Bool (and (stringContains? f.name "@init$") (not (stringContains? f.name "@lambda")))) functions))
         (globals (map (fn [(f ty/SsaFunction)] -> ty/SsaGlobal (ty/ssaGlobal (str f.name "$g") f.name)) inits))]
@@ -1782,9 +1912,16 @@ fn lowerWithPrelude forms: (List ast/TopForm) positions: (Map String String) pre
   (let [(preludeVis (preludeVisOf prelude))]
     (lowerWith forms positions (infoOf forms (belowModule preludeVis) preludeVis.arities "" (sysAliases forms) false) "" (list) (none)))
 
+fn locatedPositions scope: LinkScope positions: (Map String String) prefix: String -> (Map String String)
+  (if (stringEmpty? prefix)
+    positions
+    (mapFromPairs (map (fn [(k String)] -> (Pair String String) (pair k (str scope.path ":" (optionOr (mapGet positions k) "?")))) (mapKeys positions))))
+
+fn lowerLinkedAs forms: (List ast/TopForm) positions: (Map String String) scope: LinkScope prefix: String -> (Result ty/SsaModule (List ty/IrDiag))
+  (lowerWith forms (locatedPositions scope positions prefix) (linkedInfoAs forms scope prefix) prefix scope.strings scope.only)
+
 fn lowerLinked forms: (List ast/TopForm) positions: (Map String String) scope: LinkScope -> (Result ty/SsaModule (List ty/IrDiag))
-  (let [(located (mapFromPairs (map (fn [(k String)] -> (Pair String String) (pair k (str scope.path ":" (optionOr (mapGet positions k) "?")))) (mapKeys positions))))]
-    (lowerWith forms located (linkedInfo forms scope) (moduleName forms) scope.strings scope.only))
+  (lowerLinkedAs forms positions scope (moduleName forms))
 
 fn leadingSpaces s: String -> Int64
   (pairFirst (fold (fn [(acc (Pair Int64 Bool)) (c String)] -> (Pair Int64 Bool)
@@ -1792,7 +1929,7 @@ fn leadingSpaces s: String -> Int64
                  (pair 0 true) (stringChars s)))
 
 fn declHead? w: String -> Bool
-  (listContains? (list "fn" "fn!" "defun" "df" "schema" "defschema" "dfs" "enum" "defenum" "dfe") w)
+  (or (= w "fn") (= w "fn!") (= w "defun") (= w "df") (= w "schema") (= w "defschema") (= w "dfs") (= w "enum") (= w "defenum") (= w "dfe"))
 
 fn isDeclModifier? w: String -> Bool
   (or (= w "!") (or (= w "tailrec") (= w ":tailrec")))
@@ -1813,14 +1950,17 @@ fn declName line: String -> String
       ""))
 
 fn declPositions src: String -> (Map String String)
-  (let [(srcLines (stringSplit src "\n"))]
-    (fold (fn [(acc (Map String String)) (i Int64)] -> (Map String String)
-            (let [(line (optionOr (listGet srcLines i) ""))
-                  (name (declName line))]
-              (if (or (stringEmpty? name) (mapHas? acc name))
-                acc
-                (mapSet acc name (str (stringFromInt64 (+ i 1)) ":" (stringFromInt64 (+ (leadingSpaces line) 1)))))))
-          (mapEmpty) (range 0 (listLength srcLines))))
+  (let [(srcLines (stringSplit src "\n"))
+        (final (fold (fn [(acc (Pair (Map String String) Int64)) (line String)] -> (Pair (Map String String) Int64)
+                       (let [(m (pairFirst acc))
+                             (i (pairSecond acc))
+                             (name (declName line))]
+                         (pair (if (or (stringEmpty? name) (mapHas? m name))
+                                 m
+                                 (mapSet m name (str (stringFromInt64 (+ i 1)) ":" (stringFromInt64 (+ (leadingSpaces line) 1)))))
+                               (+ i 1))))
+                     (pair (mapEmpty) 0) srcLines))]
+    (pairFirst final))
 
 fn lowerSource src: String -> (Result ty/SsaModule (List ty/IrDiag))
   (mt (ast/parse src)

@@ -9,7 +9,7 @@ fn verifyStateDigest expectedDigest: String actualDigest: String -> Bool
   (= expectedDigest actualDigest)
 
 fn detectDivergenceLoop events: (List record/ReplayEvent) actualStates: (List String) -> (Result Bool DivergenceReport)
-  (if (or (listEmpty? events) (listEmpty? actualStates)) (ok true) (let [(evHead (optionOr (listHead events) (record/makeReplayEvent 0 "" "" "" ""))) (evTail (optionOr (listTail events) (list))) (stHead (optionOr (listHead actualStates) "")) (stTail (optionOr (listTail actualStates) ""))] (if (not (verifyStateDigest evHead.stateDigest stHead)) (err (makeDivergenceReport true evHead.step evHead.stateDigest stHead "ERR_REPLAY_DESYNC")) (detectDivergenceLoop evTail stTail))))
+  (if (or (listEmpty? events) (listEmpty? actualStates)) (ok true) (let [(evHead (optionOr (listHead events) (record/makeReplayEvent 0 "" "" "" ""))) (evTail (optionOr (listTail events) (list))) (stHead (optionOr (listHead actualStates) "")) (stTail (optionOr (listTail actualStates) (list)))] (if (not (verifyStateDigest evHead.stateDigest stHead)) (err (makeDivergenceReport true evHead.step evHead.stateDigest stHead "ERR_REPLAY_DESYNC")) (detectDivergenceLoop evTail stTail))))
 
 fn detectDivergence session: record/ReplaySession actualStates: (List String) -> (Result Bool DivergenceReport)
   (detectDivergenceLoop session.events actualStates)

@@ -113,7 +113,9 @@ fn checkBasisToken! principles: Str acc: Int64 tok: Str -> Int64
 
 fn testRulesClaimGrounding! -> Bool
   (let [(readRes (fileRead "asl/grammar/rules.asn"))
-        (principlesRes (fileRead ".asl/mem/principles.asn"))]
+        (principlesRes (fileRead ".asl/mem/principles.asn"))
+        (wsRes (fileRead ".asl/rules.asn"))
+        (wsContent (resultOr wsRes ""))]
     (do
       (assert (ok? readRes) "rules.asn must be readable on disk")
       (refute (err? readRes) "rules.asn read must refute error")
@@ -122,7 +124,8 @@ fn testRulesClaimGrounding! -> Bool
         ((err _) false)
         ((ok content)
          (let [(principles (resultOr principlesRes ""))
-               (parts (stringSplit content ":basis ("))
+               (allContent (str content wsContent))
+               (parts (stringSplit allContent ":basis ("))
                (tokens (fold (fn [(acc (List Str)) (i Int64)] -> (List Str) (listAppend acc (basisTokens parts i))) (list) (range 1 (listLength parts))))
                (grounded (fold (fn [(acc Int64) (tok Str)] -> Int64 (checkBasisToken! principles acc tok)) 0 tokens))
                (srcDecision (optionOr (listHead (stringSplit (optionOr (listGet (stringSplit content ":src ") 1) "") " ")) ""))]
@@ -130,11 +133,11 @@ fn testRulesClaimGrounding! -> Bool
              (assert (stringContains? content ":basis \".asl/mem/principles.asn\"") "rules.asn must name principles.asn as its basis")
              (assert (isDecisionId srcDecision) "rules.asn :src must name a decision id")
              (assert (= (checkBasisToken! principles 0 srcDecision) 1) "rules.asn :src decision must resolve")
-             (assert (> (listLength tokens) 0) "rules.asn must cite at least one basis")
-             (assert (= grounded (listLength tokens)) "every rules.asn basis must be grounded")
-             (refute (stringContains? content "%") "rules.asn must carry no figure; figures live in principles.asn entries or bench locks")
-             (refute (stringContains? content "arXiv") "rules.asn must refute unsourced paper citations")
-             (refute (stringContains? content "TODO") "rules.asn must refute ungrounded TODO citations")
+             (assert (> (listLength tokens) 0) "rules.asn and the workspace rules file together must cite at least one basis")
+             (assert (= grounded (listLength tokens)) "every basis across rules.asn and the workspace rules file, when present, must be grounded")
+             (refute (stringContains? allContent "%") "rules.asn and the workspace rules file must carry no figure; figures live in principles.asn entries or bench locks")
+             (refute (stringContains? allContent "arXiv") "rules.asn and the workspace rules file must refute unsourced paper citations")
+             (refute (stringContains? allContent "TODO") "rules.asn and the workspace rules file must refute ungrounded TODO citations")
              true))))
       true))
 

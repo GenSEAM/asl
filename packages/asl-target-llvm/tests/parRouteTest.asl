@@ -385,7 +385,9 @@ fn ! testArchive -> Bool
   (let [(out (sh (str "nm -P -A " (lib))))
         (members (filter (fn [(l String)] -> Bool (stringContains? l "[parallel.o]")) (stringSplit out.stdout "\n")))]
     (do (assert (= out.exitCode 0) (str "nm -P -A " (lib) ": " out.stderr))
-        (assert (stringContains? out.stdout "[abi.o]") "nm -P -A lists libaslrt.a's members")
+        (assert (stringContains? out.stdout "[rtAbi.o]") "nm -P -A lists libaslrt.a's rtAbi.o member (RT-ABI)")
+        (assert (stringContains? out.stdout "[gcAsl.o]") "nm -P -A lists libaslrt.a's gcAsl.o member")
+        (assert (stringContains? out.stdout "[rtFloor.o]") "nm -P -A lists libaslrt.a's rtFloor.o member (RT-FLOOR)")
         (assert (listEmpty? members) (str "libaslrt.a has no parallel.o member: " (listTake members 3)))
         true))
 

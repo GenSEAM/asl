@@ -1,11 +1,3 @@
-"The Option and Result combinators in a chain, with the failure carried all the"
-
-"way to the output. A pipeline that routes its failure through resultToOption"
-
-"discards the error, which is how three different `resultMapErr` bodies once"
-
-"produced byte-identical output; here the mapped error is printed."
-
 (module parse/resolve :x [resolve])
 
 fn resolve raw: String fallback: Int64 -> String

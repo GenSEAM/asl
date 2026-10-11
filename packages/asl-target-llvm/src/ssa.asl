@@ -5,10 +5,12 @@
       (asl-ir/verify :a vfy)
       (asl-target-llvm/rtFormat :a fmt)
       (asl-target-llvm/rtError :a rterr)
+      (asl-target-llvm/gcAsl :a gc)
       (asl-target-llvm/rtOps :a opsrt)
       (asl-target-llvm/rtObject :a objrt)
       (asl-target-llvm/rtValue :a valrt)
-      (asl-target-llvm/target :a target)])
+      (asl-target-llvm/target :a target)
+      (asl-target-llvm/ssaOpt :a opt)])
 
 (schema ModEnv (:f name String) (:f functions NameIndex) (:f externs NameIndex) (:f types NameIndex) (:f strings NameIndex) (:f records NameIndex))
 
@@ -84,14 +86,8 @@ fn nameIndexEmpty? tree: NameIndex -> Bool
 fn nameIndexAdd tree: NameIndex key: String n: Int64 -> NameIndex
   (nameIndexSet tree key (+ n (optionOr (nameIndexGet tree key) 0)))
 
-fn byteTable -> String
-  "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x20\x21\x22\x23\x24\x25\x26\x27\x28\x29\x2a\x2b\x2c\x2d\x2e\x2f\x30\x31\x32\x33\x34\x35\x36\x37\x38\x39\x3a\x3b\x3c\x3d\x3e\x3f\x40\x41\x42\x43\x44\x45\x46\x47\x48\x49\x4a\x4b\x4c\x4d\x4e\x4f\x50\x51\x52\x53\x54\x55\x56\x57\x58\x59\x5a\x5b\x5c\x5d\x5e\x5f\x60\x61\x62\x63\x64\x65\x66\x67\x68\x69\x6a\x6b\x6c\x6d\x6e\x6f\x70\x71\x72\x73\x74\x75\x76\x77\x78\x79\x7a\x7b\x7c\x7d\x7e\x7f\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f\xa0\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf\xb0\xb1\xb2\xb3\xb4\xb5\xb6\xb7\xb8\xb9\xba\xbb\xbc\xbd\xbe\xbf\xc0\xc1\xc2\xc3\xc4\xc5\xc6\xc7\xc8\xc9\xca\xcb\xcc\xcd\xce\xcf\xd0\xd1\xd2\xd3\xd4\xd5\xd6\xd7\xd8\xd9\xda\xdb\xdc\xdd\xde\xdf\xe0\xe1\xe2\xe3\xe4\xe5\xe6\xe7\xe8\xe9\xea\xeb\xec\xed\xee\xef\xf0\xf1\xf2\xf3\xf4\xf5\xf6\xf7\xf8\xf9\xfa\xfb\xfc\xfd\xfe\xff"
-
 fn byteAt s: String i: Int64 -> String
   (optionOr (stringSlice s i (+ i 1)) "")
-
-fn byteCode b: String -> Int64
-  (optionOr (stringIndexOf (byteTable) b) 0)
 
 fn hexByte n: Int64 -> String
   (str (byteAt "0123456789ABCDEF" (/ n 16)) (byteAt "0123456789ABCDEF" (mod n 16)))
@@ -99,19 +95,26 @@ fn hexByte n: Int64 -> String
 fn nameByte? c: Int64 first: Bool -> Bool
   (or (and (>= c 65) (<= c 90)) (and (>= c 97) (<= c 122)) (= c 95) (and (not first) (>= c 48) (<= c 57)))
 
+fn plainFrom? keep?: (fn [Int64 Int64] -> Bool) b: Bytes n: Int64 i: Int64 -> Bool
+  (cond
+    ((>= i n) true)
+    ((keep? (bytesGet b i) i) (plainFrom? keep? b n (+ i 1)))
+    (else false))
+
+fn escapeBytes s: String keep?: (fn [Int64 Int64] -> Bool) escape: (fn [Int64] -> String) -> String
+  (let [(b (stringToBytes s))
+        (n (bytesLength b))]
+    (if (plainFrom? keep? b n 0)
+      s
+      (stringJoin (map (fn [(i Int64)] -> String (let [(c (bytesGet b i))] (if (keep? c i) (byteAt s i) (escape c)))) (range 0 n)) "")))
+
 fn llvmName s: String -> String
   (if (stringEmpty? s)
     "$"
-    (stringJoin (map (fn [(i Int64)] -> String
-                        (let [(b (byteAt s i)) (c (byteCode b))]
-                          (if (nameByte? c (= i 0)) b (str "$" (hexByte c)))))
-                      (range 0 (stringLength s))) ""))
+    (escapeBytes s (fn [(c Int64) (i Int64)] -> Bool (nameByte? c (= i 0))) (fn [(c Int64)] -> String (str "$" (hexByte c)))))
 
 fn llvmBytes s: String -> String
-  (stringJoin (map (fn [(i Int64)] -> String
-                      (let [(b (byteAt s i)) (c (byteCode b))]
-                        (if (and (>= c 32) (<= c 126) (!= c 34) (!= c 92)) b (str "\x5c" (hexByte c)))))
-                    (range 0 (stringLength s))) "")
+  (escapeBytes s (fn [(c Int64) (i Int64)] -> Bool (and (>= c 32) (<= c 126) (!= c 34) (!= c 92))) (fn [(c Int64)] -> String (str "\x5c" (hexByte c))))
 
 fn llvmFloat x: Float64 -> String
   (let [(s (stringFromFloat64 x))]
@@ -261,6 +264,9 @@ fn externGlobalSym name: String -> String
 fn codeSym name: String -> String
   (str "@" (llvmName name) ".code")
 
+fn tailCodeSym name: String -> String
+  (str "@" (llvmName name) ".tailCode")
+
 fn initSym moduleName: String -> String
   (str "@init." (llvmName moduleName))
 
@@ -269,6 +275,9 @@ fn globalReadySym name: String -> String
 
 fn sharedGlobal? g: ty/SsaGlobal -> Bool
   (stringStartsWith? g.name "asl-target-llvm/")
+
+fn globalGetSym name: String -> String
+  (str "@globalGet." (llvmName name))
 
 fn definesInit? text: String moduleName: String -> Bool
   (stringContains? text (str "define void " (initSym moduleName) "() {"))
@@ -337,8 +346,25 @@ fn declSymbol decl: String -> String
         (open (optionOr (stringIndexOf decl "(") (stringLength decl)))]
     (optionOr (stringSlice decl at (+ open 1)) decl))
 
+fn declPlain? decl: String -> Bool
+  (let [(sym (declSymbol decl))]
+    (and (stringEndsWith? sym "(") (rterr/refPlain? (optionOr (stringSlice sym 0 (- (stringLength sym) 1)) ""))))
+
+fn declUsed? keys: (Map String Bool) text: String decl: String -> Bool
+  (if (declPlain? decl)
+    (mapHas? keys (declSymbol decl))
+    (stringContains? text (declSymbol decl)))
+
+fn usedDeclsIn keys: (Map String Bool) text: String decls: (List String) -> (List String)
+  (filter (fn [(d String)] -> Bool (declUsed? keys text d)) decls)
+
 fn usedDecls text: String decls: (List String) -> (List String)
-  (filter (fn [(d String)] -> Bool (stringContains? text (declSymbol d))) decls)
+  (usedDeclsIn (rterr/refKeys text) text decls)
+
+fn usedDeclsJoin chunks: (List String) decls: (List String) -> (List String)
+  (usedDeclsIn (rterr/refKeysJoin (mapEmpty) chunks)
+               (if (listAll? declPlain? decls) "" (stringJoin chunks "\n"))
+               decls)
 
 fn usedRuntimeDecls text: String -> (List String)
   (usedDecls text (runtimeDecls))
@@ -458,8 +484,6 @@ fn unboxPayload lhs: String prefix: String kind: String base: String -> String
     ((= kind "bool") (str "  " prefix ".w = extractvalue %Val " base ", 1\n" lhs "trunc i64 " prefix ".w to i1\n"))
     ((= kind "float") (str "  " prefix ".w = extractvalue %Val " base ", 1\n" lhs "bitcast i64 " prefix ".w to double\n"))
     (else (str lhs "extractvalue %Val " base ", 1\n")))
-
-
 
 fn typeTrap p: String lbl: String expect: Int64 -> String
   (str lbl ".trap:\n  call void @rterr.type(i32 " p ".vtag, i32 " expect ")\n  unreachable\n")
@@ -701,7 +725,7 @@ fn emitCtorAlloc labelPrefix: String variant: String fieldVals: (List String) ->
          "  br label %" lbl ".alloc\n"
          lbl ".alloc:\n"
          "  " p ".ctor = load i32, ptr " (ctorIdSym variant) "\n"
-         "  " p ".objp = call ptr @asl_alloc_raw(i32 3, i64 " bytes ")\n"
+         "  " p ".objp = " (gc/fastAllocCall 3 bytes) "\n"
          "  " p ".ctorp = getelementptr inbounds i8, ptr " p ".objp, i64 8\n"
          "  store i32 " p ".ctor, ptr " p ".ctorp\n"
          "  " p ".np = getelementptr inbounds i8, ptr " p ".objp, i64 12\n"
@@ -738,7 +762,7 @@ fn emitRecord lhs: String dest: String schemaName: String fields: (List String) 
          "  br label %" lbl ".alloc\n"
          lbl ".alloc:\n"
          "  " p ".schema = load i32, ptr " (schemaIdSym schemaName) "\n"
-         "  " p ".objp = call ptr @asl_alloc_raw(i32 2, i64 " bytes ")\n"
+         "  " p ".objp = " (gc/fastAllocCall 2 bytes) "\n"
          "  " p ".schemap = getelementptr inbounds i8, ptr " p ".objp, i64 8\n"
          "  store i32 " p ".schema, ptr " p ".schemap\n"
          "  " p ".np = getelementptr inbounds i8, ptr " p ".objp, i64 12\n"
@@ -758,7 +782,7 @@ fn emitMakeClosure lhs: String dest: String callee: String caps: (List String) -
                                     (str "  " p ".c" i "p = getelementptr inbounds i8, ptr " p ".objp, i64 " (+ 24 (* i 16)) "\n"
                                          "  store %Val " (val (optionOr (listGet caps i) "")) ", ptr " p ".c" i "p\n"))
                                   (range 0 n)) ""))]
-    (str "  " p ".objp = call ptr @asl_alloc_raw(i32 4, i64 " bytes ")\n"
+    (str "  " p ".objp = " (gc/fastAllocCall 4 bytes) "\n"
          "  " p ".pp = getelementptr inbounds i8, ptr " p ".objp, i64 8\n"
          "  store ptr " (protoSym callee) ", ptr " p ".pp\n"
          "  " p ".np = getelementptr inbounds i8, ptr " p ".objp, i64 16\n"
@@ -812,7 +836,7 @@ fn emitCons lhs: String dest: String a: String b: String -> String
          "  " p ".isList = icmp eq i32 " p ".vtag, 6\n"
          "  br i1 " p ".isList, label %" lbl ".alloc, label %" lbl ".bad\n"
          lbl ".alloc:\n"
-         "  " p ".objp = call ptr @asl_alloc_cons()\n"
+         "  " p ".objp = " (gc/fastConsCall) "\n"
          "  " p ".carp = getelementptr inbounds i8, ptr " p ".objp, i64 8\n"
          "  store %Val " av ", ptr " p ".carp\n"
          "  " p ".cdrp = getelementptr inbounds i8, ptr " p ".objp, i64 24\n"
@@ -1155,7 +1179,6 @@ fn emitConst env: FnEnv lhs: String dest: String t: ty/SsaTy c: ty/SsaConst -> S
                                   lhs "insertvalue %Val { i64 0, i64 0 }, i64 " p ".word, 0\n")))
       ((ty/constSymbol n) (str lhs "call %Val @objrt.symbol(ptr " (nameSym n) ")\n"))))
 
-
 fn calleeArity menv: ModEnv callee: String -> Int64
   (mt (nameIndexGet menv.functions callee) ((some f) (listLength f.params)) ((none) 0))
 
@@ -1449,12 +1472,11 @@ fn emitInstr env: FnEnv ins: ty/SsaInstr -> String
            ((ty/opConst c) (emitConst env lhs d t c))
            ((ty/opCall callee args) (emitCall env lhs d callee args))
            ((ty/opCallClosure c args) (str lhs "call %Val @objrt.call(%Val " (val c) ", i64 " (listLength args) ", " arr ")\n"))
-           ((ty/opGlobal g) (str lhs "load %Val, ptr " (globalSym g) "\n"))
+           ((ty/opGlobal g) (if (opt/singleton? g) (str lhs "call %Val " (globalGetSym g) "()\n") (str lhs "load %Val, ptr " (globalSym g) "\n")))
            ((ty/opLoadGlobal g) (str lhs "load ptr, ptr " (externGlobalSym g) "\n"))
            ((ty/opBox v) (boxInline lhs d (defType env v) (val v)))
            ((ty/opPrim name args) (emitPrim lhs d name args))
            (_ ""))))))
-
 
 fn countTarget edges: (List ty/SsaEdge) target: String -> Int64
   (listLength (filter (fn [(e ty/SsaEdge)] -> Bool (= e.target target)) edges))
@@ -1648,26 +1670,47 @@ fn returnsParam? env: FnEnv target: String fuel: Int64 -> Bool
                                                                  (returnsParam? env e.target (- fuel 1)))))
                                       (_ false))))))))
 
+fn returnsDest? env: FnEnv b: ty/SsaBlock dest: String -> Bool
+  (mt b.term
+    ((ty/termReturn v) (= v dest))
+    ((ty/termJump e) (and (= e.args (list dest)) (returnsParam? env e.target env.size)))
+    (_ false))
+
+fn sameAbi? a: ty/SsaTy b: ty/SsaTy -> Bool
+  (= (ty/ssaAbiName a) (ty/ssaAbiName b))
+
 fn tailCall? env: FnEnv b: ty/SsaBlock -> Bool
   (mt (lastInstr b)
     ((none) false)
     ((some ins)
       (mt ins.op
         ((ty/opCall callee _)
-          (mt (nameIndexGet env.mod.functions callee)
-            ((none) false)
-            ((some f) (and (not (stringContains? callee "sysRoute."))
-                           (and (= (ty/ssaAbiName f.retTy) (ty/ssaAbiName env.retTy))
-                             (mt b.term
-                             ((ty/termReturn v) (= v ins.dest))
-                             ((ty/termJump e) (and (= e.args (list ins.dest)) (returnsParam? env e.target env.size)))
-                             (_ false)))))))
+          (and (not (stringContains? callee "sysRoute."))
+               (and (mt (nameIndexGet env.mod.functions callee)
+                      ((some f) (sameAbi? f.retTy env.retTy))
+                      ((none) (mt (nameIndexGet env.mod.externs callee)
+                                ((some e) (and e.typed (and (not (nativeExtern? e)) (and (not (hostDefined? callee)) (sameAbi? e.ret env.retTy)))))
+                                ((none) false))))
+                    (returnsDest? env b ins.dest))))
+        ((ty/opCallClosure _ args)
+          (and (sameAbi? env.retTy (ty/tyVal))
+               (and (<= (listLength args) (spillCapacity))
+                    (returnsDest? env b ins.dest))))
         (_ false))))
+
+fn closureTailArgs dest: String args: (List String) -> String
+  (stringJoin (map (fn [(i Int64)] -> String
+                     (let [(p (str "%" (llvmName dest) ".targ" i))]
+                       (str (spillSlotPtr p i) "  store %Val " (val (optionOr (listGet args i) "")) ", ptr " p "\n")))
+                   (range 0 (listLength args))) "")
 
 fn emitTailCall env: FnEnv ins: ty/SsaInstr -> String
   (mt ins.op
     ((ty/opCall callee args) (str (emitCall env (str "  " (val ins.dest) " = musttail ") ins.dest callee args)
                                   "  ret " (llTy env.retTy) " " (val ins.dest) "\n"))
+    ((ty/opCallClosure c args) (str (closureTailArgs ins.dest args)
+                                    "  " (val ins.dest) " = musttail call tailcc %Val @tailrt.closure(%Val " (val c) ", i64 " (listLength args) ", ptr @asl_rt_spill)\n"
+                                    "  ret %Val " (val ins.dest) "\n"))
     (_ (emitInstr env ins)))
 
 fn emitBlock env: FnEnv allocas: String isEntry: Bool frame: NameIndex b: ty/SsaBlock -> String
@@ -1798,7 +1841,7 @@ fn listBuilderText f: ty/SsaFunction -> String
                    "  store %Val %x, ptr %argp\n"
                    "  %y = call %Val @objrt.call(%Val %f, i64 1, ptr %argv)\n"))
         (link (str "link:\n"
-                   "  %cell = call ptr @asl_alloc_cons()\n"
+                   (str "  %cell = " (gc/fastConsCall) "\n")
                    "  %ccar = getelementptr inbounds i8, ptr %cell, i64 8\n"
                    "  store %Val " (if keepsAll "%y" "%x") ", ptr %ccar\n"
                    "  %ccdr = getelementptr inbounds i8, ptr %cell, i64 24\n"
@@ -1882,6 +1925,13 @@ fn emitCaptureInline i: Int64 -> String
          "  " p " = phi %Val [ " p ".fastval, %" lbl ".fast ], [ " p ".slowval, %" lbl ".slow ]\n"))
 
 fn emitTrampoline f: ty/SsaFunction -> String
+  (emitTrampolineAs f (str "define internal %Val " (codeSym f.name)) "  %result = ")
+
+fn emitTailTrampoline f: ty/SsaFunction -> String
+  (emitTrampolineAs f (str "define internal tailcc %Val " (tailCodeSym f.name))
+                    (if (= (ty/ssaAbiName f.retTy) (ty/ssaAbiName (ty/tyVal))) "  %result = musttail " "  %result = "))
+
+fn emitTrampolineAs f: ty/SsaFunction head: String lhs: String -> String
   (let [(caps (listLength f.captures))
         (n (listLength f.params))
         (capLines (stringJoin (map emitCaptureInline (range 0 caps)) ""))
@@ -1891,11 +1941,10 @@ fn emitTrampoline f: ty/SsaFunction -> String
                                     (range 0 n)) ""))
         (callArgs (listAppend (map (fn [(i Int64)] -> String (str "cap" i)) (range 0 caps))
                               (map (fn [(i Int64)] -> String (str "arg" i)) (range 0 n))))]
-    (str "define internal %Val " (codeSym f.name) "(%Val %env, i64 %argc, ptr %argv) {\nbb.entry:\n"
+    (str head "(%Val %env, i64 %argc, ptr %argv) {\nbb.entry:\n"
          capLines argLines
-         (tailCall "  %result = " "result" f.retTy f.name callArgs (signatureTypes f))
+         (tailCall lhs "result" f.retTy f.name callArgs (signatureTypes f))
          "  ret %Val %result\n}\n"))
-
 
 fn allOps m: ty/SsaModule -> (List ty/SsaOp)
   (listReverse (fold (fn [(acc (List ty/SsaOp)) (f ty/SsaFunction)] -> (List ty/SsaOp)
@@ -2027,10 +2076,10 @@ fn emitProto menv: ModEnv callee: String wasm: Bool -> String
   (let [(name (protoNameSym (protoNameIn menv.functions callee)))
         (arity (calleeArity menv callee))]
     (if wasm
-      (str (protoSym callee) " = private unnamed_addr constant { ptr, i32, ptr, i32, i32, i32, ptr, i32, i32, i32, ptr, i32, i32, i32, ptr, i32 } "
-           "{ ptr " name ", i32 0, ptr @protoFile.compiled, i32 0, i32 " arity ", i32 0, ptr null, i32 0, i32 0, i32 0, ptr null, i32 0, i32 0, i32 0, ptr " (codeSym callee) ", i32 0 }\n")
-      (str (protoSym callee) " = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr } "
-           "{ ptr " name ", ptr @protoFile.compiled, i32 " arity ", i32 0, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr " (codeSym callee) " }\n")))
+      (str (protoSym callee) " = private unnamed_addr constant { ptr, i32, ptr, i32, i32, i32, ptr, i32, i32, i32, ptr, i32, i32, i32, ptr, i32, ptr, i32 } "
+           "{ ptr " name ", i32 0, ptr @protoFile.compiled, i32 0, i32 " arity ", i32 0, ptr null, i32 0, i32 0, i32 0, ptr null, i32 0, i32 0, i32 0, ptr " (codeSym callee) ", i32 0, ptr " (tailCodeSym callee) ", i32 0 }\n")
+      (str (protoSym callee) " = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr, ptr } "
+           "{ ptr " name ", ptr @protoFile.compiled, i32 " arity ", i32 0, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr " (codeSym callee) ", ptr " (tailCodeSym callee) " }\n")))
 
 fn byteArray bytes: String n: Int64 -> String
   (str "[" (+ n 1) " x i8] c\"" bytes "\x5c00\"")
@@ -2040,7 +2089,7 @@ fn ptrTable sym: String names: (List String) -> String
     (str sym " = private unnamed_addr constant [0 x ptr] zeroinitializer\n")
     (str sym " = private unnamed_addr constant [" (listLength names) " x ptr] [" (stringJoin (map (fn [(x String)] -> String (str "ptr " (nameSym x))) names) ", ") "]\n"))
 
-fn emitConstants m: ty/SsaModule wasm: Bool -> String
+fn emitConstants m: ty/SsaModule wasm: Bool fieldIds: (List String) -> String
   (let [(menv (moduleEnv m))
         (strings m.strings)
         (strLines (listReverse (pairSecond (fold (fn [(acc (Pair Int64 (List String))) (s String)] -> (Pair Int64 (List String))
@@ -2057,7 +2106,7 @@ fn emitConstants m: ty/SsaModule wasm: Bool -> String
         (fieldIdLines (map (fn [(fld String)] -> String
                              (str (fieldIdSym fld) " = internal global i32 0\n"
                                   (fieldIdReadySym fld) " = internal global i1 false\n"))
-                           (fieldIdNames m)))
+                           fieldIds))
         (ctorIdLines (map (fn [(v String)] -> String
                             (str (ctorIdSym v) " = internal global i32 0\n"
                                  (ctorIdReadySym v) " = internal global i1 false\n"))
@@ -2079,7 +2128,7 @@ fn emitConstants m: ty/SsaModule wasm: Bool -> String
         (globalLines (map (fn [(g ty/SsaGlobal)] -> String
                             (if (sharedGlobal? g)
                               (str (globalSym g.name) " = weak global %Val zeroinitializer\n" (globalReadySym g.name) " = weak global i1 false\n")
-                              (str (globalSym g.name) " = internal global %Val zeroinitializer\n")))
+                              (str (globalSym g.name) " = internal global %Val zeroinitializer\n" (if (opt/singleton? g.name) (str (globalReadySym g.name) " = internal global i1 false\n") ""))))
                           m.globals))]
     (stringJoin (listAppend (listAppend strLines nameLines)
                              (listAppend (listAppend keyLines (listAppend idLines fieldIdLines))
@@ -2094,10 +2143,26 @@ fn emitInit m: ty/SsaModule -> String
            (stringJoin (map (fn [(i Int64)] -> String
                                (mt (listGet globals i)
                                  ((none) "")
-                                 ((some g) (if (sharedGlobal? g) (emitSharedInit i g)
-                                             (str "  %g." i " = call tailcc %Val " (fnSym g.init) "()\n  store %Val %g." i ", ptr " (globalSym g.name) "\n")))))
+                                 ((some g) (cond ((sharedGlobal? g) (emitSharedInit i g))
+                                                 ((opt/singleton? g.name) "")
+                                                 (else (str "  %g." i " = call tailcc %Val " (fnSym g.init) "()\n  store %Val %g." i ", ptr " (globalSym g.name) "\n"))))))
                              (range 0 (listLength globals))) "")
-           "  ret void\n}\n")))
+           "  ret void\n}\n"
+           (stringJoin (map emitSingletonGet (filter (fn [(g ty/SsaGlobal)] -> Bool (opt/singleton? g.name)) globals)) ""))))
+
+fn emitSingletonGet g: ty/SsaGlobal -> String
+  (let [(ready (globalReadySym g.name)) (sym (globalSym g.name))]
+    (str "define internal %Val " (globalGetSym g.name) "() alwaysinline {\nbb.entry:\n"
+         "  %ready = load i1, ptr " ready "\n"
+         "  br i1 %ready, label %bb.done, label %bb.init\n"
+         "bb.init:\n"
+         "  %v = call tailcc %Val " (fnSym g.init) "()\n"
+         "  store %Val %v, ptr " sym "\n"
+         "  store i1 true, ptr " ready "\n"
+         "  br label %bb.done\n"
+         "bb.done:\n"
+         "  %g = load %Val, ptr " sym "\n"
+         "  ret %Val %g\n}\n"))
 
 fn emitSharedInit i: Int64 g: ty/SsaGlobal -> String
   (let [(ready (globalReadySym g.name)) (sym (globalSym g.name)) (lbl (str "bb.global." i))]
@@ -2527,7 +2592,7 @@ fn seqFunctions -> (List (Pair String String))
         "  store i64 1, ptr %elemp"
         "  %datap = getelementptr inbounds i8, ptr %obj, i64 24"
         "  store ptr %data, ptr %datap"
-        "  %accounted = call i64 @gcAccount(ptr %obj, i64 %n)"
+        "  call void @gcAccount(ptr %obj, i64 %n)"
         "  %objw = ptrtoint ptr %obj to i64"
         "  %r = insertvalue %Val { i64 11, i64 0 }, i64 %objw, 1"
         "  ret %Val %r"
@@ -2660,7 +2725,7 @@ fn seqFunctions -> (List (Pair String String))
            "  unreachable\n}")))
 
 fn seqDecls -> (List String)
-  (list "declare ptr @calloc(i64, i64)" "declare ptr @memcpy(ptr, ptr, i64)" "declare i64 @gcAccount(ptr, i64)")
+  (list "declare ptr @calloc(i64, i64)" "declare ptr @memcpy(ptr, ptr, i64)" "declare void @gcAccount(ptr, i64)")
 
 fn strConstants -> (List (Pair String String))
   (map (fn [(p (Pair String String))] -> (Pair String String) (pair (pairFirst p) (mathText (pairFirst p) (pairSecond p))))
@@ -2865,54 +2930,99 @@ fn hostDecls -> (List String)
 fn hostDefined? name: String -> Bool
   (listContains? (list "mkBytes" "aslLogSpawn") name)
 
-fn mathRefers? text: String name: String -> Bool
-  (and (stringContains? text name)
-       (listAny? (fn [(d String)] -> Bool (stringContains? text (str name d))) (list "(" ")" "," " " "\n")))
+fn mathPiecesAll -> (List rterr/RefPiece)
+  (rterr/refPieces (list "(" ")" "," " " "\n")
+                   (listAppend (listAppend (listAppend (mathPieces) (listAppend (listAppend (seqConstants) (seqFunctions)) (listAppend (strConstants) (strFunctions)))) (opsrt/rtOpsPieces)) (listAppend (objrt/rtObjectPieces) (listAppend (hostConstants) (cons (pair "@tailrt.closure" (tailClosureFunction)) (hostFunctions))))))
 
-fn mathClose text: String chosen: (List String) pieces: (List (Pair String String)) -> (List String)
-  (let [(fresh (filter (fn [(p (Pair String String))] -> Bool (and (not (listContains? chosen (pairFirst p))) (mathRefers? text (pairFirst p)))) pieces))]
-    (if (listEmpty? fresh)
-      chosen
-      (mathClose (str (rterr/tailOf text) "\n" (stringJoin (map (fn [(p (Pair String String))] -> String (pairSecond p)) fresh) "\n")) (listAppend chosen (map (fn [(p (Pair String String))] -> String (pairFirst p)) fresh)) pieces)))
+fn tailClosureFunction -> String
+  (stringJoin (list
+    "define internal tailcc %Val @tailrt.closure(%Val %fn, i64 %argc, ptr %argv) {"
+    "entry:"
+    "  %tagw = extractvalue %Val %fn, 0"
+    "  %tag = trunc i64 %tagw to i32"
+    "  %isFn = icmp eq i32 %tag, 9"
+    "  br i1 %isFn, label %closure, label %slow"
+    "closure:"
+    "  %objw = extractvalue %Val %fn, 1"
+    "  %obj = inttoptr i64 %objw to ptr"
+    "  %protop = getelementptr inbounds i8, ptr %obj, i64 8"
+    "  %proto = load ptr, ptr %protop"
+    "  %codep = getelementptr inbounds i8, ptr %proto, i64 56"
+    "  %code = load ptr, ptr %codep"
+    "  %native = icmp ne ptr %code, null"
+    "  br i1 %native, label %arity, label %slow"
+    "arity:"
+    "  %np = getelementptr inbounds i8, ptr %proto, i64 16"
+    "  %n = load i32, ptr %np"
+    "  %n64 = sext i32 %n to i64"
+    "  %fits = icmp eq i64 %argc, %n64"
+    "  br i1 %fits, label %direct, label %slow"
+    "direct:"
+    "  %tailp = getelementptr inbounds i8, ptr %proto, i64 64"
+    "  %tail = load ptr, ptr %tailp"
+    "  %result = musttail call tailcc %Val %tail(%Val %fn, i64 %argc, ptr %argv)"
+    "  ret %Val %result"
+    "slow:"
+    "  %slowResult = call %Val @objrt.call(%Val %fn, i64 %argc, ptr %argv)"
+    "  ret %Val %slowResult"
+    "}") "\n")
+
+fn mathChosen pieces: (List rterr/RefPiece) chosen: (Map String Bool) -> (List String)
+  (map (fn [(p rterr/RefPiece)] -> String p.body) (filter (fn [(p rterr/RefPiece)] -> Bool (mapHas? chosen p.name)) pieces))
 
 fn mathDefinitions text: String -> (List String)
-  (let [(pieces (listAppend (listAppend (listAppend (mathPieces) (listAppend (listAppend (seqConstants) (seqFunctions)) (listAppend (strConstants) (strFunctions)))) (opsrt/rtOpsPieces)) (listAppend (objrt/rtObjectPieces) (listAppend (hostConstants) (hostFunctions)))))
-        (chosen (mathClose text (list) pieces))]
-    (map (fn [(p (Pair String String))] -> String (pairSecond p)) (filter (fn [(p (Pair String String))] -> Bool (listContains? chosen (pairFirst p))) pieces)))
+  (let [(pieces (mathPiecesAll))]
+    (mathChosen pieces (rterr/refClose text (mapEmpty) pieces)))
+
+fn mathDefinitionsJoin chunks: (List String) -> (List String)
+  (let [(pieces (mathPiecesAll))]
+    (mathChosen pieces (rterr/refCloseJoin chunks pieces)))
 
 fn formatHelpers -> (List String)
   (listAppend (listAppend (listAppend (listAppend (fmt/rtFormatLlvm) (fmt/rtFormatValueLlvm)) (fmt/rtFormatValLlvm)) (fmt/rtFormatManyLlvm))
               (fmt/rtFormatTerminalLlvm))
 
-fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool -> (List String)
+fn emitDefinitionsRooted m: ty/SsaModule entryCalls: String rooted: Bool fieldIds: (List String) -> (List String)
   (let [(menv (moduleEnv m))
         (framed (map (fn [(f ty/SsaFunction)] -> String (if (and (not rooted) (listBuilder? f)) (listBuilderText f) (emitFunctionRooted menv f rooted))) m.functions))
         (fns (if (listAny? (fn [(t String)] -> Bool (stringContains? t "@asl_gc_shadow_top")) framed) (cons (shadowTopDecl) framed) framed))
         (targets (closureTargets m))
-        (tramps (map emitTrampoline (filter (fn [(f ty/SsaFunction)] -> Bool (listContains? targets f.name)) m.functions)))
+        (tramps (map (fn [(f ty/SsaFunction)] -> String (str (emitTrampoline f) (emitTailTrampoline f))) (filter (fn [(f ty/SsaFunction)] -> Bool (listContains? targets f.name)) m.functions)))
         (resolvers (map (fn [(t String)] -> String (emitVariantIdsInit menv t)) (switchTypes m)))
-        (fieldResolvers (map emitFieldIdInit (fieldIdNames m)))
+        (fieldResolvers (map emitFieldIdInit fieldIds))
         (ctorResolvers (map emitCtorIdInit (constructedVariants m)))
         (schemaResolvers (map (fn [(s String)] -> String (emitSchemaIdInit s (recordSchemaFields m s))) (constructedSchemas m)))
         (init (emitInit m))]
     (let [(core (listAppend (listAppend (listAppend (listAppend (listAppend (listAppend fns tramps) resolvers) fieldResolvers) ctorResolvers) schemaResolvers)
                             (if (stringEmpty? init) (list) (list init))))
-          (base (listAppend core (mathDefinitions (stringJoin core "\n"))))
-          (baseText (str (stringJoin base "\n") "\n" entryCalls))
-          (reached (stringJoin (rterr/rtErrorDefinitions baseText) "\n"))
+          (base (listAppend core (mathDefinitionsJoin core)))
+          (rtPieces (rterr/rtErrorPieces))
+          (reachedDefs (rterr/rtErrorDefinitionsJoin rtPieces (withEntryCalls base entryCalls)))
+          (reached (stringJoin reachedDefs "\n"))
           (rendering (or (stringContains? reached "@asl_rt_format_") (stringContains? reached "@rtfmt_render(")))
-          (callers (if (or rendering (listAny? formatOp? (allOps m))) (listAppend base (formatHelpers)) base))
-          (callerText (str (stringJoin callers "\n") "\n" entryCalls))]
-      (listAppend callers (rterr/rtErrorDefinitions callerText))))
+          (formats (or rendering (listAny? formatOp? (allOps m))))
+          (callers (if formats (listAppend base (formatHelpers)) base))]
+      (let [(defs (listAppend callers (if formats (rterr/rtErrorDefinitionsJoin rtPieces (withEntryCalls callers entryCalls)) reachedDefs)))]
+        (listAppend defs (gc/fastAllocDefinitions (rterr/refKeysJoin (mapEmpty) (withEntryCalls defs entryCalls)) (not rooted))))))
+
+fn withEntryCalls defs: (List String) entryCalls: String -> (List String)
+  (if (listEmpty? defs) (list "" entryCalls) (listAppend defs (list entryCalls)))
 
 fn exportDefinitions roots: String calls: Bool -> (List String)
   (let [(callDefs (if calls (mathDefinitions "@aslCall(") (list)))]
     (listAppend callDefs (rterr/rtErrorDefinitions (str roots "\n" (stringJoin callDefs "\n")))))
 
 fn valueExports defs: (List String) -> (List String)
-  (let [(text (stringJoin defs "\n"))]
-    (filter (fn [(piece String)] -> Bool (not (stringContains? text (stringTrim piece))))
+  (let [(text (stringJoin defs "\n"))
+        (keys (rterr/refKeys text))]
+    (filter (fn [(piece String)] -> Bool (pieceAbsent? keys text piece))
             (exportDefinitions (valrt/rtValueExportRoots) (stringContains? text "call %Val @asl_rt_builtin_"))))
+
+fn pieceAbsent? keys: (Map String Bool) text: String piece: String -> Bool
+  (let [(trimmed (stringTrim piece))]
+    (mt (rterr/refFirstKey trimmed)
+      ((some k) (if (mapHas? keys k) (not (stringContains? text trimmed)) true))
+      ((none) (not (stringContains? text trimmed)))))
 
 fn cRuntimeModule -> String
   (let [(wrappers (stringJoin (list "define i32 @intern(ptr %text, i64 %length) {" "entry:" "  %id = call i32 @valrt.intern(ptr %text, i64 %length)" "  ret i32 %id" "}" ""
@@ -2929,8 +3039,8 @@ fn cRuntimeModule -> String
                      (usedDecls defs (listAppend (listAppend (listAppend (rterr/rtErrorDecls) (valrt/rtValueDecls)) (objrt/rtObjectDecls)) (runtimeDecls)))))]
     (str "source_filename = \"aslRuntime\"\n\n%Val = type { i64, i64 }\n\n" defs "\n" (stringJoin decls "\n") "\n"))
 
-fn assemble m: ty/SsaModule definitions: (List String) wasm: Bool -> String
-  (let [(consts (emitConstants m wasm))
+fn assemble m: ty/SsaModule definitions: (List String) wasm: Bool fieldIds: (List String) -> String
+  (let [(consts (emitConstants m wasm fieldIds))
         (defs (stringJoin definitions "\n"))
         (externs (map (fn [(e ty/SsaExtern)] -> String
                         (cond
@@ -2940,17 +3050,24 @@ fn assemble m: ty/SsaModule definitions: (List String) wasm: Bool -> String
                       (filter (fn [(e ty/SsaExtern)] -> Bool (not (or (hostDefined? e.name) (valrt/rtValueDefines? defs e.name)))) m.externs)))
         (spill (if (stringContains? defs "@asl_rt_spill") (list (str "@asl_rt_spill = external global [" (spillCapacity) " x %Val]")) (list)))
         (externGlobals (map (fn [(n String)] -> String (str (externGlobalSym n) " = external global ptr")) (loadGlobalNames m)))
-        (moduleDecls (listAppend (listAppend (listAppend externs spill) externGlobals) (listAppend (usedRuntimeDecls defs) (usedDecls defs (intrinsicDecls)))))
+        (defKeys (rterr/refKeys defs))
+        (moduleDecls (listAppend (listAppend (listAppend externs spill) externGlobals) (listAppend (usedDeclsIn defKeys defs (runtimeDecls)) (usedDeclsIn defKeys defs (intrinsicDecls)))))
         (formatDecls (fold (fn [(acc (List String)) (d String)] -> (List String)
                              (if (listAny? (fn [(e String)] -> Bool (= (declSymbol e) (declSymbol d))) (listAppend moduleDecls acc)) acc (listAppend acc (list d))))
-                           (list) (usedDecls defs (listAppend (listAppend (listAppend (listAppend (listAppend (fmt/rtFormatDecls) (rterr/rtErrorDecls)) (seqDecls)) (strDecls)) (opsrt/rtOpsDecls)) (listAppend (listAppend (objrt/rtObjectDecls) (hostDecls)) (valrt/rtValueDecls))))))
+                           (list) (usedDeclsIn defKeys defs (listAppend (listAppend (listAppend (listAppend (listAppend (fmt/rtFormatDecls) (rterr/rtErrorDecls)) (seqDecls)) (strDecls)) (opsrt/rtOpsDecls)) (listAppend (listAppend (objrt/rtObjectDecls) (hostDecls)) (valrt/rtValueDecls))))))
         (decls (filter (fn [(d String)] -> Bool (not (valueDefinedDecl? defs d))) (listAppend moduleDecls formatDecls)))]
     (str "source_filename = \"" (llvmBytes m.name) "\"\n\n"
-         (if (stringContains? (str defs (stringJoin decls "\n")) "%Val") "%Val = type { i64, i64 }\n\n" "")
+         (if (mentionsVal? defs (stringJoin decls "\n")) "%Val = type { i64, i64 }\n\n" "")
 
          (if (stringEmpty? consts) "" (str consts "\n"))
          defs
          (if (listEmpty? decls) "" (str "\n" (stringJoin decls "\n") "\n"))))
+
+fn mentionsVal? a: String b: String -> Bool
+  (or (stringContains? a "%Val")
+      (or (stringContains? b "%Val")
+          (let [(n (stringLength a))]
+            (stringContains? (str (optionOr (stringSlice a (max 0 (- n 3)) n) a) (optionOr (stringSlice b 0 (min 3 (stringLength b))) b)) "%Val"))))
 
 fn valueDefinedDecl? defs: String decl: String -> Bool
   (let [(sym (declSymbol decl))
@@ -3063,7 +3180,7 @@ fn emitLlvmModuleWasm32 m: ty/SsaModule -> (Result String (List ty/IrDiag))
 fn emitModuleWith m: ty/SsaModule wasm: Bool -> (Result String (List ty/IrDiag))
   (mt (vfy/verifySsa m)
     ((err diags) (err diags))
-    ((ok _) (let [(e (entryBuiltins m)) (bad (emitDiags e))] (if (listEmpty? bad) (ok (assemble e (emitDefinitionsRooted e "" wasm) wasm)) (err bad)))))
+    ((ok _) (let [(e (entryBuiltins m)) (bad (emitDiags e)) (fids (fieldIdNames e))] (if (listEmpty? bad) (ok (assemble e (emitDefinitionsRooted e "" wasm fids) wasm fids)) (err bad)))))
 
 fn replaceFunction text: String signature: String replacement: String -> String
   (mt (stringIndexOf text signature)
@@ -3160,10 +3277,11 @@ fn emitEntry m: ty/SsaModule entry: String wasm: Bool -> (Result String (List ty
 
           ((some f)
             (cond
-              ((takesArgList f) (let [(defs (emitDefinitionsRooted m (emitArgsMain m f) wasm))]
-                                  (ok (assemble m (listAppend (listAppend defs (valueExports defs)) (list (emitArgsMain m f))) wasm))))
+              ((takesArgList f) (let [(fids (fieldIdNames m)) (defs (emitDefinitionsRooted m (emitArgsMain m f) wasm fids))]
+                                  (ok (assemble m (listAppend (listAppend defs (valueExports defs)) (list (emitArgsMain m f))) wasm fids))))
               ((not (and (listEmpty? f.params) (listEmpty? f.captures))) (err (entryDiag (str "entry function '" entry "' must take no parameters, or one Val parameter (the argument list) and return a Val Result, and no captures") entry)))
               (else
-                (let [(defs (emitDefinitionsRooted m (emitMain m f false) wasm))
-                      (usesRuntime (or (not (listEmpty? (usedRuntimeDecls (stringJoin defs "\n")))) (= (ty/ssaAbiName f.retTy) "val")))]
-                  (ok (assemble m (listAppend (if usesRuntime (listAppend defs (valueExports defs)) defs) (list (emitMain m f usesRuntime))) wasm))))))))
+                (let [(fids (fieldIdNames m))
+                      (defs (emitDefinitionsRooted m (emitMain m f false) wasm fids))
+                      (usesRuntime (or (not (listEmpty? (usedDeclsJoin defs (runtimeDecls)))) (= (ty/ssaAbiName f.retTy) "val")))]
+                  (ok (assemble m (listAppend (if usesRuntime (listAppend defs (valueExports defs)) defs) (list (emitMain m f usesRuntime))) wasm fids))))))))

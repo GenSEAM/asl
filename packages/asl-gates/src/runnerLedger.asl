@@ -165,7 +165,7 @@ fn reconcile! results: (List sr/SuiteResult) ledger: (List LedgerEntry) root: St
                      :notEvaluated (pairSecond step2)
                      :held held))
 
-fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvaluated: Int64 held: Int64 deltaForm: String excluded: String scope: String -> (Pair String Bool)
+fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvaluated: Int64 held: Int64 deltaForm: String excluded: String scope: String frozen: Int64 -> (Pair String Bool)
   (let [(passed (and (listEmpty? checks) (not (listEmpty? results))))
         (status (if passed ":passed" ":failed"))
         (passedSuites (fold (fn [(acc Int64) (r sr/SuiteResult)] -> Int64
@@ -181,7 +181,8 @@ fn receipt results: (List sr/SuiteResult) checks: (List ReconcileCheck) notEvalu
                    " :notEvaluated " (stringFromInt64 notEvaluated)
                    " :executedAsserts " (stringFromInt64 executedAsserts)
                    " :executedRefutes " (stringFromInt64 executedRefutes)
-                   " :declaredAsserts " (stringFromInt64 declaredAsserts)))
+                   " :declaredAsserts " (stringFromInt64 declaredAsserts)
+                   " :frozen " (stringFromInt64 frozen)))
         (parts1 (list head))
         (parts2 (if (listEmpty? results)
                   (cons "(:check :id discovery :status :failed :err ERR_NO_SUITES :ev \"no suite discovered in scope\")" parts1)

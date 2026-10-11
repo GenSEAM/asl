@@ -1,6 +1,6 @@
 (module asl-http/download
   :x [HttpDownload curlTimeout httpDownload httpHead]
-  :i [])
+  :i [(asl-proc/process :a proc)])
 
 (schema HttpDownload
   (:f status Int64)
@@ -46,36 +46,14 @@ fn removeIfPresent! path: String -> (Result Unit String)
     ((err e) (if (stringStartsWith? e "notFound") (ok ()) (err e)))
     ((ok _) (pathRemove path)))
 
-fn ! readAll! fd: Int64 -> (Result String String)
-  (mt (fdRead fd 4096)
-    ((err e) (err e))
-    ((ok chunk)
-      (if (= (stringLength chunk) 0) (ok "")
-        (mt (readAll! fd)
-          ((err e) (err e))
-          ((ok rest) (ok (str chunk rest)))))))
-
-fn waitChild! sp: SpawnedProc -> (Result (Pair Int64 String) String)
-  (do
-    (fdClose sp.stdin)
-    (fdClose sp.stdout)
-    (mt (readAll! sp.stderr)
-      ((err e) (do (fdClose sp.stderr) (err (str "ERR_CHILD_STDERR_READ: " e))))
-      ((ok stderr)
-        (do
-          (fdClose sp.stderr)
-          (mt (procWaitPid sp.pid false)
-            ((err e) (err e))
-            ((ok code) (mt code ((some n) (ok (pair n stderr))) ((none) (err "ERR_CHILD_NO_EXIT")))))))))
-
 fn curl! argv: (List String) -> (Result Int64 String)
-  (mt (procSpawnv argv (none) (none))
-    ((err e) (err (str "ERR_CURL_SPAWN: " e)))
-    ((ok sp)
-      (mt (waitChild! sp)
-        ((err e) (err e))
-        ((ok result) (if (= (pairFirst result) 0) (ok 0)
-          (err (str "ERR_HTTP_CURL: " (stringFromInt64 (pairFirst result)) ": " (pairSecond result))))))))
+  (mt (listHead argv)
+    ((none) (err "ERR_CURL_SPAWN: empty argv"))
+    ((some bin)
+      (mt (proc/exec! (proc/withTimeout (proc/cmd bin (optionOr (listSlice argv 1 (listLength argv)) (list))) 300000))
+        ((err e) (err (str "ERR_CURL_SPAWN: " e)))
+        ((ok output) (if (= output.exitCode 0) (ok 0)
+          (err (str "ERR_HTTP_CURL: " (stringFromInt64 output.exitCode) ": " output.stderr)))))))
 
 fn headCleanupError! headers: String cause: String -> (Result (Pair Int64 Int64) String)
   (mt (removeIfPresent! headers)
@@ -95,28 +73,9 @@ fn downloadTempCleanupError! tmp: String cause: String -> (Result HttpDownload S
     ((ok _) (err cause)))
 
 fn shaFile! path: String -> (Result String String)
-  (mt (procSpawnv (list "sha256sum" "--" path) (none) (none))
-    ((err e) (err (str "ERR_SHA256_SPAWN: " e)))
-    ((ok sp)
-      (do
-        (fdClose sp.stdin)
-        (fdClose sp.stderr)
-        (mt (procWaitPid sp.pid false)
-          ((err e) (do (fdClose sp.stdout) (err e)))
-          ((ok status)
-            (mt status
-              ((none) (do (fdClose sp.stdout) (err "ERR_SHA256_NO_EXIT")))
-              ((some code)
-                (if (!= code 0)
-                  (do (fdClose sp.stdout) (err "ERR_SHA256_FAILED"))
-                  (mt (fdRead sp.stdout 256)
-                    ((err e) (do (fdClose sp.stdout) (err (str "ERR_SHA256_READ: " e))))
-                    ((ok output)
-                      (do
-                        (fdClose sp.stdout)
-                        (mt (listHead (stringSplit (stringTrim output) " "))
-                          ((some hash) (ok hash))
-                          ((none) (err "ERR_SHA256_OUTPUT"))))))))))))))
+  (mt (fileReadBytes path)
+    ((err e) (err (str "ERR_SHA256_READ: " e)))
+    ((ok bytes) (ok (bytesSha256 bytes))))
 
 fn ! httpHead url: String timeoutMs: Int64 -> (Result (Pair Int64 Int64) String)
   (if (<= timeoutMs 0)

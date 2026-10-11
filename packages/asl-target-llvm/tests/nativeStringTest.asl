@@ -202,7 +202,7 @@ fn ! testStaleNames -> Bool
                      (list) files))]
     (do
       (assert (> (listLength files) 60) (str "scans the package and the host runtime, got " (listLength files) " files"))
-      (assert (listAny? (fn [(f String)] -> Bool (stringEndsWith? f "/abi.c")) files) "scans asl/host/src/abi.c")
+      (assert (listAny? (fn [(f String)] -> Bool (stringEndsWith? f "/rtAbi.asl")) files) "scans asl-target-llvm/src/rtAbi.asl (RT-ABI ported abi.c's builtins here; abi.c itself is gone)")
       (assert (listEmpty? stale) (str "no source names a deleted entry; stale: " (stringJoin stale "; ")))
       true))
 

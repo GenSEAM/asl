@@ -11,7 +11,7 @@ fn csvSlice text: String start: Int64 end: Int64 -> String
 
 fn csvTypeList spec: String -> (Result (List String) String)
   (let [(bytes (stringToBytes spec)) (n (bytesLength bytes))
-        (loop (fn [loop start pos acc] -> (Result (List String) String)
+        (step (fn [step start pos acc] -> (Result (List String) String)
           (if (>= pos n)
             (let [(last (csvSlice spec start pos))]
               (if (or (= last "f64") (or (= last "i64") (= last "i8")))
@@ -19,10 +19,10 @@ fn csvTypeList spec: String -> (Result (List String) String)
             (if (= (bytesGet bytes pos) 44)
               (let [(part (csvSlice spec start pos))]
                 (if (or (= part "f64") (or (= part "i64") (= part "i8")))
-                  (loop loop (+ pos 1) (+ pos 1) (cons part acc))
+                  (step step (+ pos 1) (+ pos 1) (cons part acc))
                   (err (str "unsupported CSV type: " part))))
-              (loop loop start (+ pos 1) acc)))))]
-    (if (= n 0) (err "empty CSV type specification") (loop loop 0 0 (list))))
+              (step step start (+ pos 1) acc)))))]
+    (if (= n 0) (err "empty CSV type specification") (step step 0 0 (list))))
 
 fn csvScanField text: String bytes: Bytes pos: Int64 -> CsvField
   (let [(n (bytesLength bytes)) (firstByte (bytesGet bytes pos))]
@@ -46,7 +46,7 @@ fn csvScanField text: String bytes: Bytes pos: Int64 -> CsvField
 
 fn csvScanRow text: String bytes: Bytes pos: Int64 -> (Result CsvRowScan String)
   (let [(n (bytesLength bytes))
-        (loop (fn [loop at acc] -> (Result CsvRowScan String)
+        (step (fn [step at acc] -> (Result CsvRowScan String)
           (let [(field (csvScanField text bytes at))]
             (if (not field.valid) (err field.message)
               (let [(value field.value) (next field.next)]
@@ -54,24 +54,24 @@ fn csvScanRow text: String bytes: Bytes pos: Int64 -> (Result CsvRowScan String)
                 (let [(sep (bytesGet bytes next))]
                   (if (= sep 44)
                     (if (= (+ next 1) n) (ok (CsvRowScan :fields (listReverse (cons "" (cons value acc))) :next n))
-                      (loop loop (+ next 1) (cons value acc)))
+                      (step step (+ next 1) (cons value acc)))
                     (if (= sep 10) (ok (CsvRowScan :fields (listReverse (cons value acc)) :next (+ next 1)))
                       (if (= sep 13)
                         (if (and (< (+ next 1) n) (= (bytesGet bytes (+ next 1)) 10))
                           (ok (CsvRowScan :fields (listReverse (cons value acc)) :next (+ next 2)))
                           (err "bare carriage return in CSV"))
                       (err "invalid CSV field boundary")))))))))))]
-    (loop loop pos (list)))
+    (step step pos (list)))
 
 fn csvParseRows text: String -> (Result (List (List String)) String)
   (let [(bytes (stringToBytes text)) (n (bytesLength bytes))
-        (loop (fn [loop pos width acc] -> (Result (List (List String)) String)
+        (step (fn [step pos width acc] -> (Result (List (List String)) String)
           (if (>= pos n) (ok (listReverse acc))
             (if (or (= (bytesGet bytes pos) 10) (= (bytesGet bytes pos) 13))
               (if (= (bytesGet bytes pos) 13)
                 (if (and (< (+ pos 1) n) (= (bytesGet bytes (+ pos 1)) 10))
-                  (loop loop (+ pos 2) width acc) (err "bare carriage return in CSV"))
-                (loop loop (+ pos 1) width acc))
+                  (step step (+ pos 2) width acc) (err "bare carriage return in CSV"))
+                (step step (+ pos 1) width acc))
               (mt (csvScanRow text bytes pos)
                 ((err e) (err e))
                 ((ok row)
@@ -80,38 +80,38 @@ fn csvParseRows text: String -> (Result (List (List String)) String)
                         (fieldCount (listLength fields))]
                       (if (and (> width 0) (!= width fieldCount))
                         (err (str "inconsistent CSV row width at row " (stringFromInt64 (listLength acc)) ": expected " (stringFromInt64 width) " fields, got " (stringFromInt64 fieldCount)))
-                        (loop loop after fieldCount (cons fields acc))))))))))]
-    (if (= n 0) (ok (list)) (loop loop 0 0 (list))))
+                        (step step after fieldCount (cons fields acc))))))))))]
+    (if (= n 0) (ok (list)) (step step 0 0 (list))))
 
 fn csvRowsRest rows: (List (List String)) -> (List (List String))
   (optionOr (listTail rows) (list))
 
 fn csvFloatArray rows: (List (List String)) col: Int64 -> F64Array
-  (let [(loop (fn [loop rest acc] -> (List F64Array)
+  (let [(step (fn [step rest acc] -> (List F64Array)
           (mt (listHead rest)
             ((none) (listReverse acc))
             ((some row)
               (let [(value (optionOr (stringToFloat64 (optionOr (listGet row col) "")) 0.0))]
-                (loop loop (csvRowsRest rest) (cons (f64ArrayGenerate 1 (fn [i] value)) acc)))))))]
-    (f64ArrayConcat (loop loop rows (list))))
+                (step step (csvRowsRest rest) (cons (f64ArrayGenerate 1 (fn [i] value)) acc)))))))]
+    (f64ArrayConcat (step step rows (list))))
 
 fn csvIntArray rows: (List (List String)) col: Int64 -> I64Array
-  (let [(loop (fn [loop rest acc] -> (List I64Array)
+  (let [(step (fn [step rest acc] -> (List I64Array)
           (mt (listHead rest)
             ((none) (listReverse acc))
             ((some row)
               (let [(value (optionOr (stringToInt64 (optionOr (listGet row col) "")) 0))]
-                (loop loop (csvRowsRest rest) (cons (i64ArrayGenerate 1 (fn [i] value)) acc)))))))]
-    (i64ArrayConcat (loop loop rows (list))))
+                (step step (csvRowsRest rest) (cons (i64ArrayGenerate 1 (fn [i] value)) acc)))))))]
+    (i64ArrayConcat (step step rows (list))))
 
 fn csvByteArray rows: (List (List String)) col: Int64 -> I8Array
-  (let [(loop (fn [loop rest acc] -> (List I8Array)
+  (let [(step (fn [step rest acc] -> (List I8Array)
           (mt (listHead rest)
             ((none) (listReverse acc))
             ((some row)
               (let [(value (optionOr (stringToInt64 (optionOr (listGet row col) "")) 0))]
-                (loop loop (csvRowsRest rest) (cons (i8ArrayGenerate 1 (fn [i] value)) acc)))))))]
-    (i8ArrayConcat (loop loop rows (list))))
+                (step step (csvRowsRest rest) (cons (i8ArrayGenerate 1 (fn [i] value)) acc)))))))]
+    (i8ArrayConcat (step step rows (list))))
 
 fn csvValidateCell typeName: String value: String -> Bool
   (if (= typeName "f64")

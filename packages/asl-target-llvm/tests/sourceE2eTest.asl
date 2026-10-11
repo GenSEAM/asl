@@ -215,6 +215,7 @@ fn fibGolden -> String
       "  br i1 %one, label %install, label %done"
       "install:"
       "  %rc = call i32 @atexit(ptr @rterr.report)"
+      "  %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)"
       "  %failed = icmp ne i32 %rc, 0"
       "  br i1 %failed, label %fail, label %done"
       "fail:"
@@ -252,6 +253,7 @@ fn fibGolden -> String
       "declare i32 @fflush(ptr)"
       "declare ptr @getenv(ptr)"
       "declare i32 @atexit(ptr)"
+      "declare i32 @unsetenv(ptr)"
       "declare void @longjmp(ptr, i32) noreturn"
       "")
     "\n")

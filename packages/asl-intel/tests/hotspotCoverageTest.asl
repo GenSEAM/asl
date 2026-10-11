@@ -6,7 +6,6 @@
       runTests]
   :i [(hotspotCoverage :a hc)])
 
-"Verifies planned traversal DAG construction and target counting."
 fn testPlanCreation -> Bool
   (let [(p0 (hc/createPlannedTraversal "plan-audit" "Remediation Audit Plan" 2000))
         (t1 (hc/createHotspotTarget "asl-engine:q" "asl/bin/asl-engine" "OP: q" 12 1 "Broken RPC redirect" 2))
@@ -20,7 +19,6 @@ fn testPlanCreation -> Bool
     (assert (stringContains? p3.title "Remediation") "Plan title must contain Remediation")
     true)
 
-"Verifies actual inspection visit recording and token accumulation."
 fn testCoverageRecording -> Bool
   (let [(c0 (hc/createActualCoverage "run-01" "session-test"))
         (v1 (hc/recordVisit "asl-engine:q" "asl/bin/asl-engine" 2 "verified" 1 150))
@@ -33,7 +31,6 @@ fn testCoverageRecording -> Bool
     (assert (not (hc/isTargetVisited? "asl-engine:patch" c2.visits)) "Target asl-engine:patch must not be visited")
     true)
 
-"Verifies planned versus actual traversal path gap and drift detection."
 fn testGapAnalysisAndComparison -> Bool
   (let [(p0 (hc/createPlannedTraversal "plan-audit" "Full Remediation Audit" 5000))
         (t1 (hc/createHotspotTarget "asl-engine:q" "asl/bin/asl-engine" "q" 12 1 "Fix redirect" 2))
@@ -58,7 +55,6 @@ fn testGapAnalysisAndComparison -> Bool
     (assert (not comp.isComplete) "Audit must not be complete while gaps remain")
     true)
 
-"Verifies structured ASN report generation and Adjacency DSL graph rendering."
 fn testReportFormatting -> Bool
   (let [(p0 (hc/createPlannedTraversal "plan-01" "Test Plan" 1000))
         (t1 (hc/createHotspotTarget "target-a" "fileA.asl" "symA" 5 1 "Test A" 2))
@@ -76,7 +72,6 @@ fn testReportFormatting -> Bool
     (assert (stringContains? graph ":traversal-graph (plan-01 > target-a:covered target-b:gap)") "Graph must render Adjacency DSL with covered/gap status")
     true)
 
-"Runs all hotspot coverage test suites."
 fn runTests -> Bool
   (let [(t1 (testPlanCreation))
         (t2 (testCoverageRecording))

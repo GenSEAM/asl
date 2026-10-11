@@ -95,7 +95,7 @@ fn ! runTests -> Bool
         (work (stringReplace made.stdout "\n" ""))]
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
         (testFloorObject work "gcAsl.o" "mmap")
-        (testFloorObject work "strFloor.o" "asl_alloc")
+        (testFloorObject work "rtFloor.o" "write")
         (testFits work)
         (testExhausts work)
         (assert (= (sh (str "rm -rf " work)).exitCode 0) "work directory removed")

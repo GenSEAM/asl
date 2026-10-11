@@ -164,9 +164,9 @@ fn rawScore c: Candidate r: Rule q: Request s: EndpointState calibration: (Optio
 fn mergeSampling c: Candidate cal: (Option ModelCalibration) -> Candidate
   (mt cal
     ((some m) (Candidate :endpoint c.endpoint :model c.model :weight c.weight
-       :temperature (optionOr c.temperature (some m.temperature))
-       :topP (optionOr c.topP (some m.topP)) :maxTokens (optionOr c.maxTokens (some m.maxTokens))
-       :effort (optionOr c.effort (some m.effort))
+       :temperature (if (some? c.temperature) c.temperature (some m.temperature))
+       :topP (if (some? c.topP) c.topP (some m.topP)) :maxTokens (if (some? c.maxTokens) c.maxTokens (some m.maxTokens))
+       :effort (if (some? c.effort) c.effort (some m.effort))
        :stopSet true :stop (if c.stopSet c.stop m.stop)))
     ((none) c))
 

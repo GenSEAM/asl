@@ -1,14 +1,2 @@
-"expect-only: literal-range"
-
-"The literal is one past Int64's greatest value. Nothing has been computed, so"
-
-"section 3.1's trap does not apply — the program is wrong before it runs. It has"
-
-"to be rejected here because the former hosts disagreed about it silently: Python has no"
-
-"width to notice with and answers 9223372036854775808, while rustc refuses the"
-
-"same literal outright."
-
 fn ceiling -> Int64
   9223372036854775808

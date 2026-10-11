@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema resolveDepTarget resolveModule safeTail secondExprEmpty sexprToList sliceFrom withImports] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool))
 
@@ -30,29 +30,29 @@ fn isQualifiedName? s: String -> Bool
 fn makeDiag code: String msg: String path: String -> ty/Diagnostic
   (ty/Diagnostic :code code :message msg :msg msg :line 1 :col 1 :path path)
 
-fn collectFieldsStep fields: (List a/AstField) idx: Int64 len: Int64 acc: (List FieldSummary) -> (List FieldSummary)
-  (if (>= idx len) acc (let [(f (optionOr (listGet fields idx) (a/AstField :name "" :type "" :docstring "" :default (none) :json (none)))) (s (FieldSummary :name f.name :type f.type :hasDefault (some? f.default)))] (collectFieldsStep fields (+ idx 1) len (listAppend acc (list s)))))
+fn collectFieldsStep fields: (List a/AstField) -> (List FieldSummary)
+  (map (fn [(f a/AstField)] -> FieldSummary (FieldSummary :name f.name :type f.type :hasDefault (some? f.default))) fields)
 
 fn collectFields fields: (List a/AstField) -> (List FieldSummary)
-  (collectFieldsStep fields 0 (listLength fields) (list))
+  (collectFieldsStep fields)
 
-fn collectParamsStep params: (List a/Param) idx: Int64 len: Int64 acc: (List (Pair String String)) -> (List (Pair String String))
-  (if (>= idx len) acc (let [(p (optionOr (listGet params idx) (a/Param :name "" :type "")))] (collectParamsStep params (+ idx 1) len (listAppend acc (list (pair p.name p.type))))))
+fn collectParamsStep params: (List a/Param) -> (List (Pair String String))
+  (map (fn [(p a/Param)] -> (Pair String String) (pair p.name p.type)) params)
 
 fn collectCaseParams params: (List a/Param) -> (List (Pair String String))
-  (collectParamsStep params 0 (listLength params) (list))
+  (collectParamsStep params)
 
-fn collectCasesStep cases: (List a/EnumCase) idx: Int64 len: Int64 acc: (List CaseSummary) -> (List CaseSummary)
-  (if (>= idx len) acc (let [(c (optionOr (listGet cases idx) (a/EnumCase :name "" :fields (list) :docstring ""))) (s (CaseSummary :name c.name :params (collectCaseParams c.fields)))] (collectCasesStep cases (+ idx 1) len (listAppend acc (list s)))))
+fn collectCasesStep cases: (List a/EnumCase) -> (List CaseSummary)
+  (map (fn [(c a/EnumCase)] -> CaseSummary (CaseSummary :name c.name :params (collectCaseParams c.fields))) cases)
 
 fn collectCases cases: (List a/EnumCase) -> (List CaseSummary)
-  (collectCasesStep cases 0 (listLength cases) (list))
+  (collectCasesStep cases)
 
 fn collectFunParams params: (List a/Param) -> (List (Pair String String))
-  (collectParamsStep params 0 (listLength params) (list))
+  (collectParamsStep params)
 
 fn collectSummary forms: (List a/TopForm) path: String -> ModuleSummary
-  (let [(modHeader (fold (fn [(acc (Option a/ModuleNode)) (form a/TopForm)] -> (Option a/ModuleNode) (mt form ((a/topModule m) (some m)) (_ acc))) (none) forms)) (hasHdr (mt modHeader ((some _) true) ((none) false))) (hdrDoc (mt modHeader ((some m) (not (stringEmpty? m.docstring))) ((none) false))) (modName (mt modHeader ((some m) (let [(p m.path)] (if (stringEmpty? p) path p))) ((none) path))) (rawExports (mt modHeader ((some m) m.exported) ((none) (list)))) (exports (filter (fn [(e String)] -> Bool (not (isPascalName? e))) rawExports)) (exportedTypes (filter (fn [(e String)] -> Bool (isPascalName? e)) rawExports)) (importsList (mt modHeader ((some m) m.imports) ((none) (list)))) (importsMap (fold (fn [(acc (Map String String)) (p (Pair String String))] -> (Map String String) (mapSet acc (pairSecond p) (pairFirst p))) (mapEmpty) importsList)) (funsMap (fold (fn [(acc (Map String FunSummary)) (form a/TopForm)] -> (Map String FunSummary) (mt form ((a/topDefun d) (let [(fparams (collectFunParams d.params)) (pTypes (map pairSecond fparams)) (tvars (if (listEmpty? d.typeVars) (ty/collectTvars pTypes d.retType) d.typeVars))] (mapSet acc d.name (FunSummary :name d.name :params fparams :ret d.retType :typevars tvars :hasDoc (not (stringEmpty? d.docstring)) :effect d.effect)))) (_ acc))) (mapEmpty) forms)) (schemasMap (fold (fn [(acc (Map String SchemaSummary)) (form a/TopForm)] -> (Map String SchemaSummary) (mt form ((a/topSchema s) (mapSet acc s.name (SchemaSummary :name s.name :typevars s.typeVars :fields (collectFields s.fields)))) (_ acc))) (mapEmpty) forms)) (enumsMap (fold (fn [(acc (Map String EnumSummary)) (form a/TopForm)] -> (Map String EnumSummary) (mt form ((a/topEnum e) (mapSet acc e.name (EnumSummary :name e.name :typevars e.typeVars :cases (collectCases e.cases)))) (_ acc))) (mapEmpty) forms)) (caseOwnerMap (fold (fn [(acc (Map String String)) (form a/TopForm)] -> (Map String String) (mt form ((a/topEnum e) (fold (fn [(cacc (Map String String)) (c a/EnumCase)] -> (Map String String) (mapSet cacc c.name e.name)) acc e.cases)) (_ acc))) (mapEmpty) forms)) (expCases (fold (fn [(acc (Map String String)) (tname String)] -> (Map String String) (mt (mapGet enumsMap tname) ((some esum) (fold (fn [(cacc (Map String String)) (c CaseSummary)] -> (Map String String) (mapSet cacc c.name tname)) acc esum.cases)) ((none) acc))) (mapEmpty) exportedTypes)) (expFields (fold (fn [(acc (Map String Bool)) (tname String)] -> (Map String Bool) (mt (mapGet schemasMap tname) ((some ssum) (addFieldsToSet acc ssum.fields)) ((none) acc))) (mapEmpty) exportedTypes))] (ModuleSummary :name modName :path path :hasHeader hasHdr :hasDoc hdrDoc :exports exports :exportedTypes exportedTypes :imports importsMap :funs funsMap :schemas schemasMap :enums enumsMap :caseOwner caseOwnerMap :exportedCases expCases :exportedFields expFields))
+  (let [(modHeader (fold (fn [(acc (Option a/ModuleNode)) (form a/TopForm)] -> (Option a/ModuleNode) (mt form ((a/topModule m) (some m)) (_ acc))) (none) forms)) (hasHdr (mt modHeader ((some _) true) ((none) false))) (hdrDoc (mt modHeader ((some m) (not (stringEmpty? m.docstring))) ((none) false))) (modName (mt modHeader ((some m) (let [(p m.path)] (if (stringEmpty? p) path p))) ((none) path))) (rawExports (mt modHeader ((some m) m.exported) ((none) (list)))) (exports (filter (fn [(e String)] -> Bool (not (isPascalName? e))) rawExports)) (exportedTypes (filter (fn [(e String)] -> Bool (isPascalName? e)) rawExports)) (importsList (mt modHeader ((some m) m.imports) ((none) (list)))) (importsMap (fold (fn [(acc (Map String String)) (p (Pair String String))] -> (Map String String) (mapSet acc (pairSecond p) (pairFirst p))) (mapEmpty) importsList)) (funsMap (fold (fn [(acc (Map String FunSummary)) (form a/TopForm)] -> (Map String FunSummary) (mt form ((a/topDefun d) (let [(fparams (collectFunParams d.params)) (pTypes (map pairSecond fparams)) (tvars (if (listEmpty? d.typeVars) (ty/collectTvars pTypes d.retType) d.typeVars))] (mapSet acc d.name (FunSummary :name d.name :params fparams :ret d.retType :typevars tvars :hasDoc (not (stringEmpty? d.docstring)) :effect (markedFn? d))))) (_ acc))) (mapEmpty) forms)) (schemasMap (fold (fn [(acc (Map String SchemaSummary)) (form a/TopForm)] -> (Map String SchemaSummary) (mt form ((a/topSchema s) (mapSet acc s.name (SchemaSummary :name s.name :typevars s.typeVars :fields (collectFields s.fields)))) (_ acc))) (mapEmpty) forms)) (enumsMap (fold (fn [(acc (Map String EnumSummary)) (form a/TopForm)] -> (Map String EnumSummary) (mt form ((a/topEnum e) (mapSet acc e.name (EnumSummary :name e.name :typevars e.typeVars :cases (collectCases e.cases)))) (_ acc))) (mapEmpty) forms)) (caseOwnerMap (fold (fn [(acc (Map String String)) (form a/TopForm)] -> (Map String String) (mt form ((a/topEnum e) (fold (fn [(cacc (Map String String)) (c a/EnumCase)] -> (Map String String) (mapSet cacc c.name e.name)) acc e.cases)) (_ acc))) (mapEmpty) forms)) (expCases (fold (fn [(acc (Map String String)) (tname String)] -> (Map String String) (mt (mapGet enumsMap tname) ((some esum) (fold (fn [(cacc (Map String String)) (c CaseSummary)] -> (Map String String) (mapSet cacc c.name tname)) acc esum.cases)) ((none) acc))) (mapEmpty) exportedTypes)) (expFields (fold (fn [(acc (Map String Bool)) (tname String)] -> (Map String Bool) (mt (mapGet schemasMap tname) ((some ssum) (addFieldsToSet acc ssum.fields)) ((none) acc))) (mapEmpty) exportedTypes))] (ModuleSummary :name modName :path path :hasHeader hasHdr :hasDoc hdrDoc :exports exports :exportedTypes exportedTypes :imports importsMap :funs funsMap :schemas schemasMap :enums enumsMap :caseOwner caseOwnerMap :exportedCases expCases :exportedFields expFields))
 
 fn addFieldsToSet facc: (Map String Bool) fields: (List FieldSummary) -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (f FieldSummary)] -> (Map String Bool) (mapSet acc f.name true)) facc fields)
@@ -450,7 +450,7 @@ fn headerStep kids: (List AsnItem) i: Int64 h: ModHeader -> ModHeader
       (cond
         ((!= k.kind "kw") (headerStep kids (+ i 1) h))
         ((and (= k.text "x") isSeq) (headerStep kids (+ i 2) (with h :exports (map (fn [(e AsnItem)] -> String e.text) (filter (fn [(e AsnItem)] -> Bool (= e.kind "sym")) v.kids)))))
-        ((and (= k.text "i") isSeq) (headerStep kids (+ i 2) (with h :imports (fold (fn [(acc (List (Pair String String))) (e AsnItem)] -> (List (Pair String String)) (mt (importEntry e) ((some p) (listAppendOne acc p)) ((none) acc))) (list) v.kids))))
+        ((and (= k.text "i") isSeq) (headerStep kids (+ i 2) (with h :imports (listReverse (fold (fn [(acc (List (Pair String String))) (e AsnItem)] -> (List (Pair String String)) (mt (importEntry e) ((some p) (cons p acc)) ((none) acc))) (list) v.kids)))))
         ((and (or (= k.text "d") (= k.text "doc")) (= v.kind "str")) (headerStep kids (+ i 2) (with h :hasDoc (not (stringEmpty? v.text)))))
         (else (headerStep kids (+ i 2) h)))))
 
@@ -471,18 +471,43 @@ fn ! resolveImports! importer: String entries: (List (Pair String String)) pass:
     ((some e) (let [(alias (pairFirst e)) (imp (pairSecond e)) (r (if (= imp "sys") (Resolution :status (resOk) :path "sys" :note "" :index pass.index) (resolveImport! importer imp pass.index)))
                     (found (mt r.status ((resOk) true) ((resDeprecated) true) (_ false)))
                     (next (if found
-                      (ImportPass :imports (mapSet pass.imports alias r.path) :targets (if (= r.path "sys") pass.targets (listAppendOne pass.targets r.path)) :unresolved pass.unresolved :index r.index)
-                      (ImportPass :imports (mapSet pass.imports alias imp) :targets pass.targets :unresolved (listAppendOne pass.unresolved (unresolvedLine importer imp r)) :index r.index)))]
+                      (ImportPass :imports (mapSet pass.imports alias r.path) :targets (if (= r.path "sys") pass.targets (cons r.path pass.targets)) :unresolved pass.unresolved :index r.index)
+                      (ImportPass :imports (mapSet pass.imports alias imp) :targets pass.targets :unresolved (cons (unresolvedLine importer imp r) pass.unresolved) :index r.index)))]
       (resolveImports! importer (safeTail entries) next))))
+
+fn markedFn? d: a/DefunNode -> Bool
+  (or d.effect (and (> (stringLength d.name) 1) (stringEndsWith? d.name "!")))
 
 fn withImports s: ModuleSummary imports: (Map String String) -> ModuleSummary
   (with s :imports imports)
 
-fn depMatches? m: ModuleSummary mpath: String -> Bool
+fn depMatches? m: ModuleSummary mpath: String pathSuffix: String nameSuffix: String -> Bool
   (or (= m.name mpath)
       (or (= m.path mpath)
-          (or (stringEndsWith? m.path (str "/" mpath ".asl"))
-              (stringEndsWith? m.name (str "/" mpath)))))
+          (or (and (stringContains? m.path pathSuffix) (stringEndsWith? m.path pathSuffix))
+              (and (stringContains? m.name nameSuffix) (stringEndsWith? m.name nameSuffix)))))
+
+(schema DepIndex (:f deps (Map String ModuleSummary)) (:f byKey (Map String (List ModuleSummary))) (:f indexed Bool))
+
+fn slashSuffixes parts: (List String) acc: (List String) -> (List String)
+  (mt (listTail parts)
+    ((none) acc)
+    ((some rest) (if (listEmpty? rest) acc (slashSuffixes rest (cons (stringJoin rest "/") acc)))))
+
+fn depKeys m: ModuleSummary -> (List String)
+  (let [(n (stringLength m.path))
+        (pathTails (if (stringEndsWith? m.path ".asl") (slashSuffixes (stringSplit (optionOr (stringSlice m.path 0 (- n 4)) "") "/") (list)) (list)))]
+    (cons m.name (cons m.path (slashSuffixes (stringSplit m.name "/") pathTails))))
+
+fn depIndexOf deps: (Map String ModuleSummary) -> DepIndex
+  (DepIndex :deps deps :indexed true
+    :byKey (fold (fn [(acc (Map String (List ModuleSummary))) (m ModuleSummary)] -> (Map String (List ModuleSummary))
+                   (fold (fn [(a (Map String (List ModuleSummary))) (k String)] -> (Map String (List ModuleSummary)) (mapSet a k (cons m (optionOr (mapGet a k) (list)))))
+                         acc (mapKeys (listToSet (depKeys m)))))
+                 (mapEmpty) (listReverse (mapValues deps))))
+
+fn depScanOf deps: (Map String ModuleSummary) -> DepIndex
+  (DepIndex :deps deps :byKey (mapEmpty) :indexed false)
 
 fn deduplicateSummaries mods: (List ModuleSummary) -> (List ModuleSummary)
   (let [(folded (fold (fn [(acc (Pair (List ModuleSummary) (Map String Bool))) (m ModuleSummary)] -> (Pair (List ModuleSummary) (Map String Bool))
@@ -493,17 +518,26 @@ fn deduplicateSummaries mods: (List ModuleSummary) -> (List ModuleSummary)
 
 fn resolveDepTarget mpath: String deps: (Map String ModuleSummary) -> (Result ModuleSummary String)
   (if (stringEmpty? mpath) (err "ERR_NOT_FOUND: empty module path")
-    (let [(allMatches (deduplicateSummaries (filter (fn [(m ModuleSummary)] -> Bool (depMatches? m mpath)) (mapValues deps))))
-          (matchCount (listLength allMatches))]
-      (cond
-        ((= matchCount 1) (ok (optionOr (listHead allMatches) (emptyModuleSummary))))
-        ((> matchCount 1)
-         (let [(names (stringJoin (map (fn [(m ModuleSummary)] -> String (if (!= m.name "") m.name m.path)) allMatches) ", "))]
-           (err (str "ERR_AMBIGUOUS_MODULE: ambiguous match for " mpath ": " names))))
-        (else
-         (mt (mapGet deps mpath)
-           ((some target) (ok target))
-           ((none) (err (str "ERR_NOT_FOUND: no module matches " mpath))))))))
+    (let [(pathSuffix (str "/" mpath ".asl")) (nameSuffix (str "/" mpath))]
+      (pickDepTarget mpath (deduplicateSummaries (filter (fn [(m ModuleSummary)] -> Bool (depMatches? m mpath pathSuffix nameSuffix)) (mapValues deps))) deps)))
+
+fn pickDepTarget mpath: String allMatches: (List ModuleSummary) deps: (Map String ModuleSummary) -> (Result ModuleSummary String)
+  (let [(matchCount (listLength allMatches)) (keyed (mapGet deps mpath))]
+    (cond
+      ((some? keyed) (ok (optionOr keyed (emptyModuleSummary))))
+      ((= matchCount 1) (ok (optionOr (listHead allMatches) (emptyModuleSummary))))
+      ((> matchCount 1)
+       (let [(names (stringJoin (map (fn [(m ModuleSummary)] -> String (if (!= m.name "") m.name m.path)) allMatches) ", "))]
+         (err (str "ERR_AMBIGUOUS_MODULE: ambiguous match for " mpath ": " names))))
+      (else (err (str "ERR_NOT_FOUND: no module matches " mpath)))))
+
+fn depCandidates mpath: String ix: DepIndex -> (List ModuleSummary)
+  (if ix.indexed (optionOr (mapGet ix.byKey mpath) (list)) (mapValues ix.deps))
+
+fn resolveDepIn mpath: String ix: DepIndex -> (Result ModuleSummary String)
+  (if (not ix.indexed) (resolveDepTarget mpath ix.deps)
+    (if (stringEmpty? mpath) (err "ERR_NOT_FOUND: empty module path")
+      (pickDepTarget mpath (deduplicateSummaries (depCandidates mpath ix)) ix.deps)))
 
 fn ioErrorText e: IoError -> String
   (mt e ((notFound) "not found") ((permissionDenied) "permission denied") ((alreadyExists) "already exists") ((invalidPath) "invalid path") ((interrupted) "interrupted") ((other) "other error"))
@@ -524,8 +558,8 @@ fn ! loadModule! real: String src: String rest: (List String) parseBodies: Bool 
                    ((ok forms) (pair (withImports (collectSummary forms real) pass.imports) cl.errors))
                    ((err pe) (pair headerOnly (listAppendOne cl.errors (str real ":" (stringFromInt64 pe.line) ":" (stringFromInt64 pe.col) ": ERR_PARSE " pe.msg)))))
                  (pair headerOnly cl.errors)))]
-    (loadQueue! (listAppend rest pass.targets) parseBodies
-      (ModuleClosure :deps (mapSet cl.deps real (pairFirst built)) :paths (listAppendOne cl.paths real) :unresolved (listAppend cl.unresolved pass.unresolved) :errors (pairSecond built) :index pass.index)))
+    (loadQueue! (listAppend rest (listReverse pass.targets)) parseBodies
+      (ModuleClosure :deps (mapSet cl.deps real (pairFirst built)) :paths (cons real cl.paths) :unresolved (listAppend cl.unresolved (listReverse pass.unresolved)) :errors (pairSecond built) :index pass.index)))
 
 fn ! loadQueue! queue: (List String) parseBodies: Bool cl: ModuleClosure -> ModuleClosure
   (mt (listHead queue)
@@ -545,7 +579,7 @@ fn ! resolveTop! importers: (List String) imp: String ix: ModIndex first: (Optio
 fn ! loadTop! importers: (List String) entries: (List (Pair String String)) parseBodies: Bool cl: ModuleClosure keys: (List (Pair String String)) -> ModuleClosure
   (mt (listHead entries)
     ((none) (let [(loaded (loadQueue! (map pairSecond keys) parseBodies cl))]
-      (ModuleClosure :deps (fold (fn [(acc (Map String ModuleSummary)) (k (Pair String String))] -> (Map String ModuleSummary) (mt (mapGet acc (pairSecond k)) ((some s) (mapSet acc (pairFirst k) s)) ((none) acc))) loaded.deps keys) :paths loaded.paths :unresolved loaded.unresolved :errors loaded.errors :index loaded.index)))
+      (ModuleClosure :deps (fold (fn [(acc (Map String ModuleSummary)) (k (Pair String String))] -> (Map String ModuleSummary) (mt (mapGet acc (pairSecond k)) ((some s) (mapSet acc (pairFirst k) s)) ((none) acc))) loaded.deps keys) :paths (listReverse loaded.paths) :unresolved loaded.unresolved :errors loaded.errors :index loaded.index)))
     ((some e) (let [(imp (pairSecond e))
                     (r (if (= imp "sys") (Resolution :status (resOk) :path "sys" :note "" :index cl.index) (resolveTop! importers imp cl.index (none))))
                     (cl2 (ModuleClosure :deps cl.deps :paths cl.paths :unresolved cl.unresolved :errors cl.errors :index r.index))
@@ -574,7 +608,6 @@ fn ! loadModuleDeps! roots: (List String) imports: (List String) -> (Result (Map
               ((not (listEmpty? cl.errors)) (err (other)))
               (else (ok cl.deps)))))
 
-
 fn mapKeysSet m: (Map String ModuleSummary) -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (k String)] -> (Map String Bool) (mapSet acc k true)) (mapEmpty) (mapKeys m))
 
@@ -590,16 +623,16 @@ fn isKnownBuiltinType? name: String -> Bool
 fn builtinTypeArity name: String -> (Option Int64)
   (let [(resolved (ty/resolveTypeAlias name))] (cond ((= resolved "List") (some 1)) ((= resolved "Option") (some 1)) ((= resolved "Result") (some 2)) ((= resolved "Map") (some 2)) ((= resolved "Pair") (some 2)) ((isNullaryBuiltinType? resolved) (some 0)) (else (none))))
 
-fn checkTypeTrees ts: (List ty/Type) bound: (Map String Bool) mod: ModuleSummary deps: (Map String ModuleSummary) where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (fold (fn [(a (List ty/Diagnostic)) (item ty/Type)] -> (List ty/Diagnostic) (checkTypeTree item bound mod deps where path a)) acc ts)
+fn checkTypeTrees ts: (List ty/Type) bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (fold (fn [(a (List ty/Diagnostic)) (item ty/Type)] -> (List ty/Diagnostic) (checkTypeTreeIx item bound mod deps where path a)) acc ts)
 
-fn importedTypeArity name: String mod: ModuleSummary deps: (Map String ModuleSummary) -> (Option Int64)
+fn importedTypeArity name: String mod: ModuleSummary deps: DepIndex -> (Option Int64)
   (fold
     (fn [(acc (Option Int64)) (mpath String)] -> (Option Int64)
       (mt acc
         ((some _) acc)
         ((none)
-         (mt (resolveDepTarget mpath deps)
+         (mt (resolveDepIn mpath deps)
            ((err _) (none))
            ((ok target)
             (if (or (listContains? target.exportedTypes name) (listContains? target.exports name))
@@ -627,10 +660,33 @@ fn dottedTypeTree t: ty/Type where: String path: String acc: (List ty/Diagnostic
     ((ty/tyFun params ret) (dottedTypeTree ret where path (fold (fn [(a (List ty/Diagnostic)) (item ty/Type)] -> (List ty/Diagnostic) (dottedTypeTree item where path a)) acc params)))
     (_ acc))
 
-fn checkTypeTree t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: (Map String ModuleSummary) where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+fn checkTypeTreeIx t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (checkTypeTreeAt t bound mod deps where path (dottedTypeDiag t where path acc))
 
-fn checkTypeTreeAt t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: (Map String ModuleSummary) where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+fn checkTypeTreeAt t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (mt (chainedTypeTarget t mod deps)
+    ((some p) (checkTypeTreeAt (pairFirst p) bound (pairSecond p) deps where path (checkTypeTrees (typeArgsOf t) bound mod deps where path acc)))
+    ((none) (checkTypeTreeLocal t bound mod deps where path acc)))
+
+fn typeArgsOf t: ty/Type -> (List ty/Type)
+  (mt t ((ty/tyCon _ args _ _) args) (_ (list)))
+
+fn chainedTypeTarget t: ty/Type mod: ModuleSummary deps: DepIndex -> (Option (Pair ty/Type ModuleSummary))
+  (mt t
+    ((ty/tyCon name args optMod optShown)
+     (let [(parts (stringSplit (optionOr optShown "") "/"))]
+       (if (< (listLength parts) 3) (none)
+         (mt (modImport mod (optionOr (listHead parts) ""))
+           ((none) (none))
+           ((some mpath)
+            (mt (resolveDepIn mpath deps)
+              ((err _) (none))
+              ((ok target)
+               (let [(rest (safeTail parts))]
+                 (some (pair (ty/tyCon (optionOr (listGet rest 1) name) (map (fn [(a ty/Type)] -> ty/Type (ty/tyVar 0 "any")) args) (listHead rest) (some (stringJoin rest "/"))) target))))))))))
+    (_ (none)))
+
+fn checkTypeTreeLocal t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (mt t
     ((ty/tyCon name args optMod optShown)
      (mt optMod
@@ -644,8 +700,8 @@ fn checkTypeTreeAt t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: 
                (cons (makeDiag "type-arity" (str name " in " where " takes " (stringFromInt64 expected) " type argument(s), given " (stringFromInt64 (listLength args))) path) checked))))))))
     (_ (checkTypeTreeRaw t bound mod deps where path acc)))
 
-fn checkTypeTreeRaw t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: (Map String ModuleSummary) where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (mt t ((ty/tyVar _ _) acc) ((ty/tyFun params ret) (let [(acc1 (checkTypeTrees params bound mod deps where path acc))] (checkTypeTree ret bound mod deps where path acc1))) ((ty/tyCon name args optMod optShown) (let [(accArgs (checkTypeTrees args bound mod deps where path acc)) (givenArity (listLength args)) (expectedArity (mt optMod ((some alias) (mt (modImport mod alias) ((some mpath) (mt (resolveDepTarget mpath deps) ((ok target) (mt (modSchema target name) ((some s) (some (listLength s.typevars))) ((none) (mt (modEnum target name) ((some e) (some (listLength e.typevars))) ((none) (none)))))) ((err _) (none)))) ((none) (none)))) ((none) (if (mapHas? bound name) (some 0) (mt (modSchema mod name) ((some s) (some (listLength s.typevars))) ((none) (mt (modEnum mod name) ((some e) (some (listLength e.typevars))) ((none) (builtinTypeArity name))))))))) (accArity (mt expectedArity ((some exp) (if (not (= exp givenArity)) (cons (makeDiag "type-arity" (str name " in " where " takes " (stringFromInt64 exp) " type argument(s), given " (stringFromInt64 givenArity)) path) accArgs) accArgs)) ((none) accArgs)))] (mt optMod ((some alias) (mt (modImport mod alias) ((none) (cons (makeDiag "rule-9" (str alias "/" name ": alias " alias " is not imported") path) accArity)) ((some mpath) (mt (resolveDepTarget mpath deps) ((err _) accArity) ((ok target) (if (not (listContains? target.exportedTypes name)) (cons (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " name " is not an exported type of " target.name) path) accArity) accArity)))))) ((none) (if (or (isKnownBuiltinType? name) (or (mapHas? bound name) (or (mapHas? mod.schemas name) (mapHas? mod.enums name)))) accArity (cons (makeDiag "rule-10" (str name " in " where " is neither a known type nor bound in { }") path) accArity)))))))
+fn checkTypeTreeRaw t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: DepIndex where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (mt t ((ty/tyVar _ _) acc) ((ty/tyFun params ret) (let [(acc1 (checkTypeTrees params bound mod deps where path acc))] (checkTypeTreeIx ret bound mod deps where path acc1))) ((ty/tyCon name args optMod optShown) (let [(accArgs (checkTypeTrees args bound mod deps where path acc)) (givenArity (listLength args)) (expectedArity (mt optMod ((some alias) (mt (modImport mod alias) ((some mpath) (mt (resolveDepIn mpath deps) ((ok target) (mt (modSchema target name) ((some s) (some (listLength s.typevars))) ((none) (mt (modEnum target name) ((some e) (some (listLength e.typevars))) ((none) (none)))))) ((err _) (none)))) ((none) (none)))) ((none) (if (mapHas? bound name) (some 0) (mt (modSchema mod name) ((some s) (some (listLength s.typevars))) ((none) (mt (modEnum mod name) ((some e) (some (listLength e.typevars))) ((none) (builtinTypeArity name))))))))) (accArity (mt expectedArity ((some exp) (if (not (= exp givenArity)) (cons (makeDiag "type-arity" (str name " in " where " takes " (stringFromInt64 exp) " type argument(s), given " (stringFromInt64 givenArity)) path) accArgs) accArgs)) ((none) accArgs)))] (mt optMod ((some alias) (mt (modImport mod alias) ((none) (cons (makeDiag "rule-9" (str alias "/" name ": alias " alias " is not imported") path) accArity)) ((some mpath) (mt (resolveDepIn mpath deps) ((err _) accArity) ((ok target) (if (not (listContains? target.exportedTypes name)) (cons (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " name " is not an exported type of " target.name) path) accArity) accArity)))))) ((none) (if (or (isKnownBuiltinType? name) (or (mapHas? bound name) (or (mapHas? mod.schemas name) (mapHas? mod.enums name)))) accArity (cons (makeDiag "rule-10" (str name " in " where " is neither a known type nor bound in { }") path) accArity)))))))
 
 fn checkPublicTypeTrees ts: (List ty/Type) bound: (Map String Bool) mod: ModuleSummary where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (fold (fn [(a (List ty/Diagnostic)) (item ty/Type)] -> (List ty/Diagnostic) (checkPublicTypeTree item bound mod where path a)) acc ts)
@@ -662,29 +718,29 @@ fn listToSet xs: (List String) -> (Map String Bool)
 fn checkModuleRules mod: ModuleSummary poses: (Map String (Pair Int64 Int64)) path: String -> (List ty/Diagnostic)
   (let [(d2 (fold (fn [(acc (List ty/Diagnostic)) (exp String)] -> (List ty/Diagnostic) (mt (modFun mod exp) ((some _) acc) ((none) (cons (makeDiag "rule-2" (str exp " is exported but not defined in this module") path) acc)))) (list) mod.exports)) (d3 (fold (fn [(acc (List ty/Diagnostic)) (tname String)] -> (List ty/Diagnostic) (if (and (not (mapHas? mod.schemas tname)) (not (mapHas? mod.enums tname))) (cons (makeDiag "rule-2" (str tname " is exported but not defined in this module") path) acc) acc)) d2 mod.exportedTypes))] d3)
 
-fn checkCycleDfs cur: String stack: (List String) visited: (Map String Bool) deps: (Map String ModuleSummary) modImports: (Map String String) path: String -> (Option (List String))
-  (let [(targets (if (= cur (pairSecond (pair "" ""))) (mapValuesList modImports) (mt (resolveDepTarget cur deps) ((ok s) (mapValuesList s.imports)) ((err _) (list)))))] (checkCycleEdges targets stack visited deps modImports path))
+fn checkCycleDfs cur: String stack: (List String) visited: (Map String Bool) deps: DepIndex modImports: (Map String String) path: String -> (Option (List String))
+  (let [(targets (if (= cur (pairSecond (pair "" ""))) (mapValuesList modImports) (mt (resolveDepIn cur deps) ((ok s) (mapValuesList s.imports)) ((err _) (list)))))] (checkCycleEdges targets stack visited deps modImports path))
 
-fn depName deps: (Map String ModuleSummary) key: String -> String
-  (mt (resolveDepTarget key deps) ((ok s) (if (stringEmpty? s.name) key s.name)) ((err _) key))
+fn depName deps: DepIndex key: String -> String
+  (mt (resolveDepIn key deps) ((ok s) (if (stringEmpty? s.name) key s.name)) ((err _) key))
 
-fn closesAtRoot? stack: (List String) deps: (Map String ModuleSummary) target: String -> Bool
+fn closesAtRoot? stack: (List String) deps: DepIndex target: String -> Bool
   (let [(root (optionOr (listHead stack) ""))] (and (not (stringEmpty? root)) (= (depName deps target) root)))
 
-fn checkCycleEdges edges: (List String) stack: (List String) visited: (Map String Bool) deps: (Map String ModuleSummary) modImports: (Map String String) path: String -> (Option (List String))
-  (mt (listHead edges) ((none) (none)) ((some edgeTarget) (let [(rest (safeTail edges))] (if (or (listContains? stack edgeTarget) (closesAtRoot? stack deps edgeTarget)) (some (listAppendOne stack edgeTarget)) (if (mapHas? visited edgeTarget) (checkCycleEdges rest stack visited deps modImports path) (let [(subRes (checkCycleDfs edgeTarget (listAppendOne stack edgeTarget) (mapSet visited edgeTarget true) deps modImports path))] (mt subRes ((some cyc) (some cyc)) ((none) (checkCycleEdges rest stack visited deps modImports path)))))))))
+fn checkCycleEdges edges: (List String) stack: (List String) visited: (Map String Bool) deps: DepIndex modImports: (Map String String) path: String -> (Option (List String))
+  (mt (listHead edges) ((none) (none)) ((some edgeTarget) (let [(rest (safeTail edges))] (if (or (= (optionOr (listHead stack) "") edgeTarget) (closesAtRoot? stack deps edgeTarget)) (some (listAppendOne stack edgeTarget)) (if (or (listContains? stack edgeTarget) (mapHas? visited edgeTarget)) (checkCycleEdges rest stack visited deps modImports path) (let [(subRes (checkCycleDfs edgeTarget (listAppendOne stack edgeTarget) (mapSet visited edgeTarget true) deps modImports path))] (mt subRes ((some cyc) (some cyc)) ((none) (checkCycleEdges rest stack visited deps modImports path)))))))))
 
-fn checkUnresolvedImportsStep mod: ModuleSummary deps: (Map String ModuleSummary) path: String aliases: (List String) idx: Int64 len: Int64 acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (if (>= idx len) acc (let [(alias (optionOr (listGet aliases idx) "")) (mpath (optionOr (modImport mod alias) ""))] (if (or (= mpath "") (= mpath "sys")) (checkUnresolvedImportsStep mod deps path aliases (+ idx 1) len acc) (mt (resolveDepTarget mpath deps) ((ok _) (checkUnresolvedImportsStep mod deps path aliases (+ idx 1) len acc)) ((err errMsg) (let [(code (if (stringStartsWith? errMsg "ERR_AMBIGUOUS_MODULE") "ERR_AMBIGUOUS_MODULE" "unresolved-import")) (msg (if (stringStartsWith? errMsg "ERR_AMBIGUOUS_MODULE") errMsg (str "no module " mpath " on the search path")))] (checkUnresolvedImportsStep mod deps path aliases (+ idx 1) len (cons (makeDiag code msg path) acc))))))))
+fn checkUnresolvedImportsStep mod: ModuleSummary deps: DepIndex path: String aliases: (List String) acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (mt (listHead aliases) ((none) acc) ((some alias) (let [(rest (safeTail aliases)) (mpath (optionOr (modImport mod alias) ""))] (if (or (= mpath "") (= mpath "sys")) (checkUnresolvedImportsStep mod deps path rest acc) (mt (resolveDepIn mpath deps) ((ok _) (checkUnresolvedImportsStep mod deps path rest acc)) ((err errMsg) (let [(code (if (stringStartsWith? errMsg "ERR_AMBIGUOUS_MODULE") "ERR_AMBIGUOUS_MODULE" "unresolved-import")) (msg (if (stringStartsWith? errMsg "ERR_AMBIGUOUS_MODULE") errMsg (str "no module " mpath " on the search path")))] (checkUnresolvedImportsStep mod deps path rest (cons (makeDiag code msg path) acc)))))))))
 
-fn checkImportsAndCycles mod: ModuleSummary deps: (Map String ModuleSummary) path: String -> (List ty/Diagnostic)
-  (let [(aliases (mapKeys mod.imports)) (unres (checkUnresolvedImportsStep mod deps path aliases 0 (listLength aliases) (list))) (cycleOpt (checkCycleDfs "" (list mod.name) (mapEmpty) deps mod.imports path))] (mt cycleOpt ((some cyc) (cons (makeDiag "rule-11" (str "import cycle: " (stringJoin (map (fn [(k String)] -> String (depName deps k)) cyc) " -> ")) path) unres)) ((none) unres)))
+fn checkImportsAndCycles mod: ModuleSummary deps: DepIndex path: String -> (List ty/Diagnostic)
+  (let [(aliases (mapKeys mod.imports)) (unres (checkUnresolvedImportsStep mod deps path aliases (list))) (cycleOpt (checkCycleDfs "" (list mod.name) (mapEmpty) deps mod.imports path))] (mt cycleOpt ((some cyc) (cons (makeDiag "rule-11" (str "import cycle: " (stringJoin (map (fn [(k String)] -> String (depName deps k)) cyc) " -> ")) path) unres)) ((none) unres)))
 
 fn checkExportClosure mod: ModuleSummary path: String -> (List ty/Diagnostic)
   (let [(fDiags (fold (fn [(acc (List ty/Diagnostic)) (fname String)] -> (List ty/Diagnostic) (mt (modFun mod fname) ((some f) (let [(bset (listToSet f.typevars)) (pDiags (fold (fn [(pacc (List ty/Diagnostic)) (p (Pair String String))] -> (List ty/Diagnostic) (let [(pty (ty/parseTypeStr (pairSecond p) (list)))] (checkPublicTypeTree pty bset mod (str "exported function " fname) path pacc))) acc f.params)) (rty (ty/parseTypeStr f.ret (list)))] (checkPublicTypeTree rty bset mod (str "exported function " fname) path pDiags))) ((none) acc))) (list) mod.exports)) (sDiags (fold (fn [(acc (List ty/Diagnostic)) (sname String)] -> (List ty/Diagnostic) (mt (modSchema mod sname) ((some s) (let [(bset (listToSet s.typevars))] (fold (fn [(facc (List ty/Diagnostic)) (f FieldSummary)] -> (List ty/Diagnostic) (let [(fty (ty/parseTypeStr f.type (list)))] (checkPublicTypeTree fty bset mod (str "exported field " sname "." f.name) path facc))) acc s.fields))) ((none) acc))) fDiags mod.exportedTypes)) (eDiags (fold (fn [(acc (List ty/Diagnostic)) (ename String)] -> (List ty/Diagnostic) (mt (modEnum mod ename) ((some e) (let [(bset (listToSet e.typevars))] (fold (fn [(cacc (List ty/Diagnostic)) (c CaseSummary)] -> (List ty/Diagnostic) (fold (fn [(pacc (List ty/Diagnostic)) (p (Pair String String))] -> (List ty/Diagnostic) (let [(pty (ty/parseTypeStr (pairSecond p) (list)))] (checkPublicTypeTree pty bset mod (str "case " c.name " of exported " ename) path pacc))) cacc c.params)) acc e.cases))) ((none) acc))) sDiags mod.exportedTypes))] eDiags)
 
-fn checkTypeAnnotations mod: ModuleSummary deps: (Map String ModuleSummary) poses: (Map String (Pair Int64 Int64)) path: String -> (List ty/Diagnostic)
-  (let [(dFuns (fold (fn [(acc (List ty/Diagnostic)) (f FunSummary)] -> (List ty/Diagnostic) (let [(bset (listToSet f.typevars)) (pDiags (fold (fn [(pacc (List ty/Diagnostic)) (p (Pair String String))] -> (List ty/Diagnostic) (let [(pty (ty/parseTypeStr (pairSecond p) (list)))] (checkTypeTree pty bset mod deps (str "function " f.name) path pacc))) (list) f.params)) (rty (ty/parseTypeStr f.ret (list)))] (listAppend (placeDiags (checkTypeTree rty bset mod deps (str "function " f.name) path pDiags) (optionOr (mapGet poses f.name) (pair 1 1))) acc))) (list) (mapValues mod.funs))) (dSchemas (fold (fn [(acc (List ty/Diagnostic)) (s SchemaSummary)] -> (List ty/Diagnostic) (let [(bset (listToSet s.typevars))] (fold (fn [(facc (List ty/Diagnostic)) (f FieldSummary)] -> (List ty/Diagnostic) (let [(fty (ty/parseTypeStr f.type (list)))] (checkTypeTree fty bset mod deps (str "field " s.name "." f.name) path facc))) acc s.fields))) dFuns (mapValues mod.schemas))) (dEnums (fold (fn [(acc (List ty/Diagnostic)) (e EnumSummary)] -> (List ty/Diagnostic) (let [(bset (listToSet e.typevars))] (fold (fn [(cacc (List ty/Diagnostic)) (c CaseSummary)] -> (List ty/Diagnostic) (fold (fn [(pacc (List ty/Diagnostic)) (p (Pair String String))] -> (List ty/Diagnostic) (let [(pty (ty/parseTypeStr (pairSecond p) (list)))] (checkTypeTree pty bset mod deps (str "case " c.name) path pacc))) cacc c.params)) acc e.cases))) dSchemas (mapValues mod.enums)))] dEnums)
+fn checkTypeAnnotations mod: ModuleSummary deps: DepIndex poses: (Map String (Pair Int64 Int64)) path: String -> (List ty/Diagnostic)
+  (let [(dFuns (fold (fn [(acc (List ty/Diagnostic)) (f FunSummary)] -> (List ty/Diagnostic) (let [(bset (listToSet f.typevars)) (pDiags (fold (fn [(pacc (List ty/Diagnostic)) (p (Pair String String))] -> (List ty/Diagnostic) (let [(pty (ty/parseTypeStr (pairSecond p) (list)))] (checkTypeTreeIx pty bset mod deps (str "function " f.name) path pacc))) (list) f.params)) (rty (ty/parseTypeStr f.ret (list)))] (listAppend (placeDiags (checkTypeTreeIx rty bset mod deps (str "function " f.name) path pDiags) (optionOr (mapGet poses f.name) (pair 1 1))) acc))) (list) (mapValues mod.funs))) (dSchemas (fold (fn [(acc (List ty/Diagnostic)) (s SchemaSummary)] -> (List ty/Diagnostic) (let [(bset (listToSet s.typevars))] (fold (fn [(facc (List ty/Diagnostic)) (f FieldSummary)] -> (List ty/Diagnostic) (let [(fty (ty/parseTypeStr f.type (list)))] (checkTypeTreeIx fty bset mod deps (str "field " s.name "." f.name) path facc))) acc s.fields))) dFuns (mapValues mod.schemas))) (dEnums (fold (fn [(acc (List ty/Diagnostic)) (e EnumSummary)] -> (List ty/Diagnostic) (let [(bset (listToSet e.typevars))] (fold (fn [(cacc (List ty/Diagnostic)) (c CaseSummary)] -> (List ty/Diagnostic) (fold (fn [(pacc (List ty/Diagnostic)) (p (Pair String String))] -> (List ty/Diagnostic) (let [(pty (ty/parseTypeStr (pairSecond p) (list)))] (checkTypeTreeIx pty bset mod deps (str "case " c.name) path pacc))) cacc c.params)) acc e.cases))) dSchemas (mapValues mod.enums)))] dEnums)
 
 fn isEffectfulBuiltin? name: String -> Bool
   (or (listContains? (list "tcpListen" "tcpConnect" "sockAccept" "sockLocalPort" "unixListen" "unixConnect" "unixSocketPair" "sockSendFd" "sockRecvFd") name) (or (or (= name "println") (or (= name "print") (= name "eprintln"))) (or (or (= name "fileRead") (or (= name "fileWrite") (or (= name "file-append") (or (= name "fileAppend") (or (= name "fileLock") (= name "fileLockWait")))))) (or (or (= name "fileExists?") (or (= name "read-line") (= name "read-all"))) (or (or (= name "dirList") (or (= name "execCmd") (= name "fileStat"))) (= name "pathCanonicalize"))))))
@@ -699,7 +755,7 @@ fn cleanNumSign v: String -> String
   (if (and (or (stringStartsWith? v "+") (stringStartsWith? v "-")) (> (stringLength v) 1)) (sliceFrom v 1) v)
 
 fn isLiteralAtom? v: String -> Bool
-  (if (or (stringStartsWith? v "\"") (or (= v "true") (or (= v "false") (or (= v "()") (= v "nil"))))) true (let [(s (cleanNumSign v))] (if (stringEmpty? s) false (stringContains? "0123456789" (firstCharStr s)))))
+  (if (or (stringStartsWith? v "\"") (or (= v "true") (or (= v "false") (= v "()")))) true (let [(s (cleanNumSign v))] (if (stringEmpty? s) false (stringContains? "0123456789" (firstCharStr s)))))
 
 fn keywordCallHeadDiag headTok: String path: String -> (Option ty/Diagnostic)
   (if (stringStartsWith? headTok ":") (some (makeDiag "kw-call" (str headTok " is a keyword literal, not callable; write (SchemaName " headTok " ...) for a record, or {" (sliceFrom headTok 1) " ...} in ASN data") path)) (none))
@@ -710,12 +766,12 @@ fn splitQual s: String -> (Pair String String)
 fn enumFamily m: ModuleSummary ename: String -> (Option (Pair String (List String)))
   (mt (modEnum m ename) ((some esum) (some (pair (str m.name "/" ename) (map (fn [(c CaseSummary)] -> String c.name) esum.cases)))) ((none) (none)))
 
-fn findUnqualifiedCaseInDeps head: String mod: ModuleSummary deps: (Map String ModuleSummary) -> (Option (Pair String (List String)))
+fn findUnqualifiedCaseInDeps head: String mod: ModuleSummary deps: DepIndex -> (Option (Pair String (List String)))
   (fold (fn [(acc (Option (Pair String (List String)))) (mpath String)] -> (Option (Pair String (List String)))
           (mt acc
             ((some _) acc)
             ((none)
-             (mt (resolveDepTarget mpath deps)
+             (mt (resolveDepIn mpath deps)
                ((ok target)
                 (mt (mapGet target.exportedCases head)
                   ((some ename) (enumFamily target ename))
@@ -727,13 +783,13 @@ fn findUnqualifiedCaseInDeps head: String mod: ModuleSummary deps: (Map String M
         (none)
         (mapValues mod.imports))
 
-fn unionForTag head: String mod: ModuleSummary deps: (Map String ModuleSummary) -> (Option (Pair String (List String)))
+fn unionForTag head: String mod: ModuleSummary deps: DepIndex -> (Option (Pair String (List String)))
   (if (= head "pair") (some (pair "Pair" (list "pair"))) (unionForTagRaw head mod deps))
 
-fn unionForTagRaw head: String mod: ModuleSummary deps: (Map String ModuleSummary) -> (Option (Pair String (List String)))
-  (mt (ty/preludeUnionCases head) ((some uname) (cond ((= uname "Option") (some (pair "Option" (list "some" "none")))) ((= uname "Result") (some (pair "Result" (list "ok" "err")))) ((= uname "List") (some (pair "List" (list "list" "cons")))) ((= uname "IoError") (some (pair "IoError" (list "notFound" "permissionDenied" "alreadyExists" "invalidPath" "interrupted" "other")))) (else (none)))) ((none) (if (isQualifiedName? head) (let [(qp (splitQual head)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepTarget mpath deps) ((ok target) (mt (mapGet target.exportedCases member) ((some ename) (enumFamily target ename)) ((none) (mt (mapGet target.caseOwner member) ((some ename) (enumFamily target ename)) ((none) (none)))))) ((err _) (none)))) ((none) (none)))) (mt (mapGet mod.caseOwner head) ((some ename) (enumFamily mod ename)) ((none) (findUnqualifiedCaseInDeps head mod deps))))))
+fn unionForTagRaw head: String mod: ModuleSummary deps: DepIndex -> (Option (Pair String (List String)))
+  (mt (mapGet mod.caseOwner head) ((some ename) (enumFamily mod ename)) ((none) (mt (ty/preludeUnionCases head) ((some uname) (cond ((= uname "Option") (some (pair "Option" (list "some" "none")))) ((= uname "Result") (some (pair "Result" (list "ok" "err")))) ((= uname "List") (some (pair "List" (list "list" "cons")))) ((= uname "IoError") (some (pair "IoError" (list "notFound" "permissionDenied" "alreadyExists" "invalidPath" "interrupted" "other")))) (else (none)))) ((none) (if (isQualifiedName? head) (let [(qp (splitQual head)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepIn mpath deps) ((ok target) (mt (mapGet target.exportedCases member) ((some ename) (enumFamily target ename)) ((none) (mt (mapGet target.caseOwner member) ((some ename) (enumFamily target ename)) ((none) (none)))))) ((err _) (none)))) ((none) (none)))) (mt (mapGet mod.caseOwner head) ((some ename) (enumFamily mod ename)) ((none) (if (mapHas? mod.funs head) (none) (findUnqualifiedCaseInDeps head mod deps)))))))))
 
-fn armFamily arm: rd/SExpr bare: Bool mod: ModuleSummary deps: (Map String ModuleSummary) -> String
+fn armFamily arm: rd/SExpr bare: Bool mod: ModuleSummary deps: DepIndex -> String
   (mt arm
     ((rd/sexprList parts)
      (mt (listHead parts)
@@ -744,19 +800,19 @@ fn armFamily arm: rd/SExpr bare: Bool mod: ModuleSummary deps: (Map String Modul
                      (_ "")))))
     (_ ""))
 
-fn matchFamily arms: (List rd/SExpr) mod: ModuleSummary deps: (Map String ModuleSummary) -> String
+fn matchFamilyIx arms: (List rd/SExpr) mod: ModuleSummary deps: DepIndex -> String
   (let [(firstOf (fn [(bare Bool)] -> String (fold (fn [(acc String) (arm rd/SExpr)] -> String (if (= acc "") (armFamily arm bare mod deps) acc)) "" arms)))
         (applied (firstOf false))]
     (if (= applied "") (firstOf true) applied))
 
-fn ctorPatternAtom? pat: rd/SExpr family: String mod: ModuleSummary deps: (Map String ModuleSummary) -> Bool
+fn ctorPatternAtomIx? pat: rd/SExpr family: String mod: ModuleSummary deps: DepIndex -> Bool
   (mt pat
     ((rd/sexprAtom v) (and (!= family "") (mt (unionForTag v mod deps) ((some u) (= (pairFirst u) family)) ((none) false))))
     (_ false))
 
-fn catchallPatternAtom? pat: rd/SExpr family: String mod: ModuleSummary deps: (Map String ModuleSummary) -> Bool
+fn catchallPatternAtom? pat: rd/SExpr family: String mod: ModuleSummary deps: DepIndex -> Bool
   (mt pat
-    ((rd/sexprAtom v) (if (or (= v "_") (= v "else")) true (if (or (isLiteralAtom? v) (stringStartsWith? v ":")) false (not (ctorPatternAtom? pat family mod deps)))))
+    ((rd/sexprAtom v) (if (or (= v "_") (= v "else")) true (if (or (isLiteralAtom? v) (stringStartsWith? v ":")) false (not (ctorPatternAtomIx? pat family mod deps)))))
     (_ false))
 
 fn armPatternOf arm: rd/SExpr -> rd/SExpr
@@ -769,7 +825,7 @@ fn elseKeywordPatternAtom? pat: rd/SExpr -> Bool
     ((rd/sexprAtom v) (= v ":else"))
     (_ false))
 
-fn unreachableArmDiags arms: (List rd/SExpr) family: String mod: ModuleSummary deps: (Map String ModuleSummary) path: String seenCatchall: Bool -> (List ty/Diagnostic)
+fn unreachableArmDiagsIx arms: (List rd/SExpr) family: String mod: ModuleSummary deps: DepIndex path: String seenCatchall: Bool -> (List ty/Diagnostic)
   (mt (listHead arms)
     ((none) (list))
     ((some arm)
@@ -778,23 +834,42 @@ fn unreachableArmDiags arms: (List rd/SExpr) family: String mod: ModuleSummary d
            (isCatchall (catchallPatternAtom? pat family mod deps))
            (dUnreach (if seenCatchall (list (makeDiag "unreachable-arm" "mt arm is unreachable: an earlier arm already binds everything" path)) (list)))
            (d (if (elseKeywordPatternAtom? pat) (cons (makeDiag "else-keyword" "mt pattern :else is a keyword literal, not the catch-all; use else or _" path) dUnreach) dUnreach))]
-       (listAppend d (unreachableArmDiags rest family mod deps path (or seenCatchall isCatchall))))))
+       (listAppend d (unreachableArmDiagsIx rest family mod deps path (or seenCatchall isCatchall))))))
 
-fn extractPattern pat: rd/SExpr mod: ModuleSummary deps: (Map String ModuleSummary) path: String accDiags: (List ty/Diagnostic) -> (Pair (Pair (List String) (Option String)) (List ty/Diagnostic))
+fn invalidArmHead pat: rd/SExpr mod: ModuleSummary path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (mt pat
+    ((rd/sexprAtom v) (if (or (mapHas? mod.funs v) (or (and (some? (ty/builtinSig v)) (not (or (isPreludeTag? v) (some? (ty/preludeUnionCases v))))) (listContains? (list "do" "begin" "if" "cond" "let" "match" "mt" "when" "unless" "fn" "lambda" "assert" "refute" "and" "or" "not") v))) (cons (makeDiag "ERR_INVALID_MT_ARM" "mt arm has an invalid pattern head" path) acc) acc))
+    (_ acc))
+
+fn extractPattern pat: rd/SExpr mod: ModuleSummary deps: DepIndex path: String accDiags: (List ty/Diagnostic) -> (Pair (Pair (List String) (Option String)) (List ty/Diagnostic))
   (mt pat ((rd/sexprAtom v) (if (or (= v "_") (isLiteralAtom? v)) (pair (pair (list) (none)) accDiags) (pair (pair (list v) (none)) accDiags))) ((rd/sexprVect items) (let [(vRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) accDiags) items))] (pair (pair (pairFirst vRes) (none)) (pairSecond vRes)))) ((rd/sexprList items) (mt (listHead items) ((none) (pair (pair (list) (none)) accDiags)) ((some h) (let [(headTok (rd/sexprHead h)) (subs (safeTail items)) (uInfo (unionForTag headTok mod deps))] (let [(dCheck (mt uInfo ((some _) accDiags) ((none) (cons (makeDiag "rule-2" (str headTok " is not a case of any union") path) accDiags)))) (arityRes (fold (fn [(acc (Pair (List String) (List ty/Diagnostic))) (sub rd/SExpr)] -> (Pair (List String) (List ty/Diagnostic)) (let [(subRes (extractPattern sub mod deps path (pairSecond acc)))] (pair (listAppend (pairFirst acc) (pairFirst (pairFirst subRes))) (pairSecond subRes)))) (pair (list) dCheck) subs))] (pair (pair (pairFirst arityRes) (some headTok)) (pairSecond arityRes))))))))
 
-fn checkMatchExhaustiveness heads: (List String) mod: ModuleSummary deps: (Map String ModuleSummary) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
-  (if (listEmpty? heads) acc (let [(firstHead (mt (listHead heads) ((some h) h) ((none) ""))) (uFirst (unionForTag firstHead mod deps))] (mt uFirst ((none) acc) ((some u1) (let [(u1Name (pairFirst u1)) (u1Cases (pairSecond u1)) (mixDiags (fold (fn [(a (List ty/Diagnostic)) (h String)] -> (List ty/Diagnostic) (mt (unionForTag h mod deps) ((none) a) ((some uh) (if (not (= (pairFirst uh) u1Name)) (cons (makeDiag "rule-4" (str "arms mix unions: " u1Name ", " (pairFirst uh)) path) a) a)))) (list) heads))] (if (not (listEmpty? mixDiags)) (listAppend mixDiags acc) (let [(bareHeads (map (fn [(h String)] -> String (if (stringContains? h "/") (let [(p (stringSplit h "/"))] (mt (listGet p 1) ((some m) m) ((none) h))) h)) heads)) (missing (filter (fn [(c String)] -> Bool (not (listContains? bareHeads c))) u1Cases))] (if (not (listEmpty? missing)) (cons (makeDiag "rule-4" (str "match is not exhaustive: " (stringJoin missing ", ") " unhandled") path) acc) acc))))))))
+fn closedEnumFamily? family: String -> Bool
+  (not (or (= family "Option") (or (= family "Result") (= family "List"))))
+
+fn checkMatchExhaustiveness heads: (List String) mod: ModuleSummary deps: DepIndex path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (if (listEmpty? heads) acc (let [(firstHead (mt (listHead heads) ((some h) h) ((none) ""))) (uFirst (unionForTag firstHead mod deps))] (mt uFirst ((none) acc) ((some u1) (let [(u1Name (pairFirst u1)) (u1Cases (pairSecond u1)) (mixDiags (fold (fn [(a (List ty/Diagnostic)) (h String)] -> (List ty/Diagnostic) (mt (unionForTag h mod deps) ((none) a) ((some uh) (if (not (= (pairFirst uh) u1Name)) (cons (makeDiag "rule-4" (str "arms mix unions: " u1Name ", " (pairFirst uh)) path) a) a)))) (list) heads))] (if (not (listEmpty? mixDiags)) (listAppend mixDiags acc) (let [(bareHeads (map (fn [(h String)] -> String (if (stringContains? h "/") (let [(p (stringSplit h "/"))] (mt (listGet p 1) ((some m) m) ((none) h))) h)) heads)) (missing (filter (fn [(c String)] -> Bool (not (listContains? bareHeads c))) u1Cases))] (if (and (not (listEmpty? missing)) (closedEnumFamily? u1Name)) (cons (makeDiag "rule-4" (str "match is not exhaustive: " (stringJoin missing ", ") " unhandled") path) acc) acc))))))))
+
+fn hostOperatorArity? head: String given: Int64 -> Bool
+  (cond ((or (= head "+") (= head "*")) (>= given 1)) ((= head "-") (= given 1)) (else false))
+
+fn fnHead? h: String mod: ModuleSummary deps: DepIndex -> Bool
+  (if (isQualifiedName? h)
+    (let [(qp (splitQual h))]
+      (mt (modImport mod (pairFirst qp))
+        ((some mpath) (mt (resolveDepIn mpath deps) ((ok target) (some? (modFun target (pairSecond qp)))) ((err _) false)))
+        ((none) false)))
+    (mapHas? mod.funs h))
 
 fn isCtorHead? h: String -> Bool
   (if (isPascalName? h) true (if (isQualifiedName? h) (isPascalName? (pairSecond (splitQual h))) false))
 
-fn findUnqualifiedSchemaInDeps head: String mod: ModuleSummary deps: (Map String ModuleSummary) -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))
+fn findUnqualifiedSchemaInDeps head: String mod: ModuleSummary deps: DepIndex -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))
   (fold (fn [(acc (Pair (Option SchemaSummary) (Option ty/Diagnostic))) (mpath String)] -> (Pair (Option SchemaSummary) (Option ty/Diagnostic))
           (mt (pairFirst acc)
             ((some _) acc)
             ((none)
-             (mt (resolveDepTarget mpath deps)
+             (mt (resolveDepIn mpath deps)
                ((ok target)
                 (if (not (or (listContains? target.exportedTypes head) (listContains? target.exports head)))
                   acc
@@ -808,8 +883,11 @@ fn findUnqualifiedSchemaInDeps head: String mod: ModuleSummary deps: (Map String
 fn extractCtorValExprs args: (List rd/SExpr) -> (List rd/SExpr)
   (mt (listHead args) ((none) (list)) ((some _) (let [(valNode (secondExprEmpty args)) (rest (dropTwo args))] (cons valNode (extractCtorValExprs rest)))))
 
-fn checkQualifiedMember v: String alias: String member: String mod: ModuleSummary deps: (Map String ModuleSummary) path: String -> (Option ty/Diagnostic)
-  (mt (modImport mod alias) ((none) (some (makeDiag "rule-9" (str v ": alias " alias " is not imported") path))) ((some mpath) (mt (resolveDepTarget mpath deps) ((err _) (none)) ((ok target) (if (and (not (listContains? target.exports member)) (not (mapHas? target.exportedCases member))) (some (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " member " is not exported by " target.name) path)) (none))))))
+fn exportedFn? target: ModuleSummary member: String -> Bool
+  (or (listContains? target.exports member) (and (listContains? target.exportedTypes member) (some? (modFun target member))))
+
+fn checkQualifiedMember v: String alias: String member: String mod: ModuleSummary deps: DepIndex path: String -> (Option ty/Diagnostic)
+  (mt (modImport mod alias) ((none) (some (makeDiag "rule-9" (str v ": alias " alias " is not imported") path))) ((some mpath) (mt (resolveDepIn mpath deps) ((err _) (none)) ((ok target) (if (and (not (exportedFn? target member)) (not (mapHas? target.exportedCases member))) (some (makeDiag "rule-9" (str "ERR_NOT_EXPORTED: " member " is not exported by " target.name) path)) (none))))))
 
 fn isReservedIdent? s: String -> Bool
   (or (stringStartsWith? s "agentscript-") (stringContains? s "/agentscript-"))
@@ -817,7 +895,7 @@ fn isReservedIdent? s: String -> Bool
 fn diagReservedPrefix name: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (cons (makeDiag "rule-7" (str name " uses the reserved agentscript- prefix") path) acc)
 
-fn checkHeadExpr headExpr: rd/SExpr scope: (Map String Bool) effectOk: Bool mod: ModuleSummary deps: (Map String ModuleSummary) fieldNames: (Map String Bool) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+fn checkHeadExpr headExpr: rd/SExpr scope: (Map String Bool) effectOk: Bool mod: ModuleSummary deps: DepIndex fieldNames: (Map String Bool) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (mt headExpr ((rd/sexprAtom v) (if (isLiteralAtom? v) acc (if (stringStartsWith? v ":") acc (if (stringStartsWith? v ".-") acc (if (isReservedIdent? v) (diagReservedPrefix v path acc) (if (isQualifiedName? v) (let [(qp (splitQual v)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (checkQualifiedMember v alias member mod deps path) ((some d) (cons d acc)) ((none) acc))) (if (or (mapHas? scope v) (or (mapHas? mod.funs v) (or (mapHas? mod.caseOwner v) (or (some? (findUnqualifiedCaseInDeps v mod deps)) (or (isPreludeTag? v) (or (isSpecialForm? v) (or (some? (ty/builtinSig v)) (ty/genericName? v)))))))) acc (cons (makeDiag "rule-2" (str v " is not defined") path) acc)))))))) (_ acc))
 
 (schema ResolveWorkItem (:f expr rd/SExpr) (:f scope (Map String Bool)) (:f effectOk Bool))
@@ -828,7 +906,7 @@ fn firstHeadIdent l: (List rd/SExpr) -> String
   (rd/sexprHead (firstExprEmpty l))
 
 fn addLetBinding bparts: (List rd/SExpr) pairAcc: (Pair (Map String Bool) (List ResolveWorkItem)) effectOk: Bool -> (Pair (Map String Bool) (List ResolveWorkItem))
-  (let [(bname (firstHeadIdent bparts)) (bval (secondExprEmpty bparts)) (curSc (pairFirst pairAcc)) (curItems (pairSecond pairAcc))] (pair (mapSet curSc bname true) (cons (ResolveWorkItem :expr bval :scope curSc :effectOk effectOk) curItems)))
+  (let [(bname (firstHeadIdent bparts)) (bval (if (= (listLength bparts) 3) (optionOr (listGet bparts 2) (rd/makeAtom "()")) (secondExprEmpty bparts))) (curSc (pairFirst pairAcc)) (curItems (pairSecond pairAcc))] (pair (mapSet curSc bname true) (cons (ResolveWorkItem :expr bval :scope curSc :effectOk effectOk) curItems)))
 
 fn addLetBindingItems bits: (List rd/SExpr) pairAcc: (Pair (Map String Bool) (List ResolveWorkItem)) effectOk: Bool path: String diags: (List ty/Diagnostic) -> (Pair (Pair (Map String Bool) (List ResolveWorkItem)) (List ty/Diagnostic))
   (let [(res (fold (fn [(st (Pair (Pair (Map String Bool) (List ResolveWorkItem)) (Option String))) (bit rd/SExpr)] -> (Pair (Pair (Map String Bool) (List ResolveWorkItem)) (Option String))
@@ -855,17 +933,17 @@ fn mapRitems exprs: (List rd/SExpr) scope: (Map String Bool) effectOk: Bool -> (
 fn dropTwo l: (List rd/SExpr) -> (List rd/SExpr)
   (safeTail (safeTail l))
 
-fn rResolveTick st: ResolveState tickIdx: Int64 mod: ModuleSummary deps: (Map String ModuleSummary) fieldNames: (Map String Bool) path: String -> ResolveState
-  (mt (listHead st.work) ((none) st) ((some item) (let [(rest (safeTail st.work)) (expr item.expr) (scope item.scope) (effectOk item.effectOk) (acc st.diags)] (mt expr ((rd/sexprAtom v) (if (isLiteralAtom? v) (ResolveState :work rest :diags acc) (if (stringStartsWith? v ":") (ResolveState :work rest :diags acc) (if (isReservedIdent? v) (ResolveState :work rest :diags (diagReservedPrefix v path acc)) (if (isQualifiedName? v) (let [(qp (splitQual v)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (checkQualifiedMember v alias member mod deps path) ((some d) (ResolveState :work rest :diags (cons d acc))) ((none) (ResolveState :work rest :diags acc)))) (if (mapHas? scope v) (ResolveState :work rest :diags acc) (if (mapHas? mod.funs v) (ResolveState :work rest :diags acc) (if (mapHas? mod.caseOwner v) (ResolveState :work rest :diags acc) (if (isPreludeTag? v) (ResolveState :work rest :diags acc) (if (isSpecialForm? v) (ResolveState :work rest :diags acc) (mt (ty/builtinSig (ty/genericSigName v)) ((some bsig) (if (pairFirst (pairSecond bsig)) (ResolveState :work rest :diags (cons (makeDiag "builtin-reference" (str v " is a builtin, not a value; wrap it in an fn to pass it") path) acc)) (if (and (isEffectfulBuiltin? v) (not effectOk)) (ResolveState :work rest :diags (cons (makeDiag "rule-12" (str "effectful builtin " v " taken as a value inside a declaration not marked !") path) acc)) (ResolveState :work rest :diags acc)))) ((none) (ResolveState :work rest :diags (cons (if (ty/genericMulti? v) (makeDiag "builtin-reference" (str v " is a builtin, not a value; wrap it in an fn to pass it") path) (makeDiag "rule-2" (str v " is not defined") path)) acc)))))))))))))) ((rd/sexprVect items) (ResolveState :work (listAppend (mapRitems items scope effectOk) rest) :diags acc)) ((rd/sexprList items) (mt (listHead items) ((none) (ResolveState :work rest :diags acc)) ((some h) (let [(headTok (if (rd/isAtom? h) (rd/sexprHead h) "")) (tailArgs (safeTail items))] (cond ((= headTok "==") (ResolveState :work rest :diags (cons (makeDiag "builtin-reference" "= is a builtin, not a value; wrap it in an fn to pass it" path) acc))) ((= headTok "let") (let [(bindItems (firstVectItems tailArgs)) (bodyExprs (safeTail tailArgs)) (bindRes (addLetBindingItems bindItems (pair scope (list)) effectOk path acc)) (bindingInfo (pairFirst bindRes)) (dLet (pairSecond bindRes)) (finalLetScope (pairFirst bindingInfo)) (letValItems (listReverse (pairSecond bindingInfo))) (letBodyItems (mapRitems bodyExprs finalLetScope effectOk))] (ResolveState :work (listAppend letValItems (listAppend letBodyItems rest)) :diags dLet))) ((= headTok "if") (ResolveState :work (listAppend (mapRitems tailArgs scope effectOk) rest) :diags acc)) ((= headTok "cond") (let [(condItems (fold (fn [(cacc (List ResolveWorkItem)) (clause rd/SExpr)] -> (List ResolveWorkItem) (mt clause ((rd/sexprList cparts) (let [(chead (firstHeadIdent cparts))] (if (= chead "else") (listAppend cacc (mapRitems (safeTail cparts) scope effectOk)) (listAppend cacc (mapRitems cparts scope effectOk))))) (_ cacc))) (list) tailArgs))] (ResolveState :work (listAppend condItems rest) :diags acc))) ((= headTok "fn") (let [(isBang (and (not (listEmpty? tailArgs)) (= (firstHeadIdent tailArgs) "!"))) (remArgs (if isBang (safeTail tailArgs) tailArgs)) (afterParams (safeTail remArgs)) (bodyNodes (if (and (not (listEmpty? afterParams)) (= (firstHeadIdent afterParams) "->")) (dropTwo afterParams) afterParams)) (paramItems (firstVectItems remArgs)) (fnScope (fold (fn [(sc (Map String Bool)) (p rd/SExpr)] -> (Map String Bool) (mt p ((rd/sexprAtom name) (mapSet sc name true)) ((rd/sexprList parts) (mapSet sc (firstHeadIdent parts) true)) ((rd/sexprVect parts) (mapSet sc (firstHeadIdent parts) true)))) scope paramItems)) (fnBodyItems (mapRitems bodyNodes fnScope (or isBang effectOk)))] (ResolveState :work (listAppend fnBodyItems rest) :diags acc))) ((or (= headTok "match") (= headTok "mt")) (let [(scrutinee (mt (listHead tailArgs) ((some s) s) ((none) (rd/makeAtom "")))) (arms (safeTail tailArgs)) (scrutItem (ResolveWorkItem :expr scrutinee :scope scope :effectOk effectOk)) (family (matchFamily arms mod deps)) (armsRes (fold (fn [(accArms (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List ResolveWorkItem)))) (arm rd/SExpr)] -> (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List ResolveWorkItem))) (mt arm ((rd/sexprList armParts) (let [(pat (mt (listHead armParts) ((some p) p) ((none) (rd/makeAtom "_")))) (armBodies (safeTail armParts)) (patRes (if (ctorPatternAtom? pat family mod deps) (pair (pair (list) (some (rd/sexprHead pat))) (pairFirst (pairSecond accArms))) (extractPattern pat mod deps path (pairFirst (pairSecond accArms))))) (boundNames (pairFirst (pairFirst patRes))) (optHead (pairSecond (pairFirst patRes))) (hasCatchall (or (pairSecond (pairFirst accArms)) (mt optHead ((none) true) ((some _) false)))) (nextHeads (mt optHead ((some hname) (cons hname (pairFirst (pairFirst accArms)))) ((none) (pairFirst (pairFirst accArms))))) (armScope (addStringsToSet scope boundNames)) (newArmItems (mapRitems armBodies armScope effectOk))] (pair (pair nextHeads hasCatchall) (pair (pairSecond patRes) (listAppend (pairSecond (pairSecond accArms)) newArmItems))))) (_ accArms))) (pair (pair (list) false) (pair acc (list scrutItem))) arms)) (dArms (listAppend (unreachableArmDiags arms family mod deps path false) (if (pairSecond (pairFirst armsRes)) (pairFirst (pairSecond armsRes)) (checkMatchExhaustiveness (pairFirst (pairFirst armsRes)) mod deps path (pairFirst (pairSecond armsRes)))))) (allMatchItems (pairSecond (pairSecond armsRes)))] (ResolveState :work (listAppend allMatchItems rest) :diags dArms))) ((stringStartsWith? headTok ".-") (let [(fname (sliceFrom headTok 2)) (dFname (if (mapHas? fieldNames fname) acc (cons (makeDiag "rule-2" (str "no record in this module has a field " fname) path) acc))) (newItems (mapRitems tailArgs scope effectOk))] (ResolveState :work (listAppend newItems rest) :diags dFname))) ((isCtorHead? headTok) (let [(schemaInfo (if (isQualifiedName? headTok) (let [(qp (splitQual headTok)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepTarget mpath deps) ((ok target) (if (not (or (listContains? target.exportedTypes member) (mapHas? target.schemas member))) (pair (none) (some (makeDiag "rule-9" (str member " is not an exported type of " target.name) path))) (mt (modSchema target member) ((some s) (pair (some s) (none))) ((none) (pair (none) (some (makeDiag "rule-2" (str member " is not a record type in " target.name) path))))))) ((err _) (pair (none) (none))))) ((none) (pair (none) (some (makeDiag "rule-9" (str headTok ": alias " alias " is not imported") path)))))) (mt (modSchema mod headTok) ((some s) (pair (some s) (none))) ((none) (let [(foundInDeps (findUnqualifiedSchemaInDeps headTok mod deps))] (mt (pairFirst foundInDeps) ((some s) (pair (some s) (none))) ((none) (pair (none) (some (makeDiag "rule-2" (str headTok " is not a record type in this module") path)))))))))) (dCtor (mt (pairSecond schemaInfo) ((some d) (cons d acc)) ((none) acc)))] (mt (pairFirst schemaInfo) ((none) (let [(newItems (mapRitems tailArgs scope effectOk))] (ResolveState :work (listAppend newItems rest) :diags dCtor))) ((some schema) (let [(fieldMap (fold (fn [(fm (Map String FieldSummary)) (f FieldSummary)] -> (Map String FieldSummary) (mapSet fm f.name f)) (mapEmpty) schema.fields)) (fieldsRes (foldCtorArgs tailArgs fieldMap (mapEmpty) schema.name path dCtor)) (givenKeys (pairFirst fieldsRes)) (dFields (pairSecond fieldsRes)) (missing (filter (fn [(f FieldSummary)] -> Bool (and (not f.hasDefault) (not (mapHas? givenKeys f.name)))) schema.fields)) (dMissing (if (not (listEmpty? missing)) (cons (makeDiag "ctor" (str schema.name " is missing " (stringJoin (map (fn [(f FieldSummary)] -> String f.name) missing) ", ")) path) dFields) dFields)) (ctorValExprs (extractCtorValExprs tailArgs)) (newItems (map (fn [(e rd/SExpr)] -> ResolveWorkItem (ResolveWorkItem :expr e :scope scope :effectOk effectOk)) ctorValExprs))] (ResolveState :work (listAppend newItems rest) :diags dMissing)))))) (else (let [(isLiteralCallee (isLiteralAtom? headTok)) (dKwCall (mt (keywordCallHeadDiag headTok path) ((some d) (cons d acc)) ((none) acc))) (dNotCallable (if isLiteralCallee (cons (makeDiag "not-callable" (str headTok " is a literal, not a function") path) dKwCall) dKwCall)) (calleeEffect (if (isEffectfulBuiltin? headTok) true (mt (modFun mod headTok) ((some f) f.effect) ((none) (if (isQualifiedName? headTok) (let [(qp (splitQual headTok)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepTarget mpath deps) ((ok target) (mt (modFun target member) ((some f) f.effect) ((none) false))) ((err _) false))) ((none) false))) false))))) (hasEffectLambda (fold (fn [(ef Bool) (a rd/SExpr)] -> Bool (or ef (mt a ((rd/sexprList aitems) (and (and (= (firstHeadIdent aitems) "fn") (not (listEmpty? (safeTail aitems)))) (= (rd/sexprHead (secondExprEmpty aitems)) "!"))) (_ false)))) false tailArgs)) (totalEffect (or calleeEffect hasEffectLambda)) (dEffect (if (and totalEffect (not effectOk)) (cons (makeDiag "rule-12" "effectful call inside a declaration not marked !" path) dNotCallable) dNotCallable)) (expectedArity (if (mapHas? scope headTok) (none) (mt (modFun mod headTok) ((some f) (some (listLength f.params))) ((none) (if (isQualifiedName? headTok) (let [(qp (splitQual headTok)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepTarget mpath deps) ((ok target) (mt (modFun target member) ((some f) (some (listLength f.params))) ((none) (mt (mapGet target.exportedCases member) ((some ename) (enumCaseArity target ename member)) ((none) (none)))))) ((err _) (none)))) ((none) (none)))) (mt (mapGet mod.caseOwner headTok) ((some ename) (enumCaseArity mod ename headTok)) ((none) (mt (ty/builtinSig (ty/genericSigName headTok)) ((some bsig) (if (pairFirst (pairSecond bsig)) (none) (some (listLength (pairFirst bsig))))) ((none) (none)))))))))) (givenCount (listLength tailArgs)) (dArity (mt expectedArity ((some exp) (if (and (not (= exp givenCount)) (not (and (= headTok "-") (= givenCount 1)))) (cons (makeDiag "arity" (str headTok " takes " (stringFromInt64 exp) " argument(s), given " (stringFromInt64 givenCount)) path) dEffect) dEffect)) ((none) dEffect))) (dHead (checkHeadExpr h scope effectOk mod deps fieldNames path dArity)) (newItems (mapRitems (if (rd/isAtom? h) tailArgs (cons h tailArgs)) scope effectOk))] (ResolveState :work (listAppend newItems rest) :diags dHead))))))))))))
+fn rResolveTick st: ResolveState tickIdx: Int64 mod: ModuleSummary deps: DepIndex fieldNames: (Map String Bool) path: String -> ResolveState
+  (mt (listHead st.work) ((none) st) ((some item) (let [(rest (safeTail st.work)) (expr item.expr) (scope item.scope) (effectOk item.effectOk) (acc st.diags)] (mt expr ((rd/sexprAtom v) (if (isLiteralAtom? v) (ResolveState :work rest :diags acc) (if (stringStartsWith? v ":") (ResolveState :work rest :diags acc) (if (isReservedIdent? v) (ResolveState :work rest :diags (diagReservedPrefix v path acc)) (if (isQualifiedName? v) (let [(qp (splitQual v)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (checkQualifiedMember v alias member mod deps path) ((some d) (ResolveState :work rest :diags (cons d acc))) ((none) (ResolveState :work rest :diags acc)))) (if (mapHas? scope v) (ResolveState :work rest :diags acc) (if (mapHas? mod.funs v) (ResolveState :work rest :diags acc) (if (mapHas? mod.caseOwner v) (ResolveState :work rest :diags acc) (if (isPreludeTag? v) (ResolveState :work rest :diags acc) (if (isSpecialForm? v) (ResolveState :work rest :diags acc) (mt (ty/builtinSig (ty/genericSigName v)) ((some bsig) (if (pairFirst (pairSecond bsig)) (ResolveState :work rest :diags (cons (makeDiag "builtin-reference" (str v " is a builtin, not a value; wrap it in an fn to pass it") path) acc)) (if (and (isEffectfulBuiltin? v) (not effectOk)) (ResolveState :work rest :diags (cons (makeDiag "rule-12" (str "effectful builtin " v " taken as a value inside a declaration not marked !") path) acc)) (ResolveState :work rest :diags acc)))) ((none) (ResolveState :work rest :diags (cons (if (ty/genericMulti? v) (makeDiag "builtin-reference" (str v " is a builtin, not a value; wrap it in an fn to pass it") path) (makeDiag "rule-2" (str v " is not defined") path)) acc)))))))))))))) ((rd/sexprVect items) (ResolveState :work (listAppend (mapRitems items scope effectOk) rest) :diags acc)) ((rd/sexprList items) (mt (listHead items) ((none) (ResolveState :work rest :diags acc)) ((some h) (let [(headTok (if (rd/isAtom? h) (rd/sexprHead h) "")) (tailArgs (safeTail items))] (cond ((= headTok "let") (let [(bindItems (firstVectItems tailArgs)) (bodyExprs (safeTail tailArgs)) (bindRes (addLetBindingItems bindItems (pair scope (list)) effectOk path acc)) (bindingInfo (pairFirst bindRes)) (dLet (pairSecond bindRes)) (finalLetScope (pairFirst bindingInfo)) (letValItems (listReverse (pairSecond bindingInfo))) (letBodyItems (mapRitems bodyExprs finalLetScope effectOk))] (ResolveState :work (listAppend letValItems (listAppend letBodyItems rest)) :diags dLet))) ((= headTok "if") (ResolveState :work (listAppend (mapRitems tailArgs scope effectOk) rest) :diags acc)) ((= headTok "cond") (let [(condItems (fold (fn [(cacc (List ResolveWorkItem)) (clause rd/SExpr)] -> (List ResolveWorkItem) (mt clause ((rd/sexprList cparts) (let [(chead (firstHeadIdent cparts))] (if (= chead "else") (listAppend cacc (mapRitems (safeTail cparts) scope effectOk)) (listAppend cacc (mapRitems cparts scope effectOk))))) (_ cacc))) (list) tailArgs))] (ResolveState :work (listAppend condItems rest) :diags acc))) ((= headTok "fn") (let [(isBang (and (not (listEmpty? tailArgs)) (= (firstHeadIdent tailArgs) "!"))) (remArgs (if isBang (safeTail tailArgs) tailArgs)) (afterParams (safeTail remArgs)) (bodyNodes (if (and (not (listEmpty? afterParams)) (= (firstHeadIdent afterParams) "->")) (dropTwo afterParams) afterParams)) (paramItems (firstVectItems remArgs)) (fnScope (fold (fn [(sc (Map String Bool)) (p rd/SExpr)] -> (Map String Bool) (mt p ((rd/sexprAtom name) (mapSet sc name true)) ((rd/sexprList parts) (mapSet sc (firstHeadIdent parts) true)) ((rd/sexprVect parts) (mapSet sc (firstHeadIdent parts) true)))) scope paramItems)) (fnBodyItems (mapRitems bodyNodes fnScope (or isBang effectOk)))] (ResolveState :work (listAppend fnBodyItems rest) :diags acc))) ((or (= headTok "match") (= headTok "mt")) (let [(scrutinee (mt (listHead tailArgs) ((some s) s) ((none) (rd/makeAtom "")))) (arms (safeTail tailArgs)) (scrutItem (ResolveWorkItem :expr scrutinee :scope scope :effectOk effectOk)) (family (matchFamilyIx arms mod deps)) (armsRes (fold (fn [(accArms (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List ResolveWorkItem)))) (arm rd/SExpr)] -> (Pair (Pair (List String) Bool) (Pair (List ty/Diagnostic) (List ResolveWorkItem))) (mt arm ((rd/sexprList armParts) (let [(pat (mt (listHead armParts) ((some p) p) ((none) (rd/makeAtom "_")))) (armBodies (safeTail armParts)) (patRes (if (ctorPatternAtomIx? pat family mod deps) (pair (pair (list) (some (rd/sexprHead pat))) (pairFirst (pairSecond accArms))) (extractPattern pat mod deps path (invalidArmHead pat mod path (pairFirst (pairSecond accArms)))))) (boundNames (pairFirst (pairFirst patRes))) (optHead (pairSecond (pairFirst patRes))) (hasCatchall (or (pairSecond (pairFirst accArms)) (mt optHead ((none) true) ((some _) false)))) (nextHeads (mt optHead ((some hname) (cons hname (pairFirst (pairFirst accArms)))) ((none) (pairFirst (pairFirst accArms))))) (armScope (addStringsToSet scope boundNames)) (newArmItems (mapRitems armBodies armScope effectOk))] (pair (pair nextHeads hasCatchall) (pair (pairSecond patRes) (listAppend (pairSecond (pairSecond accArms)) newArmItems))))) (_ accArms))) (pair (pair (list) false) (pair acc (list scrutItem))) arms)) (dArms (listAppend (unreachableArmDiagsIx arms family mod deps path false) (if (pairSecond (pairFirst armsRes)) (pairFirst (pairSecond armsRes)) (checkMatchExhaustiveness (pairFirst (pairFirst armsRes)) mod deps path (pairFirst (pairSecond armsRes)))))) (allMatchItems (pairSecond (pairSecond armsRes)))] (ResolveState :work (listAppend allMatchItems rest) :diags dArms))) ((stringStartsWith? headTok ".-") (let [(fname (sliceFrom headTok 2)) (dFname (if (mapHas? fieldNames fname) acc (cons (makeDiag "rule-2" (str "no record in this module has a field " fname) path) acc))) (newItems (mapRitems tailArgs scope effectOk))] (ResolveState :work (listAppend newItems rest) :diags dFname))) ((and (isCtorHead? headTok) (not (fnHead? headTok mod deps))) (let [(schemaInfo (if (isQualifiedName? headTok) (let [(qp (splitQual headTok)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepIn mpath deps) ((ok target) (if (not (or (listContains? target.exportedTypes member) (mapHas? target.schemas member))) (pair (none) (some (makeDiag "rule-9" (str member " is not an exported type of " target.name) path))) (mt (modSchema target member) ((some s) (pair (some s) (none))) ((none) (pair (none) (some (makeDiag "rule-2" (str member " is not a record type in " target.name) path))))))) ((err _) (pair (none) (none))))) ((none) (pair (none) (some (makeDiag "rule-9" (str headTok ": alias " alias " is not imported") path)))))) (mt (modSchema mod headTok) ((some s) (pair (some s) (none))) ((none) (let [(foundInDeps (findUnqualifiedSchemaInDeps headTok mod deps))] (mt (pairFirst foundInDeps) ((some s) (pair (some s) (none))) ((none) (pair (none) (some (makeDiag "rule-2" (str headTok " is not a record type in this module") path)))))))))) (dCtor (mt (pairSecond schemaInfo) ((some d) (cons d acc)) ((none) acc)))] (mt (pairFirst schemaInfo) ((none) (let [(newItems (mapRitems tailArgs scope effectOk))] (ResolveState :work (listAppend newItems rest) :diags dCtor))) ((some schema) (let [(fieldMap (fold (fn [(fm (Map String FieldSummary)) (f FieldSummary)] -> (Map String FieldSummary) (mapSet fm f.name f)) (mapEmpty) schema.fields)) (fieldsRes (foldCtorArgs tailArgs fieldMap (mapEmpty) schema.name path dCtor)) (givenKeys (pairFirst fieldsRes)) (dFields (pairSecond fieldsRes)) (missing (filter (fn [(f FieldSummary)] -> Bool (and (not f.hasDefault) (not (mapHas? givenKeys f.name)))) schema.fields)) (dMissing (if (not (listEmpty? missing)) (cons (makeDiag "ctor" (str schema.name " is missing " (stringJoin (map (fn [(f FieldSummary)] -> String f.name) missing) ", ")) path) dFields) dFields)) (ctorValExprs (extractCtorValExprs tailArgs)) (newItems (map (fn [(e rd/SExpr)] -> ResolveWorkItem (ResolveWorkItem :expr e :scope scope :effectOk effectOk)) ctorValExprs))] (ResolveState :work (listAppend newItems rest) :diags dMissing)))))) (else (let [(isLiteralCallee (isLiteralAtom? headTok)) (dKwCall (mt (keywordCallHeadDiag headTok path) ((some d) (cons d acc)) ((none) acc))) (dNotCallable (if isLiteralCallee (cons (makeDiag "not-callable" (str headTok " is a literal, not a function") path) dKwCall) dKwCall)) (calleeEffect (if (isEffectfulBuiltin? headTok) true (mt (modFun mod headTok) ((some f) f.effect) ((none) (if (isQualifiedName? headTok) (let [(qp (splitQual headTok)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepIn mpath deps) ((ok target) (mt (modFun target member) ((some f) f.effect) ((none) false))) ((err _) false))) ((none) false))) false))))) (hasEffectLambda (fold (fn [(ef Bool) (a rd/SExpr)] -> Bool (or ef (mt a ((rd/sexprList aitems) (and (and (= (firstHeadIdent aitems) "fn") (not (listEmpty? (safeTail aitems)))) (= (rd/sexprHead (secondExprEmpty aitems)) "!"))) (_ false)))) false tailArgs)) (totalEffect (or calleeEffect hasEffectLambda)) (dEffect (if (and totalEffect (not effectOk)) (cons (makeDiag "rule-12" "effectful call inside a declaration not marked !" path) dNotCallable) dNotCallable)) (expectedArity (if (mapHas? scope headTok) (none) (mt (modFun mod headTok) ((some f) (some (listLength f.params))) ((none) (if (isQualifiedName? headTok) (let [(qp (splitQual headTok)) (alias (pairFirst qp)) (member (pairSecond qp))] (mt (modImport mod alias) ((some mpath) (mt (resolveDepIn mpath deps) ((ok target) (mt (modFun target member) ((some f) (some (listLength f.params))) ((none) (mt (mapGet target.exportedCases member) ((some ename) (enumCaseArity target ename member)) ((none) (none)))))) ((err _) (none)))) ((none) (none)))) (mt (mapGet mod.caseOwner headTok) ((some ename) (enumCaseArity mod ename headTok)) ((none) (mt (ty/builtinSig (ty/genericSigName headTok)) ((some bsig) (if (pairFirst (pairSecond bsig)) (none) (some (listLength (pairFirst bsig))))) ((none) (none)))))))))) (givenCount (listLength tailArgs)) (dArity (mt expectedArity ((some exp) (if (and (not (= exp givenCount)) (not (and (not (mapHas? mod.funs headTok)) (hostOperatorArity? headTok givenCount)))) (cons (makeDiag "arity" (str headTok " takes " (stringFromInt64 exp) " argument(s), given " (stringFromInt64 givenCount)) path) dEffect) dEffect)) ((none) dEffect))) (dHead (checkHeadExpr h scope effectOk mod deps fieldNames path dArity)) (newItems (mapRitems (if (rd/isAtom? h) tailArgs (cons h tailArgs)) scope effectOk))] (ResolveState :work (listAppend newItems rest) :diags dHead))))))))))))
 
-fn rResolveRun st: ResolveState budget: Int64 mod: ModuleSummary deps: (Map String ModuleSummary) fieldNames: (Map String Bool) path: String -> ResolveState
+fn rResolveRun st: ResolveState budget: Int64 mod: ModuleSummary deps: DepIndex fieldNames: (Map String Bool) path: String -> ResolveState
   (let [(next (fold (fn [(s ResolveState) (idx Int64)] -> ResolveState (rResolveTick s idx mod deps fieldNames path)) st (range 0 budget)))] (if (listEmpty? next.work) next (rResolveRun next (* budget 2) mod deps fieldNames path)))
 
 fn foldCtorArgs args: (List rd/SExpr) fieldMap: (Map String FieldSummary) given: (Map String Bool) sname: String path: String acc: (List ty/Diagnostic) -> (Pair (Map String Bool) (List ty/Diagnostic))
   (mt (listHead args) ((none) (pair given acc)) ((some keyNode) (let [(valNode (secondExprEmpty args)) (rest (dropTwo args)) (rawKey (rd/sexprHead keyNode)) (kname (if (stringStartsWith? rawKey ":") (sliceFrom rawKey 1) rawKey))] (let [(dKey (if (not (mapHas? fieldMap kname)) (cons (makeDiag "ctor" (str sname " has no field " kname) path) acc) (if (mapHas? given kname) (cons (makeDiag "ctor" (str sname ": duplicate key " kname) path) acc) acc)))] (foldCtorArgs rest fieldMap (mapSet given kname true) sname path dKey)))))
 
-fn collectAllFieldNames mod: ModuleSummary deps: (Map String ModuleSummary) -> (Map String Bool)
-  (let [(s1 (addStringsToSet (mapSet (mapSet (mapEmpty) "first" true) "second" true) (list "isFile" "isDir" "isSymlink" "size" "mtime" "mode" "exitCode" "stdout" "stderr"))) (s2 (fold (fn [(acc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet acc s.fields)) s1 (mapValues mod.schemas))) (s3 (fold (fn [(acc (Map String Bool)) (mpath String)] -> (Map String Bool) (mt (resolveDepTarget mpath deps) ((ok target) (let [(acc1 (addStringsToSet acc (mapKeys target.exportedFields)))] (fold (fn [(facc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet facc s.fields)) acc1 (mapValues target.schemas)))) ((err _) acc))) s2 (mapValues mod.imports)))] s3)
+fn collectAllFieldNames mod: ModuleSummary deps: DepIndex -> (Map String Bool)
+  (let [(s1 (addStringsToSet (mapSet (mapSet (mapEmpty) "first" true) "second" true) (list "isFile" "isDir" "isSymlink" "size" "mtime" "mode" "exitCode" "stdout" "stderr"))) (s2 (fold (fn [(acc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet acc s.fields)) s1 (mapValues mod.schemas))) (s3 (fold (fn [(acc (Map String Bool)) (target ModuleSummary)] -> (Map String Bool) (let [(acc1 (addStringsToSet acc (mapKeys target.exportedFields)))] (fold (fn [(facc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet facc s.fields)) acc1 (mapValues target.schemas)))) s2 (mapValues deps.deps)))] s3)
 
 fn bodyPosAt d: a/DefunNode idx: Int64 -> (Pair Int64 Int64)
   (mt (listGet d.bodyPos idx) ((some p) (pair p.line p.col)) ((none) (pair 1 1)))
@@ -877,19 +955,19 @@ fn resolveBodyDiagPos expr: rd/SExpr pos: (Pair Int64 Int64) ds: (List ty/Diagno
   (let [(calleeDiag (listAny? (fn [(d ty/Diagnostic)] -> Bool (or (= d.code "rule-2") (= d.code "rule-12"))) ds))]
     (mt expr ((rd/sexprList _) (if (and calleeDiag (> (pairSecond pos) 0)) (pair (pairFirst pos) (+ (pairSecond pos) 1)) pos)) (_ pos)))
 
-fn checkDefunBody d: a/DefunNode mod: ModuleSummary deps: (Map String ModuleSummary) fieldNames: (Map String Bool) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+fn checkDefunBody d: a/DefunNode mod: ModuleSummary deps: DepIndex fieldNames: (Map String Bool) path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
   (let [(paramScope (fold (fn [(sc (Map String Bool)) (p a/Param)] -> (Map String Bool) (mapSet sc p.name true)) (mapEmpty) d.params))]
-    (fold (fn [(a (List ty/Diagnostic)) (i Int64)] -> (List ty/Diagnostic)
-            (let [(bodyE (optionOr (listGet d.body i) (rd/makeAtom "()")))
-                  (finalSt (rResolveRun (ResolveState :work (list (ResolveWorkItem :expr bodyE :scope paramScope :effectOk d.effect)) :diags (list)) 64 mod deps fieldNames path))
+    (fold (fn [(a (List ty/Diagnostic)) (ie (Pair Int64 rd/SExpr))] -> (List ty/Diagnostic)
+            (let [(i (pairFirst ie)) (bodyE (pairSecond ie))
+                  (finalSt (rResolveRun (ResolveState :work (list (ResolveWorkItem :expr bodyE :scope paramScope :effectOk (markedFn? d))) :diags (list)) 64 mod deps fieldNames path))
                   (pos (resolveBodyDiagPos bodyE (bodyPosAt d i) finalSt.diags))]
               (listAppend (placeDiags finalSt.diags pos) a)))
-          acc (range 0 (listLength d.body))))
+          acc (zip (range 0 (listLength d.body)) d.body)))
 
 fn defunPositions forms: (List a/TopForm) -> (Map String (Pair Int64 Int64))
   (fold (fn [(m (Map String (Pair Int64 Int64))) (form a/TopForm)] -> (Map String (Pair Int64 Int64)) (mt form ((a/topDefun d) (mapSet m d.name (bodyPosAt d 0))) (_ m))) (mapEmpty) forms)
 
-fn checkBodies forms: (List a/TopForm) mod: ModuleSummary deps: (Map String ModuleSummary) path: String -> (List ty/Diagnostic)
+fn checkBodies forms: (List a/TopForm) mod: ModuleSummary deps: DepIndex path: String -> (List ty/Diagnostic)
   (let [(fieldNames (collectAllFieldNames mod deps))] (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic) (mt form ((a/topDefun d) (checkDefunBody d mod deps fieldNames path acc)) (_ acc))) (list) forms))
 
 fn checkReservedName name: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
@@ -901,5 +979,21 @@ fn checkNamedItems names: (List String) path: String acc: (List ty/Diagnostic) -
 fn checkReservedNames forms: (List a/TopForm) path: String -> (List ty/Diagnostic)
   (fold (fn [(acc (List ty/Diagnostic)) (form a/TopForm)] -> (List ty/Diagnostic) (mt form ((a/topDefun d) (checkNamedItems (map (fn [(p a/Param)] -> String p.name) d.params) path (checkReservedName d.name path acc))) ((a/topSchema s) (checkNamedItems (map (fn [(f a/AstField)] -> String f.name) s.fields) path (checkReservedName s.name path acc))) ((a/topEnum e) (fold (fn [(a (List ty/Diagnostic)) (c a/EnumCase)] -> (List ty/Diagnostic) (checkNamedItems (map (fn [(p a/Param)] -> String p.name) c.fields) path (checkReservedName c.name path a))) (checkReservedName e.name path acc) e.cases)) ((a/topModule m) (checkNamedItems m.exported path acc)) (_ acc))) (list) forms)
 
+fn resolveModuleIn mod: ModuleSummary forms: (List a/TopForm) deps: DepIndex -> (List ty/Diagnostic)
+  (if (not deps.indexed) (list (makeDiag "ERR_INTERNAL" "resolveModuleIn needs an indexed DepIndex (depIndexOf), got a scan" mod.path))
+    (let [(p mod.path) (poses (defunPositions forms))] (listAppend (checkReservedNames forms p) (listAppend (checkModuleRules mod poses p) (listAppend (checkImportsAndCycles mod deps p) (listAppend (checkExportClosure mod p) (listAppend (checkTypeAnnotations mod deps poses p) (checkBodies forms mod deps p))))))))
+
 fn resolveModule mod: ModuleSummary forms: (List a/TopForm) deps: (Map String ModuleSummary) -> (List ty/Diagnostic)
-  (let [(p mod.path) (poses (defunPositions forms))] (listAppend (checkReservedNames forms p) (listAppend (checkModuleRules mod poses p) (listAppend (checkImportsAndCycles mod deps p) (listAppend (checkExportClosure mod p) (listAppend (checkTypeAnnotations mod deps poses p) (checkBodies forms mod deps p)))))))
+  (resolveModuleIn mod forms (depIndexOf deps))
+
+fn checkTypeTree t: ty/Type bound: (Map String Bool) mod: ModuleSummary deps: (Map String ModuleSummary) where: String path: String acc: (List ty/Diagnostic) -> (List ty/Diagnostic)
+  (checkTypeTreeIx t bound mod (depScanOf deps) where path acc)
+
+fn matchFamily arms: (List rd/SExpr) mod: ModuleSummary deps: (Map String ModuleSummary) -> String
+  (matchFamilyIx arms mod (depScanOf deps))
+
+fn ctorPatternAtom? pat: rd/SExpr family: String mod: ModuleSummary deps: (Map String ModuleSummary) -> Bool
+  (ctorPatternAtomIx? pat family mod (depScanOf deps))
+
+fn unreachableArmDiags arms: (List rd/SExpr) family: String mod: ModuleSummary deps: (Map String ModuleSummary) path: String seenCatchall: Bool -> (List ty/Diagnostic)
+  (unreachableArmDiagsIx arms family mod (depScanOf deps) path seenCatchall)

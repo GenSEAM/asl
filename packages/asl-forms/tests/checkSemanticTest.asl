@@ -241,6 +241,11 @@ fn testCleanCorpusFiles! -> Bool
     (assert (checkFileClean! "tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js") "clean corpus file yields no semantic items: tests/harnessBench/cases/attention-flood/svc/vendor/uploader.min.js")
     true)
 
+fn lineOfSubstring text: String needle: String -> Int64
+  (mt (stringIndexOf text needle)
+    ((none) -1)
+    ((some idx) (+ 1 (stringCountChar (optionOr (stringSlice text 0 idx) "") "\n"))))
+
 fn testStagedEditPackageImports! -> Bool
   (let [(target "asl/packages/asl-forms/src/wire.asl")
         (orig (resultOr (fileReadString target) ""))
@@ -262,7 +267,7 @@ fn qqDummy -> Int64
       (assert (ok? resBad) "seeded unknown symbol checkSemantic is ok")
       (assert (= (listLength itemsBad) 1) "seeded unknown symbol gives exactly one item")
       (assert (= (chk/leftItemExpected itemBad1) "ERR_UNKNOWN_SYMBOL") "seeded unknown symbol expected is ERR_UNKNOWN_SYMBOL")
-      (assert (= (chk/leftItemLine itemBad1) 290) "seeded unknown symbol is at line 290")
+      (assert (= (chk/leftItemLine itemBad1) (lineOfSubstring editedBad "qqUnknown")) (str "seeded unknown symbol is at the line qqUnknown actually appears on in the edited fixture, got " (stringFromInt64 (chk/leftItemLine itemBad1)) " want " (stringFromInt64 (lineOfSubstring editedBad "qqUnknown"))))
       (assert (stringContains? (chk/leftItemNear itemBad1) "qqUnknown") "seeded unknown symbol near contains qqUnknown")
       true))
 

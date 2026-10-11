@@ -135,6 +135,6 @@ fn ! main args: (List String) -> (Result Int64 String)
       (let [(ctx (c/Ctx :cwd cwd :env (map envPair (envList)) :spawnEnv (none) :now (/ (nowNs) 1000000000) :date ""))
             (o (runObserve ctx args))]
         (do
-          (if (stringEmpty? o.out) true (print o.out))
+          (if (stringEmpty? o.out) true (do (print o.out) true))
           (if (stringEmpty? o.err) true (do (fdWrite 2 o.err) true))
           (ok o.code)))))

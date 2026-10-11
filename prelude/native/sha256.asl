@@ -2,12 +2,8 @@
   :x [bytesSha256]
   :i [])
 
-"32-bit word arithmetic kept inside int64 by explicit masking: pow2 n for n in 0..32 is at most 4294967296, shlWord's product of two values each under 2^32 stays under 2^63 for every shift this file uses (n < 32), and addWord's sum of at most five terms each under 2^32 stays under 2^35, so none of the + or * below can overflow int64 and trap"
-fn pow2 n: Int64 -> Int64
-  (if (<= n 0) 1 (* 2 (pow2 (- n 1))))
-
 fn mask32 x: Int64 -> Int64
-  (mod x 4294967296)
+  (& x 4294967295)
 
 fn addWord2 a: Int64 b: Int64 -> Int64
   (mask32 (+ a b))
@@ -19,10 +15,10 @@ fn addWord5 a: Int64 b: Int64 c: Int64 d: Int64 e: Int64 -> Int64
   (addWord2 (addWord3 a b c) (addWord2 d e))
 
 fn shrWord x: Int64 n: Int64 -> Int64
-  (/ x (pow2 n))
+  (>> x n)
 
 fn shlWord x: Int64 n: Int64 -> Int64
-  (mask32 (* x (pow2 n)))
+  (mask32 (<< x n))
 
 fn rotr x: Int64 n: Int64 -> Int64
   (| (shrWord x n) (shlWord x (- 32 n)))
@@ -45,7 +41,6 @@ fn choose e: Int64 f: Int64 g: Int64 -> Int64
 fn majority a: Int64 b: Int64 c: Int64 -> Int64
   (^ (^ (& a b) (& a c)) (& b c))
 
-"the 64 round constants (FIPS 180-4 4.2.2), indexed by a cond chain rather than an array: the overlay has no array builtin to call, only the Bytes it already needs for the message schedule"
 fn roundK t: Int64 -> Int64
   (cond
     ((< t 8) (cond ((= t 0) 1116352408) ((= t 1) 1899447441) ((= t 2) 3049323471) ((= t 3) 3921009573)
@@ -65,7 +60,6 @@ fn roundK t: Int64 -> Int64
     (else (cond ((= t 56) 1955562222) ((= t 57) 2024104815) ((= t 58) 2227730452) ((= t 59) 2361852424)
                 ((= t 60) 2428436474) ((= t 61) 2756734187) ((= t 62) 3204031479) (else 3329325298))))
 
-
 fn initialH i: Int64 -> Int64
   (cond ((= i 0) 1779033703) ((= i 1) 3144134277) ((= i 2) 1013904242) ((= i 3) 2773480762)
         ((= i 4) 1359893119) ((= i 5) 2600822924) ((= i 6) 528734635) (else 1541459225))
@@ -82,7 +76,6 @@ fn ! set32 b: Bytes i: Int64 v: Int64 -> Bool
     (bytesSet b (+ i 3) (mod v 256))
     true)
 
-"the padded buffer: next multiple of 64 that leaves room for 0x80 and the 8-byte length no matter n mod 64, as asl/host/src/prelude.c bSha256's own tl computation does"
 fn paddedLen n: Int64 -> Int64
   (* (/ (+ n 72) 64) 64)
 
@@ -116,7 +109,6 @@ fn ! writeLen b: Bytes at: Int64 bits: Int64 -> Bool
     (bytesSet b (+ at 7) (mod bits 256))
     true)
 
-"the message schedule for one block, 256 bytes holding 64 32-bit words, w[0..15] copied from the block and w[16..63] built by smallSigma0/smallSigma1"
 fn ! loadSchedule src: Bytes blockOff: Int64 w: Bytes i: Int64 -> Bool
   (if (>= i 16) true
     (do (set32 w (* i 4) (get32 src (+ blockOff (* i 4)))) (loadSchedule src blockOff w (+ i 1))))
@@ -140,20 +132,17 @@ fn ! extendSchedule w: Bytes i: Int64 -> Bool
   (:f g Int64 "Working variable g")
   (:f h Int64 "Working variable h"))
 
-fn ! round w: Bytes t: Int64 s: ShaState -> ShaState
-  (if (>= t 64) s
-    (let [(wt (get32 w (* t 4)))
-          (t1 (addWord5 s.h (bigSigma1 s.e) (choose s.e s.f s.g) (roundK t) wt))
-          (t2 (addWord2 (bigSigma0 s.a) (majority s.a s.b s.c)))
-          (next (ShaState :a (mask32 (+ t1 t2)) :b s.a :c s.b :d s.c
-                          :e (mask32 (+ s.d t1)) :f s.e :g s.f :h s.g))]
-      (round w (+ t 1) next)))
+fn ! round w: Bytes t: Int64 a: Int64 b: Int64 c: Int64 d: Int64 e: Int64 f: Int64 g: Int64 h: Int64 -> ShaState
+  (if (>= t 64) (ShaState :a a :b b :c c :d d :e e :f f :g g :h h)
+    (let [(t1 (addWord5 h (bigSigma1 e) (choose e f g) (roundK t) (get32 w (* t 4))))
+          (t2 (addWord2 (bigSigma0 a) (majority a b c)))]
+      (round w (+ t 1) (mask32 (+ t1 t2)) a b c (mask32 (+ d t1)) e f g)))
 
 fn ! compressBlock src: Bytes blockOff: Int64 w: Bytes hs: ShaState -> ShaState
   (do
     (loadSchedule src blockOff w 0)
     (extendSchedule w 16)
-    (let [(out (round w 0 hs))]
+    (let [(out (round w 0 hs.a hs.b hs.c hs.d hs.e hs.f hs.g hs.h))]
       (ShaState :a (mask32 (+ hs.a out.a)) :b (mask32 (+ hs.b out.b))
                 :c (mask32 (+ hs.c out.c)) :d (mask32 (+ hs.d out.d))
                 :e (mask32 (+ hs.e out.e)) :f (mask32 (+ hs.f out.f))

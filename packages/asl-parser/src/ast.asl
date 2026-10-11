@@ -328,19 +328,59 @@ fn docStep st: DocScan t: lx/Token -> DocScan
 fn lineOfByte bs: Bytes at: Int64 -> Int64
   (+ 1 (listLength (filter (fn [k] (= (bytesGet bs k) 10)) (range 0 at))))
 
+fn keywordEnd? bs: Bytes n: Int64 j: Int64 -> Bool
+  (or (>= j n)
+    (let [(b (bytesGet bs j))]
+      (or (= b 32) (or (= b 9) (or (= b 10) (or (= b 13) (or (= b 40) (or (= b 41) (or (= b 91) (or (= b 93) (or (= b 123) (or (= b 125) (or (= b 34) (or (= b 59) (or (= b 58) (= b 64))))))))))))))))
+
+fn docKeywordAt? bs: Bytes n: Int64 i: Int64 -> Bool
+  (cond
+    ((>= (+ i 1) n) false)
+    ((and (= (bytesGet bs i) 58) (= (bytesGet bs (+ i 1)) 100))
+     (if (or (keywordEnd? bs n (+ i 2)) (and (< (+ i 3) n) (and (= (bytesGet bs (+ i 2)) 111) (and (= (bytesGet bs (+ i 3)) 99) (keywordEnd? bs n (+ i 4))))))
+       true
+       (docKeywordAt? bs n (+ i 2))))
+    (else (docKeywordAt? bs n (+ i 1))))
+
+fn isBareLiteralAtom text: String -> Bool
+  (or (stringStartsWith? text "\"")
+      (or (stringStartsWith? text ":")
+          (or (lx/isDigit (lx/charAt text 0))
+              (and (= (lx/charAt text 0) "-") (lx/isDigit (lx/charAt text 1))))))
+
+fn findBareLiteralTopExpr forms: (List TopForm) -> (Option PosForm)
+  (mt (listHead forms)
+    ((none) (none))
+    ((some f)
+      (mt f
+        ((topExpr pf)
+         (if (and (rd/isAtom? pf.expr) (isBareLiteralAtom (rd/sexprHead pf.expr)))
+           (some pf)
+           (findBareLiteralTopExpr (optionOr (listTail forms) (list)))))
+        (_ (findBareLiteralTopExpr (optionOr (listTail forms) (list)))))))
+
+fn rejectBareLiteralTopExpr forms: (List TopForm) -> (Result (List TopForm) ParseError)
+  (mt (findBareLiteralTopExpr forms)
+    ((some pf) (err (perr (str "ERR_READ_BARE_TOPLEVEL a bare literal '" (rd/sexprHead pf.expr) "' is not a top-level form; move it into a declaration or the package's doc.asn") pf)))
+    ((none) (ok forms)))
+
 fn retiredProse src: String -> (Option ParseError)
   (let [(bs (stringToBytes src)) (n (bytesLength bs))]
     (mt (freeCommentAt bs n 0)
       ((some at) (some (ParseError :msg "ERR_READ_COMMENT free ; comments and (:m :why ...) are retired: move the text to the package doc.asn (asl doc); a comment is one ; (:m ...) meta form" :line (lineOfByte bs at) :col 1)))
       ((none)
-        (mt (fold docStep (DocScan :stack (list) :group (DocFrame :head "" :n 0 :prevD false) :hit (none)) (lx/tokenize src)).hit
-          ((some t) (some (ParseError :msg "ERR_READ_DOC :d docstrings are retired: move the text to the package doc.asn (asl doc)" :line t.line :col t.col)))
-          ((none) (none))))))
+        (if (not (docKeywordAt? bs n 0))
+          (none)
+          (mt (fold docStep (DocScan :stack (list) :group (DocFrame :head "" :n 0 :prevD false) :hit (none)) (lx/tokenize src)).hit
+            ((some t) (some (ParseError :msg "ERR_READ_DOC :d docstrings are retired: move the text to the package doc.asn (asl doc)" :line t.line :col t.col)))
+            ((none) (none)))))))
 
 fn parse src: String -> (Result (List TopForm) ParseError)
   (mt (retiredProse src)
     ((some e) (err e))
-    ((none) (parseLegacy src)))
+    ((none) (mt (parseLegacy src)
+      ((err e) (err e))
+      ((ok forms) (rejectBareLiteralTopExpr forms)))))
 
 fn parseLegacy src: String -> (Result (List TopForm) ParseError)
   (mt (parseForChecker src)
@@ -711,10 +751,9 @@ fn oldFieldError text: String bs: Bytes at: Int64 -> ip/IndentError
         (field (optionOr (stringSlice text (+ at 2) end) ""))]
     (ip/IndentError :msg (str "ERR_READ_FIELD (.-" field " x) is retired: write x." field ", or (expr)." field " for an expression") :line pos.line :col pos.col))
 
-fn lowerTopNodeToKid text: String bs: Bytes node: tr/Node -> (Result KidForm ParseError)
+fn lowerTopNodeToKid text: String node: tr/Node startPos: LineCol -> (Result KidForm ParseError)
   (let [(start node.start)
         (end node.end)
-        (startPos (offsetPos bs start))
         (line startPos.line)
         (col startPos.col)
         (formText (optionOr (stringSlice text start end) ""))
@@ -739,18 +778,19 @@ fn lowerTopNodeToKid text: String bs: Bytes node: tr/Node -> (Result KidForm Par
                   :startOffset start
                   :endOffset end))))))))
 
-fn lowerTopNodesLoop text: String bs: Bytes elements: (List tr/TreeElement) acc: (List KidForm) -> (Result (List KidForm) ParseError)
+fn lowerTopNodesLoop text: String bs: Bytes elements: (List tr/TreeElement) at: Int64 pos: LineCol acc: (List KidForm) -> (Result (List KidForm) ParseError)
   (mt (listHead elements)
     ((none) (ok (listReverse acc)))
     ((some head)
      (let [(tail (optionOr (listTail elements) (list)))]
        (mt head
          ((tr/elemNode node)
-          (mt (lowerTopNodeToKid text bs node)
-            ((ok kid) (lowerTopNodesLoop text bs tail (cons kid acc)))
-            ((err e) (err e))))
+          (let [(startPos (offsetPosLoop bs node.start at pos.line pos.col))]
+            (mt (lowerTopNodeToKid text node startPos)
+              ((ok kid) (lowerTopNodesLoop text bs tail node.start startPos (cons kid acc)))
+              ((err e) (err e)))))
          ((tr/elemToken _)
-          (lowerTopNodesLoop text bs tail acc))))))
+          (lowerTopNodesLoop text bs tail at pos acc))))))
 
 fn skipTrivia bs: Bytes len: Int64 i: Int64 inComment: Bool -> Int64
   (if (>= i len)
@@ -851,7 +891,7 @@ fn scanDecls bs: Bytes -> (List tr/TreeElement)
 fn parseCstKidForms text: String -> (Result (List KidForm) ParseError)
   (let [(bs (stringToBytes text))
         (elems (scanDecls bs))]
-    (lowerTopNodesLoop text bs elems (list)))
+    (lowerTopNodesLoop text bs elems 0 (LineCol :line 1 :col 1) (list)))
 
 fn parseIndentedToModule src: String -> (Result (List TopForm) ParseError)
   (mt (parseCstKidForms src)
@@ -874,13 +914,15 @@ fn parseParenModule src: String -> (Result (List TopForm) ParseError)
 fn depthLimit -> Int64
   1000
 
+fn depthErr line: Int64 col: Int64 -> (Option ParseError)
+  (some (ParseError :msg (str "ERR_DEPTH expression nested deeper than " (depthLimit)) :line line :col col))
+
 fn depthScan bs: Bytes len: Int64 i: Int64 depth: Int64 state: Int64 line: Int64 col: Int64 -> (Option ParseError)
   (if (>= i len)
     (none)
     (let [(b (bytesGet bs i))
           (nextLine (if (= b 10) (+ line 1) line))
-          (nextCol (if (= b 10) 1 (+ col 1)))
-          (deep (some (ParseError :msg (str "ERR_DEPTH expression nested deeper than " (depthLimit)) :line line :col col)))]
+          (nextCol (if (= b 10) 1 (+ col 1)))]
       (cond
         ((= state 1)
          (cond
@@ -892,11 +934,11 @@ fn depthScan bs: Bytes len: Int64 i: Int64 depth: Int64 state: Int64 line: Int64
         ((or (= b 32) (or (= b 9) (or (= b 10) (= b 13)))) (depthScan bs len (+ i 1) depth (if (= state 4) 4 0) nextLine nextCol))
         ((= b 59) (depthScan bs len (+ i 1) depth 3 nextLine nextCol))
         ((or (= b 41) (or (= b 93) (= b 125))) (depthScan bs len (+ i 1) (max 0 (- depth 1)) 0 nextLine nextCol))
-        ((= b 40) (if (>= depth (depthLimit)) deep (depthScan bs len (+ i 1) (+ depth 1) 4 nextLine nextCol)))
-        ((or (= b 91) (= b 123)) (if (>= depth (depthLimit)) deep (depthScan bs len (+ i 1) (+ depth 1) 0 nextLine nextCol)))
-        ((= b 34) (if (>= depth (depthLimit)) deep (depthScan bs len (+ i 1) depth 1 nextLine nextCol)))
+        ((= b 40) (if (>= depth (depthLimit)) (depthErr line col) (depthScan bs len (+ i 1) (+ depth 1) 4 nextLine nextCol)))
+        ((or (= b 91) (= b 123)) (if (>= depth (depthLimit)) (depthErr line col) (depthScan bs len (+ i 1) (+ depth 1) 0 nextLine nextCol)))
+        ((= b 34) (if (>= depth (depthLimit)) (depthErr line col) (depthScan bs len (+ i 1) depth 1 nextLine nextCol)))
         ((= state 5) (depthScan bs len (+ i 1) depth 5 nextLine nextCol))
-        ((and (= state 0) (>= depth (depthLimit))) deep)
+        ((and (= state 0) (>= depth (depthLimit))) (depthErr line col))
         (else (depthScan bs len (+ i 1) depth 5 nextLine nextCol)))))
 
 fn depthError src: String -> (Option ParseError)
@@ -963,7 +1005,6 @@ fn isDeclHead? h: String -> Bool
 fn appendDecl k: KidForm exported: (List String) xs: (List TopForm) -> (Result (List TopForm) ParseError)
   (let [(pf k.pf) (s pf.expr)]
     (cond
-      ((and (rd/isAtom? s) (stringStartsWith? (rd/sexprHead s) "\"")) (ok xs))
       ((isTag? s) (ok xs))
       ((not (isDeclHead? (rd/sexprHead s)))
        (ok (cons (topExpr pf) xs)))

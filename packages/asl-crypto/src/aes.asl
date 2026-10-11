@@ -12,12 +12,12 @@ fn aesRcon round: Int64 -> Int64
   (if (= round 1) 1 (if (= round 2) 2 (if (= round 3) 4 (if (= round 4) 8 (if (= round 5) 16 (if (= round 6) 32 (if (= round 7) 64 (if (= round 8) 128 (if (= round 9) 27 (if (= round 10) 54 0))))))))))
 
 fn aesGfMul a: Int64 b: Int64 -> Int64
-  (let [(loop (fn [loop x y acc] -> Int64
+  (let [(step (fn [step x y acc] -> Int64
     (if (= y 0) acc
       (let [(nextAcc (if (= (mod y 2) 1) (^ acc x) acc))
             (nextX (if (>= x 128) (^ (mod (* x 2) 256) 27) (mod (* x 2) 256)))]
-        (loop loop nextX (/ y 2) nextAcc)))))]
-    (loop loop a b 0))
+        (step step nextX (/ y 2) nextAcc)))))]
+    (step step a b 0))
 
 fn ! aesExpandKey key: Bytes -> (Result Bytes String)
   (let [(keyLength (bytesLength key))]
@@ -45,31 +45,31 @@ fn ! aesExpandKey key: Bytes -> (Result Bytes String)
           (do (copy copy 0) (expand expand nk) (ok expanded))))))
 
 fn ! aesAddRoundKey! state: Bytes keys: Bytes round: Int64 -> Unit
-  (let [(loop (fn [loop i] -> Unit
-    (if (< i 16) (do (bytesSet state i (^ (bytesGet state i) (bytesGet keys (+ (* round 16) i)))) (loop loop (+ i 1))) ())))]
-    (loop loop 0))
+  (let [(step (fn [step i] -> Unit
+    (if (< i 16) (do (bytesSet state i (^ (bytesGet state i) (bytesGet keys (+ (* round 16) i)))) (step step (+ i 1))) ())))]
+    (step step 0))
 
 fn ! aesSubBytes! state: Bytes inverse: Bool -> Unit
-  (let [(loop (fn [loop i] -> Unit
-    (if (< i 16) (do (bytesSet state i (if inverse (aesInvSbox (bytesGet state i)) (aesSbox (bytesGet state i)))) (loop loop (+ i 1))) ())))]
-    (loop loop 0))
+  (let [(step (fn [step i] -> Unit
+    (if (< i 16) (do (bytesSet state i (if inverse (aesInvSbox (bytesGet state i)) (aesSbox (bytesGet state i)))) (step step (+ i 1))) ())))]
+    (step step 0))
 
 fn ! aesShiftRows! state: Bytes inverse: Bool -> Unit
   (let [(copy (bytesAlloc 16))
-        (loop (fn [loop col row] -> Unit
+        (step (fn [step col row] -> Unit
           (if (< col 4)
             (if (< row 4)
               (let [(sourceCol (if inverse (mod (+ col (- 4 row)) 4) (mod (+ col row) 4)))]
                 (do (bytesSet copy (+ (* col 4) row) (bytesGet state (+ (* sourceCol 4) row)))
-                    (loop loop col (+ row 1))))
-              (loop loop (+ col 1) 0)) ())))]
-    (do (loop loop 0 0)
+                    (step step col (+ row 1))))
+              (step step (+ col 1) 0)) ())))]
+    (do (step step 0 0)
         (let [(copyBack (fn [copyBack i] -> Unit
           (if (< i 16) (do (bytesSet state i (bytesGet copy i)) (copyBack copyBack (+ i 1))) ())))]
           (copyBack copyBack 0))))
 
 fn ! aesMixColumns! state: Bytes inverse: Bool -> Unit
-  (let [(loop (fn [loop col] -> Unit
+  (let [(step (fn [step col] -> Unit
     (if (< col 4)
       (let [(i (* col 4)) (a (bytesGet state i)) (b (bytesGet state (+ i 1))) (c (bytesGet state (+ i 2))) (d (bytesGet state (+ i 3)))]
         (do
@@ -77,8 +77,8 @@ fn ! aesMixColumns! state: Bytes inverse: Bool -> Unit
           (bytesSet state (+ i 1) (if inverse (^ (^ (aesGfMul a 9) (aesGfMul b 14)) (^ (aesGfMul c 11) (aesGfMul d 13))) (^ (^ a (aesGfMul b 2)) (^ (aesGfMul c 3) d))))
           (bytesSet state (+ i 2) (if inverse (^ (^ (aesGfMul a 13) (aesGfMul b 9)) (^ (aesGfMul c 14) (aesGfMul d 11))) (^ (^ a b) (^ (aesGfMul c 2) (aesGfMul d 3)))))
           (bytesSet state (+ i 3) (if inverse (^ (^ (aesGfMul a 11) (aesGfMul b 13)) (^ (aesGfMul c 9) (aesGfMul d 14))) (^ (^ (aesGfMul a 3) b) (^ c (aesGfMul d 2)))))
-          (loop loop (+ col 1)))) ())))]
-    (loop loop 0))
+          (step step (+ col 1)))) ())))]
+    (step step 0))
 
 fn ! aesEncryptBlock key: Bytes block: Bytes -> (Result Bytes String)
   (if (!= (bytesLength block) 16) (err "invalidBlockLength")
@@ -112,7 +112,7 @@ fn ! aesCbcDecrypt key: Bytes iv: Bytes ciphertext: Bytes -> (Result Bytes Strin
       (mt (aesExpandKey key)
         ((err e) (err e))
         ((ok _) (let [(plain (bytesAlloc length))
-                      (loop (fn [loop offset] -> (Result Bytes String)
+                      (step (fn [step offset] -> (Result Bytes String)
                         (if (>= offset length) (ok plain)
                           (mt (aesDecryptBlock key (let [(block (bytesAlloc 16))
                             (copy (fn [copy i] -> Unit (if (< i 16) (do (bytesSet block i (bytesGet ciphertext (+ offset i))) (copy copy (+ i 1))) ())))]
@@ -121,8 +121,8 @@ fn ! aesCbcDecrypt key: Bytes iv: Bytes ciphertext: Bytes -> (Result Bytes Strin
                             ((ok dec) (let [(prior (if (= offset 0) iv ciphertext))
                               (copy (fn [copy i] -> Unit
                                 (if (< i 16) (do (bytesSet plain (+ offset i) (^ (bytesGet dec i) (bytesGet prior (+ (if (= offset 0) 0 (- offset 16)) i)))) (copy copy (+ i 1))) ())))]
-                              (do (copy copy 0) (loop loop (+ offset 16))))))))) ]
-          (mt (loop loop 0)
+                              (do (copy copy 0) (step step (+ offset 16))))))))) ]
+          (mt (step step 0)
             ((err e) (err e))
             ((ok padded)
               (let [(padding (bytesGet padded (- length 1)))
@@ -150,7 +150,7 @@ fn ! aesCtrCrypt key: Bytes counterBlock: Bytes input: Bytes -> (Result Bytes St
                 (let [(value (+ (bytesGet counter i) 1))]
                   (do (bytesSet counter i (mod value 256)) (if (>= value 256) (increment increment (- i 1)) ()))) ()) ))]
         (do (copyCounter copyCounter 0)
-          (let [(loop (fn [loop offset] -> (Result Bytes String)
+          (let [(step (fn [step offset] -> (Result Bytes String)
             (if (>= offset length) (ok output)
               (mt (aesEncryptBlock key counter)
                 ((err e) (err e))
@@ -159,8 +159,8 @@ fn ! aesCtrCrypt key: Bytes counterBlock: Bytes input: Bytes -> (Result Bytes St
                         (copy (fn [copy i] -> Unit
                           (if (< i count)
                             (do (bytesSet output (+ offset i) (^ (bytesGet input (+ offset i)) (bytesGet stream i))) (copy copy (+ i 1))) ())))]
-                    (do (copy copy 0) (increment increment 15) (loop loop (+ offset count)))))))))]
-            (loop loop 0))))))))
+                    (do (copy copy 0) (increment increment 15) (step step (+ offset count)))))))))]
+            (step step 0))))))))
 
 fn ! aesCbcEncrypt key: Bytes iv: Bytes plaintext: Bytes -> (Result Bytes String)
   (if (!= (bytesLength iv) 16) (err "invalidCbcIv")
@@ -171,7 +171,7 @@ fn ! aesCbcEncrypt key: Bytes iv: Bytes plaintext: Bytes -> (Result Bytes String
       (let [(fill (fn [fill i] -> Unit
         (if (< i total)
           (do (bytesSet padded i (if (< i length) (bytesGet plaintext i) padding)) (fill fill (+ i 1))) ())))
-            (loop (fn [loop offset] -> (Result Bytes String)
+            (step (fn [step offset] -> (Result Bytes String)
               (if (>= offset total) (ok output)
                 (let [(block (bytesAlloc 16)) (prior (if (= offset 0) iv output))
                       (copy (fn [copy i] -> Unit
@@ -181,13 +181,13 @@ fn ! aesCbcEncrypt key: Bytes iv: Bytes plaintext: Bytes -> (Result Bytes String
                     ((err e) (err e))
                     ((ok encrypted) (let [(write (fn [write i] -> Unit
                       (if (< i 16) (do (bytesSet output (+ offset i) (bytesGet encrypted i)) (write write (+ i 1))) ())))]
-                      (do (write write 0) (loop loop (+ offset 16))))))))))]
-        (do (fill fill 0) (loop loop 0)))))
+                      (do (write write 0) (step step (+ offset 16))))))))))]
+        (do (fill fill 0) (step step 0)))))
 
 fn ! aesGf128Multiply! x: Bytes h: Bytes -> Bytes
   (let [(z (bytesAlloc 16)) (v (bytesAlloc 16))
         (copy (fn [copy i] -> Unit (if (< i 16) (do (bytesSet v i (bytesGet h i)) (copy copy (+ i 1))) ())))
-        (loop (fn [loop i] -> Bytes
+        (step (fn [step i] -> Bytes
           (if (>= i 128) z
             (let [(bitByte (bytesGet x (/ i 8)))
                   (mask (if (= (mod i 8) 0) 128 (if (= (mod i 8) 1) 64 (if (= (mod i 8) 2) 32 (if (= (mod i 8) 3) 16 (if (= (mod i 8) 4) 8 (if (= (mod i 8) 5) 4 (if (= (mod i 8) 6) 2 1))))))))
@@ -199,12 +199,12 @@ fn ! aesGf128Multiply! x: Bytes h: Bytes -> Bytes
               (do (if (= (mod (/ bitByte mask) 2) 1) (xorZ xorZ 0) ())
                   (let [(lastBit (mod (bytesGet v 15) 2))]
                     (do (shift shift 0 0) (if (= lastBit 1) (bytesSet v 0 (^ (bytesGet v 0) 225)) ())
-                        (loop loop (+ i 1)))))))))]
-    (do (copy copy 0) (loop loop 0)))
+                        (step step (+ i 1)))))))))]
+    (do (copy copy 0) (step step 0)))
 
 fn ! aesGhashData! y: Bytes data: Bytes h: Bytes -> Unit
   (let [(length (bytesLength data))
-        (loop (fn [loop offset] -> Unit
+        (step (fn [step offset] -> Unit
           (if (< offset length)
             (let [(block (bytesAlloc 16)) (count (if (< (- length offset) 16) (- length offset) 16))
                   (copy (fn [copy i] -> Unit
@@ -213,8 +213,8 @@ fn ! aesGhashData! y: Bytes data: Bytes h: Bytes -> Unit
                     (if (< i 16) (do (bytesSet block i (^ (bytesGet block i) (bytesGet y i))) (xorY xorY (+ i 1))) ())))
                   (updateY (fn [updateY product i] -> Unit
                     (if (< i 16) (do (bytesSet y i (bytesGet product i)) (updateY updateY product (+ i 1))) ())))]
-              (do (copy copy 0) (xorY xorY 0) (updateY updateY (aesGf128Multiply! block h) 0) (loop loop (+ offset 16))))) ()))]
-    (loop loop 0))
+              (do (copy copy 0) (xorY xorY 0) (updateY updateY (aesGf128Multiply! block h) 0) (step step (+ offset 16)))) ())))]
+    (step step 0))
 
 fn ! aesGhash! aad: Bytes ciphertext: Bytes h: Bytes -> Bytes
   (let [(y (bytesAlloc 16)) (lengthBlock (bytesAlloc 16))

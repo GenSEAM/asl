@@ -224,7 +224,7 @@ fn ! runTests -> Bool
         (base (str "http://127.0.0.1:" (stringFromInt64 stubPort) "/v1"))
         (wrote (and (ok? (dirCreate (str temp "/.asl")))
                  (ok? (fileWrite (str temp "/.asl/gateway.asn") (gatewayConfig base)))))
-        (host (resultOr (procExePath) ""))
+        (host (hostExe!))
         (server (resultOr (realPath "asl/packages/asl-gateway/src/server.asl") ""))
         (readyPath (str temp "/ready"))
         (command (str "exec " host " run " server " serve --port 0 --upstream " base " --ready " readyPath " 2>" temp "/gateway.err"))
@@ -306,3 +306,6 @@ fn ! runTests -> Bool
       (assert (and (and (answered? w6 "d1") (and (answered? w6 "d2") (answered? w6 "d3"))) (and killed (and closed removed)))
         "case 6: direct clients are answered by the gateway handler; the gateway process, sockets and temp dir are cleaned up")
       true))
+
+fn ! hostExe! -> String
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))

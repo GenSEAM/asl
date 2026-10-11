@@ -21,6 +21,9 @@ fn ! sourcesOf units: (List lk/LinkUnit) -> (Map String String)
   (fold (fn [(acc (Map String String)) (u lk/LinkUnit)] -> (Map String String) (mt (fileRead u.path) ((ok src) (mapSet acc u.path src)) ((err _) acc)))
         (mapEmpty) units)
 
+fn distinctPathsOf units: (List lk/LinkUnit) -> (List String)
+  (mapKeys (fold (fn [(acc (Map String Bool)) (u lk/LinkUnit)] -> (Map String Bool) (mapSet acc u.path true)) (mapEmpty) units))
+
 fn locusPath locus: String -> String
   (let [(file (optionOr (listGet (stringSplit locus "@") 1) ""))
         (parts (stringSplit file ":"))]
@@ -52,8 +55,9 @@ fn ! testCorpus -> Bool
         (starting (fold (fn [(acc Int64) (p (Pair String Int64))] -> Int64 (+ acc (pairSecond p))) 0 (startingTable)))
         (ratchet (fold (fn [(acc Int64) (p (Pair String Int64))] -> Int64 (+ acc (pairSecond p))) 0 (remainingTable)))]
     (do
-      (assert (= (listLength units) 45) (str "the closure loads 45 modules, got " (listLength units)))
-      (assert (= (listLength (mapKeys sources)) 46) (str "every closure and prelude source is readable, got " (listLength (mapKeys sources))))
+      (assert (= (listLength units) 46) (str "the closure loads 46 modules, got " (listLength units)))
+      (assert (= (listLength (mapKeys sources)) (listLength (distinctPathsOf (listAppend units prelude))))
+              (str "every closure and prelude source is readable, got " (listLength (mapKeys sources)) " of " (listLength (distinctPathsOf (listAppend units prelude)))))
       (assert (listEmpty? unknown) (str "every remaining diagnostic has a blocker outside the lowerer: " (stringJoin unknown "\n")))
       (assert (fold (fn [(acc Bool) (p (Pair String Int64))] -> Bool (and acc (<= (countOf blockers (pairFirst p)) (pairSecond p)))) true (remainingTable))
               (str "no blocker grows past its ratchet: " (stringJoin (map (fn [(p (Pair String Int64))] -> String (str (pairFirst p) " " (countOf blockers (pairFirst p)) "/" (pairSecond p))) (remainingTable)) ", ")))

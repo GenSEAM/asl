@@ -25,7 +25,7 @@ fn call name: String args: String -> String
 
 fn entryNames -> (List String)
   (list "asl_alloc" "asl_alloc_raw" "asl_alloc_cons" "asl_alloc_perm" "asl_gc_collect" "asl_gc_root_push" "asl_gc_root_pop" "gcInit" "gcWillAllocate" "gcAccount"
-        "gcRegisterProto" "gcFindObj" "gcFreedObjects" "gcTestFailNextPageSetGrow" "gcScanConservative" "gcStackBase" "gcStackTop" "gcExternalRoots")
+        "gcRegisterProto" "gcFindObj" "gcFreedObjects" "gcTestFailNextPageSetGrow" "gcScanConservative" "gcStackBase" "gcStackTop" "gcExternalRoots" "asl_gc_state_ptr")
 
 fn entryText target: target/TargetFacts -> String
   (stringJoin
@@ -66,7 +66,9 @@ fn entryText target: target/TargetFacts -> String
       "@gcStackTop = global ptr null, align 8"
       "@gcExternalRoots = global ptr null, align 8"
       (if (target/isWasm32 target) "@asl_gc_shadow_top = global i64 0, align 8" "")
-      (gc/stateBlockText))
+      (gc/stateBlockText target)
+      (gc/statePtrText)
+      "@gcAsl.failBuf = internal global [1024 x i8] zeroinitializer, align 1")
     )
     "\n")
 

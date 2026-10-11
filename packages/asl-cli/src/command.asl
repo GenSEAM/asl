@@ -1,6 +1,6 @@
 (module asl-cli/command
-  :x [main dispatch! asnEcho testFiles!]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build)])
+  :x [main dispatch! route! asnEcho testFiles!]
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/lensCmd :a lens) (asl/packages/asl-cli/src/consiliumCmd :a consilium) (asl/packages/asl-cli/src/verify :a verify) (asl/packages/asl-cli/src/pack :a pack) (asl/packages/asl-cli/src/target :a target) (asl/packages/asl-cli/src/build :a build) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner)])
 
 (schema Open
   (:f closer String)
@@ -393,11 +393,18 @@ fn ! test! ctx: sys/Context args: (List String) -> Int64
           (mt (testFiles! files (list))
             ((err code) code)
             ((ok paths)
-              (if tracing
-                (trace! ctx (list "--target" (first files))
-                        (sys/runWith! (cons host (cons "test" paths)) (preludeEnv)))
-                (sys/execv! (cons host (cons "test" paths))
-                            (preludeEnv))))))))))
+              (let [(dirs (filter (fn [(a String)] -> Bool (sys/isDir? a)) files))
+                    (selection (runner/selectDirectorySuites! ctx.root paths dirs))
+                    (frozen (pairSecond selection))
+                    (selected (pairFirst selection))
+                    (note (if (listEmpty? dirs) true (sys/say! (str "(:test :frozen " (stringFromInt64 (listLength frozen)) ")"))))]
+                (if (listEmpty? selected)
+                  0
+                  (if tracing
+                    (trace! ctx (list "--target" (first files))
+                            (sys/runWith! (cons host (cons "test" selected)) (preludeEnv)))
+                    (sys/execv! (cons host (cons "test" selected))
+                                (preludeEnv))))))))))))
 
 fn ! runFile! ctx: sys/Context args: (List String) -> Int64
   (cond
@@ -526,14 +533,19 @@ fn ! entry! ctx: sys/Context args: (List String) -> Int64
             ((err e) (do (sys/sayErr! (str "asl -: stdin: " e)) 2))
             ((ok text) (dispatch! ctx "rpc" (list (sys/stripTrailingNewlines text)))))))
       (else
-        (let [(trimmed (sys/trimLeft cmd))
-              (lead (if (and (or (stringStartsWith? trimmed "(") (stringStartsWith? trimmed ":")) (!= trimmed cmd)) trimmed cmd))
-              (asTest (and (sys/isFile? lead) (or (= (sys/baseName ctx.argv0) "asl-eval") (stringEndsWith? lead ".asl"))))]
-          (if asTest
-            (dispatch! ctx "test" (cons lead (rest args)))
-            (dispatch! ctx lead (rest args)))))))
+        (let [(r (route! ctx args))]
+          (dispatch! ctx (pairFirst r) (pairSecond r))))))
+
+fn ! route! ctx: sys/Context args: (List String) -> (Pair String (List String))
+  (let [(cmd (first args))
+        (trimmed (sys/trimLeft cmd))
+        (lead (if (and (or (stringStartsWith? trimmed "(") (stringStartsWith? trimmed ":")) (!= trimmed cmd)) trimmed cmd))
+        (asTest (and (sys/isFile? lead) (or (= (sys/baseName ctx.argv0) "asl-eval") (stringEndsWith? lead ".asl"))))]
+    (if asTest
+      (pair "test" (cons lead (rest args)))
+      (pair lead (rest args))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (mt (sys/context!)
     ((err e) (do (sys/sayErr! (str "(:asl :status :failed :error ERR_NO_WORKSPACE :message \"" e "\")")) (ok 2)))
-    ((ok ctx) (ok (entry! ctx args))))
+    ((ok ctx) (do (nc/hostEntry! ctx args) (ok (entry! ctx args)))))

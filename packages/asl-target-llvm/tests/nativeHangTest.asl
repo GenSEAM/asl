@@ -158,8 +158,8 @@ fn ! testDeepFiles -> Bool
         (c1 (cpuMicros))]
     (do
       (println "nativeHang depth CPU us load deepDo+deepNot:" (- c1 c0))
-      (assert (= deepDo "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepDoTest.asl:8:4004") (str "deepDoTest loads as ERR_DEPTH at asl-host's position, got " deepDo))
-      (assert (= deepNot "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepNotTest.asl:8:5001") (str "deepNotTest loads as ERR_DEPTH at asl-host's position, got " deepNot))
+      (assert (= deepDo "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepDoTest.asl:7:4004") (str "deepDoTest loads as ERR_DEPTH at asl-host's position, got " deepDo))
+      (assert (= deepNot "ERR_DEPTH expression nested deeper than 1000 tests/acceptance/r1Host/generated/invalid/depth/deepNotTest.asl:7:5001") (str "deepNotTest loads as ERR_DEPTH at asl-host's position, got " deepNot))
       (assert (< (- c1 c0) 3000000) "both 1e5-deep files are rejected within 3 s of CPU time")
       true))
 

@@ -1,6 +1,6 @@
 (module asl-gates/docExtract
-  :x [DocCandidate ExtractResult ledgerPathFor findCandidates! stripSource extractFile! applyExtract! main]
-  :i [(asl-parser/reader :a rd) (asl-parser/ast :a ast) (asl-gates/metaAudit :a meta)])
+  :x [DocCandidate ExtractResult ledgerPathFor findCandidates! stripSource extractFile! applyExtract! main NoteCandidate noteScanAll]
+  :i [(asl-parser/reader :a rd) (asl-parser/ast :a ast) (asl-gates/metaAudit :a meta) (asl-syntax/asl/asn :a asn)])
 
 (schema DocCandidate
   (:f symbol String)
@@ -242,6 +242,59 @@ fn commentScanAll path: String lines: (List LineInfo) -> (List DocCandidate)
         (mt (commentCandidate path li rest)
           ((none) (commentScanAll path rest))
           ((some c) (cons c (commentScanAll path rest)))))))
+
+fn isStringAtom? e: rd/SExpr -> Bool
+  (and (rd/isAtom? e) (stringStartsWith? (rd/sexprHead e) "\""))
+
+fn isNoteForm? t: ast/TopForm -> Bool
+  (mt t
+    ((ast/topExpr pf) (isStringAtom? pf.expr))
+    (_ false))
+
+fn noteTextOf t: ast/TopForm -> String
+  (mt t
+    ((ast/topExpr pf)
+      (let [(raw (rd/sexprHead pf.expr)) (inner (optionOr (stringSlice raw 1 (- (stringLength raw) 1)) ""))]
+        (resultOr (asn/asnUnescape inner) inner)))
+    (_ ""))
+
+(schema NoteCandidate (:f symbol String) (:f text String))
+
+fn symbolForNext path: String tops: (List ast/TopForm) -> String
+  (mt (listHead tops)
+    ((none) (moduleSymbol path))
+    ((some t)
+      (mt t
+        ((ast/topModule _) (moduleSymbol path))
+        ((ast/topDefun n) (fnSymbol path n.name))
+        ((ast/topSchema n) (fnSymbol path n.name))
+        ((ast/topEnum n) (fnSymbol path n.name))
+        ((ast/topExpr _) (moduleSymbol path)))))
+
+(schema NoteRun (:f texts (List String)) (:f rest (List ast/TopForm)))
+
+fn collectNoteFormRun tops: (List ast/TopForm) acc: (List String) -> NoteRun
+  (mt (listHead tops)
+    ((none) (NoteRun :texts (listReverse acc) :rest (list)))
+    ((some t)
+      (if (isNoteForm? t)
+        (collectNoteFormRun (optionOr (listTail tops) (list)) (cons (noteTextOf t) acc))
+        (NoteRun :texts (listReverse acc) :rest tops))))
+
+fn noteScanForms path: String tops: (List ast/TopForm) -> (List NoteCandidate)
+  (mt (listHead tops)
+    ((none) (list))
+    ((some t)
+      (if (isNoteForm? t)
+        (let [(run (collectNoteFormRun tops (list)))]
+          (cons (NoteCandidate :symbol (symbolForNext path run.rest) :text (stringJoin run.texts " "))
+                (noteScanForms path run.rest)))
+        (noteScanForms path (optionOr (listTail tops) (list))))))
+
+fn noteScanAll path: String text: String -> (List NoteCandidate)
+  (mt (ast/parseLegacy text)
+    ((err _) (list))
+    ((ok tops) (noteScanForms path tops)))
 
 fn kidOf k: ast/KidForm -> (Pair Int64 Int64)
   (pair k.startOffset k.endOffset)

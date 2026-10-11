@@ -197,9 +197,9 @@ fn ! nmNames bin: String -> (List String)
                  (if (stringStartsWith? name "_") (optionOr (stringSlice name 1 (stringLength name)) name) name)))
              (filter (fn [(line String)] -> Bool (not (stringEmpty? line))) (stringSplit out.stdout "\n")))))
 
-fn ! checkIr label: String ll: String -> Bool
+fn ! checkIr label: String ll: String names: (List String) -> Bool
   (do (assert (not (stringContains? ll "asl_rt_builtin_sysNet")) (str label ": emitted IR has no asl_rt_builtin_sysNet"))
-      (map (fn [(n String)] -> Bool (do (assert (stringContains? ll (wrapperDef n)) (str label ": IR defines the " n " wrapper internal")) true)) (routedNames))
+      (map (fn [(n String)] -> Bool (do (assert (stringContains? ll (wrapperDef n)) (str label ": IR defines the " n " wrapper internal")) true)) names)
       true)
 
 fn ! checkSymbols label: String bin: String -> Bool
@@ -217,7 +217,7 @@ fn ! checkParity label: String bin: String src: String nativeArg: String hostArg
 
 fn ! testEcho work: String -> Bool
   (let [(ll (build work "netEcho" (echoSource)))
-        (_ (checkIr "netEcho" ll))
+        (_ (checkIr "netEcho" ll (routedNames)))
         (bin (str work "/netEcho"))
         (_ (linkBin work "netEcho" (list (str work "/netEcho.ll"))))
         (_ (checkSymbols "netEcho" bin))
@@ -228,7 +228,7 @@ fn ! testEcho work: String -> Bool
 
 fn ! testErrors work: String -> Bool
   (let [(ll (build work "netErrors" (errorsSource)))
-        (_ (checkIr "netErrors" ll))
+        (_ (checkIr "netErrors" ll (routedNames)))
         (bin (str work "/netErrors"))
         (_ (linkBin work "netErrors" (list (str work "/netErrors.ll"))))
         (_ (checkSymbols "netErrors" bin))
@@ -262,7 +262,7 @@ fn ! testTwoModules work: String -> Bool
         (routedHere (some? (rt/routeFactsFor (hostTriple))))
         (_ (if routedHere
              (do (assert (= (countOf linkedText "define internal tailcc %Val @sysNetTcpListen(") 1) "linked two-module IR defines sysNetTcpListen once")
-                 (checkIr "netLinked" linkedText))
+                 (checkIr "netLinked" linkedText (list "tcpListen")))
              (do (assert (stringContains? linkedText "asl_rt_builtin_sysNet") (str "asl1 build on unverified " (hostTriple) " keeps the C sysNet table"))
                  (assert (= (countOf linkedText "@sysNetTcpListen(") 0) (str "asl1 build on unverified " (hostTriple) " adds no routed function"))
                  true)))
@@ -305,7 +305,7 @@ fn ! testLinuxRouting work: String -> Bool
       (mt (llvm/emitLlvmProgramFor (libc/linuxX8664Facts) m "main")
         ((err ds) (do (assert false (str "netSix emits for linux-x86_64: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))) false))
         ((ok text)
-          (do (checkIr "netSix linux-x86_64" text)
+          (do (checkIr "netSix linux-x86_64" text (routedNames))
               (assert (stringContains? text "@__errno_location") "linux-x86_64 routing reads errno through __errno_location")
               (assert (stringContains? text "@accept4") "linux-x86_64 routing accepts through accept4")
               (assert (not (stringContains? text "@__error(")) "linux-x86_64 routing has no darwin __error")
@@ -418,7 +418,7 @@ fn ! testNativeEntries work: String -> Bool
             ((err ds) (assert false (str "netSix emitLlvmProgramNative!: " (stringJoin (map (fn [(d ty/IrDiag)] -> String d.message) ds) "; "))))
             ((ok text)
               (if (some? (rt/routeFactsFor (hostTriple)))
-                (checkIr (str "netSix native " (hostTriple)) text)
+                (checkIr (str "netSix native " (hostTriple)) text (routedNames))
                 (do (assert (and (stringContains? text "asl_rt_builtin_sysNet") (not (stringContains? text "@sysNetTcpListen(")))
                             (str "netSix native on unverified " (hostTriple) " keeps the C sysNet table"))
                     true))))

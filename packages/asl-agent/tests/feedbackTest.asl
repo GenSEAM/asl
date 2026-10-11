@@ -1,7 +1,5 @@
 (module aslAgent/feedbackTest :x [testAmbiguityDetection testStripPoliteFluff testRefinePrompt testClarifyingQuestionFormat testConciseDirectiveFormat runTests] :i [(feedback :a fb)])
 
-"run: (run-tests)"
-
 fn testAmbiguityDetection -> Bool
   (let [(shortP (fb/isAmbiguousPrompt? "fix bug")) (noFileP (fb/isAmbiguousPrompt? "please optimize this calculation")) (clearP (fb/isAmbiguousPrompt? "run tests on src/main.asl and fix assertion"))] (assert shortP "short prompt without target should be ambiguous") (assert noFileP "prompt without file should be ambiguous") (assert (not clearP) "prompt with file and action should not be ambiguous") true)
 

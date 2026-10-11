@@ -70,7 +70,7 @@ fn ! main args: (List String) -> (Result Int64 String)
   (let [(envRoot (optionOr (envGet "ROOT_DIR") ""))
         (argRoot0 (optionOr (rootArg args) ""))
         (configuredRoot (if (not (stringEmpty? argRoot0)) argRoot0 envRoot))]
-  (mt (if (stringEmpty? configuredRoot) (ag/git! "." (list "rev-parse" "--show-toplevel")) (ok configuredRoot))
+  (mt (if (stringEmpty? configuredRoot) (ag/discoverRoot! ".") (ok configuredRoot))
     ((err e)
      (let [(r (ag/emit "none" (list (ag/failCheck "internal" "ERR_AUDIT_INTERNAL" e (none) (none))) "" "" false))]
        (do (eprintln r.summary) (println r.receipt) (ok r.exitCode))))

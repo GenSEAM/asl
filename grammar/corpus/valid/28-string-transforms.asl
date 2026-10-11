@@ -1,11 +1,3 @@
-"Transforming a string, with every operation reported beside the one it could be"
-
-"confused with: lower beside upper, replace over an input that contains the"
-
-"needle more than once, reverse over a non-palindrome, and both parsers over"
-
-"inputs that only one of them accepts."
-
 (module string/transform :x [transform])
 
 fn showInt o: (Option Int64) -> String

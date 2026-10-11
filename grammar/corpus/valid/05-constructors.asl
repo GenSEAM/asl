@@ -1,9 +1,3 @@
-"Constructor builtins used as ordinary expressions (spec 6.5, 6.6), not as"
-
-"match patterns. A list is not a pattern (the host rejects (list) in an arm as an"
-
-"unknown symbol), so here each head is only a constructor."
-
 fn smallPrimes -> (List Int64)
   (list 2 3 5 7 11)
 

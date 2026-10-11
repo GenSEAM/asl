@@ -1,5 +1,5 @@
 (module asl-target-llvm/gcAsl
-  :x [GcCtx gcFactNames gcFacts gcFactsFor gcStrings gcExterns gcFunctions helperDefinitions helperDefinitionsFor functionName stateWords stateBlockText]
+  :x [GcCtx defaultMinMib wasmDefaultMinMib defaultMinMibFor gcFactNames gcFacts gcFactsFor gcStrings gcExterns gcFunctions helperDefinitions helperDefinitionsFor functionName stateWords stateBlockText statePtrText fastAllocClass fastAllocCall fastConsCall fastAllocDefinitions]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)])
@@ -15,11 +15,35 @@ fn pn name: String -> String
 fn functionName name: String -> String
   (pn name)
 
+fn defaultMinMib -> Int64
+  32
+
+fn wasmDefaultMinMib -> Int64
+  8
+
+fn defaultMinMibFor target: target/TargetFacts -> Int64
+  (if (target/isWasm32 target) (wasmDefaultMinMib) (defaultMinMib))
+
 fn pageSize -> Int64
   16384
 
 fn pageHeader -> Int64
   512
+
+fn inUseBits -> Int64
+  72
+
+fn markBits -> Int64
+  200
+
+fn recipAt -> Int64
+  16
+
+fn headerUsed -> Int64
+  328
+
+fn bitWords -> Int64
+  16
 
 fn numClasses -> Int64
   63
@@ -198,6 +222,12 @@ fn sPagesUnmapped -> Int64
 fn sUnmapCalls -> Int64
   55
 
+fn sMarkedBytes -> Int64
+  56
+
+fn sEpoch -> Int64
+  57
+
 fn sClasses -> Int64
   64
 
@@ -207,13 +237,83 @@ fn sRoots -> Int64
 fn stateWords -> Int64
   (+ (sRoots) (maxRoots))
 
-fn stateBlockText -> String
-  (let [(init (map (fn [(i Int64)] -> String
-                     (str "i64 " (cond ((= i (sThreshold)) "8388608") ((= i (sMinBytes)) "8388608") ((= i (sGrowthBits)) "4611686018427387904")
-                                       ((= i (sLargeSorted)) "1") ((= i (sHeapLo)) "-1") (else "0"))))
+fn stateBlockText target: target/TargetFacts -> String
+  (let [(minMib (defaultMinMibFor target))
+        (init (map (fn [(i Int64)] -> String
+                     (str "i64 " (cond ((= i (sThreshold)) (stringFromInt64 (* minMib 1048576))) ((= i (sMinBytes)) (stringFromInt64 (* minMib 1048576))) ((= i (sGrowthBits)) "4611686018427387904")
+                                       ((= i (sLargeSorted)) "1") ((= i (sEpoch)) "1") ((= i (sHeapLo)) "-1") (else "0"))))
                    (range 0 64)))]
-    (str "@gcAsl.state = internal global { [64 x i64], [" (- (stateWords) 64) " x i64] } { [64 x i64] [" (stringJoin init ", ") "], ["
+    (str "@gcAsl.state = internal global " (stateTypeText) " { [64 x i64] [" (stringJoin init ", ") "], ["
          (- (stateWords) 64) " x i64] zeroinitializer }, align 16"))
+
+fn stateTypeText -> String
+  (str "{ [64 x i64], [" (- (stateWords) 64) " x i64] }")
+
+fn statePtrText -> String
+  "@asl_gc_state_ptr = weak global ptr null, align 8"
+
+fn fastAllocClass type: Int64 bytes: Int64 -> (Option Int64)
+  (if (or (> bytes (maxSmall)) (or (= type 6) (= type 7)))
+    (none)
+    (some (- (/ (+ (max bytes 16) 7) 8) 2)))
+
+fn fastAllocSym sc: Int64 -> String
+  (str "@gcAsl.allocFast." sc)
+
+fn fastConsSym -> String
+  "@gcAsl.allocFastCons"
+
+fn fastConsCall -> String
+  (str "call ptr " (fastConsSym) "(i32 1, i64 40)")
+
+fn fastAllocCall type: Int64 bytes: Int64 -> String
+  (str "call ptr " (mt (fastAllocClass type bytes) ((some sc) (fastAllocSym sc)) ((none) "@asl_alloc_raw")) "(i32 " type ", i64 " bytes ")")
+
+fn gep d: String base: String off: String -> String
+  (str "  " d " = getelementptr inbounds i8, ptr " base ", i64 " off "\n")
+
+fn slotGep d: String slot: Int64 -> String
+  (gep d "%s" (str (* 8 slot)))
+
+fn fastAllocDefinition sym: String miss: String sc: Int64 inline: Bool -> String
+  (let [(head (str "define linkonce_odr hidden ptr " sym "(i32 %t, i64 %n) alwaysinline {\nentry:\n"))
+        (slow (str "slow:\n  %r = tail call ptr " miss "\n  ret ptr %r\n}"))
+        (ca (+ (* 8 (sClasses)) (* 24 sc)))]
+    (if (not inline)
+      (str head "  br label %slow\n" slow)
+      (str head
+           "  %s = load ptr, ptr @asl_gc_state_ptr\n  %unpublished = icmp eq ptr %s, null\n"
+           "  br i1 %unpublished, label %slow, label %ready\nready:\n  %al = load i64, ptr %s\n"
+           (slotGep "%thp" (sThreshold)) "  %th = load i64, ptr %thp\n"
+           (slotGep "%stp" (sStress)) "  %stress = load i64, ptr %stp\n"
+           "  %over = icmp ult i64 %th, %al\n  %stressed = icmp ne i64 %stress, 0\n  %need = or i1 %over, %stressed\n"
+           "  br i1 %need, label %slow, label %pool\npool:\n"
+           (gep "%fpp" "%s" (str (+ ca 8))) "  %fp = load i64, ptr %fpp\n  %hasFree = icmp ne i64 %fp, 0\n"
+           "  br i1 %hasFree, label %slow, label %active\nactive:\n"
+           (gep "%app" "%s" (str (+ ca 16))) "  %ap = load ptr, ptr %app\n  %noActive = icmp eq ptr %ap, null\n"
+           "  br i1 %noActive, label %slow, label %room\nroom:\n"
+           (gep "%bip" "%ap" "56") "  %bi = load i64, ptr %bip\n"
+           (gep "%cntp" "%ap" "32") "  %cnt = load i64, ptr %cntp\n  %fits = icmp slt i64 %bi, %cnt\n"
+           "  br i1 %fits, label %bump, label %slow\nbump:\n"
+           "  %bi1 = add i64 %bi, 1\n  store i64 %bi1, ptr %bip\n"
+           "  %word = lshr i64 %bi, 6\n  %wo = shl i64 %word, 3\n" (gep "%wb" "%ap" (str (inUseBits))) (gep "%wat" "%wb" "%wo")
+           "  %bitn = and i64 %bi, 63\n  %bit = shl i64 1, %bitn\n  %wv = load i64, ptr %wat\n  %wv1 = or i64 %wv, %bit\n  store i64 %wv1, ptr %wat\n"
+           (gep "%acp" "%ap" "40") "  %ac = load i64, ptr %acp\n  %ac1 = add i64 %ac, 1\n  store i64 %ac1, ptr %acp\n"
+           "  %off = mul i64 %bi, " (* 8 (+ sc 2)) "\n" (gep "%first" "%ap" "%off") (gep "%o" "%first" (str (pageHeader)))
+           "  %t64 = sext i32 %t to i64\n  %ty = shl i64 %t64, 32\n  %h1 = or i64 %n, %ty\n  %h = or i64 %h1, " (* sc 72057594037927936) "\n  store i64 %h, ptr %o\n"
+           "  %al1 = add i64 %al, %n\n  store i64 %al1, ptr %s\n"
+           (slotGep "%oap" (sObjectsAllocated)) "  %oa = load i64, ptr %oap\n  %oa1 = add i64 %oa, 1\n  store i64 %oa1, ptr %oap\n"
+           (slotGep "%bap" (sBytesAllocated)) "  %ba = load i64, ptr %bap\n  %ba1 = add i64 %ba, %n\n  store i64 %ba1, ptr %bap\n"
+           "  ret ptr %o\n" slow)))
+
+fn fastAllocDefinitions keys: (Map String Bool) inline: Bool -> (List String)
+  (let [(used (filter (fn [(sc Int64)] -> Bool (mapHas? keys (str (fastAllocSym sc) "("))) (range 0 (numClasses))))
+        (consUsed (mapHas? keys (str (fastConsSym) "(")))]
+    (if (and (listEmpty? used) (not consUsed))
+      (list)
+      (listAppend (if inline (list (statePtrText)) (list))
+                  (listAppend (map (fn [(sc Int64)] -> String (fastAllocDefinition (fastAllocSym sc) "@asl_alloc_raw(i32 %t, i64 %n)" sc inline)) used)
+                              (if consUsed (list (fastAllocDefinition (fastConsSym) "@asl_alloc_cons()" 3 inline)) (list))))))
 
 fn gcFactNames -> (List String)
   (list "PROT_READ" "PROT_WRITE" "MAP_PRIVATE" "MAP_ANON" "CLOCK_MONOTONIC" "timespec.size" "timespec.tv_sec" "timespec.tv_nsec")
@@ -434,6 +534,9 @@ fn st8K d: String addr: String off: Int64 n: Int64 -> (List ty/SsaInstr)
 fn st8 d: String addr: String off: Int64 v: String -> (List ty/SsaInstr)
   (appendAll (list (i2p (str d ".ptr") addr) (k (str d ".off") off) (n32 (str d ".n") v) (pr d (i1) "rawStoreI8" (list (str d ".ptr") (str d ".off") (str d ".n")))))
 
+fn st8w d: String addr: String off: Int64 v: String -> (List ty/SsaInstr)
+  (appendAll (list (i2p (str d ".ptr") addr) (k (str d ".off") off) (pr d (i1) "rawStoreI8" (list (str d ".ptr") (str d ".off") v))))
+
 fn state -> (List ty/SsaInstr)
   (ex "s" (i64) "gcAslState" (list))
 
@@ -487,8 +590,11 @@ fn fun name: String params: (List String) blocks: (List ty/SsaBlock) -> ty/SsaFu
   (ty/ssaFunction (pn name) (list) (map (fn [(p String)] -> ty/SsaParam (ty/ssaParam p (i64))) params) (i64) blocks)
 
 fn failB label: String code: String fmt: String args: (List (List ty/SsaInstr)) argNames: (List String) -> ty/SsaBlock
-  (retZero label (listAppend args (list (cs (str label ".c") code) (cs (str label ".f") fmt)
-                                        (ex (str label ".r") (i64) "gcFloorFail" (listAppend (list (str label ".c") (str label ".f")) argNames)))))
+  (retZero label (listAppend args (if (listEmpty? argNames)
+                                    (list (cs (str label ".c") code) (cs (str label ".f") fmt) (ex (str label ".r") (i64) "gcFloorFail" (list (str label ".c") (str label ".f"))))
+                                    (list (cs (str label ".c") code) (cs (str label ".f") fmt) (ex (str label ".bi") (i64) "gcAslFailBuf" (list)) (i2p (str label ".b") (str label ".bi"))
+                                          (k (str label ".cap") 1024) (ex (str label ".n") (i32) "snprintf" (listAppend (list (str label ".b") (str label ".cap") (str label ".f")) argNames))
+                                          (ex (str label ".r") (i64) "gcFloorFail" (list (str label ".c") (str label ".b")))))))
 
 fn exitB c: GcCtx label: String code: Int64 -> ty/SsaBlock
   (retZero label (list (k32 (str label ".c") code) (ex (str label ".r") (i64) (exitName c) (list (str label ".c")))))
@@ -499,9 +605,9 @@ fn helperExterns -> (List ty/SsaExtern)
         (ty/ssaExternTyped "gcAslStackBase" (list) (i64)) (ty/ssaExternTyped "gcAslStackTop" (list) (i64))
         (ty/ssaExternTyped "gcAslCallFin" (list (i64) (i64)) (i64)) (ty/ssaExternTyped "gcAslFinGuarded" (list (i64) (i64) (i64)) (i64))
         (ty/ssaExternTyped "gcAslRethrow" (list (i64)) (i64)) (ty/ssaExternTyped "gcAslSortLarge" (list (i64) (i64)) (i64))
-        (ty/ssaExternTyped "gcAslCtz" (list (i64)) (i64)) (ty/ssaExternTyped "gcAslAtexitStats" (list) (i64))
+        (ty/ssaExternTyped "gcAslCtz" (list (i64)) (i64)) (ty/ssaExternTyped "gcAslClz" (list (i64)) (i64)) (ty/ssaExternTyped "gcAslPopcount" (list (i64)) (i64)) (ty/ssaExternTyped "gcAslAtexitStats" (list) (i64))
         (ty/ssaExternTyped "gcAslF64Bits" (list (f64)) (i64)) (ty/ssaExternTyped "gcAslBitsF64" (list (i64)) (f64))
-        (ty/ssaExternTyped "gcAslF64ToU64" (list (f64)) (i64)))
+        (ty/ssaExternTyped "gcAslF64ToU64" (list (f64)) (i64)) (ty/ssaExternTyped "gcAslPublish" (list) (i64)) (ty/ssaExternTyped "gcAslFailBuf" (list) (i64)))
 
 fn helperExternsFor c: GcCtx -> (List ty/SsaExtern)
   (if (wasm? c)
@@ -515,7 +621,7 @@ fn gcExterns c: GcCtx -> (List ty/SsaExtern)
         (list (t "calloc" (list (i64) (i64)) (ptr)) (t "realloc" (list (ptr) (i64)) (ptr)) (t (freeName c) (list (ptr)) (i64))
               (t "memset" (list (ptr) (i32) (i64)) (ptr)) (t "memcpy" (list (ptr) (ptr) (i64)) (ptr)) (t "strlen" (list (ptr)) (i64))
               (t "llvm.wasm.memory.grow.i32" (list (i32) (i32)) (i32)) (t (clockName) (list) (i64)) (t (exitName c) (list (i32)) (i64))
-              (ty/ssaExternVariadic "dprintf" (list (i32) (ptr)) (i32)) (ty/ssaExternVariadic "gcFloorFail" (list (ptr) (ptr)) (i64))))
+              (ty/ssaExternVariadic "dprintf" (list (i32) (ptr)) (i32)) (ty/ssaExternVariadic "snprintf" (list (ptr) (i64) (ptr)) (i32)) (ty/ssaExternVariadic "gcFloorFail" (list (ptr) (ptr)) (i64))))
     (listAppend (helperExterns)
       (listAppend
         (list (t "calloc" (list (i64) (i64)) (ptr)) (t "realloc" (list (ptr) (i64)) (ptr)) (t "free" (list (ptr)) (i64))
@@ -526,7 +632,7 @@ fn gcExterns c: GcCtx -> (List ty/SsaExtern)
             (list (t "mmap" (list (ptr) (i64) (i32) (i32) (i32) (i64)) (ptr)) (t "munmap" (list (ptr) (i64)) (i32))) )
           (list (t "getenv" (list (ptr)) (ptr)) (t "strtod" (list (ptr) (ptr)) (f64)) (t "strtoull" (list (ptr) (ptr) (i32)) (i64))
                 (t c.errno (list) (ptr)) (t "clock_gettime" (list (i32) (ptr)) (i32)) (t "exit" (list (i32)) (i64))
-                (ty/ssaExternVariadic "dprintf" (list (i32) (ptr)) (i32)) (ty/ssaExternVariadic "gcFloorFail" (list (ptr) (ptr)) (i64))))))))
+                (ty/ssaExternVariadic "dprintf" (list (i32) (ptr)) (i32)) (ty/ssaExternVariadic "snprintf" (list (ptr) (i64) (ptr)) (i32)) (ty/ssaExternVariadic "gcFloorFail" (list (ptr) (ptr)) (i64))))))))
 
 fn helperDefinitions -> (List (Pair String String))
   (list (pair "declare tailcc i64 @gcAslState()"
@@ -556,6 +662,10 @@ fn helperDefinitions -> (List (Pair String String))
               "define internal tailcc i64 @gcAslSortLarge(i64 %base, i64 %n) {\n  %bp = inttoptr i64 %base to ptr\n  call void @qsort(ptr %bp, i64 %n, i64 8, ptr @gcAslLargeCmp)\n  ret i64 0\n}")
         (pair "declare tailcc i64 @gcAslCtz(i64)"
               "define internal tailcc i64 @gcAslCtz(i64 %w) {\n  %r = call i64 @llvm.cttz.i64(i64 %w, i1 true)\n  ret i64 %r\n}")
+        (pair "declare tailcc i64 @gcAslClz(i64)"
+              "declare i64 @llvm.ctlz.i64(i64, i1)\ndefine internal tailcc i64 @gcAslClz(i64 %w) {\n  %r = call i64 @llvm.ctlz.i64(i64 %w, i1 true)\n  ret i64 %r\n}")
+        (pair "declare tailcc i64 @gcAslPopcount(i64)"
+              "declare i64 @llvm.ctpop.i64(i64)\ndefine internal tailcc i64 @gcAslPopcount(i64 %w) {\n  %r = call i64 @llvm.ctpop.i64(i64 %w)\n  ret i64 %r\n}")
         (pair "declare tailcc i64 @gcAslAtexitStats()"
               "define internal tailcc i64 @gcAslAtexitStats() {\n  %r = call i32 @atexit(ptr @gcAslPrintStatsC)\n  ret i64 0\n}")
         (pair "declare tailcc i64 @gcAslF64Bits(double)"
@@ -563,7 +673,11 @@ fn helperDefinitions -> (List (Pair String String))
         (pair "declare tailcc double @gcAslBitsF64(i64)"
               "define internal tailcc double @gcAslBitsF64(i64 %b) {\n  %d = bitcast i64 %b to double\n  ret double %d\n}")
         (pair "declare tailcc i64 @gcAslF64ToU64(double)"
-              "define internal tailcc i64 @gcAslF64ToU64(double %d) {\n  %u = fptoui double %d to i64\n  ret i64 %u\n}"))
+              "define internal tailcc i64 @gcAslF64ToU64(double %d) {\n  %u = fptoui double %d to i64\n  ret i64 %u\n}")
+        (pair "declare tailcc i64 @gcAslPublish()"
+              "define internal tailcc i64 @gcAslPublish() {\n  store ptr @gcAsl.state, ptr @asl_gc_state_ptr\n  ret i64 0\n}")
+        (pair "declare tailcc i64 @gcAslFailBuf()"
+              "define internal tailcc i64 @gcAslFailBuf() {\n  %p = ptrtoint ptr @gcAsl.failBuf to i64\n  ret i64 %p\n}"))
 
 fn helperDefinitionsFor target: target/TargetFacts -> (List (Pair String String))
   (if (target/isWasm32 target)
@@ -598,12 +712,22 @@ fn registerProtoFn c: GcCtx -> ty/SsaFunction
           (exitB c "die" 70)
           (retZero "put" (list (sld "arr" (sProtos)) (elem "at" "arr" "n" 8) (st "w3" "at" 0 "p") (addK "n1" "n" 1) (sst "w4" (sProtoCount) "n1")))))
 
+fn markBitOf d: String o: String -> (List ty/SsaInstr)
+  (appendAll (list (bandK (str d ".pg") o (- 0 (pageSize))) (sub (str d ".r0") o (str d ".pg")) (addK (str d ".rel") (str d ".r0") (- 0 (pageHeader)))
+                   (ld (str d ".rc") (str d ".pg") (recipAt)) (mul (str d ".pr") (str d ".rel") (str d ".rc")) (shrK (str d ".idx") (str d ".pr") 32)
+                   (shrK (str d ".wi") (str d ".idx") 6) (shlK (str d ".wo") (str d ".wi") 3) (add (str d ".wb") (str d ".pg") (str d ".wo")) (addK (str d ".wa") (str d ".wb") (markBits))
+                   (ld (str d ".w") (str d ".wa") 0) (bandK (str d ".bn") (str d ".idx") 63) (k (str d ".one") 1) (shl (str d ".bit") (str d ".one") (str d ".bn"))))
+
+fn markBitSet d: String b: String -> (List ty/SsaInstr)
+  (appendAll (list (bor (str d ".w1") (str b ".w") (str b ".bit")) (st (str d ".sw") (str b ".wa") 0 (str d ".w1"))))
+
 fn markObjFn -> ty/SsaFunction
   (fun "markObj" (list "o")
-    (list (blk "entry" (list (state) (ld "h" "o" 0) (byteAtK "mark" "h" 40) (byteAtK "perm" "h" 48) (bor "mp" "mark" "perm") (cmpK "skip" "neInt" "mp" 0))
-            (br "skip" "done" "set"))
-          (blk "set" (list (st8K "m" "o" 5 1) (shrK "cls" "h" 56) (cmpK "pooled" "neInt" "cls" (largeClass))) (br "pooled" "page" "push"))
-          (blk "page" (list (bandK "pg" "o" (- 0 (pageSize))) (ld "mc" "pg" 48) (addK "mc1" "mc" 1) (st "w" "pg" 48 "mc1")) (jmp "push" (list)))
+    (list (blk "entry" (list (state) (ld "h" "o" 0) (shrK "cls" "h" 56) (cmpK "pooled" "neInt" "cls" (largeClass))) (br "pooled" "ptest" "ltest"))
+          (blk "ltest" (list (byteAtK "mark" "h" 40) (byteAtK "perm" "h" 48) (bor "mp" "mark" "perm") (cmpK "skip" "neInt" "mp" 0)) (br "skip" "done" "lset"))
+          (blk "lset" (list (st8K "m" "o" 5 1)) (jmp "push" (list)))
+          (blk "ptest" (list (byteAtK "pm" "h" 40) (sld "ep" (sEpoch)) (cmp "seen" "eqInt" "pm" "ep")) (br "seen" "done" "page"))
+          (blk "page" (list (st8 "em" "o" 5 "ep") (markBitOf "mb" "o") (markBitSet "ms" "mb") (bandK "sz" "h" 4294967295) (sinc "lb" (sMarkedBytes) "sz")) (jmp "push" (list)))
           (blk "push" (list (sld "sp" (sMarkSp)) (sld "cap" (sMarkCap)) (cmp "full" "eqInt" "sp" "cap")) (br "full" "grow" "put"))
           (blk "grow" (list (cl "g" "growMark" (list "cap"))) (jmp "put" (list)))
           (retZero "put" (list (sld "stk" (sMarkStack)) (elem "at" "stk" "sp" 8) (st "w3" "at" 0 "o") (addK "sp1" "sp" 1) (sst "w4" (sMarkSp) "sp1")))
@@ -639,27 +763,34 @@ fn objCases -> (List (Pair Int64 String))
 fn drainFn -> ty/SsaFunction
   (fun "drain" (list)
     (listAppend
-      (list (blk "entry" (list (state) (sld "sp0" (sMarkSp)) (sld "stk0" (sMarkStack)) (sld "cap0" (sMarkCap))) (jmp "loop" (list "sp0" "stk0" "cap0")))
-            (blkp "loop" (list "sp" "stk" "cap") (list (cmpK "empty" "eqInt" "sp" 0)) (br "empty" "done" "pop"))
+      (list (blk "entry" (list (state) (sld "sp0" (sMarkSp)) (cmpK "idle" "eqInt" "sp0" 0)) (br "idle" "idle" "start"))
+            (retZero "idle" (list))
+            (blk "start" (list (sld "ep" (sEpoch)) (n32 "ep8" "ep") (sld "stk0" (sMarkStack)) (sld "cap0" (sMarkCap)) (sld "mb0" (sMarkedBytes)))
+              (jmp "loop" (list "sp0" "stk0" "cap0" "mb0")))
+            (blkp "loop" (list "sp" "stk" "cap" "mb") (list (cmpK "empty" "eqInt" "sp" 0)) (br "empty" "done" "pop"))
             (blk "pop" (list (addK "sp1" "sp" -1) (elem "at" "stk" "sp1" 8) (ld "o" "at" 0) (ld "h" "o" 0) (byteAtK "type" "h" 32) (k "z0" 0))
               (jmp "t0" (list)))
-            (blk "cons" (list (addK "cb" "o" 8) (k "cn" 2)) (jmp "kids" (list "cb" "cn" "z0" "sp1" "stk" "cap")))
-            (blk "rec" (list (ldS32 "rn" "o" 12) (addK "rb" "o" 24)) (jmp "kids" (list "rb" "rn" "z0" "sp1" "stk" "cap")))
-            (blk "ctor" (list (ldS32 "fn" "o" 12) (addK "fb" "o" 16)) (jmp "kids" (list "fb" "fn" "z0" "sp1" "stk" "cap")))
-            (blk "clo" (list (ldS32 "un" "o" 16) (addK "ub" "o" 24)) (jmp "kids" (list "ub" "un" "z0" "sp1" "stk" "cap")))
-            (blk "leaf" (list) (jmp "loop" (list "sp1" "stk" "cap")))
-            (blkp "kids" (list "base" "n" "i" "ksp" "kstk" "kcap") (list (cmp "more" "ltInt" "i" "n")) (brA "more" "kid" (list) "loop" (list "ksp" "kstk" "kcap")))
+            (blk "cons" (list (addK "cb" "o" 8) (k "cn" 2)) (jmp "kids" (list "cb" "cn" "z0" "sp1" "stk" "cap" "mb")))
+            (blk "rec" (list (ldS32 "rn" "o" 12) (addK "rb" "o" 24)) (jmp "kids" (list "rb" "rn" "z0" "sp1" "stk" "cap" "mb")))
+            (blk "ctor" (list (ldS32 "fn" "o" 12) (addK "fb" "o" 16)) (jmp "kids" (list "fb" "fn" "z0" "sp1" "stk" "cap" "mb")))
+            (blk "clo" (list (ldS32 "un" "o" 16) (addK "ub" "o" 24)) (jmp "kids" (list "ub" "un" "z0" "sp1" "stk" "cap" "mb")))
+            (blk "leaf" (list) (jmp "loop" (list "sp1" "stk" "cap" "mb")))
+            (blkp "kids" (list "base" "n" "i" "ksp" "kstk" "kcap" "kmb") (list (cmp "more" "ltInt" "i" "n")) (brA "more" "kid" (list) "loop" (list "ksp" "kstk" "kcap" "kmb")))
             (blk "kid" (list (elem "a" "base" "i" 16) (ldU32 "tag" "a" 0) (ld "obj" "a" 8) (addK "i1" "i" 1) (hasObj "has" "tag" "obj"))
-              (brA "has" "test" (list) "kids" (list "base" "n" "i1" "ksp" "kstk" "kcap")))
-            (blk "test" (list (ld "oh" "obj" 0) (byteAtK "mark" "oh" 40) (byteAtK "perm" "oh" 48) (bor "mp" "mark" "perm") (cmpK "skip" "neInt" "mp" 0))
-              (brA "skip" "kids" (list "base" "n" "i1" "ksp" "kstk" "kcap") "set" (list)))
-            (blk "set" (list (st8K "m" "obj" 5 1) (shrK "cls" "oh" 56) (cmpK "pooled" "neInt" "cls" (largeClass))) (br "pooled" "page" "push"))
-            (blk "page" (list (bandK "pg" "obj" (- 0 (pageSize))) (ld "mc" "pg" 48) (addK "mc1" "mc" 1) (st "w" "pg" 48 "mc1")) (jmp "push" (list)))
-            (blk "push" (list (cmp "full" "eqInt" "ksp" "kcap")) (brA "full" "grow" (list) "put" (list "kstk" "kcap")))
+              (brA "has" "test" (list) "kids" (list "base" "n" "i1" "ksp" "kstk" "kcap" "kmb")))
+            (blk "test" (list (ld "oh" "obj" 0) (shrK "cls" "oh" 56) (cmpK "pooled" "neInt" "cls" (largeClass))) (br "pooled" "ptest" "ltest"))
+            (blk "ltest" (list (byteAtK "mark" "oh" 40) (byteAtK "perm" "oh" 48) (bor "mp" "mark" "perm") (cmpK "skip" "neInt" "mp" 0))
+              (brA "skip" "kids" (list "base" "n" "i1" "ksp" "kstk" "kcap" "kmb") "lset" (list)))
+            (blk "lset" (list (st8K "m" "obj" 5 1)) (jmp "push" (list "kmb")))
+            (blk "ptest" (list (byteAtK "pm" "oh" 40) (cmp "seen" "eqInt" "pm" "ep")) (brA "seen" "kids" (list "base" "n" "i1" "ksp" "kstk" "kcap" "kmb") "page" (list)))
+            (blk "page" (list (st8w "em" "obj" 5 "ep8") (markBitOf "mb" "obj") (markBitSet "ms" "mb") (bandK "sz" "oh" 4294967295) (add "kmb1" "kmb" "sz")) (jmp "push" (list "kmb1")))
+            (blkp "push" (list "pmb") (list (shrK "ct" "oh" 32) (addK "ct1" "ct" -1) (bandK "ct2" "ct1" 255) (cmpK "inner" "ltInt" "ct2" 4))
+              (brA "inner" "room" (list) "kids" (list "base" "n" "i1" "ksp" "kstk" "kcap" "pmb")))
+            (blk "room" (list (cmp "full" "eqInt" "ksp" "kcap")) (brA "full" "grow" (list) "put" (list "kstk" "kcap")))
             (blk "grow" (list (sst "gw" (sMarkSp) "ksp") (cl "nstk" "growMark" (list "kcap")) (sld "ncap" (sMarkCap))) (jmp "put" (list "nstk" "ncap")))
             (blkp "put" (list "pstk" "pcap") (list (elem "pat" "pstk" "ksp" 8) (st "pw" "pat" 0 "obj") (addK "ksp1" "ksp" 1))
-              (jmp "kids" (list "base" "n" "i1" "ksp1" "pstk" "pcap")))
-            (retZero "done" (list (sst "dw" (sMarkSp) "sp"))))
+              (jmp "kids" (list "base" "n" "i1" "ksp1" "pstk" "pcap" "pmb")))
+            (retZero "done" (list (sst "dw" (sMarkSp) "sp") (sst "dmb" (sMarkedBytes) "mb"))))
       (typeChain "t" "type" (objCases) "leaf")))
 
 fn markRootFn -> ty/SsaFunction
@@ -710,7 +841,7 @@ fn poolScanFn -> ty/SsaFunction
           (blk "cbody" (list (classAddr "ca" "sc") (ld "p0" "ca" 0)) (jmp "ploop" (list "p0")))
           (blkp "ploop" (list "p") (list (cmpK "pz" "eqInt" "p" 0)) (br "pz" "cnext" "pbody"))
           (blk "pbody" (list) (br "clear" "preset" "pwords"))
-          (blk "preset" (list (stK "mc" "p" 48 0)) (jmp "pwords" (list)))
+          (blk "preset" (listAppend (list) (map (fn [(i Int64)] -> (List ty/SsaInstr) (stK (str "mw" (stringFromInt64 i)) "p" (+ (markBits) (* 8 i)) 0)) (range 0 (bitWords)))) (jmp "pwords" (list)))
           (blk "pwords" (list (ld "cnt" "p" 32) (addK "cnt63" "cnt" 63) (shrK "nw" "cnt63" 6) (k "kk0" 0)) (jmp "wloop" (list "kk0")))
           (blkp "wloop" (list "kk") (list (cmp "wmore" "ltInt" "kk" "nw")) (br "wmore" "wbody" "pnext"))
           (blk "wbody" (list (addK "wbase" "p" 72) (elem "wat" "wbase" "kk" 8) (ld "w0" "wat" 0)) (jmp "bloop" (list "w0")))
@@ -735,7 +866,7 @@ fn clearMarksFn -> ty/SsaFunction
 
 fn abortMarkFn -> ty/SsaFunction
   (fun "abortMark" (list)
-    (list (retZero "entry" (list (state) (sstK "c" (sCollecting) 0) (sstK "sp" (sMarkSp) 0) (cl "r" "clearMarks" (list))))))
+    (list (retZero "entry" (list (state) (sstK "c" (sCollecting) 0) (sstK "sp" (sMarkSp) 0) (sstK "mb" (sMarkedBytes) 0) (cl "r" "clearMarks" (list))))))
 
 fn numChildrenFn -> ty/SsaFunction
   (fun "numChildren" (list "o")
@@ -816,7 +947,7 @@ fn verifyDfsFn c: GcCtx -> ty/SsaFunction
 
 fn verifyHeapFn -> ty/SsaFunction
   (fun "verifyHeap" (list)
-    (list (blk "entry" (list (state) (sld "l0" (sLargeObjects))) (jmp "loop" (list "l0")))
+    (list (blk "entry" (list (state) (cl "c0" "clearMarks" (list)) (sld "l0" (sLargeObjects))) (jmp "loop" (list "l0")))
           (blkp "loop" (list "lo") (list (cmpK "z" "eqInt" "lo" 0)) (br "z" "pooled" "body"))
           (blk "body" (list (addK "o" "lo" 24) (cl "v" "verifyDfs" (list "o")) (ld "nx" "lo" 0)) (jmp "loop" (list "nx")))
           (retZero "pooled" (list (k "zero" 0) (cl "r" "poolScan" (list "zero")) (cl "c" "clearMarks" (list))))))
@@ -942,9 +1073,9 @@ fn newPageFn -> ty/SsaFunction
           (blk "cached" (list (sld "cp" (sCachedPages)) (ld "cnx" "cp" 0) (sst "w1" (sCachedPages) "cnx") (addK "cc1" "cc" -1) (sst "w2" (sCachedCount) "cc1"))
             (jmp "got" (list "cp")))
           (blk "fresh" (list (cl "fp" "freshPage" (list))) (jmp "got" (list "fp")))
-          (blkp "got" (list "p") (list (i2p "pp" "p") (k32 "z32" 0) (k "hb" (pageHeader)) (ex "ms" (ptr) "memset" (list "pp" "z32" "hb"))
-                                       (st "wc" "p" 16 "sc") (addK "sc2" "sc" 2) (mulK "ss" "sc2" 8) (st "wss" "p" 24 "ss") (k "room" (- (pageSize) (pageHeader)))
-                                       (quot "cnt" "room" "ss") (st "wcnt" "p" 32 "cnt") (stK "wb" "p" 56 (pageHeader)) (cl "put" "pageSetPut" (list "p"))
+          (blkp "got" (list "p") (list (i2p "pp" "p") (k32 "z32" 0) (k "hb" (headerUsed)) (ex "ms" (ptr) "memset" (list "pp" "z32" "hb"))
+                                       (addK "sc2" "sc" 2) (mulK "ss" "sc2" 8) (st "wss" "p" 24 "ss") (k "room" (- (pageSize) (pageHeader)))
+                                       (quot "cnt" "room" "ss") (st "wcnt" "p" 32 "cnt") (k "two32" 4294967296) (quot "rq" "two32" "ss") (addK "rc" "rq" 1) (st "wrc" "p" (recipAt) "rc") (cl "put" "pageSetPut" (list "p"))
                                        (addK "pe" "p" (pageSize)) (cl "wh" "widenHeap" (list "p" "pe")))
             (ret "p"))))
 
@@ -982,17 +1113,24 @@ fn releaseMappedCacheFn -> ty/SsaFunction
 
 fn poolAllocFn -> ty/SsaFunction
   (fun "poolAlloc" (list "sc" "ss")
-    (list (blk "entry" (list (state) (classAddr "ca" "sc") (ld "fp" "ca" 8) (cmpK "has" "neInt" "fp" 0)) (br "has" "fromFree" "fromBump"))
-          (blk "fromFree" (list (ld "fslot" "fp" 64) (ld "fnx" "fslot" 0) (st "w1" "fp" 64 "fnx") (cmpK "drained" "eqInt" "fnx" 0))
-            (brA "drained" "unlink" (list) "have" (list "fp" "fslot")))
-          (blk "unlink" (list (ld "nf" "fp" 8) (st "w2" "ca" 8 "nf") (stK "w3" "fp" 8 0)) (jmp "have" (list "fp" "fslot")))
+    (list (blk "entry" (list (state) (classAddr "ca" "sc")) (jmp "top" (list)))
+          (blk "top" (list (ld "fp" "ca" 8) (cmpK "has" "neInt" "fp" 0)) (br "has" "fromFree" "fromBump"))
+          (blk "fromFree" (list (ld "lim" "fp" 56) (ld "cur" "fp" 64) (shrK "tw" "lim" 6) (bandK "tb" "lim" 63) (k "one" 1) (shl "tp" "one" "tb") (addK "tmask" "tp" -1) (k "all" -1))
+            (jmp "scan" (list "cur")))
+          (blkp "scan" (list "c") (list (shlK "co" "c" 3) (add "cb" "fp" "co") (ld "w" "cb" (inUseBits)) (ult "below" "c" "tw")) (brA "below" "masked" (list "all") "masked" (list "tmask")))
+          (blkp "masked" (list "m") (list (bxor "inv0" "w" "all") (band "inv" "inv0" "m") (cmpK "none" "eqInt" "inv" 0)) (br "none" "next" "take"))
+          (blk "next" (list (cmpK "bottom" "eqInt" "c" 0)) (br "bottom" "unlink" "down"))
+          (blk "down" (list (addK "c1" "c" -1) (st "wc" "fp" 64 "c1")) (jmp "scan" (list "c1")))
+          (blk "unlink" (list (ld "nf" "fp" 8) (st "w2" "ca" 8 "nf") (stK "w3" "fp" 8 0)) (jmp "top" (list)))
+          (blk "take" (list (ex "lz" (i64) "gcAslClz" (list "inv")) (k "k63" 63) (sub "hb" "k63" "lz") (shlK "cw" "c" 6) (add "fi" "cw" "hb")) (jmp "have" (list "fp" "fi")))
           (blk "fromBump" (list (ld "ap" "ca" 16) (cmpK "noActive" "eqInt" "ap" 0)) (brA "noActive" "fresh" (list) "room" (list)))
-          (blk "room" (list (ld "bump" "ap" 56) (add "end" "bump" "ss") (cmpK "over" "gtInt" "end" (pageSize))) (brA "over" "fresh" (list) "bumpIt" (list "ap")))
+          (blk "room" (list (ld "bi" "ap" 56) (ld "cnt" "ap" 32) (cmp "fits" "ltInt" "bi" "cnt")) (brA "fits" "bumpIt" (list "ap") "fresh" (list)))
           (blk "fresh" (list (cl "np" "newPage" (list "sc")) (ld "head" "ca" 0) (st "w4" "np" 0 "head") (st "w5" "ca" 0 "np") (st "w6" "ca" 16 "np")) (jmp "bumpIt" (list "np")))
-          (blkp "bumpIt" (list "bp") (list (ld "b" "bp" 56) (add "bslot" "bp" "b") (add "b1" "b" "ss") (st "w7" "bp" 56 "b1")) (jmp "have" (list "bp" "bslot")))
-          (blkp "have" (list "hp" "hs") (list (sub "rel" "hs" "hp") (addK "rel2" "rel" (- 0 (pageHeader))) (quot "idx" "rel2" "ss") (shrK "word" "idx" 6) (addK "wbase" "hp" 72)
-                                              (elem "wat" "wbase" "word" 8) (bandK "bitn" "idx" 63) (k "one" 1) (shl "bit" "one" "bitn") (ld "wv" "wat" 0) (bor "wv1" "wv" "bit")
-                                              (st "w8" "wat" 0 "wv1") (ld "ac" "hp" 40) (addK "ac1" "ac" 1) (st "w9" "hp" 40 "ac1"))
+          (blkp "bumpIt" (list "bp") (list (ld "b" "bp" 56) (addK "b1" "b" 1) (st "w7" "bp" 56 "b1")) (jmp "have" (list "bp" "b")))
+          (blkp "have" (list "hp" "idx") (list (shrK "word" "idx" 6) (shlK "wo" "word" 3) (add "wb" "hp" "wo") (addK "wat" "wb" (inUseBits))
+                                               (bandK "bitn" "idx" 63) (k "hone" 1) (shl "bit" "hone" "bitn") (ld "wv" "wat" 0) (bor "wv1" "wv" "bit")
+                                               (st "w8" "wat" 0 "wv1") (ld "ac" "hp" 40) (addK "ac1" "ac" 1) (st "w9" "hp" 40 "ac1")
+                                               (mul "off" "idx" "ss") (add "first" "hp" "off") (addK "hs" "first" (pageHeader)))
             (ret "hs"))))
 
 fn collectFirst label: String bytes: String next: String -> ty/SsaBlock
@@ -1186,27 +1324,27 @@ fn sweepPagesFn -> ty/SsaFunction
           (blkp "cloop" (list "sc" "lv") (list (cmpK "cmore" "ltInt" "sc" (numClasses))) (br "cmore" "cbody" "done"))
           (blk "cbody" (list (classAddr "ca" "sc") (stK "w1" "ca" 8 0) (stK "w2" "ca" 16 0)) (jmp "ploop" (list "ca" "lv")))
           (blkp "ploop" (list "pp" "lv2") (list (ld "p" "pp" 0) (cmpK "pz" "eqInt" "p" 0)) (brA "pz" "cnext" (list "lv2") "pbody" (list)))
-          (blk "pbody" (list (ld "mc" "p" 48) (cmpK "empty" "eqInt" "mc" 0)) (br "empty" "pfree" "psweep"))
+          (blk "pbody" (list (ld "lim" "p" 56) (addK "lim63" "lim" 63) (shrK "nw" "lim63" 6) (k "c0" 0)) (jmp "cntloop" (list "c0" "c0")))
+          (blkp "cntloop" (list "ck" "cacc") (list (cmp "cmore2" "ltInt" "ck" "nw")) (brA "cmore2" "cntbody" (list) "counted" (list "cacc")))
+          (blk "cntbody" (list (shlK "cko" "ck" 3) (add "cua" "p" "cko") (ld "cmw" "cua" (markBits)) (ex "cpc" (i64) "gcAslPopcount" (list "cmw")) (add "cacc1" "cacc" "cpc") (addK "ck1" "ck" 1))
+            (jmp "cntloop" (list "ck1" "cacc1")))
+          (blkp "counted" (list "mc") (list (cmpK "empty" "eqInt" "mc" 0)) (br "empty" "pfree" "psweep"))
           (blk "pfree" (list (ld "pnx" "p" 0) (st "w3" "pp" 0 "pnx") (ld "ac" "p" 40) (sinc "fr" (sObjectsFreed) "ac") (cl "fp" "freePage" (list "p"))) (jmp "ploop" (list "pp" "lv2")))
-          (blk "psweep" (list (ld "ss" "p" 24) (ld "bump" "p" 56) (addK "used" "bump" (- 0 (pageHeader))) (quot "lim" "used" "ss") (k "i0" 0))
-            (jmp "sloop" (list "i0" "lv2" "i0" "i0")))
-          (blkp "sloop" (list "idx" "lv3" "fl" "nd") (list (cmp "smore" "ltInt" "idx" "lim")) (br "smore" "sbody" "sdone"))
-          (blk "sbody" (list (mul "off" "idx" "ss") (addK "first" "p" (pageHeader)) (add "o" "first" "off") (shrK "word" "idx" 6) (addK "wbase" "p" 72) (elem "wa" "wbase" "word" 8)
-                             (ld "w" "wa" 0) (bandK "bn" "idx" 63) (k "one" 1) (shl "bit" "one" "bn") (band "wb" "w" "bit") (cmpK "inUse" "neInt" "wb" 0) (addK "idx1" "idx" 1))
-            (brA "inUse" "sused" (list) "sfree" (list "nd")))
-          (blk "sused" (list (ld8 "m" "o" 5) (cmpK "marked" "neInt" "m" 0)) (br "marked" "slive" "sdead"))
-          (blk "slive" (list (st8K "um" "o" 5 0) (ldU32 "sz" "o" 0) (add "lv4" "lv3" "sz")) (jmp "sloop" (list "idx1" "lv4" "fl" "nd")))
-          (blk "sdead" (list (addK "nd1" "nd" 1) (k "all" -1) (bxor "nbit" "bit" "all") (band "w1b" "w" "nbit") (st "w5" "wa" 0 "w1b")) (jmp "sfree" (list "nd1")))
-          (blkp "sfree" (list "nd2") (list (st "w6" "o" 0 "fl")) (jmp "sloop" (list "idx1" "lv3" "o" "nd2")))
-          (blk "sdone" (list (st "w7" "p" 64 "fl") (sinc "fr2" (sObjectsFreed) "nd") (st "w8" "p" 40 "mc") (stK "w9" "p" 48 0) (cmpK "hasFree" "neInt" "fl" 0))
+          (blk "psweep" (list (ld "pac" "p" 40) (sub "dead" "pac" "mc") (sinc "fr2" (sObjectsFreed) "dead") (k "k0" 0))
+            (jmp "wloop" (list "k0")))
+          (blkp "wloop" (list "kk") (list (cmp "wmore" "ltInt" "kk" "nw")) (br "wmore" "wbody" "sdone"))
+          (blk "wbody" (list (shlK "ko" "kk" 3) (add "ua" "p" "ko") (ld "u" "ua" (inUseBits)) (ld "mk" "ua" (markBits)) (band "nu" "u" "mk") (st "wu" "ua" (inUseBits) "nu")
+                             (stK "wm" "ua" (markBits) 0) (addK "kk1" "kk" 1))
+            (jmp "wloop" (list "kk1")))
+          (blk "sdone" (list (st "w8" "p" 40 "mc") (addK "limm1" "lim" -1) (shrK "cur" "limm1" 6) (st "w7" "p" 64 "cur") (cmp "hasFree" "ltInt" "mc" "lim"))
             (br "hasFree" "pushFree" "activeCheck"))
           (blk "pushFree" (list (ld "ffp" "ca" 8) (st "w10" "p" 8 "ffp") (st "w11" "ca" 8 "p")) (jmp "pnext" (list)))
-          (blk "activeCheck" (list (ld "act" "ca" 16) (cmpK "noAct" "eqInt" "act" 0) (add "bend" "bump" "ss") (k "psz" (pageSize)) (ule "roomy" "bend" "psz") (andB "mkAct" "noAct" "roomy"))
+          (blk "activeCheck" (list (ld "act" "ca" 16) (cmpK "noAct" "eqInt" "act" 0) (ld "cnt" "p" 32) (cmp "roomy" "ltInt" "lim" "cnt") (andB "mkAct" "noAct" "roomy"))
             (br "mkAct" "setActive" "pnext"))
           (blk "setActive" (list (st "w12" "ca" 16 "p")) (jmp "pnext" (list)))
-          (blk "pnext" (list) (jmp "ploop" (list "p" "lv3")))
+          (blk "pnext" (list) (jmp "ploop" (list "p" "lv2")))
           (blkp "cnext" (list "lv7") (list (addK "sc1" "sc" 1)) (jmp "cloop" (list "sc1" "lv7")))
-          (blk "done" (list) (ret "lv"))))
+          (blk "done" (list (sld "mb" (sMarkedBytes)) (add "lvAll" "lv" "mb") (sstK "mb0" (sMarkedBytes) 0) (sld "ep" (sEpoch)) (k "k3" 3) (sub "ep1" "k3" "ep") (sst "wep" (sEpoch) "ep1")) (ret "lvAll"))))
 
 fn sweepPhaseFn -> ty/SsaFunction
   (fun "sweepPhase" (list "t0" "guard" "fe")
@@ -1221,7 +1359,7 @@ fn sweepPhaseFn -> ty/SsaFunction
           (blkp "cap" (list "t2") (list (sld "maxb" (sMaxBytes)) (cmpK "nomax" "eqInt" "maxb" 0)) (brA "nomax" "set" (list "t2") "room" (list)))
           (blk "room" (list (ult "under" "live" "maxb") (sub "left" "maxb" "live") (k "none" 0)) (brA "under" "roomed" (list "left") "roomed" (list "none")))
           (blkp "roomed" (list "rm") (list (ult "tight" "rm" "t2")) (brA "tight" "set" (list "rm") "set" (list "t2")))
-          (blkp "set" (list "t3") (list (sst "w3" (sThreshold) "t3") (shrK "keep" "t3" 14) (cl "rc" "releaseCache" (list "keep")) (k "slr" (sReleaseNs))
+          (blkp "set" (list "t3") (list (sst "w3" (sThreshold) "t3") (k "usable" (- (pageSize) (pageHeader))) (quot "need" "t3" "usable") (addK "keep" "need" (numClasses)) (cl "rc" "releaseCache" (list "keep")) (k "slr" (sReleaseNs))
                                         (cl "tr" "stamp" (list "slr" "tp")) (sld "ver" (sVerify)) (cmpK "verifying" "neInt" "ver" 0))
             (br "verifying" "verify" "stats"))
           (blk "verify" (list (cl "vh" "verifyHeap" (list))) (jmp "stats" (list)))
@@ -1277,7 +1415,7 @@ fn getenvI d: String name: String -> (List ty/SsaInstr)
 
 fn initFn c: GcCtx -> ty/SsaFunction
   (fun "init" (list)
-    (list (blk "entry" (list (state) (getenvI "es" "ASL_GC_STRESS") (cl "stress" "isOne" (list "es")) (sst "w1" (sStress) "stress")
+    (list (blk "entry" (list (state) (ex "pub" (i64) "gcAslPublish" (list)) (getenvI "es" "ASL_GC_STRESS") (cl "stress" "isOne" (list "es")) (sst "w1" (sStress) "stress")
                              (getenvI "et" "ASL_GC_STATS") (cl "stats" "isOne" (list "et")) (cmpK "statsOn" "neInt" "stats" 0))
             (br "statsOn" "statsOn" "growth"))
           (blk "statsOn" (list (sstK "w2" (sStats) 1) (ex "ax" (i64) "gcAslAtexitStats" (list))) (jmp "growth" (list)))

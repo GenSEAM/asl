@@ -16,12 +16,13 @@ fn testLowercasePairNotAliased -> Bool
     (and (= (ty/resolveTypeAlias "pair") "pair")
          (listAny? (fn [(d ty/Diagnostic)] -> Bool (= d.code "rule-10")) ds)))
 
-fn testUnsupportedDoubleEquals -> Bool
-  (mt (ty/builtinSig "==") ((some _) false) ((none) true))
+fn testDoubleEqualsAliasesEquals -> Bool
+  (and (= (sigText (ty/builtinSig "==")) (sigText (ty/builtinSig "=")))
+       (listEmpty? (c/checkSource "(module m :x [f]) (fn f [] -> Bool (== 1 1))" (mapEmpty) "m.asl")))
 
 fn missingPreludeSigTable -> (List (Pair String String))
-  (list (pair "fileReadString" "String -> (Result String IoError)")
-        (pair "fileReadBytes" "String -> (Result Bytes IoError)")
+  (list (pair "fileReadString" "String -> (Result String String)")
+        (pair "fileReadBytes" "String -> (Result Bytes String)")
         (pair "stringCountChar" "String String -> Int64")
         (pair "isNan?" "Float64 -> Bool")
         (pair "isFinite?" "Float64 -> Bool")
@@ -156,7 +157,7 @@ fn testCheckerBuiltinsAsValues -> Bool
 fn ! runTests -> Bool
   (do
     (assert (testLowercasePairNotAliased) "lowercase pair is rejected as an unknown type name, not aliased to Pair")
-    (assert (testUnsupportedDoubleEquals) "== is not a language builtin operator")
+    (assert (testDoubleEqualsAliasesEquals) "== has the same signature as = and checks clean as a call")
     (assert (testMissingPreludeSignatures) "missing prelude builtins have signatures")
     (assert (testStructuralEquality) "Any and differently parameterized Option types are not structurally equal")
     (assert (testGenericBuiltinReferenceFiltered) "generic builtin-reference diagnostics are filtered without name-specific messages")

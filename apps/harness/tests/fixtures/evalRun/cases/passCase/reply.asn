@@ -1,1 +1,0 @@
-(:agentReceipt :status :ok :deliver :findings :turns 3 :usage (:input 900 :cached 100 :output 50) :batching (:opsPerTurn 1.5 :singleOpShare 0.25 :opTurns 2) :findings ((:findings (:claim "add subtracts" :file "src/calc.txt" :anchor "return a - b"))))

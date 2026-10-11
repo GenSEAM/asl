@@ -1,11 +1,3 @@
-"Every comparison and both connectives, reported as eight independent columns."
-
-"A strict operator written where a non-strict one belongs differs only at the"
-
-"boundary, so the cases put `x` exactly on `lo` and exactly on `hi`; and both"
-
-"connectives take all the operand combinations that separate them."
-
 (module range/band :x [band])
 
 fn mark b: Bool -> String

@@ -37,7 +37,6 @@ fn ! putData b: Bytes at: Int64 i: Int64 end: Int64 -> Int64
   (if (>= i end) at
     (do (bytesSet b at (dataByte i)) (putData b (+ at 1) (+ i 1) end)))
 
-"1 KiB window, two raw 600-byte blocks, then one RLE-mode sequence (ll 0, ml 3) whose offset off stays within the 1200 bytes already produced; the backward bitstream is the 1-sequence offset value off+3 whose top bit is the padding marker"
 fn ! windowFrame off: Int64 -> Bytes
   (let [ofv (+ off 3)
         ofCode (if (>= ofv 1024) 10 9)
@@ -66,7 +65,6 @@ fn ! windowTailMatches off: Int64 -> Bool
         (mt (zstdDecompress (windowFrame off)) ((ok reference) (= (bytesSha256 decoded) (bytesSha256 reference))) ((err _) false))))
     ((err _) false))
 
-"default reps (1,4,8); block1 is 10 raw bytes [1..10], block2 has two sequences each (ll 1, ofv 3): both land on idx 2, which per RFC 8878 reads rep[2] then sets rep[1]=old rep[0], rep[2]=old rep[1]. Sequence 1 reads rep[2]=8 (copying block1[3..5]=[4,5,6] after literal 'A') and updates rep to (8,1,4). Sequence 2 reads the NEW rep[2]=4 (copying output[11..13]=[4,5,6] after literal 'B'), which a mutant that leaves rep[2] stale (treating idx 2 like idx 1, not updating it) would instead read as the old rep[2]=8 (copying block1[7..9]=[8,9,10]): the two decoders then disagree on bytes 15..17"
 fn ! repeatOffsetIdx2Frame -> Bytes
   (let [b (bytesAlloc 31)]
     (do
@@ -83,7 +81,6 @@ fn ! repeatOffsetIdx2Matches? -> Bool
         ((err _) false)))
     ((err _) false))
 
-"1 KiB window (windowLog 10), one raw 10-byte block, then one full-offset sequence (ll 0, ml 3, ofv 14 so off = ofv-3 = 11) that reaches exactly one byte past the 10 bytes already produced: window (1024) comfortably covers offset 11, so only the produced-bound guard (off > baseOut+produced+ll) can reject it; a mutant that relaxes that guard by one lets this exact offset through into an out-of-range match copy"
 fn ! offsetJustPastProducedFrame -> Bytes
   (let [b (bytesAlloc 29)]
     (do
@@ -98,7 +95,6 @@ fn ! offsetJustPastProducedErr -> String
         cError (mt (zstdDecompress src) ((ok _) "DECODED") ((err message) (str "ERR " message)))]
     (if (= aslError cError) aslError (str "ERROR_TEXT_MISMATCH asl=" aslError " c=" cError)))
 
-"frames from zstd 1.5.7 --check -19 over the first n bytes of MANIFESTO.md; lengths 5, 13, 45, 77 and 100 leave a remainder past the 32-byte stripes, so the xxh64 8-byte and 4-byte tail rounds run, which the 0, 1 and 32-multiple file fixtures skip"
 fn ! checkedFrameSha size: Int64 xs: (List Int64) -> String
   (let [src (bytesAlloc size)]
     (do

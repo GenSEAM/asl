@@ -18,7 +18,6 @@ fn ! cpuMicros -> Int64
       ((err e) (do (assert (ok? usageResult) (str "procRusage failed: " e)) 0))
       ((ok usage) (+ usage.selfUserUs usage.selfSysUs))))
 
-"emitCpu is the self CPU microseconds of emitLlvmProgram on the lowered source, -1 when lowering or emission fails"
 fn ! emitCpu source: String -> Int64
   (mt (low/lowerSource source)
     ((err ds) (do (println "emitScale lower diagnostic:" ds) -1))

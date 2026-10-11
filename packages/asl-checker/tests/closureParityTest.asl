@@ -24,7 +24,8 @@ fn distinctSorted xs: (List String) -> (List String)
 fn ! assertSameClosure! entry: String want: Int64 -> Bool
   (let [(lines (hostBuildLines! entry))
         (count (builtCount lines))
-        (prelude (realOf! "asl/host/out/prelude.asl"))
+        (envPrelude (optionOr (envGet "ASL_PRELUDE") ""))
+        (prelude (realOf! (if (stringEmpty? envPrelude) "asl/host/out/prelude.asl" envPrelude)))
         (entryReal (realOf! entry))
         (hostSet (distinctSorted (filter (fn [(l String)] -> Bool (and (not (stringStartsWith? l "built ")) (!= l prelude))) lines)))
         (cl (r/loadModuleClosure! entry false))
@@ -36,7 +37,7 @@ fn ! assertSameClosure! entry: String want: Int64 -> Bool
         true))
 
 fn ! testCompilerClosureMatchesHost -> Bool
-  (assertSameClosure! "asl/packages/asl-compiler/src/compiler.asl" 44)
+  (assertSameClosure! "asl/packages/asl-compiler/src/compiler.asl" 45)
 
 fn ! testDeprecatedPathClosureMatchesHost -> Bool
   (assertSameClosure! "asl/packages/asl-checker/tests/boundedSubstitutionTest.asl" 2)

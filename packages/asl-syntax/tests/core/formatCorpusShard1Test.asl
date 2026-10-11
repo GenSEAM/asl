@@ -9,8 +9,7 @@ fn knownMisparseSet -> (List String)
         "asl/packages/asl-syntax/src/core/corpus.asl"
         "asl/packages/asl-syntax/src/xml.asl"
         "asl/packages/asl-transpile/src/yamlTranspile.asl"
-        "tests/acceptance/r1Host/reader/surfaceTest.asl"
-        "tests/host/tailrecTest.asl")
+        "tests/acceptance/r1Host/reader/surfaceTest.asl")
 
 (schema ShardVerdict
   (:f corpusMatches Bool)
@@ -58,8 +57,8 @@ fn ! runTests -> Bool
     ((ok allFiles)
      (let [(v (formatShard! allFiles 4 1 "formatCorpusShard1Test"))]
        (do
-         (assert v.corpusMatches "corpus is the tracked corpus minus exactly the seven listed misparse files")
-         (assert v.excludedMatches "excluded files are exactly the listed seven")
+         (assert v.corpusMatches "corpus is the tracked corpus minus exactly the six listed misparse files")
+         (assert v.excludedMatches "excluded files are exactly the listed six")
          (assert (= v.size v.expectedShare) "shard 1 holds its exact share")
          (assert (= v.identical v.size) "every shard 1 file formats byte-identical through formatRepair")
          (= v.identical v.size)))))

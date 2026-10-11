@@ -153,7 +153,9 @@ fn listLines text: String -> (List String)
 
 fn loadCtx! root: String spec: MetaSpec tracked: (List String) -> Ctx
   (Ctx :root root :spec spec
-       :rules (readOr! (joinPath root "asl/grammar/rules.asn") "")
+       :rules (str (readOr! (joinPath root "asl/grammar/rules.asn") "")
+                  "\n"
+                  (readOr! (joinPath root ".asl/rules.asn") ""))
        :principles (readOr! (joinPath root ".asl/mem/principles.asn") "")
        :decisions (readOr! (joinPath root ".asl/mem/decisions/decisions.asn") "")
        :decisionFiles (mt (dirList (joinPath root ".asl/mem/decisions")) ((ok ns) ns) ((err _) (list)))
@@ -204,14 +206,27 @@ fn countWords text: String -> Int64
 fn violation path: String line: Int64 kind: String ev: String -> Violation
   (Violation :file path :line line :kind kind :ev ev)
 
+fn isAtomOrDotChain? e: rd/SExpr -> Bool
+  (mt e ((rd/sexprAtom _) true) (_ (isDotChain? e)))
+
+fn isDotChain? e: rd/SExpr -> Bool
+  (mt e
+    ((rd/sexprList items)
+      (and (= (listLength items) 2)
+           (mt (optionOr (listHead items) (rd/makeAtom ""))
+             ((rd/sexprAtom h) (and (stringStartsWith? h ".-") (isAtomOrDotChain? (optionOr (listGet items 1) (rd/makeAtom "")))))
+             (_ false))))
+    (_ false))
+
 fn checkValue! ctx: Ctx path: String line: Int64 key: String val: rd/SExpr -> (List Violation)
   (let [(spec ctx.spec) (text (atomText val))]
     (cond
       ((= key "ref")
-        (cond
-          ((isSeq val) (list (violation path line "refNotAtom" (rd/renderSexpr val))))
-          ((refResolves! ctx text) (list))
-          (else (list (violation path line "refUnresolved" text)))))
+        (let [(refText (if (isSeq val) (rd/renderSexpr val) text))]
+          (cond
+            ((and (isSeq val) (not (isDotChain? val))) (list (violation path line "refNotAtom" refText)))
+            ((refResolves! ctx refText) (list))
+            (else (list (violation path line "refUnresolved" refText))))))
       ((= key "gate")
         (if (or (isSeq val) (stringStartsWith? text "\""))
           (list (violation path line "gateNotAtom" (rd/renderSexpr val)))

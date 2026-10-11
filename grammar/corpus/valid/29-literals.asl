@@ -1,25 +1,3 @@
-"A sign belongs to the digits it precedes. `-1` used to be read as the"
-
-"subtraction operator applied to `1` — a legal parse of the same characters,"
-
-"and the one the Earley resolver chose — so `(+ x -1)` lowered to"
-
-"`_agentscript.add(x, _)` and `rt::add(x.clone(), _.clone())`: the wildcard token,"
-
-"leaking out of pattern position, on both backends at once. No fixture had ever"
-
-"written a negative number, so every gate was green over it."
-
-"Every literal form that can carry a sign is here, because a sign is not the"
-
-"only thing a literal can get wrong: both integer widths at both boundaries"
-
-"(Int64::MIN has no positive counterpart, so it exists only as a signed"
-
-"literal), a negative float, negative zero, a negative literal as a match"
-
-"pattern, as a field default, and inside an elided lambda."
-
 (module math/literals :x [signs floats near step])
 
 (schema Cursor (:f at Int64 "Position, before anything has moved it." :default -1))

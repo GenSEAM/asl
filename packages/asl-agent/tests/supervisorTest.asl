@@ -1,7 +1,5 @@
 (module aslAgent/supervisorTest :x [testSupervisorConfig testSupervisedEnvInjection testSlidingIdleTimeoutActivity testDeadlockTrappingReceipt testExecuteSupervisedCompletion! runTests] :i [(supervisor :a sup)])
 
-"run: (run-tests)"
-
 fn testSupervisorConfig -> Bool
   (let [(cfg (sup/makeSupervisorConfig 10000 900000 true))] (assert (= cfg.slidingIdleMs 10000) "sliding idle ms is 10000") (assert cfg.nonInteractive "non-interactive flag is true") true)
 

@@ -10,24 +10,24 @@ fn hexToBytes text: String -> (Result Bytes String)
   (let [(n (stringLength text)) (source (stringToBytes text))]
     (if (!= (mod n 2) 0) (err "invalid hex length")
       (let [(out (bytesAlloc (/ n 2)))
-            (loop (fn [loop i] -> (Result Bytes String)
+            (step (fn [step i] -> (Result Bytes String)
               (if (>= i (/ n 2)) (ok out)
                 (let [(hi (hexNibble (bytesGet source (* i 2))))
                       (lo (hexNibble (bytesGet source (+ (* i 2) 1))))]
                   (if (or (< hi 0) (< lo 0)) (err "invalid hex digit")
-                    (do (bytesSet out i (+ (* hi 16) lo)) (loop loop (+ i 1))))))))]
-        (loop loop 0))))
+                    (do (bytesSet out i (+ (* hi 16) lo)) (step step (+ i 1))))))))]
+        (step step 0))))
 
 fn hexDigit n: Int64 -> String
   (optionOr (stringSlice "0123456789abcdef" n (+ n 1)) "")
 
 fn bytesToHex bytes: Bytes -> String
   (let [(n (bytesLength bytes))
-        (loop (fn [loop i acc] -> String
+        (step (fn [step i acc] -> String
           (if (>= i n) acc
             (let [(v (bytesGet bytes i))]
-              (loop loop (+ i 1) (str acc (hexDigit (/ v 16)) (hexDigit (mod v 16))))))))]
-    (loop loop 0 ""))
+              (step step (+ i 1) (str acc (hexDigit (/ v 16)) (hexDigit (mod v 16))))))))]
+    (step step 0 ""))
 
 fn hmacSha256 key: Bytes msg: Bytes -> Bytes
   (let [(keyLength (bytesLength key))
@@ -58,7 +58,7 @@ fn constantTimeEqual a: Bytes b: Bytes -> Bool
   (let [(aLength (bytesLength a)) (bLength (bytesLength b))
         (shorter (if (< aLength bLength) aLength bLength))
         (different (if (= aLength bLength) 0 1))
-        (loop (fn [loop i diff] -> Int64
+        (step (fn [step i diff] -> Int64
           (if (>= i shorter) diff
-            (loop loop (+ i 1) (| diff (^ (bytesGet a i) (bytesGet b i)))))))]
-    (= (loop loop 0 different) 0))
+            (step step (+ i 1) (| diff (^ (bytesGet a i) (bytesGet b i)))))))]
+    (= (step step 0 different) 0))

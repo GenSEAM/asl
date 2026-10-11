@@ -93,7 +93,7 @@ fn ! testDownstream cache: String -> Bool
         (host (str "nice -n 15 '" root "/asl/host/out/asl-host' run '" root "/tools/nativeTest.asl' run app/eqAlias.asl x y </dev/null"))
         (rooted (sh (str "cd '" ws "' && ASL_ROOT='" root "' ASL_NATIVE_TEST_CACHE='" cache "' " host)))
         (unrooted (sh (str "cd '" ws "' && env -u ASL_ROOT ASL_NATIVE_FALLBACK=host ASL_NATIVE_TEST_CACHE='" cache "' " host)))
-        (cli (sh (str "ASL_HOST_CACHE=0 ASL_NATIVE_TEST_CACHE='" cache "' nice -n 15 ./bin/asl run '" ws "/app/eqAlias.asl' x y </dev/null")))
+        (cli (sh (str "ASL_NATIVE_TRACE=1 ASL_HOST_CACHE=0 ASL_NATIVE_TEST_CACHE='" cache "' nice -n 15 ./bin/asl run '" ws "/app/eqAlias.asl' x y </dev/null")))
         (expected "eq true false false true true x,y\n")
         (removed (sh (str "rm -rf '" ws "'")))]
     (do
@@ -103,7 +103,9 @@ fn ! testDownstream cache: String -> Bool
       (assert (not (stringContains? rooted.stderr "NATIVE-FALLBACK")) (str "a downstream file with ASL_ROOT does not fall back: " (errorLine rooted.stderr) (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "NATIVE-FALLBACK")) (stringLines rooted.stderr))) "")))
       (assert (stringContains? rooted.stderr "NATIVE-CACHE") "a downstream file with ASL_ROOT runs natively")
       (assert (stringContains? unrooted.stderr "NATIVE-FALLBACK app/eqAlias.asl: prelude load failed") "without ASL_ROOT a downstream cwd has no toolchain and says so")
-      (assert (= unrooted.stdout expected) "without ASL_ROOT the fallback still runs the file on the running asl-host")
+      (assert (stringContains? unrooted.stderr "the running executable is never the host") (str "without ASL_ROOT and no ASL_HOST, the fallback refuses to run on the running asl-host (spawnSafety, FORKFIX L2): " unrooted.stderr))
+      (assert (stringEmpty? unrooted.stdout) (str "without ASL_ROOT and no locatable host, nothing runs: " unrooted.stdout))
+      (assert (= unrooted.exitCode 127) (str "without ASL_ROOT and no locatable host, the fallback exits with runFile's cannot-execute code: " unrooted.exitCode))
       (assert (= cli.exitCode 0) (str "asl run of an absolute downstream path exits 0: " cli.stderr))
       (assert (= cli.stdout expected) (str "asl run of an absolute downstream path: " cli.stdout))
       (assert (not (stringContains? cli.stderr "NATIVE-BYPASS")) "asl run routes a file under another workspace through nativeTest")

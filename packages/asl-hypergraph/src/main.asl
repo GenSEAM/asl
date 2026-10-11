@@ -1,4 +1,4 @@
-(module asl-hypergraph :x [HyperNode makeHyperNode HyperEdge makeHyperEdge HyperIndex makeHyperIndex ImpactReceipt makeImpactReceipt findEdgesByTarget findEdgesBySource findNodeById extractSymbolsFromSexpr extractNodesAndEdgesFromModule buildHypergraphFromModules serializeHyperIndex deserializeHyperIndex loadOrBuildHyperIndex! querySymbolImpact formatImpactReceipt estimateReceiptTokens] :i [(asl-hypergraph/model :a model) (asl-hypergraph/index :a index) (asl-hypergraph/query :a query)])
+(module asl-hypergraph :x [HyperNode makeHyperNode HyperEdge makeHyperEdge HyperIndex makeHyperIndex ImpactReceipt makeImpactReceipt findEdgesByTarget findEdgesBySource findNodeById extractSymbolsFromSexpr extractNodesAndEdgesFromModule buildHypergraphFromModules serializeHyperIndex deserializeHyperIndex loadOrBuildHyperIndex! querySymbolImpact formatImpactReceipt estimateReceiptTokens] :i [(asl-hypergraph/model :a model) (asl-hypergraph/index :a index) (asl-hypergraph/query :a query) (asl-parser/reader :a rd)])
 
 fn makeHyperNode id: Str kind: Str module: Str symbol: Str doc: Str -> model/HyperNode
   (model/makeHyperNode id kind module symbol doc)
@@ -21,7 +21,7 @@ fn findEdgesBySource edges: (List model/HyperEdge) sourceStr: Str relationFilter
 fn findNodeById nodes: (List model/HyperNode) targetId: Str -> (Option model/HyperNode)
   (model/findNodeById nodes targetId)
 
-fn extractSymbolsFromSexpr form: asl-parser/reader:SExpr -> (List Str)
+fn extractSymbolsFromSexpr form: rd/SExpr -> (List Str)
   (index/extractSymbolsFromSexpr form)
 
 fn extractNodesAndEdgesFromModule modName: Str sourceText: Str -> (Pair (List model/HyperNode) (List model/HyperEdge))

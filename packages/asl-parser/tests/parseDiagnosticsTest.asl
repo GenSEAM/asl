@@ -47,6 +47,15 @@ fn testMismatchedBracketParenBracketIndent -> Bool
 fn testStrayCloseBraceIndent -> Bool
   (let [(got (showTop (a/parse "fn f [] -> Int64\n  }")))] (do (assert (= got "err 2:3 unmatched '}'") (str "stray close brace in indented dialect, got " got)) true))
 
+fn testBareTopLevelString -> Bool
+  (let [(got (showTop (a/parse "(module m :x [f])\n\"stray\"\n\nfn f -> Int64\n  1\n")))] (do (assert (stringStartsWith? got "err 2:1 ERR_READ_BARE_TOPLEVEL") (str "a bare string at the top level is a diagnostic at its own line, got " got)) true))
+
+fn testBareTopLevelNumber -> Bool
+  (let [(got (showTop (a/parse "(module m :x [f])\n42\n\nfn f -> Int64\n  1\n")))] (do (assert (stringStartsWith? got "err 2:1 ERR_READ_BARE_TOPLEVEL") (str "a bare number at the top level is a diagnostic at its own line, got " got)) true))
+
+fn testBareTopLevelKeyword -> Bool
+  (let [(got (showTop (a/parse "(module m :x [f])\n:stray\n\nfn f -> Int64\n  1\n")))] (do (assert (stringStartsWith? got "err 2:1 ERR_READ_BARE_TOPLEVEL") (str "a bare keyword at the top level is a diagnostic at its own line, got " got)) true))
+
 fn runTests -> Bool
   (do (assert (testUnclosedIndentBody) "unclosed paren in an indented body")
       (assert (testUnclosedIndentTopLevel) "unclosed top-level call")
@@ -61,4 +70,7 @@ fn runTests -> Bool
       (assert (testMismatchedBracketBracketParen) "bracket-paren mismatch in paren dialect")
       (assert (testMismatchedBracketParenBracketIndent) "paren-bracket mismatch in indented dialect")
       (assert (testStrayCloseBraceIndent) "stray close brace in indented dialect")
+      (assert (testBareTopLevelString) "bare top-level string is a diagnostic")
+      (assert (testBareTopLevelNumber) "bare top-level number is a diagnostic")
+      (assert (testBareTopLevelKeyword) "bare top-level keyword is a diagnostic")
       true)

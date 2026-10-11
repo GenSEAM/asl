@@ -51,3 +51,4 @@
 (:doc :symbol "asl/packages/asl-harness/src/launch.asl#pruneRunDirs!" :text "a dead launch leaves its prompt dir")
 (:doc :symbol "asl/packages/asl-harness/src/launch.asl#finish" :text "a closed stdout fails the launch")
 (:doc :symbol "asl/packages/asl-harness/src/launch.asl#main" :text "asl launch entry; ASL_ROOT names the repo")
+(:doc :symbol "asl/packages/asl-harness/src/launch.asl#mainIn!" :text "mainIn! takes the repository root as an argument, for a caller (the native asl binary) that cannot export ASL_ROOT into its own environment")

@@ -30,7 +30,7 @@ When `asl` is available on the host system, agents can execute high-speed, token
 > ### 🛑 Standalone ASL Repository Boundary & Workspace Isolation (CRITICAL)
 > **The GitHub repository `git@github.com:GenSEAM/asl.git` is dedicated EXCLUSIVELY to the `asl` package.**
 > 1. The root of `GenSEAM/asl` corresponds directly to this `asl/` directory (package.json, bin, grammar, packages, prelude, tools, web).
-> 2. The local workspace is an un-pushed monorepo with zero remotes.
+> 2. The local workspace (this repository's parent monorepo checkout) is an un-pushed monorepo with zero remotes.
 > 3. NEVER push the workspace monorepo or its parent tree to `GenSEAM/asl`. Only clean ASL package trees are published here.
 
 > **Foundational Philosophy & Invariants**: All AI agents operating in this workspace MUST adhere strictly to [**`MANIFESTO.md`**](../MANIFESTO.md) and its 8 core pillars:

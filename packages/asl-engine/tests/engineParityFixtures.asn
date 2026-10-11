@@ -7,7 +7,7 @@
     (:case :id "cli_ping_offline_sys" :kind "cli" :req "--scope system ping" :want "(:pong :status :offline :scope \"system\")")
     (:case :id "cli_ping_offline_task" :kind "cli" :req "--scope task-abc ping" :want "(:pong :status :offline :scope \"task-abc\")")
     (:case :id "socket_path_too_long" :kind "socket" :req "/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.sock" :want "(:engine :status :error :error-code ERR_SOCKET_PATH_TOO_LONG :path \"/tmp/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.sock\" :bytes 120 :limit 104)")
-    (:case :id "breaker_tripped" :kind "breaker" :req "restart" :want "=== [ASL ENGINE CIRCUIT BREAKER TRIPPED] ===\nEngine has restarted 3 times within the last 30 seconds.\nHalting automatic restart loop to prevent flapping / restart storm.\nUse 'asl engine restart --force' to override or inspect logs at /path/to/worktree/.asl/engine.log.")
+    (:case :id "breaker_tripped" :kind "breaker" :req "restart" :want "=== [ASL ENGINE CIRCUIT BREAKER TRIPPED] ===\nEngine has restarted 3 times within the last 30 seconds.\nHalting automatic restart loop to prevent flapping / restart storm.\nUse 'asl engine restart --force' to override or inspect logs at /work/repo/.asl/engine.log.")
     (:case :id "lease_held" :kind "lease" :req "run" :want "[Engine] Engine already active for socket /tmp/asl_lse_Z38DCa/engine.sock (lock held).")
     (:case :id "wire_ping" :kind "wire" :req "(:ping)" :want "(:pong :status :ok :pid 50696 :uptimeSec 0 :scope \"workspace\")")
     (:case :id "wire_sleep" :kind "wire" :req "(:sleep :sec 0.1)" :want "(:receipt :status :ok :op :sleep :slept 0.1)")

@@ -56,7 +56,7 @@ fn ! runTests -> Bool
           "            (do (println text)"
           "                (if (and (some? parsedResult) (= value parsed)) (floatCorpusStep s8 (+ count 1) bytes) false))))))"
           ""
-          "fn ! writeText s: String -> (Result Unit IoError)"
+          "fn ! writeText s: String -> Unit"
           "  (print s)"
           ""
           "fn ! main -> (Result Int64 String)"

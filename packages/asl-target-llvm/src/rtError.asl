@@ -1,5 +1,5 @@
 (module asl-target-llvm/rtError
-  :x [rtErrorDecls rtErrorDefinitions rtErrorTrapCodes wasmTrapImport wasmRaiseFunction tailOf]
+  :x [rtErrorDecls rtErrorDefinitions rtErrorDefinitionsWith rtErrorDefinitionsJoin refCloseJoin refKeysJoin rtErrorPieces RefPiece refPieces refClose refKeys refFirstKey refPlain? rtErrorTrapCodes wasmTrapImport wasmRaiseFunction tailOf]
   :i [(asl-target-llvm/rtValue :a valrt)])
 
 fn rtErrorDecls -> (List String)
@@ -13,6 +13,7 @@ fn rtErrorDecls -> (List String)
     "declare void @exit(i32)"
     "declare ptr @getenv(ptr)"
     "declare i32 @atexit(ptr)"
+    "declare i32 @unsetenv(ptr)"
     "declare void @longjmp(ptr, i32) noreturn")
 
 fn wasmTrapImport -> String
@@ -427,6 +428,7 @@ fn rtErrorValueLlvm -> (List String)
     "  br i1 %one, label %install, label %done"
     "install:"
     "  %rc = call i32 @atexit(ptr @rterr.report)"
+    "  %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)"
     "  %failed = icmp ne i32 %rc, 0"
     "  br i1 %failed, label %fail, label %done"
     "fail:"
@@ -436,6 +438,8 @@ fn rtErrorValueLlvm -> (List String)
     "}"))
 
 (schema PieceScan (:f done (List (Pair String String))) (:f name String) (:f body (List String)))
+
+(schema RefPiece (:f name String) (:f body String) (:f keys (List String)) (:f plain Bool))
 
 fn pieceName line: String -> String
   (let [(at (optionOr (stringIndexOf line "@") 0))
@@ -449,30 +453,125 @@ fn scanLine acc: PieceScan line: String -> PieceScan
   (cond
     ((not (stringEmpty? acc.name))
       (if (= line "}")
-        (PieceScan :done (listAppend acc.done (list (pair acc.name (stringJoin (listAppend acc.body (list line)) "\n")))) :name "" :body (list))
-        (with acc :body (listAppend acc.body (list line)))))
+        (PieceScan :done (cons (pair acc.name (stringJoin (listReverse (cons line acc.body)) "\n")) acc.done) :name "" :body (list))
+        (with acc :body (cons line acc.body))))
     ((stringStartsWith? line "define ") (with acc :name (pieceName line) :body (list line)))
-    ((stringStartsWith? line "@") (PieceScan :done (listAppend acc.done (list (pair (pieceName line) line))) :name "" :body (list)))
+    ((stringStartsWith? line "@") (PieceScan :done (cons (pair (pieceName line) line) acc.done) :name "" :body (list)))
     (else acc))
 
 fn piecesOf lines: (List String) -> (List (Pair String String))
-  (fold scanLine (PieceScan :done (list) :name "" :body (list)) (stringSplit (stringJoin lines "\n") "\n")).done
+  (listReverse (fold scanLine (PieceScan :done (list) :name "" :body (list)) (stringSplit (stringJoin lines "\n") "\n")).done)
 
-fn refersTo? text: String name: String -> Bool
-  (and (stringContains? text name)
-       (listAny? (fn [(d String)] -> Bool (stringContains? text (str name d))) (list "(" ")" "," " " "]" "\n")))
+fn refDelimiters -> (List String)
+  (list "(" ")" "," " " "]" "\n")
+
+fn refStop? c: Int64 -> Bool
+  (or (= c 64) (or (= c 40) (or (= c 41) (or (= c 44) (or (= c 32) (or (= c 93) (= c 10)))))))
+
+fn refEnd b: Bytes n: Int64 j: Int64 -> Int64
+  (cond
+    ((>= j n) n)
+    ((refStop? (bytesGet b j)) j)
+    (else (refEnd b n (+ j 1))))
+
+fn refAdd acc: (Map String Bool) k: String -> (Map String Bool)
+  (if (mapHas? acc k) acc (mapSet acc k true))
+
+fn refKeysFrom text: String b: Bytes n: Int64 endNl: Bool i: Int64 acc: (Map String Bool) -> (Map String Bool)
+  (cond
+    ((>= i n) acc)
+    ((!= (bytesGet b i) 64) (refKeysFrom text b n endNl (+ i 1) acc))
+    (else (let [(j (refEnd b n (+ i 1)))]
+            (cond
+              ((and (< j n) (!= (bytesGet b j) 64)) (refKeysFrom text b n endNl (+ j 1) (refAdd acc (optionOr (stringSlice text i (+ j 1)) ""))))
+              ((and (>= j n) endNl) (refAdd acc (str (optionOr (stringSlice text i n) "") "\n")))
+              (else (refKeysFrom text b n endNl j acc))))))
+
+fn refKeysInto acc: (Map String Bool) text: String endNl: Bool -> (Map String Bool)
+  (let [(b (stringToBytes text))]
+    (refKeysFrom text b (bytesLength b) endNl 0 acc))
+
+fn refKeys text: String -> (Map String Bool)
+  (refKeysInto (mapEmpty) text false)
+
+fn refKeysJoin acc: (Map String Bool) chunks: (List String) -> (Map String Bool)
+  (mt (listHead chunks)
+    ((none) acc)
+    ((some c) (let [(rest (optionOr (listTail chunks) (list)))]
+                (refKeysJoin (refKeysInto acc c (not (listEmpty? rest))) rest))))
+
+fn tailSuffix rev: (List String) acc: (List String) size: Int64 -> (List String)
+  (mt (listHead rev)
+    ((none) acc)
+    ((some c) (if (>= size 256)
+                acc
+                (tailSuffix (optionOr (listTail rev) (list)) (cons c acc) (+ size (+ (stringLength c) 1))))))
+
+fn tailOfJoin chunks: (List String) -> String
+  (tailOf (stringJoin (tailSuffix (listReverse chunks) (list) 0) "\n"))
+
+fn refFirstFrom text: String b: Bytes n: Int64 i: Int64 -> (Option String)
+  (cond
+    ((>= i n) (none))
+    ((!= (bytesGet b i) 64) (refFirstFrom text b n (+ i 1)))
+    (else (let [(j (refEnd b n (+ i 1)))]
+            (if (and (< j n) (!= (bytesGet b j) 64))
+              (stringSlice text i (+ j 1))
+              (refFirstFrom text b n j)))))
+
+fn refFirstKey text: String -> (Option String)
+  (let [(b (stringToBytes text))]
+    (refFirstFrom text b (bytesLength b) 0))
+
+fn refPlain? name: String -> Bool
+  (and (stringStartsWith? name "@")
+       (let [(b (stringToBytes name))]
+         (= (refEnd b (bytesLength b) 1) (bytesLength b))))
+
+fn refPiece delims: (List String) p: (Pair String String) -> RefPiece
+  (RefPiece :name (pairFirst p) :body (pairSecond p) :keys (map (fn [(d String)] -> String (str (pairFirst p) d)) delims) :plain (refPlain? (pairFirst p)))
+
+fn refPieces delims: (List String) pieces: (List (Pair String String)) -> (List RefPiece)
+  (map (fn [(p (Pair String String))] -> RefPiece (refPiece delims p)) pieces)
+
+fn refersVia? keys: (Map String Bool) text: String p: RefPiece -> Bool
+  (if p.plain
+    (listAny? (fn [(k String)] -> Bool (mapHas? keys k)) p.keys)
+    (listAny? (fn [(k String)] -> Bool (stringContains? text k)) p.keys))
 
 fn tailOf text: String -> String
   (optionOr (stringSlice text (if (> (stringLength text) 256) (- (stringLength text) 256) 0) (stringLength text)) text)
 
-fn closeOver text: String chosen: (List String) pieces: (List (Pair String String)) -> (List String)
-  (let [(fresh (filter (fn [(p (Pair String String))] -> Bool (and (not (listContains? chosen (pairFirst p))) (refersTo? text (pairFirst p)))) pieces))]
+fn refClose text: String chosen: (Map String Bool) pieces: (List RefPiece) -> (Map String Bool)
+  (refCloseStep (refKeys text) text (tailOf text) chosen pieces)
+
+fn refCloseStep keys: (Map String Bool) text: String tail: String chosen: (Map String Bool) pieces: (List RefPiece) -> (Map String Bool)
+  (let [(fresh (filter (fn [(p RefPiece)] -> Bool (and (not (mapHas? chosen p.name)) (refersVia? keys text p))) pieces))]
     (if (listEmpty? fresh)
       chosen
-      (closeOver (str (tailOf text) "\n" (stringJoin (map (fn [(p (Pair String String))] -> String (pairSecond p)) fresh) "\n")) (listAppend chosen (map (fn [(p (Pair String String))] -> String (pairFirst p)) fresh)) pieces)))
+      (refClose (str tail "\n" (stringJoin (map (fn [(p RefPiece)] -> String p.body) fresh) "\n"))
+                (fold (fn [(m (Map String Bool)) (p RefPiece)] -> (Map String Bool) (mapSet m p.name true)) chosen fresh)
+                pieces)))
+
+fn refCloseJoin chunks: (List String) pieces: (List RefPiece) -> (Map String Bool)
+  (refCloseStep (refKeysJoin (mapEmpty) chunks)
+                (if (listAll? (fn [(p RefPiece)] -> Bool p.plain) pieces) "" (stringJoin chunks "\n"))
+                (tailOfJoin chunks) (mapEmpty) pieces)
+
+fn rtErrorPieces -> (List RefPiece)
+  (refPieces (refDelimiters) (piecesOf (listAppend (listAppend (rtErrorCoreLlvm) (rtErrorValueLlvm)) (valrt/rtValueLlvm))))
+
+fn rtErrorChosen pieces: (List RefPiece) chosen: (Map String Bool) -> (List String)
+  (map (fn [(p RefPiece)] -> String (if (stringStartsWith? p.body "@") p.body (str "\n" p.body)))
+       (filter (fn [(p RefPiece)] -> Bool (mapHas? chosen p.name)) pieces))
+
+fn rtErrorDefinitionsJoin pieces: (List RefPiece) chunks: (List String) -> (List String)
+  (rtErrorChosen pieces (refCloseJoin chunks pieces))
+
+fn rtErrorDefinitionsWith pieces: (List RefPiece) text: String -> (List String)
+  (let [(chosen (refClose text (mapEmpty) pieces))]
+    (map (fn [(p RefPiece)] -> String (if (stringStartsWith? p.body "@") p.body (str "\n" p.body)))
+         (filter (fn [(p RefPiece)] -> Bool (mapHas? chosen p.name)) pieces)))
 
 fn rtErrorDefinitions text: String -> (List String)
-  (let [(pieces (piecesOf (listAppend (listAppend (rtErrorCoreLlvm) (rtErrorValueLlvm)) (valrt/rtValueLlvm))))
-        (chosen (closeOver text (list) pieces))]
-    (map (fn [(p (Pair String String))] -> String (if (stringStartsWith? (pairSecond p) "@") (pairSecond p) (str "\n" (pairSecond p))))
-         (filter (fn [(p (Pair String String))] -> Bool (listContains? chosen (pairFirst p))) pieces)))
+  (rtErrorDefinitionsWith (rtErrorPieces) text)

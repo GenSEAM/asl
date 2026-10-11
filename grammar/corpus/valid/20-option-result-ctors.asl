@@ -1,11 +1,3 @@
-"Both polarities of every Option and Result predicate, inside a single case: one"
-
-"half of the pair parses and one does not, so a predicate stuck at `true` fails"
-
-"on the other half. The pair is returned positionally, which is what makes an"
-
-"argument swap in `pair` visible at all — both components are String."
-
 (module parse/classify :x [classify])
 
 fn flag b: Bool -> String

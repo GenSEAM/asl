@@ -13,7 +13,7 @@
 (:case :id "commitMessageError_12" :fn "commitMessageError" :args (l "(:c :a)") :out ":a has no value")
 (:case :id "commitMessageError_13" :fn "commitMessageError" :args (l "(:c :a :do \"x\")") :out ":a has no value")
 (:case :id "commitMessageError_14" :fn "commitMessageError" :args (l "(:c :a (x) :do \"y\")") :out ":a has no value")
-(:case :id "commitMessageError_15" :fn "commitMessageError" :args (l "(:c :a x :do asex-72 S2b: more)") :out "the :do value contains a space and must be a quoted string")
+(:case :id "commitMessageError_15" :fn "commitMessageError" :args (l "(:c :a x :do unit-72 S2b: more)") :out "the :do value contains a space and must be a quoted string")
 (:case :id "commitMessageError_16" :fn "commitMessageError" :args (l "(:c \"str\" :a x)") :out "expected a :keyword, found 'str'")
 (:case :id "commitMessageError_17" :fn "commitMessageError" :args (l "(:c :a x :do \"y\" :g)") :out ":g has no value")
 (:case :id "commitMessageError_18" :fn "commitMessageError" :args (l "(:c :a x :g \"z\")") :out "the form must carry :do")

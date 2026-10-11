@@ -498,3 +498,4 @@
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#snapRun" :text "lock, snapshot, one host build, pool, cleanup")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#gateResult!" :text "knownRed not read; dirt makes it red")
 (:doc :symbol "asl/packages/asl-gates/src/suiteRunner.asl#gateSuitePath!" :text "absolute path relative to root, directory resolved")
+(:doc :symbol "asl/packages/asl-gates/tests/noteMigrationTest.asl#git!" :text "git! runs git with args in ASL_ROOT under tools/fleet/run.asl runOneLimited (120 s timeout, 8 descendants, the whole tree killed on a verdict); stdout goes to a temp file that is read back and removed, stderr is discarded")

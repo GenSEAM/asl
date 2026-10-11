@@ -3,13 +3,14 @@
       syntaxCheck! remoteCheck! ssotCheck! emojiCheck! conflictMarkerCheck! coreCheck!
       manifestCheck! groundingCheck! grammarChecks! skillCheck! installerChecks! storageChecks!
       lineHasPlaceholder? staticGateChecks! recordCheck! recordRefused? writeRecord! fullGreenDir cmdGates! cmdGatesAt! spawnFullJob! snapshotFault cmdClosure! cmdSteps! cmdCheck! cmdBuild! cmdConsistency!
-      esc isFile! isLink? readText! readBytes! git! gitOk! itos basename dirname]
+      esc isFile! isLink? readText! readBytes! git! gitOk! discoverRoot! itos basename dirname]
   :i [(asl-gates/dyck :a dyck)
       (asl-gates/runnerMain :a rm)
       (asl-gates/runnerLedger :a rl)
       (asl-gates/suiteRunner :a sr)
       (asl-gates/auditForeign :a af)
-      (asl-proc/coreProcess :a p)])
+      (asl-proc/coreProcess :a p)
+      (asl-proc/gitFixture :a gf)])
 
 (schema Check
   (:f id String)
@@ -126,22 +127,28 @@ fn dirname path: String -> String
       "."
       (stringJoin (listTake parts (- (listLength parts) 1)) "/")))
 
-fn gitCmd root: String args: (List String) -> p/ProcessCmd
-  (p/withTimeout (p/withCwd (p/cmd "git" args) root) 600000)
+fn ! gitCmd! root: String args: (List String) -> p/ProcessCmd
+  (p/withEnv (p/withTimeout (p/withCwd (p/cmd "git" (listAppend (list "-C" root) args)) root) 600000)
+             "GIT_CEILING_DIRECTORIES" (gf/ceilingFor! root))
+
+fn ! discoverRoot! cwd: String -> (Result String String)
+  (mt (p/exec! (p/withTimeout (p/withCwd (p/cmd "git" (list "rev-parse" "--show-toplevel")) cwd) 600000))
+    ((err _) (err "git rev-parse --show-toplevel could not run"))
+    ((ok o) (if (= o.exitCode 0) (ok (stringTrim o.stdout)) (err (str "git rev-parse --show-toplevel: " (stringTrim o.stderr))))))
 
 fn git! root: String args: (List String) -> (Result String String)
-  (mt (p/exec! (gitCmd root args))
+  (mt (p/exec! (gitCmd! root args))
     ((err _) (err (str "git " (stringJoin args " ") " could not run")))
     ((ok o) (if (= o.exitCode 0) (ok (stringTrim o.stdout)) (err (str "git " (stringJoin args " ") ": " (stringTrim o.stderr))))))
 
 fn gitOk! root: String args: (List String) -> Bool
-  (mt (p/exec! (gitCmd root args))
+  (mt (p/exec! (gitCmd! root args))
     ((ok o) (= o.exitCode 0))
     ((err _) false))
 
 fn trackedRoot! root: String args: (List String) -> (List String)
   (let [(cmdArgs (listAppend (list "ls-files" "-z" "--") args))]
-    (mt (p/exec! (gitCmd root cmdArgs))
+    (mt (p/exec! (gitCmd! root cmdArgs))
       ((err _) (list))
       ((ok o) (filter (fn [(s String)] -> Bool (not (stringEmpty? s))) (stringSplit o.stdout "\x00")))))
 
@@ -805,7 +812,12 @@ fn cmdGatesAt! root: String argv: (List String) inRunner: Bool -> AuditRun
                 (scopeData (pairSecond scopeInfo))
                 (suites (pairFirst scopeData))
                 (reason (pairSecond scopeData))
-                (head (str ":scope " scope " :base \"" baseSha "\" :scopeReason \"" (esc reason 400) "\""))
+                (frozen (if (= scope ":full")
+                          (resultOr (sr/frozenCount root (list)) 0)
+                          (mt (rm/affectedPrefixesAt! root baseSha)
+                            ((err _) 0)
+                            ((ok pr) (resultOr (sr/frozenCount root (pairFirst pr)) 0)))))
+                (head (str ":scope " scope " :base \"" baseSha "\" :scopeReason \"" (esc reason 400) "\" :frozen " (itos frozen)))
                 (skipRed (and staticRed (= scope ":full") (not sync)))]
             (cond
               (skipRed

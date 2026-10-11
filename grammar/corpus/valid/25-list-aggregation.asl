@@ -1,19 +1,3 @@
-"Aggregation over (List Float64), which is the instantiation listSum, listSort,"
-
-"listMin and listMax never had: their Rust lowerings were i64-only or bounded"
-
-"by Ord. The input is unsorted and carries a duplicate, so an identity sort is"
-
-"visible, and the integer entry sorts by a projection, which is the builtin that"
-
-"shipped with its arguments reversed."
-
-"A NaN is where an ascending sort stops being obvious: it is unordered against"
-
-"every number, so a comparator built out of `<` leaves it wherever the host's"
-
-"algorithm happened to put it, and the two hosts put it in different places."
-
 (module list/aggregate :x [agg aggEmpty lookup rank nanIdentity])
 
 fn showFloats xs: (List Float64) -> String

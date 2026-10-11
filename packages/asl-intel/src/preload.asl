@@ -133,7 +133,7 @@ fn horizonAddStub h: PreloadedHorizon stub: SymbolStub -> PreloadedHorizon
   (if h.truncated h (let [(cost (estimateStubTokens stub)) (newTotal (+ h.totalTokens cost))] (if (> newTotal h.tokenBudget) (with h :truncated true) (with h :totalTokens newTotal :stubs (listAppend h.stubs (list stub)) :truncated false))))
 
 fn normalizeSymbolName s: Str -> Str
-  (stringReplace (stringReplace (stringLower (stringTrim s)) "-" "") "_" "")
+  (stringReplace (stringReplace (stringReplace (stringReplace (stringLower (stringTrim s)) "-" "") "_" "") "!" "") "?" "")
 
 fn matchesIdOrName? candidate: Str target: Str -> Bool
   (let [(c (normalizeSymbolName candidate)) (t (normalizeSymbolName target))] (or (= candidate target) (or (= c t) (or (stringEndsWith? target (str "/" candidate)) (or (stringEndsWith? candidate (str "/" target)) (or (stringEndsWith? t (str "/" c)) (stringEndsWith? c (str "/" t))))))))

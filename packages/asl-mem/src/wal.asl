@@ -48,7 +48,7 @@ fn getFieldStrUnescaped fs: (List asn/AsnField) key: Str -> Str
   (mt (findField fs key) ((some v) (esc/unescapeAsnStr (optionOr (asn/asnStringValue v) ""))) ((none) ""))
 
 fn parseWalFrame raw: Str -> (Option WalEntry)
-  (mt (asn/asnRead raw) ((ok v) (mt v ((asn/asnCtor name fs) (if (= name "WalEntry") (let [(seq (getFieldInt fs ":seq")) (epoch (getFieldInt fs ":epoch")) (opS (getFieldStr fs ":op")) (keyS (getFieldStr fs ":key")) (payloadS (getFieldStr fs ":payload")) (parsedCrc (getFieldInt fs ":crc")) (expectedCrc (computeWalChecksum seq epoch opS keyS payloadS))] (if (and (> parsedCrc 0) (!= parsedCrc expectedCrc)) (none) (mt (stringToOpType opS) ((some op) (some (WalEntry :seqNum seq :timestampEpoch epoch :opType op :key keyS :payload payloadS :checksum expectedCrc))) ((none) (none))))) (none))) (_ (none)))) ((err _) (none)))
+  (mt (asn/asnRead raw) ((ok v) (mt v ((asn/asnCtor name fs) (if (= name "WalEntry") (let [(seq (getFieldInt fs ":seq")) (epoch (getFieldInt fs ":epoch")) (opS (getFieldStr fs ":op")) (keyS (getFieldStr fs ":key")) (payloadS (getFieldStr fs ":payload")) (parsedCrc (getFieldInt fs ":crc")) (expectedCrc (computeWalChecksum seq epoch opS keyS payloadS))] (if (!= parsedCrc expectedCrc) (none) (mt (stringToOpType opS) ((some op) (some (WalEntry :seqNum seq :timestampEpoch epoch :opType op :key keyS :payload payloadS :checksum expectedCrc))) ((none) (none))))) (none))) (_ (none)))) ((err _) (none)))
 
 fn parseWalStream rawLog: Str -> (List WalEntry)
   (let [(lines (filter (fn [(l Str)] -> Bool (not (stringEmpty? (stringTrim l)))) (stringSplit rawLog "\n")))] (fold (fn [(acc (List WalEntry)) (line Str)] -> (List WalEntry) (mt (parseWalFrame line) ((some entry) (listAppend acc (list entry))) ((none) acc))) (list) lines))

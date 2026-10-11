@@ -163,6 +163,7 @@
 (:doc :symbol "asl/packages/asl-proc/src/gitSearch.asl#GitBranchRecord.upstream" :text "Tracking upstream reference or empty string")
 (:doc :symbol "asl/packages/asl-proc/src/gitSearch.asl#GitBranchRecord.current" :text "True if this branch is currently checked out in active worktree")
 (:doc :symbol "asl/packages/asl-proc/src/gitSearch.asl#GitBranchRecord.remote" :text "True if this is a remote tracking branch")
+(:doc :symbol "asl/packages/asl-proc/src/gitFixture.asl#" :text "Containment for git calls against a fixture-built temp root: pins -C and GIT_CEILING_DIRECTORIES so a root missing its own .git reports an error instead of an ascending git command silently landing on the enclosing repository; verifyContained!/initContained! refuse to touch anything whose toplevel is not the root itself.")
 (:doc :symbol "asl/packages/asl-proc/src/gitTopo.asl#" :text "Pure AgentScript Git topology orientation, linearized history formatting, and on-demand worktree roster management.")
 (:doc :symbol "asl/packages/asl-proc/src/gitTopo.asl#GitTopology.branch" :text "Current branch name or HEAD state")
 (:doc :symbol "asl/packages/asl-proc/src/gitTopo.asl#GitTopology.commit" :text "Current commit hash or OID")

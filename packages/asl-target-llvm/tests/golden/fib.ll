@@ -226,6 +226,13 @@ entry:
 define internal %Val @asl_rt_format_i64(i64 %value) {
 entry:
   %buffer = alloca i8, i64 32
+  %length = call i64 @rtfmt_i64_text(ptr %buffer, i64 %value)
+  %text = call %Val @rtfmt_make_str(ptr %buffer, i64 %length)
+  ret %Val %text
+}
+
+define internal i64 @rtfmt_i64_text(ptr %buffer, i64 %value) {
+entry:
   %negative = icmp slt i64 %value, 0
   %start = zext i1 %negative to i64
   %negated = sub i64 0, %value
@@ -275,22 +282,28 @@ swap:
 terminate:
   %endp = getelementptr i8, ptr %buffer, i64 %length
   store i8 0, ptr %endp
-  %text = call %Val @rtfmt_make_str(ptr %buffer, i64 %length)
-  ret %Val %text
+  ret i64 %length
 }
 
 define internal %Val @asl_rt_format_float(double %value) {
 entry:
+  %buffer = alloca i8, i64 64
+  %length = call i64 @rtfmt_float_text(ptr %buffer, double %value)
+  %text = call %Val @rtfmt_make_str(ptr %buffer, i64 %length)
+  ret %Val %text
+}
+
+define internal i64 @rtfmt_float_text(ptr %buffer, double %value) {
+entry:
+  %precision = alloca i32
+  %endp = alloca ptr
   %initial.nan = fcmp uno double %value, %value
   br i1 %initial.nan, label %nan.output, label %normal.entry
 nan.output:
   %nan.text = getelementptr [4 x i8], ptr @.rtfmt.nan, i64 0, i64 0
-  %nan.value = call %Val @rtfmt_make_str(ptr %nan.text, i64 3)
-  ret %Val %nan.value
+  call void @llvm.memcpy.p0.p0.i64(ptr %buffer, ptr %nan.text, i64 4, i1 false)
+  ret i64 3
 normal.entry:
-  %buffer = alloca i8, i64 64
-  %precision = alloca i32
-  %endp = alloca ptr
   store i32 0, ptr %precision
   br label %try
 try:
@@ -333,8 +346,7 @@ scientific.format:
   br label %formatted
 formatted:
   %len = call i64 @strlen(ptr %buffer)
-  %result = call %Val @rtfmt_make_str(ptr %buffer, i64 %len)
-  ret %Val %result
+  ret i64 %len
 }
 
 define internal i1 @asl_rt_parse_float(ptr %text, i64 %length, ptr %out) {
@@ -447,7 +459,9 @@ entry:
   %len.ptr = getelementptr %RtFormatBuf, ptr %b, i32 0, i32 1
   %data.ptr = getelementptr %RtFormatBuf, ptr %b, i32 0, i32 0
   %len = load i64, ptr %len.ptr
-  %cap = load i64, ptr %cap.ptr
+  %cap.word = load i64, ptr %cap.ptr
+  %inline = icmp slt i64 %cap.word, 0
+  %cap = and i64 %cap.word, 9223372036854775807
   %needed0 = add i64 %len, %n
   %needed = add i64 %needed0, 1
   %enough = icmp uge i64 %cap, %needed
@@ -459,13 +473,23 @@ grow:
   %large.enough = icmp uge i64 %initial, %needed
   %newcap = select i1 %large.enough, i64 %initial, i64 %needed
   %olddata = load ptr, ptr %data.ptr
-  %newdata = call ptr @realloc(ptr %olddata, i64 %newcap)
-  %failed = icmp eq ptr %newdata, null
+  br i1 %inline, label %spill, label %resize
+spill:
+  %spilled = call ptr @malloc(i64 %newcap)
+  %spill.failed = icmp eq ptr %spilled, null
+  br i1 %spill.failed, label %oom, label %spill.copy
+spill.copy:
+  call void @llvm.memcpy.p0.p0.i64(ptr %spilled, ptr %olddata, i64 %len, i1 false)
+  br label %grown
+resize:
+  %resized = call ptr @realloc(ptr %olddata, i64 %newcap)
+  %failed = icmp eq ptr %resized, null
   br i1 %failed, label %oom, label %grown
 oom:
   call void @exit(i32 70)
   unreachable
 grown:
+  %newdata = phi ptr [ %spilled, %spill.copy ], [ %resized, %resize ]
   store ptr %newdata, ptr %data.ptr
   store i64 %newcap, ptr %cap.ptr
   br label %copy
@@ -495,6 +519,22 @@ entry:
   %n = load i64, ptr %len
   %data = getelementptr i8, ptr %obj, i64 16
   call void @rtfmt_put(ptr %b, ptr %data, i64 %n)
+  ret void
+}
+
+define internal void @rtfmt_put_i64(ptr %b, i64 %value) {
+entry:
+  %digits = alloca i8, i64 32
+  %n = call i64 @rtfmt_i64_text(ptr %digits, i64 %value)
+  call void @rtfmt_put(ptr %b, ptr %digits, i64 %n)
+  ret void
+}
+
+define internal void @rtfmt_put_float(ptr %b, double %value) {
+entry:
+  %digits = alloca i8, i64 64
+  %n = call i64 @rtfmt_float_text(ptr %digits, double %value)
+  call void @rtfmt_put(ptr %b, ptr %digits, i64 %n)
   ret void
 }
 
@@ -537,14 +577,12 @@ false.text:
   ret void
 integer:
   %iv = extractvalue %Val %v, 1
-  %inum = call %Val @asl_rt_format_i64(i64 %iv)
-  call void @rtfmt_strval(ptr %b, %Val %inum)
+  call void @rtfmt_put_i64(ptr %b, i64 %iv)
   ret void
 float:
   %fv.bits = extractvalue %Val %v, 1
   %fv = bitcast i64 %fv.bits to double
-  %fnum = call %Val @asl_rt_format_float(double %fv)
-  call void @rtfmt_strval(ptr %b, %Val %fnum)
+  call void @rtfmt_put_float(ptr %b, double %fv)
   ret void
 keyword:
   %aux = lshr i64 %tagword, 32
@@ -750,42 +788,36 @@ ctor.end:
 define internal %Val @asl_rt_format_val(%Val %v, i32 %repr, i32 %limit) {
 entry:
   %buf = alloca %RtFormatBuf
+  %inline = alloca i8, i64 256
   %ptr.slot = getelementptr %RtFormatBuf, ptr %buf, i32 0, i32 0
   %len.slot = getelementptr %RtFormatBuf, ptr %buf, i32 0, i32 1
   %cap.slot = getelementptr %RtFormatBuf, ptr %buf, i32 0, i32 2
-  store ptr null, ptr %ptr.slot
+  store ptr %inline, ptr %ptr.slot
   store i64 0, ptr %len.slot
-  store i64 0, ptr %cap.slot
+  store i64 -9223372036854775552, ptr %cap.slot
   call void @rtfmt_render(ptr %buf, %Val %v, i32 %repr, i32 0, i32 %limit)
   %data = load ptr, ptr %ptr.slot
   %length = load i64, ptr %len.slot
-  %empty = icmp eq ptr %data, null
-  br i1 %empty, label %empty.buffer, label %make.string
-empty.buffer:
-  %one = call ptr @malloc(i64 1)
-  %null.byte = icmp eq ptr %one, null
-  br i1 %null.byte, label %oom, label %empty.ready
-empty.ready:
-  store i8 0, ptr %one
-  br label %make.string
-make.string:
-  %source = phi ptr [ %data, %entry ], [ %one, %empty.ready ]
-  %result = call %Val @rtfmt_make_str(ptr %source, i64 %length)
-  call void @free(ptr %source)
+  %result = call %Val @rtfmt_make_str(ptr %data, i64 %length)
+  %cap.word = load i64, ptr %cap.slot
+  %spilled = icmp sge i64 %cap.word, 0
+  br i1 %spilled, label %release, label %finished
+release:
+  call void @free(ptr %data)
+  br label %finished
+finished:
   ret %Val %result
-oom:
-  call void @exit(i32 70)
-  unreachable
 }
 define internal %Val @asl_rt_format_many(ptr %args, i64 %count, i32 %mode) {
 entry:
   %buf = alloca %RtFormatBuf
+  %inline = alloca i8, i64 256
   %ptr.slot = getelementptr %RtFormatBuf, ptr %buf, i32 0, i32 0
   %len.slot = getelementptr %RtFormatBuf, ptr %buf, i32 0, i32 1
   %cap.slot = getelementptr %RtFormatBuf, ptr %buf, i32 0, i32 2
-  store ptr null, ptr %ptr.slot
+  store ptr %inline, ptr %ptr.slot
   store i64 0, ptr %len.slot
-  store i64 0, ptr %cap.slot
+  store i64 -9223372036854775552, ptr %cap.slot
   br label %loop
 loop:
   %i = phi i64 [ 0, %entry ], [ %next, %after.item ]
@@ -811,8 +843,7 @@ load.item:
   %is.str.mode = and i1 %str.mode, %is.string
   %render.repr = select i1 %str.mode, i32 1, i32 0
   %raw.str = select i1 %is.str.mode, i32 0, i32 %render.repr
-  %rendered = call %Val @asl_rt_format_val(%Val %item.val, i32 %raw.str, i32 -1)
-  call void @rtfmt_strval(ptr %buf, %Val %rendered)
+  call void @rtfmt_render(ptr %buf, %Val %item.val, i32 %raw.str, i32 0, i32 -1)
   br label %after.item
 after.item:
   %next = add i64 %i, 1
@@ -828,23 +859,15 @@ newline:
 finish:
   %data = load ptr, ptr %ptr.slot
   %length = load i64, ptr %len.slot
-  %empty = icmp eq ptr %data, null
-  br i1 %empty, label %empty.buffer, label %make.string
-empty.buffer:
-  %one = call ptr @malloc(i64 1)
-  %null.byte = icmp eq ptr %one, null
-  br i1 %null.byte, label %oom, label %empty.ready
-empty.ready:
-  store i8 0, ptr %one
-  br label %make.string
-make.string:
-  %source = phi ptr [ %data, %finish ], [ %one, %empty.ready ]
-  %result = call %Val @rtfmt_make_str(ptr %source, i64 %length)
-  call void @free(ptr %source)
+  %result = call %Val @rtfmt_make_str(ptr %data, i64 %length)
+  %cap.word = load i64, ptr %cap.slot
+  %spilled = icmp sge i64 %cap.word, 0
+  br i1 %spilled, label %release, label %finished
+release:
+  call void @free(ptr %data)
+  br label %finished
+finished:
   ret %Val %result
-oom:
-  call void @exit(i32 70)
-  unreachable
 }
 @.rtfmt.option = private unnamed_addr constant [7 x i8] c"Option\00"
 @.rtfmt.some = private unnamed_addr constant [5 x i8] c"some\00"
@@ -1213,6 +1236,7 @@ check:
   br i1 %one, label %install, label %done
 install:
   %rc = call i32 @atexit(ptr @rterr.report)
+  %uc = call i32 @unsetenv(ptr @.rterr.reportEnv)
   %failed = icmp ne i32 %rc, 0
   br i1 %failed, label %fail, label %done
 fail:
@@ -1538,6 +1562,7 @@ declare void @exit(i32)
 declare i32 @fflush(ptr)
 declare ptr @getenv(ptr)
 declare i32 @atexit(ptr)
+declare i32 @unsetenv(ptr)
 declare void @longjmp(ptr, i32) noreturn
 declare ptr @calloc(i64, i64)
 declare i32 @memcmp(ptr, ptr, i64)

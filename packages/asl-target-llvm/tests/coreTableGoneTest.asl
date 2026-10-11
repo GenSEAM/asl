@@ -203,14 +203,14 @@ fn ! testArchive -> Bool
     (do
       (assert (> (listLength gone) 20) (str "libaslhost.a's prelude.o and zstd.o define their symbols, got " (listLength gone)))
       (assert (listContains? gone "coreBuiltins") "libaslhost.a's prelude.o defines coreBuiltins")
-      (assert (listContains? members "abi.o") (str "libaslrt.a holds abi.o: " (stringJoin members " ")))
+      (assert (listContains? members "rtAbi.o") (str "libaslrt.a holds rtAbi.o (abi.c ported to asl-target-llvm/rtAbi.asl, RT-ABI): " (stringJoin members " ")))
       (refute (listContains? members "prelude.o") (str "libaslrt.a holds no prelude.o: " (stringJoin members " ")))
       (refute (listContains? members "zstd.o") (str "libaslrt.a holds no zstd.o: " (stringJoin members " ")))
       (map (fn [(s String)] -> Bool
              (do (refute (listAny? (fn [(l String)] -> Bool (= (symbolOf l) s)) defined) (str "libaslrt.a defines no " s)) true))
            (list "coreBuiltins" "asl_rt_builtin" "bFileStat" "zstdDecompress"))
       (map (fn [(s String)] -> Bool
-             (do (assert (listContains? (definedIn rt "strFloor.o") s) (str "libaslrt.a's strFloor.o defines " s)) true))
+             (do (refute (listAny? (fn [(l String)] -> Bool (= (symbolOf l) s)) defined) (str "no libaslrt.a member defines " s " (strFloor.c is libaslhost.a's alone since RT-FLOOR)")) true))
            (list "bStringConcat" "bStringLength" "bStringSlice"))
       (assert (listEmpty? refs)
               (str "no libaslrt.a member refers to prelude.o or zstd.o (hostVerbLink.o, whose builtin chain did, left in NX4): " (stringJoin (map (fn [(l String)] -> String (str (memberOf l) " " (symbolOf l))) refs) "; ")))

@@ -8,8 +8,8 @@ source_filename = "ops/demo"
 @name.doc = private unnamed_addr constant [4 x i8] c"doc\00"
 @name.a$2Db = private unnamed_addr constant [4 x i8] c"a-b\00"
 @name.circle = private unnamed_addr constant [7 x i8] c"circle\00"
-@name.empty = private unnamed_addr constant [6 x i8] c"empty\00"
 @name.x = private unnamed_addr constant [2 x i8] c"x\00"
+@name.empty = private unnamed_addr constant [6 x i8] c"empty\00"
 @name.y = private unnamed_addr constant [2 x i8] c"y\00"
 @ctorId.circle = internal global i32 0
 @ctorIdReady.circle = internal global i1 false
@@ -20,11 +20,13 @@ source_filename = "ops/demo"
 @keyIds.Point = internal global [2 x i32] zeroinitializer
 @protoFile.compiled = private unnamed_addr constant [11 x i8] c"<compiled>\00"
 @protoName.adder = private unnamed_addr constant [6 x i8] c"adder\00"
-@proto.adder = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr } { ptr @protoName.adder, ptr @protoFile.compiled, i32 1, i32 0, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr @adder.code }
+@proto.adder = private unnamed_addr constant { ptr, ptr, i32, i32, ptr, i32, i32, ptr, i32, i32, ptr, ptr } { ptr @protoName.adder, ptr @protoFile.compiled, i32 1, i32 0, ptr null, i32 0, i32 0, ptr null, i32 0, i32 0, ptr @adder.code, ptr @adder.tailCode }
 @nameId.doc = internal global i32 -1
 @nameId.x = internal global i32 -1
 @strVal.0 = internal global %Val zeroinitializer
 @strVal.1 = internal global %Val zeroinitializer
+@global.ops$2Fdemo$2E$40ssaOpt$24s0$24g = internal global %Val zeroinitializer
+@globalReady.ops$2Fdemo$2E$40ssaOpt$24s0$24g = internal global i1 false
 @global.origin = internal global %Val zeroinitializer
 
 define tailcc %Val @adder(%Val %n, %Val %x) {
@@ -43,7 +45,7 @@ p.resolve:
   br label %p.alloc
 p.alloc:
   %p.schema = load i32, ptr @schemaId.Point
-  %p.objp = call ptr @asl_alloc_raw(i32 2, i64 56)
+  %p.objp = call ptr @gcAsl.allocFast.5(i32 2, i64 56)
   %p.schemap = getelementptr inbounds i8, ptr %p.objp, i64 8
   store i32 %p.schema, ptr %p.schemap
   %p.np = getelementptr inbounds i8, ptr %p.objp, i64 12
@@ -64,7 +66,7 @@ bb.entry:
   %six.argv = alloca [1 x %Val]
   %rawFive = bitcast i64 5 to i64
   %five = insertvalue %Val { i64 2, i64 0 }, i64 %rawFive, 1
-  %add5.objp = call ptr @asl_alloc_raw(i32 4, i64 40)
+  %add5.objp = call ptr @gcAsl.allocFast.3(i32 4, i64 40)
   %add5.pp = getelementptr inbounds i8, ptr %add5.objp, i64 8
   store ptr @proto.adder, ptr %add5.pp
   %add5.np = getelementptr inbounds i8, ptr %add5.objp, i64 16
@@ -98,7 +100,7 @@ circle.resolve:
   br label %circle.alloc
 circle.alloc:
   %circle.ctor = load i32, ptr @ctorId.circle
-  %circle.objp = call ptr @asl_alloc_raw(i32 3, i64 32)
+  %circle.objp = call ptr @gcAsl.allocFast.2(i32 3, i64 32)
   %circle.ctorp = getelementptr inbounds i8, ptr %circle.objp, i64 8
   store i32 %circle.ctor, ptr %circle.ctorp
   %circle.np = getelementptr inbounds i8, ptr %circle.objp, i64 12
@@ -107,20 +109,7 @@ circle.alloc:
   store %Val %six, ptr %circle.f0p
   %circle.objw = ptrtoint ptr %circle.objp to i64
   %circle = insertvalue %Val { i64 8, i64 0 }, i64 %circle.objw, 1
-  %none.ready = load i1, ptr @ctorIdReady.empty
-  br i1 %none.ready, label %none.alloc, label %none.resolve
-none.resolve:
-  call void @ctorIdInit.empty()
-  br label %none.alloc
-none.alloc:
-  %none.ctor = load i32, ptr @ctorId.empty
-  %none.objp = call ptr @asl_alloc_raw(i32 3, i64 16)
-  %none.ctorp = getelementptr inbounds i8, ptr %none.objp, i64 8
-  store i32 %none.ctor, ptr %none.ctorp
-  %none.np = getelementptr inbounds i8, ptr %none.objp, i64 12
-  store i32 0, ptr %none.np
-  %none.objw = ptrtoint ptr %none.objp to i64
-  %none = insertvalue %Val { i64 8, i64 0 }, i64 %none.objw, 1
+  %none = call %Val @globalGet.ops$2Fdemo$2E$40ssaOpt$24s0$24g()
   %origin = load %Val, ptr @global.origin
   %ox = call %Val @objrt.field(%Val %origin, ptr @nameId.x, ptr @name.x, i64 1)
   %body = call %Val @net$2Ffetch(%Val %url, %Val %greeting)
@@ -163,6 +152,25 @@ bb.done:
   ret %Val %out
 }
 
+define tailcc %Val @ops$2Fdemo$2E$40ssaOpt$24s0() {
+bb.entry:
+  %v.ready = load i1, ptr @ctorIdReady.empty
+  br i1 %v.ready, label %v.alloc, label %v.resolve
+v.resolve:
+  call void @ctorIdInit.empty()
+  br label %v.alloc
+v.alloc:
+  %v.ctor = load i32, ptr @ctorId.empty
+  %v.objp = call ptr @gcAsl.allocFast.0(i32 3, i64 16)
+  %v.ctorp = getelementptr inbounds i8, ptr %v.objp, i64 8
+  store i32 %v.ctor, ptr %v.ctorp
+  %v.np = getelementptr inbounds i8, ptr %v.objp, i64 12
+  store i32 0, ptr %v.np
+  %v.objw = ptrtoint ptr %v.objp to i64
+  %v = insertvalue %Val { i64 8, i64 0 }, i64 %v.objw, 1
+  ret %Val %v
+}
+
 define internal %Val @adder.code(%Val %env, i64 %argc, ptr %argv) {
 bb.entry:
   %cap0.tagw = extractvalue %Val %env, 0
@@ -189,6 +197,34 @@ cap0.join:
   %arg0.slot = getelementptr %Val, ptr %argv, i64 0
   %arg0 = load %Val, ptr %arg0.slot
   %result = call tailcc %Val @adder(%Val %cap0, %Val %arg0)
+  ret %Val %result
+}
+define internal tailcc %Val @adder.tailCode(%Val %env, i64 %argc, ptr %argv) {
+bb.entry:
+  %cap0.tagw = extractvalue %Val %env, 0
+  %cap0.tag = trunc i64 %cap0.tagw to i32
+  %cap0.isFn = icmp eq i32 %cap0.tag, 9
+  br i1 %cap0.isFn, label %cap0.fn, label %cap0.slow
+cap0.fn:
+  %cap0.objw = extractvalue %Val %env, 1
+  %cap0.obj = inttoptr i64 %cap0.objw to ptr
+  %cap0.np = getelementptr inbounds i8, ptr %cap0.obj, i64 16
+  %cap0.n = load i32, ptr %cap0.np
+  %cap0.n64 = sext i32 %cap0.n to i64
+  %cap0.inRange = icmp slt i64 0, %cap0.n64
+  br i1 %cap0.inRange, label %cap0.fast, label %cap0.slow
+cap0.fast:
+  %cap0.fp = getelementptr inbounds i8, ptr %cap0.obj, i64 24
+  %cap0.fastval = load %Val, ptr %cap0.fp
+  br label %cap0.join
+cap0.slow:
+  %cap0.slowval = call %Val @objrt.capture(%Val %env, i64 0)
+  br label %cap0.join
+cap0.join:
+  %cap0 = phi %Val [ %cap0.fastval, %cap0.fast ], [ %cap0.slowval, %cap0.slow ]
+  %arg0.slot = getelementptr %Val, ptr %argv, i64 0
+  %arg0 = load %Val, ptr %arg0.slot
+  %result = musttail call tailcc %Val @adder(%Val %cap0, %Val %arg0)
   ret %Val %result
 }
 
@@ -224,10 +260,24 @@ bb.entry:
 
 define void @init.ops$2Fdemo() {
 bb.entry:
+  call void @asl_rt_global_root(ptr @global.ops$2Fdemo$2E$40ssaOpt$24s0$24g)
   call void @asl_rt_global_root(ptr @global.origin)
-  %g.0 = call tailcc %Val @makeOrigin()
-  store %Val %g.0, ptr @global.origin
+  %g.1 = call tailcc %Val @makeOrigin()
+  store %Val %g.1, ptr @global.origin
   ret void
+}
+define internal %Val @globalGet.ops$2Fdemo$2E$40ssaOpt$24s0$24g() alwaysinline {
+bb.entry:
+  %ready = load i1, ptr @globalReady.ops$2Fdemo$2E$40ssaOpt$24s0$24g
+  br i1 %ready, label %bb.done, label %bb.init
+bb.init:
+  %v = call tailcc %Val @ops$2Fdemo$2E$40ssaOpt$24s0()
+  store %Val %v, ptr @global.ops$2Fdemo$2E$40ssaOpt$24s0$24g
+  store i1 true, ptr @globalReady.ops$2Fdemo$2E$40ssaOpt$24s0$24g
+  br label %bb.done
+bb.done:
+  %g = load %Val, ptr @global.ops$2Fdemo$2E$40ssaOpt$24s0$24g
+  ret %Val %g
 }
 
 define internal %Val @listrt.cell(%Val %car, %Val %cdr) {
@@ -893,6 +943,291 @@ entry:
 define weak ptr @aslErrorText() {
 entry:
   ret ptr @valrt.errorMsg
+}
+@asl_gc_state_ptr = weak global ptr null, align 8
+define linkonce_odr hidden ptr @gcAsl.allocFast.0(i32 %t, i64 %n) alwaysinline {
+entry:
+  %s = load ptr, ptr @asl_gc_state_ptr
+  %unpublished = icmp eq ptr %s, null
+  br i1 %unpublished, label %slow, label %ready
+ready:
+  %al = load i64, ptr %s
+  %thp = getelementptr inbounds i8, ptr %s, i64 8
+  %th = load i64, ptr %thp
+  %stp = getelementptr inbounds i8, ptr %s, i64 40
+  %stress = load i64, ptr %stp
+  %over = icmp ult i64 %th, %al
+  %stressed = icmp ne i64 %stress, 0
+  %need = or i1 %over, %stressed
+  br i1 %need, label %slow, label %pool
+pool:
+  %fpp = getelementptr inbounds i8, ptr %s, i64 520
+  %fp = load i64, ptr %fpp
+  %hasFree = icmp ne i64 %fp, 0
+  br i1 %hasFree, label %slow, label %active
+active:
+  %app = getelementptr inbounds i8, ptr %s, i64 528
+  %ap = load ptr, ptr %app
+  %noActive = icmp eq ptr %ap, null
+  br i1 %noActive, label %slow, label %room
+room:
+  %bip = getelementptr inbounds i8, ptr %ap, i64 56
+  %bi = load i64, ptr %bip
+  %cntp = getelementptr inbounds i8, ptr %ap, i64 32
+  %cnt = load i64, ptr %cntp
+  %fits = icmp slt i64 %bi, %cnt
+  br i1 %fits, label %bump, label %slow
+bump:
+  %bi1 = add i64 %bi, 1
+  store i64 %bi1, ptr %bip
+  %word = lshr i64 %bi, 6
+  %wo = shl i64 %word, 3
+  %wb = getelementptr inbounds i8, ptr %ap, i64 72
+  %wat = getelementptr inbounds i8, ptr %wb, i64 %wo
+  %bitn = and i64 %bi, 63
+  %bit = shl i64 1, %bitn
+  %wv = load i64, ptr %wat
+  %wv1 = or i64 %wv, %bit
+  store i64 %wv1, ptr %wat
+  %acp = getelementptr inbounds i8, ptr %ap, i64 40
+  %ac = load i64, ptr %acp
+  %ac1 = add i64 %ac, 1
+  store i64 %ac1, ptr %acp
+  %off = mul i64 %bi, 16
+  %first = getelementptr inbounds i8, ptr %ap, i64 %off
+  %o = getelementptr inbounds i8, ptr %first, i64 512
+  %t64 = sext i32 %t to i64
+  %ty = shl i64 %t64, 32
+  %h1 = or i64 %n, %ty
+  %h = or i64 %h1, 0
+  store i64 %h, ptr %o
+  %al1 = add i64 %al, %n
+  store i64 %al1, ptr %s
+  %oap = getelementptr inbounds i8, ptr %s, i64 72
+  %oa = load i64, ptr %oap
+  %oa1 = add i64 %oa, 1
+  store i64 %oa1, ptr %oap
+  %bap = getelementptr inbounds i8, ptr %s, i64 88
+  %ba = load i64, ptr %bap
+  %ba1 = add i64 %ba, %n
+  store i64 %ba1, ptr %bap
+  ret ptr %o
+slow:
+  %r = tail call ptr @asl_alloc_raw(i32 %t, i64 %n)
+  ret ptr %r
+}
+define linkonce_odr hidden ptr @gcAsl.allocFast.2(i32 %t, i64 %n) alwaysinline {
+entry:
+  %s = load ptr, ptr @asl_gc_state_ptr
+  %unpublished = icmp eq ptr %s, null
+  br i1 %unpublished, label %slow, label %ready
+ready:
+  %al = load i64, ptr %s
+  %thp = getelementptr inbounds i8, ptr %s, i64 8
+  %th = load i64, ptr %thp
+  %stp = getelementptr inbounds i8, ptr %s, i64 40
+  %stress = load i64, ptr %stp
+  %over = icmp ult i64 %th, %al
+  %stressed = icmp ne i64 %stress, 0
+  %need = or i1 %over, %stressed
+  br i1 %need, label %slow, label %pool
+pool:
+  %fpp = getelementptr inbounds i8, ptr %s, i64 568
+  %fp = load i64, ptr %fpp
+  %hasFree = icmp ne i64 %fp, 0
+  br i1 %hasFree, label %slow, label %active
+active:
+  %app = getelementptr inbounds i8, ptr %s, i64 576
+  %ap = load ptr, ptr %app
+  %noActive = icmp eq ptr %ap, null
+  br i1 %noActive, label %slow, label %room
+room:
+  %bip = getelementptr inbounds i8, ptr %ap, i64 56
+  %bi = load i64, ptr %bip
+  %cntp = getelementptr inbounds i8, ptr %ap, i64 32
+  %cnt = load i64, ptr %cntp
+  %fits = icmp slt i64 %bi, %cnt
+  br i1 %fits, label %bump, label %slow
+bump:
+  %bi1 = add i64 %bi, 1
+  store i64 %bi1, ptr %bip
+  %word = lshr i64 %bi, 6
+  %wo = shl i64 %word, 3
+  %wb = getelementptr inbounds i8, ptr %ap, i64 72
+  %wat = getelementptr inbounds i8, ptr %wb, i64 %wo
+  %bitn = and i64 %bi, 63
+  %bit = shl i64 1, %bitn
+  %wv = load i64, ptr %wat
+  %wv1 = or i64 %wv, %bit
+  store i64 %wv1, ptr %wat
+  %acp = getelementptr inbounds i8, ptr %ap, i64 40
+  %ac = load i64, ptr %acp
+  %ac1 = add i64 %ac, 1
+  store i64 %ac1, ptr %acp
+  %off = mul i64 %bi, 32
+  %first = getelementptr inbounds i8, ptr %ap, i64 %off
+  %o = getelementptr inbounds i8, ptr %first, i64 512
+  %t64 = sext i32 %t to i64
+  %ty = shl i64 %t64, 32
+  %h1 = or i64 %n, %ty
+  %h = or i64 %h1, 144115188075855872
+  store i64 %h, ptr %o
+  %al1 = add i64 %al, %n
+  store i64 %al1, ptr %s
+  %oap = getelementptr inbounds i8, ptr %s, i64 72
+  %oa = load i64, ptr %oap
+  %oa1 = add i64 %oa, 1
+  store i64 %oa1, ptr %oap
+  %bap = getelementptr inbounds i8, ptr %s, i64 88
+  %ba = load i64, ptr %bap
+  %ba1 = add i64 %ba, %n
+  store i64 %ba1, ptr %bap
+  ret ptr %o
+slow:
+  %r = tail call ptr @asl_alloc_raw(i32 %t, i64 %n)
+  ret ptr %r
+}
+define linkonce_odr hidden ptr @gcAsl.allocFast.3(i32 %t, i64 %n) alwaysinline {
+entry:
+  %s = load ptr, ptr @asl_gc_state_ptr
+  %unpublished = icmp eq ptr %s, null
+  br i1 %unpublished, label %slow, label %ready
+ready:
+  %al = load i64, ptr %s
+  %thp = getelementptr inbounds i8, ptr %s, i64 8
+  %th = load i64, ptr %thp
+  %stp = getelementptr inbounds i8, ptr %s, i64 40
+  %stress = load i64, ptr %stp
+  %over = icmp ult i64 %th, %al
+  %stressed = icmp ne i64 %stress, 0
+  %need = or i1 %over, %stressed
+  br i1 %need, label %slow, label %pool
+pool:
+  %fpp = getelementptr inbounds i8, ptr %s, i64 592
+  %fp = load i64, ptr %fpp
+  %hasFree = icmp ne i64 %fp, 0
+  br i1 %hasFree, label %slow, label %active
+active:
+  %app = getelementptr inbounds i8, ptr %s, i64 600
+  %ap = load ptr, ptr %app
+  %noActive = icmp eq ptr %ap, null
+  br i1 %noActive, label %slow, label %room
+room:
+  %bip = getelementptr inbounds i8, ptr %ap, i64 56
+  %bi = load i64, ptr %bip
+  %cntp = getelementptr inbounds i8, ptr %ap, i64 32
+  %cnt = load i64, ptr %cntp
+  %fits = icmp slt i64 %bi, %cnt
+  br i1 %fits, label %bump, label %slow
+bump:
+  %bi1 = add i64 %bi, 1
+  store i64 %bi1, ptr %bip
+  %word = lshr i64 %bi, 6
+  %wo = shl i64 %word, 3
+  %wb = getelementptr inbounds i8, ptr %ap, i64 72
+  %wat = getelementptr inbounds i8, ptr %wb, i64 %wo
+  %bitn = and i64 %bi, 63
+  %bit = shl i64 1, %bitn
+  %wv = load i64, ptr %wat
+  %wv1 = or i64 %wv, %bit
+  store i64 %wv1, ptr %wat
+  %acp = getelementptr inbounds i8, ptr %ap, i64 40
+  %ac = load i64, ptr %acp
+  %ac1 = add i64 %ac, 1
+  store i64 %ac1, ptr %acp
+  %off = mul i64 %bi, 40
+  %first = getelementptr inbounds i8, ptr %ap, i64 %off
+  %o = getelementptr inbounds i8, ptr %first, i64 512
+  %t64 = sext i32 %t to i64
+  %ty = shl i64 %t64, 32
+  %h1 = or i64 %n, %ty
+  %h = or i64 %h1, 216172782113783808
+  store i64 %h, ptr %o
+  %al1 = add i64 %al, %n
+  store i64 %al1, ptr %s
+  %oap = getelementptr inbounds i8, ptr %s, i64 72
+  %oa = load i64, ptr %oap
+  %oa1 = add i64 %oa, 1
+  store i64 %oa1, ptr %oap
+  %bap = getelementptr inbounds i8, ptr %s, i64 88
+  %ba = load i64, ptr %bap
+  %ba1 = add i64 %ba, %n
+  store i64 %ba1, ptr %bap
+  ret ptr %o
+slow:
+  %r = tail call ptr @asl_alloc_raw(i32 %t, i64 %n)
+  ret ptr %r
+}
+define linkonce_odr hidden ptr @gcAsl.allocFast.5(i32 %t, i64 %n) alwaysinline {
+entry:
+  %s = load ptr, ptr @asl_gc_state_ptr
+  %unpublished = icmp eq ptr %s, null
+  br i1 %unpublished, label %slow, label %ready
+ready:
+  %al = load i64, ptr %s
+  %thp = getelementptr inbounds i8, ptr %s, i64 8
+  %th = load i64, ptr %thp
+  %stp = getelementptr inbounds i8, ptr %s, i64 40
+  %stress = load i64, ptr %stp
+  %over = icmp ult i64 %th, %al
+  %stressed = icmp ne i64 %stress, 0
+  %need = or i1 %over, %stressed
+  br i1 %need, label %slow, label %pool
+pool:
+  %fpp = getelementptr inbounds i8, ptr %s, i64 640
+  %fp = load i64, ptr %fpp
+  %hasFree = icmp ne i64 %fp, 0
+  br i1 %hasFree, label %slow, label %active
+active:
+  %app = getelementptr inbounds i8, ptr %s, i64 648
+  %ap = load ptr, ptr %app
+  %noActive = icmp eq ptr %ap, null
+  br i1 %noActive, label %slow, label %room
+room:
+  %bip = getelementptr inbounds i8, ptr %ap, i64 56
+  %bi = load i64, ptr %bip
+  %cntp = getelementptr inbounds i8, ptr %ap, i64 32
+  %cnt = load i64, ptr %cntp
+  %fits = icmp slt i64 %bi, %cnt
+  br i1 %fits, label %bump, label %slow
+bump:
+  %bi1 = add i64 %bi, 1
+  store i64 %bi1, ptr %bip
+  %word = lshr i64 %bi, 6
+  %wo = shl i64 %word, 3
+  %wb = getelementptr inbounds i8, ptr %ap, i64 72
+  %wat = getelementptr inbounds i8, ptr %wb, i64 %wo
+  %bitn = and i64 %bi, 63
+  %bit = shl i64 1, %bitn
+  %wv = load i64, ptr %wat
+  %wv1 = or i64 %wv, %bit
+  store i64 %wv1, ptr %wat
+  %acp = getelementptr inbounds i8, ptr %ap, i64 40
+  %ac = load i64, ptr %acp
+  %ac1 = add i64 %ac, 1
+  store i64 %ac1, ptr %acp
+  %off = mul i64 %bi, 56
+  %first = getelementptr inbounds i8, ptr %ap, i64 %off
+  %o = getelementptr inbounds i8, ptr %first, i64 512
+  %t64 = sext i32 %t to i64
+  %ty = shl i64 %t64, 32
+  %h1 = or i64 %n, %ty
+  %h = or i64 %h1, 360287970189639680
+  store i64 %h, ptr %o
+  %al1 = add i64 %al, %n
+  store i64 %al1, ptr %s
+  %oap = getelementptr inbounds i8, ptr %s, i64 72
+  %oa = load i64, ptr %oap
+  %oa1 = add i64 %oa, 1
+  store i64 %oa1, ptr %oap
+  %bap = getelementptr inbounds i8, ptr %s, i64 88
+  %ba = load i64, ptr %bap
+  %ba1 = add i64 %ba, %n
+  store i64 %ba1, ptr %bap
+  ret ptr %o
+slow:
+  %r = tail call ptr @asl_alloc_raw(i32 %t, i64 %n)
+  ret ptr %r
 }
 declare %Val @net$2Ffetch(%Val, %Val)
 declare ptr @asl_alloc(i32, i64)

@@ -1,6 +1,6 @@
 (module asl-compiler/tests/asl1Test
   :x [runTests]
-  :i [])
+  :i [(asl-checker/resolve :a r)])
 
 fn host -> String
   "asl/host/out/asl-host"
@@ -60,7 +60,7 @@ fn ! testCheck work: String -> Bool
         (assert (ok? noDocWritten) "noDoc.asl fixture written")
         (assert (= good.exitCode 0) (str "asl1 check fibProgram exits 0; stderr: " good.stderr))
         (assert (= checked.exitCode 1) (str "asl1 check on an unbound symbol exits 1, got " checked.exitCode))
-        (assert (stringContains? checked.stderr (str bad ":5:3: [rule-2] undefinedThing is not defined\n")) (str "asl1 check prints the checker diagnostic: " checked.stderr))
+        (assert (stringContains? checked.stderr (str bad ":4:4: [rule-2] undefinedThing is not defined\n")) (str "asl1 check prints the checker diagnostic: " checked.stderr))
         (assert (= built.exitCode 1) (str "asl1 build on an unbound symbol exits 1, got " built.exitCode))
         (assert (stringContains? built.stderr "[rule-2] undefinedThing is not defined") (str "asl1 build prints the checker diagnostic: " built.stderr))
         (assert (err? (fileRead (str work "/bad.ll"))) "asl1 build writes no .ll when there are diagnostics")
@@ -73,13 +73,26 @@ fn ! testDeps -> Bool
         (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines out.stdout)))
         (missing (driver "deps asl/packages/asl-compiler/tests/noSuchEntry.asl"))]
     (do (assert (= out.exitCode 0) (str "asl1 deps exits 0: " out.stderr))
-        (assert (listContains? (map (fn [(l String)] -> Bool (stringEndsWith? l "/asl/packages/asl-gates/src/polarity.asl")) lines) true) (str "the closure holds the imported polarity module: " out.stdout))
-        (assert (listContains? (map (fn [(l String)] -> Bool (stringEndsWith? l "/asl/packages/asl-parser/src/lexer.asl")) lines) true) "and the lexer polarity imports in turn")
+        (assert (listContains? (map (fn [(l String)] -> Bool (stringEndsWith? l "asl/packages/asl-gates/src/polarity.asl")) lines) true) (str "the closure holds the imported polarity module: " out.stdout))
+        (assert (listContains? (map (fn [(l String)] -> Bool (stringEndsWith? l "asl/packages/asl-parser/src/lexer.asl")) lines) true) "and the lexer polarity imports in turn")
         (refute (listContains? (map (fn [(l String)] -> Bool (stringEndsWith? l "/polarityTest.asl")) lines) true) "the entry itself is not listed")
         (assert (= lines (listSort lines)) "the paths are sorted")
-        (assert (listEmpty? (filter (fn [(l String)] -> Bool (not (stringStartsWith? l "/"))) lines)) "every path is absolute")
+        (assert (listEmpty? (filter (fn [(l String)] -> Bool (stringStartsWith? l "/")) lines)) "every path is root-relative, not absolute")
         (assert (= missing.exitCode 1) (str "asl1 deps on a missing entry exits 1, got " missing.exitCode))
         (assert (stringContains? missing.stderr "[ERR_IO] cannot read the entry") (str "and names the error: " missing.stderr))
+        true))
+
+fn ! testDepsFullClosure -> Bool
+  (let [(entry (asl1))
+        (out (driver (str "deps " entry)))
+        (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines out.stdout)))
+        (cl (r/loadModuleClosure! entry true))
+        (closureCount (listLength (filter (fn [(k String)] -> Bool (stringStartsWith? k "/")) (mapKeys cl.deps))))]
+    (do (assert (= out.exitCode 0) (str "asl1 deps on asl1.asl itself exits 0: " out.stderr))
+        (assert (listContains? (map (fn [(l String)] -> Bool (stringContains? l "asl-checker/")) lines) true) (str "asl1.asl's own closure holds an asl-checker module: " out.stdout))
+        (assert (listContains? (map (fn [(l String)] -> Bool (stringContains? l "asl-parser/")) lines) true) "and an asl-parser module")
+        (assert (listEmpty? (filter (fn [(l String)] -> Bool (stringStartsWith? l "/")) lines)) "every path is root-relative, not absolute")
+        (assert (= (listLength lines) closureCount) (str "deps lists every module of the real closure: printed " (stringFromInt64 (listLength lines)) ", loadModuleClosure! found " (stringFromInt64 closureCount)))
         true))
 
 fn ! testUsage -> Bool
@@ -94,6 +107,25 @@ fn ! testUsage -> Bool
              (list none noOut unknown depsBare))
         true))
 
+fn charAt s: String i: Int64 -> String
+  (mt (stringSlice s i (+ i 1)) ((some c) c) ((none) ""))
+
+fn letterOrUnderscore? ch: String -> Bool
+  (stringContains? "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_" ch)
+
+fn scanCallFieldChain src: String i: Int64 n: Int64 -> Bool
+  (if (>= (+ i 2) n)
+    false
+    (if (and (= (charAt src i) ")") (and (= (charAt src (+ i 1)) ".") (letterOrUnderscore? (charAt src (+ i 2)))))
+      true
+      (scanCallFieldChain src (+ i 1) n)))
+
+fn ! testNoCallResultFieldChain -> Bool
+  (mt (fileReadString (asl1))
+    ((err e) (do (assert false (str "cannot read " (asl1) ": " e)) false))
+    ((ok src) (do (assert (not (scanCallFieldChain src 0 (stringLength src))) (str (asl1) " must bind a call's result with let before taking a .field off it (NATIVE-ASL1-FALLBACK via a stale native compiler otherwise)"))
+                  true)))
+
 fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
@@ -102,6 +134,8 @@ fn ! runTests -> Bool
         (assert (testArgsMain work) "testArgsMain")
         (assert (testCheck work) "testCheck")
         (assert (testDeps) "testDeps")
+        (assert (testDepsFullClosure) "testDepsFullClosure")
         (assert (testUsage) "testUsage")
+        (assert (testNoCallResultFieldChain) "testNoCallResultFieldChain")
         (assert (= (sh (str "rm -rf " work)).exitCode 0) "work directory removed")
         true))

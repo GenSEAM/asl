@@ -1,9 +1,3 @@
-"A local Shape and an imported one coexist: distinct types, distinct spellings."
-
-"core/shapes is imported under two aliases, and a value reached through one is"
-
-"handed to a function typed by the other — they must be the same type."
-
 (module text/coexist :x [Shape localName importedName relay identityOf] :i [(core/shapes :a s) (core/shapes :a sh)])
 
 (enum Shape (:c blob [] "The only case of the local union"))

@@ -1,4 +1,4 @@
-(:edits :v 1 :base "75a7d7ba" :wsParent "/private/tmp/aslFormsEdits" :scenarios 14)
+(:edits :v 1 :base "75a7d7ba" :wsParent "/tmp/aslFormsEdits" :scenarios 14)
 (:file :scenario "writeArgs" :path "sub/keep.txt" :mode 420 :content "k\n")
 (:step :scenario "writeArgs" :n 1 :session "" :form "(:write :content \"x\")" :err 1 :hashOrder false :lines "  (:step :id 1 :op \"write\" :status \"rejected\" :error-code \":ERR_MISSING_ARG\" :message \"Missing file argument\")" :tree "D sub\nF sub/keep.txt 644 19732980d68fbd00358a0a4d98246c960400b87e4fa2a2e155db98be2b42ed6c" :staged "")
 (:step :scenario "writeArgs" :n 2 :session "" :form "(:write :file \"../out.txt\" :content \"x\")" :err 1 :hashOrder false :lines "  (:step :id 2 :op \"write\" :status \"rejected\" :error-code \":ERR_BOUNDARY_VIOLATION\" :message \"Path escapes workspace boundary: ../out.txt\")" :tree "D sub\nF sub/keep.txt 644 19732980d68fbd00358a0a4d98246c960400b87e4fa2a2e155db98be2b42ed6c" :staged "")

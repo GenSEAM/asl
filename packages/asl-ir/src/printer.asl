@@ -1,5 +1,11 @@
 (module asl-ir/printer :x [printIr printFunction printStmt printExpr printType printSsa printSsaFunction printSsaOp printSsaTerm quoteString] :i [(asl-ir/types :a ty)])
 
+fn concatOnto rlists: (List (List T)) acc: (List T) -> (List T)
+  (mt (listHead rlists) ((some xs) (concatOnto (optionOr (listTail rlists) (list)) (listAppend xs acc))) ((none) acc))
+
+fn concatLists lists: (List (List T)) -> (List T)
+  (concatOnto (listReverse lists) (list))
+
 fn printType t: ty/IrType -> Str
   (let [(repr t.repr)] (if (= repr "raw") (str "(ir/type :" t.kind ")") (str "(ir/type :" t.kind " :repr :" repr ")")))
 
@@ -43,7 +49,7 @@ fn printSsaOp op: ty/SsaOp -> String
     ((ty/opCallClosure c args) (form "call-closure" (cons c args)))
     ((ty/opMakeClosure callee caps) (form "make-closure" (cons callee caps)))
     ((ty/opConstruct typeName variant fields) (form "construct" (cons typeName (cons variant fields))))
-    ((ty/opRecord schemaName keys values) (form "record" (cons schemaName (map (fn [(i Int64)] -> String (str "(" (optionOr (listGet keys i) "?") " " (optionOr (listGet values i) "?") ")")) (range 0 (listLength keys))))))
+    ((ty/opRecord schemaName keys values) (form "record" (cons schemaName (recordFields keys values (list)))))
     ((ty/opField base field) (form "field" (list base field)))
     ((ty/opVariantField base i) (form "variant-field" (list base (stringFromInt64 i))))
     ((ty/opList items) (form "list" items))
@@ -52,6 +58,11 @@ fn printSsaOp op: ty/SsaOp -> String
     ((ty/opBox v) (form "box" (list v)))
     ((ty/opUnbox v) (form "unbox" (list v)))
     ((ty/opPrim name args) (form "prim" (cons name args))))
+
+fn recordFields keys: (List String) values: (List String) out: (List String) -> (List String)
+  (mt (listHead keys)
+    ((none) (listReverse out))
+    ((some k) (recordFields (optionOr (listTail keys) (list)) (optionOr (listTail values) (list)) (cons (str "(" k " " (optionOr (listHead values) "?") ")") out))))
 
 fn printSsaEdge e: ty/SsaEdge -> String
   (form e.target e.args)
@@ -79,7 +90,7 @@ fn closeLast lines: (List String) -> (List String)
 
 fn printSsaFunction f: ty/SsaFunction -> (List String)
   (closeLast (cons (str "  (fn " f.name " " (form "captures" (map printSsaParam f.captures)) " " (form "params" (map printSsaParam f.params)) " (returns " (ty/ssaTyName f.retTy) ")")
-                        (fold (fn [(acc (List String)) (b ty/SsaBlock)] -> (List String) (listAppend acc (printSsaBlock b))) (list) f.blocks)))
+                        (concatLists (map printSsaBlock f.blocks))))
 
 fn printSsa m: ty/SsaModule -> String
   (let [(header (list (str "(ssa-module " (quoteString m.name))
@@ -88,5 +99,5 @@ fn printSsa m: ty/SsaModule -> String
         (records (map (fn [(r ty/SsaRecordDecl)] -> String (str "  " (form "record" (cons r.name r.fields)))) m.records))
         (externs (map (fn [(e ty/SsaExtern)] -> String (str "  " (form "extern" (list e.name (stringFromInt64 e.arity))))) m.externs))
         (globals (map (fn [(g ty/SsaGlobal)] -> String (str "  " (form "global" (list g.name g.init)))) m.globals))
-        (functions (fold (fn [(acc (List String)) (f ty/SsaFunction)] -> (List String) (listAppend acc (printSsaFunction f))) (list) m.functions))]
+        (functions (concatLists (map printSsaFunction m.functions)))]
     (stringJoin (closeLast (listAppend header (listAppend types (listAppend records (listAppend externs (listAppend globals functions)))))) "\n"))

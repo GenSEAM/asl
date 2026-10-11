@@ -1,6 +1,6 @@
 (module asl/agentLoop/tests/toolCallsParityTest
   :x [runTests]
-  :i [(asl/agentLoop/toolCalls :a tc) (asl/agentLoop/tests/parity :a t) (asl/agentLoop/core :a c)])
+  :i [(asl/agentLoop/toolCalls :a tc) (asl/agentLoop/tests/parity :a t) (asl/agentLoop/core :a c) (asl/agentLoop/plan :a p)])
 
 fn dispatch fname: String args: (List p/SexpNode) -> String
   (let [raw (t/argStr (t/argAt args 0))

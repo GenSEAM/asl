@@ -1,4 +1,4 @@
-(module asl-gates/gateRunner :x [GateVerdict GateSummary makeVerdict runAll runAllGates runAllSevenGates commandLines checkPaths manifestCheck! balanceCheck! skillCheck! runLiveGateAudit formatGateSummary auditDeadCode auditExtensionlessBinaries getTeleologicalRules formatAssistiveOntology] :i [(gates :a g) (shebangAudit :a sa) (siteClaims :a sc) (dyck :a dyck)])
+(module asl-gates/gateRunner :x [GateVerdict GateSummary makeVerdict runAll runAllGates runAllSevenGates commandLines checkPaths manifestCheck! balanceCheck! skillCheck! auditSuitePaths runLiveGateAudit formatGateSummary auditDeadCode auditExtensionlessBinaries getTeleologicalRules formatAssistiveOntology] :i [(gates :a g) (shebangAudit :a sa) (siteClaims :a sc) (dyck :a dyck) (tools/fleet/run :a fr)])
 
 (schema GateVerdict (:f gateNum I64) (:f gateName Str) (:f passed Bool) (:f message Str))
 
@@ -54,6 +54,17 @@ fn countVerdict num: I64 name: Str res: (Result (List Str) Str) okMessage: Str -
     ((ok paths) (makeVerdict num name true (str (stringFromInt64 (listLength paths)) " " okMessage)))
     ((err e) (makeVerdict num name false e)))
 
+fn ! auditSuitePaths suites: (List Str) commandBuilder: (fn [Str] -> fr/Job) -> GateVerdict
+  (let [(failures (fold (fn [(acc (List Str)) (p Str)] -> (List Str)
+                          (let [(done (fr/runOneLimited (commandBuilder p) (fr/defaultLimits)))]
+                            (if (= done.exit 0) acc
+                              (listAppend acc (list (str p ": bin/asl test exited " (stringFromInt64 done.exit) ": " (lastLine done.out)))))))
+                        (list) suites))]
+    (cond
+      ((listEmpty? suites) (makeVerdict 5 "Pure ASL Gate Test Suite" false "No gate test suites found"))
+      ((listEmpty? failures) (makeVerdict 5 "Pure ASL Gate Test Suite" true (str (stringFromInt64 (listLength suites)) " test suites executed on the strict host with assertion integrity.")))
+      (else (makeVerdict 5 "Pure ASL Gate Test Suite" false (str (stringFromInt64 (listLength failures)) " of " (stringFromInt64 (listLength suites)) " gate test suites failed: " (stringJoin failures "; "))))))
+
 fn ! runLiveGateAudit -> GateSummary
   (let [(mfCmd "find asl/packages -name manifest.asn ! -path '*/tests/*'")
         (manifests (checkPaths "package manifests" (commandLines mfCmd (processRun mfCmd)) (fn [(p Str)] -> (Result Unit Str) (manifestCheck! p))))
@@ -64,7 +75,9 @@ fn ! runLiveGateAudit -> GateSummary
         (v4 (mt (g/auditPackageTreeZeroForeign (list "asl/packages")) ((ok cleanCount) (let [(zeroCRes (processRun "test ! -f bootstrap.c && test ! -f engine/legacy/asl.c && test ! -f engine/asl_runtime.h && test ! -f engine/asl-engine.c"))] (if (= zeroCRes.exitCode 0) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" true (str "Audited " (stringFromInt64 cleanCount) " package files: zero-foreign and zero-c infrastructure verified cleanly.")) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" false (str "Legacy C files detected in root or engine (test exited " (stringFromInt64 zeroCRes.exitCode) ")"))))) ((err violations) (makeVerdict 4 "Zero-Foreign File & Zero-C Policy" false (str "Foreign files or audit errors in packages: " (stringJoin violations ", "))))))
         (suiteCmd "find asl/packages/asl-gates/tests \\( -path '*/tests/*test*.asl' -o -path '*/tests/*Test*.asl' \\)")
         (suites (mt (commandLines suiteCmd (processRun suiteCmd)) ((ok ps) (ok (filter (fn [(p Str)] -> Bool (not (stringContains? p "gateRunnerTest"))) ps))) ((err e) (err e))))
-        (v5 (countVerdict 5 "Pure ASL Gate Test Suite" (checkPaths "gate test suites" suites (fn [(p Str)] -> (Result Unit Str) (let [(res (processRun (str "bin/asl test " p)))] (if (= res.exitCode 0) (ok ()) (err (str p ": bin/asl test exited " (stringFromInt64 res.exitCode) ": " (lastLine (str res.stdout "\n" res.stderr)))))))) "test suites executed on the strict host with assertion integrity."))
+        (v5 (mt suites
+              ((ok ps) (auditSuitePaths ps (fn [(p Str)] -> fr/Job (fr/job (list "/bin/sh" "-c" (str "bin/asl test " p)) "." (fr/childEnv (list))))))
+              ((err e) (makeVerdict 5 "Pure ASL Gate Test Suite" false e))))
         (v6 (countVerdict 6 "Package Manifest Recount" manifests "package manifests recounted with a valid package id; exported symbols are not audited."))
         (skillCmd "git ls-files '*SKILL.md'")
         (v7 (countVerdict 7 "Modular Skills Consistency & Freshness" (checkPaths "tracked SKILL.md files" (commandLines skillCmd (processRun skillCmd)) (fn [(p Str)] -> (Result Unit Str) (skillCheck! p))) "tracked SKILL.md files open with a frontmatter fence."))

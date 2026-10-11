@@ -387,8 +387,7 @@ fn lowerTopForm! s: src/Source node: tr/Node -> (Result rd/SExpr String)
   (if (hasErrors node)
     (err "form contains syntax errors")
     (let [(bs (src/sourceBytes s))
-          (formBs (lx/tokenSliceBytes! bs (tr/makeToken "" node.start node.end)))
-          (formText (optionOr (fileReadString "") ""))]
+          (formBs (lx/tokenSliceBytes! bs (tr/makeToken "" node.start node.end)))]
       (err "use lowerTopFormText with text")))
 
 fn lowerFormsList text: String forms: (List tr/TreeElement) acc: (List rd/SExpr) -> (Result (List rd/SExpr) String)

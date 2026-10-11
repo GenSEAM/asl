@@ -6,10 +6,16 @@
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)
       (asl-target-llvm/gcRoute :a gr)
-      (asl-target-llvm/wasmLink :a wl)])
+      (asl-target-llvm/wasmLink :a wl)
+      (tools/fleet/run :a run)])
 
 fn ! node -> String
-  (str (optionOr (envGet "HOME") "") "/.local/bin/node")
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
+        (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
+        (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
+    (mt (listHead (filter fileExists? allCandidates))
+      ((some p) p)
+      ((none) "")))
 
 fn llc -> String
   "/opt/homebrew/opt/llvm/bin/llc"
@@ -21,10 +27,31 @@ fn allowed -> (List String)
   (list "asl.write" "asl.exit" "asl.nowNs" "asl.trap")
 
 fn libcNames -> (List String)
-  (list "malloc" "calloc" "realloc" "free" "printf" "snprintf" "dprintf" "fprintf" "strtod" "atoi" "getenv" "atexit" "clock_gettime" "memcmp" "memcpy" "memset" "strchr" "strlen" "strcmp" "qsort" "fflush" "longjmp" "setjmp")
+  (list "malloc" "calloc" "realloc" "free" "printf" "snprintf" "dprintf" "fprintf" "strtod" "atoi" "getenv" "unsetenv" "atexit" "clock_gettime" "memcmp" "memcpy" "memset" "strchr" "strlen" "strcmp" "qsort" "fflush" "longjmp" "setjmp")
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
+(schema Captured
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! shWithin cmd: String timeoutS: Int64 -> Captured
+  (let [(root (optionOr (envGet "ASL_ROOT") "."))
+        (prelude (optionOr (envGet "ASL_PRELUDE") (str root "/asl/prelude/prelude.asl")))
+        (path (optionOr (envGet "PATH") "/usr/bin:/bin"))
+        (base (str (optionOr (envGet "TMPDIR") "/tmp") "/wasmNoLibcTest." (monotonicNs)))
+        (outPath (str base ".out"))
+        (errPath (str base ".err"))
+        (done (run/runOneLimited (run/job (list "sh" "-c" (str "(cd '" root "' && (" cmd ")) > " outPath " 2> " errPath)) root
+                                         (run/childEnv (list (str "ASL_ROOT=" root) (str "ASL_PRELUDE=" prelude) (str "PATH=" path))))
+                                 (run/limits timeoutS 32)))
+        (outText (resultOr (fileReadString outPath) ""))
+        (errText (resultOr (fileReadString errPath) ""))
+        (_ (pathRemove outPath))
+        (_ (pathRemove errPath))]
+    (Captured :exitCode done.exit :stdout outText :stderr (if (= done.verdict "exit") errText (str errText done.out))))
+
+fn ! sh cmd: String -> Captured
+  (shWithin cmd 1200)
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")

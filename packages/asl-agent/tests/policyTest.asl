@@ -1,7 +1,5 @@
 (module aslAgent/policyTest :x [testL0AskMode testL1GuardedMode testL2FullautoMode testSandboxTraversalRejections runTests] :i [(policy :a pol)])
 
-"run: (run-tests)"
-
 fn testL0AskMode -> Bool
   (let [(m (pol/makeManifest "/workspace" (list) "/tmp" false)) (rRead (pol/checkAutonomyPermission "read" "/workspace/src/app.asl" m (pol/levelAsk))) (rTest (pol/checkAutonomyPermission "test" "/workspace/tests/app-test.asl" m (pol/levelAsk))) (rWrite (pol/checkAutonomyPermission "write" "/workspace/src/app.asl" m (pol/levelAsk))) (rExec (pol/checkAutonomyPermission "exec" "/workspace/bin/run" m (pol/levelAsk)))] (assert rRead.silent "L0 read is silent") (assert rTest.silent "L0 test is silent") (assert (not rWrite.silent) "L0 write prompts user") (assert (not rExec.silent) "L0 exec prompts user") true)
 

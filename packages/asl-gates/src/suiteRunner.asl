@@ -1,5 +1,5 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers!]
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers!]
   :i [(asl-gates/suiteTimes :a st)])
 
 (schema SuiteResult
@@ -574,7 +574,55 @@ fn matchesPrefix path: String prefixes: (List String) -> Bool
   (or (listEmpty? prefixes)
       (listAny? (fn [(p String)] -> Bool (or (= path p) (stringStartsWith? path (str (rstripSlash p) "/")))) prefixes))
 
-fn ! discover root: String prefixes: (List String) -> (Result (List String) String)
+fn explicitlyNamed path: String prefixes: (List String) -> Bool
+  (listAny? (fn [(p String)] -> Bool (= path p)) prefixes)
+
+fn frozenLedgerPath root: String -> String
+  (str root "/asl/grammar/frozen.asn")
+
+fn frozenRowsOf text: String -> (List (Pair String String))
+  (fold (fn [(acc (List (Pair String String))) (line String)] -> (List (Pair String String))
+        (if (not (stringContains? line "(:frozen"))
+          acc
+          (let [(parts (stringSplit line "\""))
+                (path (optionOr (listGet parts 1) ""))
+                (kind (if (stringContains? line ":kind package") "package" "suite"))]
+            (if (stringEmpty? path) acc (listAppend acc (list (pair path kind)))))))
+      (list)
+      (stringSplit text "\n"))
+
+fn ! loadFrozenRows! root: String -> (List (Pair String String))
+  (mt (fileReadString (frozenLedgerPath root))
+    ((err _) (list))
+    ((ok text) (frozenRowsOf text)))
+
+fn isFrozenAmong rows: (List (Pair String String)) path: String -> Bool
+  (listAny? (fn [(r (Pair String String))] -> Bool
+              (if (= (pairSecond r) "package")
+                (or (= path (pairFirst r)) (stringStartsWith? path (str (rstripSlash (pairFirst r)) "/")))
+                (= path (pairFirst r))))
+            rows)
+
+fn ! isFrozenPath! root: String path: String -> Bool
+  (isFrozenAmong (loadFrozenRows! root) path)
+
+fn ! pathUnderDirectory? path: String dir: String -> Bool
+  (let [(clean (if (stringEndsWith? dir "/") (optionOr (stringSlice dir 0 (- (stringLength dir) 1)) dir) dir))]
+    (stringStartsWith? path (str clean "/")))
+
+fn ! frozenUnderDirectory? root: String path: String dirs: (List String) -> Bool
+  (let [(rootReal (resultOr (realPath root) root))
+        (pathReal (resultOr (realPath path) path))
+        (prefix (str rootReal "/"))]
+    (and (stringStartsWith? pathReal prefix)
+         (and (listAny? (fn [(d String)] -> Bool (pathUnderDirectory? pathReal (resultOr (realPath d) d))) dirs)
+              (isFrozenPath! root (optionOr (stringSlice pathReal (stringLength prefix) (stringLength pathReal)) "")))))
+
+fn ! selectDirectorySuites! root: String paths: (List String) dirs: (List String) -> (Pair (List String) (List String))
+  (let [(frozen (filter (fn [(p String)] -> Bool (frozenUnderDirectory? root p dirs)) paths))]
+    (pair (filter (fn [(p String)] -> Bool (not (listContains? frozen p))) paths) frozen))
+
+fn ! candidates root: String prefixes: (List String) -> (Result (List String) String)
   (mt (gitOut! root (list "ls-files" "-s" "-z"))
     ((err e) (err e))
     ((ok text)
@@ -588,7 +636,8 @@ fn ! discover root: String prefixes: (List String) -> (Result (List String) Stri
                            (let [(path (pairSecond e))]
                              (and (not (stringStartsWith? (pairFirst e) "120000"))
                                   (isSuiteName path)
-                                  (not (isExcludedSegment path))
+                                  (or (not (isExcludedSegment path))
+                                      (explicitlyNamed path prefixes))
                                   (not (mapHas? nh path))
                                   (not (mapHas? helperSet path))
                                   (none? (driverCorpus path))
@@ -596,6 +645,20 @@ fn ! discover root: String prefixes: (List String) -> (Result (List String) Stri
                                   (isFile! (str root "/" path)))))
                          entries))]
        (ok (listSort (map pairSecond kept))))))
+
+fn ! discover root: String prefixes: (List String) -> (Result (List String) String)
+  (mt (candidates root prefixes)
+    ((err e) (err e))
+    ((ok cs)
+     (let [(rows (loadFrozenRows! root))]
+       (ok (filter (fn [(p String)] -> Bool (or (explicitlyNamed p prefixes) (not (isFrozenAmong rows p)))) cs)))))
+
+fn ! frozenCount root: String prefixes: (List String) -> (Result Int64 String)
+  (mt (candidates root prefixes)
+    ((err e) (err e))
+    ((ok cs)
+     (let [(rows (loadFrozenRows! root))]
+       (ok (listLength (filter (fn [(p String)] -> Bool (and (not (explicitlyNamed p prefixes)) (isFrozenAmong rows p))) cs))))))
 
 fn groupNonHermetic tracked: (List String) -> (List (Pair String (List String)))
   (fold (fn [(groups (List (Pair String (List String)))) (p (Pair String String))] -> (List (Pair String (List String)))
@@ -868,6 +931,9 @@ fn slowSuiteTimeoutS suite: String -> (Option Int64)
     ((= suite "tests/conformance/cli/buildNativeAsl1Test.asl") (some 2400))
     ((= suite "tests/conformance/bootstrap/stage2FixpointTest.asl") (some 3600))
     ((= suite "tests/conformance/bootstrap/ddcFixpointTest.asl") (some 1800))
+    ((= suite "tests/conformance/bootstrap/seedFixpointTest.asl") (some 1800))
+    ((= suite "asl/packages/asl-cli/tests/binAslColdTest.asl") (some 900))
+    ((= suite "asl/packages/asl-checker/tests/importSweepTest.asl") (some 600))
     ((= suite "asl/packages/asl-gates/tests/suiteRunnerTest.asl") (some 1200))
     ((= suite "asl/packages/asl-gates/tests/runnerParityTest.asl") (some 900))
     ((or (= suite "asl/packages/asl-gates/tests/gateRunnerTest.asl") (= suite "asl/packages/asl-ir/tests/lowerCorpusTest.asl")) (some 600))
@@ -932,13 +998,16 @@ fn tail1500 s: String -> String
     (if (> n 1500) (optionOr (stringSlice s (- n 1500) n) s) s))
 
 fn ! buildHost! snap: String real: String baseS: Int64 guard: (Option Guard) registry: (Option String) -> (Result Unit String)
-  (mt (runJobs! (list (Job :input "" :argv (list "/bin/bash" "asl/host/build.sh") :cwd (some snap) :env (none) :timeoutMs (* baseS 1000))) 1 guard registry)
+  (mt (envInt! "ASL_HOST_BUILD_TIMEOUT_S" 1800)
     ((err e) (err e))
-    ((ok ds)
-     (let [(d (optionOr (listHead ds) (Done :code -1 :out "" :errText "" :merged "" :startNs 0 :endNs 0)))]
-       (if (and (= d.code 0) (isExecutable! (str snap "/asl/host/out/asl-host")))
-         (ok ())
-         (err (str "host build failed: exit " (stringFromInt64 d.code) ": " (tail1500 (pyStrip (stripSnap d.merged snap real)))))))))
+    ((ok hostBuildS)
+     (mt (runJobs! (list (Job :input "" :argv (list "/bin/bash" "asl/host/build.sh") :cwd (some snap) :env (none) :timeoutMs (* (max baseS hostBuildS) 1000))) 1 guard registry)
+       ((err e) (err e))
+       ((ok ds)
+        (let [(d (optionOr (listHead ds) (Done :code -1 :out "" :errText "" :merged "" :startNs 0 :endNs 0)))]
+          (if (and (= d.code 0) (isExecutable! (str snap "/asl/host/out/asl-host")))
+            (ok ())
+            (err (str "host build failed: exit " (stringFromInt64 d.code) ": " (tail1500 (pyStrip (stripSnap d.merged snap real)))))))))))
 
 fn unquote s: String -> String
   (let [(a (if (stringStartsWith? s "\"") (unquote (optionOr (stringSlice s 1 (stringLength s)) "")) s))]
@@ -1224,7 +1293,9 @@ fn ! main args: (List String) -> (Result Int64 String)
           ((ok suites)
            (mt (getExcludedForm root)
              ((err e) (do (println (str "(:runner :status :failed :err ERR_RUNNER :ev \"" (esc e 400) "\")")) (ok 2)))
-             ((ok excluded) (do (printLines! suites) (println excluded) (ok 0)))))))
+             ((ok excluded)
+              (let [(frozen (resultOr (frozenCount root (list)) 0))]
+                (do (printLines! suites) (println excluded) (println (str "(:frozen " (stringFromInt64 frozen) ")")) (ok 0))))))))
        ((and (= (listLength args) 2) (= (optionOr (listHead args) "") "gate") (not (stringStartsWith? (optionOr (listGet args 1) "") "-")))
         (ok (gate root (optionOr (listGet args 1) ""))))
        (else

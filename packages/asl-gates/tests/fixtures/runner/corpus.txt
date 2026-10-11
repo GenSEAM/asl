@@ -3,7 +3,7 @@ asl/packages/asl-agent-bus/tests/backpressureTest.asl
 asl/packages/asl-agent-bus/tests/browserBridgeTest.asl
 asl/packages/asl-agent-bus/tests/asnlRingTest.asl
 asl/packages/asl-gates/tests/siteClaimsTest.asl
-tools/tests/rulesStratificationTest.asl
+asl/packages/asl-cli/tests/fixtures/sweep/failTest.asl
 tests/acceptance/r1Prelude/preludeParityTest.sh
 tests/acceptance/agentLoop/aslEscapeTest.sh
 asl/packages/asl-agent-bus/tests/bridgeTest.asl

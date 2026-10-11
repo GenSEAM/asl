@@ -265,13 +265,13 @@ fn ! writeGbnf! g: peg/Grammar start: String path: String -> (Result String Stri
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(path (optionOr (listHead args) "asl/grammar/aslGrammar.asn"))
         (dir (optionOr (listGet args 1) (str (optionOr (envGet "HOME") ".") "/.asl/run/grammar")))
-        (made (processRun (str "mkdir -p '" dir "'")))]
-    (if (!= made.exitCode 0)
-      (err (str "cannot create " dir))
-      (mt (peg/grammarLoad! path)
+        (made (dirCreate dir))]
+    (mt made
+      ((err _) (err (str "cannot create " dir)))
+      ((ok _) (mt (peg/grammarLoad! path)
         ((err e) (err e))
         ((ok g) (mt (writeGbnf! g g.start (str dir "/hostExact.gbnf"))
                   ((err e) (err e))
                   ((ok a) (mt (writeGbnf! g "genFile" (str dir "/generation.gbnf"))
                             ((err e) (err e))
-                            ((ok b) (do (println (str "(:gbnf :hostExact \"" a "\" :generation \"" b "\")")) (ok 0))))))))))
+                            ((ok b) (do (println (str "(:gbnf :hostExact \"" a "\" :generation \"" b "\")")) (ok 0)))))))))))

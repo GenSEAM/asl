@@ -52,7 +52,7 @@ fn fnRetTypes defuns: (List a/DefunNode) -> (Map String String)
   (fold (fn [(acc (Map String String)) (d a/DefunNode)] -> (Map String String) (mapSet acc d.name (ct/c99TypeStr d.retType))) (mapEmpty) defuns)
 
 fn ctxOfDefun fn: a/DefunNode fnTypes: (Map String String) -> ce/LowerCtx
-  (let [(base (ce/LowerCtx :vars (list) :substs (list) :fns fnTypes :retTy (ct/c99TypeStr fn.retType)))] (ctxOfParamsStep base fn.params 0 (listLength fn.params)))
+  (let [(base (ce/LowerCtx :vars (list) :substs (list) :fns (mapPairs fnTypes) :retTy (ct/c99TypeStr fn.retType)))] (ctxOfParamsStep base fn.params 0 (listLength fn.params)))
 
 fn emitInitStmtsStep ctx: ce/LowerCtx es: (List rd/SExpr) idx: Int64 len: Int64 acc: (List String) -> (List String)
   (if (>= idx len) (listReverse acc) (let [(e (optionOr (listGet es idx) (rd/sexprAtom "()")))] (emitInitStmtsStep ctx es (+ idx 1) len (cons (emitInitStmt ctx e) acc))))

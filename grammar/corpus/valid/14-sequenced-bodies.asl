@@ -1,11 +1,3 @@
-"A multi-expression body in every position the grammar admits one: a function"
-
-"body, a `let` body, a `cond` clause, an `:else` clause, a `match` arm and a"
-
-"lambda body. Each non-final expression is a `println`, so an evaluator that"
-
-"skips one without emitting it prints a line short."
-
 (module seqDemo :x [main tally])
 
 fn tally xs: (List Int64) -> Int64

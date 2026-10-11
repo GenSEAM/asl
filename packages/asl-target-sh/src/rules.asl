@@ -1,5 +1,6 @@
 (module asl-target-sh/rules
-  :x [main
+  :x [Ctx
+      main
       rulesMain!
       renderTier
       sessionRules
@@ -14,7 +15,11 @@
       privateLeaks
       unenforcedInvariants
       renderBetween
-      extractBetween]
+      extractBetween
+      wsRulesPath
+      workspaceRuleLines!
+      insertBeforePack
+      combinedRulesText!]
   :i [(asl-target-sh/distrib :a dist)])
 
 (schema Ctx (:f root String) (:f mode String) (:f src String) (:f tools String) (:f home String))
@@ -26,6 +31,36 @@ fn sortUnique xs: (List String) -> (List String)
 
 fn spaceJoined xs: (List String) -> String
   (fold (fn [acc x] (str acc x " ")) "" xs)
+
+fn consAll xs: (List String) acc: (List String) -> (List String)
+  (fold (fn [a x] (cons x a)) acc xs)
+
+fn wsRulesPath ctx: Ctx -> String
+  (str ctx.root "/.asl/rules.asn")
+
+fn workspaceRuleLines! ctx: Ctx -> (List String)
+  (let [(f (wsRulesPath ctx))]
+    (if (not (dist/isRegular! f))
+      (list)
+      (let [(lines (dist/splitLines (resultOr (dist/readText! f) "")))]
+        (if (and (not (listEmpty? lines)) (stringStartsWith? (optionOr (listHead lines) "") "(:workspaceRules"))
+          (optionOr (listTail lines) (list))
+          lines))))
+
+fn insertBeforePack languageLines: (List String) wsLines: (List String) -> (List String)
+  (listReverse (pairSecond (fold (fn [(acc (Pair Bool (List String))) (l String)] -> (Pair Bool (List String))
+                               (let [(done (pairFirst acc)) (out (pairSecond acc))]
+                                 (if (and (not done) (stringStartsWith? l "  (:pack "))
+                                   (pair true (cons l (consAll wsLines out)))
+                                   (pair done (cons l out)))))
+                             (pair false (list)) languageLines)))
+
+fn combinedRulesText! ctx: Ctx -> String
+  (let [(languageText (resultOr (dist/readText! ctx.src) ""))
+        (wsLines (workspaceRuleLines! ctx))]
+    (if (listEmpty? wsLines)
+      languageText
+      (dist/joinLines (insertBeforePack (dist/splitLines languageText) wsLines))))
 
 fn afterSpaces s: String -> Int64
   (let [(bs (stringToBytes s)) (n (bytesLength bs))]
@@ -493,7 +528,7 @@ fn emitStep! ctx: Ctx rep: Report -> Report
         (want (dist/generateInstallSh))]
     (if (= ctx.mode "check")
       (if (= (dist/readText! f) (ok want)) (say rep (str "  ok   installer-emit (" f ")")) (fail rep (str "  DRIFT installer-emit (" f ")")))
-      (mt (writeInPlace! f want)
+      (mt (writeAtomic! f want)
         ((ok _) (say rep "  rendered installer-emit"))
         ((err e) (fail rep (str "  DRIFT installer-emit (" f ": " e ")"))))))
 
@@ -530,7 +565,7 @@ fn flushReport! rep: Report -> Bool
   (dist/writeOut! (dist/joinLines (listReverse rep.lines)))
 
 fn rulesMain! ctx: Ctx -> Int64
-  (let [(rules (resultOr (dist/readText! ctx.src) ""))
+  (let [(rules (combinedRulesText! ctx))
         (check (= ctx.mode "check"))
         (rep0 (Report :rc 0 :lines (list)))
         (rep1 (if check
@@ -638,8 +673,9 @@ fn ! main args: (List String) -> (Result Int64 String)
       ((not needsRules) (do (dist/writeErr! (str "rules: unknown mode " flag "\n")) (ok 2)))
       ((not (dist/isRegular! src)) (do (dist/writeErr! (str "missing " src "\n")) (ok 2)))
       ((= flag "--tier")
-        (let [(t (modeArg args 2))]
-          (do (dist/writeOut! (renderTier (resultOr (dist/readText! src) "") (if (stringEmpty? t) "essential" t))) (ok 0))))
+        (let [(t (modeArg args 2))
+              (ctx (Ctx :root root :mode "render" :src src :tools "" :home home))]
+          (do (dist/writeOut! (renderTier (combinedRulesText! ctx) (if (stringEmpty? t) "essential" t))) (ok 0))))
       (else
         (let [(mode (cond ((= flag "--check-rules") "check") ((= flag "--render-home") "home") (else "render")))]
           (ok (rulesMain! (Ctx :root root :mode mode :src src :tools (str root "/asl/grammar/tools.asn") :home home)))))))

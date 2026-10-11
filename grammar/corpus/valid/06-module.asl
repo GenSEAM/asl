@@ -1,7 +1,3 @@
-"Module header, type variables in annotations (the host reads no type-parameter"
-
-"binder and does not check them), closed unions, keyed collection."
-
 (module text/casing :x [shout area tally Shape] :i [(core/strings :a s)])
 
 (schema Box (:f value T "The wrapped value"))

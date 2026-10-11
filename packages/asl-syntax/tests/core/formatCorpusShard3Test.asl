@@ -9,8 +9,8 @@ fn ! runTests -> Bool
     ((ok allFiles)
      (let [(v (sweep/formatShard! allFiles 4 3 "formatCorpusShard3Test"))]
        (do
-         (assert v.corpusMatches "corpus is the tracked corpus minus exactly the seven listed misparse files")
-         (assert v.excludedMatches "excluded files are exactly the listed seven")
+         (assert v.corpusMatches "corpus is the tracked corpus minus exactly the six listed misparse files")
+         (assert v.excludedMatches "excluded files are exactly the listed six")
          (assert (= v.size v.expectedShare) "shard 3 holds its exact share")
          (assert (= v.identical v.size) "every shard 3 file formats byte-identical through formatRepair")
          (= v.identical v.size)))))

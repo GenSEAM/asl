@@ -1,8 +1,2 @@
-"expect-only: map-key-order"
-
-"A Map used as a Map key reaches the same Float64 by two routes. That is one"
-
-"defect, and a pass that recurses after scanning reports it twice."
-
 fn outer m: (Map (Map Float64 Int64) String) -> Int64
   (mapSize m)

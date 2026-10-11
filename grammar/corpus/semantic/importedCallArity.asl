@@ -1,13 +1,3 @@
-"expect-only: arity"
-
-"`s/circle` is exported and well-shaped, so rule 9 is satisfied; only the"
-
-"declaration in core/shapes says the case takes one argument. Arity does not"
-
-"stop being checkable at a module boundary — the import table carries the"
-
-"callee's parameters."
-
 (module text/tooMany :x [big] :i [(core/shapes :a s)])
 
 fn big -> s/Shape

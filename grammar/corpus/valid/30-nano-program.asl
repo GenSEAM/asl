@@ -1,15 +1,3 @@
-"The Nano projection as a whole program, which was the only shape that reached"
-
-"the former wasm arm: function-mode cases ran five targets and `main` ran six. The"
-
-"import is the point of it — the reference interpreter recognized a module"
-
-"option by the prefix of its text, so `:i` was an option it did not know and"
-
-"every import a Nano module declared was dropped in silence, leaving the alias"
-
-"unbound at its use site while all four transpilers were green."
-
 (module sensor/nanoProgram :x [Reading Verdict judge show main] :i [(core/strings :a s)])
 
 (schema Reading (:f label Str "What the value was read from.") (:f value F32 "The value itself.") (:f seq I32 "How many arguments the run was given."))

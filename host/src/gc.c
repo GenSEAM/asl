@@ -56,7 +56,7 @@ static uintptr_t heapLo = UINTPTR_MAX, heapHi;
 static int collecting;
 
 /* (:m :why "new bytes between collections = max(gcMinBytes, live * gcGrowth); ASL_GC_GROWTH and ASL_GC_MIN_MIB override; ASL_GC_MAX_MIB caps live plus new bytes, past it a collection that frees too little is ERR_OOM" :ref PERF2) */
-static size_t gcMinBytes = (size_t)8 << 20, gcMaxBytes;
+static size_t gcMinBytes = (size_t)32 << 20, gcMaxBytes;
 static double gcGrowth = 2.0;
 static size_t allocated, threshold = (size_t)8 << 20;
 static int stress, gcStats, gcVerify;

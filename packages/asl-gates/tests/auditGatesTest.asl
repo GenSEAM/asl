@@ -1,6 +1,6 @@
 (module ws/auditGatesTest
   :x [runTests]
-  :i [(asl-gates/auditGates :a ag) (asl-gates/auditMain :a am) (asl-gates/suiteRunner :a sr) (asl-proc/coreProcess :a p)])
+  :i [(asl-gates/auditGates :a ag) (asl-gates/auditMain :a am) (asl-gates/suiteRunner :a sr) (asl-proc/coreProcess :a p) (asl-proc/gitFixture :a gf)])
 
 enum AVal
   (aStr raw: String)
@@ -192,7 +192,8 @@ fn gitArgs args: (List String) -> (List String)
               args)
 
 fn runGit! root: String args: (List String) stdin: (Option String) date: (Option String) -> (Result String String)
-  (let [(c0 (p/withTimeout (p/withCwd (p/cmd "git" (gitArgs args)) root) 600000))
+  (let [(c0 (p/withEnv (p/withTimeout (p/withCwd (p/cmd "git" (listAppend (list "-C" root) (gitArgs args))) root) 600000)
+                       "GIT_CEILING_DIRECTORIES" (gf/ceilingFor! root)))
         (c1 (mt stdin ((some s) (p/withStdin c0 s)) ((none) c0)))
         (c2 (mt date
               ((none) c1)
@@ -420,18 +421,27 @@ fn loadFixture! -> (Result (List AVal) String)
 
 fn testRecordRefusal! tmp: String -> Bool
   (let [(root (str tmp "/recordRefusal"))
-        (made (dirCreate root))
-        (init (runGit! root (list "init" "-q") (none) (none)))
-        (baseFile (fileWrite (str root "/README.md") (stringToBytes "clean\\n")))
-        (added (runGit! root (list "add" "README.md") (none) (none)))
-        (committed (runGit! root (list "commit" "-q" "-m" "base") (none) (none)))
-        (dirtyFile (fileWrite (str root "/README.md") (stringToBytes "dirty\\n")))
-        (c (ag/recordCheck! root ":full"))
+        (setup (mt (gf/initContained! root)
+                 ((err e) (err e))
+                 ((ok _)
+                  (mt (fileWrite (str root "/README.md") (stringToBytes "clean\\n"))
+                    ((err e) (err e))
+                    ((ok _)
+                     (mt (runGit! root (list "add" "README.md") (none) (none))
+                       ((err e) (err e))
+                       ((ok _)
+                        (mt (runGit! root (list "commit" "-q" "-m" "base") (none) (none))
+                          ((err e) (err e))
+                          ((ok _)
+                           (mt (fileWrite (str root "/README.md") (stringToBytes "dirty\\n"))
+                             ((err e) (err e))
+                             ((ok _) (ok true))))))))))))
+        (c (mt setup
+             ((err e) (ag/failCheck "fullGreenRecord" "ERR_FIXTURE_SETUP" e (none) (none)))
+             ((ok _) (ag/recordCheck! root ":full"))))
         (cleaned (pathRemove root))]
     (do
-      (assert (ok? made) "record refusal temp root created")
-      (assert (and (ok? init) (and (ok? baseFile) (and (ok? added) (and (ok? committed) (ok? dirtyFile)))))
-              "record refusal fixture is a committed tree with a dirty worktree")
+      (assert (ok? setup) "record refusal fixture is a committed tree with a dirty worktree")
       (assert (and (= c.status ":failed") (= c.err "ERR_RECORD_REFUSED"))
               "dirty fullGreen record request is refused")
       (assert (ok? cleaned) "record refusal temp tree removed")
@@ -526,7 +536,7 @@ fn ! runTests -> Bool
   (let [(forms (resultOr (loadFixture!) (list)))
         (header (optionOr (listHead forms) (aList (list))))
         (repo (stringTrim (resultOr (runGit! "." (list "rev-parse" "--show-toplevel") (none) (none)) "")))
-        (tmp (str "/tmp/aslAuditParity." (stringFromInt64 (nowNs))))
+        (tmp (str (optionOr (envGet "TMPDIR") "/tmp") "/aslAuditParity." (stringFromInt64 (nowNs))))
         (made (dirCreate tmp))
         (t (replay! forms repo tmp))
         (refused (testRecordRefusal! tmp))

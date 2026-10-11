@@ -1,7 +1,5 @@
 (module aslAgent/vmmTest :x [testVmmInitialization testVmmKnowledgeLifecycle testVmmCompactPreservesInvariants testVmmPromptRendering runTests] :i [(vmm :a vmm)])
 
-"run: (run-tests)"
-
 fn testVmmInitialization -> Bool
   (let [(st (vmm/makeVmmState "Never delete assertions" 4096)) (slots st.slots) (s1 (mt (listGet slots 0) ((some s) s)))] (assert (= st.usedTokens 5) "used tokens matches initial count") (assert s1.isPinned "slot 0 is pinned") true)
 

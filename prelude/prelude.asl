@@ -27,7 +27,6 @@ fn preludeIsFloat x: N -> Bool
   (let [s (str x)]
     (or (stringContains? s ".") (or (stringContains? s "e") (stringContains? s "n"))))
 
-"listHead, listTail and stringSlice return Option; these unwrap where the caller has checked the bound, so a none is a prelude bug and traps (non-exhaustive match)"
 fn preludeHead xs: (List T) -> T
   (mt (listHead xs) ((some x) x))
 
@@ -92,7 +91,6 @@ fn optionMap f: (fn [A] -> B) o: (Option A) -> (Option B)
 fn resultMapErr f: (fn [E] -> F) r: (Result T E) -> (Result T F)
   (mt r ((ok x) (ok x)) ((err e) (err (f e))))
 
-"moved from asl/host/src/prelude.c (plan RT-PRELUDE P3a): the (Result T E) annotation on r makes a literal non-Result argument trap ERR_TYPE_MISMATCH at load time, as optionOr's (Option T) annotation already does, in place of the host want()'s ERR_TYPE; a non-Result value that only becomes ill-typed at run time (reaches the annotation dynamically, past static checking) instead falls through mt to ERR_MATCH_NONEXHAUSTIVE, an intentional error-code change scoped to already-ill-typed programs"
 fn resultOr r: (Result T E) fallback: T -> T
   (mt r ((ok x) x) ((err _) fallback))
 
@@ -105,7 +103,6 @@ fn optionToResult o: (Option T) e: E -> (Result T E)
 fn resultToOption r: (Result T E) -> (Option T)
   (mt r ((ok x) (some x)) ((err _) none))
 
-"moved from asl/host/src/prelude.c (plan RT-PRELUDE P3b): listLength, listReverse, range, map, filter and fold as self tail calls, so a million-element list runs in constant stack; the (List T) annotation makes a non-List argument trap ERR_TYPE_MISMATCH in place of the host want()'s ERR_TYPE"
 fn preludeLengthFrom xs: (List T) n: Int64 -> Int64
   (mt (listTail xs) ((some t) (preludeLengthFrom t (+ n 1))) (none n))
 
@@ -142,7 +139,6 @@ fn fold f: (fn [B A] -> B) init: B xs: (List A) -> B
 fn preludeRevOnto xs: (List T) acc: (List T) -> (List T)
   (preludeReverseOnto xs acc)
 
-"LISTAPPEND-1PASS: listReverse a then preludeRevOnto onto b conses a's n elements twice (once reversing it, once un-reversing it back onto b), 2n new cons cells for an n-element a. A direct single-pass (cons x (listAppend xs b)) conses each element once but is not tail recursive, so its native stack frame depth grows with a's own length, unsafe past a few thousand elements let alone the 1e6-element lists this must still handle. preludeAppendChunks instead walks a once in O(1)-stack, allocation-free strides of preludeAppendSpan (preludeChunkStarts, tail recursive, consing nothing but one pointer per span) and conses each span onto the accumulated result in a single bounded-depth pass (preludeAppendBounded, recursion depth capped at preludeAppendSpan regardless of a's length): n elements, n new cons cells, and a native/interpreted call stack that never exceeds preludeAppendSpan frames."
 fn preludeAppendSpan -> Int64
   2048
 
@@ -250,7 +246,6 @@ fn stringEndsWith? s: String suffix: String -> Bool
   (let [n (stringLength s) k (stringLength suffix)]
     (if (> k n) false (= (preludeSlice s (- n k) n) suffix)))
 
-"STRFIND-NOALLOC: preludeFind and preludeSplit used to slice a fresh k-byte String at every candidate position just to compare it against t/sep with =, allocating on every position scanned rather than only at a true match; preludeBytesEq instead compares via bytesGet over Bytes the caller converts once (stringToBytes), so a scanned-and-rejected position costs no allocation at all, and only an actual matched or final piece is ever sliced back out as a String"
 fn preludeBytesEq sb: Bytes tb: Bytes i: Int64 j: Int64 k: Int64 -> Bool
   (if (= j k) true
     (if (= (bytesGet sb (+ i j)) (bytesGet tb j)) (preludeBytesEq sb tb i (+ j 1) k) false))
@@ -282,28 +277,83 @@ fn stringSplit s: String sep: String -> (List String)
     (preludeTrap "stringSplit: empty separator")
     (preludeSplit s sep 0 0 (list)))
 
-fn preludeJoinPairs xs: (List String) -> (List String)
-  (let [(folded (fold
-                  (fn [(acc (Pair (List String) (Option String))) (x String)] -> (Pair (List String) (Option String))
-                    (mt (pairSecond acc)
-                      ((some left) (pair (cons (stringConcat left x) (pairFirst acc)) none))
-                      ((none) (pair (pairFirst acc) (some x)))))
-                  (pair (list) none)
-                  xs))
-        (merged (listReverse (pairFirst folded)))]
-    (mt (pairSecond folded)
-      ((some leftover) (listAppend merged (list leftover)))
-      ((none) merged)))
+fn preludeJoinShort xs: (List String) sep: String -> String
+  (fold (fn [(acc String) (x String)] -> String (stringConcat (stringConcat acc sep) x)) (preludeHead xs) (preludeTail xs))
 
-fn preludeJoinAll xs: (List String) -> String
-  (if (listEmpty? xs) ""
-    (let [(t (preludeTail xs))]
-      (if (listEmpty? t) (preludeHead xs)
-        (preludeJoinAll (preludeJoinPairs xs)))))
+fn preludeJoinRun xs: (List String) sep: String acc: (List String) -> (List String)
+  (mt (listHead xs)
+    (none acc)
+    ((some x0)
+      (let [r1 (preludeTail xs)]
+      (mt (listHead r1)
+        (none (cons (preludeJoinShort xs sep) acc))
+        ((some x1)
+          (let [r2 (preludeTail r1)]
+          (mt (listHead r2)
+            (none (cons (preludeJoinShort xs sep) acc))
+            ((some x2)
+              (let [r3 (preludeTail r2)]
+              (mt (listHead r3)
+                (none (cons (preludeJoinShort xs sep) acc))
+                ((some x3)
+                  (let [r4 (preludeTail r3)]
+                  (mt (listHead r4)
+                    (none (cons (preludeJoinShort xs sep) acc))
+                    ((some x4)
+                      (let [r5 (preludeTail r4)]
+                      (mt (listHead r5)
+                        (none (cons (preludeJoinShort xs sep) acc))
+                        ((some x5)
+                          (let [r6 (preludeTail r5)]
+                          (mt (listHead r6)
+                            (none (cons (preludeJoinShort xs sep) acc))
+                            ((some x6)
+                              (let [r7 (preludeTail r6)]
+                              (mt (listHead r7)
+                                (none (cons (preludeJoinShort xs sep) acc))
+                                ((some x7)
+                                  (let [r8 (preludeTail r7)]
+                                  (mt (listHead r8)
+                                    (none (cons (preludeJoinShort xs sep) acc))
+                                    ((some x8)
+                                      (let [r9 (preludeTail r8)]
+                                      (mt (listHead r9)
+                                        (none (cons (preludeJoinShort xs sep) acc))
+                                        ((some x9)
+                                          (let [r10 (preludeTail r9)]
+                                          (mt (listHead r10)
+                                            (none (cons (preludeJoinShort xs sep) acc))
+                                            ((some x10)
+                                              (let [r11 (preludeTail r10)]
+                                              (mt (listHead r11)
+                                                (none (cons (preludeJoinShort xs sep) acc))
+                                                ((some x11)
+                                                  (let [r12 (preludeTail r11)]
+                                                  (mt (listHead r12)
+                                                    (none (cons (preludeJoinShort xs sep) acc))
+                                                    ((some x12)
+                                                      (let [r13 (preludeTail r12)]
+                                                      (mt (listHead r13)
+                                                        (none (cons (preludeJoinShort xs sep) acc))
+                                                        ((some x13)
+                                                          (let [r14 (preludeTail r13)]
+                                                          (mt (listHead r14)
+                                                            (none (cons (preludeJoinShort xs sep) acc))
+                                                            ((some x14)
+                                                              (let [r15 (preludeTail r14)]
+                                                              (mt (listHead r15)
+                                                                (none (cons (preludeJoinShort xs sep) acc))
+                                                                ((some x15)
+                                                                  (preludeJoinRun (preludeTail r15) sep
+                                                                    (cons (stringConcat (stringConcat (stringConcat (stringConcat (stringConcat x0 sep) (stringConcat x1 sep)) (stringConcat (stringConcat x2 sep) (stringConcat x3 sep))) (stringConcat (stringConcat (stringConcat x4 sep) (stringConcat x5 sep)) (stringConcat (stringConcat x6 sep) (stringConcat x7 sep)))) (stringConcat (stringConcat (stringConcat (stringConcat x8 sep) (stringConcat x9 sep)) (stringConcat (stringConcat x10 sep) (stringConcat x11 sep))) (stringConcat (stringConcat (stringConcat x12 sep) (stringConcat x13 sep)) (stringConcat (stringConcat x14 sep) x15)))) acc)))))))))))))))))))))))))))))))))))))))))))))))))
+
+fn preludeJoinAll xs: (List String) sep: String -> String
+  (mt (listHead xs)
+    (none "")
+    ((some a) (if (listEmpty? (preludeTail xs)) a (preludeJoinAll (listReverse (preludeJoinRun xs sep (list))) sep))))
 
 fn stringJoin xs: (List String) sep: String -> String
-  (if (listEmpty? xs) ""
-    (preludeJoinAll (cons (preludeHead xs) (map (fn [(x String)] -> String (stringConcat sep x)) (preludeTail xs)))))
+  (preludeJoinAll xs sep)
 
 fn stringReplace s: String old: String new: String -> String
   (if (= (stringLength old) 0)
@@ -374,17 +424,35 @@ fn stringToInt64 s: String -> (Option Int64)
             (else (some (- v)))))
         (none none))))
 
-fn preludeRankStep bs: Bytes i: Int64 n: Int64 h: Int64 -> Int64
-  (if (>= i n) h
-    (preludeRankStep bs (+ i 1) n (mod (+ (* h 257) (+ (bytesGet bs i) 1)) 2147483647)))
+fn preludeRankPow5 t: Int64 -> Int64
+  (let [t2 (mod (* t t) 2147483647)
+        t4 (mod (* t2 t2) 2147483647)]
+    (mod (* t4 t) 2147483647))
+
+fn preludeRankLane h: Int64 m: Int64 c: Int64 x: Int64 -> Int64
+  (preludeRankPow5 (mod (+ (* h m) (+ x c)) 2147483647))
+
+fn preludeRankNegZero bs: Bytes j: Int64 n: Int64 -> Bool
+  (if (> (+ j 3) n) false
+    (and (= (bytesGet bs j) 48)
+      (and (= (bytesGet bs (+ j 1)) 46)
+        (and (= (bytesGet bs (+ j 2)) 48)
+          (or (= (+ j 3) n)
+            (let [d (bytesGet bs (+ j 3))] (or (< d 48) (> d 57))))))))
+
+fn preludeRankStep bs: Bytes i: Int64 n: Int64 q: Int64 a: Int64 b: Int64 -> Int64
+  (if (>= i n) (+ (* a 2147483648) b)
+    (let [x (bytesGet bs i)]
+      (if (and (= q 0) (and (= x 45) (preludeRankNegZero bs (+ i 1) n)))
+        (preludeRankStep bs (+ i 1) n q a b)
+        (preludeRankStep bs (+ i 1) n
+          (cond ((= q 2) 1) ((= q 1) (cond ((= x 92) 2) ((= x 34) 0) (else 1))) ((= x 34) 1) (else 0))
+          (preludeRankLane a 48271 12345 x)
+          (preludeRankLane b 69621 40503 x)))))
 
 fn preludeRank k: K -> Int64
-  (let [bs (stringToBytes (str k))
-        h (preludeRankStep bs 0 (bytesLength bs) 0)
-        a (mod (+ (* h 1103515245) 12345) 2147483647)
-        b (mod (+ (* a a) 1013904223) 2147483647)
-        c (mod (+ (* b b) a) 2147483647)]
-    (mod (+ (* c 48271) b) 2147483647))
+  (let [bs (stringToBytes (str (list k)))]
+    (preludeRankStep bs 0 (bytesLength bs) 0 1013904223 1103515245))
 
 fn preludeAbove r1: Int64 k1: K r2: Int64 k2: K -> Bool
   (or (> r1 r2) (and (= r1 r2) (< k1 k2)))
@@ -501,7 +569,6 @@ fn mapPairs m: (Map K V) -> (List (Pair K V))
 fn mapFromPairs ps: (List (Pair K V)) -> (Map K V)
   (fold (fn [m p] (mt p ((pair k v) (mapSet m k v)))) (mapEmpty) ps)
 
-"a host IO failure is the message \"KIND: PATH: reason\"; KIND names the IoError case"
 fn preludeIoError message: String -> IoError
   (cond
     ((stringStartsWith? message "notFound:") (notFound))
@@ -530,24 +597,25 @@ fn pairSecond p: (Pair A B) -> B
   (mt p ((pair _ b) b))
 
 fn listAll? pred: (fn [T] -> Bool) xs: (List T) -> Bool
-  (mt (listHead xs)
-    ((some h) (if (not (pred h)) false (listAll? pred (optionOr (listTail xs) (list)))))
+  (mt (listTail xs)
+    ((some t) (if (not (pred (preludeHead xs))) false (listAll? pred t)))
     ((none) true))
 
 fn listTake xs: (List T) n: Int64 -> (List T)
   (if (<= n 0) (list)
-    (mt (listHead xs)
-      ((some h) (cons h (listTake (optionOr (listTail xs) (list)) (- n 1))))
+    (mt (listTail xs)
+      ((some t) (cons (preludeHead xs) (listTake t (- n 1))))
       ((none) (list))))
 
 fn listDrop xs: (List T) n: Int64 -> (List T)
   (if (<= n 0) xs
-    (if (listEmpty? xs) (list)
-      (listDrop (optionOr (listTail xs) (list)) (- n 1))))
+    (mt (listTail xs)
+      ((some t) (listDrop t (- n 1)))
+      ((none) (list))))
 
 fn listAny? pred: (fn [T] -> Bool) xs: (List T) -> Bool
-  (mt (listHead xs)
-    ((some h) (if (pred h) true (listAny? pred (optionOr (listTail xs) (list)))))
+  (mt (listTail xs)
+    ((some t) (if (pred (preludeHead xs)) true (listAny? pred t)))
     ((none) false))
 
 fn preludeStringRepeatBuild chunk: String count: Int64 acc: String -> String
@@ -568,7 +636,6 @@ fn ! fileSize path: String -> (Result Int64 String)
     ((ok st) (ok st.size))
     ((err m) (err m)))
 
-"charCode is the Unicode code point of the first character, decoded from its UTF-8 bytes; an empty string traps"
 fn preludeUtf8Tail bs: Bytes i: Int64 n: Int64 acc: Int64 -> Int64
   (if (>= i n) acc (preludeUtf8Tail bs (+ i 1) n (+ (* acc 64) (- (bytesGet bs i) 128))))
 
@@ -582,14 +649,12 @@ fn charCode c: String -> Int64
       ((< b0 240) (preludeUtf8Tail bs 1 3 (- b0 224)))
       (else (preludeUtf8Tail bs 1 4 (- b0 240)))))
 
-"bit operations on two's complement Int64: a value is its sign bit and its low 63 bits, a non-negative Int64 taken apart by / and mod"
 fn preludeLow x: Int64 -> Int64
   (if (< x 0) (+ (+ x 9223372036854775807) 1) x)
 
 fn preludeJoin sign: Bool low: Int64 -> Int64
   (if sign (- (- low 9223372036854775807) 1) low)
 
-"LANG-BITOPS-SYM/D143 zeroHandwrittenC: & | ^ ~ are plain ASL, not a host builtin; the old bitAnd/bitOr/bitXor took an `op` lambda (preludeBits op a b) and built one fresh closure on every call, which was the actual BITOPS-NATIVE allocation cost (the per-bit recursion itself was already small). preludeAndBits/preludeOrBits/preludeXorBits below are three plain recursive functions, each with its own combining rule inlined, so no closure is built at all; the native compiler lowers &, |, ^ and ~ to single instructions by name (NATIVE-PERF), the same way << and >> already are, and never runs this ASL body"
 fn preludeAndBits a: Int64 b: Int64 -> Int64
   (if (and (= a 0) (= b 0)) 0
     (+ (* (preludeAndBits (/ a 2) (/ b 2)) 2) (* (mod a 2) (mod b 2))))
@@ -620,7 +685,6 @@ fn preludePop x: Int64 -> Int64
 fn popcount64 x: Int64 -> Int64
   (+ (if (< x 0) 1 0) (preludePop (preludeLow x)))
 
-"base64 (RFC 4648, padded): decoding rejects characters outside the alphabet and misplaced padding"
 fn preludeB64Char i: Int64 -> String
   (preludeSlice "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" i (+ i 1))
 
@@ -661,7 +725,6 @@ fn ! bytesFromBase64 s: String -> (Result Bytes String)
       (err (str "bytesFromBase64: length " n " is not a multiple of 4"))
       (preludeB64Dec s (bytesAlloc (- (* (/ n 4) 3) pad)) 0 (/ n 4) (- n pad))))
 
-"FNV-1a 64 over the UTF-8 bytes: h = (h xor byte) * 1099511628211 mod 2^64, the prime being 2^40 + 435; the product is built from the 32-bit halves of h read unsigned, so no Int64 step overflows"
 fn preludeFnvMul h: Int64 -> Int64
   (let [u (preludeLow h)
         lo (mod u 4294967296)

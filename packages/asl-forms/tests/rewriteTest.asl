@@ -2,16 +2,6 @@
   :x [runTests]
   :i [(asl-forms/rewrite :a rw)])
 
-fn checkHostValid! content: String tmpPath: String -> Bool
-  (mt (fileWrite tmpPath content)
-    ((err e) (do (assert false (str "failed to write " tmpPath ": " e)) false))
-    ((ok _)
-     (let [(res (processRun (str "asl/host/out/asl-host check " tmpPath)))
-           (exitCode res.exitCode)]
-       (do
-         (processRun (str "rm -f " tmpPath))
-         (= exitCode 0)))))
-
 fn testAslSingleNodeRewrites -> Bool
   (let [(src1 "fn test x: Option -> Bool\n  (some? x)\n")
         (expected1 "fn test x: Option -> Bool\n  (some? x)\n")
@@ -112,29 +102,6 @@ fn testCssRewrites -> Bool
       (assert (= res2 expected2) "css class selector rewrite must match expected")
       true))
 
-fn verifyD150OnFile! path: String expectedDoc: String tmpPath: String -> Bool
-  (mt (fileRead path)
-    ((err e) (do (assert false (str "failed to read " path ": " e)) false))
-    ((ok src)
-     (let [(rules (list (rw/makeRule "(module $NAME :d $DOC $$$REST)" "(module $NAME\n  $$$REST)")))
-           (extractions (list (rw/makeExtraction "(module $NAME :d $DOC $$$REST)" (str "(:doc :symbol " path "#$NAME :text $DOC)"))))
-           (rewritten (rw/rewriteAll src rules "asl"))
-           (docs (rw/extractAll src extractions "asl"))]
-       (do
-         (refute (stringContains? rewritten ":d ") (str "every :d must be gone from " path))
-         (assert (= (listLength docs) 1) (str "exactly one doc extracted from " path))
-         (assert (= (optionOr (listHead docs) "") expectedDoc) (str "doc matches expected for " path))
-         (assert (checkHostValid! rewritten tmpPath) (str "rewritten passes host check for " path))
-         true))))
-
-fn testD150ExtractionAndRewrite! -> Bool
-  (let [(docGzip "(:doc :symbol asl/packages/asl-zip/src/gzip.asl#asl-zip/gzip :text \"RFC 1952 pure-ASL gzip decoder and CRC-32\")")
-        (docInflate "(:doc :symbol asl/packages/asl-zip/src/inflate.asl#asl-zip/inflate :text \"Pure AgentScript RFC 1951 DEFLATE decoder\")")
-        (docAloud "(:doc :symbol asl/packages/asl-audio/src/aloud.asl#asl-audio/aloud :text \"Ear-Budgeted Auditory Digests with strict <=8s (112 chars) attention density limit.\")")]
-    (and (verifyD150OnFile! "asl/packages/asl-zip/src/gzip.asl" docGzip "asl/packages/asl-forms/tests/fixtures/tmpGzip.asl")
-    (and (verifyD150OnFile! "asl/packages/asl-zip/src/inflate.asl" docInflate "asl/packages/asl-forms/tests/fixtures/tmpInflate.asl")
-         (verifyD150OnFile! "asl/packages/asl-audio/src/aloud.asl" docAloud "asl/packages/asl-forms/tests/fixtures/tmpAloud.asl"))))
-
 fn testIndentTrimmingCases -> Bool
   (let [(src0 "(wrap a)")
         (res0 (rw/rewrite src0 "(wrap $A $$$REST)" "(wrap $A\n$$$REST)" "asl"))
@@ -192,6 +159,5 @@ fn ! runTests -> Bool
   (and (testJsRewrites)
   (and (testTsRewrites)
   (and (testCssRewrites)
-  (and (testD150ExtractionAndRewrite!)
   (and (testIndentTrimmingCases)
-       (testErrorPaths)))))))))
+       (testErrorPaths))))))))

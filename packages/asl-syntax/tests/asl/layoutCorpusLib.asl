@@ -50,8 +50,6 @@ fn knownMisparseReason path: String -> (Option String)
      (some "reference parser misparses: dedent defect corrupts enum YamlLineKind case list (re-verified after A6c)"))
     ((= path "tests/acceptance/r1Host/reader/surfaceTest.asl")
      (some "reference parser misparses: dedent defect drops enum Shape case list and schema Pt fields (re-verified after A6c)"))
-    ((= path "tests/host/tailrecTest.asl")
-     (some "reference parser misparses: indentParser.asl's parseTopForm never strips the tailrec/:tailrec fn modifier that a/parse's joinFnHeader (via stripTailrecPrefix) already understands, so 'fn tailrec tailCond n: Int64 acc: Int64 -> Int64' reads tailrec as the function name and tailCond as its first (untyped) param, confirmed by lay matching the true source signature while ip does not"))
     (else (none)))
 
 fn parseFileList stdout: String -> (List String)
@@ -152,10 +150,11 @@ fn verifyUncached! path: String src: String stats: CorpusStats -> CorpusStats
        (print (str path ": reference parser rejects: " e "\n"))
        (assert false (str path " reference parser rejects: " e))
        (bumpExcluded stats)))
-    ((ok iForms)
-     (mt (knownMisparseReason path)
-       ((some reason) (verifyExcludedMisparse! path src reason stats))
-       ((none) (verifyAgainstReference! path src iForms stats)))))
+    ((ok rawForms)
+     (let [(iForms (map ip/stripInferredUnit rawForms))]
+       (mt (knownMisparseReason path)
+         ((some reason) (verifyExcludedMisparse! path src reason stats))
+         ((none) (verifyAgainstReference! path src iForms stats))))))
 
 fn verifyCached path: String outcome: String stats: CorpusStats -> CorpusStats
   (if (= outcome "matched")

@@ -4,7 +4,7 @@ fn findLastSpaceLoop s: String idx: Int64 -> Int64
   (if (<= idx 0)
     -1
     (let [(ch (stringSlice s idx (+ idx 1)))]
-      (if (= ch " ")
+      (if (= (optionOr ch "") " ")
         idx
         (findLastSpaceLoop s (- idx 1)))))
 

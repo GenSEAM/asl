@@ -1,5 +1,3 @@
-"String builtins, let bindings, Result propagation by match."
-
 fn shout s: String -> String
   (str (stringUpper (stringTrim s)) "!")
 

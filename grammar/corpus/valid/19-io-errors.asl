@@ -1,13 +1,3 @@
-"A file reader, and the whole IoError surface it can reach. The six cases are"
-
-"ordinary nullary constructors, so `--labels` executes every one of them and"
-
-"pins its spelling; the host mapping from errno to case is what only a real"
-
-"failing call reaches. The host has no file-append, fileExists?, read-line or"
-
-"read-all, so the log appender this fixture once was is now a reader."
-
 (module io/log :x [main])
 
 fn label e: IoError -> String

@@ -120,7 +120,7 @@ fn lowerCCond ctx: LowerCtx items: (List rd/SExpr) -> String
   (let [(clauses (sliceFrom1 items))] (if (hasCondFlow? ctx clauses 0) (lowerCCondStmtLoop ctx clauses 0) (lowerCCondExprLoop ctx clauses 0)))
 
 fn inferCTypeOfExpr ctx: LowerCtx e: rd/SExpr valExpr: String -> String
-  (mt e ((rd/sexprVect _) "") ((rd/sexprAtom v) (cond ((isIntegerLiteral? v) "int64_t") ((isFloatLiteral? v) "double") ((or (= v "true") (= v "false")) "bool") ((stringStartsWith? v "\"") "asl_string_t") (else (mt (ctxVarType ctx v) ((some t) t) ((none) ""))))) ((rd/sexprList items) (if (<= (listLength items) 0) "" (let [(head (stripModulePrefix (nthAtom items 0)))] (mt (ctxFnRetType ctx head) ((some t) t) ((none) ""))))))
+  (mt e ((rd/sexprVect _) "") ((rd/sexprAtom v) (cond ((isIntegerLiteral? v) "int64_t") ((isFloatLiteral? v) "double") ((or (= v "true") (= v "false")) "bool") ((stringStartsWith? v "\"") "asl_string_t") (else (mt (ctxVarType ctx v) ((some t) t) ((none) ""))))) ((rd/sexprList items) (if (<= (listLength items) 0) "" (let [(head (stripModulePrefix (nthAtom items 0)))] (if (= head "str") "asl_string_t" (mt (ctxFnRetType ctx head) ((some t) t) ((none) "")))))))
 
 fn inferCType ctx: LowerCtx e: rd/SExpr valExpr: String -> String
   (let [(declared (inferCTypeOfExpr ctx e valExpr))] (if (not (= declared "")) declared (cond ((and (stringEndsWith? valExpr "LL") (not (stringContains? valExpr "("))) "int64_t") ((or (= valExpr "true") (= valExpr "false")) "bool") (else "__auto_type"))))

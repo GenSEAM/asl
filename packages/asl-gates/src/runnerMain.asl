@@ -1,5 +1,5 @@
 (module asl-gates/runnerMain
-  :x [chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
+  :x [chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
   :i [(asl-gates/suiteRunner :a sr) (asl-gates/runnerLedger :a rl)])
 
 (schema PackageInfo
@@ -337,15 +337,15 @@ fn fullReason pkgs: (List PackageInfo) changed: (List String) -> (Option String)
         (none)
         changed)
 
-fn affectedAt! root: String base: String -> (Pair String (Pair (List String) String))
+fn ! affectedPrefixesAt! root: String base: String -> (Result (Pair (List String) String) String)
   (let [(changed (changedPathsAt root base))
         (pkgRes (packagesAt root))
         (pkgs (pairFirst pkgRes))
         (errors (pairSecond pkgRes))]
     (if (not (listEmpty? errors))
-      (pair ":full" (pair (list) (str "ERR_MANIFEST_PARSE " (stringJoin (listTake errors 4) "; "))))
+      (err (str "ERR_MANIFEST_PARSE " (stringJoin (listTake errors 4) "; ")))
       (mt (fullReason pkgs changed)
-        ((some why) (pair ":full" (pair (list) why)))
+        ((some why) (err why))
         ((none)
          (let [(owners (fold (fn [(acc (List String)) (p String)] -> (List String)
                                (mt (findOwnerForPath pkgs p)
@@ -361,9 +361,17 @@ fn affectedAt! root: String base: String -> (Pair String (Pair (List String) Str
                                    ((some pkg) (listAppend acc (list pkg.dir)))))
                                (list)
                                sortedSeen))]
-           (mt (sr/discover (if (stringEmpty? root) "." root) prefixes)
-             ((err e) (pair ":full" (pair (list) (str "ERR_RUNNER " e))))
-             ((ok suites) (pair ":affected" (pair suites (str "packages " (stringJoin sortedSeen " ")))))))))))
+           (ok (pair prefixes (str "packages " (stringJoin sortedSeen " ")))))))))
+
+fn affectedAt! root: String base: String -> (Pair String (Pair (List String) String))
+  (mt (affectedPrefixesAt! root base)
+    ((err why) (pair ":full" (pair (list) why)))
+    ((ok pr)
+     (let [(prefixes (pairFirst pr))
+           (reason (pairSecond pr))]
+       (mt (sr/discover (if (stringEmpty? root) "." root) prefixes)
+         ((err e) (pair ":full" (pair (list) (str "ERR_RUNNER " e))))
+         ((ok suites) (pair ":affected" (pair suites reason)))))))
 
 fn affected! base: String -> (Pair String (Pair (List String) String))
   (affectedAt! "" base)
@@ -497,15 +505,16 @@ fn faultExit! f: sr/Fault -> Int64
     ((= f.kind "busy") (do (println (str "(:runner :status :failed :err ERR_BUSY :ev \"" (sr/esc f.msg 400) "\")")) 1))
     (else (do (println (str "(:runner :status :failed :err ERR_RUNNER :ev \"" (sr/esc f.msg 400) "\")")) 2)))
 
-fn ! receiptFor root: String x: Execution scope: String -> (Result (Pair String Bool) sr/Fault)
+fn ! receiptFor root: String x: Execution scope: String frozen: Int64 -> (Result (Pair String Bool) sr/Fault)
   (mt (sr/getExcludedForm root)
     ((err e) (err (runnerFault e)))
-    ((ok excluded) (ok (rl/receipt x.results x.checks x.notEvaluated x.held x.deltaForm excluded scope))))
+    ((ok excluded) (ok (rl/receipt x.results x.checks x.notEvaluated x.held x.deltaForm excluded scope frozen))))
 
 fn ! runWith root: String parsed: RunArgs -> (Result Int64 sr/Fault)
   (let [(suites parsed.suites)
         (paths parsed.paths)
         (scope (if (and (listEmpty? paths) (listEmpty? suites)) ":full" ":affected"))
+        (frozen (if (listEmpty? suites) (resultOr (sr/frozenCount root paths) 0) 0))
         (chosen (if (listEmpty? suites) (sr/discover root paths) (ok (listSortUnique suites))))]
     (mt chosen
       ((err e) (err (runnerFault e)))
@@ -513,7 +522,7 @@ fn ! runWith root: String parsed: RunArgs -> (Result Int64 sr/Fault)
        (mt (execute root cs parsed.base (sr/workerCount (none)))
          ((err f) (err f))
          ((ok x)
-          (mt (receiptFor root x scope)
+          (mt (receiptFor root x scope frozen)
             ((err f) (err f))
             ((ok receiptRes)
              (mt (maybeTelemetry parsed.telemetry x)
@@ -630,7 +639,7 @@ fn ! gateTestsWith root: String g: GateTestsArgs baseline: (Option Int64) -> (Re
              (mt (sr/envInt! "ASL_DECLARED_GAP_TOLERANCE" 0)
                ((err e) (err (runnerFault e)))
                ((ok tolerance)
-                (mt (receiptFor root x (if (listEmpty? prefixes) ":full" ":affected"))
+                (mt (receiptFor root x (if (listEmpty? prefixes) ":full" ":affected") (resultOr (sr/frozenCount root prefixes) 0))
                   ((err f) (err f))
                   ((ok receiptRes) (ok (gateTestsVerdict! x receiptRes baseline tolerance g.telemetry)))))))))))))
 

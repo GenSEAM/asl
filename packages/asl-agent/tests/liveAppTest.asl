@@ -1,7 +1,5 @@
 (module aslAgent/liveAppTest :x [testLiveGameSpecification testLiveGameExecutionLoop! testLiveGameTuiTelemetry runTests] :i [(policy :a pol) (agent :a ag) (feedback :a fb) (tui :a tui) (eddie :a ed)])
 
-"run: (run-tests)"
-
 fn testLiveGameSpecification -> Bool
   (let [(rawPrompt "Please build a terminal snake game with collision detection and unit tests.") (req (fb/refineUserPrompt rawPrompt (list "asl/packages/asl-agent/tests/fixtures/test-app/src/snake.asl" "asl/packages/asl-agent/tests/fixtures/test-app/tests/snake-test.asl")))] (assert (not req.isAmbiguous) "game specification is unambiguous") (assert (= (listLength req.targetFiles) 2) "two target files") (assert (stringContains? req.clarifiedGoal "terminal snake game") "contains goal text") true)
 

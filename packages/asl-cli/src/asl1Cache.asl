@@ -1,5 +1,5 @@
 (module asl-cli/asl1Cache
-  :x [nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction!]
+  :x [nativeAsl1! singleFlight! bootstrap! buildNative! buildNativeTransaction! closure!]
   :i [(asl/packages/asl-cli/src/system :a sys)])
 
 fn compilerPath! ctx: sys/Context -> String
@@ -43,15 +43,21 @@ fn ! validBinary? path: String key: String -> Bool
           ((ok actual) (= (sys/stripTrailingNewlines expected) actual))))))
 
 fn ! appendFileHash paths: (List String) acc: String -> (Result String String)
+  (appendFileHashIn "" paths acc)
+
+fn ! appendFileHashIn root: String paths: (List String) acc: String -> (Result String String)
   (mt (listHead paths)
     ((none) (ok acc))
     ((some path)
-      (mt (shaFile path)
+      (mt (shaFile (underRoot root path))
         ((err e) (err e))
-        ((ok digest) (appendFileHash (optionOr (listTail paths) (list)) (str acc path "=" digest "\n"))))))
+        ((ok digest) (appendFileHashIn root (optionOr (listTail paths) (list)) (str acc path "=" digest "\n"))))))
+
+fn underRoot root: String path: String -> String
+  (if (or (stringEmpty? root) (stringStartsWith? path "/")) path (str root "/" path))
 
 fn ! interpretedDeps! ctx: sys/Context compiler: String -> (Result String String)
-  (mt (sys/capture! (list "nice" "-n" "15" ctx.hostBin "run" compiler "deps" compiler) (none))
+  (mt (sys/capture! (list "nice" "-n" "15" ctx.hostBin "run" compiler "deps" compiler) (some ctx.root))
     ((err e) (err (str "cannot read asl1 dependency closure: " e)))
     ((ok captured)
       (if (!= captured.exitCode 0)
@@ -74,9 +80,9 @@ fn ! baseHashes compiler: String lib: String clangVersion: String -> (Result Str
 fn headPath! base: String -> String
   (str (cacheDir!) "/head-" (bytesSha256 (stringToBytes base)))
 
-fn ! makeKey closure: String base: String -> (Result String String)
+fn ! makeKey closure: String base: String root: String -> (Result String String)
   (let [(deps (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines (sys/stripTrailingNewlines closure))))]
-    (mt (appendFileHash deps "")
+    (mt (appendFileHashIn root deps "")
       ((err e) (err e))
       ((ok hashes) (ok (bytesSha256 (stringToBytes (str hashes base)))))))
 
@@ -131,8 +137,80 @@ fn ! latestHeadBinary! heads: (List String) -> (Option String)
             (if (usable? key) (some (binaryPath! key))
               (latestHeadBinary! (optionOr (listTail heads) (list)))))))))
 
-fn ! seedPath! -> String
-  (optionOr (envGet "ASL_NATIVE_ASL1_SEED") (str (optionOr (envGet "HOME") ".") "/.asl/run/asl1/seed/asl1-native"))
+fn seedField row: String key: String -> (Option String)
+  (let [(parts (stringSplit row (str ":" key " ")))]
+    (if (< (listLength parts) 2) (none)
+      (let [(rest (optionOr (listGet parts 1) ""))]
+        (if (stringStartsWith? rest "\"")
+          (listHead (stringSplit (optionOr (stringSlice rest 1 (stringLength rest)) "") "\""))
+          (listHead (stringSplit (stringReplace rest ")" " ") " "))))))
+
+fn stripVersion s: String -> String
+  (let [(n (stringLength s))]
+    (if (and (> n 0) (stringContains? "0123456789." (optionOr (stringSlice s (- n 1) n) "x"))) (stripVersion (optionOr (stringSlice s 0 (- n 1)) "")) s))
+
+fn seedTriple triple: String -> String
+  (let [(parts (stringSplit (stringTrim triple) "-"))]
+    (stringJoin (listAppend (listTake parts (max 0 (- (listLength parts) 1))) (list (stripVersion (optionOr (listLast parts) "")))) "-"))
+
+fn seedRow text: String key: String -> (Option String)
+  (listHead (filter (fn [(l String)] -> Bool (and (stringStartsWith? l "(:seed ") (stringContains? l (str ":triple \"" key "\""))))
+                    (map stringTrim (stringLines text))))
+
+fn ! bytesMatch? path: String bytes: String sha: String -> Bool
+  (mt (fileReadBytes path)
+    ((err _) false)
+    ((ok b) (and (= (stringFromInt64 (bytesLength b)) bytes) (= (bytesSha256 b) sha))))
+
+fn ! linkSeed! dir: String gz: String llBytes: String llSha: String lib: String clang: String -> (Result String String)
+  (let [(tag (str (stringFromInt64 (procSelf)) "x" (stringFromInt64 (nowNs))))
+        (copy (str dir "/asl1." tag ".ll.gz"))
+        (ll (str dir "/asl1." tag ".ll"))
+        (part (str dir "/asl1-native.part." tag))
+        (binary (str dir "/asl1-native"))]
+    (mt (mt (fileReadBytes gz) ((err e) (err e)) ((ok b) (fileWrite copy b)))
+      ((err e) (do (drop copy) (err (str "ERR_SEED_IO: cannot copy " gz ": " e))))
+      ((ok _)
+        (if (!= (sys/runMerged! (list "gzip" "-d" "-f" copy)) 0)
+          (do (drop copy) (drop ll) (err (str "ERR_SEED_UNPACK: gzip -d " gz " failed")))
+          (if (not (bytesMatch? ll llBytes llSha))
+            (do (drop ll) (err (str "ERR_SEED_SHA: " gz " unpacks to IR whose size or sha256 differs from llBytes/llSha256")))
+            (let [(linked (sys/runMerged! (list "nice" "-n" "15" clang "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" lib "-lm" "-o" part)))]
+              (do (drop ll)
+                (if (or (!= linked 0) (not (sys/isFile? part)))
+                  (do (drop part) (err (str "ERR_SEED_LINK: clang could not link the seed (exit " (stringFromInt64 linked) ")")))
+                  (mt (shaFile part)
+                    ((err e) (do (drop part) (err e)))
+                    ((ok digest) (mt (fileWrite (str part ".sha256") (str digest "\n"))
+                      ((err e) (do (drop part) (err (str "ERR_SEED_IO: " e))))
+                      ((ok _) (mt (pathRename (str part ".sha256") (str binary ".sha256"))
+                        ((err e) (do (drop part) (err (str "ERR_SEED_IO: " e))))
+                        ((ok _) (mt (pathRename part binary)
+                          ((err e) (do (drop part) (err (str "ERR_SEED_IO: " e))))
+                          ((ok _) (ok binary)))))))))))))))))
+
+fn ! checkedInSeed! root: String lib: String clang: String -> (Result String String)
+  (mt (sys/capture! (list "env" "TMPDIR=/tmp" clang "-dumpmachine") (none))
+    ((err e) (err (str "ERR_SEED_CLANG: " e)))
+    ((ok machine)
+      (let [(key (seedTriple machine.stdout))]
+        (mt (fileReadString (str root "/asl/seed/seed.asn"))
+          ((err e) (err (str "ERR_NO_NATIVE_SEED: " root "/asl/seed/seed.asn: " e)))
+          ((ok text) (mt (seedRow text key)
+            ((none) (err (str "ERR_NO_NATIVE_SEED: no seed for " key " in asl/seed/seed.asn")))
+            ((some row)
+              (let [(file (optionOr (seedField row "file") ""))
+                    (llSha (optionOr (seedField row "llSha256") ""))
+                    (gz (str root "/" file))
+                    (dir (str (cacheDir!) "/seed/" llSha))
+                    (binary (str dir "/asl1-native"))]
+                (cond
+                  ((or (stringEmpty? file) (!= (stringLength llSha) 64)) (err (str "ERR_SEED_MANIFEST: the " key " row lacks :file or :llSha256")))
+                  ((not (bytesMatch? gz (optionOr (seedField row "bytes") "") (optionOr (seedField row "sha256") ""))) (err (str "ERR_SEED_SHA: " file " does not match the size and sha256 in asl/seed/seed.asn")))
+                  ((validSeed? binary) (ok binary))
+                  (else (mt (dirCreate dir)
+                    ((err e) (err (str "ERR_SEED_IO: cannot create " dir ": " e)))
+                    ((ok _) (linkSeed! dir gz (optionOr (seedField row "llBytes") "") llSha lib clang)))))))))))))
 
 fn ! validSeed? path: String -> Bool
   (mt (fileReadString (str path ".sha256"))
@@ -141,25 +219,13 @@ fn ! validSeed? path: String -> Bool
       ((err _) false)
       ((ok actual) (= (sys/stripTrailingNewlines expected) actual)))))
 
-fn ! pinSeed! cached: String -> (Result String String)
-  (let [(seed (seedPath!))]
-    (if (validSeed? seed) (ok seed)
-      (mt (dirCreate (sys/parentOf seed))
-        ((err e) (err (str "cannot create native asl1 seed directory: " e)))
-        ((ok _) (let [(status (sys/runMerged! (list "cp" cached seed)))]
-          (if (!= status 0) (err (str "cannot pin native asl1 seed (exit " (stringFromInt64 status) ")"))
-            (mt (shaFile seed)
-              ((err e) (do (drop seed) (err e)))
-              ((ok digest) (mt (fileWrite (str seed ".sha256") (str digest "\n"))
-                ((err e) (do (drop seed) (err e)))
-                ((ok _) (ok seed)))))))))))
+fn ! ensureSeed! root: String lib: String clang: String -> (Result String String)
+  (mt (envGet "ASL_NATIVE_ASL1_SEED")
+    ((some pinned) (if (validSeed? pinned) (ok pinned) (err "ERR_NO_NATIVE_SEED")))
+    ((none) (checkedInSeed! root lib clang)))
 
-fn ! ensureSeed! -> (Result String String)
-  (let [(seed (seedPath!))]
-    (if (validSeed? seed) (ok seed)
-      (mt (latestCachedBinary!)
-        ((none) (err "ERR_NO_NATIVE_SEED"))
-        ((some cached) (pinSeed! cached)))))
+fn staleSeed reason: String -> String
+  (str "ERR_SEED_STALE: the bootstrap seed cannot build the compiler sources (" reason "); regenerate it with asl-host run tools/seed.asl regen")
 
 fn ! nativeStage! compiler: String source: String lib: String clang: String -> (Result String String)
   (let [(ll (str compiler ".boot.ll"))
@@ -174,15 +240,24 @@ fn ! nativeStage! compiler: String source: String lib: String clang: String -> (
             (do (drop part) (err (str "clang could not link native asl1 (exit " (stringFromInt64 linked) ")")))
             (ok part))))))
 
+fn fromSeed! seed: String stage: Any install: Any -> (Result String String)
+  (bootstrap! (none) (ok seed) (fn [(c String)] -> (Result String String)
+                                  (mt (stage c) ((ok s) (ok s)) ((err e) (err (if (= c seed) (staleSeed e) e)))))
+              install)
+
 fn buildNative! previousFn: Any seedFn: Any stage: Any install: Any -> (Result String String)
   (let [(previous (previousFn))]
     (mt previous
-      ((some _) (mt (seedFn previous)
-        ((err e) (err e))
-        ((ok _) (bootstrap! previous (err "unused seed: cached native compiler selected") stage install))))
+      ((some _) (mt (bootstrap! previous (err "unused seed: cached native compiler selected") stage install)
+        ((ok binary) (ok binary))
+        ((err first) (mt (seedFn previous)
+          ((err e) (err (str first "; " e)))
+          ((ok seed) (mt (fromSeed! seed stage install)
+            ((ok binary) (ok binary))
+            ((err e) (err (str first "; retried from the seed: " e)))))))))
       ((none) (mt (seedFn previous)
         ((err e) (err e))
-        ((ok seed) (bootstrap! previous (ok seed) stage install))))))
+        ((ok seed) (fromSeed! seed stage install))))))
 
 fn buildNativeTransaction! root: String key: String closure: String previousFn: Any seedFn: Any stage: Any -> (Result String String)
   (let [(entry (str root "/" key))
@@ -274,14 +349,14 @@ fn ! usable? key: String -> Bool
   (let [(binary (binaryPath! key))]
     (and (sys/isFile? binary) (and (sys/executable? binary) (validBinary? binary key))))
 
-fn ! warmBinary! base: String -> (Option String)
+fn ! warmBinary! base: String root: String -> (Option String)
   (mt (fileReadString (headPath! base))
     ((err _) (none))
     ((ok key)
       (mt (fileReadString (depsPath! key))
         ((err _) (none))
         ((ok closure)
-          (mt (makeKey closure base)
+          (mt (makeKey closure base root)
             ((err _) (none))
             ((ok actual) (if (and (= actual key) (usable? key)) (some (binaryPath! key)) (none))))))))
 
@@ -294,10 +369,33 @@ fn ! writeHead! base: String key: String -> Bool
         ((err e) (do (drop part) (sys/sayErr! (str "asl1 cache: cannot install head " head ": " e)) false))
         ((ok _) true)))))
 
+fn rootRelative root: String line: String -> String
+  (if (stringStartsWith? line (str root "/")) (optionOr (stringSlice line (+ (stringLength root) 1) (stringLength line)) line) line)
+
+fn ! nativeDeps! root: String native: String compiler: String -> (Result String String)
+  (mt (sys/capture! (list "nice" "-n" "15" native "deps" compiler) (none))
+    ((err e) (err (str "cannot run " native " deps: " e)))
+    ((ok captured)
+      (if (!= captured.exitCode 0)
+        (err (str "native asl1 deps failed (exit " (stringFromInt64 captured.exitCode) ")"))
+        (let [(real (resultOr (realPath root) root))
+              (lines (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) (stringLines captured.stdout)))]
+          (ok (stringJoin (map (fn [(l String)] -> String (rootRelative real (rootRelative root l))) lines) "\n"))))))
+
+fn ! traceErr! line: String -> Bool
+  (if (= (optionOr (envGet "ASL_NATIVE_TRACE") "") "1") (sys/sayErr! line) true)
+
+fn ! closure! ctx: sys/Context compiler: String lib: String clang: String -> (Result String String)
+  (mt (latestCachedBinary!)
+    ((none) (interpretedDeps! ctx compiler))
+    ((some b) (mt (nativeDeps! ctx.root b compiler)
+      ((ok listing) (ok listing))
+      ((err why) (do (traceErr! (str "asl1 cache: no native asl1 (" why "); asl-host reads the asl1 closure to bootstrap")) (interpretedDeps! ctx compiler))))))
+
 fn ! coldBinary! ctx: sys/Context compiler: String lib: String clang: String base: String -> (Result String String)
-  (mt (interpretedDeps! ctx compiler)
+  (mt (closure! ctx compiler lib clang)
     ((err e) (err e))
-    ((ok closure) (mt (makeKey closure base)
+    ((ok closure) (mt (makeKey closure base ctx.root)
       ((err e) (err e))
       ((ok key) (mt (dirCreate (entryDir! key))
         ((err e) (err (str "cannot create keyed cache directory: " e)))
@@ -307,7 +405,7 @@ fn ! coldBinary! ctx: sys/Context compiler: String lib: String clang: String bas
           3600000
           (fn [] (usable? key))
           (fn [] (buildNativeTransaction! (cacheDir!) key closure (fn [] (latestCachedBinary!)) (fn [(cached (Option String))] -> (Result String String)
-            (mt cached ((some binary) (pinSeed! binary)) ((none) (ensureSeed!))))
+            (ensureSeed! ctx.root lib clang))
             (fn [(native String)] -> (Result String String) (nativeStage! native compiler lib clang)))))
           ((err e) (err e))
           ((ok binary) (do (writeHead! base key) (ok binary))))))))))
@@ -323,6 +421,6 @@ fn ! nativeAsl1! ctx: sys/Context lib: String clang: String -> (Result String St
           ((err e) (err e))
           ((ok version) (mt (baseHashes compiler lib version)
             ((err e) (err e))
-            ((ok base) (mt (warmBinary! base)
+            ((ok base) (mt (warmBinary! base ctx.root)
               ((some binary) (ok binary))
               ((none) (coldBinary! ctx compiler lib clang base)))))))))))

@@ -13,6 +13,26 @@ fn found i: Int64 n: Int64 m: (Map Int64 Int64) acc: Int64 -> Int64
   (if (= i n) acc
     (found (+ i 1) n m (+ acc (if (= (mapGet m (mod (* i 7919) 1000003)) (some i)) 1 0))))
 
+fn depth t: (PreludeTree K V) -> Int64
+  (mt t
+    ((preludeLeaf) 0)
+    ((preludeNode _ _ _ l g) (+ 1 (max (depth l) (depth g)))))
+
+fn family n: Int64 -> (List String)
+  (if (= n 0) (list "")
+    (let [rest (family (- n 1))]
+      (listAppend (map (fn [s] (str "MMMMM" s)) rest) (map (fn [s] (str "LQGQN" s)) rest))))
+
+fn shuffle xs: (List T) seed: Int64 -> (List T)
+  (map (fn [p] (pairSecond p))
+    (listSortBy (fn [p] (pairFirst p))
+      (map (fn [p] (pair (mod (+ (* (pairFirst p) 7919) seed) 104729) (pairSecond p))) (enumerate xs))))
+
+fn churn keys: (List K) drop: (List K) seed: Int64 -> (Map K Int64)
+  (let [full (fold (fn [acc k] (mapSet acc k 1)) (mapEmpty) (shuffle keys seed))
+        cut (fold (fn [acc k] (mapRemove acc k)) full (shuffle drop (+ seed 31)))]
+    (fold (fn [acc k] (mapSet acc k 1)) cut (shuffle drop (+ seed 57))))
+
 fn sorted? xs: (List Int64) -> Bool
   (mt (listHead xs)
     ((none) true)
@@ -34,7 +54,16 @@ fn ! runTests -> Bool
         (t0 (monotonicNs))
         (big (grow 0 100000 (mapEmpty)))
         (hits (found 0 100000 big 0))
-        (ms (/ (- (monotonicNs) t0) 1000000))]
+        (ms (/ (- (monotonicNs) t0) 1000000))
+        (crafted (family 12))
+        (attack (fold (fn [acc k] (mapSet acc k 1)) (mapEmpty) crafted))
+        (floats (list 0.0 1.5 -2.25 3.0 -0.5 7.75 -9.0 11.5))
+        (zeroFirst (churn floats (list 0.0 -0.5 7.75) 3))
+        (zeroSwapped (mapSet zeroFirst -0.0 1))
+        (negFirst (churn (map (fn [x] (if (= x 0.0) -0.0 x)) floats) (list -0.0 -9.0) 11))
+        (words400 (map (fn [i] (str "w" (mod (* i 7919) 100003))) (range 0 400)))
+        (shape0 (churn words400 (listTake words400 150) 0))
+        (shapes (map (fn [seed] (churn words400 (listTake words400 150) seed)) (list 1 2 3 4 5)))]
     (do
       (assert (= (mapKeys m) (listSort words)) "mapKeys is sorted by < whatever the insertion order")
       (assert (= (mapValues m) (map (fn [w] (stringLength w)) (listSort words))) "mapValues follows key order")
@@ -67,4 +96,10 @@ fn ! runTests -> Bool
       (assert (= hits 100000) "every one of 100000 keys is found with its value")
       (assert (sorted? (listTake (mapKeys big) 1000)) "the keys of the large map come out sorted")
       (assert (< ms 20000) (str "100000 inserts and lookups take under 20s, took " ms "ms"))
+      (assert (= (mapSet (mapEmpty) 0.0 1) (mapSet (mapEmpty) -0.0 1)) "{0.0:1} = {-0.0:1}: equal keys get equal ranks")
+      (assert (= zeroSwapped negFirst) "a float map built with 0.0 then set at -0.0 equals one built with -0.0 under another order")
+      (assert (= (mapSize attack) 4096) "the crafted MMMMM/LQGQN family has 4096 distinct keys")
+      (assert (< (depth (preludeTree attack)) 64) (str "the crafted equal-rank family stays shallow, depth " (depth (preludeTree attack))))
+      (assert (= (listLength (filter (fn [m] (= m shape0)) shapes)) 5) "equal key sets under shuffled inserts and removes give identical trees")
+      (assert (< (depth (preludeTree shape0)) 40) "400 keys give a tree of depth under 40")
       true))

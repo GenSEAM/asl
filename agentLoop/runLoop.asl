@@ -3,7 +3,8 @@
   :i [(asl/agentLoop/loopState :a s) (asl/agentLoop/loop :a lp)
       (asl/agentLoop/context :a ctx) (asl/agentLoop/journal :a jr)
       (asl/agentLoop/gitOps :a go) (asl/agentLoop/runOps :a ro) (asl/agentLoop/reply :a rp)
-      (asl/agentLoop/core :a c) (asl/agentLoop/gates :a g) (asl-json/json :a j)])
+      (asl/agentLoop/core :a c) (asl/agentLoop/gates :a g) (asl-json/json :a j)
+      (asl/agentLoop/providers :a pv)])
 
 schema LoopRun
   (:f state s/LoopState) (:f procs ro/Procs) (:f written jr/Written) (:f session String)

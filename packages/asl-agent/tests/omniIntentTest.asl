@@ -24,7 +24,7 @@ fn testSixDomainClassification -> Bool
     true)
 
 fn testFrontAgentDirective -> Bool
-  (let [(cfg (fa/FrontAgentConfig :workspaceRoot "/workspace" :daemonSocket "/tmp/asl-engine.sock" :voiceEnabled true))
+  (let [(cfg (fa/FrontAgentConfig :workspaceRoot "/work/repo" :daemonSocket "/tmp/asl-engine.sock" :voiceEnabled true))
         (st (fa/frontAgentInit cfg))
         (res (fa/frontAgentHandleDirective st "поправь в проекте баг с компилятором"))
         (nextSt (pairFirst res))

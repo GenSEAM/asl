@@ -1,15 +1,5 @@
 (module core/shadow :x [x g triple tripled scaled])
 
-"Search-path companion: a module whose binders collide with its own top-level"
-
-"names. Every top-level name is emitted under the module's prefix and every"
-
-"binder is emitted bare, so a lowering that resolves an identifier through the"
-
-"unit's name table rather than through lexical scope reaches the definition"
-
-"instead of the binding — on both former targets at once."
-
 fn x -> Int64
   1
 

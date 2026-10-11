@@ -1,7 +1,5 @@
 (module aslAgent/horizonTest :x [testHorizonDepthExpansion testHorizonBudgetBounding testHealthMatrixCycleDetection testHealthSummaryFormatting runTests] :i [(horizon :a hor)])
 
-"run: (run-tests)"
-
 fn testHorizonDepthExpansion -> Bool
   (let [(req0 (hor/makeHorizonRequest "policy/check" 0 500)) (res0 (hor/expandHorizon req0)) (req1 (hor/makeHorizonRequest "policy/check" 1 500)) (res1 (hor/expandHorizon req1))] (assert (= (listLength res0.interfaceStubs) 0) "depth 0 has 0 stubs") (assert (= (listLength res1.interfaceStubs) 2) "depth 1 has 2 stubs") true)
 

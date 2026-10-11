@@ -1,11 +1,11 @@
 (module asl-target-llvm
   :x [emitLlvmModule emitLlvmProgram emitLlvmModuleFor emitLlvmProgramFor emitLlvmModuleForTarget emitLlvmProgramForTarget emitLlvmRuntimeForTarget emitLlvmSupportForTarget emitLlvmProgramNative! runtimeDecls emitLlvmType emitLlvmBlock emitLlvmStmt emitLlvmExpr emitLlvmClosure emitLlvmPanic emitLlvmSource emitLlvmSourceWith emitLlvmTargetTriple llvmPreamble emitLlvmFunction]
   :i [(asl-ir/types :a irTy)
-      (asl-ir/lower :a low)
       (asl-ir/link :a lk)
       (asl-target-llvm/types :a ty)
       (asl-target-llvm/emit :a em)
       (asl-target-llvm/ssa :a ssa)
+      (asl-target-llvm/ssaOpt :a opt)
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)
       (asl-target-llvm/gcRoute :a gr)
@@ -15,16 +15,16 @@
       (asl-target-llvm/arrayRoute :a ar)])
 
 fn emitLlvmModule m: irTy/SsaModule -> (Result String (List irTy/IrDiag))
-  (emitRouted (ar/routeModule m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmModule r)))
+  (emitRouted (ar/routeModule m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmModule (opt/hoistConstants r))))
 
 fn emitLlvmProgram m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
-  (emitRouted (ar/routeModule m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram r entry)))
+  (emitRouted (ar/routeModule m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram (opt/hoistConstants r) entry)))
 
 fn emitLlvmModuleFor facts: libc/TripleFacts m: irTy/SsaModule -> (Result String (List irTy/IrDiag))
-  (emitRouted (routeFor facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmModule r)))
+  (emitRouted (routeFor facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmModule (opt/hoistConstants r))))
 
 fn emitLlvmProgramFor facts: libc/TripleFacts m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
-  (emitRouted (routeFor facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram r entry)))
+  (emitRouted (routeFor facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram (opt/hoistConstants r) entry)))
 
 fn emitLlvmModuleForTarget facts: libc/TripleFacts targetFacts: target/TargetFacts m: irTy/SsaModule -> (Result String (List irTy/IrDiag))
   (mt (emitRouted (routeForTarget facts m) (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (if (target/isWasm32 targetFacts) (ssa/emitLlvmModuleWasm32 r) (ssa/emitLlvmModule r))))
@@ -74,7 +74,7 @@ fn lowerWasmPrint m: irTy/SsaModule -> irTy/SsaModule
 
 fn ! emitLlvmProgramNative! m: irTy/SsaModule entry: String -> (Result String (List irTy/IrDiag))
   (emitRouted (thenPar (thenPar (rt/routeHost! m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeHost! r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
-              (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram r entry)))
+              (fn [(r irTy/SsaModule)] -> (Result String (List irTy/IrDiag)) (ssa/emitLlvmProgram (opt/hoistConstants r) entry)))
 
 fn routeFor facts: libc/TripleFacts m: irTy/SsaModule -> (Result rt/Routed (List irTy/IrDiag))
   (thenPar (thenPar (rt/routeModule facts m) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (pr/routeModule facts r))) (fn [(r irTy/SsaModule)] -> (Result rt/Routed (List irTy/IrDiag)) (ar/routeModule r)))
@@ -118,8 +118,18 @@ fn emitLlvmExpr expr: irTy/IrExpr target: Str ty: irTy/IrType -> Str
 fn emitLlvmFunction f: irTy/IrFunction -> Str
   (em/emitLlvmFunction f)
 
-fn emitLlvmSource src: String entry: String -> (Result String (List irTy/IrDiag))
-  (llvmFromLowered (low/lowerSource src) entry)
+fn ! linkedSourceModule! src: String -> (Result irTy/SsaModule (List irTy/IrDiag))
+  (let [(dir "asl/host/out/.emitLlvmSource")
+        (made (dirCreate dir))
+        (path (str dir "/" (stringFromInt64 (monotonicNs)) ".asl"))
+        (written (if (ok? made) (fileWrite path src) (err "scratch directory unavailable")))
+        (result (if (ok? written) (lk/linkEntryBare! path)
+                  (err (list (irTy/makeIrDiag "ERR_LLVM_SCRATCH" (str "cannot write a temporary source file to link against the prelude and its imports under " dir) path)))))
+        (_ (if (fileExists? path) (pathRemove path) (ok ())))]
+    result)
+
+fn ! emitLlvmSource src: String entry: String -> (Result String (List irTy/IrDiag))
+  (llvmFromLowered (linkedSourceModule! src) entry)
 
 fn emitLlvmSourceWith src: String preludeSrc: String entry: String -> (Result String (List irTy/IrDiag))
   (llvmFromLowered (lk/lowerSourceWith src preludeSrc) entry)

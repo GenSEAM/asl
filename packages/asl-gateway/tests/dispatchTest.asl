@@ -354,7 +354,7 @@ fn ! socketChecks -> Bool
         (stubPort (resultOr (sockLocalPort listener) 0))
         (base (str "http://127.0.0.1:" (stringFromInt64 stubPort)))
         (wrote (and (ok? (dirCreate (str temp "/.asl"))) (ok? (fileWrite (str temp "/.asl/gateway.asn") (wiringConfig base true)))))
-        (host (resultOr (procExePath) ""))
+        (host (hostExe!))
         (server (resultOr (realPath "asl/packages/asl-gateway/tests/fixtures/launch/launchFixture.asl") ""))
         (readyPath (str temp "/ready"))
         (command (str "exec " host " run " server " serve --port 0 --upstream " base "/v1 --ready " readyPath " 2>" temp "/gateway.err"))
@@ -427,3 +427,6 @@ fn ! socketChecks -> Bool
 
 fn ! runTests -> Bool
   (and (unitChecks) (and (redirectChecks) (and (coldChecks) (socketChecks))))
+
+fn ! hostExe! -> String
+  (optionOr (envGet "ASL_HOST") (resultOr (realPath "asl/host/out/asl-host") "asl/host/out/asl-host"))

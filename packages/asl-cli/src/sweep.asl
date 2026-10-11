@@ -1,5 +1,5 @@
 (module asl-cli/sweep
-  :x [main]
+  :x [main Done workspace! timeoutWanted! jobsWanted! plan! report! frozenCountFor! changedPlan! changedReport! changedDry! lastLine]
   :i [(asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-gates/src/dyck :a dyck) (tools/testImpact :a impact)])
 
 (schema Job
@@ -232,54 +232,62 @@ fn ! unbalancedOf! ws: String paths: (List String) -> (Result (List (Pair String
         (ok (list))
         paths)
 
+fn ! plan! verb: String ws: String -> (Result (Pair (List String) (List (Pair String (Pair Int64 String)))) String)
+  (if (= verb "test")
+    (mt (runner/discover ws (list))
+      ((err e) (err e))
+      ((ok disc) (ok (pair (filter (fn [(p String)] -> Bool (stringEndsWith? p ".asl")) disc) (list)))))
+    (mt (tracked! ws (list "*.asl" "*.asn"))
+      ((err e) (err e))
+      ((ok all)
+        (mt (unbalancedOf! ws all)
+          ((err e) (err e))
+          ((ok bad)
+            (mt (tracked! ws (list "*.asl"))
+              ((err e) (err e))
+              ((ok asl) (ok (pair (filter (fn [(p String)] -> Bool (not (listAny? (fn [(u (Pair String (Pair Int64 String)))] -> Bool (= (pairFirst u) p)) bad))) asl) bad)))))))))
+
+fn ! frozenCountFor! verb: String ws: String -> Int64
+  (if (= verb "test") (resultOr (runner/frozenCount ws (list)) 0) 0)
+
+fn ! report! verb: String runnerName: String files: (List String) bad: (List (Pair String (Pair Int64 String))) done: (List Done) frozen: Int64 -> Int64
+  (let [(shown (map (fn [(u (Pair String (Pair Int64 String)))] -> Bool
+                      (say! (str "(:fail :file \"" (esc (pairFirst u)) "\" :error ERR_UNBALANCED :byte " (stringFromInt64 (pairFirst (pairSecond u))) " :ev \"" (esc (pairSecond (pairSecond u))) "\")")))
+                    bad))
+        (ordered (listSortBy (fn [(d Done)] -> Int64 d.index) done))
+        (passed (filter (fn [(d Done)] -> Bool (= d.code 0)) ordered))
+        (failedRuns (filter (fn [(d Done)] -> Bool (!= d.code 0)) ordered))
+        (printed (map (fn [(d Done)] -> Bool (say! (str "(:fail :file \"" (esc d.path) "\" :exit " (stringFromInt64 d.code) " :ev \"" (esc (truncateChars d.last 300)) "\")"))) failedRuns))
+        (asserts (fold (fn [(acc Int64) (d Done)] -> Int64 (+ acc (firstCount d.out " assertion(s) executed"))) 0 passed))
+        (refutes (fold (fn [(acc Int64) (d Done)] -> Int64 (+ acc (firstCount d.out " refutation(s) executed"))) 0 passed))
+        (failed (+ (listLength failedRuns) (listLength bad)))
+        (green (and (= failed 0) (> (listLength passed) 0)))
+        (counts (if (= verb "test")
+                  (str " :executedAsserts " (stringFromInt64 asserts) " :executedRefutes " (stringFromInt64 refutes))
+                  (str " :unbalanced " (stringFromInt64 (listLength bad)))))]
+    (do (say! (str "(:sweep :verb " verb " :runner \"" runnerName "\" :status " (if green ":passed" ":failed") " :files " (stringFromInt64 (+ (listLength files) (listLength bad)))
+                  " :passed " (stringFromInt64 (listLength passed)) " :failed " (stringFromInt64 failed) counts " :frozen " (stringFromInt64 frozen) ")"))
+        (if green 0 1)))
+
 fn ! sweep! verb: String host: String -> (Result Int64 String)
   (mt (workspace!)
     ((err e) (err e))
     ((ok ws)
-    (mt (timeoutWanted!)
-      ((err e) (err e))
-      ((ok timeoutS)
-        (mt (jobsWanted!)
-          ((err e) (err e))
-          ((ok jobs)
-            (mt (if (= verb "test")
-                  (mt (runner/discover ws (list))
-                    ((err e) (err e))
-                    ((ok disc) (ok (pair (filter (fn [(p String)] -> Bool (stringEndsWith? p ".asl")) disc) (list)))))
-                  (mt (tracked! ws (list "*.asl" "*.asn"))
-                    ((err e) (err e))
-                    ((ok all)
-                      (mt (unbalancedOf! ws all)
-                        ((err e) (err e))
-                        ((ok bad)
-                          (mt (tracked! ws (list "*.asl"))
-                            ((err e) (err e))
-                            ((ok asl) (ok (pair (filter (fn [(p String)] -> Bool (not (listAny? (fn [(u (Pair String (Pair Int64 String)))] -> Bool (= (pairFirst u) p)) bad))) asl) bad)))))))))
-              ((err e) (err e))
-              ((ok plan)
-                (let [(files (pairFirst plan)) (bad (pairSecond plan))
-                      (shown (map (fn [(u (Pair String (Pair Int64 String)))] -> Bool
-                                    (say! (str "(:fail :file \"" (esc (pairFirst u)) "\" :error ERR_UNBALANCED :byte " (stringFromInt64 (pairFirst (pairSecond u))) " :ev \"" (esc (pairSecond (pairSecond u))) "\")")))
-                                  bad))]
-                  (mt (poolLoop! host verb ws timeoutS (max 1 jobs) (Pool :pending (enumerate files) :running (list) :done (list)))
-                    ((err e) (err e))
-                    ((ok done)
-                      (let [(ordered (listSortBy (fn [(d Done)] -> Int64 d.index) done))
-                            (passed (filter (fn [(d Done)] -> Bool (= d.code 0)) ordered))
-                            (failedRuns (filter (fn [(d Done)] -> Bool (!= d.code 0)) ordered))
-                            (printed (map (fn [(d Done)] -> Bool (say! (str "(:fail :file \"" (esc d.path) "\" :exit " (stringFromInt64 d.code) " :ev \"" (esc (truncateChars d.last 300)) "\")"))) failedRuns))
-                            (asserts (fold (fn [(acc Int64) (d Done)] -> Int64 (+ acc (firstCount d.out " assertion(s) executed"))) 0 passed))
-                            (refutes (fold (fn [(acc Int64) (d Done)] -> Int64 (+ acc (firstCount d.out " refutation(s) executed"))) 0 passed))
-                            (failed (+ (listLength failedRuns) (listLength bad)))
-                            (green (and (= failed 0) (> (listLength passed) 0)))
-                            (counts (if (= verb "test")
-                                      (str " :executedAsserts " (stringFromInt64 asserts) " :executedRefutes " (stringFromInt64 refutes))
-                                      (str " :unbalanced " (stringFromInt64 (listLength bad)))))]
-                        (do (say! (str "(:sweep :verb " verb " :runner \"asl-host\" :status " (if green ":passed" ":failed") " :files " (stringFromInt64 (+ (listLength files) (listLength bad)))
-                                      " :passed " (stringFromInt64 (listLength passed)) " :failed " (stringFromInt64 failed) counts ")"))
-                            (ok (if green 0 1)))))))))))))))
+      (mt (timeoutWanted!)
+        ((err e) (err e))
+        ((ok timeoutS)
+          (mt (jobsWanted!)
+            ((err e) (err e))
+            ((ok jobs)
+              (mt (plan! verb ws)
+                ((err e) (err e))
+                ((ok plan)
+                  (let [(frozen (frozenCountFor! verb ws))]
+                    (mt (poolLoop! host verb ws timeoutS (max 1 jobs) (Pool :pending (enumerate (pairFirst plan)) :running (list) :done (list)))
+                      ((err e) (err e))
+                      ((ok done) (ok (report! verb "asl-host" (pairFirst plan) (pairSecond plan) done frozen)))))))))))))
 
-fn ! changedSweep! host: String base: String dryRun: Bool -> (Result Int64 String)
+fn ! changedPlan! base: String -> (Result (Pair (List String) (Pair (List String) Int64)) String)
   (mt (workspace!)
     ((err e) (err e))
     ((ok ws)
@@ -292,26 +300,45 @@ fn ! changedSweep! host: String base: String dryRun: Bool -> (Result Int64 Strin
               (mt (impact/selectFiles allAsl changed)
                 ((err e) (err (str "ERR_SELECTION: " e)))
                 ((ok selected)
-                  (if dryRun
-                    (let [(shown (map (fn [(path String)] -> Bool (say! (str "(:selected :file \"" (esc path) "\")"))) selected))]
-                      (do (say! (str "(:changed :base \"" (esc base) "\" :files " (stringFromInt64 (listLength changed)) " :selected " (stringFromInt64 (listLength selected)) " :passed 0 :failed 0)")) (ok 0)))
-                    (mt (timeoutWanted!)
-                      ((err e) (err (str "ERR_TIMEOUT: " e)))
-                      ((ok timeoutS)
-                        (mt (poolLoop! host "test" ws timeoutS 2 (Pool :pending (enumerate selected) :running (list) :done (list)))
-                          ((err e) (err (str "ERR_RUNNER: " e)))
-                          ((ok done)
-                            (let [(ordered (listSortBy (fn [(d Done)] -> Int64 d.index) done))
-                                  (passed (filter (fn [(d Done)] -> Bool (= d.code 0)) ordered))
-                                  (failedRuns (filter (fn [(d Done)] -> Bool (!= d.code 0)) ordered))
-                                  (printed (map (fn [(d Done)] -> Bool
-                                                  (say! (str (if (= d.code 0) "(:pass :file \"" "(:fail :file \"")
-                                                               (esc d.path) "\" :exit " (stringFromInt64 d.code) " :ev \""
-                                                               (esc (truncateChars d.last 300)) "\")"))) ordered))]
-                              (do (say! (str "(:changed :base \"" (esc base) "\" :files " (stringFromInt64 (listLength changed))
-                                             " :selected " (stringFromInt64 (listLength selected)) " :passed " (stringFromInt64 (listLength passed))
-                                             " :failed " (stringFromInt64 (listLength failedRuns)) ")"))
-                                  (ok (if (listEmpty? failedRuns) 0 1)))))))))))))))))
+                 (let [(kept (filter (fn [(p String)] -> Bool (not (runner/isFrozenPath! ws p))) selected))
+                       (frozen (- (listLength selected) (listLength kept)))]
+                   (ok (pair changed (pair kept frozen))))))))))))
+
+fn ! changedReport! base: String changed: (List String) selected: (List String) done: (List Done) frozen: Int64 -> Int64
+  (let [(ordered (listSortBy (fn [(d Done)] -> Int64 d.index) done))
+        (passed (filter (fn [(d Done)] -> Bool (= d.code 0)) ordered))
+        (failedRuns (filter (fn [(d Done)] -> Bool (!= d.code 0)) ordered))
+        (printed (map (fn [(d Done)] -> Bool
+                        (say! (str (if (= d.code 0) "(:pass :file \"" "(:fail :file \"")
+                                     (esc d.path) "\" :exit " (stringFromInt64 d.code) " :ev \""
+                                     (esc (truncateChars d.last 300)) "\")"))) ordered))]
+    (do (say! (str "(:changed :base \"" (esc base) "\" :files " (stringFromInt64 (listLength changed))
+                   " :selected " (stringFromInt64 (listLength selected)) " :passed " (stringFromInt64 (listLength passed))
+                   " :failed " (stringFromInt64 (listLength failedRuns)) " :frozen " (stringFromInt64 frozen) ")"))
+        (if (listEmpty? failedRuns) 0 1)))
+
+fn ! changedDry! base: String changed: (List String) selected: (List String) frozen: Int64 -> Int64
+  (let [(shown (map (fn [(path String)] -> Bool (say! (str "(:selected :file \"" (esc path) "\")"))) selected))]
+    (do (say! (str "(:changed :base \"" (esc base) "\" :files " (stringFromInt64 (listLength changed)) " :selected " (stringFromInt64 (listLength selected)) " :passed 0 :failed 0 :frozen " (stringFromInt64 frozen) ")")) 0))
+
+fn ! changedSweep! host: String base: String dryRun: Bool -> (Result Int64 String)
+  (mt (changedPlan! base)
+    ((err e) (err e))
+    ((ok plan)
+     (let [(changed (pairFirst plan))
+           (selected (pairFirst (pairSecond plan)))
+           (frozen (pairSecond (pairSecond plan)))]
+      (if dryRun
+        (ok (changedDry! base changed selected frozen))
+        (mt (workspace!)
+          ((err e) (err e))
+          ((ok ws)
+            (mt (timeoutWanted!)
+              ((err e) (err (str "ERR_TIMEOUT: " e)))
+              ((ok timeoutS)
+                (mt (poolLoop! host "test" ws timeoutS 2 (Pool :pending (enumerate selected) :running (list) :done (list)))
+                  ((err e) (err (str "ERR_RUNNER: " e)))
+                  ((ok done) (ok (changedReport! base changed selected done frozen))))))))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(verb (optionOr (listHead args) ""))]

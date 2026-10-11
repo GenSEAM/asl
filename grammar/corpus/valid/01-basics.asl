@@ -1,5 +1,3 @@
-"Records, construction, field access, arithmetic."
-
 (schema Point (:f x Int64 "Horizontal coordinate") (:f y Int64 "Vertical coordinate"))
 
 (schema Config (:f name String "Display name") (:f retries Int64 "Attempt count" :default 3))

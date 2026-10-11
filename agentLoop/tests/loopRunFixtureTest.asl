@@ -87,7 +87,7 @@ fn ! runTests -> Bool
       (assert (stringContains? specRetryLine ":specCheck :met true") "specCheckRetry completes with a successful review")
       (assert (fold (fn [clean line] (and clean (not (stringContains? line "ERR_CORE_HOST_ABSENT"))
                                              (not (stringContains? line "PermissionError"))
-                                             (not (stringContains? line "worktrees/asex-LOOP4"))))
+                                             (not (stringContains? line "scratch-writer-root-path"))))
                     true lines) "recorded scenarios exclude host failures, sandbox errors, and writer paths")
       (fold (fn [acc item]
               (let [i (pairFirst item)

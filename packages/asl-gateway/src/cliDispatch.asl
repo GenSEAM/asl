@@ -93,7 +93,7 @@ fn cliProviders -> (List CliProvider)
     (CliProvider :id "codex" :binEnv "CODEX_BIN" :binName "codex" :binLegacy "/opt/homebrew/bin/codex"
       :keyVars (list "OPENAI_API_KEY" "CODEX_API_KEY") :agentLayout false
       :parse parseCodexResult)
-    (CliProvider :id "agy" :binEnv "AGY_BIN" :binName "agy" :binLegacy ""
+    (CliProvider :id "agy" :binEnv "AGY_BIN" :binName "agy" :binLegacy "/usr/local/bin/agy"
       :keyVars (list "GEMINI_API_KEY" "GOOGLE_API_KEY" "AGY_API_KEY") :agentLayout true
       :parse parseAgyResult))
 
@@ -1159,7 +1159,7 @@ fn dispatchAgyFallback! prompt: String opts: DispatchOptions -> (Result CliParse
       ((ok ws)
        (let [(agyBin (mt opts.cliBin
                        ((some b) b)
-                       ((none) (resolveCliBin! "AGY_BIN" "agy" ""))))]
+                       ((none) (resolveCliBin! "AGY_BIN" "agy" "/usr/local/bin/agy"))))]
          (if (not (fileExists? agyBin))
            (err (str "AGY_BIN not found: " agyBin))
            (let [(hasAgent (some? opts.agent))]

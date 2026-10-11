@@ -1,4 +1,0 @@
-(:agent :task "Make the hidden check pass"
-  :owns ("src/calc.txt")
-  :gates ("sh $ASL_EVAL_HIDDEN/check.txt")
-  :model "pinned-model")

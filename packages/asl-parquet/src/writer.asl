@@ -1,6 +1,6 @@
 (module asl-parquet/writer
   :x [ParquetColumn i64Column f64Column i8Column parquetWrite]
-  :i [])
+  :i [(asl-proc/process :a proc)])
 
 (enum ParquetColumn (:c i64Column [(name String) (values I64Array) (encoding String)] "I64 column") (:c f64Column [(name String) (values F64Array) (encoding String)] "F64 column") (:c i8Column [(name String) (values I8Array) (encoding String)] "I8 column"))
 
@@ -169,13 +169,20 @@ fn ! zstdCompress! input: Bytes level: Int64 -> (Result Bytes String)
     (mt written
       ((err e) (err (str e)))
       ((ok _)
-        (let [(command (if (> level 19) "zstd --ultra -q -c -" "zstd -q -c -"))
-              (run (processRun (str command (stringFromInt64 level) " " rawPath " > " compressedPath)))]
-          (if (!= run.exitCode 0)
+        (mt (proc/exec! (proc/withTimeout
+              (proc/cmd "zstd" (listAppend (if (> level 19) (list "--ultra") (list))
+                (listAppend (list "-q" "-f" (str "-" (stringFromInt64 level)) "-o" compressedPath rawPath) (list))))
+              300000))
+          ((err e)
             (mt (removeCompressionFiles! rawPath compressedPath)
-              ((err cleanup) (err (str "zstd failed: " run.stderr "; cleanup failed: " cleanup)))
-              ((ok _) (err (str "zstd failed: " run.stderr))))
-            (mt (fileReadBytes compressedPath)
+              ((err cleanup) (err (str "zstd failed: " e "; cleanup failed: " cleanup)))
+              ((ok _) (err (str "zstd failed: " e)))))
+          ((ok run)
+            (if (!= run.exitCode 0)
+              (mt (removeCompressionFiles! rawPath compressedPath)
+                ((err cleanup) (err (str "zstd failed: " run.stderr "; cleanup failed: " cleanup)))
+                ((ok _) (err (str "zstd failed: " run.stderr))))
+              (mt (fileReadBytes compressedPath)
               ((err e)
                 (mt (removeCompressionFiles! rawPath compressedPath)
                   ((err cleanup) (err (str e "; cleanup failed: " cleanup)))
@@ -183,7 +190,7 @@ fn ! zstdCompress! input: Bytes level: Int64 -> (Result Bytes String)
               ((ok compressed)
                 (mt (removeCompressionFiles! rawPath compressedPath)
                   ((err cleanup) (err (str "zstd output cleanup failed: " cleanup)))
-                  ((ok _) (ok compressed))))))))))
+                  ((ok _) (ok compressed)))))))))))
 
 fn ! fillI64Plain! values: I64Array index: Int64 out: Bytes -> Int64
   (if (= index (i64ArrayLen values)) (* index 8)

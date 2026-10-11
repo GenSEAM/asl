@@ -1,9 +1,38 @@
 (module asl-target-llvm/tests/wasmAllocTest
   :x [runTests]
-  :i [(asl-target-llvm/wasmAlloc :a wa)])
+  :i [(asl-target-llvm/wasmAlloc :a wa) (tools/fleet/run :a run)])
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
+(schema Captured
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! shWithin cmd: String timeoutS: Int64 -> Captured
+  (let [(root (optionOr (envGet "ASL_ROOT") "."))
+        (prelude (optionOr (envGet "ASL_PRELUDE") (str root "/asl/prelude/prelude.asl")))
+        (path (optionOr (envGet "PATH") "/usr/bin:/bin"))
+        (base (str (optionOr (envGet "TMPDIR") "/tmp") "/wasmAllocTest." (monotonicNs)))
+        (outPath (str base ".out"))
+        (errPath (str base ".err"))
+        (done (run/runOneLimited (run/job (list "sh" "-c" (str "(cd '" root "' && (" cmd ")) > " outPath " 2> " errPath)) root
+                                         (run/childEnv (list (str "ASL_ROOT=" root) (str "ASL_PRELUDE=" prelude) (str "PATH=" path))))
+                                 (run/limits timeoutS 32)))
+        (outText (resultOr (fileReadString outPath) ""))
+        (errText (resultOr (fileReadString errPath) ""))
+        (_ (pathRemove outPath))
+        (_ (pathRemove errPath))]
+    (Captured :exitCode done.exit :stdout outText :stderr (if (= done.verdict "exit") errText (str errText done.out))))
+
+fn ! sh cmd: String -> Captured
+  (shWithin cmd 1200)
+
+fn ! node -> String
+  (let [(candidates (list "/usr/local/bin/node" "/opt/homebrew/bin/node"))
+        (pathDirs (stringSplit (optionOr (envGet "PATH") "") ":"))
+        (allCandidates (listAppend candidates (map (fn [(dir String)] -> String (str dir "/node")) pathDirs)))]
+    (mt (listHead (filter fileExists? allCandidates))
+      ((some p) p)
+      ((none) "")))
 
 fn probeLl -> String
   (stringJoin
@@ -101,7 +130,7 @@ fn ! testAllocator -> Bool
       (assert (ok? (fileWrite js (nodeDriver))) "write WebAssembly execution driver")
       (let [(compiled (sh (str "/opt/homebrew/opt/llvm/bin/llc -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory -filetype=obj " ll " -o " obj)))
             (linked (sh (str "/opt/homebrew/opt/lld/bin/wasm-ld --fatal-warnings --no-entry --export=probe --initial-memory=131072 --max-memory=2359296 " obj " -o " wasm)))
-            (ran (sh (str (optionOr (envGet "HOME") "") "/.local/bin/node " js " " wasm)))
+            (ran (sh (str (node) " " js " " wasm)))
             (cleaned (sh (str "rm -rf " work)))]
         (do
           (assert (= compiled.exitCode 0) (str "compile allocator wasm: " compiled.stderr))

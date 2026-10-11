@@ -7,10 +7,10 @@ fn decoded text: String -> Bytes
 
 fn repeatedByte value: Int64 count: Int64 -> Bytes
   (let [(out (bytesAlloc count))
-        (loop (fn [loop i] -> Bytes
+        (step (fn [step i] -> Bytes
           (if (>= i count) out
-            (do (bytesSet out i value) (loop loop (+ i 1))))))]
-    (loop loop 0))
+            (do (bytesSet out i value) (step step (+ i 1))))))]
+    (step step 0))
 
 fn runTests -> Bool
   (let [(key1 (decoded (stringRepeat "0b" 20)))

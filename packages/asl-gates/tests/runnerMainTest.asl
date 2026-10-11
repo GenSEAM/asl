@@ -1,6 +1,6 @@
 (module asl-gates/tests/runnerMainTest
   :x [runTests]
-  :i [(asl-gates/runnerMain :a rm) (tests/parity/gates/runnerCorpus :a gr) (asl-gates/tests/runnerParityTest :a rp)])
+  :i [(asl-gates/runnerMain :a rm) (tests/parity/gates/runnerCorpus :a gr) (asl-gates/tests/runnerParityTest :a rp) (asl-proc/gitFixture :a gf)])
 
 fn testParseDependenciesValid -> Bool
   (let [(text "(:package foo :version \"0.1.0\" :dependencies [\"dep-a\" \"dep-b\"])")
@@ -70,7 +70,8 @@ fn shq s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
 
 fn sh! dir: String script: String -> String
-  (let [(res (command! (list "/bin/sh" "-c" script) dir (none)))]
+  (let [(withCeiling (listAppend (envList) (list (str "GIT_CEILING_DIRECTORIES=" (gf/ceilingFor! dir)))))
+        (res (command! (list "/bin/sh" "-c" script) dir (some withCeiling)))]
     (do
       (assert (= res.code 0) (str "scratch step exits 0: " script " -> " res.errText))
       (stringTrim res.out)))
@@ -420,6 +421,54 @@ fn testChooseBaseReplay! -> Bool
     (assert (rp/replayChooseBaseFixtures!) "synthetic chooseBase fixtures replay through ASL only")
     true)
 
+fn frozenFixtureDir -> String
+  "asl/packages/asl-gates/tests/frozenLedgerFixture"
+
+fn frozenFixtureSuiteContent name: String marker: String -> String
+  (str "(module asl-gates/tests/frozenLedgerFixture/" name "\n  :x [runTests]\n  :i [])\n\nfn runTests -> Bool\n  (do (assert (ok? (fileWrite \"" marker "\" \"ran\\n\")) \"" name " writes its marker\") true)\n")
+
+fn ledgerWithFixtureRow original: String path: String -> String
+  (str (dropLastLine original) "\n"
+       "  (:frozen :path \"" path "\" :kind suite :reason \"runnerMainTest fixture\" :since \"2026-10-11\" :by principal))\n")
+
+fn dirtiedCheck marker: String -> String
+  (str "(:check :id suite :status :failed :err ERR_TREE_DIRTIED :suite \"snapshot\" :ev \"suites wrote " marker "\")")
+
+fn testFrozenLedger! -> Bool
+  (let [(scratch (scratchDir! "aslFrozenLedger"))
+        (repo (str scratch "/repo"))
+        (_ (sh! scratch (str "/usr/bin/git clone -q --local " (shq (workRoot!)) " repo")))
+        (frozenMarker "frozenLedgerCandidateTest.out")
+        (liveMarker "liveLedgerCandidateTest.out")
+        (frozenPath (str (frozenFixtureDir) "/frozenLedgerCandidateTest.asl"))
+        (livePath (str (frozenFixtureDir) "/liveLedgerCandidateTest.asl"))
+        (_ (sh! repo (str "mkdir -p " (shq (frozenFixtureDir)))))
+        (wFrozen (fileWrite (str repo "/" frozenPath) (frozenFixtureSuiteContent "frozenLedgerCandidateTest" frozenMarker)))
+        (wLive (fileWrite (str repo "/" livePath) (frozenFixtureSuiteContent "liveLedgerCandidateTest" liveMarker)))
+        (_ (sh! repo "/usr/bin/git add -A"))
+        (ledgerPath (str repo "/asl/grammar/frozen.asn"))
+        (originalLedger (readText! ledgerPath))
+        (wLedger (fileWrite ledgerPath (ledgerWithFixtureRow originalLedger frozenPath)))
+        (sweepOut (runAsl! repo "" (str "run --path " (frozenFixtureDir))))
+        (explicitOut (runAsl! repo "" (str "run --path " frozenPath)))]
+    (do
+      (assert (ok? wFrozen) "frozen candidate fixture written")
+      (assert (ok? wLive) "live candidate fixture written")
+      (assert (ok? wLedger) "frozen ledger gained the fixture row")
+      (assert (= sweepOut.code 1) (str "sweep over the fixture dir exits 1 (the one live suite dirties the snapshot): " sweepOut.errText))
+      (assert (stringContains? sweepOut.out " :suites 1 ") "sweep over the fixture dir runs exactly one candidate")
+      (assert (stringContains? sweepOut.out " :frozen 1 ") "sweep reports the one frozen candidate as skipped, not silently")
+      (assert (stringContains? sweepOut.out (dirtiedCheck liveMarker)) "the live candidate is the one that actually ran and wrote its marker")
+      (refute (stringContains? sweepOut.out frozenMarker) "the frozen candidate's marker never appears; it did not run")
+      (assert (= explicitOut.code 1) (str "naming the frozen candidate on the command line exits 1 (it dirties the snapshot too): " explicitOut.errText))
+      (assert (stringContains? explicitOut.out " :suites 1 ") "an explicitly named frozen candidate still runs alone")
+      (assert (stringContains? explicitOut.out " :frozen 0 ") "an explicitly named frozen candidate is not counted as skipped")
+      (assert (stringContains? explicitOut.out (dirtiedCheck frozenMarker)) "naming the frozen candidate explicitly actually runs it, marker and all")
+      (refute (stringContains? explicitOut.out liveMarker) "the live candidate was not even a candidate for this explicit path; its marker never appears")
+      (assert (ok? (fileWrite ledgerPath originalLedger)) "frozen ledger restored")
+      (assert (ok? (pathRemove scratch)) "scratch clone removed")
+      true))
+
 fn ! runTests -> Bool
   (do
     (assert (testParseDependenciesValid) "parseDependencies valid")
@@ -436,6 +485,7 @@ fn ! runTests -> Bool
     (assert (testRunUsageParity!) "run usage parity")
     (assert (testRunDifferential!) "run differential")
     (assert (testChooseBaseReplay!) "chooseBase fixture replay")
+    (assert (testFrozenLedger!) "frozen ledger")
     (assert (ok? (fileReadString (timesLedger!))) "runner children wrote the private gateTimes ledger")
     (assert (ok? (pathRemove (timesLedger!))) "private gateTimes ledger removed")
     true)

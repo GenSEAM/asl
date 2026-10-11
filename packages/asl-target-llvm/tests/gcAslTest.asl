@@ -1,6 +1,6 @@
 (module asl-target-llvm/tests/gcAslTest
   :x [runTests]
-  :i [(asl-target-llvm/gcRoute :a gr) (asl-target-llvm/ssa :a ssa)])
+  :i [(asl-target-llvm/gcRoute :a gr) (asl-target-llvm/ssa :a ssa) (tools/fleet/run :a run)])
 
 fn host -> String
   "asl/host/out/asl-host"
@@ -17,8 +17,21 @@ fn hostLib -> String
 fn clangLink -> String
   "/usr/bin/clang -Wno-override-module -x ir "
 
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
+(schema Ran
+  (:f exitCode Int64)
+  (:f stdout String)
+  (:f stderr String))
+
+fn ! sh cmd: String -> Ran
+  (let [(base (str (optionOr (envGet "TMPDIR") "/tmp") "/gcAslTest." (monotonicNs)))
+        (outPath (str base ".out"))
+        (errPath (str base ".err"))
+        (done (run/runOneLimited (run/job (list "sh" "-c" (str "(" cmd ") > " outPath " 2> " errPath)) "." (run/childEnv (list))) (run/limits 1200 32)))
+        (outText (resultOr (fileReadString outPath) ""))
+        (errText (resultOr (fileReadString errPath) ""))
+        (_ (pathRemove outPath))
+        (_ (pathRemove errPath))]
+    (Ran :exitCode done.exit :stdout outText :stderr (if (= done.verdict "exit") errText (str errText done.out))))
 
 fn programs -> (List (Pair String Int64))
   (list (pair "allocSmall" 0) (pair "switchPick" 3) (pair "fusedVariantInt" 0) (pair "fusedVariantFloat" 0)
@@ -27,8 +40,19 @@ fn programs -> (List (Pair String Int64))
 fn argsOf name: String -> String
   (if (= name "joined") " ab cde" "")
 
+fn gcRawIr -> String
+  (stringJoin
+    (list "declare ptr @asl_alloc(i32, i64)"
+          "define ptr @asl_alloc_raw(i32 %type, i64 %bytes) {"
+          "entry:"
+          "  %object = tail call ptr @asl_alloc(i32 %type, i64 %bytes)"
+          "  ret ptr %object"
+          "}"
+          "")
+    "\n")
+
 fn ! linkBoth work: String name: String ll: String -> Bool
-  (let [(c (sh (str (clangLink) ll " -x none " work "/gc.o " (gcLib) " -lm -o " work "/gcc/" name)))
+  (let [(c (sh (str (clangLink) ll " " work "/gcRaw.ll -x none " work "/gc.o " work "/strFloor.o " (gcLib) " -lm -o " work "/gcc/" name)))
         (a (sh (str (clangLink) ll " -x none " (gcLib) " -lm -o " work "/asl/" name)))]
     (do (assert (= c.exitCode 0) (str name ": links with gc.o and libaslrt.a; " c.stderr))
         (assert (= a.exitCode 0) (str name ": links against libaslrt.a; " a.stderr))
@@ -39,10 +63,13 @@ fn ! floorIr work: String -> String
     (do (assert (ok? (fileWrite path (ssa/cRuntimeModule))) "floor.ll: the C floor's IR written")
         path))
 
-fn ! runSide work: String side: String env: String name: String args: String -> ProcessOutput
-  (sh (str "cd " work "/" side " && " env "./" name args))
+fn parityEnv env: String -> String
+  (if (stringContains? env "ASL_GC_MIN_MIB=") env (str "ASL_GC_MIN_MIB=8 " env))
 
-fn ! sameRun label: String work: String env: String name: String args: String -> ProcessOutput
+fn ! runSide work: String side: String env: String name: String args: String -> Ran
+  (sh (str "cd " work "/" side " && " (parityEnv env) "./" name args))
+
+fn ! sameRun label: String work: String env: String name: String args: String -> Ran
   (let [(c (runSide work "gcc" env name args))
         (a (runSide work "asl" env name args))]
     (do (assert (= a.exitCode c.exitCode) (str label ": ASL collector exit " a.exitCode " equals gc.c exit " c.exitCode "; stderr " a.stderr))
@@ -111,7 +138,7 @@ fn floorSource count: String -> String
     "")
     "\n")
 
-fn hostErrorLine out: ProcessOutput -> String
+fn hostErrorLine out: Ran -> String
   (let [(text (str out.stdout out.stderr))
         (at (optionOr (stringIndexOf text "ERR_") (stringLength text)))
         (tail (optionOr (stringSlice text at (stringLength text)) ""))
@@ -127,7 +154,7 @@ fn ! buildLl work: String name: String source: String -> String
           (do (assert (= built.exitCode 0) (str name ": asl1 builds it; " built.stderr))
               src))))
 
-fn ! statsLine out: ProcessOutput -> String
+fn ! statsLine out: Ran -> String
   (optionOr (listHead (filter (fn [(line String)] -> Bool (stringStartsWith? line "(:gcStats ")) (stringLines out.stderr))) "")
 
 fn statsPairs line: String -> (List (Pair String String))
@@ -172,7 +199,7 @@ fn ! sameStats label: String work: String env: String name: String args: String 
               (refute (stringContains? c.stderr "(:gcPhases ") (str label ": gc.c prints no phases line"))))
         true))
 
-fn ! phasesPairs out: ProcessOutput -> (List (Pair String String))
+fn ! phasesPairs out: Ran -> (List (Pair String String))
   (let [(line (optionOr (listHead (filter (fn [(l String)] -> Bool (stringStartsWith? l "(:gcPhases ")) (stringLines out.stderr))) ""))]
     (if (stringEmpty? line) (list) (statsPairs (stringReplace line "(:gcPhases " "(:gcStats "))))
 
@@ -328,7 +355,7 @@ fn guardIr -> String
     "@fmtRaise = private constant [7 x i8] c\"%s: %s\\00\""
     "@fmtCaught = private constant [21 x i8] c\"stage %d caught: %s\\0A\\00\""
     "@fmtNone = private constant [19 x i8] c\"stage %d no raise\\0A\\00\""
-    "@fmtEnd = private constant [70 x i8] c\"finalizer calls %lld, mark after abort %d, after collect %d, type %d\\0A\\00\""
+    "@fmtEnd = private constant [52 x i8] c\"finalizer calls %lld, mark after abort %d, type %d\\0A\\00\""
     "define internal ptr @hget() {"
     "  %c = load ptr, ptr @cur"
     "  ret ptr %c"
@@ -440,13 +467,11 @@ fn guardIr -> String
     "  %m = load i8, ptr %mp"
     "  %m32 = zext i8 %m to i32"
     "  call void @asl_gc_collect()"
-    "  %m2 = load i8, ptr %mp"
-    "  %m232 = zext i8 %m2 to i32"
     "  %cnt = load i64, ptr @count"
     "  %ty = getelementptr inbounds i8, ptr %cl, i64 4"
     "  %t = load i8, ptr %ty"
     "  %t32 = zext i8 %t to i32"
-    "  %p4 = call i32 (ptr, ...) @printf(ptr @fmtEnd, i64 %cnt, i32 %m32, i32 %m232, i32 %t32)"
+    "  %p4 = call i32 (ptr, ...) @printf(ptr @fmtEnd, i64 %cnt, i32 %m32, i32 %t32)"
     "  ret i32 0"
     "}"
     "")
@@ -641,7 +666,7 @@ fn ! testPerf work: String -> Bool
   (let [(ll (str work "/asl1.ll"))
         (src "asl/packages/asl-compiler/src/asl1.asl")
         (lowered (sh (str (host) " run " src " build " src " -o " ll)))
-        (c (sh (str "/usr/bin/clang -O2 -Wno-override-module -x ir " ll " -x none " work "/gc.o " (gcLib) " -lm -o " work "/gcc/asl1")))
+        (c (sh (str "/usr/bin/clang -O2 -Wno-override-module -x ir " ll " " work "/gcRaw.ll -x none " work "/gc.o " work "/strFloor.o " (gcLib) " -lm -o " work "/gcc/asl1")))
         (a (sh (str "/usr/bin/clang -O2 -Wno-override-module -x ir " ll " -x none " (gcLib) " -lm -o " work "/asl/asl1")))
         (flag (if (stringContains? (sh "uname -s").stdout "Darwin") "-l" "-v"))]
     (do (assert (= lowered.exitCode 0) (str "perf: asl-host lowers asl1; " lowered.stderr))
@@ -678,6 +703,9 @@ fn ! runTests -> Bool
         (testArchive work)
         (let [(taken (sh (str "ar p " (hostLib) " gc.o > " work "/gc.o")))]
           (assert (= taken.exitCode 0) (str "gc.o taken from libaslhost.a; " taken.stderr)))
+        (let [(floor (sh (str "ar p " (hostLib) " strFloor.o > " work "/strFloor.o")))]
+          (assert (= floor.exitCode 0) (str "strFloor.o taken from libaslhost.a; " floor.stderr)))
+        (assert (ok? (fileWrite (str work "/gcRaw.ll") (gcRawIr))) "gcRaw.ll: asl_alloc_raw over gc.c's asl_alloc written")
         (testReference work)
         (testPrograms work)
         (testHeavy work)

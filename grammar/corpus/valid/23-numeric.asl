@@ -1,21 +1,3 @@
-"Every numeric builtin at Int64 and at Float64, in the same shape, because"
-
-"\"exercised\" has meant \"exercised at one type\": `/` and `mod` were counted as"
-
-"covered while their Rust lowerings took i64 alone. The float leg is the half"
-
-"that did not compile. Truncation toward zero, the zero divisor, the Int32"
-
-"boundary and 2^53+1 each get their own case."
-
-"The Int64 boundary is the second half: the type is fixed, so an operation whose"
-
-"result leaves it traps rather than widening — which one former host did by not"
-
-"having a width at all. A trap is not a value, so the .run expression cannot"
-
-"assert one: each trap* function is expected to trap when called."
-
 (module math/report :x [num fnum narrow minmax edge fromFloat wrapMod trapDiv trapNeg trapAbs trapAdd trapSub trapMul trapSum])
 
 fn oi o: (Option Int64) -> String

@@ -1,13 +1,3 @@
-"A map built, queried and shrunk, with its size printed before and after the"
-
-"removal: a mapRemove that does nothing is indistinguishable from a correct one"
-
-"unless both sizes are shown, and one case removes a key that is absent. The key"
-
-"order is the specification's, not the insertion order, and the two former"
-
-"backends reached it by different routes — sorted() on one, BTreeMap on the other."
-
 (module map/lifecycle :x [lifecycle counts])
 
 fn tally m: (Map String Int64) w: String -> (Map String Int64)

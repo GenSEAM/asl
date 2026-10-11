@@ -733,7 +733,7 @@
 (:doc :symbol "asl/packages/asl-forms/src/vfs.asl#withLock!" :text "VfsLock: reentrant through the caller's held lock paths")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#" :text "Replays recorded edit cases through asl-forms/edit: receipt lines, error count, file tree and staged store after every step")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#hostCheck!" :text "_asl_host_check: host check of text in an overlay")
-(:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#L33" :text "FORCEMSG optional: strip the realpath form (longer, since /tmp is a symlink to /private/tmp) before the plain overlay form, or the shorter substring match leaves a dangling '/private' glued to the filename with no separator")
+(:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#L33" :text "FORCEMSG optional: strip the realpath form (longer, since /tmp resolves through a symlink on macOS) before the plain overlay form, or the shorter substring match leaves a dangling separator-less prefix glued to the filename")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#dispatch!" :text "router stand-in: edit ops, else ported ops")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#normHost" :text "the python version in :syntaxHost is the machine's")
 (:doc :symbol "asl/packages/asl-forms/tests/editsParityTest.asl#replayAll!" :text "fixture lines grouped by scenario, in order")

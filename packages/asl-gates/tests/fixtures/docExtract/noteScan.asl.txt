@@ -1,0 +1,23 @@
+(module fx/noteScan :x [f g h k])
+
+"Banner note with nothing else before the first real decl."
+
+fn h -> Int64
+  0
+
+"First note for f."
+"Second note for f, still joined with a space."
+
+fn f -> Int64
+  1
+
+fn g -> Int64
+  2
+
+"Edge case: a quote like \"this\" inside the note,
+spanning two physical lines in one literal."
+
+fn k -> Int64
+  3
+
+"Trailing note with nothing after it."

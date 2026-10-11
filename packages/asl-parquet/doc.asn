@@ -1,3 +1,5 @@
 (:doc :symbol "asl/packages/asl-parquet/src/footer.asl#" :text "Read compact-Thrift Parquet footer metadata directly from file bytes")
 (:doc :symbol "asl/packages/asl-parquet/src/writer.asl#" :text "Parquet file writer using typed arrays, compact Thrift and level-configured Zstandard compression")
 (:doc :symbol "asl/packages/asl-parquet/tests/writerTest.asl#" :text "G17 ASL Parquet writer and compact-footer round trips")
+(:doc :symbol "asl/packages/asl-parquet/src/reader.asl#" :text "Pure-ASL Parquet reader for compact-Thrift footers, row-group pages, levels and typed values")
+(:doc :symbol "asl/packages/asl-parquet/tests/readerNativeTest.asl#compileNative" :text "Links with the same nice -n 15, -O2 and -Wno-override-module flags as asl/packages/asl-cli/src/build.asl's link!, so the reported native build and run timings reflect what asl build ships")

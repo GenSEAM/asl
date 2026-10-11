@@ -1,11 +1,3 @@
-"Reshaping a list, with the composed return shapes the former differential harness"
-
-"had to encode: `(Option (List T))` and `(List (Pair A B))`. The slice cases sit on"
-
-"both ends of the half-open interval, and `listGet` reads index 1 — neither the"
-
-"head nor the last element, so an off-by-one is visible."
-
 (module list/reshape :x [reshape window pairs])
 
 fn showList xs: (List Int64) -> String
