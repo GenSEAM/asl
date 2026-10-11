@@ -143,6 +143,7 @@ fn rejectionForms -> (List String)
         "(:agent :task \"t\" :backend \"script/missing_fixture_xyz\")"
         "(:agent :task \"t\" :dryRun 1 :backend \"script/missing_fixture_xyz\")"
         "(:agent :task \"t\" :backend \"nope\")"
+        "(:agent :task \"t\" :dryRun true :backend \"nope\")"
         "(:agent :resume \"abc\" :dryRun true)")
 
 fn dryRunForms absContext: String -> (List String)

@@ -159,7 +159,8 @@ fn ! blankKeys -> (Map String String)
 
 fn envFor! root: String stubDir: String pathMode: String url: String profile: String config: String -> pv/ProviderEnv
   (pv/ProviderEnv :gatewayUrl url :inProcess false :profile profile :gatewayConfig config :tmpDir (str root "/tmp")
-    :childEnv (mapSet (mapSet (blankKeys) "PATH" (str (if (= pathMode "empty") (str root "/emptyBin") (str root "/bin")) ":/usr/bin:/bin")) "STUB_DIR" stubDir))
+    :childEnv (mapSet (mapSet (blankKeys) "PATH" (str (if (= pathMode "empty") (str root "/emptyBin") (str root "/bin")) ":/usr/bin:/bin")) "STUB_DIR" stubDir)
+    :ollamaUrl "http://127.0.0.1:9/v1/chat/completions")
 
 fn ! setupStub stubDir: String out: String code: String last: String sleep: String -> Bool
   (and (ok? (dirCreate stubDir))
@@ -343,6 +344,32 @@ fn ! runGatewayCase kv: (List (Pair String c/KvVal)) root: String -> Bool
                                 (and (check (str cid " workspace") (fld! kv "workspace") workspace)
                                   (checkTrue (str cid " cleanup") (ok? cleaned))))))))))))))))))
 
+fn ! runOllamaCase kv: (List (Pair String c/KvVal)) root: String -> Bool
+  (let [(cid (fld! kv "id"))
+        (session (fld! kv "session"))
+        (stubDir (str root "/stub/" cid))
+        (staged (setupStub stubDir (fld! kv "raw") (if (has kv "curlExit") (fld! kv "curlExit") "0") "" ""))
+        (env (envFor! root stubDir "stub" "" "" ""))
+        (made (pv/makeProvider! "ollama" "scout" root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session
+                (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) (= (fld! kv "timeoutSet") "True") env))]
+    (mt made
+      ((err e) (checkTrue (str cid " provider made: " (pv/errorMessage e)) false))
+      ((ok p)
+        (let [(t (pv/nextTurn! p (fld! kv "sys") (fld! kv "user")))
+              (meta t.meta)
+              (config (resultOr (fileReadString (str stubDir "/stdin")) ""))
+              (called (fileExists? (str stubDir "/argv")))]
+          (and (checkTrue (str cid " stub staged") staged)
+            (and (checkOutcome! kv root t.reply)
+              (and (check (str cid " usage") (fld! kv "usage") (usageText meta.usage))
+                (and (check (str cid " curl called") (fld! kv "reached") (if called "True" "False"))
+                  (or (not called)
+                    (and (check (str cid " curl argv") "curl | --config | -" (stringJoin (recordLines (resultOr (fileReadString (str stubDir "/argv")) "")) " | "))
+                      (and (check (str cid " body") (fillRoot (fld! kv "body") root) (stringJoin (configRows config "data-raw") ""))
+                        (and (check (str cid " url") (fld! kv "url") (stringJoin (configRows config "url") ""))
+                          (and (check (str cid " noproxy") (fld! kv "loopback") (if (listEmpty? (configRows config "noproxy")) "False" "True"))
+                            (checkNoKeys cid stubDir))))))))))))))
+
 fn ! runVendorUnknown kv: (List (Pair String c/KvVal)) root: String -> Bool
   (let [(cfg (pv/VendorConfig :vendor (fld! kv "vendor") :mode "scout" :rootDir root :model "" :timeout 600 :queueTimeout 1200
                :sessionId "sother" :intent "auto" :timeoutSet true :env (envFor! root (str root "/stub/other") "stub" "" "" "") :link none))
@@ -371,7 +398,11 @@ fn ! runDryRun kv: (List (Pair String c/KvVal)) root: String -> Bool
         (agent (str root "/.asl/run/agentLoop/agents/.agents/plugins/aslLoop/agents/aslLoop"
                     (if (stringEmpty? mode) "Scout" (str (stringUpper (optionOr (stringSlice mode 0 1) "")) (optionOr (stringSlice mode 1 (stringLength mode)) ""))) ".md"))]
     (mt (pv/buildDryRunInfo! (fld! kv "vendor") mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) env)
-      ((err e) (checkTrue (str cid " dry run: " (pv/errorMessage e)) false))
+      ((err e)
+        (if (= (fld! kv "outcome") "error")
+          (and (check (str cid " code") (fld! kv "code") (pv/errorCode e))
+               (check (str cid " message") (fillRoot (fld! kv "msg") root) (pv/errorMessage e)))
+          (checkTrue (str cid " dry run: " (pv/errorMessage e)) false)))
       ((ok info)
         (and (check (str cid " info") (fillRoot (fld! kv "out") root) (pv/pyJsonDumps info))
           (or (not (has kv "agentFile")) (check (str cid " agent file") (fld! kv "agentFile") (resultOr (fileReadString agent) "")))))))
@@ -425,6 +456,7 @@ fn ! checkCase root: String line: String -> Bool
       ((= kind "gatewayIds") (runGatewayIds kv root))
       ((= kind "cli") (runCliCase kv root))
       ((= kind "gateway") (runGatewayCase kv root))
+      ((= kind "ollama") (runOllamaCase kv root))
       ((= kind "vendorUnknown") (runVendorUnknown kv root))
       ((= kind "makeProvider") (runMakeCase kv root))
       ((= kind "dryRun") (runDryRun kv root))

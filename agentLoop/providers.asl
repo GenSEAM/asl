@@ -20,7 +20,8 @@ enum ProviderError
   (:f profile String)
   (:f gatewayConfig String)
   (:f tmpDir String)
-  (:f childEnv (Map String String)))
+  (:f childEnv (Map String String))
+  (:f ollamaUrl String))
 
 (schema VendorConfig
   (:f vendor String)
@@ -703,7 +704,8 @@ fn ! providerEnv! -> ProviderEnv
     :profile (envOr! "ASL_PROFILE" "")
     :gatewayConfig (envOr! "ASL_GATEWAY_CONFIG" (str (envOr! "HOME" "") "/.asl/gateway.asn"))
     :tmpDir (envOr! "TMPDIR" (envOr! "TEMP" (envOr! "TMP" "/tmp")))
-    :childEnv (mapEmpty))
+    :childEnv (mapEmpty)
+    :ollamaUrl (envOr! "ASL_OLLAMA_URL" "http://127.0.0.1:11434/v1/chat/completions"))
 
 fn normParts parts: (List String) acc: (List String) -> (List String)
   (mt (listHead parts)
@@ -784,7 +786,7 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
         (mt (loadTurns "Replay file" (str rootDir "/tests/fixtures/agentLoop/recorded/" name) parseReplayLines)
           ((ok turns) (ok (replayProvider (str "replay/" name) rootDir turns 0 (replayVendor name))))
           ((err e) (err e)))))
-    ((or (= backend "agy") (or (= backend "codex") (= backend "claude")))
+    ((or (= backend "agy") (or (= backend "codex") (or (= backend "claude") (= backend "ollama"))))
       (let [(sid (if (stringEmpty? sessionId) (uniqueTag) sessionId))]
           (ok (vendorProvider (VendorConfig :vendor backend :mode (if (stringEmpty? mode) "scout" mode) :rootDir (absPath rootDir)
                                 :model model :timeout (if (= timeout 0) 600 timeout) :queueTimeout (if (= queueTimeout 0) 1200 queueTimeout)
@@ -1095,6 +1097,16 @@ fn replyContent resp: j/Json -> (Result (Option String) ProviderError)
                     (v (ok (some (pyStrip (pyStr v))))))))))))
       (_ (noReply "Empty choices in gateway response"))))
 
+fn standardUsage resp: j/Json -> (Option (List (Pair String j/Json)))
+  (mt (jsonLookup resp "usage")
+    ((some u)
+      (if (isObject u)
+        (some (list (pair "inputTokens" (optionOr (jsonLookup u "prompt_tokens") (j/jint 0)))
+                     (pair "cachedTokens" (j/jint 0))
+                     (pair "outputTokens" (optionOr (jsonLookup u "completion_tokens") (j/jint 0)))))
+        none))
+    (none none))
+
 fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (mt (j/jsonParse body)
     ((err e) (pair (err (gatewayError "ERR_VENDOR" (str "Failed to parse gateway JSON response: " e) "")) (emptyMeta)))
@@ -1107,11 +1119,12 @@ fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) Tu
             ((err e) (pair (err e) (emptyMeta)))
             ((ok timing)
               (let [(usageV (if aslIsDict (jsonLookup asl "usage") none))
-                    (usage (mt usageV
+                    (internalUsage (mt usageV
                              ((some u) (if (isObject u)
                                          (some (map (fn [k] (pair k (optionOr (jsonLookup u k) (j/jint 0)))) (list "inputTokens" "cachedTokens" "outputTokens")))
                                          none))
                              (none none)))
+                    (usage (mt internalUsage ((some u) (some u)) ((none) (standardUsage resp))))
                     (served (servedFields (dictPut (jsonDict asl) "model" (optionOr (jsonLookup resp "model") (j/jnull)))))
                     (meta (TurnMeta :timing timing :usage usage :served served :finish none :truncated false))]
                 (pair (replyContent resp) meta))))))))
@@ -1123,35 +1136,35 @@ fn httpErrorBody body: String -> String
       ((err _) body))
     body)
 
-fn httpError code: Int64 reason: String raw: String -> ProviderError
+fn httpError service: String code: Int64 reason: String raw: String -> ProviderError
   (let [(body (httpErrorBody raw))
         (c (stringFromInt64 code))]
     (cond
-      ((= code 413) (gatewayError "ERR_CONTEXT_TOO_LONG" (pyStrip (str "Gateway 413: " body)) ""))
-      ((or (= code 504) (stringContains? body "QUEUE_TIMEOUT")) (gatewayError "ERR_QUEUE_TIMEOUT" (str "Gateway queue timeout: " c " " body) ""))
-      (else (gatewayError "ERR_VENDOR" (pyStrip (str "Gateway HTTP error " c ": " reason " " body)) ""))))
+      ((= code 413) (gatewayError "ERR_CONTEXT_TOO_LONG" (pyStrip (str service " 413: " body)) ""))
+      ((or (= code 504) (stringContains? body "QUEUE_TIMEOUT")) (gatewayError "ERR_QUEUE_TIMEOUT" (str service " queue timeout: " c " " body) ""))
+      (else (gatewayError "ERR_VENDOR" (pyStrip (str service " HTTP error " c ": " reason " " body)) ""))))
 
 fn transportText out: cp/ProcessOutput -> String
   (let [(e (pyStrip out.stderr))]
     (if (stringEmpty? e) (str "curl exit " (stringFromInt64 out.exitCode)) e))
 
-fn readCurl url: String out: cp/ProcessOutput -> (Pair (Result (Option String) ProviderError) TurnMeta)
+fn readCurl service: String hint: String url: String out: cp/ProcessOutput -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (cond
     ((= out.exitCode 28)
-      (pair (err (gatewayError "ERR_VENDOR" (str "Gateway timed out waiting for reply: " (transportText out)) "")) (emptyMeta)))
+      (pair (err (gatewayError "ERR_VENDOR" (str service " timed out waiting for reply: " (transportText out)) "")) (emptyMeta)))
     ((!= out.exitCode 0)
-      (pair (err (gatewayError "ERR_GATEWAY_OFFLINE" (str "Gateway unreachable at " url ": " (transportText out) "; run ./bin/asl-gateway start") "./bin/asl-gateway start")) (emptyMeta)))
-    (else (readResponse out.stdout)))
+      (pair (err (gatewayError "ERR_GATEWAY_OFFLINE" (str service " unreachable at " url ": " (transportText out) (if (stringEmpty? hint) "" (str "; " hint))) hint)) (emptyMeta)))
+    (else (readResponse service out.stdout)))
 
-fn readResponse raw: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
+fn readResponse service: String raw: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (mt (parseCurlResponse raw)
-    ((err e) (pair (err (gatewayError "ERR_VENDOR" (str "Gateway reply unreadable: " e) "")) (emptyMeta)))
+    ((err e) (pair (err (gatewayError "ERR_VENDOR" (str service " reply unreadable: " e) "")) (emptyMeta)))
     ((ok r)
       (let [(code (pairFirst (pairFirst r)))
             (ctype (pairFirst (pairSecond r)))
             (body (pairSecond (pairSecond r)))]
         (cond
-          ((or (< code 200) (>= code 300)) (pair (err (httpError code (pairSecond (pairFirst r)) body)) (emptyMeta)))
+          ((or (< code 200) (>= code 300)) (pair (err (httpError service code (pairSecond (pairFirst r)) body)) (emptyMeta)))
           ((stringContains? ctype "application/asn+sexpr") (readAsnReply body))
           (else (readJsonReply body))))))
 
@@ -1192,15 +1205,14 @@ fn ! linkGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
             (next (withLink cfg (pairFirst out)))]
         (mt (pairSecond out)
           ((err e) (Called :reply (err (gatewayError "ERR_VENDOR" (str "in-process gateway: " e) "")) :meta (emptyMeta) :cfg next))
-          ((ok raw) (called next (readResponse raw)))))))
+          ((ok raw) (called next (readResponse "Gateway" raw)))))))
 
 fn ! sendGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> Called
   (if cfg.env.inProcess (linkGateway! cfg payload headers) (called cfg (postGateway! cfg payload headers)))
 
 ; (:m :effect net)
-fn ! postGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> (Pair (Result (Option String) ProviderError) TurnMeta)
-  (let [(url cfg.env.gatewayUrl)
-        (body (pyJsonDumps payload))
+fn ! postUrl! cfg: VendorConfig url: String service: String hint: String payload: j/Json headers: (List (Pair String String)) -> (Pair (Result (Option String) ProviderError) TurnMeta)
+  (let [(body (pyJsonDumps payload))
         (maxTime (stringFromFloat64 (int64ToFloat64 (+ (+ cfg.timeout cfg.queueTimeout) 30))))
         (bad (filter (fn [p] (illegalHeaderValue (pairSecond p))) headers))]
     (cond
@@ -1211,15 +1223,25 @@ fn ! postGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String 
               (c0 (cp/withStdin (cp/withTimeout (cp/cmd "curl" (list "--config" "-")) (* (+ (+ cfg.timeout cfg.queueTimeout) 60) 1000)) conf))
               (c (fold (fn [acc kv] (cp/withEnv acc (pairFirst kv) (pairSecond kv))) c0 (mapPairs cfg.env.childEnv)))]
           (mt (cp/exec! c)
-            ((ok out) (readCurl url out))
+            ((ok out) (readCurl service hint url out))
             ((err pe)
               (mt pe
-                ((cp/notFound _) (pair (err (toolAbsent "curl" "curl is not installed; the gateway call needs it (capabilities.asn :externalTools curl)")) (emptyMeta)))
-                ((cp/timeout _) (pair (err (gatewayError "ERR_VENDOR" "Gateway timed out waiting for reply: curl did not exit" "")) (emptyMeta)))
-                (_ (pair (err (gatewayError "ERR_GATEWAY_OFFLINE" (str "Gateway unreachable at " url ": curl could not start; run ./bin/asl-gateway start") "./bin/asl-gateway start")) (emptyMeta))))))))))
+                ((cp/notFound _) (pair (err (toolAbsent "curl" (str "curl is not installed; the " service " call needs it (capabilities.asn :externalTools curl)"))) (emptyMeta)))
+                ((cp/timeout _) (pair (err (gatewayError "ERR_VENDOR" (str service " timed out waiting for reply: curl did not exit") "")) (emptyMeta)))
+                (_ (pair (err (gatewayError "ERR_GATEWAY_OFFLINE" (str service " unreachable at " url ": curl could not start" (if (stringEmpty? hint) "" (str "; " hint))) hint)) (emptyMeta))))))))))
+
+; (:m :effect net)
+fn ! postGateway! cfg: VendorConfig payload: j/Json headers: (List (Pair String String)) -> (Pair (Result (Option String) ProviderError) TurnMeta)
+  (postUrl! cfg cfg.env.gatewayUrl "Gateway" "run ./bin/asl-gateway start" payload headers)
 
 fn msg role: String content: String -> j/Json
   (j/jobj (list (pair "role" (j/jstr role)) (pair "content" (j/jstr content))))
+
+; (:m :effect net)
+fn ! callOllama! cfg: VendorConfig system: String user: String -> Called
+  (let [(payload (j/jobj (list (pair "model" (j/jstr cfg.model))
+                               (pair "messages" (j/jarr (list (msg "system" system) (msg "user" user)))))))]
+    (called cfg (postUrl! cfg cfg.env.ollamaUrl "Ollama" "run ollama serve, or set ASL_OLLAMA_URL" payload (list))))
 
 ; (:m :effect net)
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
@@ -1276,6 +1298,7 @@ fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
     ((= cfg.vendor "agy") (callAgy! cfg system user))
     ((= cfg.vendor "codex") (Called :reply (callCodex! cfg system user) :meta (emptyMeta) :cfg cfg))
     ((= cfg.vendor "claude") (Called :reply (callClaude! cfg system user) :meta (emptyMeta) :cfg cfg))
+    ((= cfg.vendor "ollama") (callOllama! cfg system user))
     (else (Called :reply (err (valueError (str "Unknown vendor: " cfg.vendor))) :meta (emptyMeta) :cfg cfg)))
 
 fn stepTurns turns: (List String) index: Int64 -> (Pair (Option String) Int64)
@@ -1376,6 +1399,11 @@ fn codexArgv instr: String last: String model: String -> j/Json
                 (if (stringEmpty? model) (list) (list "-m" model)))))
 
 fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+  (mt (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env)
+    ((err e) (err e))
+    ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env)))
+
+fn buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
   (let [(base (list (pair "vendor" (j/jstr vendor)) (pair "cwd" (j/jstr ""))))
         (t (j/jint (if (= timeout 0) 600 timeout)))
         (q (j/jint (if (= queueTimeout 0) 1200 queueTimeout)))]
@@ -1421,4 +1449,7 @@ fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String 
           (list (pair "argv" (j/jarr (map (fn [a] (j/jstr a))
                   (listAppend (list "claude" "-p" "--system-prompt" "" "--tools" "" "--setting-sources" "" "--output-format" "json" "--no-session-persistence")
                               (if (stringEmpty? model) (list) (list "--model" model)))))))))))
+      ((= vendor "ollama")
+        (ok (j/jobj (listAppend base
+          (list (pair "url" (j/jstr env.ollamaUrl)) (pair "model" (j/jstr model)) (pair "timeout" t) (pair "queue_timeout" q))))))
       (else (ok (j/jobj base)))))

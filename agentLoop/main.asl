@@ -1014,7 +1014,7 @@ fn ! expandUser p: String -> String
           ((none) p)))))
 
 fn supportedBackends -> (List String)
-  (list "agy" "codex" "claude")
+  (list "agy" "codex" "claude" "ollama")
 
 fn defaultModel backend: String -> String
   (if (= backend "agy") "gemini-3.8-flash" backend)
