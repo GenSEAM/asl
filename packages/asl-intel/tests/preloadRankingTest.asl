@@ -25,7 +25,7 @@ fn testPreloadGrammarRegistration! -> Bool
       ((err ge) (assert false (str "Failed to read asl/packages/asl-intel/manifest.asn: " ge)))
       ((ok gSrc)
         (do
-          (assert (stringContains? gSrc "asl-intel/preload") "manifest registers asl-intel/preload module")
+          (assert (stringContains? gSrc "aslIntel/preload") "manifest registers aslIntel/preload module")
           (refute (stringContains? gSrc "asl_intel") "Strict camelCase in manifest registration"))))
     true)
 
@@ -33,7 +33,7 @@ fn testPreloadSyntaxAndDelimiters! -> Bool
   (let [(chkCmd "./bin/asl check asl/packages/asl-intel/src/preload.asl")
         (chkRes (processRun chkCmd))]
     (assert (= chkRes.exitCode 0) "asl check exits 0 on asl/packages/asl-intel/src/preload.asl")
-    (assert (stringContains? chkRes.stdout "verified cleanly") "preload.asl delimiter balance verified cleanly")
+    (assert (stringContains? chkRes.stdout "(:check :id balance :status :passed)") "preload.asl delimiter balance verified cleanly")
     (refute (stringContains? chkRes.stdout "Syntax error") "Zero syntax errors in preload.asl")
     (refute (stringContains? chkRes.stdout "unbalanced") "Zero unbalanced delimiters in preload.asl")
     true)

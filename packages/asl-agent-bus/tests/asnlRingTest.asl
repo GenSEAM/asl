@@ -29,7 +29,7 @@ fn testGrammarRegistration! -> Bool
       ((err e) (assert false (str "Failed to read asl/packages/asl-agent-bus/manifest.asn: " e)))
       ((ok gSrc)
         (do
-          (assert (stringContains? gSrc "asl-agent-bus/asnlRing") "manifest registers asnlRing module")
+          (assert (stringContains? gSrc "aslAgentBus/asnlRing") "manifest registers asnlRing module")
           (refute (stringContains? gSrc "asnl_ring") "Strict camelCase in manifest registration"))))
     true)
 
