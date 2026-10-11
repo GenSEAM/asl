@@ -1,6 +1,6 @@
-(module aslGateway/tests/omniIngressTest
+(module aslAgent/tests/omniIngressTest
   :x [testMultiProtocolNormalization testTargetEngineResolution testIngressDispatchAndValidation runTests]
-  :i [(aslGateway/omniIngress :a oi)])
+  :i [(aslAgent/omniIngress :a oi)])
 
 fn testMultiProtocolNormalization -> Bool
   (let [(reqSocket (oi/IngressRequest :protocol (oi/protoUnixSocket) :endpoint "/tmp/asl-engine.sock" :rawPayload "git commit -m 'fix buffer'" :authHeader "bearer-admin"))

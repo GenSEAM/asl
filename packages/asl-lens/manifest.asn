@@ -1,7 +1,0 @@
-(:package aslLens
- :version "0.1.0"
- :entry "src/lens.asl"
- :description "Sovereign Multi-Lens Discovery, Attractor Steering, and Analytical Verification Engine"
- :aslFirst true
- :modules ["asl-lens"]
- :dependencies [])

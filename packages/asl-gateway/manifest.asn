@@ -14,7 +14,6 @@
     "aslGateway/sync"
     "aslGateway/browser"
     "aslGateway/media"
-    "aslGateway/omniIngress"
     "aslGateway/pyText"
     "aslGateway/htmlEntities"
     "aslGateway/search"

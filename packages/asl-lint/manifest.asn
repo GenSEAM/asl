@@ -3,5 +3,5 @@
  :entry "src/core/lint.asl"
  :description "AgentScript Native Quality, Smell, and Anti-Pattern Analysis Engine"
  :aslFirst true
- :modules ["asl-lint/core" "asl-lint/coupling"]
+ :modules ["asl-lint/core"]
  :dependencies ["asl-parser"])

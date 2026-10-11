@@ -9,7 +9,7 @@
       (aslAgent/unbiasedContext :a uc)
       (aslVoice/voiceBuffer :a vb)
       (aslVoice/conversationalContext :a cc)
-      (aslGateway/omniIngress :a ing)])
+      (aslAgent/omniIngress :a ing)])
 
 fn testFastKnowledgeCacheAndFibers -> Bool
   (let [(cache (kc/knowledgeCacheCreate))

@@ -1,4 +1,4 @@
-(module aslGateway/omniIngress
+(module aslAgent/omniIngress
   :x [IngressRequest NormalizedIntentFrame
       protoUnixSocket protoHttpRest protoTerminalCli protoVoiceStream
       resolveTargetEngine ingressNormalize ingressDispatch isIngressValid?]

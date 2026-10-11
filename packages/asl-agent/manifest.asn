@@ -43,5 +43,6 @@
    "asl-agent/omniIntent"
    "asl-agent/frontAgent"
    "asl-agent/unbiasedContext"
+   "aslAgent/omniIngress"
  ]
  :dependencies ["asl-agent-core" "asl-agent-bus" "asl-text"])
