@@ -20,8 +20,7 @@ enum ProviderError
   (:f profile String)
   (:f gatewayConfig String)
   (:f tmpDir String)
-  (:f childEnv (Map String String))
-  (:f ollamaUrl String))
+  (:f childEnv (Map String String)))
 
 (schema VendorConfig
   (:f vendor String)
@@ -704,8 +703,7 @@ fn ! providerEnv! -> ProviderEnv
     :profile (envOr! "ASL_PROFILE" "")
     :gatewayConfig (envOr! "ASL_GATEWAY_CONFIG" (str (envOr! "HOME" "") "/.asl/gateway.asn"))
     :tmpDir (envOr! "TMPDIR" (envOr! "TEMP" (envOr! "TMP" "/tmp")))
-    :childEnv (mapEmpty)
-    :ollamaUrl (envOr! "ASL_OLLAMA_URL" "http://127.0.0.1:11434/v1/chat/completions"))
+    :childEnv (mapEmpty))
 
 fn normParts parts: (List String) acc: (List String) -> (List String)
   (mt (listHead parts)
@@ -786,7 +784,7 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
         (mt (loadTurns "Replay file" (str rootDir "/tests/fixtures/agentLoop/recorded/" name) parseReplayLines)
           ((ok turns) (ok (replayProvider (str "replay/" name) rootDir turns 0 (replayVendor name))))
           ((err e) (err e)))))
-    ((or (= backend "agy") (or (= backend "codex") (or (= backend "claude") (= backend "ollama"))))
+    ((or (= backend "agy") (or (= backend "codex") (= backend "claude")))
       (let [(sid (if (stringEmpty? sessionId) (uniqueTag) sessionId))]
           (ok (vendorProvider (VendorConfig :vendor backend :mode (if (stringEmpty? mode) "scout" mode) :rootDir (absPath rootDir)
                                 :model model :timeout (if (= timeout 0) 600 timeout) :queueTimeout (if (= queueTimeout 0) 1200 queueTimeout)
@@ -1097,16 +1095,6 @@ fn replyContent resp: j/Json -> (Result (Option String) ProviderError)
                     (v (ok (some (pyStrip (pyStr v))))))))))))
       (_ (noReply "Empty choices in gateway response"))))
 
-fn standardUsage resp: j/Json -> (Option (List (Pair String j/Json)))
-  (mt (jsonLookup resp "usage")
-    ((some u)
-      (if (isObject u)
-        (some (list (pair "inputTokens" (optionOr (jsonLookup u "prompt_tokens") (j/jint 0)))
-                     (pair "cachedTokens" (j/jint 0))
-                     (pair "outputTokens" (optionOr (jsonLookup u "completion_tokens") (j/jint 0)))))
-        none))
-    (none none))
-
 fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) TurnMeta)
   (mt (j/jsonParse body)
     ((err e) (pair (err (gatewayError "ERR_VENDOR" (str "Failed to parse gateway JSON response: " e) "")) (emptyMeta)))
@@ -1124,7 +1112,7 @@ fn readJsonReply body: String -> (Pair (Result (Option String) ProviderError) Tu
                                          (some (map (fn [k] (pair k (optionOr (jsonLookup u k) (j/jint 0)))) (list "inputTokens" "cachedTokens" "outputTokens")))
                                          none))
                              (none none)))
-                    (usage (mt internalUsage ((some u) (some u)) ((none) (standardUsage resp))))
+                    (usage internalUsage)
                     (served (servedFields (dictPut (jsonDict asl) "model" (optionOr (jsonLookup resp "model") (j/jnull)))))
                     (meta (TurnMeta :timing timing :usage usage :served served :finish none :truncated false))]
                 (pair (replyContent resp) meta))))))))
@@ -1238,12 +1226,6 @@ fn msg role: String content: String -> j/Json
   (j/jobj (list (pair "role" (j/jstr role)) (pair "content" (j/jstr content))))
 
 ; (:m :effect net)
-fn ! callOllama! cfg: VendorConfig system: String user: String -> Called
-  (let [(payload (j/jobj (list (pair "model" (j/jstr cfg.model))
-                               (pair "messages" (j/jarr (list (msg "system" system) (msg "user" user)))))))]
-    (called cfg (postUrl! cfg cfg.env.ollamaUrl "Ollama" "run ollama serve, or set ASL_OLLAMA_URL" payload (list))))
-
-; (:m :effect net)
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
   (let [(ws (absPath (str cfg.rootDir "/.asl/run/agentLoop/agents/" cfg.sessionId)))
         (profile cfg.env.profile)
@@ -1298,7 +1280,6 @@ fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
     ((= cfg.vendor "agy") (callAgy! cfg system user))
     ((= cfg.vendor "codex") (Called :reply (callCodex! cfg system user) :meta (emptyMeta) :cfg cfg))
     ((= cfg.vendor "claude") (Called :reply (callClaude! cfg system user) :meta (emptyMeta) :cfg cfg))
-    ((= cfg.vendor "ollama") (callOllama! cfg system user))
     (else (Called :reply (err (valueError (str "Unknown vendor: " cfg.vendor))) :meta (emptyMeta) :cfg cfg)))
 
 fn stepTurns turns: (List String) index: Int64 -> (Pair (Option String) Int64)
@@ -1449,7 +1430,4 @@ fn buildDryRunInfoFor vendor: String mode: String rootDir: String model: String 
           (list (pair "argv" (j/jarr (map (fn [a] (j/jstr a))
                   (listAppend (list "claude" "-p" "--system-prompt" "" "--tools" "" "--setting-sources" "" "--output-format" "json" "--no-session-persistence")
                               (if (stringEmpty? model) (list) (list "--model" model)))))))))))
-      ((= vendor "ollama")
-        (ok (j/jobj (listAppend base
-          (list (pair "url" (j/jstr env.ollamaUrl)) (pair "model" (j/jstr model)) (pair "timeout" t) (pair "queue_timeout" q))))))
       (else (ok (j/jobj base)))))
