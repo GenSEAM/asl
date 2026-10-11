@@ -13,7 +13,7 @@ fn executeReleaseStep! name: Str binary: Str args: (List Str) -> ReleaseStepResu
   (mt (sh/runCmd! binary args) ((ok r) (let [(exitCode r.exitCode) (dur r.durationMs) (summary r.summary) (_ (sh/releaseReceipt! r))] (ReleaseStepResult :name name :ok (== exitCode 0) :message summary :durationMs dur))) ((err _) (ReleaseStepResult :name name :ok false :message "Process execution failed" :durationMs 0)))
 
 fn runVerificationGate! plan: ReleasePlan -> ReleaseStepResult
-  (executeReleaseStep! "verificationGate" "./asl/bin/asl" (list "gate"))
+  (executeReleaseStep! "verificationGate" "./bin/asl" (list "audit" "gates"))
 
 fn prepareDistDirectory! plan: ReleasePlan -> ReleaseStepResult
   (let [(distPath (str plan.distDir "/" plan.tag))] (executeReleaseStep! "prepareDist" "mkdir" (list "-p" distPath)))
