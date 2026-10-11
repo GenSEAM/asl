@@ -809,7 +809,7 @@ fn caseLoop! s: String n: Int64 i: Int64 idx: Int64 -> Int64
 
 fn ! main args: (List String) -> (Result Int64 String)
   (if (listEmpty? args)
-    (err "usage: asl-host run asl/agentLoop/coreCli.asl CORPUS")
+    (err "usage: bin/asl run asl/agentLoop/coreCli.asl CORPUS")
     (mt (fileReadString (c/firstOf args))
       ((ok s) (let [(n (caseLoop! s (stringLength s) 0 0))] (ok 0)))
       ((err e) (err e))))

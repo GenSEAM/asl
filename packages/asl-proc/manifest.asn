@@ -22,5 +22,6 @@
    "asl-proc/gitFixture"
    "asl-proc/log"
    "asl-proc/coreProcess"
+   "asl-proc/runnerBin"
  ]
  :dependencies ["asl-text"])

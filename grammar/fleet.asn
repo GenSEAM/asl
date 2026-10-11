@@ -16,7 +16,7 @@
              (:entity RedBefore :fields (wt base head gate exit executed reverted kept before after mutants redBefore vacuous verdict) :required (gate exit))
              (:entity Mutant :fields (file old new applied exit executed killed))
              (:entity Integration :fields (branch base tracks head))
-             (:entity Comparison :fields (base head hosts modes jobs changed suites checked greenToRed assertLoss newCheckErrors absentOnBase missing absentOnHead errorTextsRemoved newForeign timings cache verdict))
+             (:entity Comparison :fields (base head clis jobs changed suites checked greenToRed assertLoss newCheckErrors absentOnBase missing absentOnHead errorTextsRemoved newForeign timings cache verdict))
              (:entity Verdict :fields (exit executed errors) :required (exit executed))
              (:entity Audit :fields (integration auditor claims defects verdict))
              (:entity Defect :fields (class unit file evidence round))
@@ -38,7 +38,7 @@
           (:tool docCoverage :file "tools/codemod/docCoverage.asl" :status works
            :ops (uncoveredTexts))
           (:tool run :file "tools/fleet/run.asl" :status works
-           :ops (runPoolLimited killTree! hostPath!))
+           :ops (runPoolLimited killTree! nativeCliPath!))
           (:tool guard :file "tools/fleet/guard.asl" :status works
            :ops (guardOnce! killAll! procCounts!))
           (:tool watch :file "tools/fleet/watch.asl" :status works

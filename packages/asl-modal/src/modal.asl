@@ -1376,7 +1376,7 @@ fn ! modalRenderApp! dir: String -> (Result String ModalError)
 
 
 fn usage -> String
-  "(:usage \"asl-host run asl/packages/asl-modal/src/modal.asl app|env|settings|deploy|prepare|stop|status|gateway|capability PRESET TIER [WORKSPACE] | config PRESET TIER WORKSPACE CAP_MICROUSD | smoke PRESET TIER WORKSPACE GATEWAY_URL --cap MICROUSD --yes\")"
+  "(:usage \"bin/asl run asl/packages/asl-modal/src/modal.asl app|env|settings|deploy|prepare|stop|status|gateway|capability PRESET TIER [WORKSPACE] | config PRESET TIER WORKSPACE CAP_MICROUSD | smoke PRESET TIER WORKSPACE GATEWAY_URL --cap MICROUSD --yes\")"
 
 fn ! render! cmd: String p: ModalPreset t: GpuTier presetPath: String rest: (List String) -> (Result String ModalError)
   (cond

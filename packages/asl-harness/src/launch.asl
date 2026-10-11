@@ -1,12 +1,12 @@
 (module asl-harness/launch
   :x [Asn asnForm asnKw asnSym asnStr asnInt asnFloat
       readAll readOne asnGet asnForms asnDump textOf pyStr pyStrRepr truthy formsOf formOr
-      Paths pathsFor Layer Attractor Harness Client Loaded loadSources
+      Paths pathsFor runnerDisplay! Layer Attractor Harness Client Loaded loadSources
       Probe factsOf gitState migrateOn RenderOpts render hostPaths fillText
       buildArgv jsonStr absPath pathJoin writePrompt!
       Outcome Ctx freeze mainWith! usageText
       Captured runCapture! whichIn! probe! platform! today! pruneRunDirs! runChild! main mainIn!]
-  :i [])
+  :i [(asl-proc/runnerBin :a rb)])
 
 enum Asn
   (asnForm items: (List Asn))
@@ -1194,8 +1194,11 @@ fn ! launchedEnv client: String -> (List String)
 fn ! readSource path: String -> (Result String String)
   (mt (fileReadString path) ((ok t) (ok t)) ((err e) (err (str "launch: cannot read " path ": " e))))
 
+fn ! runnerDisplay! root: String -> String
+  (rb/runnerDisplay! root)
+
 fn ! loadRoot root: String -> (Result Loaded String)
-  (let [(paths (pathsFor root (str root "/asl/host/out/asl-host")))]
+  (let [(paths (pathsFor root (runnerDisplay! root)))]
     (mt (readSource paths.harness)
       ((err e) (err e))
       ((ok h)

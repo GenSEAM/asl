@@ -1041,7 +1041,7 @@ fn bytesAllocated line: String -> Int64
       ((none) -1)))
 
 fn ! allocRun mode: String -> Int64
-  (let [(d (fr/runOneLimited (fr/job (list (fr/host!) "run" "asl/packages/asl-parser/tests/checkSpeedParseTest.asl" mode) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 600 4)))]
+  (let [(d (fr/runOneLimited (fr/job (list (fr/legacyHost!) "run" "asl/packages/asl-parser/tests/checkSpeedParseTest.asl" mode) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 600 4)))]
     (do (assert (= d.exit 0) (str mode " run exits 0 (" d.verdict ")"))
         (bytesAllocated (statsLine d.out))))
 

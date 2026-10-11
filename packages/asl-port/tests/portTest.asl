@@ -299,7 +299,7 @@ fn testCliExecution! -> Bool
       (assert planExists "plan.asn created")
       (assert draftExists "draft.asl created")
       (assert parityExists "parity.asn created")
-      (assert (= chkRes.exitCode 0) "generated draft.asl checks with asl-host")
+      (assert (= chkRes.exitCode 0) "generated draft.asl checks with the stage-0 runner")
       true))
 
 

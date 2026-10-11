@@ -1,6 +1,6 @@
 (module asl-engine/build
-  :x [EngineBuild entrySuffix entryPath! toolRootOf hostBin! sourceVersion! makeBuild! parseMs]
-  :i [])
+  :x [EngineBuild entrySuffix entryPath! toolRootOf runnerBin! sourceVersion! makeBuild! parseMs]
+  :i [(asl-proc/runnerBin :a rb)])
 
 (schema EngineBuild
   (:f entry String)
@@ -29,13 +29,14 @@ fn toolRootOf entry: String -> String
     (optionOr (stringSlice entry 0 (- (stringLength entry) (stringLength (entrySuffix)))) "")
     "")
 
-fn ! hostBin! toolRoot: String -> String
-  (let [(given (optionOr (envGet "ASL_HOST") ""))
-        (built (str toolRoot "/asl/host/out/asl-host"))]
+fn ! runnerBin! toolRoot: String -> String
+  (let [(given (optionOr (envGet "ASL_HOST") ""))]
     (cond
-      ((and (not (stringEmpty? given)) (isFile? given)) (resultOr (realPath given) given))
-      ((and (not (stringEmpty? toolRoot)) (isFile? built)) (resultOr (realPath built) built))
-      (else "")))
+      ((and (not (stringEmpty? given)) (rb/isExe? given)) (resultOr (realPath given) given))
+      ((stringEmpty? toolRoot) "")
+      (else (let [(resolved (rb/runnerDisplay! toolRoot))]
+              (if (rb/isExe? resolved) resolved "")))))
+
 
 fn srcDirOf entry: String -> String
   (mt (stringIndexOf (stringReverse entry) "/")
@@ -67,7 +68,7 @@ fn ! makeBuild! entry: String -> EngineBuild
         (updatesRaw (optionOr (envGet "ASL_ENGINE_UPDATES") "0"))]
     (EngineBuild :entry entry
                  :toolRoot root
-                 :host (hostBin! root)
+                 :host (runnerBin! root)
                  :version (sourceVersion! entry)
                  :updates (if (digitsOnly? updatesRaw) (optionOr (stringToInt64 updatesRaw) 0) 0)
                  :updatedFrom (optionOr (envGet "ASL_ENGINE_UPDATED_FROM") "")))

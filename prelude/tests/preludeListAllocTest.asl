@@ -70,7 +70,7 @@ fn objectsAllocated line: String -> Int64
             -1)
 
 fn ! runScenario extraArgs: (List String) -> (Pair Int64 String)
-  (let [(argv (listAppend (list (fr/host!) "run" "asl/prelude/tests/preludeListAllocTest.asl") extraArgs))
+  (let [(argv (listAppend (list (fr/legacyHost!) "run" "asl/prelude/tests/preludeListAllocTest.asl") extraArgs))
         (d (fr/runOneLimited (fr/job argv "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 20 6)))]
     (do
       (assert (= d.exit 0) (str (fr/quoteArgv extraArgs) " subprocess exits 0 (verdict " d.verdict "): " d.out))

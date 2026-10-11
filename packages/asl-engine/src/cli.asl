@@ -49,7 +49,7 @@ fn helpText -> String
                     "  ASL_ENGINE_MAX_RSS_MB       Hard memory RSS limit in MB (default: 512)"
                     "  ASL_ENGINE_SOFT_RSS_MB      Soft memory RSS limit in MB (default: 384)"
                     "  ASL_ENGINE_ENTRY            This entry, set by asl engine; the daemon and self-update run it"
-                    "  ASL_HOST                    asl-host binary that runs the entry")
+                    "  ASL_HOST                    runner binary (native CLI or built stage-0) that runs the entry")
               "\n")
 
 fn afterEq s: String -> String
@@ -169,7 +169,7 @@ fn ! preflight! cfg: eng/EngineConfig build: bld/EngineBuild -> (Result Unit Str
     ((err? (eng/checkSocketPath cfg.socketPath (isDarwin!)))
       (mt (eng/checkSocketPath cfg.socketPath (isDarwin!)) ((err e) (err e)) ((ok _) (ok ()))))
     ((stringEmpty? build.entry) (err "ERR_ENGINE_ENTRY: set ASL_ENGINE_ENTRY to asl/packages/asl-engine/src/cli.asl or run from the toolchain root"))
-    ((stringEmpty? build.host) (err "ERR_ENGINE_HOST: no asl-host; set ASL_HOST or build asl/host"))
+    ((stringEmpty? build.host) (err "ERR_ENGINE_HOST: no runner; set ASL_HOST or build asl/host"))
     (else (ok ())))
 
 fn ! start! cfg: eng/EngineConfig build: bld/EngineBuild root: String fg: Bool -> Int64
@@ -234,7 +234,7 @@ fn ! restart! cfg: eng/EngineConfig build: bld/EngineBuild root: String force: B
 
 fn ! eval! build: bld/EngineBuild exprs: (List String) -> Int64
   (if (stringEmpty? build.host)
-    (sayErr! "ERR_ENGINE_HOST: no asl-host; set ASL_HOST or build asl/host" 2)
+    (sayErr! "ERR_ENGINE_HOST: no runner; set ASL_HOST or build asl/host" 2)
     (mt (procExecv (list build.host "eval" (stringJoin exprs " ")) (none))
       ((ok _) 0)
       ((err e) (sayErr! (str "asl engine eval: cannot exec " build.host ": " e) 126))))

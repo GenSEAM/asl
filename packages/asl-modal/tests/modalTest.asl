@@ -351,7 +351,7 @@ fn ! readLine fd: Int64 acc: String -> (Result String String)
       ((ok chunk) (if (stringEmpty? chunk) (err (str "stub closed stdout: " acc)) (readLine fd (str acc chunk))))))
 
 fn ! startStub! mode: String -> (Result (Pair SpawnedProc Int64) String)
-  (mt (procSpawnv (list "./asl/host/out/asl-host" "run" "asl/packages/asl-modal/tests/modalTest.asl" "stub" mode) (some ".") (none))
+  (mt (procSpawnv (list (la/runnerDisplay! (resultOr (realPath ".") ".")) "run" "asl/packages/asl-modal/tests/modalTest.asl" "stub" mode) (some ".") (none))
     ((err e) (err (str "spawn stub: " e)))
     ((ok sp)
       (do

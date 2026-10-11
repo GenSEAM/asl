@@ -7,7 +7,8 @@
       (asl-engine/watchdog :a wd)
       (asl-engine/supervisor :a sp)
       (asl-engine/transport :a tp)
-      (asl-engine/engine :a eng)])
+      (asl-engine/engine :a eng)
+      (asl-engine/build :a bld)])
 
 fn ! runTests -> Bool
   (let [
@@ -78,7 +79,7 @@ fn ! runTests -> Bool
         (transChoice (tp/chooseTransport! "" "/tmp/nonexistent-socket.sock"))
         (transExplicit (tp/chooseTransport! "subprocess" "/tmp/any.sock"))
         (transAvailable (tp/chooseTransport! "" "/tmp"))
-        (evalRes (tp/runEngineEval! "./asl/host/out/asl-host" "(+ 21 21)"))
+        (evalRes (tp/runEngineEval! (bld/runnerBin! (resultOr (realPath ".") ".")) "(+ 21 21)"))
 
         (wsCfg (eng/resolveScope! "/tmp/myrepo" "workspace"))
         (sysCfg (eng/resolveScope! "/tmp/myrepo" "system"))

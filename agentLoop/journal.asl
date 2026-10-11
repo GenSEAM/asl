@@ -3,7 +3,7 @@
       harnessLayers buildSystemPrompt retainJournal journalWrite snapshotBeforeWrite patchLines filePatch!
       applyResumePatch handBack writtenField handBackFields
       newWritten idleWritten git! asnRead asnReadOne pathNorm pathRel pathJoin pathDirname splitExt loadEffects]
-  :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp)])
+  :i [(asl/agentLoop/core :a c) (asl/agentLoop/diff :a d) (asl-proc/coreProcess :a cp) (asl-proc/runnerBin :a rb)])
 
 (schema Snapshot
   (:f bytes (Option String))
@@ -809,9 +809,9 @@ fn formsOf o: (Option AsnNode) head: String -> (Result (List AsnNode) String)
         ((isForm v) (ok (filter (fn [x] (and (isForm x) (headIs x head))) (formItems v))))
         (else (err (str "AttributeError: '" (pyType v) "' object has no attribute 'forms'"))))))
 
-fn grammarOf repoRoot: String -> Grammar
+fn ! grammarOf! repoRoot: String -> Grammar
   (Grammar :harness (pathJoin repoRoot "asl/grammar/harness.asn") :clients (pathJoin repoRoot "asl/grammar/clients.asn")
-           :tools (pathJoin repoRoot "asl/grammar/tools.asn") :host (pathJoin repoRoot "asl/host/out/asl-host"))
+           :tools (pathJoin repoRoot "asl/grammar/tools.asn") :host (rb/runnerDisplay! repoRoot))
 
 fn systemExit msg: String -> String
   (str "SystemExit: " msg)
@@ -1194,7 +1194,7 @@ fn harnessError e: String -> String
     e)
 
 fn ! harnessLayers repoRoot: String rootDir: String mode: String -> (Result String String)
-  (let [g (grammarOf repoRoot)]
+  (let [g (grammarOf! repoRoot)]
     (mt (clientField! g "leon" "layers")
       ((err e) (err (harnessError e)))
       ((ok names)

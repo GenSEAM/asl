@@ -394,7 +394,7 @@ fn ! loop! st0: ServerState -> String
             (let [(checked (sourcesCheck! b))]
               (if (pairFirst checked)
                 (selfUpdate! next disk)
-                (do (engineLog! cfg (str "self-update to " disk " skipped, asl-host check failed: " (pairSecond checked)))
+                (do (engineLog! cfg (str "self-update to " disk " skipped, runner check failed: " (pairSecond checked)))
                     (accept! (withRejected next disk)))))
             (accept! next))))
       (else (accept! st))))

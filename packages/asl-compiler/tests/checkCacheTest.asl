@@ -18,7 +18,7 @@ fn badSource -> String
   "(module bad :x [f] :i [])\n\nfn f -> Int64\n  (undefinedThing 1)\n"
 
 fn ! check cache: String entry: String -> fr/Done
-  (fr/runOneLimited (fr/job (list (fr/host!) "run" (asl1) "check" entry) "." (fr/childEnv (list (str "ASL_CHECK_CACHE=" cache)))) (fr/limits 300 16))
+  (fr/runOneLimited (fr/job (list (fr/legacyHost!) "run" (asl1) "check" entry) "." (fr/childEnv (list (str "ASL_CHECK_CACHE=" cache)))) (fr/limits 300 16))
 
 fn ! entriesIn dir: String -> (List String)
   (mt (dirList dir)

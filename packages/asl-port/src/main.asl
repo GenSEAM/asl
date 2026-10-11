@@ -13,7 +13,7 @@
   (:f errMsg String))
 
 fn usage -> String
-  "usage: asl-host run asl/packages/asl-port/src/main.asl py FILE.py [--fn NAME ...] [--out DIR]"
+  "usage: bin/asl run asl/packages/asl-port/src/main.asl py FILE.py [--fn NAME ...] [--out DIR]"
 
 fn validFlags? args: (List String) -> Bool
   (mt (listHead args)
