@@ -65,7 +65,7 @@ do_compile() {
 # (:m :why "RUNTIME-NOHOST: the three emitters run as native programs a native asl1 compiled (ASL_NATIVE_ASL1, else the committed seed linked against an earlier libaslrt.a: ASL_NATIVE_RT, the out dir's, the newest cached, else one built from the runtime seed); asl-host runs them only when none of these exists, said on stderr")
 SEED_DIR="$HERE/../seed"
 PRIOR_RT="$OUT/.libaslrt.prior.a"
-[ -f "$OUT/libaslrt.a" ] && { ln -f "$OUT/libaslrt.a" "$PRIOR_RT" 2>/dev/null || cp -p "$OUT/libaslrt.a" "$PRIOR_RT"; }
+[ -f "$OUT/libaslrt.a" ] && cp -p "$OUT/libaslrt.a" "$PRIOR_RT"
 
 prior_runtime() {
   if [ -n "${ASL_NATIVE_RT:-}" ] && [ -f "$ASL_NATIVE_RT" ]; then echo "$ASL_NATIVE_RT"; return 0; fi
@@ -169,9 +169,17 @@ runtime_possible() {
   return 0
 }
 
-link_or_copy() {
-  rm -f "$2"
-  ln -f "$1" "$2" 2>/dev/null || cp -p "$1" "$2" 2>/dev/null || cp "$1" "$2"
+# (:m :why "HOSTLINK-CLOBBER: never hardlink a cache entry into $OUT - every tree keyed the same way would then share one inode, so a write through any one of them (even a stray one, like a stub test writing to its own out/asl-host) corrupts the cache and every other tree's copy. Install as an independent copy instead: cp -p to a temp name beside the destination, then mv it into place, so the install is atomic and $OUT always gets a fresh inode. The cache file itself is chmod a-w right after it is written (see cacheReadonly below), so a write attempted through the cache path fails loudly instead of silently clobbering")
+install_copy() {
+  tmp="$2.tmp.$$"
+  rm -f "$tmp"
+  cp -p "$1" "$tmp" 2>/dev/null || cp "$1" "$tmp"
+  mv -f "$tmp" "$2"
+}
+
+# (:m :why "HOSTLINK-CLOBBER: strips write permission from a freshly written cache entry so any future write attempted through the cache path itself (as opposed to a copy installed by install_copy) fails with EACCES instead of silently mutating bytes every tree's install_copy already read")
+cacheReadonly() {
+  for f in "$@"; do chmod a-w "$f" 2>/dev/null || true; done
 }
 
 hash_stdin() {
@@ -220,11 +228,12 @@ if ! { [ -x "$KEY_DIR/$HOST_NAME" ] && [ -f "$KEY_DIR/$LIB_NAME" ] && [ -f "$KEY
   mv -f "$KEY_DIR/$HOST_NAME.tmp.$$" "$KEY_DIR/$HOST_NAME"
   rm -rf "$TMP_DIR"
   trap - EXIT INT TERM
+  cacheReadonly "$KEY_DIR/$LIB_NAME" "$KEY_DIR/$TEST_RT_NAME" "$KEY_DIR/$HOST_NAME"
 fi
 
-link_or_copy "$KEY_DIR/$HOST_NAME" "$OUT/$HOST_NAME"
-link_or_copy "$KEY_DIR/$LIB_NAME" "$OUT/$LIB_NAME"
-link_or_copy "$KEY_DIR/$TEST_RT_NAME" "$OUT/$TEST_RT_NAME"
+install_copy "$KEY_DIR/$HOST_NAME" "$OUT/$HOST_NAME"
+install_copy "$KEY_DIR/$LIB_NAME" "$OUT/$LIB_NAME"
+install_copy "$KEY_DIR/$TEST_RT_NAME" "$OUT/$TEST_RT_NAME"
 touch "$OUT/$HOST_NAME" 2>/dev/null || true
 cp "$HERE/../prelude/prelude.asl" "$OUT/prelude.asl"
 
@@ -250,8 +259,9 @@ if [ ! -f "$GC_DIR/$RT_NAME" ]; then
   mv -f "$GC_DIR/$RT_NAME.tmp.$$" "$GC_DIR/$RT_NAME"
   rm -rf "$GC_TMP"
   trap - EXIT INT TERM
+  cacheReadonly "$GC_DIR/$RT_NAME"
 fi
-link_or_copy "$GC_DIR/$RT_NAME" "$OUT/$RT_NAME"
+install_copy "$GC_DIR/$RT_NAME" "$OUT/$RT_NAME"
 rm -f "$PRIOR_RT"
 
 # (:m :why "TOOLSHOST-THIN: a tree with no native CLI head gets one here, so a fresh clone runs no asl-host: the seed asl1 compiles asl-cli/nativeBuild (cached by its sources), which builds native.asl and writes the head with the keys bin/asl's fallback build uses; a tree that has a head is left to asl-cli/nativeCli")
@@ -268,11 +278,12 @@ native_cli() {
     if (cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" build asl/packages/asl-cli/src/nativeBuild.asl -o "$tmp/nativeBuild.ll") >&2 \
        && "$CLANG" -O2 -Wno-override-module -x ir "$tmp/nativeBuild.ll" -x none "$OUT/$RT_NAME" -lm -o "$tmp/aslNativeBuild" && mkdir -p "$dir" && mv -f "$tmp/aslNativeBuild" "$dir/aslNativeBuild"; then
       rm -rf "$tmp"
+      cacheReadonly "$dir/aslNativeBuild"
     else
       rm -rf "$tmp"; echo "build.sh: no native CLI: the seed asl1 could not build asl-cli/nativeBuild" >&2; return 0
     fi
   fi
-  link_or_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild"
+  install_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild"
   "$OUT/aslNativeBuild" "$root" --if-cold >&2 || echo "build.sh: the native CLI build failed; bin/asl falls back to asl-host" >&2
 }
 native_cli
