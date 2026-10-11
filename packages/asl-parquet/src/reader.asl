@@ -1,4 +1,4 @@
-(module asl-parquet/reader :x [parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata] :i [])
+(module asl-parquet/reader :x [parquetOpen parquetNumRowGroups parquetNumRows parquetColumnType parquetReadF64 parquetReadI64 parquetReadI8 parquetKvMetadata pqLoadUAt pqLoad64] :i [])
 
 (schema PqCol (:f name String) (:f ptype Int64) (:f maxDef Int64) (:f int8 Bool))
 
@@ -19,11 +19,34 @@ fn pqPow2 n: Int64 -> Int64
         (if (= (mod n 2) 1) (* (* h h) 2) (* h h)))))
 
 fn pqLoadUAt bs: Bytes at: Int64 n: Int64 acc: Int64 -> Int64
-  (if (= n 0) acc (pqLoadUAt bs (- at 1) (- n 1) (+ (* acc 256) (bytesGet bs at))))
+  (cond
+    ((= n 0) acc)
+    ((= n 1) (+ (* acc 256) (bytesGet bs at)))
+    ((= n 2)
+      (let [(b1 (bytesGet bs at)) (b0 (bytesGet bs (- at 1)))]
+        (+ (* acc 65536) (+ (* b1 256) b0))))
+    ((= n 3)
+      (let [(b2 (bytesGet bs at)) (b1 (bytesGet bs (- at 1))) (b0 (bytesGet bs (- at 2)))]
+        (+ (* acc 16777216) (+ (* b2 65536) (+ (* b1 256) b0)))))
+    ((= n 4)
+      (let [(b3 (bytesGet bs at)) (b2 (bytesGet bs (- at 1))) (b1 (bytesGet bs (- at 2))) (b0 (bytesGet bs (- at 3)))]
+        (+ (* acc 4294967296) (+ (* b3 16777216) (+ (* b2 65536) (+ (* b1 256) b0))))))
+    ((= n 5)
+      (let [(b4 (bytesGet bs at)) (b3 (bytesGet bs (- at 1))) (b2 (bytesGet bs (- at 2))) (b1 (bytesGet bs (- at 3))) (b0 (bytesGet bs (- at 4)))]
+        (+ (* acc 1099511627776) (+ (* b4 4294967296) (+ (* b3 16777216) (+ (* b2 65536) (+ (* b1 256) b0)))))))
+    ((= n 6)
+      (let [(b5 (bytesGet bs at)) (b4 (bytesGet bs (- at 1))) (b3 (bytesGet bs (- at 2))) (b2 (bytesGet bs (- at 3))) (b1 (bytesGet bs (- at 4))) (b0 (bytesGet bs (- at 5)))]
+        (+ (* acc 281474976710656) (+ (* b5 1099511627776) (+ (* b4 4294967296) (+ (* b3 16777216) (+ (* b2 65536) (+ (* b1 256) b0))))))))
+    ((= n 7)
+      (let [(b6 (bytesGet bs at)) (b5 (bytesGet bs (- at 1))) (b4 (bytesGet bs (- at 2))) (b3 (bytesGet bs (- at 3))) (b2 (bytesGet bs (- at 4))) (b1 (bytesGet bs (- at 5))) (b0 (bytesGet bs (- at 6)))]
+        (+ (* acc 72057594037927936) (+ (* b6 281474976710656) (+ (* b5 1099511627776) (+ (* b4 4294967296) (+ (* b3 16777216) (+ (* b2 65536) (+ (* b1 256) b0)))))))))
+    (else (pqLoadUAt bs (- at 1) (- n 1) (+ (* acc 256) (bytesGet bs at)))))
 
 fn pqLoad64 bs: Bytes i: Int64 -> Int64
-  (let [(top (bytesGet bs (+ i 7)))]
-    (+ (pqLoadUAt bs (+ i 6) 7 0) (* (if (>= top 128) (- top 256) top) 72057594037927936)))
+  (let [(b0 (bytesGet bs i)) (b1 (bytesGet bs (+ i 1))) (b2 (bytesGet bs (+ i 2))) (b3 (bytesGet bs (+ i 3)))
+        (b4 (bytesGet bs (+ i 4))) (b5 (bytesGet bs (+ i 5))) (b6 (bytesGet bs (+ i 6))) (top (bytesGet bs (+ i 7)))
+        (low (+ b0 (+ (* b1 256) (+ (* b2 65536) (+ (* b3 16777216) (+ (* b4 4294967296) (+ (* b5 1099511627776) (* b6 281474976710656))))))))]
+    (+ low (* (if (>= top 128) (- top 256) top) 72057594037927936)))
 
 fn ! pqStoreU bs: Bytes i: Int64 u: Int64 n: Int64 -> Bool
   (if (= n 0) true
