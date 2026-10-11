@@ -165,8 +165,7 @@ fn acceptanceTests names: (List String) reason: String -> (List (Pair String Str
 fn getNonHermeticPairs -> (List (Pair String String))
   (listSortBy (fn [(p (Pair String String))] -> String (pairFirst p))
     (listAppend
-      (list (pair "tests/acceptance/d81/TD303BatchRpcResilienceTest.sh" "spawns a daemon on a /tmp socket and kills it by pid")
-            (pair "tests/acceptance/daemonLifecycleTest.sh" "runs asl_daemon_socket_test.sh and omni_daemon_test.sh, which start daemons")
+      (list (pair "tests/acceptance/daemonLifecycleTest.sh" "runs asl_daemon_socket_test.sh and omni_daemon_test.sh, which start daemons")
             (pair "tests/acceptance/vtbotDataTooling/httpDownloadTest.asl" "downloads from https://download.gatedata.org (network)"))
       (listAppend
         (acceptanceTests (list "asl_daemon_socket" "mesh_daemon" "mesh_declarative_config" "omni_daemon" "unified_agent_plane") (daemonReason))
@@ -182,7 +181,7 @@ fn getNonHermeticPairs -> (List (Pair String String))
                                  "mesh_ast_mutations" "mesh_memory_compaction" "mesh_preflush_and_mutations" "mesh_profiles_config"
                                  "mesh_sharded_blackboard" "mesh_stale_cleanup" "mesh_transaction_concurrency" "mesh_witness_sandbox"
                                  "preflush_gate" "profile_sync" "terminal_canvas_diff" "terminal_observatory_widgets"
-                                 "third_party_toolbelt_harness" "toolbelt_consult" "tui_cockpit_e2e" "tui_workspace_router"
+                                 "toolbelt_consult" "tui_cockpit_e2e" "tui_workspace_router"
                                  "universal_consilium" "unsafe_runtime_acceleration")
                            (unverifiedReason))))))
 
