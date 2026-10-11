@@ -9,6 +9,7 @@
            "asl-transpile/placement"
            "asl-transpile/asnl"
            "asl-transpile/transpile"
+           "asl-transpile/htmlEmit"
            "asl-transpile/yamlTranspile"
            "asl-transpile/csvTranspile"
            "asl-transpile/tomlTranspile"

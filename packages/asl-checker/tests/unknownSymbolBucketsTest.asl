@@ -48,8 +48,13 @@ fn testPreludeSourcedBuiltins -> Bool
 fn testStillCatchesRealUnknowns -> Bool
   (rejects? "(module b :x [f])\nfn f -> Int64\n  totallyMadeUpSymbolXyz\n" "not defined")
 
+fn testWithIsResolvedAsSpecialForm -> Bool
+  (let [(ds (c/checkSource "(module b :x [Rec f])\n(schema Rec (:f count Int64))\nfn f r: Rec -> Rec\n  (with r :count 2)\n" (mapEmpty) "with.asl"))]
+    (do (assert (listEmpty? ds) (str "with record copy resolves and preserves the record type: " (texts ds))) true))
+
 fn ! runTests -> Bool
   (do (assert (testMissingBuiltinSig) "bucket missingBuiltinSig")
+      (assert (testWithIsResolvedAsSpecialForm) "with is a record-copy special form, not an unknown callee")
       (assert (testCmpAliasOperators) "bucket cmpAliasOperators")
       (assert (testKeywordLiteral) "bucket keywordLiteral")
       (assert (testPreludeSourcedBuiltins) "bucket preludeSourcedBuiltins")

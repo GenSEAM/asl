@@ -35,6 +35,13 @@ fn testOperatorArity -> Bool
       (assert (listContains? (codesOf "(fn + [(a Int64) (b Int64)] -> Int64 a) (fn f [] -> Int64 (+ 1 2 3))") "arity") "a module fn named + keeps its own arity")
       true)
 
+fn testVariadicBuiltinMinimumArity -> Bool
+  (do (assert (listContains? (codesOf "(fn f [] -> Bool (and))") "arity") "and requires its declared leading operand")
+      (assert (listContains? (codesOf "(fn f [] -> Bool (or))") "arity") "or requires its declared leading operand")
+      (refute (listContains? (codesOf "(fn f [] -> Bool (and true false true))") "arity") "and accepts additional operands")
+      (refute (listContains? (codesOf "(fn f [] -> (List Int64) (list))") "arity") "list permits an empty variadic call")
+      true)
+
 fn testFieldFromClosure -> Bool
   (let [(src "(fn f [(a Int64)] -> Int64 a.kinds)")
         (other (summaryOf "(module other :x [Rec] :i []) (schema Rec (:f kinds Int64))" "/w/other.asl"))
@@ -61,6 +68,24 @@ fn testExhaustiveOverDeclaredEnums -> Bool
       (assert (listContains? (codesOf "(enum Color (:c red []) (:c green [])) (fn f [(c Color)] -> Int64 (mt c ((red) 1)))") "rule-4") "a match over a declared enum missing a case is rule-4")
       (assert (listContains? (codesOf "(enum Maybe (:c none []) (:c some [(v Int64)])) (fn f [(x Maybe)] -> Int64 (mt x ((some v) v)))") "rule-4") "a local enum reusing some and none is its own declared enum, so a match missing none is rule-4")
       true)
+
+fn testImportedCasesBeatPreludeNameCollisions -> Bool
+  (let [(proc (summaryOf "(module process :x [ProcessError] :i []) (enum ProcessError (:c notFound []) (:c timeout []))" "/w/process.asl"))
+        (deps (mapSet (mapEmpty) "/w/process.asl" proc))
+        (messages (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (mt e ((notFound) 0) ((timeout) 1)))" deps))
+        (qualified (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (mt e ((p/notFound) 0) ((p/timeout) 1)))" deps))
+        (qualifiedMissing (messagesWith "(module t :x [] :i [(process :a p)]) (fn f [(e p/ProcessError)] -> Int64 (mt e ((p/notFound) 0)))" deps))]
+    (do (assert (listEmpty? messages) (str "imported ProcessError constructor names win over prelude IoError names: " (stringJoin messages "; ")))
+        (assert (listEmpty? qualified) (str "all qualified imported cases are exhaustive: " (stringJoin qualified "; ")))
+        (assert (listAny? (fn [(m String)] -> Bool (stringStartsWith? m "rule-4")) qualifiedMissing) (str "qualified imported patterns still detect a missing case: " (stringJoin qualifiedMissing "; ")))
+        true))
+
+fn testCaseExportedWithoutTypeNameStillQualifies -> Bool
+  (let [(core (summaryOf "(module core :x [windowOf mk] :i []) (enum Window (:c windowOf [(text String)])) (fn mk [] -> Window (windowOf \"x\"))" "/w/core.asl"))
+        (deps (mapSet (mapEmpty) "/w/core.asl" core))
+        (messages (messagesWith "(module t :x [] :i [(core :a c)]) (fn f [] -> String (mt (c/mk) ((c/windowOf text) text)))" deps))]
+    (do (assert (listEmpty? messages) (str "a case exported by name alone, not its enum type, still qualifies in a match pattern: " (stringJoin messages "; ")))
+        true))
 
 fn testExactImportKeyWins -> Bool
   (let [(cliMain (summaryOf "(module asl-cli/main :x [] :i [])" "/w/asl-cli/src/main.asl"))
@@ -111,8 +136,11 @@ fn ! runTests -> Bool
       (assert (testChainedQualifiedType) "a/b/T resolves through the import chain")
       (assert (testExactImportKeyWins) "an exact deps key wins over suffix matches")
       (assert (testExhaustiveOverDeclaredEnums) "exhaustiveness follows the host: declared enums only")
+      (assert (testImportedCasesBeatPreludeNameCollisions) "match family follows the imported enum, not a same-named prelude tag")
+      (assert (testCaseExportedWithoutTypeNameStillQualifies) "a case exported by name alone still qualifies in a pattern")
       (assert (testCycleThroughRootOnly) "rule-11 reports cycles through the checked module only")
       (assert (testOperatorArity) "operator arity follows the host")
+      (assert (testVariadicBuiltinMinimumArity) "variadic builtins enforce minimum arity without rejecting extra operands")
       (assert (testFieldFromClosure) "field names come from the whole loaded closure")
       (assert (testNameBangMarksEffect) "a name ending in ! marks a fn effectful, as in the host")
       true)

@@ -1,5 +1,5 @@
 (module asl-gates/runnerMain
-  :x [chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
+  :x [FullGreenRecord chooseBase! chooseBaseAt! parseFullGreen changedPaths! changedPathsAt parseDependencies packages! packagesAt affected! affectedAt! affectedPrefixesAt! isForceFull findPackageByName makePackageInfo makeRunArgs parseRunArgs baselineAsserts osError cmdGate cmdRun cmdGateTests cmdCapture main]
   :i [(asl-gates/suiteRunner :a sr) (asl-gates/runnerLedger :a rl)])
 
 (schema PackageInfo

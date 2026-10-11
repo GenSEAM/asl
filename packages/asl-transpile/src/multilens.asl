@@ -1,4 +1,4 @@
-(module asl-transpile/multilens :x [MultilensModel LensOptions LensResult MultilensBundle defaultLensOptions emptyModel validateMultilensModel parseUnifiedModel modelExtractMeta modelExtractStyles modelExtractContent modelExtractData modelExtractConfig projectLens projectLensHtml projectLensCss projectLensYaml projectLensJson projectLensToml emitMultilensBundle measureBundleSavings] :i [(asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-text/text :a txt) (cssEmit :a ce) (transpile :a tr) (yamlTranspile :a yt) (tomlTranspile :a tt)])
+(module asl-transpile/multilens :x [MultilensModel LensOptions LensResult MultilensBundle defaultLensOptions emptyModel validateMultilensModel parseUnifiedModel modelExtractMeta modelExtractStyles modelExtractContent modelExtractData modelExtractConfig projectLens projectLensHtml projectLensCss projectLensYaml projectLensJson projectLensToml emitMultilensBundle measureBundleSavings] :i [(asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-text/text :a txt) (cssEmit :a ce) (yamlTranspile :a yt) (tomlTranspile :a tt) (htmlEmit :a he)])
 
 (schema MultilensModel (:f meta rd/SExpr) (:f styles rd/SExpr) (:f content rd/SExpr) (:f data rd/SExpr) (:f config rd/SExpr) (:f success Bool) (:f errorMsg Str))
 
@@ -54,7 +54,7 @@ fn isNonEmptySexpr expr: rd/SExpr -> Bool
   (mt expr ((rd/sexprList items) (not (listEmpty? items))) ((rd/sexprVect items) (not (listEmpty? items))) ((rd/sexprAtom v) (> (stringLength (stringTrim v)) 0)))
 
 fn projectLensHtml model: MultilensModel opts: LensOptions -> LensResult
-  (let [(title (findMetadataVal model.meta ":title" "AgentScript Document")) (lang (findMetadataVal model.meta ":lang" "en")) (cssText (if opts.includeStyles (ce/asnToCss model.styles opts.minify) "")) (contentExpr model.content) (bodyHtml (mt contentExpr ((rd/sexprList items) (if (listEmpty? items) "" (tr/vdomNodeToHtml contentExpr))) ((rd/sexprAtom v) (txt/stripQuotes v)) (_ ""))) (htmlOut (if opts.standalone (tr/renderHtml5Document title lang cssText bodyHtml opts.minify) bodyHtml)) (origStr (rd/renderSexpr model.content)) (origTok (txt/estimateTokens origStr)) (outTok (txt/estimateTokens htmlOut)) (savings (txt/calcSavings origTok outTok))] (LensResult :lens "html" :output htmlOut :originalTokens origTok :emittedTokens outTok :savingsPercent savings :success true :errorMsg ""))
+  (let [(title (findMetadataVal model.meta ":title" "AgentScript Document")) (lang (findMetadataVal model.meta ":lang" "en")) (cssText (if opts.includeStyles (ce/asnToCss model.styles opts.minify) "")) (contentExpr model.content) (bodyHtml (mt contentExpr ((rd/sexprList items) (if (listEmpty? items) "" (he/vdomNodeToHtml contentExpr))) ((rd/sexprAtom v) (txt/stripQuotes v)) (_ ""))) (htmlOut (if opts.standalone (he/renderHtml5Document title lang cssText bodyHtml opts.minify) bodyHtml)) (origStr (rd/renderSexpr model.content)) (origTok (txt/estimateTokens origStr)) (outTok (txt/estimateTokens htmlOut)) (savings (txt/calcSavings origTok outTok))] (LensResult :lens "html" :output htmlOut :originalTokens origTok :emittedTokens outTok :savingsPercent savings :success true :errorMsg ""))
 
 fn projectLensCss model: MultilensModel opts: LensOptions -> LensResult
   (let [(stylesExpr model.styles) (cssOut (ce/asnToCss stylesExpr opts.minify)) (origStr (rd/renderSexpr stylesExpr)) (origTok (txt/estimateTokens origStr)) (outTok (txt/estimateTokens cssOut)) (savings (txt/calcSavings origTok outTok))] (LensResult :lens "css" :output cssOut :originalTokens origTok :emittedTokens outTok :savingsPercent savings :success true :errorMsg ""))
@@ -62,8 +62,15 @@ fn projectLensCss model: MultilensModel opts: LensOptions -> LensResult
 fn projectLensYaml model: MultilensModel opts: LensOptions -> LensResult
   (let [(cfg model.config) (dat model.data) (targetExpr (if (isNonEmptySexpr cfg) (if (isNonEmptySexpr dat) (rd/makeList (listAppend (getSexprItemsList cfg) (getSexprItemsList dat))) cfg) (if (isNonEmptySexpr dat) dat (rd/makeList (list))))) (compactAsn (rd/renderSexpr targetExpr)) (res (yt/asnToYaml compactAsn))] (LensResult :lens "yaml" :output res.output :originalTokens res.originalTokens :emittedTokens res.asnTokens :savingsPercent res.savingsPercent :success res.success :errorMsg ""))
 
+fn mlJsonRoot? expr: rd/SExpr -> Bool
+  (mt expr ((rd/sexprList _) true) ((rd/sexprVect _) true) (_ false))
+
 fn projectLensJson model: MultilensModel opts: LensOptions -> LensResult
-  (let [(dat model.data) (cfg model.config) (targetExpr (if (isNonEmptySexpr dat) dat (if (isNonEmptySexpr cfg) cfg (rd/makeList (list))))) (compactAsn (rd/renderSexpr targetExpr)) (res (tr/asnToJson compactAsn))] (LensResult :lens "json" :output res.output :originalTokens res.originalTokens :emittedTokens res.asnTokens :savingsPercent res.savingsPercent :success res.success :errorMsg ""))
+  (let [(dat model.data) (cfg model.config) (targetExpr (if (isNonEmptySexpr dat) dat (if (isNonEmptySexpr cfg) cfg (rd/makeList (list)))))]
+    (if (not (mlJsonRoot? targetExpr))
+      (LensResult :lens "json" :output "Syntax error: invalid ASN root" :originalTokens 0 :emittedTokens 0 :savingsPercent 0.0 :success false :errorMsg "")
+      (let [(compactAsn (rd/renderSexpr targetExpr)) (output (he/sexprToJson targetExpr)) (origTok (txt/estimateTokens compactAsn)) (jsonTok (txt/estimateTokens output))]
+        (LensResult :lens "json" :output output :originalTokens origTok :emittedTokens jsonTok :savingsPercent 0.0 :success true :errorMsg ""))))
 
 fn projectLensToml model: MultilensModel opts: LensOptions -> LensResult
   (let [(cfg model.config) (meta model.meta) (targetExpr (if (isNonEmptySexpr cfg) (if (isNonEmptySexpr meta) (rd/makeList (listAppend (getSexprItemsList meta) (getSexprItemsList cfg))) cfg) (if (isNonEmptySexpr meta) meta (rd/makeList (list))))) (compactAsn (rd/renderSexpr targetExpr)) (res (tt/asnToTomlDocument compactAsn))] (LensResult :lens "toml" :output res.output :originalTokens res.originalTokens :emittedTokens res.asnTokens :savingsPercent res.savingsPercent :success res.success :errorMsg ""))

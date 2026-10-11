@@ -10,19 +10,19 @@ schema Scan
 
 fn scanChar st: Scan c: String -> Scan
   (cond
-    (st.inComment (if (= c "\n") {:depth st.depth :low st.low :inStr false :esc false :inComment false} st))
-    (st.esc {:depth st.depth :low st.low :inStr true :esc false :inComment false})
-    (st.inStr {:depth st.depth :low st.low :inStr (not (= c "\"")) :esc (= c "\\") :inComment false})
-    ((= c "\"") {:depth st.depth :low st.low :inStr true :esc false :inComment false})
-    ((= c ";") {:depth st.depth :low st.low :inStr false :esc false :inComment true})
-    ((or (= c "(") (or (= c "[") (= c "{"))) {:depth (+ st.depth 1) :low st.low :inStr false :esc false :inComment false})
+    (st.inComment (if (= c "\n") (Scan :depth st.depth :low st.low :inStr false :esc false :inComment false) st))
+    (st.esc (Scan :depth st.depth :low st.low :inStr true :esc false :inComment false))
+    (st.inStr (Scan :depth st.depth :low st.low :inStr (not (= c "\"")) :esc (= c "\\") :inComment false))
+    ((= c "\"") (Scan :depth st.depth :low st.low :inStr true :esc false :inComment false))
+    ((= c ";") (Scan :depth st.depth :low st.low :inStr false :esc false :inComment true))
+    ((or (= c "(") (or (= c "[") (= c "{"))) (Scan :depth (+ st.depth 1) :low st.low :inStr false :esc false :inComment false))
     ((or (= c ")") (or (= c "]") (= c "}")))
       (let [(d (- st.depth 1))]
-        {:depth d :low (if (< d st.low) d st.low) :inStr false :esc false :inComment false}))
+        (Scan :depth d :low (if (< d st.low) d st.low) :inStr false :esc false :inComment false)))
     (else st))
 
 fn balanced? text: String -> Bool
-  (let [(end (fold (fn [st c] (scanChar st c)) {:depth 0 :low 0 :inStr false :esc false :inComment false} (stringChars text)))]
+  (let [(end (fold (fn [st c] (scanChar st c)) (Scan :depth 0 :low 0 :inStr false :esc false :inComment false) (stringChars text)))]
     (and (= end.depth 0) (and (= end.low 0) (not end.inStr))))
 
 fn ! fileBalanced? path: String want: Bool -> Bool
