@@ -55,6 +55,23 @@ fn parseParenGroup toks: (List ilx/IndentToken) -> (Pair (List ilx/IndentToken) 
 fn parseBracketGroup toks: (List ilx/IndentToken) -> (Pair (List ilx/IndentToken) (List rd/SExpr))
   (let [(inner (stripOuterDelims toks))] (pair (list) (parseTokensToExprList inner)))
 
+fn mapKeyExpr key: rd/SExpr -> rd/SExpr
+  (mt key
+    ((rd/sexprAtom v) (if (and (stringStartsWith? v ":") (> (stringLength v) 1)) (rd/makeAtom (str "\"" (optionOr (stringSlice v 1 (stringLength v)) "") "\"")) key))
+    (_ key))
+
+fn mapExprLoop items: (List rd/SExpr) acc: rd/SExpr -> rd/SExpr
+  (mt (listHead items)
+    ((none) acc)
+    ((some key)
+      (let [(afterKey (optionOr (listTail items) (list)))]
+        (mt (listHead afterKey)
+          ((none) acc)
+          ((some value) (mapExprLoop (optionOr (listTail afterKey) (list)) (rd/makeList (list (rd/makeAtom "mapSet") acc (mapKeyExpr key) value))))))))
+
+fn mapExpr items: (List rd/SExpr) -> rd/SExpr
+  (mapExprLoop items (rd/makeList (list (rd/makeAtom "mapEmpty"))))
+
 fn desugarDestructuring isRecord: Bool vars: (List String) expr: rd/SExpr bodyForms: (List rd/SExpr) -> rd/SExpr
   (let [(finalBody (if (listEmpty? bodyForms) (list (rd/makeAtom "<body>")) bodyForms))] (if isRecord (let [(bindings (map (fn [(v String)] -> rd/SExpr (let [(fieldSym (rd/makeAtom (str ".-" v))) (getter (rd/makeList (list fieldSym expr)))] (rd/makeList (list (rd/makeAtom v) getter)))) vars)) (bVect (rd/makeVect bindings))] (rd/makeList (cons (rd/makeAtom "let") (cons bVect finalBody)))) (let [(bindingsFold (fold (fn [(acc (Pair (List rd/SExpr) Int64)) (v String)] -> (Pair (List rd/SExpr) Int64) (let [(curList (pairFirst acc)) (idx (pairSecond acc)) (idxAtom (rd/makeAtom (stringFromInt64 idx))) (getter (rd/makeList (list (rd/makeAtom "mt") (rd/makeList (list (rd/makeAtom "listGet") expr idxAtom)) (rd/makeList (list (rd/makeList (list (rd/makeAtom "some") (rd/makeAtom v))) (rd/makeAtom v)))))) (binding (rd/makeList (list (rd/makeAtom v) getter)))] (pair (listAppend curList (list binding)) (+ idx 1)))) (pair (list) 0) vars)) (bVect (rd/makeVect (pairFirst bindingsFold)))] (rd/makeList (cons (rd/makeAtom "let") (cons bVect finalBody))))))
 
@@ -91,8 +108,10 @@ fn wellNested? toks: (List ilx/IndentToken) open: (List Int64) -> Bool
        (mt t.kind
          ((tokLparen) (wellNested? rest (cons 1 open)))
          ((tokLbracket) (wellNested? rest (cons 2 open)))
+         ((tokLbrace) (wellNested? rest (cons 3 open)))
          ((tokRparen) (mt (listHead open) ((some k) (and (= k 1) (wellNested? rest (optionOr (listTail open) (list))))) ((none) false)))
          ((tokRbracket) (mt (listHead open) ((some k) (and (= k 2) (wellNested? rest (optionOr (listTail open) (list))))) ((none) false)))
+         ((tokRbrace) (mt (listHead open) ((some k) (and (= k 3) (wellNested? rest (optionOr (listTail open) (list))))) ((none) false)))
          (_ (wellNested? rest open))))))
 
 fn adjacentTok? lastTok: (Option ilx/IndentToken) t: ilx/IndentToken -> Bool
@@ -132,8 +151,12 @@ fn nestedExprs toks: (List ilx/IndentToken) collected: (List rd/SExpr) lastTok: 
          ((tokLbracket)
           (let [(inner (nestedExprs rest (list) (none)))]
             (nestedExprs (optionOr (listTail inner.rest) (list)) (cons (rd/makeList (cons (rd/makeAtom "list") inner.items)) collected) (none))))
+         ((tokLbrace)
+          (let [(inner (nestedExprs rest (list) (none)))]
+            (nestedExprs (optionOr (listTail inner.rest) (list)) (cons (mapExpr inner.items) collected) (none))))
          ((tokRparen) (NestScan :items (listReverse collected) :rest toks))
          ((tokRbracket) (NestScan :items (listReverse collected) :rest toks))
+         ((tokRbrace) (NestScan :items (listReverse collected) :rest toks))
          ((tokQuestion)
           (let [(q (questionAt collected lastTok t))]
             (nestedExprs rest (pairFirst q) (pairSecond q))))
