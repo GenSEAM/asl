@@ -1,9 +1,20 @@
-(module asl-forms/kernel :x [charAt isSpaceChar countDyck1 isBalanced escapeAsnVal concatAll universalNewlines findFrom asnUnescape extractSteps batchSeq ParsedStep EditOutcome parseStep kwOr normalizePath dirName baseName joinPath relPath resolveInRoot! relToRoot resolveEditTarget! binaryKind isFile! isDir! realChild? lstripColons lineEnds splitLinesKeepEnds] :i [])
+(module asl-forms/kernel :x [toolEnv! charAt isSpaceChar countDyck1 isBalanced escapeAsnVal concatAll universalNewlines findFrom asnUnescape extractSteps batchSeq ParsedStep EditOutcome parseStep kwOr normalizePath dirName baseName joinPath relPath resolveInRoot! relToRoot resolveEditTarget! binaryKind isFile! isDir! realChild? lstripColons lineEnds splitLinesKeepEnds] :i [])
 
 
 (schema ParsedStep (:f op String) (:f kwargs (Map String String)) (:f args (List String)))
 
 (schema EditOutcome (:f lines (List String)) (:f errCount Int64))
+
+
+fn ! envText! name: String -> String
+  (optionOr (envGet name) "")
+
+fn ! toolEnv! name: String -> String
+  (cond
+    ((or (not (stringEmpty? (envText! "ROOT_DIR"))) (not (stringEmpty? (envText! "SCRIPT_DIR")))) (envText! name))
+    ((= name "ROOT_DIR") (envText! "ASL_CLI_ROOT"))
+    ((= name "SCRIPT_DIR") (envText! "ASL_CLI_SCRIPT_DIR"))
+    (else (envText! name)))
 
 
 fn sepLen b: Bytes n: Int64 i: Int64 c: Int64 -> Int64

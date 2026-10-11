@@ -1,6 +1,6 @@
 (module asl-cli/native
   :x [main]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (tools/fleet/run :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/command :a cmd) (tools/nativeTest :a nt) (asl-parser/indentParser :a ip) (asl-harness/launch :a launch) (asl/packages/asl-cli/src/sweep :a sw) (tools/fleet/run :a run) (asl/packages/asl-cli/src/nativeCli :a nc) (asl/packages/asl-gates/src/suiteRunner :a runner) (asl-forms/main :a forms) (asl-intel :a intel)])
 
 fn rest args: (List String) -> (List String)
   (optionOr (listTail args) (list))
@@ -247,8 +247,28 @@ fn ! eval! ctx: sys/Context args: (List String) -> Int64
 fn ! launch! ctx: sys/Context args: (List String) -> Int64
   (mt (launch/mainIn! ctx.root args) ((ok code) code) ((err e) (do (sys/sayErr! (str "asl launch: " e)) 1)))
 
+fn ! forms! args: (List String) -> Int64
+  (let [(result (forms/mainText! args))]
+    (do (sys/say! (sys/stripTrailingNewlines (pairFirst result))) (pairSecond result)))
+
+fn ! intel! ctx: sys/Context args: (List String) -> Int64
+  (let [(oc (intel/runIntel! (intel/makeCtxFor! ctx.root) args))]
+    (do (print oc.out)
+        (if (stringEmpty? oc.err) () (eprintln (optionOr (stringSlice oc.err 0 (- (stringLength oc.err) 1)) "")))
+        oc.code))
+
+fn intelAlias verb: String -> String
+  (cond
+    ((listContains? (list "coupling" "graph" "complexity" "stubs" "trace") verb) verb)
+    ((or (= verb "vitality") (= verb "full")) "vitality")
+    (else ""))
+
 fn ! dispatch! ctx: sys/Context verb: String args: (List String) -> Int64
   (cond
+    ((or (stringStartsWith? verb "(") (stringStartsWith? verb ":")) (forms! (cons verb args)))
+    ((= verb "rpc") (forms! args))
+    ((= verb "intel") (intel! ctx args))
+    ((not (stringEmpty? (intelAlias verb))) (intel! ctx (cons (intelAlias verb) args)))
     ((= verb "run") (run! ctx args))
     ((= verb "test") (test! ctx args))
     ((= verb "parse") (parse! ctx args))

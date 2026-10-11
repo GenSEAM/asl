@@ -361,15 +361,15 @@ fn envOr! name: String -> String
   (optionOr (envGet name) "")
 
 fn toolchainRoot! root: String -> String
-  (let [(given (envOr! "ROOT_DIR"))
-        (script (envOr! "SCRIPT_DIR"))
+  (let [(given (k/toolEnv! "ROOT_DIR"))
+        (script (k/toolEnv! "SCRIPT_DIR"))
         (cwd (resultOr (realPath ".") root))]
     (cond ((not (stringEmpty? given)) given)
           ((not (stringEmpty? script)) (k/dirName script))
           (else cwd)))
 
 fn binDirectory! root: String -> String
-  (let [(given (envOr! "SCRIPT_DIR"))
+  (let [(given (k/toolEnv! "SCRIPT_DIR"))
         (toolRoot (toolchainRoot! root))]
     (if (stringEmpty? given) (k/joinPath toolRoot "bin") given))
 

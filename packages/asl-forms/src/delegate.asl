@@ -14,9 +14,9 @@ fn envOr! name: String -> String
   (optionOr (envGet name) "")
 
 fn contextFromEnv! ws: String cwd: String -> DelegateCtx
-  (let [(given (envOr! "SCRIPT_DIR"))
+  (let [(given (k/toolEnv! "SCRIPT_DIR"))
         (binDir (if (stringEmpty? given) (k/joinPath cwd "bin") given))
-        (rootGiven (envOr! "ROOT_DIR"))
+        (rootGiven (k/toolEnv! "ROOT_DIR"))
         (rootDir (cond ((not (stringEmpty? rootGiven)) rootGiven) ((= (k/baseName binDir) "bin") (k/dirName binDir)) (else cwd)))]
     (DelegateCtx :rootDir rootDir :binDir binDir :wsDir ws))
 

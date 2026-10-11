@@ -17,7 +17,7 @@ fn verbKind args: (List String) -> String
   (let [(verb (optionOr (listHead args) "help"))]
     (cond
       ((or (listContains? (list "run" "test" "parse" "eval" "launch") verb) (stringEndsWith? verb ".asl")) "native")
-      ((stringStartsWith? verb "(") "forms")
+      ((or (stringStartsWith? verb "(") (or (stringStartsWith? verb ":") (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace") verb))) "forms")
       (else "host")))
 
 fn ! direct? -> Bool
@@ -63,7 +63,7 @@ fn ! nativeGate! ctx: sys/Context args: (List String) -> (Option Int64)
   (let [(dir (optionOr (envGet "ASL_NATIVE_CLI_DIR") ""))]
     (cond
       ((not (direct?)) (none))
-      ((!= (verbKind args) "native") (some (hostExec! ctx args (list))))
+      ((= (verbKind args) "host") (some (hostExec! ctx args (list))))
       ((or (stringEmpty? dir) (fresh? ctx.root dir)) (none))
       (else (some (hostExec! ctx args (list (str "ASL_NATIVE_CLI_STALE=" dir)))))))
 

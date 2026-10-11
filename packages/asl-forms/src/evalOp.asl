@@ -11,7 +11,7 @@ fn ! cleanupError removed: (Result Unit String) -> (Option String)
   (mt removed ((err e) (some e)) ((ok _) (none)))
 
 fn ! runRoot root: String -> String
-  (let [(scriptDir (optionOr (envGet "SCRIPT_DIR") ""))]
+  (let [(scriptDir (k/toolEnv! "SCRIPT_DIR"))]
     (if (stringEndsWith? scriptDir "/bin") (k/dirName scriptDir) root))
 
 fn ! warmNativeSelf! root: String -> (Pair String Int64)

@@ -1,4 +1,4 @@
-(module asl-forms/main :x [main runPayload! runPayloadText! workspaceFor! Drive driveOutcome! driveExitCode] :i [(asl-forms/kernel :a k) (asl-forms/wire :a w) (asl-forms/ops :a ops) (asl-coord/claims :a coord)])
+(module asl-forms/main :x [main mainText! runPayload! runPayloadText! workspaceFor! Drive driveOutcome! driveExitCode] :i [(asl-forms/kernel :a k) (asl-forms/wire :a w) (asl-forms/ops :a ops) (asl-coord/claims :a coord)])
 
 
 (schema Drive (:f lines (List String)) (:f failed (List Bool)) (:f heads (List String)) (:f errs Int64) (:f stop String))
@@ -23,8 +23,8 @@ fn workspaceRoot! rootArg: String cwd: String -> String
     (else (let [(top (gitTop! cwd))] (if (stringEmpty? top) cwd top))))
 
 fn toolchainRoot! cwd: String -> String
-  (let [(given (envOr! "ROOT_DIR"))
-        (binDir (if (stringEmpty? (envOr! "SCRIPT_DIR")) (k/joinPath cwd "bin") (envOr! "SCRIPT_DIR")))]
+  (let [(given (k/toolEnv! "ROOT_DIR"))
+        (binDir (if (stringEmpty? (k/toolEnv! "SCRIPT_DIR")) (k/joinPath cwd "bin") (k/toolEnv! "SCRIPT_DIR")))]
     (cond
       ((not (stringEmpty? given)) given)
       ((= (k/baseName binDir) "bin") (k/dirName binDir))
@@ -185,11 +185,15 @@ fn validSession? s: String -> Bool
        (!= s ".")
        (listAll? (fn [(c String)] -> Bool (let [(k (charCode c))] (or (and (>= k 48) (<= k 57)) (and (>= k 65) (<= k 90)) (and (>= k 97) (<= k 122)) (= c ".") (= c "_") (= c "-")))) (stringChars s)))
 
-fn ! main args: (List String) -> (Result Int64 String)
+fn ! mainText! args: (List String) -> (Pair String Int64)
   (let [(hasRoot (= (optionOr (listHead args) "") "--root"))
         (rootArg (if hasRoot (optionOr (listGet args 1) "") ""))
         (payloadArgs (if hasRoot (listDrop args 2) args))
         (session (envOr! "ASL_SESSION"))]
     (if (and (not (stringEmpty? session)) (not (validSession? session)))
-      (do (println "(:error :code ERR_BAD_SESSION :message \"ASL_SESSION must match [A-Za-z0-9._-]+ without ..\")") (ok 2))
-      (ok (runPayload! (workspaceFor! rootArg) (stringJoin payloadArgs " ")))))
+      (pair "(:error :code ERR_BAD_SESSION :message \"ASL_SESSION must match [A-Za-z0-9._-]+ without ..\")\n" 2)
+      (runPayloadText! (workspaceFor! rootArg) (stringJoin payloadArgs " "))))
+
+fn ! main args: (List String) -> (Result Int64 String)
+  (let [(result (mainText! args))]
+    (do (println (optionOr (stringSlice (pairFirst result) 0 (- (stringLength (pairFirst result)) 1)) "")) (ok (pairSecond result))))

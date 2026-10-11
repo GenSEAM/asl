@@ -204,10 +204,10 @@ fn pyRepr s: String -> String
 
 fn procErrorMessage argv: (List String) e: cp/ProcessError -> String
   (mt e
-    ((notFound b) (str "[Errno 2] No such file or directory: " (pyRepr b)))
-    ((permissionDenied b) (str "[Errno 13] Permission denied: " (pyRepr b)))
-    ((timeout ms) (str "Command '[" (stringJoin (map pyRepr argv) ", ") "]' timed out after " (stringFromInt64 (/ ms 1000)) " seconds"))
-    ((executionFailed code msg) msg))
+    ((cp/notFound b) (str "[Errno 2] No such file or directory: " (pyRepr b)))
+    ((cp/permissionDenied b) (str "[Errno 13] Permission denied: " (pyRepr b)))
+    ((cp/timeout ms) (str "Command '[" (stringJoin (map pyRepr argv) ", ") "]' timed out after " (stringFromInt64 (/ ms 1000)) " seconds"))
+    ((cp/executionFailed code msg) msg))
 
 fn runArgv! argv: (List String) cwd: String timeoutMs: Int64 -> (Result cp/ProcessOutput cp/ProcessError)
   (mt (listHead argv)
@@ -962,7 +962,7 @@ fn queryLines! ws: String q: String cap: Int64 -> ScanAcc
           ((ok out) (gitScan! ws (stringSplit (k/universalNewlines (pyDecode out.stdout)) "\n") cap (emptyScan)))
           ((err e)
             (mt e
-              ((timeout ms) (ScanAcc :hits (list) :count 0 :capped false :skipped (list) :failed (procErrorMessage argv e)))
+              ((cp/timeout ms) (ScanAcc :hits (list) :count 0 :capped false :skipped (list) :failed (procErrorMessage argv e)))
               (_ (walkFallback! ws q cap))))))))
 
 fn walkFallback! ws: String q: String cap: Int64 -> ScanAcc
