@@ -569,9 +569,24 @@ fn gateOutcome g: j/Json -> String
     (str ":timeout true :seconds " (pyStr (jgetOr g "seconds")))
     (str ":exit " (pyStr (jgetOr g "exit"))))
 
+; (:m :ref WINDOWED-OBSERVATION :do "a FAIL/ERR_ASSERT line or a (:gate ...) anchor with a nonzero :failed count")
+fn isFailMarkedLine line: String -> Bool
+  (or (stringContains? line "FAIL") (stringContains? line "ERR_ASSERT")
+    (and (stringStartsWith? line "(:gate ")
+      (mt (countsOnLine line 7) ((some cnt) (!= (pairSecond cnt) "0")) (none false))))
+
+fn failureLines lines: (List String) -> (List String)
+  (filter isFailMarkedLine lines)
+
+; (:m :ref WINDOWED-OBSERVATION :do "select FAIL/ERR_ASSERT lines, the failing (:gate ...) anchor from anchoredCounts, and the final line ahead of a plain last-20-line tail, so a failure outside the plain tail still survives; same 20-line/2000-char limits either way")
 fn gateTail g: j/Json -> String
-  (let [combined (pyStrip (str (strOr g "stdout") "\n" (strOr g "stderr")))]
-    (charSuffix (joinSep (lastN (pySplitLines combined) 20) "\n") 2000))
+  (let [combined (pyStrip (str (strOr g "stdout") "\n" (strOr g "stderr")))
+        lines (pySplitLines combined)
+        failing (failureLines lines)
+        last (optionOr (listLast lines) "")
+        selected (if (listEmpty? failing) (list) (dedupe (listAppend failing (if (stringEmpty? last) (list) (list last)))))
+        chosen (if (listEmpty? selected) lines selected)]
+    (charSuffix (joinSep (lastN chosen 20) "\n") 2000))
 
 fn countsOnLine line: String q: Int64 -> (Option (Pair String String))
   (if (> q (stringLength line))

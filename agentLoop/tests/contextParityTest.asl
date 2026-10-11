@@ -357,8 +357,16 @@ fn portedFns -> (List String)
 fn ! runTests -> Bool
   (let [root (resultOr (realPath ".") ".")
         path (str root "/asl/agentLoop/tests/contextParityFixtures.asn")
-        passed (pa/replay! path (portedFns) (fn [f a] (dispatchA f a)))]
+        passed (pa/replay! path (portedFns) (fn [f a] (dispatchA f a)))
+        earlyFailLine "ERR_ASSERT: assertion failed: early failure"
+        gateNoise (map (fn [i] (str "noise " (stringFromInt64 i))) (range 2 25))
+        gateSummaryLine "(:gate :cmd \"g\" :exit 1)"
+        gateLongText (c/joinSep (listAppend (cons earlyFailLine gateNoise) (list gateSummaryLine)) "\n")
+        gateLongJson (j/jobj (list (pair "stdout" (j/jstr gateLongText)) (pair "stderr" (j/jstr ""))))
+        gateLongTail (x/gateTail gateLongJson)]
     (do
       (assert (= (x/pyStrip "  reply　") "reply") "pyStrip follows Python Unicode whitespace stripping")
       (assert (>= passed 300) (str "context parity: " (stringFromInt64 passed) " cases passed"))
+      (assert (stringContains? gateLongTail "early failure")
+              "WINDOWED-OBSERVATION: a failure line beyond the plain last-20-line tail still survives gateTail's selection")
       true))
