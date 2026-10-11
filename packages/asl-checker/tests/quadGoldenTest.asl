@@ -10,7 +10,7 @@ fn checkerRoots -> (List String)
 
 fn goldenDigests -> (List (Pair String String))
   (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "6704790146093603440:686858")
-        (pair "asl/packages/asl-cli/src/main.asl" "2312148940748687743:1456944"))
+        (pair "asl/packages/asl-cli/src/main.asl" "6859675547555247433:1457498"))
 
 fn diagLine d: ty/Diagnostic -> String
   (str d.path ":" d.line ":" d.col " " d.code " " d.message " | " d.msg)

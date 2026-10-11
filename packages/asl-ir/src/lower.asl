@@ -1482,8 +1482,8 @@ fn addLowered acc: ModAcc lf: LoweredFn -> ModAcc
 fn withDiag acc: ModAcc d: ty/IrDiag -> ModAcc
   (with acc :diags (listAppend acc.diags (list d)))
 
-fn wanted? only: (Option (List String)) name: String -> Bool
-  (or (stringContains? name "@init$") (mt only ((none) true) ((some names) (listContains? names name))))
+fn wanted? only: (Option (Map String Bool)) name: String -> Bool
+  (or (stringContains? name "@init$") (mt only ((none) true) ((some names) (mapHas? names name))))
 
 fn schemaDefaultAcc positions: (Map String String) info: ModInfo acc: ModAcc s: ast/SchemaNode -> ModAcc
   (let [(fieldTypes (schemaFieldTypes s)) (defaults (schemaDefaults s))]
@@ -1497,7 +1497,7 @@ fn schemaDefaultAcc positions: (Map String String) info: ModInfo acc: ModAcc s: 
                 ((ok lf) (addLowered a lf)))))
           acc (mapKeys defaults)))
 
-fn lowerTop positions: (Map String String) info: ModInfo only: (Option (List String)) acc: ModAcc t: ast/TopForm -> ModAcc
+fn lowerTop positions: (Map String String) info: ModInfo only: (Option (Map String Bool)) acc: ModAcc t: ast/TopForm -> ModAcc
   (mt t
     ((ast/topModule _) acc)
     ((ast/topSchema s) (schemaDefaultAcc positions info acc s))
@@ -1609,13 +1609,13 @@ fn addCtors acc: (Map String Ctor) d: ty/SsaTypeDecl -> (Map String Ctor)
   (:f hidden (Map String String))
   (:f sigs (Map String FnSig)))
 
-fn visible? exports: (Option (List String)) name: String -> Bool
-  (mt exports ((none) true) ((some names) (listContains? names name)))
+fn visible? exports: (Option (Map String Bool)) name: String -> Bool
+  (mt exports ((none) true) ((some names) (mapHas? names name)))
 
 fn hide v: Vis key: String modName: String -> Vis
   (with v :hidden (mapSet v.hidden key modName))
 
-fn addDecl keyPrefix: String modName: String exports: (Option (List String)) foreign: Bool v: Vis t: ast/TopForm -> Vis
+fn addDecl keyPrefix: String modName: String exports: (Option (Map String Bool)) foreign: Bool v: Vis t: ast/TopForm -> Vis
   (mt t
     ((ast/topModule _) v)
     ((ast/topDefun d) (let [(key (str keyPrefix d.name))]
@@ -1637,7 +1637,7 @@ fn addDecl keyPrefix: String modName: String exports: (Option (List String)) for
                                e.cases))))
     ((ast/topExpr _) v))
 
-fn addDecls v: Vis forms: (List ast/TopForm) keyPrefix: String modName: String exports: (Option (List String)) foreign: Bool -> Vis
+fn addDecls v: Vis forms: (List ast/TopForm) keyPrefix: String modName: String exports: (Option (Map String Bool)) foreign: Bool -> Vis
   (fold (fn [(acc Vis) (t ast/TopForm)] -> Vis (addDecl keyPrefix modName exports foreign acc t)) v forms)
 
 fn baseVis -> Vis
@@ -1668,8 +1668,11 @@ fn sysAliases forms: (List ast/TopForm) -> (Map String String)
 fn moduleInfo forms: (List ast/TopForm) -> ModInfo
   (infoOf forms (baseVis) (mapEmpty) "" (sysAliases forms) false)
 
+fn nameSetOf names: (List String) -> (Map String Bool)
+  (fold (fn [(m (Map String Bool)) (n String)] -> (Map String Bool) (mapSet m n true)) (mapEmpty) names)
+
 fn importVis v: Vis alias: String forms: (List ast/TopForm) -> Vis
-  (addDecls v forms (str alias "/") (moduleName forms) (some (mt (moduleHeader forms) ((some m) m.exported) ((none) (list)))) true)
+  (addDecls v forms (str alias "/") (moduleName forms) (some (nameSetOf (mt (moduleHeader forms) ((some m) m.exported) ((none) (list))))) true)
 
 fn importedCtors scope: LinkScope -> (Map String Ctor)
   (let [(walked (fold (fn [(acc (Pair (Map String Bool) (List ty/SsaTypeDecl))) (a String)] -> (Pair (Map String Bool) (List ty/SsaTypeDecl))
@@ -1896,7 +1899,8 @@ fn splitFunctions functions: (List ty/SsaFunction) -> (List ty/SsaFunction)
 
 fn lowerWith forms: (List ast/TopForm) positions: (Map String String) info: ModInfo prefix: String strings: (List String) only: (Option (List String)) -> (Result ty/SsaModule (List ty/IrDiag))
   (let [(name (moduleName forms))
-        (acc (fold (fn [(a ModAcc) (t ast/TopForm)] -> ModAcc (lowerTop positions info only a t)) (ModAcc :strings (poolOf strings) :functions (list) :diags (list)) forms))
+        (onlySet (mt only ((none) (none)) ((some xs) (some (nameSetOf xs)))))
+        (acc (fold (fn [(a ModAcc) (t ast/TopForm)] -> ModAcc (lowerTop positions info onlySet a t)) (ModAcc :strings (poolOf strings) :functions (list) :diags (list)) forms))
         (functions (splitFunctions (listReverse acc.functions)))
         (diags (if (stringEmpty? name) (cons (ty/makeIrDiag "ERR_LOWER_NO_MODULE" "the source has no module header" "?") acc.diags) acc.diags))
         (inits (filter (fn [(f ty/SsaFunction)] -> Bool (and (stringContains? f.name "@init$") (not (stringContains? f.name "@lambda")))) functions))

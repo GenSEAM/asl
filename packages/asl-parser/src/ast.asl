@@ -88,7 +88,7 @@ fn modPath? s: String -> Bool
 
 (schema KidForm (:f pf PosForm) (:f kids (List (Pair Int64 Int64))) (:f startOffset Int64) (:f endOffset Int64))
 
-(schema Frame (:f items (List rd/SExpr)) (:f paren Bool) (:f line Int64) (:f col Int64) (:f kidPos (List (Pair Int64 Int64))) (:f startOffset Int64))
+(schema Frame (:f items (List rd/SExpr)) (:f paren Bool) (:f line Int64) (:f col Int64) (:f kidPos (List (Pair Int64 Int64))) (:f startOffset Int64) (:f headAtom (Option rd/SExpr)))
 
 (schema ReadState (:f stack (List Frame)) (:f out (List KidForm)) (:f fail (Option ParseError)) (:f curOffset Int64))
 
@@ -144,11 +144,11 @@ fn readFail st: ReadState msg: String line: Int64 col: Int64 -> ReadState
 
 fn emitNode st: ReadState node: rd/SExpr line: Int64 col: Int64 kids: (List (Pair Int64 Int64)) startOff: Int64 endOff: Int64 -> ReadState
   (mt (listHead st.stack)
-    ((some f) (with st :stack (cons (Frame :items (cons node f.items) :paren f.paren :line f.line :col f.col :kidPos (cons (pair line col) f.kidPos) :startOffset f.startOffset) (frameTail st.stack)) :fail (none)))
+    ((some f) (with st :stack (cons (Frame :items (cons node f.items) :paren f.paren :line f.line :col f.col :kidPos (cons (pair line col) f.kidPos) :startOffset f.startOffset :headAtom (if (listEmpty? f.items) (some node) f.headAtom)) (frameTail st.stack)) :fail (none)))
     ((none) (with st :stack (list) :out (cons (KidForm :pf (PosForm :expr node :line line :col col) :kids kids :startOffset startOff :endOffset endOff) st.out) :fail (none))))
 
 fn pushFrame st: ReadState paren: Bool t: lx/Token -> ReadState
-  (with st :stack (cons (Frame :items (list) :paren paren :line t.line :col t.col :kidPos (list) :startOffset st.curOffset) st.stack) :fail (none))
+  (with st :stack (cons (Frame :items (list) :paren paren :line t.line :col t.col :kidPos (list) :startOffset st.curOffset :headAtom (none)) st.stack) :fail (none))
 
 fn finishFrame st: ReadState f: Frame t: lx/Token -> ReadState
   (let [(items (listReverse f.items))
@@ -195,7 +195,7 @@ fn postfixToken? raw: String -> Bool
 
 fn inModuleForm? stack: (List Frame) -> Bool
   (mt (listLast stack)
-    ((some f) (mt (listLast f.items) ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "module"))) ((none) false)))
+    ((some f) (mt f.headAtom ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "module"))) ((none) false)))
     ((none) false))
 
 fn postfixFields st: ReadState t: lx/Token -> ReadState
@@ -204,7 +204,7 @@ fn postfixFields st: ReadState t: lx/Token -> ReadState
     (mt (listHead st.stack)
       ((some f) (mt (listHead f.items)
         ((some prev) (mt (fieldChain prev fields)
-          ((some x) (with st :stack (cons (Frame :items (cons x (optionOr (listTail f.items) (list))) :paren f.paren :line f.line :col f.col :kidPos f.kidPos :startOffset f.startOffset) (frameTail st.stack)) :fail (none)))
+          ((some x) (with st :stack (cons (Frame :items (cons x (optionOr (listTail f.items) (list))) :paren f.paren :line f.line :col f.col :kidPos f.kidPos :startOffset f.startOffset :headAtom (if (listEmpty? (optionOr (listTail f.items) (list))) (some x) f.headAtom)) (frameTail st.stack)) :fail (none)))
           ((none) bad)))
         ((none) bad)))
       ((none) (mt (listHead st.out)
@@ -1002,7 +1002,10 @@ fn isDeclHead? h: String -> Bool
   (or (= h "defschema") (or (= h "dfs") (or (= h "schema")
   (or (= h "defenum") (or (= h "dfe") (= h "enum")))))))))
 
-fn appendDecl k: KidForm exported: (List String) xs: (List TopForm) -> (Result (List TopForm) ParseError)
+fn exportedSetOf exported: (List String) -> (Map String Bool)
+  (fold (fn [(m (Map String Bool)) (e String)] -> (Map String Bool) (mapSet m e true)) (mapEmpty) exported)
+
+fn appendDecl k: KidForm exported: (Map String Bool) xs: (List TopForm) -> (Result (List TopForm) ParseError)
   (let [(pf k.pf) (s pf.expr)]
     (cond
       ((isTag? s) (ok xs))
@@ -1013,13 +1016,14 @@ fn appendDecl k: KidForm exported: (List String) xs: (List TopForm) -> (Result (
          ((ok t) (ok (cons t xs)))
          ((err e) (err e))))))
 
-fn declStep acc: (Result (List TopForm) ParseError) k: KidForm exported: (List String) -> (Result (List TopForm) ParseError)
+fn declStep acc: (Result (List TopForm) ParseError) k: KidForm exported: (Map String Bool) -> (Result (List TopForm) ParseError)
   (mt acc ((err e) (err e)) ((ok xs) (appendDecl k exported xs)))
 
 fn declForms forms: (List KidForm) exported: (List String) -> (Result (List TopForm) ParseError)
-  (resultMap (fold (fn [(acc (Result (List TopForm) ParseError)) (k KidForm)] -> (Result (List TopForm) ParseError) (declStep acc k exported)) (ok (list)) forms) (fn [(xs (List TopForm))] -> (List TopForm) (listReverse xs)))
+  (let [(exportedSet (exportedSetOf exported))]
+    (resultMap (fold (fn [(acc (Result (List TopForm) ParseError)) (k KidForm)] -> (Result (List TopForm) ParseError) (declStep acc k exportedSet)) (ok (list)) forms) (fn [(xs (List TopForm))] -> (List TopForm) (listReverse xs))))
 
-fn declForm pf: PosForm kids: (List (Pair Int64 Int64)) exported: (List String) -> (Result TopForm ParseError)
+fn declForm pf: PosForm kids: (List (Pair Int64 Int64)) exported: (Map String Bool) -> (Result TopForm ParseError)
   (let [(s pf.expr) (h (rd/sexprHead s))] (cond ((not (rd/isList? s)) (err (perr "expected a top-level declaration" pf))) ((or (= h "defun") (or (= h "df") (= h "fn"))) (funNode s exported pf kids)) ((or (= h "defschema") (or (= h "dfs") (= h "schema"))) (schemaNode s pf)) ((or (= h "defenum") (or (= h "dfe") (= h "enum"))) (enumNode s pf)) (else (err (perr (str "not a declaration head: '" h "'") pf)))))
 
 fn filterTags items: (List rd/SExpr) -> (List rd/SExpr)
@@ -1084,7 +1088,7 @@ fn isInlineBodyCandidate? node: rd/SExpr -> Bool
               (_ false))))))
     false)
 
-fn funNode s: rd/SExpr exported: (List String) pf: PosForm kids: (List (Pair Int64 Int64)) -> (Result TopForm ParseError)
+fn funNode s: rd/SExpr exported: (Map String Bool) pf: PosForm kids: (List (Pair Int64 Int64)) -> (Result TopForm ParseError)
   (let [(items (sexprItems s))
         (rest1 (tailExprs items))
         (eff1 (hasEffect? (listHead rest1)))
@@ -1125,7 +1129,7 @@ fn funNode s: rd/SExpr exported: (List String) pf: PosForm kids: (List (Pair Int
       ((not (= arrow "->")) (err (perr "defun return type must be introduced by ->" pf)))
       ((stringEmpty? ret) (err (perr "defun has no return type" pf)))
       ((listEmpty? body) (err (perr "defun has no body" pf)))
-      (else (ok (topDefun (DefunNode :name name :typeVars (list) :isExported (listContains? exported name) :effect eff :params params :retType ret :docstring doc :body body :bodyPos bPos))))))
+      (else (ok (topDefun (DefunNode :name name :typeVars (list) :isExported (mapHas? exported name) :effect eff :params params :retType ret :docstring doc :body body :bodyPos bPos))))))
 
 fn vectItems v: rd/SExpr -> (List rd/SExpr)
   (let [(items (sexprItems v))] (if (and (rd/isList? v) (mt (listHead items) ((some h) (and (rd/isAtom? h) (= (rd/sexprHead h) "list"))) ((none) false))) (tailExprs items) items))
