@@ -51,7 +51,7 @@ fn ! benchStringJoinChars n: Int64 budgetMs: Int64 -> Bool
         (t1 (monotonicNs))
         (elapsedMs (/ (- t1 t0) 1000000))]
     (do
-      (assert (= (int32ToInt64 (stringLength joined)) n) (str "stringJoin of " (stringFromInt64 n) " one-char strings must reassemble to length " (stringFromInt64 n)))
+      (assert (= (stringLength joined) n) (str "stringJoin of " (stringFromInt64 n) " one-char strings must reassemble to length " (stringFromInt64 n)))
       (assert (< elapsedMs budgetMs) (str "stringJoin of " (stringFromInt64 n) " one-char strings took " (stringFromInt64 elapsedMs) "ms, budget " (stringFromInt64 budgetMs) "ms"))
       true))
 
@@ -61,7 +61,7 @@ fn testBoundPortHeadBannerDetected -> Bool
         (window (sh/boundPortHeadWindow banner))
         (verdict (wd/detectBoundPort window))]
     (do
-      (assert (<= (int32ToInt64 (stringLength window)) 65536) "boundPortHeadWindow caps detectBoundPort's input at 64KB regardless of total output size")
+      (assert (<= (stringLength window) 65536) "boundPortHeadWindow caps detectBoundPort's input at 64KB regardless of total output size")
       (assert verdict.detected "a port-bound banner on the first line must still be detected despite >64KB of later output")
       (assert (= verdict.port 4242) "the detected port must be read correctly from the head window")
       true))
@@ -77,7 +77,7 @@ fn ! testRunCmdCaptureStaysLinear -> Bool
         ((ok o)
           (do
             (assert (= o.exitCode 0) "head|tr must exit 0")
-            (assert (= (int32ToInt64 (stringLength o.stdout)) bytes) "captured stdout must be exactly 4MB, no truncation or duplication from the chunk merge")
+            (assert (= (stringLength o.stdout) bytes) "captured stdout must be exactly 4MB, no truncation or duplication from the chunk merge")
             (assert (= o.stdout expected) "captured stdout bytes must exactly match the source stream")
             true))
         ((err _) true))

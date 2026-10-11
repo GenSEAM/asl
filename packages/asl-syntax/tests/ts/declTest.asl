@@ -25,7 +25,7 @@ fn checkDeclRoundTrip! code: String -> Bool
   (let [(res (decl/parse code))]
     (do
       (mt res
-        ((ok _) true)
+        ((ok _) ())
         ((err msg)
          (println (str "PARSE ERROR: " msg " FOR: " code))))
       (assert (ok? res) (str "decl/parse succeeds: " code))

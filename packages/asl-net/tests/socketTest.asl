@@ -184,7 +184,7 @@ fn testUnixStalePath! -> Bool
             (assert (= (unixErr (unx/openUnixServerSocket (unx/makeUnixSocketConfig (unixPath "mode") true 4096))) "ERR_UNIX_SOCKET_INVALID_PERMISSIONS") "permissions beyond 0777 are rejected")
             (mt again
               ((ok s) (assert (resultOr (unx/closeUnixSocket s) false) "the rebound socket closes"))
-              ((err _) (pathRemove path)))
+              ((err _) (do (pathRemove path) ())))
             true)))))
 
 fn ! runTests -> Bool

@@ -65,7 +65,7 @@ fn splitTypeTokens toks: (List tr/Token) -> (List tr/Token)
         (else
          (cons hd (splitTypeTokens tl))))))
 
-fn parseTsExprStmt toks: (List tr/Token) text: String -> decl/ParseResult
+fn parseTsExprStmt toks: (List tr/Token) text: String -> tr/ParseResult
   (let [(exprRes (ts/parseTsExpr toks text 0))
         (exprNode exprRes.node)
         (rem exprRes.rest)
@@ -77,12 +77,12 @@ fn parseTsExprStmt toks: (List tr/Token) text: String -> decl/ParseResult
             (tlSemi (optionOr (listTail remSemi) (list)))
             (kids (cons (tr/elemNode exprNode) (listAppend trivSemi (list (tr/elemToken semiTok)))))
             (node (tr/makeNode "exprStmt" (tr/nodeStart exprNode) (tr/tokenEnd semiTok) kids))]
-        (decl/ParseResult :node node :rest tlSemi))
+        (tr/ParseResult :node node :rest tlSemi))
       (let [(kids (list (tr/elemNode exprNode)))
             (node (tr/makeNode "exprStmt" (tr/nodeStart exprNode) (tr/nodeEnd exprNode) kids))]
-        (decl/ParseResult :node node :rest rem))))
+        (tr/ParseResult :node node :rest rem))))
 
-fn parseTsItem toks: (List tr/Token) text: String -> decl/ParseResult
+fn parseTsItem toks: (List tr/Token) text: String -> tr/ParseResult
   (let [(declRes (decl/parseTsDecl toks text))
         (declNode declRes.node)
         (remDecl declRes.rest)]
@@ -159,10 +159,10 @@ fn parseModuleTokens toks: (List tr/Token) text: String -> (Result tr/Node Strin
 fn parse text: String -> (Result tr/Node String)
   (parseTsModule text)
 
-fn parseImportDecl toks: (List tr/Token) text: String -> decl/ParseResult
+fn parseImportDecl toks: (List tr/Token) text: String -> tr/ParseResult
   (decl/parseTsImportDecl toks text)
 
-fn parseExportDecl toks: (List tr/Token) text: String -> decl/ParseResult
+fn parseExportDecl toks: (List tr/Token) text: String -> tr/ParseResult
   (decl/parseTsExportDecl toks text)
 
 fn isModuleNode node: tr/Node -> Bool

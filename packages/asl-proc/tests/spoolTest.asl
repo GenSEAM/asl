@@ -1,10 +1,10 @@
-(module asl-proc/spoolTest :x [testRingBufferCapacity testDiskSpoolCircularCap testDiskSpoolAutoUnlink testTwoTierSpoolIntegration testTwoTierCloseSync! testRssCeilingGuard testDeadlockGuard testPortDetectionGuard testShLifecycleWiring! testRawByteFidelity! testUniqueSpoolPathsAndRelease! testDiskSpool50mbHardCap! runTests] :i [(spool :a spool) (deadline :a wd) (sh :a sh) (asl-proc/process :a proc)])
+(module asl-proc/spoolTest :x [testRingBufferCapacity testDiskSpoolCircularCap testDiskSpoolAutoUnlink testTwoTierSpoolIntegration testTwoTierCloseSync! testRssCeilingGuard testDeadlockGuard testPortDetectionGuard testShLifecycleWiring! testRawByteFidelity! testUniqueSpoolPathsAndRelease! testDiskSpool50mbHardCap! runTests] :i [(spool :a spool) (deadline :a wd) (sh :a sh) (asl-proc/process :a proc) (asl-proc/coreProcess :a cp)])
 
 fn testRingBufferCapacity -> Bool
   (let [(init (spool/makeRingBuffer 200)) (rb (fold (fn [(b spool/RingBuffer) (i Int64)] -> spool/RingBuffer (spool/ringPush b (str "line-" (stringFromInt64 i)))) init (range 0 250))) (firstLine (optionOr (listHead rb.lines) "")) (last3 (spool/ringTail rb 3)) (emptyTail (spool/ringTail rb 0)) (defRb (spool/makeRingBuffer 0))] (assert (= (spool/ringSize rb) 200) "Ring buffer size must be capped at 200") (assert (= rb.count 200) "Ring buffer count field must equal 200") (assert (= firstLine "line-50") "Oldest 50 lines must be evicted FIFO (first retained is line-50)") (assert (= (listLength last3) 3) "ring-tail 3 must return exactly 3 lines") (assert (= last3 (list "line-247" "line-248" "line-249")) "Tail lines must match last 3 pushed items") (assert (= (listLength emptyTail) 0) "ring-tail 0 must return empty list") (assert (= defRb.capacity 200) "Default capacity must be 200 when <= 0") true)
 
 fn testDiskSpoolCircularCap -> Bool
-  (let [(spool (spool/makeDiskSpool "tmp/test-spool.spool" 100)) (chunkA "012345678901234567890123456789012345678901234567890123456789") (chunkB "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~<>?[]{}|/=") (s1 (spool/spoolWrite spool chunkA)) (s2 (spool/spoolWrite s1 chunkB)) (defSpool (spool/makeDiskSpool "tmp/default.spool" 0))] (assert (= s1.currentBytes 60) "First write must store exactly 60 bytes") (refute s1.truncated "A write that fits under the cap must not be flagged truncated") (assert (= s2.currentBytes 100) "Second write must be capped at 100 bytes") (assert s2.truncated "A write that drops the head of the content must be flagged truncated") (assert (<= (int32ToInt64 (stringLength s2.content)) 100) "Spool content length must not exceed 100 bytes") (assert (stringEndsWith? s2.content chunkB) "Recent chunk bytes must be preserved at tail") (assert (= defSpool.maxBytes 10485760) "Default max-bytes must be 10MB (10485760)") (refute defSpool.truncated "A fresh spool must not be flagged truncated") true)
+  (let [(spool (spool/makeDiskSpool "tmp/test-spool.spool" 100)) (chunkA "012345678901234567890123456789012345678901234567890123456789") (chunkB "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~<>?[]{}|/=") (s1 (spool/spoolWrite spool chunkA)) (s2 (spool/spoolWrite s1 chunkB)) (defSpool (spool/makeDiskSpool "tmp/default.spool" 0))] (assert (= s1.currentBytes 60) "First write must store exactly 60 bytes") (refute s1.truncated "A write that fits under the cap must not be flagged truncated") (assert (= s2.currentBytes 100) "Second write must be capped at 100 bytes") (assert s2.truncated "A write that drops the head of the content must be flagged truncated") (assert (<= (stringLength s2.content) 100) "Spool content length must not exceed 100 bytes") (assert (stringEndsWith? s2.content chunkB) "Recent chunk bytes must be preserved at tail") (assert (= defSpool.maxBytes 10485760) "Default max-bytes must be 10MB (10485760)") (refute defSpool.truncated "A fresh spool must not be flagged truncated") true)
 
 fn ! testDiskSpoolAutoUnlink -> Bool
   (let [(spool (spool/makeDiskSpool "tmp/unlink-test.spool" 1024))]
@@ -69,15 +69,15 @@ fn ! testRawByteFidelity! -> Bool
           (let [(_ (mt res ((ok receipt) (sh/releaseReceipt! receipt)) ((err _) (err "no receipt"))))] true)))))
 
 fn ! testUniqueSpoolPathsAndRelease! -> Bool
-  (let [(labels (map (fn [(i Int64)] -> String (str "spool-fidelity-" (stringFromInt64 i))) (range 0 100))) (receiptResults (map (fn [(label String)] -> (Result proc/ProcessReceipt proc/ProcessError) (sh/runCmd! "echo" (list label))) labels))]
+  (let [(labels (map (fn [(i Int64)] -> String (str "spool-fidelity-" (stringFromInt64 i))) (range 0 100))) (receiptResults (map (fn [(label String)] -> (Result cp/ProcessReceipt cp/ProcessError) (sh/runCmd! "echo" (list label))) labels))]
     (do
-      (assert (listAll? (fn [(r (Result proc/ProcessReceipt proc/ProcessError))] -> Bool (ok? r)) receiptResults) "all 100 runCmd! calls must succeed")
-      (let [(receipts (map (fn [(r (Result proc/ProcessReceipt proc/ProcessError))] -> proc/ProcessReceipt (resultOr r (proc/makeProcessReceipt -1 0 0 "" ""))) receiptResults)) (paths (map (fn [(rc proc/ProcessReceipt)] -> String rc.spoolPath) receipts)) (distinctCount (listLength (fold (fn [(acc (List String)) (p String)] -> (List String) (if (listContains? acc p) acc (listAppend acc (list p)))) (list) paths)))]
+      (assert (listAll? (fn [(r (Result cp/ProcessReceipt cp/ProcessError))] -> Bool (ok? r)) receiptResults) "all 100 runCmd! calls must succeed")
+      (let [(receipts (map (fn [(r (Result cp/ProcessReceipt cp/ProcessError))] -> cp/ProcessReceipt (resultOr r (proc/makeProcessReceipt -1 0 0 "" ""))) receiptResults)) (paths (map (fn [(rc cp/ProcessReceipt)] -> String rc.spoolPath) receipts)) (distinctCount (listLength (fold (fn [(acc (List String)) (p String)] -> (List String) (if (listContains? acc p) acc (listAppend acc (list p)))) (list) paths)))]
         (do
           (assert (= distinctCount 100) "100 runCmd! calls must produce 100 distinct spool paths, not a handful reused across calls")
           (let [(pairs (zip receipts labels))]
-            (assert (listAll? (fn [(pr (Pair proc/ProcessReceipt String))] -> Bool (let [(rc (pairFirst pr)) (label (pairSecond pr))] (mt (fileRead rc.spoolPath) ((ok content) (stringContains? content label)) ((err _) false)))) pairs) "every receipt's spool file must contain that call's own output, not another run's"))
-          (assert (listAll? (fn [(rc proc/ProcessReceipt)] -> Bool (ok? (sh/releaseReceipt! rc))) receipts) "release must succeed for every receipt")
+            (assert (listAll? (fn [(pr (Pair cp/ProcessReceipt String))] -> Bool (let [(rc (pairFirst pr)) (label (pairSecond pr))] (mt (fileRead rc.spoolPath) ((ok content) (stringContains? content label)) ((err _) false)))) pairs) "every receipt's spool file must contain that call's own output, not another run's"))
+          (assert (listAll? (fn [(rc cp/ProcessReceipt)] -> Bool (ok? (sh/releaseReceipt! rc))) receipts) "release must succeed for every receipt")
           (refute (listAny? (fn [(p String)] -> Bool (ok? (fileRead p))) paths) "no spool files must remain readable after every receipt has been released")
           true))))
 
@@ -85,7 +85,7 @@ fn ! testDiskSpool50mbHardCap! -> Bool
   (let [(tmpDir (str (optionOr (envGet "TMPDIR") "/tmp") "/asl-proc-spool-" (stringFromInt64 (monotonicNs)))) (_ (dirCreate tmpDir)) (path (str tmpDir "/asl-proc-test-50mb.spool")) (spool0 (spool/makeDiskSpool path 10485760)) (chunk1mb (stringRepeat "0123456789ABCDEF" 65536)) (lastChunk (str (stringRepeat "0123456789ABCDEF" 65535) "FINAL_BYTES_50MB")) (spool49 (fold (fn [(s spool/DiskSpool) (_i Int64)] -> spool/DiskSpool (spool/spoolWrite s chunk1mb)) spool0 (range 0 49))) (spool50 (spool/spoolWrite spool49 lastChunk)) (syncRes (spool/spoolSync! spool50))]
     (do
       (assert (= spool50.currentBytes 10485760) "Spool current-bytes must be exactly 10MB (10485760)")
-      (assert (<= (int32ToInt64 (stringLength spool50.content)) 10485760) "Spool content length in RAM must be <= 10485760")
+      (assert (<= (stringLength spool50.content) 10485760) "Spool content length in RAM must be <= 10485760")
       (assert (stringEndsWith? spool50.content "FINAL_BYTES_50MB") "Tail of spool content must match the final bytes of 50MB stream")
       (assert spool50.truncated "A 50MB stream into a 10MB cap must be flagged truncated")
       (assert (ok? syncRes) "spool-sync! must succeed")
@@ -95,7 +95,7 @@ fn ! testDiskSpool50mbHardCap! -> Bool
           (let [(readRes (fileRead path))]
             (do
               (assert (ok? readRes) "fileRead of synced spool must succeed")
-              (assert (mt readRes ((ok diskData) (and (<= (int32ToInt64 (stringLength diskData)) 10485760) (and (= (int32ToInt64 (stringLength diskData)) 10485760) (stringEndsWith? diskData "FINAL_BYTES_50MB")))) ((err _) false)) "Synced disk file size must be exactly 10485760 bytes and preserve trailing stream bytes")
+              (assert (mt readRes ((ok diskData) (and (<= (stringLength diskData) 10485760) (and (= (stringLength diskData) 10485760) (stringEndsWith? diskData "FINAL_BYTES_50MB")))) ((err _) false)) "Synced disk file size must be exactly 10485760 bytes and preserve trailing stream bytes")
               (let [(unlinkRes (spool/spoolUnlink! synced))]
                 (do
                   (assert (ok? unlinkRes) "spool-unlink! must succeed")

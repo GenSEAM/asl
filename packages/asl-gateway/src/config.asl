@@ -207,7 +207,7 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f undeclaredIntents (Map String Int64)))
 
 
-fn listAppendOne xs: (List String) x: String -> (List String)
+fn listAppendOne xs: (List T) x: T -> (List T)
   (listAppend xs (list x))
 
 fn isStringLiteral? expr: rd/SExpr -> Bool

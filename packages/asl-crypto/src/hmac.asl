@@ -10,7 +10,7 @@ fn hexToBytes text: String -> (Result Bytes String)
   (let [(n (stringLength text)) (source (stringToBytes text))]
     (if (!= (mod n 2) 0) (err "invalid hex length")
       (let [(out (bytesAlloc (/ n 2)))
-            (step (fn [step i] -> (Result Bytes String)
+            (step (fn [(step Any) i] -> (Result Bytes String)
               (if (>= i (/ n 2)) (ok out)
                 (let [(hi (hexNibble (bytesGet source (* i 2))))
                       (lo (hexNibble (bytesGet source (+ (* i 2) 1))))]
@@ -23,7 +23,7 @@ fn hexDigit n: Int64 -> String
 
 fn bytesToHex bytes: Bytes -> String
   (let [(n (bytesLength bytes))
-        (step (fn [step i acc] -> String
+        (step (fn [(step Any) i acc] -> String
           (if (>= i n) acc
             (let [(v (bytesGet bytes i))]
               (step step (+ i 1) (str acc (hexDigit (/ v 16)) (hexDigit (mod v 16))))))))]
@@ -36,15 +36,15 @@ fn hmacSha256 key: Bytes msg: Bytes -> Bytes
         (keyLength2 (bytesLength normalized))
         (inner (bytesAlloc (+ 64 (bytesLength msg))))
         (outer (bytesAlloc 96))]
-    (let [(fill (fn [fill i] -> Unit
+    (let [(fill (fn [(fill Any) i] -> Unit
         (if (< i 64)
           (do (bytesSet inner i (^ (if (< i keyLength2) (bytesGet normalized i) 0) 54))
               (bytesSet outer i (^ (if (< i keyLength2) (bytesGet normalized i) 0) 92))
               (fill fill (+ i 1))) ())))
-          (copyMsg (fn [copyMsg i] -> Unit
+          (copyMsg (fn [(copyMsg Any) i] -> Unit
             (if (< i (bytesLength msg))
               (do (bytesSet inner (+ i 64) (bytesGet msg i)) (copyMsg copyMsg (+ i 1))) ())))
-          (copyOuter (fn [copyOuter i digest] -> Unit
+          (copyOuter (fn [(copyOuter Any) i digest] -> Unit
             (if (< i 32) (do (bytesSet outer (+ i 64) (bytesGet digest i)) (copyOuter copyOuter (+ i 1) digest)) ()))) ]
       (do (fill fill 0) (copyMsg copyMsg 0)
         (let [(innerDigest (mt (hexToBytes (bytesSha256 inner)) ((ok digest) digest) ((err _) (bytesAlloc 32))))]
@@ -58,7 +58,7 @@ fn constantTimeEqual a: Bytes b: Bytes -> Bool
   (let [(aLength (bytesLength a)) (bLength (bytesLength b))
         (shorter (if (< aLength bLength) aLength bLength))
         (different (if (= aLength bLength) 0 1))
-        (step (fn [step i diff] -> Int64
+        (step (fn [(step Any) i diff] -> Int64
           (if (>= i shorter) diff
             (step step (+ i 1) (| diff (^ (bytesGet a i) (bytesGet b i)))))))]
     (= (step step 0 different) 0))

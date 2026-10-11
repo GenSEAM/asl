@@ -11,7 +11,7 @@ fn csvSlice text: String start: Int64 end: Int64 -> String
 
 fn csvTypeList spec: String -> (Result (List String) String)
   (let [(bytes (stringToBytes spec)) (n (bytesLength bytes))
-        (step (fn [step start pos acc] -> (Result (List String) String)
+        (step (fn [(step Any) start pos acc] -> (Result (List String) String)
           (if (>= pos n)
             (let [(last (csvSlice spec start pos))]
               (if (or (= last "f64") (or (= last "i64") (= last "i8")))
@@ -27,7 +27,7 @@ fn csvTypeList spec: String -> (Result (List String) String)
 fn csvScanField text: String bytes: Bytes pos: Int64 -> CsvField
   (let [(n (bytesLength bytes)) (firstByte (bytesGet bytes pos))]
     (if (= firstByte 34)
-      (let [(quoted (fn [quoted chunk pos acc] -> CsvField
+      (let [(quoted (fn [(quoted Any) chunk pos acc] -> CsvField
               (if (>= pos n) (CsvField :valid false :value "" :next pos :message "unterminated quoted CSV field")
           (if (= (bytesGet bytes pos) 34)
             (if (and (< (+ pos 1) n) (= (bytesGet bytes (+ pos 1)) 34))
@@ -37,7 +37,7 @@ fn csvScanField text: String bytes: Bytes pos: Int64 -> CsvField
                   (CsvField :valid true :value value :next next :message "") (CsvField :valid false :value "" :next next :message "characters after closing CSV quote"))))
             (quoted quoted chunk (+ pos 1) acc)))))]
         (quoted quoted (+ pos 1) (+ pos 1) ""))
-      (let [(plain (fn [plain i] -> CsvField
+      (let [(plain (fn [(plain Any) i] -> CsvField
         (if (>= i n) (CsvField :valid true :value (csvSlice text pos i) :next i :message "")
           (let [(b (bytesGet bytes i))]
             (if (or (= b 44) (or (= b 10) (= b 13))) (CsvField :valid true :value (csvSlice text pos i) :next i :message "")
@@ -46,7 +46,7 @@ fn csvScanField text: String bytes: Bytes pos: Int64 -> CsvField
 
 fn csvScanRow text: String bytes: Bytes pos: Int64 -> (Result CsvRowScan String)
   (let [(n (bytesLength bytes))
-        (step (fn [step at acc] -> (Result CsvRowScan String)
+        (step (fn [(step Any) at acc] -> (Result CsvRowScan String)
           (let [(field (csvScanField text bytes at))]
             (if (not field.valid) (err field.message)
               (let [(value field.value) (next field.next)]
@@ -65,7 +65,7 @@ fn csvScanRow text: String bytes: Bytes pos: Int64 -> (Result CsvRowScan String)
 
 fn csvParseRows text: String -> (Result (List (List String)) String)
   (let [(bytes (stringToBytes text)) (n (bytesLength bytes))
-        (step (fn [step pos width acc] -> (Result (List (List String)) String)
+        (step (fn [(step Any) pos width acc] -> (Result (List (List String)) String)
           (if (>= pos n) (ok (listReverse acc))
             (if (or (= (bytesGet bytes pos) 10) (= (bytesGet bytes pos) 13))
               (if (= (bytesGet bytes pos) 13)
@@ -87,7 +87,7 @@ fn csvRowsRest rows: (List (List String)) -> (List (List String))
   (optionOr (listTail rows) (list))
 
 fn csvFloatArray rows: (List (List String)) col: Int64 -> F64Array
-  (let [(step (fn [step rest acc] -> (List F64Array)
+  (let [(step (fn [(step Any) rest acc] -> (List F64Array)
           (mt (listHead rest)
             ((none) (listReverse acc))
             ((some row)
@@ -96,7 +96,7 @@ fn csvFloatArray rows: (List (List String)) col: Int64 -> F64Array
     (f64ArrayConcat (step step rows (list))))
 
 fn csvIntArray rows: (List (List String)) col: Int64 -> I64Array
-  (let [(step (fn [step rest acc] -> (List I64Array)
+  (let [(step (fn [(step Any) rest acc] -> (List I64Array)
           (mt (listHead rest)
             ((none) (listReverse acc))
             ((some row)
@@ -105,7 +105,7 @@ fn csvIntArray rows: (List (List String)) col: Int64 -> I64Array
     (i64ArrayConcat (step step rows (list))))
 
 fn csvByteArray rows: (List (List String)) col: Int64 -> I8Array
-  (let [(step (fn [step rest acc] -> (List I8Array)
+  (let [(step (fn [(step Any) rest acc] -> (List I8Array)
           (mt (listHead rest)
             ((none) (listReverse acc))
             ((some row)

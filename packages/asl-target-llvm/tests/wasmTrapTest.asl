@@ -70,7 +70,7 @@ fn ! shWithin cmd: String timeoutS: Int64 -> Captured
 fn ! sh cmd: String -> Captured
   (shWithin cmd 1200)
 
-fn errorLine out: ProcessOutput -> String
+fn errorLine out: Captured -> String
   (fold (fn [(acc String) (line String)] -> String (if (and (stringEmpty? acc) (not (stringEmpty? line))) line acc)) "" (stringSplit out.stderr "\n"))
 
 fn errorCode line: String -> String

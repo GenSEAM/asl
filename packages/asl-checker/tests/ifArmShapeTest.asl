@@ -1,12 +1,12 @@
-(module asl-checker/ifArmShapeTest :x [runTests] :i [(asl-checker/check :a c)])
+(module asl-checker/ifArmShapeTest :x [runTests] :i [(asl-checker/check :a c) (asl-checker/types :a ty)])
 
-fn diagnosticsText ds: (List c/ty/Diagnostic) -> String
-  (stringJoin (map (fn [(d c/ty/Diagnostic)] -> String (str d.code " " d.message)) ds) "; ")
+fn diagnosticsText ds: (List ty/Diagnostic) -> String
+  (stringJoin (map (fn [(d ty/Diagnostic)] -> String (str d.code " " d.message)) ds) "; ")
 
-fn typeMismatch? ds: (List c/ty/Diagnostic) -> Bool
+fn typeMismatch? ds: (List ty/Diagnostic) -> Bool
   (and (stringContains? (diagnosticsText ds) "expected") (stringContains? (diagnosticsText ds) "found Unit"))
 
-fn invalidArm? ds: (List c/ty/Diagnostic) head: String -> Bool
+fn invalidArm? ds: (List ty/Diagnostic) head: String -> Bool
   (and (stringContains? (diagnosticsText ds) "arm") (stringContains? (diagnosticsText ds) head))
 
 fn testOneArmedIfValueRejected -> Bool

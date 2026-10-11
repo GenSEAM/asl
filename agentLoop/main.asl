@@ -1098,13 +1098,13 @@ fn liveReviewAccepts? result: (Result (Option String) String) -> Bool
 
 fn ! appendLiveHook! path: String turn: Int64 name: String result: (Result (Option String) String) -> Bool
   (mt result
-    ((err e) (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name
-      "\" :error \"" (c/escapeAsn e) "\")\n")))
+    ((err e) (ok? (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name
+      "\" :error \"" (c/escapeAsn e) "\")\n"))))
     ((ok text)
       (mt text
-        ((some value) (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name
-          "\" :text \"" (c/escapeAsn value) "\")\n")))
-        ((none) (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name "\" :text \"\")\n"))))))
+        ((some value) (ok? (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name
+          "\" :text \"" (c/escapeAsn value) "\")\n"))))
+        ((none) (ok? (fileAppend path (str "(:liveHook :turn " (stringFromInt64 turn) " :name \"" name "\" :text \"\")\n")))))))
 
 fn ! liveHooks! provider: pv/Provider -> (Pair (fn [String String] -> (Result (Option String) String)) (fn [String String] -> (Result (Option String) String)))
   (pair (fn [sys msg] (liveAdvisor provider sys msg))
@@ -1243,8 +1243,8 @@ fn ! liveExecOps! ops: (List (List (Pair String c/KvVal))) ra: RunArgs rootDir: 
                 (fn [path patch mode] (listContains? (rl/writtenPaths written) path)) runOp)))
           receipt (ex/formatOpReceipt out.rec env.readCap)
           _ownsLogged (if (liveOwnsRejected? out)
-            (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
-              " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n"))
+            (ok? (fileAppend journal (str "(:liveOwnsRejected (:turn " (stringFromInt64 run.state.turn)
+              " :op \"" (c/escapeAsn opName) "\" :file \"" (c/escapeAsn target) "\" :error ERR_OWNS))\n")))
             true)
           wrote (and owned (and (listContains? (list "write" "edit") opName) (liveWriteStatus out)))
           snapWritten (mt before
@@ -1355,7 +1355,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
         _retryLogged (appendRetryLines! path turn (pairSecond retried))
         response (pairFirst retried)
         _usageLogged (mt (providerUsageLine response.meta)
-          ((some form) (fileAppend path (str form "\n"))) ((none) true))]
+          ((some form) (ok? (fileAppend path (str form "\n")))) ((none) true))]
     (mt response.reply
       ((err e)
         (do
@@ -1401,10 +1401,10 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   lastGates (liveLastGateMap newGates state.lastGates)
                   history (listAppend wrapped.history
                     (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr user)) (pair "got" (j/jstr got))))))
-                  _ (fold (fn [ok gate] (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
-                       (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))) true newGates)
+                  _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
+                       (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
-                  _ (if parseDefect (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n")) true)
+                  _ (if parseDefect (ok? (fileAppend path (str "(:turn " (stringFromInt64 turn) " :parse-defect true)\n"))) true)
                   done (liveDoneOps? operations)
                   findingsDelivery (and (not (listEmpty? findingForms))
                     (listContains? (list "scout" "review") (optionOr (modeOf ra.modeHint) "")))
@@ -1433,8 +1433,8 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                     (gi/gateIntegrity! ra.gates ra.owns rootDir newGates ra.gateTimeout none)
                     (pair true "not required"))
                   _ (if (and terminal (not (listEmpty? ra.gates)))
-                    (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
-                      " :message \"" (c/escapeAsn (pairSecond integrity)) "\")\n")) true)
+                    (ok? (fileAppend path (str "(:gateIntegrity :ok " (if (pairFirst integrity) "true" "false")
+                      " :message \"" (c/escapeAsn (pairSecond integrity)) "\")\n"))) true)
                   reviewOk (if reviewInvoked (liveReviewAccepts? reviewResult) true)
                   hooksOk (and (liveHookOk? advisorResult) reviewOk)
                   status (if (or (not (pairFirst integrity)) (not hooksOk))

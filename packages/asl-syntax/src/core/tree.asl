@@ -49,7 +49,8 @@
       nodeLeaves
       checkTiling
       checkTilingRoot
-      checkTokensTiling]
+      checkTokensTiling
+      ParseResult]
   :i [])
 
 (schema Missing
@@ -72,6 +73,10 @@
   (:f children (List TreeElement))
   (:f missing (Option Missing) :default (none))
   (:f stray Bool :default false))
+
+(schema ParseResult
+  (:f node Node)
+  (:f rest (List Token)))
 
 (enum TreeElement
   (:c elemToken [(tok Token)] "Leaf token")

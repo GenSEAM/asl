@@ -528,9 +528,9 @@ fn parseTsx text: String -> (Result tr/Node String)
 fn parse text: String -> (Result tr/Node String)
   (parseTsx text)
 
-fn parseTsxExpr toks: (List tr/Token) text: String minPrec: Int64 -> decl/ParseResult
+fn parseTsxExpr toks: (List tr/Token) text: String minPrec: Int64 -> tr/ParseResult
   (let [(res (ts/parseTsExpr toks text minPrec))]
-    (decl/ParseResult :node (rejectTypeAssertions res.node) :rest res.rest))
+    (tr/ParseResult :node (rejectTypeAssertions res.node) :rest res.rest))
 
 fn parseTsxElement text: String start: Int64 -> (Result tr/Node String)
   (let [(bs (stringToBytes text))

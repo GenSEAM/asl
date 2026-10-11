@@ -34,7 +34,7 @@ fn testUniqueHeadings -> Bool
         (readSec (mds/markdownReadSymbol doc "Features"))]
     (do
       (assert (ok? r1) "Welcome resolves")
-      (assert (= (sym/symbolName (resultOr r1 (sym/makeSymbolDef "" "" 0 0))) "Welcome") "Welcome name matches")
+      (assert (= (mds/headingSymbolName (resultOr r1 (mds/MarkdownHeadingSymbol :name "" :kind "" :level 0 :path "" :container "" :depth 0 :start 0 :end 0 :headingStart 0 :headingEnd 0 :startLine 0 :endLine 0))) "Welcome") "Welcome name matches")
       (assert (ok? r2) "# Welcome with hash resolves")
       (assert (ok? r3) "Features resolves")
       (assert (ok? r4) "## Features with hash resolves")
@@ -73,9 +73,9 @@ fn testPathDisambiguation -> Bool
         (sec2 (resultOr (mds/markdownReadSymbol doc "Reference/Options") ""))]
     (do
       (assert (ok? r1) "Guide/Options resolves uniquely")
-      (assert (= (sym/symbolContainer (resultOr r1 (sym/makeSymbolDef "" "" 0 0))) "Guide") "Guide/Options container is Guide")
+      (assert (= (mds/headingSymbolContainer (resultOr r1 (mds/MarkdownHeadingSymbol :name "" :kind "" :level 0 :path "" :container "" :depth 0 :start 0 :end 0 :headingStart 0 :headingEnd 0 :startLine 0 :endLine 0))) "Guide") "Guide/Options container is Guide")
       (assert (ok? r2) "Reference/Options resolves uniquely")
-      (assert (= (sym/symbolContainer (resultOr r2 (sym/makeSymbolDef "" "" 0 0))) "Reference") "Reference/Options container is Reference")
+      (assert (= (mds/headingSymbolContainer (resultOr r2 (mds/MarkdownHeadingSymbol :name "" :kind "" :level 0 :path "" :container "" :depth 0 :start 0 :end 0 :headingStart 0 :headingEnd 0 :startLine 0 :endLine 0))) "Reference") "Reference/Options container is Reference")
       (assert (ok? r3) "Guide/## Options resolves")
       (assert (ok? r4) "Reference.Options dotted path resolves")
       (assert (stringContains? sec1 "Guide options.") "sec1 contains Guide options")

@@ -15,10 +15,6 @@
       (asl-syntax/js/expr :a expr)
       (asl-syntax/js/cover :a cv)])
 
-(schema ParseResult
-  (:f node tr/Node)
-  (:f rest (List tr/Token)))
-
 (schema StmtsResult
   (:f elements (List tr/TreeElement))
   (:f rest (List tr/Token)))
@@ -71,7 +67,7 @@ fn hasNewlineElements elems: (List tr/TreeElement) text: String -> Bool
                (hasNewlineElements tl text)))))
         ((tr/elemNode _)
          (hasNewlineElements tl text)))))
-fn finishStatementWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeKind: String rem: (List tr/Token) text: String -> ParseResult
+fn finishStatementWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeKind: String rem: (List tr/Token) text: String -> tr/ParseResult
   (let [(sp (skipTrivia rem))
         (triv (pairFirst sp))
         (afterTriv (pairSecond sp))]
@@ -79,7 +75,7 @@ fn finishStatementWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeK
       (let [(lastElem (optionOr (listLast nodeKids) (tr/elemToken (tr/makeToken "" startPos startPos))))
             (endPos (tr/elementEnd lastElem))
             (node (tr/makeNode nodeKind startPos endPos nodeKids))]
-        (ParseResult :node node :rest rem))
+        (tr/ParseResult :node node :rest rem))
       (let [(firstTok (optionOr (listHead afterTriv) (tr/makeToken "" 0 0)))
             (k (tr/tokenKind firstTok))]
         (cond
@@ -87,25 +83,25 @@ fn finishStatementWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeK
            (let [(allKids (listAppend nodeKids (listAppend triv (list (tr/elemToken firstTok)))))
                  (endPos (tr/tokenEnd firstTok))
                  (node (tr/makeNode nodeKind startPos endPos allKids))]
-             (ParseResult :node node :rest (optionOr (listTail afterTriv) (list)))))
+             (tr/ParseResult :node node :rest (optionOr (listTail afterTriv) (list)))))
           ((or (= k "rbrace") (hasNewlineElements triv text))
            (let [(lastElem (optionOr (listLast nodeKids) (tr/elemToken (tr/makeToken "" startPos startPos))))
                  (endPos (tr/elementEnd lastElem))
                  (node (tr/makeNode nodeKind startPos endPos nodeKids))]
-             (ParseResult :node node :rest rem)))
+             (tr/ParseResult :node node :rest rem)))
           (else
            (let [(errTok (tr/makeToken "error" (tr/tokenStart firstTok) (tr/tokenStart firstTok)))
                  (allKids (listAppend nodeKids (list (tr/elemToken errTok))))
                  (lastElem (optionOr (listLast allKids) (tr/elemToken (tr/makeToken "" startPos startPos))))
                  (endPos (tr/elementEnd lastElem))
                  (node (tr/makeNode nodeKind startPos endPos allKids))]
-             (ParseResult :node node :rest rem)))))))
-fn parseDeclarator toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+             (tr/ParseResult :node node :rest rem)))))))
+fn parseDeclarator toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp (skipTrivia toks))
         (triv (pairFirst sp))
         (rem (pairSecond sp))]
     (if (listEmpty? rem)
-      (ParseResult :node (tr/makeErrorNode 0 0 triv) :rest rem)
+      (tr/ParseResult :node (tr/makeErrorNode 0 0 triv) :rest rem)
       (let [(hd (optionOr (listHead rem) (tr/makeToken "" 0 0)))
             (tl (optionOr (listTail rem) (list)))
             (k (tr/tokenKind hd))]
@@ -127,10 +123,10 @@ fn parseDeclarator toks: (List tr/Token) text: String inAsync: Bool inGen: Bool 
                      (initNode initRes.node)
                      (kids (cons nameElem (listAppend triv2 (cons (tr/elemToken eqTok) (listAppend triv3 (list (tr/elemNode initNode)))))))
                      (node (tr/makeNode "declarator" (tr/tokenStart hd) (tr/nodeEnd initNode) kids))]
-                 (ParseResult :node node :rest initRes.rest))
+                 (tr/ParseResult :node node :rest initRes.rest))
                (let [(kids (list nameElem))
                      (node (tr/makeNode "declarator" (tr/tokenStart hd) (tr/tokenEnd hd) kids))]
-                 (ParseResult :node node :rest tl)))))
+                 (tr/ParseResult :node node :rest tl)))))
           ((or (= k "lbracket") (= k "lbrace"))
            (let [(patRes (parsePattern rem text))
                  (patNode patRes.node)
@@ -149,13 +145,13 @@ fn parseDeclarator toks: (List tr/Token) text: String inAsync: Bool inGen: Bool 
                      (initNode initRes.node)
                      (kids (cons patElem (listAppend triv2 (cons (tr/elemToken eqTok) (listAppend triv3 (list (tr/elemNode initNode)))))))
                      (node (tr/makeNode "declarator" (tr/nodeStart patNode) (tr/nodeEnd initNode) kids))]
-                 (ParseResult :node node :rest initRes.rest))
+                 (tr/ParseResult :node node :rest initRes.rest))
                (let [(kids (list patElem))
                      (node (tr/makeNode "declarator" (tr/nodeStart patNode) (tr/nodeEnd patNode) kids))]
-                 (ParseResult :node node :rest remPat)))))
+                 (tr/ParseResult :node node :rest remPat)))))
           (else
            (let [(node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))))]
-             (ParseResult :node node :rest tl)))))))
+             (tr/ParseResult :node node :rest tl)))))))
 fn parseDeclaratorsLoop toks: (List tr/Token) text: String inAsync: Bool inGen: Bool acc: (List tr/TreeElement) -> StmtsResult
   (let [(sp (skipTrivia toks))
         (triv (pairFirst sp))
@@ -175,7 +171,7 @@ fn parseDeclaratorsLoop toks: (List tr/Token) text: String inAsync: Bool inGen: 
                 (accWithComma (listAppend accWithDecl (listAppend triv2 (list (tr/elemToken commaTok)))))]
             (parseDeclaratorsLoop tlComma text inAsync inGen accWithComma))
           (StmtsResult :elements accWithDecl :rest remDecl)))))
-fn parseVarStmt varTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+fn parseVarStmt varTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(kindStr (tokenSlice varTok text))
         (declKind (cond ((= kindStr "var") "varDecl") ((= kindStr "let") "letDecl") (else "constDecl")))
         (res (parseDeclaratorsLoop tl text inAsync inGen (list)))
@@ -207,44 +203,44 @@ fn parseBlockBodyLoop toks: (List tr/Token) text: String inAsync: Bool inGen: Bo
                 (let [(advToks (if (= (listLength remToks) (listLength rem)) (optionOr (listTail rem) (list)) remToks))]
                   (parseBlockBodyLoop advToks text inAsync inGen (listAppend accWithTriv (list (tr/elemNode stmtNode)))))
                 (parseBlockBodyLoop remToks text inAsync inGen (listAppend accWithTriv (list (tr/elemNode stmtNode)))))))))))
-fn parseBlock toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+fn parseBlock toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (if (listEmpty? toks)
-    (ParseResult :node (tr/makeErrorNode 0 0 (list)) :rest toks)
+    (tr/ParseResult :node (tr/makeErrorNode 0 0 (list)) :rest toks)
     (let [(hd (optionOr (listHead toks) (tr/makeToken "" 0 0)))
           (tl (optionOr (listTail toks) (list)))
           (k (tr/tokenKind hd))]
       (if (!= k "lbrace")
-        (ParseResult :node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))) :rest tl)
+        (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))) :rest tl)
         (let [(res (parseBlockBodyLoop tl text inAsync inGen (list (tr/elemToken hd))))
               (elems res.elements)
               (rem res.rest)
               (lastElem (optionOr (listLast elems) (tr/elemToken hd)))
               (endPos (tr/elementEnd lastElem))
               (node (tr/makeNode "block" (tr/tokenStart hd) endPos elems))]
-          (ParseResult :node node :rest rem)))))
+          (tr/ParseResult :node node :rest rem)))))
 
-fn parseCoverExpr toks: (List tr/Token) text: String minPrec: Int64 inAsync: Bool inGen: Bool -> ParseResult
+fn parseCoverExpr toks: (List tr/Token) text: String minPrec: Int64 inAsync: Bool inGen: Bool -> tr/ParseResult
   (cv/parseCoverExprCtxWithBody toks text minPrec inAsync inGen parseBlock)
-fn parsePattern toks: (List tr/Token) text: String -> ParseResult
+fn parsePattern toks: (List tr/Token) text: String -> tr/ParseResult
   (let [(sp (skipTrivia toks))
         (triv (pairFirst sp))
         (rem (pairSecond sp))]
     (if (listEmpty? rem)
-      (ParseResult :node (tr/makeErrorNode 0 0 triv) :rest rem)
+      (tr/ParseResult :node (tr/makeErrorNode 0 0 triv) :rest rem)
       (let [(hd (optionOr (listHead rem) (tr/makeToken "" 0 0)))
             (k (tr/tokenKind hd))]
         (if (or (= k "lbracket") (= k "lbrace"))
           (let [(patRes (parseCoverExpr rem text 25 false false))
                 (patNode patRes.node)
                 (refined (resultOr (cv/refineToPattern patNode) patNode))]
-            (ParseResult :node refined :rest patRes.rest))
-          (ParseResult :node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))) :rest (optionOr (listTail rem) (list)))))))
-fn parseIfStmt ifTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+            (tr/ParseResult :node refined :rest patRes.rest))
+          (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))) :rest (optionOr (listTail rem) (list)))))))
+fn parseIfStmt ifTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))]
     (if (or (listEmpty? rem1) (!= (tr/tokenKind (optionOr (listHead rem1) (tr/makeToken "" 0 0))) "lparen"))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart ifTok) (tr/tokenEnd ifTok) (list (tr/elemToken ifTok))) :rest tl)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart ifTok) (tr/tokenEnd ifTok) (list (tr/elemToken ifTok))) :rest tl)
       (let [(lpTok (optionOr (listHead rem1) (tr/makeToken "" 0 0)))
             (tlLp (optionOr (listTail rem1) (list)))
             (sp2 (skipTrivia tlLp))
@@ -292,16 +288,16 @@ fn parseIfStmt ifTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool in
                                  (list (tr/elemNode altNode)))))))
                 (endPos (tr/nodeEnd altNode))
                 (node (tr/makeNode "ifStmt" (tr/tokenStart ifTok) endPos allKids))]
-            (ParseResult :node node :rest altRes.rest))
+            (tr/ParseResult :node node :rest altRes.rest))
           (let [(endPos (tr/nodeEnd consNode))
                 (node (tr/makeNode "ifStmt" (tr/tokenStart ifTok) endPos kidsBeforeElse))]
-            (ParseResult :node node :rest remCons))))))
-fn parseWhileStmt whileTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+            (tr/ParseResult :node node :rest remCons))))))
+fn parseWhileStmt whileTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))]
     (if (or (listEmpty? rem1) (!= (tr/tokenKind (optionOr (listHead rem1) (tr/makeToken "" 0 0))) "lparen"))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart whileTok) (tr/tokenEnd whileTok) (list (tr/elemToken whileTok))) :rest tl)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart whileTok) (tr/tokenEnd whileTok) (list (tr/elemToken whileTok))) :rest tl)
       (let [(lpTok (optionOr (listHead rem1) (tr/makeToken "" 0 0)))
             (tlLp (optionOr (listTail rem1) (list)))
             (sp2 (skipTrivia tlLp))
@@ -332,8 +328,8 @@ fn parseWhileStmt whileTok: tr/Token tl: (List tr/Token) text: String inAsync: B
                                   (list (tr/elemNode bodyNode)))))))))))
             (endPos (tr/nodeEnd bodyNode))
             (node (tr/makeNode "whileStmt" (tr/tokenStart whileTok) endPos kids))]
-        (ParseResult :node node :rest bodyRes.rest))))
-fn parseDoWhileStmt doTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+        (tr/ParseResult :node node :rest bodyRes.rest))))
+fn parseDoWhileStmt doTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))
@@ -344,14 +340,14 @@ fn parseDoWhileStmt doTok: tr/Token tl: (List tr/Token) text: String inAsync: Bo
         (triv2 (pairFirst sp2))
         (rem2 (pairSecond sp2))]
     (if (or (listEmpty? rem2) (!= (tokenSlice (optionOr (listHead rem2) (tr/makeToken "" 0 0)) text) "while"))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart doTok) (tr/nodeEnd bodyNode) (cons (tr/elemToken doTok) (listAppend triv1 (list (tr/elemNode bodyNode))))) :rest remBody)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart doTok) (tr/nodeEnd bodyNode) (cons (tr/elemToken doTok) (listAppend triv1 (list (tr/elemNode bodyNode))))) :rest remBody)
       (let [(whileTok (optionOr (listHead rem2) (tr/makeToken "" 0 0)))
             (tlWhile (optionOr (listTail rem2) (list)))
             (sp3 (skipTrivia tlWhile))
             (triv3 (pairFirst sp3))
             (rem3 (pairSecond sp3))]
         (if (or (listEmpty? rem3) (!= (tr/tokenKind (optionOr (listHead rem3) (tr/makeToken "" 0 0))) "lparen"))
-          (ParseResult :node (tr/makeErrorNode (tr/tokenStart doTok) (tr/tokenEnd whileTok) (list (tr/elemToken doTok))) :rest rem3)
+          (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart doTok) (tr/tokenEnd whileTok) (list (tr/elemToken doTok))) :rest rem3)
           (let [(lpTok (optionOr (listHead rem3) (tr/makeToken "" 0 0)))
                 (tlLp (optionOr (listTail rem3) (list)))
                 (sp4 (skipTrivia tlLp))
@@ -378,7 +374,7 @@ fn parseDoWhileStmt doTok: tr/Token tl: (List tr/Token) text: String inAsync: Bo
                                         (listAppend triv5
                                           (list (tr/elemToken rpTok)))))))))))))]
             (finishStatementWithSemi kids (tr/tokenStart doTok) "doWhileStmt" remRp text))))))
-fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))
@@ -389,14 +385,14 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
         (triv2 (pairFirst sp2))
         (rem2 (pairSecond sp2))]
     (if (or (listEmpty? rem2) (!= (tr/tokenKind (optionOr (listHead rem2) (tr/makeToken "" 0 0))) "lparen"))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart forTok) (tr/tokenEnd forTok) (list (tr/elemToken forTok))) :rest tl)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart forTok) (tr/tokenEnd forTok) (list (tr/elemToken forTok))) :rest tl)
       (let [(lpTok (optionOr (listHead rem2) (tr/makeToken "" 0 0)))
             (tlLp (optionOr (listTail rem2) (list)))
             (spIn (skipTrivia tlLp))
             (trivIn (pairFirst spIn))
             (remIn (pairSecond spIn))]
         (if (listEmpty? remIn)
-          (ParseResult :node (tr/makeErrorNode (tr/tokenStart forTok) (tr/tokenEnd lpTok) (list (tr/elemToken forTok))) :rest remIn)
+          (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart forTok) (tr/tokenEnd lpTok) (list (tr/elemToken forTok))) :rest remIn)
           (let [(hdIn (optionOr (listHead remIn) (tr/makeToken "" 0 0)))
                 (kIn (tr/tokenKind hdIn))
                 (slIn (tokenSlice hdIn text))
@@ -450,7 +446,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                  (listAppend trivB
                                                    (list (tr/elemNode bodyNode)))))))))))))
                          (node (tr/makeNode "forInStmt" (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                     (ParseResult :node node :rest bodyRes.rest)))
+                     (tr/ParseResult :node node :rest bodyRes.rest)))
                   ((= slAfter "of")
                    (let [(ofTok tokAfter)
                          (tlOf (optionOr (listTail remAfter) (list)))
@@ -488,7 +484,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                    (list (tr/elemNode bodyNode)))))))))))))
                          (stmtKind (if hasAwait "forAwaitOfStmt" "forOfStmt"))
                          (node (tr/makeNode stmtKind (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                     (ParseResult :node node :rest bodyRes.rest)))
+                     (tr/ParseResult :node node :rest bodyRes.rest)))
                   (else
                    (let [(varRes (parseVarStmt hdIn (optionOr (listTail remIn) (list)) text inAsync inGen))
                          (varNode varRes.node)
@@ -497,7 +493,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                          (trivT (pairFirst spT))
                          (remT (pairSecond spT))
                          (hasTest (and (not (listEmpty? remT)) (!= (tr/tokenKind (optionOr (listHead remT) (tr/makeToken "" 0 0))) "semicolon")))
-                         (testRes (if hasTest (parseCoverExpr remT text 0 inAsync inGen) (ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remT)))
+                         (testRes (if hasTest (parseCoverExpr remT text 0 inAsync inGen) (tr/ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remT)))
                          (testNode testRes.node)
                          (remTest testRes.rest)
                          (spSemi2 (skipTrivia remTest))
@@ -510,7 +506,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                          (trivU (pairFirst spU))
                          (remU (pairSecond spU))
                          (hasUpd (and (not (listEmpty? remU)) (!= (tr/tokenKind (optionOr (listHead remU) (tr/makeToken "" 0 0))) "rparen")))
-                         (updRes (if hasUpd (parseCoverExpr remU text 0 inAsync inGen) (ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remU)))
+                         (updRes (if hasUpd (parseCoverExpr remU text 0 inAsync inGen) (tr/ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remU)))
                          (updNode updRes.node)
                          (remUpd updRes.rest)
                          (spRp (skipTrivia remUpd))
@@ -539,7 +535,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                  (listAppend trivB
                                                    (list (tr/elemNode bodyNode)))))))))))))
                          (node (tr/makeNode "forStmt" (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                     (ParseResult :node node :rest bodyRes.rest)))))
+                     (tr/ParseResult :node node :rest bodyRes.rest)))))
               (if (= kIn "semicolon")
                 (let [(semi1Tok hdIn)
                       (tlSemi1 (optionOr (listTail remIn) (list)))
@@ -547,7 +543,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                       (trivT (pairFirst spT))
                       (remT (pairSecond spT))
                       (hasTest (and (not (listEmpty? remT)) (!= (tr/tokenKind (optionOr (listHead remT) (tr/makeToken "" 0 0))) "semicolon")))
-                      (testRes (if hasTest (parseCoverExpr remT text 0 inAsync inGen) (ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remT)))
+                      (testRes (if hasTest (parseCoverExpr remT text 0 inAsync inGen) (tr/ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remT)))
                       (testNode testRes.node)
                       (remTest testRes.rest)
                       (spSemi2 (skipTrivia remTest))
@@ -560,7 +556,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                       (trivU (pairFirst spU))
                       (remU (pairSecond spU))
                       (hasUpd (and (not (listEmpty? remU)) (!= (tr/tokenKind (optionOr (listHead remU) (tr/makeToken "" 0 0))) "rparen")))
-                      (updRes (if hasUpd (parseCoverExpr remU text 0 inAsync inGen) (ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remU)))
+                      (updRes (if hasUpd (parseCoverExpr remU text 0 inAsync inGen) (tr/ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remU)))
                       (updNode updRes.node)
                       (remUpd updRes.rest)
                       (spRp (skipTrivia remUpd))
@@ -589,7 +585,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                               (listAppend trivB
                                                 (list (tr/elemNode bodyNode)))))))))))))
                       (node (tr/makeNode "forStmt" (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                  (ParseResult :node node :rest bodyRes.rest))
+                  (tr/ParseResult :node node :rest bodyRes.rest))
                 (let [(initRes (parseCoverExpr remIn text 0 inAsync inGen))
                       (initNode initRes.node)
                       (remInit initRes.rest)
@@ -632,7 +628,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                    (listAppend trivB
                                                      (list (tr/elemNode bodyNode)))))))))))))
                            (node (tr/makeNode "forInStmt" (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                       (ParseResult :node node :rest bodyRes.rest)))
+                       (tr/ParseResult :node node :rest bodyRes.rest)))
                     ((= slAfter "of")
                      (let [(ofTok tokAfter)
                            (tlOf (optionOr (listTail remAfter) (list)))
@@ -667,7 +663,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                      (list (tr/elemNode bodyNode)))))))))))))
                            (stmtKind (if hasAwait "forAwaitOfStmt" "forOfStmt"))
                            (node (tr/makeNode stmtKind (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                       (ParseResult :node node :rest bodyRes.rest)))
+                       (tr/ParseResult :node node :rest bodyRes.rest)))
                     (else
                      (let [(semi1Pair (expectClose remAfter "semicolon" (tr/nodeEnd initNode)))
                            (semi1Tok (pairFirst semi1Pair))
@@ -676,7 +672,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                            (trivT (pairFirst spT))
                            (remT (pairSecond spT))
                            (hasTest (and (not (listEmpty? remT)) (!= (tr/tokenKind (optionOr (listHead remT) (tr/makeToken "" 0 0))) "semicolon")))
-                           (testRes (if hasTest (parseCoverExpr remT text 0 inAsync inGen) (ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remT)))
+                           (testRes (if hasTest (parseCoverExpr remT text 0 inAsync inGen) (tr/ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remT)))
                            (testNode testRes.node)
                            (remTest testRes.rest)
                            (spSemi2 (skipTrivia remTest))
@@ -689,7 +685,7 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                            (trivU (pairFirst spU))
                            (remU (pairSecond spU))
                            (hasUpd (and (not (listEmpty? remU)) (!= (tr/tokenKind (optionOr (listHead remU) (tr/makeToken "" 0 0))) "rparen")))
-                           (updRes (if hasUpd (parseCoverExpr remU text 0 inAsync inGen) (ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remU)))
+                           (updRes (if hasUpd (parseCoverExpr remU text 0 inAsync inGen) (tr/ParseResult :node (tr/makeNode "emptyExpr" 0 0 (list)) :rest remU)))
                            (updNode updRes.node)
                            (remUpd updRes.rest)
                            (spRp (skipTrivia remUpd))
@@ -720,8 +716,8 @@ fn parseForStmt forTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                        (listAppend trivB
                                                          (list (tr/elemNode bodyNode)))))))))))))))
                            (node (tr/makeNode "forStmt" (tr/tokenStart forTok) (tr/nodeEnd bodyNode) kids))]
-                       (ParseResult :node node :rest bodyRes.rest))))))))))))
-fn parseReturnStmt returnTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+                       (tr/ParseResult :node node :rest bodyRes.rest))))))))))))
+fn parseReturnStmt returnTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp (skipTrivia tl))
         (triv (pairFirst sp))
         (rem (pairSecond sp))]
@@ -734,28 +730,28 @@ fn parseReturnStmt returnTok: tr/Token tl: (List tr/Token) text: String inAsync:
               (kids (cons (tr/elemToken returnTok) (listAppend triv (list (tr/elemToken semiTok)))))
               (endPos (tr/tokenEnd semiTok))
               (node (tr/makeNode "returnStmt" (tr/tokenStart returnTok) endPos kids))]
-          (ParseResult :node node :rest (optionOr (listTail rem) (list))))
+          (tr/ParseResult :node node :rest (optionOr (listTail rem) (list))))
         (let [(kids (list (tr/elemToken returnTok)))
               (endPos (tr/tokenEnd returnTok))
               (node (tr/makeNode "returnStmt" (tr/tokenStart returnTok) endPos kids))]
-          (ParseResult :node node :rest tl)))
+          (tr/ParseResult :node node :rest tl)))
       (let [(exprRes (parseCoverExpr rem text 0 inAsync inGen))
             (exprNode exprRes.node)
             (remAfter exprRes.rest)
             (kids (cons (tr/elemToken returnTok) (listAppend triv (list (tr/elemNode exprNode)))))]
         (finishStatementWithSemi kids (tr/tokenStart returnTok) "returnStmt" remAfter text))))
-fn parseThrowStmt throwTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+fn parseThrowStmt throwTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp (skipTrivia tl))
         (triv (pairFirst sp))
         (rem (pairSecond sp))]
     (if (or (listEmpty? rem) (hasNewlineElements triv text))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart throwTok) (tr/tokenEnd throwTok) (list (tr/elemToken throwTok))) :rest tl)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart throwTok) (tr/tokenEnd throwTok) (list (tr/elemToken throwTok))) :rest tl)
       (let [(exprRes (parseCoverExpr rem text 0 inAsync inGen))
             (exprNode exprRes.node)
             (remAfter exprRes.rest)
             (kids (cons (tr/elemToken throwTok) (listAppend triv (list (tr/elemNode exprNode)))))]
         (finishStatementWithSemi kids (tr/tokenStart throwTok) "throwStmt" remAfter text))))
-fn parseBreakStmt breakTok: tr/Token tl: (List tr/Token) text: String -> ParseResult
+fn parseBreakStmt breakTok: tr/Token tl: (List tr/Token) text: String -> tr/ParseResult
   (let [(sp (skipTrivia tl))
         (triv (pairFirst sp))
         (rem (pairSecond sp))]
@@ -768,11 +764,11 @@ fn parseBreakStmt breakTok: tr/Token tl: (List tr/Token) text: String -> ParseRe
               (kids (cons (tr/elemToken breakTok) (listAppend triv (list (tr/elemToken semiTok)))))
               (endPos (tr/tokenEnd semiTok))
               (node (tr/makeNode "breakStmt" (tr/tokenStart breakTok) endPos kids))]
-          (ParseResult :node node :rest (optionOr (listTail rem) (list))))
+          (tr/ParseResult :node node :rest (optionOr (listTail rem) (list))))
         (let [(kids (list (tr/elemToken breakTok)))
               (endPos (tr/tokenEnd breakTok))
               (node (tr/makeNode "breakStmt" (tr/tokenStart breakTok) endPos kids))]
-          (ParseResult :node node :rest tl)))
+          (tr/ParseResult :node node :rest tl)))
       (let [(labelTok (optionOr (listHead rem) (tr/makeToken "" 0 0)))
             (k (tr/tokenKind labelTok))]
         (if (!= k "ident")
@@ -780,7 +776,7 @@ fn parseBreakStmt breakTok: tr/Token tl: (List tr/Token) text: String -> ParseRe
           (let [(kids (cons (tr/elemToken breakTok) (listAppend triv (list (tr/elemToken labelTok)))))
                 (remLabel (optionOr (listTail rem) (list)))]
             (finishStatementWithSemi kids (tr/tokenStart breakTok) "breakStmt" remLabel text))))))
-fn parseContinueStmt contTok: tr/Token tl: (List tr/Token) text: String -> ParseResult
+fn parseContinueStmt contTok: tr/Token tl: (List tr/Token) text: String -> tr/ParseResult
   (let [(sp (skipTrivia tl))
         (triv (pairFirst sp))
         (rem (pairSecond sp))]
@@ -793,11 +789,11 @@ fn parseContinueStmt contTok: tr/Token tl: (List tr/Token) text: String -> Parse
               (kids (cons (tr/elemToken contTok) (listAppend triv (list (tr/elemToken semiTok)))))
               (endPos (tr/tokenEnd semiTok))
               (node (tr/makeNode "continueStmt" (tr/tokenStart contTok) endPos kids))]
-          (ParseResult :node node :rest (optionOr (listTail rem) (list))))
+          (tr/ParseResult :node node :rest (optionOr (listTail rem) (list))))
         (let [(kids (list (tr/elemToken contTok)))
               (endPos (tr/tokenEnd contTok))
               (node (tr/makeNode "continueStmt" (tr/tokenStart contTok) endPos kids))]
-          (ParseResult :node node :rest tl)))
+          (tr/ParseResult :node node :rest tl)))
       (let [(labelTok (optionOr (listHead rem) (tr/makeToken "" 0 0)))
             (k (tr/tokenKind labelTok))]
         (if (!= k "ident")
@@ -805,10 +801,10 @@ fn parseContinueStmt contTok: tr/Token tl: (List tr/Token) text: String -> Parse
           (let [(kids (cons (tr/elemToken contTok) (listAppend triv (list (tr/elemToken labelTok)))))
                 (remLabel (optionOr (listTail rem) (list)))]
             (finishStatementWithSemi kids (tr/tokenStart contTok) "continueStmt" remLabel text))))))
-fn parseDebuggerStmt debugTok: tr/Token tl: (List tr/Token) text: String -> ParseResult
+fn parseDebuggerStmt debugTok: tr/Token tl: (List tr/Token) text: String -> tr/ParseResult
   (finishStatementWithSemi (list (tr/elemToken debugTok)) (tr/tokenStart debugTok) "debuggerStmt" tl text)
-fn parseEmptyStmt semiTok: tr/Token tl: (List tr/Token) -> ParseResult
-  (ParseResult :node (tr/makeNode "emptyStmt" (tr/tokenStart semiTok) (tr/tokenEnd semiTok) (list (tr/elemToken semiTok))) :rest tl)
+fn parseEmptyStmt semiTok: tr/Token tl: (List tr/Token) -> tr/ParseResult
+  (tr/ParseResult :node (tr/makeNode "emptyStmt" (tr/tokenStart semiTok) (tr/tokenEnd semiTok) (list (tr/elemToken semiTok))) :rest tl)
 fn parseSwitchCasesLoop toks: (List tr/Token) text: String inAsync: Bool inGen: Bool acc: (List tr/TreeElement) -> StmtsResult
   (let [(sp (skipTrivia toks))
         (triv (pairFirst sp))
@@ -888,12 +884,12 @@ fn parseCaseBodyStmts toks: (List tr/Token) text: String inAsync: Bool inGen: Bo
               (let [(advToks (if (= (listLength remToks) (listLength rem)) (optionOr (listTail rem) (list)) remToks))]
                 (StmtsResult :elements (listAppend accWithTriv (list (tr/elemNode stmtNode))) :rest advToks))
               (parseCaseBodyStmts remToks text inAsync inGen (listAppend accWithTriv (list (tr/elemNode stmtNode))))))))))
-fn parseSwitchStmt switchTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+fn parseSwitchStmt switchTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))]
     (if (or (listEmpty? rem1) (!= (tr/tokenKind (optionOr (listHead rem1) (tr/makeToken "" 0 0))) "lparen"))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart switchTok) (tr/tokenEnd switchTok) (list (tr/elemToken switchTok))) :rest tl)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart switchTok) (tr/tokenEnd switchTok) (list (tr/elemToken switchTok))) :rest tl)
       (let [(lpTok (optionOr (listHead rem1) (tr/makeToken "" 0 0)))
             (tlLp (optionOr (listTail rem1) (list)))
             (sp2 (skipTrivia tlLp))
@@ -912,7 +908,7 @@ fn parseSwitchStmt switchTok: tr/Token tl: (List tr/Token) text: String inAsync:
             (triv4 (pairFirst sp4))
             (rem4 (pairSecond sp4))]
         (if (or (listEmpty? rem4) (!= (tr/tokenKind (optionOr (listHead rem4) (tr/makeToken "" 0 0))) "lbrace"))
-          (ParseResult :node (tr/makeErrorNode (tr/tokenStart switchTok) (tr/tokenEnd rpTok) (list (tr/elemToken switchTok))) :rest rem4)
+          (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart switchTok) (tr/tokenEnd rpTok) (list (tr/elemToken switchTok))) :rest rem4)
           (let [(lbTok (optionOr (listHead rem4) (tr/makeToken "" 0 0)))
                 (tlLb (optionOr (listTail rem4) (list)))
                 (casesRes (parseSwitchCasesLoop tlLb text inAsync inGen (list)))
@@ -938,8 +934,8 @@ fn parseSwitchStmt switchTok: tr/Token tl: (List tr/Token) text: String inAsync:
                                             (list (tr/elemToken rbTok))))))))))))))
                 (endPos (tr/tokenEnd rbTok))
                 (node (tr/makeNode "switchStmt" (tr/tokenStart switchTok) endPos kids))]
-            (ParseResult :node node :rest remRbTok))))))
-fn parseTryStmt tryTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+            (tr/ParseResult :node node :rest remRbTok))))))
+fn parseTryStmt tryTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))
@@ -987,13 +983,13 @@ fn parseTryStmt tryTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                                                      (listAppend trivCB
                                                        (list (tr/elemNode cBlockNode)))))))))))
                                 (cNode (tr/makeNode "catchClause" (tr/tokenStart catchTok) (tr/nodeEnd cBlockNode) cKids))]
-                            (ParseResult :node cNode :rest cBlockRes.rest))
+                            (tr/ParseResult :node cNode :rest cBlockRes.rest))
                           (let [(cBlockRes (parseBlock remCP text inAsync inGen))
                                 (cBlockNode cBlockRes.node)
                                 (cKids (cons (tr/elemToken catchTok) (listAppend trivCP (list (tr/elemNode cBlockNode)))))
                                 (cNode (tr/makeNode "catchClause" (tr/tokenStart catchTok) (tr/nodeEnd cBlockNode) cKids))]
-                            (ParseResult :node cNode :rest cBlockRes.rest))))
-                      (ParseResult :node (tr/makeNode "emptyCatch" 0 0 (list)) :rest remBlock)))
+                            (tr/ParseResult :node cNode :rest cBlockRes.rest))))
+                      (tr/ParseResult :node (tr/makeNode "emptyCatch" 0 0 (list)) :rest remBlock)))
           (catchNode catchRes.node)
           (remAfterCatch catchRes.rest)
           (spFin (skipTrivia remAfterCatch))
@@ -1010,8 +1006,8 @@ fn parseTryStmt tryTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
                             (fBlockNode fBlockRes.node)
                             (fKids (cons (tr/elemToken finTok) (listAppend trivFB (list (tr/elemNode fBlockNode)))))
                             (fNode (tr/makeNode "finallyClause" (tr/tokenStart finTok) (tr/nodeEnd fBlockNode) fKids))]
-                        (ParseResult :node fNode :rest fBlockRes.rest))
-                      (ParseResult :node (tr/makeNode "emptyFinally" 0 0 (list)) :rest remAfterCatch)))
+                        (tr/ParseResult :node fNode :rest fBlockRes.rest))
+                      (tr/ParseResult :node (tr/makeNode "emptyFinally" 0 0 (list)) :rest remAfterCatch)))
             (finNode finRes.node)
             (remAfterFin finRes.rest)
             (kids1 (cons (tr/elemToken tryTok) (listAppend triv1 (list (tr/elemNode blockNode)))))
@@ -1020,13 +1016,13 @@ fn parseTryStmt tryTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool 
             (lastElem (optionOr (listLast allKids) (tr/elemToken tryTok)))
             (endPos (tr/elementEnd lastElem))
             (node (tr/makeNode "tryStmt" (tr/tokenStart tryTok) endPos allKids))]
-        (ParseResult :node node :rest remAfterFin))))
-fn parseWithStmt withTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+        (tr/ParseResult :node node :rest remAfterFin))))
+fn parseWithStmt withTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(sp1 (skipTrivia tl))
         (triv1 (pairFirst sp1))
         (rem1 (pairSecond sp1))]
     (if (or (listEmpty? rem1) (!= (tr/tokenKind (optionOr (listHead rem1) (tr/makeToken "" 0 0))) "lparen"))
-      (ParseResult :node (tr/makeErrorNode (tr/tokenStart withTok) (tr/tokenEnd withTok) (list (tr/elemToken withTok))) :rest tl)
+      (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart withTok) (tr/tokenEnd withTok) (list (tr/elemToken withTok))) :rest tl)
       (let [(lpTok (optionOr (listHead rem1) (tr/makeToken "" 0 0)))
             (tlLp (optionOr (listTail rem1) (list)))
             (sp2 (skipTrivia tlLp))
@@ -1057,7 +1053,7 @@ fn parseWithStmt withTok: tr/Token tl: (List tr/Token) text: String inAsync: Boo
                                   (list (tr/elemNode bodyNode)))))))))))
             (endPos (tr/nodeEnd bodyNode))
             (node (tr/makeNode "withStmt" (tr/tokenStart withTok) endPos kids))]
-        (ParseResult :node node :rest bodyRes.rest))))
+        (tr/ParseResult :node node :rest bodyRes.rest))))
 fn parseParametersLoop toks: (List tr/Token) text: String acc: (List tr/TreeElement) -> StmtsResult
   (let [(sp (skipTrivia toks))
         (triv (pairFirst sp))
@@ -1090,22 +1086,22 @@ fn parseParametersLoop toks: (List tr/Token) text: String acc: (List tr/TreeElem
                     (paramNode paramRes.node)
                     (newAcc (listAppend acc (listAppend triv (list (tr/elemNode paramNode)))))]
                 (parseParametersLoop paramRes.rest text newAcc))))))))
-fn parseParameters toks: (List tr/Token) text: String -> ParseResult
+fn parseParameters toks: (List tr/Token) text: String -> tr/ParseResult
   (if (listEmpty? toks)
-    (ParseResult :node (tr/makeErrorNode 0 0 (list)) :rest toks)
+    (tr/ParseResult :node (tr/makeErrorNode 0 0 (list)) :rest toks)
     (let [(hd (optionOr (listHead toks) (tr/makeToken "" 0 0)))
           (tl (optionOr (listTail toks) (list)))
           (k (tr/tokenKind hd))]
       (if (!= k "lparen")
-        (ParseResult :node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))) :rest tl)
+        (tr/ParseResult :node (tr/makeErrorNode (tr/tokenStart hd) (tr/tokenEnd hd) (list (tr/elemToken hd))) :rest tl)
         (let [(res (parseParametersLoop tl text (list (tr/elemToken hd))))
               (elems res.elements)
               (rem res.rest)
               (lastElem (optionOr (listLast elems) (tr/elemToken hd)))
               (endPos (tr/elementEnd lastElem))
               (node (tr/makeNode "parameters" (tr/tokenStart hd) endPos elems))]
-          (ParseResult :node node :rest rem)))))
-fn parseFunctionDecl prefixElems: (List tr/TreeElement) fnTok: tr/Token tl: (List tr/Token) text: String isAsync: Bool -> ParseResult
+          (tr/ParseResult :node node :rest rem)))))
+fn parseFunctionDecl prefixElems: (List tr/TreeElement) fnTok: tr/Token tl: (List tr/Token) text: String isAsync: Bool -> tr/ParseResult
   (let [(spStar (skipTrivia tl))
         (trivStar (pairFirst spStar))
         (remStar (pairSecond spStar))
@@ -1146,13 +1142,13 @@ fn parseFunctionDecl prefixElems: (List tr/TreeElement) fnTok: tr/Token tl: (Lis
                     (isGen "generatorDecl")
                     (else "functionDecl")))
         (node (tr/makeNode declKind startPos endPos allKids))]
-    (ParseResult :node node :rest bodyRes.rest))
-fn parseClassDecl classTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+    (tr/ParseResult :node node :rest bodyRes.rest))
+fn parseClassDecl classTok: tr/Token tl: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(exprRes (parseCoverExpr (cons classTok tl) text 0 inAsync inGen))
         (exprNode exprRes.node)
         (node (tr/makeNode "classDecl" (tr/nodeStart exprNode) (tr/nodeEnd exprNode) (tr/nodeChildren exprNode)))]
-    (ParseResult :node node :rest exprRes.rest))
-fn parseLabeledStmt labelTok: tr/Token colonTok: tr/Token triv1: (List tr/TreeElement) triv2: (List tr/TreeElement) rem: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+    (tr/ParseResult :node node :rest exprRes.rest))
+fn parseLabeledStmt labelTok: tr/Token colonTok: tr/Token triv1: (List tr/TreeElement) triv2: (List tr/TreeElement) rem: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(stmtRes (parseStatement rem text inAsync inGen))
         (stmtNode stmtRes.node)
         (kids (cons (tr/elemToken labelTok)
@@ -1162,15 +1158,15 @@ fn parseLabeledStmt labelTok: tr/Token colonTok: tr/Token triv1: (List tr/TreeEl
                       (list (tr/elemNode stmtNode)))))))
         (endPos (tr/nodeEnd stmtNode))
         (node (tr/makeNode "labeledStmt" (tr/tokenStart labelTok) endPos kids))]
-    (ParseResult :node node :rest stmtRes.rest))
-fn parseExprStmt toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+    (tr/ParseResult :node node :rest stmtRes.rest))
+fn parseExprStmt toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (let [(exprRes (parseCoverExpr toks text 0 inAsync inGen))
         (exprNode exprRes.node)
         (rem exprRes.rest)]
     (finishStatementWithSemi (list (tr/elemNode exprNode)) (tr/nodeStart exprNode) "exprStmt" rem text))
-fn parseStatement toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> ParseResult
+fn parseStatement toks: (List tr/Token) text: String inAsync: Bool inGen: Bool -> tr/ParseResult
   (if (listEmpty? toks)
-    (ParseResult :node (tr/makeErrorNode 0 0 (list)) :rest toks)
+    (tr/ParseResult :node (tr/makeErrorNode 0 0 (list)) :rest toks)
     (let [(hd (optionOr (listHead toks) (tr/makeToken "" 0 0)))
           (tl (optionOr (listTail toks) (list)))
           (k (tr/tokenKind hd))

@@ -1,5 +1,8 @@
 (module asl-vector/marching :x [traceMaskContours polygonBBox polygonArea isPointInPolygon])
 
+fn pairAny a: Any b: Any -> (List Any)
+  (list a b)
+
 fn traceMaskContours grid: (List (List Int)) width: Int height: Int threshold: Int -> (List (List (List F64)))
   (let [(segments (scanGridSegments grid width height threshold))] (assemblePolylines segments))
 
@@ -34,7 +37,7 @@ fn findConnectingSegment segs: (List (List F64)) targetX: F64 targetY: F64 -> (O
   (findConnectingHelper segs targetX targetY (list))
 
 fn findConnectingHelper segs: (List (List F64)) targetX: F64 targetY: F64 passed: (List (List F64)) -> (Option (List Any))
-  (if (listEmpty? segs) (none) (let [(seg (optionOr (listHead segs) (list))) (rest (optionOr (listTail segs) (list))) (x1 (optionOr (listGet seg 0) -999.0)) (y1 (optionOr (listGet seg 1) -999.0)) (x2 (optionOr (listGet seg 2) -999.0)) (y2 (optionOr (listGet seg 3) -999.0)) (eps 0.01)] (if (and (< (abs (- x1 targetX)) eps) (< (abs (- y1 targetY)) eps)) (some (list (list x2 y2) (listAppend passed rest))) (if (and (< (abs (- x2 targetX)) eps) (< (abs (- y2 targetY)) eps)) (some (list (list x1 y1) (listAppend passed rest))) (findConnectingHelper rest targetX targetY (listAppend passed (list seg)))))))
+  (if (listEmpty? segs) (none) (let [(seg (optionOr (listHead segs) (list))) (rest (optionOr (listTail segs) (list))) (x1 (optionOr (listGet seg 0) -999.0)) (y1 (optionOr (listGet seg 1) -999.0)) (x2 (optionOr (listGet seg 2) -999.0)) (y2 (optionOr (listGet seg 3) -999.0)) (eps 0.01)] (if (and (< (abs (- x1 targetX)) eps) (< (abs (- y1 targetY)) eps)) (some (pairAny (list x2 y2) (listAppend passed rest))) (if (and (< (abs (- x2 targetX)) eps) (< (abs (- y2 targetY)) eps)) (some (pairAny (list x1 y1) (listAppend passed rest))) (findConnectingHelper rest targetX targetY (listAppend passed (list seg)))))))
 
 fn polygonBBox poly: (List (List F64)) -> (List F64)
   (if (listEmpty? poly) (list 0.0 0.0 0.0 0.0) (let [(firstPt (optionOr (listHead poly) (list 0.0 0.0))) (fx (optionOr (listHead firstPt) 0.0)) (fy (optionOr (listHead (optionOr (listTail firstPt) (list))) 0.0))] (bboxHelper poly fx fy fx fy)))

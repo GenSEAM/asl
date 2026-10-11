@@ -148,9 +148,9 @@ fn ! execCase xs: (List p/SexpNode) base: String template: String repo: String e
         same (= (unplace got root base) (place want root base))]
     (do
       (if (and copied (and cleared (ok? killed)))
-        true
+        ()
         (eprintln (str cid ": case setup: copied " (if copied "yes" "no") ", logs " (if cleared "yes" "no") ", kill " (if (ok? killed) "ok" "failed"))))
-      (if same true (eprintln (str "MISMATCH " cid "\n  want " (place want root base) "\n  got  " (unplace got root base))))
+      (if same () (eprintln (str "MISMATCH " cid "\n  want " (place want root base) "\n  got  " (unplace got root base))))
       (and same (and copied (and cleared (ok? killed))))))
 
 fn fmtCase! xs: (List p/SexpNode) -> Bool
@@ -158,7 +158,7 @@ fn fmtCase! xs: (List p/SexpNode) -> Bool
         got (x/formatOpReceipt (recOf (at xs 3)) (optionOr (stringToInt64 (atomOf (at xs 2))) 0))
         want (partStr xs "want")]
     (do
-      (if (= got want) true (eprintln (str "MISMATCH " cid "\n  want " want "\n  got  " got)))
+      (if (= got want) () (eprintln (str "MISMATCH " cid "\n  want " want "\n  got  " got)))
       (= got want)))
 
 fn ! tableCase xs: (List p/SexpNode) effects: (List (Pair String String)) -> Bool
@@ -174,7 +174,7 @@ fn ! tableCase xs: (List p/SexpNode) effects: (List (Pair String String)) -> Boo
                 (serStrs (x/collectProseStrings (strOf (at xs 2)) (= (atomOf (at xs 3)) "true") (map strOf (items (at xs 6)))
                            (= (atomOf (at xs 4)) "true") (= (atomOf (at xs 5)) "true")))))]
     (do
-      (if (= got want) true (eprintln (str "MISMATCH " kind " " a1 "\n  want " want "\n  got  " got)))
+      (if (= got want) () (eprintln (str "MISMATCH " kind " " a1 "\n  want " want "\n  got  " got)))
       (= got want)))
 
 fn ! runCases rows: (List (List p/SexpNode)) base: String template: String repo: String effects: (List (Pair String String)) -> Int64

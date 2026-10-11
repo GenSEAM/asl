@@ -2,6 +2,9 @@
   :x [vectorizeBitmap vectorizeLayer extractColorLayers]
   :i [(color :a c) (marching :a m) (primitives :a p) (emitter :a e)])
 
+fn pairAny a: Any b: Any -> (List Any)
+  (list a b)
+
 fn vectorizeBitmap grid: (List (List Int)) width: Int height: Int palette: (List (List Int)) -> String
   (let [(layers (extractColorLayers grid width height palette))
         (elements (vectorizeAllLayers layers width height (list)))]
@@ -15,7 +18,7 @@ fn extractLayersHelper grid: (List (List Int)) width: Int height: Int palette: (
     (let [(color (optionOr (listHead palette) (list 0 0 0)))
           (tail (optionOr (listTail palette) (list)))
           (mask (buildColorMask grid width height color))
-          (layerData (list color mask))
+          (layerData (pairAny color mask))
           (nextAcc (listAppend acc (list layerData)))]
       (extractLayersHelper grid width height tail nextAcc)))
 

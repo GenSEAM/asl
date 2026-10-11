@@ -32,7 +32,7 @@ fn ! runTests -> Bool
         (linked (sh! root (list "/bin/sh" "-c" "rm -rf \"$1\" && mkdir -p \"$1\" && cp -R \"$2\" \"$3\" && for d in \"$0\"/seed-* \"$0\"/asl1-* \"$0\"/cli-*; do ln -s \"$d\" \"$1/\"; done" shared cache built copy)))
         (edited (mt (fileRead (str copy "/src/" (tampered)))
                   ((err e) (err e))
-                  ((ok text) (fileWrite (str copy "/src/" (tampered)) (str text "\n(:m :why \"an edit the cached binary predates\")\n")))))
+                  ((ok text) (resultMapErr preludeIoError (fileWrite (str copy "/src/" (tampered)) (str text "\n(:m :why \"an edit the cached binary predates\")\n"))))))
         (pointed (fileWrite (nc/headPath cache root) (str copy "\n")))
         (stale (binAsl! root (list "test" (passSuite)) (envFor (some cache) (list))))
         (rebuilt (binAsl! root (list "test" (probe)) (envFor (some cache) (list "ASL_NATIVE_CLI_WAIT=1"))))

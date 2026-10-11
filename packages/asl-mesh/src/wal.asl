@@ -35,7 +35,7 @@ fn walAppendEntry! journal: WalJournal term: Int64 command: String -> WalJournal
       (if (and (not (stringEmpty? journal.logPath)) (!= journal.logPath ":memory:"))
         (let [(rendered (fold (fn [(acc String) (r WalRecord)] (str acc (formatWalRecord r))) "" updatedRecords))]
           (fileWrite journal.logPath rendered))
-        (ok true))
+        (ok ()))
       (with journal :records updatedRecords :lastAppendedIndex nextIndex)))
 
 fn walReplayFromIndex journal: WalJournal fromIndex: Int64 -> (List WalRecord)
@@ -47,5 +47,5 @@ fn walTruncateSuffix! journal: WalJournal keepUpToIndex: Int64 -> WalJournal
       (if (and (not (stringEmpty? journal.logPath)) (!= journal.logPath ":memory:"))
         (let [(rendered (fold (fn [(acc String) (r WalRecord)] (str acc (formatWalRecord r))) "" filtered))]
           (fileWrite journal.logPath rendered))
-        (ok true))
+        (ok ()))
       (with journal :records filtered :lastAppendedIndex keepUpToIndex)))

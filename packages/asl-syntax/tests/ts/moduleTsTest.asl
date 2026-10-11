@@ -23,7 +23,7 @@ fn checkExactRoundTrip! code: String -> Bool
   (let [(res (tsMod/parse code))]
     (do
       (mt res
-        ((ok _) true)
+        ((ok _) ())
         ((err msg)
          (println (str "PARSE ERROR: " msg " FOR: " code))))
       (assert (ok? res) (str "tsMod/parse succeeds: " code))

@@ -10,10 +10,10 @@ fn makeWorklistEntry path: Str intent: Str -> WorklistEntry
 fn worklistCreate id: Str entries: (List WorklistEntry) -> Worklist
   (Worklist :id id :cursor 0 :entries entries)
 
-fn worklistCursorNext wl: Worklist batchSize: Int -> (Map Str Any)
+fn worklistCursorNext wl: Worklist batchSize: Int -> (Map Keyword Any)
   (let [(cur wl.cursor) (all wl.entries) (total (listLength all)) (rem (if (>= cur total) 0 (- total cur))) (takeCount (if (<= rem batchSize) rem batchSize)) (endPos (+ cur takeCount)) (batch (if (> takeCount 0) (optionOr (listSlice all cur endPos) (list)) (list))) (updatedWl (with wl :cursor endPos :entries all))] {:batch batch :cursor endPos :hasMore (< endPos total) :worklist updatedWl})
 
-fn worklistClaimBatch wl: Worklist walkerId: Str batchSize: Int -> (Map Str Any)
+fn worklistClaimBatch wl: Worklist walkerId: Str batchSize: Int -> (Map Keyword Any)
   (let [(all wl.entries) (pending (filter (fn [(e WorklistEntry)] -> Bool (= e.status "pending")) all)) (pendLen (listLength pending)) (takeN (if (<= pendLen batchSize) pendLen batchSize)) (toClaim (if (> takeN 0) (optionOr (listSlice pending 0 takeN) (list)) (list))) (claimPaths (map (fn [(e WorklistEntry)] -> Str e.path) toClaim)) (updatedEntries (map (fn [(e WorklistEntry)] -> WorklistEntry (if (listContains? claimPaths e.path) (WorklistEntry :path e.path :intent e.intent :status "reading" :reason e.reason :notes e.notes :walkerId walkerId :timestamp 1789280000000) e)) all)) (claimedBatch (filter (fn [(e WorklistEntry)] -> Bool (and (= e.status "reading") (= e.walkerId walkerId))) updatedEntries))] {:claimed claimedBatch :count (listLength claimedBatch) :worklist (with wl :entries updatedEntries)})
 
 fn worklistMarkDone wl: Worklist path: Str notes: Str -> Worklist

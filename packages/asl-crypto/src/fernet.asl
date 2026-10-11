@@ -14,7 +14,7 @@ fn ! fernetBase64UrlDecode encoded: String -> (Result Bytes String)
 
 fn fernetCopy source: Bytes start: Int64 count: Int64 -> Bytes
   (let [(out (bytesAlloc count))
-        (step (fn [step i] -> Unit
+        (step (fn [(step Any) i] -> Unit
           (if (< i count)
             (do (bytesSet out i (bytesGet source (+ start i))) (step step (+ i 1)))
             ())))]
@@ -23,7 +23,7 @@ fn fernetCopy source: Bytes start: Int64 count: Int64 -> Bytes
 
 fn fernetTimestamp token: Bytes -> Int64
   (if (>= (bytesGet token 1) 128) -1
-    (let [(step (fn [step i value] -> Int64
+    (let [(step (fn [(step Any) i value] -> Int64
       (if (>= i 9) value
         (step step (+ i 1) (+ (* value 256) (bytesGet token i))))))]
       (step step 1 0)))

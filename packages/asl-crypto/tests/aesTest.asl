@@ -62,9 +62,9 @@ fn ! runTests -> Bool
         (assert (= (crypto/bytesToHex (mt (aes/aesCbcDecrypt fernetAesKey fernetIv fernetCipher) ((ok v) v) ((err _) (bytesAlloc 0)))) "68656c6c6f") "CBC Fernet padding and plaintext")
         (let [(cbcCipher (mt (aes/aesCbcEncrypt ctrKey cbcIv cbcPlain) ((ok v) v) ((err _) (bytesAlloc 0))))
               (firstBlock (bytesAlloc 16))
-              (copy (fn [copy i] -> Unit (if (< i 16) (do (bytesSet firstBlock i (bytesGet cbcCipher i)) (copy copy (+ i 1))) ())))
+              (copy (fn [(copy Any) i] -> Unit (if (< i 16) (do (bytesSet firstBlock i (bytesGet cbcCipher i)) (copy copy (+ i 1))) ())))
               (badIv (bytesAlloc 16))
-              (copyIv (fn [copyIv i] -> Unit (if (< i 16) (do (bytesSet badIv i (bytesGet fernetIv i)) (copyIv copyIv (+ i 1))) ())))]
+              (copyIv (fn [(copyIv Any) i] -> Unit (if (< i 16) (do (bytesSet badIv i (bytesGet fernetIv i)) (copyIv copyIv (+ i 1))) ())))]
           (do (copy copy 0) (copyIv copyIv 0)
             (assert (= (crypto/bytesToHex firstBlock) "7649abac8119b246cee98e9b12e9197d") "NIST AES-CBC first block")
             (assert (= (crypto/bytesToHex (mt (aes/aesCbcDecrypt ctrKey cbcIv cbcCipher) ((ok v) v) ((err _) (bytesAlloc 0)))) "6bc1bee22e409f96e93d7e117393172a") "CBC encrypt/decrypt PKCS#7 roundtrip")

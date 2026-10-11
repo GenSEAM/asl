@@ -15,10 +15,6 @@
       (asl-syntax/js/cover :a cv)
       (asl-syntax/js/stmt :a stmt)])
 
-(schema ParseResult
-  (:f node tr/Node)
-  (:f rest (List tr/Token)))
-
 fn tokenSlice tok: tr/Token text: String -> String
   (let [(st (tr/tokenStart tok))
         (en (tr/tokenEnd tok))]
@@ -72,7 +68,7 @@ fn concatLists lists: (List (List tr/TreeElement)) -> (List tr/TreeElement)
 fn tokElem tok: tr/Token -> (List tr/TreeElement)
   (list (tr/elemToken tok))
 
-fn finishDeclWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeKind: String rem: (List tr/Token) text: String -> (Result ParseResult String)
+fn finishDeclWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeKind: String rem: (List tr/Token) text: String -> (Result tr/ParseResult String)
   (let [(sp (skipTrivia rem))
         (triv (pairFirst sp))
         (afterTriv (pairSecond sp))]
@@ -80,7 +76,7 @@ fn finishDeclWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeKind: 
       (let [(lastElem (optionOr (listLast nodeKids) (tr/elemToken (tr/makeToken "" startPos startPos))))
             (endPos (tr/elementEnd lastElem))
             (node (tr/makeNode nodeKind startPos endPos nodeKids))]
-        (ok (ParseResult :node node :rest rem)))
+        (ok (tr/ParseResult :node node :rest rem)))
       (let [(firstTok (optionOr (listHead afterTriv) (tr/makeToken "" 0 0)))
             (k (tr/tokenKind firstTok))]
         (cond
@@ -88,17 +84,17 @@ fn finishDeclWithSemi nodeKids: (List tr/TreeElement) startPos: Int64 nodeKind: 
            (let [(allKids (listAppend nodeKids (listAppend triv (list (tr/elemToken firstTok)))))
                  (endPos (tr/tokenEnd firstTok))
                  (node (tr/makeNode nodeKind startPos endPos allKids))]
-             (ok (ParseResult :node node :rest (optionOr (listTail afterTriv) (list))))))
+             (ok (tr/ParseResult :node node :rest (optionOr (listTail afterTriv) (list))))))
           ((or (= k "rbrace") (hasNewlineElements triv text))
            (let [(lastElem (optionOr (listLast nodeKids) (tr/elemToken (tr/makeToken "" startPos startPos))))
                  (endPos (tr/elementEnd lastElem))
                  (node (tr/makeNode nodeKind startPos endPos nodeKids))]
-             (ok (ParseResult :node node :rest rem))))
+             (ok (tr/ParseResult :node node :rest rem))))
           (else
            (let [(lastElem (optionOr (listLast nodeKids) (tr/elemToken (tr/makeToken "" startPos startPos))))
                  (endPos (tr/elementEnd lastElem))
                  (node (tr/makeNode nodeKind startPos endPos nodeKids))]
-             (ok (ParseResult :node node :rest rem))))))))
+             (ok (tr/ParseResult :node node :rest rem))))))))
 
 fn parseImportAttributesLoop toks: (List tr/Token) text: String acc: (List tr/TreeElement) -> (Result (Pair (List tr/TreeElement) (List tr/Token)) String)
   (let [(sp (skipTrivia toks))
@@ -226,7 +222,7 @@ fn parseImportSpecifiersLoop toks: (List tr/Token) text: String acc: (List tr/Tr
 fn parseExportSpecifiersLoop toks: (List tr/Token) text: String acc: (List tr/TreeElement) -> (Result (Pair (List tr/TreeElement) (List tr/Token)) String)
   (parseImportSpecifiersLoop toks text acc)
 
-fn parseImportDecl toks: (List tr/Token) text: String -> (Result ParseResult String)
+fn parseImportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult String)
   (let [(importTok (optionOr (listHead toks) (tr/makeToken "" 0 0)))
         (tl (optionOr (listTail toks) (list)))
         (startPos (tr/tokenStart importTok))
@@ -441,7 +437,7 @@ fn isAsyncFn rem: (List tr/Token) text: String -> Bool
         (and (not (listEmpty? rem2)) (= (tokenSlice (optionOr (listHead rem2) (tr/makeToken "" 0 0)) text) "function")))
       false))
 
-fn parseExportDecl toks: (List tr/Token) text: String -> (Result ParseResult String)
+fn parseExportDecl toks: (List tr/Token) text: String -> (Result tr/ParseResult String)
   (let [(exportTok (optionOr (listHead toks) (tr/makeToken "" 0 0)))
         (tl (optionOr (listTail toks) (list)))
         (startPos (tr/tokenStart exportTok))
@@ -474,7 +470,7 @@ fn parseExportDecl toks: (List tr/Token) text: String -> (Result ParseResult Str
                            (allKids (concatLists (list defKids trivDef (list (tr/elemNode stmtNode)))))
                            (endPos (tr/nodeEnd stmtNode))
                            (node (tr/makeNode "exportDecl" startPos endPos allKids))]
-                       (ok (ParseResult :node node :rest remAfter)))
+                       (ok (tr/ParseResult :node node :rest remAfter)))
                      (let [(exprRes (cv/parseCoverExprCtx remDef text 0 false false))
                            (exprNode exprRes.node)
                            (remExpr exprRes.rest)
@@ -577,7 +573,7 @@ fn parseExportDecl toks: (List tr/Token) text: String -> (Result ParseResult Str
                  (allKids (concatLists (list (tokElem exportTok) triv1 (list (tr/elemNode stmtNode)))))
                  (endPos (tr/nodeEnd stmtNode))
                  (node (tr/makeNode "exportDecl" startPos endPos allKids))]
-             (ok (ParseResult :node node :rest remDecl))))
+             (ok (tr/ParseResult :node node :rest remDecl))))
           (else
            (err (str "Parse error at offset " (stringFromInt64 (tr/tokenStart hd1)))))))))
 

@@ -7,7 +7,7 @@ fn decoded text: String -> Bytes
 
 fn repeatedByte value: Int64 count: Int64 -> Bytes
   (let [(out (bytesAlloc count))
-        (step (fn [step i] -> Bytes
+        (step (fn [(step Any) i] -> Bytes
           (if (>= i count) out
             (do (bytesSet out i value) (step step (+ i 1))))))]
     (step step 0))

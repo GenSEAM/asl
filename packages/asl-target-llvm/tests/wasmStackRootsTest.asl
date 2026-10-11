@@ -242,7 +242,7 @@ fn emitFor facts: libc/TripleFacts tf: target/TargetFacts source: String -> (Res
     ((err ds) (err ds))
     ((ok m) (targetLlvm/emitLlvmProgramForTarget facts tf m "main")))
 
-fn ! compileObject ll: String obj: String -> ProcessOutput
+fn ! compileObject ll: String obj: String -> Captured
   (sh (str (shellQuote (llc)) " -mtriple=wasm32-unknown-unknown -mattr=+bulk-memory -filetype=obj " (shellQuote ll) " -o " (shellQuote obj)))
 
 fn ! writeAndCompile name: String part: String text: (Result String (List irTy/IrDiag)) work: String -> Bool
@@ -255,7 +255,7 @@ fn ! writeAndCompile name: String part: String text: (Result String (List irTy/I
         (assert (= compiled.exitCode 0) (str name " llc compiles " part ": " compiled.stderr)))
       true))
 
-fn ! nativeRun name: String source: String work: String -> ProcessOutput
+fn ! nativeRun name: String source: String work: String -> Captured
   (let [(un (sh "uname -s -m"))
         (triple (gr/hostTriple un.stdout))
         (facts (libc/libcFacts triple))

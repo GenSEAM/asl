@@ -220,7 +220,7 @@ fn verifySingleTopForm! path: String idx: Int64 tf: a/TopForm -> Bool
                 (do
                   (if (not equiv)
                     (print (str "DIFF in " path " form " (stringFromInt64 idx) ":\n  ORIG: " (rd/renderSexpr (cv/topFormToSexpr tf)) "\n  REPARSED: " (mt (listHead reparsedForms) ((some rf) (rd/renderSexpr (cv/topFormToSexpr rf))) ((none) "<empty>")) "\n  ASL:\n" aslText "\n"))
-                    false)
+                    ())
                   (assert equiv (str path " form " (stringFromInt64 idx) " roundtrip equivalence"))
                   equiv)))))))))
 

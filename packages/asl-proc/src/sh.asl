@@ -4,7 +4,7 @@ fn boundPortHeadWindow s: String -> String
   (let [(len (int32ToInt64 (stringLength s)))]
     (if (<= len 65536) s (optionOr (stringSlice s 0 65536) s)))
 
-fn ! execReceipt! c: proc/ProcessCmd -> (Result proc/ProcessReceipt proc/ProcessError)
+fn ! execReceipt! c: cp/ProcessCmd -> (Result cp/ProcessReceipt cp/ProcessError)
   (mt (proc/execRaw! c)
     ((err e) (err e))
     ((ok out)
@@ -16,13 +16,13 @@ fn ! execReceipt! c: proc/ProcessCmd -> (Result proc/ProcessReceipt proc/Process
               ((ok receipt) (ok receipt))
               ((err e) (err (cp/executionFailed out.exitCode (str "spool sync failed: " e))))))))))
 
-fn ! runCmd! bin: String args: (List String) -> (Result proc/ProcessReceipt proc/ProcessError)
+fn ! runCmd! bin: String args: (List String) -> (Result cp/ProcessReceipt cp/ProcessError)
   (execReceipt! (proc/cmd bin args))
 
-fn ! releaseReceipt! r: proc/ProcessReceipt -> (Result Unit String)
+fn ! releaseReceipt! r: cp/ProcessReceipt -> (Result Unit String)
   (spool/spoolPathRelease! r.spoolPath)
 
-fn ! runPipeline! stages: (List proc/ProcessCmd) -> (Result proc/ProcessOutput proc/ProcessError)
+fn ! runPipeline! stages: (List cp/ProcessCmd) -> (Result cp/ProcessOutput cp/ProcessError)
   (pipe/pipe! (pipe/makePipeline stages))
 
 fn ! logInfo! subsystem: String message: String -> Unit
