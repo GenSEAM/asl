@@ -3,5 +3,28 @@
  :entry "src/main.asl"
  :description "Pure AgentScript Universal Declarative UI, Elm Architecture, and Double-Buffered Frame Arena"
  :aslFirst true
- :modules ["asl-ui" "asl-ui/vnode" "asl-ui/runtime" "asl-ui/arena" "asl-ui/layout" "asl-ui/tokens" "asl-ui/theme" "asl-ui/ax" "asl-ui/query" "asl-ui/renderWeb" "asl-ui/renderNative" "asl-ui/auditDashboard" "asl-ui/pluginShell"]
+ :modules [
+   "asl-ui"
+   "asl-ui/vnode"
+   "asl-ui/runtime"
+   "asl-ui/arena"
+   "asl-ui/layout"
+   "asl-ui/tokens"
+   "asl-ui/theme"
+   "asl-ui/ax"
+   "asl-ui/query"
+   "asl-ui/renderWeb"
+   "asl-ui/renderNative"
+   "asl-ui/auditDashboard"
+   "asl-ui/pluginShell"
+   "asl-ui/bento"
+   "asl-ui/blastRadiusHeatmap"
+   "asl-ui/radarCard"
+   "asl-ui/sessionTile"
+   "asl-ui/terminalCanvas"
+   "asl-ui/terminalObservatory"
+   "asl-ui/vacuousMockDetector"
+   "asl-ui/voiceBar"
+   "asl-ui/workflowDag"
+ ]
  :dependencies ["asl-conform"])

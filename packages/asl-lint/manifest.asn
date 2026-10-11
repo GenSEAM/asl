@@ -3,5 +3,13 @@
  :entry "src/core/lint.asl"
  :description "AgentScript Native Quality, Smell, and Anti-Pattern Analysis Engine"
  :aslFirst true
- :modules ["asl-lint/core"]
+ :modules [
+   "asl-lint/core"
+   "asl-lint/anchorGuard"
+   "asl-lint/incongruity"
+   "asl-lint/rules"
+   "asl-lint/clone"
+   "asl-lint/heal"
+   "asl-lint/tokens"
+ ]
  :dependencies ["asl-parser"])

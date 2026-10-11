@@ -3,5 +3,13 @@
  :entry "src/core/sql.asl"
  :description "Native AgentScript Cross-Dialect SQL AST Query Builder & Parameterized Emission Engine"
  :aslFirst true
- :modules ["asl-sql" "asl-sql/ddl" "asl-sql/schemaGen"]
+ :modules [
+   "asl-sql/ddl"
+   "asl-sql/schemaGen"
+   "duckdbAdapter"
+   "asl-sql/core"
+   "asl-sql/semantic/expand"
+   "asl-sql/semantic/lower"
+   "asl-sql/semantic/schema"
+ ]
  :dependencies ["asl-derive" "asl-text" "asl-parser"])

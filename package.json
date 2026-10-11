@@ -8,7 +8,6 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "test:wasm-runner": "asl test packages/asl-codegen/tests/emit_wat_test.asl",
     "build:web": "npm --prefix web run build && cp -r web/dist ./dist 2>/dev/null || true",
     "dev:web": "npm --prefix web run dev",
     "build": "npm --prefix web run build && cp -r web/dist ./dist 2>/dev/null || true",

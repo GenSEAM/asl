@@ -3,5 +3,10 @@
  :entry "src/http11.asl"
  :description "Pure AgentScript Streaming HTTP/1.1 and HTTP/2 Protocol Engine"
  :aslFirst true
- :modules ["asl-http" "asl-http/http11" "asl-http/http2" "asl-http/wsProtocol" "asl-http/download"]
+ :modules [
+   "asl-http/http11"
+   "asl-http/http2"
+   "asl-http/wsProtocol"
+   "asl-http/download"
+ ]
  :dependencies [])

@@ -4,14 +4,14 @@
  :description "Aslany Browser Plugin: Voice-In Action-Out, In-Tab WebGPU, AudioWorklet 16kHz & AXTree Perception"
  :aslFirst true
  :modules [
-   "asl-browser-plugin/background"
-   "asl-browser-plugin/content"
-   "asl-browser-plugin/dom-compiler"
-   "asl-browser-plugin/local-slm"
-   "asl-browser-plugin/mesh-client"
-   "asl-browser-plugin/plugin"
-   "asl-browser-plugin/popup"
-   "asl-browser-plugin/runtime"
-   "asl-browser-plugin/safety-gate"
+   "aslBrowserPlugin/background"
+   "aslBrowserPlugin/content"
+   "aslBrowserPlugin/domCompiler"
+   "aslBrowserPlugin/localSlm"
+   "aslBrowserPlugin/meshClient"
+   "aslBrowserPlugin/plugin"
+   "browserPlugin/popup"
+   "aslBrowserPlugin/runtime"
+   "aslBrowserPlugin/safetyGate"
  ]
  :dependencies ["aslContracts" "aslAgentBus" "aslVdom"])

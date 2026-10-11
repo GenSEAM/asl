@@ -5,10 +5,10 @@
   :description "Sovereign voice engine: dual-feature VAD, speaker biometrics, AST Cyrillic sound-folding, ear-budgeted digests, and voice intent"
   :dependencies []
   :modules [
-    "vad"
-    "dictation"
-    "speakerVerifier"
-    "heardname"
-    "aloud"
-    "voiceIntent"
+    "asl-audio/vad"
+    "asl-audio/dictation"
+    "asl-audio/speakerVerifier"
+    "asl-audio/heardname"
+    "asl-audio/aloud"
+    "asl-audio/voiceIntent"
   ])

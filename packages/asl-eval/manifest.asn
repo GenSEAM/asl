@@ -3,5 +3,8 @@
  :entry "src/eval.asl"
  :description "100% Self-Hosted Pure AgentScript AST Evaluator, Closures & Module System"
  :aslFirst true
- :modules ["asl-eval"]
+ :modules [
+   "asl-eval"
+   "asl-eval/main"
+ ]
  :dependencies [])

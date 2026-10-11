@@ -4,15 +4,15 @@
  :description "AgentScript Multi-Engine Web Search, Quota Router, and Ecosystem Provider Aggregator"
  :aslFirst true
  :modules [
-   "asl-search/config"
-   "asl-search/ecosystems"
-   "asl-search/engine"
-   "asl-search/hybrid"
-   "asl-search/quota"
-   "asl-search/router"
-   "asl-search/transport"
-   "asl-search/research"
-   "asl-search/commonCrawl"
-   "asl-search/commonCrawlCli"
+   "aslWebApiSearch/config"
+   "aslWebApiSearch/ecosystems"
+   "aslWebApiSearch/engine"
+   "aslWebApiSearch/hybrid"
+   "aslWebApiSearch/quota"
+   "aslWebApiSearch/router"
+   "aslWebApiSearch/transport"
+   "aslWebApiSearch/research"
+   "aslWebApiSearch/commonCrawl"
+   "aslWebApiSearch/commonCrawlCli"
  ]
  :dependencies ["asl-zip"])

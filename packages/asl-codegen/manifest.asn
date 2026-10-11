@@ -3,11 +3,17 @@
  :entry "src/emit.asl"
  :description "Pure AgentScript Native Rust and ISO C99 Codegen Pipeline"
  :aslFirst true
- :modules ["asl-codegen/emit"
-           "asl-codegen/emitC"
-           "asl-codegen/c99Type"
-           "asl-codegen/c99Mangle"
-           "asl-codegen/c99Expr"
-           "asl-codegen/c99Emit"]
+ :modules [
+   "asl-codegen/emit"
+   "asl-codegen/emitC"
+   "asl-codegen/c99Type"
+   "asl-codegen/c99Mangle"
+   "asl-codegen/c99Expr"
+   "asl-codegen/c99Emit"
+   "asl-codegen/builtins"
+   "asl-codegen/expr"
+   "asl-codegen/mangle"
+   "asl-codegen/rtypes"
+ ]
  :dependencies ["asl-parser"
                 "asl-checker"])

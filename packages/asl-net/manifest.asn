@@ -3,5 +3,10 @@
  :entry "src/socket.asl"
  :description "AgentScript loopback TCP and Unix domain sockets and a poll-driven HTTP reactor over the host socket and fd builtins"
  :aslFirst true
- :modules ["asl-net" "asl-net/socket" "asl-net/unix" "asl-net/handoff" "asl-net/reactor"]
+ :modules [
+   "asl-net/socket"
+   "asl-net/unix"
+   "asl-net/handoff"
+   "asl-net/reactor"
+ ]
  :dependencies ["asl-http"])

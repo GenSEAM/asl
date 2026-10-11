@@ -8,6 +8,7 @@
    "asl-target-ts/types"
    "asl-target-ts/tsAst"
    "asl-target-ts/emitTs"
+   "asl-target-ts/runTs"
  ]
  :dependencies ["asl-parser"]
  :capabilities ["codegen/target"]

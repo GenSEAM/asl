@@ -3,5 +3,13 @@
  :entry "src/main.asl"
  :description "AgentScript Multi-Target Semantic Conformance and Mutation Verification Harness"
  :aslFirst true
- :modules ["asl-conform" "asl-conform/types" "asl-conform/semantics" "asl-conform/compare" "asl-conform/mutant" "asl-conform/runner" "asl-conform/hypergraph"]
+ :modules [
+   "aslConform/types"
+   "aslConform/semantics"
+   "aslConform/compare"
+   "aslConform/mutant"
+   "aslConform/runner"
+   "asl-conform/hypergraph"
+   "aslConform/main"
+ ]
  :dependencies ["asl-target-c" "asl-target-py"])
