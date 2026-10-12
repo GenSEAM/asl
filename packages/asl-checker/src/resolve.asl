@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema builtinSchemaFieldTypes builtinRecordNames builtinFieldNameList resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool))
 
@@ -89,6 +89,23 @@ fn listAppendOne xs: (List T) x: T -> (List T)
 
 fn modSchema m: ModuleSummary name: String -> (Option SchemaSummary)
   (mapGet m.schemas name)
+
+; (:m :ref NATIVE-CHECK-DISAGREE :do "single source of truth for every host-returned record's field (name, type) pairs; collectAllFieldNames (resolve-phase existence check) and check.asl#checkerSchema (type-phase field lookup) both derive from this instead of keeping their own, independently drifting literal lists")
+fn builtinSchemaFieldTypes name: String -> (Option (List (Pair String String)))
+  (cond
+    ((= name "FileStat") (some (list (pair "isFile" "Bool") (pair "isDir" "Bool") (pair "size" "Int64") (pair "mtime" "Int64") (pair "mode" "Int64") (pair "mtimeNs" "Int64"))))
+    ((= name "LinkStat") (some (list (pair "isFile" "Bool") (pair "isDir" "Bool") (pair "isSymlink" "Bool") (pair "size" "Int64") (pair "mtime" "Int64") (pair "mode" "Int64") (pair "mtimeNs" "Int64"))))
+    ((= name "SpawnedProc") (some (list (pair "pid" "Int64") (pair "stdin" "Int64") (pair "stdout" "Int64") (pair "stderr" "Int64"))))
+    ((= name "ProcessOutput") (some (list (pair "exitCode" "Int64") (pair "stdout" "String") (pair "stderr" "String"))))
+    ((= name "Rusage") (some (list (pair "selfMaxRssKb" "Int64") (pair "selfUserUs" "Int64") (pair "selfSysUs" "Int64") (pair "childrenMaxRssKb" "Int64") (pair "childrenUserUs" "Int64") (pair "childrenSysUs" "Int64"))))
+    ((= name "PlatformInfo") (some (list (pair "os" "String") (pair "release" "String") (pair "machine" "String"))))
+    (else (none)))
+
+fn builtinRecordNames -> (List String)
+  (list "FileStat" "LinkStat" "SpawnedProc" "ProcessOutput" "Rusage" "PlatformInfo")
+
+fn builtinFieldNameList -> (List String)
+  (fold (fn [(acc (List String)) (name String)] -> (List String) (listAppend acc (map pairFirst (optionOr (builtinSchemaFieldTypes name) (list))))) (list) (builtinRecordNames))
 
 fn modEnum m: ModuleSummary name: String -> (Option EnumSummary)
   (mapGet m.enums name)
@@ -988,7 +1005,7 @@ fn foldCtorArgs args: (List rd/SExpr) fieldMap: (Map String FieldSummary) given:
   (mt (listHead args) ((none) (pair given acc)) ((some keyNode) (let [(valNode (secondExprEmpty args)) (rest (dropTwo args)) (rawKey (rd/sexprHead keyNode)) (kname (if (stringStartsWith? rawKey ":") (sliceFrom rawKey 1) rawKey))] (let [(dKey (if (not (mapHas? fieldMap kname)) (cons (makeDiag "ctor" (str sname " has no field " kname) path) acc) (if (mapHas? given kname) (cons (makeDiag "ctor" (str sname ": duplicate key " kname) path) acc) acc)))] (foldCtorArgs rest fieldMap (mapSet given kname true) sname path dKey)))))
 
 fn collectAllFieldNames mod: ModuleSummary deps: DepIndex -> (Map String Bool)
-  (let [(s1 (addStringsToSet (mapSet (mapSet (mapEmpty) "first" true) "second" true) (list "isFile" "isDir" "isSymlink" "size" "mtime" "mode" "exitCode" "stdout" "stderr"))) (s2 (fold (fn [(acc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet acc s.fields)) s1 (mapValues mod.schemas))) (s3 (fold (fn [(acc (Map String Bool)) (target ModuleSummary)] -> (Map String Bool) (let [(acc1 (addStringsToSet acc (mapKeys target.exportedFields)))] (fold (fn [(facc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet facc s.fields)) acc1 (mapValues target.schemas)))) s2 (mapValues deps.deps)))] s3)
+  (let [(s1 (addStringsToSet (mapSet (mapSet (mapEmpty) "first" true) "second" true) (builtinFieldNameList))) (s2 (fold (fn [(acc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet acc s.fields)) s1 (mapValues mod.schemas))) (s3 (fold (fn [(acc (Map String Bool)) (target ModuleSummary)] -> (Map String Bool) (let [(acc1 (addStringsToSet acc (mapKeys target.exportedFields)))] (fold (fn [(facc (Map String Bool)) (s SchemaSummary)] -> (Map String Bool) (addFieldsToSet facc s.fields)) acc1 (mapValues target.schemas)))) s2 (mapValues deps.deps)))] s3)
 
 fn bodyPosAt d: a/DefunNode idx: Int64 -> (Pair Int64 Int64)
   (mt (listGet d.bodyPos idx) ((some p) (pair p.line p.col)) ((none) (pair 1 1)))

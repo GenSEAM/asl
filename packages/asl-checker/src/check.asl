@@ -365,8 +365,15 @@ fn ctorKey e: rd/SExpr -> String
 fn fieldTypeIn f: r/FieldSummary vmap: (Map String ty/Type) owner: r/ModuleSummary deps: r/DepIndex -> ty/Type
   (qualifyTypeWithMod (substParsedType (ty/parseTypeStr f.type (list)) vmap) owner deps)
 
+fn builtinFieldSummary ft: (Pair String String) -> r/FieldSummary
+  (r/FieldSummary :name (pairFirst ft) :type (pairSecond ft) :hasDefault false)
+
 fn checkerSchema mod: r/ModuleSummary name: String -> (Option r/SchemaSummary)
-  (mt (r/modSchema mod name) ((some schema) (some schema)) ((none) (cond ((= name "FileStat") (some (r/SchemaSummary :name name :typevars (list) :fields (list (r/FieldSummary :name "isFile" :type "Bool" :hasDefault false) (r/FieldSummary :name "isDir" :type "Bool" :hasDefault false) (r/FieldSummary :name "size" :type "Int64" :hasDefault false) (r/FieldSummary :name "mtime" :type "Int64" :hasDefault false) (r/FieldSummary :name "mode" :type "Int64" :hasDefault false))))) ((= name "LinkStat") (some (r/SchemaSummary :name name :typevars (list) :fields (list (r/FieldSummary :name "isFile" :type "Bool" :hasDefault false) (r/FieldSummary :name "isDir" :type "Bool" :hasDefault false) (r/FieldSummary :name "isSymlink" :type "Bool" :hasDefault false) (r/FieldSummary :name "size" :type "Int64" :hasDefault false) (r/FieldSummary :name "mtime" :type "Int64" :hasDefault false) (r/FieldSummary :name "mode" :type "Int64" :hasDefault false))))) ((= name "SpawnedProc") (some (r/SchemaSummary :name name :typevars (list) :fields (list (r/FieldSummary :name "pid" :type "Int64" :hasDefault false) (r/FieldSummary :name "stdin" :type "Int64" :hasDefault false) (r/FieldSummary :name "stdout" :type "Int64" :hasDefault false) (r/FieldSummary :name "stderr" :type "Int64" :hasDefault false))))) ((= name "ProcessOutput") (some (r/SchemaSummary :name name :typevars (list) :fields (list (r/FieldSummary :name "exitCode" :type "Int64" :hasDefault false) (r/FieldSummary :name "stdout" :type "String" :hasDefault false) (r/FieldSummary :name "stderr" :type "String" :hasDefault false))))) (else (none)))))
+  (mt (r/modSchema mod name)
+    ((some schema) (some schema))
+    ((none) (mt (r/builtinSchemaFieldTypes name)
+      ((none) (none))
+      ((some fieldTypes) (some (r/SchemaSummary :name name :typevars (list) :fields (map builtinFieldSummary fieldTypes)))))))
 
 fn inferCtorArgs fm: FrameMachine fields: (List r/FieldSummary) owner: r/ModuleSummary vmap: (Map String ty/Type) sname: String args: (List rd/SExpr) st: InferState -> InferState
   (if (< (listLength args) 2) st (let [(kname (ctorKey (r/firstExprEmpty args))) (vres (evalFm fm (r/secondExprEmpty args) st)) (st1 (pairSecond vres)) (st2 (mt (listHead (filter (fn [(f r/FieldSummary)] -> Bool (= f.name kname)) fields)) ((none) st1) ((some f) (expectType st1 (pairFirst vres) (fieldTypeIn f vmap owner fm.deps) (str "field " kname " of " sname) fm.path))))] (inferCtorArgs fm fields owner vmap sname (r/safeTail (r/safeTail args)) st2)))
