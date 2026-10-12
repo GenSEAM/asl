@@ -1,6 +1,9 @@
 (module asl-ir/tests/arityAllocTest
   :x [runTests main]
-  :i [(asl-ir/lower :a lw)])
+  :i [(asl-ir/lower :a lw) (tools/nativeTest :a nt) (tools/fleet/run :a fr)])
+
+fn thisFile -> String
+  "asl/packages/asl-ir/tests/arityAllocTest.asl"
 
 fn ! loopArity i: Int64 n: Int64 acc: Int64 -> Int64
   (if (>= i n) acc
@@ -8,9 +11,6 @@ fn ! loopArity i: Int64 n: Int64 acc: Int64 -> Int64
 
 fn ! main args: (List String) -> (Result Int64 String)
   (do (println (str "result " (loopArity 0 20000 0))) (ok 0))
-
-fn ! sh cmd: String -> ProcessOutput
-  (processRun cmd)
 
 fn statsLine text: String -> String
   (optionOr (listHead (filter (fn [(line String)] -> Bool (stringStartsWith? line "(:gcStats ")) (stringLines text))) "")
@@ -40,14 +40,18 @@ fn ! testArityCorrectness -> Bool
     true)
 
 fn ! testArityAllocation -> Bool
-  (let [(out (sh "ASL_GC_STATS=1 asl/host/out/asl-host run asl/packages/asl-ir/tests/arityAllocTest.asl arity 2>&1 1>/dev/null"))
-        (line (statsLine out.stdout))
-        (allocated (objectsAllocated line))]
-    (do
-      (assert (= out.exitCode 0) (str "the arity subprocess exits 0: " out.stdout))
-      (assert (> allocated 0) (str "a (:gcStats ...) line with objectsAllocated was captured: " out.stdout))
-      (assert (< allocated 5000000) (str "20000 builtinArity lookups allocate under 5M objects (cond dispatch measures ~23K; the old per-call mapFromPairs rebuild measured ~317.68M): " line))
-      true))
+  (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
+    (mt built.binary
+      ((none) (do (assert false (str "arityAllocTest builds natively: " built.reason)) false))
+      ((some bin)
+       (let [(done (fr/runOneLimited (fr/job (list bin "arity") "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))
+             (line (statsLine done.out))
+             (allocated (objectsAllocated line))]
+         (do
+           (assert (= done.exit 0) (str "the arity subprocess exits 0 (" done.verdict "): " done.out))
+           (assert (> allocated 0) (str "a (:gcStats ...) line with objectsAllocated was captured: " done.out))
+           (assert (< allocated 5000000) (str "20000 builtinArity lookups allocate under 5M objects (cond dispatch measures ~23K; the old per-call mapFromPairs rebuild measured ~317.68M): " line))
+           true)))))
 
 fn ! runTests -> Bool
   (do

@@ -1,11 +1,16 @@
-(module asl-target-llvm/tests/emitAllocTest
+(module asl-target-llvm/tests/emitAllocTes
   :x [runTests main]
   :i [(asl-ir/types :a irTy)
       (asl-ir/lower :a low)
       (asl-ir/link :a lk)
       (asl-target-llvm :a nat)
       (asl-target-llvm/libc :a libc)
-      (asl-target-llvm/sysRoute :a route)])
+      (asl-target-llvm/sysRoute :a route)
+      (tools/nativeTest :a nt)
+      (tools/fleet/run :a fr)])
+
+fn thisFile -> String
+  "asl/packages/asl-target-llvm/tests/emitAllocTest.asl"
 
 fn entryPath -> String
   "asl/packages/asl-target-llvm/tests/fixtures/emitAlloc/entry.asl"
@@ -68,9 +73,13 @@ fn bytesAllocated line: String -> Int64
       ((none) -1)))
 
 fn ! runMode mode: String -> Int64
-  (let [(out (processRun (str "ASL_GC_STATS=1 asl/host/out/asl-host run asl/packages/asl-target-llvm/tests/emitAllocTest.asl " mode " 2>&1")))]
-    (do (assert (= out.exitCode 0) (str mode " run exits 0: " out.stdout))
-        (bytesAllocated (statsLine out.stdout))))
+  (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
+    (mt built.binary
+      ((none) (do (assert false (str "emitAllocTest builds natively: " built.reason)) -1))
+      ((some bin)
+       (let [(done (fr/runOneLimited (fr/job (list bin mode) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]
+         (do (assert (= done.exit 0) (str mode " run exits 0 (" done.verdict "): " done.out))
+             (bytesAllocated (statsLine done.out)))))))
 
 fn ! runTests -> Bool
   (let [(lowerOnly (runMode "lower"))

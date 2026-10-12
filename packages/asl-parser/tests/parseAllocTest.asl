@@ -1,6 +1,11 @@
-(module asl-parser/tests/parseAllocTest
+(module asl-parser/tests/parseAllocTes
   :x [runTests main]
-  :i [(asl-parser/ast :a ast)])
+  :i [(asl-parser/ast :a ast)
+      (tools/nativeTest :a nt)
+      (tools/fleet/run :a fr)])
+
+fn thisFile -> String
+  "asl/packages/asl-parser/tests/parseAllocTest.asl"
 
 fn workload -> (List String)
   (list "asl/prelude/prelude.asl" "asl/packages/asl-json/src/json.asl" "asl/packages/asl-json/tests/jsonTest.asl")
@@ -30,9 +35,13 @@ fn bytesAllocated line: String -> Int64
       ((none) -1)))
 
 fn ! runMode mode: String -> (Pair Int64 String)
-  (let [(out (processRun (str "ASL_GC_STATS=1 asl/host/out/asl-host run asl/packages/asl-parser/tests/parseAllocTest.asl " mode " 2>&1")))]
-    (do (assert (= out.exitCode 0) (str mode " run exits 0: " out.stdout))
-        (pair (bytesAllocated (statsLine out.stdout)) out.stdout)))
+  (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
+    (mt built.binary
+      ((none) (do (assert false (str "parseAllocTest builds natively: " built.reason)) (pair -1 "")))
+      ((some bin)
+       (let [(done (fr/runOneLimited (fr/job (list bin mode) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]
+         (do (assert (= done.exit 0) (str mode " run exits 0 (" done.verdict "): " done.out))
+             (pair (bytesAllocated (statsLine done.out)) done.out))))))
 
 fn ! runTests -> Bool
   (let [(readRun (runMode "read"))

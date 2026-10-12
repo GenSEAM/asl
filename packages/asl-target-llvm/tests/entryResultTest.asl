@@ -2,10 +2,8 @@
   :x [runTests]
   :i [(asl-ir/types :a ty)
       (asl-target-llvm :a llvm)
-      (asl-target-llvm/emit :a em)])
-
-fn host -> String
-  "asl/host/out/asl-host"
+      (asl-target-llvm/emit :a em)
+      (tools/nativeTest :a nt)])
 
 fn asl1Path -> String
   "asl/packages/asl-compiler/src/asl1.asl"
@@ -18,6 +16,12 @@ fn libPath -> String
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
+
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun (asl1Path) (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
 fn ok0Source -> String
   (stringJoin
@@ -106,8 +110,7 @@ fn ! runProgram work: String name: String src: String expectedExit: Int64 -> Boo
         (binFile (str work "/" name ".bin"))]
     (do
       (assert (ok? (fileWrite srcFile src)) (str "write " srcFile))
-      (let [(hostOut (sh (str (host) " run " srcFile)))
-            (buildRes (sh (str (host) " run " (asl1Path) " build " srcFile " -o " llFile)))
+      (let [(buildRes (sh (str (asl1Bin!) " build " srcFile " -o " llFile)))
             (linkRes (sh (str (clangCmd) " -x ir " llFile " -x none " (libPath) " -lm -o " binFile)))
             (nativeOut (sh binFile))]
         (do
@@ -115,10 +118,8 @@ fn ! runProgram work: String name: String src: String expectedExit: Int64 -> Boo
           (assert (= linkRes.exitCode 0) (str "clang link " name ": " linkRes.stderr))
           (assert (= nativeOut.exitCode expectedExit)
                   (str name ": expected exit " (stringFromInt64 expectedExit) ", got " (stringFromInt64 nativeOut.exitCode)))
-          (assert (= nativeOut.exitCode hostOut.exitCode)
-                  (str name ": exit code parity; native=" (stringFromInt64 nativeOut.exitCode) " host=" (stringFromInt64 hostOut.exitCode)))
-          (assert (= nativeOut.stdout hostOut.stdout)
-                  (str name ": stdout parity; native=" nativeOut.stdout " host=" hostOut.stdout))
+          (assert (stringEmpty? nativeOut.stdout) (str name ": prints nothing on stdout: " nativeOut.stdout))
+          (assert (fileExists? binFile) (str name ": the linked native binary exists on disk"))
           true))))
 
 fn ! testMainEntrySource work: String -> Bool
@@ -149,13 +150,12 @@ fn ! testMainEntrySource work: String -> Bool
                 (refute (stringContains? code "@asl_rt_exit_code") "emitted IR names no abi.c asl_rt_exit_code")
                 (assert (ok? (fileWrite llFile code)) "write testMain.ll")
                 (let [(linkRes (sh (str (clangCmd) " -x ir " llFile " -x none " (libPath) " -lm -o " binFile)))
-                      (hostOut (sh (str (host) " run " srcFile)))
                       (nativeOut (sh binFile))]
                   (do
                     (assert (= linkRes.exitCode 0) (str "clang link testMain: " linkRes.stderr))
                     (assert (= nativeOut.exitCode 42) "testMain: exit code 42")
-                    (assert (= nativeOut.exitCode hostOut.exitCode) "testMain: exit code parity with host")
-                    (assert (= nativeOut.stdout hostOut.stdout) "testMain: stdout parity with host")
+                    (assert (stringEmpty? nativeOut.stdout) "testMain: prints nothing on stdout")
+                    (assert (fileExists? binFile) "testMain: the linked native binary exists on disk")
                     true)))))))))
 
 fn testEmitFunctionMain -> Bool
@@ -189,8 +189,14 @@ fn testEmitModuleMain -> Bool
             (assert (stringContains? code "ret i32 %code") "em/emitLlvmModule wrapper returns code")
             true)))))
 
+fn ! runParityBin! -> String
+  (let [(built (nt/prepareRun "tests/acceptance/targetParity/runParity.asl" (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "runParity.asl builds natively: " built.reason)) ""))))
+
 fn ! testRunParityLlvm -> Bool
-  (let [(res (sh (str (host) " run tests/acceptance/targetParity/runParity.asl llvm")))]
+  (let [(res (sh (str (runParityBin!) " llvm")))]
     (do
       (assert (= res.exitCode 0) (str "runParity llvm passes exit 0: " res.stderr))
       (assert (stringContains? res.stdout "6/6 passed, 0 failed, 0 skipped") "runParity llvm reports 6/6 passed on whole corpus")

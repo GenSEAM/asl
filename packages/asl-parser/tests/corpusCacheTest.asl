@@ -2,7 +2,8 @@
   :x [runTests]
   :i [(asl-syntax/tests/asl/layoutCorpusLib :a lay)
       (asl-parser/tests/printReparseLib :a pr)
-      (asl-syntax/tests/asl/corpusCache :a cc)])
+      (asl-syntax/tests/asl/corpusCache :a cc)
+      (tools/fleet/run :a fr)])
 
 fn fixedFiles -> (List String)
   (list "asl/packages/asl-syntax/src/core/bytesText.asl"
@@ -29,7 +30,7 @@ fn runnerCounts stdout: String -> (Pair Int64 Int64)
        (pair executed passed))))
 
 fn probe! cacheDir: String files: String -> ProcessOutput
-  (sh! (str "ASL_CORPUS_CACHE='" cacheDir "' CORPUS_CACHE_PROBE_FILES='" files "' asl/host/out/asl-host test asl/packages/asl-parser/tests/corpusCacheProbe.asl 2>&1"))
+  (sh! (str "ASL_CORPUS_CACHE='" cacheDir "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor ".") "' test asl/packages/asl-parser/tests/corpusCacheProbe.asl 2>&1"))
 
 fn countFiles! dir: String -> Int64
   (mt (dirList dir)
@@ -71,16 +72,16 @@ fn testSecondRunHits! tmp: String fp: String -> Bool
       (and (= lay2.cached n) (and (= pr2.cached n) (= coldCounts warmCounts)))))
 
 fn snapshotProbe! root: String cwd: String home: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='" home "' CORPUS_CACHE_PROBE_FILES='" files "' '" root "/asl/host/out/asl-host' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='" home "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
 
 fn snapshotProbeNoHome! root: String cwd: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE -u HOME CORPUS_CACHE_PROBE_FILES='" files "' '" root "/asl/host/out/asl-host' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE -u HOME CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
 
 fn snapshotProbeEmptyHome! root: String cwd: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='' CORPUS_CACHE_PROBE_FILES='" files "' '" root "/asl/host/out/asl-host' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && env -u ASL_CORPUS_CACHE HOME='' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
 
 fn snapshotProbeEmptyCacheEnv! root: String cwd: String home: String files: String -> ProcessOutput
-  (sh! (str "cd '" cwd "' && ASL_CORPUS_CACHE='' HOME='" home "' CORPUS_CACHE_PROBE_FILES='" files "' '" root "/asl/host/out/asl-host' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
+  (sh! (str "cd '" cwd "' && ASL_CORPUS_CACHE='' HOME='" home "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor root) "' test '" root "/asl/packages/asl-parser/tests/corpusCacheProbe.asl' 2>&1"))
 
 fn probeFilesOnly! cwd: String -> ProcessOutput
   (sh! (str "mkdir -p '" cwd "/probeFiles' && cp asl/packages/asl-syntax/src/core/bytesText.asl '" cwd "/probeFiles/bytesText.asl' && cp asl/packages/asl-syntax/src/core/print.asl '" cwd "/probeFiles/print.asl' && cp asl/packages/asl-syntax/src/core/outline.asl '" cwd "/probeFiles/outline.asl'"))
@@ -235,7 +236,7 @@ fn testContentChangeRechecks! tmp: String fp: String -> Bool
       (and (= third.cached 0) (= fourth.cached 1))))
 
 fn probeSuite! cacheDir: String suite: String files: String -> ProcessOutput
-  (sh! (str "CORPUS_CACHE_PROBE_SUITES='" suite "' ASL_CORPUS_CACHE='" cacheDir "' CORPUS_CACHE_PROBE_FILES='" files "' asl/host/out/asl-host test asl/packages/asl-parser/tests/corpusCacheProbe.asl 2>&1"))
+  (sh! (str "CORPUS_CACHE_PROBE_SUITES='" suite "' ASL_CORPUS_CACHE='" cacheDir "' CORPUS_CACHE_PROBE_FILES='" files "' '" (fr/nativeCliFor ".") "' test asl/packages/asl-parser/tests/corpusCacheProbe.asl 2>&1"))
 
 fn testBrokenNeverCached! tmp: String fp: String -> Bool
   (let [(broken (str tmp "/broken.asl"))
@@ -297,7 +298,7 @@ fn ! runTests -> Bool
         (fp (cc/fingerprintRoots! (cc/defaultRoots)))]
     (do
       (assert (and (= made.exitCode 0) (not (stringEmpty? tmp))) "temporary directory created")
-      (assert (fileExists? "asl/host/out/asl-host") "asl/host/out/asl-host is built")
+      (assert (some? (fr/builtBinary! ".")) "a native CLI or built host exists to spawn the corpus-cache probe with")
       (let [(r1 (testSecondRunHits! tmp fp))
             (r2 (testDefaultSnapshotCache! tmp))
             (r2a (testMissingRootsDisableCache! tmp (stringTrim (sh! "pwd").stdout) "probeFiles/bytesText.asl probeFiles/print.asl probeFiles/outline.asl"))

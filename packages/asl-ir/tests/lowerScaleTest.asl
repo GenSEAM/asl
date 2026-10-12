@@ -6,7 +6,11 @@
       (asl-ir/link :a lk)
       (asl-ir/printer :a pr)
       (asl-parser/ast :a ast)
-      (tools/fleet/run :a run)])
+      (tools/fleet/run :a run)
+      (tools/nativeTest :a nt)])
+
+fn thisFile -> String
+  "asl/packages/asl-ir/tests/lowerScaleTest.asl"
 
 fn depDecl i: Int64 -> String
   (str "(enum E" i " (:c a" i " [(x Int64)] \"a\") (:c b" i " [] \"b\"))\n"
@@ -82,9 +86,13 @@ fn bytesAllocated text: String -> Int64
       ((none) -1)))
 
 fn ! childBytes mode: String n: Int64 -> Int64
-  (let [(done (run/runOneLimited (run/job (list (run/legacyHost!) "run" "asl/packages/asl-ir/tests/lowerScaleTest.asl" mode (stringFromInt64 n)) "." (run/childEnv (list "ASL_GC_STATS=1"))) (run/limits 300 4)))]
-    (do (assert (and (= done.exit 0) (stringContains? done.out (str "(lowerScale :mode " mode " :n " n " "))) (str mode " " n " child exits 0 (" done.verdict "): " done.out))
-        (bytesAllocated done.out)))
+  (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
+    (mt built.binary
+      ((none) (do (assert false (str "lowerScaleTest builds natively: " built.reason)) -1))
+      ((some bin)
+       (let [(done (run/runOneLimited (run/job (list bin mode (stringFromInt64 n)) "." (run/childEnv (list "ASL_GC_STATS=1"))) (run/limits 300 4)))]
+         (do (assert (and (= done.exit 0) (stringContains? done.out (str "(lowerScale :mode " mode " :n " n " "))) (str mode " " n " child exits 0 (" done.verdict "): " done.out))
+             (bytesAllocated done.out))))))
 
 fn ! deltaBytes base: String work: String n: Int64 -> Int64
   (let [(built (childBytes base n)) (done (childBytes work n))]

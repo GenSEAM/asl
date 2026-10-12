@@ -1,10 +1,8 @@
 (module asl-target-llvm/tests/exitCodeTest
   :x [runTests]
   :i [(asl-ir/types :a ty)
-      (asl-target-llvm :a llvm)])
-
-fn host -> String
-  "asl/host/out/asl-host"
+      (asl-target-llvm :a llvm)
+      (tools/nativeTest :a nt)])
 
 fn asl1Path -> String
   "asl/packages/asl-compiler/src/asl1.asl"
@@ -17,6 +15,12 @@ fn lib -> String
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
+
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun (asl1Path) (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
 fn ok0Source -> String
   (stringJoin
@@ -54,23 +58,22 @@ fn errSource -> String
       "  (err \"boom\")")
     "\n")
 
-fn ! runProgram work: String name: String src: String -> Bool
+fn ! runProgram work: String name: String src: String wantExit: Int64 wantStdout: String -> Bool
   (let [(srcFile (str work "/" name ".asl"))
         (llFile (str work "/" name ".ll"))
         (binFile (str work "/" name ".bin"))]
     (do
       (assert (ok? (fileWrite srcFile src)) (str "write " srcFile))
-      (let [(hostOut (sh (str (host) " run " srcFile)))
-            (buildRes (sh (str (host) " run " (asl1Path) " build " srcFile " -o " llFile)))
+      (let [(buildRes (sh (str (asl1Bin!) " build " srcFile " -o " llFile)))
             (linkRes (sh (str (clang) " -x ir " llFile " -x none " (lib) " -lm -o " binFile)))
             (nativeOut (sh binFile))]
         (do
           (assert (= buildRes.exitCode 0) (str "asl1 build " name ": " buildRes.stderr))
           (assert (= linkRes.exitCode 0) (str "clang link " name ": " linkRes.stderr))
-          (assert (= nativeOut.exitCode hostOut.exitCode)
-                  (str name ": exit code parity; native=" nativeOut.exitCode " host=" hostOut.exitCode "; stderr: " nativeOut.stderr))
-          (assert (= nativeOut.stdout hostOut.stdout)
-                  (str name ": stdout parity; native=" nativeOut.stdout " host=" hostOut.stdout))
+          (assert (= nativeOut.exitCode wantExit)
+                  (str name ": exit code; native=" nativeOut.exitCode " want=" wantExit "; stderr: " nativeOut.stderr))
+          (assert (= nativeOut.stdout wantStdout)
+                  (str name ": stdout; native=" nativeOut.stdout " want=" wantStdout))
           true))))
 
 fn ! testMainEntry work: String -> Bool
@@ -100,14 +103,13 @@ fn ! testMainEntry work: String -> Bool
               (do
                 (assert (ok? (fileWrite llFile code)) "write testMain.ll")
                 (let [(linkRes (sh (str (clang) " -x ir " llFile " -x none " (lib) " -lm -o " binFile)))
-                      (hostOut (sh (str (host) " run " srcFile)))
                       (nativeOut (sh binFile))]
                   (do
                     (assert (= linkRes.exitCode 0) (str "clang link testMain: " linkRes.stderr))
-                    (assert (= nativeOut.exitCode hostOut.exitCode)
-                            (str "testMain: exit code parity; native=" nativeOut.exitCode " host=" hostOut.exitCode))
-                    (assert (= nativeOut.stdout hostOut.stdout)
-                            (str "testMain: stdout parity; native=" nativeOut.stdout " host=" hostOut.stdout))
+                    (assert (= nativeOut.exitCode 42)
+                            (str "testMain: exit code; native=" nativeOut.exitCode " want=42"))
+                    (assert (= nativeOut.stdout "")
+                            (str "testMain: stdout; native=" nativeOut.stdout " want=empty"))
                     true)))))))))
 
 fn ! runTests -> Bool
@@ -115,10 +117,10 @@ fn ! runTests -> Bool
         (work (stringReplace made.stdout "\n" ""))]
     (do
       (assert (= made.exitCode 0) "mktemp -d makes a work directory")
-      (assert (runProgram work "progOk0" (ok0Source)) "progOk0")
-      (assert (runProgram work "progOk42" (ok42Source)) "progOk42")
-      (assert (runProgram work "progOkStr" (okStrSource)) "progOkStr")
-      (assert (runProgram work "progErr" (errSource)) "progErr")
+      (assert (runProgram work "progOk0" (ok0Source) 0 "") "progOk0")
+      (assert (runProgram work "progOk42" (ok42Source) 42 "") "progOk42")
+      (assert (runProgram work "progOkStr" (okStrSource) 0 "") "progOkStr")
+      (assert (runProgram work "progErr" (errSource) 1 "") "progErr")
       (assert (testMainEntry work) "testMainEntry")
       (assert (= (sh (str "rm -rf " work)).exitCode 0) "work directory removed")
       true))

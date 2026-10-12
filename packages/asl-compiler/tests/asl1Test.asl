@@ -1,9 +1,7 @@
 (module asl-compiler/tests/asl1Test
   :x [runTests]
-  :i [(asl-checker/resolve :a r)])
-
-fn host -> String
-  "asl/host/out/asl-host"
+  :i [(asl-checker/resolve :a r)
+      (tools/nativeTest :a nt)])
 
 fn asl1 -> String
   "asl/packages/asl-compiler/src/asl1.asl"
@@ -14,8 +12,14 @@ fn fibPath -> String
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
 
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun (asl1) (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
+
 fn ! driver args: String -> ProcessOutput
-  (sh (str (host) " run " (asl1) " " args))
+  (sh (str (asl1Bin!) " " args))
 
 fn ! testBuildFib work: String -> Bool
   (let [(built (driver (str "build " (fibPath) " -o " work "/fib.ll")))]
@@ -35,14 +39,13 @@ fn ! testArgsMain work: String -> Bool
         (written (fileWrite src (argsSource)))
         (built (driver (str "build " src " -o " work "/args.ll")))
         (linked (sh (str "/usr/bin/clang -Wno-override-module -x ir " work "/args.ll -x none asl/host/out/libaslrt.a -lm -o " work "/args")))
-        (hostRun (sh (str (host) " run " src " a b")))
         (nativeRun (sh (str work "/args a b")))
         (nativeErr (sh (str work "/args")))]
     (do (assert (ok? written) "argsProgram fixture written")
         (assert (= built.exitCode 0) (str "asl1 builds a main taking the argument list: " built.stderr))
         (assert (= linked.exitCode 0) (str "clang links argsProgram: " linked.stderr))
-        (assert (= hostRun.exitCode 42) (str "asl-host run argsProgram a b exits 42, got " hostRun.exitCode))
-        (assert (= nativeRun.exitCode 42) (str "native argsProgram a b exits 42 like asl-host run, got " nativeRun.exitCode))
+        (assert (= nativeRun.exitCode 42) (str "native argsProgram a b exits 42 (40 plus 2 args), got " nativeRun.exitCode))
+        (assert (stringEmpty? nativeRun.stdout) (str "native argsProgram a b prints nothing: " nativeRun.stdout))
         (assert (= nativeErr.exitCode 1) (str "native argsProgram with no arguments exits 1, got " nativeErr.exitCode))
         (assert (= nativeErr.stderr "ERR_MAIN_FAILED: main returned (err \"no arguments\"), not (ok ...)\n") (str "native (err ...) from main is reported: " nativeErr.stderr))
         true))
@@ -70,12 +73,11 @@ fn ! testCheck work: String -> Bool
 fn ! testCheckLikeHost work: String -> Bool
   (let [(lint (str work "/lint.asl"))
         (written (fileWrite lint "(module lint :x [f runTests] :i [])\n\nfn f x: Any -> Int64\n  1\n"))
-        (hostChecked (sh (str (host) " check " lint)))
         (checked (driver (str "check " lint)))]
     (do (assert (ok? written) "lint.asl fixture written")
-        (assert (= hostChecked.exitCode 0) (str "asl-host check accepts an exported-but-undefined name and an Any parameter: " hostChecked.stdout hostChecked.stderr))
-        (assert (= checked.exitCode hostChecked.exitCode) (str "HL-CHECK-UNIFY: asl1 check runs checkFile!, so it drops the lint rows (exported-but-undefined rule-2, rule-10 Any) the host never reports; exit " (stringFromInt64 checked.exitCode) ": " checked.stderr))
+        (assert (= checked.exitCode 0) (str "HL-CHECK-UNIFY: asl1 check runs checkFile!, so it drops the lint rows (exported-but-undefined rule-2, rule-10 Any) asl-host never reported either; exit " (stringFromInt64 checked.exitCode) ": " checked.stderr))
         (assert (= checked.stderr "") (str "asl1 check prints no diagnostic on the lint fixture: " checked.stderr))
+        (assert (= checked.stdout "") (str "asl1 check prints nothing on stdout either: " checked.stdout))
         true))
 
 fn ! testDeps -> Bool

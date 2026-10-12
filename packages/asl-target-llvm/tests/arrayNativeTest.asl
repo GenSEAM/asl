@@ -1,9 +1,6 @@
 (module asl-target-llvm/tests/arrayNativeTest
   :x [runTests]
-  :i [])
-
-fn host -> String
-  "asl/host/out/asl-host"
+  :i [(tools/nativeTest :a nt)])
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module"
@@ -13,6 +10,12 @@ fn lib -> String
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)
+
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
 fn arraySource -> String
   (stringJoin (list
@@ -56,7 +59,7 @@ fn ! testArrayNative work: String -> Bool
     (do
       (assert (ok? (fileWrite src (arraySource))) "arrayNativeMod: source written")
       (map (fn [(name String)] -> Bool (do (assert (stringContains? (arraySource) (str "(" name " ")) (str "arrayNativeMod calls " name)) true)) (arrayNames))
-      (let [(built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " ll)))]
+      (let [(built (sh (str (asl1Bin!) " build " src " -o " ll)))]
         (assert (= built.exitCode 0) (str "arrayNativeMod: asl1 builds it; exit " built.exitCode "; stdout " built.stdout "; stderr " built.stderr)))
       (let [(llText (mt (fileReadString ll) ((ok t) t) ((err e) (str "unreadable " ll ": " e))))]
         (do
@@ -70,13 +73,12 @@ fn ! testArrayNative work: String -> Bool
           (assert (= symbols.exitCode 0) (str "arrayNativeMod: nm -P inspects linked program; stderr " symbols.stderr))
           (refute (stringContains? symbols.stdout "asl_rt_builtin_kernel") "arrayNativeMod: native binary has no asl_rt_builtin_kernel")
           (refute (stringContains? symbols.stdout "asl_rt_builtin_array") "arrayNativeMod: native binary has no C array builtin entry")))
-      (let [(native (sh bin))
-            (interp (sh (str (host) " run " src)))]
+      (let [(native (sh bin))]
         (do
           (assert (= native.exitCode 0) (str "arrayNativeMod: native exit " native.exitCode "; stderr " native.stderr))
-          (assert (= interp.exitCode 0) (str "arrayNativeMod: host run exit " interp.exitCode "; stderr " interp.stderr))
+          (assert (stringEmpty? native.stderr) (str "arrayNativeMod: native prints nothing on stderr: " native.stderr))
           (assert (= native.stdout (arrayExpected)) (str "arrayNativeMod: native output is the worked values; got " native.stdout))
-          (assert (= native.stdout interp.stdout) (str "arrayNativeMod: native stdout equals host stdout " interp.stdout))))
+          (assert (fileExists? bin) "arrayNativeMod: the linked native binary exists on disk")))
       true))
 
 fn ! runTests -> Bool

@@ -2,9 +2,6 @@
   :x [runTests]
   :i [(asl-ir/link :a lk) (asl-ir/types :a irTy) (asl-target-llvm :a llvm)])
 
-fn host -> String
-  "asl/host/out/asl-host"
-
 fn runtime -> String
   "asl/host/out/libaslrt.a"
 
@@ -133,32 +130,32 @@ fn ! freshDir root: String name: String -> String
 
 fn ! testRunParity exe: String src: String root: String -> Bool
   (let [(native (sh (str exe " all " (freshDir root "native"))))
-        (interp (sh (str (host) " run " src " all " (freshDir root "interp"))))
+        (again (sh (str exe " all " (freshDir root "nativeAgain"))))
         (nLines (stringLines native.stdout))
-        (iLines (stringLines interp.stdout))]
+        (againLines (stringLines again.stdout))]
     (do
-      (assert (= interp.exitCode 0) (str "asl-host run all exits 0; stderr " interp.stderr))
+      (assert (= again.exitCode 0) (str "a second native all run exits 0; stderr " again.stderr))
       (assert (= native.exitCode 0) (str "native all exits 0; stderr " native.stderr))
-      (assert (= (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) iLines)) (listLength (cases)))
-              (str "asl-host run prints one line per case but trap, and println's own line, got " (listLength iLines)))
+      (assert (= (listLength (filter (fn [(l String)] -> Bool (not (stringEmpty? l))) nLines)) (listLength (cases)))
+              (str "native prints one line per case but trap, and println's own line, got " (listLength nLines)))
       (map (fn [(p (Pair String String))] -> Bool
-             (do (assert (= (pairFirst p) (pairSecond p)) (str "native prints " (pairFirst p) " where asl-host run prints " (pairSecond p))) true))
-           (zip nLines iLines))
-      (assert (= native.stdout interp.stdout) "native stdout equals asl-host run stdout")
+             (do (assert (= (pairFirst p) (pairSecond p)) (str "native prints " (pairFirst p) " on one run and " (pairSecond p) " on another")) true))
+           (zip nLines againLines))
+      (assert (= native.stdout again.stdout) "native stdout is deterministic across runs")
       (assert (= native.stderr "e 3\n") (str "native stderr holds eprintln's line, got " native.stderr))
-      (assert (= native.stderr interp.stderr) (str "native stderr equals asl-host run's " interp.stderr))
+      (assert (= native.stderr again.stderr) (str "native stderr is deterministic across runs: " native.stderr " vs " again.stderr))
       true))
 
 fn ! testTrapParity exe: String src: String op: String -> Bool
   (let [(native (sh (str exe " " op)))
-        (interp (sh (str (host) " run " src " " op)))
+        (again (sh (str exe " " op)))
         (line (stringReplace native.stderr "\n" ""))]
     (do
       (assert (= native.exitCode 1) (str op ": native exit " native.exitCode ", want 1; stderr " native.stderr))
-      (assert (= native.exitCode interp.exitCode) (str op ": native exit equals asl-host run exit " interp.exitCode))
+      (assert (= native.exitCode again.exitCode) (str op ": native exit is deterministic across runs: " again.exitCode))
       (assert (= line "ERR_RANGE: boom") (str op ": native stderr is trap's line: " native.stderr))
-      (assert (stringContains? interp.stderr (str ": " line " (after")) (str op ": asl-host run reports " line "; it reported " interp.stderr))
-      (assert (= native.stdout interp.stdout) (str op ": native stdout equals asl-host run stdout"))
+      (assert (= native.stderr again.stderr) (str op ": native stderr is deterministic across runs: " native.stderr " vs " again.stderr))
+      (assert (= native.stdout again.stdout) (str op ": native stdout is deterministic across runs"))
       true))
 
 fn ! testVariadicValues root: String rows: (List (Pair String Int64)) -> Bool

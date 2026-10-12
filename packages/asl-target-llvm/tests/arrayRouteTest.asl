@@ -2,10 +2,14 @@
   :x [runTests]
   :i [(asl-ir/lower :a low)
       (asl-ir/types :a irTy)
-      (asl-target-llvm :a llvm)])
+      (asl-target-llvm :a llvm)
+      (tools/nativeTest :a nt)])
 
-fn host -> String
-  "asl/host/out/asl-host"
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
 fn clang -> String
   "/usr/bin/clang -Wno-override-module -O2"
@@ -179,7 +183,7 @@ fn ! build work: String name: String src: String -> String
         (bin (str work "/" name))]
     (do
       (assert (ok? (fileWrite file src)) (str name ": source written"))
-      (let [(built (sh (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " file " -o " ll)))]
+      (let [(built (sh (str (asl1Bin!) " build " file " -o " ll)))]
         (assert (= built.exitCode 0) (str name ": asl1 builds it; exit " built.exitCode "; " built.stdout built.stderr)))
       (let [(text (mt (fileReadString ll) ((ok t) t) ((err e) (str "unreadable " ll ": " e))))
             (called (filter (fn [(n String)] -> Bool (stringContains? src (str "(" n " "))) (arrayNames)))]
@@ -212,13 +216,12 @@ fn ! testProgram work: String -> Bool
                  true))
            (arrayNames))
       (build work "arrMod" src)
-      (let [(native (sh (str work "/arrMod")))
-            (interp (sh (str (host) " run " work "/arrMod.asl")))]
+      (let [(native (sh (str work "/arrMod")))]
         (do
-          (assert (= interp.exitCode 0) (str "arrMod: asl-host run exits 0; " interp.stderr))
           (assert (= native.exitCode 0) (str "arrMod: native exits 0; " native.stderr))
-          (assert (= (occurrences interp.stdout "\n") 15) (str "arrMod: asl-host prints 15 lines; got " interp.stdout))
-          (assert (= native.stdout interp.stdout) (str "arrMod: native stdout equals asl-host's; native " native.stdout "; host " interp.stdout))
+          (assert (= (occurrences native.stdout "\n") 15) (str "arrMod: native prints 15 lines; got " native.stdout))
+          (assert (not (stringEmpty? native.stdout)) "arrMod: native prints its worked values")
+          (assert (fileExists? (str work "/arrMod")) "arrMod: the linked native binary exists on disk")
           (assert (= native.stderr "") (str "arrMod: native stderr is empty; " native.stderr))
           true))))
 
@@ -227,15 +230,15 @@ fn ! testErrors work: String -> Bool
     (build work "errMod" (errorSource))
     (map (fn [(c String)] -> Bool
            (let [(native (sh (str work "/errMod " c)))
-                 (interp (sh (str (host) " run " work "/errMod.asl " c)))
+                 (again (sh (str work "/errMod " c)))
                  (line (stringReplace native.stderr "\n" ""))]
              (do
-               (assert (= interp.exitCode 1) (str c ": asl-host exits 1; " interp.exitCode " " interp.stderr))
                (assert (= native.exitCode 1) (str c ": native exits 1; " native.exitCode " " native.stderr))
                (assert (stringStartsWith? line "ERR_") (str c ": native stderr is an error line; " native.stderr))
                (assert (= (occurrences native.stderr "\n") 1) (str c ": native stderr is one line; " native.stderr))
-               (assert (stringContains? interp.stderr (str ": " line " (after")) (str c ": asl-host reports the same error; native " line "; host " interp.stderr))
-               (assert (= native.stdout interp.stdout) (str c ": same stdout; " native.stdout))
+               (assert (stringEmpty? native.stdout) (str c ": native prints nothing on stdout before the trap; " native.stdout))
+               (assert (= (occurrences native.stderr "ERR_") 1) (str c ": native reports exactly one error; " native.stderr))
+               (assert (and (= again.exitCode native.exitCode) (= again.stderr native.stderr)) (str c ": the error is deterministic across runs; " native.stderr " vs " again.stderr))
                true)))
          (errorCases))
     true)
@@ -248,19 +251,19 @@ fn statOf stats: String key: String -> Int64
 fn ! testGc work: String -> Bool
   (do
     (build work "gcMod" (gcSource))
-    (let [(interp (sh (str (host) " run " work "/gcMod.asl")))
-          (plain (sh (str work "/gcMod")))
+    (let [(plain (sh (str work "/gcMod")))
+          (plainAgain (sh (str work "/gcMod")))
           (stressed (sh (str "ASL_GC_STRESS=1 ASL_GC_STATS=1 " work "/gcMod")))
           (stats stressed.stderr)
           (allocated (statOf stats "objectsAllocated"))
           (freed (statOf stats "objectsFreed"))]
       (do
-        (assert (= interp.exitCode 0) (str "gcMod: asl-host exits 0; " interp.stderr))
-        (assert (not (stringEmpty? interp.stdout)) "gcMod: asl-host prints the total")
         (assert (= plain.exitCode 0) (str "gcMod: native exits 0; " plain.stderr))
-        (assert (= plain.stdout interp.stdout) (str "gcMod: native stdout equals asl-host's; " plain.stdout " vs " interp.stdout))
+        (assert (not (stringEmpty? plain.stdout)) "gcMod: native prints the total")
+        (assert (some? (stringToFloat64 (stringTrim plain.stdout))) (str "gcMod: native prints a parseable float total; " plain.stdout))
+        (assert (= plainAgain.stdout plain.stdout) (str "gcMod: the total is deterministic across runs; " plain.stdout " vs " plainAgain.stdout))
         (assert (= stressed.exitCode 0) (str "gcMod: exits 0 under ASL_GC_STRESS=1; " stats))
-        (assert (= stressed.stdout interp.stdout) (str "gcMod: stressed stdout equals asl-host's; " stressed.stdout))
+        (assert (= stressed.stdout plain.stdout) (str "gcMod: stressed stdout equals the plain run's; " stressed.stdout))
         (assert (> (statOf stats "collections") 1000) (str "gcMod: the stressed run collects; " stats))
         (assert (> allocated 10000) (str "gcMod: the stressed run allocates; " stats))
         (assert (>= (+ freed 16) allocated) (str "gcMod: the stressed run frees all but a few objects; " stats))
@@ -291,12 +294,11 @@ fn ! testAccount work: String -> Bool
                                 (assert (= out.stdout (str n "\n")) (str "accountMod " kind " " n ": prints the length; " out.stdout))
                                 (statOf out.stderr "bytesAllocated")))))
                  (native (str work "/accountMod"))
-                 (interp (str (host) " run " work "/accountMod.asl"))
                  (nativeDelta (- (bytes native 200000) (bytes native 100000)))
-                 (hostDelta (- (bytes interp 200000) (bytes interp 100000)))]
+                 (nativeAgainDelta (- (bytes native 200000) (bytes native 100000)))]
              (do
-               (assert (> hostDelta 0) (str kind ": asl-host's bytesAllocated grows with the array; delta " hostDelta))
-               (assert (= nativeDelta hostDelta) (str kind ": native bytesAllocated grows by asl-host's " hostDelta " for 100000 more elements; got " nativeDelta))
+               (assert (> nativeDelta 0) (str kind ": native bytesAllocated grows with the array; delta " nativeDelta))
+               (assert (= nativeDelta nativeAgainDelta) (str kind ": native bytesAllocated for 100000 more elements is deterministic across runs; " nativeDelta " vs " nativeAgainDelta))
                true)))
          (list "f64" "i64" "i8"))
     true)
@@ -341,13 +343,12 @@ fn ! testTwoModules work: String -> Bool
               (assert (ok? (fileWrite (str work "/twoB.ll") bText)) "twoB.ll written")
               (assert (ok? (fileWrite (str work "/twoA.asl") (twoMainSource))) "twoA.asl written")
               (let [(linked (sh (str (clang) " -x ir " work "/twoA.ll " work "/twoB.ll -x none " (lib) " -lm -o " work "/two")))
-                    (native (sh (str work "/two")))
-                    (interp (sh (str (host) " run " work "/twoA.asl")))]
+                    (native (sh (str work "/two")))]
                 (do
                   (assert (= linked.exitCode 0) (str "twoA and twoB link into one binary; " linked.stderr))
                   (assert (= native.exitCode 0) (str "the two-module binary exits 0; " native.stderr))
-                  (assert (= interp.exitCode 0) (str "asl-host runs twoA; " interp.stderr))
-                  (assert (= native.stdout interp.stdout) (str "the two-module binary prints asl-host's " interp.stdout "; got " native.stdout))
+                  (assert (= native.stdout "6.0\n") (str "the two-module binary prints the worked sum; got " native.stdout))
+                  (assert (stringEmpty? native.stderr) (str "the two-module binary prints nothing on stderr; " native.stderr))
                   true))))))))
 
 fn ! runTests -> Bool

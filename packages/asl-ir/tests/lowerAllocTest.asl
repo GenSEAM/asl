@@ -1,8 +1,13 @@
-(module asl-ir/tests/lowerAllocTest
+(module asl-ir/tests/lowerAllocTes
   :x [runTests main]
   :i [(asl-ir/types :a ty)
       (asl-ir/lower :a low)
-      (asl-ir/link :a lk)])
+      (asl-ir/link :a lk)
+      (tools/nativeTest :a nt)
+      (tools/fleet/run :a fr)])
+
+fn thisFile -> String
+  "asl/packages/asl-ir/tests/lowerAllocTest.asl"
 
 fn entryPath -> String
   "asl/packages/asl-json/tests/jsonTest.asl"
@@ -56,10 +61,14 @@ fn bytesAllocated line: String -> Int64
       ((none) -1)))
 
 fn ! runMode mode: String -> Int64
-  (let [(out (processRun (str "ASL_GC_STATS=1 asl/host/out/asl-host run asl/packages/asl-ir/tests/lowerAllocTest.asl " mode " " (entryPath) " 2>&1")))]
-    (do (assert (= out.exitCode 0) (str mode " run exits 0: " out.stdout))
-        (assert (stringContains? out.stdout (str "lowerAlloc " mode " modules 2")) (str mode " run covers the 2 modules of the jsonTest closure: " out.stdout))
-        (bytesAllocated (statsLine out.stdout))))
+  (let [(built (nt/prepareRun (thisFile) (nt/fingerprint)))]
+    (mt built.binary
+      ((none) (do (assert false (str "lowerAllocTest builds natively: " built.reason)) -1))
+      ((some bin)
+       (let [(done (fr/runOneLimited (fr/job (list bin mode (entryPath)) "." (fr/childEnv (list "ASL_GC_STATS=1"))) (fr/limits 300 4)))]
+         (do (assert (= done.exit 0) (str mode " run exits 0 (" done.verdict "): " done.out))
+             (assert (stringContains? done.out (str "lowerAlloc " mode " modules 2")) (str mode " run covers the 2 modules of the jsonTest closure: " done.out))
+             (bytesAllocated (statsLine done.out)))))))
 
 fn ! runTests -> Bool
   (let [(loadOnly (runMode "load"))

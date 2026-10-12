@@ -1,6 +1,12 @@
 (module asl-parser/tests/fnHeaderJoinTest
   :x [runTests]
-  :i [(ast :a a)])
+  :i [(ast :a a) (tools/nativeTest :a nt)])
+
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun "asl/packages/asl-compiler/src/asl1.asl" (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
 
 fn probeSource -> String
   (stringJoin (list "(module probe" "  :x [f]" "  :i [])" "fn f a: Int64" "     b: Int64" "     c: Int64 -> Int64" "  (+ a \"x\")" "") "\n")
@@ -19,9 +25,9 @@ fn ! testCheckerLine -> Bool
         (work (stringReplace made.stdout "\n" ""))
         (probe (str work "/probe.asl"))
         (written (fileWrite probe (probeSource)))
-        (out (processRun (str "asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl check " probe)))]
+        (out (processRun (str (asl1Bin!) " check " probe)))]
     (do (assert (ok? written) "probe written")
-        (assert (stringContains? out.stderr (str probe ":7:3: [type] argument to +: expected Int64, found String")) (str "native checker reports the body type error at line 7: " out.stderr))
+        (assert (stringContains? out.stderr (str probe ":7:3: [ERR_TYPE_MISMATCH] argument to +: expected Int64, found String")) (str "native checker reports the body type error at line 7: " out.stderr))
         (assert (= (processRun (str "rm -rf " work)).exitCode 0) "work directory removed")
         true))
 

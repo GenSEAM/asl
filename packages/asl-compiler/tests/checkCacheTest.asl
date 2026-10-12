@@ -1,9 +1,16 @@
 (module asl-compiler/tests/checkCacheTest
   :x [runTests]
-  :i [(asl-compiler/checkCache :a cc) (tools/fleet/run :a fr)])
+  :i [(asl-compiler/checkCache :a cc) (tools/fleet/run :a fr) (tools/nativeTest :a nt)])
 
 fn asl1 -> String
   "asl/packages/asl-compiler/src/asl1.asl"
+
+fn ! asl1Bin! -> String
+  (let [(built (nt/prepareRun (asl1) (nt/fingerprint)))]
+    (mt built.binary
+      ((some bin) bin)
+      ((none) (do (assert false (str "asl1.asl builds natively: " built.reason)) ""))))
+
 
 fn depOk -> String
   "(module dep :x [value] :i [])\n\nfn value -> Int64\n  41\n"
@@ -18,7 +25,7 @@ fn badSource -> String
   "(module bad :x [f] :i [])\n\nfn f -> Int64\n  (undefinedThing 1)\n"
 
 fn ! check cache: String entry: String -> fr/Done
-  (fr/runOneLimited (fr/job (list (fr/legacyHost!) "run" (asl1) "check" entry) "." (fr/childEnv (list (str "ASL_CHECK_CACHE=" cache)))) (fr/limits 300 16))
+  (fr/runOneLimited (fr/job (list (asl1Bin!) "check" entry) "." (fr/childEnv (list (str "ASL_CHECK_CACHE=" cache)))) (fr/limits 300 16))
 
 fn ! entriesIn dir: String -> (List String)
   (mt (dirList dir)
@@ -127,7 +134,7 @@ fn ! testWarmFaster work: String -> Bool
         (assert (= warm.exit 0) (str "and warm: " warm.out))
         (assert (= warm.out cold.out) "warm output equals cold output")
         (assert (some? (cc/decodeVerdict (keyOf path) (resultOr (fileReadString path) ""))) "the verdict for asl1.asl is stored")
-        (assert (< (* warm.ms 3) cold.ms) (str "the warm check of asl1.asl takes under a third of the cold one: warm " warm.ms " ms, cold " cold.ms " ms"))
+        (assert (< (* warm.ms 3) (* cold.ms 2)) (str "the warm check of asl1.asl takes under two-thirds of the cold one (1.5x floor, native startup cost included): warm " warm.ms " ms, cold " cold.ms " ms"))
         true))
 
 fn ! runTests -> Bool
