@@ -1189,6 +1189,9 @@ fn preludeName? ctx: LowerCtx env: (Map String String) name: String -> Bool
 fn builtinName? ctx: LowerCtx env: (Map String String) name: String -> Bool
   (and (not (mapHas? env name)) (and (not (mapHas? ctx.info.arities name)) (and (not (mapHas? ctx.info.ctors name)) (not (mapHas? ctx.info.records name)))))
 
+fn moduleBoundName? ctx: LowerCtx name: String -> Bool
+  (or (mapHas? ctx.info.arities name) (or (mapHas? ctx.info.ctors name) (mapHas? ctx.info.records name)))
+
 fn optionSource ctx: LowerCtx env: (Map String String) e: rd/SExpr -> String
   (let [(items (rd/sexprToList e))
         (h (rd/sexprHead (nthOf items 0)))
@@ -1229,7 +1232,7 @@ fn lowerHead ctx: LowerCtx env: (Map String String) st: LowerState name: String 
         (let [(body (rd/makeList (cons (rd/makeAtom "do") (tailOf args))))
               (unit (rd/makeAtom "()"))]
           (lowerIf ctx env st (if (= name "when") (list (nthOf args 0) body unit) (list (nthOf args 0) unit body))))))
-    ((or (= name "loop") (= name "recur") (= name "try") (= name "return") (= name "quote")) (err (outside ctx name)))
+    ((and (or (= name "loop") (= name "recur") (= name "try") (= name "return") (= name "quote")) (not (moduleBoundName? ctx name))) (err (outside ctx name)))
     ((mapHas? env name) (lowerCallClosure ctx env st (rd/makeAtom name) args))
     ((preludeBitOp? ctx name) (lowerPreludeBit ctx env st name args))
     ((mapHas? ctx.info.arities name) (lowerCall ctx env st name (optionOr (mapGet ctx.info.arities name) 0) args))
@@ -1629,12 +1632,15 @@ fn addDecl keyPrefix: String modName: String exports: (Option (Map String Bool))
                              key modName s keyPrefix)
                            (hide v key modName))))
     ((ast/topEnum e) (let [(decl (enumDecl modName e))
-                           (decls (if foreign (cons decl v.foreign) v.foreign))]
-                       (if (visible? exports e.name)
-                         (with v :ctors (addCtorsAs keyPrefix v.ctors decl) :foreign decls)
-                         (fold (fn [(acc Vis) (c ast/EnumCase)] -> Vis (hide acc (str keyPrefix c.name) modName))
-                               (with v :foreign decls)
-                               e.cases))))
+                           (decls (if foreign (cons decl v.foreign) v.foreign))
+                           (visibleCase? (fn [(c ast/EnumCase)] -> Bool (or (visible? exports e.name) (visible? exports c.name))))
+                           (newCtors (fold (fn [(m (Map String Ctor)) (c ast/EnumCase)] -> (Map String Ctor)
+                                             (if (visibleCase? c) (mapSet m (str keyPrefix c.name) (Ctor :typeName decl.name :variant c.name :arity (caseArity c))) m))
+                                           v.ctors e.cases))
+                           (newHidden (fold (fn [(m (Map String String)) (c ast/EnumCase)] -> (Map String String)
+                                              (if (visibleCase? c) m (mapSet m (str keyPrefix c.name) modName)))
+                                            v.hidden e.cases))]
+                       (with v :ctors newCtors :foreign decls :hidden newHidden)))
     ((ast/topExpr _) v))
 
 fn addDecls v: Vis forms: (List ast/TopForm) keyPrefix: String modName: String exports: (Option (Map String Bool)) foreign: Bool -> Vis

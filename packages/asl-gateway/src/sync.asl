@@ -43,14 +43,14 @@
 fn hashStep text: Str idx: I64 h: I64 -> I64
   (if (>= idx (stringLength text))
     h
-    (let ((c (optionOr (stringSlice text idx (+ idx 1)) ""))
+    (let [(c (optionOr (stringSlice text idx (+ idx 1)) ""))
           (code (charCode c))
-          (nextH (mod (+ (* (mod h 1000000007) 31) (+ idx code)) 1000000007)))
+          (nextH (mod (+ (* (mod h 1000000007) 31) (+ idx code)) 1000000007))]
       (hashStep text (+ idx 1) nextH)))
 
 fn computeContentHash text: Str -> Str
-  (let ((len (stringLength text))
-        (seed (hashStep text 0 5381)))
+  (let [(len (stringLength text))
+        (seed (hashStep text 0 5381))]
     (str "h" len "-" seed))
 
 fn formatProjectSync p: ProjectSync -> Str
