@@ -11,7 +11,8 @@
       (asl-intel/complexity :a cx)
       (asl-intel/trace :a tr)
       (asl-intel/sweep :a sw)
-      (asl-intel/vitality :a vt)])
+      (asl-intel/vitality :a vt)
+      (asl-intel/lintOp :a lo)])
 
 (schema Opts
   (:f fmt String)
@@ -78,6 +79,8 @@ fn parseOpts sub: String args: (List String) o: Opts -> Opts
               (parseOpts sub rest (with o :symF a))))
           ((and (= sub "complexity") (not (stringStartsWith? a "-")))
             (parseOpts sub rest (with o :target a :hasTarget true)))
+          ((and (= sub "lint") (not (stringStartsWith? a "-")))
+            (parseOpts sub rest (with o :target a :hasTarget true)))
           ((and (= sub "trace") (and (= a "--target") (hasNext? args)))
             (parseOpts sub after (with o :target nxt :hasTarget true)))
           ((and (= sub "trace") (and (not (stringStartsWith? a "--")) (not o.hasTarget)))
@@ -111,7 +114,7 @@ fn makeCtxFor! workspaceRoot: String -> h/Ctx
 
 fn usage -> String
   (t/joinWith (list
-    "Usage: asl-intel <coupling|impact|outline|query|deadcode|vacuity|sweep|graph|complexity|stubs|vitality> [options]"
+    "Usage: asl-intel <coupling|impact|outline|query|deadcode|vacuity|sweep|graph|complexity|stubs|vitality|lint> [options]"
     "  Unified Code Intelligence Engine (ADR D135)"
     "Subcommands:"
     "  vitality [--summary|--json|--asn] (alias: full, all, system)"
@@ -123,6 +126,7 @@ fn usage -> String
     "  outline <file>"
     "  query <text>"
     "  deadcode [--summary|--json|--asn] [--package <name>]"
+    "  lint [<file>] [--summary|--json|--asn]  (idiom checks, e.g. LINT_QUADRATIC_LISTGET; no file: whole tracked tree)"
     "  vacuity [--summary|--json|--asn] [--strict]"
     "  sweep"
     "") "\n")
@@ -143,6 +147,7 @@ fn runIntel! ctx: h/Ctx args: (List String) -> h/Outcome
       ((= sub "trace") (let [(o (parseOpts sub rest (opts0 "summary")))] (tr/runTrace! ctx o.fmt o.target)))
       ((= sub "stubs") (let [(o (parseOpts sub rest (opts0 "asn")))] (st/runStubs! ctx o.fmt o.strict)))
       ((= sub "deadcode") (let [(o (parseOpts sub rest (opts0 "asn")))] (dc/runDeadcode! ctx o.fmt o.pkg)))
+      ((= sub "lint") (let [(o (parseOpts sub rest (opts0 "asn")))] (lo/runLint! ctx o.fmt o.target)))
       (else (h/outcome "" (str "Unknown intel subcommand: " sub "\n") 1))))
 
 fn dispatchIntel! op: String target: String -> String
