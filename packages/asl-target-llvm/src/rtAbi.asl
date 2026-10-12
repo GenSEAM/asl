@@ -4,10 +4,13 @@
       (asl-target-llvm/gcRoute :a gr)])
 
 fn entryNames -> (List String)
-  (list "asl_rt_spill" "asl_rt_init" "asl_rt_global_root" "abiGcRoots" "gcMutatorRoots")
+  (list "asl_rt_spill" "asl_rt_init" "asl_rt_main" "asl_rt_global_root" "abiGcRoots" "gcMutatorRoots")
 
 fn spillSlots -> Int64
   1024
+
+fn mainStackBytes -> Int64
+  1073741824
 
 fn cString name: String text: String -> String
   (str "@" name " = private unnamed_addr constant [" (+ (stringLength text) 1) " x i8] c\"" text "\\00\"")
@@ -29,6 +32,12 @@ fn dataLines -> (List String)
           (cString "rtAbi.errLimit" "ERR_LIMIT")
           (cString "rtAbi.errOom" "ERR_OOM")
           (cString "rtAbi.noStack" "cannot locate the native stack")
+          "@rtAbi.mainBody = internal global ptr null, align 8"
+          "@rtAbi.mainArgc = internal global i32 0, align 4"
+          "@rtAbi.mainArgv = internal global ptr null, align 8"
+          (cString "rtAbi.noMainThread" "cannot run main on a %lld-byte thread stack: sigfillset %d, pthread_sigmask %d, pthread_attr_init %d, pthread_attr_setstacksize %d, pthread_create %d")
+          (cString "rtAbi.mainJoined" "the main thread ended without exit: pthread_join %d")
+          (cString "rtAbi.noMainMask" "cannot restore the signal mask on the main thread: pthread_sigmask %d")
           (cString "rtAbi.tooMany" "more than %d global roots")
           (cString "rtAbi.noMemory" "out of memory growing the global root table to %d slots"))
     (map (fn [(k (Pair String String))] -> String (cString (str "rtAbi.kw." (pairSecond k)) (pairSecond k))) (keywords)))
@@ -54,6 +63,76 @@ fn initText -> String
        "out:\n"
        "  ret void\n"
        "}")
+
+fn mainText facts: libc/TripleFacts maskBytes: Int64 attrBytes: Int64 -> String
+  (let [(thread (if (= facts.triple "darwin-arm64") "ptr" "i64"))
+        (block (optionOr (libc/libcConst facts "SIG_BLOCK") 0))
+        (setMask (optionOr (libc/libcConst facts "SIG_SETMASK") 0))]
+    (stringJoin
+      (list (str "@rtAbi.mainMask = internal global [" maskBytes " x i8] zeroinitializer, align 8")
+            ""
+            "define i32 @asl_rt_main(ptr %body, i32 %argc, ptr %argv) {"
+            "entry:"
+            "  store ptr %body, ptr @rtAbi.mainBody"
+            "  store i32 %argc, ptr @rtAbi.mainArgc"
+            "  store ptr %argv, ptr @rtAbi.mainArgv"
+            (str "  %all = alloca [" maskBytes " x i8], align 8")
+            (str "  %attr = alloca [" attrBytes " x i8], align 16")
+            (str "  %thread = alloca " thread ", align 8")
+            "  %filled = call i32 @sigfillset(ptr %all)"
+            (str "  %masked = call i32 @pthread_sigmask(i32 " block ", ptr %all, ptr @rtAbi.mainMask)")
+            "  %inited = call i32 @pthread_attr_init(ptr %attr)"
+            (str "  %sized = call i32 @pthread_attr_setstacksize(ptr %attr, i64 " (mainStackBytes) ")")
+            "  %started = call i32 @pthread_create(ptr %thread, ptr %attr, ptr @rtAbi.mainThread, ptr null)"
+            "  %destroyed = call i32 @pthread_attr_destroy(ptr %attr)"
+            "  %any1 = or i32 %filled, %masked"
+            "  %any2 = or i32 %any1, %inited"
+            "  %any3 = or i32 %any2, %sized"
+            "  %any4 = or i32 %any3, %started"
+            "  %failed = icmp ne i32 %any4, 0"
+            "  br i1 %failed, label %noThread, label %join"
+            "join:"
+            (str "  %handle = load " thread ", ptr %thread")
+            (str "  %joined = call i32 @pthread_join(" thread " %handle, ptr null)")
+            "  %joinedText = alloca [128 x i8], align 1"
+            "  %joinedLen = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %joinedText, i64 128, ptr @rtAbi.mainJoined, i32 %joined)"
+            "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr %joinedText)"
+            "  unreachable"
+            "noThread:"
+            "  %noThreadText = alloca [256 x i8], align 1"
+            (str "  %noThreadLen = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %noThreadText, i64 256, ptr @rtAbi.noMainThread, i64 " (mainStackBytes) ", i32 %filled, i32 %masked, i32 %inited, i32 %sized, i32 %started)")
+            "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr %noThreadText)"
+            "  unreachable"
+            "}"
+            ""
+            "define internal ptr @rtAbi.mainThread(ptr %unused) {"
+            "entry:"
+            (str "  %restored = call i32 @pthread_sigmask(i32 " setMask ", ptr @rtAbi.mainMask, ptr null)")
+            "  %restoreFailed = icmp ne i32 %restored, 0"
+            "  br i1 %restoreFailed, label %noMask, label %run"
+            "run:"
+            "  %body = load ptr, ptr @rtAbi.mainBody"
+            "  %argc = load i32, ptr @rtAbi.mainArgc"
+            "  %argv = load ptr, ptr @rtAbi.mainArgv"
+            "  %code = call i32 %body(i32 %argc, ptr %argv)"
+            "  call void @exit(i32 %code)"
+            "  unreachable"
+            "noMask:"
+            "  %noMaskText = alloca [128 x i8], align 1"
+            "  %noMaskLen = call i32 (ptr, i64, ptr, ...) @snprintf(ptr %noMaskText, i64 128, ptr @rtAbi.noMainMask, i32 %restored)"
+            "  call void (ptr, ptr, ...) @gcFloorFail(ptr @rtAbi.errInternal, ptr %noMaskText)"
+            "  unreachable"
+            "}")
+      "\n"))
+
+fn mainSizes facts: libc/TripleFacts -> (Result (Pair Int64 Int64) String)
+  (mt (libc/structSize facts "sigset_t")
+    ((none) (err (str "ERR_LLVM_RTABI: libc.asl has no sigset_t size for " facts.triple)))
+    ((some mask) (mt (libc/structSize facts "pthread_attr_t")
+                   ((none) (err (str "ERR_LLVM_RTABI: libc.asl has no pthread_attr_t size for " facts.triple)))
+                   ((some attr) (if (or (none? (libc/libcConst facts "SIG_BLOCK")) (none? (libc/libcConst facts "SIG_SETMASK")))
+                                  (err (str "ERR_LLVM_RTABI: libc.asl has no SIG_BLOCK or SIG_SETMASK for " facts.triple))
+                                  (ok (pair mask attr)))))))
 
 fn globalRootText -> String
   (stringJoin
@@ -238,12 +317,19 @@ fn declLines darwin: Bool asan: Bool -> (List String)
           "declare ptr @realloc(ptr, i64)"
           "declare i32 @snprintf(ptr, i64, ptr, ...)"
           "declare void @llvm.eh.unwind.init()"
-          "declare ptr @llvm.stacksave.p0()")
+          "declare ptr @llvm.stacksave.p0()"
+          "declare i32 @sigfillset(ptr)"
+          "declare i32 @pthread_sigmask(i32, ptr, ptr)"
+          "declare i32 @pthread_attr_init(ptr)"
+          "declare i32 @pthread_attr_setstacksize(ptr, i64)"
+          "declare i32 @pthread_create(ptr, ptr, ptr, ptr)"
+          "declare void @exit(i32) noreturn")
     (listAppend
       (if darwin
-        (list "declare ptr @pthread_self()" "declare ptr @pthread_get_stackaddr_np(ptr)")
+        (list "declare ptr @pthread_self()" "declare ptr @pthread_get_stackaddr_np(ptr)" "declare i32 @pthread_attr_destroy(ptr)"
+              "declare i32 @pthread_join(ptr, ptr)")
         (list "declare i64 @pthread_self()" "declare i32 @pthread_getattr_np(i64, ptr)" "declare i32 @pthread_attr_getstack(ptr, ptr, ptr)"
-              "declare i32 @pthread_attr_destroy(ptr)"))
+              "declare i32 @pthread_attr_destroy(ptr)" "declare i32 @pthread_join(i64, ptr)"))
       (if asan
         (list "declare ptr @__asan_get_current_fake_stack()" "declare ptr @__asan_addr_is_in_fake_stack(ptr, ptr, ptr, ptr)")
         (list))))
@@ -261,12 +347,15 @@ fn abiText facts: libc/TripleFacts asan: Bool -> (Result String String)
   (mt (locateText facts)
     ((err e) (err e))
     ((ok locate)
-      (ok (str "source_filename = \"aslRtAbi\"\n\n"
-               (stringJoin
-                 (list (stringJoin (dataLines) "\n") "" (initText) "" (globalRootText) "" (rootsText) "" (externalRootsText asan) ""
-                       (if asan (str (fakeFrameText) "\n") "") locate "" (stringJoin (declLines (= facts.triple "darwin-arm64") asan) "\n"))
-                 "\n")
-               "\n"))))
+      (mt (mainSizes facts)
+        ((err e) (err e))
+        ((ok sizes)
+          (ok (str "source_filename = \"aslRtAbi\"\n\n"
+                   (stringJoin
+                     (list (stringJoin (dataLines) "\n") "" (initText) "" (mainText facts (pairFirst sizes) (pairSecond sizes)) "" (globalRootText) "" (rootsText) "" (externalRootsText asan) ""
+                           (if asan (str (fakeFrameText) "\n") "") locate "" (stringJoin (declLines (= facts.triple "darwin-arm64") asan) "\n"))
+                     "\n")
+                   "\n"))))))
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(out (processRun "uname -s -m"))

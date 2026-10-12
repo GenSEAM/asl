@@ -127,6 +127,7 @@ fn darwinArm64Facts -> TripleFacts
         (pair "pw_change" 24) (pair "pw_class" 32) (pair "pw_gecos" 40)
         (pair "pw_dir" 48) (pair "pw_shell" 56) (pair "pw_expire" 64))))
       (pair "posix_spawn_file_actions_t" (StructFacts :size 8 :fields (list)))
+      (pair "pthread_attr_t" (StructFacts :size 64 :fields (list)))
       (pair "sigset_t" (StructFacts :size 4 :fields (list)))
       (pair "sigaction" (StructFacts :size 16 :fields (list
         (pair "sa_handler" 0) (pair "sa_mask" 8) (pair "sa_flags" 12))))

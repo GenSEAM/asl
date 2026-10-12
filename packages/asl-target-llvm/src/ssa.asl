@@ -299,6 +299,7 @@ fn linkInits text: String moduleNames: (List String) -> (Result String String)
 
 fn runtimeDecls -> (List String)
   (list "declare void @asl_rt_init()"
+        "declare i32 @asl_rt_main(ptr, i32, ptr)"
         "declare %Val @asl_rt_builtin_sys(ptr, i64, ptr)"
         "declare %Val @asl_rt_builtin_sysNet(ptr, i64, ptr)"
         "declare %Val @asl_rt_builtin_parallel(ptr, i64, ptr)"
@@ -3218,6 +3219,13 @@ fn emitArgsMain m: ty/SsaModule f: ty/SsaFunction -> String
        "  %code = call i32 @rterr.exit(%Val %result)\n"
        "  ret i32 %code\n}\n")
 
+fn onMainStack main: String -> String
+  (str (stringReplace (stringReplace main "define i32 @main() {" "define internal i32 @asl.main(i32 %argc, ptr %argv) {")
+                      "define i32 @main(i32 %argc, ptr %argv) {" "define internal i32 @asl.main(i32 %argc, ptr %argv) {")
+       "\ndefine i32 @main(i32 %argc, ptr %argv) {\nbb.entry:\n"
+       "  %code = call i32 @asl_rt_main(ptr @asl.main, i32 %argc, ptr %argv)\n"
+       "  ret i32 %code\n}\n")
+
 fn takesArgList f: ty/SsaFunction -> Bool
   (and (listEmpty? f.captures)
        (and (= (listLength f.params) 1)
@@ -3278,10 +3286,10 @@ fn emitEntry m: ty/SsaModule entry: String wasm: Bool -> (Result String (List ty
           ((some f)
             (cond
               ((takesArgList f) (let [(fids (fieldIdNames m)) (defs (emitDefinitionsRooted m (emitArgsMain m f) wasm fids))]
-                                  (ok (assemble m (listAppend (listAppend defs (valueExports defs)) (list (emitArgsMain m f))) wasm fids))))
+                                  (ok (assemble m (listAppend (listAppend defs (valueExports defs)) (list (if wasm (emitArgsMain m f) (onMainStack (emitArgsMain m f))))) wasm fids))))
               ((not (and (listEmpty? f.params) (listEmpty? f.captures))) (err (entryDiag (str "entry function '" entry "' must take no parameters, or one Val parameter (the argument list) and return a Val Result, and no captures") entry)))
               (else
                 (let [(fids (fieldIdNames m))
                       (defs (emitDefinitionsRooted m (emitMain m f false) wasm fids))
                       (usesRuntime (or (not (listEmpty? (usedDeclsJoin defs (runtimeDecls)))) (= (ty/ssaAbiName f.retTy) "val")))]
-                  (ok (assemble m (listAppend (if usesRuntime (listAppend defs (valueExports defs)) defs) (list (emitMain m f usesRuntime))) wasm fids))))))))
+                  (ok (assemble m (listAppend (if usesRuntime (listAppend defs (valueExports defs)) defs) (list (if (and usesRuntime (not wasm)) (onMainStack (emitMain m f true)) (emitMain m f usesRuntime)))) wasm fids))))))))

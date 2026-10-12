@@ -1525,7 +1525,7 @@ entry:
   %value = insertvalue %Val { i64 8, i64 0 }, i64 %word, 1
   ret %Val %value
 }
-define i32 @main() {
+define internal i32 @asl.main(i32 %argc, ptr %argv) {
 bb.entry:
   call void @asl_rt_init()
   call void @rterr.reportInit()
@@ -1543,7 +1543,14 @@ bb.result:
   ret i32 %code.res
 }
 
+define i32 @main(i32 %argc, ptr %argv) {
+bb.entry:
+  %code = call i32 @asl_rt_main(ptr @asl.main, i32 %argc, ptr %argv)
+  ret i32 %code
+}
+
 declare void @asl_rt_init()
+declare i32 @asl_rt_main(ptr, i32, ptr)
 declare ptr @asl_alloc(i32, i64)
 declare {i64, i1} @llvm.sadd.with.overflow.i64(i64, i64)
 declare {i64, i1} @llvm.ssub.with.overflow.i64(i64, i64)

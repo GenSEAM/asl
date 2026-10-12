@@ -77,7 +77,7 @@ fn outsideInits text: String needle: String -> Int64
         0 (stringSplit text "\ndefine "))
 
 fn mainBody text: String -> String
-  (mt (stringIndexOf text "define i32 @main(")
+  (mt (mt (stringIndexOf text "define internal i32 @asl.main(") ((some i) (some i)) ((none) (stringIndexOf text "define i32 @main(")))
     ((none) "")
     ((some i) (let [(rest (optionOr (stringSlice text i (stringLength text)) ""))]
                 (optionOr (stringSlice rest 0 (optionOr (stringIndexOf rest "\n}\n") (stringLength rest))) ""))))
