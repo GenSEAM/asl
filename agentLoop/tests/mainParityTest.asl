@@ -1,6 +1,8 @@
 (module asl/agentLoop/tests/mainParityTest
   :x [runTests]
-  :i [(asl/agentLoop/core :a c)])
+  :i [(asl/agentLoop/core :a c) (asl-proc/runnerBin :a rb)])
+
+; (:m :ref MAINPARITY-ENV :do "dry-run and plan_* fixture receipts embed the systemPrompt's 'stage-0 host' sentence, which journal.asl#grammarOf! fills in from asl-proc/runnerBin#runnerDisplay!: the plain repo-relative asl/host/out/asl-host path only when no fresh native-CLI cache entry exists for this root, otherwise the cached native binary's own path under the shared, machine-wide ~/.asl/run/nativeCli -- a value this suite cannot hardcode, since it depends on whichever checkout or worktree root last triggered a native build, not on fixture content. The fixture's '{ROOT}/asl/host/out/asl-host' literal silently assumed the never-cached case; it is now '{HOST}', filled in with the same runnerDisplay! call main.asl itself makes, so the comparison tracks whatever the real loop actually reports instead of one checkout's incidental cache state")
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")
@@ -76,9 +78,12 @@ fn ! fixtureRowForForm repo: String lines: (List String) scope: String form: Str
                                              (and (= scope "default") (= (fixtureField line "scope") "")))
                                          (fixtureFormMatches repo line form)))) lines)) "")
 
-fn ! matchesFixtureRow repo: String scope: String env: String form: String row: String -> Bool
+fn ! receiptExpected repo: String hostDisplay: String row: String -> String
+  (stringReplace (stringReplace (fixtureField row "receipt") "{HOST}" hostDisplay) "{ROOT}" repo)
+
+fn ! matchesFixtureRow repo: String hostDisplay: String scope: String env: String form: String row: String -> Bool
   (let [rowScope (fixtureField row "scope")
-        expected (stringReplace (fixtureField row "receipt") "{ROOT}" repo)
+        expected (receiptExpected repo hostDisplay row)
         actual (runAsl env form)]
     (and (!= row "")
          (or (= rowScope scope) (and (= scope "default") (= rowScope "")))
@@ -86,7 +91,7 @@ fn ! matchesFixtureRow repo: String scope: String env: String form: String row: 
          (= actual.stdout expected)
          (= actual.exitCode (fixtureInt row "exit"))))
 
-fn ! fixtureMismatchesAt repo: String scope: String env: String prefix: String index: Int64 forms: (List String) acc: (List String) -> (List String)
+fn ! fixtureMismatchesAt repo: String hostDisplay: String scope: String env: String prefix: String index: Int64 forms: (List String) acc: (List String) -> (List String)
   (mt (listHead forms)
     ((none) (listReverse acc))
     ((some form)
@@ -94,16 +99,16 @@ fn ! fixtureMismatchesAt repo: String scope: String env: String prefix: String i
             id (str prefix (if (< index 10) (str "0" digit) digit))
             lines (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n")
             row (if (= prefix "") (fixtureRowForForm repo lines scope form) (fixtureRow lines id))
-            matched (matchesFixtureRow repo scope env form row)]
-        (fixtureMismatchesAt repo scope env prefix (+ index 1) (optionOr (listTail forms) (list))
+            matched (matchesFixtureRow repo hostDisplay scope env form row)]
+        (fixtureMismatchesAt repo hostDisplay scope env prefix (+ index 1) (optionOr (listTail forms) (list))
                              (if matched acc (cons form acc))))))
 
-fn ! fixtureMismatches repo: String scope: String env: String prefix: String forms: (List String) -> (List String)
-  (fixtureMismatchesAt repo scope env prefix 0 forms (list))
+fn ! fixtureMismatches repo: String hostDisplay: String scope: String env: String prefix: String forms: (List String) -> (List String)
+  (fixtureMismatchesAt repo hostDisplay scope env prefix 0 forms (list))
 
-fn ! matchesNoArgFixture repo: String -> Bool
+fn ! matchesNoArgFixture repo: String hostDisplay: String -> Bool
   (let [row (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "no_arg")
-        expected (stringReplace (fixtureField row "receipt") "{ROOT}" repo)
+        expected (receiptExpected repo hostDisplay row)
         actual (processRun (str "nice -n 15 " (host) " run asl/agentLoop/tests/mainDriver.asl"))]
     (and (!= row "")
          (= (fixtureField row "scope") "default")
@@ -243,18 +248,20 @@ fn ! readOr path: String -> String
 
 fn ! runTests -> Bool
   (let [repo (resultOr (realPath ".") ".")
+        hostDisplay (rb/runnerDisplay! repo)
         at (str "ASL_ROOT_DIR=" (shellQuote repo))
         absContext (resultOr (realPath "tests/fixtures/agentLoop/mvp/honest.asn") "")
         noArgAsl (processRun (str "nice -n 15 " (host) " run asl/agentLoop/tests/mainDriver.asl"))
-        noArgFixture (matchesNoArgFixture repo)
-        rejected (fixtureMismatches repo "default" at "" (rejectionForms))
-        dry (fixtureMismatches repo "default" at "dry_" (dryRunForms absContext))
-        planOn (matchesFixtureRow repo "ASL_LEON_PLAN=1" (str at " ASL_LEON_PLAN=1") "(:agent :task \"env plan\" :dryRun true :backend \"claude\")" (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "plan_1"))
-        planBad (matchesFixtureRow repo "ASL_LEON_PLAN=2" (str at " ASL_LEON_PLAN=2") "(:agent :task \"env plan\" :dryRun true)" (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "plan_2"))
-        planOff (matchesFixtureRow repo "ASL_LEON_PLAN=0" (str at " ASL_LEON_PLAN=0") "(:agent :task \"param plan\" :plan true :dryRun true :backend \"claude\")" (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "plan_0"))
+        noArgFixture (matchesNoArgFixture repo hostDisplay)
+        rejected (fixtureMismatches repo hostDisplay "default" at "" (rejectionForms))
+        dry (fixtureMismatches repo hostDisplay "default" at "dry_" (dryRunForms absContext))
+        planOn (matchesFixtureRow repo hostDisplay "ASL_LEON_PLAN=1" (str at " ASL_LEON_PLAN=1") "(:agent :task \"env plan\" :dryRun true :backend \"claude\")" (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "plan_1"))
+        planBad (matchesFixtureRow repo hostDisplay "ASL_LEON_PLAN=2" (str at " ASL_LEON_PLAN=2") "(:agent :task \"env plan\" :dryRun true)" (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "plan_2"))
+        planOff (matchesFixtureRow repo hostDisplay "ASL_LEON_PLAN=0" (str at " ASL_LEON_PLAN=0") "(:agent :task \"param plan\" :plan true :dryRun true :backend \"claude\")" (fixtureRow (stringSplit (readOr "asl/agentLoop/tests/mainParityFixtures.asn") "\n") "plan_0"))
         journalRoot (tempDir "journals")
         journalsWritten (writeJournals journalRoot)
-        resumed (fixtureMismatches journalRoot "resume" (str "ASL_ROOT_DIR=" (shellQuote journalRoot)) "resume_" (resumeForms))
+        journalHostDisplay (rb/runnerDisplay! journalRoot)
+        resumed (fixtureMismatches journalRoot journalHostDisplay "resume" (str "ASL_ROOT_DIR=" (shellQuote journalRoot)) "resume_" (resumeForms))
         liveRoot (tempDir "live")
         fixtureCopied (and (ok? (dirCreate (str liveRoot "/tests/fixtures/agentLoop/mvp")))
                            (write (str liveRoot "/tests/fixtures/agentLoop/mvp/honest.asn") (readOr "tests/fixtures/agentLoop/mvp/honest.asn")))
