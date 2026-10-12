@@ -87,6 +87,7 @@ fn darwinArm64Facts -> TripleFacts
       (pair "EROFS" 30) (pair "EOVERFLOW" 84) (pair "POLLPRI" 2) (pair "POLLERR" 8) (pair "POLLHUP" 16)
       (pair "SIGHUP" 1) (pair "SIGINT" 2) (pair "SIGQUIT" 3) (pair "SIGKILL" 9) (pair "SIGUSR1" 30) (pair "SIGUSR2" 31)
       (pair "SIGTERM" 15) (pair "SIGCONT" 19) (pair "SIGSTOP" 17) (pair "SIGWINCH" 28)
+      (pair "SIGBUS" 10) (pair "SIGSEGV" 11) (pair "SA_ONSTACK" 1) (pair "SA_SIGINFO" 64)
       (pair "PROT_READ" 1) (pair "PROT_WRITE" 2) (pair "MAP_PRIVATE" 2) (pair "MAP_ANON" 4096)
       (pair "SCM_RIGHTS" 1) (pair "MSG_CTRUNC" 32) (pair "EBADMSG" 94) (pair "EMSGSIZE" 40)
       (pair "CMSG_LEN_INT" 16) (pair "CMSG_SPACE_INT" 16) (pair "CMSG_DATA_OFFSET" 12))
@@ -132,7 +133,9 @@ fn darwinArm64Facts -> TripleFacts
       (pair "sigaction" (StructFacts :size 16 :fields (list
         (pair "sa_handler" 0) (pair "sa_mask" 8) (pair "sa_flags" 12))))
       (pair "siginfo_t" (StructFacts :size 104 :fields (list
-        (pair "si_signo" 0) (pair "si_pid" 12))))
+        (pair "si_signo" 0) (pair "si_pid" 12) (pair "si_addr" 24))))
+      (pair "stack_t" (StructFacts :size 24 :fields (list
+        (pair "ss_sp" 0) (pair "ss_size" 8) (pair "ss_flags" 16))))
       (pair "kevent" (StructFacts :size 32 :fields (list
         (pair "ident" 0) (pair "filter" 8) (pair "flags" 10) (pair "fflags" 12) (pair "data" 16) (pair "udata" 24))))
       (pair "msghdr" (StructFacts :size 48 :fields (list

@@ -1552,6 +1552,69 @@ fn ! testPreludeSingleModule work: String -> Bool
                        (assert (stringContains? code "fn_prelude_2estringSplit(") (str "preludeSingle: the C11 program carries prelude.stringSplit; its native link retired with the C backend (ruling TARGETC, ABIVAL-2 deletes the abi.c entries it calls)")))))
       true))
 
+; (:m :ref NATIVE-SIGPIPE :do "a native binary used to die on SIGPIPE (exit 141) when its stdout reader closed early, unlike asl-host which ignores SIGPIPE at startup (main.c) so a write past a closed pipe returns EPIPE instead; rtAbi.asl's asl_rt_main now ignores SIGPIPE the same way, and every fork+exec child (processRun's shell, processSpawn, procSpawnv) resets it back to SIG_DFL before exec so an ordinary pipeline run through processRun (e.g. 'yes | head') still terminates its own upstream normally. Exit code compared directly against the identical source run under asl-host, which was already correct")
+
+fn sigpipeSource -> String
+  (stringJoin (list
+    "(module sigpipeFixture :x [main] :i [])"
+    ""
+    "fn ! loop n: Int64 -> Int64"
+    "  (if (<= n 0) 0"
+    "    (do (print \"line-0123456789abcdefghijklmnopqrstuvwxyz\\n\")"
+    "        (loop (- n 1))))"
+    ""
+    "fn ! main args: (List String) -> (Result Int64 String)"
+    "  (do (loop 50000)"
+    "      (ok 0))") "\n")
+
+fn ! earlyCloseExit! bin: String -> Int64
+  (let [(tag (str (stringFromInt64 (procSelf)) "-" (stringFromInt64 (nowNs))))
+        (fifo (str "/tmp/sigpipeFifo-" tag))
+        (marker (str "/tmp/sigpipeExit-" tag))
+        (script (str "rm -f " fifo " " marker "; mkfifo " fifo "; "
+                     "(" bin " > " fifo " 2>/dev/null; echo $? > " marker ") & "
+                     "dd if=" fifo " bs=1 count=1 of=/dev/null 2>/dev/null; "
+                     "exec 9<" fifo "; exec 9<&-; wait; cat " marker "; rm -f " fifo " " marker))
+        (out (sh script))]
+    (optionOr (stringToInt64 (stringTrim out.stdout)) -1))
+
+fn nestedPipelineSource -> String
+  (stringJoin (list
+    "(module sigpipeNestedFixture :x [main] :i [])"
+    ""
+    "fn ! main args: (List String) -> (Result Int64 String)"
+    "  (let [(out (processRun \"yes 2>/dev/null | head -1\"))]"
+    "    (do (print out.stdout)"
+    "        (ok out.exitCode)))") "\n")
+
+fn ! testSigpipeIgnored work: String -> Bool
+  (let [(src (str work "/sigpipeFixture.asl"))
+        (wrote (ok? (fileWrite src (sigpipeSource))))]
+    (do
+      (assert wrote "sigpipe: source written")
+      (expectExit "sigpipeFixture: asl1 builds it" (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " work "/sigpipeFixture.ll") 0)
+      (link work "sigpipeFixture" (lib))
+      (let [(nativeExit (earlyCloseExit! (str work "/sigpipeFixture")))
+            (hostExit (earlyCloseExit! (str (host) " run " src)))]
+        (do (assert (= nativeExit 0) (str "sigpipe: native exits 0 when the reader closes early (same as asl-host), got " nativeExit))
+            (assert (= hostExit 0) (str "sigpipe: asl-host exits 0 when the reader closes early, got " hostExit))))
+      true))
+
+fn ! testSigpipeChildResetsToDefault work: String -> Bool
+  (let [(src (str work "/sigpipeNestedFixture.asl"))
+        (wrote (ok? (fileWrite src (nestedPipelineSource))))]
+    (do
+      (assert wrote "sigpipeNested: source written")
+      (expectExit "sigpipeNestedFixture: asl1 builds it" (str (host) " run asl/packages/asl-compiler/src/asl1.asl build " src " -o " work "/sigpipeNestedFixture.ll") 0)
+      (link work "sigpipeNestedFixture" (lib))
+      (let [(watchScript (str "( " work "/sigpipeNestedFixture >/tmp/sigpipeNestedOut 2>/dev/null ; echo done >/tmp/sigpipeNestedDone ) & "
+                               "BG=$!; sleep 2; "
+                               "if kill -0 $BG 2>/dev/null; then echo HUNG; kill -9 $BG; else echo FINISHED; fi"))
+            (watch (sh watchScript))]
+        (assert (stringContains? watch.stdout "FINISHED")
+                (str "sigpipeNested: processRun's own 'yes | head -1' child resets SIGPIPE to SIG_DFL before exec, so it terminates within 2s instead of inheriting the ignored disposition and hanging: " watch.stdout)))
+      true))
+
 fn ! runTests -> Bool
   (let [(made (sh "mktemp -d"))
         (work (stringReplace made.stdout "\n" ""))]
@@ -1597,6 +1660,8 @@ fn ! runTests -> Bool
       (testPreludeInline work)
       (testNumericGeneric work)
       (testPreludeSingleModule work)
+      (testSigpipeIgnored work)
+      (testSigpipeChildResetsToDefault work)
       (let [(formatGate (sh (str (host) " test asl/packages/asl-target-llvm/tests/nativeFormatTest.asl")))]
         (assert (and (= formatGate.exitCode 0)
                      (stringContains? formatGate.stdout "16 assertion(s) executed, 4 refutation(s) executed"))
