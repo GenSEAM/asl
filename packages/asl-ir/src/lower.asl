@@ -871,6 +871,34 @@ fn lowerRecord ctx: LowerCtx env: (Map String String) st: LowerState name: Strin
                        (b (boxAll r.st (map (fn [(f String)] -> String (optionOr (mapGet byKey f) "")) present)))]
                    (ok (emit b.st (ty/opRecord (symbolOf ctx name) present b.values)))))))))))))
 
+fn anonSchemaName fields: (List String) -> String
+  (str "$anonRecord$" (stringFromInt64 (listLength fields)) "$" (stringJoin fields ","))
+
+fn anonFieldPairs items: (List rd/SExpr) -> (List (Pair String rd/SExpr))
+  (mt (listHead items)
+    ((none) (list))
+    ((some key)
+     (let [(afterKey (optionOr (listTail items) (list)))]
+       (mt (listHead afterKey)
+         ((none) (list))
+         ((some value)
+          (cons (pair (optionOr (stringSlice (rd/sexprHead key) 1 (stringLength (rd/sexprHead key))) "") value)
+                (anonFieldPairs (optionOr (listTail afterKey) (list)))))))))
+
+fn dropTrailingBraceClose items: (List rd/SExpr) -> (List rd/SExpr)
+  (if (and (not (listEmpty? items)) (= (rd/sexprHead (nthOf items (- (listLength items) 1))) "}"))
+    (optionOr (listSlice items 0 (- (listLength items) 1)) (list))
+    items)
+
+fn lowerAnonRecordLiteral ctx: LowerCtx env: (Map String String) st: LowerState args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
+  (let [(pairs (anonFieldPairs (dropTrailingBraceClose args)))
+        (fields (map pairFirst pairs))
+        (valueExprs (map pairSecond pairs))]
+    (mt (lowerArgs ctx env st valueExprs)
+      ((err d) (err d))
+      ((ok r) (let [(b (boxAll r.st r.values))]
+                (ok (emit b.st (ty/opRecord (anonSchemaName fields) fields b.values)))))))
+
 fn lowerField ctx: LowerCtx env: (Map String String) st: LowerState name: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
   (if (!= (listLength args) 1)
     (err (lowerDiag ctx "ERR_LOWER_ARITY" (str "field access '" name "' takes 1 argument, got " (listLength args))))
@@ -1239,6 +1267,7 @@ fn lowerHead ctx: LowerCtx env: (Map String String) st: LowerState name: String 
     ((mapHas? ctx.info.ctors name) (lowerConstruct ctx env st name args))
     ((mapHas? ctx.info.records name) (lowerRecord ctx env st name args))
     ((and (stringStartsWith? name ".-") (> (stringLength name) 2)) (lowerField ctx env st name args))
+    ((= name "{") (lowerAnonRecordLiteral ctx env st args))
     ((and (or (= name "+") (= name "*")) (> (listLength args) 2)) (lowerExpr ctx env st (rd/makeList (list (rd/makeAtom name) (rd/makeList (listAppend (list (rd/makeAtom name)) (optionOr (listSlice args 0 (- (listLength args) 1)) (list)))) (nthOf args (- (listLength args) 1))))))
     ((not (stringEmpty? (genericAlias name))) (lowerHead ctx env st (genericAlias name) args))
     ((and (genericMulti? name) (not (mapHas? ctx.info.late name))) (err (ambiguousDiag ctx name)))

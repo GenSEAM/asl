@@ -60,6 +60,22 @@ fn mapKeyExpr key: rd/SExpr -> rd/SExpr
     ((rd/sexprAtom v) (if (and (stringStartsWith? v ":") (> (stringLength v) 1)) (rd/makeAtom (str "\"" (optionOr (stringSlice v 1 (stringLength v)) "") "\"")) key))
     (_ key))
 
+fn keywordKey? key: rd/SExpr -> Bool
+  (mt key
+    ((rd/sexprAtom v) (and (stringStartsWith? v ":") (> (stringLength v) 1)))
+    (_ false))
+
+fn braceGroupIsRecord? items: (List rd/SExpr) -> Bool
+  (mt (listHead items)
+    ((none) true)
+    ((some key) (and (keywordKey? key) (braceGroupIsRecord? (optionOr (listSlice items 2 (listLength items)) (list))))))
+
+fn recordExprOf items: (List rd/SExpr) -> rd/SExpr
+  (rd/makeList (cons (rd/makeAtom "{") (listAppend items (list (rd/makeAtom "}")))))
+
+fn braceExpr items: (List rd/SExpr) -> rd/SExpr
+  (if (braceGroupIsRecord? items) (recordExprOf items) (mapExpr items))
+
 fn mapExprLoop items: (List rd/SExpr) acc: rd/SExpr -> rd/SExpr
   (mt (listHead items)
     ((none) acc)
@@ -153,7 +169,7 @@ fn nestedExprs toks: (List ilx/IndentToken) collected: (List rd/SExpr) lastTok: 
             (nestedExprs (optionOr (listTail inner.rest) (list)) (cons (rd/makeList (cons (rd/makeAtom "list") inner.items)) collected) (none))))
          ((tokLbrace)
           (let [(inner (nestedExprs rest (list) (none)))]
-            (nestedExprs (optionOr (listTail inner.rest) (list)) (cons (mapExpr inner.items) collected) (none))))
+            (nestedExprs (optionOr (listTail inner.rest) (list)) (cons (braceExpr inner.items) collected) (none))))
          ((tokRparen) (NestScan :items (listReverse collected) :rest toks))
          ((tokRbracket) (NestScan :items (listReverse collected) :rest toks))
          ((tokRbrace) (NestScan :items (listReverse collected) :rest toks))
