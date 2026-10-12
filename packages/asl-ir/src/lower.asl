@@ -1537,7 +1537,7 @@ fn qualify prefix: String name: String -> String
   (if (stringEmpty? prefix) name (str prefix "." name))
 
 fn caseArity c: ast/EnumCase -> Int64
-  (listLength (filter (fn [(p ast/Param)] -> Bool (not (stringEmpty? p.name))) c.fields))
+  (listLength c.fields)
 
 fn enumDecl prefix: String e: ast/EnumNode -> ty/SsaTypeDecl
   (ty/ssaTypeDecl (qualify prefix e.name) (map (fn [(c ast/EnumCase)] -> ty/SsaVariant (ty/ssaVariant c.name (caseArity c))) e.cases))

@@ -78,7 +78,7 @@ fn isMediaTerminal? rec: MediaGenReceipt -> Bool
         (= rec.status "error"))))
 
 fn checkQuotaAvailability ledger: MediaQuotaLedger -> (Pair Bool I64)
-  (let ((rem ledger.remainingCount))
+  (let [(rem ledger.remainingCount)]
     (if (> rem 0)
       (pair true rem)
       (pair false 0)))

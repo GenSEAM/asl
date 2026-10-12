@@ -67,7 +67,7 @@ fn isActionTerminal? receipt: BrowserActionReceipt -> Bool
 fn validateLoop frames: (List BrowserActionFrame) idx: I64 -> (Pair Bool Str)
   (if (>= idx (listLength frames))
     (pair true "all_valid")
-    (let ((frame (optionOr (listGet frames idx) (BrowserActionFrame :actionId "" :op "" :selector "" :payload "" :timeoutMs 0 :requireAuth false))))
+    (let [(frame (optionOr (listGet frames idx) (BrowserActionFrame :actionId "" :op "" :selector "" :payload "" :timeoutMs 0 :requireAuth false)))]
       (if (not (validateActionOp frame.op))
         (pair false (str "invalid_op: " frame.op))
         (validateLoop frames (+ idx 1)))))

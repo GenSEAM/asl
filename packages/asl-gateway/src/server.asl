@@ -12,36 +12,36 @@
   (:f rejectionReason Str))
 
 fn extractThinkBlocks text: Str -> (Pair Str Str)
-  (let ((openTag "<think>")
+  (let [(openTag "<think>")
         (closeTag "</think>")
-        (idxOpen (stringIndexOf text openTag)))
+        (idxOpen (stringIndexOf text openTag))]
     (mt idxOpen
       ((none) (pair "" text))
       ((some o)
-        (let ((afterOpen (optionOr (stringSlice text (+ o 7) (stringLength text)) ""))
-              (idxClose (stringIndexOf afterOpen closeTag)))
+        (let [(afterOpen (optionOr (stringSlice text (+ o 7) (stringLength text)) ""))
+              (idxClose (stringIndexOf afterOpen closeTag))]
           (mt idxClose
             ((none) (pair (stringTrim afterOpen) (optionOr (stringSlice text 0 o) "")))
             ((some c)
-              (let ((thinkContent (optionOr (stringSlice afterOpen 0 c) ""))
+              (let [(thinkContent (optionOr (stringSlice afterOpen 0 c) ""))
                     (prefix (optionOr (stringSlice text 0 o) ""))
                     (suffix (optionOr (stringSlice afterOpen (+ c 8) (stringLength afterOpen)) ""))
-                    (remaining (stringTrim (str prefix " " suffix))))
+                    (remaining (stringTrim (str prefix " " suffix)))]
                 (pair (stringTrim thinkContent) remaining))))))))
 
 fn detectEshViolation text: Str -> Bool
-  (let ((lower (stringLower text)))
+  (let [(lower (stringLower text))]
     (and (or (stringContains? lower "test") (or (stringContains? lower "gate") (stringContains? lower "assert")))
          (or (stringContains? lower " pass") (or (stringContains? lower "verif") (stringContains? lower "clean")))))
 
 fn inspectCompletionTurn rawText: Str hasVerifiedExec: Bool -> GatewayTurnVerdict
-  (let ((demuxThink (extractThinkBlocks rawText))
+  (let [(demuxThink (extractThinkBlocks rawText))
         (thinkPart (pairFirst demuxThink))
         (remaining (pairSecond demuxThink))
         (demuxAsn (wire/demuxRawAsnTurn remaining))
         (uiPart (pairFirst demuxAsn))
         (toolPart (pairSecond demuxAsn))
-        (isEsh (and (detectEshViolation uiPart) (not hasVerifiedExec))))
+        (isEsh (and (detectEshViolation uiPart) (not hasVerifiedExec)))]
     (if isEsh
       (GatewayTurnVerdict
         :allowed false
@@ -57,18 +57,18 @@ fn inspectCompletionTurn rawText: Str hasVerifiedExec: Bool -> GatewayTurnVerdic
         :rejectionReason "")))
 
 fn handleSyncIngest rawPayload: Str -> (Pair Str Str)
-  (let ((contentHash (sync/computeContentHash rawPayload)))
+  (let [(contentHash (sync/computeContentHash rawPayload))]
     (pair "ok" contentHash))
 
 fn handleBrowserDispatch frame: browser/BrowserActionFrame -> browser/BrowserActionReceipt
-  (let ((isValid (browser/validateActionOp frame.op)))
+  (let [(isValid (browser/validateActionOp frame.op))]
     (if isValid
       (browser/createSuccessReceipt frame.actionId 45 "https://gateway.local" "none" "executed")
       (browser/createErrorReceipt frame.actionId 0 "invalid_op" "Unknown browser operation")))
 
 fn handleMediaDispatch req: media/MediaGenRequest -> media/MediaGenReceipt
-  (let ((isValid (media/validateMediaKind req.mediaKind))
-        (dim (media/calculateMediaDimensions req.aspectRatio)))
+  (let [(isValid (media/validateMediaKind req.mediaKind))
+        (dim (media/calculateMediaDimensions req.aspectRatio))]
     (if isValid
       (media/createMediaReceipt req.requestId "ok" "storage://generated/asset" "/tmp/asset" "hash123" (pairFirst dim) (pairSecond dim) 10)
       (media/createMediaReceipt req.requestId "rejected" "" "" "" 0 0 0)))
@@ -527,7 +527,7 @@ fn ! runEffect! srv: GatewayLoop eff: ch/ChatEffect -> (Pair GatewayLoop ch/Chat
         (pair (loopState srv srv.breaker (pairFirst r) srv.profiles) (ch/outBool (resultOr (pairSecond r) false)))))
     ((ch/effCli client _)
       (do (logLine! (str "(:gateway :cli :unavailable \"" (wire/asnEscape client) "\" :entry http)")) (pair srv (ch/outCli none))))
-    ((ch/effHttp _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
+    ((ch/effHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "an HTTP effect reached the synchronous effect runner"))))
     ((ch/effPoolHttp _ _ _ _ _ _) (pair srv (ch/outHttp (ch/httpRaised false "a pool effect reached the synchronous effect runner")))))
 
 fn ! drive! srv: GatewayLoop fd: Int64 step: ch/ChatStep -> GatewayLoop
