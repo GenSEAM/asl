@@ -8,7 +8,7 @@ fn entries -> (List String)
   (list "asl/packages/asl-forms/tests/checkSemanticTest.asl")
 
 fn goldenDigests -> (List (Pair String String))
-  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-7425021421597155705:3164211")
+  (list (pair "asl/packages/asl-forms/tests/checkSemanticTest.asl" "-2859233404496240521:3192986")
         (pair "lowerSourceWith" "7145294191011425170:8412"))
 
 fn diagLine d: ty/IrDiag -> String

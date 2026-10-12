@@ -869,10 +869,15 @@ fn lowerRecord ctx: LowerCtx env: (Map String String) st: LowerState name: Strin
                                                  (range 0 (listLength allKeys)))))
                        (present (filter (fn [(f String)] -> Bool (mapHas? byKey f)) declared))
                        (b (boxAll r.st (map (fn [(f String)] -> String (optionOr (mapGet byKey f) "")) present)))]
-                   (ok (emit b.st (ty/opRecord (symbolOf ctx name) present b.values)))))))))))))
+                   (ok (emitAs b.st (ty/tyRec (symbolOf ctx name)) (ty/opRecord (symbolOf ctx name) present b.values)))))))))))))
 
 fn anonSchemaName fields: (List String) -> String
   (str "$anonRecord$" (stringFromInt64 (listLength fields)) "$" (stringJoin fields ","))
+
+fn anonSchemaFields schema: String -> (List String)
+  (let [(afterPrefix (optionOr (stringSlice schema (stringLength "$anonRecord$") (stringLength schema)) ""))
+        (fieldsPart (optionOr (listGet (stringSplit afterPrefix "$") 1) ""))]
+    (if (stringEmpty? fieldsPart) (list) (stringSplit fieldsPart ",")))
 
 fn anonFieldPairs items: (List rd/SExpr) -> (List (Pair String rd/SExpr))
   (mt (listHead items)
@@ -896,8 +901,71 @@ fn lowerAnonRecordLiteral ctx: LowerCtx env: (Map String String) st: LowerState 
         (valueExprs (map pairSecond pairs))]
     (mt (lowerArgs ctx env st valueExprs)
       ((err d) (err d))
-      ((ok r) (let [(b (boxAll r.st r.values))]
-                (ok (emit b.st (ty/opRecord (anonSchemaName fields) fields b.values)))))))
+      ((ok r) (let [(b (boxAll r.st r.values)) (schema (anonSchemaName fields))]
+                (ok (emitAs b.st (ty/tyRec schema) (ty/opRecord schema fields b.values)))))))
+
+fn withPairs args: (List rd/SExpr) -> (Option (List (Pair String rd/SExpr)))
+  (mt (listHead args)
+    ((none) (some (list)))
+    ((some k)
+     (let [(rest (optionOr (listTail args) (list)))
+           (head (rd/sexprHead k))]
+       (if (not (and (rd/isAtom? k) (and (stringStartsWith? head ":") (> (stringLength head) 1))))
+         (none)
+         (mt (listHead rest)
+           ((none) (none))
+           ((some v)
+            (mt (withPairs (optionOr (listTail rest) (list)))
+              ((none) (none))
+              ((some ps) (some (cons (pair (optionOr (stringSlice head 1 (stringLength head)) "") v) ps))))))))))
+
+fn withOverride pairs: (List (Pair String rd/SExpr)) field: String -> (Option rd/SExpr)
+  (mt (listHead pairs)
+    ((none) (none))
+    ((some p)
+     (if (= (pairFirst p) field)
+       (some (pairSecond p))
+       (withOverride (optionOr (listTail pairs) (list)) field))))
+
+fn lowerWithValues ctx: LowerCtx env: (Map String String) st: LowerState recValue: String pairs: (List (Pair String rd/SExpr)) declared: (List String) -> (Result LoweredList ty/IrDiag)
+  (mt (listHead declared)
+    ((none) (ok (LoweredList :st st :values (list))))
+    ((some f)
+     (let [(restFields (optionOr (listTail declared) (list)))]
+       (mt (withOverride pairs f)
+         ((some expr)
+          (mt (lowerExpr ctx env st expr)
+            ((err d) (err d))
+            ((ok r) (let [(b (coerce r.st r.value (ty/tyVal)))]
+                      (mt (lowerWithValues ctx env b.st recValue pairs restFields)
+                        ((err d) (err d))
+                        ((ok rest) (ok (LoweredList :st rest.st :values (cons b.value rest.values)))))))))
+         ((none)
+          (let [(r (emit st (ty/opField recValue f)))]
+            (mt (lowerWithValues ctx env r.st recValue pairs restFields)
+              ((err d) (err d))
+              ((ok rest) (ok (LoweredList :st rest.st :values (cons r.value rest.values)))))))))))
+
+fn lowerWithExpr ctx: LowerCtx env: (Map String String) st: LowerState args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
+  (if (< (listLength args) 3)
+    (err (lowerDiag ctx "ERR_LOWER_ARITY" "'with' takes a record and :field value pairs"))
+    (mt (withPairs (optionOr (listTail args) (list)))
+      ((none) (err (lowerDiag ctx "ERR_LOWER_BAD_WITH" "'with' takes :field value pairs after the record")))
+      ((some pairs)
+       (mt (lowerExpr ctx env st (nthOf args 0))
+         ((err d) (err d))
+         ((ok r0)
+          (mt (tyOf r0.st r0.value)
+            ((ty/tyRec schema)
+             (let [(declared (if (stringStartsWith? schema "$anonRecord$") (anonSchemaFields schema) (optionOr (mapGet ctx.info.records schema) (list))))
+                   (keys (map pairFirst pairs))]
+               (mt (recordFieldDiag ctx schema declared keys)
+                 ((some d) (err d))
+                 ((none) (let [(rRec (coerce r0.st r0.value (ty/tyVal)))]
+                           (mt (lowerWithValues ctx env rRec.st rRec.value pairs declared)
+                             ((err d) (err d))
+                             ((ok r) (ok (emitAs r.st (ty/tyRec schema) (ty/opRecord schema declared r.values))))))))))
+            (_ (err (unsupported ctx "with" "needs a record of known schema")))))))))
 
 fn lowerField ctx: LowerCtx env: (Map String String) st: LowerState name: String args: (List rd/SExpr) -> (Result Lowered ty/IrDiag)
   (if (!= (listLength args) 1)
@@ -1316,6 +1384,7 @@ fn lowerHead ctx: LowerCtx env: (Map String String) st: LowerState name: String 
               (unit (rd/makeAtom "()"))]
           (lowerIf ctx env st (if (= name "when") (list (nthOf args 0) body unit) (list (nthOf args 0) unit body))))))
     ((and (or (= name "loop") (= name "recur") (= name "try") (= name "return") (= name "quote")) (not (moduleBoundName? ctx name))) (err (outside ctx name)))
+    ((and (= name "with") (not (moduleBoundName? ctx name))) (lowerWithExpr ctx env st args))
     ((mapHas? env name) (lowerCallClosure ctx env st (rd/makeAtom name) args))
     ((preludeBitOp? ctx name) (lowerPreludeBit ctx env st name args))
     ((mapHas? ctx.info.arities name) (lowerCall ctx env st name (optionOr (mapGet ctx.info.arities name) 0) args))

@@ -1,9 +1,7 @@
 (module asl-parser/fieldDotParityTest
   :x [runTests]
-  :i [(asl-parser/ast :a ast) (asl-parser/lexer :a lx) (asl-parser/reader :a rd)])
-
-fn ! hostEval expr: String -> ProcessOutput
-  (processRun (str (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host") " eval '" expr "' 2>&1"))
+  :i [(asl-parser/ast :a ast) (asl-parser/lexer :a lx) (asl-parser/reader :a rd)
+      (tools/nativeTest :a nt) (tools/fleet/run :a fr)])
 
 fn tree e: rd/SExpr -> String
   (mt e
@@ -21,21 +19,39 @@ fn selfRead src: String -> (Result String String)
     ((ok forms) (ok (stringJoin (map (fn [pf] (rd/renderSexpr pf.expr)) forms) " ")))
     ((err e) (err e.msg)))
 
-fn ! agrees src: String want: String -> Bool
-  (let [(direct (hostEval src))
-        (lowered (optionOr (resultToOption (selfRead src)) "lowering failed"))
-        (viaSelf (hostEval lowered))]
+fn ! nativeRun expr: String -> fr/Done
+  (let [(probePath "asl/packages/asl-parser/tests/tmpFieldDotProbe.asl")
+        (src (str "(module fieldDotProbe :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  (do (println " expr ")\n      (ok 0))\n"))
+        (wRes (fileWrite probePath src))]
     (do
-      (assert (= direct.stdout want) (str "host reads " src " as " want ", got " direct.stdout))
-      (assert (= viaSelf.stdout want) (str "self-hosted lowering " lowered " runs as " want ", got " viaSelf.stdout))
+      (assert (ok? wRes) "probe source must write")
+      (let [(built (nt/prepareRun probePath (nt/fingerprint)))]
+        (mt built.binary
+          ((none) (do (assert false (str "probe builds natively: " built.reason)) (fr/Done :idx 0 :exit 1 :out "" :ms 0 :verdict "buildFailed")))
+          ((some bin) (let [(res (fr/runOne (fr/job (list bin) "." (fr/childEnv (list))))) (_ (pathRemove probePath))] res))))))
+
+fn ! nativeBuildFails expr: String -> Bool
+  (let [(probePath "asl/packages/asl-parser/tests/tmpFieldDotRejectProbe.asl")
+        (src (str "(module fieldDotRejectProbe :x [main] :i [])\n\nfn ! main -> (Result Int64 String)\n  (do (println " expr ")\n      (ok 0))\n"))
+        (wRes (fileWrite probePath src))
+        (built (nt/prepareRun probePath (nt/fingerprint)))
+        (_ (pathRemove probePath))]
+    (and (ok? wRes) (none? built.binary)))
+
+fn ! agrees src: String want: String -> Bool
+  (let [(direct (nativeRun src))
+        (lowered (optionOr (resultToOption (selfRead src)) "lowering failed"))
+        (viaSelf (nativeRun lowered))]
+    (do
+      (assert (= direct.out want) (str "a native run of " src " is " want ", got " direct.out))
+      (assert (= viaSelf.out want) (str "self-hosted lowering " lowered " runs as " want ", got " viaSelf.out))
       true))
 
 fn ! rejects src: String -> Bool
-  (let [(direct (hostEval src))
-        (self (selfRead src))]
+  (let [(self (selfRead src))]
     (do
-      (assert (!= direct.exitCode 0) (str "host rejects " src ": " direct.stdout))
       (assert (mt self ((err m) (stringContains? m "ERR_READ_FIELD")) ((ok s) false)) (str "self-hosted reader rejects " src " with ERR_READ_FIELD"))
+      (assert (nativeBuildFails src) (str "a native build of " src " also fails"))
       true))
 
 fn shapes -> Bool
