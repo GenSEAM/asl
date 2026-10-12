@@ -619,7 +619,7 @@ fn mapValuesList m: (Map String String) -> (List String)
   (mapValues m)
 
 fn isNullaryBuiltinType? resolved: String -> Bool
-  (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat") resolved))
+  (or (ty/isNumericType? resolved) (listContains? (list "String" "Bool" "Unit" "IoError" "N" "Bytes" "ProcessOutput" "SpawnedProc" "PlatformInfo" "Rusage" "FileStat" "F64Array" "I8Array" "I64Array" "ParquetHandle") resolved))
 
 fn isKnownBuiltinType? name: String -> Bool
   (let [(resolved (ty/resolveTypeAlias name))] (or (isNullaryBuiltinType? resolved) (or (or (= resolved "List") (or (= resolved "Option") (= resolved "Result"))) (or (= resolved "Map") (= resolved "Pair")))))
