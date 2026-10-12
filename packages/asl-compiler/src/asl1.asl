@@ -27,18 +27,17 @@ fn diagBody diags: (List String) -> String
 fn failed diags: (List String) -> (Option cc/Verdict)
   (some (cc/Verdict :exitCode 1 :body (diagBody diags)))
 
+fn checkRoots -> (List String)
+  (list "." "asl/packages" "asl")
+
 fn ! verdictOf entry: String -> (Option cc/Verdict)
   (mt (fileRead entry)
     ((err _) (failed (list (str entry ": [ERR_IO] cannot read the entry"))))
-    ((ok src) (mt (a/parse src)
-                ((err pe) (failed (list (str entry ":" pe.line ":" pe.col ": [parse-error] " pe.msg))))
-                ((ok forms) (let [(summary (r/collectSummary forms entry))]
-                              (mt (r/loadModuleDeps! (cons (r/parentDirOf entry) (roots)) (r/mapValuesList summary.imports))
-                                ((err _) (none))
-                                ((ok deps) (let [(diags (chk/checkModule forms deps entry))]
-                                             (if (listEmpty? diags)
-                                               (some (cc/Verdict :exitCode 0 :body ""))
-                                               (failed (map comp/formatDiagnostic diags)))))))))))
+    ((ok _) (mt (chk/checkFile! entry (checkRoots))
+              ((err _) (none))
+              ((ok diags) (if (listEmpty? diags)
+                            (some (cc/Verdict :exitCode 0 :body ""))
+                            (failed (map comp/formatDiagnostic diags)))))))
 
 fn ! remember key: (Option String) v: cc/Verdict -> Unit
   (mt key

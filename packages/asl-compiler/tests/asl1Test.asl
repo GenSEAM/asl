@@ -60,11 +60,22 @@ fn ! testCheck work: String -> Bool
         (assert (ok? noDocWritten) "noDoc.asl fixture written")
         (assert (= good.exitCode 0) (str "asl1 check fibProgram exits 0; stderr: " good.stderr))
         (assert (= checked.exitCode 1) (str "asl1 check on an unbound symbol exits 1, got " checked.exitCode))
-        (assert (stringContains? checked.stderr (str bad ":4:4: [rule-2] undefinedThing is not defined\n")) (str "asl1 check prints the checker diagnostic: " checked.stderr))
+        (assert (stringContains? checked.stderr (str bad ":4:4: [ERR_UNKNOWN_SYMBOL] unbound symbol: undefinedThing\n")) (str "asl1 check prints the checker diagnostic: " checked.stderr))
         (assert (= built.exitCode 1) (str "asl1 build on an unbound symbol exits 1, got " built.exitCode))
         (assert (stringContains? built.stderr "[rule-2] undefinedThing is not defined") (str "asl1 build prints the checker diagnostic: " built.stderr))
         (assert (err? (fileRead (str work "/bad.ll"))) "asl1 build writes no .ll when there are diagnostics")
         (assert (= noDocChecked.exitCode 0) (str "XPLATDOC: asl1 check exits 0 on an exported main with no :doc (rule-8 is a warning), got " (stringFromInt64 noDocChecked.exitCode) "; stderr: " noDocChecked.stderr))
+        true))
+
+fn ! testCheckLikeHost work: String -> Bool
+  (let [(lint (str work "/lint.asl"))
+        (written (fileWrite lint "(module lint :x [f runTests] :i [])\n\nfn f x: Any -> Int64\n  1\n"))
+        (hostChecked (sh (str (host) " check " lint)))
+        (checked (driver (str "check " lint)))]
+    (do (assert (ok? written) "lint.asl fixture written")
+        (assert (= hostChecked.exitCode 0) (str "asl-host check accepts an exported-but-undefined name and an Any parameter: " hostChecked.stdout hostChecked.stderr))
+        (assert (= checked.exitCode hostChecked.exitCode) (str "HL-CHECK-UNIFY: asl1 check runs checkFile!, so it drops the lint rows (exported-but-undefined rule-2, rule-10 Any) the host never reports; exit " (stringFromInt64 checked.exitCode) ": " checked.stderr))
+        (assert (= checked.stderr "") (str "asl1 check prints no diagnostic on the lint fixture: " checked.stderr))
         true))
 
 fn ! testDeps -> Bool
@@ -133,6 +144,7 @@ fn ! runTests -> Bool
         (assert (testBuildFib work) "testBuildFib")
         (assert (testArgsMain work) "testArgsMain")
         (assert (testCheck work) "testCheck")
+        (assert (testCheckLikeHost work) "testCheckLikeHost")
         (assert (testDeps) "testDeps")
         (assert (testDepsFullClosure) "testDepsFullClosure")
         (assert (testUsage) "testUsage")

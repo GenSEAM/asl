@@ -1384,7 +1384,7 @@ fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String 
     ((err e) (err e))
     ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env)))
 
-fn buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
+fn ! buildDryRunInfoFor vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
   (let [(base (list (pair "vendor" (j/jstr vendor)) (pair "cwd" (j/jstr ""))))
         (t (j/jint (if (= timeout 0) 600 timeout)))
         (q (j/jint (if (= queueTimeout 0) 1200 queueTimeout)))]

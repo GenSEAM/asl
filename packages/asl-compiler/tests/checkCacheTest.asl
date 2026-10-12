@@ -55,7 +55,7 @@ fn ! testColdWarmIdentical work: String -> Bool
         (warm (check cache bad))]
     (do (assert (ok? written) "bad.asl fixture written")
         (assert (= cold.exit 1) (str "cold check of an unbound symbol exits 1, got " cold.exit))
-        (assert (stringContains? cold.out (str bad ":4:4: [rule-2] undefinedThing is not defined\n")) (str "cold check prints the diagnostic: " cold.out))
+        (assert (stringContains? cold.out (str bad ":4:4: [ERR_UNKNOWN_SYMBOL] unbound symbol: undefinedThing\n")) (str "cold check prints the diagnostic: " cold.out))
         (assert (= (listLength stored) 1) (str "the cold run stores one verdict, got " (listLength stored)))
         (assert (= warm.exit cold.exit) (str "warm exit equals cold exit, got " warm.exit))
         (assert (= warm.out cold.out) (str "warm diagnostics equal cold ones byte for byte: " warm.out))
