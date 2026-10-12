@@ -26,7 +26,7 @@ fn ! testCommonCrawlCallsCurlSafely! -> Bool
                ((ok _)
                 (let [(setup (proc/exec! (proc/cmd "ln" (list "-s" "/usr/bin/mktemp" (str tmpDir "/mktemp")))))
                       (setupRm (proc/exec! (proc/cmd "ln" (list "-s" "/bin/rm" (str tmpDir "/rm")))))
-                      (childCmd (proc/withEnv (proc/withEnv (proc/cmd "asl/host/out/asl-host" (list "test" childPath)) "PATH" path) "CC_LOG" logPath))
+                      (childCmd (proc/withEnv (proc/withEnv (proc/cmd "bin/asl" (list "test" childPath)) "PATH" path) "CC_LOG" logPath))
                       (childRes (proc/exec! childCmd))
                       (argsRes (fileRead logPath))
                       (stdinRes (fileRead stdinPath))

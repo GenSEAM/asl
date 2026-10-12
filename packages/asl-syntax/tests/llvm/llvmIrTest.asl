@@ -67,7 +67,7 @@ fn testSourceE2eProgram -> Bool
 
 
 fn testIrE2eProgram! name: String -> Bool
-  (let [(cmd (str "asl/host/out/asl-host run asl/packages/asl-target-llvm/tests/irE2eTest.asl " name))
+  (let [(cmd (str "bin/asl run asl/packages/asl-target-llvm/tests/irE2eTest.asl " name))
         (runRes (processRun cmd))]
     (if (!= runRes.exitCode 0)
       (do (assert false (str "running irE2eTest " name " failed: " runRes.stderr)) false)

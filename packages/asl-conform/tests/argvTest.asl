@@ -38,7 +38,7 @@ fn ! runTests -> Bool
             (_e (fileWrite (str casePath "/expect.exit") "0\n"))
             (chmod (mt (proc/exec! (proc/cmd "chmod" (list "+x" stub))) ((ok out) out.exitCode) ((err _) 127)))
             (path (str stubDir ":" (optionOr (envGet "PATH") "/usr/bin:/bin")))
-            (childCmd (proc/withEnv (proc/withEnv (proc/withEnv (proc/cmd "asl/host/out/asl-host" (list "run" "asl/packages/asl-conform/tests/argvTest.asl")) "PATH" path) "ASL_CONFORM_ARGV_CHILD" "1") "ASL_CONFORM_ARGV_ROOT" root))
+            (childCmd (proc/withEnv (proc/withEnv (proc/withEnv (proc/cmd "bin/asl" (list "run" "asl/packages/asl-conform/tests/argvTest.asl")) "PATH" path) "ASL_CONFORM_ARGV_CHILD" "1") "ASL_CONFORM_ARGV_ROOT" root))
             (childCmd (proc/withEnv childCmd "ASL_CONFORM_ARGV_CASE" casePath))
             (childCmd (proc/withEnv childCmd "ASL_CONFORM_ARGV_RECORD" record))
             (child (mt (proc/exec! childCmd) ((ok out) out) ((err _) (proc/ProcessOutput :exitCode 127 :stdout "" :stderr "child test spawn failed" :durationMs 0))) )

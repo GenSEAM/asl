@@ -1,4 +1,7 @@
-(module asl-audio/tests/aloudTest :x [runAloudTests] :i [(asl-audio/aloud :a aloud) (asl-audio/voiceIntent :a vi) (asl-audio/heardname :a hn)])
+(module asl-audio/tests/aloudTest :x [runAloudTests runTests] :i [(asl-audio/aloud :a aloud) (asl-audio/voiceIntent :a vi) (asl-audio/heardname :a hn)])
+
+fn runTests -> Bool
+  (runAloudTests)
 
 fn runAloudTests -> Bool
   (let [(shortText "Короткий дайджест")

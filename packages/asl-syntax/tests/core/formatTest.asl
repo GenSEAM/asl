@@ -4,7 +4,8 @@
       (asl-forms/repair :a rep)
       (asl-syntax/asl/lex :a lx)
       (asl-syntax/core/tree :a tr)
-      (asl-syntax/core/bytesText :a bt)])
+      (asl-syntax/core/bytesText :a bt)
+      (tools/fleet/run :a run)])
 
 (schema HostRun
   (:f exitCode Int64)
@@ -41,9 +42,7 @@ fn repoRoot! -> (Result String String)
     ((ok cwd) (findRoot! cwd 64)))
 
 fn hostBinary! root: String -> String
-  (mt (envGet "ASL_HOST")
-    ((some h) h)
-    ((none) (str root "/asl/host/out/asl-host")))
+  (run/legacyHost!)
 
 fn shellQuote s: String -> String
   (str "'" (stringReplace s "'" "'\\''") "'")

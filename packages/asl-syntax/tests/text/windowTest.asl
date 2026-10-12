@@ -3,7 +3,8 @@
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/text :a txt)
       (asl-syntax/textWindow :a win)
-      (asl-syntax/core/bytesText :a btxt)])
+      (asl-syntax/core/bytesText :a btxt)
+      (tools/fleet/run :a run)])
 
 fn testWindowedRangeParity! -> Bool
   (let [(manifestPath "asl/packages/asl-syntax/manifest.asn")
@@ -222,7 +223,8 @@ fn test50MbLogGate! scratchDir: String -> Bool
         (_ (assert (stringContains? winRange50Mb "worker-pool-42") "readWindowedRange 50 MB contains expected log line"))
         (winRange50MbOob (win/readWindowedRange! bigPath 600000 600010 200 12000 65536))
         (_ (assert (err? winRange50MbOob) "readWindowedRange on 50 MB log out-of-range is err"))
-        (rssCmd (str "sh -c 'if /usr/bin/time -l true >/dev/null 2>&1; then /usr/bin/time -l asl/host/out/asl-host eval \"(fileReadRange \\\"" bigPath "\\\" 25000000 4096)\" 2>&1 | awk \"/maximum resident set size/{print \\$1}\"; else /usr/bin/time -v asl/host/out/asl-host eval \"(fileReadRange \\\"" bigPath "\\\" 25000000 4096)\" 2>&1 | awk \"/Maximum resident set size/{print \\$6 * 1024}\"; fi'"))
+        (hostBin (run/legacyHost!))
+        (rssCmd (str "sh -c 'if /usr/bin/time -l true >/dev/null 2>&1; then /usr/bin/time -l " hostBin " eval \"(fileReadRange \\\"" bigPath "\\\" 25000000 4096)\" 2>&1 | awk \"/maximum resident set size/{print \\$1}\"; else /usr/bin/time -v " hostBin " eval \"(fileReadRange \\\"" bigPath "\\\" 25000000 4096)\" 2>&1 | awk \"/Maximum resident set size/{print \\$6 * 1024}\"; fi'"))
         (rssRun (processRun rssCmd))
         (_ (assert (= rssRun.exitCode 0) "rss measurement command executed cleanly"))
         (rssOut (stringTrim rssRun.stdout))

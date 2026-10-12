@@ -3,10 +3,10 @@
   :i [])
 
 fn host -> String
-  "asl/host/out/asl-host"
+  "bin/asl"
 
 fn asl1 -> String
-  "asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl"
+  "bin/asl run asl/packages/asl-compiler/src/asl1.asl"
 
 fn ! sh cmd: String -> ProcessOutput
   (processRun cmd)

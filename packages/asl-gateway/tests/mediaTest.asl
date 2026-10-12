@@ -1,6 +1,6 @@
 (module aslGateway/tests/mediaTest
-  :x (testMediaKindValidation testAspectRatioAndDimensions testMediaRequestFormatting testMediaReceiptFormatting testQuotaLedger runTests)
-  :i ((media :a m)))
+  :x [testMediaKindValidation testAspectRatioAndDimensions testMediaRequestFormatting testMediaReceiptFormatting testQuotaLedger runTests]
+  :i [(media :a m)])
 
 fn testMediaKindValidation -> Bool
   (do
@@ -13,9 +13,9 @@ fn testMediaKindValidation -> Bool
     true)
 
 fn testAspectRatioAndDimensions -> Bool
-  (let ((dim916 (m/calculateMediaDimensions "9:16"))
+  (let [(dim916 (m/calculateMediaDimensions "9:16"))
         (dim169 (m/calculateMediaDimensions "16:9"))
-        (dim11 (m/calculateMediaDimensions "1:1")))
+        (dim11 (m/calculateMediaDimensions "1:1"))]
     (do
       (assert (m/validateAspectRatio "9:16") "9:16 ratio must be valid")
       (assert (m/validateAspectRatio "16:9") "16:9 ratio must be valid")
@@ -28,7 +28,7 @@ fn testAspectRatioAndDimensions -> Bool
       true))
 
 fn testMediaRequestFormatting -> Bool
-  (let ((req (m/MediaGenRequest
+  (let [(req (m/MediaGenRequest
                :requestId "req-img-001"
                :mediaKind "image"
                :prompt "Cinematic hyper-realistic portrait in volumetric lighting"
@@ -36,7 +36,7 @@ fn testMediaRequestFormatting -> Bool
                :aspectRatio "9:16"
                :durationSec 0
                :provider "imagen"))
-        (formatted (m/formatMediaRequest req)))
+        (formatted (m/formatMediaRequest req))]
     (do
       (assert (= req.requestId "req-img-001") "Request ID must match")
       (assert (= req.mediaKind "image") "Media kind must be image")
@@ -46,7 +46,7 @@ fn testMediaRequestFormatting -> Bool
       true))
 
 fn testMediaReceiptFormatting -> Bool
-  (let ((rec (m/createMediaReceipt
+  (let [(rec (m/createMediaReceipt
                "req-vid-002"
                "ok"
                "https://storage.provider.com/gen/video.mp4"
@@ -55,7 +55,7 @@ fn testMediaReceiptFormatting -> Bool
                1080
                1920
                120))
-        (formatted (m/formatMediaReceipt rec)))
+        (formatted (m/formatMediaReceipt rec))]
     (do
       (assert (= rec.status "ok") "Receipt status must be ok")
       (assert (m/isMediaTerminal? rec) "ok status must be terminal")
@@ -67,10 +67,10 @@ fn testMediaReceiptFormatting -> Bool
       true))
 
 fn testQuotaLedger -> Bool
-  (let ((availableLedger (m/MediaQuotaLedger :provider "veo" :dailyLimit 100 :usedCount 25 :remainingCount 75))
+  (let [(availableLedger (m/MediaQuotaLedger :provider "veo" :dailyLimit 100 :usedCount 25 :remainingCount 75))
         (exhaustedLedger (m/MediaQuotaLedger :provider "veo" :dailyLimit 100 :usedCount 100 :remainingCount 0))
         (availCheck (m/checkQuotaAvailability availableLedger))
-        (exhaustCheck (m/checkQuotaAvailability exhaustedLedger)))
+        (exhaustCheck (m/checkQuotaAvailability exhaustedLedger))]
     (do
       (assert (pairFirst availCheck) "Available ledger must check true")
       (assert (= (pairSecond availCheck) 75) "Remaining count must be 75")

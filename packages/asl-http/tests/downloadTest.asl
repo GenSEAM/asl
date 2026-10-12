@@ -70,7 +70,7 @@ fn ! main args: (List String) -> (Result Int64 String)
 fn ! startServer mode: String -> (Result (Pair SpawnedProc Int64) String)
   (let [(ticks (/ (nowNs) 1000))
         (port (+ 30000 (- ticks (* (/ ticks 30000) 30000))))]
-   (mt (procSpawnv (list "./asl/host/out/asl-host" "run" "asl/packages/asl-http/tests/downloadTest.asl" "server" mode (stringFromInt64 port)) (some ".") (none))
+   (mt (procSpawnv (list "./bin/asl" "run" "asl/packages/asl-http/tests/downloadTest.asl" "server" mode (stringFromInt64 port)) (some ".") (none))
     ((err e) (err (str "ERR_TEST_SERVER_SPAWN: " e)))
     ((ok sp)
       (do

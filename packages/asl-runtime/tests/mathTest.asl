@@ -15,7 +15,7 @@ fn testClampToGrid -> Bool
     true)
 
 fn testClampToGridStepZero! -> Bool
-  (let [(res (processRun "asl/host/out/asl-host run asl/packages/asl-runtime/tests/mathTest.asl stepZero"))]
+  (let [(res (processRun "bin/asl run asl/packages/asl-runtime/tests/mathTest.asl stepZero"))]
     (assert (= res.exitCode 1) "clampToGrid with step 0.0 must fail")
     true)
 

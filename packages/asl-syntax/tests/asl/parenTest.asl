@@ -4,7 +4,8 @@
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
       (asl-syntax/asl/lex :a lx)
-      (asl-syntax/asl/paren :a prn)])
+      (asl-syntax/asl/paren :a prn)
+      (tools/fleet/run :a run)])
 
 fn testParseUnclosedParen -> Bool
   (let [(s1 "(foo (bar 1 2)")
@@ -242,7 +243,7 @@ fn checkOneCorpusFile! acc: CheckDirStats path: String -> CheckDirStats
            (hasErr (prn/hasErrors root))
            (tilingRes (tr/checkTiling root len))
            (outBs (pr/printTreeBytes! bs root))
-           (cmd (str "asl/host/out/asl-host check " path " >/dev/null 2>&1"))
+           (cmd (str (run/legacyHost!) " check " path " >/dev/null 2>&1"))
            (cmdRes (processRun cmd))
            (hostReject (!= cmdRes.exitCode 0))
            (agree (= hasErr hostReject))]

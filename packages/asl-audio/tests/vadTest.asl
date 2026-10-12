@@ -1,4 +1,7 @@
-(module asl-audio/tests/vadTest :x [runVadTests] :i [(asl-audio/vad :a vad) (asl-audio/dictation :a dict)])
+(module asl-audio/tests/vadTest :x [runVadTests runTests] :i [(asl-audio/vad :a vad) (asl-audio/dictation :a dict)])
+
+fn runTests -> Bool
+  (runVadTests)
 
 fn runVadTests -> Bool
   (do

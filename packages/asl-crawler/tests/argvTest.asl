@@ -53,7 +53,7 @@ fn ! runCrawlerArgvParent -> Bool
         (browserChmod (fileChmod browserPath 493))
         (path (mt (envGet "PATH") ((some p) p) ((none) "/usr/bin:/bin")))
         (cwd (mt (envGet "PWD") ((some p) p) ((none) ".")))
-        (baseCmd (procCore/withCwd (procCore/cmd "asl/host/out/asl-host" (list "run" "asl/packages/asl-crawler/tests/argvTest.asl")) cwd))
+        (baseCmd (procCore/withCwd (procCore/cmd "bin/asl" (list "run" "asl/packages/asl-crawler/tests/argvTest.asl")) cwd))
         (pathCmd (procCore/withEnv baseCmd "PATH" (str dir ":" path)))
         (browserCmd (procCore/withEnv pathCmd "CHROME_BIN" browserPath))
         (childCmd (procCore/withEnv browserCmd "CRAWLER_ARGV_DIR" dir))

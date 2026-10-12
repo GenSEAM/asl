@@ -47,7 +47,7 @@ fn ! runTests -> Bool
                               (and (ok? (fileWrite at (pairSecond t))) (ok? (fileChmod at 493)))))
                           tools))
             (realPath (optionOr (envGet "PATH") "/usr/bin:/bin"))
-            (childCmd (proc/withEnv (proc/withEnv (proc/withEnv (proc/withEnv (proc/withEnv (proc/withTimeout (proc/cmd "asl/host/out/asl-host" (list "run" "asl/packages/asl-plugin/tests/argvTest.asl")) 30000) "PATH" (str stubDir ":" realPath)) "ASL_PLUGIN_ARGV_LOG" record) "ASL_PLUGIN_ARGV_CHILD" "1") "ASL_PLUGIN_PARENT_LOG" parents) "ASL_PLUGIN_REAL_PATH" realPath))
+            (childCmd (proc/withEnv (proc/withEnv (proc/withEnv (proc/withEnv (proc/withEnv (proc/withTimeout (proc/cmd "bin/asl" (list "run" "asl/packages/asl-plugin/tests/argvTest.asl")) 30000) "PATH" (str stubDir ":" realPath)) "ASL_PLUGIN_ARGV_LOG" record) "ASL_PLUGIN_ARGV_CHILD" "1") "ASL_PLUGIN_PARENT_LOG" parents) "ASL_PLUGIN_REAL_PATH" realPath))
             (child (proc/exec! childCmd))
             (childOut (mt child ((ok out) out.stdout) ((err _) "")))
             (logged (fileRead record))

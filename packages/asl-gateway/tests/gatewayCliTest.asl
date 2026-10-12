@@ -28,7 +28,7 @@ fn ! cliInvoke command: String -> ProcessOutput
 
 fn ! testGatewayCliAndLifecycle -> Bool
   (let [(root (cliRoot))
-        (host (str root "/asl/host/out/asl-host"))
+        (host (str root "/bin/asl"))
         (runner (str root "/bin/asl-gateway"))
         (registry (str root "/.asl/mem/calibration/index.asn"))
         (temp (stringTrim (processRun "mktemp -d /tmp/asl-gateway-cli.XXXXXX").stdout))

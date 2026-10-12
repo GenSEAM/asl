@@ -2,10 +2,11 @@
   :x [runTests]
   :i [(asl-syntax/core/tree :a tr)
       (asl-syntax/asl/lex :a lx)
-      (asl-syntax/asl/asn :a asn)])
+      (asl-syntax/asl/asn :a asn)
+      (tools/fleet/run :a run)])
 
 fn hostBin -> String
-  "asl/host/out/asl-host"
+  (run/legacyHost!)
 
 fn escapeCases -> (List (Pair String Bool))
   (list

@@ -107,7 +107,7 @@ fn ! testReaderNative -> Bool
                     (Captured :exitCode 1 :stdout "" :stderr "fixture setup failed")))
         (buildEnd (monotonicNs))
         (hostStart (monotonicNs))
-        (interp (sh (str (shellQuote (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host")) " run " (shellQuote path))))
+        (interp (sh (str (shellQuote (run/legacyHost!)) " run " (shellQuote path))))
         (hostEnd (monotonicNs))
         (nativeStart (monotonicNs))
         (ran (if (= native.exitCode 0) (sh (shellQuote exePath))

@@ -1,6 +1,6 @@
 (module aslGateway/tests/browserTest
-  :x (testActionOps testBrowserActionFormatting testBrowserReceiptFormatting testSuccessAndErrorReceipts testSequenceValidation runTests)
-  :i ((browser :a b)))
+  :x [testActionOps testBrowserActionFormatting testBrowserReceiptFormatting testSuccessAndErrorReceipts testSequenceValidation runTests]
+  :i [(browser :a b)])
 
 fn testActionOps -> Bool
   (do
@@ -15,14 +15,14 @@ fn testActionOps -> Bool
     true)
 
 fn testBrowserActionFormatting -> Bool
-  (let ((frame (b/BrowserActionFrame
+  (let [(frame (b/BrowserActionFrame
                  :actionId "act-001"
                  :op "navigate"
                  :selector "none"
                  :payload "https://gemini.google.com"
                  :timeoutMs 5000
                  :requireAuth true))
-        (formatted (b/formatBrowserAction frame)))
+        (formatted (b/formatBrowserAction frame))]
     (do
       (assert (= frame.actionId "act-001") "Action ID must match")
       (assert (= frame.op "navigate") "Op must be navigate")
@@ -32,14 +32,14 @@ fn testBrowserActionFormatting -> Bool
       true))
 
 fn testBrowserReceiptFormatting -> Bool
-  (let ((rec (b/BrowserActionReceipt
+  (let [(rec (b/BrowserActionReceipt
                :actionId "act-002"
                :status "ok"
                :durationMs 240
                :pageUrl "https://gemini.google.com/app"
                :artifactPath "artifacts/screen.png"
                :capturedText "Hello World"))
-        (formatted (b/formatBrowserReceipt rec)))
+        (formatted (b/formatBrowserReceipt rec))]
     (do
       (assert (= rec.status "ok") "Status must be ok")
       (assert (= rec.durationMs 240) "Duration must match")
@@ -49,8 +49,8 @@ fn testBrowserReceiptFormatting -> Bool
       true))
 
 fn testSuccessAndErrorReceipts -> Bool
-  (let ((sRec (b/createSuccessReceipt "act-10" 120 "https://target.url" "shot.png" "DOM Title"))
-        (eRec (b/createErrorReceipt "act-11" 5000 "timeout" "Page navigation timed out")))
+  (let [(sRec (b/createSuccessReceipt "act-10" 120 "https://target.url" "shot.png" "DOM Title"))
+        (eRec (b/createErrorReceipt "act-11" 5000 "timeout" "Page navigation timed out"))]
     (do
       (assert (= sRec.status "ok") "Success receipt status must be ok")
       (assert (= sRec.artifactPath "shot.png") "Artifact path must match")
@@ -60,14 +60,14 @@ fn testSuccessAndErrorReceipts -> Bool
       true))
 
 fn testSequenceValidation -> Bool
-  (let ((f1 (b/BrowserActionFrame :actionId "1" :op "navigate" :selector "" :payload "https://test.com" :timeoutMs 3000 :requireAuth false))
+  (let [(f1 (b/BrowserActionFrame :actionId "1" :op "navigate" :selector "" :payload "https://test.com" :timeoutMs 3000 :requireAuth false))
         (f2 (b/BrowserActionFrame :actionId "2" :op "click" :selector "#login-btn" :payload "" :timeoutMs 2000 :requireAuth true))
         (fBad (b/BrowserActionFrame :actionId "3" :op "invalid_cmd" :selector "" :payload "" :timeoutMs 1000 :requireAuth false))
         (validSeq (list f1 f2))
         (invalidSeq (list f1 fBad))
         (resValid (b/validateActionSequence validSeq))
         (resInvalid (b/validateActionSequence invalidSeq))
-        (resEmpty (b/validateActionSequence (list))))
+        (resEmpty (b/validateActionSequence (list)))]
     (do
       (assert (pairFirst resValid) "Valid sequence must validate to true")
       (assert (= (pairSecond resValid) "all_valid") "Reason must be all_valid")

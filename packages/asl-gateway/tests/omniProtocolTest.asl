@@ -1,12 +1,12 @@
 (module asl/packages/asl-gateway/tests/omniProtocolTest
-  :x (runTests)
-  :i ((aslGateway/sync :a sync)
+  :x [runTests]
+  :i [(aslGateway/sync :a sync)
       (aslGateway/browser :a browser)
       (aslGateway/media :a media)
-      (aslGateway/server :a server)))
+      (aslGateway/server :a server)])
 
 fn testSyncOmniProtocol -> Bool
-  (let ((proj (sync/ProjectSync
+  (let [(proj (sync/ProjectSync
                 :id "proj-589-test"
                 :name "Omni Gateway Pipeline"
                 :intentions "Universal cognitive nexus"
@@ -24,7 +24,7 @@ fn testSyncOmniProtocol -> Bool
         (hash2 (sync/computeContentHash "canonical test content"))
         (hash3 (sync/computeContentHash "divergent content"))
         (reconcileSame (sync/reconcileSync hash1 hash2))
-        (reconcileDiff (sync/reconcileSync hash1 hash3)))
+        (reconcileDiff (sync/reconcileSync hash1 hash3))]
     (do
       (assert (= proj.id "proj-589-test") "Project ID must match")
       (assert (stringContains? formattedProj ":projectSync") "Must format project S-expr")
@@ -37,7 +37,7 @@ fn testSyncOmniProtocol -> Bool
       true))
 
 fn testBrowserOmniProtocol -> Bool
-  (let ((act (browser/BrowserActionFrame
+  (let [(act (browser/BrowserActionFrame
                :actionId "act-01"
                :op "navigate"
                :selector "body"
@@ -47,7 +47,7 @@ fn testBrowserOmniProtocol -> Bool
         (rec (browser/createSuccessReceipt "act-01" 50 "https://gemini.google.com" "art.png" "Loaded"))
         (formattedAct (browser/formatBrowserAction act))
         (formattedRec (browser/formatBrowserReceipt rec))
-        (seqRes (browser/validateActionSequence (list act))))
+        (seqRes (browser/validateActionSequence (list act)))]
     (do
       (assert (browser/validateActionOp "navigate") "navigate op must be valid")
       (assert (browser/validateActionOp "click") "click op must be valid")
@@ -58,7 +58,7 @@ fn testBrowserOmniProtocol -> Bool
       true))
 
 fn testMediaOmniProtocol -> Bool
-  (let ((req (media/MediaGenRequest
+  (let [(req (media/MediaGenRequest
                :requestId "req-01"
                :mediaKind "image"
                :prompt "Futuristic landscape"
@@ -69,7 +69,7 @@ fn testMediaOmniProtocol -> Bool
         (rec (media/createMediaReceipt "req-01" "ok" "uri://asset" "/tmp/asset" "sha256-hash" 1080 1920 10))
         (dim (media/calculateMediaDimensions "9:16"))
         (formattedReq (media/formatMediaRequest req))
-        (formattedRec (media/formatMediaReceipt rec)))
+        (formattedRec (media/formatMediaReceipt rec))]
     (do
       (assert (media/validateMediaKind "image") "image kind must be valid")
       (assert (media/validateMediaKind "video") "video kind must be valid")
@@ -82,13 +82,13 @@ fn testMediaOmniProtocol -> Bool
       true))
 
 fn testServerOmniDispatch -> Bool
-  (let ((syncRes (server/handleSyncIngest "(:projectSync :id \"test\")"))
+  (let [(syncRes (server/handleSyncIngest "(:projectSync :id \"test\")"))
         (frame (browser/BrowserActionFrame :actionId "act-99" :op "click" :selector "#btn" :payload "" :timeoutMs 1000 :requireAuth false))
         (browserRec (server/handleBrowserDispatch frame))
         (mediaReq (media/MediaGenRequest :requestId "m-99" :mediaKind "video" :prompt "A video" :negativePrompt "" :aspectRatio "16:9" :durationSec 5 :provider "veo"))
         (mediaRec (server/handleMediaDispatch mediaReq))
         (cleanTurn (server/inspectCompletionTurn "Here is the result." true))
-        (isEsh (server/detectEshViolation "The refactor is done and all tests pass cleanly.")))
+        (isEsh (server/detectEshViolation "The refactor is done and all tests pass cleanly."))]
     (do
       (assert (= (pairFirst syncRes) "ok") "Sync ingest must return ok")
       (assert (= browserRec.status "ok") "Browser dispatch must return ok")

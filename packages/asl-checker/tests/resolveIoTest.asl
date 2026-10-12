@@ -77,7 +77,7 @@ fn ! testLoadModuleDepsErrOnUnreadableOrUnparsable dir: String -> Bool
 fn ! testAsl1ReportsTransitiveMissingImport dir: String -> Bool
   (let [(entry (str dir "/ioMain.asl"))
         (written (fileWrite entry "(module ioMain :x [main] :i [(ioC :a c)])\n\nfn ! main args: (List String) -> (Result Int64 String)\n  (ok (c/f))\n"))
-        (driver (str "asl/host/out/asl-host run asl/packages/asl-compiler/src/asl1.asl "))
+        (driver (str "bin/asl run asl/packages/asl-compiler/src/asl1.asl "))
         (checked (sh (str driver "check " entry)))
         (built (sh (str driver "build " entry " -o " dir "/ioMain.ll")))]
     (do (assert (ok? written) "ioMain.asl fixture written")

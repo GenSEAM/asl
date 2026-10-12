@@ -26,8 +26,8 @@ fn testRuntimeGrammarRegistration! -> Bool
       ((ok gSrc)
         (do
           (assert (stringContains? gSrc ":package aslBrowserPlugin") "manifest registers aslBrowserPlugin")
-          (assert (stringContains? gSrc "\"asl-browser-plugin/runtime\"") "manifest registers runtime")
-          (assert (stringContains? gSrc "\"asl-browser-plugin/content\"") "manifest registers content")
+          (assert (stringContains? gSrc "\"aslBrowserPlugin/runtime\"") "manifest registers runtime")
+          (assert (stringContains? gSrc "\"aslBrowserPlugin/content\"") "manifest registers content")
           (assert (stringContains? gSrc "\"aslContracts\"") "manifest registers aslContracts")
           (refute (stringContains? gSrc ";;") "runtime manifest refutes legacy line comments"))))
     true)
@@ -48,7 +48,8 @@ fn testLinearMemoryBounds! -> Bool
     ((err e) (do (assert false (str "Failed to read runtime.asl: " e)) false))
     ((ok src)
      (do
-       (assert (stringContains? src "(:f maxRssBytes I64 \"Hard memory boundary ceiling in bytes (16MB)\")") "bridge declares a 16MB max RSS ceiling field")
+       (assert (stringContains? src "(:f maxRssBytes I64)") "bridge declares a max RSS ceiling field")
+       (assert (stringContains? (resultOr (fileRead "asl/packages/asl-browser-plugin/doc.asn") "") "Hard memory boundary ceiling in bytes (16MB)") "the field's 16MB doc moved to doc.asn, not lost")
        (refute (stringContains? src ":maxRssBytes 0") "bridge refutes a zero RSS ceiling")
        (assert (stringContains? src ":linearMemoryBytes linearMem :activeSessions 1 :maxRssBytes maxRss") "bridge stores the given linear memory and RSS ceiling")
        (refute (stringContains? src ":linearMemoryBytes maxRss") "bridge refutes swapping linear memory and RSS ceiling")

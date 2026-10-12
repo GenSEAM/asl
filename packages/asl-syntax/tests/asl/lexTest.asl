@@ -3,7 +3,8 @@
   :i [(asl-syntax/core/source :a src)
       (asl-syntax/core/tree :a tr)
       (asl-syntax/core/print :a pr)
-      (asl-syntax/asl/lex :a lx)])
+      (asl-syntax/asl/lex :a lx)
+      (tools/fleet/run :a run)])
 
 fn testDelimitersAndTrivia -> Bool
   (let [(s "( [ { } ] ) , \n \r\n ; comment\n")
@@ -225,7 +226,7 @@ fn checkLiteralAgainstHost! hostExe: String lit: String -> Bool
         true)))
 
 fn testDifferentialStringEscapes! -> Bool
-  (let [(hostExe (optionOr (envGet "ASL_HOST") "asl/host/out/asl-host"))
+  (let [(hostExe (run/legacyHost!))
         (cases (list
           "\"hello world\""
           "\"\\n\""
