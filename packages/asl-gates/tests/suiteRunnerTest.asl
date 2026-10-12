@@ -1,6 +1,7 @@
 (module asl-gates/tests/suiteRunnerTest
   :x [runTests]
-  :i [(asl-parser/reader :a p) (asl-gates/suiteRunner :a sr) (tests/parity/gates/runnerCorpus :a gr)])
+  :i [(asl-parser/reader :a p) (asl-gates/suiteRunner :a sr) (tests/parity/gates/runnerCorpus :a gr)
+      (tools/fleet/run :a fr) (asl-proc/runnerBin :a rb)])
 
 fn items node: p/SExpr -> (List p/SExpr)
   (p/sexprToList node)
@@ -115,6 +116,58 @@ fn ! replayGates! records: (List p/SExpr) -> Bool
           (assert (= got.exitCode wantedExit) (str "gate exit matches recorded Python for " suite))
           (replayGates! (optionOr (listTail records) (list)))))))
 
+fn hostlessProbeSuite -> String
+  "asl/packages/asl-gates/tests/fixtures/hostlessProbe/alwaysPassTest.asl"
+
+fn ! hideHostIn! snap: String -> (Result Unit String)
+  (let [(hostPath (str snap "/asl/host/out/asl-host"))]
+    (if (sr/isFile! hostPath) (pathRename hostPath (str hostPath ".hiddenByHostlessProbe")) (ok ())))
+
+fn ! ranHostlessly? d: fr/Done -> Bool
+  (and (= d.exit 0) (stringContains? d.out "1 assertion(s) executed"))
+
+fn ! seedSnapshotHead! rootReal: String snapReal: String -> Bool
+  (let [(cache (rb/cacheDirOf!))
+        (dir (rb/headDirIn! cache rootReal))]
+    (if (and (not (stringEmpty? dir)) (sr/nativeCliReady? rootReal))
+      (let [(wrote (fileWrite (rb/headPath cache snapReal) dir))]
+        (and (ok? wrote) (sr/nativeCliReady? snapReal)))
+      false))
+
+fn ! ensureNativeCli! snap: String real: String rootReal: String -> (Result Unit String)
+  (if (seedSnapshotHead! rootReal real)
+    (ok ())
+    (sr/buildHost! snap real 1800 (none) (none)))
+
+fn ! runViaFleet! job: sr/Job snap: String -> fr/Done
+  (fr/runOneLimited
+    (fr/job job.argv (optionOr job.cwd snap) (optionOr job.env (list)))
+    (fr/Limits :timeoutMs job.timeoutMs :maxDesc 32))
+
+fn ! hostlessProbe! -> Bool
+  (mt (sr/gitRoot!)
+    ((err e) (do (assert false (str "hostless probe: git root: " e)) false))
+    ((ok root)
+     (let [(rootReal (resultOr (realPath root) root))]
+      (mt (sr/makeSnapshot! root)
+       ((err e) (do (assert false (str "hostless probe: make snapshot: " e)) false))
+       ((ok snap)
+        (let [(real (resultOr (realPath snap) snap))
+              (built (ensureNativeCli! snap real rootReal))]
+          (mt built
+            ((err e) (do (assert false (str "hostless probe: native CLI ready for the snapshot: " e)) (pathRemove snap) false))
+            ((ok _)
+             (let [(hidden (hideHostIn! snap))
+                   (job (sr/suiteJob! snap (hostlessProbeSuite) 60))
+                   (ran (runViaFleet! job snap))
+                   (removed (pathRemove snap))]
+               (do
+                 (assert (ok? hidden) "hostless probe: asl-host renamed out of the snapshot")
+                 (assert (ranHostlessly? ran)
+                   "hostless probe: a trivial suite still passes through the snapshot's native CLI with no asl-host present")
+                 (assert (ok? removed) "hostless probe: snapshot removed")
+                 true))))))))))
+
 fn ! runTests -> Bool
   (let [fixtureText (mt (fileReadString "tests/parity/audit/suiteRunner.asn")
                          ((ok text) text)
@@ -197,6 +250,7 @@ fn ! runTests -> Bool
       (assert (= (gateExit gates "nonexistentTest.asl") 1) "recorded missing-suite gate fails")
       (assert (stringContains? (gateOutput gates "nonexistentTest.asl") "ERR_NOT_A_SUITE") "recorded missing-suite cause is preserved")
       (assert (replayGates! gates) "ASL gate outputs and exits equal recorded Python")
+      (assert (hostlessProbe!) "suiteJob! runs a .asl suite through the snapshot's native CLI head with no asl-host present")
       (assert (ok? (fileReadString (timesLedger!))) "runner children wrote the private gateTimes ledger")
       (assert (ok? (pathRemove (timesLedger!))) "private gateTimes ledger removed")
       true))

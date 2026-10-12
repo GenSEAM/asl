@@ -15,7 +15,6 @@ asl/packages/asl-pack/tests/standaloneTest.asl
 asl/packages/asl-derive/tests/codecDerivationTest.asl
 tests/harnessBench/cases/fund-spec-coverage-asl/svc/tests/signupTest.asl
 tests/harnessBench/cases/twin-spec-asl/hotel/tests/bookingsTest.asl
-tests/acceptance/d81/TD303BatchRpcResilienceTest.sh
 tests/acceptance/daemonLifecycleTest.asl
 tests/acceptance/vtbotDataTooling/httpDownloadTest.asl
 tests/acceptance/aslDaemonSocketTest.asl

@@ -1,6 +1,6 @@
 (module asl-gates/suiteRunner
-  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers!]
-  :i [(asl-gates/suiteTimes :a st)])
+  :x [SuiteResult SnapRun Fault Job Done discover frozenCount isFrozenPath! selectDirectorySuites! getExcludedForm snapRun gainedPaths workerCount envInt! gate main makeSuiteResult esc trustForm gateCounts computeDigest normpath dirname relpath makeSnapshot! runJobs! runJobsBy! doneMs runOne! gitOut! gitRun! gitRoot! absPath slowSuiteTimeoutS suiteJob! makeTempDir! sweepStaleTemps! isFile! nonHermeticReason driverCorpus pyStrip pyLines isSuiteName isExcludedSegment helpers! buildHost! nativeCliReady? nativeFallbackReason]
+  :i [(asl-gates/suiteTimes :a st) (asl-proc/runnerBin :a rb)])
 
 (schema SuiteResult
   (:f suite String)
@@ -978,13 +978,39 @@ fn withEnv! extra: (List String) -> (List String)
 fn nestedTimes snap: String -> String
   (str "ASL_GATE_TIMES=" snap "/.git/aslGateTimes.asn")
 
-fn suiteJob! snap: String suite: String baseS: Int64 -> Job
+fn ! nativeCliReady? real: String -> Bool
+  (rb/fresh? real (rb/headDirIn! (rb/cacheDirOf!) real))
+
+fn ! nativeTestCacheRoot! -> String
+  (optionOr (envGet "ASL_NATIVE_TEST_CACHE") (str (optionOr (envGet "HOME") (tempBase!)) "/.asl/run/nativeTest"))
+
+fn getNativeFallbackPairs -> (List (Pair String String))
+  (list
+    (pair "asl/packages/asl-agent-bus/tests/asnlRingTest.asl"
+          "its own logic shells out to ./bin/asl check and captures the nested subprocess output; measured under the native CLI (asl1 build, 2026-10-12) that capture truncates (33 passed interpreted by asl-host vs failing assert 16 of 16 compiled natively), independent of this runner; runs on asl-host directly until that native nested-capture gap is fixed")
+    (pair "tests/acceptance/aslDaemonSocketTest.asl"
+          "spawns a live engine daemon and drives it through repeated nested ./bin/asl engine/manage subprocess calls over a real socket; measured directly (2026-10-12, no env difference) that asl-host passes 7/7 every run while the native CLI fails deterministically at the first manage-spawn call (3 of 7 asserts), independent of this runner's own env vars; same nested-subprocess class as asnlRingTest; runs on asl-host directly until that native nested-subprocess gap is fixed"))
+
+fn getNativeFallbackMap -> (Map String String)
+  (mapFromPairs (getNativeFallbackPairs))
+
+fn nativeFallbackReason suite: String -> (Option String)
+  (mapGet (getNativeFallbackMap) suite)
+
+fn ! nativeSuiteArgv! snap: String real: String suite: String -> (List String)
+  (if (some? (nativeFallbackReason suite))
+    (list (str snap "/asl/host/out/asl-host") "test" suite)
+    (list (rb/runnerBin! real) "test" suite))
+
+fn ! suiteJob! snap: String suite: String baseS: Int64 -> Job
   (let [(path (str snap "/" suite))]
     (if (stringEndsWith? suite ".sh")
       (Job :input "" :argv (if (isExecutable! path) (list path) (list "/bin/sh" path)) :cwd (some snap)
            :env (some (withEnv! (list (str "ASL_TRANSCRIPT_DIR=" snap "/.noTranscripts") "ASL_IN_RUNNER=1" (nestedTimes snap)))) :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000))
-      (Job :input "" :argv (list (str snap "/asl/host/out/asl-host") "test" suite) :cwd (some snap)
-           :env (some (withEnv! (list "ASL_IN_RUNNER=1" (nestedTimes snap)))) :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000))))
+      (let [(real (resultOr (realPath snap) snap))]
+        (Job :input "" :argv (nativeSuiteArgv! snap real suite) :cwd (some snap)
+             :env (some (withEnv! (list "ASL_IN_RUNNER=1" (str "ASL_CLI_ROOT=" real) (str "ASL_NATIVE_TEST_CACHE=" (nativeTestCacheRoot!)) (nestedTimes snap))))
+             :timeoutMs (* (optionOr (slowSuiteTimeoutS suite) baseS) 1000)))))
 
 fn toResult! snap: String real: String suite: String d: Done -> SuiteResult
   (let [(out (stripSnap d.merged snap real))]
@@ -1004,9 +1030,9 @@ fn ! buildHost! snap: String real: String baseS: Int64 guard: (Option Guard) reg
        ((err e) (err e))
        ((ok ds)
         (let [(d (optionOr (listHead ds) (Done :code -1 :out "" :errText "" :merged "" :startNs 0 :endNs 0)))]
-          (if (and (= d.code 0) (isExecutable! (str snap "/asl/host/out/asl-host")))
+          (if (and (= d.code 0) (nativeCliReady? real))
             (ok ())
-            (err (str "host build failed: exit " (stringFromInt64 d.code) ": " (tail1500 (pyStrip (stripSnap d.merged snap real)))))))))))
+            (err (str "native CLI build failed: exit " (stringFromInt64 d.code) ": " (tail1500 (pyStrip (stripSnap d.merged snap real)))))))))))
 
 fn unquote s: String -> String
   (let [(a (if (stringStartsWith? s "\"") (unquote (optionOr (stringSlice s 1 (stringLength s)) "")) s))]

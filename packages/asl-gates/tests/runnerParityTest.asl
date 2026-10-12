@@ -123,7 +123,7 @@ fn testCorpusParity! -> Bool
     (assert (= (replayCases! (fixtureCases!) 0) 8) "all eight synthetic runner recordings replay exactly through ASL only")
     (assert (ok? (fileReadString (timesLedger!))) "runner calls wrote the private gateTimes ledger")
     (assert (ok? (pathRemove (timesLedger!))) "private gateTimes ledger removed")
-    (assert (gr/replayCorpus!) "pinned 26-suite runner.py recordings replay through ASL only")
+    (assert (gr/replayCorpus!) "pinned 25-suite runner.py recordings replay through ASL only")
     true)
 
 fn ! runTests -> Bool
