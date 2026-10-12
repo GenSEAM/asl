@@ -1349,6 +1349,9 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
         user (str "Task: " ra.task (if (stringEmpty? transcript) "" (str "\n\n" transcript))
           (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
           (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." ""))
+        turnOwnSent (str "Task: " ra.task
+          (if (stringEmpty? advisorText) "" (str "\n\nAdvisor: " advisorText))
+          (if run.lastDefect "\n\nThe prior reply contained no actionable operations; retry with a valid operation or terminal form." ""))
         _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :sent \"" (c/escapeAsn user) "\")\n"))
         retried (liveProviderRetry! wrapped.provider
           (fn [p attempt] (providerCall p system user)) env.wallBudget env.sleep)
@@ -1400,7 +1403,7 @@ fn ! liveBody! ra: RunArgs repoRoot: String rootDir: String path: String system:
                   allGates (listAppend state.allGateResults newGates)
                   lastGates (liveLastGateMap newGates state.lastGates)
                   history (listAppend wrapped.history
-                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr user)) (pair "got" (j/jstr got))))))
+                    (list (j/jobj (list (pair "turn" (j/jint turn)) (pair "sent" (j/jstr turnOwnSent)) (pair "got" (j/jstr got))))))
                   _ (fold (fn [acc gate] (and acc (ok? (fileAppend path (str "(:gate :cmd \"" (c/escapeAsn (g/gateCmd gate)) "\" :exit "
                        (stringFromInt64 (g/gateExit gate)) (if (g/gateTimeout gate) " :timeout true" "") ")\n"))))) true newGates)
                   _ (fileAppend path (str "(:turn " (stringFromInt64 turn) " :reply \"" (c/escapeAsn normalized) "\")\n"))
