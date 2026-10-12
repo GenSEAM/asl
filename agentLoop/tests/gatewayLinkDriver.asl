@@ -31,7 +31,7 @@ fn linkText p: pv/Provider -> String
 
 fn ! main args: (List String) -> (Result Int64 String)
   (let [(root (optionOr (listHead args) "."))]
-    (mt (pv/makeProvider! "agy" "scout" root "mA" 60 "sLink" 30 false (pv/providerEnv!))
+    (mt (pv/makeProvider! "agy" "scout" root "mA" 60 "sLink" 30 false (pv/providerEnv!) "auto")
       ((err e) (do (println (str "(:receipt :reply (:error " (pv/errorCode e) " " (quoted (pv/errorMessage e)) "))")) (ok 1)))
       ((ok p)
         (let [(t (pv/nextTurn! p "You are Leon." "hello gateway"))]

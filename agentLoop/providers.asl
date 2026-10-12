@@ -766,7 +766,7 @@ fn scriptBackendPrefix -> String
 fn replayBackendPrefix -> String
   "replay"
 
-fn ! makeProvider! backend: String mode: String rootDir: String model: String timeout: Int64 sessionId: String queueTimeout: Int64 timeoutSet: Bool env: ProviderEnv -> (Result Provider ProviderError)
+fn ! makeProvider! backend: String mode: String rootDir: String model: String timeout: Int64 sessionId: String queueTimeout: Int64 timeoutSet: Bool env: ProviderEnv intent: String -> (Result Provider ProviderError)
   (cond
     ((stringStartsWith? backend (str (scriptBackendPrefix) "/"))
       (let [(name (sub backend 7 (stringLength backend)))
@@ -788,7 +788,7 @@ fn ! makeProvider! backend: String mode: String rootDir: String model: String ti
       (let [(sid (if (stringEmpty? sessionId) (uniqueTag) sessionId))]
           (ok (vendorProvider (VendorConfig :vendor backend :mode (if (stringEmpty? mode) "scout" mode) :rootDir (absPath rootDir)
                                 :model model :timeout (if (= timeout 0) 600 timeout) :queueTimeout (if (= queueTimeout 0) 1200 queueTimeout)
-                                :sessionId sid :intent "auto" :timeoutSet timeoutSet :env env :link none)))))
+                                :sessionId sid :intent (if (stringEmpty? intent) "auto" intent) :timeoutSet timeoutSet :env env :link none)))))
     (else (err (valueError (str "Unknown backend: " backend)))))
 
 fn providerName p: Provider -> String
@@ -1380,7 +1380,7 @@ fn codexArgv instr: String last: String model: String -> j/Json
                 (if (stringEmpty? model) (list) (list "-m" model)))))
 
 fn ! buildDryRunInfo! vendor: String mode: String rootDir: String model: String timeout: Int64 queueTimeout: Int64 env: ProviderEnv -> (Result j/Json ProviderError)
-  (mt (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env)
+  (mt (makeProvider! vendor mode rootDir model timeout "" queueTimeout false env "auto")
     ((err e) (err e))
     ((ok _) (buildDryRunInfoFor vendor mode rootDir model timeout queueTimeout env)))
 

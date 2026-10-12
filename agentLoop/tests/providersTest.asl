@@ -214,7 +214,7 @@ fn ! runProviderCase kv: (List (Pair String c/KvVal)) root: String kind: String 
         (prep (and (ok? (dirCreate dir)) (or (not (has kv "content")) (writeFile file (fld! kv "content")))))
         (backend (str (if (= kind "scriptProvider") "script/" "replay/") name))
         (env (envFor! root (str root "/stub/" cid) "stub" "" "" ""))
-        (made (pv/makeProvider! backend "scout" root "" 600 "sprov" 1200 true env))]
+        (made (pv/makeProvider! backend "scout" root "" 600 "sprov" 1200 true env "auto"))]
     (and (checkTrue (str cid " fixture file written") prep)
       (mt made
         ((err e) (checkOutcome! kv root (err e)))
@@ -244,7 +244,7 @@ fn ! runCliCase kv: (List (Pair String c/KvVal)) root: String -> Bool
         (codexDir (str root "/.asl/run/agentLoop/codex/" session))
         (pre (or (not (has kv "preLast")) (and (ok? (dirCreate codexDir)) (writeFile (str codexDir "/" mode ".last") (fld! kv "preLast")))))
         (env (envFor! root stubDir (fld! kv "path") "" "" ""))
-        (made (pv/makeProvider! vendor mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session 1200 true env))]
+        (made (pv/makeProvider! vendor mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session 1200 true env "auto"))]
     (mt made
       ((err e) (checkTrue (str cid " provider made: " (pv/errorMessage e)) false))
       ((ok p)
@@ -305,7 +305,7 @@ fn ! runGatewayCase kv: (List (Pair String c/KvVal)) root: String -> Bool
         (cfgOk (or (not (has kv "config")) (writeFile cfgPath (fld! kv "config"))))
         (env (envFor! root stubDir "stub" (fld! kv "url") (fld! kv "profile") cfgPath))
         (made (pv/makeProvider! "agy" mode root (fld! kv "model") (optionOr (stringToInt64 (fld! kv "timeout")) 600) session
-                (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) (= (fld! kv "timeoutSet") "True") env))]
+                (optionOr (stringToInt64 (fld! kv "queueTimeout")) 1200) (= (fld! kv "timeoutSet") "True") env "auto"))]
     (mt made
       ((err e) (checkTrue (str cid " provider made: " (pv/errorMessage e)) false))
       ((ok p)
@@ -351,7 +351,7 @@ fn ! runVendorUnknown kv: (List (Pair String c/KvVal)) root: String -> Bool
 
 fn ! runMakeCase kv: (List (Pair String c/KvVal)) root: String -> Bool
   (let [(cid (fld! kv "id"))]
-    (mt (pv/makeProvider! (fld! kv "backend") "scout" root "" 600 "smake" 1200 true (envFor! root (str root "/stub/make") "stub" "" "" ""))
+    (mt (pv/makeProvider! (fld! kv "backend") "scout" root "" 600 "smake" 1200 true (envFor! root (str root "/stub/make") "stub" "" "" "") "auto")
       ((ok p) (and (check (str cid " outcome") (fld! kv "outcome") "ok")
                 (and (check (str cid " name") (fld! kv "providerName") (pv/providerName p))
                   (check (str cid " vendor") (fld! kv "vendor") (optText (pv/vendorName p))))))
@@ -384,13 +384,29 @@ fn ! checkRedirect root: String -> Bool
   (let [(stubDir (str root "/stub/redirect302"))
         (staged (setupStub stubDir "HTTP/1.1 302 Found\r\nLocation: /elsewhere\r\nContent-Length: 0\r\n\r\n" "0" "" ""))
         (env (envFor! root stubDir "stub" "http://127.0.0.1:9/v1/chat/completions" "" (str root "/none.asn")))]
-    (mt (pv/makeProvider! "agy" "scout" root "" 600 "gredirect" 1200 true env)
+    (mt (pv/makeProvider! "agy" "scout" root "" 600 "gredirect" 1200 true env "auto")
       ((err e) (checkTrue (str "redirect302 provider: " (pv/errorMessage e)) false))
       ((ok p)
         (let [(t (pv/nextTurn! p "s" "u"))
               (got (mt t.reply ((ok _) "ok") ((err e) (str (pv/errorCode e) " " (pv/errorMessage e)))))]
           (and (checkTrue "redirect302 stub staged" staged)
             (check "redirect302 is an HTTP error" "ERR_VENDOR Gateway HTTP error 302: Found" got))))))
+
+; (:m :tags (gateway))
+fn ! checkIntentPlan root: String -> Bool
+  (let [(stubDir (str root "/stub/intentPlan"))
+        (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/intentPlan.asn")))
+        (made (pv/makeProvider! "agy" "scout" root "" 600 "sintentplan" 1200 true env "plan"))]
+    (mt made
+      ((err e) (checkTrue (str "intentPlan provider made: " (pv/errorMessage e)) false))
+      ((ok p)
+        (let [(t (pv/nextTurn! p "s" "u"))
+              (config (resultOr (fileReadString (str stubDir "/stdin")) ""))
+              (body (stringJoin (configRows config "data-raw") ""))]
+          (and (checkTrue "intentPlan stub staged" staged)
+            (check "LEON-INTENT-PASS: a vendor request built for intent plan carries plan" "true"
+              (if (stringContains? body "\"intent\": \"plan\"") "true" "false")))))))
 
 fn ! checkFreshDir root: String -> Bool
   (let [(base (str root "/tmp"))
@@ -400,7 +416,7 @@ fn ! checkFreshDir root: String -> Bool
       (check "freshDir! skips the taken name" (str base "/aslFresh_other") (mt got ((ok d) d) ((err e) (pv/errorMessage e))))))
 
 fn ! checkTempDirs root: String -> Bool
-  (mt (pv/makeProvider! "codex" "scout" root "" 600 "stemp" 1200 true (envFor! root (str root "/stub/temp") "stub" "" "" ""))
+  (mt (pv/makeProvider! "codex" "scout" root "" 600 "stemp" 1200 true (envFor! root (str root "/stub/temp") "stub" "" "" "") "auto")
     ((err e) (checkTrue (str "tempDir provider: " (pv/errorMessage e)) false))
     ((ok p)
       (mt p
@@ -448,8 +464,9 @@ fn ! runTests -> Bool
            (redirect (checkRedirect root))
            (temps (checkTempDirs root))
            (freshOk (checkFreshDir root))
+           (intentPlan (checkIntentPlan root))
            (removed (ok? (pathRemove root)))]
        (and (checkTrue (str "the fixture holds at least 150 cases: " (stringFromInt64 (listLength lines))) (>= (listLength lines) 150))
          (and (checkTrue "scratch root and stub bin ready" ready)
-           (and (checkTrue "every case passed" (and redirect (and temps (and freshOk (listAll? (fn [r] r) results)))))
+           (and (checkTrue "every case passed" (and redirect (and temps (and freshOk (and intentPlan (listAll? (fn [r] r) results))))))
              (checkTrue "scratch root removed" removed)))))))

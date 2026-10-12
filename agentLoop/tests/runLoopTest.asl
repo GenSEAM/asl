@@ -41,6 +41,13 @@ fn makeEnvWith sid: (Option String) task: String root: String journal: String bu
     :gateTimeout (some 10) :wallBudget wall :resume resume :intent (some "patch") :plan false :specCheck false
     :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
 
+fn makeEnvModel id: String model: String contextTokens: (Option Int64) root: String journal: String -> s/LoopEnv
+  (s/LoopEnv :provider fakeTurn :task "context window check" :modeHint (some "implement") :owns (list) :gates (list)
+    :rootDir root :budget 4 :journalPath journal :maxRetries 0 :sessionId (some id)
+    :base (some "") :contextTokens contextTokens :model (some model)
+    :gateTimeout (some 10) :wallBudget none :resume none :intent (some "patch") :plan false :specCheck false
+    :next fakeTurn :advise fakeAdvice :review fakeAdvice :newId fakeId :now fakeNow :sleep fakeSleep)
+
 ; (:m :ref PREFETCH-WIRE)
 fn makeEnvOwns id: String task: String root: String journal: String owns: (List String) -> s/LoopEnv
   (s/LoopEnv :provider fakeTurn :task task :modeHint (some "implement") :owns owns :gates (list)
@@ -464,6 +471,12 @@ fn ! runTests -> Bool
         escalatedEnv (makeEnv "loopRun07" "escalated without receipt" tmp (str tmp "/loopRunTest-escalated.asn") 9 none (list) none)
         escalatedResult (rl/runLoopWith! escalatedEnv (onState escalatedBody))
         baseState (rl/stateFor noWriteEnv)
+        deepseekFallbackEnv (makeEnvModel "loopRunCtxA" "deepseekPro" none tmp (str tmp "/loopRunTest-ctxFallback.asn"))
+        deepseekFallbackState (rl/stateFor deepseekFallbackEnv)
+        minimaxFallbackEnv (makeEnvModel "loopRunCtxB" "ollama/minimax-m3:latest" none tmp (str tmp "/loopRunTest-ctxFallbackMm.asn"))
+        minimaxFallbackState (rl/stateFor minimaxFallbackEnv)
+        deepseekExplicitEnv (makeEnvModel "loopRunCtxC" "deepseekPro" (some 50000) tmp (str tmp "/loopRunTest-ctxExplicit.asn"))
+        deepseekExplicitState (rl/stateFor deepseekExplicitEnv)
         gateEnv (makeEnv "loopRun11" "declared gate head" tmp (str tmp "/loopRunTest-gate.asn") 40 none (list "false") none)
         redGate (g/makeGateResult "false" 1 "" "" false 0)
         greenGate (g/makeGateResult "false" 0 "" "" false 0)
@@ -623,6 +636,9 @@ fn ! runTests -> Bool
                                "\n(:prefetch (:file \"prefetch.txt\" :lines (1 1) :content \"hello prefetch\\n\"))"))
                       "turn 1's state carries the prefetched block for a task with :owns")
                     (assert (= noOwnsState.prefetch "") "a task with no :owns carries no prefetch block in turn 1's state")
+                    (assert (>= (optionOr deepseekFallbackState.contextTokens 0) 120000) "LEON-CONTEXT-WINDOW: a deepseek model with no explicit contextTokens falls back above the 8000 floor")
+                    (assert (>= (optionOr minimaxFallbackState.contextTokens 0) 120000) "LEON-CONTEXT-WINDOW: a minimax model with no explicit contextTokens falls back above the 8000 floor")
+                    (assert (= deepseekExplicitState.contextTokens (some 50000)) "LEON-CONTEXT-WINDOW: an explicit contextTokens wins over the deepseek family default")
                     (finishPathTests tmp)
                     (assert (ok? (removeIfExists! tmp)) "the temporary test root is removed")
                     (assert (mt (fileStat tmp) ((ok _) false) ((err _) true)) "no temporary test root is left behind")

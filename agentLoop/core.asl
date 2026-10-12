@@ -634,9 +634,21 @@ enum Window
 
 ; (:m :ref SPECCASE-DYNAMIC-PROBE :do "renderWindow always rendered the newest ('last') history entry whole, uncapped, no matter how large; main.asl liveBody! separately stored each turn's full rendered prompt (task + the whole prior transcript) as that turn's own history 'sent' field, so a later turn's always-whole 'last' re-embedded its predecessor's already-embedded predecessor, compounding every turn (observed 35 -> 223627 chars over 9 turns, >13GB RSS by turn 33). liveBody! now records only the turn's own content (task plus that turn's advisor/retry note) as 'sent', not the rendered transcript, so entry sizes stop compounding; boundedLast is the belt-and-suspenders half of the fix, truncating a single still-oversized entry with the same cut/elide vocabulary renderWindow already uses for older entries, instead of rendering it whole unconditionally")
 
+; (:m :tags (window))
+fn cutGot got: String -> String
+  (let [reads (cutReads got (stringLength got) 0 (list))]
+    (str "[" (stringFromInt64 (charLen got)) " chars from this turn, outlined instead of cut -- "
+         (if (listEmpty? reads) "its lines are in your note if you kept them" (str "its reads, re-read any by :start/:end or :symbol: " (joinSep reads "; ")))
+         "]"))
+
 fn boundedLast newest: Turn budget: Int64 -> String
   (let [whole (wholeTurn newest)]
-    (if (> (stringLength whole) budget) (cutTurn newest) whole))
+    (if (> (stringLength whole) budget)
+      (mt newest ((turnOf turn sent got)
+        (turnForm turn
+          (if (> (charLen sent) 300) (str (charPrefix sent 300) " ...") sent)
+          (if (> (charLen got) 300) (cutGot got) got))))
+      whole))
 
 ; (:m :tags (window cache))
 fn renderWindow history: (List Turn) budget: Int64 cut0: Int64 drop0: Int64 pinned: (List String) -> Window

@@ -565,6 +565,14 @@ fn buildIntelForm sub: String op: (List (Pair String c/KvVal)) -> String
                f0 keys)]
     (str args ")"))
 
+fn ! outlineText filePath: String root: String run: (fn [String String] -> t/AslRun) -> String
+  (let [form (buildIntelForm "outline" (list (pair "file" (c/kvStr filePath))))
+        res (run form root)]
+    (parseOutlineItems (aslRunOut res)))
+
+fn oversizeWholeHint -> String
+  "read exceeded the payload cap; this is the file's outline instead -- read a section by :symbol name, or :start n :end m"
+
 fn buildSearchForm qText: String limitStr: String engine: String -> String
   (let [f0 (str "(:search :query \"" (c/escapeAsn qText) "\"")
         f1 (if (allDigits limitStr) (str f0 " :limit " limitStr) f0)
@@ -738,6 +746,7 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               anchorVal (getKvStr op "anchor")
               startVal (getKvStr op "start")
               endVal (getKvStr op "end")
+              wholeFile (and (= symbolVal "") (and (= anchorVal "") (and (= startVal "") (= endVal ""))))
               widened (if (!= symbolVal "") (none) (t/widenToSymbol! filePath startVal endVal root cap budgetLeft run))
               effStart (mt widened ((some w) (mt w ((t/widenItem a _ _ _) (stringFromInt64 a)))) ((none) startVal))
               effEnd (mt widened ((some w) (mt w ((t/widenItem _ b _ _) (stringFromInt64 b)))) ((none) endVal))
@@ -748,6 +757,7 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
               errText (aslRunErr res)
               st (if (= code 0) "ok" "rejected")
               contentRaw (if (= code 0) (findReadContent out) "")
+              oversizeWhole (and wholeFile (and (= code 0) (> (stringLength contentRaw) cap)))
               fullPath (t/normPath (if (stringStartsWith? filePath "/") filePath (str root "/" filePath)))
               totalLines (countFileLines fullPath)
               mStart (findIntField out ":start ")
@@ -758,16 +768,19 @@ fn ! execAslOpCustom! op: (List (Pair String c/KvVal)) owns: (List String) root:
                           ((some? mFirst) (optionOr mFirst 1))
                           ((and (!= anchorVal "") (some? totalLines)) (findAnchorLine fullPath anchorVal))
                           (else 1))
-              bodyPair (formatReadBody contentRaw cap totalLines mStart mMore)
+              outline (if oversizeWhole (outlineText filePath root run) "")
+              useOutline (and oversizeWhole (not (stringEmpty? outline)))
+              bodyPair (if useOutline (pair outline outline) (formatReadBody contentRaw cap totalLines mStart mMore))
               fullCont (pairFirst bodyPair)
               body (pairSecond bodyPair)
               partial (or (!= body fullCont) (stringEndsWith? body "\n"))
               last0 (- (+ firstLine (countLns body (stringLength body) 0 0)) (if partial 1 0))
               lastLine (mt mMore ((some mr) (min last0 (- (pairFirst mr) 1))) ((none) last0))
-              span (if (and (!= body "") (= code 0)) (some (pair firstLine lastLine)) (none))
+              span (if (and (!= body "") (and (= code 0) (not useOutline))) (some (pair firstLine lastLine)) (none))
               errVal (if (!= code 0) (some (findReadError out "ERR_READ_FAILED")) (none))
               msgVal (cond
                        ((!= code 0) (some (findReadMsg out errText)))
+                       (useOutline (some (oversizeWholeHint)))
                        ((some? widened)
                          (mt (optionOr widened (t/widenItem 0 0 "" ""))
                            ((t/widenItem a b nm kd) (some (str "widened to the enclosing " kd " " nm ", lines " (stringFromInt64 a) "-" (stringFromInt64 b))))))

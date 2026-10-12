@@ -420,9 +420,11 @@ fn smallContextTokens -> Int64
 fn charsPerToken -> Int64
   3
 
+; (:m :tags (budget))
 fn familyTokens -> (List (Pair String Int64))
   (list (pair "gemini" (/ 180000 3)) (pair "claude" 100000) (pair "opus" 100000) (pair "sonnet" 100000)
-        (pair "haiku" 100000) (pair "gpt" 100000) (pair "codex" 100000) (pair "glm" 100000))
+        (pair "haiku" 100000) (pair "gpt" 100000) (pair "codex" 100000) (pair "glm" 100000)
+        (pair "deepseek" 120000) (pair "minimax" 120000))
 
 fn contextTokensFor model: (Option String) contextTokens: j/Json split: Bool -> Int64
   (if (pyTruthy contextTokens)

@@ -46,6 +46,7 @@ fn ! buildTree real: String -> Bool
         steps (list
                 (ok? (dirCreate real))
                 (ok? (dirCreate binDir))
+                (ok? (dirCreate (str real "/.asl/mem")))
                 (writeOk (str real "/short.txt") (stringJoin (map (fn [i] (str "line " (stringFromInt64 i) "\n")) (range 1 11)) ""))
                 (writeOk (str real "/long.txt") (stringJoin (map (fn [i] (str "line " (stringFromInt64 i) "\n")) (range 1 81)) ""))
                 (writeOk (str real "/empty.txt") "")
