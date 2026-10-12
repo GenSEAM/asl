@@ -1,5 +1,5 @@
 (module asl-cli/nativeCli
-  :x [cacheDir! headPath underRoot fresh? verbKind nativeGate! hostEntry!]
+  :x [cacheDir! headPath underRoot fresh? probe? alive? verbKind nativeGate! hostEntry!]
   :i [(asl/packages/asl-cli/src/system :a sys)])
 
 fn ! cacheDir! -> String
@@ -41,13 +41,36 @@ fn ! allSame? root: String dir: String paths: (List String) -> Bool
     ((none) true)
     ((some p) (if (sameBytes? (underRoot root p) (str dir "/src/" p)) (allSame? root dir (optionOr (listTail paths) (list))) false)))
 
+fn ! shQuote s: String -> String
+  (str "'" (stringReplace s "'" "'\\''") "'")
+
+fn ! boundedCapture! cmd: String timeoutMs: Int64 -> sys/Captured
+  (mt (processSpawn cmd)
+    ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))
+    ((ok h) (mt (processWait h timeoutMs)
+              ((err e) (sys/Captured :exitCode 127 :stdout "" :stderr e))
+              ((ok o) (sys/Captured :exitCode o.exitCode :stdout o.stdout :stderr o.stderr)))))
+
 fn ! fresh? root: String dir: String -> Bool
   (if (or (stringEmpty? dir) (not (sys/executable? (str dir "/bin"))))
     false
-    (mt (fileRead (str dir "/deps"))
+    (mt (fileRead (str dir "/clang-version"))
       ((err _) false)
-      ((ok text) (let [(paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines text)))]
-                   (if (listEmpty? paths) false (allSame? root dir paths))))))
+      ((ok expected) (let [(actual (boundedCapture! (str (shQuote (optionOr (envGet "CLANG") "clang")) " --version") 10000))]
+        (and (= actual.exitCode 0)
+          (and (= (stringTrim expected) (stringTrim (optionOr (listHead (stringLines actual.stdout)) "")))
+            (mt (fileRead (str dir "/deps"))
+              ((err _) false)
+              ((ok text) (let [(paths (filter (fn [(p String)] -> Bool (not (stringEmpty? p))) (stringLines text)))]
+                           (if (listEmpty? paths) false (allSame? root dir paths)))))))))))
+
+fn ! probe? root: String dir: String -> Bool
+  (let [(cmd (str "ASL_CLI_ENTRY_PID=$$ ASL_NATIVE_CLI_DIR=" (shQuote dir) " ASL_NATIVE_QUIET_PID=$$ exec " (shQuote (str dir "/bin")) " test " (shQuote (str root "/asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl"))))
+        (result (boundedCapture! cmd 30000))]
+    (if (and (= result.exitCode 0)
+          (and (stringContains? result.stdout "passTest.asl: 1 assertion(s) executed") (not (stringContains? result.stdout "asl-host"))))
+      true
+      (do (sys/sayErr! (str "native CLI self-probe: exit=" (stringFromInt64 result.exitCode) " stdout=" result.stdout " stderr=" result.stderr)) false)))
 
 fn envName row: String -> String
   (mt (stringIndexOf row "=") ((some i) (optionOr (stringSlice row 0 i) row)) ((none) row))
@@ -84,7 +107,9 @@ fn detachScript -> String
 fn ! spawnBuilder! ctx: sys/Context cache: String lock: String -> String
   (let [(log (str cache "/build.log"))
         (native (str ctx.root "/asl/host/out/aslNativeBuild"))
-        (builder (if (sys/executable? native) (list native) (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/nativeBuild.asl"))))
+        (owner (fileWrite (str lock "/owner") (str (stringFromInt64 (procSelf)) "\n")))
+        (builder (if (and (sys/executable? native) (fresh? ctx.root (str ctx.root "/asl/host/out/aslNativeBuild-fresh")))
+                       (list native) (list ctx.hostBin "run" (str ctx.root "/asl/packages/asl-cli/src/nativeBuild.asl"))))
         (argv (listAppend (list "/bin/sh" "-c" (detachScript) "sh" "nice" "-n" "15") (listAppend builder (list ctx.root cache "--lock-owner" (stringFromInt64 (procSelf))))))
         (d (mt (sys/captureWith! argv (some ctx.root) (list (str "NATIVE_CLI_LOG=" log)))
              ((ok c) c)
@@ -110,9 +135,10 @@ fn ! startBuild! ctx: sys/Context cache: String tries: Int64 last: String -> Str
                        (do (pathRemove lock) (startBuild! ctx cache (- tries 1) "a stale build lock was cleared"))))))))))
 
 fn ! waitBuild! lock: String deadlineNs: Int64 -> Bool
-  (if (and (alive? (heldPid lock)) (< (monotonicNs) deadlineNs))
+  (let [(owner (optionOr (stringToInt64 (stringTrim (resultOr (fileRead (str lock "/owner")) ""))) 0))]
+  (if (and (alive? (heldPid lock)) (or (= owner 0) (alive? owner)) (< (monotonicNs) deadlineNs))
     (do (sleepMs 1000) (waitBuild! lock deadlineNs))
-    true)
+    true))
 
 fn ! execNative! ctx: sys/Context dir: String args: (List String) -> String
   (let [(code (execWith! (cons (str dir "/bin") args) (list) (list (str "ASL_NATIVE_CLI_DIR=" dir) (str "ASL_NATIVE_QUIET_PID=" (stringFromInt64 (procSelf))))))]
@@ -124,13 +150,14 @@ fn ! timeoutS! -> Int64
 fn ! headDir! cache: String root: String -> String
   (stringTrim (resultOr (fileRead (headPath cache root)) ""))
 
-fn ! awaitNative! ctx: sys/Context cache: String stale: String args: (List String) rounds: Int64 -> String
-  (let [(_ (waitBuild! (str cache "/lock") (+ (monotonicNs) (* (+ (timeoutS!) 60) 1000000000))))
+fn ! awaitNative! ctx: sys/Context cache: String stale: String args: (List String) -> String
+  (let [(deadline (+ (monotonicNs) (* (timeoutS!) 1000000000)))
+        (_ (waitBuild! (str cache "/lock") deadline))
         (built (headDir! cache ctx.root))]
     (cond
-      ((and (!= built stale) (fresh? ctx.root built)) (execNative! ctx built args))
-      ((<= rounds 1) (str "its build did not finish (see " cache "/build.log)"))
-      (else (do (startBuild! ctx cache 2 "") (awaitNative! ctx cache stale args (- rounds 1))))))
+      ((and (!= built stale) (fresh? ctx.root built) (probe? ctx.root built)) (execNative! ctx built args))
+      ((>= (monotonicNs) deadline) "its build exceeded ASL_NATIVE_CLI_TIMEOUT")
+      (else (str "its build did not finish (see " cache "/build.log)"))))
 
 fn ! nativeWhy! ctx: sys/Context args: (List String) -> String
   (let [(cache (cacheDir!))
@@ -138,11 +165,11 @@ fn ! nativeWhy! ctx: sys/Context args: (List String) -> String
         (dir (headDir! cache ctx.root))]
     (cond
       ((not (sys/isFile? (str ctx.root "/asl/host/out/libaslrt.a"))) "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
-      ((and (!= dir stale) (fresh? ctx.root dir)) (execNative! ctx dir args))
+      ((and (!= dir stale) (fresh? ctx.root dir)) (if (probe? ctx.root dir) (execNative! ctx dir args) "the cached binary failed its self-probe"))
       (else
         (let [(why (startBuild! ctx cache 2 ""))]
           (cond
-            ((not (stringEmpty? (optionOr (envGet "ASL_NATIVE_CLI_WAIT") ""))) (awaitNative! ctx cache stale args 3))
+            ((not (stringEmpty? (optionOr (envGet "ASL_NATIVE_CLI_WAIT") ""))) (awaitNative! ctx cache stale args))
             ((stringEmpty? stale) why)
             (else (str "the cached binary predates its sources and " why)))))))
 

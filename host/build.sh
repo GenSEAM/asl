@@ -269,8 +269,9 @@ native_cli() {
   [ -z "$MODE" ] && [ -f "$PACKAGES/asl-cli/src/nativeBuild.asl" ] || return 0
   asl1=$(native_asl1 "$OUT/$RT_NAME") || { echo "build.sh: no native CLI: no native asl1" >&2; return 0; }
   root=$(cd "$HERE/../.." && pwd -P)
+  clang_version=$("$CLANG" --version | head -n 1)
   deps=$(cd "$root" && ASL_PRELUDE="$root/asl/prelude/prelude.asl" "$asl1" deps asl/packages/asl-cli/src/nativeBuild.asl) || { echo "build.sh: no native CLI: asl1 deps of asl-cli/nativeBuild failed" >&2; return 0; }
-  key=$( { echo "$asl1"; for f in $deps "$root"/asl/prelude/prelude.asl "$root"/asl/prelude/native/*.asl; do case $f in (/*) ;; (*) f="$root/$f" ;; esac; echo "${f#"$root"/}"; cat "$f"; done; } | hash_stdin )
+  key=$( { echo "$asl1"; echo "$clang_version"; for f in $deps "$root"/asl/prelude/prelude.asl "$root"/asl/prelude/native/*.asl; do case $f in (/*) ;; (*) f="$root/$f" ;; esac; echo "${f#"$root"/}"; cat "$f"; done; } | hash_stdin )
   dir="$CACHE_DIR/nativeBuild/$key"
   if [ ! -x "$dir/aslNativeBuild" ]; then
     tmp="$CACHE_DIR/nativeBuild/.tmp.$$"
@@ -284,6 +285,16 @@ native_cli() {
     fi
   fi
   install_copy "$dir/aslNativeBuild" "$OUT/aslNativeBuild"
+  stamp="$OUT/aslNativeBuild-fresh"
+  rm -rf "$stamp" && mkdir -p "$stamp/src"
+  printf '%s\n' "$deps" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in /*) rel=${f#"$root"/} ;; *) rel=$f; f="$root/$f" ;; esac
+    mkdir -p "$stamp/src/$(dirname "$rel")" && cp "$f" "$stamp/src/$rel" || exit 1
+    printf '%s\n' "$rel"
+  done > "$stamp/deps"
+  printf '%s\n' "$clang_version" > "$stamp/clang-version"
+  cp "$OUT/aslNativeBuild" "$stamp/bin" && chmod +x "$stamp/bin"
   "$OUT/aslNativeBuild" "$root" --if-cold >&2 || echo "build.sh: the native CLI build failed; bin/asl falls back to asl-host" >&2
 }
 native_cli

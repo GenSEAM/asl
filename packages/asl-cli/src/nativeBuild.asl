@@ -8,6 +8,8 @@
   (:f tmp String)
   (:f lib String)
   (:f base String)
+  (:f clangVersion String)
+  (:f owner String)
   (:f deadlineNs Int64)
   (:f maxDesc Int64))
 
@@ -37,11 +39,20 @@ fn ! say! line: String -> Bool
 fn ! envInt! name: String fallback: Int64 -> Int64
   (optionOr (stringToInt64 (optionOr (envGet name) "")) fallback)
 
+fn ! clang! -> String
+  (optionOr (envGet "CLANG") "clang")
+
 fn ! remainingS b: Build -> Int64
   (max 1 (/ (- b.deadlineNs (monotonicNs)) 1000000000))
 
+fn ! ownerAlive? b: Build -> Bool
+  (if (stringEmpty? b.owner) true
+    (and (> (optionOr (stringToInt64 b.owner) 0) 1) (nc/alive? (optionOr (stringToInt64 b.owner) 0))))
+
 fn ! child! b: Build argv: (List String) -> run/Done
-  (run/runOneLimited (run/job argv b.root (run/childEnv (list (str "ASL_PRELUDE=" b.root "/asl/prelude/prelude.asl")))) (run/limits (remainingS b) b.maxDesc))
+  (if (or (<= b.deadlineNs (monotonicNs)) (not (ownerAlive? b)))
+    (run/Done :idx 0 :exit 1 :out "" :ms 0 :verdict (if (ownerAlive? b) "deadline" "owner-gone"))
+    (run/runOneLimited (run/job argv b.root (run/childEnv (list (str "ASL_PRELUDE=" b.root "/asl/prelude/prelude.asl")))) (run/limits (remainingS b) b.maxDesc)))
 
 fn lastLines text: String -> String
   (let [(lines (stringLines (stringTrim text)))]
@@ -64,30 +75,30 @@ fn ! firstLine! b: Build argv: (List String) -> (Result String String)
   (let [(d (child! b argv))]
     (if (passed? d) (ok (stringTrim (optionOr (listHead (stringLines d.out)) ""))) (err (failure (stringJoin argv " ") d))))
 
-fn ! setup! root: String cacheDir: String -> (Result (Pair Build String) String)
+fn ! setup! root: String cacheDir: String owner: String -> (Result (Pair Build String) String)
   (let [(lib (str root "/asl/host/out/libaslrt.a"))
-        (start (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base ""
+        (start (Build :root root :cache cacheDir :tmp (str cacheDir "/tmp." (stringFromInt64 (procSelf))) :lib lib :base "" :clangVersion "" :owner owner
                       :deadlineNs (+ (monotonicNs) (* (envInt! "ASL_NATIVE_CLI_TIMEOUT" 1800) 1000000000)) :maxDesc (envInt! "ASL_NATIVE_CLI_MAXDESC" 32)))]
     (if (not (sys/isFile? lib))
       (err "asl/host/out/libaslrt.a is absent (sh asl/host/build.sh)")
-      (mt (firstLine! start (list "clang" "-print-target-triple"))
+      (mt (firstLine! start (list (clang!) "-print-target-triple"))
         ((err e) (err e))
         ((ok machine)
           (let [(triple (seedTriple machine))]
             (mt (mt (fileRead (str root "/asl/seed/seed.asn")) ((err e) (none)) ((ok text) (seedRow text triple)))
               ((none) (err (str "no seed for " triple " in asl/seed/seed.asn")))
               ((some row)
-                (mt (firstLine! start (list "clang" "--version"))
+                (mt (firstLine! start (list (clang!) "--version"))
                   ((err e) (err e))
                   ((ok version)
                     (mt (shaOf lib)
                       ((err e) (err e))
-                      ((ok libSha) (mt (dirCreate start.tmp)
+                        ((ok libSha) (mt (dirCreate start.tmp)
                         ((err e) (err (str "cannot create " start.tmp ": " e)))
-                        ((ok _) (ok (pair (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) row)))))))))))))))
+                        ((ok _) (ok (pair (with (with start :base (sh/bytesSha256 (stringToBytes (str row "\n" libSha "\n" version)))) :clangVersion version) row)))))))))))))))
 
 fn ! link! b: Build ll: String out: String -> (Result String String)
-  (let [(d (child! b (list "clang" "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" b.lib "-lm" "-o" out)))]
+  (let [(d (child! b (list (clang!) "-O2" "-Wno-override-module" "-x" "ir" ll "-x" "none" b.lib "-lm" "-o" out)))]
     (if (passed? d) (ok out) (err (failure (str "clang link of " ll) d))))
 
 fn ! seed! b: Build row: String -> (Result String String)
@@ -152,7 +163,8 @@ fn ! copyAll! from: String to: String paths: (List String) -> (Result Unit Strin
 
 fn ! install! b: Build name: String tag: String entry: String key: String dir: String deps: (List String) bin: String -> (Result String String)
   (let [(staged (str b.tmp "/" name ".dir"))]
-    (mt (mt (dirCreate staged) ((err e) (err e)) ((ok _) (fileWrite (str staged "/deps") (str (stringJoin deps "\n") "\n"))))
+    (mt (mt (dirCreate staged) ((err e) (err e)) ((ok _) (mt (fileWrite (str staged "/deps") (str (stringJoin deps "\n") "\n"))
+      ((err e) (err e)) ((ok _) (fileWrite (str staged "/clang-version") (str b.clangVersion "\n"))))))
       ((err e) (err (str "cannot stage " staged ": " e)))
       ((ok _) (mt (copyAll! b.root (str staged "/src") deps)
         ((err e) (err e))
@@ -196,8 +208,8 @@ fn ! writeHead! b: Build dir: String -> (Result String String)
       ((err e) (err (str "cannot write " part ": " e)))
       ((ok _) (mt (pathRename part head) ((err e) (err (str "cannot install " head ": " e))) ((ok _) (ok dir))))))
 
-fn ! build! root: String cacheDir: String -> (Result String String)
-  (mt (setup! root cacheDir)
+fn ! build! root: String cacheDir: String owner: String -> (Result String String)
+  (mt (setup! root cacheDir owner)
     ((err e) (err e))
     ((ok ready)
       (let [(b (pairFirst ready))]
@@ -209,7 +221,7 @@ fn ! build! root: String cacheDir: String -> (Result String String)
               (mt (stage! b "cli" (str stage1 "/bin") (sys/baseName stage1) "asl/packages/asl-cli/src/native.asl"
                           (listAppend asl1Deps (list "asl/host/out/libaslrt.a" "asl/seed/seed.asn")))
                 ((err e) (err e))
-                ((ok cli) (writeHead! b cli)))))))))))
+                ((ok cli) (if (nc/probe? root cli) (writeHead! b cli) (err "the built native CLI failed its self-probe"))))))))))))
 
 fn flagValue args: (List String) flag: String -> (Option String)
   (mt (listIndexOf args flag)
@@ -229,10 +241,11 @@ fn ! main args: (List String) -> (Result Int64 String)
         (pid (stringFromInt64 (procSelf)))]
     (cond
       ((stringEmpty? root) (do (say! "usage: nativeBuild ROOT [CACHE] [--if-cold] [--lock-owner PID]") (ok 2)))
-      ((and (listContains? args "--if-cold") (sys/isFile? (nc/headPath cacheDir root))) (ok 0))
+      ((and (listContains? args "--if-cold") (let [(head (stringTrim (resultOr (fileRead (nc/headPath cacheDir root)) "")))] (and (nc/fresh? root head) (nc/probe? root head)))) (ok 0))
+      ((and (not (stringEmpty? owner)) (or (<= (optionOr (stringToInt64 owner) 0) 1) (not (nc/alive? (optionOr (stringToInt64 owner) 0))))) (do (releaseLock! cacheDir owner) (ok 1)))
       (else
         (let [(_ (say! (str "asl: native build pid " pid " started for " root)))
-              (code (mt (build! root cacheDir)
+              (code (mt (build! root cacheDir owner)
                       ((ok dir) (do (say! (str "asl: native build: " dir)) 0))
                       ((err e) (do (say! (str "asl: native build failed: " e)) 1))))
               (_ (pathRemove (str cacheDir "/tmp." pid)))
