@@ -21,7 +21,8 @@ fn verbKind args: (List String) -> String
            (or (stringStartsWith? verb ":")
                (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
                                      "crawler" "crawl" "engine" "mesh" "version" "-v" "--version"
-                                     "build" "audit" "pack") verb)))
+                                     "build" "audit" "pack"
+                                     "note" "doc" "lens" "consilium" "browser" "web" "search" "research") verb)))
         "forms")
       (else "host")))
 
