@@ -1,4 +1,4 @@
-(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy retiredProse parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
+(module asl-parser/ast :x [moduleNode ModuleNode SchemaNode EnumNode DefunNode EnumCase Param AstField TopForm ParseError PosForm KidForm readForms parse parseLegacy parseForTypeCheck retiredProse parseForChecker renderNode AstLit litInt litFloat litString litBool litUnit AstPattern patWildcard patVar patLit patTuple patRecord patCtor AstMatchArm matchArm makeMatchArm AstExpr exprLit exprIdent exprMember exprCall exprLet exprIf exprMatch exprTry exprBlock exprRecord exprCond exprLambda exprInterpolation AstType typeNamed typeTuple typeRecord typeFn charsWithin? tailExprs sexprItems nthExpr hasTailrec? isInlineBodyCandidate? typeNodeText joinFnHeader readKidForms kidFormsFor] :i [(lexer :a lx) (reader :a rd) (indentParser :a ip) (asl-syntax/core/tree :a tr) (fnHeader :a fh)])
 
 (schema ParseError (:f msg String) (:f line Int64) (:f col Int64))
 
@@ -381,6 +381,13 @@ fn parse src: String -> (Result (List TopForm) ParseError)
     ((none) (mt (parseLegacy src)
       ((err e) (err e))
       ((ok forms) (rejectBareLiteralTopExpr forms)))))
+
+fn parseForTypeCheck src: String -> (Result (List TopForm) ParseError)
+  (mt (retiredProse src)
+    ((some e) (err e))
+    ((none) (mt (parseForChecker src)
+      ((err e) (err e))
+      ((ok forms) (rejectBareLiteralTopExpr (desugarWith forms))))))
 
 fn parseLegacy src: String -> (Result (List TopForm) ParseError)
   (mt (parseForChecker src)

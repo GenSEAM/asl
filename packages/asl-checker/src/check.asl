@@ -1,4 +1,4 @@
-(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkSource checkFile! schemaOfCtor] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd)])
+(module asl-checker/check :x [InferState Deferred checkModule checkModuleIn checkModuleSource checkSource checkFile! schemaOfCtor] :i [(types :a ty) (unify :a u) (resolve :a r) (ast :a a) (reader :a rd)])
 
 (schema InferState (:f subst (Map Int64 ty/Type)) (:f nextVar Int64) (:f intSites (List (pair String Int64))) (:f mapSites (List (pair ty/Type String))) (:f diags (List ty/Diagnostic)) (:f deferred (List Deferred)))
 
@@ -459,8 +459,11 @@ fn bodyDiagPos d: a/DefunNode idx: Int64 ds: (List ty/Diagnostic) -> (Pair Int64
         (unknown (listAny? (fn [(diag ty/Diagnostic)] -> Bool (or (= diag.code "rule-1") (= diag.code "rule-2"))) ds))]
     (mt expr ((rd/sexprList _) (if (and unknown (> (pairSecond pos) 0)) (pair (pairFirst pos) (+ (pairSecond pos) 1)) pos)) (_ pos)))
 
+fn paramInferType p: a/Param summary: r/ModuleSummary deps: r/DepIndex -> ty/Type
+  (if (stringEmpty? p.type) (ty/tyCon "?" (list) (none) (none)) (qualifyTypeWithMod (ty/parseTypeStr p.type (list)) summary deps))
+
 fn checkDefunDiags d: a/DefunNode summary: r/ModuleSummary deps: r/DepIndex path: String -> (List ty/Diagnostic)
-  (let [(st0 (makeInferState)) (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type) (mapSet e p.name (qualifyTypeWithMod (ty/parseTypeStr p.type (list)) summary deps))) (mapEmpty) d.params)) (retTy (qualifyTypeWithMod (ty/parseTypeStr d.retType (list)) summary deps)) (scopeName (str "function " d.name)) (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState (noteMapType s (qualifyTypeWithMod (ty/parseTypeStr p.type (list)) summary deps) scopeName)) st0 d.params)) (stNote (noteMapType stParams retTy scopeName)) (bodyNodes d.body)]
+  (let [(st0 (makeInferState)) (env0 (fold (fn [(e (Map String ty/Type)) (p a/Param)] -> (Map String ty/Type) (mapSet e p.name (paramInferType p summary deps))) (mapEmpty) d.params)) (retTy (qualifyTypeWithMod (ty/parseTypeStr d.retType (list)) summary deps)) (scopeName (str "function " d.name)) (stParams (fold (fn [(s InferState) (p a/Param)] -> InferState (noteMapType s (paramInferType p summary deps) scopeName)) st0 d.params)) (stNote (noteMapType stParams retTy scopeName)) (bodyNodes d.body)]
     (if (listEmpty? bodyNodes) (list)
       (let [(allBodyRes (fold (fn [(accRes (Pair ty/Type InferState)) (ie (Pair Int64 rd/SExpr))] -> (Pair ty/Type InferState) (let [(i (pairFirst ie)) (e (pairSecond ie)) (before (listLength (pairSecond accRes).diags)) (res (runExprDirect e env0 (some retTy) false scopeName path summary deps (pairSecond accRes))) (pos (bodyDiagPos d i (pairSecond res).diags))] (pair (pairFirst res) (setDiags (pairSecond res) (placeFresh (pairSecond res).diags before pos))))) (pair (unitType) stNote) (zip (range 0 (listLength bodyNodes)) bodyNodes))) (lastTy (pairFirst allBodyRes)) (st1 (pairSecond allBodyRes)) (placed (listLength st1.diags)) (st2 (resolveDeferred (expectType st1 lastTy retTy (str "return of " d.name) path) summary path)) (st3Subst st2.subst) (dLit (checkLiteralRanges st2.intSites st3Subst path st2.diags)) (dMap (checkMapKeyRules st2.mapSites st3Subst summary deps path dLit))]
         (placeFresh dMap placed (bodyDiagPos d (- (listLength bodyNodes) 1) st2.diags)))))
@@ -533,7 +536,7 @@ fn checkSource src: String deps: (Map String r/ModuleSummary) path: String -> (L
   (mt (a/parseForChecker src) ((ok forms) (checkModule forms deps path)) ((err pe) (parseErrDiag pe path)))
 
 fn ! checkFile! path: String roots: (List String) -> (Result (List ty/Diagnostic) IoError)
-  (mt (fileRead path) ((err ioErr) (err ioErr)) ((ok src) (mt (a/parse src) ((err pe) (ok (parseErrDiag pe path))) ((ok forms) (let [(summary (r/collectSummary forms path)) (importPaths (r/mapValuesList summary.imports)) (allRoots (cons (optionOr (parentDir path) ".") roots))] (mt (r/loadModuleDeps! allRoots importPaths) ((err ioErr2) (err ioErr2)) ((ok deps) (ok (checkModuleSource forms deps path src)))))))))
+  (mt (fileRead path) ((err ioErr) (err ioErr)) ((ok src) (mt (a/parseForTypeCheck src) ((err pe) (ok (parseErrDiag pe path))) ((ok forms) (let [(summary (r/collectSummary forms path)) (importPaths (r/mapValuesList summary.imports)) (allRoots (cons (optionOr (parentDir path) ".") roots))] (mt (r/loadModuleDeps! allRoots importPaths) ((err ioErr2) (err ioErr2)) ((ok deps) (ok (checkModuleSource forms deps path src)))))))))
 
 fn parentDir p: String -> (Option String)
   (if (stringContains? p "/") (let [(parts (stringSplit p "/")) (segs (listReverse (r/safeTail (listReverse parts))))] (if (listEmpty? segs) (some ".") (some (stringJoin segs "/")))) (some "."))

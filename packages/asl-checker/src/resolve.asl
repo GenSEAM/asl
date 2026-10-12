@@ -1,4 +1,4 @@
-(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports] :i [(types :a ty) (ast :a a) (reader :a rd)])
+(module asl-checker/resolve :x [FunSummary SchemaSummary EnumSummary CaseSummary FieldSummary ModuleSummary emptyModuleSummary bodyPosAt placeDiags cleanNumSign collectSummary checkTypeTree dottedTypeTree listToSet firstCharStr firstExprEmpty firstExprUnit firstExprVect firstHeadIdent firstVectItems isLiteralAtom? listAppendOne loadModuleDeps! loadModuleDepsFrom! loadModuleClosure! parentDirOf resolveImport! emptyModIndex ModIndex Resolution ResStatus ModuleClosure mapValuesList modEnum modFun modImport matchFamily ctorPatternAtom? unreachableArmDiags modSchema resolveDepTarget resolveDepIn depCandidates depIndexOf depScanOf DepIndex resolveModule resolveModuleIn safeTail secondExprEmpty sexprToList sliceFrom withImports] :i [(types :a ty) (ast :a a) (reader :a rd)])
 
 (schema FunSummary (:f name String) (:f params (List (pair String String))) (:f ret String) (:f typevars (List String)) (:f hasDoc Bool) (:f effect Bool))
 
@@ -607,6 +607,10 @@ fn ! loadModuleDeps! roots: (List String) imports: (List String) -> (Result (Map
         (cond ((not (listEmpty? cl.unresolved)) (err (notFound)))
               ((not (listEmpty? cl.errors)) (err (other)))
               (else (ok cl.deps)))))
+
+fn ! loadModuleDepsFrom! roots: (List String) imports: (List String) seedDeps: (Map String ModuleSummary) seedIndex: ModIndex -> ModuleClosure
+  (let [(importers (fold (fn [(acc (List String)) (r String)] -> (List String) (mt (realPath! r) ((some d) (listAppendOne acc (str d "/_"))) ((none) acc))) (list) roots))]
+    (loadTop! importers (map (fn [(p String)] -> (Pair String String) (pair (lastSegOf p) p)) imports) true (ModuleClosure :deps seedDeps :paths (list) :unresolved (list) :errors (list) :index seedIndex) (list)))
 
 fn mapKeysSet m: (Map String ModuleSummary) -> (Map String Bool)
   (fold (fn [(acc (Map String Bool)) (k String)] -> (Map String Bool) (mapSet acc k true)) (mapEmpty) (mapKeys m))

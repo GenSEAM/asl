@@ -1,6 +1,6 @@
 (module asl-cli/build
   :x [buildCommand! hostArchive?]
-  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache)])
+  :i [(asl/packages/asl-cli/src/system :a sys) (asl/packages/asl-cli/src/asl1Cache :a cache) (asl/packages/asl-cli/src/verify :a verify)])
 
 fn usage -> String
   "usage: asl build FILE [-o OUT]"
@@ -99,7 +99,7 @@ fn ! link! ctx: sys/Context clang: String lib: String target: String out: String
 
 fn ! buildFile! ctx: sys/Context clang: String lib: String target: String given: String -> Int64
   (let [(out (if (stringEmpty? given) (defaultOut target) given))
-        (checked (sys/run! (list ctx.hostBin "check" target)))]
+        (checked (verify/nativeCheckPaths! (list target)))]
     (if (!= checked 0)
       checked
       (mt (tempDir! (let [(t (optionOr (envGet "TMPDIR") ""))] (if (stringEmpty? t) "/tmp" (if (stringEndsWith? t "/") (optionOr (stringSlice t 0 (- (stringLength t) 1)) t) t))) 0)

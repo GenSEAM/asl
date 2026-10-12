@@ -170,9 +170,9 @@ fn ! changedTest! ctx: sys/Context args: (List String) -> Int64
                     ((ok timeoutS) (sw/changedReport! base changed selected (sweepDone! ctx ws timeoutS 2 selected) frozen))))))))))))
 
 fn ! check! ctx: sys/Context args: (List String) -> Int64
-  (if (or (not (listEmpty? args)) (not (sys/executable? ctx.hostBin)))
+  (if (not (listEmpty? args))
     (cmd/dispatch! ctx "check" args)
-    (mt (sw/main (list "check" ctx.hostBin)) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
+    (mt (sw/nativeCheckSweep!) ((ok code) code) ((err e) (do (sys/sayErr! e) 1))))
 
 fn ! test! ctx: sys/Context args: (List String) -> Int64
   (let [(tracing (or (listContains? args "--trace") (= (optionOr (envGet "ASL_TRACE") "0") "1")))

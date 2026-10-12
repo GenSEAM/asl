@@ -1,6 +1,6 @@
 (module asl-cli/sweep
-  :x [main Done workspace! timeoutWanted! jobsWanted! plan! report! frozenCountFor! changedPlan! changedReport! changedDry! lastLine]
-  :i [(asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-gates/src/dyck :a dyck) (tools/testImpact :a impact)])
+  :x [main Done workspace! timeoutWanted! jobsWanted! plan! report! frozenCountFor! changedPlan! changedReport! changedDry! lastLine nativeCheckSweep!]
+  :i [(asl/packages/asl-gates/src/suiteRunner :a runner) (asl/packages/asl-gates/src/dyck :a dyck) (tools/testImpact :a impact) (asl-checker/checkCached :a cc)])
 
 (schema Job
   (:f index Int64)
@@ -268,6 +268,37 @@ fn ! report! verb: String runnerName: String files: (List String) bad: (List (Pa
     (do (say! (str "(:sweep :verb " verb " :runner \"" runnerName "\" :status " (if green ":passed" ":failed") " :files " (stringFromInt64 (+ (listLength files) (listLength bad)))
                   " :passed " (stringFromInt64 (listLength passed)) " :failed " (stringFromInt64 failed) counts " :frozen " (stringFromInt64 frozen) ")"))
         (if green 0 1)))
+
+fn checkRootsAt ws: String -> (List String)
+  (list ws (str ws "/asl/packages") (str ws "/asl"))
+
+fn ! checkVerdictDone! ws: String idx: Int64 path: String cache: cc/Cache -> (Pair Done cc/Cache)
+  (let [(r (cc/checkFileCached! (str ws "/" path) (checkRootsAt ws) cache))]
+    (mt (pairFirst r)
+      ((err _) (pair (Done :index idx :path path :code 1 :last (str "FAIL " path ": ERR_IO cannot open file (after 0 asserts)") :out "") (pairSecond r)))
+      ((ok v)
+        (if (listEmpty? v.diags)
+          (pair (Done :index idx :path path :code 0 :last (str "ok " path ": " (stringFromInt64 v.moduleCount) " module(s) checked") :out "") (pairSecond r))
+          (pair (Done :index idx :path path :code 1 :last (str "FAIL " path ": " (stringFromInt64 (listLength v.diags)) " error(s)") :out "") (pairSecond r))))))
+
+fn ! checkVerdictStep! ws: String files: (List (Pair Int64 String)) cache: cc/Cache acc: (List Done) -> (List Done)
+  (mt (listHead files)
+    ((none) acc)
+    ((some ip) (let [(r (checkVerdictDone! ws (pairFirst ip) (pairSecond ip) cache))]
+      (checkVerdictStep! ws (optionOr (listTail files) (list)) (pairSecond r) (listAppend acc (list (pairFirst r)))))))
+
+fn ! nativeCheckSweep! -> (Result Int64 String)
+  (mt (workspace!)
+    ((err e) (err e))
+    ((ok ws)
+      (mt (plan! "check" ws)
+        ((err e) (err e))
+        ((ok planned)
+          (let [(files (pairFirst planned))
+                (bad (pairSecond planned))
+                (frozen (frozenCountFor! "check" ws))
+                (done (checkVerdictStep! ws (enumerate files) (cc/emptyCache) (list)))]
+            (ok (report! "check" "native" files bad done frozen)))))))
 
 fn ! sweep! verb: String host: String -> (Result Int64 String)
   (mt (workspace!)
