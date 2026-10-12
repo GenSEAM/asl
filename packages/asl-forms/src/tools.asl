@@ -280,8 +280,34 @@ fn ! hasAsl? ws: String -> Bool
 fn realOr! p: String -> String
   (resultOr (realPath p) p)
 
+; (:m :ref NATIVE-TOOLS-CATALOGUE :do "isTc used to compare ctx.ws to ctx.toolRoot by bare realpath equality, so :scope toolchain ops (crawl, search, research, manage, engine, lens, agent, intel, tree, observe, audit, doctor, note, target, pack) vanished from (:tools) whenever ASL_ROOT pointed at a different worktree of the very same toolchain checkout than ctx.toolRoot (ASL_CLI_ROOT) resolved to -- the exact shape of a dev shell with a global ASL_ROOT set to the main checkout while asl runs from a worktree. Added gitCommonDirAbs!/sameToolchainRepo? to also treat ws and toolRoot as the same repo when their git common dirs agree (true for a worktree and its main checkout), keeping the cheap bare-equality path first")
+
+fn ! absolutizeCommonDir dir: String raw: String -> String
+  (realOr! (if (stringStartsWith? raw "/") raw (k/joinPath dir raw)))
+
+fn ! gitCommonDirParsed! stdout: String dir: String -> (Option String)
+  (let [(raw (s/pyStrip stdout))]
+    (if (stringEmpty? raw) (none) (some (absolutizeCommonDir dir raw))))
+
+fn ! gitCommonDirAbs! dir: String -> (Option String)
+  (mt (cp/exec! (cp/withTimeout (cp/withCwd (cp/cmd "git" (list "rev-parse" "--git-common-dir")) dir) 2000))
+    ((err _) (none))
+    ((ok out)
+      (if (!= out.exitCode 0)
+        (none)
+        (gitCommonDirParsed! out.stdout dir))))
+
+fn ! sameToolchainRepo? ws: String toolRoot: String -> Bool
+  (or (= (realOr! ws) (realOr! toolRoot))
+      (mt (gitCommonDirAbs! ws)
+        ((none) false)
+        ((some wsCommon)
+          (mt (gitCommonDirAbs! toolRoot)
+            ((none) false)
+            ((some trCommon) (= wsCommon trCommon))))))
+
 fn visibleOps! reg: Registry ctx: s/KnowCtx scopeAll: Bool -> (List ToolOp)
-  (let [(isTc (= (realOr! ctx.ws) (realOr! ctx.toolRoot)))
+  (let [(isTc (sameToolchainRepo? ctx.ws ctx.toolRoot))
         (has (hasAsl? ctx.ws))]
     (filter (fn [(o ToolOp)] -> Bool
               (cond
