@@ -553,6 +553,38 @@ fn withString m: ty/SsaModule s: String -> ty/SsaModule
 fn countIn xs: (List String) s: String -> Int64
   (listLength (filter (fn [(x String)] -> Bool (= x s)) xs))
 
+fn referencePoolIndex strings: (List String) s: String -> (Option Int64)
+  (listHead (filter (fn [(i Int64)] -> Bool (= (listGet strings i) (some s))) (range 0 (listLength strings))))
+
+fn referencePoolWith strings: (List String) wanted: (List String) -> (Pair (List String) (Map String Int64))
+  (fold (fn [(acc (Pair (List String) (Map String Int64))) (s String)] -> (Pair (List String) (Map String Int64))
+          (let [(have (pairFirst acc))]
+            (mt (referencePoolIndex have s)
+              ((some i) (pair have (mapSet (pairSecond acc) s i)))
+              ((none) (pair (listAppend have (list s)) (mapSet (pairSecond acc) s (listLength have)))))))
+        (pair strings (mapEmpty)) wanted)
+
+fn poolMapsAgree? wanted: (List String) a: (Map String Int64) b: (Map String Int64) -> Bool
+  (and (= (mapSize a) (mapSize b))
+       (listAll? (fn [(s String)] -> Bool (= (mapGet a s) (mapGet b s))) wanted))
+
+fn ! checkPoolWith label: String strings: (List String) wanted: (List String) -> Bool
+  (let [(want (referencePoolWith strings wanted))
+        (got (rt/poolWith strings wanted))]
+    (do (assert (= (pairFirst want) (pairFirst got)) (str label ": poolWith's pooled strings equal the reference's; reference=" (pairFirst want) " got=" (pairFirst got)))
+        (assert (poolMapsAgree? wanted (pairSecond want) (pairSecond got)) (str label ": poolWith's index map agrees with the reference on every wanted key"))
+        true))
+
+fn ! testPoolWith -> Bool
+  (do (checkPoolWith "empty/empty" (list) (list))
+      (checkPoolWith "empty strings" (list) (list "a" "b" "a" "c"))
+      (checkPoolWith "no wanted" (list "x" "y" "z") (list))
+      (checkPoolWith "all already present" (list "a" "b" "c") (list "c" "a" "b" "a"))
+      (checkPoolWith "all new" (list "a" "b") (list "c" "d" "c" "e"))
+      (checkPoolWith "duplicates in strings keep the first index" (list "x" "y" "x" "z" "x") (list "x" "y" "z" "x"))
+      (checkPoolWith "mixed present and new with repeats" (list "a" "b" "a") (list "b" "c" "a" "c" "d" "b" "d"))
+      true)
+
 fn ! testRouteModule -> Bool
   (let [(facts (libc/darwinArm64Facts))]
     (mt (lowered "sysInfo" (infoSource))
@@ -608,6 +640,7 @@ fn ! runTests -> Bool
     (do (assert (= made.exitCode 0) "mktemp -d makes a work directory")
         (testConsts work)
         (testArchive)
+        (testPoolWith)
         (testRouteModule)
         (testFd work)
         (testInfo work)

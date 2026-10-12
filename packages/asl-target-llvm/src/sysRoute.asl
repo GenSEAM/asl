@@ -1,5 +1,5 @@
 (module asl-target-llvm/sysRoute
-  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! internalize routeConst signalNames errKinds tagGuardText]
+  :x [RouteTable Routed routeTables tableBuiltins wrapperName routes? routeModule tripleOf routeFactsFor hostFactsOf routeHost! internalize routeConst signalNames errKinds tagGuardText poolWith]
   :i [(asl-ir/types :a ty)
       (asl-ir/verify :a vfy)
       (asl-target-llvm/libc :a libc)
@@ -224,7 +224,7 @@ fn rewriteFunction names: (List String) f: ty/SsaFunction -> ty/SsaFunction
          f.blocks))
 
 fn poolIndex strings: (List String) s: String -> (Option Int64)
-  (listHead (filter (fn [(i Int64)] -> Bool (= (listGet strings i) (some s))) (range 0 (listLength strings))))
+  (listIndexOf strings s)
 
 fn routeDiag code: String message: String locus: String -> ty/IrDiag
   (ty/makeIrDiag code message locus)
@@ -263,13 +263,25 @@ fn mergeRecords own: (List ty/SsaRecordDecl) added: (List ty/SsaRecordDecl) locu
 fn poolAt pool: (Map String Int64) s: String -> Int64
   (optionOr (mapGet pool s) -1)
 
+fn stringIndex strings: (List String) -> (Map String Int64)
+  (pairSecond
+    (fold (fn [(acc (Pair Int64 (Map String Int64))) (s String)] -> (Pair Int64 (Map String Int64))
+            (let [(i (pairFirst acc)) (m (pairSecond acc))]
+              (mt (mapGet m s)
+                ((some _) (pair (+ i 1) m))
+                ((none) (pair (+ i 1) (mapSet m s i))))))
+          (pair 0 (mapEmpty)) strings))
+
 fn poolWith strings: (List String) wanted: (List String) -> (Pair (List String) (Map String Int64))
-  (fold (fn [(acc (Pair (List String) (Map String Int64))) (s String)] -> (Pair (List String) (Map String Int64))
-          (let [(have (pairFirst acc))]
-            (mt (poolIndex have s)
-              ((some i) (pair have (mapSet (pairSecond acc) s i)))
-              ((none) (pair (listAppend have (list s)) (mapSet (pairSecond acc) s (listLength have)))))))
-        (pair strings (mapEmpty)) wanted)
+  (let [(grown (fold (fn [(acc (Pair (List String) (Map String Int64))) (s String)] -> (Pair (List String) (Map String Int64))
+                        (let [(have (pairFirst acc)) (idx (pairSecond acc))]
+                          (mt (mapGet idx s)
+                            ((some _) acc)
+                            ((none) (pair (listAppend have (list s)) (mapSet idx s (listLength have)))))))
+                      (pair strings (stringIndex strings)) wanted))
+        (idx (pairSecond grown))]
+    (pair (pairFirst grown)
+          (fold (fn [(pool (Map String Int64)) (s String)] -> (Map String Int64) (mapSet pool s (poolAt idx s))) (mapEmpty) wanted)))
 
 fn tablesFunctions facts: libc/TripleFacts tables: (List RouteTable) pool: (Map String Int64) -> (Result (List ty/SsaFunction) String)
   (fold (fn [(acc (Result (List ty/SsaFunction) String)) (t RouteTable)] -> (Result (List ty/SsaFunction) String)
