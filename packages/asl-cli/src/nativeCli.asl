@@ -17,7 +17,11 @@ fn verbKind args: (List String) -> String
   (let [(verb (optionOr (listHead args) "help"))]
     (cond
       ((or (listContains? (list "run" "test" "parse" "eval" "launch") verb) (stringEndsWith? verb ".asl")) "native")
-      ((or (stringStartsWith? verb "(") (or (stringStartsWith? verb ":") (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace") verb))) "forms")
+      ((or (stringStartsWith? verb "(")
+           (or (stringStartsWith? verb ":")
+               (listContains? (list "rpc" "intel" "coupling" "graph" "complexity" "vitality" "full" "stubs" "trace"
+                                     "crawler" "crawl" "engine" "mesh" "version" "-v" "--version") verb)))
+        "forms")
       (else "host")))
 
 fn ! direct? -> Bool

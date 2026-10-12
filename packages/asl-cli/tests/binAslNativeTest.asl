@@ -46,6 +46,28 @@ fn ! testUnsupportedFallsBack root: String -> Bool
         (refute (stringContains? failing.out "runs on asl-host") "a native test failure is never rerun on asl-host")
         true))
 
+fn ! testSilentVerbs root: String -> Bool
+  (let [(version (binAsl! root (list "version") (envWith (list))))
+        (crawler (binAsl! root (list "crawler") (envWith (list))))
+        (crawl (binAsl! root (list "crawl") (envWith (list))))
+        (engine (binAsl! root (list "engine" "status") (envWith (list))))
+        (mesh (binAsl! root (list "mesh" "status") (envWith (list))))]
+    (do (assert (= version.exit 0) (str "bin/asl version still answers: " version.out))
+        (refute (stringContains? version.out "is not native yet") "version runs natively without a host-fallback note")
+        (assert (stringContains? version.out "asl 0.1.0 (bin/asl)") "version keeps its own banner line")
+        (assert (= crawler.exit 0) (str "bin/asl crawler still answers: " crawler.out))
+        (refute (stringContains? crawler.out "is not native yet") "crawler runs natively without a host-fallback note")
+        (assert (stringContains? crawler.out "asl-crawler: Sovereign Web Crawler") "crawler keeps its usage banner")
+        (assert (= crawl.exit 0) (str "bin/asl crawl (alias) still answers: " crawl.out))
+        (refute (stringContains? crawl.out "is not native yet") "crawl alias runs natively without a host-fallback note")
+        (assert (= engine.exit 0) (str "bin/asl engine status still answers: " engine.out))
+        (refute (stringContains? engine.out "is not native yet") "engine runs natively without a host-fallback note")
+        (assert (stringContains? engine.out "ASL ENGINE STATUS") "engine keeps its status banner")
+        (assert (= mesh.exit 0) (str "bin/asl mesh status still answers: " mesh.out))
+        (refute (stringContains? mesh.out "is not native yet") "mesh runs natively without a host-fallback note")
+        (assert (stringContains? mesh.out "ASL AUDIT MESH STATUS") "mesh keeps its status banner")
+        true))
+
 fn ! testQuiet root: String host: String -> Bool
   (let [(dir (str root "/.asl/cache/binAslQuiet/" (stringFromInt64 (procSelf))))
         (tag (str "quiet" (stringFromInt64 (procSelf)) "x" (stringFromInt64 (nowNs))))
@@ -69,4 +91,4 @@ fn ! testQuiet root: String host: String -> Bool
 fn ! runTests -> Bool
   (let [(root (resultOr (realPath ".") "."))
         (host (str root "/asl/host/out/asl-host"))]
-    (and (testServed root host) (and (testUnsupportedFallsBack root) (testQuiet root host))))
+    (and (testServed root host) (and (testUnsupportedFallsBack root) (and (testSilentVerbs root) (testQuiet root host)))))
