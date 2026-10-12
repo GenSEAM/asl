@@ -1732,13 +1732,15 @@ fn visWithSchemaDefaults v: Vis key: String modName: String s: ast/SchemaNode ke
     (fold (fn [(acc Vis) (fieldName String)] -> Vis
             (let [(bareThunk (defaultThunkBareName s.name fieldName))
                   (sourceThunk (str keyPrefix bareThunk))
+                  (qualifiedThunk (qualify modName bareThunk))
                   (fieldTy (optionOr (mapGet fieldTypes fieldName) ""))
                   (callExpr (rd/sexprList (list (rd/sexprAtom sourceThunk))))
-                  (prevForKey (optionOr (mapGet acc.defaults key) (mapEmpty)))]
-              (Vis :arities (mapSet acc.arities sourceThunk 0) :ctors acc.ctors :records acc.records
+                  (prevForKey (optionOr (mapGet acc.defaults key) (mapEmpty)))
+                  (thunkSig (FnSig :params (list) :ret (annotTy fieldTy)))]
+              (Vis :arities (mapSet (mapSet acc.arities sourceThunk 0) qualifiedThunk 0) :ctors acc.ctors :records acc.records
                    :defaults (mapSet acc.defaults key (mapSet prevForKey fieldName callExpr))
-                   :targets (mapSet acc.targets sourceThunk (qualify modName bareThunk)) :foreign acc.foreign :hidden acc.hidden
-                   :sigs (mapSet acc.sigs sourceThunk (FnSig :params (list) :ret (annotTy fieldTy))))))
+                   :targets (mapSet acc.targets sourceThunk qualifiedThunk) :foreign acc.foreign :hidden acc.hidden
+                   :sigs (mapSet (mapSet acc.sigs sourceThunk thunkSig) qualifiedThunk thunkSig))))
           v (mapKeys (schemaDefaults s))))
 
 fn recordDecls forms: (List ast/TopForm) prefix: String -> (List ty/SsaRecordDecl)
@@ -1781,7 +1783,7 @@ fn addDecl keyPrefix: String modName: String exports: (Option (Map String Bool))
     ((ast/topSchema s) (let [(key (str keyPrefix s.name))]
                          (if (visible? exports s.name)
                            (visWithSchemaDefaults
-                             (with v :records (mapSet v.records key (schemaFields s)) :targets (mapSet v.targets key (qualify modName s.name)) :sigs (withFieldSigs v.sigs (qualify modName s.name) s))
+                             (with v :records (mapSet (mapSet v.records key (schemaFields s)) (qualify modName s.name) (schemaFields s)) :targets (mapSet v.targets key (qualify modName s.name)) :sigs (withFieldSigs v.sigs (qualify modName s.name) s))
                              key modName s keyPrefix)
                            (hide v key modName))))
     ((ast/topEnum e) (let [(decl (enumDecl modName e))

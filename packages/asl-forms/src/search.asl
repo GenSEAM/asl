@@ -1,6 +1,7 @@
 (module asl-forms/search
   :x [KnowCtx KnowOutcome queryStep! noteStep! whereStep! observeStep! observeResult kwOrder localDate! localDateAt! pyStrip pyDecode pySplitWs pyInt utf8Take utf8TakeLast splitLinesPy quoted stepHead okLine badLine procErrorMessage]
-  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-forms/vfs :a v)])
+  :i [(asl-forms/kernel :a k) (asl-proc/coreProcess :a cp) (asl-forms/vfs :a v)
+      (ws/asl/tools/observe/observe :a obs) (ws/asl/tools/observe/common :a oc)])
 
 
 (schema KnowCtx (:f ws String) (:f toolRoot String) (:f binDir String) (:f vfsDir String) (:f toolsFile String) (:f home String))
@@ -1436,19 +1437,39 @@ fn observeResult id: Int64 code: Int64 stdout: String stderr: String -> KnowOutc
               (msg (utf8TakeLast (cond ((not (stringEmpty? errText)) errText) ((not (stringEmpty? obOut)) obOut) (else "observe produced no receipt")) 400))]
           (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :exitCode " (stringFromInt64 code) " :message " (quoted msg)))))))
 
+fn safeObserveInProcessDim? dim: String -> Bool
+  (listContains? (list "memory" "session" "tokenCost") dim)
+
+fn obsEnvPair row: String -> (Pair String String)
+  (mt (stringIndexOf row "=")
+    ((some i) (pair (optionOr (stringSlice row 0 i) row) (optionOr (stringSlice row (+ i 1) (stringLength row)) "")))
+    ((none) (pair row "")))
+
+fn notCliRootKey p: (Pair String String) -> Bool
+  (!= (pairFirst p) "ASL_CLI_ROOT")
+
+fn observeInProcess! root: String ws: String argv: (List String) id: Int64 -> KnowOutcome
+  (let [(baseEnv (filter notCliRootKey (map obsEnvPair (envList))))
+        (env (cons (pair "ASL_CLI_ROOT" root) baseEnv))
+        (ctx (oc/Ctx :cwd ws :env env :spawnEnv (none) :now (/ (nowNs) 1000000000) :date ""))
+        (out (obs/runObserve ctx argv))]
+    (observeResult id out.code out.out out.err))
+
 fn observeStep! ctx: KnowCtx id: Int64 kw: (Map String String) args: (List String) keys: (List String) -> KnowOutcome
   (let [(dim (k/lstripColons (k/kwOr kw "dim" (optionOr (listHead args) ""))))
         (extra (fold (fn [(acc (List String)) (key String)] -> (List String)
                        (let [(v (optionOr (mapGet kw key) ""))]
                          (if (or (= key "dim") (stringEmpty? v)) acc (listAppend acc (list (str "--" key) (k/lstripColons v))))))
                      (list) keys))
-        (root ctx.toolRoot)
-        (host (optionOr (envGet "ASL_CLI_HOST_BIN") (k/joinPath (k/joinPath root "asl") "host/out/asl-host")))
-        (program (k/joinPath (k/joinPath root "asl") "tools/observe/observe.asl"))
-        (argv (listAppend (list host "run" program "--dim" dim) extra))]
-    (mt (runObserveArgv! argv ctx.ws root host 300000)
-      ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
-      ((ok out) (observeResult id out.exitCode out.stdout out.stderr))))
+        (root ctx.toolRoot)]
+    (if (safeObserveInProcessDim? dim)
+      (observeInProcess! root ctx.ws (listAppend (list "--dim" dim) extra) id)
+      (let [(host (optionOr (envGet "ASL_CLI_HOST_BIN") (k/joinPath (k/joinPath root "asl") "host/out/asl-host")))
+            (program (k/joinPath (k/joinPath root "asl") "tools/observe/observe.asl"))
+            (argv (listAppend (list host "run" program "--dim" dim) extra))]
+        (mt (runObserveArgv! argv ctx.ws root host 300000)
+          ((err e) (rejectedLine id "observe" "ERR_EXEC_FAILED" (str " :message " (quoted (procErrorMessage argv e)))))
+          ((ok out) (observeResult id out.exitCode out.stdout out.stderr))))))
 
 fn floorDiv a: Int64 b: Int64 -> Int64
   (/ a b)

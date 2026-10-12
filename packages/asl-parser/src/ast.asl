@@ -986,8 +986,13 @@ fn kidFormsForChecked src: String -> (Result (List KidForm) ParseError)
          (err pe)
          (mt (parseCstKidForms src) ((ok ks) (ok ks)) ((err _) (err pe)))))))
 
+fn exportNamesOf v: rd/SExpr -> (List String)
+  (mt v
+    ((rd/sexprList items) (atomsToStrings (optionOr (listTail items) (list))))
+    (_ (atomsToStrings (sexprItems v))))
+
 fn moduleExported m: rd/SExpr -> (List String)
-  (let [(raw (mt (findOpt (sexprItems m) ":export") ((some v) (atomsToStrings (sexprItems v))) ((none) (mt (findOpt (sexprItems m) ":x") ((some v) (atomsToStrings (sexprItems v))) ((none) (list))))))] (filter (fn [(s String)] -> Bool (!= s "list")) raw))
+  (mt (findOpt (sexprItems m) ":export") ((some v) (exportNamesOf v)) ((none) (mt (findOpt (sexprItems m) ":x") ((some v) (exportNamesOf v)) ((none) (list)))))
 
 fn moduleImports m: rd/SExpr -> (List (Pair String String))
   (mt (findOpt (sexprItems m) ":import") ((some v) (map importPair (filter rd/isList? (sexprItems v)))) ((none) (mt (findOpt (sexprItems m) ":i") ((some v) (map importPair (filter rd/isList? (sexprItems v)))) ((none) (list)))))
