@@ -39,7 +39,7 @@ fn ! testUnsupportedFallsBack root: String -> Bool
         (failing (binAsl! root (list "test" (fixture "failingProbe")) (envWith (list))))]
     (do (assert (= gap.exit 0) (str "a suite the native lowering rejects keeps the asl-host verdict: " gap.out))
         (assert (stringContains? gap.out (str "asl: " (fixture "unsupportedProbe") " runs on asl-host: ERR_NATIVE_UNSUPPORTED: ")) "the rerun note names the suite and the gap")
-        (assert (stringContains? gap.out "ERR_LOWER_UNSUPPORTED] 'quote'") "the note carries the lowering diagnostic")
+        (assert (stringContains? gap.out "ERR_LOWER_UNSUPPORTED] 'recur'") "the note carries the lowering diagnostic")
         (assert (stringContains? gap.out "unsupportedProbe.asl: 1 assertion(s) executed (1 passed)") "asl-host ran the suite's assertion")
         (assert (= failing.exit 1) (str "a suite that fails natively fails: " failing.out))
         (assert (stringContains? failing.out "ERR_ASSERT: assertion failed: two has two letters") "the native failure is reported")
@@ -51,7 +51,10 @@ fn ! testSilentVerbs root: String -> Bool
         (crawler (binAsl! root (list "crawler") (envWith (list))))
         (crawl (binAsl! root (list "crawl") (envWith (list))))
         (engine (binAsl! root (list "engine" "status") (envWith (list))))
-        (mesh (binAsl! root (list "mesh" "status") (envWith (list))))]
+        (mesh (binAsl! root (list "mesh" "status") (envWith (list))))
+        (build (binAsl! root (list "build" "--help") (envWith (list))))
+        (audit (binAsl! root (list "audit") (envWith (list))))
+        (pack (binAsl! root (list "pack" "--help") (envWith (list))))]
     (do (assert (= version.exit 0) (str "bin/asl version still answers: " version.out))
         (refute (stringContains? version.out "is not native yet") "version runs natively without a host-fallback note")
         (assert (stringContains? version.out "asl 0.1.0 (bin/asl)") "version keeps its own banner line")
@@ -66,6 +69,15 @@ fn ! testSilentVerbs root: String -> Bool
         (assert (= mesh.exit 0) (str "bin/asl mesh status still answers: " mesh.out))
         (refute (stringContains? mesh.out "is not native yet") "mesh runs natively without a host-fallback note")
         (assert (stringContains? mesh.out "ASL AUDIT MESH STATUS") "mesh keeps its status banner")
+        (assert (= build.exit 0) (str "bin/asl build --help still answers: " build.out))
+        (refute (stringContains? build.out "is not native yet") "build runs natively without a host-fallback note")
+        (assert (stringContains? build.out "usage: asl build FILE") "build keeps its usage line")
+        (assert (= audit.exit 0) (str "bin/asl audit still answers: " audit.out))
+        (refute (stringContains? audit.out "is not native yet") "audit runs natively without a host-fallback note")
+        (assert (stringContains? audit.out "(:audit :sub consistency") "audit keeps its consistency receipt")
+        (assert (= pack.exit 0) (str "bin/asl pack --help still answers: " pack.out))
+        (refute (stringContains? pack.out "is not native yet") "pack runs natively without a host-fallback note")
+        (assert (stringContains? pack.out "usage: asl pack") "pack keeps its usage line")
         true))
 
 fn ! testQuiet root: String host: String -> Bool
