@@ -155,6 +155,7 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (:f kind String)
   (:f base String)
   (:f keyEnv String)
+  (:f sessionHeader String)
   (:f timeoutSec Float64)
   (:f rpm Float64)
   (:f pool (Option GatewayPool)))
@@ -311,6 +312,24 @@ fn isValidEnvName? s: String -> Bool
       (if (isEnvStartChar (optionOr (stringSlice s 0 1) ""))
         (checkEnvChars s 1 n)
         false)))
+
+fn isHeaderNameChar c: String -> Bool
+  (let [(code (charCode c))]
+    (or (= c "-")
+        (and (>= code 65) (<= code 90))
+        (and (>= code 97) (<= code 122))
+        (and (>= code 48) (<= code 57))))
+
+fn checkHeaderNameChars s: String i: Int64 n: Int64 -> Bool
+  (if (>= i n) true
+    (if (isHeaderNameChar (optionOr (stringSlice s i (+ i 1)) ""))
+      (checkHeaderNameChars s (+ i 1) n)
+      false))
+
+fn isValidHeaderName? s: String -> Bool
+  (let [(n (stringLength s))]
+    (if (= n 0) false
+      (checkHeaderNameChars s 0 n)))
 
 fn rstripSlash s: String -> String
   (if (stringEndsWith? s "/")
@@ -770,13 +789,13 @@ fn defaultProviders! -> (Map String GatewayProvider)
                                    ((none) (none))
                                    ((some s) (if (isFloatString? s) (stringToFloat64 s) (mt (stringToInt64 s) ((some n) (some (int64ToFloat64 n)) ((none) (none)))))))
                                  300.0))
-        (p1 (GatewayProvider :id "agy" :kind "cli" :base "" :keyEnv "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
-        (p2 (GatewayProvider :id "codex" :kind "cli" :base "" :keyEnv "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
-        (p3 (GatewayProvider :id "claude" :kind "cli" :base "" :keyEnv "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
-        (p4 (GatewayProvider :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
-        (p5 (GatewayProvider :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
-        (p6 (GatewayProvider :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
-        (p7 (GatewayProvider :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :timeoutSec ollamaTimeout :rpm 0.0 :pool (none)))]
+        (p1 (GatewayProvider :id "agy" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
+        (p2 (GatewayProvider :id "codex" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
+        (p3 (GatewayProvider :id "claude" :kind "cli" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none)))
+        (p4 (GatewayProvider :id "gemini" :kind "openai" :base geminiBase :keyEnv "GEMINI_API_KEY" :sessionHeader "" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
+        (p5 (GatewayProvider :id "groq" :kind "openai" :base groqBase :keyEnv "GROQ_API_KEY" :sessionHeader "" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
+        (p6 (GatewayProvider :id "openrouter" :kind "openai" :base openrouterBase :keyEnv "OPENROUTER_API_KEY" :sessionHeader "" :timeoutSec 45.0 :rpm 0.0 :pool (none)))
+        (p7 (GatewayProvider :id "ollama" :kind "openai" :base ollamaBase :keyEnv "OLLAMA_API_KEY" :sessionHeader "" :timeoutSec ollamaTimeout :rpm 0.0 :pool (none)))]
     (mapFromPairs (list (pair "agy" p1) (pair "codex" p2) (pair "claude" p3) (pair "gemini" p4) (pair "groq" p5) (pair "openrouter" p6) (pair "ollama" p7))))
 
 fn extractPropList items: (List rd/SExpr) head: String accForms: (List (Map String rd/SExpr)) accErrs: (List String) -> (Pair (List (Map String rd/SExpr)) (List String))
@@ -857,7 +876,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
         ((err e) (pair provs (listAppendOne curErrs e)))
         ((ok pid)
           (let [(withKeyErr (if (mapHas? p "key") (listAppendOne curErrs (str "provider " pid ": keys are named by :keyEnv, never stored in the file")) curErrs))
-                (existing (optionOr (mapGet provs pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :timeoutSec 0.0 :rpm 0.0 :pool (none))))
+                (existing (optionOr (mapGet provs pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none))))
                 (kind (mt (mapGet p "kind")
                         ((some kExpr) (scalarToString (asn_scalar kExpr)))
                         ((none) existing.kind)))
@@ -886,14 +905,23 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                                    (pair ke withBaseErr))))))
                 (keyEnv (pairFirst keyEnvRes))
                 (withKeErr (pairSecond keyEnvRes))
+                (sessionHeaderRes (mt (mapGet p "sessionHeader")
+                                    ((none) (pair existing.sessionHeader withKeErr))
+                                    ((some shExpr)
+                                      (let [(sh (scalarToString (asn_scalar shExpr)))]
+                                        (if (not (isValidHeaderName? sh))
+                                          (pair existing.sessionHeader (listAppendOne withKeErr (str "provider " pid ": :sessionHeader must name an http header")))
+                                          (pair sh withKeErr))))))
+                (sessionHeader (pairFirst sessionHeaderRes))
+                (withShErr (pairSecond sessionHeaderRes))
                 (timeoutRes (mt (mapGet p "timeoutSec")
-                              ((none) (pair existing.timeoutSec withKeErr))
+                              ((none) (pair existing.timeoutSec withShErr))
                               ((some tExpr)
                                 (let [(sc (asn_scalar tExpr))]
                                   (mt sc
-                                    ((scalarFloat f) (if (> f 0.0) (pair f withKeErr) (pair existing.timeoutSec (listAppendOne withKeErr (str "provider " pid ": :timeoutSec must be a positive number")))))
-                                    ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withKeErr) (pair existing.timeoutSec (listAppendOne withKeErr (str "provider " pid ": :timeoutSec must be a positive number")))))
-                                    (_ (pair existing.timeoutSec (listAppendOne withKeErr (str "provider " pid ": :timeoutSec must be a positive number")))))))))
+                                    ((scalarFloat f) (if (> f 0.0) (pair f withShErr) (pair existing.timeoutSec (listAppendOne withShErr (str "provider " pid ": :timeoutSec must be a positive number")))))
+                                    ((scalarInt n) (if (> n 0) (pair (int64ToFloat64 n) withShErr) (pair existing.timeoutSec (listAppendOne withShErr (str "provider " pid ": :timeoutSec must be a positive number")))))
+                                    (_ (pair existing.timeoutSec (listAppendOne withShErr (str "provider " pid ": :timeoutSec must be a positive number")))))))))
                 (timeoutSec (pairFirst timeoutRes))
                 (withToErr (pairSecond timeoutRes))
                 (rpmRes (mt (mapGet p "rpm")
@@ -917,7 +945,7 @@ fn applyOneProvider provs: (Map String GatewayProvider) curErrs: (List String) p
                 (finalErrs (if (and (= kind "openai") (stringEmpty? base))
                              (listAppendOne withPoolErr (str "provider " pid ": an openai provider needs :base"))
                              withPoolErr))
-                (updated (GatewayProvider :id pid :kind kind :base base :keyEnv keyEnv :timeoutSec timeoutSec :rpm rpm :pool poolValue))]
+                (updated (GatewayProvider :id pid :kind kind :base base :keyEnv keyEnv :sessionHeader sessionHeader :timeoutSec timeoutSec :rpm rpm :pool poolValue))]
             (pair (mapSet provs pid updated) finalErrs))))))
 
 fn loopProviders pForms: (List (Map String rd/SExpr)) provs: (Map String GatewayProvider) errs: (List String) -> (Pair (Map String GatewayProvider) (List String))
@@ -1285,7 +1313,7 @@ fn gateway_config_v2_build! g: (Map String rd/SExpr) source: String registryPath
                     (listAppendOne allErrs1 ":profiles must define at least one (:profile ...)")
                     allErrs1))
         (envWarns (fold (fn [(acc (List String)) (pid String)] -> (List String)
-                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :timeoutSec 0.0 :rpm 0.0 :pool (none))))]
+                          (let [(pv (optionOr (mapGet providers pid) (GatewayProvider :id pid :kind "" :base "" :keyEnv "" :sessionHeader "" :timeoutSec 0.0 :rpm 0.0 :pool (none))))]
                             (if (and (not (stringEmpty? pv.keyEnv)) (listAny? (fn [(m GatewayModel)] -> Bool (= m.provider pid)) (mapValues models)))
                               (mt (envGet pv.keyEnv)
                                 ((none) (listAppendOne acc (str "provider " pid ": key env " pv.keyEnv " is not set")))

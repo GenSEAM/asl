@@ -142,6 +142,32 @@ fn testGatewayParams -> Bool
       (refute (listEmpty? errsInvalid) "invalid params must produce errors")
       true))
 
+fn testSessionHeaderParse -> Bool
+  (let [(withHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\" :sessionHeader \"x-opencode-session\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (withHeaderRes (cfg/gateway_config_parse! withHeaderText "sessionHeaderPresent" ".asl/mem/calibration/index.asn"))
+        (withoutHeaderText "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (withoutHeaderRes (cfg/gateway_config_parse! withoutHeaderText "sessionHeaderAbsent" ".asl/mem/calibration/index.asn"))]
+    (and
+      (mt withHeaderRes
+        ((err e) (do (assert false (str "OCSESSION: provider with :sessionHeader failed to parse: " e)) false))
+        ((ok tbl)
+          (mt (mapGet tbl.providers "custom")
+            ((none) (do (assert false "OCSESSION: provider custom missing from parsed table") false))
+            ((some pv)
+              (do
+                (assert (= pv.sessionHeader "x-opencode-session") "OCSESSION: :sessionHeader is parsed onto GatewayProvider")
+                (refute (!= pv.sessionHeader "x-opencode-session") "OCSESSION: :sessionHeader must not mismatch")
+                true)))))
+      (mt withoutHeaderRes
+        ((err e) (do (assert false (str "OCSESSION: provider without :sessionHeader failed to parse: " e)) false))
+        ((ok tbl)
+          (mt (mapGet tbl.providers "custom")
+            ((none) (do (assert false "OCSESSION: provider custom missing from parsed table") false))
+            ((some pv)
+              (do
+                (assert (= pv.sessionHeader "") "OCSESSION: absent :sessionHeader stays empty")
+                true)))))))
+
 fn testRoutingAndEntries! tbl: cfg/GatewayTable -> Bool
   (let [(lineDesign (cfg/gateway_intent_line tbl "design"))
         (lineImplement (cfg/gateway_intent_line tbl "implement"))
@@ -227,6 +253,7 @@ fn ! runTests -> Bool
                               (assert (testVariantsLoop! vList) "All fixture variants verified")
                               (assert (testAsnScalarAndFigure) "ASN scalar and figure tested")
                               (assert (testGatewayParams) "Gateway params validation tested")
+                              (assert (testSessionHeaderParse) "OCSESSION: provider :sessionHeader parsing tested")
                               (let [(userGtwyRes (cfg/gateway_config_parse! (getPropStr (pairFirst (let [(v0 (optionOr (listHead vList) (rd/sexprAtom "")))] (mt (cfg/asn_props v0 (some ":variant")) ((ok p) (pair p (list))) ((err _) (pair (mapEmpty) (list)))))) "text" "") "userGtwy" ".asl/mem/calibration/index.asn"))]
                                 (mt userGtwyRes
                                   ((err e) (assert false (str "user gateway parse failed: " e)))

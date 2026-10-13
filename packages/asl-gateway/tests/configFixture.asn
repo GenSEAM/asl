@@ -96,6 +96,14 @@
       :numProfiles 0
       :numModels 0
       :error "provider custom: :base must be an http(s) URL string; provider custom: an openai provider needs :base")
+    (:variant :id "invalid_session_header"
+      :text "(:gateway :v 2\n  :providers ((:provider :id custom :kind openai :base \"https://example.com\" :sessionHeader \"bad header!\"))\n  :models ((:model :id m1 :provider custom :name \"m1\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
+      :valid false
+      :version 0
+      :defaultProfile ""
+      :numProfiles 0
+      :numModels 0
+      :error "provider custom: :sessionHeader must name an http header")
     (:variant :id "invalid_param_value"
       :text "(:gateway :v 2\n  :models ((:model :id m1 :provider agy :name \"m1\" :timeoutSec -5))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))"
       :valid false

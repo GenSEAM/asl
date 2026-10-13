@@ -1,11 +1,8 @@
 (:package asl-target-go
- :version "0.2.0"
- :entry "src/main.asl"
- :description "Go backend: lowers a linked, verified asl-ir SSA module to one self-contained Go file (package main with func main, or a named library package with exported wrappers) and a small runtime; Int is int64 with overflow traps, String is a Go byte string"
+ :version "0.1.0"
+ :entry "src/emitGo.asl"
+ :description "Standalone Go emitter backend for AgentScript"
  :aslFirst true
- :modules [
-   "asl-target-go"
-   "asl-target-go/emit"
-   "asl-target-go/runtime"
- ]
- :dependencies ["asl-ir"])
+ :layer 0
+ :modules ["asl-target-go/emitGo"]
+ :dependencies [])

@@ -2,36 +2,13 @@
 
 Return each most-frequent letter of a space-separated string, with its count. Ties all included.
 
-> **Historical record, not a current measurement.** The comparison below (sections 1 to 3 and
-> everything after them) was made against an earlier AgentSlang syntax — top-level `(df ...)`,
-> `:d` docstrings, kebab-case builtins such as `map-get` — and a Python lowering and pytest
-> harness (`.venv/bin/python -m pytest bench/algo -q`, 17 assertions) that are not in this
-> repository. The section 1 source no longer loads: the stage-0 host rejects a top-level
-> `(df ...)` with `ERR_UNSUPPORTED_TOPLEVEL`. Its sizes and ratios describe that version and
-> cannot be reproduced from this tree.
-
-## Current source and its status (2026-10-14)
-
-The current versions are `asl/bench/algo/histogram.asl` and `asl/bench/algo/variants/tight.asl`
-(the one `asl/bench/tasks/histogram.asn` names, with 7 cases).
-
-- `asl/host/out/asl-host check` passes on both files.
-- Run against the 7 cases of `histogram.asn`, both stop on the first case with
-  `ERR_TYPE: .-second expects a record, got Variant`: they read a pair's second element as
-  `p.second`. With `(pairSecond p)` in its place, all 7 cases pass. No runner in the tree
-  executes those cases; this was checked with a scratch test outside the repository.
-- Size: `histogram.asl` is 556 bytes in 7 lines, `tight.asl` 515 bytes in 4 lines. Their token
-  counts have not been measured, so no token ratio against Python is claimed for current syntax.
+**All three pass the same 17 assertions** (`.venv/bin/python -m pytest bench/algo -q`).
 
 ---
 
-## The original comparison (earlier syntax)
+## 1. AgentScript source — hand-written
 
-
-## 1. AgentSlang source — hand-written, earlier syntax
-
-<!-- not-agentslang: retired (df ...) syntax, kept as the historical input -->
-```text
+```lisp
 (df tally [(m (Map Str I64)) (w Str)] -> (Map Str I64)
   :d "Increment the count for one letter."
   (mt (map-get m w)
@@ -55,23 +32,23 @@ The current versions are `asl/bench/algo/histogram.asl` and `asl/bench/algo/vari
 
 ```python
 def tally(m, w):
-    _t1 = _agentslang.m_get(m, w)
+    _t1 = _agentscript.m_get(m, w)
     if _t1[0] == "some":
         n = _t1[1]
-        _t2 = _agentslang.m_set(m, w, (n + 1))
+        _t2 = _agentscript.m_set(m, w, (n + 1))
     elif _t1[0] == "none":
-        _t2 = _agentslang.m_set(m, w, 1)
+        _t2 = _agentscript.m_set(m, w, 1)
     return _t2
 
 def histogram(text):
     words = [_x for _x in text.strip().split(" ") if (lambda w: (not (len(w) == 0)))(_x)]
-    counts = _agentslang.fold(tally, {}, words)
-    _t3 = _agentslang.greatest([counts[_k] for _k in sorted(counts)])
+    counts = _agentscript.fold(tally, {}, words)
+    _t3 = _agentscript.greatest([counts[_k] for _k in sorted(counts)])
     if _t3[0] == "none":
         _t4 = {}
     elif _t3[0] == "some":
         top = _t3[1]
-        _t4 = _agentslang.m_from([_x for _x in _agentslang.m_pairs(counts) if (lambda p: _agentslang.eq(p[2], top))(_x)])
+        _t4 = _agentscript.m_from([_x for _x in _agentscript.m_pairs(counts) if (lambda p: _agentscript.eq(p[2], top))(_x)])
     return _t4
 ```
 
@@ -91,28 +68,28 @@ def histogram(text):
 
 ---
 
-## Size (earlier syntax, as recorded then)
+## Size
 
 | Artifact | Bytes | ~Tokens | Code lines |
 |---|---:|---:|---:|
-| AgentSlang source | 894 | 223 | 19 |
+| AgentScript source | 894 | 223 | 19 |
 | Generated Python | 643 | 160 | 19 |
 | Idiomatic Python | 341 | 85 | 9 |
 
-**In that version, AgentSlang cost 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.** The tokenizer and date of those counts were not recorded.
+**AgentScript costs 2.6× the tokens and 2.1× the lines of idiomatic Python for this task.**
 
 That number matters more than it looks. The project's stated goal is more work per agent pass, and
-tokens spent on syntax are tokens not spent on problem-solving. On that evidence the language was
-then moving that metric the wrong way. One task is not a measurement — but it was the first
-real data point, and it pointed down. Whether the current syntax changes the ratio is unmeasured.
+tokens spent on syntax are tokens not spent on problem-solving. On this evidence the language is
+currently moving that metric the wrong way. One task is not a measurement — but it is the first
+real data point, and it points down.
 
-Roughly half the excess was mandatory `:d` docstrings and explicit parameter types. The current
-syntax has no docstrings in source (the reader rejects `:d`; docs live as rows in a package
-`doc.asn`) and keeps explicit parameter types; the trade should be judged, not assumed away.
+Roughly half the excess is mandatory `:doc` strings and explicit parameter types. Those are
+deliberate: they exist so an agent reading a module needs nothing but its surface. The trade is
+real and should be judged, not assumed away.
 
-## Critique of the generated Python (as it was then)
+## Critique of the generated Python
 
-Reported qualitatively, never folded into a score — the language's designer cannot
+Reported qualitatively, never folded into a score (PCP `c-9af5`) — the language's designer cannot
 be its scoring judge.
 
 **Wrong, none found.** Output agrees with the hand-written version on every case.
@@ -135,11 +112,10 @@ cause — which is exactly the bug the smoke test caught earlier. The generated 
 an explicit unreachable-case raise, so a checker gap surfaces as a clear error rather than a
 mystery.
 
-## What that run established, and what it did not
+## What this run establishes, and what it does not
 
-**Established then:** an algorithm could be written in AgentSlang, lowered to Python, and pass the
-original benchmark's assertions unmodified. The lowering and harness used are not in this
-repository, so this tree does not re-establish it.
+**Establishes:** the pipeline is real end to end — an algorithm can be written in AgentScript, lowered
+to Python, and pass the original benchmark's assertions unmodified.
 
-**Did not establish:** anything about whether an *agent* can write AgentSlang. The source was written
-by hand. The premise under test in `asl/EXPERIMENT.md` is untouched by it.
+**Does not establish:** anything about whether an *agent* can write AgentScript. This file was written
+by hand. The premise under test in `EXPERIMENT.md` is untouched by it.

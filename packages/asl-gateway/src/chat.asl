@@ -538,11 +538,11 @@ fn entryBody cx: Ctx e: c/GatewayEntry -> j/Json
 
 fn entryUpstream cx: Ctx e: c/GatewayEntry -> u/UpstreamEndpoint
   (let [(up e.upstream)
-        (keyEnv (mt cx.table
-                  ((some tbl) (mt (mapGet tbl.providers e.provider) ((some pv) pv.keyEnv) ((none) "")))
-                  ((none) "")))
+        (pv (mt cx.table ((some tbl) (mapGet tbl.providers e.provider)) ((none) none)))
+        (keyEnv (mt pv ((some p) p.keyEnv) ((none) "")))
+        (sessionHeader (mt pv ((some p) p.sessionHeader) ((none) "")))
         (key (if (= e.kind "cli") "" (optionOr (mapGet cx.world.env keyEnv) "")))]
-    (u/UpstreamEndpoint :provider up.provider :url up.url :key key))
+    (u/UpstreamEndpoint :provider up.provider :url up.url :key key :sessionHeader sessionHeader))
 
 fn upstreamFor cx: Ctx m: String -> u/UpstreamEndpoint
   (u/getUpstreamForModelIn (dp/rowsFromTable cx.table) (u/upstreamFallback) cx.world.settings cx.world.env (some m))
@@ -958,7 +958,7 @@ fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
 
 fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(up a.upstream)]
-    (mt (u/upstreamRequest up.url cx.path up.key a.data cx.req.headers)
+    (mt (u/upstreamRequest up.url cx.path up.key a.data (u/withSessionHeader cx.req.headers up.sessionHeader))
       ((err s) (raise (splitErr s)))
       ((ok request)
        (mt (upTimeout cx l a)

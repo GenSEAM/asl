@@ -74,6 +74,7 @@
       headerGet
       harnessMode
       upstreamRequest
+      withSessionHeader
       childEnv
       curlArgv
       curlConfig
@@ -105,7 +106,8 @@
 (schema UpstreamEndpoint
   (:f provider String)
   (:f url String)
-  (:f key String))
+  (:f key String)
+  (:f sessionHeader String))
 
 (schema UpstreamProvider
   (:f id String)
@@ -502,7 +504,7 @@ fn upstreamProviderNamed providers: (List UpstreamProvider) id: String -> (Optio
   (firstProvider (fn [(row UpstreamProvider)] -> Bool (= row.id id)) providers)
 
 fn upstreamProviderEndpoint row: UpstreamProvider st: UpstreamSettings env: (Map String String) -> UpstreamEndpoint
-  (UpstreamEndpoint :provider row.id :url (row.url st env) :key (row.key st env))
+  (UpstreamEndpoint :provider row.id :url (row.url st env) :key (row.key st env) :sessionHeader "")
 
 fn getUpstreamForModelIn providers: (List UpstreamProvider) fallback: UpstreamProvider st: UpstreamSettings env: (Map String String) model: (Option String) -> UpstreamEndpoint
   (let [(row (mt model
@@ -883,6 +885,12 @@ fn upstreamRequest url: String path: String key: String data: String clientHeade
     (if (hasScheme? base)
       (ok (UpstreamRequest :url base :fragment fragment :method "POST" :headers h3 :data data))
       (err (str "ValueError: unknown url type: " full))))
+
+fn withSessionHeader clientHeaders: (List (Pair String String)) sessionHeader: String -> (List (Pair String String))
+  (if (stringEmpty? sessionHeader) clientHeaders
+    (mt (nonEmpty (headerGet clientHeaders "X-ASL-Session"))
+      ((none) clientHeaders)
+      ((some sid) (headerPut clientHeaders sessionHeader sid))))
 
 fn childEnvNames -> (List String)
   (list "PATH" "TMPDIR" "LANG" "LC_ALL" "SSL_CERT_FILE" "SSL_CERT_DIR" "CURL_CA_BUNDLE" "http_proxy" "https_proxy" "HTTP_PROXY" "HTTPS_PROXY"

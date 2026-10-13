@@ -1,2 +1,2 @@
-fn agentslang-internal -> Int64
+fn agentscript-internal -> Int64
   1

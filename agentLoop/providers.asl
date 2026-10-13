@@ -1229,7 +1229,9 @@ fn msg role: String content: String -> j/Json
 fn ! callProfile! cfg: VendorConfig system: String user: String model: String -> Called
   (let [(ws (absPath (str cfg.rootDir "/.asl/run/agentLoop/agents/" cfg.sessionId)))
         (profile cfg.env.profile)
-        (headers (if (and (= model "profile") (not (stringEmpty? profile))) (list (pair "X-ASL-Profile" profile)) (list)))
+        (headers (listAppend
+                   (if (and (= model "profile") (not (stringEmpty? profile))) (list (pair "X-ASL-Profile" profile)) (list))
+                   (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId)))))
         (payload (j/jobj (listAppend
                            (list (pair "model" (j/jstr model))
                                  (pair "intent" (j/jstr cfg.intent))
@@ -1273,7 +1275,7 @@ fn ! callAgy! cfg: VendorConfig system: String user: String -> Called
                                    ((ok _) (writeText (str pluginDir "/agents/" agent ".md") (agentFileText agent system)))))))]
           (mt written
             ((err e) (Called :reply (err e) :meta (emptyMeta) :cfg cfg))
-            ((ok _) (sendGateway! cfg payload (list))))))))
+            ((ok _) (sendGateway! cfg payload (if (stringEmpty? cfg.sessionId) (list) (list (pair "X-ASL-Session" cfg.sessionId))))))))))
 
 fn ! callVendor! cfg: VendorConfig system: String user: String -> Called
   (cond

@@ -408,6 +408,36 @@ fn ! checkIntentPlan root: String -> Bool
             (check "LEON-INTENT-PASS: a vendor request built for intent plan carries plan" "true"
               (if (stringContains? body "\"intent\": \"plan\"") "true" "false")))))))
 
+; (:m :tags (gateway))
+fn ! checkSessionHeader root: String -> Bool
+  (let [(stubDir (str root "/stub/sessionHeader"))
+        (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/none.asn")))
+        (made (pv/makeProvider! "agy" "scout" root "" 600 "gsesshdr" 1200 true env "auto"))]
+    (mt made
+      ((err e) (checkTrue (str "sessionHeader provider made: " (pv/errorMessage e)) false))
+      ((ok p)
+        (let [(t (pv/nextTurn! p "s" "u"))
+              (config (resultOr (fileReadString (str stubDir "/stdin")) ""))
+              (headers (stringJoin (map headerRow (configRows config "header")) " | "))]
+          (and (checkTrue "sessionHeader stub staged" staged)
+            (check "OCSESSION: callProfile! tags the gateway request with its Leon session id" "true"
+              (if (stringContains? headers "x-asl-session: gsesshdr") "true" "false")))))))
+
+; (:m :tags (gateway))
+fn ! checkSessionHeaderEmpty root: String -> Bool
+  (let [(stubDir (str root "/stub/sessionHeaderEmpty"))
+        (staged (setupStub stubDir "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" "0" "" ""))
+        (env (envFor! root stubDir "stub" "http://127.0.0.1:8765/v1/chat/completions" "" (str root "/none.asn")))
+        (cfg (pv/VendorConfig :vendor "agy" :mode "scout" :rootDir root :model "" :timeout 600 :queueTimeout 1200
+               :sessionId "" :intent "auto" :timeoutSet true :env env :link none))
+        (t (pv/nextTurn! (pv/vendorProvider cfg) "s" "u"))
+        (config (resultOr (fileReadString (str stubDir "/stdin")) ""))
+        (headers (stringJoin (map headerRow (configRows config "header")) " | "))]
+    (and (checkTrue "sessionHeaderEmpty stub staged" staged)
+      (check "OCSESSION: callProfile! sends no X-ASL-Session when cfg.sessionId is empty" "false"
+        (if (stringContains? headers "x-asl-session") "true" "false"))))
+
 fn ! checkFreshDir root: String -> Bool
   (let [(base (str root "/tmp"))
         (taken (ok? (dirCreate (str base "/aslFresh_same"))))
@@ -465,8 +495,11 @@ fn ! runTests -> Bool
            (temps (checkTempDirs root))
            (freshOk (checkFreshDir root))
            (intentPlan (checkIntentPlan root))
+           (sessionHeader (checkSessionHeader root))
+           (sessionHeaderEmpty (checkSessionHeaderEmpty root))
            (removed (ok? (pathRemove root)))]
        (and (checkTrue (str "the fixture holds at least 150 cases: " (stringFromInt64 (listLength lines))) (>= (listLength lines) 150))
          (and (checkTrue "scratch root and stub bin ready" ready)
-           (and (checkTrue "every case passed" (and redirect (and temps (and freshOk (and intentPlan (listAll? (fn [r] r) results))))))
+           (and (checkTrue "every case passed"
+                  (and redirect (and temps (and freshOk (and intentPlan (and sessionHeader (and sessionHeaderEmpty (listAll? (fn [r] r) results))))))))
              (checkTrue "scratch root removed" removed)))))))

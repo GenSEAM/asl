@@ -552,6 +552,42 @@ fn ! redirectIsError! dir: String tmp: String -> Bool
                ((err e) (err (u/protocolFailure e)))))]
     (and reset (mt res ((err f) (mt f ((u/httpFailure status _ body) (and (= status 302) (= body "moved"))) (_ false))) ((ok _) false))))
 
+; (:m OCSESSION: withSessionHeader tags the upstream request with the provider's session header)
+fn ! sessionHeaderAdded! dir: String tmp: String -> Bool
+  (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
+        (headers (u/withSessionHeader (list (pair "X-ASL-Session" "sess-oc-1")) "x-opencode-session"))
+        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((err e) (err (u/protocolFailure e)))))
+        (cfg (readOr! (str dir "/stdin")))]
+    (and reset
+         (and (ok? res)
+              (and (stringContains? cfg "header = \"X-opencode-session: sess-oc-1\"\n")
+                   (stringContains? cfg "header = \"X-asl-session: sess-oc-1\"\n")))))
+
+fn ! sessionHeaderOmittedWithoutProviderHeader! dir: String tmp: String -> Bool
+  (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
+        (headers (u/withSessionHeader (list (pair "X-ASL-Session" "sess-oc-2")) ""))
+        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((err e) (err (u/protocolFailure e)))))
+        (cfg (readOr! (str dir "/stdin")))]
+    (and reset
+         (and (ok? res)
+              (and (stringContains? cfg "header = \"X-asl-session: sess-oc-2\"\n")
+                   (not (stringContains? cfg "opencode-session"))))))
+
+fn ! sessionHeaderOmittedWithoutClientSession! dir: String tmp: String -> Bool
+  (let [(reset (resetStub! dir "0" "HTTP/1.1 200 OK\r\n\r\nok"))
+        (headers (u/withSessionHeader (list) "x-opencode-session"))
+        (res (mt (u/upstreamRequest "https://h.example/v1" "/chat" "" "{}" headers)
+               ((ok req) (u/callUpstream! req (stubEnv dir tmp) 45.0))
+               ((err e) (err (u/protocolFailure e)))))
+        (cfg (readOr! (str dir "/stdin")))]
+    (and reset
+         (and (ok? res)
+              (not (stringContains? cfg "opencode-session")))))
+
 fn ! stubCase! c: Case dir: String tmp: String -> (Pair j/Json j/Json)
   (let [(a c.args)
         (curl (jget a "curl"))
@@ -672,6 +708,9 @@ fn ! runTests -> Bool
         (badNames (badNamesRejected! stub tmp))
         (breaks (lineBreaksRejected! stub tmp))
         (redirect (redirectIsError! stub tmp))
+        (sessionAdded (sessionHeaderAdded! stub tmp))
+        (sessionNoProviderHeader (sessionHeaderOmittedWithoutProviderHeader! stub tmp))
+        (sessionNoClientSession (sessionHeaderOmittedWithoutClientSession! stub tmp))
         (big (largeTransfer! stub tmp))
         (tel (largeTelemetry!))
         (report (eprintln (str "(:upstreamParity :cases " (stringFromInt64 (listLength cases)) " :failed " (stringFromInt64 (listLength failed))
@@ -691,6 +730,9 @@ fn ! runTests -> Bool
       (assert badNames "header names outside RFC 7230 tokens are refused before curl runs")
       (assert breaks "CR or LF in key, header name or value is refused without echoing it")
       (assert redirect "a 302 reply is an httpFailure, not followed")
+      (assert sessionAdded "OCSESSION: withSessionHeader tags the upstream request with the provider's session header")
+      (assert sessionNoProviderHeader "OCSESSION: no provider sessionHeader means no extra header is added")
+      (assert sessionNoClientSession "OCSESSION: no client X-ASL-Session means no extra header is added")
       (assert (pairFirst big) "2 MiB request and 1 MiB reply cross the stub intact")
       (assert (< (pairSecond big) 20000) "large transfer finishes within 20 s")
       (assert (pairFirst tel) "large telemetry record and long clean_url query are correct")

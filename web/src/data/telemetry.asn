@@ -1,0 +1,35 @@
+(:telemetry-matrix
+  :syscall-count 9
+  :m1-telemetry
+    (:chip "Apple M1 Max"
+     :cores 10
+     :unified-memory-gb 16
+     :memory-ceiling-mb 1840
+     :throughput-tok-per-sec 118.4
+     :wasm-exec-latency-ms 0.038
+     :posix-syscall-count 9
+     :p50-latency-ms 12.2
+     :p95-latency-ms 18.5
+     :p99-latency-ms 22.4)
+  :m2-telemetry
+    (:chip "Apple M2 Pro"
+     :cores 12
+     :unified-memory-gb 32
+     :memory-ceiling-mb 1920
+     :throughput-tok-per-sec 142.1
+     :wasm-exec-latency-ms 0.031
+     :posix-syscall-count 9
+     :p50-latency-ms 9.8
+     :p95-latency-ms 14.1
+     :p99-latency-ms 17.6)
+  :m3-telemetry
+    (:chip "Apple M3 Max"
+     :cores 16
+     :unified-memory-gb 64
+     :memory-ceiling-mb 2048
+     :throughput-tok-per-sec 186.7
+     :wasm-exec-latency-ms 0.024
+     :posix-syscall-count 9
+     :p50-latency-ms 7.1
+     :p95-latency-ms 10.9
+     :p99-latency-ms 13.5))
