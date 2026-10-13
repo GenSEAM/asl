@@ -842,11 +842,18 @@ fn dataFindingForm op: (List (Pair String KvVal)) -> String
       form
       (str "(:findings " form ")")))
 
+fn isExplicitFinding op: (List (Pair String KvVal)) declared: (List String) -> Bool
+  (and (= (dictGet op "type") (some (kvStr "findings"))) (isDataOp op declared))
+
+; (:m :ref LEONCTX2-FINDINGS-DONE :do "a reply pairing a proper (:findings ...) form with another recognized op in the same turn (most often (:done), ending a scout delivery in the turn that states it) used to lose every finding, since the former all-ops-must-be-data fold demanded the whole reply be undeclared ad-hoc data and :done broke that for the entire reply; an explicit (:findings ...) op is now taken unconditionally (its type is only set by the parser for a syntactically real findings form), and the ad-hoc all-or-nothing fallback applies only when the reply carries no explicit findings op")
 fn dataFindings reply: String declared: (List String) -> (List String)
-  (let [ops (parseReply reply)]
-    (if (fold (fn [acc op] (and acc (isDataOp op declared))) true ops)
-      (map dataFindingForm ops)
-      (list)))
+  (let [ops (parseReply reply)
+        explicit (filter (fn [op] (isExplicitFinding op declared)) ops)]
+    (if (not (listEmpty? explicit))
+      (map dataFindingForm explicit)
+      (if (fold (fn [acc op] (and acc (isDataOp op declared))) true ops)
+        (map dataFindingForm ops)
+        (list))))
 
 fn withoutForm op: (List (Pair String KvVal)) -> (List (Pair String KvVal))
   (filter (fn [p] (mt p ((pair k _) (!= k "form")))) op)

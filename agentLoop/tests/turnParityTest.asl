@@ -63,7 +63,10 @@ fn ! runTests -> Bool
                    "(:step :op \"read\" :file \"a.txt\")")
         proseReply (tr/turnReply prose none)
         shortProse "(:step :op \"read\" :file \"a.txt\") some words `"
-        shortProseReply (tr/turnReply shortProse none)]
+        shortProseReply (tr/turnReply shortProse none)
+        findingsThenDone (tr/turnReply (str "(:evidence (:receipt \"r1\"))\n"
+                            "(:findings (:claim \"a\" :file \"f\" :anchor \"x\"))\n"
+                            "(:findings (:claim \"b\" :file \"f\" :anchor \"y\"))\n(:done)") (some (list)))]
     (do
       (assert (= passed 7) "all seven independently recorded turn results match the core turn implementation")
       (assert (= shortProseReply.text "(:step :op \"read\" :file \"a.txt\")")
@@ -88,4 +91,6 @@ fn ! runTests -> Bool
       (assert (= (tr/vendorRetryPause "ERR_VENDOR" 2 (list 3 8) (some 20)) 8) "transient retry takes its configured backoff slot")
       (assert (= (tr/vendorRetryPause "ERR_VENDOR" 2 (list 3 8) (some 4)) 4) "retry backoff is capped by remaining wall budget")
       (assert (= (tr/vendorRetryPause "ERR_CONTEXT_TOO_LONG" 2 (list 3 8) none) 0) "non-transient provider failures do not back off")
+      (assert (= (listLength findingsThenDone.facts.dataFindings) 2)
+              "LEONCTX2-FINDINGS-DONE: two (:findings ...) ops delivered alongside (:evidence ...) and a terminal (:done) in the same turn are both kept, not dropped for the reply's other declared ops")
       true))
