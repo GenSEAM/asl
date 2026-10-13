@@ -754,7 +754,7 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (out0 (jdel body1 "effort"))
         (out1 (if (and ollama chosenValid) (pt/jset out0 "reasoning_effort" chosen) out0))
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
-        (out3 (if (some? v2) (jdel out2 "timeout") out2))
+        (out3 (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
         (sent (if (and truthy ollama) (if chosenValid (some (some (strOr chosen ""))) (some none)) none))
         (data (if truthy (pt/jsonDumps out3 -1) cx.req.body))]
     (pair body1 (Attempt :entry entry :v2 v2 :model m :target target :upstream upstream :alias alias :pool pool :sentEffort sent

@@ -204,6 +204,16 @@ fn ! directTransportOp -> String
       ((none) "world-error")
       ((some world) (transportOp world))))
 
+; (:m OCSESSION-2: queue_timeout is a Leon-internal field, stripped before an openai v2 upstream body)
+fn ! queueTimeoutEffect -> j/Json
+  (let [(configText "(:gateway :v 2 :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\")) :models ((:model :id m :provider test :name \"model-m\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))")
+        (env (mapSet (mapEmpty) "TEST_KEY" "test-key"))
+        (request (ch/ChatRequest :path "/v1/chat/completions" :headers (list)
+                  :body "{\"model\":\"m\",\"queue_timeout\":1200,\"timeout\":300,\"messages\":[{\"role\":\"user\",\"content\":\"hello\"}]}"))]
+    (mt (testChatWorld configText env)
+      ((none) (j/jnull))
+      ((some world) (optionOr (transportEffect (ch/chatStart! request world) 40) (j/jnull)))))
+
 fn statusOf c: Case -> String
   (let [(r (get c.io "response"))
         (hs (filter (fn [(h j/Json)] -> Bool (= (text (optionOr (listGet (items h) 0) (j/jnull))) ":status")) (items (get r "head"))))]
@@ -240,4 +250,8 @@ fn ! runTests -> Bool
       (assert (= (text (get (configuredPoolEffect) "url")) "https://example.test/v1/chat/completions") "pool transport preserves the upstream HTTP URL")
       (assert (stringContains? (text (get (configuredPoolEffect) "data")) "hello") "pool transport carries the chat request body")
       (assert (= (directTransportOp) "http") (str "unpooled provider effect: " (directTransportOp)))
+      (assert (= (text (get (queueTimeoutEffect) "op")) "http") (str "OCSESSION-2: queue_timeout body reaches an http transport: " (text (get (queueTimeoutEffect) "op"))))
+      (assert (not (stringContains? (text (get (queueTimeoutEffect) "data")) "queue_timeout")) "OCSESSION-2: queue_timeout is stripped from the v2 openai upstream body")
+      (assert (not (stringContains? (text (get (queueTimeoutEffect) "data")) "\"timeout\"")) "OCSESSION-2: timeout stays stripped from the v2 openai upstream body")
+      (assert (stringContains? (text (get (queueTimeoutEffect) "data")) "\"messages\"") "OCSESSION-2: messages still reach the v2 openai upstream body")
       true))
