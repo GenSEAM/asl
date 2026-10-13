@@ -29,9 +29,10 @@ fn ! testServed root: String host: String -> Bool
         (refute (stringContains? native.out "runs on asl-host") "bin/asl printed no host fallback note for test")
         (assert (!= forced.exit 0) "with ASL_HOST set, bin/asl test runs on asl-host and the probe fails")
         (assert (stringContains? forced.out "no asl-host stands between bin/asl and this suite") "the forced host run fails on the host refutation")
-        (assert (= checked.exit 0) (str "bin/asl check still answers through asl-host: " checked.out))
-        (assert (stringContains? checked.out "asl: check is not native yet, so it runs on asl-host") "the check fallback names its verb on stderr")
-        (assert (stringContains? checked.out "ok asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl") "the host check result follows the note")
+        (assert (= checked.exit 0) (str "bin/asl check runs natively: " checked.out))
+        (refute (stringContains? checked.out "is not native yet") "check runs natively without a host-fallback note")
+        (refute (stringContains? checked.out "runs on asl-host") "check prints no host fallback note")
+        (assert (stringContains? checked.out "ok asl/packages/asl-cli/tests/fixtures/sweep/passTest.asl") "the native check result is reported")
         true))
 
 fn ! testUnsupportedFallsBack root: String -> Bool

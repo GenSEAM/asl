@@ -49,7 +49,7 @@ fn testGoldenSwitch! -> Bool
 fn testGoldenTraps! -> Bool
   (verifyCleanFile! "asl/packages/asl-target-llvm/tests/golden/traps.ll")
 
-fn testSourceE2eProgram -> Bool
+fn ! testSourceE2eProgram -> Bool
   (let [(res (llvm/emitLlvmSource (sE2e/fibSource) "fibMain"))]
     (mt res
       ((err e) (do (assert false (str "emitLlvmSource failed: " e)) false))

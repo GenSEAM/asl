@@ -70,7 +70,7 @@ fn ! runTests -> Bool
         (sent (and (> client 0) (writeAll! client request)))
         (probe (if sent (probe! client listener "" false 250) (Probe :response "" :providerContact false)))
         (killed (if (> pid 0) (do (procKill (- 0 pid) "SIGTERM") (procWaitPid pid false) true) false))
-        (closed (do (if (> client 0) (fdClose client) false) (fdClose listener) true))
+        (closed (do (if (> client 0) (do (fdClose client) true) false) (fdClose listener) true))
         (gatewayErr (resultOr (fileReadString (str temp "/gateway.err")) ""))
         (removed (= (processRun (str "/bin/rm -rf " temp)).exitCode 0))]
     (do

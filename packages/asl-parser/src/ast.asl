@@ -988,7 +988,7 @@ fn kidFormsForChecked src: String -> (Result (List KidForm) ParseError)
 
 fn exportNamesOf v: rd/SExpr -> (List String)
   (mt v
-    ((rd/sexprList items) (atomsToStrings (optionOr (listTail items) (list))))
+    ((rd/sexprList items) (atomsToStrings (if (= (listHeadText items) "list") (optionOr (listTail items) (list)) items)))
     (_ (atomsToStrings (sexprItems v))))
 
 fn moduleExported m: rd/SExpr -> (List String)

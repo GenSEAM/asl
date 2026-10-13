@@ -1,6 +1,6 @@
 (module asl-ir/tests/lowerGapHLGAPSCTest
   :x [runTests]
-  :i [(asl-ir/link :a lk)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a ty)])
 
 ; (:m :ref HL-GAPS-C :do "regression for the literal-pattern native-lowering gap: a bare Int64 or String literal match arm (mt x (1 \"one\") (2 \"two\") (_ \"other\")) fell through every classifyArm branch (not wild, not a 0-arity ctor, excluded from bindName? by design, not a list) and was rejected ERR_LOWER_UNSUPPORTED; fixed by giving classifyArm a 'lit' arm kind and lowerMatch a termBranch chain (upToLitCatchAll + lowerLitArms) that compares the scrutinee to each literal by the generic '=' entry in source order, ending at a trailing wild/var catch-all or a prebuilt unreachable trap when none is present")
 

@@ -1,6 +1,4 @@
-(module aslMem/astFilter :x [ASTQuery ASTMatchNode VFSBuffer matchAstForm] :i [])
-
-(schema VFSBuffer (:f path Str) (:f content Str) (:f baseContent Str) (:f casHash Str) (:f baseHash Str) (:f revision I64) (:f dirty Bool) (:f loadedAt I64))
+(module aslMem/astFilter :x [ASTQuery ASTMatchNode matchAstForm] :i [(vfs :a v)])
 
 (schema ASTQuery (:f formType Str) (:f symbolId (Option Str)) (:f paramCount (Option I64)) (:f predicateToken (Option Str)))
 
@@ -85,5 +83,5 @@ fn formMatchesQuery? node: ASTMatchNode pCount: (Option I64) query: ASTQuery -> 
 fn parseMatchFromSpan span: RawSpan content: Str -> MatchParsed
   (let [(startC span.startIdx) (endC span.endIdx) (raw (optionOr (stringSlice content startC endC) "")) (toks (extractHeaderTokens raw 5)) (rawT0 (optionOr (listGet toks 0) "")) (t0 (normalizeKw rawT0)) (t1 (optionOr (listGet toks 1) "")) (t2 (optionOr (listGet toks 2) "")) (isEffectful (or (and (= t0 "df") (= t1 "!")) (and (= t0 "fn") (= t1 "!")))) (symId (if isEffectful t2 t1)) (pCnt (if (or (= t0 "fn") (or (= t0 "df") (or (= t0 "dfe") (= t0 "enum")))) (countParamsInForm raw) (none))) (node (ASTMatchNode :formType t0 :symbolId symId :startChar startC :endChar endC :rawForm raw :lineNumber span.lineNum))] (MatchParsed :node node :pCnt pCnt))
 
-fn matchAstForm buffer: VFSBuffer query: ASTQuery -> (List ASTMatchNode)
+fn matchAstForm buffer: v/VFSBuffer query: ASTQuery -> (List ASTMatchNode)
   (let [(content buffer.content) (spans (scanTopLevelSpans content))] (fold (fn [(acc (List ASTMatchNode)) (span RawSpan)] -> (List ASTMatchNode) (let [(parsed (parseMatchFromSpan span content)) (node parsed.node) (pCnt parsed.pCnt)] (if (formMatchesQuery? node pCnt query) (listAppend acc (list node)) acc))) (list) spans))

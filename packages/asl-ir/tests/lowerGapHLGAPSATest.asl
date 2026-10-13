@@ -1,6 +1,6 @@
 (module asl-ir/tests/lowerGapHLGAPSATest
   :x [runTests]
-  :i [(asl-ir/link :a lk)])
+  :i [(asl-ir/link :a lk) (asl-ir/types :a ty)])
 
 ; (:m :ref HL-GAPS-A :do "regression for two native-lowering gaps: a module fn literally named loop/recur/try/return/quote, and an enum case exported without its enum type name")
 

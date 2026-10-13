@@ -45,7 +45,7 @@ fn ! serve mode: String port: Int64 -> (Result Int64 String)
                     (fdRead client 4096)
                     (cond
                       ((= mode "slow") (do (sleepMs 500) (writeAll client "HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nsmall" 0)))
-                      ((= mode "keepalive") (do (writeAll client "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nsmall" 0) (sleepMs 500)))
+                      ((= mode "keepalive") (let [(r (writeAll client "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nsmall" 0))] (do (sleepMs 500) r)))
                       ((= mode "head") (writeAll client "HTTP/1.1 200 OK\r\nContent-Length: 3145728\r\nConnection: close\r\n\r\n" 0))
                       ((= mode "missing") (writeAll client "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" 0))
                       ((= mode "noheaders") (writeAll client "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nsmall" 0))

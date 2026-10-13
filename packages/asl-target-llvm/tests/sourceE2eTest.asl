@@ -258,7 +258,7 @@ fn fibGolden -> String
       "")
     "\n")
 
-fn testFibSourceToLlvm -> Bool
+fn ! testFibSourceToLlvm -> Bool
   (let [(res (llvm/emitLlvmSource (fibSource) "fibMain"))]
     (do
       (assert (ok? res) "paren-dialect fib compiles to .ll")
@@ -277,7 +277,7 @@ fn testFibSourceToLlvm -> Bool
             (assert (stringContains? code "%$259 = phi i64 [ %n, %bb.then0 ], [ %$258, %$258.p.ok ]") "emitted .ll derives a raw phi in bb.join0 from the checked add's continuation")
             true)))))
 
-fn testUnsupportedReturnsDiagnostic -> Bool
+fn ! testUnsupportedReturnsDiagnostic -> Bool
   (let [(res (llvm/emitLlvmSource (unsupportedSource) "main"))]
     (do
       (assert (err? res) "unsupported construct must return err")
@@ -324,7 +324,7 @@ fn ! main args: (List String) -> (Result Int64 String)
     ((err diags)
       (err (stringJoin (map (fn [(d ty/IrDiag)] -> String (str d.code " " d.locus ": " d.message)) diags) "; "))))
 
-fn testMissingEntryIsDiagnostic -> Bool
+fn ! testMissingEntryIsDiagnostic -> Bool
   (mt (llvm/emitLlvmSource (fibSource) "main")
     ((ok _) (do (assert false "a source without main must not compile with entry main") false))
     ((err diags)

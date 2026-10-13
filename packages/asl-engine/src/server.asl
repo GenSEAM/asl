@@ -92,7 +92,7 @@ fn ! cancelJobs! jobs: (List AsyncJob) -> Bool
             (errClosed (if (and (= j.kind "forms") j.errOpen) (fdClose j.errFd) (ok ())))
             (clientClosed (fdClose j.clientFd))
             (okThis (and (ok? killed) (and (ok? outClosed) (and (ok? errClosed) (ok? clientClosed)))))
-            (_ (if okThis true (fileAppend j.logFile "[Engine] async job cleanup failed\n")))
+            (_ (if okThis true (do (fileAppend j.logFile "[Engine] async job cleanup failed\n") false)))
             (okRest (cancelJobs! (optionOr (listTail jobs) (list))))]
         (and okThis okRest))))
 
@@ -328,10 +328,10 @@ fn ! abortFormsJob! j: AsyncJob reason: String -> AsyncJob
         (outClosed (if j.outOpen (fdClose j.outFd) (ok ())))
         (errClosed (if j.errOpen (fdClose j.errFd) (ok ())))
         (details (str reason
-                      (if (err? killed) (str "\nERR_FORMS_KILL: " (resultOr killed "unknown")) "")
+                      (if (err? killed) (str "\nERR_FORMS_KILL: " (mt killed ((err e) e) ((ok _) "unknown"))) "")
                       (if (err? waited) (str "\nERR_FORMS_WAIT: " (mt waited ((err e) e) ((ok _) ""))) "")
-                      (if (err? outClosed) (str "\nERR_FORMS_CLOSE_STDOUT: " (resultOr outClosed "unknown")) "")
-                      (if (err? errClosed) (str "\nERR_FORMS_CLOSE_STDERR: " (resultOr errClosed "unknown")) "")))]
+                      (if (err? outClosed) (str "\nERR_FORMS_CLOSE_STDOUT: " (mt outClosed ((err e) e) ((ok _) "unknown"))) "")
+                      (if (err? errClosed) (str "\nERR_FORMS_CLOSE_STDERR: " (mt errClosed ((err e) e) ((ok _) "unknown"))) "")))]
     (jobWith j j.out (str j.errText details) false false (some 1)))
 
 fn ! advanceJobs! cfg: eng/EngineConfig jobs: (List AsyncJob) ready: (List (Pair Int64 Int64)) exited: (List (Pair Int64 Int64)) now: Int64 -> (Pair (List AsyncJob) Bool)
