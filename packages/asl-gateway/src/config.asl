@@ -110,7 +110,8 @@ fn scalarToString sc: AsnScalar -> String
   (:f contextBudget (Option Int64))
   (:f timeoutSec (Option Float64))
   (:f reasoning (Option Bool))
-  (:f rpm (Option Float64)))
+  (:f rpm (Option Float64))
+  (:f api (Option String)))
 
 fn emptyGatewayParams -> GatewayParams
   (GatewayParams
@@ -120,7 +121,8 @@ fn emptyGatewayParams -> GatewayParams
     :contextBudget (none)
     :timeoutSec (none)
     :reasoning (none)
-    :rpm (none))
+    :rpm (none)
+    :api (none))
 
 fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
   (GatewayParams
@@ -130,7 +132,8 @@ fn mergeParams base: GatewayParams override: GatewayParams -> GatewayParams
     :contextBudget (if (some? override.contextBudget) override.contextBudget base.contextBudget)
     :timeoutSec (if (some? override.timeoutSec) override.timeoutSec base.timeoutSec)
     :reasoning (if (some? override.reasoning) override.reasoning base.reasoning)
-    :rpm (if (some? override.rpm) override.rpm base.rpm))
+    :rpm (if (some? override.rpm) override.rpm base.rpm)
+    :api (if (some? override.api) override.api base.api))
 
 (schema GatewayRoute
   (:f intent String)
@@ -521,8 +524,21 @@ fn gateway_params props: (Map String rd/SExpr) what: String -> (Pair GatewayPara
         (s4 (checkContextBudget props what (pairFirst s3) (pairSecond s3)))
         (s5 (checkTimeoutSec props what (pairFirst s4) (pairSecond s4)))
         (s6 (checkReasoning props what (pairFirst s5) (pairSecond s5)))
-        (s7 (checkRpm props what (pairFirst s6) (pairSecond s6)))]
-    (pair (pairFirst s7) (listReverse (pairSecond s7))))
+        (s7 (checkRpm props what (pairFirst s6) (pairSecond s6)))
+        (s8 (checkApi props what (pairFirst s7) (pairSecond s7)))]
+    (pair (pairFirst s8) (listReverse (pairSecond s8))))
+
+fn checkApi props: (Map String rd/SExpr) what: String cur: GatewayParams errs: (List String) -> (Pair GatewayParams (List String))
+  (mt (mapGet props "api")
+    ((none) (pair cur errs))
+    ((some expr)
+      (let [(sc (asn_figure expr))]
+        (mt sc
+          ((scalarStr s)
+            (if (or (= s "chat") (= s "responses"))
+              (pair (with cur :api (some s)) errs)
+              (pair cur (cons (str what ": :api must be chat or responses") errs))))
+          (_ (pair cur (cons (str what ": :api must be chat or responses") errs)))))))
 
 fn gatewayParams props: (Map String rd/SExpr) what: String -> (Pair GatewayParams (List String))
   (gateway_params props what)
@@ -536,6 +552,7 @@ fn paramPresent? params: GatewayParams k: String -> Bool
     ((= k "timeoutSec") (some? params.timeoutSec))
     ((= k "reasoning") (some? params.reasoning))
     ((= k "rpm") (some? params.rpm))
+    ((= k "api") (some? params.api))
     (else false))
 
 fn scalarAsnValue sc: AsnScalar -> String
@@ -554,7 +571,7 @@ fn paramsShown props: (Map String rd/SExpr) params: GatewayParams -> (List (Pair
                 (listAppend acc (list (pair k (scalarAsnValue (asn_figure expr)))))
                 acc))))
         (list)
-        (list "temperature" "effort" "maxTokens" "contextBudget" "timeoutSec" "reasoning" "rpm"))
+        (list "temperature" "effort" "maxTokens" "contextBudget" "timeoutSec" "reasoning" "rpm" "api"))
 
 fn shownHasKey? shown: (List (Pair String String)) k: String -> Bool
   (listAny? (fn [(p (Pair String String))] -> Bool (= (pairFirst p) k)) shown)

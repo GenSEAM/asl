@@ -214,6 +214,47 @@ fn ! queueTimeoutEffect -> j/Json
       ((none) (j/jnull))
       ((some world) (optionOr (transportEffect (ch/chatStart! request world) 40) (j/jnull)))))
 
+fn ! responsesConfigText -> String
+  "(:gateway :v 2 :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\")) :models ((:model :id m :provider test :name \"model-m\" :api \"responses\")) :profiles ((:profile :id default :routes ((:intent any :chain (m))))) :uses ((:use :for default :profile default)))"
+
+fn ! responsesRequest -> ch/ChatRequest
+  (ch/ChatRequest :path "/v1/chat/completions" :headers (list)
+                  :body "{\"model\":\"m\",\"messages\":[{\"role\":\"system\",\"content\":\"be brief\"},{\"role\":\"user\",\"content\":\"hello\"}],\"max_tokens\":256}")
+
+fn ! responsesTransportEffect -> j/Json
+  (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))]
+    (mt (testChatWorld (responsesConfigText) env)
+      ((none) (j/jnull))
+      ((some world) (optionOr (transportEffect (ch/chatStart! (responsesRequest) world) 40) (j/jnull)))))
+
+fn ! drive! step: ch/ChatStep reply: String remaining: Int64 -> (Option ch/ChatResponse)
+  (if (<= remaining 0) none
+    (mt step
+      ((ch/stepEffect eff k)
+       (mt eff
+         ((ch/effHttp _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
+         ((ch/effPoolHttp _ _ _ _ _ _) (drive! (k (ch/outHttp (ch/httpOk 200 (list) reply))) reply (- remaining 1)))
+         ((ch/effRealpath _) (drive! (k (ch/outPath "/")) reply (- remaining 1)))
+         ((ch/effIsDir _) (drive! (k (ch/outBool true)) reply (- remaining 1)))
+         ((ch/effClock) (drive! (k (ch/outFloat 1.0)) reply (- remaining 1)))
+         ((ch/effBreakerDown _) (drive! (k (ch/outFloat 0.0)) reply (- remaining 1)))
+         ((ch/effBreakerDownAll _) (drive! (k (ch/outFloats (list 0.0))) reply (- remaining 1)))
+         ((ch/effBucket _ _ _) (drive! (k (ch/outBool true)) reply (- remaining 1)))
+         ((ch/effCli _ _) (drive! (k (ch/outCli none)) reply (- remaining 1)))
+         (_ (drive! (k ch/outDone) reply (- remaining 1)))))
+      ((ch/stepDone resp) (some resp))
+      ((ch/stepRaised _ _) none)))
+
+fn ! responsesReplyCheck -> String
+  (let [(env (mapSet (mapEmpty) "TEST_KEY" "test-key"))
+        (reply "{\"id\":\"r1\",\"object\":\"response\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hi there\"}]}],\"usage\":{\"input_tokens\":5,\"output_tokens\":7,\"output_tokens_details\":{\"reasoning_tokens\":2}}}")]
+    (mt (testChatWorld (responsesConfigText) env)
+      ((none) "world-error")
+      ((some world)
+       (mt (drive! (ch/chatStart! (responsesRequest) world) reply 60)
+         ((none) "no-response")
+         ((some resp) resp.body)))))
+
 fn statusOf c: Case -> String
   (let [(r (get c.io "response"))
         (hs (filter (fn [(h j/Json)] -> Bool (= (text (optionOr (listGet (items h) 0) (j/jnull))) ":status")) (items (get r "head"))))]
@@ -254,4 +295,20 @@ fn ! runTests -> Bool
       (assert (not (stringContains? (text (get (queueTimeoutEffect) "data")) "queue_timeout")) "OCSESSION-2: queue_timeout is stripped from the v2 openai upstream body")
       (assert (not (stringContains? (text (get (queueTimeoutEffect) "data")) "\"timeout\"")) "OCSESSION-2: timeout stays stripped from the v2 openai upstream body")
       (assert (stringContains? (text (get (queueTimeoutEffect) "data")) "\"messages\"") "OCSESSION-2: messages still reach the v2 openai upstream body")
+      (assert (= (text (get (responsesTransportEffect) "op")) "http") (str "RESPAPI: responses entry reaches an http transport: " (text (get (responsesTransportEffect) "op"))))
+      (assert (stringEndsWith? (text (get (responsesTransportEffect) "url")) "/responses") (str "RESPAPI: upstream path ends with /responses: " (text (get (responsesTransportEffect) "url"))))
+      (assert (stringContains? (text (get (responsesTransportEffect) "data")) "\"input\"") "RESPAPI: upstream body carries input")
+      (assert (stringContains? (text (get (responsesTransportEffect) "data")) "\"instructions\"") "RESPAPI: system message becomes instructions")
+      (assert (not (stringContains? (text (get (responsesTransportEffect) "data")) "\"messages\"")) "RESPAPI: upstream body has no messages")
+      (assert (stringContains? (text (get (responsesTransportEffect) "data")) "\"max_output_tokens\"") "RESPAPI: max_tokens becomes max_output_tokens")
+      (let [(parsed (pt/jsonLoads (responsesReplyCheck)))]
+        (mt parsed
+          ((err _) (assert false "RESPAPI: converted reply did not parse"))
+          ((ok v)
+            (let [(choices (get v "choices"))
+                  (first (optionOr (listHead (items choices)) (j/jnull)))
+                  (msg (get first "message"))]
+              (assert (= (text (get msg "content")) "hi there") (str "RESPAPI: client sees output_text as chat content: " (text (get msg "content"))))
+              (assert (= (int (get (get v "usage") "prompt_tokens")) 5) "RESPAPI: input_tokens maps to prompt_tokens")
+              (assert (= (int (get (get v "usage") "completion_tokens")) 7) "RESPAPI: output_tokens maps to completion_tokens")))))
       true))

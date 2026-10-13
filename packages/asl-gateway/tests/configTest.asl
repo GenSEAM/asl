@@ -229,6 +229,25 @@ fn testProfilesV1Parse -> Bool
           (assert (mapHas? v1Cfg.profiles "defProfile") "v1 profiles map has defProfile")
           true))))
 
+fn testModelApiParse -> Bool
+  (let [(okText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-m\" :api \"responses\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (badText "(:gateway :v 2\n  :providers ((:provider :id test :kind openai :base \"https://example.test/v1\" :keyEnv \"TEST_KEY\"))\n  :models ((:model :id m1 :provider test :name \"model-m\" :api \"bogus\"))\n  :profiles ((:profile :id p1 :routes ((:intent any :chain (m1)))))\n  :uses ((:use :for default :profile p1)))")
+        (okRes (cfg/gateway_config_parse! okText "apiOk" ".asl/mem/calibration/index.asn"))
+        (badRes (cfg/gateway_config_parse! badText "apiBad" ".asl/mem/calibration/index.asn"))]
+    (and
+      (mt okRes
+        ((err e) (do (assert false (str "RESPAPI: :api responses must parse: " e)) false))
+        ((ok tbl)
+          (mt (mapGet tbl.models "m1")
+            ((none) (do (assert false "RESPAPI: model m1 missing") false))
+            ((some m)
+              (mt m.params.api
+                ((some a) (do (assert (= a "responses") "RESPAPI: :api parsed as responses") true))
+                ((none) (do (assert false "RESPAPI: :api not parsed onto params") false)))))))
+      (mt badRes
+        ((ok _) (do (assert false "RESPAPI: :api bogus must be rejected") false))
+        ((err e) (do (assert (stringContains? (stringLower e) ":api") (str "RESPAPI: bogus :api error names :api: " e)) true)))))
+
 fn ! runTests -> Bool
   (let [(contentRes (fileReadString "asl/packages/asl-gateway/tests/configFixture.asn"))]
     (mt contentRes
@@ -259,5 +278,6 @@ fn ! runTests -> Bool
                                   ((err e) (assert false (str "user gateway parse failed: " e)))
                                   ((ok tbl) (assert (testRoutingAndEntries! tbl) "Routing, entries, and labels tested"))))
                               (assert (testProfilesV1Parse) "Profiles v1 parsing tested")
+                              (assert (testModelApiParse) "RESPAPI: model :api parsing tested")
                               true))
                           (_ (do (assert false "variants is not a list") false))))))))))))))

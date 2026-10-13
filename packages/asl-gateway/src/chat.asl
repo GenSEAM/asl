@@ -161,7 +161,9 @@
   (:f pool String)
   (:f sentEffort (Option (Option String)))
   (:f poolConfig (Option c/GatewayPool))
-  (:f data String))
+  (:f data String)
+  (:f api String)
+  (:f path String))
 
 
 fn roleCascades -> (List (Pair String (List String)))
@@ -724,6 +726,38 @@ fn loopStep cx: Ctx l: Loop -> ChatStep
     ((none) (afterLoop cx l))
     ((some entry) (attempt cx l entry)))
 
+fn respSystemJoin msgs: (List j/Json) acc: (List String) -> String
+  (mt (listHead msgs)
+    ((none) (stringJoin (listReverse acc) "\n\n"))
+    ((some msg)
+     (let [(rest (optionOr (listTail msgs) (list)))
+           (role (getOr msg "role" (j/jnull)))]
+       (if (and (= role (j/jstr "system")) (pt/pyTruthy (getOr msg "content" (j/jnull))))
+         (mt (getOr msg "content" (j/jnull))
+           ((j/jstr s) (respSystemJoin rest (cons s acc)))
+           (_ (respSystemJoin rest acc)))
+         (respSystemJoin rest acc)))))
+
+fn respInputItems msgs: (List j/Json) acc: (List j/Json) -> (List j/Json)
+  (mt (listHead msgs)
+    ((none) (listReverse acc))
+    ((some msg)
+     (let [(rest (optionOr (listTail msgs) (list)))
+           (role (getOr msg "role" (j/jnull)))]
+       (if (= role (j/jstr "system"))
+         (respInputItems rest acc)
+         (respInputItems rest (cons (j/jobj (list (pair "role" role) (pair "content" (getOr msg "content" (j/jstr ""))))) acc))))))
+
+fn responsesBody body: j/Json target: String -> j/Json
+  (let [(msgs (mt (getOr body "messages" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+        (sys (respSystemJoin msgs (list)))
+        (b0 (j/jobj (list (pair "model" (j/jstr target)) (pair "input" (j/jarr (respInputItems msgs (list)))))))
+        (b1 (if (not (stringEmpty? sys)) (pt/jset b0 "instructions" (j/jstr sys)) b0))]
+    (mt (getOr body "max_tokens" (j/jnull))
+      ((j/jint n) (pt/jset b1 "max_output_tokens" (j/jint n)))
+      ((j/jfloat f) (pt/jset b1 "max_output_tokens" (j/jint (optionOr (float64ToInt64 f) 0))))
+      (_ b1)))
+
 fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json Attempt)
   (let [(v2 (mt entry ((c/entryResolved e) (some e)) ((c/entryUnresolved _) none)))
         (m (mt entry ((c/entryResolved e) e.dispatch) ((c/entryUnresolved a) a)))
@@ -756,9 +790,12 @@ fn prepareAttempt cx: Ctx l: Loop entry: c/GatewayResolvedEntry -> (Pair j/Json 
         (out2 (jdel (jdel (jdel (jdel out1 "role") "intent") "lens") "workspace"))
         (out3 (if (some? v2) (jdel (jdel out2 "timeout") "queue_timeout") out2))
         (sent (if (and truthy ollama) (if chosenValid (some (some (strOr chosen ""))) (some none)) none))
-        (data (if truthy (pt/jsonDumps out3 -1) cx.req.body))]
+        (respApi (mt v2 ((some e) (optionOr e.params.api "chat")) ((none) "chat")))
+        (upBody (if (= respApi "responses") (responsesBody out3 target) out3))
+        (data (if truthy (pt/jsonDumps upBody -1) cx.req.body))]
     (pair body1 (Attempt :entry entry :v2 v2 :model m :target target :upstream upstream :alias alias :pool pool :sentEffort sent
-      :poolConfig (mt v2 ((some e) e.pool) ((none) none)) :data data)))
+      :poolConfig (mt v2 ((some e) e.pool) ((none) none)) :data data :api respApi
+      :path (if (= respApi "responses") "/responses" cx.path))))
 
 fn withBreaker pool: String k: (fn [Float64] -> ChatStep) -> ChatStep
   (if (stringEmpty? pool) (k 0.0) (askFloat (effBreakerDown pool) k))
@@ -958,7 +995,7 @@ fn upTimeout cx: Ctx l: Loop a: Attempt -> (Result Float64 pt/PyErr)
 
 fn httpAttempt cx: Ctx l: Loop a: Attempt -> ChatStep
   (let [(up a.upstream)]
-    (mt (u/upstreamRequest up.url cx.path up.key a.data (u/withSessionHeader cx.req.headers up.sessionHeader))
+    (mt (u/upstreamRequest up.url a.path up.key a.data (u/withSessionHeader cx.req.headers up.sessionHeader))
       ((err s) (raise (splitErr s)))
       ((ok request)
        (mt (upTimeout cx l a)
@@ -1041,11 +1078,44 @@ fn mergeAsl resp: j/Json served: (List (Pair String j/Json)) -> j/Json
 fn dropHeaders hs: (List (Pair String String)) names: (List String) -> (List (Pair String String))
   (filter (fn [(p (Pair String String))] -> Bool (not (listContains? names (u/pyLower (pairFirst p))))) hs)
 
+fn respTexts items: (List j/Json) acc: (List String) -> (List String)
+  (mt (listHead items)
+    ((none) (listReverse acc))
+    ((some o)
+     (let [(rest (optionOr (listTail items) (list)))
+           (isMsg (= (getOr o "type" (j/jnull)) (j/jstr "message")))
+           (cItems (mt (getOr o "content" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+           (texts (fold (fn [(acc2 (List String)) (c j/Json)] -> (List String)
+                          (let [(ct (getOr c "type" (j/jnull)))
+                                (tx (getOr c "text" (j/jnull)))]
+                            (if (and (= ct (j/jstr "output_text")) (pt/pyTruthy tx))
+                              (mt tx ((j/jstr s) (cons s acc2)) (_ acc2))
+                              acc2)))
+                        acc cItems))]
+       (if isMsg (respTexts rest texts) (respTexts rest acc)))))
+
+fn responsesToChat body: String -> (Option String)
+  (mt (pt/jsonLoads body)
+    ((err _) none)
+    ((ok resp)
+     (if (and (isObj? resp) (pt/pyTruthy (getOr resp "output" (j/jnull))))
+       (let [(itemsL (mt (getOr resp "output" (j/jnull)) ((j/jarr xs) xs) (_ (list))))
+             (content (stringJoin (respTexts itemsL (list)) ""))
+             (usage (getOr resp "usage" (j/jnull)))
+             (msg (j/jobj (list (pair "role" (j/jstr "assistant")) (pair "content" (j/jstr content)))))
+             (choice (j/jobj (list (pair "message" msg))))
+             (use (j/jobj (list (pair "prompt_tokens" (j/jint (usageInt usage "input_tokens")))
+                                (pair "completion_tokens" (j/jint (usageInt usage "output_tokens"))))))
+             (chat (j/jobj (list (pair "choices" (j/jarr (list choice))) (pair "usage" use))))]
+         (some (pt/jsonDumps chat -1)))
+       none)))
+
 fn httpAnswered cx: Ctx l: Loop a: Attempt status: Int64 headers: (List (Pair String String)) body: String -> ChatStep
   (let [(prov a.upstream.provider)
         (alias a.alias)
         (m a.model)
-        (proj (project body))]
+        (chatBody (if (= a.api "responses") (optionOr (responsesToChat body) body) body))
+        (proj (project chatBody))]
     (mt proj
       ((some p)
        (if (emptyContent? p.content)
