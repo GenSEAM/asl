@@ -69,9 +69,12 @@ fn rulesOf parent: String items: (List rd/SExpr) -> (Result (List c/Rule) (List 
   (collect (map (fn [(p (Pair Int64 rd/SExpr))] -> (Result c/Rule (List String)) (ruleOf parent (pairFirst p) (pairSecond p))) (enumerate items)))
 
 fn asnToCss source: String -> (Result String (List String))
-  (let [(root (rd/parseSexpr source))]
-    (if (not (= (a/headOf root) "css"))
-      (err ["a stylesheet must be one (:css ...) form"])
-      (mt (rulesOf "css > " (mt root ((rd/sexprList xs) (listDrop xs 1)) (_ [])))
-        ((ok rules) (ok (str (c/renderSheet rules) "\n")))
-        ((err es) (err es)))))
+  (mt (a/unbalanced source)
+    ((some es) (err es))
+    ((none)
+      (let [(root (rd/parseSexpr source))]
+        (if (not (= (a/headOf root) "css"))
+          (err ["a stylesheet must be one (:css ...) form"])
+          (mt (rulesOf "css > " (mt root ((rd/sexprList xs) (listDrop xs 1)) (_ [])))
+            ((ok rules) (ok (str (c/renderSheet rules) "\n")))
+            ((err es) (err es)))))))

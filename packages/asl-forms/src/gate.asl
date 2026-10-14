@@ -1206,7 +1206,7 @@ fn binaryProbe! env: GateEnv name: String path: String -> (Pair Bool String)
     (pair present (str "(:capability :id \"" name "\" :binary " (q path) " :status " (if present ":present" ":absent") ")")))
 
 fn entryProbe! env: GateEnv name: String rel: String -> (Pair Bool String)
-  (let [(present (mt (fileStat (k/joinPath env.rootDir rel)) ((ok st) st.isFile) ((err _) false)))]
+  (let [(present (mt (fileStat (k/aslPath! env.rootDir (if (stringStartsWith? rel "asl/") (optionOr (stringSlice rel 4 (stringLength rel)) rel) rel))) ((ok st) st.isFile) ((err _) false)))]
     (pair present (str "(:capability :id \"" name "\" :binary " (q rel) " :status " (if present ":present" ":absent") ")")))
 
 fn remoteCount! env: GateEnv -> (Result Int64 String)
@@ -1242,7 +1242,7 @@ fn writeLock! env: GateEnv rows: (List (List String)) -> (Result String String)
   (let [(body (stringJoin (map (fn [(r (List String))] -> String (str "    (:cap :id \"" (optionOr (listGet r 0) "") "\" :status :" (optionOr (listGet r 1) "") " :probed " (optionOr (listGet r 2) "") ")\n")) rows) ""))
         (text (str "(:capabilitiesLock\n  :version \"1.1.0\"\n  :source \"asl/grammar/capabilities.asn\"\n  :measuredBy \"(:doctor :write true)\"\n  :measuredAt " (stringFromInt64 (/ (nowNs) 1000000))
                    "\n  :summary (:total " (stringFromInt64 (listLength rows)) (lockCounts rows) ")\n  :capabilities (\n" body "  ))\n"))
-        (lockPath (k/joinPath env.rootDir "asl/grammar/capabilities.lock"))]
+        (lockPath (k/aslPath! env.rootDir "grammar/capabilities.lock"))]
     (mt (fileWrite (str lockPath ".tmp") text)
       ((err e) (err e))
       ((ok _) (mt (pathRename (str lockPath ".tmp") lockPath) ((ok _) (ok lockPath)) ((err e) (err e))))))
@@ -1254,7 +1254,7 @@ fn doctorStep! env: GateEnv run: (fn [Int64 String] -> (Pair (List String) Int64
                        ((ok n) (str "(:capability :id \"zeroRemote\" :remotesCount " (stringFromInt64 n) " :status " (if (= n 0) ":pass" ":fail") ")"))
                        ((err e) (str "(:capability :id \"zeroRemote\" :status :absent :error ERR_TOOL_ABSENT :message " (q e) ")"))))
         (vfsProbe (str "(:capability :id \"ramVfs\" :stagedFiles " (stringFromInt64 (listLength env.staged)) " :status :measured)"))
-        (capText (fileReadString (k/joinPath env.rootDir "asl/grammar/capabilities.asn")))
+        (capText (fileReadString (k/aslPath! env.rootDir "grammar/capabilities.asn")))
         (text (resultOr capText ""))
         (rows (capRows text (stringToBytes text) (stringLength text) 0 (list)))
         (measured (map (fn [(r CapRow)] -> (List String) (probeRow run r)) rows))
@@ -1296,9 +1296,16 @@ fn auditStep! env: GateEnv id: Int64 kw: (Map String String) args: (List String)
         (timeoutS (max 1 (pyIntOr (envOr! "ASL_AUDIT_TIMEOUT_S" "300") 300)))
         (full (listContains? (list "true" "True" "1") (k/lstripColons (optionOr (mapGet kw "full") ""))))
         (asn (listContains? (list "vitality" "full" "all" "system" "stubs" "graph" "complexity" "coupling" "vacuity" "deadcode") subcmd))
-        (argv (listAppend (list bin "audit" subcmd) (listAppend (if full (list "--full") (list)) (if asn (list "--asn") (list)))))
-        (r (runArgv! argv (some env.rootDir) (none) (* timeoutS 1000) 15000))]
+        (intelSub (listContains? (list "coupling" "deadcode" "vacuity" "sweep" "graph" "complexity" "stubs" "trace") subcmd))
+        (workspaceSub (listContains? (list "consistency" "gates" "closure" "foreign" "steps" "vitality" "full" "all" "system") subcmd))
+        (argv (if intelSub
+                (listAppend (list bin "intel" subcmd) (if (or asn (= subcmd "trace")) (list "--asn") (list)))
+                (listAppend (list bin "audit" subcmd) (listAppend (if full (list "--full") (list)) (if asn (list "--asn") (list))))))
+        (r (if (or intelSub workspaceSub) (runArgv! argv (some env.rootDir) (none) (* timeoutS 1000) 15000) (RunOut :code 1 :out "" :errText "" :timedOut false :failure "")))]
     (cond
+      ((and workspaceSub (not (fileExists? (k/joinPath env.rootDir "scripts/audit/audit.py"))))
+        (rejectLine id "audit" ":ERR_WORKSPACE_ONLY" (str " :subcmd \"" sc "\" :message \"" sc " runs the workspace's scripts/audit/audit.py, which this checkout does not have; asl-intel audits here: coupling deadcode vacuity sweep graph complexity stubs trace\"")))
+      ((and (not intelSub) (not workspaceSub)) (rejectLine id "audit" ":ERR_UNKNOWN_SUBCMD" (str " :subcmd \"" sc "\" :message \"known: coupling deadcode vacuity sweep graph complexity stubs trace (asl-intel); consistency gates closure foreign steps vitality full all system (the workspace audit)\"")))
       ((not (stringEmpty? r.failure)) (rejectLine id "audit" ":ERR_EXEC_FAILED" (msgTail (osErrorText r.failure bin))))
       (r.timedOut (rejectLine id "audit" ":ERR_TIMEOUT" (str " :subcmd \"" sc "\" :receipt (:audit :sub " sc " :status :failed :err ERR_TIMEOUT :timeoutS " (stringFromInt64 timeoutS) ")")))
       (else

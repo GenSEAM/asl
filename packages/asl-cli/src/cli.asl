@@ -224,5 +224,5 @@ fn ! handleDispatchResult cmd: Str args: (List Str) res: (Result Str Str) -> (Re
 fn ! executeCli args: (List Str) -> (Result Unit Str)
   (if (listEmpty? args) (let [(unused (println (formatHelp)))] (ok ())) (let [(cmd (optionOr (listHead args) "help")) (cmdArgs (optionOr (listTail args) (list)))] (handleDispatchResult cmd cmdArgs (dispatchCmd cmd cmdArgs))))
 
-fn ! main args: (List Str) -> (Result Unit IoError)
-  (mt (executeCli args) ((ok _) (ok ())) ((err _) (err (other))))
+fn ! main args: (List Str) -> Int64
+  (mt (executeCli args) ((ok _) 0) ((err _) 1))

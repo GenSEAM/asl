@@ -29,7 +29,7 @@ An ASL file is a module header, then items starting in column 0: (module ws/name
 
 - `(:tools)` Print the operation registry.
 - `(:help)` Show help for an op, a topic, or the ASL builtins whose name contains a text.
-- `(:eval)` Evaluate ASL code in an isolated, time-bounded native-first subprocess.
+- `(:eval)` Evaluate ASL code in a time-bounded subprocess.
 - `(:mem)` List, get, query, and stage row-keyed memory ledger changes.
 - `(:doc)` Look up a D150 doc ledger row by symbol, or list a file's rows.
 - `(:read)` Return a symbol or bounded slice of a file.

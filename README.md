@@ -71,16 +71,16 @@ A function header is a bare column-0 line; its body is indented below. There is 
 AgentSlang is not released: there are no release binaries, and the installer at `aslang.dev/install.sh` is under development. From a checkout:
 
 ```sh
-sh host/build.sh                    # builds host/out/asl-host and the runtime archives (needs clang)
-asl version
-asl check file.asl                  # delimiter balance, then the host check
-asl test fileTest.asl               # run a suite on the host
-host/out/asl-host check file.asl    # strict: names, arity, enums
-host/out/asl-host test fileTest.asl # strict runner
-asl '(:tools)'                      # the agent-plane operation catalogue
+CC=$(command -v clang) sh host/build.sh   # builds host/out/asl-host (on Linux the script then stops at the missing runtime seed; the host is built)
+bin/asl version                           # bin/asl runs the CLI, the toolbelt and asl-intel on that host; put bin/ on PATH
+bin/asl check file.asl                    # delimiter balance, then the host check
+bin/asl test fileTest.asl                 # run a suite on the host
+bin/asl '(:tools)'                        # the agent-plane operation catalogue; also bin/asl -f FILE and bin/asl - (forms on stdin)
+host/out/asl-host check file.asl          # strict: names, arity, enums
+host/out/asl-host test fileTest.asl       # strict runner
 ```
 
-`asl-host` is the reference: it checks names, arity, enums, types it knows and effects (an unmarked effectful `fn` is ERR_EFFECT_UNMARKED) before running anything. The `asl` CLI is `packages/asl-cli`; it looks for its workspace as a directory holding `.git` and `asl/grammar/rules.asn`, so outside that layout set `ASL_CLI_ROOT` to the directory that contains this checkout as `asl/`. `asl help` lists its commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
+`asl-host` is the reference: it checks names, arity, enums, types it knows and effects (an unmarked effectful `fn` is ERR_EFFECT_UNMARKED) before running anything. `bin/asl` is a launcher that only picks the entry module: `(...)` forms, `-f FILE` and `-` go to the toolbelt (`packages/asl-forms`), `asl intel ...` to `packages/asl-intel`, everything else to the CLI (`packages/asl-cli`). It works from a plain clone; inside the larger workspace the same paths resolve under `asl/`. `asl help` lists the CLI commands; `asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED.
 
 ## Packages
 

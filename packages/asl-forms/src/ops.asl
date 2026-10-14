@@ -76,7 +76,7 @@ fn excludedTreeDir? name: String -> Bool
 fn relJoin relDir: String name: String -> String
   (if (stringEmpty? relDir) name (str relDir "/" name))
 
-fn walkTree! dir: String relDir: String depth: Int64 acc: TreeAcc -> TreeAcc
+fn walkTree! maxDepth: Int64 dir: String relDir: String depth: Int64 acc: TreeAcc -> TreeAcc
   (mt (dirList dir)
     ((err _) acc)
     ((ok names)
@@ -84,10 +84,10 @@ fn walkTree! dir: String relDir: String depth: Int64 acc: TreeAcc -> TreeAcc
             (pairs (zip names isDirs))
             (files (map pairFirst (filter (fn [(p (Pair String Bool))] -> Bool (not (pairSecond p))) pairs)))
             (dirs (filter (fn [(nm String)] -> Bool (not (excludedTreeDir? nm))) (map pairFirst (filter pairSecond pairs))))
-            (listed (if (< depth 3) (fold (fn [(es (List String)) (f String)] -> (List String) (cons (relJoin relDir f) es)) acc.entries files) acc.entries))
+            (listed (if (< depth maxDepth) (fold (fn [(es (List String)) (f String)] -> (List String) (cons (relJoin relDir f) es)) acc.entries files) acc.entries))
             (here (TreeAcc :files (+ acc.files (listLength files)) :dirs (+ acc.dirs (listLength dirs)) :entries listed))]
         (fold (fn [(a TreeAcc) (d String)] -> TreeAcc
-                (if (k/realChild? dir d) (walkTree! (k/joinPath dir d) (relJoin relDir d) (+ depth 1) a) a))
+                (if (k/realChild? dir d) (walkTree! maxDepth (k/joinPath dir d) (relJoin relDir d) (+ depth 1) a) a))
               here
               dirs))))
 
@@ -97,17 +97,19 @@ fn quoted s: String -> String
 fn treeStep! root: String id: Int64 kw: (Map String String) args: (List String) -> StepOutcome
   (let [(tPath (k/kwOr kw "path" (optionOr (listHead args) ".")))
         (res (k/resolveInRoot! root tPath))
-        (target (pairFirst res))]
+        (target (pairFirst res))
+        (maxDepth (max 0 (optionOr (stringToInt64 (k/kwOr kw "depth" "3")) 3)))]
     (cond
       ((not (stringEmpty? (pairSecond res))) (rejected id "tree" "ERR_BOUNDARY_VIOLATION" (msgTail (pairSecond res))))
+      ((k/isFile! target) (rejected id "tree" "ERR_NOT_A_DIRECTORY" (msgTail (str "Not a directory: " tPath "; read it with (:read :file ...)"))))
       ((not (k/isDir! target)) (rejected id "tree" "ERR_PATH_NOT_FOUND" (msgTail (str "Directory not found: " tPath))))
       (else
-        (let [(walked (walkTree! target "" 0 (TreeAcc :files 0 :dirs 0 :entries (list))))
+        (let [(walked (walkTree! maxDepth target "" 0 (TreeAcc :files 0 :dirs 0 :entries (list))))
               (entries (listReverse walked.entries))
               (n (listLength entries))]
           (done (str (stepHead id "tree") " :status \"ok\" :path " (quoted (k/relToRoot root target))
                      " :totalFiles " (stringFromInt64 walked.files) " :totalDirs " (stringFromInt64 walked.dirs)
-                     " :depth 3 :entries (" (stringJoin (map quoted (listTake entries 200)) " ") ")"
+                     " :depth " (stringFromInt64 maxDepth) " :entries (" (stringJoin (map quoted (listTake entries 200)) " ") ")"
                      (if (> n 200) (str " :more " (stringFromInt64 (- n 200))) "") ")"))))))
 
 fn splitLinesKeepEnds text: String -> (List String)
@@ -297,11 +299,24 @@ fn compiled! kind: String path: String source: String -> (Result String (List St
         ((err ds) (err (map (fn [(d ty/IrDiag)] -> String (str d.code ": " d.message)) ds)))
         ((ok both) (ok (if (= kind "ts") (pairSecond both) (pairFirst both)))))))
 
+fn ! hostChecked! root: String kind: String path: String -> (Result Unit (List String))
+  (if (listContains? (conv/kinds) kind)
+    (ok ())
+    (let [(given (envOr! "ASL_HOST"))
+          (host (if (stringEmpty? given) (k/aslPath! (toolchainRoot! root) "host/out/asl-host") given))
+          (r (processRun (str (shellQuoted host) " check " (shellQuoted path) " 2>&1")))]
+      (if (= r.exitCode 0)
+        (ok ())
+        (err (filter (fn [(l String)] -> Bool (stringContains? l "ERR_")) (stringSplit r.stdout "\n"))))))
+
+fn shellQuoted s: String -> String
+  (str "'" (stringReplace s "'" "'\\''") "'")
+
 fn targetConverted! root: String id: Int64 tname: String kw: (Map String String) args: (List String) -> (Result String StepOutcome)
   (mt (targetSource! root kw args)
     ((err e) (err (rejected id "target" "ERR_MISSING_ARG" (msgTail e))))
     ((ok found)
-      (mt (compiled! tname (pairFirst found) (pairSecond found))
+      (mt (mt (hostChecked! root tname (pairFirst found)) ((err es) (err es)) ((ok _) (compiled! tname (pairFirst found) (pairSecond found))))
         ((ok text) (ok text))
         ((err es) (err (rejected id "target" "ERR_TARGET" (str " :target \"" tname "\" :errors (" (stringJoin (map (fn [(e String)] -> String (str "\"" (k/escapeAsnVal e) "\"")) es) " ") ")")))))))
 
@@ -405,21 +420,21 @@ fn toolchainRoot! root: String -> String
 fn binDirectory! root: String -> String
   (let [(given (k/toolEnv! "SCRIPT_DIR"))
         (toolRoot (toolchainRoot! root))]
-    (if (stringEmpty? given) (k/joinPath toolRoot "bin") given))
+    (if (stringEmpty? given) (k/binFor! toolRoot) given))
 
 fn knowContext! root: String -> s/KnowCtx
   (let [(ws (if (stringEmpty? (envOr! "ASL_ROOT")) root (envOr! "ASL_ROOT")))
         (toolRoot (toolchainRoot! root))
         (bin (binDirectory! root))
         (vfs (envOr! "ASL_VFS_DIR"))
-        (tools (optionOr (envGet "ASL_TOOLS_ASN") (k/joinPath toolRoot "asl/grammar/tools.asn")))]
+        (tools (optionOr (envGet "ASL_TOOLS_ASN") (k/aslPath! toolRoot "grammar/tools.asn")))]
     (s/KnowCtx :ws ws :toolRoot toolRoot :binDir bin :vfsDir vfs :toolsFile tools :home (envOr! "HOME")))
 
 fn gateContext! root: String -> g/GateEnv
   (let [(toolRoot (toolchainRoot! root))
         (bin (binDirectory! root))
         (given (envOr! "ASL_HOST"))
-        (host (if (stringEmpty? given) (k/joinPath toolRoot "asl/host/out/asl-host") given))
+        (host (if (stringEmpty? given) (k/aslPath! toolRoot "host/out/asl-host") given))
         (vs (v/vfsAt root (v/vfsRoot! root (envOr! "ASL_VFS_DIR") (envOr! "HOME")) (envOr! "ASL_SESSION")))
         (staged (stagedCheckFiles! vs (v/stagedPaths! vs)))]
     (g/GateEnv :root root :rootDir toolRoot :binDir bin :host host :staged staged))

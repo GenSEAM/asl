@@ -1,6 +1,6 @@
 (module asl-html/asn
-  :x [unquote stringAtom? keywordAtom? bare valueText kebab atomOf headOf lookup]
-  :i [(asl-parser/reader :a rd)])
+  :x [unbalanced unquote stringAtom? keywordAtom? bare valueText kebab atomOf headOf lookup]
+  :i [(asl-parser/reader :a rd) (asl-parser/balance :a bal)])
 
 fn unquote atom: String -> String
   (let [(inner (optionOr (stringSlice atom 1 (- (stringLength atom) 1)) ""))
@@ -33,3 +33,9 @@ fn headOf e: rd/SExpr -> String
 
 fn lookup table: (List (Pair String String)) key: String -> (Option String)
   (optionMap pairSecond (listHead (filter (fn [(p (Pair String String))] -> Bool (= (pairFirst p) key)) table)))
+
+fn unbalanced source: String -> (Option (List String))
+  (let [(b (bal/checkDelimiterBalanceIn false source))]
+    (if b.balanced
+      (none)
+      (some [(str "unbalanced input: " (stringFromInt64 b.openParens) " unclosed '(', " (stringFromInt64 b.openBrackets) " unclosed '[', " (stringFromInt64 b.openBraces) " unclosed '{' (negative means extra closers)")])))

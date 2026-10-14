@@ -1,4 +1,4 @@
-(module asl-forms/kernel :x [toolEnv! charAt isSpaceChar countDyck1 isBalanced escapeAsnVal concatAll universalNewlines findFrom asnUnescape extractSteps batchSeq ParsedStep EditOutcome parseStep kwOr normalizePath dirName baseName joinPath relPath resolveInRoot! relToRoot resolveEditTarget! binaryKind isFile! isDir! realChild? lstripColons lineEnds splitLinesKeepEnds] :i [])
+(module asl-forms/kernel :x [toolEnv! aslHome! aslPath! binFor! charAt isSpaceChar countDyck1 isBalanced escapeAsnVal concatAll universalNewlines findFrom asnUnescape extractSteps batchSeq ParsedStep EditOutcome parseStep kwOr normalizePath dirName baseName joinPath relPath resolveInRoot! relToRoot resolveEditTarget! binaryKind isFile! isDir! realChild? lstripColons lineEnds splitLinesKeepEnds] :i [])
 
 
 (schema ParsedStep (:f op String) (:f kwargs (Map String String)) (:f args (List String)))
@@ -357,6 +357,15 @@ fn existingProbe! p: String -> String
 
 fn joinPath a: String b: String -> String
   (if (stringEndsWith? a "/") (str a b) (str a "/" b))
+
+fn aslHome! root: String -> String
+  (if (fileExists? (joinPath root "asl/grammar/tools.asn")) (joinPath root "asl") root)
+
+fn aslPath! root: String rel: String -> String
+  (joinPath (aslHome! root) rel)
+
+fn binFor! root: String -> String
+  (if (fileExists? (joinPath root "bin/asl")) (joinPath root "bin") (aslPath! root "bin"))
 
 fn resolveInRoot! root: String p: String -> (Pair String String)
   (if (stringEmpty? p)

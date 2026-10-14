@@ -1,0 +1,27 @@
+#!/bin/sh
+# The asl command. It only picks which ASL entry module the stage-0 host runs:
+#   asl '(:op ...)' | asl -f FILE | asl -   the toolbelt (packages/asl-forms)
+#   asl intel ...                           code intelligence (packages/asl-intel)
+#   asl <command> ...                       everything else (packages/asl-cli)
+here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+host=${ASL_HOST:-$here/host/out/asl-host}
+if [ ! -x "$host" ]; then
+  echo "asl: the stage-0 host is not built: $host" >&2
+  echo "asl: build it with: CC=\$(command -v clang) sh $here/host/build.sh" >&2
+  exit 127
+fi
+export ASL_HOST="$host"
+: "${ASL_CLI_ROOT:=$here}"
+: "${ASL_CLI_SCRIPT_DIR:=$here/bin}"
+export ASL_CLI_ROOT ASL_CLI_SCRIPT_DIR
+case "${1-}" in
+  "("*|-f|-) exec "$host" run "$here/packages/asl-forms/src/main.asl" "$@" ;;
+  intel)
+    shift
+    # asl-intel reports paths as asl/packages/...: give it a directory holding this checkout as asl/.
+    if [ "$(basename -- "$here")" = asl ]; then ws=$(dirname -- "$here"); else
+      ws=${XDG_CACHE_HOME:-$HOME/.cache}/asl/workspace; mkdir -p "$ws" && ln -sfn "$here" "$ws/asl"; fi
+    : "${ASL_INTEL_HOME:=$ws}"; export ASL_INTEL_HOME
+    exec "$host" run "$here/packages/asl-intel/src/main.asl" "$@" ;;
+  *) exec "$host" run "$here/packages/asl-cli/src/main.asl" "$@" ;;
+esac

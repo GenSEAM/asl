@@ -188,7 +188,7 @@ fn dispatchRequest! rt: EngineRuntime line: String nowSec: Int64 -> (Pair Engine
               (let [(resp (sp/listSessionsReceipt rt.supervisor))]
                 (pair rt resp)))
                         (else
-              (pair rt (w/formatReceiptError (str "Unknown engine op: " op)))))))
+              (pair rt (w/formatReceiptError (if (stringEmpty? action) "Missing :action; known: spawn poll tail kill send list" (str "Unknown :action " action "; known: spawn poll tail kill send list"))))))))
       (else
         (pair rt (w/formatReceiptError (str "Unknown engine op: " op))))))
 fn cmdStatus! rootDir: String scopeOpt: String -> String

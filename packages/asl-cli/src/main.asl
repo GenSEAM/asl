@@ -3,5 +3,5 @@
 fn ! dispatch args: (List Str) -> (Result Unit Str)
   (c/executeCli args)
 
-fn ! main args: (List Str) -> (Result Unit IoError)
+fn ! main args: (List Str) -> Int64
   (c/main args)

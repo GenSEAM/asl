@@ -65,7 +65,7 @@ fn spawnSessionWith! state: SupervisorState id: String cmd: String cwd: String s
   (if (not (w/validSessionId? id))
     (pair state (w/formatReceiptInvalidId id))
     (if (or (stringEmpty? id) (stringEmpty? cmd))
-      (pair state (w/formatReceiptError "Missing cmd or id for spawn"))
+      (pair state (w/formatReceiptError (if (stringEmpty? id) "Missing :id for spawn" "Missing :cmd for spawn")))
       (let [(cwdStat (fileStat cwd))]
         (if (not (mt (fileStat cwd) ((ok st) st.isDir) ((err _) false)))
           (pair state (str "(:receipt :status :error :id \"" (w/escapeStr id) "\" :message \"no directory " (w/escapeStr cwd) "\")"))

@@ -1,7 +1,7 @@
 <!-- ASL_TOOLBELT_START -->
 # AgentSlang (ASL) Universal Toolbelt
 
-When `asl` is available, agents can run workspace operations as ASN forms via `asl '(<form1> <form2> ...)'`:
+Agents run workspace operations as ASN forms via `bin/asl '(<form1> <form2> ...)'` (put `bin/` on PATH to type `asl`; `bin/asl -f FILE` and `bin/asl -` read forms from a file or stdin):
 
 - **Introspect Tool Schemas**: `asl '(:tools)'` — the operation catalogue; `asl '(:help :op read)'` explains one op, `asl '(:help :topic language)'` the language.
 - **Symbol Search**: `asl '(:query "symbolName")'` — definitions and uses of a name in code; `:in` searches comments, docs, memories and data instead.
@@ -28,7 +28,7 @@ When `asl` is available, agents can run workspace operations as ASN forms via `a
 > ### Repository boundary
 > **The GitHub repository `GenSEAM/asl` holds only the ASL package.**
 > 1. Its root is this directory (grammar, host, packages, prelude, seed, tools, web and the docs beside them).
-> 2. It is developed inside a larger local workspace that has no remote; the `asl` CLI expects that layout (a directory holding `.git` and `asl/grammar/rules.asn`), or `ASL_CLI_ROOT` pointing at the directory that contains this checkout as `asl/`.
+> 2. It is developed inside a larger local workspace that has no remote. `bin/asl` works in both layouts: from a plain clone, paths are repo-relative (`packages/...`); inside the workspace they are `asl/...`. Build the host first (`CC=$(command -v clang) sh host/build.sh`).
 > 3. Never push the workspace or its parent tree to `GenSEAM/asl`.
 
 Design rationale is in [`MANIFESTO.md`](MANIFESTO.md). The rules every agent follows live in `grammar/rules.asn` (goal, refuting question and check for each).
@@ -54,10 +54,11 @@ Through the CLI (`asl help` lists the commands):
 asl check <file>       # delimiter balance, then asl-host check for .asl; bare: every tracked file
 asl test <file|dir>    # suites on asl-host; bare: every discovered suite; --changed [BASE] selects by impact
 asl run <file.asl>     # load the file and call its main
-asl audit <subcmd>     # coupling, deadcode, vacuity, sweep, graph, complexity, stubs, vitality, trace, full, all, system
+asl intel <subcmd>     # coupling, deadcode, vacuity, sweep, graph, complexity, stubs, trace, lint, outline, impact, query
+asl '(:audit :subcmd coupling)'   # the same audits as a toolbelt receipt
 ```
 
-`asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED. `asl audit gates` and `asl audit consistency` run the workspace's `scripts/audit/audit.py`, which is not part of this repository; the gate code in `packages/asl-gates` (`auditMain.asl`) also needs the workspace's git root.
+`asl gate`, `asl lint`, `asl mem` and `asl tool` are retired and answer ERR_RETIRED. The audits `consistency`, `gates`, `closure`, `foreign`, `steps` and `vitality` run the workspace's `scripts/audit/audit.py`, which is not part of this repository: `(:audit)` answers ERR_WORKSPACE_ONLY for them here. The gate code in `packages/asl-gates` (`auditMain.asl`) also needs the workspace's git root.
 
 ## 3. Syntax
 The full rules are in the `language` topic; the points agents most often get wrong:

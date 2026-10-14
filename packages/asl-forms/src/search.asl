@@ -796,8 +796,13 @@ fn aslKwDef s: String b: Bytes n: Int64 i: Int64 allowEnd: Bool -> (Option Strin
       (nameAt s a e)
       (none)))
 
+fn skipBang b: Bytes n: Int64 h: Int64 -> Int64
+  (if (and (>= h 0) (and (< (+ h 1) n) (= (bytesGet b h) 33)))
+    (let [(after (spTab1 b n (+ h 1)))] (if (< after 0) h after))
+    h)
+
 fn aslIndentDef s: String b: Bytes n: Int64 -> (Option String)
-  (let [(h (headThenWs b n 0 true))]
+  (let [(h (skipBang b n (headThenWs b n 0 true)))]
     (if (< h 0) (none) (nameAt s h (aslNameEnd b n h))))
 
 fn orElse a: (Option String) b: (fn [] -> (Option String)) -> (Option String)

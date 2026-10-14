@@ -1,4 +1,4 @@
-(module asl-cli/check :x [runCheckCommand! formatCheckHelp applyCandidatePatchAndJournal! checkSourceWithFix] :i [(asl-ir/patch :a patch) (asl-cli/patch :a patchCli) (asl-compiler/diagnostics :a diag) (asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-checker/check :a checker) (asl-checker/types :a ty)])
+(module asl-cli/check :x [runCheckCommand! formatCheckHelp applyCandidatePatchAndJournal! checkSourceWithFix] :i [(asl-ir/patch :a patch) (asl-cli/patch :a patchCli) (asl-compiler/diagnostics :a diag) (asl-parser/reader :a rd) (asl-parser/lexer :a lx) (asl-parser/ast :a ast) (asl-checker/check :a checker) (asl-checker/types :a ty) (asl-parser/balance :a bal)])
 
 fn formatCheckHelp -> Str
   (str "Usage: asl check [options] <files...>\n\n" "Options:\n" "  --format=auto|indent|paren   Override source format detection\n" "  --data                       Activate unquoted data mode\n\n" "[Teleology] Principle: GroundTruthOverReport (ADR D94)\n" "  \"Compiler diagnostics emit structured candidate AST patches; --fix applies them with transactional rollback.\"\n\n" "[Assistive Ontology] Enforces Self-Healing & Transactional Invariants:\n" "  • Candidate AST Patches: Diagnostics include (:suggestedPatch (:astPatch ...))\n" "  • Single-Step Fix: --fix validates and applies patches in one deterministic step\n" "  • External Rollback Stack Journal: Automatically journals inverse patches to .asl/mem/patch_stack.asn\n" "  • Zero-Line-Number Invariant: Code addressed strictly by Module:symbol and :anchor\n")
@@ -45,8 +45,24 @@ fn filterNonFlags args: (List Str) -> (List Str)
 fn containsFlag args: (List Str) targetFlag: Str -> Bool
   (mt (listHead args) ((none) false) ((some a) (if (= a targetFlag) true (containsFlag (optionOr (listTail args) (list)) targetFlag))))
 
+fn checkData filePath: Str src: Str -> (Result Str Str)
+  (let [(b (bal/checkDelimiterBalanceIn false src))]
+    (if b.balanced
+      (ok (str "ok " filePath ": ASN, delimiters balanced"))
+      (err (str filePath ": ERR_UNBALANCED " (stringFromInt64 b.openParens) " unclosed '(', " (stringFromInt64 b.openBrackets) " unclosed '['"))))
+
+fn shq s: Str -> Str
+  (str "'" (stringReplace s "'" "'\\''") "'")
+
+fn ! hostCheck! filePath: Str src: Str -> (Result Str Str)
+  (let [(b (bal/checkDelimiterBalanceIn true src))]
+    (if (not b.balanced)
+      (err (str filePath ": ERR_UNBALANCED " (stringFromInt64 b.openParens) " unclosed '(', " (stringFromInt64 b.openBrackets) " unclosed '['"))
+      (let [(r (processRun (str (shq (optionOr (envGet "ASL_HOST") "asl-host")) " check " (shq filePath) " 2>&1")))]
+        (if (= r.exitCode 0) (ok (stringTrim r.stdout)) (err (stringTrim r.stdout))))))
+
 fn checkFilesStep! files: (List Str) isFix: Bool acc: (List Str) -> (Result Str Str)
-  (mt (listHead files) ((none) (ok (stringJoin acc "\n"))) ((some f) (let [(readRes (fileRead f))] (mt readRes ((err _) (err (str "Failed to read file: " f))) ((ok src) (let [(checkRes (checkSourceWithFix f src isFix))] (mt checkRes ((err e) (err e)) ((ok out) (checkFilesStep! (optionOr (listTail files) (list)) isFix (listAppend acc (list out)))))))))))
+  (mt (listHead files) ((none) (ok (stringJoin acc "\n"))) ((some f) (let [(readRes (fileRead f))] (mt readRes ((err _) (err (str "Failed to read file: " f))) ((ok src) (let [(checkRes (cond ((stringEndsWith? f ".asn") (checkData f src)) ((stringEmpty? (optionOr (envGet "ASL_HOST") "")) (checkSourceWithFix f src isFix)) (else (hostCheck! f src))))] (mt checkRes ((err e) (err e)) ((ok out) (checkFilesStep! (optionOr (listTail files) (list)) isFix (listAppend acc (list out)))))))))))
 
 fn runCheckCommand! args: (List Str) -> (Result Str Str)
   (cond ((listEmpty? args) (err "Usage: asl check [options] <files...>")) ((or (containsFlag args "--help") (containsFlag args "-h")) (ok (formatCheckHelp))) (else (let [(isFix (containsFlag args "--fix")) (files (filterNonFlags args))] (cond ((listEmpty? files) (err "Usage: asl check [options] <files...>")) (isFix (err "ERR_NOT_IMPLEMENTED: check --fix has no repair source")) (else (checkFilesStep! files isFix (list)))))))

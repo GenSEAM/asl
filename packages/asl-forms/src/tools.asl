@@ -252,7 +252,7 @@ fn firstReadable! paths: (List String) -> String
 fn loadRegistry! ctx: s/KnowCtx -> (Option Registry)
   (let [(root ctx.toolRoot)
         (paths (if (stringEmpty? ctx.toolsFile)
-                 (list (k/joinPath root "asl/grammar/tools.asn") (k/joinPath root "grammar/tools.asn") (k/joinPath root "share/asl/tools.asn"))
+                 (list (k/aslPath! root "grammar/tools.asn") (k/joinPath root "grammar/tools.asn") (k/joinPath root "share/asl/tools.asn"))
                  (list ctx.toolsFile)))
         (raw (firstReadable! paths))]
     (if (stringEmpty? raw) (none) (some (parseRegistry raw))))
@@ -311,7 +311,7 @@ fn visibleOps! reg: Registry ctx: s/KnowCtx scopeAll: Bool -> (List ToolOp)
         (has (hasAsl? ctx.ws))]
     (filter (fn [(o ToolOp)] -> Bool
               (cond
-                (scopeAll (or (= o.scope "any") (= o.scope "asl")))
+                (scopeAll true)
                 (isTc true)
                 ((= o.scope "any") true)
                 ((= o.scope "asl") has)
@@ -464,7 +464,7 @@ fn cRegistrationRows! root: String paths: (List String) -> (List Builtin)
     ((some path)
       (listAppend
         (map (fn [(name String)] -> Builtin (Builtin :name name :sec "" :type "" :doc ""))
-             (cTableNames path (resultOr (fileReadString (k/joinPath root path)) "")))
+             (cTableNames path (resultOr (fileReadString (if (fileExists? (k/joinPath root path)) (k/joinPath root path) (k/aslPath! root (optionOr (stringSlice path 4 (stringLength path)) path)))) "")))
         (cRegistrationRows! root (optionOr (listTail paths) (list))))))
 
 fn checkerNames t: String b: Bytes from: Int64 acc: (List String) -> (List String)

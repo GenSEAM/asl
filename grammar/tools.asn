@@ -53,7 +53,7 @@
 
     (:op :eval
       :scope any
-      :public "Evaluate ASL code in an isolated, time-bounded native-first subprocess."
+      :public "Evaluate ASL code in a time-bounded subprocess."
       :form "(:eval :code <str> [:timeoutMs <int>])"
       :params (
         (:code :type str :req true :note "ASL expression to evaluate")
@@ -62,7 +62,7 @@
       :examples ("(:eval :code \"(+ 1 2)\")")
       :errors (ERR_MISSING_ARG ERR_BAD_TIMEOUT ERR_TIMEOUT ERR_EVAL ERR_PROCESS)
       :related (run help)
-      :doc "Compile and run an isolated temporary ASL module through the native-first run route; returns output, status and exit code.")
+      :doc "Run the code through the native route when the workspace has tools/nativeTest.asl, else through asl-host eval (:via :host); returns :value (the last line printed), :stdout and status. Every failure exits 1.")
 
     (:op :mem
       :scope any
@@ -116,6 +116,7 @@
       )
       :actions (:status :ping :start :stop :restart)
       :scopes (:workspace :system)
+      :errors (ERR_UNKNOWN_ACTION ERR_BAD_SCOPE ERR_PERMISSION_DENIED ERR_EXEC_FAILED)
       :doc "Resident ASL engine runtime management, scope isolation, socket status, liveness ping, and graceful restart/termination via RPC.")
 
     (:op :lens
@@ -166,17 +167,12 @@
       :scope toolchain
       :brief "(:intel :op outline :file f) lists a file's definitions with their line ranges; :op coupling, deadcode and stubs survey the repository"
       :params (
-        (:op :type sym :req true :note "suboperation: coupling impact outline query deadcode vacuity graph complexity stubs vitality trace")
+        (:op :type sym :req true :note "suboperation: coupling impact outline query deadcode vacuity graph complexity stubs sweep trace lint")
         (:target :type str :default "" :note "target symbol package or file")
         (:symbol :type str :default "" :note "symbol name")
         (:file :type str :default "" :note "file path")
         (:strict :type bool :default false :note "strict audit mode")
         (:filter :type str :default "" :note "graph node filter")
-        (:symbol :type str :note "callers, status: the symbol")
-        (:module :type str :note "callers: restrict to one module (Python)")
-        (:path :type str :note "status: a file instead of a symbol")
-        (:spec :type str :note "coverage: the spec file")
-        (:id :type str :note "coverage: one requirement id")
         (:limit :type int :default 20 :note "result limit")
         (:module :type str :default "" :note "module path filter")
       )
@@ -191,14 +187,14 @@
         (:file :type str :req true :note "path to file in repository")
         (:symbol :type str :default "" :note "symbol definition to extract")
         (:anchor :type str :default "" :note "text anchor substring")
-        (:limit :type int :default 200 :note "maximum line count to return")
+        (:limit :type int :default 200 :note "maximum lines to return; after an :anchor, characters from the anchor")
         (:start :type int :default 0 :note "starting line number for slice")
         (:end :type int :default 0 :note "ending line number for slice")
       )
       :examples (
         "(:read :file \"asl/grammar/rules.asn\" :limit 10)"
       )
-      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_SYMBOL_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_ANCHOR_NOT_FOUND ERR_BINARY)
+      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_SYMBOL_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_ANCHOR_NOT_FOUND ERR_BINARY ERR_INVALID_ARG ERR_NOT_PORTED ERR_READ_FAILED ERR_AMBIGUOUS_PATH ERR_RANGE_OUT_OF_BOUNDS)
       :related (query)
       :doc "Bounded AST symbol and slice retrieval without whole-file dumping; a binary file (NUL in the first 8 KB or a known magic) is rejected with ERR_BINARY, :bytes and :kind, never returned.")
 
@@ -209,7 +205,7 @@
       :params (
         (:text :type str :req true :note "substring or symbol query text")
         (:in :type sym :default :code :note "code: definitions confirmed against the symbol index, then code lines where the text is code, and a :text count of what else matched; text: sections :comment (comments and strings in code) :doc :memory :data; all: both")
-        (:limit :type int :default 20 :note "maximum definition and hit count per section")
+        (:limit :type int :default 20 :note "maximum definition and hit count per section, at most 200")
       )
       :examples (
         "(:query :text \"rules\" :limit 5)"
@@ -228,13 +224,13 @@
         (:old :type str :req true :note "exact target string to replace")
         (:new :type str :req true :note "replacement string")
         (:all :type bool :default false :note "replace all occurrences")
-        (:autofix :type sym :default :none :note "structural or heuristic delimiter repair")
+        (:autofix :type sym :default :structural :note "repair unbalanced delimiters left by the replacement; :none stages the text as given")
         (:force :type bool :default false :note "stage despite balance or syntax errors")
       )
       :examples (
         "(:edit :file \"asl/grammar/rules.asn\" :old \"rules\" :new \"rules\" :all true)"
       )
-      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_NO_MATCH ERR_AMBIGUOUS ERR_UNBALANCED)
+      :errors (ERR_MISSING_ARG ERR_FILE_NOT_FOUND ERR_NO_MATCH ERR_AMBIGUOUS ERR_UNBALANCED ERR_UNREPAIRABLE)
       :related (diff flush discard check txn)
       :doc "Atomic string replacement staged in the session buffer; rejected when the staged result breaks delimiter balance or syntax. :all replaces every occurrence, :autofix (true, indentation or heuristic) stages a delimiter repair, :force stages anyway.")
 
@@ -250,22 +246,24 @@
       :examples (
         "(:write :file \".asl/scratch.asn\" :content \"(:scratch true)\" :force true)"
       )
-      :errors (ERR_MISSING_ARG ERR_BOUNDARY_VIOLATION ERR_IS_DIRECTORY ERR_UNBALANCED ERR_WRITE_FAILED)
+      :errors (ERR_MISSING_ARG ERR_BOUNDARY_VIOLATION ERR_IS_DIRECTORY ERR_UNBALANCED ERR_WRITE_FAILED ERR_UNREPAIRABLE)
       :related (edit diff flush discard)
       :doc "Stage whole-file content in the session buffer, validated like edit; only flush touches disk.")
 
     (:op :tree
       :scope toolchain
-      :form "(:tree [:path <path>])"
+      :form "(:tree [:path <path>] [:depth <int>])"
       :params (
         (:path :type str :default "." :note "directory path to scan")
+        (:depth :type int :default 3 :note "list files this many directory levels deep; the counts always cover the whole tree")
       )
       :examples (
         "(:tree :path \".\")"
+        "(:tree :path \"packages\" :depth 1)"
       )
-      :errors (ERR_PATH_NOT_FOUND ERR_BOUNDARY_VIOLATION)
+      :errors (ERR_PATH_NOT_FOUND ERR_NOT_A_DIRECTORY ERR_BOUNDARY_VIOLATION)
       :related (read query)
-      :doc "Count files and directories under :path inside the workspace.")
+      :doc "Count files and directories under :path inside the workspace and list the files down to :depth, at most 200 of them (:more counts the rest).")
 
     (:op :observe
       :scope toolchain
@@ -307,7 +305,7 @@
       )
       :errors (ERR_BOUNDARY_VIOLATION ERR_NOT_STAGED ERR_SYNTAX_MALFORMATION ERR_STALE_BASE ERR_WRITE_FAILED)
       :related (diff discard edit txn)
-      :doc "Write all staged changes of the session buffer to disk atomically (fsync and rename); ERR_STALE_BASE when disk changed since staging.")
+      :doc "Write all staged changes of the session buffer to disk atomically (temp file, then rename; :synced says whether it was fsynced); ERR_STALE_BASE when disk changed since staging.")
 
     (:op :discard
       :scope any
@@ -333,7 +331,7 @@
       :examples (
         "(:check :file \"asl/grammar/rules.asn\")"
       )
-      :errors (ERR_FILE_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_SYNTAX ERR_UNBALANCED_DELIMITERS ERR_CHECK_FAILED ERR_HOST_ABSENT ERR_WORKSPACE_CHECK_FAILED)
+      :errors (ERR_FILE_NOT_FOUND ERR_BOUNDARY_VIOLATION ERR_SYNTAX ERR_UNBALANCED_DELIMITERS ERR_CHECK_FAILED ERR_HOST_ABSENT ERR_WORKSPACE_CHECK_FAILED ERR_READ_FAILED ERR_STAGED_CHECK_FAILED ERR_EXEC_FAILED)
       :related (test fix edit)
       :doc "Verify delimiter balance of an ASL or ASN file, or run a local syntax checker on a foreign one. A balanced .asl file then goes to asl/host/out/asl-host check on the content the next flush would write, which resolves imports and names and checks arity; its exit is :checkerExit and its diagnostics come back in :message. Without :file it runs asl check over the workspace: balance of every tracked ASL and ASN file and asl/host/out/asl-host check of each .asl.")
 
@@ -347,7 +345,7 @@
       :examples (
         "(:test :file \"asl/packages/asl-parser/tests/readerTest.asl\")"
       )
-      :errors (ERR_MISSING_ARG ERR_TEST_FAILED ERR_VACUOUS_PASS ERR_HOST_ABSENT ERR_EXEC_FAILED)
+      :errors (ERR_MISSING_ARG ERR_TEST_FAILED ERR_VACUOUS_PASS ERR_HOST_ABSENT ERR_EXEC_FAILED ERR_FILE_NOT_FOUND ERR_UNPARSEABLE_ASSERT_COUNT)
       :related (check fix)
       :doc "Run asl/host/out/asl-host test on the file as the next flush would write it: an unknown name is an error, assert takes only true or false, and runTests must return true. It passes only with a positive executed :assertCount; a failure carries the host's :exit, the asserts run before it, and its diagnostics.")
 
@@ -378,15 +376,15 @@
       )
       :errors (ERR_MISSING_ARG ERR_OWNS ERR_TXN_FORBIDDEN ERR_TXN_ABORTED ERR_TXN_FLUSH_FAILED)
       :related (edit check flush discard)
-      :doc "Stage nested edits inside :owns, run nested gates on staged content, flush only if all pass, else restore.")
+      :doc "Stage nested edits inside :owns, run nested gates on staged content, flush only if all pass, else restore. It is not a dry run: when every step passes the changes are on disk.")
 
     (:op :audit
       :scope toolchain
       :params (
-        (:subcmd :type sym :default :consistency :note "subcommand to audit")
+        (:subcmd :type sym :default :coupling :note "the audit to run")
       )
-      :subcmds (:consistency :gates :coupling :closure :foreign :steps :deadcode :vacuity :sweep :graph :complexity :stubs :vitality :trace :all :full)
-      :doc "Run systemic monorepo audit across declared dimensions including whole-repo sweep, dead code, test vacuity, stub detection, runtime tracing, and master system vitality.")
+      :subcmds (:coupling :deadcode :vacuity :sweep :graph :complexity :stubs :trace :consistency :gates :closure :foreign :steps :vitality :all :full :system)
+      :doc "coupling, deadcode, vacuity, sweep, graph, complexity, stubs and trace run asl-intel and return its receipt; consistency, gates, closure, foreign, steps, vitality, all, full and system run the workspace's scripts/audit/audit.py and answer ERR_WORKSPACE_ONLY where it is absent; any other name is ERR_UNKNOWN_SUBCMD.")
 
     (:op :crawl
       :scope toolchain
@@ -395,6 +393,7 @@
         (:mode :type sym :default :auto :note "crawler mode: auto staticHttp patchright")
         (:distill :type sym :default :asn :note "distillation format: asn text raw")
       )
+      :errors (ERR_MISSING_ARG ERR_NETWORK_DENIED ERR_NETWORK_UNREACHABLE ERR_EXEC_FAILED)
       :doc "Crawl target web page and distill DOM to pure Dyck-1 ASN without noise.")
 
     (:op :search
@@ -404,6 +403,7 @@
         (:query :type str :req true :note "search query string")
         (:limit :type int :default 3 :note "maximum results to return")
       )
+      :errors (ERR_MISSING_ARG ERR_NETWORK_DENIED ERR_NETWORK_UNREACHABLE ERR_EXEC_FAILED)
       :doc "Cognitive web search with provider cascading and direct fallback.")
 
     (:op :research
@@ -413,12 +413,13 @@
         (:topic :type str :req true :note "research topic inquiry")
         (:depth :type sym :default :flash :note "one of :flash (3 results, gateway flash), :deep (5 results, gateway targeted), :exhaustive (5 results plus an adversarial search, gateway matrix); another value is rejected")
       )
-      :doc "Web research through the gateway: the research route of its profile extracts facts; a report is :verified only when facts with source urls pass verification, else :unverified, :noEvidence or :failed with a :reason.")
+      :errors (ERR_MISSING_ARG ERR_INVALID_ARG ERR_GATEWAY_NO_CONFIG ERR_NETWORK_DENIED ERR_NETWORK_UNREACHABLE ERR_EXEC_FAILED)
+      :doc "Web research through the gateway: the research route of its profile extracts facts; the gateway is configured in ~/.asl/gateway.asn (ERR_GATEWAY_NO_CONFIG without it); a report is :verified only when facts with source urls pass verification, else :unverified, :noEvidence or :failed with a :reason.")
 
     (:op :doctor
       :scope toolchain
       :params ()
-      :doc "Audit measured capabilities and substrate invariants.")
+      :doc "Probe every capability in grammar/capabilities.asn and report which are measured present; slow (minutes). :write true also writes grammar/capabilities.lock.")
 
     (:op :note
       :scope toolchain
@@ -428,6 +429,7 @@
         (:scope :type sym :default :workspace :note "scope tag")
         (:date :type str :default "" :note "observation date")
         (:claim :type str :default "" :note "claim or note content")
+        (:query :type str :default "" :note "query: the text to look for")
       )
       :doc "Record or query working memory observations in pure ASN.")
 
@@ -438,7 +440,7 @@
         (:file :type str :default "" :note "source file path")
         (:out :type str :default "" :note "stage the result at this path, like (:write); without it the result is returned in :output")
       )
-      :doc "Convert an ASN drawing, page or stylesheet to SVG, HTML or CSS, or compile an ASL entry module to an ES module (js), its TypeScript declarations (ts), a Python 3 file (py) or a Go file (go). Errors name their place in the source. Other target names answer ERR_NOT_IMPLEMENTED.")
+      :doc "Convert an ASN drawing, page or stylesheet to SVG, HTML or CSS, or compile an ASL entry module to an ES module (js), its TypeScript declarations (ts), a Python 3 file (py) or a Go file (go). Errors name their place in the source. An ASL module is type-checked on the host first. c, llvm, rs, swift, wat and sh answer ERR_NOT_IMPLEMENTED; any other name ERR_UNKNOWN_TARGET.")
 
     (:op :pack
       :scope toolchain
