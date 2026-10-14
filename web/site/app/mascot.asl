@@ -1,6 +1,6 @@
 (module aslSite/app/mascot
   :x [chameleon iconSvg]
-  :i [(aslSite/ui/html :a h)])
+  :i [(asl-html/html :a h)])
 
 fn stroke d: String -> h/Node
   (h/path [(h/attr "d" d)])

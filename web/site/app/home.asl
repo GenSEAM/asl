@@ -1,6 +1,6 @@
 (module aslSite/app/home
   :x [Stats placeholderStats installLine batchLine homeContent homePage]
-  :i [(aslSite/ui/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m) (aslSite/app/mascot :a mascot)])
+  :i [(asl-html/html :a h) (aslSite/app/layout :a l) (aslSite/app/msg :a m) (aslSite/app/mascot :a mascot)])
 
 (schema Stats (:f wasmBytes Int64) (:f aslLines Int64) (:f bridgeLines Int64))
 
@@ -29,10 +29,10 @@ fn heroSection -> h/Node
          (shellLine (installLine) "copy-install" (m/copyInstall))
          (h/p [(h/cls "micro")] [(h/text "Not released yet: the installer is under development. ") (h/a [(h/href "/docs#install")] [(h/text "Details")])])
          (h/ul [(h/cls "facts")]
-           [(h/li [] [(h/elem "b" [] [(h/text "( )")]) (h/text " balanced S-expressions")])
-            (h/li [] [(h/elem "b" [] [(h/text "0")]) (h/text " nil, exceptions or try")])
-            (h/li [] [(h/elem "b" [] [(h/text "!")]) (h/text " marks every effect")])
-            (h/li [] [(h/elem "b" [] [(h/text "wasm32")]) (h/text " and native through LLVM")])])])
+           [(h/li [] [(h/el "b" [] [(h/text "( )")]) (h/text " balanced S-expressions")])
+            (h/li [] [(h/el "b" [] [(h/text "0")]) (h/text " nil, exceptions or try")])
+            (h/li [] [(h/el "b" [] [(h/text "!")]) (h/text " marks every effect")])
+            (h/li [] [(h/el "b" [] [(h/text "wasm32")]) (h/text " and native through LLVM")])])])
        (h/figure [(h/cls "hero-art")] [(mascot/chameleon true "large") (h/figcaption [(h/cls "micro")] [(h/text "Drawn in ASL: typed SVG nodes, no image file.")])])])])
 
 fn costCell n: String title: String body: String cost: String -> h/Node
@@ -105,7 +105,7 @@ fn toolbeltSection -> h/Node
        (h/div [(h/cls "stack gap-top")] [(shellLine (batchLine) "copy-batch" (m/copyBatch))])])])
 
 fn proofCell label: String value: String valueId: String live: Bool -> h/Node
-  (h/div [] [(h/span [(h/cls "micro") (h/id (str valueId "-note"))] [(h/text label)]) (h/elem "b" [(h/id valueId) (h/cls (if live "live" ""))] [(h/text value)])])
+  (h/div [] [(h/span [(h/cls "micro") (h/id (str valueId "-note"))] [(h/text label)]) (h/el "b" [(h/id valueId) (h/cls (if live "live" ""))] [(h/text value)])])
 
 fn proofSection stats: Stats -> h/Node
   (h/section [(h/cls "band sunken") (h/attr "aria-labelledby" "proof")]

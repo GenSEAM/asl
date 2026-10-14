@@ -1,0 +1,11 @@
+(:package asl-html
+ :version "0.1.0"
+ :entry "src/html.asl"
+ :description "Typed HTML5 and CSS for AgentSlang: one constructor per HTML5 and SVG element, escaping by construction (text, attributes, script and style bodies), styles as data with every at-rule, and a Markdown subset to nodes"
+ :aslFirst true
+ :modules [
+   "asl-html/html"
+   "asl-html/css"
+   "asl-html/markdown"
+ ]
+ :dependencies [])

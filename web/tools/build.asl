@@ -6,7 +6,7 @@
       (asl-target-llvm/libc :a libc)
       (asl-target-llvm/target :a target)
       (asl-target-llvm/wasmLink :a wl)
-      (aslSite/ui/html :a h)
+      (asl-html/html :a h)
       (aslSite/app/theme :a theme)
       (aslSite/app/home :a home)
       (aslSite/app/mascot :a mascot)
@@ -101,7 +101,7 @@ fn ! lineCount! path: String -> Int64
   (mt (fileRead path) ((ok s) (stringCountChar s "\n")) ((err e) 0))
 
 fn ! aslLines! -> Int64
-  (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (web) "/site -name '*.asl' -not -name '*Test.asl'")).stdout "\n")))]
+  (let [(files (filter (fn [(f String)] -> Bool (not (stringEmpty? f))) (stringSplit (sh! (str "find " (web) "/site asl/packages/asl-html/src -name '*.asl'")).stdout "\n")))]
     (listSum (map lineCount! files)))
 
 fn ! writePage! route: String node: h/Node -> Bool

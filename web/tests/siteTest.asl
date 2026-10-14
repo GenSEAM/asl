@@ -1,6 +1,6 @@
 (module aslSite/tests/siteTest
   :x [runTests]
-  :i [(aslSite/ui/html :a h) (aslSite/ui/css :a c) (aslSite/ui/bridge :a b) (aslSite/app/msg :a m) (aslSite/app/update :a u) (aslSite/app/theme :a theme) (aslSite/app/home :a home) (aslSite/app/layout :a l)])
+  :i [(asl-html/html :a h) (asl-html/css :a c) (aslSite/ui/bridge :a b) (aslSite/app/msg :a m) (aslSite/app/update :a u) (aslSite/app/theme :a theme) (aslSite/app/home :a home) (aslSite/app/layout :a l)])
 
 fn ops msg: m/Msg model: Int64 -> String
   (b/encodeOps (pairSecond (u/step msg model)))
@@ -12,10 +12,10 @@ fn runTests -> Bool
   (let [(page (h/renderDocument (home/homePage (home/Stats :wasmBytes 240640 :aslLines 900 :bridgeLines 80))))]
     (do
       (assert (= (h/render (h/p [(h/cls "a\"b")] [(h/text "x < y & z")])) "<p class=\"a&quot;b\">x &lt; y &amp; z</p>") "text and attributes are escaped")
-      (assert (= (h/render (h/elem "link" [] [(h/text "u")])) "<link>u</link>") "a void name with children renders its children")
+      (assert (= (h/render (h/el "link" [] [(h/text "u")])) "<link>u</link>") "a void name with children renders its children")
       (assert (= (h/render (h/meta [(h/attr "charset" "utf-8")])) "<meta charset=\"utf-8\"/>") "an empty void element self-closes")
       (assert (= (h/render (h/button [(h/flag "disabled")] [])) "<button type=\"button\" disabled></button>") "buttons never submit; flags have no value")
-      (assert (= (c/renderRule (c/media "(min-width: 1px)" [(c/rule ".a" [(c/decl "color" (c/tokenVar "ink"))])])) "@media (min-width: 1px){.a{color:var(--ink)}}") "css rules nest in media")
+      (assert (= (c/renderRule (c/media "(min-width: 1px)" [(c/rule ".a" [(c/decl "color" (c/cssVar "ink"))])])) "@media (min-width: 1px){.a{color:var(--ink)}}") "css rules nest in media")
       (assert (stringContains? (theme/stylesheet) ":root[data-theme=light]{--ground:#faf8f9") "light tokens come from the palette table")
       (assert (= (b/encodeOp (b/textOp "#x" "say \"hi\"\nnow")) "(:text \"#x\" \"say \\\"hi\\\"\\nnow\")") "bridge strings are ASN-quoted on one line")
       (assert (= (next (m/toggleTheme) 0) 3) "dark -> explicit light")

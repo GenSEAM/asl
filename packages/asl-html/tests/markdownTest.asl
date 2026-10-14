@@ -1,6 +1,6 @@
-(module aslSite/tests/markdownTest
+(module asl-html/tests/markdownTest
   :x [runTests]
-  :i [(aslSite/ui/html :a h) (aslSite/ui/markdown :a md)])
+  :i [(asl-html/html :a h) (asl-html/markdown :a md)])
 
 fn html src: String -> String
   (stringJoin (map h/render (md/blocks (stringLines src))) "")

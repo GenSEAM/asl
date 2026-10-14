@@ -1,6 +1,6 @@
 (module aslSite/main
   :x [! main ! update ! render ! measured]
-  :i [(aslSite/ui/html :a h) (aslSite/ui/bridge :a b) (aslSite/app/msg :a m) (aslSite/app/home :a home) (aslSite/app/update :a u)])
+  :i [(asl-html/html :a h) (aslSite/ui/bridge :a b) (aslSite/app/msg :a m) (aslSite/app/home :a home) (aslSite/app/update :a u)])
 
 fn ! main -> Int64
   0

@@ -1,6 +1,6 @@
 (module aslSite/ui/bridge
   :x [Op attrOp textOp swapOp copyOp storeOp afterOp quote encodeOp encodeOps]
-  :i [(aslSite/ui/html :a h)])
+  :i [(asl-html/html :a h)])
 
 (enum Op (:c attrOp [(sel String) (name String) (value String)] "set an attribute") (:c textOp [(sel String) (s String)] "set text content") (:c swapOp [(sel String) (node h/Node)] "replace the children of an element") (:c copyOp [(s String)] "write text to the clipboard") (:c storeOp [(key String) (value String)] "persist a preference on this device") (:c afterOp [(ms Int64) (msg Int64)] "deliver msg back to update after ms"))
 

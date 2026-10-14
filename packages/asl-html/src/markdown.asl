@@ -1,6 +1,6 @@
-(module aslSite/ui/markdown
+(module asl-html/markdown
   :x [inline blocks]
-  :i [(aslSite/ui/html :a h)])
+  :i [(asl-html/html :a h)])
 
 fn cut s: String from: Int64 to: Int64 -> String
   (optionOr (stringSlice s from to) "")
@@ -67,8 +67,8 @@ fn tableNode rows: (List String) -> h/Node
         (bodyRows (filter (fn [(r String)] -> Bool (not (stringContains? r "---"))) (listDrop rows 1)))]
     (h/div [(h/cls "tablewrap")]
       [(h/table []
-        [(h/thead [(h/tr (map (fn [(c String)] -> h/Node (h/th [] (inline c))) headRow))])
-         (h/tbody (map (fn [(r String)] -> h/Node (h/tr (map (fn [(c String)] -> h/Node (h/td [] (inline c))) (cells r)))) bodyRows))])]))
+        [(h/thead [] [(h/tr [] (map (fn [(c String)] -> h/Node (h/th [] (inline c))) headRow))])
+         (h/tbody [] (map (fn [(r String)] -> h/Node (h/tr [] (map (fn [(c String)] -> h/Node (h/td [] (inline c))) (cells r)))) bodyRows))])]))
 
 fn headingNode line: String -> h/Node
   (cond

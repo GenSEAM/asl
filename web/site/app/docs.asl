@@ -1,6 +1,6 @@
 (module aslSite/app/docs
   :x [docsPage]
-  :i [(aslSite/ui/html :a h) (aslSite/app/layout :a l)])
+  :i [(asl-html/html :a h) (aslSite/app/layout :a l)])
 
 fn para s: String -> h/Node
   (h/p [] [(h/text s)])

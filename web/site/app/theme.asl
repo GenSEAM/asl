@@ -1,6 +1,6 @@
 (module aslSite/app/theme
   :x [Swatch palette swatchDark swatchLight tokenRules sheet stylesheet]
-  :i [(aslSite/ui/css :a c)])
+  :i [(asl-html/css :a c)])
 
 (enum Swatch (:c swatch [(name String) (dark String) (light String)] "one colour role: its dark and light value"))
 
@@ -29,7 +29,7 @@ fn tokenRules -> (List c/Rule)
    (c/rule ":root[data-theme=light]" (listAppend (map swatchLight (palette)) [(c/decl "color-scheme" "light")]))]
 
 fn v name: String -> String
-  (c/tokenVar name)
+  (c/cssVar name)
 
 fn d prop: String value: String -> c/Decl
   (c/decl prop value)

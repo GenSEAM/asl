@@ -127,6 +127,7 @@ fn runtimeText -> String
      "const spaced = (xs) => join(xs.flatMap((x, i) => (i ? [' ', show(x, false)] : [show(x, false)])));"
      "let write = (s) => (globalThis.process?.stdout ? process.stdout.write(s) : console.log(s));"
      "const setOutput = (f) => { write = f; };"
+     "const counts = { asserts: 0, refutes: 0 };"
      "const int = (v, who) => (isInt(v) ? v : trap('ERR_TYPE', `${who} expects Int`));"
      "const string = (v, who) => (isStr(v) ? v : trap('ERR_TYPE', `${who} expects String`));"
      "const builtins = {"
@@ -169,9 +170,11 @@ fn runtimeText -> String
      "  nowNs: () => BigInt(Date.now()) * 1000000n,"
      "  monotonicNs: () => BigInt(Math.round((globalThis.performance?.now() ?? Date.now()) * 1e6)),"
      "  trap: (code, m) => trap(show(code, false), show(m, false)),"
+     "  assert: (c, m) => { counts.asserts++; if (c !== true) trap('ERR_ASSERT', `assertion failed: ${show(m, false)}`); return UNIT; },"
+     "  refute: (c, m) => { counts.refutes++; if (c !== false) trap('ERR_REFUTE', `refutation failed: ${show(m, false)}`); return UNIT; },"
      "};"
      "const entries = {"
-     "  '+': (a, b) => arith('+', a, b), '-': (a, b) => arith('-', a, b), '*': (a, b) => arith('*', a, b),"
+     "  '+': (a, b) => arith('+', a, b), '-': (a, b) => (b === undefined ? (isInt(a) ? fit(-a, '-') : isFloat(a) ? -a : trap('ERR_TYPE', '- expects a number')) : arith('-', a, b)), '*': (a, b) => arith('*', a, b),"
      "  '/': (a, b) => arith('/', a, b), 'mod': (a, b) => arith('mod', a, b), '%': (a, b) => arith('%', a, b),"
      "  '=': (a, b) => eq(a, b), '!=': (a, b) => !eq(a, b), '==': (a, b) => eq(a, b),"
      "  '<': (a, b) => order('<', a, b), '<=': (a, b) => order('<=', a, b), '>': (a, b) => order('>', a, b), '>=': (a, b) => order('>=', a, b),"
@@ -199,13 +202,13 @@ fn runtimeText -> String
      "};"
      "const unreachable = () => trap('ERR_UNREACHABLE', 'control reached an unreachable block');"
      "const fieldOf = (r, k) => (r instanceof Rec && k in r ? r[k] : trap('ERR_TYPE', `no field ${k}`));"
-     "return { AslTrap, callClosure, UNIT, kw, sym, Variant, Rec, Cons, list, eq, BStr, show, setOutput, builtins, entries, prims, unreachable, fieldOf };"
+     "return { AslTrap, callClosure, UNIT, kw, sym, Variant, Rec, Cons, list, eq, BStr, show, setOutput, counts, builtins, entries, prims, unreachable, fieldOf };"
      "})();"
      ""]
     "\n")
 
 fn builtinNames -> (List String)
-  ["print" "println" "str" "max" "min" "abs" "cons" "listEmpty?" "listHead" "listTail" "list" "stringConcat" "stringContains?" "stringStartsWith?" "stringLength" "stringSlice" "stringFromInt64" "stringToBytes" "bytesLength" "bytesGet" "stringFromFloat64" "stringToFloat64" "int64ToFloat64" "float64ToInt64" "floor" "sqrt" "log2" "sin" "atan2" "clamp" "partial" "bytesAlloc" "bytesSet" "bytesGetFloat64" "bytesSetFloat64" "eprintln" "nowNs" "monotonicNs" "trap" "ceil" "round" "exp" "log" "log10" "cos" "tan" "pow"]
+  ["print" "println" "str" "max" "min" "abs" "cons" "listEmpty?" "listHead" "listTail" "list" "stringConcat" "stringContains?" "stringStartsWith?" "stringLength" "stringSlice" "stringFromInt64" "stringToBytes" "bytesLength" "bytesGet" "stringFromFloat64" "stringToFloat64" "int64ToFloat64" "float64ToInt64" "floor" "sqrt" "log2" "sin" "atan2" "clamp" "partial" "bytesAlloc" "bytesSet" "bytesGetFloat64" "bytesSetFloat64" "eprintln" "nowNs" "monotonicNs" "trap" "assert" "refute" "ceil" "round" "exp" "log" "log10" "cos" "tan" "pow"]
 
 fn entryNames -> (List String)
   (listAppend ["+" "/" "=" "<" "@listFirst" "@listRest" "@stringSliceOr" "@stringIndexOf" "@listHeadOr" "@listTailOr" "@listGetOr" "not" "-" "*" "mod" "%" "!=" "==" "<=" ">" ">="] (builtinNames))
