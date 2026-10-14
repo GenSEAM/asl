@@ -19,8 +19,9 @@ reading as a sticker applied to a grey page. What is out permanently is the *com
 marks a generated page: violet-to-cyan gradients, clipped-gradient headlines and neon glow. A
 single flat accent is not that.
 
-The mark is `( • )` — two parentheses around one evaluated core, the smallest well-formed
-S-expression.
+The mark is the chameleon: a single-stroke line drawing in `signal` (`web/site/app/mascot.asl`),
+its tail the spiral of the old logo. It is typed SVG built in ASL, not an image file, so it takes
+the theme's colours; the favicon is rendered from the same paths.
 
 **The page sells the outcome, not the syntax.** A visitor is buying what the language removes —
 repair loops, ambiguous structure, a program that means something different on the next runtime —
@@ -69,7 +70,7 @@ element, every text escaped by the serializer), so no source file holds HTML in 
 - `document` — head, top bar, main, footer for a route.
 - `sectionHead` — numbered eyebrow, title, lead.
 - `eyebrow` — the numbered index rule.
-- `markNode` — the `( • )` mark.
+- `markNode` — the chameleon at top-bar size (`mascot/chameleon`).
 - `copyButton` — a button wired to a message, never to a script.
 
 Behaviour lives in `app/update.asl`: a pure `step` from a message and the model to the next model

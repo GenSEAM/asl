@@ -112,7 +112,7 @@ fn ! writePage! route: String node: h/Node -> Bool
 fn ! main -> Int64
   (let [(work (str (dist) "/.work"))
         (wasm (str (dist) "/site.wasm"))]
-    (if (not (and (ok! "clean" (sh! (str "rm -rf " (quoteSh (dist)) " && mkdir -p " (quoteSh work) " && cp -R " (quoteSh (str (web) "/public/.")) " " (quoteSh (dist)) " && cp " (quoteSh (str (web) "/bridge/boot.js")) " " (quoteSh (dist)))))
+    (if (not (and (ok! "clean" (sh! (str "rm -rf " (quoteSh (dist)) " && mkdir -p " (quoteSh work) " && cp -R " (quoteSh (str (web) "/public/.")) " " (quoteSh (dist)) " && cp " (quoteSh (str (web) "/bridge/boot.js")) " asl/llms.txt " (quoteSh (dist)))))
                   (compileWasm! work wasm)))
       1
       (let [(stats (home/Stats :wasmBytes (resultOr (fileSize wasm) 0) :aslLines (aslLines!) :bridgeLines (lineCount! (str (web) "/bridge/boot.js"))))

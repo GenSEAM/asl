@@ -10,6 +10,7 @@
    "aslSite/ui/bridge"
    "aslSite/ui/markdown"
    "aslSite/app/theme"
+   "aslSite/app/mascot"
    "aslSite/app/msg"
    "aslSite/app/layout"
    "aslSite/app/home"
