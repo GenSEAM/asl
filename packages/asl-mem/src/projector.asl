@@ -12,7 +12,7 @@ fn projectStatusMd iteration: Str phasesTable: Str -> Str
   (str "# Current Status: `" iteration "`\n\n" "## Active Roadmap Waves\n\n" "| Phase ID | State | Gate Command | Result |\n" "|---|---|---|---|\n" phasesTable "\n")
 
 fn projectPlanMd phaseId: Str phaseName: Str goal: Str gate: Str itemsContent: Str -> Str
-  (str "# Plan: " phaseName "\n\n" "## Goal\n" goal "\n\n" "## Work Items\n\n" itemsContent "\n" "## Acceptance Gate\n" "```bash\n" gate "\n" "```\n\n" "## Invariants\n" "- 100% pure AgentScript (.asl) in code packages.\n" "- Zero comments (C0001). Docstrings :d only.\n" "- Strict falsification assertions.\n")
+  (str "# Plan: " phaseName "\n\n" "## Goal\n" goal "\n\n" "## Work Items\n\n" itemsContent "\n" "## Acceptance Gate\n" "```bash\n" gate "\n" "```\n\n" "## Invariants\n" "- 100% pure AgentSlang (.asl) in code packages.\n" "- Zero comments (C0001). Docstrings :d only.\n" "- Strict falsification assertions.\n")
 
 fn projectDualManifest iteration: Str phaseId: Str phaseName: Str status: Str wave: Str gate: Str -> DualProjection
   (let [(row (formatPhaseStatusRow phaseId status gate)) (sMd (projectStatusMd iteration row)) (pItem (formatPlanItem (str phaseId ".1") "Initial Implementation" status gate)) (pMd (projectPlanMd phaseId phaseName (str "Execute " phaseName " in " wave) gate pItem)) (path (str ".plans/" phaseId "/PLAN.md"))] (DualProjection :statusMd sMd :planMd pMd :targetPlanPath path))

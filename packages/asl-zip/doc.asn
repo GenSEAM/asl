@@ -5,7 +5,7 @@
 (:doc :symbol "asl/packages/asl-zip/src/gzip.asl#crcCombine" :text "zlib crc32_combine joins the four streams")
 (:doc :symbol "asl/packages/asl-zip/src/gzip.asl#members!" :text "members share one ISIZE-preallocated output buffer")
 (:doc :symbol "asl/packages/asl-zip/src/gzip.asl#gunzipWithLimit!" :text "output above limit bytes is an Err")
-(:doc :symbol "asl/packages/asl-zip/src/inflate.asl#" :text "Pure AgentScript RFC 1951 DEFLATE decoder")
+(:doc :symbol "asl/packages/asl-zip/src/inflate.asl#" :text "Pure AgentSlang RFC 1951 DEFLATE decoder")
 (:doc :symbol "asl/packages/asl-zip/src/inflate.asl#overrun?" :text "consumed bits past input end mean truncation")
 (:doc :symbol "asl/packages/asl-zip/src/inflate.asl#buildTable!" :text "1024-entry primary table; counts at 2048, symbols 2080")
 (:doc :symbol "asl/packages/asl-zip/src/inflate.asl#slowDecode" :text "canonical decode for codes longer than 10 bits")

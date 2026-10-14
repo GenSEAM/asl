@@ -21,7 +21,7 @@ Protocol Buffers, OpenAPI and JSON Schema standardize data transfer formats. The
 
 ```text
                                   ┌────────────────────────┐
-                                  │   Pure AgentScript     │
+                                  │   Pure AgentSlang     │
                                   │   Algorithm & Models   │
                                   └───────────┬────────────┘
                                               │
@@ -45,9 +45,9 @@ Protocol Buffers, OpenAPI and JSON Schema standardize data transfer formats. The
 
 ## 2. One Source, Many Targets: Where It Stands
 
-AgentScript (ASL) is designed to be the shared semantic layer. Instead of writing bindings and manual translations, developers and agents write core logic once:
+AgentSlang (ASL) is designed to be the shared semantic layer. Instead of writing bindings and manual translations, developers and agents write core logic once:
 
-```agentscript
+```agentslang
 (module math/vector :x [Vec2 dotProduct scale runTests] :i [])
 
 schema Vec2

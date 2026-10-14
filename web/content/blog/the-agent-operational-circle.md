@@ -15,7 +15,7 @@ Each switch is a new set of escaping and closing rules for the model to get righ
 
 ## 1. The Four Quadrants of Autonomous Operation
 
-The design goal: the agent does not write raw JSON, YAML, SVG, HTML or Bash. It writes **AgentScript Notation (ASN)**, and renderers produce the external format.
+The design goal: the agent does not write raw JSON, YAML, SVG, HTML or Bash. It writes **AgentSlang Notation (ASN)**, and renderers produce the external format.
 
 ```text
 Universal ASN S-expression

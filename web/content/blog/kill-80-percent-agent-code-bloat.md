@@ -26,7 +26,7 @@ Before writing a line of agent code or building an abstraction, we climb **The L
 6. Only then: write the minimum verifiable code.
 ```
 
-### The 3 Core Invariants of AgentScript (ASL)
+### The 3 Core Invariants of AgentSlang (ASL)
 
 1. **Zero-Foreign Code, Measured**: the language packages are ASL. On 2026-10-14 (commit `36deda1`), `git ls-files packages` listed 1,602 `.asl` files; the only other code in it is test material: two shell scripts, two C probes, LLVM IR goldens and upstream parser samples kept as `.sample` fixtures. The foundation underneath is not ASL: the stage-0 host in `host/` is 33 C source and header files, 10,202 lines by `wc -l`. It parses, checks and runs ASL. The way off it is the self-hosted compiler `asl1`, which `asl-target-llvm` lowers to LLVM IR; a seed exists for `arm64-apple-darwin` only, and self-hosting is in progress. The same backend already compiles this website to WebAssembly (`web/dist/site.wasm`, 252,954 bytes in the 2026-10-14 build).
 2. **Tools as Forms**: agent tools are operations called as S-expressions, `asl '(:read ...) (:edit ...) (:check ...)'`, several forms per call, each answered with an ASN receipt. `asl '(:tools)'` lists them.
@@ -41,4 +41,4 @@ We have not measured framework size or start-up latency against a Python or Type
 ---
 
 ## Next Steps
-- Next Article: [AgentScript and the case for S-expressions](/blog/agent-script-the-optimal-agent-language).
+- Next Article: [AgentSlang and the case for S-expressions](/blog/agent-slang-the-optimal-agent-language).

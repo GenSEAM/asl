@@ -10,7 +10,7 @@ Traditional instrumentation brings its own costs:
 2. **Allocation pressure**: profilers allocate telemetry objects of their own.
 3. **Telemetry bloat**: verbose traces dump large payloads into the agent's observation window.
 
-This post describes what the AgentScript (ASL) test runner reports today, what the host can already tell you about memory, and the telemetry we want in every receipt.
+This post describes what the AgentSlang (ASL) test runner reports today, what the host can already tell you about memory, and the telemetry we want in every receipt.
 
 ---
 

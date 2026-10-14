@@ -1,7 +1,7 @@
 (:package asl-target-swift
  :version "0.1.0"
  :entry "src/emitSwift.asl"
- :description "Standalone Swift 6 & SwiftUI native emitter backend for AgentScript under ADR D93 and D129"
+ :description "Standalone Swift 6 & SwiftUI native emitter backend for AgentSlang under ADR D93 and D129"
  :layer 0
  :aslFirst true
   :modules [

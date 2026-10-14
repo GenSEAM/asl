@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/logo.svg" alt="AgentScript Chameleon Logo" width="100" height="100" />
+<img src="assets/logo.svg" alt="AgentSlang Chameleon Logo" width="100" height="100" />
 
-# AgentScript (ASL)
+# AgentSlang (ASL)
 ### *A language and data notation written by models, for models.*
 
 [Website](https://aslang.dev) · [LLM entry (llms.txt)](llms.txt)
@@ -11,7 +11,7 @@
 
 ---
 
-AgentScript is two things:
+AgentSlang is two things:
 
 - **ASL, the language.** Source (`.asl`) and data (`.asn`) files are S-expressions with balanced parentheses. A malformed program is caught by counting delimiters rather than by running it, and whitespace carries no meaning inside a form.
 - **`asl`, the toolbelt.** `asl '<form> <form> ...'` reads, searches and edits files in a git repository; the forms of one call run as one batch, and edits are staged, inspected with `(:diff)`, then flushed or discarded.
@@ -68,7 +68,7 @@ A function header is a bare column-0 line; its body is indented below. There is 
 
 ## Quickstart
 
-AgentScript is not released: there are no release binaries, and the installer at `aslang.dev/install.sh` is under development. From a checkout:
+AgentSlang is not released: there are no release binaries, and the installer at `aslang.dev/install.sh` is under development. From a checkout:
 
 ```sh
 sh host/build.sh                    # builds host/out/asl-host and the runtime archives (needs clang)

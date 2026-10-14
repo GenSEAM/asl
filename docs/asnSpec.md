@@ -1,4 +1,4 @@
-# asnSpec.md — AgentScript Notation v0.1
+# asnSpec.md — AgentSlang Notation v0.1
 
 **Status:** normative for data. This document defines ASN: what a payload may contain, what each
 form means, and what a decoder must do when a payload is wrong.

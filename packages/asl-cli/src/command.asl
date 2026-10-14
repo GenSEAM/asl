@@ -8,7 +8,7 @@
   (:f opener String))
 
 fn helpText -> String
-  (str "AgentScript (ASL) Unified Toolchain & Runtime\n"
+  (str "AgentSlang (ASL) Unified Toolchain & Runtime\n"
        "\n"
        "Human CLI Usage:\n"
        "  asl <command> [args...]\n"

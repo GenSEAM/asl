@@ -12,8 +12,8 @@ fn llvmPreamble target: Str -> Str
                            "@.str_fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\", align 1\n"
                            "@.str_arg_v = private unnamed_addr constant [10 x i8] c\"--version\\00\", align 1\n"
                            "@.str_arg_h = private unnamed_addr constant [7 x i8] c\"--help\\00\", align 1\n"
-                           "@.str_version = private unnamed_addr constant [51 x i8] c\"asl 0.1.0 (pure AgentScript self-hosted toolchain)\\00\", align 1\n"
-                           "@.str_help = private unnamed_addr constant [56 x i8] c\"AgentScript Native CLI (Unified S-Expression Toolchain)\\00\", align 1\n\n"))
+                           "@.str_version = private unnamed_addr constant [51 x i8] c\"asl 0.1.0 (pure AgentSlang self-hosted toolchain)\\00\", align 1\n"
+                           "@.str_help = private unnamed_addr constant [56 x i8] c\"AgentSlang Native CLI (Unified S-Expression Toolchain)\\00\", align 1\n\n"))
         (decls (str "declare i32 @printf(ptr, ...)\n"
                     "declare void @exit(i32)\n"
                     "declare ptr @malloc(i64)\n"

@@ -21,7 +21,7 @@ Agents do not need to be polite to each other. They need typed, deterministic, l
 
 ---
 
-## 1. AgP: The AgentScript Wire Protocol (v0.1.0)
+## 1. AgP: The AgentSlang Wire Protocol (v0.1.0)
 
 **AgP (Agentic Protocol)** replaces natural language chatter with typed, single-pass S-expression frames. Its specification lives in `asl/docs/agenticProtocol.md`, marked as a target design, and its target transports are JSON-RPC 2.0 stdio and SSE, Google A2A streams, and Unix domain sockets or WebSockets for local agent clusters.
 
@@ -54,7 +54,7 @@ An AgP frame begins with one of three single-character sigils:
 
 ### Pure Value Syntax
 
-AgP values are AgentScript literals, not JSON:
+AgP values are AgentSlang literals, not JSON:
 * Lists are whitespace-delimited (`["idle" "active"]`), with no commas.
 * Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The specification and the `seambus` skill are camelCase throughout (`:replyTo`, `:scopeViolation`).
 * Payloads are constructor forms such as `(fsm :states 3)`, read directly as S-expressions without a JSON decoding step.

@@ -1,4 +1,4 @@
-# AgP — The AgentScript Wire Protocol (v0.1.0)
+# AgP — The AgentSlang Wire Protocol (v0.1.0)
 
 **Status: target design.** This document specifies agent-to-agent communication in two layers.
 As of 2026-10-14 no code implements either layer; the frames, dialects and error codes below are
@@ -14,8 +14,8 @@ Neighbouring documents and what they govern:
 
 | Document | Governs |
 |---|---|
-| `asl/agentSpecCore.md` | The AgentScript language: forms, types, evaluation |
-| `asl/docs/asnSpec.md` | AgentScript Notation — how payload **data** is written |
+| `asl/agentSpecCore.md` | The AgentSlang language: forms, types, evaluation |
+| `asl/docs/asnSpec.md` | AgentSlang Notation — how payload **data** is written |
 | **this document** | The **wire** — how agents frame and exchange that data |
 
 ## What exists today
@@ -47,7 +47,7 @@ Part II, and any CLI for them. There is no `asl loom` command, and the operation
 ## 1. Why a wire at all
 
 Natural language between agents is bloated, lossy, and unverifiable. AgP frames an
-agent-to-agent exchange as typed AgentScript s-expressions. Target transports:
+agent-to-agent exchange as typed AgentSlang s-expressions. Target transports:
 
 - **AWP (Agent Wire Protocol)** JSON-RPC 2.0 stdio and SSE transports
 - **Google A2A** and client-to-agent streams
@@ -92,10 +92,10 @@ this document is written in the spaced form; a spaceless frame is a defect where
 
 ## 4. Value syntax
 
-Frame values are **AgentScript literals**, never JSON. The difference is load-bearing: AgentScript
+Frame values are **AgentSlang literals**, never JSON. The difference is load-bearing: AgentSlang
 lists are whitespace-delimited and carry no commas, and a comma on the wire is a decode error.
 
-| Kind | Written | AgentScript type |
+| Kind | Written | AgentSlang type |
 |---|---|---|
 | String | `"idle"` | `String` |
 | Integer | `50`, `-3` | `Int64` |
@@ -210,7 +210,7 @@ No test decodes these examples yet; a frame-layer codec, when it exists, should 
 this file.
 
 Wire frames are fenced ` ```agp `, never ` ```lisp `. A frame is the protocol's language, not
-Core AgentScript or ASN: the ASN reader (`asl/packages/asl-transpile/src/core/asn.asl`) rejects a
+Core AgentSlang or ASN: the ASN reader (`asl/packages/asl-transpile/src/core/asn.asl`) rejects a
 sigil head such as `(! :a 1)` as `parse`.
 
 ---
@@ -258,7 +258,7 @@ Everything except `DATA`, `HANDOFF` and `YIELD` is a control frame (`isControlFr
 
 ## 12. Frame structure
 
-A `LoomFrame` is a header, a type, an optional channel and a body. Types below are AgentScript
+A `LoomFrame` is a header, a type, an optional channel and a body. Types below are AgentSlang
 types.
 
 | Field | Wire key | Type | Required |
@@ -283,7 +283,7 @@ In `asl/v1`, `compact/v1` and `polyglot/v1` the design places a JSON body inside
 so an `asl/v1` frame is an s-expression envelope wrapping a JSON payload, not an s-expression
 all the way down.
 
-**The target is ASN.** The body becomes an AgentScript Notation value (`asl/docs/asnSpec.md`)
+**The target is ASN.** The body becomes an AgentSlang Notation value (`asl/docs/asnSpec.md`)
 carrying the same nominal types the checker verifies, and the JSON layer goes away.
 
 `asl/coord` already has that shape: its `loom:handoff` and `loom:yield` frames carry their fields
@@ -293,7 +293,7 @@ as typed keyed s-expression attributes, with no JSON anywhere.
 
 ### 14.1 `asl/v1` — verbose self-describing
 
-The `:body` here is a JSON object; the block is a wire dump, not AgentScript source.
+The `:body` here is a JSON object; the block is a wire dump, not AgentSlang source.
 
 ```text
 (loom:frame :v 1 :id "msg-9f201" :from "orchestratorMain" :to "coderSub42" :dialect "asl/v1" :ts 1788350000000 :type "DATA" :channel "tasks" :body {"action":"compile","target":"wasm","timeoutMs":5000})
@@ -301,7 +301,7 @@ The `:body` here is a JSON object; the block is a wire dump, not AgentScript sou
 
 ### 14.2 `asl/coord` — coordination and handoff
 
-Fully typed, no JSON. These are AgentScript s-expressions.
+Fully typed, no JSON. These are AgentSlang s-expressions.
 
 ```agp
 (loom:handoff :v 1 :id "handoff-7721" :from "agentOrchestrator" :to "agentCoder1"

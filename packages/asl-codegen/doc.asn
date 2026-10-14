@@ -96,7 +96,7 @@
 (:doc :symbol "asl/packages/asl-codegen/src/emit.asl#formsHaveTopExpr?" :text "True when any of forms is a bare top-level expression; the Rust target has no module-load hook to run it in, unlike a function body.")
 (:doc :symbol "asl/packages/asl-codegen/src/emit.asl#emitTopForms" :text "Emits Rust code for a list of top-level schema, enum, and function forms.")
 (:doc :symbol "asl/packages/asl-codegen/src/emit.asl#emitRustProgram" :text "Emits a complete Rust source program with runtime imports and declarations.")
-(:doc :symbol "asl/packages/asl-codegen/src/emitC.asl#" :text "Embedded ANSI C and Arduino Sketch code generator for AgentScript.")
+(:doc :symbol "asl/packages/asl-codegen/src/emitC.asl#" :text "Embedded ANSI C and Arduino Sketch code generator for AgentSlang.")
 (:doc :symbol "asl/packages/asl-codegen/src/emitC.asl#emitCHeader" :text "Returns standard C library include header lines.")
 (:doc :symbol "asl/packages/asl-codegen/src/emitC.asl#emitArduinoHeader" :text "Returns Arduino library include header lines.")
 (:doc :symbol "asl/packages/asl-codegen/src/emitC.asl#emitCType" :text "Maps an ASL type string to an Arduino C type.")

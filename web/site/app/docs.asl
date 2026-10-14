@@ -22,14 +22,14 @@ fn toc -> h/Node
 
 fn install -> (List h/Node)
   (topic "install" "Install"
-    [(para "AgentScript has not been released yet. The installer is under development: there are no release binaries, and the script below is the one that will ship.")
+    [(para "AgentSlang has not been released yet. The installer is under development: there are no release binaries, and the script below is the one that will ship.")
      (listing ["curl -fsSL https://aslang.dev/install.sh | sh"])
      (para "To try the language before then, clone the repository and build the stage-0 host with host/build.sh; host/out/asl-host check, test and run work on it directly.")])
 
 fn body -> (List h/Node)
   (listAppend
     [(l/eyebrow "DOCS" "The language on one page")
-     (h/h1 [] [(h/text "AgentScript in ten minutes")])
+     (h/h1 [] [(h/text "AgentSlang in ten minutes")])
      (para "ASL source (.asl) and data (.asn) files are S-expressions with balanced parentheses. A malformed program is caught by counting delimiters rather than by running it, and whitespace carries no meaning inside a form. The complete rules an agent needs are in llms.txt; this page is the same material for a person.")
      (toc)]
     (listAppend (install) (listAppend
@@ -69,5 +69,5 @@ fn body -> (List h/Node)
                      (listing ["fn ! update code: Int64 model: Int64 -> Int64" "  (let [(r (u/step (m/msgOf code) model))]" "    (do (print (b/encodeOps (pairSecond r))) (pairFirst r)))"])]))))))))))
 
 fn docsPage -> h/Node
-  (l/document (l/docs) "AgentScript docs: the language on one page" "The AgentScript (ASL) language on one page: modules, functions, enums, no nil or exceptions, marked effects, tests, the agent toolbelt and WebAssembly."
+  (l/document (l/docs) "AgentSlang docs: the language on one page" "The AgentSlang (ASL) language on one page: modules, functions, enums, no nil or exceptions, marked effects, tests, the agent toolbelt and WebAssembly."
     [(h/div [(h/cls "shell page")] [(h/article [(h/cls "prose")] (body))])])

@@ -1,4 +1,4 @@
-(:doc :symbol "asl/packages/asl-replay/src/main.asl#" :text "Pure AgentScript Deterministic Execution Replay and Canonical Event Streamer Substrate")
+(:doc :symbol "asl/packages/asl-replay/src/main.asl#" :text "Pure AgentSlang Deterministic Execution Replay and Canonical Event Streamer Substrate")
 (:doc :symbol "asl/packages/asl-replay/src/record.asl#" :text "Deterministic Agent Event Streaming Recorder and Volatile Metadata Masking under ADR D97")
 (:doc :symbol "asl/packages/asl-replay/src/replay.asl#" :text "Deterministic Replay Execution Engine, Step-Level State Verification, and Divergence Detection under ADR D97")
 (:doc :symbol "asl/packages/asl-replay/tests/replayTest.asl#" :text "Unit test suite for deterministic execution replay and canonical event streaming")

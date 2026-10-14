@@ -1,4 +1,4 @@
-(:doc :symbol "asl/packages/asl-eval/src/eval.asl#" :text "Pure AgentScript AST Evaluator, Lexical Closures, and Module Loading Runtime.")
+(:doc :symbol "asl/packages/asl-eval/src/eval.asl#" :text "Pure AgentSlang AST Evaluator, Lexical Closures, and Module Loading Runtime.")
 (:doc :symbol "asl/packages/asl-eval/src/eval.asl#EvalResult.value" :text "Serialized evaluated value or empty on error")
 (:doc :symbol "asl/packages/asl-eval/src/eval.asl#EvalResult.ok" :text "True if evaluation succeeded cleanly")
 (:doc :symbol "asl/packages/asl-eval/src/eval.asl#EvalResult.errCode" :text "Canonical failure error code")

@@ -1,4 +1,4 @@
-# researchReport.md — Viability and Design Research for AgentScript
+# researchReport.md — Viability and Design Research for AgentSlang
 
 Companion to a specification review (`SPEC_REVIEW.md`, not in this repository). Where the review
 asked *"is this specification complete?"*, this asks *"should this be built, and in what shape?"*
@@ -74,7 +74,7 @@ discipline in §3.3. Not the parentheses.
 ### 2.1 The zero-corpus problem is the central risk
 
 The DSL survey's diagnosis of why LLMs fail on DSLs is **absence of training data for the DSL's
-syntax and semantics — not syntactic complexity of the host language**. If that holds, AgentScript's
+syntax and semantics — not syntactic complexity of the host language**. If that holds, AgentSlang's
 core design move (choose a simpler, more regular syntax) targets a cause that isn't the cause.
 `[UNVERIFIED — arXiv 2410.03981]`
 
@@ -85,7 +85,7 @@ for low-resource targets run 40–60% for OCaml/Haskell and 18–39% for hard Ru
 
 **This is the single most important thing to measure before writing a compiler.** MultiPL-E's
 methodology is directly reusable: mechanically translate HumanEval/MBPP plus tests and signatures
-into AgentScript and measure generation reliability against TypeScript/Python/Go/Rust baselines. That
+into AgentSlang and measure generation reliability against TypeScript/Python/Go/Rust baselines. That
 experiment is cheap relative to a four-backend compiler and it either validates or kills the
 premise. **Do it first.** `[UNVERIFIED — nuprl.github.io/MultiPL-E]`
 
@@ -111,7 +111,7 @@ as a mechanism, and OpenAI's strict mode giving no measurable improvement. Notab
 exceeded what syntax-error counts explain, attributed to formatting burden consuming reasoning
 capacity. `[UNVERIFIED — aider.chat]`
 
-For AgentScript this cuts both ways, and the spec should claim the favorable half explicitly: an
+For AgentSlang this cuts both ways, and the spec should claim the favorable half explicitly: an
 S-expression DSL emitted as **raw text** avoids the escaping tax entirely, while one emitted
 inside a JSON field inherits all of it. But the same source warns that any unfamiliar output
 format may impose a non-syntactic reasoning tax even when it parses cleanly — which is 2.1 again.
@@ -159,7 +159,7 @@ what 2501.10868 measured.
 
 > **A grammar must force reasoning-bearing tokens to precede committed results.**
 
-This is the one place where AgentScript's syntax choice has a *defensible* advantage the spec never
+This is the one place where AgentSlang's syntax choice has a *defensible* advantage the spec never
 claimed. In a Lisp, a function body is a sequence whose value is its tail expression: `let`
 bindings, intermediate computation, and comments naturally precede the returned value. A grammar
 built on that shape structurally puts derivation before result — the opposite of a JSON schema
@@ -199,7 +199,7 @@ a binding. The economics are real but they are agent-assisted economics.
 ### 4.2 Recommendation: shared runtime, and it is not close
 
 Roughly 2 engineer-months of fixed cost buys a substrate on which each additional language is
-about an engineer-week. AgentScript's stated design — four independent native backends — pays the
+about an engineer-week. AgentSlang's stated design — four independent native backends — pays the
 per-target cost *every time*, and pays it in the hardest possible currency:
 
 * every backend needs its own semantic-equivalence guarantees (§6 of the review: A1 mangling,
@@ -233,7 +233,7 @@ cutting it from v1 (§6).
 
 **If these hold, they are the most important findings in this report** — they say the entire
 grammar strategy buys roughly a tenth of what a type-aware completion engine does, and they
-relocate AgentScript's defensible value from syntax to types. **They also directly downgrade my earlier
+relocate AgentSlang's defensible value from syntax to types. **They also directly downgrade my earlier
 recommendation in the review (`SPEC_REVIEW.md` §11.4) to ship a GBNF grammar.** That advice is not wrong, but I
 weighted it far too heavily; a grammar is table stakes, and the leverage is in the type layer.
 
@@ -250,7 +250,7 @@ entirely under realistic (non-golden) retrieval.
 ## 6. Recommendations
 
 1. **Run the MultiPL-E experiment before writing any compiler.** Translate a HumanEval subset into
-   AgentScript, measure generation reliability against TS/Python/Go/Rust. This premise is currently
+   AgentSlang, measure generation reliability against TS/Python/Go/Rust. This premise is currently
    assumed, cheap to test, and load-bearing for everything else.
 2. **Re-found the pitch on types, not parentheses.** Syntactic validity is commodity (§2.2) and
    reportedly ~6% of the error surface (§5). A typed IR with an incremental checker over partial

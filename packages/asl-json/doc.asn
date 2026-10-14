@@ -1,4 +1,4 @@
-(:doc :symbol "asl/packages/asl-json/src/json.asl#" :text "Pure AgentScript RFC 8259 JSON parser, emitter, and inspector")
+(:doc :symbol "asl/packages/asl-json/src/json.asl#" :text "Pure AgentSlang RFC 8259 JSON parser, emitter, and inspector")
 (:doc :symbol "asl/packages/asl-json/tests/jsonTest.asl#" :text "Test suite for pure-ASL RFC 8259 JSON parser, emitter, and inspector")
 (:doc :symbol "asl/packages/asl-json/tests/jsonTest.asl#L41" :text "Literals (3)")
 (:doc :symbol "asl/packages/asl-json/tests/jsonTest.asl#L45" :text "Integers (7)")

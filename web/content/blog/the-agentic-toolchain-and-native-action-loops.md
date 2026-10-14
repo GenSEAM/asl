@@ -11,7 +11,7 @@ The result is operational fragility:
 3. **Foreign Dependency Drift**: Multi-language projects break when host environments drift across Python, Node, Rust, or C toolchains.
 4. **Weak Feedback Loops**: A check that passes when it should fail teaches the agent to declare success.
 
-Tools for agents should match how language models operate. This post describes the loop we are building for AgentScript (ASL), the checks that already exist, and the parts that are still design.
+Tools for agents should match how language models operate. This post describes the loop we are building for AgentSlang (ASL), the checks that already exist, and the parts that are still design.
 
 ---
 

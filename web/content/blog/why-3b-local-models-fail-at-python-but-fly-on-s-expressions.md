@@ -45,11 +45,11 @@ Rust and TypeScript fail differently: brackets are explicit, but validity depend
 
 Our hypothesis is that for small models the shape of the grammar matters as much as the parameter count: a grammar that closes every construct with an explicit, local token asks less bookkeeping of the model. It is a hypothesis; section 4 is how we intend to test it.
 
-## 3. The AgentScript Approach
+## 3. The AgentSlang Approach
 
-In AgentScript (ASL) every form is delimited by balanced parentheses, operators are prefix, and the text is a direct serialization of the syntax tree. Here is the same accumulator, written as a fold over a closed `Event` type:
+In AgentSlang (ASL) every form is delimited by balanced parentheses, operators are prefix, and the text is a direct serialization of the syntax tree. Here is the same accumulator, written as a fold over a closed `Event` type:
 
-```agentscript
+```agentslang
 (module engine/events :x [processEvents runTests])
 
 enum Event (event id: Int64 valid: Bool)

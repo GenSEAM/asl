@@ -74,4 +74,4 @@ fn ! runSuite paths: (List Str) -> (Result I64 Str)
   (fold (fn [(acc (Result I64 Str)) (p Str)] -> (Result I64 Str) (mt acc ((err e) (err e)) ((ok count) (mt (verifyFileSemantic p) ((ok _) (ok (+ count 1))) ((err msg) (err msg)))))) (ok 0) paths)
 
 fn ! main args: (List Str) -> (Result Unit IoError)
-  (if (listEmpty? args) (let [(u1 (println "AgentScript Gate Runner: 0 files specified. Verification clean."))] (ok ())) (mt (runSuite args) ((ok count) (let [(u2 (println (str "=== [Pure ASL Gate] ALL " (stringFromInt64 count) " FILE(S) VERIFIED CLEANLY ===")))] (ok ()))) ((err msg) (let [(u3 (eprintln (str "=== [Pure ASL Gate] FAILED: " msg " ===")))] (err (other))))))
+  (if (listEmpty? args) (let [(u1 (println "AgentSlang Gate Runner: 0 files specified. Verification clean."))] (ok ())) (mt (runSuite args) ((ok count) (let [(u2 (println (str "=== [Pure ASL Gate] ALL " (stringFromInt64 count) " FILE(S) VERIFIED CLEANLY ===")))] (ok ()))) ((err msg) (let [(u3 (eprintln (str "=== [Pure ASL Gate] FAILED: " msg " ===")))] (err (other))))))

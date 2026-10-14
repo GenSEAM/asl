@@ -479,7 +479,7 @@ fn lastPathSeparator path: Str index: I64 last: I64 -> I64
     (let [(char (optionOr (stringSlice path index (+ index 1)) ""))]
       (lastPathSeparator path (+ index 1) (if (= char "/") index last))))
 
-fn exportAgentScript! exportFile: Str script: Str -> Int64
+fn exportAgentSlang! exportFile: Str script: Str -> Int64
   (let [(separator (lastPathSeparator exportFile 0 -1))
         (parent (if (< separator 0) "" (optionOr (stringSlice exportFile 0 separator) "")))]
     (if (stringEmpty? parent)
@@ -509,7 +509,7 @@ fn runAgent! status: Bool exportFile: Str maxNodes: I64 stealth: Bool kinetics: 
                  :maxSnapshotNodes maxNodes))
           (script (iba/generateInBrowserAgentBootstrap cfg))]
       (if (not (stringEmpty? exportFile))
-        (exportAgentScript! exportFile script)
+        (exportAgentSlang! exportFile script)
         (do (println script) 0))))
 
 fn cmdStatus! -> Int64

@@ -4,7 +4,7 @@
 
 fn testActionCreationAndFormatting -> Bool
   (let [(clickAct (auto/makeClickAction "button#login" true))
-        (typeAct (auto/makeTypeAction "input[name='q']" "AgentScript" 80 160))
+        (typeAct (auto/makeTypeAction "input[name='q']" "AgentSlang" 80 160))
         (scrollAct (auto/makeScrollAction "down" 850 true))
         (navAct (auto/makeNavigateAction "https://www.tiktok.com/@creator"))]
     (do
@@ -12,7 +12,7 @@ fn testActionCreationAndFormatting -> Bool
       (assert (== clickAct.target "button#login") "click target selector")
       (assert clickAct.kinetic "click has kinetic flag")
       (assert (== typeAct.op "type") "type operation")
-      (assert (== typeAct.value "AgentScript") "type value")
+      (assert (== typeAct.value "AgentSlang") "type value")
       (assert (== scrollAct.op "scroll") "scroll operation")
       (assert (== scrollAct.direction "down") "scroll direction")
       (assert (== scrollAct.pixels 850) "scroll pixels")
@@ -63,7 +63,7 @@ fn testActionExecutionSimulation -> Bool
       true))
 
 fn testAutomationReceiptSerialization -> Bool
-  (let [(rcpt (auto/makeAutomationReceipt "act-101" "ok" 42 "https://agentscript.org" "(:pageSnapshot :title \"AgentScript\")" ""))
+  (let [(rcpt (auto/makeAutomationReceipt "act-101" "ok" 42 "https://agentslang.org" "(:pageSnapshot :title \"AgentSlang\")" ""))
         (asn (auto/formatReceiptAsn rcpt))]
     (do
       (assert (stringContains? asn ":automationReceipt") "contains receipt header")

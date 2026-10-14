@@ -1,7 +1,7 @@
 (:package aslAgentCore
  :version "0.1.0"
  :entry "src/core.asl"
- :description "Autonomous AgentScript execution core, onion middleware pipeline and state machine"
+ :description "Autonomous AgentSlang execution core, onion middleware pipeline and state machine"
  :aslFirst true
  :modules [
    "aslAgentCore/clarify"

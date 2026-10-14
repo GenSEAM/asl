@@ -12,7 +12,7 @@ This architecture has real ceilings:
 
 What if the whole development environment (the compiler, the test runner, the virtual filesystem, the git storage and the coding agent) **ran locally inside the user's browser tab, with no backend server**?
 
-This is the direction we are building AgentScript (ASL) toward. The IDE is not shipped; this post describes the design and the part that already runs.
+This is the direction we are building AgentSlang (ASL) toward. The IDE is not shipped; this post describes the design and the part that already runs.
 
 ---
 

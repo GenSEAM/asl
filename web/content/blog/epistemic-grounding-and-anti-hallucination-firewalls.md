@@ -51,14 +51,14 @@ Large language models are probabilistic token predictors, not deductive truth en
 
 ## 2. Structural Grounding: The Closure Check
 
-In AgentScript (ASL), every name in a module must resolve to one of three things:
+In AgentSlang (ASL), every name in a module must resolve to one of three things:
 1. A builtin of the host or a function of its prelude.
 2. A local binding (a function defined with a `fn` line, a `let` binding, or a parameter).
 3. A symbol imported from another module (`:i [(pkg/module :a m)]`), called as `m/name`.
 
 The stage-0 host checks this before anything runs. `asl/host/out/asl-host check FILE` resolves every name in the module graph, checks call arity, and checks that a match covers every case of an enum. Here is a module an agent might plausibly write:
 
-```agentscript
+```agentslang
 (module probe/p10a :x [total runTests] :i [])
 
 fn total xs: (List Int64) -> Int64
@@ -97,7 +97,7 @@ The workspace gate rule in `grammar/rules.asn` adds a counting requirement: ever
 
 When agents take facts from documentation or search results, a claim can carry its evidence:
 
-```agentscript
+```agentslang
 (module probe/p10b :x [Claim grounded? runTests] :i [])
 
 schema Claim

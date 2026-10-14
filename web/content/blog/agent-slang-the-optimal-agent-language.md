@@ -9,7 +9,7 @@ Large language models do not have eyes, biological working memory, or keyboards.
 
 When an LLM generates Python, JavaScript, or C++, part of its work goes into resolving lexical ambiguities, tracking invisible indentation, and applying operator precedence.
 
-**AgentScript (ASL)** is designed for model authors first. It combines **single-pass S-expressions**, **closed algebraic variants with exhaustive matching**, and **explicit effect markers**. This post argues why that combination suits LLM generation and verification, and says which parts are checked today.
+**AgentSlang (ASL)** is designed for model authors first. It combines **single-pass S-expressions**, **closed algebraic variants with exhaustive matching**, and **explicit effect markers**. This post argues why that combination suits LLM generation and verification, and says which parts are checked today.
 
 ---
 
@@ -17,9 +17,9 @@ When an LLM generates Python, JavaScript, or C++, part of its work goes into res
 
 In conventional compilers, source code goes through several stages: lexing into tokens, parsing into a concrete syntax tree with precedence rules (for example the shunting-yard algorithm), and lowering into an abstract syntax tree.
 
-In AgentScript, the written form is already the tree. This property is known as **homoiconicity**.
+In AgentSlang, the written form is already the tree. This property is known as **homoiconicity**.
 
-```agentscript
+```agentslang
 (module core/fsm :x [step runTests] :i [])
 
 enum State (idle) (active sessionId: String) (errored code: Int64)
@@ -69,9 +69,9 @@ const result = a + b * c > d ? e : f;
 
 To read this single line correctly, a model has to apply five precedence levels: multiplication, addition, relational comparison, the ternary conditional, and assignment.
 
-In AgentScript, **operator precedence does not exist**:
+In AgentSlang, **operator precedence does not exist**:
 
-```agentscript
+```agentslang
 (let [(result (if (> (+ a (* b c)) d) e f))]
   result)
 ```
@@ -90,7 +90,7 @@ In ASL, closing a form is always the explicit token `)`, and each bracket kind p
 
 In dynamic languages, runtime failures such as `AttributeError: 'NoneType' object has no attribute 'val'` or `TypeError: Cannot read properties of undefined` are a common way for an agent's run to go wrong.
 
-AgentScript removes some of these classes by construction:
+AgentSlang removes some of these classes by construction:
 
 1. **Closed variants (`enum`):** Cases carry typed payloads, as in `enum State (idle) (active sessionId: String) (errored code: Int64)`. There is no `nil`: absence is `(none)`, and builtins such as `list-head` and `map-get` return `(some v)` or `(none)`.
 2. **Exhaustive matching (`mt`):** `asl-host check` verifies that every variant of an enum is covered. Removing the `(errored c)` arm from the module above makes it fail with `ERR_MATCH_NONEXHAUSTIVE match over enum State misses variant(s): errored`.
@@ -105,7 +105,7 @@ One of the larger reliability hazards of autonomous agents is the **unconstraine
 
 ASL makes the difference visible in every function header. A function that names an effectful builtin such as `println`, or calls another effectful function, must be marked, either as `fn ! name ...` or with a trailing `!` in its name. `asl-host check` enforces this before anything runs:
 
-```agentscript
+```agentslang
 (module demo/effects :x [greet total])
 
 fn ! greet name: String -> Unit

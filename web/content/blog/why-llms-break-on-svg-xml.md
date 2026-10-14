@@ -13,7 +13,7 @@ When autonomous coding agents generate user interfaces, icons, architecture diag
 
 On large drawings this runs into **the verbose delimiter blowup**: the model spends its output budget on repeated attribute names and closing tags, and a capped generation stops mid-element.
 
-Vector graphics do not have to be authored as XML during agent inference. In AgentScript they are written as **ASN (AgentScript Notation)** S-expressions and rendered to SVG afterwards.
+Vector graphics do not have to be authored as XML during agent inference. In AgentSlang they are written as **ASN (AgentSlang Notation)** S-expressions and rendered to SVG afterwards.
 
 ---
 

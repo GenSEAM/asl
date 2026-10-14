@@ -16,7 +16,7 @@ This pattern has three structural traps:
 
 We have not measured how often each trap occurs; the failure modes are well known, and their rate depends on the model, the schema and the task.
 
-Relational queries should not be manipulated as freeform prose. In AgentScript, a query is a value of an algebraic type, and the `asl-sql` package renders it to a target dialect.
+Relational queries should not be manipulated as freeform prose. In AgentSlang, a query is a value of an algebraic type, and the `asl-sql` package renders it to a target dialect.
 
 ---
 

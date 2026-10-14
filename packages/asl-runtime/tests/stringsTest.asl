@@ -77,7 +77,7 @@ fn testSplitLines -> Bool
       true))
 
 fn testSliceSafe -> Bool
-  (let [(s "AgentScript")
+  (let [(s "AgentSlang")
         (sl1 (str/strSliceSafe s 0 5))
         (sl2 (str/strSliceSafe s -3 5))
         (sl3 (str/strSliceSafe s 5 20))
@@ -91,9 +91,9 @@ fn testSliceSafe -> Bool
       true))
 
 fn testStringPredicates -> Bool
-  (let [(s "Hello, AgentScript World!")]
+  (let [(s "Hello, AgentSlang World!")]
     (do
-      (assert (str/strContains? s "AgentScript") "strContains finds substring")
+      (assert (str/strContains? s "AgentSlang") "strContains finds substring")
       (refute (str/strContains? s "Python") "strContains refutes absent substring")
       (assert (str/strStartsWith? s "Hello") "strStartsWith matches prefix")
       (refute (str/strStartsWith? s "World") "strStartsWith refutes wrong prefix")

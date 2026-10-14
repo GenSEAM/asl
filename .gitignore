@@ -2,8 +2,8 @@
 results/*.json
 node_modules/
 target/
-grammar/tree-sitter-agentscript/src/
-grammar/tree-sitter-agentscript/*.so
+grammar/tree-sitter-agentslang/src/
+grammar/tree-sitter-agentslang/*.so
 package-lock.json
 .pcp/MAP.json
 .pcp/INVENTORY.md

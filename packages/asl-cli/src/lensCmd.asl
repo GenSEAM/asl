@@ -50,7 +50,7 @@ fn formatLensList -> Str
        "  13. coupling          - Intra-package cohesion, inter-package fan-in/fan-out, cycle eradication, module fictions\n")
 
 fn formatLensVersion -> Str
-  "asl-lens v2.1.0 (Multi-Lens Sovereign Audit Engine - 100% Pure AgentScript)"
+  "asl-lens v2.1.0 (Multi-Lens Sovereign Audit Engine - 100% Pure AgentSlang)"
 
 fn formatLensRules -> Str
   (str "# Cognitive Potential Landscape & Lens Steering Directives\n"
@@ -233,7 +233,7 @@ fn runLensPayload! kind: Str args: (List Str) -> (Result Str Str)
 
 fn lensTestResult res: ProcessOutput -> (Result Str Str)
   (if (= res.exitCode 0)
-    (ok (str "--> Running asl-lens pure ASL test suite...\n" res.stdout "✓ [Lens Test] All tests passed cleanly (100% pure AgentScript).\n"))
+    (ok (str "--> Running asl-lens pure ASL test suite...\n" res.stdout "✓ [Lens Test] All tests passed cleanly (100% pure AgentSlang).\n"))
     (err (if (stringEmpty? res.stderr) res.stdout res.stderr)))
 
 fn runLensTests! -> (Result Str Str)

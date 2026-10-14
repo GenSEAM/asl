@@ -31,5 +31,5 @@ fn rssXml posts: (List blog/Post) -> String
     (h/elem "rss" [(h/attr "version" "2.0")]
       [(h/elem "channel" []
         (listAppend
-          [(leaf "title" "AgentScript blog") (leaf "link" (str (l/siteUrl) "/blog")) (leaf "description" "Notes from building a language for models.") (leaf "language" "en")]
+          [(leaf "title" "AgentSlang blog") (leaf "link" (str (l/siteUrl) "/blog")) (leaf "description" "Notes from building a language for models.") (leaf "language" "en")]
           (map itemNode posts)))]))

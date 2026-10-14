@@ -82,7 +82,7 @@ fn emitRustType t: ty/Type -> String
 
 fn emitRustHeader -> String
   (str
-    "// Emitted by AgentScript (asl-target-rs) under ADR D130\n"
+    "// Emitted by AgentSlang (asl-target-rs) under ADR D130\n"
     "#![allow(dead_code, unused_variables, unused_mut, unused_parens, non_snake_case)]\n"
     "use std::collections::HashMap;\n"
     "use std::panic::{catch_unwind, AssertUnwindSafe};\n"

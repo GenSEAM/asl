@@ -23,9 +23,9 @@ fn heroSection -> h/Node
   (h/section [(h/cls "hero")]
     [(h/div [(h/cls "shell hero-grid")]
       [(h/div [(h/cls "stack")]
-        [(l/eyebrow "ASL" "AgentScript")
+        [(l/eyebrow "ASL" "AgentSlang")
          (h/h1 [(h/cls "display")] [(h/text "The language models write ") (h/em [] [(h/text "without repair loops.")])])
-         (h/p [(h/cls "lead")] [(h/text "AgentScript is a programming language and data notation for code that models write and models read. Structure lives in balanced parentheses, every failure is a value and every effect is marked, so a wrong program is rejected before it runs instead of three turns later.")])
+         (h/p [(h/cls "lead")] [(h/text "AgentSlang is a programming language and data notation for code that models write and models read. Structure lives in balanced parentheses, every failure is a value and every effect is marked, so a wrong program is rejected before it runs instead of three turns later.")])
          (shellLine (installLine) "copy-install" (m/copyInstall))
          (h/p [(h/cls "micro")] [(h/text "Not released yet: the installer is under development. ") (h/a [(h/href "/docs#install")] [(h/text "Details")])])
          (h/ul [(h/cls "facts")]
@@ -128,4 +128,4 @@ fn homeContent stats: Stats -> (List h/Node)
   [(heroSection) (costSection) (rulesSection) (wireSection) (toolbeltSection) (proofSection stats)]
 
 fn homePage stats: Stats -> h/Node
-  (l/document (l/home) "AgentScript (ASL): the language models write without repair loops" "AgentScript is a programming language and data notation for code written by models: balanced S-expressions, no nil or exceptions, marked effects, compiled to native code and WebAssembly." (homeContent stats))
+  (l/document (l/home) "AgentSlang (ASL): the language models write without repair loops" "AgentSlang is a programming language and data notation for code written by models: balanced S-expressions, no nil or exceptions, marked effects, compiled to native code and WebAssembly." (homeContent stats))

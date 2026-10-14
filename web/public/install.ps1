@@ -1,4 +1,4 @@
-# AgentScript Universal Installer for Windows (PowerShell)
+# AgentSlang Universal Installer for Windows (PowerShell)
 # Usage: irm https://aslang.dev/install.ps1 | iex
 $ErrorActionPreference = "Stop"
 
@@ -6,7 +6,7 @@ $Version = "0.1.0"
 $InstallDir = "$env:LOCALAPPDATA\asl\bin"
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
-Write-Host "🚀 Installing AgentScript (ASL) for Windows..." -ForegroundColor Cyan
+Write-Host "🚀 Installing AgentSlang (ASL) for Windows..." -ForegroundColor Cyan
 
 $AslCmdPath = Join-Path $InstallDir "asl.cmd"
 
@@ -65,7 +65,7 @@ echo asl 0.1.0 (wasm-wasi windows-x64 substrate)
 exit /b 0
 
 :show_help
-echo AgentScript Native CLI (WASM/WASI substrate for Windows)
+echo AgentSlang Native CLI (WASM/WASI substrate for Windows)
 echo Usage: asl ^<command^> [args...]
 exit /b 0
 "@ | Set-Content -Path $AslCmdPath -Encoding ASCII
