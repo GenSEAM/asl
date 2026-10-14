@@ -1,6 +1,6 @@
 (module aslSite/app/blog
   :x [Post blogIndexPage postPage notFoundPage]
-  :i [(aslSite/ui/html :a h) (aslSite/ui/markdown :a md) (aslSite/app/layout :a l)])
+  :i [(asl-html/html :a h) (asl-html/markdown :a md) (aslSite/app/layout :a l)])
 
 (schema Post (:f slug String) (:f title String) (:f date String) (:f author String) (:f category String) (:f readTime String) (:f excerpt String) (:f content String))
 

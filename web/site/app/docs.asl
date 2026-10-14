@@ -1,6 +1,6 @@
 (module aslSite/app/docs
   :x [docsPage]
-  :i [(aslSite/ui/html :a h) (aslSite/app/layout :a l)])
+  :i [(asl-html/html :a h) (aslSite/app/layout :a l)])
 
 fn para s: String -> h/Node
   (h/p [] [(h/text s)])
@@ -14,7 +14,7 @@ fn topic anchor: String heading: String body: (List h/Node) -> (List h/Node)
 fn topics -> (List (Pair String String))
   [(pair "install" "Install") (pair "files" "Files and modules") (pair "functions" "Functions") (pair "data" "Enums and records")
    (pair "failure" "No nil, no exceptions") (pair "effects" "Effects") (pair "tests" "Tests")
-   (pair "toolbelt" "The toolbelt") (pair "wasm" "WebAssembly")]
+   (pair "toolbelt" "The toolbelt") (pair "wasm" "WebAssembly") (pair "targets" "JavaScript, TypeScript, HTML and CSS")]
 
 fn toc -> h/Node
   (h/ul [(h/cls "toc") (h/attr "aria-label" "On this page")]
@@ -63,10 +63,15 @@ fn body -> (List h/Node)
                     [(para "asl '<form> <form> ...' runs file operations on the git repository that holds the working directory. The forms of one call run as one batch, and every form answers with an ASN receipt.")
                      (listing ["asl '(:tools)'" "asl '(:query \"handleRequest\")'" "asl '(:read :file \"src/app.asl\" :symbol \"greet\")'" "asl '(:edit :file \"src/app.asl\" :old \"a\" :new \"b\") (:diff)'" "asl '(:flush)'   # or (:discard)"])
                      (para "Edits are staged outside the working tree until (:flush) writes them atomically; (:txn :owns (...) ...) stages, gates and flushes in one call and restores every touched file when a step fails.")])
-                  (topic "wasm" "WebAssembly"
+                  (listAppend (topic "wasm" "WebAssembly"
                     [(para "asl-target-llvm lowers a linked program to LLVM IR for wasm32-unknown-unknown with its own collector and allocator. The module imports four host functions (asl.write, asl.exit, asl.nowNs and asl.trap) and nothing else; a builtin the target cannot provide, such as tcpListen or a clock read, is a compile error rather than a runtime surprise.")
                      (para "This site is built that way. Its markup, styles and event handlers are ASL in web/site; web/tools/build.asl prerenders every page and compiles the same modules into site.wasm, and a short JavaScript bridge forwards clicks to the module's update export.")
-                     (listing ["fn ! update code: Int64 model: Int64 -> Int64" "  (let [(r (u/step (m/msgOf code) model))]" "    (do (print (b/encodeOps (pairSecond r))) (pairFirst r)))"])]))))))))))
+                     (listing ["fn ! update code: Int64 model: Int64 -> Int64" "  (let [(r (u/step (m/msgOf code) model))]" "    (do (print (b/encodeOps (pairSecond r))) (pairFirst r)))"])])
+                  (topic "targets" "JavaScript, TypeScript, HTML and CSS"
+                    [(para "asl-target-js lowers the same linked program to one ES module: Int is BigInt and traps on int64 overflow, strings keep their UTF-8 byte semantics, and output, exit codes and trap codes match the host on its test fixtures. Unlike wasm32 it can read clocks; files, processes and the environment are refused at compile time.")
+                     (para "TypeScript callers get declarations generated from the module's signatures: a schema becomes a readonly interface, an enum a union tagged by variant name, Int bigint, and type variables generics. A test checks a consumer against tsc --strict.")
+                     (listing ["ENTRY=asl/app/main.asl OUT=app.mjs asl/host/out/asl-host run asl/web/tools/jsc.asl" "# app.mjs and app.d.mts"])
+                     (para "asl-html is typed HTML5 and CSS: one constructor per element, escaping by construction, styles as data with media, supports, layer, container, keyframes and font-face rules. This site is written with it.")])))))))))))
 
 fn docsPage -> h/Node
   (l/document (l/docs) "AgentSlang docs: the language on one page" "The AgentSlang (ASL) language on one page: modules, functions, enums, no nil or exceptions, marked effects, tests, the agent toolbelt and WebAssembly."

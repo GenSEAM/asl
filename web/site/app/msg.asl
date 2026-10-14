@@ -1,6 +1,6 @@
 (module aslSite/app/msg
   :x [Msg msgCode msgOf onClick]
-  :i [(aslSite/ui/html :a h)])
+  :i [(asl-html/html :a h)])
 
 (enum Msg (:c boot [] "the module started; arg carries the visitor's stored and system theme") (:c toggleTheme [] "flip between dark and light") (:c copyInstall [] "copy the install line") (:c copyBatch [] "copy the toolbelt batch line") (:c resetCopy [] "restore the copy labels") (:c unknown [] "a code this build does not know"))
 

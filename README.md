@@ -16,7 +16,7 @@ AgentSlang is two things:
 - **ASL, the language.** Source (`.asl`) and data (`.asn`) files are S-expressions with balanced parentheses. A malformed program is caught by counting delimiters rather than by running it, and whitespace carries no meaning inside a form.
 - **`asl`, the toolbelt.** `asl '<form> <form> ...'` reads, searches and edits files in a git repository; the forms of one call run as one batch, and edits are staged, inspected with `(:diff)`, then flushed or discarded.
 
-Status: early. The stage-0 C host (`host/out/asl-host`) checks and runs programs. `asl-target-llvm` lowers a linked program to LLVM IR for native code and for `wasm32-unknown-unknown`; [aslang.dev](https://aslang.dev) is built that way from [`web/`](web/) (markup, styles and event handlers in ASL, compiled to `site.wasm`). The self-hosted native compiler (`asl1`) has a seed for `arm64-apple-darwin` only, and self-hosting is in progress. The TypeScript, WAT and other source-to-source targets are prototypes.
+Status: early. The stage-0 C host (`host/out/asl-host`) checks and runs programs. `asl-target-llvm` lowers a linked program to LLVM IR for native code and for `wasm32-unknown-unknown`; [aslang.dev](https://aslang.dev) is built that way from [`web/`](web/) (markup, styles and event handlers in ASL, compiled to `site.wasm`). The self-hosted native compiler (`asl1`) has a seed for `arm64-apple-darwin` only, and self-hosting is in progress. `asl-target-js` lowers the same linked program to JavaScript, with TypeScript declarations generated from its signatures, and `asl-html` renders typed HTML and CSS. The WAT emitter and the older source-to-source targets are prototypes.
 
 ## Why
 

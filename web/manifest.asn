@@ -5,10 +5,7 @@
  :aslFirst true
  :modules [
    "aslSite/main"
-   "aslSite/ui/html"
-   "aslSite/ui/css"
    "aslSite/ui/bridge"
-   "aslSite/ui/markdown"
    "aslSite/app/theme"
    "aslSite/app/mascot"
    "aslSite/app/msg"
@@ -21,4 +18,4 @@
    "aslSite/tools/posts"
    "aslSite/tools/feeds"
  ]
- :dependencies ["asl-parser" "asl-ir" "asl-target-llvm"])
+ :dependencies ["asl-html" "asl-parser" "asl-ir" "asl-target-llvm"])
