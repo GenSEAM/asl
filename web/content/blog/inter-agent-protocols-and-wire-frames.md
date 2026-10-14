@@ -23,9 +23,9 @@ Agents do not need to be polite to each other. They need typed, deterministic, l
 
 ## 1. AgP: The AgentScript Wire Protocol (v0.1.0)
 
-**AgP (Agentic Protocol)** replaces natural language chatter with typed, single-pass S-expression frames. Its specification lives in `asl/docs/agenticProtocol.md`, and it is designed to run over standard transports: JSON-RPC 2.0 stdio and SSE, Google A2A streams, and Unix domain sockets or WebSockets for local agent clusters.
+**AgP (Agentic Protocol)** replaces natural language chatter with typed, single-pass S-expression frames. Its specification lives in `asl/docs/agenticProtocol.md`, marked as a target design, and its target transports are JSON-RPC 2.0 stdio and SSE, Google A2A streams, and Unix domain sockets or WebSockets for local agent clusters.
 
-Where it stands today: the frame layer and error taxonomy are specified, and the `seambus` skill in `asl/packages/asl-agent-bus/skills/seambus/` teaches agents to use them. The code in `asl/packages/asl-agent-bus/src` implements a related envelope (`CanonicalWireFrame`, with stdio, Unix socket, HTTP and SSE encoders), not yet the sigil grammar or the taxonomy below. We are building the decoder that enforces them.
+Where it stands today: the frame layer and error taxonomy are specified, and the `seambus` skill in `asl/packages/asl-agent-bus/skills/seambus/` describes them to agents. No code implements the sigil grammar or the taxonomy below yet. What `asl/packages/asl-agent-bus/src` does implement is a smaller envelope, `CanonicalWireFrame` (five string fields with stdio, Unix socket, HTTP and SSE encoders), plus newline-delimited ASN frames, swarm presence and task contracts. Their suites pass on the strict stage-0 host (on 2026-10-14, `asl-host test` executed 29 assertions in `wireTest.asl`, 18 in `transportTest.asl`, 31 in `ndAsnTest.asl`, 24 in `presenceTest.asl` and 40 in `meshTest.asl`). The decoder that enforces AgP is the next piece.
 
 ### The Lexical Rule: Sigils as Causal Heads
 
@@ -44,7 +44,7 @@ An AgP frame begins with one of three single-character sigils:
 (! coder :ok (fsm :states 3 :file "state.asl"))
 
 ;; Response: failure with a closed error taxonomy keyword
-(! coder :err :scopeViolation :msg "path '/etc/shadow' is outside the jailed workspace" :retry false)
+(! coder :err :scopeViolation :msg "path /etc/shadow is outside the jailed workspace" :retry false)
 
 ;; Stream: telemetry chunks followed by an explicit end frame
 (~ telemetry42 :seq 1 :chunk (reading 22.4))
@@ -56,10 +56,10 @@ An AgP frame begins with one of three single-character sigils:
 
 AgP values are AgentScript literals, not JSON:
 * Lists are whitespace-delimited (`["idle" "active"]`), with no commas.
-* Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The protocol document and skill still spell them kebab-case (`:timeout-ms`); they are being converged.
+* Keys are camelCase with the physical unit in the name (`:timeoutMs`), following the language dialect. The specification is camelCase throughout; the `seambus` skill still spells some keys and error keywords kebab-case (`:reply-to`, `:scope-violation`), and the two are being converged.
 * Payloads are constructor forms such as `(fsm :states 3)`, read directly as S-expressions without a JSON decoding step.
 
-How much this saves depends on the frame. For the query above, the AgP frame is 25 tokens and an equivalent JSON-RPC 2.0 request carrying the same method, target, states and timeout is 41 tokens on o200k_base and 39 on cl100k_base (tiktoken 0.12.0, measured 2026-09-24): about 40 percent fewer for this one frame, not a corpus figure.
+How much this saves depends on the frame, and we have no corpus measurement. The one recorded example is in the [README](https://github.com/GenSEAM/asl#why): a `git status` tool call is 51 `cl100k_base` tokens as a JSON object and 18 as a positional sigil frame. That is one example, not a benchmark.
 
 ---
 
@@ -71,56 +71,51 @@ AgP specifies a **closed error taxonomy**. An `:err` frame carries one of ten er
 
 | Error Keyword | NACK Code | Meaning |
 |---|---|---|
-| `:peer-unreachable` | 1001 | Target agent ID is not registered in the active swarm |
-| `:lonely-queued` | 1002 | Target peer is offline; frame buffered in a mailbox |
-| `:dialect-unsupported`| 1003 | Peer cannot decode the requested dialect |
-| `:decode-failed` | 1004 | Malformed frame syntax or invalid token sequence |
-| `:type-mismatch` | 1005 | Payload violates the receiving agent's schema contract |
-| `:timeout` | 1006 | Execution exceeded the specified deadline |
-| `:stalled` | 1007 | Peer accepted the task but emitted no heartbeats |
-| `:dead-letter` | 1008 | Frame exceeded the maximum delivery retries |
-| `:scope-violation` | 1009 | Agent reached for paths outside its directory jail |
-| `:handoff-rejected` | 1010 | Target agent declined the delegated task contract |
+| `:peerUnreachable` | 1001 | Target agent id is not in the active registry |
+| `:lonelyQueued` | 1002 | No peer listening; frame buffered in the mailbox |
+| `:dialectUnsupported` | 1003 | Peer cannot decode the requested dialect |
+| `:decodeFailed` | 1004 | Malformed frame syntax |
+| `:typeMismatch` | 1005 | Body does not conform to the expected schema |
+| `:timeout` | 1006 | No acknowledgement within the deadline |
+| `:stalled` | 1007 | Peer accepted the task but heartbeats ceased |
+| `:deadLetter` | 1008 | Frame exceeded its maximum retry attempts |
+| `:scopeViolation` | 1009 | Agent reached outside its permitted directory scope |
+| `:handoffRejected` | 1010 | Target agent declined the handoff contract |
 
-The table is the specification's spelling. Because the set is closed, failure handling is a lookup rather than a reading exercise: an agent receiving `:scope-violation` knows the request was rejected by the jail, without guessing.
+The table is the specification's spelling. Because the set is closed, failure handling is a lookup rather than a reading exercise: an agent receiving `:scopeViolation` knows the request was rejected by the jail, without guessing. A conforming decoder will reject an `:err` frame naming any keyword outside the table.
 
 ---
 
-## 3. SeamBus: The Session & Coordination Mesh
+## 3. The Session Layer: Handshake and Handoff
 
-Above the frame layer sits **SeamBus**, the session layer described by the `seambus` skill: peer registry, dialect negotiation, delivery and context-isolated delegation.
+Above the frame layer sits the session layer: peer registry, dialect negotiation, delivery and context-isolated delegation. The specification calls it SkyLoom; the `seambus` skill describes the same design under the name SeamBus. None of it is implemented yet.
 
-```
+```text
 Coordinator (Alpha)                              Worker (Beta)
-        │                                              │
-        │── 1. Handshake Probe ───────────────────────>│
-        │   (? agent probe :proto "asl")               │
-        │                                              │
-        │<─ 2. Capability Ack ─────────────────────────│
-        │   (! agent :ok (proto :name "asl"            │
-        │                       :format :compact))     │
-        │                                              │
-        │── 3. Context-Isolated Delegation ───────────>│
-        │   (pass :id "h-99"                           │
-        │         :in "pkg/auth"                       │
-        │         :do "auditJwt")                      │
-        │                                              │
-        │<─ 4. Typed Return ───────────────────────────│
-        │   (ret :id "h-99"                            │
-        │        :ok "patch.diff"                      │
-        │        :gate "pass")                         │
+        |                                              |
+        |-- 1. Discovery Probe ----------------------->|
+        |   (? agent probe :proto "asl/1.0")           |
+        |                                              |
+        |<- 2. Protocol Ack ---------------------------|
+        |   (! agent :ok (proto :v "asl/1.0"           |
+        |                       :mode :nano))          |
+        |                                              |
+        |-- 3. Context-Isolated Handoff -------------->|
+        |   task, working directory, owned files,      |
+        |   frozen files, gate, token budget           |
+        |                                              |
+        |<- 4. Yield ----------------------------------|
+        |   status, gate verdict, artifacts            |
 ```
 
-### Context-Isolated Delegation (`pass`) & Return (`ret`)
+### Context-Isolated Delegation
 
-When a coordinator delegates work to a subagent, passing the coordinator's entire conversational history pollutes the worker's context.
+When a coordinator delegates work to a subagent, passing the coordinator's entire conversational history pollutes the worker's context. The design specifies **hermetic task handoffs** instead (`HANDOFF` and `YIELD` in the specification, `pass` and `ret` in the skill):
+1. **Scope Jailing:** The handoff names the working directory and the files the assignee owns. Reaching outside the directory or writing a frozen path is `:scopeViolation`.
+2. **Minimal Contract Input:** The subagent receives the task, the files it owns, a verification gate and a token budget, not the coordinator's history.
+3. **Deterministic Return:** On completion, the subagent answers with a structured frame carrying status, the gate verdict and artifact paths.
 
-SeamBus specifies **hermetic task handoffs**:
-1. **Scope Jailing:** The `pass` frame names the directory root (`:in "pkg/auth"`) the subagent may read and modify. Access outside this path is a `:scope-violation`.
-2. **Minimal Contract Input:** The subagent receives only the task definition, the interfaces of the modules it needs, and the verification criteria.
-3. **Deterministic Return (`ret`):** On completion, the subagent returns a structured frame carrying status (`:ok` or `:err`), gate verdicts and artifact references.
-
-The same idea already runs in the workspace's own agent loop: the `(:agent ...)` op takes an `:owns` list, edits only inside it and runs the named `:gates`, and its receipt reports status, findings and gate results.
+No command or op sends these frames yet. The nearest working pieces are `proposeTask`, `acceptTask` and `declineTask` in `asl-agent-bus/src/presence.asl`, `delegateContract` in `asl-agent-bus/src/mesh.asl`, and the toolbelt's own agent loop: the `(:agent ...)` op takes `:owns` and `:gates`, edits only inside its root narrowed by `:owns`, runs the gates, and reports status, findings and gate results in its receipt.
 
 ---
 
@@ -136,4 +131,4 @@ We have not yet run a multi-hop drift benchmark comparing natural language chat,
 
 Autonomous agent swarms do not scale on top of human conversational metaphors.
 
-Sigil-headed S-expression frames, a closed error taxonomy, and context-isolated delegations (`pass` / `ret`) are the substrate we are building for multi-agent software engineering: typed state instead of chatter, and failures that are keywords instead of prose.
+Sigil-headed S-expression frames, a closed error taxonomy, and context-isolated handoffs are the substrate we are building for multi-agent software engineering: typed state instead of chatter, and failures that are keywords instead of prose.

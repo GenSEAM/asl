@@ -30,46 +30,47 @@ Agent working memory (observations, decisions, symbol contracts) is small next t
 Consider a 384-dimensional dense embedding (the size of `all-MiniLM-L6-v2` and similar local embedding models):
 * A vector of 384 `Float32` elements occupies **1,536 bytes**.
 * 10,000 such vectors occupy **15.36 MB**.
-* Cosine similarity between a query $\mathbf{q}$ and a candidate $\mathbf{v}$:
-$$\text{sim}(\mathbf{q}, \mathbf{v}) = \frac{\mathbf{q} \cdot \mathbf{v}}{\|\mathbf{q}\| \|\mathbf{v}\|}$$
-When vectors are stored at unit length, the similarity is the dot product alone.
+* Cosine similarity between a query `q` and a candidate `v` is `dot(q, v) / (|q| * |v|)`. When vectors are stored at unit length, it is the dot product alone.
 
-One measurement on today's interpreter: on 2026-09-24, `asl-host test` on a file that builds 10,000 384-dimensional `F64Array` vectors and takes each one's dot product with a query finished in 0.26 s wall time (`/usr/bin/time`, Apple M1 Pro, construction included). The same scan over 1,000 vectors finished in 0.02 s.
+One measurement on today's interpreter: on 2026-10-14 we ran `asl-host test` on a file that builds 10,000 384-dimensional `F64Array` vectors and takes each one's dot product with a query. Over five runs on a 4-core Linux cloud VM (Intel Xeon, 2.8 GHz), timed as whole-process wall time from Python's `subprocess.run`, the median was 0.37 s, vector construction and host start-up included. The same scan over 1,000 vectors took a median of 0.05 s.
 
 ---
 
 ## 2. Recall in Plain AgentScript
 
-The stage-0 host binds `F64Array` builtins (`f64-array-generate`, `f64-array-get`, `f64-array-len`, `f64-array-sum`), which are enough for an in-process scan. It has no `sqrt` builtin yet, so the sample assumes unit-length vectors. It passes `asl-host check` and `asl-host test` (3 assertions):
+The stage-0 host binds unboxed `F64Array` builtins (`f64ArrayGenerate`, `f64ArrayGet`, `f64ArrayLen`, `f64ArraySum`, among others) and `sqrt`, which is enough for an in-process cosine scan. This sample passes `asl-host check` and `asl-host test` (3 assertions):
 
 ```asl
-(module probe/p13eTest :d "In-process recall over unit-length F64 arrays" :x [dot topMatch runTests] :i [])
+(module probe/p13eTest :x [dot cosine topMatch runTests] :i [])
 
 schema VectorItem
   id: String
   vector: F64Array
 
 fn dot a: F64Array b: F64Array -> Float64
-  (f64-array-sum (f64-array-generate (f64-array-len a) (fn [i] (* (f64-array-get a i) (f64-array-get b i)))))
+  (f64ArraySum (f64ArrayGenerate (f64ArrayLen a) (fn [i] (* (f64ArrayGet a i) (f64ArrayGet b i)))))
+
+fn cosine a: F64Array b: F64Array -> Float64
+  (/ (dot a b) (* (sqrt (dot a a)) (sqrt (dot b b))))
 
 fn topMatch query: F64Array items: (List VectorItem) -> (Option String)
-  (mt (list-head (list-sort-by (fn [it] (- 0.0 (dot query (.-vector it)))) items))
-    ((some best) (some (.-id best)))
+  (mt (listHead (listSortBy (fn [it] (- 0.0 (cosine query it.vector))) items))
+    ((some best) (some best.id))
     ((none) (none)))
 
-fn unit x: Float64 y: Float64 -> F64Array
-  (f64-array-generate 2 (fn [i] (if (= i 0) x y)))
+fn vec2 x: Float64 y: Float64 -> F64Array
+  (f64ArrayGenerate 2 (fn [i] (if (= i 0) x y)))
 
 fn runTests -> Bool
-  (let [(items (list {:id "east" :vector (unit 1.0 0.0)} {:id "north" :vector (unit 0.0 1.0)}))]
+  (let [(items (list {:id "east" :vector (vec2 2.0 0.0)} {:id "north" :vector (vec2 0.0 5.0)}))]
     (do
-      (assert (= (dot (unit 0.6 0.8) (unit 0.6 0.8)) 1.0) "unit vector")
-      (assert (= (topMatch (unit 0.8 0.6) items) (some "east")) "nearest is east")
-      (assert (= (topMatch (unit 0.6 0.8) (list)) (none)) "empty store")
+      (assert (= (cosine (vec2 3.0 4.0) (vec2 6.0 8.0)) 1.0) "parallel vectors")
+      (assert (= (topMatch (vec2 4.0 3.0) items) (some "east")) "nearest is east")
+      (assert (= (topMatch (vec2 3.0 4.0) (list)) (none)) "empty store")
       true))
 ```
 
-The repository also carries a fuller store in `asl/packages/asl-mem/src/store.asl` (vector items, dimension validation, normalization, a flat slab layout). Its math suite, `asl/packages/asl-mem/tests/mathTest.asl`, passes 27 assertions under `./bin/asl test`, which runs the lenient asl-core engine; the strict host does not load it yet, because its helper `asl/packages/asl-mem/src/math.asl` calls names the host does not bind (`bytesAlloc`, `bytesGetF64`, `list-map` and others). Moving that store onto the host builtins shown above is open work.
+The repository also carries a fuller store in `asl/packages/asl-mem/src/store.asl` (vector items, dimension validation, normalization, a flat slab layout). Its math suite, `asl/packages/asl-mem/tests/mathTest.asl`, passes on the strict host (27 assertions, 2026-10-14). That store keeps vectors as `(List F64)`; moving it onto the unboxed `F64Array` builtins shown above is open work.
 
 ---
 
@@ -77,12 +78,12 @@ The repository also carries a fuller store in `asl/packages/asl-mem/src/store.as
 
 The weakness of a hosted vector database is **temporal decoupling**: a convention stored there is global, mutable and blind to Git branches.
 
-This workspace keeps its agent memory as ASN ledgers under `.asl/mem/`, tracked in Git: on 2026-09-24, `git ls-files .asl/mem` listed 545 files, among them tasks, decisions, audits, receipts, reviews and `notes.asn`. That gives three properties today:
+The toolbelt keeps agent memory as ASN ledgers under `.asl/mem/` in the repository it works on, so the ledgers can be tracked in Git like any other file. The `(:mem)` op lists, gets and queries rows there, and `(:mem :op put ...)` stages a row change through the same buffer as `(:edit)`, written only by `(:flush)`. Paths outside `.asl/mem` are rejected with `ERR_BOUNDARY_VIOLATION`. Tracked in Git, that gives three properties:
 1. **Memory as Repository Data:** plans, decisions and findings are plain S-expression files next to the code they describe.
 2. **Branch-Aware Context:** checking out a branch checks out the memory written on it.
 3. **Reproducible Runs:** a clone carries the same memory, with no API keys, database or network tunnel.
 
-Recall over these ledgers is text search today: the `(:query)` op searches symbols and text, and `(:note :action query)` searches `notes.asn`. We are building embedding recall on top: vectors stored as versioned ASN beside the ledgers and scanned in process as in section 2. No embedding index is stored in the repository yet.
+Recall over these ledgers is text search today: `(:mem :op query :text ...)` matches rows, `(:query)` searches code and, with `:in text`, memories and docs, and `(:note :action query)` searches working notes. We are building embedding recall on top: vectors stored as versioned ASN beside the ledgers and scanned in process as in section 2. No embedding index is stored in the repository yet.
 
 ---
 
@@ -91,4 +92,4 @@ Recall over these ledgers is text search today: the `(:query)` op searches symbo
 Agent memory does not need to be a remote service. Kept as versioned files and scanned in process, it:
 * **Moves with the code:** memory follows `git checkout`, merge and revert.
 * **Needs no infrastructure:** no API keys, no daemon, no hosted index.
-* **Is cheap at working-set size:** a 10,000-vector dot-product scan took 0.26 s on the stage-0 interpreter in the measurement above, and compiled array kernels are the direction for bringing that down.
+* **Is cheap at working-set size:** a 10,000-vector dot-product scan took 0.37 s on the stage-0 interpreter in the measurement above, and compiled array kernels are the direction for bringing that down.
