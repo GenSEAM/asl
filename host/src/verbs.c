@@ -1,6 +1,7 @@
 /* Command verbs of asl-host (main.c), in libaslhost.a. */
 #include "compile.h"
 #include <errno.h>
+#include <limits.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdio.h>

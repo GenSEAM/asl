@@ -1,12 +1,11 @@
 # GitLab Pages CI/CD Configuration for ASL (AgentScript Language)
-image: node:20-alpine
+image: ubuntu:24.04
 
 pages:
   stage: deploy
   script:
-    - npm ci
-    - npm --prefix web ci
-    - npm run build:web
+    - apt-get update && apt-get install -y --no-install-recommends clang llvm lld make ca-certificates
+    - sh web/build.sh
     - rm -rf public
     - cp -r web/dist public
   artifacts:

@@ -8,9 +8,8 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "build:web": "npm --prefix web run build && cp -r web/dist ./dist 2>/dev/null || true",
-    "dev:web": "npm --prefix web run dev",
-    "build": "npm --prefix web run build && cp -r web/dist ./dist 2>/dev/null || true",
-    "preview:web": "npm --prefix web run preview"
+    "build:web": "sh web/build.sh",
+    "build": "sh web/build.sh",
+    "preview:web": "npx --yes serve web/dist -l 4173"
   }
 }
