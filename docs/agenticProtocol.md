@@ -1,7 +1,7 @@
 # AgP — The AgentScript Wire Protocol (v0.1.0)
 
 **Status: target design.** This document specifies agent-to-agent communication in two layers.
-As of 2026-09-24 no code implements either layer; the frames, dialects and error codes below are
+As of 2026-10-14 no code implements either layer; the frames, dialects and error codes below are
 the design that code is meant to meet. What the tree implements today is listed in the next
 section.
 
@@ -23,23 +23,22 @@ Neighbouring documents and what they govern:
 The implemented wire is a different, smaller shape than AgP: a canonical frame of five string
 fields carried over four transports.
 
-| Path | What it holds | Check (asl-core, 2026-09-24) |
+| Path | What it holds | `asl-host test`, 2026-10-14 |
 |---|---|---|
 | `asl/grammar/wire.asn` | `CanonicalWireFrame` (`identity`, `sessionId`, `causality`, `payload`, `digest`), `WireError`, transports `:stdio :unixSocket :http :sse`, conformance vectors | — |
-| `asl/packages/asl-agent-bus/src/wire.asl` | `CanonicalWireFrame` validate/encode/decode, per-transport `encodeStdioFrame` … `decodeSseFrame`, and a compressed `WireFrame` | `./bin/asl test asl/packages/asl-agent-bus/tests/wireTest.asl`: 43 assertions |
-| `asl/packages/asl-agent-bus/src/transport.asl` | `TransportFrameType` (handshake, heartbeat, rpcReq, rpcRes, streamChunk, close), transport sessions, conversion to and from `CanonicalWireFrame` | `transportTest.asl`: 36 assertions |
+| `asl/packages/asl-agent-bus/src/wire.asl` | `CanonicalWireFrame` validate/encode/decode, per-transport `encodeStdioFrame` … `decodeSseFrame`, and a compressed `WireFrame` | `wireTest.asl`: 29 assertions |
+| `asl/packages/asl-agent-bus/src/transport.asl` | `TransportFrameType` (handshake, heartbeat, rpcReq, rpcRes, streamChunk, close), transport sessions, conversion to and from `CanonicalWireFrame` | `transportTest.asl`: 18 assertions |
 | `asl/packages/asl-agent-bus/src/ndAsn.asl` | Newline-delimited ASN frames (`topic`, `seq`, `ts`, `payload`, `meta`) | `ndAsnTest.asl`: 31 assertions |
-| `asl/packages/asl-agent-bus/src/presence.asl` | Swarm rooms (join, leave), path claims, task propose/accept/decline — the nearest thing to rendezvous and handoff | `presenceTest.asl`: 48 assertions |
+| `asl/packages/asl-agent-bus/src/presence.asl` | Swarm rooms (join, leave), path claims, task propose/accept/decline — the nearest thing to rendezvous and handoff | `presenceTest.asl`: 24 assertions |
 | `asl/packages/asl-agent-bus/src/mesh.asl` | `TaskContract`, `delegateContract`, peer registry | `meshTest.asl`: 40 assertions |
 
-These suites pass on asl-core, which is lenient. The stage-0 host (`asl/host/out/asl-host test`)
-does not load them yet: `wire.asl` calls `show`, which the host does not bind
-(`ERR_UNKNOWN_SYMBOL show`).
+All five suites (under `asl/packages/asl-agent-bus/tests/`) pass on the stage-0 host,
+`asl/host/out/asl-host test`; §18 has the commands.
 
 Not implemented: the sigil frames of Part I, the error codes 1001–1010 (they appear only in
 `asl/packages/asl-agent-bus/skills/seambus/SKILL.md` and in blog data), the SkyLoom dialects and negotiator of
-Part II, and any CLI for them. `asl loom` is an unknown command, and the `(:handoff)` op answers
-`ERR_UNIMPLEMENTED`.
+Part II, and any CLI for them. There is no `asl loom` command, and the operation registry
+(`asl/grammar/tools.asn`) has no `(:handoff)` op.
 
 ---
 
@@ -111,8 +110,8 @@ String escapes are `\"`, `\\`, `\n`, `\t`, `\r`. Nothing else is an escape.
 ## 5. Parameter keys are camelCase
 
 Every `:key` is a camelCase whole-word name, `[a-z][a-zA-Z0-9]*`, the dialect rule for keywords
-in ASL and ASN. Neither engine enforces a naming convention today (snake_case names load on both),
-so a conforming codec is where this rule is checked.
+in ASL and ASN. Neither the host nor the ASN reader enforces a naming convention (snake_case and
+kebab-case keys load on both), so a conforming codec is where this rule is checked.
 
 A quantity carries its unit in the key. The canonical spelling is **`:timeoutMs`**. The
 spellings `:timeout`, `:tOut`, `:timeout_ms` and `:timeout-ms` are all wrong and all name the
@@ -374,17 +373,20 @@ must not touch, a verification gate, and a token budget. The assignee answers wi
 Reaching outside `:cwd` or writing a `:frozen` path is `:scopeViolation` (1009). Declining the
 contract outright is `:handoffRejected` (1010).
 
-No command sends these frames yet: `asl loom` is an unknown command and the `(:handoff)` op
-answers `ERR_UNIMPLEMENTED`. The implemented neighbours are `proposeTask`, `acceptTask` and
+No command sends these frames yet: there is no `asl loom` command and no `(:handoff)` op. (The
+`asl-net/handoff` module is unrelated: it passes a listening socket between processes.) The
+implemented neighbours are `proposeTask`, `acceptTask` and
 `declineTask` in `asl/packages/asl-agent-bus/src/presence.asl` and `delegateContract` in `asl/packages/asl-agent-bus/src/mesh.asl`.
 
 ## 18. Conformance
 
 Neither layer has a conformance suite. The suites that cover the wire the tree does implement
-run on asl-core:
+run on the stage-0 host, from the directory that holds `asl/`:
 
 ```bash
-./bin/asl test asl/packages/asl-agent-bus/tests/wireTest.asl        # CanonicalWireFrame, transports
-./bin/asl test asl/packages/asl-agent-bus/tests/transportTest.asl   # transport sessions and frame types
-./bin/asl test asl/packages/asl-agent-bus/tests/ndAsnTest.asl       # newline-delimited ASN frames
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/wireTest.asl        # CanonicalWireFrame, transports
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/transportTest.asl   # transport sessions and frame types
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/ndAsnTest.asl       # newline-delimited ASN frames
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/presenceTest.asl    # rooms, claims, task proposals
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/meshTest.asl        # contracts, peer registry, traces
 ```

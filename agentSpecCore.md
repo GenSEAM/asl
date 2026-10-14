@@ -18,8 +18,8 @@ arrays, arithmetic and comparison over `Bool` / `Int32` / `Int64` / `Float64` / 
 `Unit`.
 
 **Not in the language today:** a foreign-function form, a `try` or `?` propagation operator (the
-host answers `ERR_UNKNOWN_SYMBOL try`), `for`, mutation (`set!`), and JSON naming options on a
-schema (`:json`, `:json-case` are `ERR_BAD_DEFINITION`).
+host answers `ERR_UNKNOWN_SYMBOL try`), `for`, mutation (`set!`), and JSON naming: the host accepts a field's `:json "name"` and does
+nothing with it, and a schema-level case option such as `:jsonCase camel` is `ERR_BAD_DEFINITION`.
 
 **I/O is in**, with its effects tracked: a function that touches the world carries `!` (§5.7),
 `fileRead` fails with the closed union `IoError` (§3), and a program's entry point is `main`
@@ -505,7 +505,7 @@ fn longestRun s: String -> (Option (Pair String Int64))
   (let [(cs (stringChars s))]
     (mt (listHead cs)
       ((none) (none))
-      ((some h) (some (runLength (optionOr (listTail cs) (list)) h 1 (pair h 1)))))))
+      ((some h) (some (runLength (optionOr (listTail cs) (list)) h 1 (pair h 1))))))
 ```
 
 `(longestRun "aabbbc")` is `(some (pair "b" 3))` and `(longestRun "")` is `(none)`. Note the
