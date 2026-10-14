@@ -27,10 +27,10 @@ The caller agent does not care *how* a module computes tax or serializes a buffe
 
 An AgentScript (ASL) module declares its public surface in its header: `:x` lists the exported names. That makes the interface a property of the syntax tree rather than a convention.
 
-Consider an order module (135 tokens under `cl100k_base`):
+Consider an order module (124 tokens under `cl100k_base`):
 
 ```agentscript
-(module store/orders :d "Order management and tax calculations" :x [calculateTotal] :i [])
+(module store/orders :x [calculateTotal] :i [])
 
 enum OrderStatus (pending) (completed txId: String)
 
@@ -42,15 +42,15 @@ fn regionalTaxMultiplier rate: Float64 -> Float64
   (+ 1.0 (/ rate 100.0))
 
 fn calculateTotal items: (List Order) taxRate: Float64 -> Float64
-  (let [(subtotal (fold (fn [acc o] (+ acc (.-total o))) 0.0 items))
+  (let [(subtotal (fold (fn [acc o] (+ acc o.total)) 0.0 items))
         (multiplier (regionalTaxMultiplier taxRate))]
     (* subtotal multiplier))
 ```
 
-A peer subagent that only needs to build orders and ask for totals can receive the interface instead (73 tokens):
+A peer subagent that only needs to build orders and ask for totals can receive the interface instead (64 tokens):
 
 ```agentscript
-(module store/orders :d "Order management and tax calculations" :x [calculateTotal] :i [])
+(module store/orders :x [calculateTotal] :i [])
 
 enum OrderStatus (pending) (completed txId: String)
 
@@ -62,7 +62,7 @@ fn calculateTotal items: (List Order) taxRate: Float64 -> Float64
   0.0
 ```
 
-Both files pass `asl-host check`. On this one module the interface is 45.9% smaller under `cl100k_base` (135 to 73 tokens; 134 to 73, 45.5%, under `o200k_base`), counted with tiktoken 0.12.0 on 2026-09-24. A single module is an illustration, not a repository-wide figure.
+Both files pass `asl-host check`. On this one module the interface is 48.4% smaller under `cl100k_base` (124 to 64 tokens; 123 to 64, 48.0%, under `o200k_base`), counted with js-tiktoken 1.0.15 on 2026-10-14 over each file as checked. A single module is an illustration, not a repository-wide figure.
 
 ### Why Naive Stripping Fails: The Valid Stub Rule
 
@@ -70,7 +70,7 @@ Regex or header-only truncation often emits files that no longer parse. In ASL a
 
 An extractor that works on the syntax tree avoids this:
 * It drops private top-level functions (here `regionalTaxMultiplier`, which is not in `:x`).
-* For exported functions it keeps the name, the typed parameters, the return type (`-> Type`) and any `:d` docstring.
+* For exported functions it keeps the name, the typed parameters and the return type (`-> Type`), and it can carry their doc rows from the package `doc.asn`, where ASL keeps documentation out of the source.
 * It replaces each body with a type-satisfying default (`0.0` for `Float64`, `0` for `Int64`, `""` for `String`).
 
 The result is not a text fragment but a module the checker accepts.
@@ -89,8 +89,8 @@ The saving that matters is repository-wide: full-source handoffs against interfa
 
 Token savings are worthless if they cause regressions. Three properties keep a subagent honest when it writes against a stub:
 
-1. **Checked Names and Arity:** `asl-host check` rejects an unknown name (`ERR_UNKNOWN_SYMBOL`) and a call with the wrong number of arguments (`ERR_ARITY`) before anything runs. Parameter and return type annotations are not checked yet, so passing a `String` where an `Int64` is declared is not caught at check time today.
-2. **Contract-Carrying Docstrings:** Keeping `:d` strings keeps units (for example a `:timeoutMs` field) and preconditions in front of the subagent.
+1. **Checked Names, Arity and Types:** `asl-host check` rejects an unknown name (`ERR_UNKNOWN_SYMBOL`), a call with the wrong number of arguments (`ERR_ARITY`) and an argument of the wrong declared type (`ERR_TYPE_MISMATCH`, for example a `String` passed where an `Int64` is declared) before anything runs.
+2. **Contract-Carrying Docs:** Handing over the doc rows of the exported names keeps units (for example a `:timeoutMs` field) and preconditions in front of the subagent.
 3. **Hermetic Boundaries:** A private helper is absent from the stub, so a subagent cannot depend on it by reading about it.
 
 ### Summary

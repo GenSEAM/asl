@@ -1,123 +1,73 @@
-# The Death of JSON-RPC: Why Autonomous Agent Swarms Need Zero-Copy S-Expression Wire Protocols
-*Published on September 10, 2026 · 9 min read · By the GenSEAM Team*
+# Beyond JSON-RPC: Why ASL Frames Agent Messages as S-Expressions
+*Published on September 10, 2026 · 6 min read · By the GenSEAM Team*
 *Canonical URL: https://aslang.dev/blog/the-death-of-json-rpc-and-zero-copy-wire-protocols*
 
-## 1. The Incident / The Bottleneck
+## 1. The Bottleneck
 
-Imagine a 12-agent autonomous compiler verification swarm. Three orchestrators, four code scouts, three static analyzers, and two test synthesizers running in concert.
+Most agent stacks today follow industry defaults: tools are described with JSON Schema, and every call travels as a JSON-RPC 2.0 message. That works, but it charges a model in two places on every call.
 
-The team followed industry defaults: Model Context Protocol (MCP) and JSON-RPC 2.0 over HTTP/SSE.
+Here is a tool call that asks for one function out of one file:
 
-Ten minutes into an integration run, the swarm stalls. The orchestrator's context window is 82% full, yet only two actual code edits have been committed.
-
-Where did the context go? Inspecting the prompt trace reveals an absurdity:
 ```json
-{
-  "jsonrpc": "2.0",
-  "id": "req-98412",
-  "method": "tools/call",
-  "params": {
-    "name": "mutate_ast_node",
-    "arguments": {
-      "file_path": "src/compiler/parser.asl",
-      "target_symbol": "expand_macro",
-      "replacement_code": "(df expand_macro (node env)\n  \"Expands macro with lexical hygiene.\\"\n  (if (null? node)\n      nil\n      (match (car node)\n        (\\\"syntax-case\\\" (rewrite-syntax-case node env))\n        (_ (cons (car node) (map (lambda (x) (expand_macro x env)) (cdr node)))))))",
-      "verification_strategy": "strict_falsify",
-      "options": {
-        "preserve_comments": false,
-        "enforce_camel_case": true
-      }
-    }
-  }
-}
+{"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "read", "arguments": {"file": "src/server.asl", "symbol": "handleRequest"}}}
 ```
 
-Notice the `"replacement_code"` value: because code is embedded inside a JSON string, every double quote must be escaped (`\"`). When the macro itself contains nested string literals or regex patterns, the escaping cascades: `\\\"`.
+And here is the same request as the `asl` toolbelt takes it today:
 
-At token 612, the model mispredicts the escaping depth. It outputs `"syntax-case"` with an unescaped trailing quote. The JSON-RPC receiver in Node.js crashes with:
+```asl
+(:read :file "src/server.asl" :symbol "handleRequest")
+```
+
+Counted with `cl100k_base` (js-tiktoken 1.0.15, 2026-10-14), the JSON-RPC message is 51 tokens and the form is 15; under `o200k_base` they are 52 and 16. One example, not a benchmark: the gap is the envelope (`jsonrpc`, `id`, `method`, `params`, `arguments`) plus the quotes and colons around every key.
+
+## 2. The Structural Flaw
+
+JSON was designed to pass small associative arrays into JavaScript runtimes. Used as the wire between a model and its tools, it imposes two costs.
+
+### The quotation tax
+Every JSON property key needs two quotes and a colon (`"symbol":`), and the envelope repeats on every call. The README's example, one `git status` command, is 51 `cl100k_base` tokens as a JSON object and 18 as a positional S-expression frame.
+
+### The escaping problem
+Code is rich in quotes and backslashes. Put code inside a JSON string and every `"` becomes `\"`; put that message inside another string, as happens when a tool call is logged, forwarded or wrapped by a second agent, and the escapes double (`\\\"`). A model generating left to right has to track that depth, and one wrong backslash makes the whole message unparseable.
+
+ASL strings escape the same way, so an ASN string is not immune. What S-expressions change is that a payload which is itself code or data does not have to be a string at all: ASL source and ASN data share one syntax, so a frame can carry a form as a form, nested in parentheses, with no escaping and nothing to re-parse.
+
+## 3. What Exists Today
+
+The implemented wire is small and deliberately plain:
+
+- `grammar/wire.asn` declares a `CanonicalWireFrame` of five fields (`identity`, `sessionId`, `causality`, `payload`, `digest`), its errors, and four transports: stdio, Unix socket, HTTP and SSE.
+- `packages/asl-agent-bus/src/wire.asl` validates, encodes and decodes that frame per transport; `transport.asl` adds frame types (handshake, heartbeat, request, response, stream chunk, close); `ndAsn.asl` carries newline-delimited ASN frames.
+- These suites pass on the stage-0 host: `wireTest.asl` (29 assertions), `transportTest.asl` (18), `ndAsnTest.asl` (31), `presenceTest.asl` (24) and `meshTest.asl` (40), run on 2026-10-14.
+
+Today the frame's `payload` field is a string, so the "form as a form" property above is not yet used on this wire.
+
+## 4. What Is Still Design
+
+The AgentScript wire protocol (AgP, `docs/agenticProtocol.md`) is a target design, and its own status line says so. It specifies sigil frames with a space after the sigil:
+
 ```text
-SyntaxError: Unexpected token s in JSON at position 284
+(? agentCoder synthesizeFsm :states ["idle" "active" "error"] :timeoutMs 50)
+(! agentCoder :ok (fsm :states 3))
+(~ s1 :seq 0 :chunk "...")
 ```
 
-The entire 12-agent consensus pipeline locks up. Worse, over the course of 1,000 tool invocations, the swarm spent 4.2 million tokens transmitting curly braces, colons, schema descriptions, and quotation marks.
+and a session layer for dialect negotiation, handshake and handoff. None of it is implemented yet.
 
-## 2. The Structural Flaw in Legacy Approaches
+An earlier version of this post described a shared-memory ring buffer built on `mmap` and `shm_open`, and a benchmark table of payload sizes, latencies, failure rates and throughput. No such transport exists in the repository, and no measurement backs those figures, so both are withdrawn. The bus's `asnlRing.asl` is an in-memory ring of ASN frames held as an ordinary list, not a shared-memory queue. A comparison against JSON-RPC will be published with its method, scope and date, or not at all.
 
-JSON was designed in 2001 by Douglas Crockford to pass lightweight associative arrays into JavaScript runtimes. It was never intended for high-frequency multi-agent IPC or autoregressive transformer decoders.
-
-When forced into autonomous agent architectures, JSON-RPC imposes three crushing penalties:
-
-### 1. The Quotation Tax and Token Fragmentation
-In byte-pair encoding (BPE) tokenizers (`cl100k_base`, `o200k_base`), quotation marks, colons, and braces are rarely merged efficiently with identifiers. Every JSON property key requires two quotes and a colon (`"target_symbol":`). A simple schema describing four parameters consumes 350 to 800 tokens before a single argument value is supplied.
-
-### 2. The Escaping Catastrophe
-Code is inherently rich in delimiters: quotes, backslashes, braces, and special characters. Wrapping code inside a JSON string requires recursive backslash escaping. Autoregressive models generate sequentially; tracking escape depth across nested string levels is an unnatural task for causal attention heads.
-
-### 3. Serialization Thrashing and Kernel Overhead
-Standard agent swarms exchange JSON over HTTP loopback or Unix domain sockets. On every tool invocation:
-1. Sender allocates string buffers and serializes the AST into JSON text ($O(N)$ allocations).
-2. The OS copies bytes through the socket buffer into kernel space.
-3. Receiver reads from socket, allocates a new string, and runs a recursive descent parser to reconstruct the object.
-4. If an agent performs 50 tool calls per second, Node.js or Python runtimes spend 30% of their CPU time inside garbage collection pauses cleaning up transient JSON strings.
-
-## 3. The AgentScript Solution
-
-AgentScript replaces JSON-RPC with **Agent Script Notation (ASN)** and **SeamBus Ring Buffers**.
-
-In AgentScript, code and data share the exact same homoiconic S-expression grammar. A tool invocation is not a serialized JSON string wrapping foreign code; it is a direct S-expression wire frame:
-
-```agentscript
-(:call :tool "asl-mem-edit"
-  :file "src/compiler/parser.asl"
-  :sym "expandMacro"
-  :code (df expandMacro [(node AstNode) (env Env)] -> AstNode
-          :d "Expands macro with lexical hygiene."
-          (match (node-car node)
-            ((some "syntax-case") (rewrite-syntax-case node env))
-            (none nil)
-            (_ (node-cons (node-car node)
-                          (map (fn [x] (expandMacro x env))
-                               (node-cdr node)))))))
-```
-
-### The Architectural Breakthroughs
-- **Zero String Escaping**: The `:code` argument is an AST literal. There are no outer quotes, no backslashes, and no escaped delimiters. It cannot produce a JSON parse error by construction.
-- **Single-Token Directives**: Keywords (`:call`, `:tool`, `:file`, `:sym`, `:code`) tokenize as exactly 1 BPE token.
-- **POSIX Shared-Memory Ring Buffers**: SeamBus (`agent-bus`) transmits messages through memory-mapped circular queues (`mmap`, `shm_open`) with atomic acquire/release barriers. Agents read and write directly into shared linear memory without kernel socket roundtrips or string allocations.
-
-## 4. Reproducible Benchmark & Numbers
-
-We benchmarked 10,000 inter-agent tool dispatch cycles comparing standard Model Context Protocol (MCP) JSON-RPC 2.0 against native AgentScript ASN frames over SeamBus ring buffers:
-
-| Benchmark Metric | MCP JSON-RPC 2.0 | AgentScript ASN / SeamBus | Improvement |
-|---|---|---|---|
-| **Wire Frame Byte Size** | 846 bytes / call | **114 bytes / call** | **86.5% Smaller Payloads** |
-| **Token Cost per Dispatch** | 182 tokens | **24 tokens** | **86.8% Fewer Tokens** |
-| **Round-Trip Serialization Latency** | 1.840 ms | **0.012 ms** | **153x Faster Latency** |
-| **Model Parse Failure Rate** | 3.82% (escaping errors) | **0.00% (zero failures)** | **100% Parsing Reliability** |
-| **Memory Allocated (10k cycles)** | 420 MB (GC churn) | **0 MB (fixed ring buffer)** | **Zero Heap Allocations** |
-| **Max Swarm Throughput** | 540 msgs / sec | **83,300 msgs / sec** | **154x Higher Throughput** |
-
-By eliminating JSON-RPC, an agent swarm can fit 6x more tool interactions into the exact same context window while cutting inter-agent communication latency from milliseconds to microseconds.
-
-## 5. Implementation Guide
-
-You can inspect and benchmark native S-expression batch RPC calls today using the `asl` CLI:
+## 5. Try It
 
 ```bash
-# 1. Execute an atomic batch RPC tool call with zero JSON overhead
-asl rpc '(:batch (:find "SeamBus") (:sym "expandMacro") (:chk))'
+# One batch of agent-plane forms: search, then a bounded read
+asl '(:query :text "handleRequest") (:read :file "src/server.asl" :symbol "handleRequest")'
 
-# 2. Benchmark the agent bus inter-process ring buffer
-asl test asl/packages/asl-agent-bus/tests/bus_parity_test.asl
-
-# 3. Verify zero foreign code across the entire workspace
-asl gate
+# The wire codec suites on the stage-0 host (from the directory above the asl checkout)
+asl/host/out/asl-host test asl/packages/asl-agent-bus/tests/wireTest.asl
 ```
 
-## 6. Resources & Ecosystem
+## 6. Resources
 
-- Full protocol specifications: [aslang.dev](https://aslang.dev)
-- High-performance inter-agent mesh: [github.com/GenSEAM/agent-bus](https://github.com/GenSEAM/agent-bus)
-- Core compiler & runtime: [github.com/GenSEAM/asl](https://github.com/GenSEAM/asl)
-- Agent memory hierarchy: [github.com/GenSEAM/mem](https://github.com/GenSEAM/mem)
+- The language and toolchain: [github.com/GenSEAM/asl](https://github.com/GenSEAM/asl)
+- The data notation: `docs/asnSpec.md` in that repository
+- The wire design: `docs/agenticProtocol.md` in that repository

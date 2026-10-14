@@ -17,29 +17,19 @@ Our position: separate **the stochastic semantic ALU** from **the deterministic 
 
 ## 1. The Separation
 
-```mermaid
-graph TD
-    subgraph Stochastic Plane
-        A["LLM Inference Engine<br/>(Stochastic ALU / Token Predictor)"]
-        B["Model Context Window<br/>(Ephemeral Register Stack)"]
-    end
-    subgraph Deterministic Plane
-        C["Harness & Gateway<br/>(Deterministic Operating System)"]
-        D["Staged Edits & Git<br/>(Transactional Buffer & .asl/mem Ledgers)"]
-        E["Supervisor<br/>(STDIN Firewall & Idle Watchdog)"]
-    end
-
-    A <--> C
-    B <--> C
-    C <--> D
-    C <--> E
+```text
+stochastic plane      the model (the ALU) and its context window (the registers)
+                              |  forms in, receipts out
+deterministic plane   the harness: tool routing, delimiter and name checks
+                      staged edits and git, with the .asl/mem ledgers
+                      process supervision: stdin firewall and idle watchdog
 ```
 
 - **The LLM is an ALU**: The model's job is probabilistic reasoning and semantic code transformation under explicit constraints.
 - **The Harness is the OS**: The harness controls process lifetimes, routes tools, validates delimiters, and isolates execution.
 - **The Context Window is a register file, not a trash bin**: What enters it should be chosen, bounded, and replaceable.
 
-Much of the deterministic plane already exists as tools. The `asl` agent plane reads a symbol or a bounded slice of a file (`(:read :file ... :symbol ...)`) instead of `cat`, stages edits in a session buffer (`(:edit ...)`, `(:diff)`) and writes them to disk only on `(:flush)`, and resolves names, arity and enum coverage before anything runs (`asl/host/out/asl-host check FILE`). The rest of this post describes the parts we are still building.
+Much of the deterministic plane already exists as tools. The `asl` agent plane reads a symbol or a bounded slice of a file (`(:read :file ... :symbol ...)`) instead of `cat`, stages edits in a session buffer (`(:edit ...)`, `(:diff)`) and writes them to disk only on `(:flush)`, and resolves names, arity and enum coverage before anything runs (`host/out/asl-host check FILE`, also run by `(:check)`). The rest of this post describes the parts we are still building.
 
 ---
 
@@ -57,7 +47,7 @@ We are building the harness to partition the prompt into four registers:
 The lifecycle we want for external knowledge: load the verified signatures of a library into Slot 3, let the model write against them, then drop the slot and keep only a one-line receipt:
 
 ```lisp
-(:receipt :target "zod@3.22.4" :action "validated-schema" :anchor "auth.asl:42")
+(:receipt :target "zod@3.22.4" :action "validated-schema" :anchor "auth.asl#validateUser")
 ```
 
 This is direction, not a measured result. We have not yet run a controlled comparison of context size or token budget with and without slotting, so we make no savings claim here.
@@ -68,7 +58,7 @@ This is direction, not a measured result. We have not yet run a controlled compa
 
 Traditional agent state engines rely on SQLite databases, Redis caches, or cloud vector endpoints. When multiple agents collaborate across Git branches, binary files collide.
 
-Our working memory is plain ASN text under `.asl/mem`: `intent.asn`, `roadmap.asn`, `principles.asn`, `notes.asn`, `knownRed.asn` and dated work ledgers, versioned with the code. The `(:note)` op records and lists observations in `.asl/mem/notes.asn`. The EDDIE harness keeps only its configuration (`.eddie/config.asn`: model, provider, role routing) in the repository today.
+Our working memory is plain ASN text in the workspace under `.asl/mem` (`intent.asn`, `roadmap.asn`, `principles.asn`, `notes.asn`, `knownRed.asn` and dated work ledgers), versioned with the code. The `(:mem)` op lists, queries and stages changes to those row-keyed ledgers, and `(:note)` records and lists observations in `notes.asn`.
 
 The property we rely on is that a record is one self-contained line, so additions from parallel branches merge as line additions:
 
@@ -85,20 +75,20 @@ Code and the facts about it commit together in one Git commit. A relational grap
 
 Terminal commands executed by agents frequently hang when an interactive prompt waits for input.
 
-The process package `asl-proc` models non-interactive supervision in ASL (`asl/packages/asl-proc/src/core/process.asl`):
+The process package `asl-proc` handles this in ASL (`packages/asl-proc/src/core/process.asl`):
 1. **STDIN Firewall**: the command builder redirects standard input from `/dev/null` unless input is supplied, and a timeout wraps the command in a watchdog that kills it and exits 124.
 2. **Idle Watchdog**: a session tracks milliseconds since the last stdout, stderr or stdin event; any event resets it.
-3. **Escalation**: `sessionStepDeadline!` sends SIGTERM after 10 s of silence and SIGKILL after 12 s, and records a receipt with the exit code (143 or 137) and a summary line.
+3. **Escalation**: `sessionStepDeadline!` moves a silent session to SIGTERM at 10 s and SIGKILL at 12 s, and records a receipt with the signal (as exit code -15 or -9) and a summary line.
 
 The model then sees a structured receipt instead of a frozen terminal and can re-run with non-interactive flags (e.g. `-y`).
 
-This is a design in code, not yet a running guarantee: on 2026-09-24, `asl/host/out/asl-host check asl/packages/asl-proc/src/core/process.asl` exits 1 because `execCmd` and `file-write` are not bound on the stage-0 host, so the module does not load there yet.
+The module loads on the stage-0 host, and its suites pass there (on 2026-10-14: `processTest.asl` 47 passed checks, `sessionTest.asl` 30, and `rpcProcTest.asl` 42, which steps a session through the deadline). The escalation is a session model stepped by elapsed time, not yet a guarantee for every command the agent plane runs.
 
 ---
 
 ## 5. What We Have Not Measured
 
-An earlier version of this post carried a solve-rate table comparing a 31B model and a 3B model inside this harness with a frontier model in a raw shell. No run, lock or result file backs those numbers, so we removed them. We record headless client runs, one line per run with pass, token and turn counts, in `tests/harnessBench/ledger.asn`; a solve-rate comparison will be published from such a ledger, with its method, scope and date, or not at all.
+An earlier version of this post carried a solve-rate table comparing a 31B model and a 3B model inside this harness with a frontier model in a raw shell. No run, lock or result file backs those numbers, so we removed them. A solve-rate comparison will be published from recorded runs, with its method, scope and date, or not at all.
 
 ---
 
@@ -106,6 +96,6 @@ An earlier version of this post carried a solve-rate table comparing a 31B model
 
 Our working hypothesis is that much of what makes autonomous software engineering unreliable is an **operating system architecture problem**, not only a model capability problem.
 
-When models are relieved of bookkeeping, file traversal, and unconstrained shell execution, and instead work through bounded reads, staged edits, checks that run before code does, and process supervision, the remaining failures are the ones worth a model's attention. That claim is testable, and the ledger above is where we intend to test it.
+When models are relieved of bookkeeping, file traversal, and unconstrained shell execution, and instead work through bounded reads, staged edits, checks that run before code does, and process supervision, the remaining failures are the ones worth a model's attention. That claim is testable, and recorded runs are how we intend to test it.
 
 - Explore [The Agent Operational Circle](/blog/the-agent-operational-circle).

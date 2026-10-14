@@ -15,7 +15,7 @@ Here is why character-level disemvoweling is an anti-pattern, and the naming rul
 
 Byte-Pair Encoding (BPE) tokenizers do not process code as arbitrary characters. They segment text into statistically frequent subword chunks learned from large natural language and code corpora.
 
-Whole words split along the words. We measured the identifiers in this post with tiktoken 0.12.0 on 2026-09-24 (o200k_base and cl100k_base, each identifier encoded alone):
+Whole words split along the words. We counted the identifiers in this post with js-tiktoken 1.0.15 on 2026-10-14 (o200k_base and cl100k_base, each identifier encoded alone):
 
 ```text
 o200k_base
@@ -51,7 +51,7 @@ For agents generating code from parametric memory, **synonym collisions** matter
 
 The one-token "saving" is paid back many times over by that repair turn.
 
-The AgentScript builtins follow one spelling per concept: `list-length`, `string-contains?`, `is-some?`. Short aliases such as `len`, `head` or `includes?` are not bound on the host and fail with `ERR_UNKNOWN_SYMBOL`. For user-defined names, one canonical spelling is a convention we adopt, not something either engine enforces: on 2026-09-24 both engines accept `snake_case`, `is-` prefixes and a trailing `!` alike.
+The AgentScript builtins follow one spelling per concept, in camelCase with predicates ending in `?`: `listLength`, `stringContains?`, `some?`. Short aliases such as `len`, `head` or `includes?` are not bound on the host and fail with `ERR_UNKNOWN_SYMBOL`. For user-defined names, one canonical spelling is a convention we adopt rather than a rule the host enforces: on 2026-10-14 `asl-host check` accepts a `snake_case` function name. The one naming mark the host does enforce is for effects: a function that calls an effectful builtin must be marked, as `fn !` or with a trailing `!`, or the check fails with `ERR_EFFECT_UNMARKED`.
 
 ---
 
@@ -63,9 +63,9 @@ Two parts do the work:
 - **Whole words** keep every fragment a common token and every name a readable phrase. Established abbreviations with high corpus frequency (`cfg`, `ctx`, `msg`) stay acceptable when they tokenize as cheaply as the word; invented ones do not.
 - **Measured cheapest** settles ties by running a tokenizer, not by counting characters. Where two names carry the same meaning, keep the one that costs fewer tokens.
 
-Why camelCase rather than kebab-case? It is cheaper, but by a few percent, not by tens. Rewriting every camelCase identifier outside string literals in 2,964 git-tracked `.asl` and `.asn` files (169,852 identifiers) to kebab-case and counting tokens gave a camelCase saving of 1.90 percent on o200k_base and 1.68 percent on cl100k_base (measured 2026-09-22, recorded in `.asl/mem/principles.asn` as CamelCaseCorpusSaving). Large per-identifier savings quoted for single long names do not carry over to a corpus, because most identifiers are short and much of the text is string literals.
+Why camelCase rather than kebab-case? It is cheaper, but by a few percent, not by tens. Rewriting every camelCase identifier outside string literals in 2,964 git-tracked `.asl` and `.asn` files (169,852 identifiers) to kebab-case and counting tokens gave a camelCase saving of 1.90 percent on o200k_base and 1.68 percent on cl100k_base (measured 2026-09-22, recorded in the project ledger as CamelCaseCorpusSaving and listed in `bench/publishedClaims.asn`). Large per-identifier savings quoted for single long names do not carry over to a corpus, because most identifiers are short and much of the text is string literals.
 
-The rule also bounds length by meaning rather than by a morpheme count: a longer name earns its extra words when removing them would change what a caller has to know (a safety condition, a fallback path, a lifecycle phase). A word that only describes the implementation belongs in the docstring.
+The rule also bounds length by meaning rather than by a morpheme count: a longer name earns its extra words when removing them would change what a caller has to know (a safety condition, a fallback path, a lifecycle phase). A word that only describes the implementation belongs in the symbol's doc row in the package `doc.asn`.
 
 | Identifier | Verdict | Reason |
 | :--- | :--- | :--- |

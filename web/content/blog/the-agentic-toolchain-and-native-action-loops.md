@@ -11,74 +11,69 @@ The result is operational fragility:
 3. **Foreign Dependency Drift**: Multi-language projects break when host environments drift across Python, Node, Rust, or C toolchains.
 4. **Weak Feedback Loops**: A check that passes when it should fail teaches the agent to declare success.
 
-Tools for agents should match how language models operate. This post describes the loop we are building for AgentScript (ASL), the checks that already exist, and where they are still weaker than they look.
+Tools for agents should match how language models operate. This post describes the loop we are building for AgentScript (ASL), the checks that already exist, and the parts that are still design.
 
 ---
 
 ## 1. The Action-Observation Loop
 
-Human engineers use a terminal as an interactive loop with visual inspection. Coding agents work in discrete turns of action and observation. The loop we are building:
+Human engineers use a terminal as an interactive loop with visual inspection. Coding agents work in discrete turns of action and observation. The loop, one turn per line:
 
-```mermaid
-sequenceDiagram
-    participant Agent as Autonomous Agent (Semantic ALU)
-    participant Harness as ASL Harness & Supervisor
-    participant Session as Execution Environment
-
-    Agent->>Harness: (:read :file "core/auth.asl" :symbol "login")
-    Harness-->>Agent: Bounded slice, not the whole file
-    Agent->>Harness: (:edit :file ... :old ... :new ...)
-    Harness->>Harness: Stage in session buffer, show (:diff)
-    Agent->>Harness: asl-host check core/auth.asl
-    Harness-->>Agent: ok, or ERR_UNKNOWN_SYMBOL / ERR_ARITY / ERR_MATCH_NONEXHAUSTIVE with line and column
-    Agent->>Harness: (:flush)
-    Agent->>Harness: asl-host test tests/authTest.asl
-    Session-->>Harness: "N assertion(s) executed (N passed)", exit 0
-    Harness-->>Agent: Receipt
+```text
+agent  -> (:read :file "core/auth.asl" :symbol "login")
+asl    <- the symbol, or a bounded slice, not the whole file
+agent  -> (:edit :file "core/auth.asl" :old "..." :new "...")
+asl    <- staged in the session buffer; (:diff) shows it
+agent  -> (:check :file "core/auth.asl")
+asl    <- ok, or ERR_UNKNOWN_SYMBOL / ERR_ARITY / ERR_MATCH_NONEXHAUSTIVE with line and column
+agent  -> (:flush)
+agent  -> asl-host test tests/authTest.asl
+asl    <- "N assertion(s) executed (N passed)", exit 0
 ```
 
 ### Operational Properties
-1. **Bounded reads**: `(:read)` returns a symbol or a bounded slice; `asl intel outline FILE` lists a module's functions and signatures without loading bodies.
-2. **Staged edits**: `(:edit)` and `(:write)` stage changes in a session buffer; `(:diff)` shows them; `(:flush)` writes them to disk together and `(:discard)` drops them.
-3. **Non-interactive execution** (in progress): the process package `asl-proc` redirects standard input from `/dev/null` by default, and models an idle watchdog that sends SIGTERM after 10 s of silence and SIGKILL after 12 s, returning a structured receipt. That module does not yet load on the stage-0 host (on 2026-09-24 `asl-host check` reports unbound `execCmd` and `file-write`), so it is a design in code rather than a running guarantee. Persisting working directory and environment across turns is likewise a target.
+1. **Bounded reads**: `(:read)` returns a symbol or a bounded slice; `(:intel :op outline :file "...")`, or `asl intel outline FILE`, lists a module's items with their kind, signature and export flag without loading bodies.
+2. **Staged edits**: `(:edit)` and `(:write)` stage changes in a session buffer outside the working tree; `(:diff)`, `(:check)` and `(:test)` see the staged content; `(:flush)` writes it to disk and `(:discard)` drops it. `(:txn ...)` stages, checks and flushes in one call and restores every touched file when a step fails.
+3. **Non-interactive execution** (partly built): the process package `asl-proc` redirects standard input from `/dev/null` unless input is supplied, and a timeout wraps the command so it is killed and exits 124. Its session model tracks idle time and steps to SIGTERM after 10 s of silence and SIGKILL after 12 s, recording a receipt. The module loads on the stage-0 host and its suites pass there (`processTest.asl`, `sessionTest.asl`, `rpcProcTest.asl`). Persisting working directory and environment across turns is still a target.
 
 ---
 
 ## 2. Checks That Fail on the Claim
 
-A check is only useful to an agent if it fails when the code is wrong. The ASL toolchain has two engines, and today they differ on exactly that point:
+A check is only useful to an agent if it fails when the code is wrong. The reference is the stage-0 host (`host/out/asl-host`), and `asl check` and `asl test` on an `.asl` file run on it. It resolves every name before anything runs:
 
-- **The stage-0 host** (`asl/host/out/asl-host check FILE`, `asl-host test FILE`, and `asl run`) resolves every name before anything runs. An unknown symbol, a wrong argument count, or an `mt` that misses an enum case is an error with line and column. A test passes only when the exported `runTests` returns `true` after at least one assertion executed.
-- **asl-core** (`asl check`, `asl test`, `asl eval`) is lenient: `asl check` verifies delimiter balance only, and `asl test` treats an unknown name as data and passes a `runTests` that returns `false`.
+- an unknown symbol is `ERR_UNKNOWN_SYMBOL`, a wrong argument count `ERR_ARITY`, a mismatched argument type `ERR_TYPE_MISMATCH`, and an `mt` that misses an enum case `ERR_MATCH_NONEXHAUSTIVE`, each with line and column;
+- a function that calls an effectful builtin without being marked is `ERR_EFFECT_UNMARKED`;
+- a test passes only when the exported `runTests` returns `true` after at least one assertion executed. A suite with zero assertions fails (`ERR_TEST_FAILED: zero assertions executed`), and `(assert true ...)` is rejected at load as `ERR_CONSTANT_ASSERT`.
 
-A concrete example, run on 2026-09-24: a file with a top-level `(defun double [x] (* x 2))` fails `asl-host check` with `ERR_UNSUPPORTED_TOPLEVEL list-form (defun ...) at top level` (exit 1), while `asl check` on the same file reports `audit check: passed` (exit 0). `lambda` is not a hallucination on either engine; the host accepts it as `fn`.
+A concrete example: a file with a top-level `(defun double [x] (* x 2))` fails `asl-host check` with `ERR_UNSUPPORTED_TOPLEVEL list-form (defun ...) at top level` and exit 1. `lambda` is accepted as an anonymous `fn`.
 
-So the agent-facing rule is simple: check and test with the host.
+An earlier toolchain engine, asl-core, verified delimiter balance only and passed suites that it should have failed. It is retired: the rule for agents is to check and test with the host.
 
 ---
 
 ## 3. The Gate Suite
 
-Workspace-level verification runs through one command, `./bin/asl audit gates --full --sync`. Without `--full` it runs the static checks only. On 2026-09-24 that static run took about 9 s wall-clock on a local macOS machine and reported 19 checks passed with status `:pending`, because the 816 test suites had not been executed. The static checks include:
+Workspace-level verification runs through `asl audit gates`. With `--static` it runs the static checks only and reports the suites as not run. Otherwise it runs the static checks plus the suites affected since the last verified fully green commit; when there is no such base it asks for `--full`, which runs every suite. The checks are written in ASL in `packages/asl-gates` and include:
 
-| Check | What it verifies (count from the 2026-09-24 run) |
+| Check | What it verifies |
 | :--- | :--- |
-| `gate1Manifests` | package manifests (65) |
-| `gate2Syntax` | delimiter balance across source files (3,048) |
-| `gate3Grounding` | the published-claims registry (12 entries) |
-| `gate4Foreign` and `foreign*` | foreign-language files against an allowlist and a baseline that grows only by a recorded raise (453 entries) |
-| `gate6GrammarCount`, `c2Emoji` | grammar registry shape; no emoji in sources |
+| `gate1Manifests` | package manifests |
+| `gate2Syntax` | delimiter balance across source files |
+| `gate3Grounding` | the published-claims registry (`bench/publishedClaims.asn`) |
+| `gate4Foreign` | foreign-language files against an allowlist |
+| `gate6GrammarCount` | grammar registry shape |
 | `gate7Skill`, `gate7Rules`, `gate7Installer` | skills, rendered rules, and installer identity |
 
-With `--full`, the suites run as well. A suite that fails is red unless it is listed with its digest in `.asl/mem/knownRed.asn`, and that list may only shrink. Two caveats matter. First, the gate runner's own logic lives in a binary without tracked source, so its green banner is not by itself authoritative; we treat a gate as real only when a seeded defect makes it fail. Second, many suites still run on the lenient engine. Moving them to the host is the current work.
+A failing suite is red unless it is listed in the known-red ledger. A green banner is not by itself evidence; we treat a gate as real only when a seeded defect makes it fail.
 
-`asl gate` and `asl lint` also exist as commands, but today they print a fixed success line without running checks; do not use them as verification.
+`asl gate` and `asl lint` are retired commands: they print a pointer to `asl audit gates` and `asl check` instead of running anything.
 
 ---
 
 ## 4. Coverage
 
-An earlier version of this post claimed 100 percent function coverage across the packages. No coverage command or measurement exists, so the claim is withdrawn. The nearest real tool is `asl '(:intel :op :vacuity)'`, which scans test files for suites that return without executing an assertion. Function-level coverage is a target.
+An earlier version of this post claimed 100 percent function coverage across the packages. No coverage command or measurement exists, so the claim is withdrawn. The nearest real tool is `(:intel :op vacuity)` (`asl intel vacuity`), which scans test files for suites that return without executing an assertion. Function-level coverage is a target.
 
 ---
 
@@ -86,7 +81,7 @@ An earlier version of this post claimed 100 percent function coverage across the
 
 A repository that mixes Python test scripts, TypeScript transpilers, Rust binaries, and Bash glue asks an agent to master several package managers, build systems, and diagnostic formats.
 
-Inside `asl/packages` (46 package directories on 2026-09-24), every tracked file is `.asl`, `.asn` or `.md`, apart from three `.gitignore` files. The toolchain around them is not yet pure: `bin/asl` is a bash script with embedded Python, and `./bin/asl audit foreign` counts 453 allowlisted foreign files (77,975 lines on 2026-09-24) each held to a baseline that may grow only by a recorded, dated raise. Replacing them with ASL is the direction.
+Inside `packages/`, the source directories are ASL: on 2026-10-14, of the 720 git-tracked files under `packages/*/src`, 718 are `.asl` and one is `.asn`; the exception is the browser plugin's `popup.html`. Tests and fixtures carry some data files. The stage-0 host that runs all of this is C by design, and the native self-hosted compiler is still in progress.
 
 The benefit we are after:
 1. **One cognitive domain**: the agent reads and writes one syntax.
@@ -98,12 +93,12 @@ The benefit we are after:
 
 | Command | Purpose |
 | :--- | :--- |
-| `asl/host/out/asl-host check <file>` | Resolve names, arity and enum coverage before running. |
-| `asl/host/out/asl-host test <file>` | Strict test runner: `runTests` must return `true` after at least one assertion. |
-| `asl check <file>` | Delimiter balance only (asl-core). |
-| `asl test <file>` | Lenient runner on asl-core. |
-| `asl intel outline <file>` | Functions and signatures of a module without bodies. |
-| `asl audit gates --full --sync` | The workspace gate suite. |
+| `host/out/asl-host check <file>` | Resolve names, arity, types, enum coverage and effect marks before running. |
+| `host/out/asl-host test <file>` | Strict test runner: `runTests` must return `true` after at least one assertion. |
+| `asl check <file>` | Delimiter balance, then the host check for an `.asl` file. |
+| `asl test <file>` | The host test runner. |
+| `asl intel outline <file>` | Items and signatures of a module without bodies. |
+| `asl audit gates --full` | The workspace gate suite; `--static` skips the suites. |
 | `asl '(:read ...)' '(:edit ...)' '(:flush)'` | Bounded reads and staged edits on the agent plane; `asl '(:tools)'` lists every op. |
 
 ---
@@ -113,4 +108,4 @@ The benefit we are after:
 Autonomous coding is not only about model weights or prompts; it is about **tooling architecture**. The parts that help most are the plain ones: bounded reads, staged edits, and checks that fail on the claim. The parts that look like help but are not, such as a gate that always passes, are worse than no gate at all, because the agent trusts them.
 
 - Learn about token ergonomics in [The Token-Density Fallacy](/blog/the-token-density-fallacy-and-machine-understandability).
-- Run the strict checks: `asl/host/out/asl-host check <file>` and `./bin/asl audit gates --full --sync`.
+- Run the strict checks: `host/out/asl-host check <file>` and `asl audit gates --full`.
